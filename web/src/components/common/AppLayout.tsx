@@ -21,6 +21,12 @@ export const AppLayout: React.FC = () => {
     queryFn: () => api.getResources({ status: 'unclaimed' }),
   });
 
+  const logoutMutation = useMutation({
+    mutationFn: api.logout,
+    onSuccess: () => window.location.reload(),
+    onError: (err: Error) => message.error(`退出登录失败: ${err.message}`),
+  });
+
   // Discovery mutation
   const discoverMutation = useMutation({
     mutationFn: api.discoverDefaultInstance,
@@ -42,6 +48,8 @@ export const AppLayout: React.FC = () => {
         health={health}
         isDiscovering={discoverMutation.isPending}
         onDiscover={() => discoverMutation.mutate()}
+        onLogout={() => logoutMutation.mutate()}
+        isLoggingOut={logoutMutation.isPending}
       />
 
       <main style={{ flex: 1, padding: '24px', maxWidth: '1280px', width: '100%', margin: '0 auto' }}>

@@ -18,144 +18,143 @@ export class ApiError extends Error {
   }
 }
 
+type UnauthorizedHandler = () => void;
+let unauthorizedHandler: UnauthorizedHandler | undefined;
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | undefined): void {
+  unauthorizedHandler = handler;
+}
+
+function apiRoot(): string {
+  const { apiBaseUrl } = getAppConfig();
+  return apiBaseUrl.replace(/\/api\/v1\/?$/, '') || '';
+}
+
+function authUrl(path: string): string {
+  return `${apiRoot()}/api/auth${path}`;
+}
+
+async function readError(response: Response): Promise<{ data: unknown; message: string }> {
+  let errorData: unknown = null;
+  let message = `请求失败 [HTTP ${response.status}]`;
+  try {
+    errorData = await response.json();
+    if (typeof errorData === 'object' && errorData !== null) {
+      const errorObj = errorData as Record<string, unknown>;
+      if (typeof errorObj.message === 'string') {
+        message = errorObj.message;
+      } else if (typeof errorObj.error === 'string') {
+        message = errorObj.error;
+      }
+    }
+  } catch {
+    const text = await response.text().catch(() => '');
+    if (text) message += `: ${text.slice(0, 100)}`;
+  }
+  return { data: errorData, message };
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const { apiBaseUrl } = getAppConfig();
-  // If path starts with /api or /omc, handle appropriately
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   const url = cleanPath.startsWith(apiBaseUrl) ? cleanPath : `${apiBaseUrl}${cleanPath}`;
-
   const headers: Record<string, string> = {
-    'Accept': 'application/json',
+    Accept: 'application/json',
     ...(options.headers as Record<string, string> || {}),
   };
-
   if (options.body && typeof options.body === 'string' && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json';
   }
 
   let response: Response;
   try {
-    response = await fetch(url, {
-      ...options,
-      headers,
-    });
+    response = await fetch(url, { ...options, credentials: 'same-origin', headers });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     throw new ApiError(`网络连接失败 (${errorMsg})，请检查后端服务是否正常运行`, 0);
   }
-
   if (!response.ok) {
-    let errorData: unknown = null;
-    let message = `请求失败 [HTTP ${response.status}]`;
-    try {
-      errorData = await response.json();
-      if (typeof errorData === 'object' && errorData !== null) {
-        const errorObj = errorData as Record<string, unknown>;
-        if (typeof errorObj.message === 'string') {
-          message = errorObj.message;
-        } else if (typeof errorObj.error === 'string') {
-          message = errorObj.error;
-        }
-      }
-    } catch {
-      // Not JSON response
-      const text = await response.text().catch(() => '');
-      if (text) {
-        message += `: ${text.slice(0, 100)}`;
-      }
-    }
-    throw new ApiError(message, response.status, errorData);
+    const error = await readError(response);
+    if (response.status === 401) unauthorizedHandler?.();
+    throw new ApiError(error.message, response.status, error.data);
   }
-
-  // Handle 204 No Content
-  if (response.status === 204) {
-    return {} as T;
-  }
-
+  if (response.status === 204) return {} as T;
   return response.json() as Promise<T>;
 }
 
+export interface AuthSession {
+  authenticated: boolean;
+}
+
 export const api = {
-  /**
-   * Health check probe
-   */
+  async login(password: string): Promise<AuthSession> {
+    return request<AuthSession>(authUrl('/login'), {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    });
+  },
+
+  async getSession(): Promise<AuthSession> {
+    let response: Response;
+    try {
+      response = await fetch(authUrl('/session'), {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' },
+      });
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      throw new ApiError(`网络连接失败 (${errorMsg})，请检查后端服务是否正常运行`, 0);
+    }
+    if (!response.ok) {
+      const error = await readError(response);
+      if (response.status === 401) unauthorizedHandler?.();
+      throw new ApiError(error.message, response.status, error.data);
+    }
+    return response.json() as Promise<AuthSession>;
+  },
+
+  async logout(): Promise<void> {
+    await request<unknown>(authUrl('/logout'), { method: 'POST' });
+  },
+
   async getHealth(): Promise<HealthStatus> {
     const { basePath } = getAppConfig();
     const normalizedBase = basePath === '/' ? '' : basePath;
     const url = `${normalizedBase}/api/healthz`;
     try {
-      const res = await fetch(url, { headers: { Accept: 'application/json' } });
-      if (!res.ok) {
-        return { status: 'unhealthy', uptime_seconds: 0, cpa_connected: false };
-      }
+      const res = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+      if (!res.ok) return { status: 'unhealthy', uptime_seconds: 0, cpa_connected: false };
       return await res.json();
     } catch {
       return { status: 'offline', uptime_seconds: 0, cpa_connected: false };
     }
   },
 
-  /**
-   * Trigger discovery on default CPA instance
-   */
   async discoverDefaultInstance(): Promise<DiscoveryResult> {
-    return request<DiscoveryResult>('/instances/default/discover', {
-      method: 'POST',
-    });
+    return request<DiscoveryResult>('/instances/default/discover', { method: 'POST' });
   },
 
-  /**
-   * List resources with optional filters
-   */
-  async getResources(params?: {
-    status?: string;
-    driver?: string;
-    query?: string;
-  }): Promise<{ resources: DiscoveredResource[]; total: number }> {
+  async getResources(params?: { status?: string; driver?: string; query?: string }): Promise<{ resources: DiscoveredResource[]; total: number }> {
     const search = new URLSearchParams();
     if (params?.status) search.set('status', params.status);
     if (params?.driver) search.set('driver', params.driver);
     if (params?.query) search.set('q', params.query);
-
     const queryStr = search.toString();
-    const endpoint = `/resources${queryStr ? `?${queryStr}` : ''}`;
-    const data = await request<unknown>(endpoint, {
-      method: 'GET',
-    });
-
-    if (Array.isArray(data)) {
-      return { resources: data as DiscoveredResource[], total: data.length };
-    }
+    const data = await request<unknown>(`/resources${queryStr ? `?${queryStr}` : ''}`, { method: 'GET' });
+    if (Array.isArray(data)) return { resources: data as DiscoveredResource[], total: data.length };
     if (typeof data === 'object' && data !== null) {
       const obj = data as Record<string, unknown>;
-      if (Array.isArray(obj.resources)) {
-        return {
-          resources: obj.resources as DiscoveredResource[],
-          total: typeof obj.total === 'number' ? obj.total : obj.resources.length,
-        };
-      }
-      if (Array.isArray(obj.data)) {
-        return {
-          resources: obj.data as DiscoveredResource[],
-          total: typeof obj.total === 'number' ? obj.total : obj.data.length,
-        };
-      }
+      if (Array.isArray(obj.resources)) return { resources: obj.resources as DiscoveredResource[], total: typeof obj.total === 'number' ? obj.total : obj.resources.length };
+      if (Array.isArray(obj.data)) return { resources: obj.data as DiscoveredResource[], total: typeof obj.total === 'number' ? obj.total : obj.data.length };
     }
     return { resources: [], total: 0 };
   },
 
-  /**
-   * Update custom display name, icon, color, notes or status for a resource
-   */
-  async updateResourceOverride(
-    resourceId: string,
-    payload: ResourceOverridePayload
-  ): Promise<{ status: string; resource?: DiscoveredResource }> {
-    return request<{ status: string; resource?: DiscoveredResource }>(
-      `/resources/${encodeURIComponent(resourceId)}/override`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify(payload),
-      }
-    );
+  async updateResourceOverride(resourceId: string, payload: ResourceOverridePayload): Promise<{ status: string; resource?: DiscoveredResource }> {
+    return request<{ status: string; resource?: DiscoveredResource }>(`/resources/${encodeURIComponent(resourceId)}/override`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
   },
 };

@@ -20,6 +20,8 @@ interface HeaderNavProps {
   health?: HealthStatus;
   isDiscovering?: boolean;
   onDiscover?: () => void;
+  onLogout?: () => void;
+  isLoggingOut?: boolean;
 }
 
 export const HeaderNav: React.FC<HeaderNavProps> = ({
@@ -27,6 +29,8 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
   health,
   isDiscovering = false,
   onDiscover,
+  onLogout,
+  isLoggingOut = false,
 }) => {
   const config = getAppConfig();
 
@@ -242,6 +246,14 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
             style={{ borderRadius: '6px', fontWeight: 500 }}
           >
             扫描 / 同步 CPA
+          </Button>
+          <Button
+            icon={<CloseCircleFilled />}
+            loading={isLoggingOut}
+            onClick={onLogout}
+            style={{ borderRadius: '6px', fontWeight: 500 }}
+          >
+            退出登录
           </Button>
         </div>
       </div>

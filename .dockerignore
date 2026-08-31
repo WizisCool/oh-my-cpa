@@ -1,0 +1,17 @@
+.git
+.gitignore
+node_modules
+**/node_modules
+.pnpm-store
+web/dist
+**/dist
+internal/web/dist/assets
+internal/web/dist/favicon.svg
+*.db
+*.db-shm
+*.db-wal
+.smoke-data
+cpa
+oh-my-cpa-data
+caddy-data
+caddy-config

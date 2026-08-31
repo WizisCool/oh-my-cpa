@@ -13,6 +13,7 @@ import { AppLayout } from './components/common/AppLayout';
 import { TriagePage } from './pages/TriagePage';
 import { AllResourcesPage } from './pages/AllResourcesPage';
 import { InstanceStatusPage } from './pages/InstanceStatusPage';
+import { AuthGate } from './components/common/AuthGate';
 
 // Configure TanStack Query
 const queryClient = new QueryClient({
@@ -64,7 +65,9 @@ export const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <ConfigProvider locale={zhCN} theme={themeConfig}>
-        <RouterProvider router={router} />
+        <AuthGate>
+          <RouterProvider router={router} />
+        </AuthGate>
       </ConfigProvider>
     </QueryClientProvider>
   );
