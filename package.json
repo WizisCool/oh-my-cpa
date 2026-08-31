@@ -1,0 +1,11 @@
+{
+  "name": "oh-my-cpa",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --dir web dev",
+    "build": "pnpm --dir web build",
+    "type-check": "pnpm --dir web type-check"
+  }
+}

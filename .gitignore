@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Production builds
+web/dist/
+dist/
+internal/web/dist/*
+!internal/web/dist/index.html
+
+# TypeScript build info
+*.tsbuildinfo
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# IDE & Editor files
+.idea/
+.vscode/
+*.local
+
+# Go build artifacts
+bin/
+tmp/
+
+# Runtime data
+/data/
+*.db
+*.db-shm
+*.db-wal
+oh-my-cpa-data/
+cpa/
+caddy-data/
+caddy-config/

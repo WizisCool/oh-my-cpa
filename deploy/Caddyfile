@@ -1,0 +1,11 @@
+{$DOMAIN:localhost} {
+    redir /omc /omc/ 308
+
+    handle /omc/* {
+        reverse_proxy oh-my-cpa:8080
+    }
+
+    handle {
+        reverse_proxy cpa:8317
+    }
+}

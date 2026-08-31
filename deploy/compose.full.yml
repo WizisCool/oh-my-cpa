@@ -1,0 +1,67 @@
+services:
+  cpa:
+    image: ${CPA_IMAGE:-eceasy/cli-proxy-api:latest}
+    pull_policy: always
+    container_name: ${CPA_CONTAINER_NAME:-cli-proxy-api}
+    environment:
+      DEPLOY: ${DEPLOY:-}
+      MANAGEMENT_PASSWORD: ${CPA_MANAGEMENT_KEY:?set CPA_MANAGEMENT_KEY}
+    expose:
+      - "8317"
+    volumes:
+      - ${CPA_CONFIG_PATH:-../cpa/config.yaml}:/CLIProxyAPI/config.yaml
+      - ${CPA_AUTH_PATH:-../cpa/auths}:/root/.cli-proxy-api
+      - ${CPA_LOG_PATH:-../cpa/logs}:/CLIProxyAPI/logs
+      - ${CPA_PLUGIN_PATH:-../cpa/plugins}:/CLIProxyAPI/plugins
+    restart: unless-stopped
+    networks:
+      - oh-my-cpa
+
+  oh-my-cpa:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: ${OMCPA_IMAGE:-oh-my-cpa:local}
+    container_name: ${OMCPA_CONTAINER_NAME:-oh-my-cpa}
+    depends_on:
+      - cpa
+    expose:
+      - "8080"
+    environment:
+      OMCPA_LISTEN_ADDR: ":8080"
+      OMCPA_BASE_PATH: ${OMCPA_BASE_PATH:-/omc}
+      OMCPA_DATA_DIR: /data
+      OMCPA_CPA_BASE_URL: http://cpa:8317
+      OMCPA_CPA_USAGE_ADDR: cpa:8317
+      OMCPA_CPA_MANAGEMENT_KEY: ${CPA_MANAGEMENT_KEY:?set CPA_MANAGEMENT_KEY}
+      OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?set OMCPA_MASTER_KEY}
+      OMCPA_SESSION_SECRET: ${OMCPA_SESSION_SECRET:-change-me-in-production}
+      OMCPA_PUBLIC_URL: ${OMCPA_PUBLIC_URL:-http://localhost/omc}
+    volumes:
+      - ${OMCPA_DATA_PATH:-../oh-my-cpa-data}:/data
+    restart: unless-stopped
+    networks:
+      - oh-my-cpa
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: ${CADDY_CONTAINER_NAME:-oh-my-cpa-caddy}
+    depends_on:
+      - cpa
+      - oh-my-cpa
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - "${HTTP_BIND:-0.0.0.0:80}:80"
+      - "${HTTPS_BIND:-0.0.0.0:443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${CADDY_DATA_PATH:-../caddy-data}:/data
+      - ${CADDY_CONFIG_PATH:-../caddy-config}:/config
+    restart: unless-stopped
+    networks:
+      - oh-my-cpa
+
+networks:
+  oh-my-cpa:
+    name: ${OMCPA_NETWORK_NAME:-oh-my-cpa}
