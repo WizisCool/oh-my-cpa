@@ -67,6 +67,7 @@ func TestNewClientValidatesURLAndKey(t *testing.T) {
 	}{
 		{name: "missing url", base: "", key: "secret"},
 		{name: "bad scheme", base: "ftp://example.test", key: "secret"},
+		{name: "userinfo", base: "http://user:password@example.test", key: "secret"},
 		{name: "missing key", base: "http://example.test", key: ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {

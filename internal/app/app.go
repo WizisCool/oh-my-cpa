@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/api"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/auth"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/config"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
@@ -45,6 +46,10 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 	if err != nil {
 		return nil, fmt.Errorf("initialize secret cipher: %w", err)
 	}
+	authManager, err := auth.New(cfg.AdminPassword, cfg.SessionSecret, cfg.BasePath, cfg.PublicURL)
+	if err != nil {
+		return nil, fmt.Errorf("initialize administrator authentication: %w", err)
+	}
 	db, err := repository.Open(ctx, cfg.DatabasePath)
 	if err != nil {
 		return nil, err
@@ -54,7 +59,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 		db.Close()
 		return nil, err
 	}
-	handler := api.NewHandler(cfg, repo, cipher, logger)
+	handler := api.NewHandler(cfg, repo, cipher, logger, authManager)
 	return &App{
 		cfg:     cfg,
 		db:      db,

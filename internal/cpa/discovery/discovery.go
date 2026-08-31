@@ -118,7 +118,7 @@ func (d *Discoverer) fromCodexAPIKey(instanceID string, index int, entry managem
 	if err != nil {
 		return domain.DiscoveredResource{}, err
 	}
-	baseURL := strings.TrimSpace(entry.BaseURL)
+	baseURL := publicURL(entry.BaseURL)
 	return domain.DiscoveredResource{
 		InstanceID:      instanceID,
 		ResourceKey:     key,
@@ -135,13 +135,13 @@ func (d *Discoverer) fromCodexAPIKey(instanceID string, index int, entry managem
 			AuthType: "api_key",
 			Priority: entry.Priority,
 			Prefix:   entry.Prefix,
-			Extra:    map[string]string{"index": fmt.Sprintf("%d", index), "proxy_url": entry.ProxyURL, "api_key_present": fmt.Sprintf("%t", strings.TrimSpace(entry.APIKey) != "")},
+			Extra:    map[string]string{"index": fmt.Sprintf("%d", index), "proxy_configured": fmt.Sprintf("%t", strings.TrimSpace(entry.ProxyURL) != ""), "api_key_present": fmt.Sprintf("%t", strings.TrimSpace(entry.APIKey) != "")},
 		},
 	}, nil
 }
 
 func (d *Discoverer) fromOpenAICompatibility(instanceID string, index int, provider management.OpenAICompatibility) ([]domain.DiscoveredResource, error) {
-	base := strings.TrimSpace(provider.BaseURL)
+	base := publicURL(provider.BaseURL)
 	entries := provider.APIKeyEntries
 	if len(entries) == 0 && len(provider.LegacyAPIKeys) > 0 {
 		entries = make([]management.APIKeyEntry, 0, len(provider.LegacyAPIKeys))
@@ -175,7 +175,7 @@ func (d *Discoverer) fromOpenAICompatibility(instanceID string, index int, provi
 				Models:   modelNames(provider.Models),
 				AuthType: "api_key",
 				Disabled: provider.Disabled,
-				Extra:    map[string]string{"provider": provider.Name, "index": fmt.Sprintf("%d", index), "key_index": fmt.Sprintf("%d", keyIndex), "proxy_url": entry.ProxyURL, "api_key_present": fmt.Sprintf("%t", strings.TrimSpace(entry.APIKey) != "")},
+				Extra:    map[string]string{"provider": provider.Name, "index": fmt.Sprintf("%d", index), "key_index": fmt.Sprintf("%d", keyIndex), "proxy_configured": fmt.Sprintf("%t", strings.TrimSpace(entry.ProxyURL) != ""), "api_key_present": fmt.Sprintf("%t", strings.TrimSpace(entry.APIKey) != "")},
 			},
 		})
 	}
@@ -245,8 +245,21 @@ func normalizeDriver(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
 }
 
-func normalizeURL(value string) string {
+func publicURL(value string) string {
 	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	parsed.User = nil
+	return strings.TrimRight(parsed.String(), "/")
+}
+
+func normalizeURL(value string) string {
+	value = publicURL(value)
 	if value == "" {
 		return ""
 	}

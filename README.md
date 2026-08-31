@@ -26,7 +26,7 @@ Oh My CPA 是面向 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 
 环境要求：Go 1.24+、Node.js 22+、pnpm 9+。
 
 ```powershell
-pnpm --dir web install
+pnpm install --frozen-lockfile
 pnpm --dir web type-check
 pnpm --dir web build
 
@@ -51,6 +51,9 @@ go run ./cmd/oh-my-cpa
 $env:OMCPA_MASTER_KEY = 'change-this-to-at-least-32-random-bytes'
 $env:OMCPA_CPA_BASE_URL = 'http://127.0.0.1:8317'
 $env:OMCPA_CPA_MANAGEMENT_KEY = 'your-cpa-management-key'
+$env:OMCPA_SESSION_SECRET = 'at-least-32-random-bytes-for-sessions'
+$env:OMCPA_ADMIN_PASSWORD = 'change-this-admin-password'
+$env:OMCPA_PUBLIC_URL = 'http://127.0.0.1:8080/omc'
 $env:OMCPA_BASE_PATH = '/omc'
 ```
 
@@ -64,6 +67,8 @@ $env:OMCPA_BASE_PATH = '/omc'
 $env:CPA_MANAGEMENT_KEY = 'your-cpa-management-key'
 $env:OMCPA_MASTER_KEY = 'at-least-32-random-bytes-for-encryption'
 $env:OMCPA_SESSION_SECRET = 'at-least-32-random-bytes-for-sessions'
+$env:OMCPA_ADMIN_PASSWORD = 'change-this-admin-password'
+$env:OMCPA_PUBLIC_URL = 'https://xxxx.com/omc'
 $env:DOMAIN = 'xxxx.com'
 docker compose -f deploy/compose.full.yml up -d --build
 ```
@@ -81,15 +86,23 @@ Caddy 配置会保留 `/omc` 前缀，不使用 `handle_path`。Oh My CPA 通过
 
 ## API
 
+`/omc/api/v1/*` requires an administrator session cookie. The login/session endpoints are:
+
 ```text
-GET   /omc/api/healthz
-POST  /omc/api/v1/instances/default/discover
-GET   /omc/api/v1/resources?status=unclaimed
+GET  /omc/api/healthz
+POST /omc/api/auth/login     {"password":"..."}
+GET  /omc/api/auth/session
+POST /omc/api/auth/logout
+POST /omc/api/v1/instances/default/discover
+GET  /omc/api/v1/resources?status=unclaimed
 PATCH /omc/api/v1/resources/{id}/override
 ```
 
+Set both `OMCPA_SESSION_SECRET` (at least 32 bytes) and `OMCPA_ADMIN_PASSWORD` before starting. The session cookie is HttpOnly, SameSite=Strict, expires after 12 hours, and is marked Secure when `OMCPA_PUBLIC_URL` uses HTTPS.
+
 ## 安全边界
 
+- 管理员密码和会话签名密钥只在 Go 后端使用；浏览器仅持有短期 HttpOnly 会话 cookie；
 - CPA Management Key 只保存在 Go 后端并以 AES-GCM 密文落库；
 - 资源响应不会包含 API Key、OAuth Token 或 Auth File 原文；
 - 当前版本的 `api-call`、完整配置写回、OAuth 编排和用量订阅尚未开放；

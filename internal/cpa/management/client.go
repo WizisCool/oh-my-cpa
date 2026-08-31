@@ -31,6 +31,9 @@ func NewClient(baseURL, managementKey string, timeout time.Duration, tlsSkipVeri
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return nil, fmt.Errorf("CPA base URL must use http or https")
 	}
+	if parsed.User != nil {
+		return nil, errors.New("CPA base URL must not contain user info")
+	}
 	if strings.TrimSpace(managementKey) == "" {
 		return nil, errors.New("CPA management key is required")
 	}

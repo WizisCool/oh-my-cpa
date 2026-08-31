@@ -57,7 +57,10 @@ async function readError(response: Response): Promise<{ data: unknown; message: 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const { apiBaseUrl } = getAppConfig();
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  const url = cleanPath.startsWith(apiBaseUrl) ? cleanPath : `${apiBaseUrl}${cleanPath}`;
+  const authBaseUrl = `${apiRoot()}/api/auth`;
+  const url = cleanPath.startsWith(apiBaseUrl) || cleanPath.startsWith(authBaseUrl)
+    ? cleanPath
+    : `${apiBaseUrl}${cleanPath}`;
   const headers: Record<string, string> = {
     Accept: 'application/json',
     ...(options.headers as Record<string, string> || {}),

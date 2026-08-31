@@ -21,6 +21,7 @@ type Config struct {
 	CPA            CPAConfig
 	MasterKey      string
 	SessionSecret  string
+	AdminPassword  string
 	PublicURL      string
 	Version        string
 	RequestTimeout time.Duration
@@ -106,6 +107,7 @@ func Load() (Config, error) {
 		DatabasePath:   filepath.Join(dataDir, "oh-my-cpa.db"),
 		MasterKey:      strings.TrimSpace(os.Getenv("OMCPA_MASTER_KEY")),
 		SessionSecret:  strings.TrimSpace(os.Getenv("OMCPA_SESSION_SECRET")),
+		AdminPassword:  strings.TrimSpace(os.Getenv("OMCPA_ADMIN_PASSWORD")),
 		PublicURL:      strings.TrimSpace(os.Getenv("OMCPA_PUBLIC_URL")),
 		Version:        envOr("OMCPA_VERSION", "v0.1.0-dev"),
 		RequestTimeout: timeout,

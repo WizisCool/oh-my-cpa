@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 func TestNormalizeBasePath(t *testing.T) {
 	tests := []struct {
@@ -24,6 +27,24 @@ func TestNormalizeBasePath(t *testing.T) {
 				t.Fatalf("NormalizeBasePath(%q) = %q, want %q", test.in, got, test.want)
 			}
 		})
+	}
+}
+
+func TestLoadReadsAuthenticationConfiguration(t *testing.T) {
+	t.Setenv("OMCPA_BASE_PATH", "/omc")
+	t.Setenv("OMCPA_ADMIN_PASSWORD", "admin-password")
+	t.Setenv("OMCPA_SESSION_SECRET", "01234567890123456789012345678901")
+	t.Setenv("OMCPA_MASTER_KEY", "01234567890123456789012345678901")
+	t.Setenv("OMCPA_PUBLIC_URL", "https://example.test/omc")
+	for _, name := range []string{"OMCPA_DATA_DIR", "OMCPA_LISTEN_ADDR", "OMCPA_CPA_BASE_URL", "OMCPA_CPA_USAGE_ADDR", "OMCPA_REQUEST_TIMEOUT", "OMCPA_CPA_TLS_SKIP_VERIFY", "OMCPA_CPA_MANAGEMENT_KEY", "OMCPA_VERSION"} {
+		_ = os.Unsetenv(name)
+	}
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AdminPassword != "admin-password" || cfg.SessionSecret == "" || cfg.PublicURL != "https://example.test/omc" {
+		t.Fatalf("authentication config = %#v", cfg)
 	}
 }
 
