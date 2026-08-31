@@ -288,14 +288,35 @@ func (r *Repository) UpdateResourceOverride(ctx context.Context, id string, over
 	if r == nil || r.db == nil || r.db.SQL == nil {
 		return domain.DiscoveredResource{}, errors.New("repository is not initialized")
 	}
-	if _, err := r.GetResource(ctx, id); err != nil {
-		return domain.DiscoveredResource{}, err
+	if override.StatusSet && (override.Status == nil || !override.Status.Valid()) {
+		return domain.DiscoveredResource{}, fmt.Errorf("invalid resource status")
 	}
-	now := time.Now().Unix()
-	current, err := r.GetResource(ctx, id)
+	tx, err := r.db.SQL.BeginTx(ctx, nil)
 	if err != nil {
-		return domain.DiscoveredResource{}, err
+		return domain.DiscoveredResource{}, fmt.Errorf("begin resource override transaction: %w", err)
 	}
+	defer func() { _ = tx.Rollback() }()
+
+	var current domain.DiscoveredResource
+	row := tx.QueryRowContext(ctx, `
+		SELECT d.id, d.instance_id, d.resource_key, d.cpa_resource_type,
+		       d.cpa_auth_index, d.cpa_resource_name, d.cpa_driver,
+		       d.protocol_driver, d.protocol_display, d.base_url,
+		       d.suggested_source, d.suggested_plan, d.status, d.details_json,
+		       d.last_seen_at, d.created_at, d.updated_at,
+		       o.display_name, o.color, o.icon_ref, o.notes
+		FROM discovered_resources d
+		LEFT JOIN resource_overrides o ON o.resource_id = d.id
+		WHERE d.id = ?
+	`, id)
+	current, err = scanResource(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.DiscoveredResource{}, fmt.Errorf("resource %q: %w", id, sql.ErrNoRows)
+		}
+		return domain.DiscoveredResource{}, fmt.Errorf("load resource override target: %w", err)
+	}
+
 	if override.DisplayNameSet {
 		current.CustomDisplayName = normalizedPointer(override.DisplayName)
 	}
@@ -308,24 +329,32 @@ func (r *Repository) UpdateResourceOverride(ctx context.Context, id string, over
 	if override.NotesSet {
 		current.Notes = normalizedPointer(override.Notes)
 	}
-	_, err = r.db.SQL.ExecContext(ctx, `
-		INSERT INTO resource_overrides(resource_id, display_name, color, icon_ref, notes, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?)
-		ON CONFLICT(resource_id) DO UPDATE SET
-			display_name = excluded.display_name,
-			color = excluded.color,
-			icon_ref = excluded.icon_ref,
-			notes = excluded.notes,
-			updated_at = excluded.updated_at
-	`, id, nullableStringPtr(current.CustomDisplayName), nullableStringPtr(current.Color),
-		nullableStringPtr(current.IconRef), nullableStringPtr(current.Notes), now)
-	if err != nil {
-		return domain.DiscoveredResource{}, fmt.Errorf("save resource override: %w", err)
+	now := time.Now().Unix()
+	if override.DisplayNameSet || override.ColorSet || override.IconRefSet || override.NotesSet {
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO resource_overrides(resource_id, display_name, color, icon_ref, notes, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?)
+			ON CONFLICT(resource_id) DO UPDATE SET
+				display_name = excluded.display_name,
+				color = excluded.color,
+				icon_ref = excluded.icon_ref,
+				notes = excluded.notes,
+				updated_at = excluded.updated_at
+		`, id, nullableStringPtr(current.CustomDisplayName), nullableStringPtr(current.Color),
+			nullableStringPtr(current.IconRef), nullableStringPtr(current.Notes), now)
+		if err != nil {
+			return domain.DiscoveredResource{}, fmt.Errorf("save resource override: %w", err)
+		}
 	}
-	if override.StatusSet && override.Status != nil {
-		if _, err := r.db.SQL.ExecContext(ctx, `UPDATE discovered_resources SET status = ?, updated_at = ? WHERE id = ?`, *override.Status, now, id); err != nil {
+	if override.StatusSet {
+		_, err = tx.ExecContext(ctx, `UPDATE discovered_resources SET status = ?, updated_at = ? WHERE id = ?`, *override.Status, now, id)
+		if err != nil {
 			return domain.DiscoveredResource{}, fmt.Errorf("update resource status: %w", err)
 		}
+		current.Status = *override.Status
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.DiscoveredResource{}, fmt.Errorf("commit resource override: %w", err)
 	}
 	return r.GetResource(ctx, id)
 }

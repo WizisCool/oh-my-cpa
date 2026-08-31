@@ -94,6 +94,66 @@ func TestMigrationsAndResourceOverride(t *testing.T) {
 	}
 }
 
+func TestResourceOverridePatchSemantics(t *testing.T) {
+	repo, cipher := testRepository(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	ciphertext, nonce, err := cipher.Encrypt([]byte("secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.UpsertInstance(ctx, domain.CPAInstance{ID: "default", Name: "Default", BaseURL: "http://cpa:8317", UsageAddr: "cpa:8317", ManagementKeyCiphertext: ciphertext, ManagementKeyNonce: nonce, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	resources, err := repo.UpsertDiscoveredResources(ctx, "default", []domain.DiscoveredResource{{ResourceKey: "patch-target", CPAResourceType: "codex-api-key", CPADriver: "codex", ProtocolDriver: "openai_responses", ProtocolDisplay: "OpenAI Responses", BaseURL: "https://example.test", SuggestedSource: "Example", Status: domain.ResourceStatusUnclaimed}}, now, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := resources[0].ID
+	name, icon, color, notes := "Custom", "deepseek", "#123456", "keep me"
+	claimed := domain.ResourceStatusClaimed
+	if _, err := repo.UpdateResourceOverride(ctx, id, domain.ResourceOverride{DisplayName: &name, IconRef: &icon, Color: &color, Notes: &notes, Status: &claimed, DisplayNameSet: true, IconRefSet: true, ColorSet: true, NotesSet: true, StatusSet: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	// An omitted field is not a clear operation.
+	if _, err := repo.UpdateResourceOverride(ctx, id, domain.ResourceOverride{Status: &claimed, StatusSet: true}); err != nil {
+		t.Fatal(err)
+	}
+	preserved, err := repo.GetResource(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preserved.CustomDisplayName == nil || *preserved.CustomDisplayName != name || preserved.IconRef == nil || *preserved.IconRef != icon || preserved.Color == nil || *preserved.Color != color || preserved.Notes == nil || *preserved.Notes != notes {
+		t.Fatalf("status-only update changed metadata: %#v", preserved)
+	}
+
+	// Explicit empty values clear nullable metadata.
+	empty := ""
+	if _, err := repo.UpdateResourceOverride(ctx, id, domain.ResourceOverride{DisplayName: &empty, IconRef: &empty, Color: &empty, Notes: &empty, DisplayNameSet: true, IconRefSet: true, ColorSet: true, NotesSet: true}); err != nil {
+		t.Fatal(err)
+	}
+	cleared, err := repo.GetResource(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.CustomDisplayName != nil || cleared.IconRef != nil || cleared.Color != nil || cleared.Notes != nil || cleared.Status != domain.ResourceStatusClaimed {
+		t.Fatalf("explicit clear result = %#v", cleared)
+	}
+
+	invalid := domain.ResourceStatus("not-a-status")
+	if _, err := repo.UpdateResourceOverride(ctx, id, domain.ResourceOverride{Status: &invalid, StatusSet: true}); err == nil {
+		t.Fatal("expected invalid status error")
+	}
+	unchanged, err := repo.GetResource(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchanged.Status != domain.ResourceStatusClaimed {
+		t.Fatalf("invalid status mutated resource to %q", unchanged.Status)
+	}
+}
+
 func containsNoRows(err error) bool {
 	return err != nil && len(err.Error()) > 0 && (err.Error() == "sql: no rows in result set" ||
 		(len(err.Error()) >= len("resource ") && (stringContains(err.Error(), "sql: no rows in result set"))))

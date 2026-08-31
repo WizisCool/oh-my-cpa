@@ -199,7 +199,7 @@ func (h *Handler) updateResourceOverride(writer http.ResponseWriter, request *ht
 		IconRefSet:     payload.Icon != nil,
 		NotesSet:       payload.Notes != nil,
 	}
-	if payload.Status != nil && strings.TrimSpace(*payload.Status) != "" {
+	if payload.Status != nil {
 		status := domain.ResourceStatus(strings.TrimSpace(*payload.Status))
 		override.Status = &status
 		override.StatusSet = true
@@ -243,8 +243,11 @@ func (p overrideRequest) validate() error {
 	if p.Color != nil && strings.TrimSpace(*p.Color) != "" && !isHexColor(strings.TrimSpace(*p.Color)) {
 		return errors.New("color must be a six-digit hexadecimal color")
 	}
-	if p.Status != nil && strings.TrimSpace(*p.Status) != "" && !domain.ResourceStatus(strings.TrimSpace(*p.Status)).Valid() {
-		return errors.New("invalid resource status")
+	if p.Status != nil {
+		status := strings.TrimSpace(*p.Status)
+		if status == "" || !domain.ResourceStatus(status).Valid() {
+			return errors.New("invalid resource status")
+		}
 	}
 	if p.Icon != nil && len([]rune(*p.Icon)) > 64 {
 		return errors.New("icon reference is too long")
