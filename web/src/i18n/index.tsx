@@ -237,6 +237,17 @@ const DICT: Record<string, [string, string]> = {
   'af.identity_missing': ['身份信息未提供', 'No identity info provided'],
   'af.download_one': ['下载 {name}', 'Download {name}'],
   'af.delete_one': ['删除 {name}', 'Delete {name}'],
+  'af.drawer_title': ['认证文件详情与配置', 'Auth File Details & Configuration'],
+  'af.fields_title': ['安全字段配置', 'Safe Field Configuration'],
+  'af.field_priority': ['优先级 (Priority)', 'Priority'],
+  'af.field_weight': ['调度权重 (Weight)', 'Weight'],
+  'af.field_note': ['备注说明 (Note)', 'Note'],
+  'af.models_title': ['支持模型列表', 'Supported Models'],
+  'af.models_empty': ['暂无模型列表', 'No models reported'],
+  'af.quota_title': ['配额观测指标 (Quota Signals)', 'Quota Signals'],
+  'af.quota_empty': ['未上报配额限制', 'No quota signals reported'],
+  'af.save_fields': ['保存字段修改', 'Save Fields'],
+  'af.save_fields_success': ['认证文件字段已保存', 'Auth file fields saved'],
 
   // ── config management ───────────────────────────────────────────────────
   'cfg.search_placeholder': ['搜索配置项（标签或 YAML 键名）', 'Search settings (label or YAML key)'],
