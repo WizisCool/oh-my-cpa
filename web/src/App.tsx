@@ -13,6 +13,7 @@ import { createThemeConfig, type ThemeMode } from './theme/themeConfig';
 import { AppLayout } from './components/common/AppLayout';
 import { TriagePage } from './pages/TriagePage';
 import { AllResourcesPage } from './pages/AllResourcesPage';
+import { UsageEventsPage } from './pages/UsageEventsPage';
 import { InstanceStatusPage } from './pages/InstanceStatusPage';
 import { AuthGate } from './components/common/AuthGate';
 import { DashboardPage } from './pages/DashboardPage';
@@ -101,6 +102,7 @@ const AppRoutes: React.FC = () => {
         { path: 'oauth', element: <CapabilityPlaceholderPage navKey="oauth" capability="oauth" /> },
         { path: 'quota', element: <CapabilityPlaceholderPage navKey="quota" capability="quota" /> },
         { path: 'logs', element: <LogsPage /> },
+        { path: 'usage/events', element: <UsageEventsPage /> },
         { path: 'config', element: <ConfigPage /> },
         { path: 'plugins', element: <CapabilityPlaceholderPage navKey="plugins" capability="plugins" /> },
         { path: 'plugin-store', element: <CapabilityPlaceholderPage navKey="plugin_store" capability="plugin-store" /> },

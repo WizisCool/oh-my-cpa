@@ -8,6 +8,7 @@ import {
   FieldTimeOutlined,
   FileProtectOutlined,
   FileSearchOutlined,
+  HistoryOutlined,
   InfoCircleOutlined,
   LoginOutlined,
   MenuFoldOutlined,
@@ -67,6 +68,7 @@ const navGroups: NavGroup[] = [
     key: 'observe',
     labelKey: 'nav.group.observe',
     items: [
+      { key: '/usage/events', labelKey: 'nav.usage_events', icon: <HistoryOutlined /> },
       { key: '/logs', labelKey: 'nav.logs', icon: <ProfileOutlined /> },
     ],
   },

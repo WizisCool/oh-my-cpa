@@ -1,6 +1,7 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Alert, Button, Card, Empty, Skeleton, Space, Tooltip, Typography } from 'antd';
-import { QuestionCircleOutlined, ReloadOutlined } from '@ant-design/icons';
+import { HistoryOutlined, QuestionCircleOutlined, ReloadOutlined, RightOutlined } from '@ant-design/icons';
 import { Tiny } from '@ant-design/charts';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
@@ -139,6 +140,7 @@ function rateTone(rate: number | null): ChartTone {
 
 export const DashboardPage: React.FC = () => {
   const t = useT();
+  const navigate = useNavigate();
   // The chosen window is the operator's working context, so it lives in the
   // database: a reload, a service restart and a container rebuild all drop
   // browser storage, and none of them should reset what they are looking at.
@@ -255,6 +257,13 @@ export const DashboardPage: React.FC = () => {
         </div>
         <Space size={8}>
           <TimeRangeControl range={range} onChange={applyRange} />
+          <Button
+            size="small"
+            icon={<HistoryOutlined />}
+            onClick={() => navigate('/usage/events')}
+          >
+            {t('nav.usage_events')}
+          </Button>
           <Tooltip title={t('header.refresh_all')}>
             <Button size="small" icon={<ReloadOutlined />} loading={isFetching} onClick={() => refetch()} />
           </Tooltip>
@@ -267,7 +276,18 @@ export const DashboardPage: React.FC = () => {
 
       <div className="dashboard-grid">
         <Card className="dashboard-tile is-wide" styles={{ body: { padding: 20 } }}>
-          <div className="tile-label">{t('dash.total_requests')}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="tile-label">{t('dash.total_requests')}</div>
+            <Button
+              type="link"
+              size="small"
+              icon={<RightOutlined />}
+              onClick={() => navigate('/usage/events')}
+              style={{ padding: 0, height: 'auto', fontSize: 12 }}
+            >
+              {t('nav.usage_events')}
+            </Button>
+          </div>
           <div className="tile-value">{formatCount(data.requests.total)}</div>
           <div className="tile-caption">
             <span className="tile-rate">

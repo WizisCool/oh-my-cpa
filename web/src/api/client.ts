@@ -292,6 +292,11 @@ export const api = {
     return request<UsageEventDetail>(`/usage/events/${id}`, { method: 'GET' });
   },
 
+  async downloadUsageEventRequestLog(id: number): Promise<Blob> {
+    const { apiBaseUrl } = getAppConfig();
+    return downloadBlob(`${apiBaseUrl}/usage/events/${id}/request-log`);
+  },
+
   async getUsageFacets(query: string): Promise<UsageFacetsResponse> {
     return request<UsageFacetsResponse>(`/usage/facets${query ? `?${query}` : ''}`, { method: 'GET' });
   },

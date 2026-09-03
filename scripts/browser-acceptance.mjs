@@ -159,6 +159,7 @@ try {
   check('valid sign-in creates an administrator session', await page.locator('.app-shell').isVisible());
 
   await auditPage(page, responseBodies, '/dashboard', '.dashboard-page');
+  await auditPage(page, responseBodies, '/usage/events', '.usage-events-page');
   await auditPage(page, responseBodies, '/auth-files', '.auth-files-page');
   await auditPage(page, responseBodies, '/logs', '.logs-page');
   await auditPage(page, responseBodies, '/config', '.config-page');
