@@ -130,12 +130,14 @@ Login sends the CPA management key (`{"password":"<management-key>"}` at `POST /
 
 ## 安全边界
 
-- 登录凭证就是 CPA Management Key，不存在第二个管理密码；密钥只在 Go 后端校验并派生会话签名，浏览器仅持有短期 HttpOnly 会话 cookie；
-- CPA Management Key 只保存在 Go 后端并以 AES-GCM 密文落库；修改 CPA 的 key 后需同步 `OMCPA_CPA_MANAGEMENT_KEY` 并重启，旧会话随之全部失效；
-- 资源响应不会包含 API Key、OAuth Token 或 Auth File 原文；
+- 登录凭据就是 CPA Management Key，不存在第二个管理密码；密钥仅在 Go 后端校验并派生会话签名，浏览器仅持有短期 SameSite=Strict 的 HttpOnly 会话 cookie；
+- CPA Management Key 与原始 usage inbox 消息在 SQLite 中采用 AES-GCM 加密存储，主密钥由 `OMCPA_MASTER_KEY` 提供；
+- 日常与普通 API 响应（`/resources`、`/management/auth-files`、`/management/config`、`/usage/events`、`/management/dashboard`、`/healthz`）采用严格 DTO allowlist 与字段脱敏，不暴露 API Key、OAuth Token、Account、原始 Auth File 内容或带凭据的 URL；
+- 原始 Auth File 下载、原始配置 YAML 查看与编辑、request-log 下载属于显式高意图管理员受限操作，必须具备有效会话与同源校验，响应头标记 `Cache-Control: no-store`，并写入追加写入的 `audit_events` 审计日志；审计写失败时系统 fail-closed，阻止敏感数据导出与破坏性变更；
+- 数据库升级至 004 时执行不可逆脱敏与历史数据清理，迁移前自动执行可用磁盘空间检查、AES-GCM 加密备份、SHA-256 校验和及还原 smoke 验证，并按策略保留最近备份；
 - 当前版本的 `api-call`、完整配置写回、OAuth 编排和用量订阅尚未开放；
 - SQLite 部署必须保持单 Oh My CPA 副本；
 - 不应把 CPA Management API 直接暴露到公网；
-- `OMCPA_MASTER_KEY` 丢失后无法解密已保存的 CPA 密钥。
+- `OMCPA_MASTER_KEY` 丢失后无法解密已保存的密文。
 
 术语和领域模型见 [`CONTEXT.md`](CONTEXT.md)，架构决策见 [`docs/adr/0001-go-react-sqlite-modular-monolith.md`](docs/adr/0001-go-react-sqlite-modular-monolith.md)。

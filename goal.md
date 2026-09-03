@@ -1054,3 +1054,25 @@ Codex 完成全部或一个阶段时，必须输出：
 - workflow 同等门禁：`pnpm install --frozen-lockfile`、Chromium 安装、`pnpm verify:static`、worktree/history secret scan、`pnpm verify:e2e`、`git diff --check` 均通过。
 - 测试结果：Go test/vet、TypeScript、严格 i18n、payload/dirty tests、Ant Design lint、Gitleaks worktree/history scan 全部通过；deterministic fake CPA 浏览器验收通过 51 项检查。
 - 运行边界：仓库尚未配置 remote，因此本阶段没有 hosted CI URL；本地 verified clone 已完成与 workflow 等价的可执行门禁。
+
+## 阶段 1 执行记录（P0 秘密治理）
+
+- 目标达成：
+  1. 移除 `AuthFile.Account` 在资源 identity 与 `details_json` 中的流向；fallback identity 移除数组索引，在无稳定 ID 时明确标记 `identity_collision=true`；收紧 `domain.ResourceDetails` 为严格字段与固定 allowlist `Extra`。
+  2. 收紧 `/resources` 响应为显式 `resourceDetailsResponse` DTO 投影，不返回底层 domain persistence 内部对象；URL 去除 userinfo、query 及 fragment。
+  3. 新增 `migrations/004_sensitive_data_cleanup.sql` 与 `sanitizeHistoricalDataTx` 迁移治理钩子，清理历史 `details_json`、`usage_inboxes.raw_message/last_error`、`error_events` body/auth_status/quota_reason，并将历史明文 `api_group_key` 与 `source` 转化为安全 keyed HMAC 或脱敏标记，新增 `api_group_label` 列。
+  4. 实现迁移前安全运维前置：可用磁盘空间检查、AES-GCM 加密备份、SHA-256 校验和生成与验证、`RestoreBackupSmoke` 还原烟雾测试，以及备份轮转策略（retention）。
+  5. 修复 `usage.DecodeEvent`/persistence/API 的 key 扩散：`apiGroupIdentity` 输出 keyed HMAC 与独立 `api_group_label`；`usage_inboxes` 落库默认存储安全投影并在具备应用 cipher 时加密存储原始消息；`error_events` 写入时执行字段级 redaction。
+  6. 建立最小追加写入 `audit_events` 表与审计服务，完整覆盖：Auth File 删除与下载、Logs 清理、Config scalar/source 保存、Config source 查看、request-log 下载；审计写失败时 fail-closed 阻止敏感内容外发或破坏性变更，并记录 ERROR 告警。
+  7. 编写完整的迁移升级、备份还原、审计追加与失败注入、DTO allowlist 排除秘密的自动化测试。
+  8. 更新 `README.md` 安全边界声明，严格对齐已验证事实。
+- 验证结果：
+  - `go test ./...` 全绿（涵盖 repository 迁移与备份还原测试、audit 服务与注入测试、DTO allowlist 测试、security、usage decode、ingest 与 API 测试）；
+  - `go vet ./...` 零警告；
+  - `pnpm type-check`、`pnpm test:i18n`、`pnpm check-i18n`、`pnpm test:payload`、`node --experimental-strip-types scripts/test-dirty.ts`、`pnpm build`、`pnpm lint:antd` 全部通过；
+  - `pnpm verify:secrets:worktree` 与 `pnpm verify:secrets:history` 均无泄漏（0 leaks）；
+  - `pnpm verify:e2e` 51 项 deterministic fake CPA 浏览器验收测试全部通过。
+- 剩余风险与已知限制：
+  - 依赖单节点本地 SQLite 与本地主密钥 `OMCPA_MASTER_KEY`；
+  - CPA 后端如果直接返回不受控格式的错误，仍依赖基于规则与正则的文本脱敏；
+  - 阶段 5 将在 ADR 中进一步固化完整 CPA Binding 层级体系。
