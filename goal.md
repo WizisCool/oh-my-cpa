@@ -1137,3 +1137,33 @@ Codex 完成全部或一个阶段时，必须输出：
   - `pnpm verify:e2e` 53 项端到端检查全数通过。
 - 剩余风险与已知限制：
   - 移动端视图目前采用局部横向滚动容器适配超宽表格，更深度的卡片流模式可随需求进一步拓展。
+
+## 阶段 4 执行记录（Usage 一致性与可解释的数据完整性）
+
+- 目标达成：
+  1. 保证 Rollup 与 Checkpoint 的强原子性：
+     - 将 `AggregateUsageGrain` 内部的 Checkpoint 读取、High-water 选择、Additive Rollup 插入及 Checkpoint 水位线推进行为全部纳入单一不可拆分的序列化事务；
+     - 彻底消除进程崩溃或提交中途失败可能产生的双重计数；
+     - 新增多协程并发聚合测试 `TestConcurrentAggregateUsageGrainIsAtomicAndExact`，验证多 Worker 并发聚合同一批事件总量精确无误。
+  2. 消除非唯一 auth_index JOIN 导致的事件列表扇出：
+     - 在 `ListUsageEvents` 与 `GetUsageEvent` 中将直接 `LEFT JOIN discovered_resources` 替换为无歧义聚合子查询（仅当 auth_index 映射唯一资源时绑定，存在多条歧义资源时返回 unbound，不盲目扇出）；
+     - 新增测试 `TestAmbiguousAuthIndexDoesNotDuplicateEvents`，验证多资源重名 auth_index 下事件列表数量绝对唯一，分页游标不乱序。
+  3. 建立持久化 Ingest Gaps 与网络交付语义：
+     - 新增不可变迁移 `005_ingest_gaps.sql`，建立持久化 `ingest_gaps` 表；
+     - 修正 `migrations/002_usage_ingest.sql` 中“same transaction as the pop”的不准确注释，明确表达远端网络 pop 与本地写入的在途边界与 at-most-once 交付语义；
+     - 当 `AppendUsageInbox` 发生本地数据库写入失败时，自动捕获并持久化 `ingest_gaps` 记录（包含实例、模式、时间区间、丢失估计数量与脱敏原因码），并在采集状态接口及运行状态中可见；
+     - 优化订阅模式优雅退出（Shutdown flush），在上下文取消前执行紧急缓冲区刷盘，避免退役时内存丢包；
+     - 新增测试 `TestRunnerRecordsIngestGapOnAppendFailure` 与 `TestRunnerShutdownFlushPreservesBufferedItems`。
+  4. 强化 Retention 保留策略：
+     - 在 `PurgeUsageOlderThan` 中不仅清理已处理消息，同时按保留期限严格清理过期的 `InboxDiscarded`（Poison 废弃消息）与历史 `ingest_gaps` 记录，防止未处理与异常数据无限累积膨胀；
+     - 新增 `TestIngestGapsRecordingAndRetention` 自动化测试。
+- 验证结果：
+  - `go test ./...` 全部通过（包含并发聚合精确性、多资源扇出拦截、覆盖区间缺口记录与保留清理测试）；
+  - `go vet ./...` 零警告；
+  - `pnpm type-check`、`pnpm check-i18n`、`pnpm test:i18n`、`pnpm test:payload`、`pnpm test:config-states`、`node --experimental-strip-types scripts/test-dirty.ts` 全部通过；
+  - `pnpm lint:antd` 通过（0 a11y、0 usage、0 performance）；
+  - `pnpm build` 顺利产出并同步嵌入静态资产；
+  - `pnpm verify:secrets:worktree` 与 `pnpm verify:secrets:history` 零泄漏；
+  - `pnpm verify:e2e` 53 项端到端检查全数通过。
+- 剩余风险与已知限制：
+  - 远端 CPA 若在 pop 返回前崩溃且已从 Redis 队列移除，网络物理层截断风险依赖远端 CPA 的可靠性，本地通过 `ingest_gaps` 建立最大程度的故障追踪与区间可见性。
