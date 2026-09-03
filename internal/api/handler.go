@@ -43,6 +43,7 @@ type Handler struct {
 	configMu     sync.Mutex
 	grantMu      sync.RWMutex
 	revealGrants map[string]time.Time
+	startTime    time.Time
 }
 
 func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypto.Cipher, logger *slog.Logger, authManager *auth.Manager) *Handler {
@@ -54,6 +55,7 @@ func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypt
 		logger:       logger,
 		auth:         authManager,
 		revealGrants: make(map[string]time.Time),
+		startTime:    time.Now(),
 	}
 }
 
@@ -118,6 +120,8 @@ func (h *Handler) Router() http.Handler {
 				v1.Delete("/management/oauth/session", h.cancelOAuthSession)
 				v1.Get("/management/quota", h.getQuotaOverview)
 				v1.Post("/management/quota/reset", h.resetCredentialQuota)
+				v1.Get("/management/system", h.getSystemInfo)
+				v1.Get("/management/system/diagnostics", h.getSystemDiagnostics)
 				v1.NotFound(h.notFound)
 				v1.MethodNotAllowed(h.methodNotAllowed)
 			})

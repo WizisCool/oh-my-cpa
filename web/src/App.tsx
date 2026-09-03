@@ -23,6 +23,7 @@ import { ConfigPage } from './pages/ConfigPage';
 import { AuthFilesPage } from './pages/AuthFilesPage';
 import { OAuthPage } from './pages/OAuthPage';
 import { QuotaPage } from './pages/QuotaPage';
+import { SystemPage } from './pages/SystemPage';
 import { CapabilityPlaceholderPage } from './pages/CapabilityPlaceholderPage';
 import { ThemeContext } from './theme/ThemeContext';
 import { I18nProvider, useI18n } from './i18n';
@@ -109,7 +110,7 @@ const AppRoutes: React.FC = () => {
         { path: 'config', element: <ConfigPage /> },
         { path: 'plugins', element: <CapabilityPlaceholderPage navKey="plugins" capability="plugins" /> },
         { path: 'plugin-store', element: <CapabilityPlaceholderPage navKey="plugin_store" capability="plugin-store" /> },
-        { path: 'system', element: <CapabilityPlaceholderPage navKey="system" capability="system" /> },
+        { path: 'system', element: <SystemPage /> },
         { path: 'resources/triage', element: <TriagePage /> },
         { path: 'resources/all', element: <AllResourcesPage /> },
         { path: 'instances', element: <InstanceStatusPage /> },

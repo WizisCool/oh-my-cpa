@@ -824,6 +824,36 @@ const DICT: Record<string, [string, string]> = {
   'quota.filter_normal': ['正常凭据', 'Normal'],
   'quota.filter_exceeded': ['超限凭据', 'Exceeded'],
 
+  // ── system ───────────────────────────────────────────────────────────────
+  'sys.title': ['系统信息与自检诊断', 'System Information & Diagnostics'],
+  'sys.subtitle': ['查看系统组件拓扑、版本检查与运行状态，导出脱敏诊断包', 'Inspect system topology, version status, runtime health, and export redacted diagnostics'],
+  'sys.version_card': ['版本与更新', 'Versions & Updates'],
+  'sys.omc_version': ['Oh My CPA 版本', 'Oh My CPA Version'],
+  'sys.cpa_version': ['CPA 运行时版本', 'CPA Runtime Version'],
+  'sys.latest_version': ['上游最新版本', 'Upstream Latest Version'],
+  'sys.update_available': ['发现新版本：{version}', 'New version available: {version}'],
+  'sys.is_latest': ['已是最新版本', 'Up to date'],
+  'sys.checking_updates': ['正在检查更新…', 'Checking for updates…'],
+  'sys.topology_card': ['服务拓扑与组件健康', 'Service Topology & Health'],
+  'sys.component_cpa': ['CPA 代理网关', 'CPA Proxy Gateway'],
+  'sys.component_db': ['SQLite 数据库', 'SQLite Database'],
+  'sys.component_collector': ['用量采集器', 'Usage Ingestion Collector'],
+  'sys.cpa_latency': ['连接延迟：{ms}ms', 'Latency: {ms}ms'],
+  'sys.db_mode': ['模式：WAL 驱动', 'Mode: WAL driver'],
+  'sys.collector_mode': ['模式：{mode} (缺口: {gaps})', 'Mode: {mode} (gaps: {gaps})'],
+  'sys.runtime_card': ['运行环境与资源指标', 'Runtime & Resource Metrics'],
+  'sys.runtime_go': ['Go 运行时', 'Go Runtime'],
+  'sys.runtime_os': ['操作系统 / 架构', 'OS / Architecture'],
+  'sys.runtime_uptime': ['运行时间', 'Uptime'],
+  'sys.runtime_goroutines': ['活动协程数', 'Active Goroutines'],
+  'sys.runtime_mem': ['内存占用 (Alloc)', 'Memory Alloc'],
+  'sys.diag_card': ['导出脱敏诊断包', 'Export Redacted Diagnostics'],
+  'sys.diag_desc': ['生成包含当前版本、数据库元数据、脱敏审计记录与运行指标的 JSON 诊断包。严禁包含任何密钥、密码、令牌或私有 Auth File 内容。操作受审计。', 'Generate a JSON diagnostic bundle containing versions, DB metadata, redacted audits, and runtime metrics. Strictly excludes keys, secrets, tokens, or auth contents. Audited.'],
+  'sys.download_diag': ['下载诊断包', 'Download Diagnostics'],
+  'sys.download_success': ['诊断包已成功生成并下载', 'Diagnostics bundle downloaded successfully'],
+  'sys.download_failed': ['生成诊断包失败：{msg}', 'Failed to generate diagnostics: {msg}'],
+
+
 };
 
 export type TFunc = (key: string, vars?: Record<string, string | number>) => string;

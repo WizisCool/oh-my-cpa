@@ -185,6 +185,7 @@ try {
   await auditPage(page, responseBodies, '/resources/triage', '.terminal-panel');
   await auditPage(page, responseBodies, '/resources/all', '.terminal-page');
   await auditPage(page, responseBodies, '/instances', '.terminal-page');
+  await auditPage(page, responseBodies, '/system', '.system-page');
   await auditPage(page, responseBodies, '/quick-start', '.capability-page');
 
   await page.goto(`${appURL}/dashboard`, { waitUntil: 'networkidle' });

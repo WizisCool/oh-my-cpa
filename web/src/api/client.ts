@@ -14,6 +14,7 @@ import { ConfigScalarsResponse, ConfigSourceResponse, ConfigGrantResponse } from
 import { ClientAPIKeyItem, ProviderItem } from '../types/providers';
 import { OAuthProviderItem, StartOAuthResponse, OAuthStatusResponse } from '../types/oauth';
 import { QuotaOverviewResponse } from '../types/quota';
+import { SystemInfoResponse } from '../types/system';
 
 
 /** DEFAULT_LOG_PAGE is the page size a fresh tail read asks for. */
@@ -448,6 +449,16 @@ export const api = {
   async cancelOAuthSession(sessionId?: string): Promise<{ status: string }> {
     const search = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : '';
     return request<{ status: string }>(`/management/oauth/session${search}`, { method: 'DELETE' });
+  },
+
+  // System
+  async getSystemInfo(): Promise<SystemInfoResponse> {
+    return request<SystemInfoResponse>('/management/system', { method: 'GET' });
+  },
+
+  async downloadSystemDiagnostics(): Promise<Blob> {
+    const { apiBaseUrl } = getAppConfig();
+    return downloadBlob(`${apiBaseUrl}/management/system/diagnostics`);
   },
 
   // Quota
