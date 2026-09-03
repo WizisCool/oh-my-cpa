@@ -1,0 +1,43 @@
+# Set default behavior to automatically normalize line endings
+* text=auto eol=lf
+
+# Explicit text file types with LF
+*.go text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.sql text eol=lf
+*.md text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.sh text eol=lf
+.gitignore text eol=lf
+.editorconfig text eol=lf
+.dockerignore text eol=lf
+Dockerfile text eol=lf
+
+# Windows scripts
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binaries / non-text
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.tar.gz binary
+*.zip binary
+*.exe binary
+*.bundle binary
