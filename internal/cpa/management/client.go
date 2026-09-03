@@ -149,6 +149,64 @@ func (c *Client) OpenAICompatibility(ctx context.Context) (OpenAICompatibilityRe
 	return response, nil
 }
 
+type ClientAPIKeysResponse struct {
+	APIKeys []string `json:"api-keys"`
+}
+
+func (c *Client) ClientAPIKeys(ctx context.Context) ([]string, error) {
+	var response ClientAPIKeysResponse
+	if err := c.DoJSON(ctx, http.MethodGet, "/api-keys", &response); err != nil {
+		return nil, err
+	}
+	return response.APIKeys, nil
+}
+
+func (c *Client) UpdateClientAPIKeys(ctx context.Context, keys []string) error {
+	payload := map[string]any{"api-keys": keys}
+	return c.doJSONBody(ctx, http.MethodPut, "/api-keys", payload, nil)
+}
+
+func (c *Client) UpdateCodexAPIKeys(ctx context.Context, entries []CodexAPIKey) error {
+	payload := map[string]any{"codex-api-key": entries}
+	return c.doJSONBody(ctx, http.MethodPut, "/codex-api-key", payload, nil)
+}
+
+func (c *Client) UpdateOpenAICompatibility(ctx context.Context, entries []OpenAICompatibility) error {
+	payload := map[string]any{"openai-compatibility": entries}
+	return c.doJSONBody(ctx, http.MethodPut, "/openai-compatibility", payload, nil)
+}
+
+type SimpleKeyEntry struct {
+	APIKey    string `json:"api-key"`
+	AuthIndex string `json:"auth-index,omitempty"`
+	BaseURL   string `json:"base-url,omitempty"`
+	ProxyURL  string `json:"proxy-url,omitempty"`
+}
+
+type ClaudeAPIKeysResponse struct {
+	Entries []SimpleKeyEntry `json:"claude-api-key"`
+}
+
+func (c *Client) ClaudeAPIKeys(ctx context.Context) ([]SimpleKeyEntry, error) {
+	var response ClaudeAPIKeysResponse
+	if err := c.DoJSON(ctx, http.MethodGet, "/claude-api-key", &response); err != nil {
+		return nil, err
+	}
+	return response.Entries, nil
+}
+
+type GeminiAPIKeysResponse struct {
+	Entries []SimpleKeyEntry `json:"gemini-api-key"`
+}
+
+func (c *Client) GeminiAPIKeys(ctx context.Context) ([]SimpleKeyEntry, error) {
+	var response GeminiAPIKeysResponse
+	if err := c.DoJSON(ctx, http.MethodGet, "/gemini-api-key", &response); err != nil {
+		return nil, err
+	}
+	return response.Entries, nil
+}
+
 // PatchAuthFileStatus changes only the disabled state of a named auth file.
 // The endpoint and request shape are fixed here rather than supplied by an
 // HTTP caller.

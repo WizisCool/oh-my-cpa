@@ -160,6 +160,7 @@ try {
 
   await auditPage(page, responseBodies, '/dashboard', '.dashboard-page');
   await auditPage(page, responseBodies, '/usage/events', '.usage-events-page');
+  await auditPage(page, responseBodies, '/ai-providers', '.providers-page');
   await auditPage(page, responseBodies, '/auth-files', '.auth-files-page');
   await auditPage(page, responseBodies, '/logs', '.logs-page');
   await auditPage(page, responseBodies, '/config', '.config-page');

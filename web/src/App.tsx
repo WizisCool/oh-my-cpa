@@ -14,6 +14,7 @@ import { AppLayout } from './components/common/AppLayout';
 import { TriagePage } from './pages/TriagePage';
 import { AllResourcesPage } from './pages/AllResourcesPage';
 import { UsageEventsPage } from './pages/UsageEventsPage';
+import { ProvidersPage } from './pages/ProvidersPage';
 import { InstanceStatusPage } from './pages/InstanceStatusPage';
 import { AuthGate } from './components/common/AuthGate';
 import { DashboardPage } from './pages/DashboardPage';
@@ -97,7 +98,7 @@ const AppRoutes: React.FC = () => {
         { index: true, element: <Navigate to="/dashboard" replace /> },
         { path: 'dashboard', element: <DashboardPage /> },
         { path: 'quick-start', element: <CapabilityPlaceholderPage navKey="quick_start" capability="quick-start" /> },
-        { path: 'ai-providers', element: <CapabilityPlaceholderPage navKey="providers" capability="ai-providers" /> },
+        { path: 'ai-providers', element: <ProvidersPage /> },
         { path: 'auth-files', element: <AuthFilesPage /> },
         { path: 'oauth', element: <CapabilityPlaceholderPage navKey="oauth" capability="oauth" /> },
         { path: 'quota', element: <CapabilityPlaceholderPage navKey="quota" capability="quota" /> },

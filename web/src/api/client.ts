@@ -11,6 +11,7 @@ import { DashboardResponse, DashboardTailResponse } from '../types/dashboard';
 import { ErrorLogFile } from '../types/logs';
 import { CapabilityProbeReport } from '../types/capability';
 import { ConfigScalarsResponse, ConfigSourceResponse, ConfigGrantResponse } from '../types/configManagement';
+import { ClientAPIKeyItem, ProviderItem } from '../types/providers';
 
 /** DEFAULT_LOG_PAGE is the page size a fresh tail read asks for. */
 export const DEFAULT_LOG_PAGE = 2000;
@@ -265,7 +266,33 @@ export const api = {
     });
   },
 
-  /** getLogsStatus answers why a tail is empty: CPA only logs to file on demand. */
+  async getClientAPIKeys(): Promise<{ keys: ClientAPIKeyItem[]; total: number }> {
+    return request<{ keys: ClientAPIKeyItem[]; total: number }>('/management/api-keys', { method: 'GET' });
+  },
+
+  async createClientAPIKey(key: string): Promise<{ status: string; index: number; masked: string }> {
+    return request<{ status: string; index: number; masked: string }>('/management/api-keys', {
+      method: 'POST',
+      body: JSON.stringify({ key }),
+    });
+  },
+
+  async deleteClientAPIKey(index: number): Promise<{ status: string; deleted: number }> {
+    return request<{ status: string; deleted: number }>(`/management/api-keys/${index}`, { method: 'DELETE' });
+  },
+
+  async getManagementProviders(): Promise<{ providers: ProviderItem[]; total: number }> {
+    return request<{ providers: ProviderItem[]; total: number }>('/management/providers', { method: 'GET' });
+  },
+
+  async patchManagementProviderStatus(family: string, index: number, disabled: boolean): Promise<{ status: string; disabled: boolean }> {
+    return request<{ status: string; disabled: boolean }>('/management/providers/status', {
+      method: 'PATCH',
+      body: JSON.stringify({ family, index, disabled }),
+    });
+  },
+
+    /** getLogsStatus answers why a tail is empty: CPA only logs to file on demand. */
   async getLogsStatus(): Promise<LogsStatus> {
     return request<LogsStatus>('/management/logs/status', { method: 'GET' });
   },
