@@ -24,6 +24,7 @@ type PipelineStatus struct {
 	Decoder     ProcessorStatus               `json:"decoder"`
 	Maintenance MaintenanceStatus             `json:"maintenance"`
 	Stats       repository.UsagePipelineStats `json:"stats"`
+	RecentGaps  []repository.IngestGap        `json:"recent_gaps,omitempty"`
 	// Healthy is false when nothing has been captured and the collector is not
 	// reporting a working mode, so the UI can say so plainly.
 	Healthy bool `json:"healthy"`
@@ -81,6 +82,10 @@ func (p *Pipeline) Status(ctx context.Context) (PipelineStatus, error) {
 		return status, err
 	}
 	status.Stats = stats
+	if p.store != nil {
+		gaps, _ := p.store.ListIngestGaps(ctx, "default", 10)
+		status.RecentGaps = gaps
+	}
 	status.Healthy = status.Collector.Mode != "" && status.Collector.Mode != ModeOff
 	return status, nil
 }

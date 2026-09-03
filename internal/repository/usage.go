@@ -557,6 +557,16 @@ func (r *Repository) PurgeUsageOlderThan(ctx context.Context, cutoffMS int64) (i
 		InboxProcessed, safeCutoff); err != nil {
 		return 0, fmt.Errorf("purge usage inboxes: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM usage_inboxes WHERE status = ? AND popped_at < ?`,
+		InboxDiscarded, cutoffMS); err != nil {
+		return 0, fmt.Errorf("purge discarded usage inboxes: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM ingest_gaps WHERE ended_at_ms < ?`,
+		cutoffMS); err != nil {
+		return 0, fmt.Errorf("purge ingest gaps: %w", err)
+	}
 	if err := tx.Commit(); err != nil {
 		return 0, fmt.Errorf("commit usage purge: %w", err)
 	}

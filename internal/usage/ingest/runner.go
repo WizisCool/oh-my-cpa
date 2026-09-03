@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
 )
 
@@ -71,6 +73,12 @@ type ErrorSink interface {
 // a payload that is not stored here is gone forever.
 type Sink interface {
 	AppendUsageInbox(ctx context.Context, instanceID, sourceMode string, payloads []string, poppedAt time.Time) (int, error)
+}
+
+// GapRecorder is implemented by persistent sinks that track coverage loss
+// when a destructive pop fails to commit locally.
+type GapRecorder interface {
+	RecordIngestGap(ctx context.Context, gap repository.IngestGap) (int64, error)
 }
 
 // Config tunes the collector.
@@ -137,6 +145,7 @@ type Status struct {
 	Running       bool   `json:"running"`
 	Captured      int64  `json:"captured"`
 	ControlFrames int64  `json:"control_frames"`
+	CoverageGaps  int64  `json:"coverage_gaps"`
 	LastError     string `json:"last_error,omitempty"`
 	// AuthRejected marks that the last failure was CPA refusing the key, which
 	// the UI should surface as an actionable configuration error.
@@ -366,6 +375,10 @@ func (r *Runner) runSubscribe(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			_ = r.flush(shutdownCtx, ModeSubscribe, &batch)
+			_ = captureErrors()
+			cancel()
 			return nil
 		case payload, ok := <-stream.Messages():
 			if !ok {
@@ -461,9 +474,24 @@ func (r *Runner) flush(ctx context.Context, mode Mode, batch *[]string) error {
 		return nil
 	}
 	payloads := *batch
-	written, err := r.sink.AppendUsageInbox(ctx, r.instanceID, string(mode), payloads, time.Now())
+	poppedAt := time.Now()
+	written, err := r.sink.AppendUsageInbox(ctx, r.instanceID, string(mode), payloads, poppedAt)
 	*batch = payloads[:0]
 	if err != nil {
+		if recorder, ok := r.sink.(GapRecorder); ok {
+			_, _ = recorder.RecordIngestGap(context.Background(), repository.IngestGap{
+				InstanceID:     r.instanceID,
+				SourceMode:     string(mode),
+				StartedAtMS:    poppedAt.UnixMilli(),
+				EndedAtMS:      time.Now().UnixMilli(),
+				EstimatedCount: len(payloads),
+				ReasonCode:     "append_failure",
+				Summary:        security.RedactText(err.Error()),
+			})
+		}
+		r.mu.Lock()
+		r.status.CoverageGaps++
+		r.mu.Unlock()
 		return fmt.Errorf("append usage inbox: %w", err)
 	}
 	if written > 0 {

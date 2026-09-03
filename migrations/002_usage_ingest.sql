@@ -5,7 +5,7 @@
 -- older tables which store unixepoch() seconds.
 --
 -- Pipeline shape (mirrors cpa-usage-keeper):
---   pop from CPA  ->  usage_inboxes (raw, same transaction as the pop)
+--   pop from CPA  ->  usage_inboxes (raw, durable write immediately following pop; tracked via ingest_gaps on write failure)
 --   inbox         ->  usage_events  (typed, decode may be retried)
 --   usage_events  ->  *_stats       (checkpoint-gated incremental rollup)
 
