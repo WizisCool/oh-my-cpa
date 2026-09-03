@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
 )
 
@@ -18,8 +19,9 @@ import (
 // so capture must be as fast and as reliable as possible, while decoding can
 // take its time and retry without ever losing the original payload.
 type Processor struct {
-	store  *repository.Repository
-	logger *slog.Logger
+	store         *repository.Repository
+	logger        *slog.Logger
+	fingerprinter security.Fingerprinter
 
 	// batchLimit caps how many inbox rows one pass decodes.
 	batchLimit int
@@ -41,6 +43,14 @@ type ProcessorStatus struct {
 
 // NewProcessor wires a decoder against the inbox store.
 func NewProcessor(store *repository.Repository, logger *slog.Logger, batchLimit int, idleInterval time.Duration) (*Processor, error) {
+	return NewProcessorWithFingerprinter(store, logger, batchLimit, idleInterval, nil)
+}
+
+// NewProcessorWithFingerprinter shares the application's keyed identity service
+// with usage decoding. The optional argument keeps small integrations and tests
+// that do not configure a master key source-compatible; those paths fail closed
+// to redacted markers.
+func NewProcessorWithFingerprinter(store *repository.Repository, logger *slog.Logger, batchLimit int, idleInterval time.Duration, fingerprinter security.Fingerprinter) (*Processor, error) {
 	if store == nil {
 		return nil, errors.New("usage inbox store is required")
 	}
@@ -53,7 +63,7 @@ func NewProcessor(store *repository.Repository, logger *slog.Logger, batchLimit 
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Processor{store: store, logger: logger, batchLimit: batchLimit, idleInterval: idleInterval}, nil
+	return &Processor{store: store, logger: logger, fingerprinter: fingerprinter, batchLimit: batchLimit, idleInterval: idleInterval}, nil
 }
 
 // Status copies the current decoder state.
@@ -109,7 +119,7 @@ func (p *Processor) ProcessOnce(ctx context.Context) (int, error) {
 	var lastReason string
 	for _, row := range batch {
 		observed := time.UnixMilli(row.PoppedAtMS)
-		event, errDecode := usage.DecodeEvent(row.RawMessage, row.InstanceID, observed)
+		event, errDecode := usage.DecodeEventWithFingerprinter(row.RawMessage, row.InstanceID, observed, p.fingerprinter)
 		if errDecode != nil {
 			failures = append(failures, row.ID)
 			lastReason = errDecode.Error()

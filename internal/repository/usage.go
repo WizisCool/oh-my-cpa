@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
 )
 
@@ -64,8 +65,10 @@ func (r *Repository) AppendUsageInbox(ctx context.Context, instanceID, sourceMod
 	defer func() { _ = tx.Rollback() }()
 
 	statement, err := tx.PrepareContext(ctx, `
-		INSERT INTO usage_inboxes (instance_id, source_mode, message_hash, raw_message, status, popped_at)
-		VALUES (?, ?, ?, ?, '`+InboxPending+`', ?)`)
+		INSERT INTO usage_inboxes (
+			instance_id, source_mode, message_hash, raw_message,
+			raw_message_ciphertext, raw_message_nonce, status, popped_at
+		) VALUES (?, ?, ?, ?, ?, ?, '`+InboxPending+`', ?)`)
 	if err != nil {
 		return 0, fmt.Errorf("prepare usage inbox insert: %w", err)
 	}
@@ -74,10 +77,18 @@ func (r *Repository) AppendUsageInbox(ctx context.Context, instanceID, sourceMod
 	poppedMS := poppedAt.UnixMilli()
 	written := 0
 	for _, payload := range payloads {
-		if strings.TrimSpace(payload) == "" || payload == "null" {
+		if strings.TrimSpace(payload) == "" || strings.TrimSpace(payload) == "null" {
 			continue
 		}
-		if _, errExec := statement.ExecContext(ctx, instanceID, sourceMode, usage.Hash(payload), payload, poppedMS); errExec != nil {
+		projection := security.RedactPayload(payload)
+		var ciphertext, nonce []byte
+		if r.db.cipher != nil {
+			ciphertext, nonce, err = r.db.cipher.Encrypt([]byte(payload))
+			if err != nil {
+				return written, fmt.Errorf("encrypt usage inbox row: %w", err)
+			}
+		}
+		if _, errExec := statement.ExecContext(ctx, instanceID, sourceMode, usage.Hash(projection), projection, ciphertext, nonce, poppedMS); errExec != nil {
 			return written, fmt.Errorf("insert usage inbox row: %w", errExec)
 		}
 		written++
@@ -97,7 +108,8 @@ func (r *Repository) ClaimUsageInboxBatch(ctx context.Context, limit int) ([]Usa
 		limit = 200
 	}
 	rows, err := r.SQL().QueryContext(ctx, `
-		SELECT id, instance_id, source_mode, message_hash, raw_message, status, attempt_count,
+		SELECT id, instance_id, source_mode, message_hash, raw_message,
+		       raw_message_ciphertext, raw_message_nonce, status, attempt_count,
 		       COALESCE(last_error, ''), popped_at
 		FROM usage_inboxes
 		WHERE status = '`+InboxPending+`'
@@ -111,9 +123,21 @@ func (r *Repository) ClaimUsageInboxBatch(ctx context.Context, limit int) ([]Usa
 	var items []UsageInbox
 	for rows.Next() {
 		var item UsageInbox
+		var ciphertext, nonce []byte
 		if errScan := rows.Scan(&item.ID, &item.InstanceID, &item.SourceMode, &item.MessageHash,
-			&item.RawMessage, &item.Status, &item.AttemptCount, &item.LastError, &item.PoppedAtMS); errScan != nil {
+			&item.RawMessage, &ciphertext, &nonce, &item.Status, &item.AttemptCount,
+			&item.LastError, &item.PoppedAtMS); errScan != nil {
 			return nil, fmt.Errorf("scan usage inbox row: %w", errScan)
+		}
+		if len(ciphertext) > 0 {
+			if r.db.cipher == nil {
+				return nil, errors.New("usage inbox encryption key is unavailable")
+			}
+			plaintext, errDecrypt := r.db.cipher.Decrypt(ciphertext, nonce)
+			if errDecrypt != nil {
+				return nil, fmt.Errorf("decrypt usage inbox row: %w", errDecrypt)
+			}
+			item.RawMessage = string(plaintext)
 		}
 		items = append(items, item)
 	}
@@ -149,13 +173,13 @@ func (r *Repository) CommitUsageDecoded(ctx context.Context, decoded []UsageDeco
 
 	insert, err := tx.PrepareContext(ctx, `
 		INSERT INTO usage_events (
-			instance_id, event_key, api_group_key, provider, endpoint, auth_type, request_id,
+			instance_id, event_key, api_group_key, api_group_label, provider, endpoint, auth_type, request_id,
 			client_ip, x_forwarded_for, user_agent, model, model_alias, reasoning_effort,
 			service_tier, response_service_tier, executor_type, timestamp_ms, source, auth_index,
 			failed, generate, latency_ms, ttft_ms,
 			input_tokens, output_tokens, reasoning_tokens, cached_tokens,
 			cache_read_tokens, cache_creation_tokens, total_tokens, created_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, fmt.Errorf("prepare usage event insert: %w", err)
 	}
@@ -173,9 +197,9 @@ func (r *Repository) CommitUsageDecoded(ctx context.Context, decoded []UsageDeco
 	createdMS := time.Now().UnixMilli()
 	committed := 0
 	for _, item := range decoded {
-		event := item.Event
+		event := r.sanitizeUsageEvent(item.Event)
 		if _, errExec := insert.ExecContext(ctx,
-			event.InstanceID, event.EventKey, event.APIGroupKey, event.Provider, event.Endpoint,
+			event.InstanceID, event.EventKey, event.APIGroupKey, event.APIGroupLabel, event.Provider, event.Endpoint,
 			event.AuthType, event.RequestID, event.ClientIP, event.XForwardedFor, event.UserAgent,
 			event.Model, event.ModelAlias, event.ReasoningEffort, event.ServiceTier,
 			event.ResponseServiceTier, event.ExecutorType, event.TimestampMS, event.Source,
@@ -241,7 +265,7 @@ func (r *Repository) MarkUsageInboxFailure(ctx context.Context, id int64, reason
 		    last_error = ?,
 		    status = CASE WHEN attempt_count + 1 >= ? THEN ? ELSE ? END
 		WHERE id = ?`,
-		truncate(reason, 500), maxInboxAttempts, InboxDiscarded, InboxPending, id); err != nil {
+		security.RedactText(truncate(reason, 500)), maxInboxAttempts, InboxDiscarded, InboxPending, id); err != nil {
 		return fmt.Errorf("mark usage inbox failure: %w", err)
 	}
 	return nil
@@ -308,7 +332,7 @@ func (r *Repository) CaptureErrorEvent(ctx context.Context, instanceID, raw stri
 	if r == nil || r.SQL() == nil {
 		return errors.New("repository is not initialized")
 	}
-	event, err := usage.DecodeErrorEvent(raw, instanceID, observedAt)
+	event, err := usage.DecodeErrorEventWithFingerprinter(raw, instanceID, observedAt, r.db.Cipher())
 	if err != nil {
 		return err
 	}
@@ -346,13 +370,13 @@ func (r *Repository) InsertUsageEvents(ctx context.Context, events []usage.Event
 
 	statement, err := tx.PrepareContext(ctx, `
 		INSERT INTO usage_events (
-			instance_id, event_key, api_group_key, provider, endpoint, auth_type, request_id,
+			instance_id, event_key, api_group_key, api_group_label, provider, endpoint, auth_type, request_id,
 			client_ip, x_forwarded_for, user_agent, model, model_alias, reasoning_effort,
 			service_tier, response_service_tier, executor_type, timestamp_ms, source, auth_index,
 			failed, generate, latency_ms, ttft_ms,
 			input_tokens, output_tokens, reasoning_tokens, cached_tokens,
 			cache_read_tokens, cache_creation_tokens, total_tokens, created_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, fmt.Errorf("prepare usage event insert: %w", err)
 	}
@@ -361,8 +385,9 @@ func (r *Repository) InsertUsageEvents(ctx context.Context, events []usage.Event
 	createdMS := time.Now().UnixMilli()
 	var lastID int64
 	for _, event := range events {
+		event = r.sanitizeUsageEvent(event)
 		result, errExec := statement.ExecContext(ctx,
-			event.InstanceID, event.EventKey, event.APIGroupKey, event.Provider, event.Endpoint,
+			event.InstanceID, event.EventKey, event.APIGroupKey, event.APIGroupLabel, event.Provider, event.Endpoint,
 			event.AuthType, event.RequestID, event.ClientIP, event.XForwardedFor, event.UserAgent,
 			event.Model, event.ModelAlias, event.ReasoningEffort, event.ServiceTier,
 			event.ResponseServiceTier, event.ExecutorType, event.TimestampMS, event.Source,
@@ -396,12 +421,18 @@ func (r *Repository) InsertErrorEvent(ctx context.Context, event usage.ErrorEven
 			backoff_level, timestamp_ms, created_at_ms
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(event_key) DO NOTHING`,
-		event.InstanceID, event.EventKey, event.RequestID, event.Provider, event.Model,
-		event.AuthID, event.AuthIndex, event.StatusCode, event.Code, truncate(event.Body, 4000),
-		boolInt(event.Retryable), event.AuthStatus, boolInt(event.AuthDisabled),
-		boolInt(event.AuthUnavailable), boolInt(event.QuotaExceeded), event.QuotaReason,
-		event.NextRetryAfterMS, event.NextRecoverAtMS, event.BackoffLevel,
-		event.TimestampMS, time.Now().UnixMilli())
+		security.RedactText(truncate(event.InstanceID, 256)),
+		security.RedactText(truncate(event.EventKey, 256)),
+		security.RedactText(truncate(event.RequestID, 256)),
+		security.RedactText(truncate(event.Provider, 256)),
+		security.RedactText(truncate(event.Model, 256)),
+		security.FingerprintOrRedacted(r.db.Cipher(), "error-auth-id", event.AuthID),
+		security.RedactText(truncate(event.AuthIndex, 256)), event.StatusCode,
+		security.RedactText(truncate(event.Code, 256)), security.RedactText(truncate(event.Body, 4000)),
+		boolInt(event.Retryable), security.RedactText(truncate(event.AuthStatus, 512)),
+		boolInt(event.AuthDisabled), boolInt(event.AuthUnavailable), boolInt(event.QuotaExceeded),
+		security.RedactText(truncate(event.QuotaReason, 512)), event.NextRetryAfterMS,
+		event.NextRecoverAtMS, event.BackoffLevel, event.TimestampMS, time.Now().UnixMilli())
 	if err != nil {
 		return fmt.Errorf("insert error event: %w", err)
 	}
@@ -537,6 +568,141 @@ func boolInt(value bool) int {
 		return 1
 	}
 	return 0
+}
+
+// sanitizeUsageEvent enforces the same projection at the persistence boundary
+// as the decoder does at the ingest boundary. This protects callers that build
+// usage.Event values directly and keeps a future decoder change from widening
+// the database contract accidentally.
+func (r *Repository) sanitizeUsageEvent(event usage.Event) usage.Event {
+	event.InstanceID = persistedText(event.InstanceID, 256)
+	event.EventKey = persistedText(event.EventKey, 256)
+	event.RequestID = persistedText(event.RequestID, 256)
+	event.Provider = persistedText(event.Provider, 256)
+	event.Endpoint = security.PublicEndpoint(event.Endpoint)
+	event.AuthType = persistedText(event.AuthType, 128)
+	event.AuthIndex = persistedText(event.AuthIndex, 256)
+	event.Model = persistedText(event.Model, 256)
+	event.ModelAlias = persistedPointer(event.ModelAlias, 256)
+	event.ReasoningEffort = persistedText(event.ReasoningEffort, 128)
+	event.ServiceTier = persistedText(event.ServiceTier, 128)
+	event.ResponseServiceTier = persistedText(event.ResponseServiceTier, 128)
+	event.ExecutorType = persistedText(event.ExecutorType, 128)
+	event.Source = r.persistedFingerprint("usage-source", event.Source)
+	event.APIGroupKey, event.APIGroupLabel = r.persistedAPIGroup(event.APIGroupKey, event.APIGroupLabel, event.Provider, event.Endpoint)
+	event.ClientIP = persistedPointerWith(event.ClientIP, security.MaskIP)
+	event.XForwardedFor = persistedPointerWith(event.XForwardedFor, security.MaskForwardedFor)
+	event.UserAgent = security.MinimizeUserAgent(pointerValue(event.UserAgent))
+	event.LatencyMS = nonNegative(event.LatencyMS)
+	event.TTFTMS = nonNegativePointer(event.TTFTMS)
+	event.InputTokens = nonNegative(event.InputTokens)
+	event.OutputTokens = nonNegative(event.OutputTokens)
+	event.ReasoningTokens = nonNegative(event.ReasoningTokens)
+	event.CachedTokens = nonNegative(event.CachedTokens)
+	event.CacheReadTokens = nonNegative(event.CacheReadTokens)
+	event.CacheCreationTokens = nonNegative(event.CacheCreationTokens)
+	event.TotalTokens = nonNegative(event.TotalTokens)
+	return event
+}
+
+func (r *Repository) persistedAPIGroup(value, label, provider, endpoint string) (string, string) {
+	value = strings.TrimSpace(value)
+	switch strings.ToLower(strings.TrimSpace(label)) {
+	case "api_key", "apikey":
+		return r.persistedFingerprint("usage-api-key", value), "api_key"
+	case "provider":
+		value = persistedText(value, 256)
+		if value == "" {
+			return "unknown", "unknown"
+		}
+		return value, "provider"
+	case "endpoint":
+		if safe := security.PublicEndpoint(value); safe != "" {
+			return safe, "endpoint"
+		}
+		return "unknown", "unknown"
+	case "unknown":
+		if value == "" {
+			return "unknown", "unknown"
+		}
+	}
+	if value == "" {
+		return "unknown", "unknown"
+	}
+	if strings.HasPrefix(value, "hmac:") || value == security.RedactedValue {
+		return value, "api_key"
+	}
+	if safe := security.PublicEndpoint(value); safe != "" {
+		return safe, "endpoint"
+	}
+	if strings.TrimSpace(provider) != "" && strings.TrimSpace(provider) == value {
+		return persistedText(provider, 256), "provider"
+	}
+	if strings.TrimSpace(endpoint) != "" && strings.TrimSpace(endpoint) == value {
+		if safe := security.PublicEndpoint(endpoint); safe != "" {
+			return safe, "endpoint"
+		}
+	}
+	return r.persistedFingerprint("usage-api-key", value), "api_key"
+}
+
+func (r *Repository) persistedFingerprint(purpose, value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if strings.HasPrefix(value, "hmac:") || value == security.RedactedValue {
+		return value
+	}
+	return security.FingerprintOrRedacted(r.db.Cipher(), purpose, value)
+}
+
+func persistedText(value string, limit int) string {
+	value = security.RedactText(strings.TrimSpace(value))
+	if limit > 0 && len([]rune(value)) > limit {
+		return string([]rune(value)[:limit])
+	}
+	return value
+}
+
+func persistedPointer(value *string, limit int) *string {
+	if value == nil {
+		return nil
+	}
+	cleaned := persistedText(*value, limit)
+	if cleaned == "" {
+		return nil
+	}
+	return &cleaned
+}
+
+func persistedPointerWith(value *string, mask func(string) *string) *string {
+	if value == nil {
+		return nil
+	}
+	return mask(*value)
+}
+
+func pointerValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func nonNegative(value int64) int64 {
+	if value < 0 {
+		return 0
+	}
+	return value
+}
+
+func nonNegativePointer(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	cleaned := nonNegative(*value)
+	return &cleaned
 }
 
 func truncate(value string, limit int) string {

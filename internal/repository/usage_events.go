@@ -71,6 +71,7 @@ type UsageEventRow struct {
 	AuthType            string           `json:"auth_type"`
 	AuthIndex           string           `json:"auth_index"`
 	APIGroupKey         string           `json:"api_group_key"`
+	APIGroupLabel       string           `json:"api_group_label"`
 	Source              string           `json:"source"`
 	Model               string           `json:"model"`
 	ModelAlias          *string          `json:"model_alias,omitempty"`
@@ -133,7 +134,7 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 	query := `
 		SELECT e.id, e.instance_id, e.event_key, e.request_id, e.timestamp_ms,
 		       e.provider, e.endpoint, e.executor_type, e.auth_type, e.auth_index,
-		       e.api_group_key, e.source, e.model, e.model_alias, e.reasoning_effort,
+		       e.api_group_key, e.api_group_label, e.source, e.model, e.model_alias, e.reasoning_effort,
 		       e.service_tier, e.response_service_tier, e.failed, e.generate,
 		       e.latency_ms, e.ttft_ms, e.client_ip, e.x_forwarded_for, e.user_agent,
 		       e.input_tokens, e.output_tokens, e.reasoning_tokens, e.cached_tokens,
@@ -162,7 +163,7 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 		if errScan := rows.Scan(
 			&row.ID, &row.InstanceID, &row.EventKey, &row.RequestID, &row.TimestampMS,
 			&row.Provider, &row.Endpoint, &row.ExecutorType, &row.AuthType, &row.AuthIndex,
-			&row.APIGroupKey, &row.Source, &row.Model, &row.ModelAlias, &row.ReasoningEffort,
+			&row.APIGroupKey, &row.APIGroupLabel, &row.Source, &row.Model, &row.ModelAlias, &row.ReasoningEffort,
 			&row.ServiceTier, &row.ResponseServiceTier, &failed, &generate,
 			&row.LatencyMS, &row.TTFTMS, &row.ClientIP, &row.XForwardedFor, &row.UserAgent,
 			&row.Tokens.InputTokens, &row.Tokens.OutputTokens, &row.Tokens.ReasoningTokens,
@@ -210,7 +211,7 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 	err := r.SQL().QueryRowContext(ctx, `
 		SELECT e.id, e.instance_id, e.event_key, e.request_id, e.timestamp_ms,
 		       e.provider, e.endpoint, e.executor_type, e.auth_type, e.auth_index,
-		       e.api_group_key, e.source, e.model, e.model_alias, e.reasoning_effort,
+		       e.api_group_key, e.api_group_label, e.source, e.model, e.model_alias, e.reasoning_effort,
 		       e.service_tier, e.response_service_tier, e.failed, e.generate,
 		       e.latency_ms, e.ttft_ms, e.client_ip, e.x_forwarded_for, e.user_agent,
 		       e.input_tokens, e.output_tokens, e.reasoning_tokens, e.cached_tokens,
@@ -223,7 +224,7 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 		WHERE e.id = ?`, id).Scan(
 		&row.ID, &row.InstanceID, &row.EventKey, &row.RequestID, &row.TimestampMS,
 		&row.Provider, &row.Endpoint, &row.ExecutorType, &row.AuthType, &row.AuthIndex,
-		&row.APIGroupKey, &row.Source, &row.Model, &row.ModelAlias, &row.ReasoningEffort,
+		&row.APIGroupKey, &row.APIGroupLabel, &row.Source, &row.Model, &row.ModelAlias, &row.ReasoningEffort,
 		&row.ServiceTier, &row.ResponseServiceTier, &failed, &generate,
 		&row.LatencyMS, &row.TTFTMS, &row.ClientIP, &row.XForwardedFor, &row.UserAgent,
 		&row.Tokens.InputTokens, &row.Tokens.OutputTokens, &row.Tokens.ReasoningTokens,

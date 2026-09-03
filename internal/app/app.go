@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -58,7 +59,9 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 			return nil, fmt.Errorf("initialize administrator authentication: %w", err)
 		}
 	}
-	db, err := repository.Open(ctx, cfg.DatabasePath)
+	db, err := repository.Open(ctx, cfg.DatabasePath,
+		repository.WithMigrationBackup(cipher, filepath.Join(cfg.DataDir, "backups"), 5),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +72,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 	}
 	handler := api.NewHandler(cfg, repo, cipher, logger, authManager)
 
-	pipeline, err := buildUsagePipeline(cfg, repo, handler, logger)
+	pipeline, err := buildUsagePipeline(cfg, repo, handler, logger, cipher)
 	if err != nil {
 		db.Close()
 		return nil, err
@@ -114,7 +117,9 @@ func (u usageUpstream) UsageQueueJSON(ctx context.Context, count int) ([]string,
 // buildUsagePipeline wires capture, decode and maintenance over the default CPA
 // instance. It is intentionally skipped, not failed, when CPA is not configured:
 // the UI must still boot and explain what is missing.
-func buildUsagePipeline(cfg config.Config, repo *repository.Repository, handler *api.Handler, logger *slog.Logger) (*ingest.Pipeline, error) {
+func buildUsagePipeline(cfg config.Config, repo *repository.Repository, handler *api.Handler, logger *slog.Logger, fingerprinter interface {
+	Fingerprint(...string) (string, error)
+}) (*ingest.Pipeline, error) {
 	if !cfg.Usage.Enabled || cfg.Usage.Mode == string(ingest.ModeOff) {
 		logger.Info("usage ingestion disabled", "mode", cfg.Usage.Mode, "enabled", cfg.Usage.Enabled)
 		return nil, nil
@@ -136,7 +141,7 @@ func buildUsagePipeline(cfg config.Config, repo *repository.Repository, handler 
 	if err != nil {
 		return nil, fmt.Errorf("build usage collector: %w", err)
 	}
-	processor, err := ingest.NewProcessor(repo, logger, 0, cfg.Usage.IdleInterval)
+	processor, err := ingest.NewProcessorWithFingerprinter(repo, logger, 0, cfg.Usage.IdleInterval, fingerprinter)
 	if err != nil {
 		return nil, fmt.Errorf("build usage processor: %w", err)
 	}
