@@ -18,6 +18,7 @@ const DICT: Record<string, [string, string]> = {
   'common.delete': ['删除', 'Delete'],
   'common.save_failed': ['保存失败：{msg}', 'Save failed: {msg}'],
   'common.unnamed': ['自定义资源', 'custom resource'],
+  'common.loading': ['加载中…', 'Loading…'],
 
   // ── navigation ───────────────────────────────────────────────────────────
   'nav.group.operate': ['运行', 'Operate'],
