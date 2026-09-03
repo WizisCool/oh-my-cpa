@@ -34,7 +34,7 @@
 | OAuth 排除模型/别名 | `auth_files` 子页面 | `/oauth-excluded-models`、`/oauth-model-alias` | 计划 | provider key 归一化和通配符专项测试 |
 | OAuth 登录 | `oauth` | `GET /{provider}-auth-url`、`GET /get-auth-status`、`DELETE /oauth-session`、`POST /oauth-callback` | 进行中 | provider/state 轮询、取消、回调输入；不模拟 token |
 | Vertex JSON / iFlow Cookie 导入 | OAuth/认证文件 | `POST /vertex/import` 及 provider 专用流程 | 计划 | 以官方版本能力探测为准 |
-| 配额观察 | `quota_management`、凭据详情 | `auth-files` 返回的 quota/model_quotas 观察数据 | 进行中 | provider-specific 空态、旧版本字段兼容 |
+| 配额观察 | `quota_management`、凭据详情 | `auth-files` 返回的 quota/model_quotas 观察数据 | 已覆盖 | 凭据详情/抽屉展示、字段级安全过滤 |
 | 配额重置 | 配额行操作 | `POST /reset-quota {auth_index}` | 进行中 | 只接受稳定 `auth_index`，不能用文件名替代 |
 | 用量队列 | 仪表盘/观测 | `GET /usage-queue?count=N` | 计划 | 明确破坏性消费语义后再提供“读取并确认”操作 |
 | API Key 用量桶 | 仪表盘/提供商 | `GET /api-key-usage` | 进行中 | 20 个 10 分钟桶与空态 |

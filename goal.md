@@ -1225,3 +1225,28 @@ Codex 完成全部或一个阶段时，必须输出：
   - `pnpm verify:e2e` 58 项端到端检查全数通过（新增请求记录页面渲染、390px 视口无溢出、凭据排除等）。
 - 剩余风险与已知限制：
   - 极端网络中断下若未配置 request_log，下载按钮自动置灰禁用。
+
+## 阶段 7.1 执行记录（Auth Files 深化）
+
+- 目标达成：
+  1. 认证文件字段编辑能力闭环：
+     - 新增 `web/src/components/authFiles/AuthFileDetailDrawer.tsx`，支持对白名单安全字段（`priority`、`weight`、`note`）进行编辑并保存；
+     - 保存调用 `PATCH /api/v1/management/auth-files/fields`，后端严格校验字段白名单，拒绝任何凭据或敏感键篡改；
+     - 在卡片上直观显示已配置的 Priority 与 Weight 标签。
+  2. 模型列表与配额观测呈现：
+     - 抽屉内呈现该认证文件支持的模型列表（调用 `GET /api/v1/management/auth-files/models`）；
+     - 展示配额观测指标（Quota Signals 与 Model Quotas），使管理员及时掌握各凭据的额度与速率限制；
+     - 保持严格秘密边界：绝不回显 token、path、metadata 或 raw account。
+  3. Parity 矩阵同步：
+     - 更新 `docs/cpamc-parity.md`，将配额观察（Quota Observation）状态标记为已覆盖；
+     - 新增 `internal/api/management_auth_patch_test.go` 自动化回归测试。
+- 验证结果：
+  - `go test ./...` 全部通过；
+  - `go vet ./...` 零警告；
+  - `pnpm type-check`、`pnpm check-i18n`、`pnpm test:i18n`、`pnpm test:payload`、`pnpm test:config-states`、`node --experimental-strip-types scripts/test-dirty.ts` 全部通过；
+  - `pnpm lint:antd` 通过（0 a11y、0 usage、0 performance）；
+  - `pnpm build` 顺利产出并同步嵌入静态资产；
+  - `pnpm verify:secrets:worktree` 与 `pnpm verify:secrets:history` 零泄漏；
+  - `pnpm verify:e2e` 58 项端到端检查全数通过。
+- 剩余风险与已知限制：
+  - 配额重置（`POST /reset-quota`）将在下一阶段 7.4 展开深度专项实现。
