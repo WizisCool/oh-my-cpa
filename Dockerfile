@@ -1,4 +1,4 @@
-FROM node:22-alpine AS web
+FROM node:22.23.2-alpine AS web
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY web/package.json ./web/package.json
@@ -6,7 +6,7 @@ RUN corepack enable && pnpm install --frozen-lockfile
 COPY web/ ./web/
 RUN pnpm --dir web run build
 
-FROM golang:1.24-alpine AS server
+FROM golang:1.24.13-alpine AS server
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

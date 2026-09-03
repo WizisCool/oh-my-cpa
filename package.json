@@ -15,6 +15,25 @@
     "cpa:start": "node scripts/cpa-start.mjs",
     "dev:api": "node scripts/dev.mjs --api-only",
     "verify:browser": "node scripts/browser-acceptance.mjs",
-    "dev:web": "pnpm --dir web dev"
+    "dev:web": "pnpm --dir web dev",
+    "verify:toolchain": "node scripts/verify-toolchain.mjs",
+    "verify:toolchain:strict": "node scripts/verify-toolchain.mjs --strict",
+    "test:i18n": "node --test scripts/check-missing-i18n.test.mjs",
+    "lint:antd": "node scripts/lint-antd.mjs",
+    "verify:secrets:staged": "node scripts/secret-scan.mjs --staged",
+    "verify:secrets:worktree": "node scripts/secret-scan.mjs --worktree",
+    "verify:secrets:history": "node scripts/secret-scan.mjs --history",
+    "verify:secrets": "pnpm verify:secrets:worktree",
+    "verify:static": "go test ./... && go vet ./... && pnpm type-check && pnpm test:i18n && pnpm check-i18n && pnpm test:payload && node --experimental-strip-types scripts/test-dirty.ts && pnpm lint:antd",
+    "verify:e2e": "node scripts/browser-acceptance.mjs",
+    "verify": "pnpm verify:toolchain && pnpm verify:static && pnpm verify:secrets && pnpm build && pnpm verify:e2e"
+  },
+  "devDependencies": {
+    "@ant-design/cli": "6.6.2",
+    "playwright-core": "1.62.1"
+  },
+  "engines": {
+    "node": "22.23.2",
+    "pnpm": "11.19.0"
   }
 }

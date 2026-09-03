@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "summary": {
+    "total": 22,
+    "deprecated": 22,
+    "a11y": 0,
+    "usage": 0,
+    "performance": 0,
+    "skipped": 0
+  },
+  "issues": {
+    "web/src/pages/AllResourcesPage.tsx :: deprecated :: Space `direction` is deprecated. The space direction": 1,
+    "web/src/pages/AuthFilesPage.tsx :: deprecated :: Spin `tip` is deprecated. Customize description content when Spin has children. Deprecated, use `description` instead": 1,
+    "web/src/pages/AuthFilesPage.tsx :: deprecated :: Alert `message` is deprecated. Content of Alert, please use `title` instead": 1,
+    "web/src/pages/CapabilityPlaceholderPage.tsx :: deprecated :: Alert `message` is deprecated. Content of Alert, please use `title` instead": 1,
+    "web/src/pages/ConfigPage.tsx :: deprecated :: Alert `onClose` is deprecated. Callback when Alert is closed, please use `closable.onClose` instead": 1,
+    "web/src/pages/ConfigPage.tsx :: deprecated :: Alert `message` is deprecated. Content of Alert, please use `title` instead": 1,
+    "web/src/pages/ConfigPage.tsx :: deprecated :: Modal `destroyOnClose` is deprecated. Whether to unmount child components on onClose": 1,
+    "web/src/pages/DashboardPage.tsx :: deprecated :: Alert `message` is deprecated. Content of Alert, please use `title` instead": 2,
+    "web/src/pages/InstanceStatusPage.tsx :: deprecated :: Alert `message` is deprecated. Content of Alert, please use `title` instead": 1,
+    "web/src/pages/LogsPage.tsx :: deprecated :: Alert `message` is deprecated. Content of Alert, please use `title` instead": 5,
+    "web/src/pages/TriagePage.tsx :: deprecated :: Alert `message` is deprecated. Content of Alert, please use `title` instead": 1,
+    "web/src/pages/TriagePage.tsx :: deprecated :: Spin `tip` is deprecated. Customize description content when Spin has children. Deprecated, use `description` instead": 1,
+    "web/src/components/common/AppLayout.tsx :: deprecated :: Drawer `width` is deprecated. Width of the Drawer dialog, please use `size` instead": 1,
+    "web/src/components/common/AuthGate.tsx :: deprecated :: Alert `message` is deprecated. Content of Alert, please use `title` instead": 1,
+    "web/src/components/config/PayloadRulesEditor.tsx :: deprecated :: Modal `destroyOnClose` is deprecated. Whether to unmount child components on onClose": 1,
+    "web/src/components/resources/ResourceCard.tsx :: deprecated :: Space `direction` is deprecated. The space direction": 1,
+    "web/src/components/resources/ResourceEditDrawer.tsx :: deprecated :: Drawer `width` is deprecated. Width of the Drawer dialog, please use `size` instead": 1
+  }
+}

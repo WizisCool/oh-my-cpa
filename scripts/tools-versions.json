@@ -1,0 +1,93 @@
+{
+  "go": {
+    "version": "1.24.13",
+    "archives": {
+      "darwin-amd64": {
+        "url": "https://go.dev/dl/go1.24.13.darwin-amd64.tar.gz",
+        "sha256": "6cc6549b06725220b342b740497ffd24e0ebdcef75781a77931ca199f46ad781"
+      },
+      "darwin-arm64": {
+        "url": "https://go.dev/dl/go1.24.13.darwin-arm64.tar.gz",
+        "sha256": "f282d882c3353485e2fc6c634606d85caf36e855167d59b996dbeae19fa7629a"
+      },
+      "linux-amd64": {
+        "url": "https://go.dev/dl/go1.24.13.linux-amd64.tar.gz",
+        "sha256": "1fc94b57134d51669c72173ad5d49fd62afb0f1db9bf3f798fd98ee423f8d730"
+      },
+      "linux-arm64": {
+        "url": "https://go.dev/dl/go1.24.13.linux-arm64.tar.gz",
+        "sha256": "74d97be1cc3a474129590c67ebf748a96e72d9f3a2b6fef3ed3275de591d49b3"
+      },
+      "windows-amd64": {
+        "url": "https://go.dev/dl/go1.24.13.windows-amd64.zip",
+        "sha256": "40b16bc8f00540a2cb02dff4de72b73e966fdd8d65f95e33d8e4080b48a2459a"
+      }
+    }
+  },
+  "node": {
+    "version": "22.23.2",
+    "archives": {
+      "darwin-amd64": {
+        "url": "https://nodejs.org/dist/v22.23.2/node-v22.23.2-darwin-x64.tar.xz",
+        "sha256": "96dff79f4e19a78715da559ec7cac2028f4985a175ea0c3454625a269c21deb7"
+      },
+      "darwin-arm64": {
+        "url": "https://nodejs.org/dist/v22.23.2/node-v22.23.2-darwin-arm64.tar.xz",
+        "sha256": "5eff7a9011895aae3f29d06f167b84a62b028a591370c7cafb59103559fd26e1"
+      },
+      "linux-amd64": {
+        "url": "https://nodejs.org/dist/v22.23.2/node-v22.23.2-linux-x64.tar.xz",
+        "sha256": "d60acfe00a2932254bb0ad20e01b0d74397a0875595de719654b214f4b03f307"
+      },
+      "linux-arm64": {
+        "url": "https://nodejs.org/dist/v22.23.2/node-v22.23.2-linux-arm64.tar.xz",
+        "sha256": "fff4078c5def658577f92c88db7db3bc0072924bfb93fe52c1e744a54e94abb8"
+      },
+      "windows-amd64": {
+        "url": "https://nodejs.org/dist/v22.23.2/node-v22.23.2-win-x64.zip",
+        "sha256": "1177b4137ba5adaa56354ae40f1080c7450e8ae09cecb47da459d1c52ac99f97"
+      }
+    }
+  },
+  "pnpm": {
+    "version": "11.19.0",
+    "url": "https://registry.npmjs.org/pnpm/-/pnpm-11.19.0.tgz",
+    "sha256": "b9e49603540d04107b98e93917a30e6114970d403c23e40309a44ea9c2bca7fd"
+  },
+  "antDesignCli": {
+    "version": "6.6.2",
+    "url": "https://registry.npmjs.org/@ant-design/cli/-/cli-6.6.2.tgz",
+    "integrity": "sha512-HrOc5t6SlBXCjdNjOQs3JP9PaDA07yBno9YPz6sajhl0SxpHwxj2N6y3+gEFeA6IpYB6Jdx+myMj242m7Rk20Q=="
+  },
+  "playwrightCore": {
+    "version": "1.62.1",
+    "url": "https://registry.npmjs.org/playwright-core/-/playwright-core-1.62.1.tgz",
+    "chromiumRevision": "1234",
+    "chromiumVersion": "151.0.7922.34"
+  },
+  "gitleaks": {
+    "version": "8.24.3",
+    "archives": {
+      "darwin-amd64": {
+        "url": "https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_darwin_x64.tar.gz",
+        "sha256": "41c44ae8ad1d6eef57d4526ad0fd67d8129eee9a856f55c2b3b9395fd3d9ec0f"
+      },
+      "darwin-arm64": {
+        "url": "https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_darwin_arm64.tar.gz",
+        "sha256": "b90f13bb8c90ab72083d9b0c842e39dafb82c0e5c3f872f407366b7a58909013"
+      },
+      "linux-amd64": {
+        "url": "https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz",
+        "sha256": "9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c"
+      },
+      "linux-arm64": {
+        "url": "https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_arm64.tar.gz",
+        "sha256": "5f2edbe1f49f7b920f9e06e90759947d3c5dfc16f752fb93aaafc17e9d14cf07"
+      },
+      "windows-amd64": {
+        "url": "https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_windows_x64.zip",
+        "sha256": "3f1a35578631dbfe633cc5b49e6c906e55ff14a4bfd7336a10fb27fe33b6dcd2"
+      }
+    }
+  }
+}

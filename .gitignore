@@ -42,3 +42,5 @@ caddy-config/
 
 # Air hot-reload artifacts
 .air.toml.bak
+# Local version-pinned tool cache
+.tools/

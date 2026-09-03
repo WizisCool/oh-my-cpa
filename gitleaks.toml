@@ -1,0 +1,4 @@
+title = "Oh My CPA secret scanning"
+
+[extend]
+useDefault = true
