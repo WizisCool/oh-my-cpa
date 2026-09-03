@@ -1167,3 +1167,29 @@ Codex 完成全部或一个阶段时，必须输出：
   - `pnpm verify:e2e` 53 项端到端检查全数通过。
 - 剩余风险与已知限制：
   - 远端 CPA 若在 pop 返回前崩溃且已从 Redis 队列移除，网络物理层截断风险依赖远端 CPA 的可靠性，本地通过 `ingest_gaps` 建立最大程度的故障追踪与区间可见性。
+
+## 阶段 5 执行记录（CPA Binding 与领域模型闭环）
+
+- 目标达成：
+  1. 沉淀 ADR 0002 架构决策：
+     - 在 `docs/adr/0002-cpa-binding-and-identity-hierarchy.md` 中完整定义稳定 CPA Binding 与五级身份解析层级；
+     - 固化五级决策链：①经验证稳定的 CPA 不可变 ID；②分族作用域的稳定认证索引（`auth-index:<family>:<auth_index>`）；③规范化凭据材料的加盐 Keyed HMAC（`credential-hmac-v1`）；④唯一的非敏感元数据组合；⑤仍不可区分时报告 `identity_collision=true` 并待人工绑定，严禁使用数组物理位置作为身份。
+  2. 彻底移除 fallback identity 中的位置依赖：
+     - 重构 `fromCodexAPIKey` 与 `fromOpenAICompatibility` 中的标识生成，两个非敏感元数据相同、仅密钥不同的条目通过 Keyed HMAC 产生不同且稳定的唯一键；
+     - 新增测试 `TestMetadataIdenticalEntriesWithDifferentKeysPreserveIdentityAcrossRearrangement`，验证上游数组重排或前部插入条目时，身份与个性化配置绝对不漂移、不串号。
+  3. 引入 CPA Bindings 物理映射表：
+     - 新增不可变迁移 `006_cpa_bindings_and_entities.sql`，建立 `cpa_bindings` 与 `connections` 数据表及索引；
+     - 在 `UpsertDiscoveredResources` 事务中自动执行 `cpa_bindings` 的双向同步与生命周期状态维护；
+     - 当上游资源缺失变为 `missing` 时，自动在 `cpa_bindings` 标记 `missing_at_ms`，外键设为 `ON DELETE SET NULL`，删除当前实体不破坏历史事实。
+  4. 保证用量事实的连续归属：
+     - 新增测试 `TestCPABindingsSyncAndHistoricalUsagePreservation`，验证资源即使在上游失效变为 missing，所有关联的历史用量记录依然完整保留、可读且可回溯。
+- 验证结果：
+  - `go test ./...` 全部通过（包含数组重排稳定性、密钥轮换区分、Binding 同步与历史用量连续性测试）；
+  - `go vet ./...` 零警告；
+  - `pnpm type-check`、`pnpm check-i18n`、`pnpm test:i18n`、`pnpm test:payload`、`pnpm test:config-states`、`node --experimental-strip-types scripts/test-dirty.ts` 全部通过；
+  - `pnpm lint:antd` 通过（0 a11y、0 usage、0 performance）；
+  - `pnpm build` 顺利完成；
+  - `pnpm verify:secrets:worktree` 与 `pnpm verify:secrets:history` 零泄漏；
+  - `pnpm verify:e2e` 53 项端到端检查全数通过。
+- 剩余风险与已知限制：
+  - 缺乏 `auth_index` 且无 API Key 的完全同构匿名条目依策略进入显式冲突待人工绑定，不作不可靠的自动猜测。
