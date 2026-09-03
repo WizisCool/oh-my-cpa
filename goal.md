@@ -1076,3 +1076,32 @@ Codex 完成全部或一个阶段时，必须输出：
   - 依赖单节点本地 SQLite 与本地主密钥 `OMCPA_MASTER_KEY`；
   - CPA 后端如果直接返回不受控格式的错误，仍依赖基于规则与正则的文本脱敏；
   - 阶段 5 将在 ADR 中进一步固化完整 CPA Binding 层级体系。
+
+## 阶段 2 执行记录（Config 可靠性、并发与秘密边界）
+
+- 目标达成：
+  1. 阻断配置拉取失败后的 fail-open 行为：当配置接口异常（如 CPA offline、502/503 或网络失败）时，阻断工作区进入可编辑或可保存状态，明确提示错误与 Retry，禁止无凭据回退默认值与宣称“已同步”；当存在旧数据但刷新失败时，明确显示 stale 状态并锁定保存。
+  2. 修复保存基线竞争：`onSuccess(data, variables)` 严格使用提交的 snapshot 变量 `variables.yamlToSave` 作为新基线；请求期间产生的新修改保持 dirty，不被误标为已同步。
+  3. 建立强版本（Revision）与冲突检测契约：
+     - 后端计算并返回 YAML 的 SHA-256 强 revision 与 ETag；
+     - PUT 保存请求强制校验 `If-Match` 头或请求体 `revision`；
+     - 引入实例作用域互斥锁串行化写操作，锁内重新获取当前 YAML 校验 revision；若检测到并发修改，返回 409 Conflict 与机器可读错误码 `config_conflict`，前端提供重新加载最新配置或复制本地修改进行人工合并的选项，杜绝静默覆盖。
+  4. 保护原始 YAML 与凭据秘密边界：
+     - 默认视觉模式改用安全投影 `safe_yaml` 与安全 DTO，自动去除 `proxy_url` 中的 userinfo 及敏感 query 参数；
+     - 敏感字段（`remote-management.secret-key`、`api-keys`、`tls.key` 等）采用 `__OMCPA_UNCHANGED__` 占位符脱敏保护，在服务端更新时执行 AST 节点还原，防止掩码写回破坏原始真实配置；
+     - 原始 Source 模式接入高意图重认证机制：切换前弹出风险说明与重认证模态框，验证 CPA 管理密钥并生成 5 分钟有限授权 `grant_token`；无授权或授权过期时请求 raw YAML 返回 403 `reauth_required`；离开 Source 模式或注销后立即清理内存中 raw YAML 缓存。
+  5. 关键 schema 与语法防护：后端在保存前执行严格 YAML 语法校验，语法错误返回行号、列号与机器可读错误码 `yaml_syntax_error`。
+  6. 审计与离线化保障：所有配置读取与变更均写入不可篡改的 `audit_events` 表；Monaco Editor 严格本地化，消除控制台异常与页面错误。
+  7. 自动化测试套件：
+     - 新增 `scripts/test-config-states.ts`，覆盖 initial/loading/loaded/error/dirty/validating/saving/save-success/save-error/conflict 完整状态机；
+     - 新增 Go 单元与集成测试：覆盖 revision 生成、409 冲突检测、缺少 revision 校验、403 授权保护、401 密钥验证、AST 敏感占位符还原与语法校验。
+- 验证结果：
+  - `go test ./...` 全部通过；
+  - `go vet ./...` 零警告；
+  - `pnpm type-check`、`pnpm check-i18n`、`pnpm test:i18n`、`pnpm test:payload`、`pnpm test:config-states`、`node --experimental-strip-types scripts/test-dirty.ts`、`pnpm lint:antd` 全部通过；
+  - `pnpm build` 顺利产出并同步嵌入静态资产；
+  - `pnpm verify:secrets:worktree` 与 `pnpm verify:secrets:history` 均无泄漏；
+  - `pnpm verify:e2e` 53 项 deterministic browser checks 全部通过（包含源码模式重认证授权流程与无 page errors 校验）。
+- 剩余风险与已知限制：
+  - CPA 上游若被外部非 Oh My CPA 客户端绕过并发起并发写入，Oh My CPA 提供 best-effort 级别的冲突探测（锁内 re-fetch 校验），受限于 CPA 是否原生提供 CAS 支持；
+  - 交付至浏览器内存或 DevTools 的 Raw YAML 无法做远程内存清除保证，因此依靠 `no-store` 和退出 Source 清理进行风险最小化。
