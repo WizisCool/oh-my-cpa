@@ -44,8 +44,8 @@
 | 单请求日志下载 | 日志详情 | `GET /request-log-by-id/:id` | 已覆盖（`/usage/events/{id}/request-log`） | 404 视为能力缺失，不渲染成空文件 |
 | 插件列表/开关/删除/配置 | `plugins` | `/plugins` 及 `/plugins/:id/*` | 进行中 | 旧版本 404 能力提示；配置 JSON 校验 |
 | 插件商店安装 | `plugin_store` | `/plugin-store`、`POST /plugin-store/:id/install` | 进行中 | 安装确认、版本/来源显示、失败不污染列表 |
-| 系统版本/更新检查 | `system_info` | `/latest-version`、CPA response headers | 进行中 | 不把“检查”误报为“升级完成” |
-| 运行自检/诊断 | `system_info` | CPA 探活、管理端点能力探测 | 进行中 | 真实耗时、HTTP 状态、复制诊断信息 |
+| 系统版本/更新检查 | `system_info` | `/latest-version`、CPA response headers | 已覆盖 | 真实版本比对、更新提示、不把“检查”误报为“升级完成” |
+| 运行自检/诊断 | `system_info` | CPA 探活、管理端点能力探测、脱敏诊断导出 | 已覆盖 | 组件健康拓扑、脱敏诊断包下载、强审计保护 |
 | 任意上游 API Call | provider/调试操作 | CPA `POST /api-call` | 计划（显式开关） | 默认关闭；开启前需 SSRF/审计/目标限制设计 |
 | 多 CPA 实例 | 顶部连接/系统信息 | Oh My CPA 自有实例模型 | 计划 | 增加实例 CRUD、密钥轮换、实例级权限后实现 |
 | Oh My CPA 资源身份层 | 待整理/所有资源 | Oh My CPA 自有 `/api/v1/resources*` | 已覆盖 | 保持用户名称、图标、颜色、备注和状态不被 rediscovery 覆盖 |

@@ -1304,3 +1304,30 @@ Codex 完成全部或一个阶段时，必须输出：
   - `pnpm verify:e2e` 73 项端到端检查全数通过（新增 `/oauth` 与 `/quota` 页面渲染、390px 视口无溢出、全量凭据排除等）。
 - 剩余风险与已知限制：
   - 后续阶段 7.5 将覆盖系统诊断与自检包生成。
+
+## 阶段 7.5 执行记录（系统自检与脱敏诊断包导出）
+
+- 目标达成：
+  1. 系统全景与组件拓扑健康观测：
+     - 新增 `web/src/pages/SystemPage.tsx`，彻底替代 `/system` 占位符；
+     - 呈现 Oh My CPA 版本、CPA 运行时版本与上游最新版本对比，动态提示可用更新（不自动执行升级，保障生产可预期性）；
+     - 集中监控 CPA 代理网关延迟与连接状态、SQLite WAL 数据库健康度、用量采集器（Ingest Collector）状态与缺口计数；
+     - 展示 Go 运行时、OS/Arch、进程运行时间、Goroutine 数量及内存分配统计。
+  2. 脱敏诊断包安全导出：
+     - 新增后端接口 `GET /api/v1/management/system/diagnostics` 与 `GET /api/v1/management/system`；
+     - 导出结构化 JSON 诊断包，附带 `Content-Disposition: attachment` 与 `Cache-Control: no-store`；
+     - 严格过滤与脱敏：绝对不暴露内部地址、密码、主密钥、Management Key、API Token 或 Auth File 明文内容；
+     - 诊断包导出受强审计保护（写入 `audit_events` 记录 `system.diagnostics` 操作）。
+  3. Parity 矩阵同步：
+     - 更新 `docs/cpamc-parity.md`，将“系统版本/更新检查”与“运行自检/诊断”两项均标记为已覆盖；
+     - 新增后端回归测试 `internal/api/management_system_test.go`。
+- 验证结果：
+  - `go test ./...` 全部通过；
+  - `go vet ./...` 零警告；
+  - `pnpm type-check`、`pnpm check-i18n`、`pnpm test:i18n`、`pnpm test:payload`、`pnpm test:config-states`、`node --experimental-strip-types scripts/test-dirty.ts` 全部通过；
+  - `pnpm lint:antd` 通过（0 a11y、0 usage、0 performance）；
+  - `pnpm build` 顺利完成；
+  - `pnpm verify:secrets:worktree` 与 `pnpm verify:secrets:history` 零泄漏；
+  - `pnpm verify:e2e` 78 项端到端检查全数通过（新增 `/system` 真实页面渲染、390px 视口无溢出、全量凭据排除等）。
+- 剩余风险与已知限制：
+  - 下一阶段 7.6 将收口插件系统（Plugins & Plugin Store）。
