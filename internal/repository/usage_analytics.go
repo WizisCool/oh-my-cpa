@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 )
 
 // Grain bucket widths in milliseconds.
@@ -80,13 +81,22 @@ func (r *Repository) AggregateUsageGrain(ctx context.Context, grain string, buck
 	if err != nil {
 		return 0, err
 	}
-	lastID, err := r.UsageCheckpoint(ctx, grain)
+
+	tx, err := r.SQL().BeginTx(ctx, nil)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("begin usage rollup: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var lastID int64
+	err = tx.QueryRowContext(ctx, `
+		SELECT last_usage_event_id FROM usage_aggregation_checkpoints WHERE name = ?`, grain).Scan(&lastID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return 0, fmt.Errorf("read checkpoint inside rollup tx: %w", err)
 	}
 
 	var highID sql.NullInt64
-	err = r.SQL().QueryRowContext(ctx, `
+	err = tx.QueryRowContext(ctx, `
 		SELECT MAX(id) FROM (SELECT id FROM usage_events WHERE id > ? ORDER BY id ASC LIMIT ?)`,
 		lastID, batchSize).Scan(&highID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -95,12 +105,6 @@ func (r *Repository) AggregateUsageGrain(ctx context.Context, grain string, buck
 	if !highID.Valid {
 		return 0, nil
 	}
-
-	tx, err := r.SQL().BeginTx(ctx, nil)
-	if err != nil {
-		return 0, fmt.Errorf("begin usage rollup: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
 
 	// INSERT..SELECT keeps aggregation inside SQLite: the detail rows never
 	// cross the Go boundary, which is the whole reason the rollup exists.
@@ -140,11 +144,22 @@ func (r *Repository) AggregateUsageGrain(ctx context.Context, grain string, buck
 		return 0, fmt.Errorf("aggregate usage rollup %s: %w", grain, err)
 	}
 	absorbed, _ := result.RowsAffected()
+
+	nowMS := time.Now().UnixMilli()
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO usage_aggregation_checkpoints (name, last_usage_event_id, stats_updated_at_ms, created_at_ms, updated_at_ms)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(name) DO UPDATE SET
+			last_usage_event_id = CASE WHEN excluded.last_usage_event_id > usage_aggregation_checkpoints.last_usage_event_id
+				THEN excluded.last_usage_event_id ELSE usage_aggregation_checkpoints.last_usage_event_id END,
+			stats_updated_at_ms = excluded.stats_updated_at_ms,
+			updated_at_ms = excluded.updated_at_ms`,
+		grain, highID.Int64, nowMS, nowMS, nowMS); err != nil {
+		return 0, fmt.Errorf("advance checkpoint in rollup tx %s: %w", grain, err)
+	}
+
 	if err := tx.Commit(); err != nil {
 		return 0, fmt.Errorf("commit usage rollup: %w", err)
-	}
-	if err := r.SetUsageCheckpoint(ctx, grain, highID.Int64); err != nil {
-		return int(absorbed), err
 	}
 	return int(absorbed), nil
 }
