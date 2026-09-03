@@ -17,49 +17,63 @@ import (
 
 const (
 	CookieName     = "omc_session"
-	sessionVersion = "v1"
+	sessionVersion = "v2"
 )
 
-var ErrInvalidConfiguration = errors.New("admin password and session secret are required")
+// ErrKeyRequired is returned when no CPA management key is configured. The
+// application still starts so the UI can explain that CPA must be configured
+// before anybody can sign in.
+var ErrKeyRequired = errors.New("CPA management key is required")
 
-// Manager implements a stateless, single-admin session. The browser receives
-// only an HMAC-signed, expiring cookie; the configured password and signing
-// secret never leave the server process.
+// Manager implements a stateless, single-admin session whose only login
+// credential is the CPA management key. Oh My CPA has no separate admin
+// password: entering the management key in the UI is exactly how the bundled
+// CPA panel works. The key never leaves the server process; the browser only
+// receives an HMAC-signed, expiring cookie.
+//
+// The signing secret is derived from the management key, so rotating the key
+// in CPA immediately invalidates every previously issued session.
 type Manager struct {
-	passwordDigest [sha256.Size]byte
-	secret         []byte
-	cookiePath     string
-	secure         bool
-	now            func() time.Time
+	secret     []byte
+	cookiePath string
+	secure     bool
+	now        func() time.Time
 }
 
-func New(adminPassword, sessionSecret, basePath, publicURL string) (*Manager, error) {
-	adminPassword = strings.TrimSpace(adminPassword)
-	sessionSecret = strings.TrimSpace(sessionSecret)
-	if len([]byte(adminPassword)) < 12 || len([]byte(sessionSecret)) < 32 {
-		return nil, ErrInvalidConfiguration
+// New builds a session manager for the given CPA management key. The key must
+// be non-empty, but its strength policy belongs to CPA, not here: keys like
+// "admin" remain valid local credentials.
+func New(managementKey, basePath, publicURL string) (*Manager, error) {
+	managementKey = strings.TrimSpace(managementKey)
+	if managementKey == "" {
+		return nil, ErrKeyRequired
 	}
-	digest := sha256.Sum256([]byte(adminPassword))
+	// HMAC-SHA256 over a fixed label: a dedicated signing secret without a
+	// second configured value.
+	mac := hmac.New(sha256.New, []byte(managementKey))
+	mac.Write([]byte("oh-my-cpa session signing secret v2"))
+	derived := mac.Sum(nil)
 	return &Manager{
-		passwordDigest: digest,
-		secret:         append([]byte(nil), []byte(sessionSecret)...),
-		cookiePath:     cookiePath(basePath),
-		secure:         isHTTPS(publicURL),
-		now:            time.Now,
+		secret:     derived,
+		cookiePath: cookiePath(basePath),
+		secure:     isHTTPS(publicURL),
+		now:        time.Now,
 	}, nil
 }
 
-func (m *Manager) PasswordMatches(password string) bool {
+// KeyMatches reports whether the provided password is the CPA management key.
+func (m *Manager) KeyMatches(key string) bool {
 	if m == nil {
 		return false
 	}
-	digest := sha256.Sum256([]byte(password))
-	return subtle.ConstantTimeCompare(digest[:], m.passwordDigest[:]) == 1
+	provided := hmac.New(sha256.New, []byte(strings.TrimSpace(key)))
+	provided.Write([]byte("oh-my-cpa session signing secret v2"))
+	return subtle.ConstantTimeCompare(provided.Sum(nil), m.secret) == 1
 }
 
 func (m *Manager) Issue(w http.ResponseWriter) error {
 	if m == nil || len(m.secret) < 32 {
-		return ErrInvalidConfiguration
+		return ErrKeyRequired
 	}
 	now := m.now().UTC()
 	nonce := make([]byte, 16)
@@ -78,35 +92,32 @@ func (m *Manager) Issue(w http.ResponseWriter) error {
 		Value:    value,
 		Path:     m.cookiePath,
 		HttpOnly: true,
-		Secure:   m.secure,
 		SameSite: http.SameSiteStrictMode,
-		MaxAge:   int((12 * time.Hour).Seconds()),
+		Secure:   m.secure,
 		Expires:  now.Add(12 * time.Hour),
 	})
+	w.Header().Add("Cache-Control", "no-store")
 	return nil
 }
 
 func (m *Manager) Clear(w http.ResponseWriter) {
-	if m == nil {
-		return
-	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     CookieName,
 		Value:    "",
 		Path:     m.cookiePath,
 		HttpOnly: true,
-		Secure:   m.secure,
 		SameSite: http.SameSiteStrictMode,
-		MaxAge:   -1,
-		Expires:  time.Unix(1, 0).UTC(),
+		Secure:   m.secure,
+		Expires:  time.Unix(0, 0),
 	})
+	w.Header().Add("Cache-Control", "no-store")
 }
 
-func (m *Manager) Valid(r *http.Request) bool {
-	if m == nil || r == nil {
+func (m *Manager) Valid(request *http.Request) bool {
+	if m == nil || len(m.secret) < 32 || request == nil {
 		return false
 	}
-	cookie, err := r.Cookie(CookieName)
+	cookie, err := request.Cookie(CookieName)
 	if err != nil || cookie.Value == "" {
 		return false
 	}
@@ -114,34 +125,51 @@ func (m *Manager) Valid(r *http.Request) bool {
 	if len(parts) != 4 || parts[0] != sessionVersion {
 		return false
 	}
+	signature, err := base64.RawURLEncoding.DecodeString(parts[3])
+	if err != nil || len(signature) != sha256.Size {
+		return false
+	}
+	payload := parts[0] + "." + parts[1] + "." + parts[2]
+	if !verifyHMAC(m.secret, payload, signature) {
+		return false
+	}
 	expires, err := strconv.ParseInt(parts[1], 10, 64)
-	if err != nil || expires <= m.now().Unix() {
+	if err != nil || m.now().UTC().Unix() >= expires {
 		return false
 	}
-	payload := strings.Join(parts[:3], ".")
-	provided, err := base64.RawURLEncoding.DecodeString(parts[3])
-	if err != nil {
-		return false
-	}
-	expected := m.sign(payload)
-	return subtle.ConstantTimeCompare(provided, expected) == 1
+	return true
 }
 
 func (m *Manager) sign(payload string) []byte {
 	mac := hmac.New(sha256.New, m.secret)
-	_, _ = mac.Write([]byte(payload))
+	mac.Write([]byte(payload))
 	return mac.Sum(nil)
+}
+
+func verifyHMAC(secret []byte, payload string, signature []byte) bool {
+	mac := hmac.New(sha256.New, secret)
+	mac.Write([]byte(payload))
+	return subtle.ConstantTimeCompare(mac.Sum(nil), signature) == 1
 }
 
 func cookiePath(basePath string) string {
 	basePath = strings.TrimSpace(basePath)
-	if basePath == "" || basePath == "/" {
+	if basePath == "" {
 		return "/"
 	}
-	return "/" + strings.Trim(strings.TrimSpace(basePath), "/") + "/"
+	if !strings.HasPrefix(basePath, "/") {
+		basePath = "/" + basePath
+	}
+	return strings.TrimRight(basePath, "/") + "/"
 }
 
 func isHTTPS(publicURL string) bool {
+	if strings.TrimSpace(publicURL) == "" {
+		return false
+	}
 	parsed, err := url.Parse(strings.TrimSpace(publicURL))
-	return err == nil && strings.EqualFold(parsed.Scheme, "https")
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(parsed.Scheme, "https")
 }

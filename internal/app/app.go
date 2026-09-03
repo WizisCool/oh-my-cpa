@@ -2,9 +2,7 @@ package app
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -20,6 +18,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/usage/ingest"
 )
 
 type App struct {
@@ -30,6 +29,9 @@ type App struct {
 	handler    *api.Handler
 	httpServer *http.Server
 	logger     *slog.Logger
+	// pipeline captures CPA request records into the local database. Nil when
+	// ingestion is disabled or no CPA instance is configured yet.
+	pipeline *ingest.Pipeline
 }
 
 func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, error) {
@@ -46,9 +48,15 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 	if err != nil {
 		return nil, fmt.Errorf("initialize secret cipher: %w", err)
 	}
-	authManager, err := auth.New(cfg.AdminPassword, cfg.SessionSecret, cfg.BasePath, cfg.PublicURL)
-	if err != nil {
-		return nil, fmt.Errorf("initialize administrator authentication: %w", err)
+	// Oh My CPA has no separate administrator password: the CPA management key
+	// is the only login credential. The app still boots without one so the UI
+	// can explain what to configure; the login endpoint then reports 503.
+	var authManager *auth.Manager
+	if strings.TrimSpace(cfg.CPA.ManagementKey) != "" {
+		authManager, err = auth.New(cfg.CPA.ManagementKey, cfg.BasePath, cfg.PublicURL)
+		if err != nil {
+			return nil, fmt.Errorf("initialize administrator authentication: %w", err)
+		}
 	}
 	db, err := repository.Open(ctx, cfg.DatabasePath)
 	if err != nil {
@@ -60,14 +68,88 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 		return nil, err
 	}
 	handler := api.NewHandler(cfg, repo, cipher, logger, authManager)
+
+	pipeline, err := buildUsagePipeline(cfg, repo, handler, logger)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
 	return &App{
-		cfg:     cfg,
-		db:      db,
-		repo:    repo,
-		cipher:  cipher,
-		handler: handler,
-		logger:  logger,
+		cfg:      cfg,
+		db:       db,
+		repo:     repo,
+		cipher:   cipher,
+		handler:  handler,
+		logger:   logger,
+		pipeline: pipeline,
 	}, nil
+}
+
+// usageUpstream adapts the CPA management client to the collector's narrower
+// view of it. The concrete *management.UsageStream already satisfies
+// ingest.Stream; only the client method signature needs wrapping, which keeps
+// the ingest package free of any dependency on the management client type.
+type usageUpstream struct{ client *management.Client }
+
+func (u usageUpstream) PingUsageChannel(ctx context.Context) error {
+	return u.client.PingUsageChannel(ctx)
+}
+
+func (u usageUpstream) OpenUsageStream(ctx context.Context, channel string) (ingest.Stream, error) {
+	stream, err := u.client.OpenUsageStream(ctx, channel)
+	if err != nil {
+		return nil, err
+	}
+	return stream, nil
+}
+
+func (u usageUpstream) PopUsageQueue(ctx context.Context, count int) ([]string, error) {
+	return u.client.PopUsageQueue(ctx, count)
+}
+
+func (u usageUpstream) UsageQueueJSON(ctx context.Context, count int) ([]string, error) {
+	return u.client.UsageQueueJSON(ctx, count)
+}
+
+// buildUsagePipeline wires capture, decode and maintenance over the default CPA
+// instance. It is intentionally skipped, not failed, when CPA is not configured:
+// the UI must still boot and explain what is missing.
+func buildUsagePipeline(cfg config.Config, repo *repository.Repository, handler *api.Handler, logger *slog.Logger) (*ingest.Pipeline, error) {
+	if !cfg.Usage.Enabled || cfg.Usage.Mode == string(ingest.ModeOff) {
+		logger.Info("usage ingestion disabled", "mode", cfg.Usage.Mode, "enabled", cfg.Usage.Enabled)
+		return nil, nil
+	}
+	if strings.TrimSpace(cfg.CPA.BaseURL) == "" || strings.TrimSpace(cfg.CPA.ManagementKey) == "" {
+		logger.Info("usage ingestion waiting for a configured CPA instance")
+		return nil, nil
+	}
+	client, err := management.NewClient(cfg.CPA.BaseURL, cfg.CPA.ManagementKey, cfg.RequestTimeout, cfg.TLSSkipVerify)
+	if err != nil {
+		return nil, fmt.Errorf("build CPA usage client: %w", err)
+	}
+	runner, err := ingest.NewRunner("default", usageUpstream{client}, repo, repo, logger, ingest.Config{
+		Mode:          ingest.Mode(cfg.Usage.Mode),
+		IdleInterval:  cfg.Usage.IdleInterval,
+		BatchSize:     cfg.Usage.BatchSize,
+		CollectErrors: cfg.Usage.CollectErrors,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build usage collector: %w", err)
+	}
+	processor, err := ingest.NewProcessor(repo, logger, 0, cfg.Usage.IdleInterval)
+	if err != nil {
+		return nil, fmt.Errorf("build usage processor: %w", err)
+	}
+	maintenance, err := ingest.NewMaintenance(repo, logger, cfg.Usage.AggregateInterval, cfg.Usage.RetentionDays)
+	if err != nil {
+		return nil, fmt.Errorf("build usage maintenance: %w", err)
+	}
+	pipeline, err := ingest.NewPipeline(runner, processor, maintenance, repo)
+	if err != nil {
+		return nil, fmt.Errorf("build usage pipeline: %w", err)
+	}
+	handler.SetUsagePipeline(pipeline)
+	return pipeline, nil
 }
 
 func (a *App) Handler() http.Handler {
@@ -88,7 +170,27 @@ func (a *App) Run(ctx context.Context) error {
 		a.logger.Info("HTTP server listening", "addr", a.cfg.ListenAddr, "base_path", a.cfg.BasePath)
 		serverErrors <- a.httpServer.ListenAndServe()
 	}()
+
+	pipelineErrors := make(chan error, 1)
+	if a.pipeline != nil {
+		go func() {
+			a.logger.Info("usage ingestion started",
+				"mode", a.cfg.Usage.Mode,
+				"idle_interval", a.cfg.Usage.IdleInterval.String(),
+				"batch_size", a.cfg.Usage.BatchSize,
+				"retention_days", a.cfg.Usage.RetentionDays)
+			pipelineErrors <- a.pipeline.Run(ctx)
+		}()
+	}
+
 	select {
+	case err := <-pipelineErrors:
+		// Losing the capture loop means the dashboard stops gaining history;
+		// treat it as fatal rather than serving silently stale numbers.
+		if err != nil && !errors.Is(err, context.Canceled) {
+			return fmt.Errorf("usage pipeline stopped: %w", err)
+		}
+		return nil
 	case <-ctx.Done():
 		shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -144,14 +246,4 @@ func bootstrapDefaultInstance(ctx context.Context, cfg config.Config, repo *repo
 		return fmt.Errorf("load default CPA instance: %w", err)
 	}
 	return repo.UpsertInstance(ctx, instance)
-}
-
-// NewSessionSecret returns a cryptographically random secret suitable for a
-// deployment bootstrap command. It is not used as a fallback in production.
-func NewSessionSecret() (string, error) {
-	value := make([]byte, 32)
-	if _, err := rand.Read(value); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(value), nil
 }

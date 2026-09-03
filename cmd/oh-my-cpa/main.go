@@ -14,6 +14,16 @@ import (
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	// Route package-level slog calls (including API error reporting) here.
+	slog.SetDefault(logger)
+	// A local .env is a developer convenience only: real environment variables
+	// keep precedence, so containers and CI never depend on the file.
+	if applied, err := config.LoadDotEnv(config.DotEnvPath()); err != nil {
+		logger.Error("invalid environment file", "path", config.DotEnvPath(), "error", err)
+		os.Exit(2)
+	} else if applied > 0 {
+		logger.Info("loaded environment file", "path", config.DotEnvPath(), "variables", applied)
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		logger.Error("invalid configuration", "error", err)

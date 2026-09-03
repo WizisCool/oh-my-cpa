@@ -35,6 +35,8 @@ type Handler struct {
 	discoverer *discovery.Discoverer
 	logger     *slog.Logger
 	auth       *auth.Manager
+	// usage reports the background capture pipeline; nil when ingestion is off.
+	usage usagePipeline
 }
 
 func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypto.Cipher, logger *slog.Logger, authManager *auth.Manager) *Handler {
@@ -69,6 +71,33 @@ func (h *Handler) Router() http.Handler {
 				v1.Post("/instances/default/discover", h.discoverDefault)
 				v1.Get("/resources", h.listResources)
 				v1.Patch("/resources/{id}/override", h.updateResourceOverride)
+				v1.Get("/management/overview", h.managementOverview)
+				v1.Get("/management/dashboard", h.dashboard)
+				v1.Get("/management/dashboard/tail", h.dashboardTail)
+				v1.Get("/management/logs", h.managementLogs)
+				v1.Delete("/management/logs", h.clearManagementLogs)
+				v1.Get("/management/logs/status", h.managementLogsStatus)
+				v1.Get("/management/request-error-logs", h.requestErrorLogs)
+				v1.Get("/management/request-error-logs/{name}", h.downloadRequestErrorLog)
+				v1.Get("/preferences", h.listPreferences)
+				v1.Put("/preferences/{key}", h.putPreference)
+				v1.Get("/usage/ingest-status", h.dashboardIngestStatus)
+				v1.Get("/usage/events", h.listUsageEvents)
+				v1.Get("/usage/events/{id}", h.getUsageEvent)
+				v1.Get("/usage/events/{id}/request-log", h.downloadUsageEventRequestLog)
+				v1.Get("/usage/facets", h.listUsageFacets)
+				v1.Get("/management/auth-files", h.listManagementAuthFiles)
+				v1.Get("/management/auth-files/models", h.listManagementAuthFileModels)
+				v1.Post("/management/auth-files", h.uploadManagementAuthFiles)
+				v1.Patch("/management/auth-files/status", h.patchManagementAuthFileStatus)
+				v1.Patch("/management/auth-files/fields", h.patchManagementAuthFileFields)
+				v1.Delete("/management/auth-files", h.deleteManagementAuthFiles)
+				v1.Get("/management/auth-files/download", h.downloadManagementAuthFile)
+				v1.Get("/management/capabilities/{key}", h.managementCapabilityProbe)
+				v1.Get("/management/config", h.managementConfigGet)
+				v1.Put("/management/config/source", h.managementConfigSourcePut)
+				v1.Get("/management/config/source", h.managementConfigSourceGet)
+				v1.Put("/management/config/{key}", h.managementConfigPutScalar)
 				v1.NotFound(h.notFound)
 				v1.MethodNotAllowed(h.methodNotAllowed)
 			})
@@ -110,18 +139,18 @@ func (h *Handler) login(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	if h.auth == nil {
-		writeError(writer, http.StatusServiceUnavailable, "administrator authentication is not configured")
+		writeError(writer, http.StatusServiceUnavailable, "CPA management key is not configured yet; set OMCPA_CPA_MANAGEMENT_KEY first")
 		return
 	}
 	var payload loginRequest
 	decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 8*1024))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&payload); err != nil || strings.TrimSpace(payload.Password) == "" {
-		writeError(writer, http.StatusBadRequest, "password is required")
+		writeError(writer, http.StatusBadRequest, "management key is required")
 		return
 	}
-	if !h.auth.PasswordMatches(payload.Password) {
-		writeError(writer, http.StatusUnauthorized, "invalid administrator password")
+	if !h.auth.KeyMatches(payload.Password) {
+		writeError(writer, http.StatusUnauthorized, "invalid CPA management key")
 		return
 	}
 	if err := h.auth.Issue(writer); err != nil {
@@ -624,7 +653,12 @@ func writeErrorWithDetails(writer http.ResponseWriter, status int, message strin
 	writeJSON(writer, status, map[string]any{"error": message, "details": details})
 }
 
+// writeInternalError hides details from the client but never from the log: a
+// swallowed 500 is undiagnosable in a running deployment.
 func writeInternalError(writer http.ResponseWriter, err error) {
+	if err != nil {
+		slog.Error("api request failed", "error", err.Error())
+	}
 	writeError(writer, http.StatusInternalServerError, "internal server error")
 }
 

@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import {
+  App as AntdApp,
   Row,
   Col,
   Spin,
   Alert,
   Empty,
   Button,
-  message,
   Typography,
 } from 'antd';
 import {
@@ -17,6 +17,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useOutletContext } from 'react-router-dom';
 import { api } from '../api/client';
+import { useT } from '../i18n';
 import { DiscoveredResource, ResourceOverridePayload } from '../types/resource';
 import { ResourceCard } from '../components/resources/ResourceCard';
 import { ResourceEditDrawer } from '../components/resources/ResourceEditDrawer';
@@ -30,6 +31,8 @@ interface OutletContextType {
 }
 
 export const TriagePage: React.FC = () => {
+  const t = useT();
+  const { message } = AntdApp.useApp();
   const queryClient = useQueryClient();
   const { triggerDiscovery, isDiscovering } = useOutletContext<OutletContextType>();
 
@@ -113,11 +116,11 @@ export const TriagePage: React.FC = () => {
     mutationFn: ({ id, payload }: { id: string; payload: ResourceOverridePayload }) =>
       api.updateResourceOverride(id, payload),
     onSuccess: (_, variables) => {
-      message.success(`已成功保存「${variables.payload.display_name || '自定义资源'}」！`);
+      message.success(t('tri.saved', { name: variables.payload.display_name || t('common.unnamed') }));
       queryClient.invalidateQueries({ queryKey: ['resources'] });
     },
     onError: (err: Error) => {
-      message.error(`保存失败: ${err.message}`);
+      message.error(t('common.save_failed', { msg: err.message }));
     },
   });
 
@@ -131,7 +134,7 @@ export const TriagePage: React.FC = () => {
       payload: {
         display_name: resource.display_name,
         icon: resource.icon || 'custom',
-        color: resource.color || '#1677FF',
+        color: resource.color || '#007aff',
         status: 'claimed',
       },
     });
@@ -167,48 +170,40 @@ export const TriagePage: React.FC = () => {
       {/* Error Alert */}
       {isError && (
         <Alert
-          message="无法从 Oh My CPA 服务获取资源列表"
+          message={t('tri.error')}
           description={
             <div>
               <p style={{ margin: '4px 0 8px 0' }}>{error instanceof Error ? error.message : String(error)}</p>
               <Button size="small" type="primary" onClick={handleRefetch}>
-                重试连接
+                {t('tri.retry_conn')}
               </Button>
             </div>
           }
           type="error"
           showIcon
-          style={{ marginBottom: '24px', borderRadius: '8px' }}
+          style={{ marginBottom: '24px' }}
         />
       )}
 
       {/* Loading State */}
       {isLoading && (
         <div style={{ textAlign: 'center', padding: '64px 0' }}>
-          <Spin size="large" tip="正在扫描并加载 CPA 资源列表..." />
+          <Spin size="large" tip={t('tri.loading')}><div style={{ minHeight: 80, minWidth: 220 }} /></Spin>
         </div>
       )}
 
       {/* Empty State when no resources found */}
       {!isLoading && !isError && totalCount === 0 && (
-        <div
-          style={{
-            backgroundColor: '#ffffff',
-            borderRadius: '16px',
-            padding: '64px 24px',
-            textAlign: 'center',
-            border: '1px solid #e2e8f0',
-          }}
-        >
+        <div className="terminal-panel" style={{ padding: '64px 24px', textAlign: 'center' }}>
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             description={
               <div style={{ maxWidth: '420px', margin: '0 auto' }}>
-                <Text strong style={{ fontSize: '16px', color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-                  尚未发现任何 CPA 接入点
+                <Text strong style={{ fontSize: '16px', display: 'block', marginBottom: '6px' }}>
+                  {t('tri.empty_title')}
                 </Text>
                 <Text type="secondary" style={{ fontSize: '13px' }}>
-                  请确保 CPA 实例已正常启动，并配置了正确的 <code>OMCPA_CPA_BASE_URL</code> 与 <code>MANAGEMENT_KEY</code>。
+                  {t('tri.empty_desc')}
                 </Text>
               </div>
             }
@@ -219,9 +214,9 @@ export const TriagePage: React.FC = () => {
               onClick={triggerDiscovery}
               loading={isDiscovering}
               size="large"
-              style={{ marginTop: '16px', borderRadius: '8px' }}
+              style={{ marginTop: '16px' }}
             >
-              立即扫描 CPA 实例
+              {t('tri.scan_now')}
             </Button>
           </Empty>
         </div>
@@ -229,22 +224,14 @@ export const TriagePage: React.FC = () => {
 
       {/* All Clear / Triage Complete State */}
       {!isLoading && !isError && totalCount > 0 && unclaimedList.length === 0 && (
-        <div
-          style={{
-            backgroundColor: '#ffffff',
-            borderRadius: '16px',
-            padding: '64px 24px',
-            textAlign: 'center',
-            border: '1px solid #e2e8f0',
-          }}
-        >
+        <div className="terminal-panel" style={{ padding: '64px 24px', textAlign: 'center' }}>
           <div
             style={{
               width: '64px',
               height: '64px',
               borderRadius: '50%',
-              backgroundColor: '#f0fdf4',
-              color: '#16a34a',
+              border: '1px solid var(--success)',
+              color: 'var(--success)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -255,12 +242,12 @@ export const TriagePage: React.FC = () => {
             <CheckCircleOutlined />
           </div>
 
-          <Text strong style={{ fontSize: '18px', color: '#0f172a', display: 'block', marginBottom: '8px' }}>
-            太棒了！所有接入点已全部整理完毕
+          <Text strong style={{ fontSize: '18px', display: 'block', marginBottom: '8px' }}>
+            {t('tri.all_done')}
           </Text>
 
           <Text type="secondary" style={{ fontSize: '14px', maxWidth: '480px', display: 'block', margin: '0 auto 20px auto' }}>
-            你已为全部 {totalCount} 个端点配置了专属名称与品牌图标。新增 CPA 凭据后，点击下方按钮即可重新扫描。
+            {t('tri.all_done_desc', { n: totalCount })}
           </Text>
 
           <Button
@@ -268,31 +255,18 @@ export const TriagePage: React.FC = () => {
             icon={<SyncOutlined />}
             onClick={triggerDiscovery}
             loading={isDiscovering}
-            style={{ borderRadius: '8px' }}
           >
-            重新扫描新端点
+            {t('tri.rescan')}
           </Button>
         </div>
       )}
 
       {/* Filter result is empty */}
       {!isLoading && !isError && unclaimedList.length > 0 && filteredList.length === 0 && (
-        <div
-          style={{
-            backgroundColor: '#ffffff',
-            borderRadius: '16px',
-            padding: '48px 24px',
-            textAlign: 'center',
-            border: '1px solid #e2e8f0',
-          }}
-        >
+        <div className="terminal-panel" style={{ padding: '48px 24px', textAlign: 'center' }}>
           <Empty
-            image={<InboxOutlined style={{ fontSize: '48px', color: '#94a3b8' }} />}
-            description={
-              <span>
-                没有匹配过滤条件 <strong>"{searchQuery || driverFilter}"</strong> 的待整理端点
-              </span>
-            }
+            image={<InboxOutlined style={{ fontSize: '48px', color: 'var(--muted)' }} />}
+            description={t('tri.no_match', { q: searchQuery || driverFilter })}
           >
             <Button
               onClick={() => {
@@ -300,7 +274,7 @@ export const TriagePage: React.FC = () => {
                 setDriverFilter('all');
               }}
             >
-              清空搜索与筛选
+              {t('tri.clear_filters')}
             </Button>
           </Empty>
         </div>
@@ -310,11 +284,11 @@ export const TriagePage: React.FC = () => {
       {!isLoading && !isError && filteredList.length > 0 && (
         <div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <Text strong style={{ fontSize: '15px', color: '#1e293b' }}>
-              待整理端点列表 ({filteredList.length})
+            <Text strong style={{ fontSize: '15px' }}>
+              {t('tri.list_title', { n: filteredList.length })}
             </Text>
             <Text type="secondary" style={{ fontSize: '13px' }}>
-              点击卡片「立即整理」为端点赋予业务名称与品牌标识
+              {t('tri.list_hint')}
             </Text>
           </div>
 

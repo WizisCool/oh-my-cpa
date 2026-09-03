@@ -9,6 +9,7 @@ import {
   LinkOutlined,
   KeyOutlined,
 } from '@ant-design/icons';
+import { useT } from '../../i18n';
 import { DiscoveredResource } from '../../types/resource';
 import { PresetIcon } from '../icons/PresetIcon';
 
@@ -27,6 +28,7 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
   onQuickClaim,
   onIgnore,
 }) => {
+  const t = useT();
   const [copied, setCopied] = React.useState(false);
 
   const handleCopyUrl = (e: React.MouseEvent) => {
@@ -38,19 +40,19 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
     }
   };
 
-  const cardColor = resource.color || '#1677FF';
+  const cardColor = resource.color || '#007aff';
   const isCustomized = Boolean(resource.custom_display_name);
 
   const menuItems: MenuProps['items'] = [
     {
       key: 'claim',
-      label: '快速认领 (保持当前名称)',
+      label: t('res.claim_keep'),
       icon: <CheckCircleOutlined />,
       onClick: () => onQuickClaim?.(resource),
     },
     {
       key: 'ignore',
-      label: '暂不整理 / 忽略',
+      label: t('res.ignore'),
       icon: <EyeInvisibleOutlined />,
       danger: true,
       onClick: () => onIgnore?.(resource),
@@ -60,7 +62,7 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
   // Friendly display for CPA technical driver
   const renderDriverBadge = () => {
     const driver = resource.cpa_driver || 'unknown';
-    const protocol = resource.protocol_display || resource.protocol_driver || '未知协议';
+    const protocol = resource.protocol_display || resource.protocol_driver || t('res.unknown_protocol');
 
     let color = 'default';
     if (driver === 'codex') color = 'purple';
@@ -69,7 +71,7 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
     else if (driver === 'openai-compatibility') color = 'cyan';
 
     return (
-      <Tooltip title={`底层技术驱动：CPA 将此接入点作为 [${driver}] 适配器加载`}>
+      <Tooltip title={t('res.driver_tooltip', { driver })}>
         <Tag color={color} style={{ marginRight: 0, fontSize: '12px', borderRadius: '4px' }}>
           {protocol} · CPA: {driver}
         </Tag>
@@ -80,21 +82,22 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
   return (
     <Card
       hoverable
-      className="resource-card"
+      className="resource-card terminal-panel"
       style={{
-        borderRadius: '12px',
-        border: isCustomized ? `1px solid ${cardColor}40` : '1px solid #e2e8f0',
-        transition: 'all 0.25s ease',
-        background: '#ffffff',
+        borderRadius: '4px',
+        border: isCustomized ? `1px solid ${cardColor}` : '1px solid var(--border)',
+        background: 'var(--surface)',
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
       }}
-      bodyStyle={{
-        padding: '20px',
-        display: 'flex',
-        flexDirection: 'column',
-        flex: 1,
+      styles={{
+        body: {
+          padding: '20px',
+          display: 'flex',
+          flexDirection: 'column',
+          flex: 1,
+        },
       }}
     >
       {/* Top Header Row */}
@@ -104,7 +107,7 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
           style={{
             width: '44px',
             height: '44px',
-            borderRadius: '10px',
+            borderRadius: '4px',
             backgroundColor: `${cardColor}15`,
             color: cardColor,
             border: `1px solid ${cardColor}30`,
@@ -112,7 +115,6 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
-            boxShadow: `0 2px 6px ${cardColor}15`,
           }}
         >
           <PresetIcon name={resource.icon} size={24} />
@@ -125,7 +127,6 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
               strong
               style={{
                 fontSize: '16px',
-                color: '#0f172a',
                 lineHeight: 1.3,
                 wordBreak: 'break-word',
               }}
@@ -134,11 +135,11 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
             </Text>
             {isCustomized ? (
               <Tag color="success" style={{ margin: 0, fontSize: '11px', borderRadius: '4px' }}>
-                已自定义
+                {t('res.customized')}
               </Tag>
             ) : (
               <Tag color="warning" style={{ margin: 0, fontSize: '11px', borderRadius: '4px' }}>
-                待认领
+                {t('res.pending')}
               </Tag>
             )}
           </div>
@@ -146,7 +147,7 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
           {resource.suggested_source && (
             <div style={{ marginTop: '4px' }}>
               <Text type="secondary" style={{ fontSize: '12px' }}>
-                来源推荐: <span style={{ color: '#475569', fontWeight: 500 }}>{resource.suggested_source}</span>
+                {t('res.source', { source: resource.suggested_source })}
               </Text>
             </div>
           )}
@@ -158,7 +159,7 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
             type="text"
             size="small"
             icon={<MoreOutlined />}
-            style={{ color: '#94a3b8' }}
+            style={{ color: 'var(--muted)' }}
             onClick={(e) => e.stopPropagation()}
           />
         </Dropdown>
@@ -171,7 +172,7 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             {renderDriverBadge()}
             {resource.cpa_auth_index && (
-              <Tooltip title="CPA 运行时稳定凭据索引 (auth_index)">
+              <Tooltip title={t('res.auth_index_tooltip')}>
                 <Text type="secondary" style={{ fontSize: '11px', fontFamily: 'monospace' }}>
                   <KeyOutlined style={{ marginRight: '4px' }} />
                   {resource.cpa_auth_index.slice(0, 10)}
@@ -184,10 +185,10 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
           {resource.base_url ? (
             <div
               style={{
-                backgroundColor: '#f8fafc',
+                backgroundColor: 'var(--bg)',
                 padding: '6px 10px',
-                borderRadius: '6px',
-                border: '1px solid #f1f5f9',
+                borderRadius: '4px',
+                border: '1px solid var(--border-soft)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
@@ -195,23 +196,22 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
-                <LinkOutlined style={{ color: '#94a3b8', fontSize: '12px' }} />
+                <LinkOutlined style={{ color: 'var(--muted)', fontSize: '12px' }} />
                 <Text
                   style={{
                     fontSize: '12px',
                     fontFamily: 'monospace',
-                    color: '#334155',
                   }}
                   ellipsis={{ tooltip: resource.base_url }}
                 >
                   {resource.base_url}
                 </Text>
               </div>
-              <Tooltip title={copied ? '已复制！' : '复制端点 URL'}>
+              <Tooltip title={copied ? t('res.copied') : t('res.copy_url')}>
                 <Button
                   type="text"
                   size="small"
-                  icon={copied ? <CheckCircleOutlined style={{ color: '#10b981' }} /> : <CopyOutlined />}
+                  icon={copied ? <CheckCircleOutlined style={{ color: 'var(--success)' }} /> : <CopyOutlined />}
                   onClick={handleCopyUrl}
                   style={{ height: '22px', width: '22px', padding: 0 }}
                 />
@@ -220,14 +220,14 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
           ) : resource.cpa_resource_name ? (
             <div
               style={{
-                backgroundColor: '#f8fafc',
+                backgroundColor: 'var(--bg)',
                 padding: '6px 10px',
-                borderRadius: '6px',
-                border: '1px solid #f1f5f9',
+                borderRadius: '4px',
+                border: '1px solid var(--border-soft)',
               }}
             >
               <Text type="secondary" style={{ fontSize: '12px', fontFamily: 'monospace' }}>
-                凭据文件: {resource.cpa_resource_name}
+                {t('res.credential_file', { name: resource.cpa_resource_name })}
               </Text>
             </div>
           ) : null}
@@ -237,9 +237,9 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
             <Paragraph
               type="secondary"
               ellipsis={{ rows: 2 }}
-              style={{ fontSize: '12px', margin: '4px 0 0 0', color: '#64748b' }}
+              style={{ fontSize: '12px', margin: '4px 0 0 0' }}
             >
-              📝 {resource.notes}
+              {resource.notes}
             </Paragraph>
           )}
         </Space>
@@ -248,7 +248,7 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
       {/* Action Footer */}
       <div
         style={{
-          borderTop: '1px solid #f1f5f9',
+          borderTop: '1px solid var(--border-soft)',
           paddingTop: '12px',
           display: 'flex',
           justifyContent: 'space-between',
@@ -268,11 +268,11 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
           style={{
             borderColor: cardColor,
             color: cardColor,
-            borderRadius: '6px',
+            borderRadius: '4px',
             fontWeight: 500,
           }}
         >
-          立即整理 / 命名
+          {t('res.organize')}
         </Button>
       </div>
     </Card>

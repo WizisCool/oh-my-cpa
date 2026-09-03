@@ -1,0 +1,349 @@
+# Oh My CPA · Brand & Theme Tokens
+
+Single source of truth for the visual system. OpenCode-inspired, product-owned:
+interaction patterns and information density draw inspiration from OpenCode's
+minimalist developer console, while brand identity (`›_`), warm terminal palette,
+CPA information architecture, and security boundaries strictly belong to Oh My CPA.
+Values are mirrored in code at:
+
+- `web/src/theme/themeConfig.ts` — `palette` object + antd `ThemeConfig`
+- `web/src/index.css` — CSS custom properties on `:root`
+
+**Rule: never hardcode a color in components.** Import from `palette`, or use
+the CSS variable. When a value changes, change it here and in those two files
+only.
+
+## 1. Design language
+
+Terminal-flat console. Depth comes from **1px borders + background shifts**,
+never shadows or gradients. IBM Plex Mono everywhere (Berkeley Mono if
+licensed), 4px radii, dense but breathable spacing.
+
+| Principle | Meaning |
+| --- | --- |
+| Flat | `box-shadow: none` globally; borders carry all structure |
+| Monospace | All text uses the mono stack; tabular numerals for data |
+| Quiet chrome, loud data | UI scaffolding stays muted; status color is reserved for real state |
+| Semantic color only | Green/red/amber mean enabled/error/warning — never decoration |
+
+## 2. Color palette
+
+### Dark (default)
+
+| Token | Value | antd mapping | Usage |
+| --- | --- | --- | --- |
+| `--bg` | `#201d1d` | `colorBgBase`, `colorBgLayout`, `colorBgContainer` | App background, inputs, tables |
+| `--surface` | `#302c2c` | `colorBgElevated`, `colorFillTertiary` | Cards, panels, dropdowns, hover states |
+| `--fg` | `#fdfcfc` | `colorText`, `colorTextBase` | Primary text |
+| `--fg-2` | `#c8c6c4` | `colorTextSecondary` | Secondary text |
+| `--muted` | `#9a9898` | `colorTextTertiary` | Hints, legends, labels |
+| `--meta` | `#6e6e73` | `colorTextQuaternary` | Group labels, footnotes |
+| `--border` | `#464343` | `colorBorder` | Primary 1px borders |
+| `--border-soft` | `#302c2c` | `colorBorderSecondary`, `colorSplit` | Row dividers, inner borders |
+| `--accent` | `#007aff` | `colorInfo`, `colorLink` | Links, info, active bars, selection |
+| `--accent-hover` | `#0056b3` | `colorPrimary` | Filled primary buttons |
+| `--accent-active` | `#004085` | `colorPrimaryHover/Active` | Pressed state |
+| `--success` | `#30d158` | `colorSuccess` | Enabled / healthy / ok pip |
+| `--warn` | `#ff9f0a` | `colorWarning` | Degraded / quota warning |
+| `--danger` | `#ff3b30` | `colorError` | Failed / disabled / delete |
+
+### Light
+
+| Token | Value |
+| --- | --- |
+| `--bg` | `#fdfcfc` |
+| `--surface` | `#f1eeee` |
+| `--fg` | `#201d1d` |
+| `--fg-2` | `#424245` |
+| `--muted` | `#6e6e73` |
+| `--meta` | `#9a9898` |
+| `--border` | `rgba(15, 0, 0, 0.12)` |
+| `--border-soft` | `rgba(15, 0, 0, 0.07)` |
+
+Accent/success/warn/danger are identical in both modes.
+
+### Status pip semantics
+
+`ok/loaded → success` · `degraded/quota → warn` · `invalid/error/401 → danger`
+· `inactive/offline/disabled → meta (gray)`. Pips are 7×7px, radius 2px.
+
+**One pip per verdict.** A pip labels the state of the number it sits on, so a
+row that shows a rate and its two components gets one pip — on the rate. The
+components carry state by their own colour instead: a failure count is `danger`
+when it is above zero and `meta` when it is not, because "0 failures" is not a
+success worth painting green. Success rate thresholds: `100 → success`,
+`≥ 95 → warn`, `< 95 → danger`, no traffic → `neutral`.
+
+## 3. Typography
+
+```text
+Font stack   "Sarasa Mono SC", "Sarasa UI SC", "Sarasa Term SC", "更纱黑体 SC",
+             "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular,
+             Menlo, Monaco, Consolas, "Liberation Mono", monospace
+Subset font  Build-time subsetted woff2 (< 100KB per weight, Regular & Bold)
+             embedded in assets; local Sarasa Mono SC takes zero-latency priority.
+Base size    14px (antd token fontSize)
+Line height  1.5
+Tabular      font-variant-numeric: tabular-nums on all numeric data
+```
+
+| Level | Size / weight | Usage |
+| --- | --- | --- |
+| Page title (`--text-xl`) | 22px / 700 | One per page, the verdict or page name |
+| Section h2 | 16px / 600 | Dashboard sections |
+| Hero number | 42px / 700, letter-spacing −0.04em | The one big KPI |
+| KPI value | 28px / 700 | Stat cards |
+| Body | 14px / 400 | Default |
+| Data / mono | 12–13px | Tables, logs, code |
+| Eyebrow | 10px / 500, letter-spacing 0.16em, uppercase, `--muted` | Tiny group labels above KPI numbers only |
+
+**Hierarchy rules** (from the prototype):
+
+1. One page title per page — the dashboard title is the *verdict* (运行稳定。),
+   other pages use the nav label. No duplicated subtitles restating it.
+2. No decorative subtitles. A subtitle exists only when it carries live data
+   (e.g. `Default CPA · 已连接`, `3 个认证条目`), never static marketing copy.
+   The same rule covers warning text: a state label (`CPA 未开启文件日志`) plus
+   an action (`重试`) is the whole message. Sentences explaining *why* the switch
+   exists, or promising what another screen will do, are documentation pasted
+   into the UI — an operator who needs them is looking at the wrong product.
+3. No stacked language pairs: a Chinese UI never shows English captions for the
+   same thing (both languages localize fully; proper nouns like "Provider" may
+   remain English in zh copy where that is the industry term).
+4. Body max width `1440px`; page padding 32px desktop / 24px tablet / 16px phone.
+
+## 4. Shape, spacing, elevation
+
+```text
+radius-sm     4px    inputs, buttons, tags, cards, pips (the app's radius)
+radius-lg     6px    modals/drawers outer shell only
+space scale   4 · 8 · 12 · 16 · 20 · 24 · 32 · 48px
+section gap   32px (dashboard sections)
+card padding  20px (antd Card paddingLG)
+page head     title block left, actions right, 24px bottom margin
+header        56px tall, 1px bottom border
+sider         236px (58px collapsed), 1px right border
+```
+
+Elevation: **zero shadows** on layout, card, drawer, modal, popover, dropdown.
+`--focus-ring: 0 0 0 2px var(--accent)` is the only ring.
+
+## 5. Layout skeleton
+
+```text
+┌──────────┬──────────────────────────────────────────┐
+│ brand ›_ │ breadcrumb (分组 / 页面)   actions  中|EN │ 56px, border-bottom
+│──────────┼──────────────────────────────────────────┤
+│ nav      │                                          │
+│ (groups) │ page content        ← scrolls alone      │
+│          │                                          │
+│ foot:    │                                          │
+│ CPA conn │                                          │
+└──────────┴──────────────────────────────────────────┘
+   236px        1fr    — both columns scroll independently
+```
+
+- `body { overflow: hidden }` — the shell is `100dvh`; sidebar and content
+  scroll independently (`overscroll-behavior: contain`).
+- Nav groups: 运行 / 网关 / 观测 / 控制 (+ Oh My CPA). Group labels 10px
+  uppercase `--meta`. Items: icon + label only, no subtitles. Selected item =
+  2px `--fg` inset rule (`box-shadow: inset 2px 0 0 var(--fg)`) + `--fg` bold text,
+  never a filled background block. Hover uses `--surface` for immediate feedback.
+- Sider foot shows live CPA connection + version in `--meta`.
+
+### OpenCode-inspired patterns (OpenCode 设计哲学吸收)
+
+Oh My CPA 吸收了 OpenCode 控制台纯粹、高效、工程师优先的设计理念，同时保持 Oh My CPA 自有的暖墨色调、安全边界与技术架构：
+
+1. **开放式行列表 (Open List Pattern)**
+   - 模型、凭据、配置项等列表优先采用无外层 Card 包装的开放式行列表。
+   - 依靠极细的底边分割线 (`border-bottom: 1px solid var(--border-soft)`) 分隔行。
+   - 结构清晰：左侧实体名与标识、中间技术元数据/Provider、右侧直接交互操作（如 Switch 开关、操作按钮）。
+2. **按任务分配界面密度 (Task-dependent Density)**
+   - 监控与高频数据（Dashboard、实时日志、资源整理）：高密度、紧凑、Tabular 等宽对齐。
+   - 配置与系统管理（Config、计费、系统设置）：留白更加舒展，采用 32–48px 分节间距与全宽 1px 分割线。
+3. **严格的卡片边界 (Honest Card Boundaries)**
+   - 卡片仅用于：核心 KPI、关键实体摘要、同类对象横向比较。
+   - 严禁将单个输入框或单个开关单独装入独立 Card 中制造“卡片拼贴”感。
+4. **同级对比面板 (Peer Comparison Panel)**
+   - 吸收多列横向对比卡片模式：外层整洁栅格 + 1px 细线边框 + 内部分隔线（上部主要对比值，下部次级关联源与底部品牌徽标）。
+5. **上下文引导文案 (Contextual Next Actions)**
+   - 允许一行简明、说明当前操作对象或下一步行为的引导句（如带下划线链接的 `了解更多.` / `联系我们`）。
+   - 依然禁止空洞的营销副标或长篇大论的文档说明。
+6. **顶部上下文槽位 (Top Context Slot)**
+   - 左侧保留 `›_` 品牌标识，未来支持多 CPA 实例时可复用类似工作区下拉的“实例上下文选择器”；
+   - 右侧承载真实会话状态、主题与中英切换。未接入真实能力前绝不伪造头像、余额或工作区假入口。
+7. **表单与配置工作台规范 (Form Workbench & Setting Group Panels)**
+   - **全宽顶栏与视觉平衡 (Full-width Toolbar & Viewport Anchoring)**：顶部操作栏（Toolbar）与 1px 底边线 100% 贯穿全屏，右侧操作区（搜索/刷新/保存）推至最右侧（与全局 Header 右侧操作严格垂直呼应），彻底消除顶栏在半路截断导致的“右侧空旷黑洞”；下方表单工作台则保持在 216px + 920px 黄金阅读宽度，形成“通栏置顶立格局，主体聚焦易输入”的专业层次。
+   - **模块化设置面板 (Setting Group Panels)**：严禁所有字段全部生硬平铺在一条无尽的横向流水账中，也不得每个字段单独套卡片。而是将相关配置收敛为 **Setting Group Panel**（具备统一的 1px 细线外框、`--surface` 底色与 4px 终端圆角），内部依据配置性质采用三种专业结构：
+     1. **Form Grid（表单网格）**：文本、数字、下拉框采用“标签与说明在上、控件在下”的局部工整网格；强相关短字段（如 Host 与 Port、重试次数与间隔）并列同行，短数字框限制为 120px，下拉框限制为 260px，输入焦点清晰聚焦；
+     2. **Settings List（策略开关行）**：特性开关与运行标志行采用“左侧标题说明 + 右侧 Switch”的卡片内行列表，最大行宽收敛在卡片容器内，右侧具有坚实的边框边界，彻底杜绝孤立悬空；
+     3. **Entity List（实体凭据列表）**：API Keys 列表保留独立的 32×32px 方形功能按键与 Tooltip，强化操作安全感与防误触；
+     4. **TLS 渐进折叠 (Progressive Disclosure Panel)**：组头承载启用开关，关闭时只呈现状态说明，启用后平滑展开证书路径与私钥路径网格，折叠时保留已有 YAML 数据并禁用不可见控件。
+   - **顶部紧凑粘性工具条 (Sticky Action Toolbar)**：页面标题、同步胶囊、模式切换（`可视化 / 源码`）与右侧操作区（搜索、刷新、保存）收敛为单行置顶工具栏，保存按钮固定于最右端，告别空置模式行与跨屏折返跑。
+   - **独立触控目标 (Target Ergonomics)**：高频行内操作采用独立方形按键（32×32px，1px 边框与微弱底色），提供充足点击热区与 Tooltip 反馈，而非易误触的裸图标。
+   - **表单控件规格**：复杂表单控件高度统一提升至 38px~40px / 14px 字号，强化输入舒适度与可读性；数字输入框采用左对齐并预留 34px 右侧内边距，彻底杜绝 AntD 步进加减按钮对数值的重叠与遮挡。
+   - **IDE 级源码编辑器 (Monaco YAML Source Editor)**：
+     - **离线与零 CDN 约束**：显式注入本地打包的 `monaco-editor` 核心与 `editor.worker`、`yaml.worker`，严禁通过 CDN 加载远程静态资源；禁止远程 Schema 请求（`enableSchemaRequest: false`）；
+     - **轻量化按需拆包**：通过 `React.lazy` 实现动态加载，不增加首页和可视化模式的首屏体积；通过 Vite 别名按需收敛，剥离无关语言（TypeScript/CSS/HTML 等 workers），仅保留核心 `editor.worker` (274 KB) 与 `yaml.worker` (1017 KB)；
+     - **终端扁平主题匹配**：针对暗色与浅色注册专属主题（`omc-dark`、`omc-light`），统一采用更纱黑体（Sarasa Mono SC）等宽字体栈与 1px 细线外框，消除 VS Code 默认蓝黑主题的跳脱感；
+     - **全功能 IDE 交互**：支持 YAML 语法高亮、括号匹配、缩进参考线、代码折叠、`Ctrl+F` 查找与替换、`Ctrl+S` 原生保存拦截、以及显式触发的 YAML 格式化与语法校验提示。
+   - **吸底浮动操作栏 (Floating Dirty Action Bar) 与确认语义**：
+     - **触发时机**：仅在存在未保存修改（`isDirty === true`）时浮现，平时完全隐藏；右上角操作栏同步呈现【放弃更改】按钮；
+     - **视口居中与非侵入**：依托主布局暴露的 `--app-sider-width` 动态居中于内容区，无论用户在“可视化”还是“源码”模式、滚动到页面任何深度，都能随时一键点击保存或放弃修改；外层采用 `pointer-events: none` 穿透，绝不遮挡下层页面交互；
+     - **纯粹黑客风质感**：严格遵守终端无大阴影、无入口编舞约束，采用 1px 细线边框、`--surface` 纯色底色与纯粹的琥珀色 dirty 提示点；
+     - **操作二次确认准则**：
+       - **保存操作（写操作）**：无论是右上角顶栏还是底部浮动栏，点击“保存配置/保存更改”均触发气泡二次确认（Popconfirm），快捷键（`Ctrl+S` / `Cmd+S`）同步触发确认模态框，确保关键系统配置不被意外触碰；
+       - **放弃更改（回退操作）**：右上角与底部浮动栏点击“放弃更改”均**无需二次确认**，一键直接无损回滚至服务端配置，Dirty 状态与浮动栏即刻干净退场；
+       - **状态保护**：源码存在语法错误或 Payload 规则未填完整时禁用保存并精准悬浮提示原因。
+   - **模块化 Payload 规则构建器 (Payload Rules Builder)**：
+     - **摆脱通用 TextArea 泥潭**：弃用低效的两行原始 JSON 文本框，依照 CPAMC 官方设计体系打造结构化折叠面板（默认规则、默认 Raw 规则、覆盖规则、覆盖 Raw 规则、过滤规则）；
+     - **双向无损 AST 映射**：直接挂接 YAML Document AST，模型、协议、类型化参数（字符串/数字/布尔/null/复杂JSON）、Raw 文本片段与过滤路径独立控件编辑；严格保留 Payload 节点之外的所有配置项、字段顺序与注释，编辑过的 Payload 子树按标准格式回写并保留未知字段（`_extra`）；
+     - **表单输入校验时机 (Pristine → Touched → Submitted)**：严禁在用户刚打开页面或点击“添加规则”时就大面积飘红报错；必填项初始保持纯净中性状态，只有在用户失焦离开字段（`onBlur`）或主动尝试提交保存时，才精准展示错误提示，输入有效后错误即刻实时自动消散；
+     - **高级匹配条件弹窗**：支持扩展配置来源协议（`from-protocol`）、请求头匹配（`headers`）、路径相等匹配（`match` 单键对象数组）、路径不相等匹配（`not-match`）与路径必须存在/不存在检查规则。
+   - **架构评估：为何不引入 @ant-design/pro-layout / pro-components？**：
+     - 需求中的浮动操作栏与列表表单在 ProComponents 中为 `FooterToolbar` 和 `ProFormList`，但它们绑定了庞大的 `rc-field-form` 和臃肿的大厂中后台设计范式；
+     - 引入将增加数兆体积，与“单一 Go 二进制内嵌零 CDN 离线运行”相悖，且其默认白色大阴影与我们追求的 1px 极细边框黑客风完全冲突；
+     - 自研纯原生组件无缝结合 YAML AST 状态流，体积精简 100%、响应灵敏且自由度极高。
+
+### Time range control
+
+One button names the window (`近 1 小时`, or `08-11 – 至今`); the rest lives
+in its popover. **最近** lists the quick windows and nothing else — no secondary
+column repeating the span each one resolves to. **自定义** is antd's own range
+picker: its panel, its two-month calendar, nothing wrapped around it. Wrapping a
+date picker in a draft state and a second Apply control means two opinions about
+when a date is "chosen", and users feel the disagreement.
+
+The picker stays day-granular on purpose. `showTime` collapses antd's range panel
+to one calendar plus time columns — the least legible thing in the component —
+and it keeps 确定 disabled until the end field has a value, which makes an empty
+end impossible. Without it, `allowEmpty` works the way the antd docs advertise:
+**leave the end empty and the range runs 至今**. A picked end means *through*
+that day, so `08-09 → 08-21` really includes the 21st.
+
+Three kinds of window, and only the first two move:
+
+| Chosen | Behaviour |
+| --- | --- |
+| 实时 / 最近 N (preset) | Sliding: re-resolved against `now` on every poll, so the newest bucket keeps appearing. |
+| 自定义, end left empty | Growing (至今): fixed start, end tracks `now`. Polled like a preset. |
+| 自定义, closed range | Frozen: shown exactly as picked, never polled. |
+
+The choice is stored on the server, not in the browser: a reload, a service
+restart and a container rebuild must all bring back the window the operator was
+looking at. A date picker that is not in use never sits in the toolbar.
+
+The selected row is marked the way a TUI marks it — a 2px accent inset rule and
+the text weight, not a filled block. Polling is paced to the resolution being
+served — `bucket / 12`, clamped to 5s–120s — because refreshing faster than the
+grid can change costs queries and buys nothing. There is no "live" switch: the
+shortest preset **is** live. It is fifteen minutes at one bucket per minute, so
+the pacing rule lands on its five-second floor by itself; five minutes was too
+narrow to read as a trend and an hour too coarse to feel like it was moving.
+
+## 6. antd theme wiring (themeConfig.ts)
+
+Non-obvious decisions, keep these when editing:
+
+- `colorPrimary: accentHover (#0056b3)` — filled controls use the deeper step;
+  `colorInfo/colorLink: accent (#007aff)`. This is why buttons don't glow
+  antd-blue while links stay recognizable.
+- Menu: `itemSelectedBg = transparent`, `itemSelectedColor = fg`,
+  `activeBarBorderWidth: 0` — kills the default blue selected block and avoids
+  heavy filled blocks; active position uses the left 2px `--fg` inset rule.
+- Switch: `colorPrimary = success (#30d158)` — active toggle switch uses
+  semantic success green (enabled/healthy), never decorative blue.
+- Modal & Drawer: `1px solid var(--border)`, zero shadow, 4px/6px radii. Simple
+  single-task dialogs use a clean uninterrupted body ("Title → Field/Content →
+  Right-aligned Actions") without decorative header/footer hairline dividers;
+  only complex Drawers retain section dividers.
+- Table: uppercase 11px `--muted` headers on `--bg`, `rowHoverBg = surface`.
+- All shadow tokens set to `'none'`; every motion token pinned to ≤ 0.1s (§7).
+- Components pinned: Button 32/26px, Input active ring `accent22`,
+  Select optionSelectedBg = surface, Tag defaultBg = bg.
+- Chart tooltips are not antd. G2 renders them as `.g2-tooltip` HTML outside the
+  canvas and styles that panel from `interaction.tooltip.css`, so
+  `chartTheme.tooltipStyle` supplies it — every declaration reads a CSS variable
+  first (`var(--surface, …)`) and keeps the palette as fallback, which is what
+  lets an already-open tooltip repaint when the theme flips. The hover rule is
+  canvas-drawn and cannot read variables, so it takes `palette.border` for the
+  active mode.
+
+## 7. Motion
+
+```text
+hover / state colour   none — it paints the frame the pointer arrives
+fast    50ms    antd motionDurationFast
+base    100ms   antd motionDurationMid and Slow: drawers, modals, route and data transitions
+float   60ms    popovers and dropdowns — the click already said "open"
+ease    cubic-bezier(0.2, 0, 0, 1)
+```
+
+No bounces, no scale-ins. Content appears; it does not "fly".
+
+### Motion is restraint, not decoration
+
+The interface is deliberately raw and terminal-like. Motion exists only to make
+state changes feel continuous and **hand-following** (跟手) — never to impress.
+When fluidity and flourish compete, keep fluidity; when flourish and
+performance compete, drop the flourish.
+
+Hard rules:
+
+1. **Animate compositor-only properties** — `opacity` and `transform`. Never
+   `width`, `height`, `top`, `margin` or anything that triggers layout or
+   repaint of a large subtree.
+2. **Keep the animated area tiny.** A 2px progress bar is acceptable; dimming or
+   fading a whole grid is not — it forces the browser to composite the entire
+   page on every refresh.
+3. **No gradient shimmer.** antd's `Skeleton active` and similar sweeping
+   gradients cost frames and clash with the flat aesthetic. Use static skeleton
+   blocks.
+4. **Suppress spinner flash.** A request that resolves quickly must never paint a
+   loading indicator at all (`DataProgress` waits 200ms before showing).
+   Background auto-refresh should be invisible.
+5. **Charts do not animate.** `animate: false` everywhere: G2 canvas
+   re-renders are the most expensive thing on the dashboard, and a line snapping
+   to new data reads as honest, not janky.
+6. **Feedback must be immediate.** Optimistic affordances (button `loading`,
+   the progress bar) appear on the interaction itself, not after a transition.
+7. **Hover is not an animation.** A hover is the interface acknowledging the
+   pointer, so it paints on the frame the pointer arrives — never a transition
+   on a hover colour. The trap: antd hangs menu-item hover, submenu expand and
+   the sider collapse off `motionDurationSlow`, whose default is 0.3s, and
+   setting only Fast/Mid leaves the nav feeling drags. All three tokens are
+   pinned ≤ 0.1s in `themeConfig.ts`.
+
+### Never hard-swap a view
+
+**A painted frame must never go blank between two states.** This applies to
+every transition: route changes from the sidebar, dashboard window presets,
+custom range changes, manual refresh and background refetch.
+
+| Situation | Required behaviour |
+| --- | --- |
+| Route change | Content sits in a keyed `.route-transition` that fades in over 100ms with a 3px rise, and the scroll position resets with the new page. |
+| Query key change (preset, range, filter) | `placeholderData: keepPreviousData` — the previous result stays on screen while the next one loads. |
+| Any request in flight | The app-wide 2px `.data-progress` bar, shown after a 200ms delay. Regions are never dimmed or unmounted. |
+| First load with no data yet | Render the real page frame with static `Skeleton` blocks, not a bare full-page spinner swap. |
+| Error after data existed | Keep the stale data visible and surface a warning; only replace the page when nothing was ever loaded. |
+
+`prefers-reduced-motion` removes the fade and freezes the progress bar, but the
+no-blank rule still applies — fall back to a static loading state.
+
+## 8. Checklist for new UI
+- [ ] Colors only via `palette` / CSS vars; semantic colors carry meaning
+- [ ] No shadows, no gradients, 4px radius
+- [ ] Mono font inherited (never set a new font-family)
+- [ ] One page title; subtitles only with live data; no zh/en duplication
+- [ ] Nav position marked by 2px `--fg` left tick rule, not a filled block or semantic color
+- [ ] Settings and management favor open section lists over heavy card wrappers
+- [ ] Cards reserved for KPIs, summaries, and peer comparisons
+- [ ] Switches use `--success` when active (green = enabled)
+- [ ] Status shown with pip + text, never color alone
+- [ ] Numbers tabular; empty states say what's missing (no fake data or invented workspace/account placeholders)
+- [ ] "Nothing to show" distinguishes its reasons: blocked (cannot serve it),
+      loading (no answer yet), empty (a live source with nothing in it). One
+      shared message makes a working page look broken.
+- [ ] Wheel scrolls only the hovered column; page never scrolls body-wide

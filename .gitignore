@@ -16,9 +16,10 @@ internal/web/dist/*
 .DS_Store
 Thumbs.db
 
-# IDE & Editor files
+# IDE, editor, and local agent artifacts
 .idea/
 .vscode/
+.pi/
 *.local
 
 # Go build artifacts
@@ -34,3 +35,10 @@ oh-my-cpa-data/
 /cpa/
 caddy-data/
 caddy-config/
+
+# Local debugging: real CPA binary/config and dotenv
+.env
+!.env.example
+
+# Air hot-reload artifacts
+.air.toml.bak

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import {
+  App as AntdApp,
   Card,
   Table,
   Tag,
@@ -8,7 +9,6 @@ import {
   Input,
   Radio,
   Typography,
-  message,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -18,13 +18,16 @@ import {
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { useT } from '../i18n';
 import { DiscoveredResource, ResourceOverridePayload } from '../types/resource';
 import { PresetIcon } from '../components/icons/PresetIcon';
 import { ResourceEditDrawer } from '../components/resources/ResourceEditDrawer';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 export const AllResourcesPage: React.FC = () => {
+  const t = useT();
+  const { message } = AntdApp.useApp();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'claimed' | 'unclaimed'>('all');
@@ -61,29 +64,30 @@ export const AllResourcesPage: React.FC = () => {
     mutationFn: ({ id, payload }: { id: string; payload: ResourceOverridePayload }) =>
       api.updateResourceOverride(id, payload),
     onSuccess: () => {
-      message.success('已成功更新配置！');
+      message.success(t('allres.updated'));
       queryClient.invalidateQueries({ queryKey: ['resources'] });
     },
     onError: (err: Error) => {
-      message.error(`保存失败: ${err.message}`);
+      message.error(t('common.save_failed', { msg: err.message }));
     },
   });
 
   const columns: ColumnsType<DiscoveredResource> = [
     {
-      title: '资源标识与名称',
+      title: t('allres.col_name'),
       key: 'name',
       render: (_, record) => {
-        const color = record.color || '#1677FF';
+        const color = record.color || '#007aff';
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div
               style={{
                 width: '36px',
                 height: '36px',
-                borderRadius: '8px',
+                borderRadius: '4px',
                 backgroundColor: `${color}15`,
                 color: color,
+                border: `1px solid ${color}30`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -93,10 +97,10 @@ export const AllResourcesPage: React.FC = () => {
               <PresetIcon name={record.icon} size={20} />
             </div>
             <div>
-              <div style={{ fontWeight: 600, color: '#0f172a' }}>{record.display_name}</div>
+              <div style={{ fontWeight: 600 }}>{record.display_name}</div>
               {record.suggested_source && (
                 <Text type="secondary" style={{ fontSize: '11px' }}>
-                  来源: {record.suggested_source}
+                  {t('allres.source', { source: record.suggested_source })}
                 </Text>
               )}
             </div>
@@ -105,7 +109,7 @@ export const AllResourcesPage: React.FC = () => {
       },
     },
     {
-      title: '协议规范 · CPA 驱动',
+      title: t('allres.col_driver'),
       key: 'driver',
       render: (_, record) => (
         <Space direction="vertical" size={2}>
@@ -119,12 +123,12 @@ export const AllResourcesPage: React.FC = () => {
       ),
     },
     {
-      title: '接入端点 (Base URL) / 凭据',
+      title: t('allres.col_endpoint'),
       key: 'endpoint',
       render: (_, record) => (
         <div>
           {record.base_url ? (
-            <Text style={{ fontSize: '12px', fontFamily: 'monospace', color: '#334155' }}>
+            <Text style={{ fontSize: '12px', fontFamily: 'monospace' }}>
               {record.base_url}
             </Text>
           ) : (
@@ -133,7 +137,7 @@ export const AllResourcesPage: React.FC = () => {
             </Text>
           )}
           {record.cpa_auth_index && (
-            <div style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'monospace' }}>
+            <div style={{ fontSize: '11px', color: 'var(--meta)', fontFamily: 'monospace' }}>
               auth_index: {record.cpa_auth_index}
             </div>
           )}
@@ -141,20 +145,20 @@ export const AllResourcesPage: React.FC = () => {
       ),
     },
     {
-      title: '状态',
+      title: t('allres.col_status'),
       key: 'status',
       width: 100,
       render: (_, record) => {
         const isCustom = Boolean(record.custom_display_name);
         return isCustom ? (
-          <Tag color="success">已自定义</Tag>
+          <Tag color="success">{t('res.customized')}</Tag>
         ) : (
-          <Tag color="warning">待整理</Tag>
+          <Tag color="warning">{t('res.pending')}</Tag>
         );
       },
     },
     {
-      title: '操作',
+      title: t('allres.col_actions'),
       key: 'action',
       width: 100,
       render: (_, record) => (
@@ -163,39 +167,35 @@ export const AllResourcesPage: React.FC = () => {
           icon={<EditOutlined />}
           onClick={() => setEditingResource(record)}
         >
-          编辑
+          {t('common.edit')}
         </Button>
       ),
     },
   ];
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+    <div className="terminal-page">
+      <div className="terminal-page-head">
         <div>
-          <Title level={3} style={{ margin: 0, color: '#0f172a' }}>所有 AI 接入资源</Title>
-          <Text type="secondary">查看、管理与修改全部已发现的 CPA 接入端点及自定义元数据</Text>
+          <h1 className="terminal-title">{t('allres.title')}</h1>
         </div>
         <Button
           icon={<SyncOutlined spin={isFetching} />}
           onClick={() => refetch()}
           loading={isFetching}
         >
-          刷新
+          {t('common.refresh')}
         </Button>
       </div>
 
-      <Card
-        style={{ borderRadius: '12px', border: '1px solid #e2e8f0' }}
-        bodyStyle={{ padding: '16px 20px' }}
-      >
+      <Card className="terminal-panel" styles={{ body: { padding: '16px 20px' } }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
           <Input
-            prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
-            placeholder="按名称、Base URL 或 Auth Index 过滤..."
+            prefix={<SearchOutlined style={{ color: 'var(--muted)' }} />}
+            placeholder={t('allres.search_ph')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={{ width: 280, borderRadius: '8px' }}
+            style={{ width: 280 }}
             allowClear
           />
 
@@ -204,9 +204,9 @@ export const AllResourcesPage: React.FC = () => {
             onChange={(e) => setStatusFilter(e.target.value)}
             buttonStyle="solid"
           >
-            <Radio.Button value="all">全部 ({resources.length})</Radio.Button>
-            <Radio.Button value="unclaimed">待整理</Radio.Button>
-            <Radio.Button value="claimed">已认领</Radio.Button>
+            <Radio.Button value="all">{t('allres.filter_all', { n: resources.length })}</Radio.Button>
+            <Radio.Button value="unclaimed">{t('allres.filter_unclaimed')}</Radio.Button>
+            <Radio.Button value="claimed">{t('allres.filter_claimed')}</Radio.Button>
           </Radio.Group>
         </div>
 

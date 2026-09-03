@@ -29,7 +29,7 @@ func testHandler(t *testing.T, basePath string) *Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	authManager, err := auth.New("admin-password", "01234567890123456789012345678901", basePath, "")
+	authManager, err := auth.New("management-secret", basePath, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestRouterSeparatesSPAFromAPIAndRedirectsBasePath(t *testing.T) {
 		t.Fatal(err)
 	}
 	authenticatedClient := &http.Client{Jar: jar}
-	loginResponse, err := authenticatedClient.Post(server.URL+"/omc/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"admin-password"}`))
+	loginResponse, err := authenticatedClient.Post(server.URL+"/omc/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"management-secret"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,7 +241,7 @@ func TestResourceResponseDoesNotExposeCredentialBearingURLs(t *testing.T) {
 }
 
 func TestHTTPSSessionCookieIsSecure(t *testing.T) {
-	manager, err := auth.New("admin-password", "01234567890123456789012345678901", "/omc", "https://example.test/omc")
+	manager, err := auth.New("test-management-key", "/omc", "https://example.test/omc")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,7 +273,7 @@ func TestProtectedMutationRequiresSameOrigin(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := &http.Client{Jar: jar}
-	login, err := client.Post(server.URL+"/omc/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"admin-password"}`))
+	login, err := client.Post(server.URL+"/omc/api/auth/login", "application/json", bytes.NewBufferString(`{"password":"management-secret"}`))
 	if err != nil {
 		t.Fatal(err)
 	}

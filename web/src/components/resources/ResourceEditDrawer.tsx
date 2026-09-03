@@ -20,6 +20,7 @@ import {
   SaveOutlined,
   ReloadOutlined,
 } from '@ant-design/icons';
+import { useT } from '../../i18n';
 import {
   DiscoveredResource,
   ResourceOverridePayload,
@@ -45,6 +46,7 @@ export const ResourceEditDrawer: React.FC<ResourceEditDrawerProps> = ({
   onSave,
   loading = false,
 }) => {
+  const t = useT();
   const [form] = Form.useForm<ResourceOverridePayload>();
 
   // Watch form fields for live preview
@@ -57,7 +59,7 @@ export const ResourceEditDrawer: React.FC<ResourceEditDrawerProps> = ({
       form.setFieldsValue({
         display_name: resource.custom_display_name || resource.display_name || '',
         icon: resource.icon || 'custom',
-        color: resource.color || '#1677FF',
+        color: resource.color || '#007aff',
         notes: resource.notes || '',
         status: resource.status || 'claimed',
       });
@@ -80,26 +82,25 @@ export const ResourceEditDrawer: React.FC<ResourceEditDrawerProps> = ({
     form.setFieldsValue({
       display_name: resource.suggested_source || resource.cpa_resource_name || '',
       icon: 'custom',
-      color: '#1677FF',
+      color: '#007aff',
       notes: '',
     });
   };
 
-  const previewName = watchedName || resource.display_name || '未命名线路';
+  const previewName = watchedName || resource.display_name || t('res.unnamed');
   const previewIcon = watchedIcon || resource.icon || 'custom';
-  const previewColor = watchedColor || resource.color || '#1677FF';
+  const previewColor = watchedColor || resource.color || '#007aff';
 
   return (
     <Drawer
-      title="整理与自定义 AI 接入点"
+      title={t('res.drawer_title')}
       placement="right"
       width={520}
       open={visible}
       onClose={onClose}
-      bodyStyle={{ padding: '24px' }}
       extra={
         <Space>
-          <Button onClick={onClose}>取消</Button>
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
           <Button
             type="primary"
             icon={<SaveOutlined />}
@@ -107,32 +108,31 @@ export const ResourceEditDrawer: React.FC<ResourceEditDrawerProps> = ({
             onClick={() => form.submit()}
             style={{ backgroundColor: previewColor }}
           >
-            保存并认领
+            {t('res.save_claim')}
           </Button>
         </Space>
       }
     >
       {/* Live Preview Card */}
       <div style={{ marginBottom: '24px' }}>
-        <Text strong style={{ fontSize: '13px', color: '#64748b', display: 'block', marginBottom: '8px' }}>
-          实时卡片预览 (Live Preview)
+        <Text strong style={{ fontSize: '13px', color: 'var(--muted)', display: 'block', marginBottom: '8px' }}>
+          {t('res.preview')}
         </Text>
         <Card
           size="small"
           style={{
-            borderRadius: '10px',
-            border: `1.5px solid ${previewColor}50`,
-            background: `linear-gradient(135deg, #ffffff 0%, ${previewColor}08 100%)`,
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+            borderRadius: '4px',
+            border: `1.5px solid ${previewColor}`,
+            background: 'var(--bg)',
           }}
-          bodyStyle={{ padding: '16px' }}
+          styles={{ body: { padding: '16px' } }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div
               style={{
                 width: '40px',
                 height: '40px',
-                borderRadius: '8px',
+                borderRadius: '4px',
                 backgroundColor: `${previewColor}20`,
                 color: previewColor,
                 display: 'flex',
@@ -146,11 +146,11 @@ export const ResourceEditDrawer: React.FC<ResourceEditDrawerProps> = ({
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Text strong style={{ fontSize: '15px', color: '#0f172a' }}>
+                <Text strong style={{ fontSize: '15px' }}>
                   {previewName}
                 </Text>
                 <Tag color="success" style={{ margin: 0, fontSize: '11px', borderRadius: '4px' }}>
-                  已整理
+                  {t('res.preview_tag')}
                 </Tag>
               </div>
               <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginTop: '2px' }}>
@@ -173,16 +173,16 @@ export const ResourceEditDrawer: React.FC<ResourceEditDrawerProps> = ({
           name="display_name"
           label={
             <Space>
-              <span style={{ fontWeight: 600 }}>显示名称 (Display Name)</span>
-              <Tooltip title="为这个端点设置清晰的中文或业务名称，如「DeepSeek 官方主线路」、「GOAT 个人订阅」、「OpenAI 团队号」">
-                <InfoCircleOutlined style={{ color: '#94a3b8' }} />
+              <span style={{ fontWeight: 600 }}>{t('res.name_label')}</span>
+              <Tooltip title={t('res.name_tooltip')}>
+                <InfoCircleOutlined style={{ color: 'var(--muted)' }} />
               </Tooltip>
             </Space>
           }
-          rules={[{ required: true, message: '请输入显示名称' }]}
+          rules={[{ required: true, message: t('res.name_required') }]}
         >
           <Input
-            placeholder="例如：DeepSeek 官方主线路 / GOAT 团队套餐"
+            placeholder={t('res.name_ph')}
             size="large"
             maxLength={64}
             allowClear
@@ -192,7 +192,7 @@ export const ResourceEditDrawer: React.FC<ResourceEditDrawerProps> = ({
         {/* Icon Preset Selector */}
         <Form.Item
           name="icon"
-          label={<span style={{ fontWeight: 600 }}>品牌图标预设 (Icon Preset)</span>}
+          label={<span style={{ fontWeight: 600 }}>{t('res.icon_label')}</span>}
         >
           <Radio.Group style={{ width: '100%' }}>
             <Row gutter={[8, 8]}>
@@ -210,11 +210,11 @@ export const ResourceEditDrawer: React.FC<ResourceEditDrawerProps> = ({
                       }}
                       style={{
                         padding: '10px 8px',
-                        borderRadius: '8px',
+                        borderRadius: '4px',
                         border: isSelected
                           ? `2px solid ${previewColor}`
-                          : '1px solid #e2e8f0',
-                        backgroundColor: isSelected ? `${previewColor}10` : '#f8fafc',
+                          : '1px solid var(--border)',
+                        backgroundColor: isSelected ? `${previewColor}10` : 'var(--bg)',
                         cursor: 'pointer',
                         display: 'flex',
                         flexDirection: 'column',
@@ -226,12 +226,12 @@ export const ResourceEditDrawer: React.FC<ResourceEditDrawerProps> = ({
                       <PresetIcon
                         name={preset.key}
                         size={20}
-                        style={{ color: isSelected ? previewColor : '#475569' }}
+                        style={{ color: isSelected ? previewColor : 'var(--muted)' }}
                       />
                       <span
                         style={{
                           fontSize: '11px',
-                          color: isSelected ? previewColor : '#334155',
+                          color: isSelected ? previewColor : 'var(--fg-2)',
                           fontWeight: isSelected ? 600 : 400,
                           textAlign: 'center',
                           whiteSpace: 'nowrap',
@@ -253,7 +253,7 @@ export const ResourceEditDrawer: React.FC<ResourceEditDrawerProps> = ({
         {/* Color Palette Chips */}
         <Form.Item
           name="color"
-          label={<span style={{ fontWeight: 600 }}>标识色彩 (Theme Color)</span>}
+          label={<span style={{ fontWeight: 600 }}>{t('res.color_label')}</span>}
         >
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
             {COLOR_PRESETS.map((color) => {
@@ -271,10 +271,8 @@ export const ResourceEditDrawer: React.FC<ResourceEditDrawerProps> = ({
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      boxShadow: isSelected
-                        ? `0 0 0 3px #ffffff, 0 0 0 5px ${color.hex}`
-                        : '0 1px 3px rgba(0,0,0,0.1)',
-                      transition: 'all 0.2s ease',
+                      outline: isSelected ? `2px solid var(--fg)` : 'none',
+                      outlineOffset: '2px',
                     }}
                   >
                     {isSelected && <CheckOutlined style={{ color: '#ffffff', fontSize: '14px' }} />}
@@ -288,10 +286,10 @@ export const ResourceEditDrawer: React.FC<ResourceEditDrawerProps> = ({
         {/* Notes */}
         <Form.Item
           name="notes"
-          label={<span style={{ fontWeight: 600 }}>备注 / 用途说明 (Optional Notes)</span>}
+          label={<span style={{ fontWeight: 600 }}>{t('res.notes_label')}</span>}
         >
           <Input.TextArea
-            placeholder="例如：团队主力编码线路，月付套餐，续费日每月 15 号"
+            placeholder={t('res.notes_ph')}
             rows={3}
             maxLength={200}
             showCount
@@ -301,12 +299,12 @@ export const ResourceEditDrawer: React.FC<ResourceEditDrawerProps> = ({
         {/* Status Option */}
         <Form.Item
           name="status"
-          label={<span style={{ fontWeight: 600 }}>资源状态 (Status)</span>}
+          label={<span style={{ fontWeight: 600 }}>{t('res.status_label')}</span>}
         >
           <Radio.Group buttonStyle="solid">
-            <Radio.Button value="claimed">已认领 (Claimed)</Radio.Button>
-            <Radio.Button value="unclaimed">待整理 (Unclaimed)</Radio.Button>
-            <Radio.Button value="ignored">忽略 (Ignored)</Radio.Button>
+            <Radio.Button value="claimed">{t('res.status_claimed')}</Radio.Button>
+            <Radio.Button value="unclaimed">{t('res.status_unclaimed')}</Radio.Button>
+            <Radio.Button value="ignored">{t('res.status_ignored')}</Radio.Button>
           </Radio.Group>
         </Form.Item>
       </Form>
@@ -314,36 +312,35 @@ export const ResourceEditDrawer: React.FC<ResourceEditDrawerProps> = ({
       {/* Technical Collapsible Details */}
       <Collapse
         ghost
-        style={{ marginTop: '20px', borderTop: '1px solid #f1f5f9' }}
+        style={{ marginTop: '20px', borderTop: '1px solid var(--border-soft)' }}
         items={[
           {
             key: 'tech-details',
             label: (
               <Text type="secondary" style={{ fontSize: '12px' }}>
                 <InfoCircleOutlined style={{ marginRight: '6px' }} />
-                底层 CPA 技术配置详情 (Read-Only)
+                {t('res.tech_details')}
               </Text>
             ),
             children: (
               <div
                 style={{
-                  backgroundColor: '#f8fafc',
+                  backgroundColor: 'var(--bg)',
                   padding: '12px',
-                  borderRadius: '6px',
+                  borderRadius: '4px',
                   fontSize: '12px',
                   fontFamily: 'monospace',
-                  color: '#334155',
                 }}
               >
-                <div><strong>CPA 资源类型:</strong> {resource.cpa_resource_type}</div>
-                <div><strong>CPA 驱动:</strong> {resource.cpa_driver}</div>
-                <div><strong>协议规范:</strong> {resource.protocol_driver}</div>
-                {resource.base_url && <div><strong>接入点 Base URL:</strong> {resource.base_url}</div>}
+                <div><strong>{t('res.tech_type')}</strong> {resource.cpa_resource_type}</div>
+                <div><strong>{t('res.tech_driver')}</strong> {resource.cpa_driver}</div>
+                <div><strong>{t('res.tech_protocol')}</strong> {resource.protocol_driver}</div>
+                {resource.base_url && <div><strong>{t('res.tech_baseurl')}</strong> {resource.base_url}</div>}
                 {resource.cpa_auth_index && <div><strong>Auth Index:</strong> {resource.cpa_auth_index}</div>}
-                {resource.cpa_resource_name && <div><strong>资源标识:</strong> {resource.cpa_resource_name}</div>}
+                {resource.cpa_resource_name && <div><strong>{t('res.tech_resource')}</strong> {resource.cpa_resource_name}</div>}
                 {resource.details?.models && (
                   <div style={{ marginTop: '6px' }}>
-                    <strong>支持模型 ({resource.details.models.length}):</strong>
+                    <strong>{t('res.tech_models', { n: resource.details.models.length })}</strong>
                     <div style={{ maxHeight: '80px', overflowY: 'auto', marginTop: '4px' }}>
                       {resource.details.models.join(', ')}
                     </div>
@@ -361,9 +358,9 @@ export const ResourceEditDrawer: React.FC<ResourceEditDrawerProps> = ({
           size="small"
           icon={<ReloadOutlined />}
           onClick={handleResetToDefault}
-          style={{ color: '#94a3b8' }}
+          style={{ color: 'var(--muted)' }}
         >
-          重置表单为推测默认值
+          {t('res.reset')}
         </Button>
       </div>
     </Drawer>

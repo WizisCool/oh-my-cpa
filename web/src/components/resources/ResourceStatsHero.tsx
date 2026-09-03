@@ -6,6 +6,7 @@ import {
   ThunderboltFilled,
   SyncOutlined,
 } from '@ant-design/icons';
+import { useT } from '../../i18n';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -32,19 +33,14 @@ export const ResourceStatsHero: React.FC<ResourceStatsHeroProps> = ({
   onSync,
   isSyncing,
 }) => {
+  const t = useT();
   return (
     <div style={{ marginBottom: '24px' }}>
       {/* Hero Banner Card */}
       <Card
-        style={{
-          borderRadius: '16px',
-          border: '1px solid #e2e8f0',
-          background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
-          color: '#ffffff',
-          boxShadow: '0 4px 20px rgba(15, 23, 42, 0.08)',
-          marginBottom: '16px',
-        }}
-        bodyStyle={{ padding: '28px 32px' }}
+        className="terminal-panel"
+        style={{ marginBottom: '16px' }}
+        styles={{ body: { padding: '28px 32px' } }}
       >
         <Row gutter={[32, 24]} align="middle">
           {/* Left Column: Mission Statement */}
@@ -55,26 +51,24 @@ export const ResourceStatsHero: React.FC<ResourceStatsHeroProps> = ({
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '4px',
-                  backgroundColor: '#1677FF30',
-                  color: '#60a5fa',
+                  border: '1px solid var(--border)',
+                  borderRadius: '4px',
+                  color: 'var(--muted)',
                   padding: '2px 10px',
-                  borderRadius: '12px',
                   fontSize: '12px',
                   fontWeight: 600,
                 }}
               >
-                <ThunderboltFilled /> 资源身份中枢
+                <ThunderboltFilled /> {t('tri.hero_badge')}
               </span>
             </div>
 
-            <Title level={2} style={{ color: '#ffffff', margin: '0 0 10px 0', fontSize: '24px', letterSpacing: '-0.5px' }}>
-              AI 接入点整理与命名
+            <Title level={2} style={{ margin: '0 0 10px 0', fontSize: '24px', letterSpacing: '-0.5px' }}>
+              {t('tri.hero_title')}
             </Title>
 
-            <Paragraph style={{ color: '#94a3b8', fontSize: '14px', lineHeight: 1.6, margin: 0, maxWidth: '620px' }}>
-              CPA 原生将所有 Responses 端点统一归类为 <code>Codex</code>。在这里，你可以为你的{' '}
-              <strong style={{ color: '#e2e8f0' }}>OpenCode Go</strong>、<strong style={{ color: '#e2e8f0' }}>GPT Plus 个人号</strong>、
-              <strong style={{ color: '#e2e8f0' }}>Command Code GOAT</strong> 以及各类中转站，配置清晰的业务名称、品牌图标与用途。
+            <Paragraph style={{ color: 'var(--muted)', fontSize: '14px', lineHeight: 1.6, margin: 0, maxWidth: '620px' }}>
+              {t('tri.hero_desc')}
             </Paragraph>
           </Col>
 
@@ -84,51 +78,48 @@ export const ResourceStatsHero: React.FC<ResourceStatsHeroProps> = ({
               <Col span={8}>
                 <div
                   style={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '12px',
+                    border: '1px solid var(--border)',
+                    borderRadius: '4px',
                     padding: '16px 12px',
                     textAlign: 'center',
                   }}
                 >
-                  <Text style={{ color: '#f59e0b', fontSize: '24px', fontWeight: 700, display: 'block' }}>
+                  <Text style={{ color: 'var(--warn)', fontSize: '24px', fontWeight: 700, display: 'block' }}>
                     {unclaimedCount}
                   </Text>
-                  <Text style={{ color: '#94a3b8', fontSize: '12px' }}>待整理端点</Text>
+                  <Text style={{ color: 'var(--muted)', fontSize: '12px' }}>{t('tri.metric_unclaimed')}</Text>
                 </div>
               </Col>
 
               <Col span={8}>
                 <div
                   style={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '12px',
+                    border: '1px solid var(--border)',
+                    borderRadius: '4px',
                     padding: '16px 12px',
                     textAlign: 'center',
                   }}
                 >
-                  <Text style={{ color: '#10b981', fontSize: '24px', fontWeight: 700, display: 'block' }}>
+                  <Text style={{ color: 'var(--success)', fontSize: '24px', fontWeight: 700, display: 'block' }}>
                     {claimedCount}
                   </Text>
-                  <Text style={{ color: '#94a3b8', fontSize: '12px' }}>已认领线路</Text>
+                  <Text style={{ color: 'var(--muted)', fontSize: '12px' }}>{t('tri.metric_claimed')}</Text>
                 </div>
               </Col>
 
               <Col span={8}>
                 <div
                   style={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '12px',
+                    border: '1px solid var(--border)',
+                    borderRadius: '4px',
                     padding: '16px 12px',
                     textAlign: 'center',
                   }}
                 >
-                  <Text style={{ color: '#60a5fa', fontSize: '24px', fontWeight: 700, display: 'block' }}>
+                  <Text style={{ color: 'var(--fg)', fontSize: '24px', fontWeight: 700, display: 'block' }}>
                     {totalCount}
                   </Text>
-                  <Text style={{ color: '#94a3b8', fontSize: '12px' }}>总接入数</Text>
+                  <Text style={{ color: 'var(--muted)', fontSize: '12px' }}>{t('tri.metric_total')}</Text>
                 </div>
               </Col>
             </Row>
@@ -137,25 +128,16 @@ export const ResourceStatsHero: React.FC<ResourceStatsHeroProps> = ({
       </Card>
 
       {/* Filter and Search Bar */}
-      <Card
-        style={{
-          borderRadius: '12px',
-          border: '1px solid #e2e8f0',
-          background: '#ffffff',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)',
-        }}
-        bodyStyle={{ padding: '16px 20px' }}
-      >
+      <Card className="terminal-panel" styles={{ body: { padding: '16px 20px' } }}>
         <Row gutter={[16, 12]} align="middle" justify="space-between">
           <Col xs={24} sm={14} md={12}>
             <Input
-              prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
-              placeholder="搜索资源名称、接入点 Base URL、Auth Index..."
+              prefix={<SearchOutlined style={{ color: 'var(--muted)' }} />}
+              placeholder={t('tri.search_ph')}
               allowClear
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
               size="middle"
-              style={{ borderRadius: '8px' }}
             />
           </Col>
 
@@ -165,15 +147,15 @@ export const ResourceStatsHero: React.FC<ResourceStatsHeroProps> = ({
                 value={driverFilter}
                 onChange={onDriverFilterChange}
                 style={{ width: 180 }}
-                placeholder="全部协议驱动"
-                suffixIcon={<FilterOutlined style={{ color: '#94a3b8' }} />}
+                placeholder={t('tri.driver_ph')}
+                suffixIcon={<FilterOutlined style={{ color: 'var(--muted)' }} />}
                 options={[
-                  { label: '全部 CPA 驱动类型', value: 'all' },
+                  { label: t('tri.driver_all'), value: 'all' },
                   { label: 'Codex (Responses)', value: 'codex' },
                   { label: 'Claude (Anthropic)', value: 'claude' },
                   { label: 'Gemini (Google)', value: 'gemini' },
-                  { label: 'OpenAI 兼容提供商', value: 'openai-compatibility' },
-                  { label: 'Auth Files (OAuth 凭据)', value: 'auth-file' },
+                  { label: t('tri.driver_openai_compat'), value: 'openai-compatibility' },
+                  { label: t('tri.driver_authfile'), value: 'auth-file' },
                 ]}
               />
 
@@ -181,9 +163,8 @@ export const ResourceStatsHero: React.FC<ResourceStatsHeroProps> = ({
                 icon={<SyncOutlined spin={isSyncing} />}
                 onClick={onSync}
                 loading={isSyncing}
-                style={{ borderRadius: '6px' }}
               >
-                刷新发现
+                {t('tri.refresh_discovery')}
               </Button>
             </Space>
           </Col>

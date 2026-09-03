@@ -20,12 +20,31 @@ type Config struct {
 	DatabasePath   string
 	CPA            CPAConfig
 	MasterKey      string
-	SessionSecret  string
-	AdminPassword  string
+	Usage          UsageConfig
 	PublicURL      string
 	Version        string
 	RequestTimeout time.Duration
 	TLSSkipVerify  bool
+}
+
+// UsageConfig controls the request-record pipeline that backs the dashboard and
+// every later analytics feature.
+type UsageConfig struct {
+	// Enabled gates background capture. When false the dashboard still serves
+	// whatever was stored before, but nothing new is collected.
+	Enabled bool
+	// Mode selects the collection path: auto, subscribe, resp_pull, http_pull or off.
+	Mode string
+	// IdleInterval is how long a collector waits when CPA has nothing queued.
+	IdleInterval time.Duration
+	// BatchSize caps one pop.
+	BatchSize int
+	// AggregateInterval bounds how stale rollup-assisted queries can get.
+	AggregateInterval time.Duration
+	// RetentionDays prunes detail and rollup rows; zero keeps everything.
+	RetentionDays int
+	// CollectErrors also subscribes to CPA's push-only errors channel.
+	CollectErrors bool
 }
 
 type CPAConfig struct {
@@ -100,14 +119,18 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	usage, err := loadUsageConfig()
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		ListenAddr:     listenAddr,
+		Usage:          usage,
 		BasePath:       basePath,
 		DataDir:        dataDir,
 		DatabasePath:   filepath.Join(dataDir, "oh-my-cpa.db"),
 		MasterKey:      strings.TrimSpace(os.Getenv("OMCPA_MASTER_KEY")),
-		SessionSecret:  strings.TrimSpace(os.Getenv("OMCPA_SESSION_SECRET")),
-		AdminPassword:  strings.TrimSpace(os.Getenv("OMCPA_ADMIN_PASSWORD")),
 		PublicURL:      strings.TrimSpace(os.Getenv("OMCPA_PUBLIC_URL")),
 		Version:        envOr("OMCPA_VERSION", "v0.1.0-dev"),
 		RequestTimeout: timeout,
@@ -149,4 +172,66 @@ func envOr(name, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// loadUsageConfig reads the request-record pipeline settings.
+func loadUsageConfig() (UsageConfig, error) {
+	enabled, err := parseBoolEnv("OMCPA_USAGE_INGEST_ENABLED", true)
+	if err != nil {
+		return UsageConfig{}, err
+	}
+	collectErrors, err := parseBoolEnv("OMCPA_USAGE_COLLECT_ERRORS", true)
+	if err != nil {
+		return UsageConfig{}, err
+	}
+	idleInterval := time.Second
+	if raw := strings.TrimSpace(os.Getenv("OMCPA_USAGE_IDLE_INTERVAL")); raw != "" {
+		parsed, parseErr := time.ParseDuration(raw)
+		if parseErr != nil || parsed <= 0 {
+			return UsageConfig{}, fmt.Errorf("OMCPA_USAGE_IDLE_INTERVAL must be a positive duration: %q", raw)
+		}
+		idleInterval = parsed
+	}
+	aggregateInterval := 15 * time.Second
+	if raw := strings.TrimSpace(os.Getenv("OMCPA_USAGE_AGGREGATE_INTERVAL")); raw != "" {
+		parsed, parseErr := time.ParseDuration(raw)
+		if parseErr != nil || parsed <= 0 {
+			return UsageConfig{}, fmt.Errorf("OMCPA_USAGE_AGGREGATE_INTERVAL must be a positive duration: %q", raw)
+		}
+		aggregateInterval = parsed
+	}
+	batchSize := 1000
+	if raw := strings.TrimSpace(os.Getenv("OMCPA_USAGE_BATCH_SIZE")); raw != "" {
+		parsed, parseErr := strconv.Atoi(raw)
+		if parseErr != nil || parsed <= 0 || parsed > 10000 {
+			return UsageConfig{}, fmt.Errorf("OMCPA_USAGE_BATCH_SIZE must be between 1 and 10000: %q", raw)
+		}
+		batchSize = parsed
+	}
+	retentionDays := 90
+	if raw := strings.TrimSpace(os.Getenv("OMCPA_USAGE_RETENTION_DAYS")); raw != "" {
+		parsed, parseErr := strconv.Atoi(raw)
+		if parseErr != nil || parsed < 0 {
+			return UsageConfig{}, fmt.Errorf("OMCPA_USAGE_RETENTION_DAYS must be zero or positive: %q", raw)
+		}
+		retentionDays = parsed
+	}
+	mode := strings.ToLower(strings.TrimSpace(os.Getenv("OMCPA_USAGE_INGEST_MODE")))
+	if mode == "" {
+		mode = "auto"
+	}
+	switch mode {
+	case "auto", "subscribe", "resp_pull", "http_pull", "off":
+	default:
+		return UsageConfig{}, fmt.Errorf("OMCPA_USAGE_INGEST_MODE must be auto, subscribe, resp_pull, http_pull or off")
+	}
+	return UsageConfig{
+		Enabled:           enabled,
+		Mode:              mode,
+		IdleInterval:      idleInterval,
+		BatchSize:         batchSize,
+		AggregateInterval: aggregateInterval,
+		RetentionDays:     retentionDays,
+		CollectErrors:     collectErrors,
+	}, nil
 }
