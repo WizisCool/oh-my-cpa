@@ -70,8 +70,17 @@ func (h *Handler) managementConfigPutScalar(writer http.ResponseWriter, request 
 		return
 	}
 
+	if auditErr := h.recordAudit(request, "config.save_scalar", "config", key, "attempt", nil); auditErr != nil {
+		writeError(writer, http.StatusInternalServerError, "audit log failure; config save aborted")
+		return
+	}
 	if err := client.UpdateConfigScalar(request.Context(), key, validatedVal); err != nil {
+		_ = h.recordAudit(request, "config.save_scalar", "config", key, "failure", map[string]any{"error": err.Error()})
 		writeCPAFacadeError(writer, err)
+		return
+	}
+	if auditErr := h.recordAudit(request, "config.save_scalar", "config", key, "success", map[string]any{"key": key}); auditErr != nil {
+		writeError(writer, http.StatusInternalServerError, "audit log failure; operation aborted")
 		return
 	}
 
@@ -141,7 +150,12 @@ func (h *Handler) managementConfigSourceGet(writer http.ResponseWriter, request 
 
 	yamlStr, err := client.ConfigYAML(request.Context())
 	if err != nil {
+		_ = h.recordAudit(request, "config.reveal_source", "config", "config_source_yaml", "failure", map[string]any{"error": err.Error()})
 		writeCPAFacadeError(writer, err)
+		return
+	}
+	if auditErr := h.recordAudit(request, "config.reveal_source", "config", "config_source_yaml", "success", map[string]any{"size_bytes": len(yamlStr)}); auditErr != nil {
+		writeError(writer, http.StatusInternalServerError, "audit log failure; config reveal aborted")
 		return
 	}
 
@@ -176,8 +190,17 @@ func (h *Handler) managementConfigSourcePut(writer http.ResponseWriter, request 
 		return
 	}
 
+	if auditErr := h.recordAudit(request, "config.save_source", "config", "config_source_yaml", "attempt", map[string]any{"size_bytes": len(req.YAML)}); auditErr != nil {
+		writeError(writer, http.StatusInternalServerError, "audit log failure; config save aborted")
+		return
+	}
 	if err := client.UpdateConfigYAML(request.Context(), req.YAML); err != nil {
+		_ = h.recordAudit(request, "config.save_source", "config", "config_source_yaml", "failure", map[string]any{"error": err.Error()})
 		writeCPAFacadeError(writer, err)
+		return
+	}
+	if auditErr := h.recordAudit(request, "config.save_source", "config", "config_source_yaml", "success", map[string]any{"size_bytes": len(req.YAML)}); auditErr != nil {
+		writeError(writer, http.StatusInternalServerError, "audit log failure; operation aborted")
 		return
 	}
 

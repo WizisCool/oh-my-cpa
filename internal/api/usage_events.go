@@ -31,6 +31,7 @@ type usageEventResponse struct {
 	AuthType            string `json:"auth_type,omitempty"`
 	AuthIndex           string `json:"auth_index,omitempty"`
 	APIGroupKey         string `json:"api_group_key,omitempty"`
+	APIGroupLabel       string `json:"api_group_label,omitempty"`
 	Source              string `json:"source,omitempty"`
 	Model               string `json:"model"`
 	ModelAlias          string `json:"model_alias,omitempty"`
@@ -65,6 +66,8 @@ func projectUsageEvent(row repository.UsageEventRow) usageEventResponse {
 	item.ExecutorType = row.ExecutorType
 	item.AuthType = row.AuthType
 	item.AuthIndex = row.AuthIndex
+	item.APIGroupKey = row.APIGroupKey
+	item.APIGroupLabel = row.APIGroupLabel
 	item.Source = row.Source
 	item.Model = row.Model
 	item.ReasoningEffort = row.ReasoningEffort
@@ -218,6 +221,7 @@ func projectUsageEventDetail(row repository.UsageEventRow) map[string]any {
 		"auth_type":             item.AuthType,
 		"auth_index":            item.AuthIndex,
 		"api_group_key":         item.APIGroupKey,
+		"api_group_label":       item.APIGroupLabel,
 		"source":                item.Source,
 		"model":                 item.Model,
 		"model_alias":           item.ModelAlias,
@@ -273,7 +277,12 @@ func (h *Handler) downloadUsageEventRequestLog(writer http.ResponseWriter, reque
 	defer cancel()
 	payload, _, fetchErr := client.DownloadRequestLog(ctx, row.RequestID)
 	if fetchErr != nil {
+		_ = h.recordAudit(request, "request_log.download", "request_log", row.RequestID, "failure", map[string]any{"error": fetchErr.Error()})
 		writeCPAFacadeError(writer, fetchErr)
+		return
+	}
+	if auditErr := h.recordAudit(request, "request_log.download", "request_log", row.RequestID, "success", map[string]any{"size_bytes": len(payload)}); auditErr != nil {
+		writeError(writer, http.StatusInternalServerError, "audit log failure; request log download aborted")
 		return
 	}
 	name := sanitizeLogName(row.RequestID)

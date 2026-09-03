@@ -319,12 +319,21 @@ func (h *Handler) deleteManagementAuthFiles(writer http.ResponseWriter, request 
 		seen[name] = struct{}{}
 		unique = append(unique, name)
 	}
+	if auditErr := h.recordAudit(request, "auth_file.delete", "auth_file", strings.Join(unique, ","), "attempt", map[string]any{"count": len(unique)}); auditErr != nil {
+		writeError(writer, http.StatusInternalServerError, "audit log failure; deletion aborted")
+		return
+	}
 	client, ok := h.managementClientOrError(writer, request)
 	if !ok {
 		return
 	}
 	if _, err := client.DeleteAuthFiles(request.Context(), unique); err != nil {
+		_ = h.recordAudit(request, "auth_file.delete", "auth_file", strings.Join(unique, ","), "failure", map[string]any{"error": err.Error()})
 		writeCPAFacadeError(writer, err)
+		return
+	}
+	if auditErr := h.recordAudit(request, "auth_file.delete", "auth_file", strings.Join(unique, ","), "success", map[string]any{"deleted": len(unique)}); auditErr != nil {
+		writeError(writer, http.StatusInternalServerError, "audit log failure; operation aborted")
 		return
 	}
 	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "deleted": len(unique), "files": unique})
@@ -342,7 +351,12 @@ func (h *Handler) downloadManagementAuthFile(writer http.ResponseWriter, request
 	}
 	data, _, err := client.DownloadAuthFile(request.Context(), name)
 	if err != nil {
+		_ = h.recordAudit(request, "auth_file.download", "auth_file", name, "failure", map[string]any{"error": err.Error()})
 		writeCPAFacadeError(writer, err)
+		return
+	}
+	if auditErr := h.recordAudit(request, "auth_file.download", "auth_file", name, "success", map[string]any{"size_bytes": len(data)}); auditErr != nil {
+		writeError(writer, http.StatusInternalServerError, "audit log failure; download aborted")
 		return
 	}
 	writer.Header().Set("Cache-Control", "no-store")

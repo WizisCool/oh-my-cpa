@@ -25,6 +25,7 @@ import (
 	appcrypto "github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/web"
 )
 
@@ -444,27 +445,65 @@ func (p overrideRequest) validate() error {
 }
 
 type resourceResponse struct {
-	ID                string                 `json:"id"`
-	CPAInstanceID     string                 `json:"cpa_instance_id"`
-	CPAResourceType   string                 `json:"cpa_resource_type"`
-	CPAAuthIndex      string                 `json:"cpa_auth_index,omitempty"`
-	CPAResourceName   string                 `json:"cpa_resource_name,omitempty"`
-	CPADriver         string                 `json:"cpa_driver"`
-	ProtocolDriver    string                 `json:"protocol_driver"`
-	ProtocolDisplay   string                 `json:"protocol_display,omitempty"`
-	BaseURL           string                 `json:"base_url,omitempty"`
-	SuggestedSource   string                 `json:"suggested_source,omitempty"`
-	SuggestedPlan     string                 `json:"suggested_plan,omitempty"`
-	DisplayName       string                 `json:"display_name"`
-	CustomDisplayName *string                `json:"custom_display_name,omitempty"`
-	Icon              *string                `json:"icon,omitempty"`
-	Color             *string                `json:"color,omitempty"`
-	Notes             *string                `json:"notes,omitempty"`
-	Status            domain.ResourceStatus  `json:"status"`
-	LastSeenAt        time.Time              `json:"last_seen_at"`
-	CreatedAt         time.Time              `json:"created_at"`
-	UpdatedAt         time.Time              `json:"updated_at"`
-	Details           domain.ResourceDetails `json:"details,omitempty"`
+	ID                string                  `json:"id"`
+	CPAInstanceID     string                  `json:"cpa_instance_id"`
+	CPAResourceType   string                  `json:"cpa_resource_type"`
+	CPAAuthIndex      string                  `json:"cpa_auth_index,omitempty"`
+	CPAResourceName   string                  `json:"cpa_resource_name,omitempty"`
+	CPADriver         string                  `json:"cpa_driver"`
+	ProtocolDriver    string                  `json:"protocol_driver"`
+	ProtocolDisplay   string                  `json:"protocol_display,omitempty"`
+	BaseURL           string                  `json:"base_url,omitempty"`
+	SuggestedSource   string                  `json:"suggested_source,omitempty"`
+	SuggestedPlan     string                  `json:"suggested_plan,omitempty"`
+	DisplayName       string                  `json:"display_name"`
+	CustomDisplayName *string                 `json:"custom_display_name,omitempty"`
+	Icon              *string                 `json:"icon,omitempty"`
+	Color             *string                 `json:"color,omitempty"`
+	Notes             *string                 `json:"notes,omitempty"`
+	Status            domain.ResourceStatus   `json:"status"`
+	LastSeenAt        time.Time               `json:"last_seen_at"`
+	CreatedAt         time.Time               `json:"created_at"`
+	UpdatedAt         time.Time               `json:"updated_at"`
+	Details           resourceDetailsResponse `json:"details,omitempty"`
+}
+
+// resourceDetailsResponse is an explicit browser contract. Persistence details
+// can evolve independently, while ordinary resource responses expose only the
+// fields the resource editor needs plus reviewed non-secret status flags.
+type resourceDetailsResponse struct {
+	Models      []string          `json:"models,omitempty"`
+	AuthType    string            `json:"auth_type,omitempty"`
+	Priority    int               `json:"priority,omitempty"`
+	Disabled    bool              `json:"disabled,omitempty"`
+	Unavailable bool              `json:"unavailable,omitempty"`
+	Extra       map[string]string `json:"extra,omitempty"`
+}
+
+func toResourceDetailsResponse(details domain.ResourceDetails) resourceDetailsResponse {
+	result := resourceDetailsResponse{
+		Models:      append([]string(nil), details.Models...),
+		AuthType:    details.AuthType,
+		Priority:    details.Priority,
+		Disabled:    details.Disabled,
+		Unavailable: details.Unavailable,
+	}
+	allowed := map[string]struct{}{
+		"account_present":    {},
+		"account_type":       {},
+		"api_key_present":    {},
+		"identity_collision": {},
+		"proxy_configured":   {},
+	}
+	for key, value := range details.Extra {
+		if _, ok := allowed[key]; ok && value != "" {
+			if result.Extra == nil {
+				result.Extra = make(map[string]string)
+			}
+			result.Extra[key] = value
+		}
+	}
+	return result
 }
 
 func toResourceResponse(resource domain.DiscoveredResource) resourceResponse {
@@ -489,7 +528,7 @@ func toResourceResponse(resource domain.DiscoveredResource) resourceResponse {
 		LastSeenAt:        resource.LastSeenAt,
 		CreatedAt:         resource.CreatedAt,
 		UpdatedAt:         resource.UpdatedAt,
-		Details:           resource.Details,
+		Details:           toResourceDetailsResponse(resource.Details),
 	}
 }
 
@@ -691,4 +730,63 @@ func clearBytes(value []byte) {
 	for index := range value {
 		value[index] = 0
 	}
+}
+
+func (h *Handler) recordAudit(request *http.Request, action, targetType, targetID, result string, details map[string]any) error {
+	if h == nil || h.repo == nil {
+		return errors.New("repository is not initialized")
+	}
+	summary := requestSourceSummary(request)
+	reqID := getOrGenerateRequestID(request)
+	_, err := h.repo.RecordAuditEvent(request.Context(), repository.AuditEvent{
+		Action:        action,
+		TargetType:    targetType,
+		TargetID:      targetID,
+		Result:        result,
+		RequestID:     reqID,
+		SourceSummary: summary,
+		Details:       details,
+	})
+	if err != nil {
+		if h.logger != nil {
+			h.logger.Error("audit event recording failed",
+				"action", action,
+				"target_type", targetType,
+				"target_id", targetID,
+				"result", result,
+				"request_id", reqID,
+				"error", err,
+			)
+		}
+		return err
+	}
+	return nil
+}
+
+func getOrGenerateRequestID(request *http.Request) string {
+	if request != nil {
+		if id := strings.TrimSpace(request.Header.Get("X-Request-ID")); id != "" && len([]rune(id)) <= 128 {
+			return security.RedactText(id)
+		}
+	}
+	return uuid.NewString()
+}
+
+func requestSourceSummary(request *http.Request) string {
+	if request == nil {
+		return ""
+	}
+	parts := make([]string, 0, 2)
+	ip := request.RemoteAddr
+	if fwd := request.Header.Get("X-Forwarded-For"); fwd != "" {
+		if masked := security.MaskForwardedFor(fwd); masked != nil {
+			parts = append(parts, "ip="+*masked)
+		}
+	} else if masked := security.MaskIP(ip); masked != nil {
+		parts = append(parts, "ip="+*masked)
+	}
+	if ua := security.MinimizeUserAgent(request.UserAgent()); ua != nil {
+		parts = append(parts, "ua="+*ua)
+	}
+	return strings.Join(parts, " ")
 }

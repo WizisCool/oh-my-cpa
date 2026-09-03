@@ -77,12 +77,21 @@ func (h *Handler) managementLogs(writer http.ResponseWriter, request *http.Reque
 // DELETE the operator triggers deliberately; nothing here runs on a timer.
 func (h *Handler) clearManagementLogs(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
+	if auditErr := h.recordAudit(request, "logs.clear", "logs", "management_logs", "attempt", nil); auditErr != nil {
+		writeError(writer, http.StatusInternalServerError, "audit log failure; clear aborted")
+		return
+	}
 	client, ok := h.managementClientOrError(writer, request)
 	if !ok {
 		return
 	}
 	if _, err := client.ClearLogs(request.Context()); err != nil {
+		_ = h.recordAudit(request, "logs.clear", "logs", "management_logs", "failure", map[string]any{"error": err.Error()})
 		writeCPAFacadeError(writer, err)
+		return
+	}
+	if auditErr := h.recordAudit(request, "logs.clear", "logs", "management_logs", "success", nil); auditErr != nil {
+		writeError(writer, http.StatusInternalServerError, "audit log failure; operation aborted")
 		return
 	}
 	writeJSON(writer, http.StatusOK, map[string]any{"cleared": true})
@@ -138,7 +147,12 @@ func (h *Handler) downloadRequestErrorLog(writer http.ResponseWriter, request *h
 	}
 	data, _, err := client.DownloadRequestErrorLog(request.Context(), name)
 	if err != nil {
+		_ = h.recordAudit(request, "request_log.download", "request_error_log", name, "failure", map[string]any{"error": err.Error()})
 		writeCPAFacadeError(writer, err)
+		return
+	}
+	if auditErr := h.recordAudit(request, "request_log.download", "request_error_log", name, "success", map[string]any{"size_bytes": len(data)}); auditErr != nil {
+		writeError(writer, http.StatusInternalServerError, "audit log failure; log download aborted")
 		return
 	}
 	writer.Header().Set("Cache-Control", "no-store")
