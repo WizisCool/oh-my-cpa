@@ -1193,3 +1193,35 @@ Codex 完成全部或一个阶段时，必须输出：
   - `pnpm verify:e2e` 53 项端到端检查全数通过。
 - 剩余风险与已知限制：
   - 缺乏 `auth_index` 且无 API Key 的完全同构匿名条目依策略进入显式冲突待人工绑定，不作不可靠的自动猜测。
+
+## 阶段 6 执行记录（Usage Events 用户界面）
+
+- 目标达成：
+  1. 新增请求记录（`/usage/events`）用户页面与导航路由：
+     - 在 `web/src/components/common/AppLayout.tsx` 的“观测”分组中新增“请求记录”导航项（`/usage/events`），并在 `web/src/App.tsx` 注册路由；
+     - 在仪表盘（Dashboard）中加入直通请求记录与失败筛选记录的双向跳转入口（Drill-down）。
+  2. 多维事件浏览器与服务端游标分页：
+     - 包含时间、状态结果（Success / Failed / Warm-up）、模型及别名、业务归属（Connection / Resource / Unbound）、耗时 / TTFT、Token 汇总与详细 Breakdown 浮层、Request ID 复制；
+     - 采用服务端游标分页（Keyset Cursor），提供上一页 / 下一页与每页条数切换，防止超大 DOM 性能卡顿；
+     - 筛选器接入时间预设（15m / 1h / 6h / 24h / 7d）、结果筛选、服务端动态 Facets（模型、提供商、来源、执行器）与 Request ID 搜索；
+     - 筛选状态双向同步至 URL Search Params，保证链接可复制与可分享。
+  3. 请求事件详情抽屉（UsageEventDrawer）：
+     - 呈现完整 Token 分类明细（输入、输出、推理、缓存命中、缓存读取、缓存创建）；
+     - 展示服务层、安全脱敏的端点公网摘要、脱敏客户端 IP 与最小化 User Agent；
+     - 关联展示请求时刻前后的 CPA 错误事件及配额异常状态；
+     - 支持请求原始日志（Request Log）受控下载：当且仅当存在 request_id 时开放，并在下载前弹出安全提示模态框确认，受审计与 no-store 保护。
+  4. 采集健康状态（Ingestion Health）透明呈现：
+     - 顶部导航区集成采集器运行状态浮层，展示当前采集模式、入库请求数、Coverage Gaps 缺口告警数与 Inbox 积压量，并清晰提示 At-most-once 网络交付语义。
+  5. 响应式移动端体验：
+     - 表格使用响应式横向滚动包装层，390px 视口无横向溢出；
+     - Loading 骨架屏、空状态与异常重试链路全部闭环。
+- 验证结果：
+  - `go test ./...` 全部通过；
+  - `go vet ./...` 零警告；
+  - `pnpm type-check`、`pnpm check-i18n`、`pnpm test:i18n`、`pnpm test:payload`、`pnpm test:config-states`、`node --experimental-strip-types scripts/test-dirty.ts` 全部通过；
+  - `pnpm lint:antd` 通过（0 a11y、0 usage、0 performance）；
+  - `pnpm build` 顺利产出并同步嵌入静态资产；
+  - `pnpm verify:secrets:worktree` 与 `pnpm verify:secrets:history` 零泄漏；
+  - `pnpm verify:e2e` 58 项端到端检查全数通过（新增请求记录页面渲染、390px 视口无溢出、凭据排除等）。
+- 剩余风险与已知限制：
+  - 极端网络中断下若未配置 request_log，下载按钮自动置灰禁用。
