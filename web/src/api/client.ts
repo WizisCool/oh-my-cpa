@@ -15,6 +15,7 @@ import { ClientAPIKeyItem, ProviderItem } from '../types/providers';
 import { OAuthProviderItem, StartOAuthResponse, OAuthStatusResponse } from '../types/oauth';
 import { QuotaOverviewResponse } from '../types/quota';
 import { SystemInfoResponse } from '../types/system';
+import { PluginsResponse, PluginStoreResponse } from '../types/plugin';
 
 
 /** DEFAULT_LOG_PAGE is the page size a fresh tail read asks for. */
@@ -449,6 +450,41 @@ export const api = {
   async cancelOAuthSession(sessionId?: string): Promise<{ status: string }> {
     const search = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : '';
     return request<{ status: string }>(`/management/oauth/session${search}`, { method: 'DELETE' });
+  },
+
+  // Plugins
+  async getPlugins(): Promise<PluginsResponse> {
+    return request<PluginsResponse>('/management/plugins', { method: 'GET' });
+  },
+
+  async setPluginStatus(id: string, enabled: boolean): Promise<{ status: string; id: string; enabled: boolean }> {
+    return request<{ status: string; id: string; enabled: boolean }>(`/management/plugins/${encodeURIComponent(id)}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled }),
+    });
+  },
+
+  async deletePlugin(id: string): Promise<{ status: string; id: string }> {
+    return request<{ status: string; id: string }>(`/management/plugins/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async setPluginConfig(id: string, config: Record<string, unknown>): Promise<{ status: string; id: string }> {
+    return request<{ status: string; id: string }>(`/management/plugins/${encodeURIComponent(id)}/config`, {
+      method: 'PUT',
+      body: JSON.stringify({ config }),
+    });
+  },
+
+  async getPluginStore(): Promise<PluginStoreResponse> {
+    return request<PluginStoreResponse>('/management/plugin-store', { method: 'GET' });
+  },
+
+  async installPlugin(id: string): Promise<{ status: string; id: string }> {
+    return request<{ status: string; id: string }>(`/management/plugin-store/${encodeURIComponent(id)}/install`, {
+      method: 'POST',
+    });
   },
 
   // System

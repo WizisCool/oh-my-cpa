@@ -853,6 +853,43 @@ const DICT: Record<string, [string, string]> = {
   'sys.download_success': ['诊断包已成功生成并下载', 'Diagnostics bundle downloaded successfully'],
   'sys.download_failed': ['生成诊断包失败：{msg}', 'Failed to generate diagnostics: {msg}'],
 
+  // ── plugins & plugin-store ───────────────────────────────────────────────
+  'plg.title': ['CPA 插件扩展管理', 'CPA Extension Plugins'],
+  'plg.subtitle': ['管理 CPA 已安装扩展插件、启停状态、自定义配置与卸载', 'Manage installed CPA plugins, toggles, configuration, and removal'],
+  'plg.col_plugin': ['插件名称 / 标识', 'Plugin / ID'],
+  'plg.col_version': ['版本 / 作者', 'Version / Author'],
+  'plg.col_permissions': ['声明权限', 'Permissions'],
+  'plg.col_status': ['状态', 'Status'],
+  'plg.col_actions': ['操作', 'Actions'],
+  'plg.status_enabled': ['已启用', 'Enabled'],
+  'plg.status_disabled': ['已禁用', 'Disabled'],
+  'plg.status_updated': ['插件状态已更新', 'Plugin status updated'],
+  'plg.config_title': ['编辑插件配置 ({name})', 'Edit Plugin Configuration ({name})'],
+  'plg.config_json_desc': ['请输入符合该插件规范的 JSON 配置格式：', 'Enter JSON configuration according to plugin specifications:'],
+  'plg.config_saved': ['插件配置已保存', 'Plugin configuration saved'],
+  'plg.config_invalid_json': ['配置内容必须是合法的 JSON 对象', 'Configuration must be a valid JSON object'],
+  'plg.delete_confirm': ['确认卸载并删除该插件？此操作将记录审计日志。', 'Uninstall and remove this plugin? This action is audited.'],
+  'plg.deleted': ['插件已卸载', 'Plugin uninstalled'],
+  'plg.empty': ['暂无已安装的插件扩展', 'No installed plugins'],
+  'plg.go_store': ['浏览插件商店', 'Browse Plugin Store'],
+  'plg.security_notice': ['插件在 CPA 运行时内部执行，请仅从可信来源安装扩展并定期审查声明权限。', 'Plugins execute within the CPA runtime. Only install from trusted sources and audit declared permissions.'],
+
+  'store.title': ['CPA 官方与社区插件商店', 'CPA Plugin Store'],
+  'store.subtitle': ['发现与安装已验证的 CPA 扩展能力，扩展网关认证、限流与可观测性', 'Discover and install verified CPA extensions for authentication, rate limiting, and observability'],
+  'store.col_plugin': ['插件名称 / 标识', 'Plugin / ID'],
+  'store.col_version': ['版本 / 作者', 'Version / Author'],
+  'store.col_permissions': ['所需权限', 'Requested Permissions'],
+  'store.col_actions': ['操作', 'Actions'],
+  'store.installed': ['已安装', 'Installed'],
+  'store.install': ['安装插件', 'Install'],
+  'store.install_confirm_title': ['确认安装插件「{name}」？', 'Install Plugin “{name}”?'],
+  'store.install_confirm_desc': ['该插件声明了以下权限：{perms}。安装操作将记录审计日志，确认继续？', 'This plugin declares the following permissions: {perms}. The installation is audited. Proceed?'],
+  'store.install_success': ['插件已成功安装', 'Plugin installed successfully'],
+  'store.install_failed': ['插件安装失败：{msg}', 'Failed to install plugin: {msg}'],
+  'store.empty': ['商店暂无可供安装的插件', 'No plugins available in the store'],
+  'store.security_alert': ['安装第三方插件可能引入网络或执行安全风险。请仔细核验权限清单后再行安装。', 'Installing third-party plugins introduces runtime security implications. Review the permission list before installing.'],
+
+
 
 };
 

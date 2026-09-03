@@ -24,6 +24,8 @@ import { AuthFilesPage } from './pages/AuthFilesPage';
 import { OAuthPage } from './pages/OAuthPage';
 import { QuotaPage } from './pages/QuotaPage';
 import { SystemPage } from './pages/SystemPage';
+import { PluginsPage } from './pages/PluginsPage';
+import { PluginStorePage } from './pages/PluginStorePage';
 import { CapabilityPlaceholderPage } from './pages/CapabilityPlaceholderPage';
 import { ThemeContext } from './theme/ThemeContext';
 import { I18nProvider, useI18n } from './i18n';
@@ -108,8 +110,8 @@ const AppRoutes: React.FC = () => {
         { path: 'logs', element: <LogsPage /> },
         { path: 'usage/events', element: <UsageEventsPage /> },
         { path: 'config', element: <ConfigPage /> },
-        { path: 'plugins', element: <CapabilityPlaceholderPage navKey="plugins" capability="plugins" /> },
-        { path: 'plugin-store', element: <CapabilityPlaceholderPage navKey="plugin_store" capability="plugin-store" /> },
+        { path: 'plugins', element: <PluginsPage /> },
+        { path: 'plugin-store', element: <PluginStorePage /> },
         { path: 'system', element: <SystemPage /> },
         { path: 'resources/triage', element: <TriagePage /> },
         { path: 'resources/all', element: <AllResourcesPage /> },

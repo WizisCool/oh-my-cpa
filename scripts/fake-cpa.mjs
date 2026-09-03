@@ -102,7 +102,44 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       json(response, 200, { status: 'ok' });
       return;
     }
-    if (request.method === 'GET' && ['/api-keys', '/claude-api-key', '/gemini-api-key', '/oauth-excluded-models', '/plugins', '/plugin-store'].includes(path)) {
+    if (request.method === 'GET' && path === '/plugins') {
+      json(response, 200, { plugins: [{
+        id: 'fixture-logger',
+        name: 'Request Logger Plugin',
+        description: 'Audits and logs request metadata to internal store',
+        version: '1.0.0',
+        author: 'cpa-official',
+        enabled: true,
+        permissions: ['read_request', 'write_log'],
+        config: { level: 'info' }
+      }] });
+      return;
+    }
+    if (request.method === 'GET' && path === '/plugin-store') {
+      json(response, 200, { plugins: [{
+        id: 'fixture-limiter',
+        name: 'Rate Limiter',
+        description: 'In-memory client token-bucket rate limiter',
+        version: '1.2.0',
+        author: 'cpa-community',
+        permissions: ['inspect_client_ip', 'enforce_limit'],
+        installed: false
+      }, {
+        id: 'fixture-logger',
+        name: 'Request Logger Plugin',
+        description: 'Audits and logs request metadata to internal store',
+        version: '1.0.0',
+        author: 'cpa-official',
+        permissions: ['read_request', 'write_log'],
+        installed: true
+      }] });
+      return;
+    }
+    if ((request.method === 'POST' || request.method === 'PATCH' || request.method === 'PUT' || request.method === 'DELETE') && (path.startsWith('/plugins') || path.startsWith('/plugin-store'))) {
+      json(response, 200, { status: 'ok' });
+      return;
+    }
+    if (request.method === 'GET' && ['/api-keys', '/claude-api-key', '/gemini-api-key', '/oauth-excluded-models'].includes(path)) {
       json(response, 200, {});
       return;
     }

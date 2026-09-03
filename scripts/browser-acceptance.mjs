@@ -185,6 +185,8 @@ try {
   await auditPage(page, responseBodies, '/resources/triage', '.terminal-panel');
   await auditPage(page, responseBodies, '/resources/all', '.terminal-page');
   await auditPage(page, responseBodies, '/instances', '.terminal-page');
+  await auditPage(page, responseBodies, '/plugins', '.plugins-page');
+  await auditPage(page, responseBodies, '/plugin-store', '.plugin-store-page');
   await auditPage(page, responseBodies, '/system', '.system-page');
   await auditPage(page, responseBodies, '/quick-start', '.capability-page');
 
