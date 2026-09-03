@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fullCartesianProduct": [
+    "authenticated dashboard: 1440x900 dark",
+    "authenticated dashboard: 390x844 light"
+  ],
+  "representativeSmoke": [
+    "unauthenticated and failed sign-in",
+    "session expiration after cookie removal",
+    "auth files, logs, config, instances, resources and capability routes",
+    "/omc redirect and SPA routing",
+    "console, page error and same-origin request failure capture",
+    "ordinary response, DOM and browser persistent storage secret search"
+  ],
+  "deferredMatrices": [
+    "offline, capability-missing, upstream-authentication and server-error states",
+    "all routes across both viewports and both themes",
+    "write operations in an isolated fake CPA data directory"
+  ]
+}

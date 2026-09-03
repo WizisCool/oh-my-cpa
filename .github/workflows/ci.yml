@@ -1,0 +1,69 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify repository anchors
+        run: |
+          git show-ref --verify --quiet refs/tags/pre-overhaul-base-20260904
+          git show-ref --verify --quiet refs/tags/handoff/20260904-plan
+          test "$(git cat-file -t handoff/20260904-plan)" = tag
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.24.13
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+          cache: pnpm
+
+      - name: Activate pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.19.0 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify pinned toolchain
+        run: pnpm verify:toolchain:strict
+
+      - name: Install Chromium
+        run: pnpm exec playwright-core install --with-deps chromium
+
+      - name: Verify static gates
+        run: pnpm verify:static
+
+      - name: Scan worktree and history
+        run: |
+          pnpm verify:secrets:worktree
+          pnpm verify:secrets:history
+
+      - name: Run deterministic browser acceptance
+        run: pnpm verify:e2e
+
+      - name: Verify clean generated state
+        run: |
+          git diff --check
+          git status --porcelain
+          test -z "$(git status --porcelain)"

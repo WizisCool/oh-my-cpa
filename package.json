@@ -24,13 +24,16 @@
     "verify:secrets:worktree": "node scripts/secret-scan.mjs --worktree",
     "verify:secrets:history": "node scripts/secret-scan.mjs --history",
     "verify:secrets": "pnpm verify:secrets:worktree",
-    "verify:static": "go test ./... && go vet ./... && pnpm type-check && pnpm test:i18n && pnpm check-i18n && pnpm test:payload && node --experimental-strip-types scripts/test-dirty.ts && pnpm lint:antd",
-    "verify:e2e": "node scripts/browser-acceptance.mjs",
-    "verify": "pnpm verify:toolchain && pnpm verify:static && pnpm verify:secrets && pnpm build && pnpm verify:e2e"
+    "verify:static": "pnpm verify:workflow && go test ./... && go vet ./... && pnpm type-check && pnpm test:i18n && pnpm check-i18n && pnpm test:payload && node --experimental-strip-types scripts/test-dirty.ts && pnpm lint:antd",
+    "verify:e2e": "pnpm build && node scripts/browser-acceptance.mjs",
+    "verify": "pnpm verify:toolchain && pnpm verify:static && pnpm verify:secrets && pnpm verify:e2e",
+    "verify:live": "node scripts/browser-live-smoke.mjs",
+    "verify:workflow": "node scripts/validate-workflow.mjs"
   },
   "devDependencies": {
     "@ant-design/cli": "6.6.2",
-    "playwright-core": "1.62.1"
+    "playwright-core": "1.62.1",
+    "yaml": "2.9.0"
   },
   "engines": {
     "node": "22.23.2",
