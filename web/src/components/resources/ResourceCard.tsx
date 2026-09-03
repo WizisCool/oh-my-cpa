@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Tag, Button, Typography, Space, Tooltip, Dropdown, MenuProps } from 'antd';
+import { Card, Tag, Button, Typography, Tooltip, Dropdown, MenuProps } from 'antd';
 import {
   EditOutlined,
   CopyOutlined,
@@ -167,7 +167,7 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
 
       {/* Technical Driver & Details */}
       <div style={{ marginBottom: '14px', flex: 1 }}>
-        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
           {/* Driver Tag */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             {renderDriverBadge()}
@@ -242,7 +242,7 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
               {resource.notes}
             </Paragraph>
           )}
-        </Space>
+        </div>
       </div>
 
       {/* Action Footer */}

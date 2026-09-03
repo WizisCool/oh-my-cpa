@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import {
+  Alert,
   App as AntdApp,
   Card,
   Table,
   Tag,
   Button,
-  Space,
   Input,
   Radio,
   Typography,
@@ -30,10 +30,10 @@ export const AllResourcesPage: React.FC = () => {
   const { message } = AntdApp.useApp();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'claimed' | 'unclaimed'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'claimed' | 'unclaimed' | 'ignored' | 'missing'>('all');
   const [editingResource, setEditingResource] = useState<DiscoveredResource | null>(null);
 
-  const { data, isLoading, refetch, isFetching } = useQuery({
+  const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['resources'],
     queryFn: () => api.getResources(),
   });
@@ -42,10 +42,7 @@ export const AllResourcesPage: React.FC = () => {
 
   const filteredResources = useMemo(() => {
     return resources.filter((item) => {
-      if (statusFilter === 'claimed' && item.status !== 'claimed' && !item.custom_display_name) {
-        return false;
-      }
-      if (statusFilter === 'unclaimed' && (item.status === 'claimed' && item.custom_display_name)) {
+      if (statusFilter !== 'all' && item.status !== statusFilter) {
         return false;
       }
       if (search.trim()) {
@@ -112,14 +109,14 @@ export const AllResourcesPage: React.FC = () => {
       title: t('allres.col_driver'),
       key: 'driver',
       render: (_, record) => (
-        <Space direction="vertical" size={2}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Tag color="purple" style={{ margin: 0, borderRadius: '4px' }}>
             {record.protocol_display || record.protocol_driver}
           </Tag>
           <Text type="secondary" style={{ fontSize: '11px', fontFamily: 'monospace' }}>
             CPA: {record.cpa_driver}
           </Text>
-        </Space>
+        </div>
       ),
     },
     {
@@ -147,13 +144,31 @@ export const AllResourcesPage: React.FC = () => {
     {
       title: t('allres.col_status'),
       key: 'status',
-      width: 100,
+      width: 120,
       render: (_, record) => {
-        const isCustom = Boolean(record.custom_display_name);
-        return isCustom ? (
-          <Tag color="success">{t('res.customized')}</Tag>
-        ) : (
-          <Tag color="warning">{t('res.pending')}</Tag>
+        const statusTag = (() => {
+          switch (record.status) {
+            case 'claimed':
+              return <Tag color="success">{t('res.status_claimed')}</Tag>;
+            case 'unclaimed':
+              return <Tag color="warning">{t('res.status_unclaimed')}</Tag>;
+            case 'ignored':
+              return <Tag color="default">{t('res.status_ignored')}</Tag>;
+            case 'missing':
+              return <Tag color="error">{t('res.status_missing')}</Tag>;
+            default:
+              return <Tag>{record.status}</Tag>;
+          }
+        })();
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+            {statusTag}
+            {record.custom_display_name && (
+              <Tag color="cyan" style={{ margin: 0, fontSize: '10px' }}>
+                {t('res.customized')}
+              </Tag>
+            )}
+          </div>
         );
       },
     },
@@ -188,6 +203,20 @@ export const AllResourcesPage: React.FC = () => {
         </Button>
       </div>
 
+      {isError && (
+        <Alert
+          type="error"
+          showIcon
+          description={`${t('allres.load_error')} — ${error instanceof Error ? error.message : String(error)}`}
+          action={
+            <Button size="small" type="primary" onClick={() => void refetch()}>
+              {t('common.retry')}
+            </Button>
+          }
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
       <Card className="terminal-panel" styles={{ body: { padding: '16px 20px' } }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
           <Input
@@ -207,16 +236,21 @@ export const AllResourcesPage: React.FC = () => {
             <Radio.Button value="all">{t('allres.filter_all', { n: resources.length })}</Radio.Button>
             <Radio.Button value="unclaimed">{t('allres.filter_unclaimed')}</Radio.Button>
             <Radio.Button value="claimed">{t('allres.filter_claimed')}</Radio.Button>
+            <Radio.Button value="ignored">{t('allres.filter_ignored')}</Radio.Button>
+            <Radio.Button value="missing">{t('allres.filter_missing')}</Radio.Button>
           </Radio.Group>
         </div>
 
-        <Table
-          columns={columns}
-          dataSource={filteredResources}
-          rowKey="id"
-          loading={isLoading}
-          pagination={{ pageSize: 10, showSizeChanger: true }}
-        />
+        <div className="table-responsive-wrapper" style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <Table
+            columns={columns}
+            dataSource={filteredResources}
+            rowKey="id"
+            loading={isLoading}
+            scroll={{ x: 'max-content' }}
+            pagination={{ pageSize: 10, showSizeChanger: true }}
+          />
+        </div>
       </Card>
 
       <ResourceEditDrawer

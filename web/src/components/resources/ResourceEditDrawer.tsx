@@ -336,7 +336,7 @@ export const ResourceEditDrawer: React.FC<ResourceEditDrawerProps> = ({
                 <div><strong>{t('res.tech_driver')}</strong> {resource.cpa_driver}</div>
                 <div><strong>{t('res.tech_protocol')}</strong> {resource.protocol_driver}</div>
                 {resource.base_url && <div><strong>{t('res.tech_baseurl')}</strong> {resource.base_url}</div>}
-                {resource.cpa_auth_index && <div><strong>Auth Index:</strong> {resource.cpa_auth_index}</div>}
+                {resource.cpa_auth_index && <div><strong>{t('res.auth_index')}</strong> {resource.cpa_auth_index}</div>}
                 {resource.cpa_resource_name && <div><strong>{t('res.tech_resource')}</strong> {resource.cpa_resource_name}</div>}
                 {resource.details?.models && (
                   <div style={{ marginTop: '6px' }}>
