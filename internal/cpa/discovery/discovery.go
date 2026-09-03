@@ -81,8 +81,8 @@ func (d *Discoverer) fromAuthFile(instanceID string, file management.AuthFile) (
 	provider := normalizeDriver(file.Provider)
 	// Account is a credential-bearing CPA field. Identity is deliberately built
 	// from CPA identifiers and descriptive metadata only.
-	identity := []string{"auth-file", file.AuthIndex, file.ID, file.Name, file.Provider, file.Email}
-	key, err := d.resourceKey(instanceID, file.AuthIndex, identity...)
+	identity := []string{"auth-file", file.ID, file.Name, file.Provider, file.Email}
+	key, err := d.resolveResourceKey(instanceID, "auth-file", file.AuthIndex, "", identity...)
 	if err != nil {
 		return domain.DiscoveredResource{}, err
 	}
@@ -125,8 +125,7 @@ func (d *Discoverer) fromAuthFile(instanceID string, file management.AuthFile) (
 func (d *Discoverer) fromCodexAPIKey(instanceID string, index int, entry management.CodexAPIKey) (domain.DiscoveredResource, error) {
 	_ = index // CPA array positions are not identity.
 	baseURL := publicURL(entry.BaseURL)
-	identity := []string{"codex-api-key", entry.AuthIndex, baseURL, safeDisplayText(entry.Prefix, 128)}
-	key, err := d.resourceKey(instanceID, entry.AuthIndex, identity...)
+	key, err := d.resolveResourceKey(instanceID, "codex-api-key", entry.AuthIndex, entry.APIKey, baseURL, safeDisplayText(entry.Prefix, 128))
 	if err != nil {
 		return domain.DiscoveredResource{}, err
 	}
@@ -134,7 +133,7 @@ func (d *Discoverer) fromCodexAPIKey(instanceID string, index int, entry managem
 		"proxy_configured": fmt.Sprintf("%t", strings.TrimSpace(entry.ProxyURL) != ""),
 		"api_key_present":  fmt.Sprintf("%t", strings.TrimSpace(entry.APIKey) != ""),
 	}
-	if strings.TrimSpace(entry.AuthIndex) == "" {
+	if strings.TrimSpace(entry.AuthIndex) == "" && strings.TrimSpace(entry.APIKey) == "" {
 		extra["identity_collision"] = "true"
 	}
 	return domain.DiscoveredResource{
@@ -173,8 +172,7 @@ func (d *Discoverer) fromOpenAICompatibility(instanceID string, index int, provi
 	}
 	resources := make([]domain.DiscoveredResource, 0, len(entries))
 	for _, entry := range entries {
-		identity := []string{"openai-compatibility", provider.Name, base, entry.AuthIndex}
-		resourceKey, err := d.resourceKey(instanceID, entry.AuthIndex, identity...)
+		resourceKey, err := d.resolveResourceKey(instanceID, "openai-compatibility", entry.AuthIndex, entry.APIKey, provider.Name, base)
 		if err != nil {
 			return nil, err
 		}
@@ -183,7 +181,7 @@ func (d *Discoverer) fromOpenAICompatibility(instanceID string, index int, provi
 			"proxy_configured": fmt.Sprintf("%t", strings.TrimSpace(entry.ProxyURL) != ""),
 			"api_key_present":  fmt.Sprintf("%t", strings.TrimSpace(entry.APIKey) != ""),
 		}
-		if strings.TrimSpace(entry.AuthIndex) == "" {
+		if strings.TrimSpace(entry.AuthIndex) == "" && strings.TrimSpace(entry.APIKey) == "" {
 			extra["identity_collision"] = "true"
 		}
 		resources = append(resources, domain.DiscoveredResource{
@@ -209,18 +207,17 @@ func (d *Discoverer) fromOpenAICompatibility(instanceID string, index int, provi
 	return resources, nil
 }
 
-func (d *Discoverer) resourceKey(instanceID string, authIndex string, identity ...string) (string, error) {
+func (d *Discoverer) resolveResourceKey(instanceID, family, authIndex, apiKey string, metadata ...string) (string, error) {
+	// Level 1 & 2: Stable family-scoped auth index
 	if authIndex = strings.TrimSpace(authIndex); authIndex != "" {
-		// CPA documents auth_index as a stable runtime credential identifier.
-		// Keep the CPA resource family in the key too: an auth index can be
-		// surfaced by more than one management collection.
-		family := "resource"
-		if len(identity) > 0 && strings.TrimSpace(identity[0]) != "" {
-			family = strings.TrimSpace(identity[0])
-		}
 		return "auth-index:" + family + ":" + authIndex, nil
 	}
-	parts := append([]string{instanceID}, identity...)
+	// Level 3: Keyed HMAC of normalized credential material
+	if trimmedKey := strings.TrimSpace(apiKey); trimmedKey != "" {
+		return d.cipher.Fingerprint("credential-hmac-v1", family, trimmedKey)
+	}
+	// Level 4: Unique non-sensitive metadata fingerprint
+	parts := append([]string{"metadata-v1", instanceID, family}, metadata...)
 	return d.cipher.Fingerprint(normalizeIdentityParts(parts)...)
 }
 
