@@ -17,9 +17,17 @@ export interface ConfigScalars {
 export interface ConfigScalarsResponse {
   scalars: ConfigScalars;
   supported_keys: string[];
+  revision: string;
+  safe_yaml?: string;
 }
 
 export interface ConfigSourceResponse {
   yaml: string;
   size_bytes: number;
+  revision: string;
+}
+
+export interface ConfigGrantResponse {
+  grant_token: string;
+  expires_in_seconds: number;
 }

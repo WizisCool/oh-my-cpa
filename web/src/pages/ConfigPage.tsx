@@ -59,7 +59,7 @@ import {
   type ConfigGroupDefinition,
   type ConfigSectionId,
 } from '../types/configSchema';
-import type { ConfigSourceResponse } from '../types/configManagement';
+import type { ConfigScalarsResponse } from '../types/configManagement';
 
 const { Text } = Typography;
 
@@ -231,31 +231,41 @@ export const ConfigPage: React.FC = () => {
   const [activeSection, setActiveSection] = React.useState<ConfigSectionId>('connectivity');
   const [searchQuery, setSearchQuery] = React.useState<string>('');
 
-  const sourceQuery = useQuery<ConfigSourceResponse>({
-    queryKey: ['management-config-source'],
-    queryFn: api.getConfigSource,
+  const configQuery = useQuery<ConfigScalarsResponse>({
+    queryKey: ['management-config'],
+    queryFn: () => api.getConfigScalars(),
     staleTime: 60000,
   });
 
+  const [grantToken, setGrantToken] = React.useState<string | null>(null);
+  const [grantExpiresAt, setGrantExpiresAt] = React.useState<number | null>(null);
+  const [isReauthModalOpen, setIsReauthModalOpen] = React.useState(false);
+  const [reauthPassword, setReauthPassword] = React.useState('');
+  const [reauthLoading, setReauthLoading] = React.useState(false);
+
   const [rawYaml, setRawYaml] = React.useState<string>('');
   const [serverYaml, setServerYaml] = React.useState<string>('');
+  const [serverRevision, setServerRevision] = React.useState<string>('');
+  const [conflictState, setConflictState] = React.useState<{ currentRevision: string } | null>(null);
   const [saveError, setSaveError] = React.useState<string | null>(null);
 
   const docRef = React.useRef<Document | null>(null);
   const serverDocRef = React.useRef<Document | null>(null);
 
   React.useEffect(() => {
-    if (sourceQuery.data?.yaml !== undefined) {
-      setRawYaml(sourceQuery.data.yaml);
-      setServerYaml(sourceQuery.data.yaml);
+    if (viewMode === 'visual' && configQuery.data?.safe_yaml !== undefined) {
+      const safe = configQuery.data.safe_yaml;
+      setRawYaml(safe);
+      setServerYaml(safe);
+      setServerRevision(configQuery.data.revision || '');
       try {
-        docRef.current = parseDocument(sourceQuery.data.yaml);
-        serverDocRef.current = parseDocument(sourceQuery.data.yaml);
+        docRef.current = parseDocument(safe);
+        serverDocRef.current = parseDocument(safe);
       } catch {
-        // syntax error in raw yaml
+        // syntax error in yaml
       }
     }
-  }, [sourceQuery.data?.yaml]);
+  }, [configQuery.data?.safe_yaml, configQuery.data?.revision, viewMode]);
 
   const isDirty = rawYaml !== serverYaml;
 
@@ -309,25 +319,31 @@ export const ConfigPage: React.FC = () => {
   );
 
   const saveMutation = useMutation({
-    mutationFn: async (yamlToSave: string) => {
+    mutationFn: async ({ yamlToSave, revision }: { yamlToSave: string; revision: string }) => {
       setSaveError(null);
-      return api.updateConfigSource(yamlToSave);
+      setConflictState(null);
+      return api.updateConfigSource(yamlToSave, revision);
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       message.success(t('cfg.source_save_success'));
-      setServerYaml(rawYaml);
+      setServerYaml(variables.yamlToSave);
+      setServerRevision(data.revision);
       try {
-        serverDocRef.current = parseDocument(rawYaml);
+        serverDocRef.current = parseDocument(variables.yamlToSave);
       } catch {
         // ignore
       }
       setPayloadIssues([]);
       setShowErrorFeedback(false);
       setValidateTrigger(0);
-      void queryClient.invalidateQueries({ queryKey: ['management-config-source'] });
       void queryClient.invalidateQueries({ queryKey: ['management-config'] });
     },
     onError: (err: unknown) => {
+      if (err instanceof ApiError && (err.status === 409 || (err.data as Record<string, unknown>)?.code === 'config_conflict')) {
+        const currentRev = String((err.data as Record<string, unknown>)?.current_revision || '');
+        setConflictState({ currentRevision: currentRev });
+        return;
+      }
       const msg = err instanceof ApiError ? err.message : String(err);
       setSaveError(msg);
       message.error(msg);
@@ -365,10 +381,10 @@ export const ConfigPage: React.FC = () => {
   const hasConfigErrors = hasYamlErrors || payloadIssues.length > 0;
 
   const handleSaveChanges = React.useCallback(() => {
-    if (isDirty && !saveMutation.isPending && !hasConfigErrors) {
-      saveMutation.mutate(rawYaml);
+    if (isDirty && !saveMutation.isPending && !hasConfigErrors && !configQuery.isError) {
+      saveMutation.mutate({ yamlToSave: rawYaml, revision: serverRevision });
     }
-  }, [isDirty, hasConfigErrors, rawYaml, saveMutation]);
+  }, [isDirty, hasConfigErrors, configQuery.isError, rawYaml, serverRevision, saveMutation]);
 
   const requestSaveConfirmation = React.useCallback(() => {
     if (!isDirty || saveMutation.isPending) return;
@@ -407,6 +423,65 @@ export const ConfigPage: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [requestSaveConfirmation]);
+
+  const handleViewModeChange = async (targetMode: 'visual' | 'source') => {
+    if (targetMode === 'source') {
+      if (!grantToken || (grantExpiresAt && Date.now() > grantExpiresAt)) {
+        setIsReauthModalOpen(true);
+        return;
+      }
+      try {
+        const src = await api.getConfigSource(grantToken);
+        setRawYaml(src.yaml);
+        setServerYaml(src.yaml);
+        setServerRevision(src.revision);
+        try {
+          docRef.current = parseDocument(src.yaml);
+          serverDocRef.current = parseDocument(src.yaml);
+        } catch {
+          // ignore
+        }
+        setViewMode('source');
+      } catch {
+        setIsReauthModalOpen(true);
+      }
+    } else {
+      setViewMode('visual');
+      queryClient.removeQueries({ queryKey: ['management-config-source'] });
+      void configQuery.refetch();
+    }
+  };
+
+  const handleReauthConfirm = async () => {
+    if (!reauthPassword.trim()) {
+      message.warning(t('cfg.reveal_modal_password_placeholder'));
+      return;
+    }
+    setReauthLoading(true);
+    try {
+      const res = await api.grantConfigSourceReveal(reauthPassword);
+      setGrantToken(res.grant_token);
+      setGrantExpiresAt(Date.now() + res.expires_in_seconds * 1000);
+      setIsReauthModalOpen(false);
+      setReauthPassword('');
+      const src = await api.getConfigSource(res.grant_token);
+      setRawYaml(src.yaml);
+      setServerYaml(src.yaml);
+      setServerRevision(src.revision);
+      try {
+        docRef.current = parseDocument(src.yaml);
+        serverDocRef.current = parseDocument(src.yaml);
+      } catch {
+        // ignore
+      }
+      setViewMode('source');
+      message.success(t('cfg.mode_source'));
+    } catch {
+      message.error(t('cfg.reveal_grant_failed'));
+    } finally {
+      setReauthLoading(false);
+    }
+  };
 
   // ── API Keys Management ──────────────────────────────────────────────────
   const [apiKeyModalOpen, setApiKeyModalOpen] = React.useState(false);
@@ -833,16 +908,21 @@ export const ConfigPage: React.FC = () => {
       <div className="config-toolbar">
         <div className="config-toolbar-left">
           <h1 className="terminal-title">{t('nav.config')}</h1>
-          <Tag color={isDirty ? 'warning' : 'success'} className="config-sync-badge">
-            {t('cfg.items_count', {
-              n: ALL_CONFIG_FIELDS.length,
-              status: isDirty ? t('cfg.source_dirty') : t('cfg.source_clean'),
-            })}
-          </Tag>
+          {configQuery.isPending && !rawYaml ? (
+            <Tag className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.status_loading') })}</Tag>
+          ) : configQuery.isError && !rawYaml ? (
+            <Tag color="error" className="config-sync-badge">{t('cfg.status_error')}</Tag>
+          ) : configQuery.isError && rawYaml ? (
+            <Tag color="warning" className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.status_stale') })}</Tag>
+          ) : isDirty ? (
+            <Tag color="warning" className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.source_dirty') })}</Tag>
+          ) : (
+            <Tag color="success" className="config-sync-badge">{t('cfg.items_count', { n: ALL_CONFIG_FIELDS.length, status: t('cfg.source_clean') })}</Tag>
+          )}
           <Segmented
             size="small"
             value={viewMode}
-            onChange={(val) => setViewMode(val as 'visual' | 'source')}
+            onChange={(val) => void handleViewModeChange(val as 'visual' | 'source')}
             options={[
               { value: 'visual', label: t('cfg.mode_visual'), icon: <AppstoreOutlined /> },
               { value: 'source', label: t('cfg.mode_source'), icon: <CodeOutlined /> },
@@ -866,8 +946,8 @@ export const ConfigPage: React.FC = () => {
           <Button
             size="small"
             icon={<ReloadOutlined />}
-            onClick={() => void sourceQuery.refetch()}
-            loading={sourceQuery.isFetching}
+            onClick={() => void configQuery.refetch()}
+            loading={configQuery.isFetching}
             disabled={isDirty}
           >
             {t('cfg.reload')}
@@ -931,9 +1011,29 @@ export const ConfigPage: React.FC = () => {
         />
       )}
 
-      {sourceQuery.isPending && !rawYaml ? (
+      {configQuery.isError && (
+        <Alert
+          type="error"
+          showIcon
+          description={t('cfg.load_failed') + ' — ' + t('cfg.load_failed_desc')}
+          action={
+            <Button size="small" type="primary" onClick={() => void configQuery.refetch()}>
+              {t('common.retry')}
+            </Button>
+          }
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
+      {configQuery.isPending && !rawYaml ? (
         <Card size="small" className="config-card">
           <Skeleton active paragraph={{ rows: 10 }} />
+        </Card>
+      ) : configQuery.isError && !rawYaml ? (
+        <Card size="small" className="config-card">
+          <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            <Alert type="warning" showIcon description={t('cfg.load_failed_desc')} />
+          </div>
         </Card>
       ) : viewMode === 'visual' ? (
         /* ── Visual Mode: Two-column Setting Group Panels ───────────────── */
@@ -1122,6 +1222,61 @@ export const ConfigPage: React.FC = () => {
         onSave={requestSaveConfirmation}
         onDiscard={handleDiscardChanges}
       />
+
+      {/* ── Conflict Modal ────────────────────────────────────────────── */}
+      <Modal
+        open={Boolean(conflictState)}
+        title={t('cfg.conflict_title')}
+        footer={[
+          <Button
+            key="copy"
+            icon={<CopyOutlined />}
+            onClick={() => {
+              void navigator.clipboard.writeText(rawYaml);
+              message.success(t('cfg.api_keys_copy'));
+            }}
+          >
+            {t('cfg.conflict_copy')}
+          </Button>,
+          <Button
+            key="reload"
+            type="primary"
+            icon={<ReloadOutlined />}
+            onClick={() => {
+              setConflictState(null);
+              void configQuery.refetch();
+            }}
+          >
+            {t('cfg.conflict_reload')}
+          </Button>,
+        ]}
+        onCancel={() => setConflictState(null)}
+      >
+        <Alert type="error" showIcon description={t('cfg.conflict_desc')} style={{ marginBottom: 16 }} />
+      </Modal>
+
+      {/* ── Source Mode Reauthentication Modal ──────────────────────────── */}
+      <Modal
+        open={isReauthModalOpen}
+        title={t('cfg.reveal_modal_title')}
+        onOk={() => void handleReauthConfirm()}
+        onCancel={() => {
+          setIsReauthModalOpen(false);
+          setReauthPassword('');
+        }}
+        confirmLoading={reauthLoading}
+        okText={t('common.confirm')}
+        cancelText={t('common.cancel')}
+      >
+        <Alert type="warning" showIcon description={t('cfg.reveal_modal_desc')} style={{ marginBottom: 16 }} />
+        <Input.Password
+          placeholder={t('cfg.reveal_modal_password_placeholder')}
+          value={reauthPassword}
+          onChange={(e) => setReauthPassword(e.target.value)}
+          onPressEnter={() => void handleReauthConfirm()}
+          autoFocus
+        />
+      </Modal>
     </div>
   );
 };

@@ -10,7 +10,7 @@ import { ManagementAuthFilesResponse, ManagementAuthFileMutationResponse, Manage
 import { DashboardResponse, DashboardTailResponse } from '../types/dashboard';
 import { ErrorLogFile } from '../types/logs';
 import { CapabilityProbeReport } from '../types/capability';
-import { ConfigScalarsResponse, ConfigSourceResponse } from '../types/configManagement';
+import { ConfigScalarsResponse, ConfigSourceResponse, ConfigGrantResponse } from '../types/configManagement';
 
 /** DEFAULT_LOG_PAGE is the page size a fresh tail read asks for. */
 export const DEFAULT_LOG_PAGE = 2000;
@@ -238,14 +238,30 @@ export const api = {
     });
   },
 
-  async getConfigSource(): Promise<ConfigSourceResponse> {
-    return request<ConfigSourceResponse>('/management/config/source', { method: 'GET' });
+  async getConfigSource(grantToken?: string): Promise<ConfigSourceResponse> {
+    const headers: Record<string, string> = {};
+    if (grantToken) {
+      headers['X-Reveal-Grant'] = grantToken;
+    }
+    return request<ConfigSourceResponse>('/management/config/source', { method: 'GET', headers });
   },
 
-  async updateConfigSource(yaml: string): Promise<{ status: string; size_bytes: number }> {
-    return request<{ status: string; size_bytes: number }>('/management/config/source', {
+  async grantConfigSourceReveal(password: string): Promise<ConfigGrantResponse> {
+    return request<ConfigGrantResponse>('/management/config/source/grant', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    });
+  },
+
+  async updateConfigSource(yaml: string, revision?: string): Promise<{ status: string; size_bytes: number; revision: string }> {
+    const headers: Record<string, string> = {};
+    if (revision) {
+      headers['If-Match'] = revision;
+    }
+    return request<{ status: string; size_bytes: number; revision: string }>('/management/config/source', {
       method: 'PUT',
-      body: JSON.stringify({ yaml }),
+      headers,
+      body: JSON.stringify({ yaml, revision }),
     });
   },
 

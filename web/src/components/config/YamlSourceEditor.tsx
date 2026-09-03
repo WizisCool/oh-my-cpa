@@ -51,7 +51,7 @@ function ensureMonacoConfigured() {
   if (!monacoYamlInstance) {
     monacoYamlInstance = configureMonacoYaml(monaco, {
       enableSchemaRequest: false, // Strict offline: no external network schema fetching
-      validate: true,
+      validate: false,
       format: { enable: true },
       hover: true,
       completion: true,

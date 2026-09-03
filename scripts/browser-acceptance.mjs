@@ -162,6 +162,22 @@ try {
   await auditPage(page, responseBodies, '/auth-files', '.auth-files-page');
   await auditPage(page, responseBodies, '/logs', '.logs-page');
   await auditPage(page, responseBodies, '/config', '.config-page');
+
+  // Config Page: Source tab switch requires reauthentication modal
+  await page.goto(`${appURL}/config`, { waitUntil: 'networkidle' });
+  const sourceSegment = page.locator('.ant-segmented-item').filter({ hasText: /源码|Source/ });
+  if (await sourceSegment.isVisible()) {
+    await sourceSegment.click();
+    const reauthModal = page.locator('.ant-modal').filter({ hasText: /源码|Source/ });
+    await reauthModal.waitFor({ state: 'visible', timeout: 5000 });
+    check('config source switch prompts for reauthentication', await reauthModal.isVisible());
+    await reauthModal.locator('input[type="password"]').fill(FAKE_CPA_MANAGEMENT_KEY);
+    await reauthModal.locator('.ant-modal-footer button.ant-btn-primary').click();
+    await reauthModal.waitFor({ state: 'hidden', timeout: 10000 });
+    const sourceToolbar = page.locator('.config-source-toolbar');
+    await sourceToolbar.waitFor({ state: 'visible', timeout: 10000 });
+    check('source mode unlocks after valid reauthentication', await sourceToolbar.isVisible());
+  }
   await auditPage(page, responseBodies, '/resources/triage', '.terminal-panel');
   await auditPage(page, responseBodies, '/resources/all', '.terminal-page');
   await auditPage(page, responseBodies, '/instances', '.terminal-page');
