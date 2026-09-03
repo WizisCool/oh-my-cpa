@@ -42,8 +42,8 @@
 | 清理日志 | `logs` | `DELETE /logs` | 已覆盖 | 二次确认、清空后重建缓冲 |
 | 错误日志文件 | `logs` | `/request-error-logs`、`/request-error-logs/:name` | 已覆盖（真实文件列表 + 下载验证） | 文件名在 Go 侧拒绝穿越，不转发到 CPA |
 | 单请求日志下载 | 日志详情 | `GET /request-log-by-id/:id` | 已覆盖（`/usage/events/{id}/request-log`） | 404 视为能力缺失，不渲染成空文件 |
-| 插件列表/开关/删除/配置 | `plugins` | `/plugins` 及 `/plugins/:id/*` | 进行中 | 旧版本 404 能力提示；配置 JSON 校验 |
-| 插件商店安装 | `plugin_store` | `/plugin-store`、`POST /plugin-store/:id/install` | 进行中 | 安装确认、版本/来源显示、失败不污染列表 |
+| 插件列表/开关/删除/配置 | `plugins` | `/plugins` 及 `/plugins/:id/*` | 已覆盖 | 启停开关、JSON 配置模态编辑、卸载二次确认与强审计 |
+| 插件商店安装 | `plugin_store` | `/plugin-store`、`POST /plugin-store/:id/install` | 已覆盖 | 商店列表、权限审查、安装确认与强审计 |
 | 系统版本/更新检查 | `system_info` | `/latest-version`、CPA response headers | 已覆盖 | 真实版本比对、更新提示、不把“检查”误报为“升级完成” |
 | 运行自检/诊断 | `system_info` | CPA 探活、管理端点能力探测、脱敏诊断导出 | 已覆盖 | 组件健康拓扑、脱敏诊断包下载、强审计保护 |
 | 任意上游 API Call | provider/调试操作 | CPA `POST /api-call` | 计划（显式开关） | 默认关闭；开启前需 SSRF/审计/目标限制设计 |

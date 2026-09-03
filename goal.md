@@ -1331,3 +1331,30 @@ Codex 完成全部或一个阶段时，必须输出：
   - `pnpm verify:e2e` 78 项端到端检查全数通过（新增 `/system` 真实页面渲染、390px 视口无溢出、全量凭据排除等）。
 - 剩余风险与已知限制：
   - 下一阶段 7.6 将收口插件系统（Plugins & Plugin Store）。
+
+## 阶段 7.6 执行记录（Plugins 与 Plugin Store 扩展管理）
+
+- 目标达成：
+  1. 已安装插件管理（Plugins）：
+     - 新增 `web/src/pages/PluginsPage.tsx`，彻底替代 `/plugins` 占位符；
+     - 呈现已安装插件名称、版本、作者、声明权限列表与启停状态；
+     - 提供状态启停切换（`PATCH /api/v1/management/plugins/{id}/status`），防误触卸载（`DELETE /api/v1/management/plugins/{id}`）与二次确认；
+     - 提供合法 JSON 校验的配置模态框（`PUT /api/v1/management/plugins/{id}/config`）；
+     - 所有写操作均追加写入 `audit_events`。
+  2. 插件商店安全安装（Plugin Store）：
+     - 新增 `web/src/pages/PluginStorePage.tsx`，彻底替代 `/plugin-store` 占位符；
+     - 呈现可用插件元数据、版本与所需权限清单，明示供应链与执行权限安全提示；
+     - 支持一键安装（`POST /api/v1/management/plugin-store/{id}/install`），带有明确权限审查二次确认和操作审计。
+  3. Parity 矩阵同步：
+     - 更新 `docs/cpamc-parity.md`，将“插件列表/开关/删除/配置”与“插件商店安装”均标记为已覆盖；
+     - 新增后端回归测试 `internal/api/management_plugins_test.go`。
+- 验证结果：
+  - `go test ./...` 全部通过；
+  - `go vet ./...` 零警告；
+  - `pnpm type-check`、`pnpm check-i18n`、`pnpm test:i18n`、`pnpm test:payload`、`pnpm test:config-states`、`node --experimental-strip-types scripts/test-dirty.ts` 全部通过；
+  - `pnpm lint:antd` 通过（0 a11y、0 usage、0 performance）；
+  - `pnpm build` 顺利产出并同步静态资源；
+  - `pnpm verify:secrets:worktree` 与 `pnpm verify:secrets:history` 零泄漏；
+  - `pnpm verify:e2e` 88 项端到端检查全数通过（新增 `/plugins` 与 `/plugin-store` 真实页面渲染、390px 视口无溢出、全量凭据排除等）。
+- 剩余风险与已知限制：
+  - 插件商店当前按 CPA 实例配置的 Store 源读取与执行安装，不支持任意不可信源注入。
