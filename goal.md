@@ -1105,3 +1105,35 @@ Codex 完成全部或一个阶段时，必须输出：
 - 剩余风险与已知限制：
   - CPA 上游若被外部非 Oh My CPA 客户端绕过并发起并发写入，Oh My CPA 提供 best-effort 级别的冲突探测（锁内 re-fetch 校验），受限于 CPA 是否原生提供 CAS 支持；
   - 交付至浏览器内存或 DevTools 的 Raw YAML 无法做远程内存清除保证，因此依靠 `no-store` 和退出 Source 清理进行风险最小化。
+
+## 阶段 3 执行记录（Logs、Health、Resources 与 UI 正确性）
+
+- 目标达成：
+  1. 修复 Logs 页面假死与无反馈问题：
+     - 当 `logs-status` 接口失败（CPA offline、鉴权失败或网络故障）时，停止虚假 loading 状态，明确展示错误 Alert（区分 offline/auth/capability/unknown）与重试入口；
+     - 修复 clearLogs 异常吞没：清空日志失败时提示具体错误原因，保留当前页面上下文与确认状态，并在清空成功后展示反馈。
+  2. 修复 Health / Instance 拓扑泄露与状态混淆：
+     - 公共 `/healthz` 移除内部 `cpa_base_url` 暴露，仅在认证后的实例/管理端点呈现拓扑；
+     - `database_status` 真实接入 `PingContext` 轻量探针；
+     - 明确 liveness 与 readiness 分离：数据库故障返回 503 与 `status: error`；CPA 断开连接时进程与数据库健康，返回 200 与 `status: degraded` 及 `cpa_connected: false`；
+     - `InstanceStatusPage.tsx` 使用 `health.cpa_connected` 驱动 CPA 在线卡片，将应用探针、数据库健康与 CPA 连通性彻底解耦显示。
+  3. 修复 All Resources 四态生命周期过滤与移动端布局：
+     - 筛选器与状态标签由领域状态 `claimed | unclaimed | ignored | missing` 严格驱动，将“已个性化命名”与状态生命周期解耦独立展示；
+     - 列表请求失败时阻断伪造空表，展示 Alert 与 Retry 链路；
+     - 修复 390px 移动端布局横向溢出问题，加入响应式滚动容器；
+     - 规范化 `ResourceEditDrawer.tsx` 国际化标签与 Missing/Ignored 可用行为。
+  4. 改进可访问性与设计系统 Token：
+     - `AppLayout.tsx` 的品牌交互增加键盘导航（Enter/Space）支持与 `aria-label`；
+     - 补充缺失的 `--bg-surface` 与 `--font-mono` 主题字体与表面变量定义；
+     - 清理资源与全局组件中不规范的行内样式与颜色；
+     - 清理并收紧 Ant Design 弃用警告基线（从 22 条降至 7 条，0 新增问题，0 a11y 异常）。
+- 验证结果：
+  - `go test ./...` 全部通过（包含新增的 `TestHealthzLivenessAndReadinessPartitioning`）；
+  - `go vet ./...` 零警告；
+  - `pnpm type-check`、`pnpm check-i18n`、`pnpm test:i18n`、`pnpm test:payload`、`pnpm test:config-states`、`node --experimental-strip-types scripts/test-dirty.ts` 全部通过；
+  - `pnpm lint:antd` 通过（0 a11y、0 usage、0 performance，弃用基线收紧至 7 条）；
+  - `pnpm build` 顺利完成静态资源打包与嵌入；
+  - `pnpm verify:secrets:worktree` 与 `pnpm verify:secrets:history` 零泄漏；
+  - `pnpm verify:e2e` 53 项端到端检查全数通过。
+- 剩余风险与已知限制：
+  - 移动端视图目前采用局部横向滚动容器适配超宽表格，更深度的卡片流模式可随需求进一步拓展。
