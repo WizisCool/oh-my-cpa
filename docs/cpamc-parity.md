@@ -22,9 +22,9 @@
 | 配置读取 | `config_management` | `GET /config`、`GET /config.yaml` | 已覆盖（已对真实 CPA 7.2.146 验证） | 读取并显示真实 JSON/YAML |
 | 配置可视化标量编辑 | `config_management` | `/debug`、`/proxy-url`、`/request-log`、`/logging-to-file`、`/usage-statistics-enabled`、`/request-retry`、`/max-retry-*`、`/ws-auth`、`/force-model-prefix`、`/routing/strategy` | 已覆盖（已对真实 CPA 7.2.146 验证） | 每个白名单端点的 GET/PUT 合约测试与乐观交互 |
 | 配置源码编辑与保存 | `config_management` | `PUT /config.yaml` | 已覆盖（已对真实 CPA 7.2.146 验证） | YAML 错误 400、配置错误 422、脏状态保护、Ctrl+S 快捷保存 |
-| 代理客户端 API Keys | 配置、快速开始 | `GET/PUT/PATCH/DELETE /api-keys` | 进行中 | 列表替换、单项修改、删除；UI 遮罩 |
-| Gemini/Interactions/Codex/Claude/xAI/Vertex Key | `ai_providers` | 各 provider 的 `GET/PUT/PATCH/DELETE /{provider}-api-key` | 进行中 | 真实数组 CRUD、刷新后保留未知字段 |
-| OpenAI 兼容提供商 | `ai_providers` | `GET/PUT/PATCH/DELETE /openai-compatibility` | 进行中 | 多 key、headers、模型别名、禁用开关 |
+| 代理客户端 API Keys | 配置、快速开始 | `GET/PUT/PATCH/DELETE /api-keys` | 已覆盖 | 独立端点增删、单次明文呈现与脱敏列表 |
+| Gemini/Interactions/Codex/Claude/xAI/Vertex Key | `ai_providers` | 各 provider 的 `GET/PUT/PATCH/DELETE /{provider}-api-key` | 已覆盖 | 统一提供商列表、脱敏展示与状态切换 |
+| OpenAI 兼容提供商 | `ai_providers` | `GET/PUT/PATCH/DELETE /openai-compatibility` | 已覆盖 | 多 key、端点去敏、模型列表与启停开关 |
 | 模型发现 | 提供商操作、快速开始 | CPA `/v1/models`（固定代理调用待专项实现） | 计划 | 需要明确代理 API key 选择与审计边界 |
 | 认证文件列表/筛选 | `auth_files` | `GET /auth-files` | 已覆盖（已对真实 CPA 7.2.146 验证） | 真实字段归一化、runtime-only/disabled 空态 |
 | 认证文件上传 | `auth_files` | `POST /auth-files` multipart | 已覆盖（已对真实 CPA 7.2.146 验证） | JSON 文件上传、错误文件反馈 |

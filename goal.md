@@ -1250,3 +1250,30 @@ Codex 完成全部或一个阶段时，必须输出：
   - `pnpm verify:e2e` 58 项端到端检查全数通过。
 - 剩余风险与已知限制：
   - 配额重置（`POST /reset-quota`）将在下一阶段 7.4 展开深度专项实现。
+
+## 阶段 7.2 执行记录（Providers 与代理 API Keys）
+
+- 目标达成：
+  1. AI Providers 提供商管理闭环：
+     - 新增 `web/src/pages/ProvidersPage.tsx`，彻底替代原 `/ai-providers` 的 CapabilityPlaceholderPage；
+     - 统一聚合呈现 Codex、OpenAI Compatibility、Claude、Gemini 等全家族提供商列表；
+     - 呈现提供商标识、协议规范、端点 Base URL（严格脱敏剥离鉴权信息）、支持模型列表、密钥配置状态与启停开关；
+     - 提供状态启停切换能力（调用 `PATCH /api/v1/management/providers/status`），受操作审计保护。
+  2. 代理客户端 API Keys 独立安全管理：
+     - 设立专用轻量级接口：`GET /api/v1/management/api-keys`、`POST /api/v1/management/api-keys`、`DELETE /api/v1/management/api-keys/{index}`，完全摆脱对整份 YAML 保存的依赖；
+     - 实施 Write-only 写入与脱敏列表呈现契约：列表接口绝对不返回明文 API Key，仅展示掩码与 HMAC 指纹；
+     - 支持生成随机客户端密钥（`omc-sk-...`）或自定义密钥；创建成功后仅在当前模态框中单次展示明文，离开后永久不可见；
+     - 删除操作配备二次防误触确认与审计记录。
+  3. Parity 矩阵同步：
+     - 更新 `docs/cpamc-parity.md`，将“代理客户端 API Keys”、“Gemini/Codex/Claude 等 Key”以及“OpenAI 兼容提供商”三项均标记为已覆盖；
+     - 新增后端集成测试 `internal/api/management_providers_test.go`。
+- 验证结果：
+  - `go test ./...` 全部通过；
+  - `go vet ./...` 零警告；
+  - `pnpm type-check`、`pnpm check-i18n`、`pnpm test:i18n`、`pnpm test:payload`、`pnpm test:config-states`、`node --experimental-strip-types scripts/test-dirty.ts` 全部通过；
+  - `pnpm lint:antd` 通过（0 a11y、0 usage、0 performance）；
+  - `pnpm build` 顺利完成；
+  - `pnpm verify:secrets:worktree` 与 `pnpm verify:secrets:history` 零泄漏；
+  - `pnpm verify:e2e` 63 项端到端检查全数通过（新增 `/ai-providers` 真实页面渲染、390px 视口无溢出、全量凭据排除等）。
+- 剩余风险与已知限制：
+  - 提供商高级参数如请求头自定义修改目前在配置面板或源码模式中提供完整支撑。
