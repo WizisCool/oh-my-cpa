@@ -213,8 +213,7 @@ export const DashboardPage: React.FC = () => {
         <Alert
           type="error"
           showIcon
-          message={t('dash.error_title')}
-          description={error instanceof ApiError ? error.message : t('dash.error_desc')}
+          description={`${t('dash.error_title')} — ${error instanceof ApiError ? error.message : t('dash.error_desc')}`}
         />
       </div>
     );
@@ -263,7 +262,7 @@ export const DashboardPage: React.FC = () => {
       </div>
 
       {data.partial_errors.length > 0 && (
-        <Alert className="dashboard-alert" type="warning" showIcon message={t('dash.partial_title')} description={data.partial_errors.join(' · ')} />
+        <Alert className="dashboard-alert" type="warning" showIcon description={`${t('dash.partial_title')} — ${data.partial_errors.join(' · ')}`} />
       )}
 
       <div className="dashboard-grid">

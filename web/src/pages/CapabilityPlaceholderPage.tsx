@@ -78,7 +78,7 @@ export const CapabilityPlaceholderPage: React.FC<CapabilityPlaceholderPageProps>
         <Alert
           type="error"
           showIcon
-          message={apiErrorCode(error) === 'cpa_unavailable' ? t('cap.status_offline') : t('cap.status_error')}
+          description={apiErrorCode(error) === 'cpa_unavailable' ? t('cap.status_offline') : t('cap.status_error')}
         />
       ) : data ? (
         <div className="capability-content">

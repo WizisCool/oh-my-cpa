@@ -30,6 +30,8 @@
   color: #fdfcfc;
   --bg: #201d1d;
   --surface: #302c2c;
+  --bg-surface: #302c2c;
+  --font-mono: "Sarasa Mono SC", "Sarasa UI SC", "Sarasa Term SC", "更纱黑体 SC", "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   --fg: #fdfcfc;
   --fg-2: #c8c6c4;
   --muted: #9a9898;
@@ -388,7 +390,7 @@ a { color: inherit; }
 .runtime-list dt { color: var(--muted); font-size: 13px; }
 .runtime-list dd { max-width: 65%; margin: 0; color: var(--fg); font-size: 13px; text-align: right; overflow-wrap: anywhere; }
 .capability-content { display: flex; flex-direction: column; gap: 16px; }
-.capability-status-banner { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 2px; }
+.capability-status-banner { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 2px; }
 .capability-status-tag { font-size: 13px; padding: 2px 8px; font-weight: 500; }
 .capability-probe-time { font-size: 12px; font-family: var(--font-mono); }
 

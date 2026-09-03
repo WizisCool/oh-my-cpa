@@ -1006,7 +1006,7 @@ export const ConfigPage: React.FC = () => {
           showIcon
           closable
           onClose={() => setSaveError(null)}
-          message={saveError}
+          description={saveError}
           style={{ marginBottom: 16 }}
         />
       )}

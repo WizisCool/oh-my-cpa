@@ -108,7 +108,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
             <h1 className="terminal-title">{t('auth.title')}</h1>
             <p className="auth-subtitle">{t('auth.subtitle')}</p>
           </div>
-          {error && <Alert showIcon type="error" message={error} className="auth-alert" />}
+          {error && <Alert showIcon type="error" description={error} className="auth-alert" />}
           <Form layout="vertical" onFinish={login} requiredMark={false}>
             <Form.Item
               label={t('auth.label')}

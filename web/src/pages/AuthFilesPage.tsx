@@ -98,7 +98,7 @@ export const AuthFilesPage: React.FC = () => {
   };
 
   if (filesQuery.isLoading) return <div className="dashboard-loading"><Spin tip={t('af.loading')}><div style={{ minHeight: 80, minWidth: 200 }} /></Spin></div>;
-  if (filesQuery.isError) return <div className="terminal-page"><Alert type="error" showIcon message={t('af.error')} description={safeError(filesQuery.error, t)} action={<Button onClick={() => filesQuery.refetch()}>{t('common.retry')}</Button>} /></div>;
+  if (filesQuery.isError) return <div className="terminal-page"><Alert type="error" showIcon description={`${t('af.error')} — ${safeError(filesQuery.error, t)}`} action={<Button onClick={() => filesQuery.refetch()}>{t('common.retry')}</Button>} /></div>;
 
   return (
     <div className="terminal-page auth-files-page">

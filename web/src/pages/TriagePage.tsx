@@ -170,17 +170,17 @@ export const TriagePage: React.FC = () => {
       {/* Error Alert */}
       {isError && (
         <Alert
-          message={t('tri.error')}
+          type="error"
+          showIcon
           description={
             <div>
+              <Text strong>{t('tri.error')}</Text>
               <p style={{ margin: '4px 0 8px 0' }}>{error instanceof Error ? error.message : String(error)}</p>
               <Button size="small" type="primary" onClick={handleRefetch}>
                 {t('tri.retry_conn')}
               </Button>
             </div>
           }
-          type="error"
-          showIcon
           style={{ marginBottom: '24px' }}
         />
       )}

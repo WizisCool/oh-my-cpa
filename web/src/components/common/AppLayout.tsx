@@ -204,8 +204,22 @@ export const AppLayout: React.FC = () => {
     />
   );
 
+  const handleBrandKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      navigate('/dashboard');
+    }
+  };
+
   const brand = (
-    <div className="app-brand" onClick={() => navigate('/dashboard')} role="button" tabIndex={0}>
+    <div
+      className="app-brand"
+      onClick={() => navigate('/dashboard')}
+      onKeyDown={handleBrandKeyDown}
+      role="button"
+      tabIndex={0}
+      aria-label="Dashboard"
+    >
       <div className="app-brand-mark">›_</div>
       <div className="app-brand-copy">
         <strong>oh-my-cpa</strong>
@@ -235,7 +249,19 @@ export const AppLayout: React.FC = () => {
           theme="dark"
         >
           {collapsed ? (
-            <div className="app-brand app-brand-collapsed" onClick={() => setCollapsed(false)} role="button" tabIndex={0}>
+            <div
+              className="app-brand app-brand-collapsed"
+              onClick={() => setCollapsed(false)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setCollapsed(false);
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label="Expand Sider"
+            >
               <div className="app-brand-mark">OM</div>
             </div>
           ) : brand}
