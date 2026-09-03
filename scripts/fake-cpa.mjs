@@ -82,7 +82,27 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       json(response, 200, { version: '7.2.146-e2e' });
       return;
     }
-    if (request.method === 'GET' && ['/api-keys', '/claude-api-key', '/gemini-api-key', '/oauth-excluded-models', '/get-auth-status', '/plugins', '/plugin-store'].includes(path)) {
+    if (request.method === 'GET' && path.endsWith('-auth-url')) {
+      json(response, 200, { url: 'https://auth.example.test/oauth?session=e2e' });
+      return;
+    }
+    if (request.method === 'GET' && path === '/get-auth-status') {
+      json(response, 200, { status: 'waiting', message: 'waiting for user' });
+      return;
+    }
+    if (request.method === 'DELETE' && path === '/oauth-session') {
+      json(response, 200, { status: 'ok' });
+      return;
+    }
+    if (request.method === 'POST' && path === '/oauth-callback') {
+      json(response, 200, { status: 'ok' });
+      return;
+    }
+    if (request.method === 'POST' && path === '/reset-quota') {
+      json(response, 200, { status: 'ok' });
+      return;
+    }
+    if (request.method === 'GET' && ['/api-keys', '/claude-api-key', '/gemini-api-key', '/oauth-excluded-models', '/plugins', '/plugin-store'].includes(path)) {
       json(response, 200, {});
       return;
     }

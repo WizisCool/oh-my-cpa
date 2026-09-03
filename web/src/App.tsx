@@ -21,6 +21,8 @@ import { DashboardPage } from './pages/DashboardPage';
 import { LogsPage } from './pages/LogsPage';
 import { ConfigPage } from './pages/ConfigPage';
 import { AuthFilesPage } from './pages/AuthFilesPage';
+import { OAuthPage } from './pages/OAuthPage';
+import { QuotaPage } from './pages/QuotaPage';
 import { CapabilityPlaceholderPage } from './pages/CapabilityPlaceholderPage';
 import { ThemeContext } from './theme/ThemeContext';
 import { I18nProvider, useI18n } from './i18n';
@@ -100,8 +102,8 @@ const AppRoutes: React.FC = () => {
         { path: 'quick-start', element: <CapabilityPlaceholderPage navKey="quick_start" capability="quick-start" /> },
         { path: 'ai-providers', element: <ProvidersPage /> },
         { path: 'auth-files', element: <AuthFilesPage /> },
-        { path: 'oauth', element: <CapabilityPlaceholderPage navKey="oauth" capability="oauth" /> },
-        { path: 'quota', element: <CapabilityPlaceholderPage navKey="quota" capability="quota" /> },
+        { path: 'oauth', element: <OAuthPage /> },
+        { path: 'quota', element: <QuotaPage /> },
         { path: 'logs', element: <LogsPage /> },
         { path: 'usage/events', element: <UsageEventsPage /> },
         { path: 'config', element: <ConfigPage /> },

@@ -12,6 +12,9 @@ import { ErrorLogFile } from '../types/logs';
 import { CapabilityProbeReport } from '../types/capability';
 import { ConfigScalarsResponse, ConfigSourceResponse, ConfigGrantResponse } from '../types/configManagement';
 import { ClientAPIKeyItem, ProviderItem } from '../types/providers';
+import { OAuthProviderItem, StartOAuthResponse, OAuthStatusResponse } from '../types/oauth';
+import { QuotaOverviewResponse } from '../types/quota';
+
 
 /** DEFAULT_LOG_PAGE is the page size a fresh tail read asks for. */
 export const DEFAULT_LOG_PAGE = 2000;
@@ -415,6 +418,48 @@ export const api = {
       if (Array.isArray(obj.data)) return { resources: obj.data as DiscoveredResource[], total: typeof obj.total === 'number' ? obj.total : obj.data.length };
     }
     return { resources: [], total: 0 };
+  },
+
+
+  // OAuth
+  async getOAuthProviders(): Promise<{ providers: OAuthProviderItem[] }> {
+    return request<{ providers: OAuthProviderItem[] }>('/management/oauth/providers', { method: 'GET' });
+  },
+
+  async startOAuthFlow(provider: string): Promise<StartOAuthResponse> {
+    return request<StartOAuthResponse>('/management/oauth/start', {
+      method: 'POST',
+      body: JSON.stringify({ provider }),
+    });
+  },
+
+  async getOAuthStatus(sessionId?: string): Promise<OAuthStatusResponse> {
+    const search = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : '';
+    return request<OAuthStatusResponse>(`/management/oauth/status${search}`, { method: 'GET' });
+  },
+
+  async handleOAuthCallback(code: string, state: string): Promise<{ status: string }> {
+    return request<{ status: string }>('/management/oauth/callback', {
+      method: 'POST',
+      body: JSON.stringify({ code, state }),
+    });
+  },
+
+  async cancelOAuthSession(sessionId?: string): Promise<{ status: string }> {
+    const search = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : '';
+    return request<{ status: string }>(`/management/oauth/session${search}`, { method: 'DELETE' });
+  },
+
+  // Quota
+  async getQuotaOverview(): Promise<QuotaOverviewResponse> {
+    return request<QuotaOverviewResponse>('/management/quota', { method: 'GET' });
+  },
+
+  async resetCredentialQuota(authIndex: string): Promise<{ status: string; auth_index: string }> {
+    return request<{ status: string; auth_index: string }>('/management/quota/reset', {
+      method: 'POST',
+      body: JSON.stringify({ auth_index: authIndex }),
+    });
   },
 
   async updateResourceOverride(resourceId: string, payload: ResourceOverridePayload): Promise<{ status: string; resource?: DiscoveredResource }> {

@@ -207,6 +207,62 @@ func (c *Client) GeminiAPIKeys(ctx context.Context) ([]SimpleKeyEntry, error) {
 	return response.Entries, nil
 }
 
+type OAuthAuthURLResponse struct {
+	URL string `json:"url"`
+}
+
+func (c *Client) OAuthAuthURL(ctx context.Context, provider string) (string, error) {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	var response OAuthAuthURLResponse
+	endpoint := fmt.Sprintf("/%s-auth-url", provider)
+	if err := c.DoJSON(ctx, http.MethodGet, endpoint, &response); err != nil {
+		return "", err
+	}
+	return response.URL, nil
+}
+
+type OAuthStatusResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message,omitempty"`
+}
+
+func (c *Client) OAuthStatus(ctx context.Context, sessionID string) (OAuthStatusResponse, error) {
+	var response OAuthStatusResponse
+	endpoint := "/get-auth-status"
+	if strings.TrimSpace(sessionID) != "" {
+		endpoint += "?session_id=" + url.QueryEscape(sessionID)
+	}
+	if err := c.DoJSON(ctx, http.MethodGet, endpoint, &response); err != nil {
+		return OAuthStatusResponse{}, err
+	}
+	return response, nil
+}
+
+func (c *Client) CancelOAuthSession(ctx context.Context, sessionID string) error {
+	endpoint := "/oauth-session"
+	if strings.TrimSpace(sessionID) != "" {
+		endpoint += "?session_id=" + url.QueryEscape(sessionID)
+	}
+	return c.DoJSON(ctx, http.MethodDelete, endpoint, nil)
+}
+
+func (c *Client) OAuthCallback(ctx context.Context, code, state string) error {
+	payload := map[string]string{
+		"code":  code,
+		"state": state,
+	}
+	return c.doJSONBody(ctx, http.MethodPost, "/oauth-callback", payload, nil)
+}
+
+func (c *Client) ResetQuota(ctx context.Context, authIndex string) error {
+	authIndex = strings.TrimSpace(authIndex)
+	if authIndex == "" {
+		return errors.New("auth_index is required")
+	}
+	payload := map[string]string{"auth_index": authIndex}
+	return c.doJSONBody(ctx, http.MethodPost, "/reset-quota", payload, nil)
+}
+
 // PatchAuthFileStatus changes only the disabled state of a named auth file.
 // The endpoint and request shape are fixed here rather than supplied by an
 // HTTP caller.
