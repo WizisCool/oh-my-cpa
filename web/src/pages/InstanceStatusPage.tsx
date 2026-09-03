@@ -32,7 +32,9 @@ export const InstanceStatusPage: React.FC = () => {
     },
   });
 
-  const isOnline = health?.status === 'ok' || health?.status === 'healthy';
+  const isCpaOnline = Boolean(health?.cpa_connected);
+  const isDbOk = health?.database_status === 'ok';
+  const overallStatus = health?.status || 'unknown';
 
   return (
     <div className="terminal-page">
@@ -70,14 +72,14 @@ export const InstanceStatusPage: React.FC = () => {
           >
             <div style={{ marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                {isOnline ? (
+                {isCpaOnline ? (
                   <CheckCircleFilled style={{ color: 'var(--success)', fontSize: '24px' }} />
                 ) : (
                   <CloseCircleFilled style={{ color: 'var(--danger)', fontSize: '24px' }} />
                 )}
                 <div>
                   <Text strong style={{ fontSize: '16px', display: 'block' }}>
-                    {isOnline ? t('inst.conn_ok') : t('inst.conn_bad')}
+                    {isCpaOnline ? t('inst.conn_ok') : t('inst.conn_bad')}
                   </Text>
                   <Text type="secondary" style={{ fontSize: '12px' }}>
                     {t('inst.conn_note')}
@@ -88,19 +90,25 @@ export const InstanceStatusPage: React.FC = () => {
 
             <Descriptions column={1} size="small" bordered>
               <Descriptions.Item label={t('inst.probe')}>
-                <Tag color={isOnline ? 'success' : 'error'}>{health?.status || 'unknown'}</Tag>
+                <Tag color={overallStatus === 'ok' ? 'success' : overallStatus === 'degraded' ? 'warning' : 'error'}>
+                  {overallStatus}
+                </Tag>
               </Descriptions.Item>
-              <Descriptions.Item label={t('inst.omc_version')}>
-                <code>{health?.version || 'v0.1.0-dev'}</code>
-              </Descriptions.Item>
-              <Descriptions.Item label={t('inst.cpa_endpoint')}>
-                <code>{health?.cpa_base_url || t('inst.cpa_endpoint_default')}</code>
+              <Descriptions.Item label={t('inst.cpa_connected_label')}>
+                <Tag color={isCpaOnline ? 'success' : 'error'}>
+                  {isCpaOnline ? t('inst.conn_ok') : t('inst.conn_bad')}
+                </Tag>
               </Descriptions.Item>
               <Descriptions.Item label={t('inst.database')}>
                 <Space>
                   <DatabaseOutlined />
-                  <span>{t('inst.database_val')}</span>
+                  <Tag color={isDbOk ? 'success' : 'error'}>
+                    {isDbOk ? t('inst.db_ok') : t('inst.db_error')}
+                  </Tag>
                 </Space>
+              </Descriptions.Item>
+              <Descriptions.Item label={t('inst.omc_version')}>
+                <code>{health?.version || 'v0.1.0-dev'}</code>
               </Descriptions.Item>
             </Descriptions>
           </Card>
@@ -119,8 +127,7 @@ export const InstanceStatusPage: React.FC = () => {
             style={{ height: '100%' }}
           >
             <Alert
-              message={t('inst.proxy_alert_title')}
-              description={t('inst.proxy_alert_desc')}
+              description={t('inst.proxy_alert_title') + ' — ' + t('inst.proxy_alert_desc')}
               type="info"
               showIcon
               style={{ marginBottom: '16px' }}

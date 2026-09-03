@@ -237,25 +237,37 @@ func sameOrigin(request *http.Request) bool {
 
 func (h *Handler) healthz(writer http.ResponseWriter, request *http.Request) {
 	status := "ok"
+	httpStatus := http.StatusOK
+
+	databaseStatus := "ok"
+	if h.repo == nil || h.repo.SQL() == nil {
+		databaseStatus = "error"
+		status = "error"
+		httpStatus = http.StatusServiceUnavailable
+	} else if err := h.repo.SQL().PingContext(request.Context()); err != nil {
+		databaseStatus = "error"
+		status = "error"
+		httpStatus = http.StatusServiceUnavailable
+	}
+
 	cpaConnected := false
-	cpaBaseURL := h.cfg.CPA.BaseURL
 	if instance, err := h.repo.GetInstance(request.Context(), defaultInstanceID()); err == nil {
-		cpaBaseURL = instance.BaseURL
 		client, clientErr := h.clientForInstance(request.Context(), instance)
 		if clientErr == nil && client.Health(request.Context()) == nil {
 			cpaConnected = true
-		} else {
-			status = "degraded"
 		}
-	} else if !errors.Is(err, sql.ErrNoRows) && !strings.Contains(err.Error(), sql.ErrNoRows.Error()) {
+	}
+
+	if status == "ok" && !cpaConnected {
 		status = "degraded"
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{
+
+	writer.Header().Set("Cache-Control", "no-store")
+	writeJSON(writer, httpStatus, map[string]any{
 		"status":          status,
 		"version":         h.cfg.Version,
+		"database_status": databaseStatus,
 		"cpa_connected":   cpaConnected,
-		"cpa_base_url":    cpaBaseURL,
-		"database_status": "ok",
 	})
 }
 
