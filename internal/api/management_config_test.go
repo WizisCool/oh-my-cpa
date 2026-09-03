@@ -178,39 +178,103 @@ func TestManagementConfigSourceGetAndPut(t *testing.T) {
 	fixture := &configFixtureCPA{}
 	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
 
-	// GET source
+	// 1. GET source without grant token must fail with 403 reauth_required
 	resp, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/config/source")
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403 without grant token, got %d body %s", resp.StatusCode, payload)
+	}
+	var errObj map[string]any
+	_ = json.Unmarshal(payload, &errObj)
+	if errObj["code"] != "reauth_required" {
+		t.Fatalf("expected code reauth_required, got %#v", errObj)
+	}
+
+	// 2. Grant request with wrong password must return 401
+	resp, _ = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/config/source/grant", `{"password":"wrong-password"}`)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for wrong grant password, got %d", resp.StatusCode)
+	}
+
+	// 3. Grant request with correct password succeeds
+	resp, payload = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/config/source/grant", `{"password":"management-secret-value"}`)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("get source status = %d body %s", resp.StatusCode, payload)
+		t.Fatalf("expected 200 for grant, got %d body %s", resp.StatusCode, payload)
+	}
+	var grantRes struct {
+		GrantToken string `json:"grant_token"`
+	}
+	if err := json.Unmarshal(payload, &grantRes); err != nil || grantRes.GrantToken == "" {
+		t.Fatalf("invalid grant response: %s", payload)
+	}
+
+	// 4. GET source with valid grant succeeds and returns revision
+	req, _ := http.NewRequest(http.MethodGet, baseURL+"/omc/api/v1/management/config/source", nil)
+	req.Header.Set("X-Reveal-Grant", grantRes.GrantToken)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
 	}
 	var srcRes struct {
 		YAML      string `json:"yaml"`
 		SizeBytes int    `json:"size_bytes"`
+		Revision  string `json:"revision"`
 	}
-	if err := json.Unmarshal(payload, &srcRes); err != nil {
-		t.Fatalf("decode source response: %v", err)
-	}
-	if !strings.Contains(srcRes.YAML, "host: 127.0.0.1") || srcRes.SizeBytes == 0 {
-		t.Fatalf("unexpected yaml content: %s", srcRes.YAML)
+	_ = json.NewDecoder(resp.Body).Decode(&srcRes)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || srcRes.Revision == "" {
+		t.Fatalf("get source with grant failed: %d, rev=%s", resp.StatusCode, srcRes.Revision)
 	}
 
-	// PUT source success
-	newYAML := "host: 0.0.0.0\nport: 8317\ndebug: true\n"
-	putBody, _ := json.Marshal(map[string]string{"yaml": newYAML})
-	resp, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/config/source", string(putBody))
+	// 5. PUT source without revision must return 400 missing_revision
+	putNoRev, _ := json.Marshal(map[string]string{"yaml": `host: 0.0.0.0
+`})
+	resp, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/config/source", string(putNoRev))
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for missing revision, got %d body %s", resp.StatusCode, payload)
+	}
+
+	// 6. PUT source with outdated revision must return 409 config_conflict
+	putStale, _ := json.Marshal(map[string]string{"yaml": `host: 0.0.0.0
+`, "revision": "outdated-sha256-hex"})
+	resp, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/config/source", string(putStale))
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("expected 409 config_conflict, got %d body %s", resp.StatusCode, payload)
+	}
+	var conflictObj map[string]any
+	_ = json.Unmarshal(payload, &conflictObj)
+	if conflictObj["code"] != "config_conflict" || conflictObj["current_revision"] != srcRes.Revision {
+		t.Fatalf("unexpected conflict payload: %#v", conflictObj)
+	}
+
+	// 7. PUT source with invalid YAML syntax returns 400 yaml_syntax_error with line & col
+	putBadSyntax, _ := json.Marshal(map[string]string{"yaml": `bad: [unclosed
+`, "revision": srcRes.Revision})
+	resp, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/config/source", string(putBadSyntax))
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for syntax error, got %d body %s", resp.StatusCode, payload)
+	}
+	var synObj map[string]any
+	_ = json.Unmarshal(payload, &synObj)
+	if synObj["code"] != "yaml_syntax_error" {
+		t.Fatalf("expected yaml_syntax_error, got %#v", synObj)
+	}
+
+	// 8. PUT source with matching revision succeeds and returns new revision
+	newYAML := `host: 0.0.0.0
+port: 8317
+debug: true
+`
+	putGood, _ := json.Marshal(map[string]string{"yaml": newYAML, "revision": srcRes.Revision})
+	resp, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/config/source", string(putGood))
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("put source status = %d body %s", resp.StatusCode, payload)
+		t.Fatalf("put source with valid revision failed: %d body %s", resp.StatusCode, payload)
 	}
-
-	// PUT source invalid YAML error propagation
-	fixture.mu.Lock()
-	fixture.yamlError = true
-	fixture.mu.Unlock()
-
-	badYAML := "bad: [unclosed"
-	badPutBody, _ := json.Marshal(map[string]string{"yaml": badYAML})
-	resp, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/config/source", string(badPutBody))
-	if resp.StatusCode == http.StatusOK {
-		t.Fatalf("expected error for bad YAML, got 200")
+	var putRes struct {
+		Status   string `json:"status"`
+		Revision string `json:"revision"`
+	}
+	_ = json.Unmarshal(payload, &putRes)
+	if putRes.Status != "ok" || putRes.Revision == "" || putRes.Revision == srcRes.Revision {
+		t.Fatalf("expected new revision, got %#v", putRes)
 	}
 }

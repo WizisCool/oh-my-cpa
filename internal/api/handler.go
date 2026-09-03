@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -38,16 +39,21 @@ type Handler struct {
 	auth       *auth.Manager
 	// usage reports the background capture pipeline; nil when ingestion is off.
 	usage usagePipeline
+
+	configMu     sync.Mutex
+	grantMu      sync.RWMutex
+	revealGrants map[string]time.Time
 }
 
 func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypto.Cipher, logger *slog.Logger, authManager *auth.Manager) *Handler {
 	return &Handler{
-		cfg:        cfg,
-		repo:       repo,
-		cipher:     cipher,
-		discoverer: discovery.NewDiscoverer(cipher),
-		logger:     logger,
-		auth:       authManager,
+		cfg:          cfg,
+		repo:         repo,
+		cipher:       cipher,
+		discoverer:   discovery.NewDiscoverer(cipher),
+		logger:       logger,
+		auth:         authManager,
+		revealGrants: make(map[string]time.Time),
 	}
 }
 
@@ -96,6 +102,7 @@ func (h *Handler) Router() http.Handler {
 				v1.Get("/management/auth-files/download", h.downloadManagementAuthFile)
 				v1.Get("/management/capabilities/{key}", h.managementCapabilityProbe)
 				v1.Get("/management/config", h.managementConfigGet)
+				v1.Post("/management/config/source/grant", h.managementConfigSourceGrant)
 				v1.Put("/management/config/source", h.managementConfigSourcePut)
 				v1.Get("/management/config/source", h.managementConfigSourceGet)
 				v1.Put("/management/config/{key}", h.managementConfigPutScalar)

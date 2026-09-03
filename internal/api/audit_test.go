@@ -165,19 +165,38 @@ func TestAuditOperationsAreRecorded(t *testing.T) {
 		t.Fatalf("config scalar save status = %d", resp.StatusCode)
 	}
 
-	// 5. Config source reveal (GET)
+	// 5. Config source reveal grant & GET
+	grantReq, _ := http.NewRequest(http.MethodPost, serverURL+"/api/v1/management/config/source/grant", bytes.NewBufferString(`{"password":"app-admin-secret"}`))
+	grantReq.Header.Set("Origin", serverURL)
+	grantReq.Header.Set("Content-Type", "application/json")
+	grantResp, err := client.Do(grantReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var grantData struct {
+		GrantToken string `json:"grant_token"`
+	}
+	_ = json.NewDecoder(grantResp.Body).Decode(&grantData)
+	grantResp.Body.Close()
+
 	srcGetReq, _ := http.NewRequest(http.MethodGet, serverURL+"/api/v1/management/config/source", nil)
+	srcGetReq.Header.Set("X-Reveal-Grant", grantData.GrantToken)
 	resp, err = client.Do(srcGetReq)
 	if err != nil {
 		t.Fatal(err)
 	}
+	var srcBody struct {
+		Revision string `json:"revision"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&srcBody)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("config source get status = %d", resp.StatusCode)
 	}
 
 	// 6. Config source save (PUT)
-	srcPutReq, _ := http.NewRequest(http.MethodPut, serverURL+"/api/v1/management/config/source", bytes.NewBufferString(`{"yaml":"proxy_url: test"}`))
+	putPayload, _ := json.Marshal(map[string]string{"yaml": "proxy_url: test\n", "revision": srcBody.Revision})
+	srcPutReq, _ := http.NewRequest(http.MethodPut, serverURL+"/api/v1/management/config/source", bytes.NewBuffer(putPayload))
 	srcPutReq.Header.Set("Origin", serverURL)
 	srcPutReq.Header.Set("Content-Type", "application/json")
 	resp, err = client.Do(srcPutReq)
@@ -286,8 +305,19 @@ func TestAuditFailureFailsClosedWithoutExposingSecrets(t *testing.T) {
 		t.Fatalf("expected 500 on audit failure, got %d", resp2.StatusCode)
 	}
 
-	// 3. Config reveal must fail with 500
+	// 3. Config reveal with valid grant must fail with 500 when audit write fails
+	grantReq, _ := http.NewRequest(http.MethodPost, serverURL+"/api/v1/management/config/source/grant", bytes.NewBufferString(`{"password":"app-admin-secret"}`))
+	grantReq.Header.Set("Origin", serverURL)
+	grantReq.Header.Set("Content-Type", "application/json")
+	grantResp, _ := client.Do(grantReq)
+	var grantData struct {
+		GrantToken string `json:"grant_token"`
+	}
+	_ = json.NewDecoder(grantResp.Body).Decode(&grantData)
+	grantResp.Body.Close()
+
 	srcGetReq, _ := http.NewRequest(http.MethodGet, serverURL+"/api/v1/management/config/source", nil)
+	srcGetReq.Header.Set("X-Reveal-Grant", grantData.GrantToken)
 	resp3, err := client.Do(srcGetReq)
 	if err != nil {
 		t.Fatal(err)

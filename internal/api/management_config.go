@@ -7,7 +7,12 @@ import (
 	"net/http"
 	"strings"
 
+	"fmt"
+	"time"
+
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/configyaml"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
 
@@ -16,7 +21,54 @@ type configPutScalarRequest struct {
 }
 
 type configSourcePutRequest struct {
-	YAML string `json:"yaml"`
+	YAML     string `json:"yaml"`
+	Revision string `json:"revision,omitempty"`
+}
+
+type configGrantRequest struct {
+	Password string `json:"password"`
+}
+
+func (h *Handler) managementConfigSourceGrant(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	if h.auth == nil {
+		writeError(writer, http.StatusServiceUnavailable, "authentication manager is unavailable")
+		return
+	}
+	var payload configGrantRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 8*1024))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&payload); err != nil || strings.TrimSpace(payload.Password) == "" {
+		writeError(writer, http.StatusBadRequest, "management key is required")
+		return
+	}
+	if !h.auth.KeyMatches(payload.Password) {
+		writeError(writer, http.StatusUnauthorized, "invalid CPA management key")
+		return
+	}
+	token := uuid.NewString()
+	expiresAt := time.Now().Add(5 * time.Minute)
+	h.grantMu.Lock()
+	h.revealGrants[token] = expiresAt
+	h.grantMu.Unlock()
+
+	writeJSON(writer, http.StatusOK, map[string]any{
+		"grant_token":        token,
+		"expires_in_seconds": 300,
+	})
+}
+
+func (h *Handler) isGrantValid(token string) bool {
+	if strings.TrimSpace(token) == "" {
+		return false
+	}
+	h.grantMu.RLock()
+	expiresAt, exists := h.revealGrants[token]
+	h.grantMu.RUnlock()
+	if !exists || time.Now().After(expiresAt) {
+		return false
+	}
+	return true
 }
 
 func (h *Handler) managementConfigGet(writer http.ResponseWriter, request *http.Request) {
@@ -32,9 +84,24 @@ func (h *Handler) managementConfigGet(writer http.ResponseWriter, request *http.
 		return
 	}
 
+	rawYAML, err := client.ConfigYAML(request.Context())
+	if err != nil {
+		writeCPAFacadeError(writer, err)
+		return
+	}
+
+	rev := configyaml.ComputeRevision(rawYAML)
+	safeYAML, err := configyaml.SanitizeSafeYAML(rawYAML)
+	if err != nil {
+		safeYAML = ""
+	}
+
+	writer.Header().Set("ETag", fmt.Sprintf("%q", rev))
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"scalars":        scalars,
 		"supported_keys": management.KnownScalarKeys(),
+		"revision":       rev,
+		"safe_yaml":      safeYAML,
 	})
 }
 
@@ -143,6 +210,15 @@ func validateScalarValue(key string, val any) (any, error) {
 
 func (h *Handler) managementConfigSourceGet(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
+	grantToken := strings.TrimSpace(request.Header.Get("X-Reveal-Grant"))
+	if !h.isGrantValid(grantToken) {
+		writeJSON(writer, http.StatusForbidden, map[string]string{
+			"error": "reauthentication required to view raw configuration source",
+			"code":  "reauth_required",
+		})
+		return
+	}
+
 	client, ok := h.managementClientOrError(writer, request)
 	if !ok {
 		return
@@ -154,23 +230,22 @@ func (h *Handler) managementConfigSourceGet(writer http.ResponseWriter, request 
 		writeCPAFacadeError(writer, err)
 		return
 	}
-	if auditErr := h.recordAudit(request, "config.reveal_source", "config", "config_source_yaml", "success", map[string]any{"size_bytes": len(yamlStr)}); auditErr != nil {
+	rev := configyaml.ComputeRevision(yamlStr)
+	if auditErr := h.recordAudit(request, "config.reveal_source", "config", "config_source_yaml", "success", map[string]any{"revision": rev, "size_bytes": len(yamlStr)}); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit log failure; config reveal aborted")
 		return
 	}
 
+	writer.Header().Set("ETag", fmt.Sprintf("%q", rev))
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"yaml":       yamlStr,
 		"size_bytes": len(yamlStr),
+		"revision":   rev,
 	})
 }
 
 func (h *Handler) managementConfigSourcePut(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
-	client, ok := h.managementClientOrError(writer, request)
-	if !ok {
-		return
-	}
 
 	body, err := io.ReadAll(io.LimitReader(request.Body, 2*1024*1024))
 	if err != nil {
@@ -190,22 +265,77 @@ func (h *Handler) managementConfigSourcePut(writer http.ResponseWriter, request 
 		return
 	}
 
-	if auditErr := h.recordAudit(request, "config.save_source", "config", "config_source_yaml", "attempt", map[string]any{"size_bytes": len(req.YAML)}); auditErr != nil {
+	if synErr := configyaml.ValidateSyntax([]byte(req.YAML)); synErr != nil {
+		writeJSON(writer, http.StatusBadRequest, map[string]any{
+			"error":  "invalid YAML syntax: " + synErr.Error(),
+			"code":   "yaml_syntax_error",
+			"line":   synErr.Line,
+			"column": synErr.Column,
+		})
+		return
+	}
+
+	expectedRev := strings.Trim(strings.TrimSpace(request.Header.Get("If-Match")), `"`)
+	if expectedRev == "" {
+		expectedRev = strings.Trim(strings.TrimSpace(req.Revision), `"`)
+	}
+	if expectedRev == "" {
+		writeJSON(writer, http.StatusBadRequest, map[string]any{
+			"error": "config revision or If-Match header is required for conflict protection",
+			"code":  "missing_revision",
+		})
+		return
+	}
+
+	h.configMu.Lock()
+	defer h.configMu.Unlock()
+
+	client, ok := h.managementClientOrError(writer, request)
+	if !ok {
+		return
+	}
+
+	currentYAML, err := client.ConfigYAML(request.Context())
+	if err != nil {
+		writeCPAFacadeError(writer, err)
+		return
+	}
+	currentRev := configyaml.ComputeRevision(currentYAML)
+	if !strings.EqualFold(expectedRev, currentRev) {
+		writeJSON(writer, http.StatusConflict, map[string]any{
+			"error":            "configuration has been modified by another session",
+			"code":             "config_conflict",
+			"current_revision": currentRev,
+		})
+		return
+	}
+
+	finalYAML, err := configyaml.RestoreSentinels(req.YAML, currentYAML)
+	if err != nil {
+		writeError(writer, http.StatusBadRequest, "failed to process configuration sentinels: "+err.Error())
+		return
+	}
+
+	if auditErr := h.recordAudit(request, "config.save_source", "config", "config_source_yaml", "attempt", map[string]any{"revision": expectedRev, "size_bytes": len(finalYAML)}); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit log failure; config save aborted")
 		return
 	}
-	if err := client.UpdateConfigYAML(request.Context(), req.YAML); err != nil {
+	if err := client.UpdateConfigYAML(request.Context(), finalYAML); err != nil {
 		_ = h.recordAudit(request, "config.save_source", "config", "config_source_yaml", "failure", map[string]any{"error": err.Error()})
 		writeCPAFacadeError(writer, err)
 		return
 	}
-	if auditErr := h.recordAudit(request, "config.save_source", "config", "config_source_yaml", "success", map[string]any{"size_bytes": len(req.YAML)}); auditErr != nil {
+
+	newRev := configyaml.ComputeRevision(finalYAML)
+	if auditErr := h.recordAudit(request, "config.save_source", "config", "config_source_yaml", "success", map[string]any{"revision": newRev, "size_bytes": len(finalYAML)}); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit log failure; operation aborted")
 		return
 	}
 
+	writer.Header().Set("ETag", fmt.Sprintf("%q", newRev))
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"status":     "ok",
-		"size_bytes": len(req.YAML),
+		"size_bytes": len(finalYAML),
+		"revision":   newRev,
 	})
 }
