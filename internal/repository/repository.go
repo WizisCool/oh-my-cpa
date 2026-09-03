@@ -186,6 +186,29 @@ func (r *Repository) UpsertDiscoveredResources(ctx context.Context, instanceID s
 		if execErr != nil {
 			return nil, fmt.Errorf("upsert discovered resource %q: %w", resource.ResourceKey, execErr)
 		}
+
+		nowMS := discoveredAt.UnixMilli()
+		_, execBindErr := tx.ExecContext(ctx, `
+			INSERT INTO cpa_bindings (
+				id, instance_id, resource_id, cpa_resource_type, cpa_auth_index,
+				binding_fingerprint, status, first_seen_at_ms, last_seen_at_ms, missing_at_ms,
+				created_at_ms, updated_at_ms
+			) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, NULL, ?, ?)
+			ON CONFLICT(instance_id, cpa_resource_type, binding_fingerprint) DO UPDATE SET
+				resource_id = excluded.resource_id,
+				cpa_auth_index = excluded.cpa_auth_index,
+				status = 'active',
+				last_seen_at_ms = excluded.last_seen_at_ms,
+				missing_at_ms = NULL,
+				updated_at_ms = excluded.updated_at_ms`,
+			uuid.NewString(), instanceID, resource.ID, resource.CPAResourceType,
+			resource.CPAAuthIndex, resource.ResourceKey,
+			nowMS, nowMS, nowMS, nowMS,
+		)
+		if execBindErr != nil {
+			return nil, fmt.Errorf("sync cpa_binding for %q: %w", resource.ResourceKey, execBindErr)
+		}
+
 		stored = append(stored, resource)
 	}
 
@@ -212,6 +235,14 @@ func (r *Repository) UpsertDiscoveredResources(ctx context.Context, instanceID s
 				return nil, fmt.Errorf("mark missing resources: %w", err)
 			}
 		}
+		nowMS := discoveredAt.UnixMilli()
+		_, _ = tx.ExecContext(ctx, `
+			UPDATE cpa_bindings
+			SET status = 'missing', missing_at_ms = ?, updated_at_ms = ?
+			WHERE instance_id = ? AND resource_id IN (
+				SELECT id FROM discovered_resources WHERE instance_id = ? AND status = 'missing'
+			)`,
+			nowMS, nowMS, instanceID, instanceID)
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit resource discovery: %w", err)
