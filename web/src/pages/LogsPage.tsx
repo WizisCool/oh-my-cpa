@@ -10,7 +10,7 @@ import {
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
-import { api, apiErrorCode } from '../api/client';
+import { api, apiErrorCode, ApiError } from '../api/client';
 import { useT } from '../i18n';
 import { useLogTail } from '../hooks/useLogTail';
 import { usePreference } from '../hooks/usePreference';
@@ -107,7 +107,7 @@ const ErrorLogFiles: React.FC = () => {
       <Alert
         type="warning"
         showIcon
-        message={code === 'capability_missing' ? t('logs.errors_unsupported') : t('logs.errors_failed')}
+        description={code === 'capability_missing' ? t('logs.errors_unsupported') : t('logs.errors_failed')}
       />
     );
   }
@@ -169,6 +169,7 @@ const ErrorLogFiles: React.FC = () => {
 
 export const LogsPage: React.FC = () => {
   const t = useT();
+  const { message } = AntdApp.useApp();
   const { value: filters, ready: filtersReady, set: setFilters } = usePreference<LogFilters>(
     LOG_FILTERS_PREFERENCE,
     DEFAULT_LOG_FILTERS,
@@ -223,16 +224,32 @@ export const LogsPage: React.FC = () => {
     mutationFn: api.clearLogs,
     onSuccess: () => {
       setConfirmClear(false);
+      message.success(t('logs.clear_success'));
       tail.reload();
     },
-    onError: () => setConfirmClear(false),
+    onError: (err: unknown) => {
+      setConfirmClear(false);
+      const msg = err instanceof ApiError ? err.message : String(err);
+      message.error(t('logs.clear_failed', { err: msg }));
+    },
   });
 
   // "Nothing to show" has three different reasons and they must not share a
   // message: blocked (no file), loading (no answer yet), empty (a live tail with
   // no lines). Showing "no log lines" while waiting, or while the switch is off,
   // is how a working page gets reported as broken.
-  const blocked = loggingDisabled || tail.phase === 'disabled' || tail.phase === 'unsupported';
+  const statusError = status.error;
+  const statusErrorMsg = statusError instanceof ApiError ? statusError.message : statusError instanceof Error ? statusError.message : String(statusError || '');
+  let statusErrorTitle = t('logs.error_title');
+  if (statusError instanceof ApiError) {
+    if (statusError.status === 401 || statusError.status === 403) {
+      statusErrorTitle = t('logs.auth_failed');
+    } else if (statusError.status === 502 || statusError.status === 503) {
+      statusErrorTitle = t('logs.offline_title');
+    }
+  }
+
+  const blocked = status.isError || loggingDisabled || tail.phase === 'disabled' || tail.phase === 'unsupported' || tail.phase === 'offline' || tail.phase === 'error';
   const loading = !blocked && tail.phase === 'pending' && parsed.length === 0;
 
   return (
@@ -326,19 +343,40 @@ export const LogsPage: React.FC = () => {
             label: t('logs.tab_tail'),
             children: (
               <div className="logs-tail">
-                {loggingDisabled || tail.phase === 'disabled' ? (
+                {status.isError ? (
                   <Alert
                     className="logs-alert"
-                    type="warning"
+                    type="error"
                     showIcon
-                    message={t('logs.disabled_title')}
+                    description={
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <Text strong>{statusErrorTitle}</Text>
+                        <Text type="secondary">{statusErrorMsg}</Text>
+                      </div>
+                    }
                     action={
                       <Button
                         size="small"
                         icon={<ReloadOutlined />}
                         onClick={() => {
-                          // The switch may have been flipped elsewhere; retry
-                          // means re-ask, not re-render.
+                          void status.refetch();
+                        }}
+                      >
+                        {t('logs.retry')}
+                      </Button>
+                    }
+                  />
+                ) : loggingDisabled || tail.phase === 'disabled' ? (
+                  <Alert
+                    className="logs-alert"
+                    type="warning"
+                    showIcon
+                    description={t('logs.disabled_title')}
+                    action={
+                      <Button
+                        size="small"
+                        icon={<ReloadOutlined />}
+                        onClick={() => {
                           void status.refetch();
                           tail.reload();
                         }}
@@ -348,11 +386,11 @@ export const LogsPage: React.FC = () => {
                     }
                   />
                 ) : tail.phase === 'unsupported' ? (
-                  <Alert className="logs-alert" type="warning" showIcon message={t('logs.unsupported_title')} />
+                  <Alert className="logs-alert" type="warning" showIcon description={t('logs.unsupported_title')} />
                 ) : tail.phase === 'offline' ? (
-                  <Alert className="logs-alert" type="error" showIcon message={t('logs.offline_title')} />
+                  <Alert className="logs-alert" type="error" showIcon description={t('logs.offline_title')} />
                 ) : tail.phase === 'error' ? (
-                  <Alert className="logs-alert" type="error" showIcon message={t('logs.error_title')} description={tail.message} />
+                  <Alert className="logs-alert" type="error" showIcon description={`${t('logs.error_title')}: ${tail.message}`} />
                 ) : null}
 
                 {!blocked && (
