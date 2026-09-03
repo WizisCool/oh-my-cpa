@@ -11,6 +11,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
 type Discoverer struct {
@@ -78,7 +79,9 @@ func (d *Discoverer) Discover(ctx context.Context, client *management.Client, in
 
 func (d *Discoverer) fromAuthFile(instanceID string, file management.AuthFile) (domain.DiscoveredResource, error) {
 	provider := normalizeDriver(file.Provider)
-	identity := []string{"auth-file", file.AuthIndex, file.ID, file.Name, file.Provider, file.Email, file.Account}
+	// Account is a credential-bearing CPA field. Identity is deliberately built
+	// from CPA identifiers and descriptive metadata only.
+	identity := []string{"auth-file", file.AuthIndex, file.ID, file.Name, file.Provider, file.Email}
 	key, err := d.resourceKey(instanceID, file.AuthIndex, identity...)
 	if err != nil {
 		return domain.DiscoveredResource{}, err
@@ -88,6 +91,13 @@ func (d *Discoverer) fromAuthFile(instanceID string, file management.AuthFile) (
 		if model.ID != "" {
 			models = append(models, model.ID)
 		}
+	}
+	extra := map[string]string{
+		"account_present": fmt.Sprintf("%t", strings.TrimSpace(file.Account) != ""),
+		"account_type":    safeAccountType(file.AccountType),
+	}
+	if strings.TrimSpace(file.AuthIndex) == "" {
+		extra["identity_collision"] = "true"
 	}
 	return domain.DiscoveredResource{
 		InstanceID:      instanceID,
@@ -103,22 +113,30 @@ func (d *Discoverer) fromAuthFile(instanceID string, file management.AuthFile) (
 		Details: domain.ResourceDetails{
 			Models:      models,
 			AuthType:    "oauth",
-			Email:       file.Email,
-			SourceFile:  file.Name,
+			Email:       safeDisplayText(file.Email, 256),
+			SourceFile:  safeDisplayText(file.Name, 256),
 			Disabled:    file.Disabled,
 			Unavailable: file.Unavailable,
-			Extra:       map[string]string{"account": file.Account, "account_type": file.AccountType, "label": file.Label, "status": file.Status, "status_message": file.StatusMessage, "source": file.Source},
+			Extra:       omitEmptyExtra(extra),
 		},
 	}, nil
 }
 
 func (d *Discoverer) fromCodexAPIKey(instanceID string, index int, entry management.CodexAPIKey) (domain.DiscoveredResource, error) {
-	identity := []string{"codex-api-key", entry.AuthIndex, normalizeURL(entry.BaseURL), entry.Prefix, fmt.Sprintf("%d", index)}
+	_ = index // CPA array positions are not identity.
+	baseURL := publicURL(entry.BaseURL)
+	identity := []string{"codex-api-key", entry.AuthIndex, baseURL, safeDisplayText(entry.Prefix, 128)}
 	key, err := d.resourceKey(instanceID, entry.AuthIndex, identity...)
 	if err != nil {
 		return domain.DiscoveredResource{}, err
 	}
-	baseURL := publicURL(entry.BaseURL)
+	extra := map[string]string{
+		"proxy_configured": fmt.Sprintf("%t", strings.TrimSpace(entry.ProxyURL) != ""),
+		"api_key_present":  fmt.Sprintf("%t", strings.TrimSpace(entry.APIKey) != ""),
+	}
+	if strings.TrimSpace(entry.AuthIndex) == "" {
+		extra["identity_collision"] = "true"
+	}
 	return domain.DiscoveredResource{
 		InstanceID:      instanceID,
 		ResourceKey:     key,
@@ -134,13 +152,14 @@ func (d *Discoverer) fromCodexAPIKey(instanceID string, index int, entry managem
 			Models:   modelNames(entry.Models),
 			AuthType: "api_key",
 			Priority: entry.Priority,
-			Prefix:   entry.Prefix,
-			Extra:    map[string]string{"index": fmt.Sprintf("%d", index), "proxy_configured": fmt.Sprintf("%t", strings.TrimSpace(entry.ProxyURL) != ""), "api_key_present": fmt.Sprintf("%t", strings.TrimSpace(entry.APIKey) != "")},
+			Prefix:   safeDisplayText(entry.Prefix, 128),
+			Extra:    omitEmptyExtra(extra),
 		},
 	}, nil
 }
 
 func (d *Discoverer) fromOpenAICompatibility(instanceID string, index int, provider management.OpenAICompatibility) ([]domain.DiscoveredResource, error) {
+	_ = index // Provider ordering is not identity.
 	base := publicURL(provider.BaseURL)
 	entries := provider.APIKeyEntries
 	if len(entries) == 0 && len(provider.LegacyAPIKeys) > 0 {
@@ -153,18 +172,26 @@ func (d *Discoverer) fromOpenAICompatibility(instanceID string, index int, provi
 		entries = []management.APIKeyEntry{{}}
 	}
 	resources := make([]domain.DiscoveredResource, 0, len(entries))
-	for keyIndex, entry := range entries {
-		identity := []string{"openai-compatibility", provider.Name, normalizeURL(base), entry.AuthIndex, fmt.Sprintf("%d", index), fmt.Sprintf("%d", keyIndex)}
+	for _, entry := range entries {
+		identity := []string{"openai-compatibility", provider.Name, base, entry.AuthIndex}
 		resourceKey, err := d.resourceKey(instanceID, entry.AuthIndex, identity...)
 		if err != nil {
 			return nil, err
+		}
+		extra := map[string]string{
+			"provider":         safeDisplayText(provider.Name, 256),
+			"proxy_configured": fmt.Sprintf("%t", strings.TrimSpace(entry.ProxyURL) != ""),
+			"api_key_present":  fmt.Sprintf("%t", strings.TrimSpace(entry.APIKey) != ""),
+		}
+		if strings.TrimSpace(entry.AuthIndex) == "" {
+			extra["identity_collision"] = "true"
 		}
 		resources = append(resources, domain.DiscoveredResource{
 			InstanceID:      instanceID,
 			ResourceKey:     resourceKey,
 			CPAResourceType: "openai-compatibility",
 			CPAAuthIndex:    strings.TrimSpace(entry.AuthIndex),
-			CPAResourceName: strings.TrimSpace(provider.Name),
+			CPAResourceName: safeDisplayText(provider.Name, 256),
 			CPADriver:       "openai-compatibility",
 			ProtocolDriver:  "openai_chat_completions",
 			ProtocolDisplay: "OpenAI Chat Completions",
@@ -175,7 +202,7 @@ func (d *Discoverer) fromOpenAICompatibility(instanceID string, index int, provi
 				Models:   modelNames(provider.Models),
 				AuthType: "api_key",
 				Disabled: provider.Disabled,
-				Extra:    map[string]string{"provider": provider.Name, "index": fmt.Sprintf("%d", index), "key_index": fmt.Sprintf("%d", keyIndex), "proxy_configured": fmt.Sprintf("%t", strings.TrimSpace(entry.ProxyURL) != ""), "api_key_present": fmt.Sprintf("%t", strings.TrimSpace(entry.APIKey) != "")},
+				Extra:    omitEmptyExtra(extra),
 			},
 		})
 	}
@@ -201,6 +228,37 @@ func normalizeIdentityParts(parts []string) []string {
 	result := make([]string, len(parts))
 	for index, part := range parts {
 		result[index] = strings.ToLower(strings.TrimSpace(part))
+	}
+	return result
+}
+
+func safeAccountType(value string) string {
+	switch normalized := strings.ToLower(strings.TrimSpace(value)); normalized {
+	case "", "oauth", "api_key", "apikey", "service_account", "service-account":
+		return normalized
+	default:
+		return "other"
+	}
+}
+
+func safeDisplayText(value string, limit int) string {
+	value = security.RedactText(value)
+	value = strings.TrimSpace(value)
+	if limit > 0 && len([]rune(value)) > limit {
+		value = string([]rune(value)[:limit])
+	}
+	return value
+}
+
+func omitEmptyExtra(values map[string]string) map[string]string {
+	result := make(map[string]string, len(values))
+	for key, value := range values {
+		if strings.TrimSpace(value) != "" {
+			result[key] = value
+		}
+	}
+	if len(result) == 0 {
+		return nil
 	}
 	return result
 }
@@ -245,18 +303,7 @@ func normalizeDriver(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
 }
 
-func publicURL(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return ""
-	}
-	parsed, err := url.Parse(value)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return ""
-	}
-	parsed.User = nil
-	return strings.TrimRight(parsed.String(), "/")
-}
+func publicURL(value string) string { return security.PublicURL(value) }
 
 func normalizeURL(value string) string {
 	value = publicURL(value)

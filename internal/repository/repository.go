@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
 var ErrNotFound = sql.ErrNoRows
@@ -143,6 +144,7 @@ func (r *Repository) UpsertDiscoveredResources(ctx context.Context, instanceID s
 		if resource.ID == "" {
 			resource.ID = uuid.NewString()
 		}
+		resource.Details = sanitizeResourceDetails(resource.Details)
 		details, marshalErr := json.Marshal(resource.Details)
 		if marshalErr != nil {
 			return nil, fmt.Errorf("marshal resource details: %w", marshalErr)
@@ -388,6 +390,7 @@ func scanResource(scanner interface{ Scan(dest ...any) error }) (domain.Discover
 		if err := json.Unmarshal([]byte(detailsJSON.String), &resource.Details); err != nil {
 			return domain.DiscoveredResource{}, fmt.Errorf("decode resource details %q: %w", resource.ID, err)
 		}
+		resource.Details = sanitizeResourceDetails(resource.Details)
 	}
 	resource.CustomDisplayName = nullableStringPointer(displayName)
 	resource.Color = nullableStringPointer(color)
@@ -395,6 +398,77 @@ func scanResource(scanner interface{ Scan(dest ...any) error }) (domain.Discover
 	resource.Notes = nullableStringPointer(notes)
 	resource.DisplayName = firstNonEmpty(displayName.String, resource.SuggestedSource, resource.CPAResourceName, resource.BaseURL, resource.CPADriver)
 	return resource, nil
+}
+
+func sanitizeResourceDetails(details domain.ResourceDetails) domain.ResourceDetails {
+	// ResourceDetails is a persistence model, not a pass-through envelope for
+	// CPA management responses. Keep only fields the current resource UI uses
+	// and a small, reviewed set of boolean observations.
+	result := domain.ResourceDetails{
+		Models:      append([]string(nil), details.Models...),
+		AuthType:    safeResourceAuthType(details.AuthType),
+		Priority:    details.Priority,
+		Disabled:    details.Disabled,
+		Unavailable: details.Unavailable,
+	}
+	if len(result.Models) == 0 {
+		result.Models = nil
+	}
+	if result.AuthType == "" {
+		result.AuthType = "unknown"
+	}
+	allowed := map[string]struct{}{
+		"account_present":    {},
+		"account_type":       {},
+		"api_key_present":    {},
+		"identity_collision": {},
+		"proxy_configured":   {},
+	}
+	for key, value := range details.Extra {
+		if _, ok := allowed[key]; !ok {
+			continue
+		}
+		if security.IsSensitiveKey(key) || strings.TrimSpace(value) == "" {
+			continue
+		}
+		if key == "account_type" {
+			value = safeResourceAccountType(value)
+		}
+		if value != "true" && value != "false" && key != "account_type" {
+			continue
+		}
+		result.Extra = ensureExtra(result.Extra)
+		result.Extra[key] = value
+	}
+	if len(result.Extra) == 0 {
+		result.Extra = nil
+	}
+	return result
+}
+
+func ensureExtra(extra map[string]string) map[string]string {
+	if extra == nil {
+		return make(map[string]string)
+	}
+	return extra
+}
+
+func safeResourceAuthType(value string) string {
+	switch value = strings.ToLower(strings.TrimSpace(value)); value {
+	case "oauth", "api_key", "apikey", "service_account":
+		return value
+	default:
+		return "unknown"
+	}
+}
+
+func safeResourceAccountType(value string) string {
+	switch value = strings.ToLower(strings.TrimSpace(value)); value {
+	case "oauth", "api_key", "apikey", "service_account", "service-account":
+		return value
+	default:
+		return "other"
+	}
 }
 
 func nullableString(value string) any {

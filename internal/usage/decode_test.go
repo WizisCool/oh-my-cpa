@@ -2,6 +2,8 @@ package usage
 
 import (
 	"encoding/json"
+
+	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"strings"
 	"testing"
 	"time"
@@ -86,14 +88,17 @@ func TestDecodeEventMapsFieldsAndNormalizes(t *testing.T) {
 	if event.RequestID != "req-123" || event.EventKey != "req-123" {
 		t.Fatalf("request id not trimmed: %+v", event)
 	}
-	if event.APIGroupKey != "sk-secret" {
-		t.Fatalf("api group key should prefer api_key, got %q", event.APIGroupKey)
+	if event.APIGroupKey == "sk-secret" || event.APIGroupKey != "[redacted]" || event.APIGroupLabel != "api_key" {
+		t.Fatalf("api group key must be redacted and labeled, got key=%q label=%q", event.APIGroupKey, event.APIGroupLabel)
 	}
 	if event.AuthType != "apikey" {
 		t.Fatalf("auth_type not normalized: %q", event.AuthType)
 	}
 	if event.ModelAlias == nil || *event.ModelAlias != "pro" {
 		t.Fatalf("alias not trimmed: %+v", event.ModelAlias)
+	}
+	if event.Source != "[redacted]" {
+		t.Fatalf("source must not be persisted in plaintext: %q", event.Source)
 	}
 	if event.XForwardedFor != nil {
 		t.Fatalf("blank x_forwarded_for should be nil, got %q", *event.XForwardedFor)
@@ -261,5 +266,51 @@ func TestPayloadKeepsUnknownFieldsAndCachePresence(t *testing.T) {
 	}
 	if !payload.Tokens.CacheReadTokensPresent || payload.Tokens.CacheReadTokens != 0 {
 		t.Fatalf("cache presence flag lost: %+v", payload.Tokens)
+	}
+}
+
+func TestDecodeEventWithFingerprinterUsesStableCredentialFingerprint(t *testing.T) {
+	cipher, err := crypto.New("01234567890123456789012345678901")
+	if err != nil {
+		t.Fatal(err)
+	}
+	apiKey := "fixture-" + "credential-val-123"
+	raw := `{"request_id":"r1","api_key":"` + apiKey + `","source":"` + apiKey + `","provider":"openai","endpoint":"https://user:pass@example.test/v1?token=` + apiKey + `#fragment","client_ip":"10.20.30.40","x_forwarded_for":"10.20.30.41, 192.0.2.9","user_agent":"codex-cli/0.46 (fixture)"}`
+	event, err := DecodeEventWithFingerprinter(raw, "default", time.Unix(0, 0), cipher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if event.APIGroupLabel != "api_key" || event.APIGroupKey == apiKey || !strings.HasPrefix(event.APIGroupKey, "hmac:") {
+		t.Fatalf("group identity = key=%q label=%q", event.APIGroupKey, event.APIGroupLabel)
+	}
+	if event.Source == apiKey || !strings.HasPrefix(event.Source, "hmac:") {
+		t.Fatalf("source identity = %q", event.Source)
+	}
+	if event.Endpoint != "https://example.test/v1" {
+		t.Fatalf("endpoint = %q", event.Endpoint)
+	}
+	if event.ClientIP == nil || *event.ClientIP != "10.20.30.0/24" {
+		t.Fatalf("client IP = %v", event.ClientIP)
+	}
+	if event.XForwardedFor == nil || *event.XForwardedFor != "10.20.30.0/24" {
+		t.Fatalf("forwarded-for = %v", event.XForwardedFor)
+	}
+	if event.UserAgent == nil || *event.UserAgent != "codex-cli/0.46" {
+		t.Fatalf("user agent = %v", event.UserAgent)
+	}
+}
+
+func TestDecodeErrorEventRedactsBody(t *testing.T) {
+	secret := "fixture-error-token"
+	raw := `{"status_code":502,"body":"Authorization: Bearer ` + secret + `; proxy=https://u:p@example.test/?token=` + secret + `","auth_status":{"status_message":"token=` + secret + `"}}`
+	event, err := DecodeErrorEvent(raw, "default", time.Unix(0, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(event.Body, secret) || strings.Contains(event.Body, "u:p") {
+		t.Fatalf("error body contains secret: %q", event.Body)
+	}
+	if strings.Contains(event.AuthStatus, secret) {
+		t.Fatalf("auth status contains secret: %q", event.AuthStatus)
 	}
 }

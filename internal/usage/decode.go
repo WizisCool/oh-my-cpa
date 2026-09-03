@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
 // ErrMissingRequestID rejects payloads that cannot be attributed to a request.
@@ -133,6 +135,7 @@ type Event struct {
 	InstanceID          string
 	EventKey            string
 	APIGroupKey         string
+	APIGroupLabel       string
 	Provider            string
 	Endpoint            string
 	AuthType            string
@@ -168,11 +171,17 @@ type Event struct {
 // record without a usable timestamp would otherwise be invisible to every
 // time-windowed dashboard query.
 func DecodeEvent(raw string, instanceID string, observedAt time.Time) (Event, error) {
+	return DecodeEventWithFingerprinter(raw, instanceID, observedAt, nil)
+}
+
+// DecodeEventWithFingerprinter decodes a queue record while ensuring values that
+// can identify a client credential are either keyed or replaced by a marker.
+func DecodeEventWithFingerprinter(raw string, instanceID string, observedAt time.Time, fingerprinter security.Fingerprinter) (Event, error) {
 	var payload Payload
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 		return Event{}, fmt.Errorf("decode usage payload: %w", err)
 	}
-	requestID := strings.TrimSpace(payload.RequestID)
+	requestID := boundedSafe(payload.RequestID, 256)
 	if requestID == "" {
 		return Event{}, ErrMissingRequestID
 	}
@@ -181,39 +190,40 @@ func DecodeEvent(raw string, instanceID string, observedAt time.Time) (Event, er
 	if timestamp.IsZero() {
 		timestamp = observedAt
 	}
-
+	groupKey, groupLabel := apiGroupIdentity(payload, fingerprinter)
 	event := Event{
-		InstanceID:          strings.TrimSpace(instanceID),
+		InstanceID:          boundedSafe(instanceID, 256),
 		EventKey:            requestID,
-		APIGroupKey:         apiGroupKey(payload),
-		Provider:            trim(payload.Provider),
-		Endpoint:            trim(payload.Endpoint),
+		APIGroupKey:         groupKey,
+		APIGroupLabel:       groupLabel,
+		Provider:            boundedSafe(payload.Provider, 256),
+		Endpoint:            security.PublicEndpoint(payload.Endpoint),
 		AuthType:            normalizeAuthType(payload.AuthType),
 		RequestID:           requestID,
-		ClientIP:            cleanString(payload.ClientIP),
-		XForwardedFor:       cleanString(payload.XForwardedFor),
-		UserAgent:           cleanString(payload.UserAgent),
-		Model:               orUnknown(payload.Model),
-		ModelAlias:          cleanString(payload.Alias),
-		ReasoningEffort:     trim(payload.ReasoningEffort),
-		ServiceTier:         trim(payload.ServiceTier),
-		ResponseServiceTier: trim(payload.ResponseServiceTier),
-		ExecutorType:        trim(payload.ExecutorType),
+		ClientIP:            maskPointer(payload.ClientIP, security.MaskIP),
+		XForwardedFor:       maskPointer(payload.XForwardedFor, security.MaskForwardedFor),
+		UserAgent:           security.MinimizeUserAgent(valueOf(payload.UserAgent)),
+		Model:               orUnknown(boundedSafe(payload.Model, 256)),
+		ModelAlias:          cleanBoundedString(payload.Alias, 256),
+		ReasoningEffort:     boundedSafe(payload.ReasoningEffort, 128),
+		ServiceTier:         boundedSafe(payload.ServiceTier, 128),
+		ResponseServiceTier: boundedSafe(payload.ResponseServiceTier, 128),
+		ExecutorType:        boundedSafe(payload.ExecutorType, 128),
 		TimestampMS:         timestamp.UnixMilli(),
-		Source:              trim(payload.Source),
-		AuthIndex:           trim(payload.AuthIndex),
+		Source:              security.FingerprintOrRedacted(fingerprinter, "usage-source", payload.Source),
+		AuthIndex:           boundedSafe(payload.AuthIndex, 256),
 		Failed:              payload.Failed,
 		// Older CPA builds have no generate flag. Only a successful websocket
 		// executor call with no tokens at all counts as a warm-up.
 		Generate:            generate(payload.Generate, payload.Failed, payload.ExecutorType, payload.Tokens),
-		LatencyMS:           payload.LatencyMS,
-		TTFTMS:              payload.TTFTMS,
-		InputTokens:         payload.Tokens.InputTokens,
-		OutputTokens:        payload.Tokens.OutputTokens,
-		ReasoningTokens:     payload.Tokens.ReasoningTokens,
-		CachedTokens:        payload.Tokens.CachedTokens,
-		CacheReadTokens:     payload.Tokens.CacheReadTokens,
-		CacheCreationTokens: payload.Tokens.CacheCreationTokens,
+		LatencyMS:           nonNegative(payload.LatencyMS),
+		TTFTMS:              nonNegativePointer(payload.TTFTMS),
+		InputTokens:         nonNegative(payload.Tokens.InputTokens),
+		OutputTokens:        nonNegative(payload.Tokens.OutputTokens),
+		ReasoningTokens:     nonNegative(payload.Tokens.ReasoningTokens),
+		CachedTokens:        nonNegative(payload.Tokens.CachedTokens),
+		CacheReadTokens:     nonNegative(payload.Tokens.CacheReadTokens),
+		CacheCreationTokens: nonNegative(payload.Tokens.CacheCreationTokens),
 		TotalTokens:         totalTokens(payload.Tokens),
 	}
 	return event, nil
@@ -275,6 +285,12 @@ type ErrorEvent struct {
 // DecodeErrorEvent converts a raw errors-channel message into an ErrorEvent.
 // Error notifications carry no request id, so the hash keys the row instead.
 func DecodeErrorEvent(raw string, instanceID string, observedAt time.Time) (ErrorEvent, error) {
+	return DecodeErrorEventWithFingerprinter(raw, instanceID, observedAt, nil)
+}
+
+// DecodeErrorEventWithFingerprinter keeps the error event key stable without
+// deriving it from an exposed raw payload digest when a keyed service exists.
+func DecodeErrorEventWithFingerprinter(raw string, instanceID string, observedAt time.Time, fingerprinter security.Fingerprinter) (ErrorEvent, error) {
 	var payload ErrorPayload
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 		return ErrorEvent{}, fmt.Errorf("decode error event: %w", err)
@@ -283,18 +299,22 @@ func DecodeErrorEvent(raw string, instanceID string, observedAt time.Time) (Erro
 	if timestamp.IsZero() {
 		timestamp = observedAt
 	}
+	eventKey := "err-" + Hash(security.RedactPayload(raw))[:24]
+	if fingerprinted, err := security.Fingerprint(fingerprinter, "error-event", raw); err == nil && strings.HasPrefix(fingerprinted, "hmac:") && len(fingerprinted) >= len("hmac:")+24 {
+		eventKey = "err-" + fingerprinted[len("hmac:"):len("hmac:")+24]
+	}
 	event := ErrorEvent{
-		InstanceID:      trim(instanceID),
-		EventKey:        "err-" + Hash(raw)[:24],
-		Provider:        trim(payload.Provider),
-		Model:           trim(payload.Model),
-		AuthID:          trim(payload.AuthID),
-		AuthIndex:       trim(payload.AuthIndex),
+		InstanceID:      boundedSafe(instanceID, 256),
+		EventKey:        eventKey,
+		Provider:        boundedSafe(payload.Provider, 256),
+		Model:           boundedSafe(payload.Model, 256),
+		AuthID:          boundedSafe(payload.AuthID, 256),
+		AuthIndex:       boundedSafe(payload.AuthIndex, 256),
 		StatusCode:      payload.StatusCode,
-		Code:            trim(payload.Code),
-		Body:            strings.TrimSpace(payload.Body),
+		Code:            boundedSafe(payload.Code, 256),
+		Body:            security.RedactText(strings.TrimSpace(payload.Body)),
 		Retryable:       payload.Retryable,
-		AuthStatus:      trim(payload.AuthStatus.StatusMessage),
+		AuthStatus:      security.RedactText(boundedSafe(payload.AuthStatus.StatusMessage, 512)),
 		AuthDisabled:    payload.AuthStatus.Disabled,
 		AuthUnavailable: payload.AuthStatus.Unavailable,
 		TimestampMS:     timestamp.UnixMilli(),
@@ -305,7 +325,7 @@ func DecodeErrorEvent(raw string, instanceID string, observedAt time.Time) (Erro
 	}
 	if quota := payload.AuthStatus.Quota; quota != nil {
 		event.QuotaExceeded = quota.Exceeded
-		event.QuotaReason = trim(quota.Reason)
+		event.QuotaReason = security.RedactText(boundedSafe(quota.Reason, 512))
 		event.BackoffLevel = quota.BackoffLevel
 		if quota.NextRecoverAt != nil {
 			value := quota.NextRecoverAt.UnixMilli()
@@ -321,13 +341,24 @@ func Hash(raw string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func apiGroupKey(payload Payload) string {
-	for _, candidate := range []string{payload.APIKey, payload.Provider, payload.Endpoint} {
-		if trimmed := trim(candidate); trimmed != "" {
-			return trimmed
-		}
+func apiGroupIdentity(payload Payload, fingerprinter security.Fingerprinter) (string, string) {
+	if apiKey := trim(payload.APIKey); apiKey != "" {
+		return security.FingerprintOrRedacted(fingerprinter, "usage-api-key", apiKey), "api_key"
 	}
-	return "unknown"
+	if provider := boundedSafe(payload.Provider, 256); provider != "" {
+		return provider, "provider"
+	}
+	if endpoint := security.PublicEndpoint(payload.Endpoint); endpoint != "" {
+		return endpoint, "endpoint"
+	}
+	return "unknown", "unknown"
+}
+
+// apiGroupKey is retained for package-local callers and always returns a safe
+// value, never the payload API key.
+func apiGroupKey(payload Payload) string {
+	key, _ := apiGroupIdentity(payload, nil)
+	return key
 }
 
 // normalizeAuthType matches CPA's stored vocabulary where api keys are "apikey".
@@ -384,6 +415,55 @@ func cleanString(value *string) *string {
 		return nil
 	}
 	return &trimmed
+}
+
+func boundedSafe(value string, limit int) string {
+	value = security.RedactText(value)
+	value = strings.TrimSpace(value)
+	if limit > 0 && len([]rune(value)) > limit {
+		value = string([]rune(value)[:limit])
+	}
+	return value
+}
+
+func valueOf(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func cleanBoundedString(value *string, limit int) *string {
+	if value == nil {
+		return nil
+	}
+	cleaned := boundedSafe(*value, limit)
+	if cleaned == "" {
+		return nil
+	}
+	return &cleaned
+}
+
+func maskPointer(value *string, mask func(string) *string) *string {
+	if value == nil {
+		return nil
+	}
+	return mask(*value)
+}
+
+func nonNegative(value int64) int64 {
+	if value < 0 {
+		return 0
+	}
+	return value
+}
+
+func nonNegativePointer(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	cleaned := nonNegative(*value)
+	return &cleaned
 }
 
 func trim(value string) string { return strings.TrimSpace(value) }

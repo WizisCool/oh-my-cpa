@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -166,4 +168,48 @@ func stringContains(value, fragment string) bool {
 		}
 	}
 	return false
+}
+
+func TestRepositorySanitizesSensitiveResourceDetails(t *testing.T) {
+	repo, cipher := testRepository(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	ciphertext, nonce, err := cipher.Encrypt([]byte("secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.UpsertInstance(ctx, domain.CPAInstance{ID: "default", Name: "Default", BaseURL: "http://cpa:8317", UsageAddr: "cpa:8317", ManagementKeyCiphertext: ciphertext, ManagementKeyNonce: nonce, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	fixtureSecret := "fixture-resource-api-key"
+	resources, err := repo.UpsertDiscoveredResources(ctx, "default", []domain.DiscoveredResource{{
+		ResourceKey: "sensitive-details", CPAResourceType: "auth-file", CPADriver: "openai",
+		ProtocolDriver: "openai_responses", ProtocolDisplay: "OpenAI Responses",
+		Status: domain.ResourceStatusUnclaimed,
+		Details: domain.ResourceDetails{Models: []string{"gpt-test"}, Email: "owner@example.test", SourceFile: "fixture-token.json", Prefix: fixtureSecret, Extra: map[string]string{
+			"account": fixtureSecret, "api_key": fixtureSecret, "proxy_url": "https://user:pass@example.test?token=" + fixtureSecret,
+			"api_key_present": "true", "provider": "openai",
+		}},
+	}}, now, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw string
+	if err := repo.SQL().QueryRowContext(ctx, `SELECT details_json FROM discovered_resources WHERE id = ?`, resources[0].ID).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(raw, fixtureSecret) || strings.Contains(raw, "account") || strings.Contains(raw, `"api_key":`) || strings.Contains(raw, `"proxy_url":`) {
+		t.Fatalf("stored resource details contain sensitive fields: %s", raw)
+	}
+	loaded, err := repo.GetResource(ctx, resources[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(loaded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), fixtureSecret) {
+		t.Fatalf("loaded resource contains fixture secret: %s", encoded)
+	}
 }
