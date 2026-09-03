@@ -1045,3 +1045,12 @@ Codex 完成全部或一个阶段时，必须输出：
 - 基线 tag：`pre-overhaul-base-20260904` → `4b1c80db4375fa19b8ee763b5e0cf205143bb87b`
 - 计划文件：本文件
 - 已知第一优先级：阶段 0 仓库规范化，然后阶段 1 秘密治理；不得先开发新 placeholder 模块。
+
+## 阶段 0 执行记录（本次验收）
+
+- 基线：`master` 当前提交 `72803f1`；工作区保持干净。
+- 可复现性：使用项目外 verified bundle `<repo-parent>\oh-my-cpa-handoff-20260903.bundle` 创建全新 clone `<repo-parent>\oh-my-cpa-verified-20260904`；bundle SHA-256 为 `32BE7FFAF1BCD5F3D3064BFBB0386D9A48244DDBFF99BAF72DB46F35E1ECC496`，`git bundle verify`、`git bundle list-heads` 与 checkout smoke 均通过。
+- 固定工具链验收：Node.js `22.23.2`、Go `1.24.13`、pnpm `11.19.0`、`@ant-design/cli` `6.6.2`、`playwright-core` `1.62.1`，Chromium revision `1234` / version `151.0.7922.34`；`pnpm verify:toolchain:strict` 通过。
+- workflow 同等门禁：`pnpm install --frozen-lockfile`、Chromium 安装、`pnpm verify:static`、worktree/history secret scan、`pnpm verify:e2e`、`git diff --check` 均通过。
+- 测试结果：Go test/vet、TypeScript、严格 i18n、payload/dirty tests、Ant Design lint、Gitleaks worktree/history scan 全部通过；deterministic fake CPA 浏览器验收通过 51 项检查。
+- 运行边界：仓库尚未配置 remote，因此本阶段没有 hosted CI URL；本地 verified clone 已完成与 workflow 等价的可执行门禁。
