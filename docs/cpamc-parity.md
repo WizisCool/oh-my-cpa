@@ -32,10 +32,10 @@
 | 认证文件启用/禁用与字段 | 详情/批量操作 | `PATCH /auth-files/status`、`PATCH /auth-files/fields` | 已覆盖（已对真实 CPA 7.2.146 验证） | 状态、priority/weight/note/proxy 等字段 |
 | 认证文件模型列表 | 详情 | `GET /auth-files/models` | 已覆盖（真实 CPA 7.2.146 返回 200；旧版本 404 时返回 501 capability_missing） | 旧 CPA 404 时显示能力提示 |
 | OAuth 排除模型/别名 | `auth_files` 子页面 | `/oauth-excluded-models`、`/oauth-model-alias` | 计划 | provider key 归一化和通配符专项测试 |
-| OAuth 登录 | `oauth` | `GET /{provider}-auth-url`、`GET /get-auth-status`、`DELETE /oauth-session`、`POST /oauth-callback` | 进行中 | provider/state 轮询、取消、回调输入；不模拟 token |
+| OAuth 登录 | `oauth` | `GET /{provider}-auth-url`、`GET /get-auth-status`、`DELETE /oauth-session`、`POST /oauth-callback` | 已覆盖 | provider/state 轮询、取消、回调输入；不模拟 token |
 | Vertex JSON / iFlow Cookie 导入 | OAuth/认证文件 | `POST /vertex/import` 及 provider 专用流程 | 计划 | 以官方版本能力探测为准 |
 | 配额观察 | `quota_management`、凭据详情 | `auth-files` 返回的 quota/model_quotas 观察数据 | 已覆盖 | 凭据详情/抽屉展示、字段级安全过滤 |
-| 配额重置 | 配额行操作 | `POST /reset-quota {auth_index}` | 进行中 | 只接受稳定 `auth_index`，不能用文件名替代 |
+| 配额重置 | 配额行操作 | `POST /reset-quota {auth_index}` | 已覆盖 | 只接受稳定 `auth_index`，二次确认、审计与前端重置闭环 |
 | 用量队列 | 仪表盘/观测 | `GET /usage-queue?count=N` | 计划 | 明确破坏性消费语义后再提供“读取并确认”操作 |
 | API Key 用量桶 | 仪表盘/提供商 | `GET /api-key-usage` | 进行中 | 20 个 10 分钟桶与空态 |
 | 实时日志与增量拉取 | `logs` | `GET /logs?after=&cursor=&limit=` | 已覆盖（真实 CPA 7.2.146 验证） | cursor 优先、`after` 回退并回退一秒；`cursor-reset` 重建缓冲；5s 轮询可暂停 |

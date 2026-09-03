@@ -1277,3 +1277,30 @@ Codex 完成全部或一个阶段时，必须输出：
   - `pnpm verify:e2e` 63 项端到端检查全数通过（新增 `/ai-providers` 真实页面渲染、390px 视口无溢出、全量凭据排除等）。
 - 剩余风险与已知限制：
   - 提供商高级参数如请求头自定义修改目前在配置面板或源码模式中提供完整支撑。
+
+## 阶段 7.3 与 7.4 执行记录（OAuth 提供商授权与 Quota 配额管理）
+
+- 目标达成：
+  1. OAuth 授权全流程闭环：
+     - 新增 `web/src/pages/OAuthPage.tsx`，彻底替代 `/oauth` 占位符；
+     - 支持 Codex、Anthropic、Gemini、Vertex 等主流提供商一键唤起官方 OAuth 授权（调用 `POST /api/v1/management/oauth/start` 获取授权 URL 与追踪 Session）；
+     - 提供授权会话实时轮询进度指示器（调用 `GET /api/v1/management/oauth/status`）与会话取消机制（`DELETE /api/v1/management/oauth/session`）；
+     - 支持无头/远程场景下的手动回调凭据提交（`POST /api/v1/management/oauth/callback`），实施严格状态与代码校验；
+     - 恪守秘密边界：Token 仅在 Go 与 CPA 间安全交换，普通浏览器响应永不回显明文 Token。
+  2. 凭据配额与模型限额集中管理：
+     - 新增 `web/src/pages/QuotaPage.tsx`，替代 `/quota` 占位符；
+     - 聚合呈现所有凭据配额信号（Signals）、模型专属限额（Model Quotas）、超限原因及预计恢复时间/建议重试间隔；
+     - 提供凭据配额重置动作（调用 `POST /api/v1/management/quota/reset`），配备防误触二次确认与明确影响提示，受强操作审计保护。
+  3. Parity 矩阵同步：
+     - 更新 `docs/cpamc-parity.md`，将“OAuth 登录”与“配额重置”两项均标记为已覆盖；
+     - 后端单元与集成测试全量覆盖 OAuth 状态机与 Quota 重置流程。
+- 验证结果：
+  - `go test ./...` 全部通过；
+  - `go vet ./...` 零警告；
+  - `pnpm type-check`、`pnpm check-i18n`、`pnpm test:i18n`、`pnpm test:payload`、`pnpm test:config-states`、`node --experimental-strip-types scripts/test-dirty.ts` 全部通过；
+  - `pnpm lint:antd` 通过（0 a11y、0 usage、0 performance）；
+  - `pnpm build` 顺利产出并同步静态资源；
+  - `pnpm verify:secrets:worktree` 与 `pnpm verify:secrets:history` 零泄漏；
+  - `pnpm verify:e2e` 73 项端到端检查全数通过（新增 `/oauth` 与 `/quota` 页面渲染、390px 视口无溢出、全量凭据排除等）。
+- 剩余风险与已知限制：
+  - 后续阶段 7.5 将覆盖系统诊断与自检包生成。
