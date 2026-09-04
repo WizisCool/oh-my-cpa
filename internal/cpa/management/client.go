@@ -934,25 +934,29 @@ type OpenAICompatibilityResponse struct {
 }
 
 type OpenAICompatibility struct {
-	Name          string            `json:"name"`
-	Disabled      bool              `json:"disabled"`
-	BaseURL       string            `json:"base-url"`
-	APIKeyEntries []APIKeyEntry     `json:"api-key-entries"`
-	LegacyAPIKeys []string          `json:"api-keys"`
-	Models        []ModelAlias      `json:"models"`
-	Headers       map[string]string `json:"headers"`
+	Name           string            `json:"name"`
+	Disabled       bool              `json:"disabled"`
+	Prefix         string            `json:"prefix,omitempty"`
+	Priority       *int              `json:"priority,omitempty"`
+	DisableCooling bool              `json:"disable-cooling,omitempty"`
+	BaseURL        string            `json:"base-url"`
+	APIKeyEntries  []APIKeyEntry     `json:"api-key-entries,omitempty"`
+	LegacyAPIKeys  []string          `json:"api-keys,omitempty"`
+	Models         []ModelAlias      `json:"models,omitempty"`
+	Headers        map[string]string `json:"headers,omitempty"`
 }
 
 type APIKeyEntry struct {
 	APIKey    string `json:"api-key"`
-	AuthIndex string `json:"auth-index"`
-	ProxyURL  string `json:"proxy-url"`
+	AuthIndex string `json:"auth-index,omitempty"`
+	ProxyURL  string `json:"proxy-url,omitempty"`
+	Weight    *int   `json:"weight,omitempty"`
 }
 
 type ModelAlias struct {
 	Name        string `json:"name"`
-	Alias       string `json:"alias"`
-	DisplayName string `json:"display-name"`
+	Alias       string `json:"alias,omitempty"`
+	DisplayName string `json:"display-name,omitempty"`
 }
 
 // UsageQueue pops up to count usage records from CPA's redis-backed usage

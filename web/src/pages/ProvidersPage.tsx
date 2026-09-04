@@ -5,6 +5,7 @@ import {
   Tag,
   Button,
   Input,
+  InputNumber,
   Switch,
   Typography,
   Alert,
@@ -13,6 +14,8 @@ import {
   Popconfirm,
   Form,
   Select,
+  Row,
+  Col,
   App as AntdApp,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -25,13 +28,40 @@ import {
   KeyOutlined,
   ThunderboltOutlined,
   CloudServerOutlined,
+  CloseOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
-import type { ClientAPIKeyItem, ProviderItem, SaveProviderPayload } from '../types/providers';
+import type {
+  ClientAPIKeyItem,
+  ProviderItem,
+  SaveProviderPayload,
+  SaveProviderKeyItem,
+  SaveProviderModelItem,
+} from '../types/providers';
 
 const { Text } = Typography;
+
+interface FormKeyItem {
+  id: string;
+  masked?: string;
+  apiKey?: string;
+  proxyUrl?: string;
+  isChanging?: boolean;
+}
+
+interface FormHeaderItem {
+  id: string;
+  key: string;
+  value: string;
+}
+
+interface FormModelItem {
+  id: string;
+  name: string;
+  alias: string;
+}
 
 export const ProvidersPage: React.FC = () => {
   const t = useT();
@@ -46,9 +76,13 @@ export const ProvidersPage: React.FC = () => {
   const [formFamily, setFormFamily] = useState<string>('openai-compatibility');
   const [formName, setFormName] = useState<string>('');
   const [formBaseURL, setFormBaseURL] = useState<string>('');
-  const [formKey, setFormKey] = useState<string>('');
-  const [formModels, setFormModels] = useState<string[]>([]);
+  const [formPrefix, setFormPrefix] = useState<string>('');
+  const [formPriority, setFormPriority] = useState<number | null>(null);
   const [formDisabled, setFormDisabled] = useState<boolean>(false);
+  const [formDisableCooling, setFormDisableCooling] = useState<boolean>(false);
+  const [formKeys, setFormKeys] = useState<FormKeyItem[]>([]);
+  const [formHeaders, setFormHeaders] = useState<FormHeaderItem[]>([]);
+  const [formModels, setFormModels] = useState<FormModelItem[]>([]);
 
   // ── 1. Providers Query & Mutations ────────────────────────────────────────
   const {
@@ -123,9 +157,13 @@ export const ProvidersPage: React.FC = () => {
     setFormFamily('openai-compatibility');
     setFormName('');
     setFormBaseURL('');
-    setFormKey('');
-    setFormModels([]);
+    setFormPrefix('');
+    setFormPriority(null);
     setFormDisabled(false);
+    setFormDisableCooling(false);
+    setFormKeys([{ id: 'key-init-1', apiKey: '', proxyUrl: '' }]);
+    setFormHeaders([]);
+    setFormModels([]);
     setProviderModalOpen(true);
   };
 
@@ -134,20 +172,101 @@ export const ProvidersPage: React.FC = () => {
     setFormFamily(provider.family);
     setFormName(provider.name);
     setFormBaseURL(provider.base_url || '');
-    setFormKey('');
-    setFormModels(provider.models || []);
+    setFormPrefix(provider.prefix || '');
+    setFormPriority(provider.priority != null ? provider.priority : null);
     setFormDisabled(provider.disabled);
+    setFormDisableCooling(Boolean(provider.disable_cooling));
+
+    // Populate keys
+    if (provider.key_entries && provider.key_entries.length > 0) {
+      setFormKeys(
+        provider.key_entries.map((k, i) => ({
+          id: `key-edit-${i}`,
+          masked: k.masked,
+          proxyUrl: k.proxy_url,
+          isChanging: false,
+        }))
+      );
+    } else if (provider.key_masked) {
+      setFormKeys([
+        {
+          id: 'key-edit-0',
+          masked: provider.key_masked,
+          isChanging: false,
+        },
+      ]);
+    } else {
+      setFormKeys([{ id: 'key-new-0', apiKey: '', proxyUrl: '' }]);
+    }
+
+    // Populate headers
+    if (provider.headers && Object.keys(provider.headers).length > 0) {
+      setFormHeaders(
+        Object.entries(provider.headers).map(([k, v], i) => ({
+          id: `hdr-edit-${i}`,
+          key: k,
+          value: v,
+        }))
+      );
+    } else {
+      setFormHeaders([]);
+    }
+
+    // Populate models
+    if (provider.model_entries && provider.model_entries.length > 0) {
+      setFormModels(
+        provider.model_entries.map((m, i) => ({
+          id: `model-edit-${i}`,
+          name: m.name,
+          alias: m.alias || m.name,
+        }))
+      );
+    } else if (provider.models && provider.models.length > 0) {
+      setFormModels(
+        provider.models.map((m, i) => ({
+          id: `model-edit-${i}`,
+          name: m,
+          alias: m,
+        }))
+      );
+    } else {
+      setFormModels([]);
+    }
+
     setProviderModalOpen(true);
   };
 
   const handleSaveProvider = () => {
+    const keysPayload: SaveProviderKeyItem[] = formKeys.map((k) => ({
+      api_key: k.apiKey || '',
+      proxy_url: k.proxyUrl || '',
+    }));
+
+    const modelsPayload: SaveProviderModelItem[] = formModels
+      .filter((m) => m.name.trim() !== '')
+      .map((m) => ({
+        name: m.name.trim(),
+        alias: m.alias.trim() || m.name.trim(),
+      }));
+
+    const headersPayload: Record<string, string> = {};
+    for (const h of formHeaders) {
+      if (h.key.trim() !== '') {
+        headersPayload[h.key.trim()] = h.value.trim();
+      }
+    }
+
     const payload: SaveProviderPayload = {
       family: formFamily,
       name: formName.trim() || 'Custom Provider',
       base_url: formBaseURL.trim(),
-      api_key: formKey.trim(),
-      models: formModels,
+      prefix: formPrefix.trim(),
+      priority: formPriority != null ? formPriority : undefined,
+      disable_cooling: formDisableCooling,
       disabled: formDisabled,
+      keys: keysPayload,
+      model_entries: modelsPayload,
+      headers: headersPayload,
     };
 
     if (editingProvider) {
@@ -225,9 +344,21 @@ export const ProvidersPage: React.FC = () => {
       render: (_, record) => (
         <div>
           <div style={{ fontWeight: 600 }}>{record.name}</div>
-          <Tag color="purple" style={{ fontFamily: 'monospace', fontSize: 10, marginTop: 4 }}>
-            {record.family}
-          </Tag>
+          <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+            <Tag color="purple" style={{ fontFamily: 'monospace', fontSize: 10 }}>
+              {record.family}
+            </Tag>
+            {record.prefix && (
+              <Tag color="geekblue" style={{ fontSize: 10 }}>
+                prefix: {record.prefix}
+              </Tag>
+            )}
+            {record.priority != null && (
+              <Tag style={{ fontSize: 10 }}>
+                pri: {record.priority}
+              </Tag>
+            )}
+          </div>
         </div>
       ),
     },
@@ -298,7 +429,7 @@ export const ProvidersPage: React.FC = () => {
     {
       title: t('common.actions'),
       key: 'actions',
-      width: 120,
+      width: 110,
       align: 'right',
       render: (_, record) => (
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
@@ -491,7 +622,7 @@ export const ProvidersPage: React.FC = () => {
         ]}
       />
 
-      {/* Provider Create/Edit Modal */}
+      {/* Provider Rich Create/Edit Modal */}
       <Modal
         title={editingProvider ? t('pro.edit_provider_title') : t('pro.add_provider_title')}
         open={providerModalOpen}
@@ -500,57 +631,337 @@ export const ProvidersPage: React.FC = () => {
         confirmLoading={createProviderMutation.isPending || updateProviderMutation.isPending}
         okText={t('common.confirm')}
         cancelText={t('common.cancel')}
+        width={720}
       >
         <Form layout="vertical" style={{ marginTop: 16 }}>
-          <Form.Item label={t('pro.field_family')} required>
-            <Select
-              value={formFamily}
-              onChange={setFormFamily}
-              disabled={!!editingProvider}
-              options={[
-                { label: 'OpenAI Compatible (openai-compatibility)', value: 'openai-compatibility' },
-                { label: 'Codex / Responses (codex)', value: 'codex' },
-                { label: 'Anthropic Claude (claude)', value: 'claude' },
-                { label: 'Google Gemini (gemini)', value: 'gemini' },
-              ]}
-            />
-          </Form.Item>
-          <Form.Item label={t('pro.field_name')} required>
-            <Input
-              value={formName}
-              onChange={(e) => setFormName(e.target.value)}
-              placeholder={t('pro.field_name_ph')}
-            />
-          </Form.Item>
-          <Form.Item label={t('pro.field_base_url')}>
+          {/* Driver & Name */}
+          <Row gutter={16}>
+            <Col xs={24} sm={12}>
+              <Form.Item label={t('pro.field_family')} required>
+                <Select
+                  value={formFamily}
+                  onChange={setFormFamily}
+                  disabled={!!editingProvider}
+                  options={[
+                    { label: 'OpenAI 兼容 (openai-compatibility)', value: 'openai-compatibility' },
+                    { label: 'Codex / Responses (codex)', value: 'codex' },
+                    { label: 'Anthropic Claude (claude)', value: 'claude' },
+                    { label: 'Google Gemini (gemini)', value: 'gemini' },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item label={t('pro.field_name')} required>
+                <Input
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  placeholder={t('pro.field_name_ph')}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          {/* Base URL */}
+          <Form.Item
+            label={t('pro.field_base_url')}
+            extra={<span style={{ fontSize: 12, color: 'var(--meta)' }}>{t('pro.field_base_url_desc')}</span>}
+          >
             <Input
               value={formBaseURL}
               onChange={(e) => setFormBaseURL(e.target.value)}
               placeholder={t('pro.field_base_url_ph')}
             />
           </Form.Item>
-          <Form.Item label={t('pro.field_key')}>
-            <Input.Password
-              value={formKey}
-              onChange={(e) => setFormKey(e.target.value)}
-              placeholder={editingProvider ? t('pro.field_key_ph_edit') : t('pro.field_key_ph_create')}
-            />
-          </Form.Item>
-          <Form.Item label={t('pro.field_models')}>
-            <Select
-              mode="tags"
-              value={formModels}
-              onChange={setFormModels}
-              tokenSeparators={[',', ' ']}
-              placeholder={t('pro.field_models_ph')}
-            />
-          </Form.Item>
-          <Form.Item label={t('pro.col_status')}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Switch checked={!formDisabled} onChange={(checked) => setFormDisabled(!checked)} />
-              <Text type="secondary">{formDisabled ? t('af.disabled') : t('af.enabled')}</Text>
+
+          {/* Prefix & Priority */}
+          <Row gutter={16}>
+            <Col xs={24} sm={12}>
+              <Form.Item label={t('pro.field_prefix')}>
+                <Input
+                  value={formPrefix}
+                  onChange={(e) => setFormPrefix(e.target.value)}
+                  placeholder="e.g. glm"
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item label={t('pro.field_priority')}>
+                <InputNumber
+                  value={formPriority}
+                  onChange={(val) => setFormPriority(val)}
+                  placeholder="e.g. 1"
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          {/* Flags: Disabled & Disable Cooling */}
+          <Row gutter={16} style={{ marginBottom: 16 }}>
+            <Col xs={24} sm={12}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                <Switch
+                  checked={formDisabled}
+                  onChange={(checked) => setFormDisabled(checked)}
+                />
+                <div>
+                  <Text strong>{t('pro.field_disabled')}</Text>
+                  <div style={{ fontSize: 12, color: 'var(--meta)' }}>
+                    {t('pro.field_disabled_desc')}
+                  </div>
+                </div>
+              </div>
+            </Col>
+            <Col xs={24} sm={12}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                <Switch
+                  checked={formDisableCooling}
+                  onChange={(checked) => setFormDisableCooling(checked)}
+                />
+                <div>
+                  <Text strong>{t('pro.field_disable_cooling')}</Text>
+                  <div style={{ fontSize: 12, color: 'var(--meta)' }}>
+                    {t('pro.field_disable_cooling_desc')}
+                  </div>
+                </div>
+              </div>
+            </Col>
+          </Row>
+
+          {/* Section: API Keys */}
+          <Card
+            size="small"
+            title={
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>{t('pro.section_keys')} ({formKeys.length})</span>
+                <Button
+                  size="small"
+                  icon={<PlusOutlined />}
+                  onClick={() =>
+                    setFormKeys((prev) => [
+                      ...prev,
+                      { id: `key-${Date.now()}-${prev.length}`, apiKey: '', proxyUrl: '', isChanging: true },
+                    ])
+                  }
+                >
+                  {t('pro.add_key_entry')}
+                </Button>
+              </div>
+            }
+            style={{ marginBottom: 16 }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {formKeys.map((k, idx) => (
+                <div
+                  key={k.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    background: 'var(--card-bg, rgba(0,0,0,0.02))',
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                  }}
+                >
+                  <Text strong style={{ minWidth: 60, fontSize: 12 }}>
+                    {t('pro.key_label', { n: idx + 1 })}
+                  </Text>
+
+                  {k.masked && !k.isChanging ? (
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Tag color="success" style={{ fontFamily: 'monospace' }}>
+                        {k.masked}
+                      </Tag>
+                      <Button
+                        size="small"
+                        type="link"
+                        onClick={() =>
+                          setFormKeys((prev) =>
+                            prev.map((item) => (item.id === k.id ? { ...item, isChanging: true } : item))
+                          )
+                        }
+                      >
+                        {t('pro.change_key')}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div style={{ flex: 1, display: 'flex', gap: 8 }}>
+                      <Input.Password
+                        value={k.apiKey || ''}
+                        onChange={(e) =>
+                          setFormKeys((prev) =>
+                            prev.map((item) => (item.id === k.id ? { ...item, apiKey: e.target.value } : item))
+                          )
+                        }
+                        placeholder={t('pro.field_key_ph_create')}
+                        style={{ flex: 1 }}
+                      />
+                      {k.masked && (
+                        <Button
+                          size="small"
+                          onClick={() =>
+                            setFormKeys((prev) =>
+                              prev.map((item) =>
+                                item.id === k.id ? { ...item, isChanging: false, apiKey: '' } : item
+                              )
+                            )
+                          }
+                        >
+                          {t('pro.keep_key')}
+                        </Button>
+                      )}
+                    </div>
+                  )}
+
+                  <Input
+                    value={k.proxyUrl || ''}
+                    onChange={(e) =>
+                      setFormKeys((prev) =>
+                        prev.map((item) => (item.id === k.id ? { ...item, proxyUrl: e.target.value } : item))
+                      )
+                    }
+                    placeholder="proxy-url (optional)"
+                    style={{ width: 160 }}
+                  />
+
+                  <Button
+                    size="small"
+                    type="text"
+                    danger
+                    icon={<CloseOutlined />}
+                    disabled={formKeys.length <= 1}
+                    onClick={() => setFormKeys((prev) => prev.filter((item) => item.id !== k.id))}
+                  />
+                </div>
+              ))}
             </div>
-          </Form.Item>
+          </Card>
+
+          {/* Section: Custom Headers */}
+          <Card
+            size="small"
+            title={
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>{t('pro.section_headers')} ({formHeaders.length})</span>
+                <Button
+                  size="small"
+                  icon={<PlusOutlined />}
+                  onClick={() =>
+                    setFormHeaders((prev) => [
+                      ...prev,
+                      { id: `hdr-${Date.now()}-${prev.length}`, key: '', value: '' },
+                    ])
+                  }
+                >
+                  {t('pro.add_header_entry')}
+                </Button>
+              </div>
+            }
+            style={{ marginBottom: 16 }}
+          >
+            {formHeaders.length === 0 ? (
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                -
+              </Text>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {formHeaders.map((h) => (
+                  <div key={h.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <Input
+                      value={h.key}
+                      onChange={(e) =>
+                        setFormHeaders((prev) =>
+                          prev.map((item) => (item.id === h.id ? { ...item, key: e.target.value } : item))
+                        )
+                      }
+                      placeholder={t('pro.header_name')}
+                      style={{ flex: 1, fontFamily: 'monospace' }}
+                    />
+                    <Input
+                      value={h.value}
+                      onChange={(e) =>
+                        setFormHeaders((prev) =>
+                          prev.map((item) => (item.id === h.id ? { ...item, value: e.target.value } : item))
+                        )
+                      }
+                      placeholder={t('pro.header_value')}
+                      style={{ flex: 1 }}
+                    />
+                    <Button
+                      size="small"
+                      type="text"
+                      danger
+                      icon={<CloseOutlined />}
+                      onClick={() => setFormHeaders((prev) => prev.filter((item) => item.id !== h.id))}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {/* Section: Custom Models */}
+          <Card
+            size="small"
+            title={
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>{t('pro.section_models')} ({formModels.length})</span>
+                <Button
+                  size="small"
+                  icon={<PlusOutlined />}
+                  onClick={() =>
+                    setFormModels((prev) => [
+                      ...prev,
+                      { id: `mdl-${Date.now()}-${prev.length}`, name: '', alias: '' },
+                    ])
+                  }
+                >
+                  {t('pro.add_model_entry')}
+                </Button>
+              </div>
+            }
+          >
+            {formModels.length === 0 ? (
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                -
+              </Text>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {formModels.map((m) => (
+                  <div key={m.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <Input
+                      value={m.name}
+                      onChange={(e) =>
+                        setFormModels((prev) =>
+                          prev.map((item) => (item.id === m.id ? { ...item, name: e.target.value } : item))
+                        )
+                      }
+                      placeholder={t('pro.model_name')}
+                      style={{ flex: 1 }}
+                    />
+                    <Input
+                      value={m.alias}
+                      onChange={(e) =>
+                        setFormModels((prev) =>
+                          prev.map((item) => (item.id === m.id ? { ...item, alias: e.target.value } : item))
+                        )
+                      }
+                      placeholder={t('pro.model_alias')}
+                      style={{ flex: 1 }}
+                    />
+                    <Button
+                      size="small"
+                      type="text"
+                      danger
+                      icon={<CloseOutlined />}
+                      onClick={() => setFormModels((prev) => prev.filter((item) => item.id !== m.id))}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
         </Form>
       </Modal>
 

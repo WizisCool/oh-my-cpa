@@ -18,18 +18,35 @@ type ClientAPIKeyItemDTO struct {
 	Length      int    `json:"length"`
 }
 
+type ProviderKeyEntryDTO struct {
+	Index    int    `json:"index"`
+	Masked   string `json:"masked"`
+	ProxyURL string `json:"proxy_url,omitempty"`
+}
+
+type ProviderModelDTO struct {
+	Name  string `json:"name"`
+	Alias string `json:"alias,omitempty"`
+}
+
 type ProviderItemDTO struct {
-	ID              string   `json:"id"`
-	Family          string   `json:"family"`
-	Name            string   `json:"name"`
-	Protocol        string   `json:"protocol"`
-	BaseURL         string   `json:"base_url,omitempty"`
-	AuthIndex       string   `json:"auth_index,omitempty"`
-	Models          []string `json:"models,omitempty"`
-	Disabled        bool     `json:"disabled"`
-	KeyConfigured   bool     `json:"key_configured"`
-	KeyMasked       string   `json:"key_masked,omitempty"`
-	ProxyConfigured bool     `json:"proxy_configured"`
+	ID              string                `json:"id"`
+	Family          string                `json:"family"`
+	Name            string                `json:"name"`
+	Protocol        string                `json:"protocol"`
+	BaseURL         string                `json:"base_url,omitempty"`
+	Prefix          string                `json:"prefix,omitempty"`
+	Priority        *int                  `json:"priority,omitempty"`
+	DisableCooling  bool                  `json:"disable_cooling"`
+	AuthIndex       string                `json:"auth_index,omitempty"`
+	Models          []string              `json:"models,omitempty"`
+	ModelEntries    []ProviderModelDTO    `json:"model_entries,omitempty"`
+	Disabled        bool                  `json:"disabled"`
+	KeyConfigured   bool                  `json:"key_configured"`
+	KeyMasked       string                `json:"key_masked,omitempty"`
+	KeyEntries      []ProviderKeyEntryDTO `json:"key_entries,omitempty"`
+	Headers         map[string]string     `json:"headers,omitempty"`
+	ProxyConfigured bool                  `json:"proxy_configured"`
 }
 
 func (h *Handler) listClientAPIKeys(writer http.ResponseWriter, request *http.Request) {
@@ -213,16 +230,45 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 			} else if len(entry.APIKeyEntries) > 0 {
 				firstKey = entry.APIKeyEntries[0].APIKey
 			}
+			keyEntries := make([]ProviderKeyEntryDTO, 0, len(entry.APIKeyEntries)+len(entry.LegacyAPIKeys))
+			for ki, k := range entry.APIKeyEntries {
+				keyEntries = append(keyEntries, ProviderKeyEntryDTO{
+					Index:    ki,
+					Masked:   maskSecretKey(k.APIKey),
+					ProxyURL: k.ProxyURL,
+				})
+			}
+			for ki, k := range entry.LegacyAPIKeys {
+				keyEntries = append(keyEntries, ProviderKeyEntryDTO{
+					Index:  len(entry.APIKeyEntries) + ki,
+					Masked: maskSecretKey(k),
+				})
+			}
+
+			modelEntries := make([]ProviderModelDTO, 0, len(entry.Models))
+			for _, m := range entry.Models {
+				modelEntries = append(modelEntries, ProviderModelDTO{
+					Name:  m.Name,
+					Alias: m.Alias,
+				})
+			}
+
 			items = append(items, ProviderItemDTO{
 				ID:              fmt.Sprintf("openai-compat-%d", i),
 				Family:          "openai-compatibility",
 				Name:            firstNonEmpty(entry.Name, "OpenAI Compatible"),
 				Protocol:        "OpenAI Chat Completions",
 				BaseURL:         security.PublicURL(entry.BaseURL),
+				Prefix:          entry.Prefix,
+				Priority:        entry.Priority,
+				DisableCooling:  entry.DisableCooling,
 				Models:          models,
+				ModelEntries:    modelEntries,
 				Disabled:        entry.Disabled,
 				KeyConfigured:   hasKey,
 				KeyMasked:       maskSecretKey(firstKey),
+				KeyEntries:      keyEntries,
+				Headers:         entry.Headers,
 				ProxyConfigured: false,
 			})
 		}
@@ -343,13 +389,29 @@ func maskSecretKey(key string) string {
 	return key[:prefixLen] + "••••••••" + key[len(key)-4:]
 }
 
+type SaveProviderKeyEntry struct {
+	APIKey   string `json:"api_key,omitempty"`
+	ProxyURL string `json:"proxy_url,omitempty"`
+}
+
+type SaveProviderModelEntry struct {
+	Name  string `json:"name"`
+	Alias string `json:"alias,omitempty"`
+}
+
 type SaveProviderRequest struct {
-	Family   string   `json:"family"`
-	Name     string   `json:"name"`
-	BaseURL  string   `json:"base_url"`
-	APIKey   string   `json:"api_key"`
-	Models   []string `json:"models"`
-	Disabled bool     `json:"disabled"`
+	Family         string                   `json:"family"`
+	Name           string                   `json:"name"`
+	BaseURL        string                   `json:"base_url"`
+	Prefix         string                   `json:"prefix,omitempty"`
+	Priority       *int                     `json:"priority,omitempty"`
+	DisableCooling bool                     `json:"disable_cooling"`
+	APIKey         string                   `json:"api_key,omitempty"`
+	Keys           []SaveProviderKeyEntry   `json:"keys,omitempty"`
+	Models         []string                 `json:"models,omitempty"`
+	ModelEntries   []SaveProviderModelEntry `json:"model_entries,omitempty"`
+	Headers        map[string]string        `json:"headers,omitempty"`
+	Disabled       bool                     `json:"disabled"`
 }
 
 func parseProviderID(id string) (string, int, error) {
@@ -400,11 +462,24 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 	}
 
 	ctx := request.Context()
-	models := make([]management.ModelAlias, 0, len(req.Models))
-	for _, m := range req.Models {
-		m = strings.TrimSpace(m)
-		if m != "" {
-			models = append(models, management.ModelAlias{Name: m, Alias: m})
+	models := make([]management.ModelAlias, 0)
+	if len(req.ModelEntries) > 0 {
+		for _, m := range req.ModelEntries {
+			mName := strings.TrimSpace(m.Name)
+			if mName != "" {
+				alias := strings.TrimSpace(m.Alias)
+				if alias == "" {
+					alias = mName
+				}
+				models = append(models, management.ModelAlias{Name: mName, Alias: alias})
+			}
+		}
+	} else {
+		for _, m := range req.Models {
+			m = strings.TrimSpace(m)
+			if m != "" {
+				models = append(models, management.ModelAlias{Name: m, Alias: m})
+			}
 		}
 	}
 
@@ -421,12 +496,25 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 			return
 		}
 		newEntry := management.OpenAICompatibility{
-			Name:     name,
-			BaseURL:  baseURL,
-			Disabled: req.Disabled,
-			Models:   models,
+			Name:           name,
+			BaseURL:        baseURL,
+			Prefix:         strings.TrimSpace(req.Prefix),
+			Priority:       req.Priority,
+			DisableCooling: req.DisableCooling,
+			Disabled:       req.Disabled,
+			Models:         models,
+			Headers:        req.Headers,
 		}
-		if apiKey != "" {
+		if len(req.Keys) > 0 {
+			for _, k := range req.Keys {
+				if strings.TrimSpace(k.APIKey) != "" {
+					newEntry.APIKeyEntries = append(newEntry.APIKeyEntries, management.APIKeyEntry{
+						APIKey:   strings.TrimSpace(k.APIKey),
+						ProxyURL: strings.TrimSpace(k.ProxyURL),
+					})
+				}
+			}
+		} else if apiKey != "" {
 			newEntry.APIKeyEntries = []management.APIKeyEntry{{APIKey: apiKey}}
 		}
 		resp.Entries = append(resp.Entries, newEntry)
@@ -519,11 +607,24 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 	baseURL := strings.TrimSpace(req.BaseURL)
 	apiKey := strings.TrimSpace(req.APIKey)
 
-	models := make([]management.ModelAlias, 0, len(req.Models))
-	for _, m := range req.Models {
-		m = strings.TrimSpace(m)
-		if m != "" {
-			models = append(models, management.ModelAlias{Name: m, Alias: m})
+	models := make([]management.ModelAlias, 0)
+	if len(req.ModelEntries) > 0 {
+		for _, m := range req.ModelEntries {
+			mName := strings.TrimSpace(m.Name)
+			if mName != "" {
+				alias := strings.TrimSpace(m.Alias)
+				if alias == "" {
+					alias = mName
+				}
+				models = append(models, management.ModelAlias{Name: mName, Alias: alias})
+			}
+		}
+	} else {
+		for _, m := range req.Models {
+			m = strings.TrimSpace(m)
+			if m != "" {
+				models = append(models, management.ModelAlias{Name: m, Alias: m})
+			}
 		}
 	}
 
@@ -548,9 +649,34 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 			entry.Name = name
 		}
 		entry.BaseURL = baseURL
+		entry.Prefix = strings.TrimSpace(req.Prefix)
+		entry.Priority = req.Priority
+		entry.DisableCooling = req.DisableCooling
 		entry.Disabled = req.Disabled
 		entry.Models = models
-		if apiKey != "" {
+		entry.Headers = req.Headers
+
+		if len(req.Keys) > 0 {
+			updatedKeys := make([]management.APIKeyEntry, 0, len(req.Keys))
+			for ki, k := range req.Keys {
+				kVal := strings.TrimSpace(k.APIKey)
+				if kVal == "" {
+					if ki < len(entry.APIKeyEntries) {
+						kVal = entry.APIKeyEntries[ki].APIKey
+					} else if ki < len(entry.LegacyAPIKeys) {
+						kVal = entry.LegacyAPIKeys[ki]
+					}
+				}
+				if kVal != "" {
+					updatedKeys = append(updatedKeys, management.APIKeyEntry{
+						APIKey:   kVal,
+						ProxyURL: strings.TrimSpace(k.ProxyURL),
+					})
+				}
+			}
+			entry.APIKeyEntries = updatedKeys
+			entry.LegacyAPIKeys = nil
+		} else if apiKey != "" {
 			entry.APIKeyEntries = []management.APIKeyEntry{{APIKey: apiKey}}
 			entry.LegacyAPIKeys = nil
 		}
