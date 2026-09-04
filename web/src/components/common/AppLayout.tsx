@@ -7,14 +7,11 @@ import {
   DashboardOutlined,
   FieldTimeOutlined,
   FileProtectOutlined,
-  FileSearchOutlined,
   HistoryOutlined,
   InfoCircleOutlined,
   LoginOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  NodeIndexOutlined,
-  PartitionOutlined,
   ProfileOutlined,
   ShopOutlined,
   ThunderboltOutlined,
@@ -82,20 +79,11 @@ const navGroups: NavGroup[] = [
       { key: '/system', labelKey: 'nav.system', icon: <InfoCircleOutlined /> },
     ],
   },
-  {
-    key: 'ohmycpa',
-    labelKey: 'nav.group.ohmycpa',
-    items: [
-      { key: '/resources/triage', labelKey: 'nav.triage', icon: <FileSearchOutlined /> },
-      { key: '/resources/all', labelKey: 'nav.all_resources', icon: <PartitionOutlined /> },
-      { key: '/instances', labelKey: 'nav.instances', icon: <NodeIndexOutlined /> },
-    ],
-  },
 ];
 
 const navEntries: NavEntry[] = navGroups.flatMap((group) => group.items);
 
-function buildMenuItems(t: TFunc, collapsed: boolean, unclaimedCount: number): NavItem[] {
+function buildMenuItems(t: TFunc, collapsed: boolean): NavItem[] {
   if (collapsed) {
     return navEntries.map((entry) => ({ key: entry.key, icon: entry.icon, label: t(entry.labelKey), title: t(entry.labelKey) }));
   }
@@ -106,12 +94,7 @@ function buildMenuItems(t: TFunc, collapsed: boolean, unclaimedCount: number): N
     children: group.items.map((entry): NavItem => ({
       key: entry.key,
       icon: entry.icon,
-      label: entry.key === '/resources/triage' && unclaimedCount > 0 ? (
-        <span className="nav-label-with-count">
-          <span>{t(entry.labelKey)}</span>
-          <span className="nav-count">{unclaimedCount > 99 ? '99+' : unclaimedCount}</span>
-        </span>
-      ) : t(entry.labelKey),
+      label: t(entry.labelKey),
     })),
   }));
 }
@@ -156,26 +139,10 @@ export const AppLayout: React.FC = () => {
     refetchInterval: 15000,
   });
 
-  const { data: unclaimedData } = useQuery({
-    queryKey: ['resources', 'unclaimed'],
-    queryFn: () => api.getResources({ status: 'unclaimed' }),
-    staleTime: 10000,
-  });
-
   const logoutMutation = useMutation({
     mutationFn: api.logout,
     onSuccess: () => window.location.reload(),
     onError: (err: Error) => message.error(t('shell.logout_failed', { msg: err.message })),
-  });
-
-  const discoverMutation = useMutation({
-    mutationFn: api.discoverDefaultInstance,
-    onSuccess: (result) => {
-      message.success(t('shell.discover_done', { n: result.discovered_count }));
-      queryClient.invalidateQueries({ queryKey: ['resources'] });
-      queryClient.invalidateQueries({ queryKey: ['management-overview'] });
-    },
-    onError: (err: Error) => message.error(t('shell.discover_failed', { msg: err.message })),
   });
 
   const selectedKey = navEntries
@@ -184,10 +151,7 @@ export const AppLayout: React.FC = () => {
     .sort((a, b) => b.length - a.length)[0] ?? '/dashboard';
   const currentEntry = navEntries.find((entry) => entry.key === selectedKey);
   const currentGroup = navGroups.find((group) => group.items.some((entry) => entry.key === selectedKey));
-  const menuItems = React.useMemo(
-    () => buildMenuItems(t, collapsed, unclaimedData?.total ?? 0),
-    [t, collapsed, unclaimedData?.total]
-  );
+  const menuItems = React.useMemo(() => buildMenuItems(t, collapsed), [t, collapsed]);
 
   const selectPage = ({ key }: { key: string }) => {
     navigate(key);
@@ -313,8 +277,8 @@ export const AppLayout: React.FC = () => {
           </div>
           <HeaderNav
             health={health}
-            isDiscovering={discoverMutation.isPending}
-            onDiscover={() => discoverMutation.mutate()}
+            isDiscovering={false}
+            onDiscover={() => { void queryClient.invalidateQueries(); message.success(t('common.refresh')); }}
             onLogout={() => logoutMutation.mutate()}
             isLoggingOut={logoutMutation.isPending}
             themeMode={themeMode}
@@ -329,7 +293,7 @@ export const AppLayout: React.FC = () => {
               swapping, and the scroll position resets with the new page. */}
           <div key={location.pathname} className="route-transition">
             <React.Suspense fallback={<div style={{ padding: 60, textAlign: 'center' }}><Spin size="large" /></div>}>
-              <Outlet context={{ triggerDiscovery: () => discoverMutation.mutate(), isDiscovering: discoverMutation.isPending }} />
+              <Outlet />
             </React.Suspense>
           </div>
         </Content>

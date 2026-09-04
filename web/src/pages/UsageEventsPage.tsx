@@ -319,7 +319,7 @@ export const UsageEventsPage: React.FC = () => {
         ),
     },
     {
-      title: t('allres.col_actions'),
+      title: t('common.actions'),
       key: 'actions',
       width: 80,
       align: 'right',

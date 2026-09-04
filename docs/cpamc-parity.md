@@ -48,7 +48,6 @@
 | 运行自检/诊断 | `system_info` | CPA 探活、管理端点能力探测、脱敏诊断导出 | 已覆盖 | 组件健康拓扑、脱敏诊断包下载、强审计保护 |
 | 任意上游 API Call | provider/调试操作 | CPA `POST /api-call` | 计划（显式开关） | 默认关闭；开启前需 SSRF/审计/目标限制设计 |
 | 多 CPA 实例 | 顶部连接/系统信息 | Oh My CPA 自有实例模型 | 计划 | 增加实例 CRUD、密钥轮换、实例级权限后实现 |
-| Oh My CPA 资源身份层 | 待整理/所有资源 | Oh My CPA 自有 `/api/v1/resources*` | 已覆盖 | 保持用户名称、图标、颜色、备注和状态不被 rediscovery 覆盖 |
 
 ## 当前实现顺序
 

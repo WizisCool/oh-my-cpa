@@ -13,11 +13,8 @@ import { createThemeConfig, type ThemeMode } from './theme/themeConfig';
 import { AppLayout } from './components/common/AppLayout';
 import { AuthGate } from './components/common/AuthGate';
 
-const TriagePage = React.lazy(() => import('./pages/TriagePage').then(m => ({ default: m.TriagePage })));
-const AllResourcesPage = React.lazy(() => import('./pages/AllResourcesPage').then(m => ({ default: m.AllResourcesPage })));
 const UsageEventsPage = React.lazy(() => import('./pages/UsageEventsPage').then(m => ({ default: m.UsageEventsPage })));
 const ProvidersPage = React.lazy(() => import('./pages/ProvidersPage').then(m => ({ default: m.ProvidersPage })));
-const InstanceStatusPage = React.lazy(() => import('./pages/InstanceStatusPage').then(m => ({ default: m.InstanceStatusPage })));
 const DashboardPage = React.lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
 const QuickStartPage = React.lazy(() => import('./pages/QuickStartPage').then(m => ({ default: m.QuickStartPage })));
 const LogsPage = React.lazy(() => import('./pages/LogsPage').then(m => ({ default: m.LogsPage })));
@@ -114,9 +111,6 @@ const AppRoutes: React.FC = () => {
         { path: 'plugins', element: <PluginsPage /> },
         { path: 'plugin-store', element: <PluginStorePage /> },
         { path: 'system', element: <SystemPage /> },
-        { path: 'resources/triage', element: <TriagePage /> },
-        { path: 'resources/all', element: <AllResourcesPage /> },
-        { path: 'instances', element: <InstanceStatusPage /> },
         { path: '*', element: <Navigate to="/dashboard" replace /> },
       ],
     }],

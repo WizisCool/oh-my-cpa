@@ -241,7 +241,7 @@ export const ProvidersPage: React.FC = () => {
       ),
     },
     {
-      title: t('allres.col_actions'),
+      title: t('common.actions'),
       key: 'actions',
       width: 120,
       align: 'right',
