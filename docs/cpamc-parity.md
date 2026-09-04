@@ -18,7 +18,7 @@
 | --- | --- | --- | --- | --- |
 | 管理员登录与连接状态 | 登录、顶部连接胶囊 | 本地 session；服务端调用 `/auth-files` 探活 | 已覆盖 | 登录/登出、无效 session、CPA 断连手工验证 |
 | 仪表盘连接、版本、数量、模型概览 | `dashboard` | `/config`、`/auth-files`、`/api-key-usage`、`/latest-version` | 进行中 | 真实 CPA fixture + 空态/断连态 |
-| 快速开始与请求示例 | `quick_start` | `/config`、`/api-keys`、固定代理端点 | 进行中 | 从真实配置生成 URL、复制示例 |
+| 快速开始与请求示例 | `quick_start` | `/config`、`/api-keys`、固定代理端点 | 已覆盖 | 四步式向导、多客户端配置、端点及 cURL/Python/Node.js 代码示例复制 |
 | 配置读取 | `config_management` | `GET /config`、`GET /config.yaml` | 已覆盖（已对真实 CPA 7.2.146 验证） | 读取并显示真实 JSON/YAML |
 | 配置可视化标量编辑 | `config_management` | `/debug`、`/proxy-url`、`/request-log`、`/logging-to-file`、`/usage-statistics-enabled`、`/request-retry`、`/max-retry-*`、`/ws-auth`、`/force-model-prefix`、`/routing/strategy` | 已覆盖（已对真实 CPA 7.2.146 验证） | 每个白名单端点的 GET/PUT 合约测试与乐观交互 |
 | 配置源码编辑与保存 | `config_management` | `PUT /config.yaml` | 已覆盖（已对真实 CPA 7.2.146 验证） | YAML 错误 400、配置错误 422、脏状态保护、Ctrl+S 快捷保存 |

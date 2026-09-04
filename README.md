@@ -135,7 +135,7 @@ Login sends the CPA management key (`{"password":"<management-key>"}` at `POST /
 - 日常与普通 API 响应（`/resources`、`/management/auth-files`、`/management/config`、`/usage/events`、`/management/dashboard`、`/healthz`）采用严格 DTO allowlist 与字段脱敏，不暴露 API Key、OAuth Token、Account、原始 Auth File 内容或带凭据的 URL；
 - 原始 Auth File 下载、原始配置 YAML 查看与编辑、request-log 下载属于显式高意图管理员受限操作，必须具备有效会话与同源校验，响应头标记 `Cache-Control: no-store`，并写入追加写入的 `audit_events` 审计日志；审计写失败时系统 fail-closed，阻止敏感数据导出与破坏性变更；
 - 数据库升级至 004 时执行不可逆脱敏与历史数据清理，迁移前自动执行可用磁盘空间检查、AES-GCM 加密备份、SHA-256 校验和及还原 smoke 验证，并按策略保留最近备份；
-- 当前版本的 `api-call`、完整配置写回、OAuth 编排和用量订阅尚未开放；
+- 当前版本的任意上游 `POST /api-call` 具有 SSRF 风险默认保持关闭，所有管理写操作均通过强类型白名单端点执行；
 - SQLite 部署必须保持单 Oh My CPA 副本；
 - 不应把 CPA Management API 直接暴露到公网；
 - `OMCPA_MASTER_KEY` 丢失后无法解密已保存的密文。

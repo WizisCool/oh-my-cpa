@@ -1358,3 +1358,36 @@ Codex 完成全部或一个阶段时，必须输出：
   - `pnpm verify:e2e` 88 项端到端检查全数通过（新增 `/plugins` 与 `/plugin-store` 真实页面渲染、390px 视口无溢出、全量凭据排除等）。
 - 剩余风险与已知限制：
   - 插件商店当前按 CPA 实例配置的 Store 源读取与执行安装，不支持任意不可信源注入。
+
+## 阶段 8 执行记录（性能、部署、安全运营与发布准备）
+
+- 目标达成：
+  1. 前端性能调优与 Bundle Budget 达成：
+     - 在 `web/src/App.tsx` 中全面实施全路由动态按需加载（`React.lazy` + `React.Suspense`）；
+     - 分离高负载第三方依赖（`vendor-react`、`vendor-antd`、`vendor-charts`、`vendor-query`），Monaco 仅在源码模式按需加载；
+     - 主入口构建产物由基线 1.85 MB 骤降至 97.43 kB（gzip 33.75 kB），达成降幅超 94%；
+     - 引入 `scripts/check-bundle-budget.mjs` 并集成至端到端验收门禁，确保主入口体积严格低于 250 kB 预算。
+  2. 登录限流、审计扩展与安全响应头：
+     - 实现有界来源 IP 限流与指数退避拦截器 `internal/api/login_limiter.go`，防范密码爆破并记录审计；
+     - 严格识别受信任反向代理地址，阻断伪造 `X-Forwarded-For` 绕过限流与审计；
+     - 挂载全局安全头中间件：强制执行 `X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`X-Frame-Options: SAMEORIGIN`、`Permissions-Policy`、`Content-Security-Policy-Report-Only` 与条件式 HSTS；
+     - 新增管理审计日志列表与完整归档导出接口（`GET /api/v1/management/audit/events` 与 `GET /api/v1/management/audit/export`）。
+  3. 容器与供应链安全加固：
+     - `Dockerfile` 运行环境切换为非 root 专属用户（UID/GID 10001:10001）；
+     - `deploy/compose.full.yml` 与 `deploy/compose.omc.yml` 强制开启只读根文件系统（`read_only: true`）、`cap_drop: [ALL]` 与 `no-new-privileges: true`；
+     - CPA 基础镜像由 `latest` 固定至版本 `v7.2.146`，且 `pull_policy` 改为 `if_not_present`；
+     - 全栈补充容器健康检查（Healthcheck）与就绪依赖条件（`service_healthy`）。
+  4. SQLite 运维与完整灾备恢复手册：
+     - 产出专业级运维手册 `docs/ops/sqlite-operations.md`，规范化 WAL 模式在线 `VACUUM INTO` 备份、SHA-256 校验和、恢复演练、主密钥治理与单副本限制；
+     - 新增自动化验证脚本 `scripts/sqlite-ops.mjs`，在纯 Go 环境下通过测试用例验证完整性。
+  5. 快速上手指引与发布前文档收口：
+     - 新增 `web/src/pages/QuickStartPage.tsx`，彻底取代 `/quick-start` 占位符，提供四步接入向导与可复制 cURL、Python、Node.js 示例；
+     - 更新 `README.md` 与 `docs/cpamc-parity.md`，如实反映全部 14 个核心功能页面与安全边界。
+- 验证结果：
+  - `go test ./...` 全部通过；
+  - `go vet ./...` 零警告；
+  - `pnpm type-check`、`pnpm check-i18n`、`pnpm test:i18n`、`pnpm test:payload`、`pnpm test:config-states`、`node --experimental-strip-types scripts/test-dirty.ts` 全部通过；
+  - `pnpm lint:antd` 通过（0 a11y、0 usage、0 performance）；
+  - `pnpm build` 顺利完成，主入口 97.43 kB；
+  - `pnpm verify:secrets:worktree` 与 `pnpm verify:secrets:history` 零泄漏；
+  - `pnpm verify:e2e` 89 项端到端检查全数通过（新增 bundle budget 验证、快速上手页面渲染等）。
