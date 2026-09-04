@@ -1,13 +1,13 @@
 export interface ClientAPIKeyItem {
   index: number;
-  masked: string;
+  key: string;
   fingerprint: string;
   length: number;
 }
 
 export interface ProviderKeyEntry {
   index: number;
-  masked: string;
+  api_key: string;
   proxy_url?: string;
   weight?: number;
 }
@@ -37,7 +37,7 @@ export interface ProviderItem {
   model_entries?: ProviderModelItem[];
   disabled: boolean;
   key_configured: boolean;
-  key_masked?: string;
+  api_key?: string;
   key_entries?: ProviderKeyEntry[];
   headers?: Record<string, string>;
   proxy_configured?: boolean;

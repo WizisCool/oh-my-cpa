@@ -275,8 +275,8 @@ export const api = {
     return request<{ keys: ClientAPIKeyItem[]; total: number }>('/management/api-keys', { method: 'GET' });
   },
 
-  async createClientAPIKey(key: string): Promise<{ status: string; index: number; masked: string }> {
-    return request<{ status: string; index: number; masked: string }>('/management/api-keys', {
+  async createClientAPIKey(key: string): Promise<{ status: string; index: number; key: string }> {
+    return request<{ status: string; index: number; key: string }>('/management/api-keys', {
       method: 'POST',
       body: JSON.stringify({ key }),
     });

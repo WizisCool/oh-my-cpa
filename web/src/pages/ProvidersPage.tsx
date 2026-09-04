@@ -10,9 +10,7 @@ import {
   Switch,
   Alert,
   Drawer,
-  Modal,
   Tooltip,
-  Tabs,
   Popconfirm,
   Form,
   Select,
@@ -28,10 +26,6 @@ import {
   DeleteOutlined,
   EditOutlined,
   EyeOutlined,
-  CopyOutlined,
-  KeyOutlined,
-  ThunderboltOutlined,
-  CloudServerOutlined,
   CloseOutlined,
   UpOutlined,
   DownOutlined,
@@ -42,8 +36,8 @@ import { useT } from '../i18n';
 import { usePreference } from '../hooks/usePreference';
 import { LobeIcon, getProviderDefaultIcon } from '../components/LobeIcon';
 import { IconPickerModal } from '../components/IconPickerModal';
+import { MaskedText } from '../components/MaskedText';
 import type {
-  ClientAPIKeyItem,
   ProviderItem,
   SaveProviderPayload,
   SaveProviderKeyItem,
@@ -65,7 +59,6 @@ const THINKING_LEVEL_OPTIONS = [
 
 interface FormKeyItem {
   id: string;
-  masked?: string;
   apiKey?: string;
   proxyUrl?: string;
   weight?: number;
@@ -141,8 +134,6 @@ export const ProvidersPage: React.FC = () => {
   const t = useT();
   const { message } = AntdApp.useApp();
   const queryClient = useQueryClient();
-
-  const [activeTab, setActiveTab] = useState<'providers' | 'keys'>('providers');
 
   // Provider Drawer state
   const [providerDrawerOpen, setProviderDrawerOpen] = useState(false);
@@ -341,7 +332,7 @@ export const ProvidersPage: React.FC = () => {
   };
 
   const handleTestKey = (k: FormKeyItem, idx: number) => {
-    if (!k.masked && (!k.apiKey || !k.apiKey.trim())) {
+    if (!k.apiKey || !k.apiKey.trim()) {
       message.warning(t('pro.test_key_empty'));
       return;
     }
@@ -353,7 +344,7 @@ export const ProvidersPage: React.FC = () => {
   };
 
   const handleTestAllKeys = () => {
-    const hasAny = formKeys.some((k) => k.masked || (k.apiKey && k.apiKey.trim() !== ''));
+    const hasAny = formKeys.some((k) => k.apiKey && k.apiKey.trim() !== '');
     if (!hasAny) {
       message.warning(t('pro.test_key_empty'));
       return;
@@ -364,17 +355,6 @@ export const ProvidersPage: React.FC = () => {
       message.success(t('pro.test_all_ok', { count: formKeys.length }));
     }, 550);
   };
-
-  function maskPreview(key?: string, masked?: string): string {
-    if (masked) return masked;
-    if (!key) return '';
-    const trimmed = key.trim();
-    if (!trimmed) return '';
-    if (trimmed.length <= 8) return '••••••••';
-    const prefix = trimmed.slice(0, 2);
-    const suffix = trimmed.slice(-2);
-    return `${prefix}******${suffix}`;
-  }
 
   // ── 1. Providers Query & Mutations ────────────────────────────────────────
   const {
@@ -495,23 +475,23 @@ export const ProvidersPage: React.FC = () => {
       getProviderDefaultIcon(provider.family, provider.name, provider.base_url);
     setFormIcon(existingIcon);
     setIconManuallySelected(Boolean(providerIcons[provider.id] || providerIcons[provider.name]));
-    // Populate keys
+    // Populate keys (plaintext — the tool mirrors the CPA config file as-is)
     if (provider.key_entries && provider.key_entries.length > 0) {
       setFormKeys(
         provider.key_entries.map((k, i) => ({
           id: `key-edit-${i}`,
-          masked: k.masked,
+          apiKey: k.api_key || '',
           proxyUrl: k.proxy_url,
           weight: k.weight ?? 1,
           isChanging: false,
         }))
       );
       setExpandedKeyIds(new Set());
-    } else if (provider.key_masked) {
+    } else if (provider.api_key) {
       setFormKeys([
         {
           id: 'key-edit-0',
-          masked: provider.key_masked,
+          apiKey: provider.api_key,
           weight: 1,
           isChanging: false,
         },
@@ -627,66 +607,7 @@ export const ProvidersPage: React.FC = () => {
     }
   };
 
-  // ── 2. Client API Keys ────────────────────────────────────────────────────
-  const {
-    data: keysData,
-    isLoading: keysLoading,
-    isFetching: keysFetching,
-    isError: keysError,
-    error: keysErr,
-    refetch: refetchKeys,
-  } = useQuery({
-    queryKey: ['management-client-api-keys'],
-    queryFn: api.getClientAPIKeys,
-    staleTime: 30000,
-  });
-
-  const keys = keysData?.keys || [];
-
-  const [addKeyModalOpen, setAddKeyModalOpen] = useState(false);
-  const [newKeyInput, setNewKeyInput] = useState('');
-  const [createdKeyPlaintext, setCreatedKeyPlaintext] = useState<string | null>(null);
-
-  const createKeyMutation = useMutation({
-    mutationFn: (key: string) => api.createClientAPIKey(key),
-    onSuccess: () => {
-      message.success(t('pro.key_created'));
-      setCreatedKeyPlaintext(newKeyInput);
-      setNewKeyInput('');
-      setAddKeyModalOpen(false);
-      void queryClient.invalidateQueries({ queryKey: ['management-client-api-keys'] });
-    },
-    onError: (err: unknown) => {
-      const msg = err instanceof ApiError ? err.message : String(err);
-      message.error(msg);
-    },
-  });
-
-  const deleteKeyMutation = useMutation({
-    mutationFn: (index: number) => api.deleteClientAPIKey(index),
-    onSuccess: () => {
-      message.success(t('pro.key_deleted'));
-      void queryClient.invalidateQueries({ queryKey: ['management-client-api-keys'] });
-    },
-    onError: (err: unknown) => {
-      const msg = err instanceof ApiError ? err.message : String(err);
-      message.error(msg);
-    },
-  });
-
-  const handleGenerateRandomKey = () => {
-    const array = new Uint8Array(24);
-    crypto.getRandomValues(array);
-    const randomHex = Array.from(array, (b) => b.toString(16).padStart(2, '0')).join('');
-    setNewKeyInput(`omc-sk-${randomHex}`);
-  };
-
-  const handleCopy = (text: string) => {
-    void navigator.clipboard.writeText(text).then(() => {
-      message.success(t('res.copied'));
-    });
-  };
-
+  // ── 2. Shared helpers ─────────────────────────────────────────────────────
   const familyDisplayNames: Record<string, string> = {
     'openai-compatibility': t(PROTOCOL_META['openai-compatibility'].labelKey),
     'codex': t(PROTOCOL_META['codex'].labelKey),
@@ -734,9 +655,9 @@ export const ProvidersPage: React.FC = () => {
               <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--fg)' }}>
                 {record.name}
               </div>
-              {record.key_masked && (
-                <div style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--meta)', marginTop: 2 }}>
-                  {record.key_masked}
+              {record.api_key && (
+                <div style={{ marginTop: 2, maxWidth: 240 }}>
+                  <MaskedText value={record.api_key} />
                 </div>
               )}
             </div>
@@ -965,52 +886,6 @@ export const ProvidersPage: React.FC = () => {
     },
   ];
 
-    // Client Key Columns
-  const keyColumns: ColumnsType<ClientAPIKeyItem> = [
-    {
-      title: '#',
-      key: 'index',
-      width: 60,
-      render: (_, r) => <span className="mono-num">#{r.index + 1}</span>,
-    },
-    {
-      title: t('pro.col_key'),
-      key: 'masked',
-      render: (_, r) => <span className="mono-num" style={{ fontWeight: 600 }}>{r.masked}</span>,
-    },
-    {
-      title: 'Fingerprint (HMAC)',
-      key: 'fingerprint',
-      render: (_, r) => (
-        <span className="mono-num" style={{ fontSize: 11, color: 'var(--meta)' }}>
-          {r.fingerprint}
-        </span>
-      ),
-    },
-    {
-      title: t('common.actions'),
-      key: 'actions',
-      width: 120,
-      align: 'right',
-      render: (_, r) => (
-        <Popconfirm
-          title={t('pro.delete_key_confirm')}
-          onConfirm={() => deleteKeyMutation.mutate(r.index)}
-          okText={t('common.confirm')}
-          cancelText={t('common.cancel')}
-        >
-          <Button
-            size="small"
-            type="text"
-            danger
-            icon={<DeleteOutlined />}
-            loading={deleteKeyMutation.isPending}
-          />
-        </Popconfirm>
-      ),
-    },
-  ];
-
   return (
     <div className="terminal-page providers-page">
       <div className="terminal-page-head">
@@ -1021,113 +896,46 @@ export const ProvidersPage: React.FC = () => {
 
         <Button
           size="small"
-          icon={<SyncOutlined spin={activeTab === 'providers' ? providersFetching : keysFetching} />}
-          onClick={() => {
-            if (activeTab === 'providers') void refetchProviders();
-            else void refetchKeys();
-          }}
+          icon={<SyncOutlined spin={providersFetching} />}
+          onClick={() => void refetchProviders()}
         >
           {t('common.refresh')}
         </Button>
       </div>
 
-      <Tabs
-        activeKey={activeTab}
-        onChange={(k) => setActiveTab(k as 'providers' | 'keys')}
-        items={[
-          {
-            key: 'providers',
-            label: (
-              <span>
-                <CloudServerOutlined style={{ marginRight: 6 }} />
-                {t('pro.tab_providers')} ({providers.length})
-              </span>
-            ),
-            children: (
-              <div>
-                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
-                  <Button
-                    type="primary"
-                    icon={<PlusOutlined />}
-                    onClick={handleOpenCreate}
-                  >
-                    {t('pro.add_provider')}
-                  </Button>
-                </div>
+      <div>
+        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={handleOpenCreate}
+          >
+            {t('pro.add_provider')}
+          </Button>
+        </div>
 
-                {providersError && (
-                  <Alert
-                    type="error"
-                    showIcon
-                    style={{ marginBottom: 16 }}
-                    description={`${t('common.save_failed', { msg: providersErr instanceof Error ? providersErr.message : String(providersErr) })}`}
-                  />
-                )}
+        {providersError && (
+          <Alert
+            type="error"
+            showIcon
+            style={{ marginBottom: 16 }}
+            description={`${t('common.save_failed', { msg: providersErr instanceof Error ? providersErr.message : String(providersErr) })}`}
+          />
+        )}
 
-                <Card>
-                  <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                    <Table
-                      columns={providerColumns}
-                      dataSource={providers}
-                      rowKey="id"
-                      loading={providersLoading}
-                      pagination={false}
-                      locale={{ emptyText: t('pro.providers_empty') }}
-                    />
-                  </div>
-                </Card>
-              </div>
-            ),
-          },
-          {
-            key: 'keys',
-            label: (
-              <span>
-                <KeyOutlined style={{ marginRight: 6 }} />
-                {t('pro.tab_keys')} ({keys.length})
-              </span>
-            ),
-            children: (
-              <div>
-                {keysError && (
-                  <Alert
-                    type="error"
-                    showIcon
-                    style={{ marginBottom: 16 }}
-                    description={`${t('common.save_failed', { msg: keysErr instanceof Error ? keysErr.message : String(keysErr) })}`}
-                  />
-                )}
-
-                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
-                  <Button
-                    type="primary"
-                    icon={<PlusOutlined />}
-                    onClick={() => {
-                      setNewKeyInput('');
-                      setAddKeyModalOpen(true);
-                    }}
-                  >
-                    {t('pro.add_key')}
-                  </Button>
-                </div>
-
-                <Card>
-                  <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                    <Table
-                      columns={keyColumns}
-                      dataSource={keys}
-                      rowKey="index"
-                      loading={keysLoading}
-                      pagination={false}
-                      locale={{ emptyText: t('pro.keys_empty') }}
-                    />
-                  </div>
-                </Card>
-              </div>
-            ),
-          },
-        ]}
-      />
+        <Card>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <Table
+              columns={providerColumns}
+              dataSource={providers}
+              rowKey="id"
+              loading={providersLoading}
+              pagination={false}
+              locale={{ emptyText: t('pro.providers_empty') }}
+            />
+          </div>
+        </Card>
+      </div>
 
       {/* Provider Rich Drawer */}
       <Drawer
@@ -1434,7 +1242,7 @@ export const ProvidersPage: React.FC = () => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {formKeys.map((k, idx) => {
                     const isExpanded = expandedKeyIds.has(k.id);
-                    const displayMasked = maskPreview(k.apiKey, k.masked);
+                    const displayKey = (k.apiKey || '').trim();
 
                     return (
                       <div
@@ -1466,18 +1274,8 @@ export const ProvidersPage: React.FC = () => {
                             style={{ display: 'flex', alignItems: 'center', gap: 12 }}
                             onClick={(e) => e.stopPropagation()}
                           >
-                            {displayMasked && (
-                              <span
-                                style={{
-                                  fontFamily: 'monospace',
-                                  fontWeight: 600,
-                                  fontSize: 13,
-                                  color: 'var(--fg)',
-                                  letterSpacing: '0.5px',
-                                }}
-                              >
-                                {displayMasked}
-                              </span>
+                            {displayKey && (
+                              <MaskedText value={displayKey} style={{ maxWidth: 240, fontSize: 13, fontWeight: 600, color: 'var(--fg)' }} />
                             )}
                             <Button
                               type="link"
@@ -1545,7 +1343,7 @@ export const ProvidersPage: React.FC = () => {
                                     )
                                   )
                                 }
-                                placeholder={k.masked ? t('pro.key_ph_no_change') : t('pro.field_key_ph_create')}
+                                placeholder={t('pro.field_key_ph_create')}
                                 style={{ width: '100%' }}
                               />
                             </div>
@@ -2019,61 +1817,6 @@ export const ProvidersPage: React.FC = () => {
         </Form>
       </Drawer>
 
-      {/* Add Client Key Modal */}
-      <Modal
-        title={t('pro.add_key_title')}
-        open={addKeyModalOpen}
-        onCancel={() => setAddKeyModalOpen(false)}
-        onOk={() => createKeyMutation.mutate(newKeyInput)}
-        confirmLoading={createKeyMutation.isPending}
-        okButtonProps={{ disabled: !newKeyInput.trim() }}
-        okText={t('common.confirm')}
-        cancelText={t('common.cancel')}
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
-          <Input
-            value={newKeyInput}
-            onChange={(e) => setNewKeyInput(e.target.value)}
-            placeholder={t('pro.key_placeholder')}
-          />
-          <div>
-            <Button
-              icon={<ThunderboltOutlined />}
-              onClick={handleGenerateRandomKey}
-            >
-              {t('pro.generate_key')}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Single-view Key Display Modal */}
-      <Modal
-        title={t('pro.key_created_title')}
-        open={!!createdKeyPlaintext}
-        onOk={() => setCreatedKeyPlaintext(null)}
-        onCancel={() => setCreatedKeyPlaintext(null)}
-        okText={t('common.confirm')}
-        cancelButtonProps={{ style: { display: 'none' } }}
-      >
-        <Alert
-          type="warning"
-          showIcon
-          style={{ marginBottom: 16, marginTop: 12 }}
-          description={t('pro.key_created_desc')}
-        />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Input
-            readOnly
-            value={createdKeyPlaintext || ''}
-            style={{ fontFamily: 'monospace', fontWeight: 600 }}
-          />
-          <Button
-            icon={<CopyOutlined />}
-            onClick={() => handleCopy(createdKeyPlaintext || '')}
-          />
-        </div>
-      </Modal>
       {/* LobeHub Icon Picker Modal */}
       <IconPickerModal
         open={iconPickerOpen}

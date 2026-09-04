@@ -19,14 +19,14 @@ import (
 
 type ClientAPIKeyItemDTO struct {
 	Index       int    `json:"index"`
-	Masked      string `json:"masked"`
+	Key         string `json:"key"`
 	Fingerprint string `json:"fingerprint"`
 	Length      int    `json:"length"`
 }
 
 type ProviderKeyEntryDTO struct {
 	Index    int    `json:"index"`
-	Masked   string `json:"masked"`
+	APIKey   string `json:"api_key"`
 	ProxyURL string `json:"proxy_url,omitempty"`
 	Weight   *int   `json:"weight,omitempty"`
 }
@@ -56,7 +56,7 @@ type ProviderItemDTO struct {
 	ModelEntries    []ProviderModelDTO    `json:"model_entries,omitempty"`
 	Disabled        bool                  `json:"disabled"`
 	KeyConfigured   bool                  `json:"key_configured"`
-	KeyMasked       string                `json:"key_masked,omitempty"`
+	APIKey          string                `json:"api_key,omitempty"`
 	KeyEntries      []ProviderKeyEntryDTO `json:"key_entries,omitempty"`
 	Headers         map[string]string     `json:"headers,omitempty"`
 	ProxyConfigured bool                  `json:"proxy_configured"`
@@ -81,7 +81,7 @@ func (h *Handler) listClientAPIKeys(writer http.ResponseWriter, request *http.Re
 		fp := security.FingerprintOrRedacted(h.cipher, "client-key", trimmed)
 		items = append(items, ClientAPIKeyItemDTO{
 			Index:       i,
-			Masked:      maskSecretKey(trimmed),
+			Key:         trimmed,
 			Fingerprint: fp,
 			Length:      len(trimmed),
 		})
@@ -137,7 +137,7 @@ func (h *Handler) createClientAPIKey(writer http.ResponseWriter, request *http.R
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"status": "ok",
 		"index":  len(currentKeys),
-		"masked": maskSecretKey(newKey),
+		"key":    newKey,
 	})
 }
 
@@ -318,7 +318,7 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 			if strings.TrimSpace(entry.APIKey) != "" {
 				keyEntries = append(keyEntries, ProviderKeyEntryDTO{
 					Index:    0,
-					Masked:   maskSecretKey(entry.APIKey),
+					APIKey:   entry.APIKey,
 					ProxyURL: entry.ProxyURL,
 					Weight:   entry.Weight,
 				})
@@ -339,7 +339,7 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 				Family:          "codex",
 				Name:            name,
 				Protocol:        "OpenAI Responses",
-				BaseURL:         security.PublicURL(entry.BaseURL),
+				BaseURL:         entry.BaseURL,
 				Prefix:          entry.Prefix,
 				Priority:        entry.Priority,
 				DisableCooling:  disableCoolingVal,
@@ -348,7 +348,7 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 				ModelEntries:    modelEntries,
 				Disabled:        isDisabled,
 				KeyConfigured:   strings.TrimSpace(entry.APIKey) != "",
-				KeyMasked:       maskSecretKey(entry.APIKey),
+				APIKey:          entry.APIKey,
 				KeyEntries:      keyEntries,
 				Headers:         entry.Headers,
 				ProxyConfigured: strings.TrimSpace(entry.ProxyURL) != "",
@@ -394,15 +394,15 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 			for ki, k := range entry.APIKeyEntries {
 				keyEntries = append(keyEntries, ProviderKeyEntryDTO{
 					Index:    ki,
-					Masked:   maskSecretKey(k.APIKey),
+					APIKey:   k.APIKey,
 					ProxyURL: k.ProxyURL,
 					Weight:   k.Weight,
 				})
 			}
 			for ki, k := range entry.LegacyAPIKeys {
 				keyEntries = append(keyEntries, ProviderKeyEntryDTO{
-					Index:  len(entry.APIKeyEntries) + ki,
-					Masked: maskSecretKey(k),
+					Index: len(entry.APIKeyEntries) + ki,
+					APIKey: k,
 				})
 			}
 
@@ -411,7 +411,7 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 				Family:          "openai-compatibility",
 				Name:            name,
 				Protocol:        "OpenAI Chat Completions",
-				BaseURL:         security.PublicURL(entry.BaseURL),
+				BaseURL:         entry.BaseURL,
 				Prefix:          entry.Prefix,
 				Priority:        entry.Priority,
 				DisableCooling:  entry.DisableCooling,
@@ -419,7 +419,7 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 				ModelEntries:    modelEntries,
 				Disabled:        entry.Disabled,
 				KeyConfigured:   hasKey,
-				KeyMasked:       maskSecretKey(firstKey),
+				APIKey:          firstKey,
 				KeyEntries:      keyEntries,
 				Headers:         entry.Headers,
 				ProxyConfigured: false,
@@ -460,7 +460,7 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 			if strings.TrimSpace(entry.APIKey) != "" {
 				keyEntries = append(keyEntries, ProviderKeyEntryDTO{
 					Index:    0,
-					Masked:   maskSecretKey(entry.APIKey),
+					APIKey:   entry.APIKey,
 					ProxyURL: entry.ProxyURL,
 					Weight:   entry.Weight,
 				})
@@ -481,7 +481,7 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 				Family:          "claude",
 				Name:            name,
 				Protocol:        "Anthropic Messages",
-				BaseURL:         security.PublicURL(entry.BaseURL),
+				BaseURL:         entry.BaseURL,
 				Prefix:          entry.Prefix,
 				Priority:        entry.Priority,
 				DisableCooling:  disableCoolingVal,
@@ -490,7 +490,7 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 				ModelEntries:    modelEntries,
 				Disabled:        isDisabled,
 				KeyConfigured:   strings.TrimSpace(entry.APIKey) != "",
-				KeyMasked:       maskSecretKey(entry.APIKey),
+				APIKey:          entry.APIKey,
 				KeyEntries:      keyEntries,
 				Headers:         entry.Headers,
 				ProxyConfigured: strings.TrimSpace(entry.ProxyURL) != "",
@@ -531,7 +531,7 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 			if strings.TrimSpace(entry.APIKey) != "" {
 				keyEntries = append(keyEntries, ProviderKeyEntryDTO{
 					Index:    0,
-					Masked:   maskSecretKey(entry.APIKey),
+					APIKey:   entry.APIKey,
 					ProxyURL: entry.ProxyURL,
 					Weight:   entry.Weight,
 				})
@@ -552,7 +552,7 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 				Family:          "gemini",
 				Name:            name,
 				Protocol:        "Gemini Generate Content",
-				BaseURL:         security.PublicURL(entry.BaseURL),
+				BaseURL:         entry.BaseURL,
 				Prefix:          entry.Prefix,
 				Priority:        entry.Priority,
 				DisableCooling:  disableCoolingVal,
@@ -561,7 +561,7 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 				ModelEntries:    modelEntries,
 				Disabled:        isDisabled,
 				KeyConfigured:   strings.TrimSpace(entry.APIKey) != "",
-				KeyMasked:       maskSecretKey(entry.APIKey),
+				APIKey:          entry.APIKey,
 				KeyEntries:      keyEntries,
 				Headers:         entry.Headers,
 				ProxyConfigured: strings.TrimSpace(entry.ProxyURL) != "",
@@ -633,21 +633,6 @@ func (h *Handler) patchManagementProviderStatus(writer http.ResponseWriter, requ
 		"index":    req.Index,
 		"disabled": req.Disabled,
 	})
-}
-
-func maskSecretKey(key string) string {
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return ""
-	}
-	if len(key) <= 8 {
-		return "••••••••"
-	}
-	prefixLen := 4
-	if len(key) < 12 {
-		prefixLen = 2
-	}
-	return key[:prefixLen] + "••••••••" + key[len(key)-4:]
 }
 
 type SaveProviderKeyEntry struct {

@@ -176,14 +176,14 @@ func startProviderTestServer(t *testing.T) (*http.Client, string, *providerFakeS
 func TestManagementClientAPIKeysEndpoints(t *testing.T) {
 	client, baseURL, state := startProviderTestServer(t)
 
-	// 1. GET client API keys: assert masked output
+	// 1. GET client API keys: assert plaintext keys are returned unmasked
 	resp, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/api-keys")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("get keys status = %d body %s", resp.StatusCode, payload)
 	}
 	payloadStr := string(payload)
-	if strings.Contains(payloadStr, "sk-original-key-1") {
-		t.Fatalf("leaked plaintext client key in response: %s", payloadStr)
+	if !strings.Contains(payloadStr, "sk-original-key-1") {
+		t.Fatalf("client key missing from response, keys must be returned in plaintext: %s", payloadStr)
 	}
 
 	var res struct {
@@ -192,8 +192,8 @@ func TestManagementClientAPIKeysEndpoints(t *testing.T) {
 	if err := json.Unmarshal(payload, &res); err != nil || len(res.Keys) != 2 {
 		t.Fatalf("unexpected keys response: %s", payload)
 	}
-	if !strings.Contains(res.Keys[0].Masked, "••••") {
-		t.Fatalf("key was not masked: %q", res.Keys[0].Masked)
+	if res.Keys[0].Key != "sk-original-key-1" {
+		t.Fatalf("expected plaintext client key, got %q", res.Keys[0].Key)
 	}
 
 	// 2. POST client API key
@@ -228,15 +228,15 @@ func TestManagementClientAPIKeysEndpoints(t *testing.T) {
 func TestManagementProvidersEndpoints(t *testing.T) {
 	client, baseURL, state := startProviderTestServer(t)
 
-	// 1. GET providers: assert masked keys and stripped URLs
+	// 1. GET providers: assert plaintext keys and raw URLs are returned unmasked
 	resp, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/providers")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("get providers status = %d body %s", resp.StatusCode, payload)
 	}
 	payloadStr := string(payload)
-	for _, secret := range []string{"user:pass@", "?token=secret", "sk-provider-secret-key-1234", "sk-codex-secret-key-9999", "sk-ant-secret-1234"} {
-		if strings.Contains(payloadStr, secret) {
-			t.Fatalf("providers list leaked secret %q: %s", secret, payloadStr)
+	for _, secret := range []string{"sk-provider-secret-key-1234", "sk-codex-secret-key-9999", "sk-ant-secret-1234", "user:pass@", "?token=secret"} {
+		if !strings.Contains(payloadStr, secret) {
+			t.Fatalf("providers list must return %q in plaintext, got: %s", secret, payloadStr)
 		}
 	}
 
@@ -428,7 +428,6 @@ func TestPullProviderModels(t *testing.T) {
 	}
 }
 
-
 func TestPullProviderModelsByProviderID(t *testing.T) {
 	// Upstream serves /v1/models only (like the official Anthropic API);
 	// wrong or missing auth is rejected with 401 the way relays report it.
@@ -486,7 +485,6 @@ func TestPullProviderModelsByProviderID(t *testing.T) {
 	if len(claudeAuthHeaders) != 2 || claudeAuthHeaders[0] != "sk-ant-secret-1234" || claudeAuthHeaders[1] != "2023-06-01" {
 		t.Fatalf("anthropic auth headers missing: %#v", claudeAuthHeaders)
 	}
-
 	updateCodex := fmt.Sprintf(`{"family":"codex","name":"Codex relay","base_url":"%s","keys":[{"api_key":"sk-codex-secret-key-9999"}]}`, fakeUpstream.URL)
 	resp, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/providers/codex-0", updateCodex)
 	if resp.StatusCode != http.StatusOK {
@@ -516,7 +514,7 @@ func TestUnifiedProviderArchitectureClaudeCodexGemini(t *testing.T) {
 		t.Fatalf("update claude provider status = %d body %s", resp.StatusCode, payload)
 	}
 
-	// Read providers list and verify custom name and masked key in list
+	// Read providers list and verify custom name and plaintext key in list
 	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers")
 	var providersResp struct {
 		Providers []ProviderItemDTO `json:"providers"`

@@ -47,6 +47,7 @@ import { useThemeMode } from '../theme/ThemeContext';
 import { ConfigDirtyBar } from '../components/config/ConfigDirtyBar';
 import { PayloadRulesEditor, type PayloadValidationIssue } from '../components/config/PayloadRulesEditor';
 import { updateFieldWithBaseline, isConfigSemanticallyEqual } from '../components/config/configDirty';
+import { maskKeyText } from '../components/MaskedText';
 import type { YamlSourceEditorRef } from '../components/config/YamlSourceEditor';
 
 const YamlSourceEditor = React.lazy(() => import('../components/config/YamlSourceEditor'));
@@ -62,14 +63,6 @@ import {
 import type { ConfigScalarsResponse } from '../types/configManagement';
 
 const { Text } = Typography;
-
-function maskApiKey(key: string): string {
-  if (!key) return '';
-  if (key.length <= 8) return '••••••••';
-  const prefix = key.slice(0, 6);
-  const suffix = key.slice(-4);
-  return `${prefix}••••••••${suffix}`;
-}
 
 interface ApiKeyRecord {
   id: string;
@@ -142,7 +135,7 @@ const ConfigApiKeysCard: React.FC<ApiKeysCardProps> = ({
             render: (rawKey: string, record: ApiKeyRecord) => (
               <div className="config-key-box">
                 <span className="config-key-text">
-                  {revealedKeys[record.index] ? rawKey : maskApiKey(rawKey)}
+                  {revealedKeys[record.index] ? rawKey : maskKeyText(rawKey)}
                 </span>
               </div>
             ),
@@ -153,7 +146,7 @@ const ConfigApiKeysCard: React.FC<ApiKeysCardProps> = ({
             align: 'right' as const,
             render: (_: unknown, record: ApiKeyRecord) => (
               <Space size={6}>
-                <Tooltip title={revealedKeys[record.index] ? t('cfg.api_keys_hide') : t('cfg.api_keys_reveal')}>
+                <Tooltip title={revealedKeys[record.index] ? t('common.hide_secret') : t('common.reveal_secret')}>
                   <button
                     type="button"
                     className="config-key-action"
@@ -163,7 +156,7 @@ const ConfigApiKeysCard: React.FC<ApiKeysCardProps> = ({
                         [record.index]: !prev[record.index],
                       }))
                     }
-                    aria-label={revealedKeys[record.index] ? t('cfg.api_keys_hide') : t('cfg.api_keys_reveal')}
+                    aria-label={revealedKeys[record.index] ? t('common.hide_secret') : t('common.reveal_secret')}
                   >
                     {revealedKeys[record.index] ? <EyeInvisibleOutlined /> : <EyeOutlined />}
                   </button>
