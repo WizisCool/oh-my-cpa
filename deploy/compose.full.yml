@@ -1,7 +1,7 @@
 services:
   cpa:
-    image: ${CPA_IMAGE:-eceasy/cli-proxy-api:latest}
-    pull_policy: always
+    image: ${CPA_IMAGE:-eceasy/cli-proxy-api:v7.2.146}
+    pull_policy: if_not_present
     container_name: ${CPA_CONTAINER_NAME:-cli-proxy-api}
     environment:
       DEPLOY: ${DEPLOY:-}
@@ -13,6 +13,12 @@ services:
       - ${CPA_AUTH_PATH:-../cpa/auths}:/root/.cli-proxy-api
       - ${CPA_LOG_PATH:-../cpa/logs}:/CLIProxyAPI/logs
       - ${CPA_PLUGIN_PATH:-../cpa/plugins}:/CLIProxyAPI/plugins
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8317/v0/management/get-auth-status > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     restart: unless-stopped
     networks:
       - oh-my-cpa
@@ -23,8 +29,15 @@ services:
       dockerfile: Dockerfile
     image: ${OMCPA_IMAGE:-oh-my-cpa:local}
     container_name: ${OMCPA_CONTAINER_NAME:-oh-my-cpa}
+    user: "10001:10001"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     depends_on:
-      - cpa
+      cpa:
+        condition: service_healthy
     expose:
       - "8080"
     environment:
@@ -38,6 +51,12 @@ services:
       OMCPA_PUBLIC_URL: ${OMCPA_PUBLIC_URL:?set OMCPA_PUBLIC_URL}
     volumes:
       - ${OMCPA_DATA_PATH:-../oh-my-cpa-data}:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080${OMCPA_BASE_PATH:-/omc}/api/healthz | grep -q 'ok\\|degraded' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     restart: unless-stopped
     networks:
       - oh-my-cpa
@@ -46,8 +65,10 @@ services:
     image: caddy:2-alpine
     container_name: ${CADDY_CONTAINER_NAME:-oh-my-cpa-caddy}
     depends_on:
-      - cpa
-      - oh-my-cpa
+      cpa:
+        condition: service_healthy
+      oh-my-cpa:
+        condition: service_healthy
     environment:
       DOMAIN: ${DOMAIN:-localhost}
     ports:
