@@ -20,6 +20,7 @@ const DICT: Record<string, [string, string]> = {
   'common.unnamed': ['自定义资源', 'custom resource'],
   'common.loading': ['加载中…', 'Loading…'],
   'common.actions': ['操作', 'Actions'],
+  'common.details': ['详情', 'Details'],
 
   // ── navigation ───────────────────────────────────────────────────────────
   'nav.group.operate': ['运行', 'Operate'],
@@ -749,7 +750,8 @@ const DICT: Record<string, [string, string]> = {
   'events.col_time': ['请求时间', 'Timestamp'],
   'events.col_result': ['结果', 'Result'],
   'events.col_model': ['模型', 'Model'],
-  'events.col_resource': ['归属接入点', 'Connection / Resource'],
+  'events.col_resource': ['提供商 / 凭据', 'Provider / Credential'],
+  'events.col_provider_cred': ['提供商 / 凭据', 'Provider / Credential'],
   'events.col_latency': ['耗时 / TTFT', 'Latency / TTFT'],
   'events.col_tokens': ['Token 消耗', 'Tokens'],
   'events.col_request_id': ['Request ID', 'Request ID'],

@@ -246,17 +246,11 @@ export const UsageEventsPage: React.FC = () => {
       ),
     },
     {
-      title: t('events.col_resource'),
-      key: 'resource',
+      title: t('events.col_provider_cred'),
+      key: 'provider',
       render: (_, r) => (
         <div>
-          {r.resource_name ? (
-            <Tag color="blue">{r.resource_name}</Tag>
-          ) : (
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              {t('events.unbound')}
-            </Text>
-          )}
+          <Tag color="blue">{r.provider || '-'}</Tag>
           {r.auth_index && (
             <div style={{ fontSize: 10, color: 'var(--meta)', fontFamily: 'monospace' }}>
               idx: {r.auth_index}
@@ -325,7 +319,7 @@ export const UsageEventsPage: React.FC = () => {
       align: 'right',
       render: (_, r) => (
         <Button size="small" type="link" onClick={() => setSelectedEventId(r.id)}>
-          {t('common.edit')}
+          {t('common.details')}
         </Button>
       ),
     },

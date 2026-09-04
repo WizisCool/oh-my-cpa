@@ -139,14 +139,13 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 		       e.latency_ms, e.ttft_ms, e.client_ip, e.x_forwarded_for, e.user_agent,
 		       e.input_tokens, e.output_tokens, e.reasoning_tokens, e.cached_tokens,
 		       e.cache_read_tokens, e.cache_creation_tokens, e.total_tokens,
-		       d.id, d.resource_name
+		       d.id, d.cpa_resource_name AS resource_name
 		FROM usage_events e
 		LEFT JOIN (
 			SELECT instance_id, cpa_auth_index,
 			       CASE WHEN COUNT(1) = 1 THEN MIN(d.id) ELSE NULL END AS id,
-			       CASE WHEN COUNT(1) = 1 THEN MIN(COALESCE(o.display_name, d.suggested_source)) ELSE NULL END AS resource_name
+			       CASE WHEN COUNT(1) = 1 THEN MIN(d.cpa_resource_name) ELSE NULL END AS cpa_resource_name
 			FROM discovered_resources d
-			LEFT JOIN resource_overrides o ON o.resource_id = d.id
 			WHERE cpa_auth_index IS NOT NULL AND cpa_auth_index <> ''
 			GROUP BY instance_id, cpa_auth_index
 		) d ON d.instance_id = e.instance_id AND d.cpa_auth_index = e.auth_index`
@@ -222,14 +221,13 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 		       e.latency_ms, e.ttft_ms, e.client_ip, e.x_forwarded_for, e.user_agent,
 		       e.input_tokens, e.output_tokens, e.reasoning_tokens, e.cached_tokens,
 		       e.cache_read_tokens, e.cache_creation_tokens, e.total_tokens,
-		       d.id, d.resource_name
+		       d.id, d.cpa_resource_name AS resource_name
 		FROM usage_events e
 		LEFT JOIN (
 			SELECT instance_id, cpa_auth_index,
 			       CASE WHEN COUNT(1) = 1 THEN MIN(d.id) ELSE NULL END AS id,
-			       CASE WHEN COUNT(1) = 1 THEN MIN(COALESCE(o.display_name, d.suggested_source)) ELSE NULL END AS resource_name
+			       CASE WHEN COUNT(1) = 1 THEN MIN(d.cpa_resource_name) ELSE NULL END AS cpa_resource_name
 			FROM discovered_resources d
-			LEFT JOIN resource_overrides o ON o.resource_id = d.id
 			WHERE cpa_auth_index IS NOT NULL AND cpa_auth_index <> ''
 			GROUP BY instance_id, cpa_auth_index
 		) d ON d.instance_id = e.instance_id AND d.cpa_auth_index = e.auth_index
