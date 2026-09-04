@@ -175,7 +175,7 @@ export const QuotaTable: React.FC<QuotaTableProps> = ({
       render: (_, r) => {
         const isRefreshing = refreshingIndexes.has(r.auth_index);
         return (
-          <Space direction="horizontal" size="small">
+          <Space size="small">
             {r.active_cooldown?.is_active && (
               <Button
                 size="small"

@@ -57,7 +57,7 @@ export const QuotaDetailDrawer: React.FC<QuotaDetailDrawerProps> = ({
     <Drawer
       open={open}
       onClose={onClose}
-      width={560}
+      size="large"
       title={
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div className={styles.cardIcon} style={{ width: 28, height: 28 }}>
