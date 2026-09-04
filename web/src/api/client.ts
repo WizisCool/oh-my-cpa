@@ -12,7 +12,7 @@ import { ErrorLogFile } from '../types/logs';
 import { CapabilityProbeReport } from '../types/capability';
 import { ConfigScalarsResponse, ConfigSourceResponse, ConfigGrantResponse } from '../types/configManagement';
 import { ClientAPIKeyItem, ProviderItem, SaveProviderPayload } from '../types/providers';
-import { OAuthProviderItem, StartOAuthResponse, OAuthStatusResponse } from '../types/oauth';
+import { OAuthProviderItem, StartOAuthResponse, OAuthStatusResponse, OAuthCallbackResponse } from '../types/oauth';
 import { QuotaOverviewResponse } from '../types/quota';
 import { SystemInfoResponse } from '../types/system';
 import { PluginsResponse, PluginStoreResponse } from '../types/plugin';
@@ -469,15 +469,15 @@ export const api = {
     });
   },
 
-  async getOAuthStatus(sessionId?: string): Promise<OAuthStatusResponse> {
-    const search = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : '';
+  async getOAuthStatus(sessionIdOrState?: string): Promise<OAuthStatusResponse> {
+    const search = sessionIdOrState ? `?state=${encodeURIComponent(sessionIdOrState)}&session_id=${encodeURIComponent(sessionIdOrState)}` : '';
     return request<OAuthStatusResponse>(`/management/oauth/status${search}`, { method: 'GET' });
   },
 
-  async handleOAuthCallback(code: string, state: string): Promise<{ status: string }> {
-    return request<{ status: string }>('/management/oauth/callback', {
+  async handleOAuthCallback(payload: { provider: string; redirect_url: string }): Promise<OAuthCallbackResponse> {
+    return request<OAuthCallbackResponse>('/management/oauth/callback', {
       method: 'POST',
-      body: JSON.stringify({ code, state }),
+      body: JSON.stringify(payload),
     });
   },
 
