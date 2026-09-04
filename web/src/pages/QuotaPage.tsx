@@ -21,15 +21,15 @@ export const QuotaPage: React.FC = () => {
   const queryClient = useQueryClient();
 
   // Preferences & Filters
-  const [activeProvider, setActiveProvider] = useState<string>('all');
-  const [searchText, setSearchText] = useState<string>('');
+  const [activeProvider, setActiveProvider] = useState('all');
+  const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [sortMode, setSortMode] = useState<SortMode>('default');
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
 
   // Detail Drawer state
   const [selectedItem, setSelectedItem] = useState<QuotaItem | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Tracking refreshing auth indexes
   const [refreshingIndexes, setRefreshingIndexes] = useState<Set<string>>(new Set());
