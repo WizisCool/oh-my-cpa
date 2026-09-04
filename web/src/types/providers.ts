@@ -18,3 +18,12 @@ export interface ProviderItem {
   key_masked?: string;
   proxy_configured?: boolean;
 }
+
+export interface SaveProviderPayload {
+  family: string;
+  name: string;
+  base_url?: string;
+  api_key?: string;
+  models?: string[];
+  disabled?: boolean;
+}

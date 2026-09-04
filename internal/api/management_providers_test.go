@@ -212,3 +212,49 @@ func TestManagementProvidersEndpoints(t *testing.T) {
 		t.Fatalf("expected provider disabled true on CPA, got %v", disabledVal)
 	}
 }
+
+func TestManagementProviderCreateUpdateDelete(t *testing.T) {
+	client, baseURL, state := startProviderTestServer(t)
+
+	// 1. Create a new openai-compatibility provider
+	createBody := `{"family":"openai-compatibility","name":"DeepSeek Primary","base_url":"https://api.deepseek.com/v1","api_key":"sk-deepseek-1234","models":["deepseek-chat"]}`
+	resp, payload := doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/providers", createBody)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("create provider status = %d body %s", resp.StatusCode, payload)
+	}
+
+	state.mu.Lock()
+	count := len(state.oaiProviders)
+	last := state.oaiProviders[count-1]
+	state.mu.Unlock()
+	if count != 2 || last["name"] != "DeepSeek Primary" {
+		t.Fatalf("expected 2 providers with last name DeepSeek Primary, got %#v", state.oaiProviders)
+	}
+
+	// 2. Update provider (openai-compat-1)
+	updateBody := `{"family":"openai-compatibility","name":"DeepSeek Updated","base_url":"https://api.deepseek.com/v2","models":["deepseek-reasoner"]}`
+	resp, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/providers/openai-compat-1", updateBody)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("update provider status = %d body %s", resp.StatusCode, payload)
+	}
+
+	state.mu.Lock()
+	updatedName := state.oaiProviders[1]["name"]
+	state.mu.Unlock()
+	if updatedName != "DeepSeek Updated" {
+		t.Fatalf("expected updated name DeepSeek Updated, got %v", updatedName)
+	}
+
+	// 3. Delete provider (openai-compat-1)
+	resp, payload = doJSON(t, client, http.MethodDelete, baseURL+"/omc/api/v1/management/providers/openai-compat-1", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("delete provider status = %d body %s", resp.StatusCode, payload)
+	}
+
+	state.mu.Lock()
+	finalCount := len(state.oaiProviders)
+	state.mu.Unlock()
+	if finalCount != 1 {
+		t.Fatalf("expected 1 provider after delete, got %d", finalCount)
+	}
+}

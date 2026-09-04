@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
@@ -340,4 +341,412 @@ func maskSecretKey(key string) string {
 		prefixLen = 2
 	}
 	return key[:prefixLen] + "••••••••" + key[len(key)-4:]
+}
+
+type SaveProviderRequest struct {
+	Family   string   `json:"family"`
+	Name     string   `json:"name"`
+	BaseURL  string   `json:"base_url"`
+	APIKey   string   `json:"api_key"`
+	Models   []string `json:"models"`
+	Disabled bool     `json:"disabled"`
+}
+
+func parseProviderID(id string) (string, int, error) {
+	id = strings.TrimSpace(id)
+	switch {
+	case strings.HasPrefix(id, "openai-compat-"):
+		idxStr := strings.TrimPrefix(id, "openai-compat-")
+		idx, err := strconv.Atoi(idxStr)
+		return "openai-compatibility", idx, err
+	case strings.HasPrefix(id, "codex-"):
+		idxStr := strings.TrimPrefix(id, "codex-")
+		idx, err := strconv.Atoi(idxStr)
+		return "codex", idx, err
+	case strings.HasPrefix(id, "claude-"):
+		idxStr := strings.TrimPrefix(id, "claude-")
+		idx, err := strconv.Atoi(idxStr)
+		return "claude", idx, err
+	case strings.HasPrefix(id, "gemini-"):
+		idxStr := strings.TrimPrefix(id, "gemini-")
+		idx, err := strconv.Atoi(idxStr)
+		return "gemini", idx, err
+	default:
+		return "", 0, fmt.Errorf("unknown provider id format: %s", id)
+	}
+}
+
+func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	var req SaveProviderRequest
+	if err := decodeManagementJSON(writer, request, 32*1024, &req); err != nil {
+		return
+	}
+
+	family := strings.ToLower(strings.TrimSpace(req.Family))
+	if family == "" {
+		family = "openai-compatibility"
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		name = "Custom Provider"
+	}
+	baseURL := strings.TrimSpace(req.BaseURL)
+	apiKey := strings.TrimSpace(req.APIKey)
+
+	client, ok := h.managementClientOrError(writer, request)
+	if !ok {
+		return
+	}
+
+	ctx := request.Context()
+	models := make([]management.ModelAlias, 0, len(req.Models))
+	for _, m := range req.Models {
+		m = strings.TrimSpace(m)
+		if m != "" {
+			models = append(models, management.ModelAlias{Name: m, Alias: m})
+		}
+	}
+
+	if auditErr := h.recordAudit(request, "provider.create", "provider", family, "attempt", map[string]any{"name": name}); auditErr != nil {
+		writeError(writer, http.StatusInternalServerError, "audit failure; provider creation aborted")
+		return
+	}
+
+	switch family {
+	case "openai-compatibility":
+		resp, err := client.OpenAICompatibility(ctx)
+		if err != nil {
+			writeCPAFacadeError(writer, err)
+			return
+		}
+		newEntry := management.OpenAICompatibility{
+			Name:     name,
+			BaseURL:  baseURL,
+			Disabled: req.Disabled,
+			Models:   models,
+		}
+		if apiKey != "" {
+			newEntry.APIKeyEntries = []management.APIKeyEntry{{APIKey: apiKey}}
+		}
+		resp.Entries = append(resp.Entries, newEntry)
+		if err := client.UpdateOpenAICompatibility(ctx, resp.Entries); err != nil {
+			_ = h.recordAudit(request, "provider.create", "provider", family, "failure", map[string]any{"error": err.Error()})
+			writeCPAFacadeError(writer, err)
+			return
+		}
+	case "codex":
+		resp, err := client.CodexAPIKeys(ctx)
+		if err != nil {
+			writeCPAFacadeError(writer, err)
+			return
+		}
+		newEntry := management.CodexAPIKey{
+			APIKey:  apiKey,
+			BaseURL: baseURL,
+			Models:  models,
+		}
+		resp.Entries = append(resp.Entries, newEntry)
+		if err := client.UpdateCodexAPIKeys(ctx, resp.Entries); err != nil {
+			_ = h.recordAudit(request, "provider.create", "provider", family, "failure", map[string]any{"error": err.Error()})
+			writeCPAFacadeError(writer, err)
+			return
+		}
+	case "claude":
+		entries, err := client.ClaudeAPIKeys(ctx)
+		if err != nil {
+			writeCPAFacadeError(writer, err)
+			return
+		}
+		entries = append(entries, management.SimpleKeyEntry{
+			APIKey:  apiKey,
+			BaseURL: baseURL,
+		})
+		if err := client.UpdateClaudeAPIKeys(ctx, entries); err != nil {
+			_ = h.recordAudit(request, "provider.create", "provider", family, "failure", map[string]any{"error": err.Error()})
+			writeCPAFacadeError(writer, err)
+			return
+		}
+	case "gemini":
+		entries, err := client.GeminiAPIKeys(ctx)
+		if err != nil {
+			writeCPAFacadeError(writer, err)
+			return
+		}
+		entries = append(entries, management.SimpleKeyEntry{
+			APIKey:  apiKey,
+			BaseURL: baseURL,
+		})
+		if err := client.UpdateGeminiAPIKeys(ctx, entries); err != nil {
+			_ = h.recordAudit(request, "provider.create", "provider", family, "failure", map[string]any{"error": err.Error()})
+			writeCPAFacadeError(writer, err)
+			return
+		}
+	default:
+		writeError(writer, http.StatusBadRequest, "unsupported provider family: "+family)
+		return
+	}
+
+	_ = h.recordAudit(request, "provider.create", "provider", family, "success", map[string]any{"name": name})
+
+	writeJSON(writer, http.StatusOK, map[string]any{
+		"status": "ok",
+		"family": family,
+	})
+}
+
+func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	id := chi.URLParam(request, "id")
+	family, index, err := parseProviderID(id)
+	if err != nil || index < 0 {
+		writeError(writer, http.StatusBadRequest, "invalid provider id")
+		return
+	}
+
+	var req SaveProviderRequest
+	if err := decodeManagementJSON(writer, request, 32*1024, &req); err != nil {
+		return
+	}
+
+	client, ok := h.managementClientOrError(writer, request)
+	if !ok {
+		return
+	}
+
+	ctx := request.Context()
+	name := strings.TrimSpace(req.Name)
+	baseURL := strings.TrimSpace(req.BaseURL)
+	apiKey := strings.TrimSpace(req.APIKey)
+
+	models := make([]management.ModelAlias, 0, len(req.Models))
+	for _, m := range req.Models {
+		m = strings.TrimSpace(m)
+		if m != "" {
+			models = append(models, management.ModelAlias{Name: m, Alias: m})
+		}
+	}
+
+	if auditErr := h.recordAudit(request, "provider.update", "provider", id, "attempt", map[string]any{"name": name}); auditErr != nil {
+		writeError(writer, http.StatusInternalServerError, "audit failure; provider update aborted")
+		return
+	}
+
+	switch family {
+	case "openai-compatibility":
+		resp, err := client.OpenAICompatibility(ctx)
+		if err != nil {
+			writeCPAFacadeError(writer, err)
+			return
+		}
+		if index >= len(resp.Entries) {
+			writeError(writer, http.StatusNotFound, "provider index out of bounds")
+			return
+		}
+		entry := &resp.Entries[index]
+		if name != "" {
+			entry.Name = name
+		}
+		entry.BaseURL = baseURL
+		entry.Disabled = req.Disabled
+		entry.Models = models
+		if apiKey != "" {
+			entry.APIKeyEntries = []management.APIKeyEntry{{APIKey: apiKey}}
+			entry.LegacyAPIKeys = nil
+		}
+		if err := client.UpdateOpenAICompatibility(ctx, resp.Entries); err != nil {
+			_ = h.recordAudit(request, "provider.update", "provider", id, "failure", map[string]any{"error": err.Error()})
+			writeCPAFacadeError(writer, err)
+			return
+		}
+	case "codex":
+		resp, err := client.CodexAPIKeys(ctx)
+		if err != nil {
+			writeCPAFacadeError(writer, err)
+			return
+		}
+		if index >= len(resp.Entries) {
+			writeError(writer, http.StatusNotFound, "provider index out of bounds")
+			return
+		}
+		entry := &resp.Entries[index]
+		entry.BaseURL = baseURL
+		entry.Models = models
+		if apiKey != "" {
+			entry.APIKey = apiKey
+		}
+		if err := client.UpdateCodexAPIKeys(ctx, resp.Entries); err != nil {
+			_ = h.recordAudit(request, "provider.update", "provider", id, "failure", map[string]any{"error": err.Error()})
+			writeCPAFacadeError(writer, err)
+			return
+		}
+	case "claude":
+		entries, err := client.ClaudeAPIKeys(ctx)
+		if err != nil {
+			writeCPAFacadeError(writer, err)
+			return
+		}
+		if index >= len(entries) {
+			writeError(writer, http.StatusNotFound, "provider index out of bounds")
+			return
+		}
+		entry := &entries[index]
+		entry.BaseURL = baseURL
+		if apiKey != "" {
+			entry.APIKey = apiKey
+		}
+		if err := client.UpdateClaudeAPIKeys(ctx, entries); err != nil {
+			_ = h.recordAudit(request, "provider.update", "provider", id, "failure", map[string]any{"error": err.Error()})
+			writeCPAFacadeError(writer, err)
+			return
+		}
+	case "gemini":
+		entries, err := client.GeminiAPIKeys(ctx)
+		if err != nil {
+			writeCPAFacadeError(writer, err)
+			return
+		}
+		if index >= len(entries) {
+			writeError(writer, http.StatusNotFound, "provider index out of bounds")
+			return
+		}
+		entry := &entries[index]
+		entry.BaseURL = baseURL
+		if apiKey != "" {
+			entry.APIKey = apiKey
+		}
+		if err := client.UpdateGeminiAPIKeys(ctx, entries); err != nil {
+			_ = h.recordAudit(request, "provider.update", "provider", id, "failure", map[string]any{"error": err.Error()})
+			writeCPAFacadeError(writer, err)
+			return
+		}
+	default:
+		writeError(writer, http.StatusBadRequest, "unsupported provider family")
+		return
+	}
+
+	_ = h.recordAudit(request, "provider.update", "provider", id, "success", map[string]any{"name": name})
+
+	writeJSON(writer, http.StatusOK, map[string]any{
+		"status": "ok",
+		"id":     id,
+	})
+}
+
+func (h *Handler) deleteManagementProvider(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	id := chi.URLParam(request, "id")
+	family, index, err := parseProviderID(id)
+	if err != nil || index < 0 {
+		writeError(writer, http.StatusBadRequest, "invalid provider id")
+		return
+	}
+
+	client, ok := h.managementClientOrError(writer, request)
+	if !ok {
+		return
+	}
+
+	ctx := request.Context()
+	if auditErr := h.recordAudit(request, "provider.delete", "provider", id, "attempt", nil); auditErr != nil {
+		writeError(writer, http.StatusInternalServerError, "audit failure; provider deletion aborted")
+		return
+	}
+
+	switch family {
+	case "openai-compatibility":
+		resp, err := client.OpenAICompatibility(ctx)
+		if err != nil {
+			writeCPAFacadeError(writer, err)
+			return
+		}
+		if index >= len(resp.Entries) {
+			writeError(writer, http.StatusNotFound, "provider index out of bounds")
+			return
+		}
+		updated := make([]management.OpenAICompatibility, 0, len(resp.Entries)-1)
+		for i, e := range resp.Entries {
+			if i != index {
+				updated = append(updated, e)
+			}
+		}
+		if err := client.UpdateOpenAICompatibility(ctx, updated); err != nil {
+			_ = h.recordAudit(request, "provider.delete", "provider", id, "failure", map[string]any{"error": err.Error()})
+			writeCPAFacadeError(writer, err)
+			return
+		}
+	case "codex":
+		resp, err := client.CodexAPIKeys(ctx)
+		if err != nil {
+			writeCPAFacadeError(writer, err)
+			return
+		}
+		if index >= len(resp.Entries) {
+			writeError(writer, http.StatusNotFound, "provider index out of bounds")
+			return
+		}
+		updated := make([]management.CodexAPIKey, 0, len(resp.Entries)-1)
+		for i, e := range resp.Entries {
+			if i != index {
+				updated = append(updated, e)
+			}
+		}
+		if err := client.UpdateCodexAPIKeys(ctx, updated); err != nil {
+			_ = h.recordAudit(request, "provider.delete", "provider", id, "failure", map[string]any{"error": err.Error()})
+			writeCPAFacadeError(writer, err)
+			return
+		}
+	case "claude":
+		entries, err := client.ClaudeAPIKeys(ctx)
+		if err != nil {
+			writeCPAFacadeError(writer, err)
+			return
+		}
+		if index >= len(entries) {
+			writeError(writer, http.StatusNotFound, "provider index out of bounds")
+			return
+		}
+		updated := make([]management.SimpleKeyEntry, 0, len(entries)-1)
+		for i, e := range entries {
+			if i != index {
+				updated = append(updated, e)
+			}
+		}
+		if err := client.UpdateClaudeAPIKeys(ctx, updated); err != nil {
+			_ = h.recordAudit(request, "provider.delete", "provider", id, "failure", map[string]any{"error": err.Error()})
+			writeCPAFacadeError(writer, err)
+			return
+		}
+	case "gemini":
+		entries, err := client.GeminiAPIKeys(ctx)
+		if err != nil {
+			writeCPAFacadeError(writer, err)
+			return
+		}
+		if index >= len(entries) {
+			writeError(writer, http.StatusNotFound, "provider index out of bounds")
+			return
+		}
+		updated := make([]management.SimpleKeyEntry, 0, len(entries)-1)
+		for i, e := range entries {
+			if i != index {
+				updated = append(updated, e)
+			}
+		}
+		if err := client.UpdateGeminiAPIKeys(ctx, updated); err != nil {
+			_ = h.recordAudit(request, "provider.delete", "provider", id, "failure", map[string]any{"error": err.Error()})
+			writeCPAFacadeError(writer, err)
+			return
+		}
+	default:
+		writeError(writer, http.StatusBadRequest, "unsupported provider family")
+		return
+	}
+
+	_ = h.recordAudit(request, "provider.delete", "provider", id, "success", nil)
+
+	writeJSON(writer, http.StatusOK, map[string]any{
+		"status": "ok",
+		"id":     id,
+	})
 }

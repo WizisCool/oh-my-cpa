@@ -11,6 +11,8 @@ import {
   Modal,
   Tabs,
   Popconfirm,
+  Form,
+  Select,
   App as AntdApp,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -18,6 +20,7 @@ import {
   SyncOutlined,
   PlusOutlined,
   DeleteOutlined,
+  EditOutlined,
   CopyOutlined,
   KeyOutlined,
   ThunderboltOutlined,
@@ -26,7 +29,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
-import type { ClientAPIKeyItem, ProviderItem } from '../types/providers';
+import type { ClientAPIKeyItem, ProviderItem, SaveProviderPayload } from '../types/providers';
 
 const { Text } = Typography;
 
@@ -37,7 +40,17 @@ export const ProvidersPage: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'providers' | 'keys'>('providers');
 
-  // ── 1. Providers ──────────────────────────────────────────────────────────
+  // Provider Modal state
+  const [providerModalOpen, setProviderModalOpen] = useState(false);
+  const [editingProvider, setEditingProvider] = useState<ProviderItem | null>(null);
+  const [formFamily, setFormFamily] = useState<string>('openai-compatibility');
+  const [formName, setFormName] = useState<string>('');
+  const [formBaseURL, setFormBaseURL] = useState<string>('');
+  const [formKey, setFormKey] = useState<string>('');
+  const [formModels, setFormModels] = useState<string[]>([]);
+  const [formDisabled, setFormDisabled] = useState<boolean>(false);
+
+  // ── 1. Providers Query & Mutations ────────────────────────────────────────
   const {
     data: providersData,
     isLoading: providersLoading,
@@ -66,6 +79,84 @@ export const ProvidersPage: React.FC = () => {
     },
   });
 
+  const createProviderMutation = useMutation({
+    mutationFn: (payload: SaveProviderPayload) => api.createManagementProvider(payload),
+    onSuccess: () => {
+      message.success(t('pro.provider_created'));
+      setProviderModalOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof ApiError ? err.message : String(err);
+      message.error(msg);
+    },
+  });
+
+  const updateProviderMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: SaveProviderPayload }) =>
+      api.updateManagementProvider(id, payload),
+    onSuccess: () => {
+      message.success(t('pro.provider_updated'));
+      setProviderModalOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof ApiError ? err.message : String(err);
+      message.error(msg);
+    },
+  });
+
+  const deleteProviderMutation = useMutation({
+    mutationFn: (id: string) => api.deleteManagementProvider(id),
+    onSuccess: () => {
+      message.success(t('pro.provider_deleted'));
+      void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof ApiError ? err.message : String(err);
+      message.error(msg);
+    },
+  });
+
+  const handleOpenCreate = () => {
+    setEditingProvider(null);
+    setFormFamily('openai-compatibility');
+    setFormName('');
+    setFormBaseURL('');
+    setFormKey('');
+    setFormModels([]);
+    setFormDisabled(false);
+    setProviderModalOpen(true);
+  };
+
+  const handleOpenEdit = (provider: ProviderItem) => {
+    setEditingProvider(provider);
+    setFormFamily(provider.family);
+    setFormName(provider.name);
+    setFormBaseURL(provider.base_url || '');
+    setFormKey('');
+    setFormModels(provider.models || []);
+    setFormDisabled(provider.disabled);
+    setProviderModalOpen(true);
+  };
+
+  const handleSaveProvider = () => {
+    const payload: SaveProviderPayload = {
+      family: formFamily,
+      name: formName.trim() || 'Custom Provider',
+      base_url: formBaseURL.trim(),
+      api_key: formKey.trim(),
+      models: formModels,
+      disabled: formDisabled,
+    };
+
+    if (editingProvider) {
+      updateProviderMutation.mutate({ id: editingProvider.id, payload });
+    } else {
+      createProviderMutation.mutate(payload);
+    }
+  };
+
   // ── 2. Client API Keys ────────────────────────────────────────────────────
   const {
     data: keysData,
@@ -75,25 +166,25 @@ export const ProvidersPage: React.FC = () => {
     error: keysErr,
     refetch: refetchKeys,
   } = useQuery({
-    queryKey: ['client-api-keys'],
+    queryKey: ['management-client-api-keys'],
     queryFn: api.getClientAPIKeys,
     staleTime: 30000,
   });
 
-  const clientKeys = keysData?.keys || [];
+  const keys = keysData?.keys || [];
 
   const [addKeyModalOpen, setAddKeyModalOpen] = useState(false);
   const [newKeyInput, setNewKeyInput] = useState('');
-  const [createdKeyToDisplay, setCreatedKeyToDisplay] = useState<string | null>(null);
+  const [createdKeyPlaintext, setCreatedKeyPlaintext] = useState<string | null>(null);
 
   const createKeyMutation = useMutation({
     mutationFn: (key: string) => api.createClientAPIKey(key),
-    onSuccess: (_, newKey) => {
+    onSuccess: () => {
       message.success(t('pro.key_created'));
-      setAddKeyModalOpen(false);
+      setCreatedKeyPlaintext(newKeyInput);
       setNewKeyInput('');
-      setCreatedKeyToDisplay(newKey);
-      void queryClient.invalidateQueries({ queryKey: ['client-api-keys'] });
+      setAddKeyModalOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ['management-client-api-keys'] });
     },
     onError: (err: unknown) => {
       const msg = err instanceof ApiError ? err.message : String(err);
@@ -105,7 +196,7 @@ export const ProvidersPage: React.FC = () => {
     mutationFn: (index: number) => api.deleteClientAPIKey(index),
     onSuccess: () => {
       message.success(t('pro.key_deleted'));
-      void queryClient.invalidateQueries({ queryKey: ['client-api-keys'] });
+      void queryClient.invalidateQueries({ queryKey: ['management-client-api-keys'] });
     },
     onError: (err: unknown) => {
       const msg = err instanceof ApiError ? err.message : String(err);
@@ -113,53 +204,44 @@ export const ProvidersPage: React.FC = () => {
     },
   });
 
-  const handleGenerateKey = () => {
-    const randomSuffix = Array.from(crypto.getRandomValues(new Uint8Array(18)))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-    setNewKeyInput(`omc-sk-${randomSuffix}`);
+  const handleGenerateRandomKey = () => {
+    const array = new Uint8Array(24);
+    crypto.getRandomValues(array);
+    const randomHex = Array.from(array, (b) => b.toString(16).padStart(2, '0')).join('');
+    setNewKeyInput(`omc-sk-${randomHex}`);
   };
 
   const handleCopy = (text: string) => {
-    void navigator.clipboard.writeText(text);
-    message.success(t('res.copied'));
+    void navigator.clipboard.writeText(text).then(() => {
+      message.success(t('res.copied'));
+    });
   };
 
-  // Provider Columns
+  // Columns for Providers
   const providerColumns: ColumnsType<ProviderItem> = [
     {
       title: t('pro.col_provider'),
       key: 'name',
       render: (_, record) => (
         <div>
-          <Text strong>{record.name}</Text>
-          <div>
-            <Tag color="purple" style={{ fontSize: 10, margin: '2px 0 0 0' }}>
-              {record.family}
-            </Tag>
-          </div>
+          <div style={{ fontWeight: 600 }}>{record.name}</div>
+          <Tag color="purple" style={{ fontFamily: 'monospace', fontSize: 10, marginTop: 4 }}>
+            {record.family}
+          </Tag>
         </div>
       ),
     },
     {
       title: t('pro.col_protocol'),
       key: 'protocol',
-      dataIndex: 'protocol',
-      render: (protocol: string) => <Tag color="blue">{protocol}</Tag>,
+      render: (_, record) => <Tag color="blue">{record.protocol}</Tag>,
     },
     {
       title: t('pro.col_endpoint'),
-      key: 'endpoint',
+      key: 'base_url',
       render: (_, record) =>
         record.base_url ? (
-          <div>
-            <span className="mono-num" style={{ fontSize: 12 }}>{record.base_url}</span>
-            {record.auth_index && (
-              <div style={{ fontSize: 10, color: 'var(--meta)' }} className="mono-num">
-                auth: {record.auth_index}
-              </div>
-            )}
-          </div>
+          <code style={{ fontSize: 11, wordBreak: 'break-all' }}>{record.base_url}</code>
         ) : (
           <span style={{ color: 'var(--meta)' }}>-</span>
         ),
@@ -169,15 +251,12 @@ export const ProvidersPage: React.FC = () => {
       key: 'models',
       render: (_, record) =>
         record.models && record.models.length > 0 ? (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: 300 }}>
-            {record.models.slice(0, 4).map((m) => (
-              <Tag key={m} style={{ fontSize: 11, margin: 0 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {record.models.map((m) => (
+              <Tag key={m} style={{ fontSize: 11 }}>
                 {m}
               </Tag>
             ))}
-            {record.models.length > 4 && (
-              <Tag style={{ fontSize: 11, margin: 0 }}>+{record.models.length - 4}</Tag>
-            )}
           </div>
         ) : (
           <span style={{ color: 'var(--meta)' }}>-</span>
@@ -213,6 +292,36 @@ export const ProvidersPage: React.FC = () => {
           <Text type="secondary" style={{ fontSize: 11 }}>
             {record.disabled ? t('af.disabled') : t('af.enabled')}
           </Text>
+        </div>
+      ),
+    },
+    {
+      title: t('common.actions'),
+      key: 'actions',
+      width: 120,
+      align: 'right',
+      render: (_, record) => (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+          <Button
+            size="small"
+            type="text"
+            icon={<EditOutlined />}
+            onClick={() => handleOpenEdit(record)}
+          />
+          <Popconfirm
+            title={t('pro.delete_provider_confirm')}
+            onConfirm={() => deleteProviderMutation.mutate(record.id)}
+            okText={t('common.confirm')}
+            cancelText={t('common.cancel')}
+          >
+            <Button
+              size="small"
+              type="text"
+              danger
+              icon={<DeleteOutlined />}
+              loading={deleteProviderMutation.isPending && deleteProviderMutation.variables === record.id}
+            />
+          </Popconfirm>
         </div>
       ),
     },
@@ -298,30 +407,33 @@ export const ProvidersPage: React.FC = () => {
             ),
             children: (
               <div>
+                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-start' }}>
+                  <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    onClick={handleOpenCreate}
+                  >
+                    {t('pro.add_provider')}
+                  </Button>
+                </div>
+
                 {providersError && (
                   <Alert
                     type="error"
                     showIcon
-                    description={`${t('common.save_failed', { msg: providersErr instanceof Error ? providersErr.message : String(providersErr) })}`}
-                    action={
-                      <Button size="small" type="primary" onClick={() => void refetchProviders()}>
-                        {t('common.retry')}
-                      </Button>
-                    }
                     style={{ marginBottom: 16 }}
+                    description={`${t('common.save_failed', { msg: providersErr instanceof Error ? providersErr.message : String(providersErr) })}`}
                   />
                 )}
 
-                <Card size="small" className="terminal-panel" styles={{ body: { padding: 0 } }}>
-                  <div className="table-responsive-wrapper" style={{ width: '100%', overflowX: 'auto' }}>
-                    <Table<ProviderItem>
+                <Card>
+                  <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                    <Table
                       columns={providerColumns}
                       dataSource={providers}
                       rowKey="id"
                       loading={providersLoading}
                       pagination={false}
-                      scroll={{ x: 'max-content' }}
-                      size="small"
                       locale={{ emptyText: t('pro.providers_empty') }}
                     />
                   </div>
@@ -334,7 +446,7 @@ export const ProvidersPage: React.FC = () => {
             label: (
               <span>
                 <KeyOutlined style={{ marginRight: 6 }} />
-                {t('pro.tab_keys')} ({clientKeys.length})
+                {t('pro.tab_keys')} ({keys.length})
               </span>
             ),
             children: (
@@ -343,37 +455,32 @@ export const ProvidersPage: React.FC = () => {
                   <Alert
                     type="error"
                     showIcon
-                    description={`${t('common.save_failed', { msg: keysErr instanceof Error ? keysErr.message : String(keysErr) })}`}
-                    action={
-                      <Button size="small" type="primary" onClick={() => void refetchKeys()}>
-                        {t('common.retry')}
-                      </Button>
-                    }
                     style={{ marginBottom: 16 }}
+                    description={`${t('common.save_failed', { msg: keysErr instanceof Error ? keysErr.message : String(keysErr) })}`}
                   />
                 )}
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Button
                     type="primary"
-                    size="small"
                     icon={<PlusOutlined />}
-                    onClick={() => setAddKeyModalOpen(true)}
+                    onClick={() => {
+                      setNewKeyInput('');
+                      setAddKeyModalOpen(true);
+                    }}
                   >
                     {t('pro.add_key')}
                   </Button>
                 </div>
 
-                <Card size="small" className="terminal-panel" styles={{ body: { padding: 0 } }}>
-                  <div className="table-responsive-wrapper" style={{ width: '100%', overflowX: 'auto' }}>
-                    <Table<ClientAPIKeyItem>
+                <Card>
+                  <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                    <Table
                       columns={keyColumns}
-                      dataSource={clientKeys}
+                      dataSource={keys}
                       rowKey="index"
                       loading={keysLoading}
                       pagination={false}
-                      scroll={{ x: 'max-content' }}
-                      size="small"
                       locale={{ emptyText: t('pro.keys_empty') }}
                     />
                   </div>
@@ -384,37 +491,90 @@ export const ProvidersPage: React.FC = () => {
         ]}
       />
 
-      {/* Add Client Key Modal */}
+      {/* Provider Create/Edit Modal */}
       <Modal
-        open={addKeyModalOpen}
-        title={t('pro.add_key_title')}
-        onOk={() => {
-          if (!newKeyInput.trim()) {
-            message.warning(t('pro.key_placeholder'));
-            return;
-          }
-          createKeyMutation.mutate(newKeyInput.trim());
-        }}
-        onCancel={() => {
-          setAddKeyModalOpen(false);
-          setNewKeyInput('');
-        }}
-        confirmLoading={createKeyMutation.isPending}
+        title={editingProvider ? t('pro.edit_provider_title') : t('pro.add_provider_title')}
+        open={providerModalOpen}
+        onCancel={() => setProviderModalOpen(false)}
+        onOk={handleSaveProvider}
+        confirmLoading={createProviderMutation.isPending || updateProviderMutation.isPending}
         okText={t('common.confirm')}
         cancelText={t('common.cancel')}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
+        <Form layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item label={t('pro.field_family')} required>
+            <Select
+              value={formFamily}
+              onChange={setFormFamily}
+              disabled={!!editingProvider}
+              options={[
+                { label: 'OpenAI Compatible (openai-compatibility)', value: 'openai-compatibility' },
+                { label: 'Codex / Responses (codex)', value: 'codex' },
+                { label: 'Anthropic Claude (claude)', value: 'claude' },
+                { label: 'Google Gemini (gemini)', value: 'gemini' },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item label={t('pro.field_name')} required>
+            <Input
+              value={formName}
+              onChange={(e) => setFormName(e.target.value)}
+              placeholder={t('pro.field_name_ph')}
+            />
+          </Form.Item>
+          <Form.Item label={t('pro.field_base_url')}>
+            <Input
+              value={formBaseURL}
+              onChange={(e) => setFormBaseURL(e.target.value)}
+              placeholder={t('pro.field_base_url_ph')}
+            />
+          </Form.Item>
+          <Form.Item label={t('pro.field_key')}>
+            <Input.Password
+              value={formKey}
+              onChange={(e) => setFormKey(e.target.value)}
+              placeholder={editingProvider ? t('pro.field_key_ph_edit') : t('pro.field_key_ph_create')}
+            />
+          </Form.Item>
+          <Form.Item label={t('pro.field_models')}>
+            <Select
+              mode="tags"
+              value={formModels}
+              onChange={setFormModels}
+              tokenSeparators={[',', ' ']}
+              placeholder={t('pro.field_models_ph')}
+            />
+          </Form.Item>
+          <Form.Item label={t('pro.col_status')}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Switch checked={!formDisabled} onChange={(checked) => setFormDisabled(!checked)} />
+              <Text type="secondary">{formDisabled ? t('af.disabled') : t('af.enabled')}</Text>
+            </div>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Add Client Key Modal */}
+      <Modal
+        title={t('pro.add_key_title')}
+        open={addKeyModalOpen}
+        onCancel={() => setAddKeyModalOpen(false)}
+        onOk={() => createKeyMutation.mutate(newKeyInput)}
+        confirmLoading={createKeyMutation.isPending}
+        okButtonProps={{ disabled: !newKeyInput.trim() }}
+        okText={t('common.confirm')}
+        cancelText={t('common.cancel')}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
           <Input
-            placeholder={t('pro.key_placeholder')}
             value={newKeyInput}
             onChange={(e) => setNewKeyInput(e.target.value)}
-            autoFocus
+            placeholder={t('pro.key_placeholder')}
           />
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <div>
             <Button
-              size="small"
               icon={<ThunderboltOutlined />}
-              onClick={handleGenerateKey}
+              onClick={handleGenerateRandomKey}
             >
               {t('pro.generate_key')}
             </Button>
@@ -422,42 +582,32 @@ export const ProvidersPage: React.FC = () => {
         </div>
       </Modal>
 
-      {/* One-time Key Created Display Modal */}
+      {/* Single-view Key Display Modal */}
       <Modal
-        open={createdKeyToDisplay != null}
         title={t('pro.key_created_title')}
-        footer={[
-          <Button
-            key="copy"
-            type="primary"
-            icon={<CopyOutlined />}
-            onClick={() => {
-              if (createdKeyToDisplay) {
-                handleCopy(createdKeyToDisplay);
-                setCreatedKeyToDisplay(null);
-              }
-            }}
-          >
-            {t('res.copy_url')}
-          </Button>,
-          <Button key="close" onClick={() => setCreatedKeyToDisplay(null)}>
-            {t('common.confirm')}
-          </Button>,
-        ]}
-        onCancel={() => setCreatedKeyToDisplay(null)}
+        open={!!createdKeyPlaintext}
+        onOk={() => setCreatedKeyPlaintext(null)}
+        onCancel={() => setCreatedKeyPlaintext(null)}
+        okText={t('common.confirm')}
+        cancelButtonProps={{ style: { display: 'none' } }}
       >
         <Alert
           type="warning"
           showIcon
+          style={{ marginBottom: 16, marginTop: 12 }}
           description={t('pro.key_created_desc')}
-          style={{ marginBottom: 16 }}
         />
-        <Input
-          readOnly
-          value={createdKeyToDisplay || ''}
-          className="mono-num"
-          style={{ fontWeight: 600, color: 'var(--accent)' }}
-        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Input
+            readOnly
+            value={createdKeyPlaintext || ''}
+            style={{ fontFamily: 'monospace', fontWeight: 600 }}
+          />
+          <Button
+            icon={<CopyOutlined />}
+            onClick={() => handleCopy(createdKeyPlaintext || '')}
+          />
+        </div>
       </Modal>
     </div>
   );

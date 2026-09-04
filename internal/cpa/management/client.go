@@ -207,6 +207,16 @@ func (c *Client) GeminiAPIKeys(ctx context.Context) ([]SimpleKeyEntry, error) {
 	return response.Entries, nil
 }
 
+func (c *Client) UpdateClaudeAPIKeys(ctx context.Context, entries []SimpleKeyEntry) error {
+	payload := map[string]any{"claude-api-key": entries}
+	return c.doJSONBody(ctx, http.MethodPut, "/claude-api-key", payload, nil)
+}
+
+func (c *Client) UpdateGeminiAPIKeys(ctx context.Context, entries []SimpleKeyEntry) error {
+	payload := map[string]any{"gemini-api-key": entries}
+	return c.doJSONBody(ctx, http.MethodPut, "/gemini-api-key", payload, nil)
+}
+
 type OAuthAuthURLResponse struct {
 	URL string `json:"url"`
 }

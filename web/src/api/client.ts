@@ -11,7 +11,7 @@ import { DashboardResponse, DashboardTailResponse } from '../types/dashboard';
 import { ErrorLogFile } from '../types/logs';
 import { CapabilityProbeReport } from '../types/capability';
 import { ConfigScalarsResponse, ConfigSourceResponse, ConfigGrantResponse } from '../types/configManagement';
-import { ClientAPIKeyItem, ProviderItem } from '../types/providers';
+import { ClientAPIKeyItem, ProviderItem, SaveProviderPayload } from '../types/providers';
 import { OAuthProviderItem, StartOAuthResponse, OAuthStatusResponse } from '../types/oauth';
 import { QuotaOverviewResponse } from '../types/quota';
 import { SystemInfoResponse } from '../types/system';
@@ -288,6 +288,26 @@ export const api = {
 
   async getManagementProviders(): Promise<{ providers: ProviderItem[]; total: number }> {
     return request<{ providers: ProviderItem[]; total: number }>('/management/providers', { method: 'GET' });
+  },
+
+  async createManagementProvider(payload: SaveProviderPayload): Promise<{ status: string }> {
+    return request<{ status: string }>('/management/providers', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateManagementProvider(id: string, payload: SaveProviderPayload): Promise<{ status: string }> {
+    return request<{ status: string }>(`/management/providers/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteManagementProvider(id: string): Promise<{ status: string }> {
+    return request<{ status: string }>(`/management/providers/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
   },
 
   async patchManagementProviderStatus(family: string, index: number, disabled: boolean): Promise<{ status: string; disabled: boolean }> {
