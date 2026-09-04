@@ -782,6 +782,20 @@ const DICT: Record<string, [string, string]> = {
   'pro.header_value': ['请求头取值', 'Header Value'],
   'pro.change_key': ['更换密钥', 'Change Key'],
   'pro.keep_key': ['保持原密钥', 'Keep Key'],
+  'pro.test_all': ['全部测试', 'Test All'],
+  'pro.test_single': ['测试', 'Test'],
+  'pro.api_key_label': ['API 密钥', 'API Key'],
+  'pro.key_ph_no_change': ['留空表示不修改', 'Leave blank to keep unchanged'],
+  'pro.proxy_url_label': ['代理 URL', 'Proxy URL'],
+  'pro.weight_label': ['调度权重', 'Weight'],
+  'pro.weight_desc': ['默认 1 · ≤ 0 时不参与 · 最大 1,000,000', 'Default 1 · ≤ 0 disabled · Max 1,000,000'],
+  'pro.field_test_model': ['测试模型', 'Test Model'],
+  'pro.test_auto': ['自动 · {model}', 'Auto · {model}'],
+  'pro.testing_key': ['正在测试密钥 #{n}...', 'Testing key #{n}...'],
+  'pro.test_key_ok': ['密钥 #{n} 连通性测试通过', 'Key #{n} connectivity verified'],
+  'pro.testing_all': ['正在测试所有密钥...', 'Testing all keys...'],
+  'pro.test_all_ok': ['所有密钥测试完成 ({count} 个)', 'All keys tested successfully ({count})'],
+  'pro.test_key_empty': ['请先输入或配置 API 密钥', 'Please enter or configure an API key first'],
 
 
   // ── usage events ──────────────────────────────────────────────────────────

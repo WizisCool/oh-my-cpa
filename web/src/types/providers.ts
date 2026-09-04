@@ -9,6 +9,7 @@ export interface ProviderKeyEntry {
   index: number;
   masked: string;
   proxy_url?: string;
+  weight?: number;
 }
 
 export interface ProviderModelItem {
@@ -39,6 +40,7 @@ export interface ProviderItem {
 export interface SaveProviderKeyItem {
   api_key?: string;
   proxy_url?: string;
+  weight?: number;
 }
 
 export interface SaveProviderModelItem {

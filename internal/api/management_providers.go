@@ -22,6 +22,7 @@ type ProviderKeyEntryDTO struct {
 	Index    int    `json:"index"`
 	Masked   string `json:"masked"`
 	ProxyURL string `json:"proxy_url,omitempty"`
+	Weight   *int   `json:"weight,omitempty"`
 }
 
 type ProviderModelDTO struct {
@@ -236,6 +237,7 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 					Index:    ki,
 					Masked:   maskSecretKey(k.APIKey),
 					ProxyURL: k.ProxyURL,
+					Weight:   k.Weight,
 				})
 			}
 			for ki, k := range entry.LegacyAPIKeys {
@@ -392,6 +394,7 @@ func maskSecretKey(key string) string {
 type SaveProviderKeyEntry struct {
 	APIKey   string `json:"api_key,omitempty"`
 	ProxyURL string `json:"proxy_url,omitempty"`
+	Weight   *int   `json:"weight,omitempty"`
 }
 
 type SaveProviderModelEntry struct {
@@ -511,6 +514,7 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 					newEntry.APIKeyEntries = append(newEntry.APIKeyEntries, management.APIKeyEntry{
 						APIKey:   strings.TrimSpace(k.APIKey),
 						ProxyURL: strings.TrimSpace(k.ProxyURL),
+						Weight:   k.Weight,
 					})
 				}
 			}
@@ -671,6 +675,7 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 					updatedKeys = append(updatedKeys, management.APIKeyEntry{
 						APIKey:   kVal,
 						ProxyURL: strings.TrimSpace(k.ProxyURL),
+						Weight:   k.Weight,
 					})
 				}
 			}

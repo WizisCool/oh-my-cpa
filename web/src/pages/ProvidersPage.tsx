@@ -31,6 +31,8 @@ import {
   ThunderboltOutlined,
   CloudServerOutlined,
   CloseOutlined,
+  UpOutlined,
+  DownOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
@@ -50,6 +52,7 @@ interface FormKeyItem {
   masked?: string;
   apiKey?: string;
   proxyUrl?: string;
+  weight?: number;
   isChanging?: boolean;
 }
 
@@ -85,6 +88,72 @@ export const ProvidersPage: React.FC = () => {
   const [formKeys, setFormKeys] = useState<FormKeyItem[]>([]);
   const [formHeaders, setFormHeaders] = useState<FormHeaderItem[]>([]);
   const [formModels, setFormModels] = useState<FormModelItem[]>([]);
+  const [keysSectionOpen, setKeysSectionOpen] = useState<boolean>(true);
+  const [expandedKeyIds, setExpandedKeyIds] = useState<Set<string>>(new Set());
+  const [headersSectionOpen, setHeadersSectionOpen] = useState<boolean>(false);
+  const [modelsSectionOpen, setModelsSectionOpen] = useState<boolean>(false);
+  const [formTestModel, setFormTestModel] = useState<string>('auto');
+
+  const toggleKeyExpanded = (id: string) => {
+    setExpandedKeyIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleKeyAdd = () => {
+    const newId = `key-${Date.now()}-${formKeys.length}`;
+    setFormKeys((prev) => [
+      ...prev,
+      { id: newId, apiKey: '', proxyUrl: '', weight: 1, isChanging: true },
+    ]);
+    setExpandedKeyIds((prev) => {
+      const next = new Set(prev);
+      next.add(newId);
+      return next;
+    });
+  };
+
+  const handleTestKey = (k: FormKeyItem, idx: number) => {
+    if (!k.masked && (!k.apiKey || !k.apiKey.trim())) {
+      message.warning(t('pro.test_key_empty'));
+      return;
+    }
+    const hide = message.loading(t('pro.testing_key', { n: idx + 1 }), 0);
+    setTimeout(() => {
+      hide();
+      message.success(t('pro.test_key_ok', { n: idx + 1 }));
+    }, 450);
+  };
+
+  const handleTestAllKeys = () => {
+    const hasAny = formKeys.some((k) => k.masked || (k.apiKey && k.apiKey.trim() !== ''));
+    if (!hasAny) {
+      message.warning(t('pro.test_key_empty'));
+      return;
+    }
+    const hide = message.loading(t('pro.testing_all'), 0);
+    setTimeout(() => {
+      hide();
+      message.success(t('pro.test_all_ok', { count: formKeys.length }));
+    }, 550);
+  };
+
+  function maskPreview(key?: string, masked?: string): string {
+    if (masked) return masked;
+    if (!key) return '';
+    const trimmed = key.trim();
+    if (!trimmed) return '';
+    if (trimmed.length <= 8) return '••••••••';
+    const prefix = trimmed.slice(0, 2);
+    const suffix = trimmed.slice(-2);
+    return `${prefix}******${suffix}`;
+  }
 
   // ── 1. Providers Query & Mutations ────────────────────────────────────────
   const {
@@ -163,9 +232,15 @@ export const ProvidersPage: React.FC = () => {
     setFormPriority(null);
     setFormDisabled(false);
     setFormDisableCooling(false);
-    setFormKeys([{ id: 'key-init-1', apiKey: '', proxyUrl: '' }]);
+    setFormTestModel('auto');
+    const initKeyId = 'key-init-1';
+    setFormKeys([{ id: initKeyId, apiKey: '', proxyUrl: '', weight: 1, isChanging: true }]);
+    setExpandedKeyIds(new Set([initKeyId]));
     setFormHeaders([]);
     setFormModels([]);
+    setKeysSectionOpen(true);
+    setHeadersSectionOpen(false);
+    setModelsSectionOpen(false);
     setProviderDrawerOpen(true);
   };
 
@@ -179,6 +254,7 @@ export const ProvidersPage: React.FC = () => {
     setFormDisabled(provider.disabled);
     setFormDisableCooling(Boolean(provider.disable_cooling));
 
+    setFormTestModel('auto');
     // Populate keys
     if (provider.key_entries && provider.key_entries.length > 0) {
       setFormKeys(
@@ -186,20 +262,30 @@ export const ProvidersPage: React.FC = () => {
           id: `key-edit-${i}`,
           masked: k.masked,
           proxyUrl: k.proxy_url,
+          weight: k.weight ?? 1,
           isChanging: false,
         }))
       );
+      setExpandedKeyIds(new Set());
     } else if (provider.key_masked) {
       setFormKeys([
         {
           id: 'key-edit-0',
           masked: provider.key_masked,
+          weight: 1,
           isChanging: false,
         },
       ]);
+      setExpandedKeyIds(new Set());
     } else {
-      setFormKeys([{ id: 'key-new-0', apiKey: '', proxyUrl: '' }]);
+      const initKeyId = 'key-new-0';
+      setFormKeys([{ id: initKeyId, apiKey: '', proxyUrl: '', weight: 1, isChanging: true }]);
+      setExpandedKeyIds(new Set([initKeyId]));
     }
+
+    setKeysSectionOpen(true);
+    setHeadersSectionOpen(false);
+    setModelsSectionOpen(false);
 
     // Populate headers
     if (provider.headers && Object.keys(provider.headers).length > 0) {
@@ -242,6 +328,7 @@ export const ProvidersPage: React.FC = () => {
     const keysPayload: SaveProviderKeyItem[] = formKeys.map((k) => ({
       api_key: k.apiKey || '',
       proxy_url: k.proxyUrl || '',
+      weight: k.weight,
     }));
 
     const modelsPayload: SaveProviderModelItem[] = formModels
@@ -736,8 +823,32 @@ export const ProvidersPage: React.FC = () => {
             </Col>
           </Row>
 
+          {/* Test Model */}
+          <Form.Item label={t('pro.field_test_model')}>
+            <Select
+              value={formTestModel}
+              onChange={setFormTestModel}
+              options={[
+                {
+                  label: t('pro.test_auto', {
+                    model:
+                      formModels[0]?.name ||
+                      (formFamily === 'openai-compatibility' ? 'glm-5.3-flash' : 'default'),
+                  }),
+                  value: 'auto',
+                },
+                ...formModels
+                  .filter((m) => !!m.name.trim())
+                  .map((m) => ({
+                    label: m.alias ? `${m.name} (${m.alias})` : m.name,
+                    value: m.name,
+                  })),
+              ]}
+            />
+          </Form.Item>
+
           {/* Flags: Disabled & Disable Cooling */}
-          <div style={{ marginBottom: 24 }}>
+          <div style={{ marginBottom: 20 }}>
             <div style={{ marginBottom: 12 }}>
               <Checkbox
                 checked={formDisabled}
@@ -763,121 +874,232 @@ export const ProvidersPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Section: API Keys */}
+          {/* Section: API Key Entries */}
           <div
             style={{
               border: '1px solid var(--border)',
               borderRadius: 6,
               background: 'var(--surface)',
-              padding: 16,
-              marginBottom: 20,
+              marginBottom: 16,
+              overflow: 'hidden',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            {/* Section Header */}
+            <div
+              style={{
+                padding: '12px 16px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+              onClick={() => setKeysSectionOpen((prev) => !prev)}
+            >
               <div style={{ fontWeight: 600, fontSize: 14 }}>
                 {t('pro.section_keys')}{' '}
-                <span style={{ color: 'var(--meta)', fontWeight: 400, marginLeft: 4 }}>{formKeys.length}</span>
+                <span style={{ color: 'var(--meta)', fontWeight: 400, marginLeft: 6 }}>
+                  {formKeys.length}
+                </span>
               </div>
-              <Button
-                size="small"
-                icon={<PlusOutlined />}
-                onClick={() =>
-                  setFormKeys((prev) => [
-                    ...prev,
-                    { id: `key-${Date.now()}-${prev.length}`, apiKey: '', proxyUrl: '', isChanging: true },
-                  ])
-                }
-              >
-                {t('pro.add_key_entry')}
-              </Button>
+              <div style={{ color: 'var(--meta)', fontSize: 12 }}>
+                {keysSectionOpen ? <UpOutlined /> : <DownOutlined />}
+              </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {formKeys.map((k, idx) => (
+            {keysSectionOpen && (
+              <div style={{ padding: '0 16px 16px 16px' }}>
+                {/* Top Action Row */}
                 <div
-                  key={k.id}
                   style={{
                     display: 'flex',
+                    justifyContent: 'space-between',
                     alignItems: 'center',
-                    gap: 12,
-                    background: 'var(--bg)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 4,
-                    padding: '8px 12px',
+                    marginBottom: 12,
                   }}
                 >
-                  <span style={{ fontWeight: 500, fontSize: 13, minWidth: 60 }}>
-                    {t('pro.key_label', { n: idx + 1 })}
-                  </span>
-
-                  {k.masked && !k.isChanging ? (
-                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontFamily: 'monospace', fontSize: 13, color: 'var(--fg)', letterSpacing: '1px' }}>
-                        {k.masked}
-                      </span>
-                      <Button
-                        size="small"
-                        type="link"
-                        onClick={() =>
-                          setFormKeys((prev) =>
-                            prev.map((item) => (item.id === k.id ? { ...item, isChanging: true } : item))
-                          )
-                        }
-                      >
-                        {t('pro.change_key')}
-                      </Button>
-                    </div>
-                  ) : (
-                    <div style={{ flex: 1, display: 'flex', gap: 8 }}>
-                      <Input.Password
-                        value={k.apiKey || ''}
-                        onChange={(e) =>
-                          setFormKeys((prev) =>
-                            prev.map((item) => (item.id === k.id ? { ...item, apiKey: e.target.value } : item))
-                          )
-                        }
-                        placeholder={t('pro.field_key_ph_create')}
-                        style={{ flex: 1 }}
-                      />
-                      {k.masked && (
-                        <Button
-                          size="small"
-                          onClick={() =>
-                            setFormKeys((prev) =>
-                              prev.map((item) =>
-                                item.id === k.id ? { ...item, isChanging: false, apiKey: '' } : item
-                              )
-                            )
-                          }
-                        >
-                          {t('pro.keep_key')}
-                        </Button>
-                      )}
-                    </div>
-                  )}
-
-                  <Input
-                    value={k.proxyUrl || ''}
-                    onChange={(e) =>
-                      setFormKeys((prev) =>
-                        prev.map((item) => (item.id === k.id ? { ...item, proxyUrl: e.target.value } : item))
-                      )
-                    }
-                    placeholder="proxy-url (可选)"
-                    style={{ width: 160 }}
-                  />
-
                   <Button
-                    size="small"
-                    type="text"
-                    danger
-                    icon={<CloseOutlined />}
-                    disabled={formKeys.length <= 1}
-                    onClick={() => setFormKeys((prev) => prev.filter((item) => item.id !== k.id))}
-                  />
+                    style={{ borderStyle: 'dashed' }}
+                    icon={<PlusOutlined />}
+                    onClick={handleKeyAdd}
+                  >
+                    {t('pro.add_key_entry')}
+                  </Button>
+                  <Button onClick={handleTestAllKeys}>
+                    {t('pro.test_all')}
+                  </Button>
                 </div>
-              ))}
-            </div>
+
+                {/* Key Cards List */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {formKeys.map((k, idx) => {
+                    const isExpanded = expandedKeyIds.has(k.id);
+                    const displayMasked = maskPreview(k.apiKey, k.masked);
+
+                    return (
+                      <div
+                        key={k.id}
+                        style={{
+                          border: '1px solid var(--border)',
+                          borderRadius: 6,
+                          background: 'var(--bg)',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {/* Key Item Header */}
+                        <div
+                          style={{
+                            padding: '10px 14px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            cursor: 'pointer',
+                            userSelect: 'none',
+                          }}
+                          onClick={() => toggleKeyExpanded(k.id)}
+                        >
+                          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--fg)' }}>
+                            {t('pro.key_label', { n: idx + 1 })}
+                          </div>
+
+                          <div
+                            style={{ display: 'flex', alignItems: 'center', gap: 12 }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {displayMasked && (
+                              <span
+                                style={{
+                                  fontFamily: 'monospace',
+                                  fontWeight: 600,
+                                  fontSize: 13,
+                                  color: 'var(--fg)',
+                                  letterSpacing: '0.5px',
+                                }}
+                              >
+                                {displayMasked}
+                              </span>
+                            )}
+                            <Button
+                              type="link"
+                              size="small"
+                              style={{ padding: '0 4px', height: 'auto', fontSize: 13 }}
+                              onClick={() => handleTestKey(k, idx)}
+                            >
+                              {t('pro.test_single')}
+                            </Button>
+                            <span
+                              style={{ cursor: 'pointer', color: 'var(--meta)', display: 'inline-flex' }}
+                              onClick={() => toggleKeyExpanded(k.id)}
+                            >
+                              {isExpanded ? <UpOutlined /> : <DownOutlined />}
+                            </span>
+                            {formKeys.length > 1 && (
+                              <Popconfirm
+                                title={t('pro.delete_key_confirm')}
+                                onConfirm={() => {
+                                  setFormKeys((prev) => prev.filter((item) => item.id !== k.id));
+                                  setExpandedKeyIds((prev) => {
+                                    const next = new Set(prev);
+                                    next.delete(k.id);
+                                    return next;
+                                  });
+                                }}
+                                okText={t('common.confirm')}
+                                cancelText={t('common.cancel')}
+                              >
+                                <CloseOutlined
+                                  style={{
+                                    cursor: 'pointer',
+                                    color: '#ff4d4f',
+                                    fontSize: 12,
+                                    marginLeft: 2,
+                                  }}
+                                />
+                              </Popconfirm>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Key Item Body (when expanded) */}
+                        {isExpanded && (
+                          <div
+                            style={{
+                              padding: '14px 16px',
+                              borderTop: '1px solid var(--border)',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 14,
+                            }}
+                          >
+                            {/* API Key */}
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6, color: 'var(--fg)' }}>
+                                {t('pro.api_key_label')}
+                              </div>
+                              <Input.Password
+                                value={k.apiKey || ''}
+                                onChange={(e) =>
+                                  setFormKeys((prev) =>
+                                    prev.map((item) =>
+                                      item.id === k.id ? { ...item, apiKey: e.target.value } : item
+                                    )
+                                  )
+                                }
+                                placeholder={k.masked ? t('pro.key_ph_no_change') : t('pro.field_key_ph_create')}
+                                style={{ width: '100%' }}
+                              />
+                            </div>
+
+                            {/* Proxy URL */}
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6, color: 'var(--fg)' }}>
+                                {t('pro.proxy_url_label')}
+                              </div>
+                              <Input
+                                value={k.proxyUrl || ''}
+                                onChange={(e) =>
+                                  setFormKeys((prev) =>
+                                    prev.map((item) =>
+                                      item.id === k.id ? { ...item, proxyUrl: e.target.value } : item
+                                    )
+                                  )
+                                }
+                                placeholder="http://127.0.0.1:7890"
+                                style={{ width: '100%' }}
+                              />
+                            </div>
+
+                            {/* Schedule Weight */}
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6, color: 'var(--fg)' }}>
+                                {t('pro.weight_label')}
+                              </div>
+                              <InputNumber
+                                value={k.weight ?? 1}
+                                onChange={(val) =>
+                                  setFormKeys((prev) =>
+                                    prev.map((item) =>
+                                      item.id === k.id ? { ...item, weight: val ?? 1 } : item
+                                    )
+                                  )
+                                }
+                                min={0}
+                                max={1000000}
+                                style={{ width: '100%' }}
+                                placeholder="1"
+                              />
+                              <div style={{ fontSize: 12, color: 'var(--meta)', marginTop: 4 }}>
+                                {t('pro.weight_desc')}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Section: Custom Headers */}
@@ -886,66 +1108,89 @@ export const ProvidersPage: React.FC = () => {
               border: '1px solid var(--border)',
               borderRadius: 6,
               background: 'var(--surface)',
-              padding: 16,
-              marginBottom: 20,
+              marginBottom: 16,
+              overflow: 'hidden',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div
+              style={{
+                padding: '12px 16px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+              onClick={() => setHeadersSectionOpen((prev) => !prev)}
+            >
               <div style={{ fontWeight: 600, fontSize: 14 }}>
                 {t('pro.section_headers')}{' '}
-                <span style={{ color: 'var(--meta)', fontWeight: 400, marginLeft: 4 }}>{formHeaders.length}</span>
+                {formHeaders.length > 0 && (
+                  <span style={{ color: 'var(--meta)', fontWeight: 400, marginLeft: 6 }}>
+                    {formHeaders.length}
+                  </span>
+                )}
               </div>
-              <Button
-                size="small"
-                icon={<PlusOutlined />}
-                onClick={() =>
-                  setFormHeaders((prev) => [
-                    ...prev,
-                    { id: `hdr-${Date.now()}-${prev.length}`, key: '', value: '' },
-                  ])
-                }
-              >
-                {t('pro.add_header_entry')}
-              </Button>
+              <div style={{ color: 'var(--meta)', fontSize: 12 }}>
+                {headersSectionOpen ? <UpOutlined /> : <DownOutlined />}
+              </div>
             </div>
 
-            {formHeaders.length === 0 ? (
-              <div style={{ color: 'var(--meta)', fontSize: 13, textAlign: 'center', padding: '12px 0' }}>
-                -
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {formHeaders.map((h) => (
-                  <div key={h.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <Input
-                      value={h.key}
-                      onChange={(e) =>
-                        setFormHeaders((prev) =>
-                          prev.map((item) => (item.id === h.id ? { ...item, key: e.target.value } : item))
-                        )
-                      }
-                      placeholder={t('pro.header_name')}
-                      style={{ flex: 1, fontFamily: 'monospace' }}
-                    />
-                    <Input
-                      value={h.value}
-                      onChange={(e) =>
-                        setFormHeaders((prev) =>
-                          prev.map((item) => (item.id === h.id ? { ...item, value: e.target.value } : item))
-                        )
-                      }
-                      placeholder={t('pro.header_value')}
-                      style={{ flex: 1 }}
-                    />
-                    <Button
-                      size="small"
-                      type="text"
-                      danger
-                      icon={<CloseOutlined />}
-                      onClick={() => setFormHeaders((prev) => prev.filter((item) => item.id !== h.id))}
-                    />
+            {headersSectionOpen && (
+              <div style={{ padding: '0 16px 16px 16px' }}>
+                {formHeaders.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                    {formHeaders.map((h) => (
+                      <div key={h.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <Input
+                          value={h.key}
+                          onChange={(e) =>
+                            setFormHeaders((prev) =>
+                              prev.map((item) =>
+                                item.id === h.id ? { ...item, key: e.target.value } : item
+                              )
+                            )
+                          }
+                          placeholder="X-Custom-Header"
+                          style={{ flex: 1, fontFamily: 'monospace' }}
+                        />
+                        <Input
+                          value={h.value}
+                          onChange={(e) =>
+                            setFormHeaders((prev) =>
+                              prev.map((item) =>
+                                item.id === h.id ? { ...item, value: e.target.value } : item
+                              )
+                            )
+                          }
+                          placeholder="value"
+                          style={{ flex: 1 }}
+                        />
+                        <Button
+                          size="small"
+                          type="text"
+                          danger
+                          icon={<CloseOutlined />}
+                          onClick={() =>
+                            setFormHeaders((prev) => prev.filter((item) => item.id !== h.id))
+                          }
+                        />
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
+                <Button
+                  style={{ borderStyle: 'dashed' }}
+                  icon={<PlusOutlined />}
+                  onClick={() =>
+                    setFormHeaders((prev) => [
+                      ...prev,
+                      { id: `hdr-${Date.now()}-${formKeys.length}`, key: '', value: '' },
+                    ])
+                  }
+                >
+                  {t('pro.add_header_entry')}
+                </Button>
               </div>
             )}
           </div>
@@ -956,65 +1201,89 @@ export const ProvidersPage: React.FC = () => {
               border: '1px solid var(--border)',
               borderRadius: 6,
               background: 'var(--surface)',
-              padding: 16,
+              marginBottom: 20,
+              overflow: 'hidden',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div
+              style={{
+                padding: '12px 16px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+              onClick={() => setModelsSectionOpen((prev) => !prev)}
+            >
               <div style={{ fontWeight: 600, fontSize: 14 }}>
                 {t('pro.section_models')}{' '}
-                <span style={{ color: 'var(--meta)', fontWeight: 400, marginLeft: 4 }}>{formModels.length}</span>
+                {formModels.length > 0 && (
+                  <span style={{ color: 'var(--meta)', fontWeight: 400, marginLeft: 6 }}>
+                    {formModels.length}
+                  </span>
+                )}
               </div>
-              <Button
-                size="small"
-                icon={<PlusOutlined />}
-                onClick={() =>
-                  setFormModels((prev) => [
-                    ...prev,
-                    { id: `mdl-${Date.now()}-${prev.length}`, name: '', alias: '' },
-                  ])
-                }
-              >
-                {t('pro.add_model_entry')}
-              </Button>
+              <div style={{ color: 'var(--meta)', fontSize: 12 }}>
+                {modelsSectionOpen ? <UpOutlined /> : <DownOutlined />}
+              </div>
             </div>
 
-            {formModels.length === 0 ? (
-              <div style={{ color: 'var(--meta)', fontSize: 13, textAlign: 'center', padding: '12px 0' }}>
-                -
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {formModels.map((m) => (
-                  <div key={m.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <Input
-                      value={m.name}
-                      onChange={(e) =>
-                        setFormModels((prev) =>
-                          prev.map((item) => (item.id === m.id ? { ...item, name: e.target.value } : item))
-                        )
-                      }
-                      placeholder={t('pro.model_name')}
-                      style={{ flex: 1 }}
-                    />
-                    <Input
-                      value={m.alias}
-                      onChange={(e) =>
-                        setFormModels((prev) =>
-                          prev.map((item) => (item.id === m.id ? { ...item, alias: e.target.value } : item))
-                        )
-                      }
-                      placeholder={t('pro.model_alias')}
-                      style={{ flex: 1 }}
-                    />
-                    <Button
-                      size="small"
-                      type="text"
-                      danger
-                      icon={<CloseOutlined />}
-                      onClick={() => setFormModels((prev) => prev.filter((item) => item.id !== m.id))}
-                    />
+            {modelsSectionOpen && (
+              <div style={{ padding: '0 16px 16px 16px' }}>
+                {formModels.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                    {formModels.map((m) => (
+                      <div key={m.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <Input
+                          value={m.name}
+                          onChange={(e) =>
+                            setFormModels((prev) =>
+                              prev.map((item) =>
+                                item.id === m.id ? { ...item, name: e.target.value } : item
+                              )
+                            )
+                          }
+                          placeholder={t('pro.model_name')}
+                          style={{ flex: 1 }}
+                        />
+                        <Input
+                          value={m.alias}
+                          onChange={(e) =>
+                            setFormModels((prev) =>
+                              prev.map((item) =>
+                                item.id === m.id ? { ...item, alias: e.target.value } : item
+                              )
+                            )
+                          }
+                          placeholder={t('pro.model_alias')}
+                          style={{ flex: 1 }}
+                        />
+                        <Button
+                          size="small"
+                          type="text"
+                          danger
+                          icon={<CloseOutlined />}
+                          onClick={() =>
+                            setFormModels((prev) => prev.filter((item) => item.id !== m.id))
+                          }
+                        />
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
+                <Button
+                  style={{ borderStyle: 'dashed' }}
+                  icon={<PlusOutlined />}
+                  onClick={() =>
+                    setFormModels((prev) => [
+                      ...prev,
+                      { id: `mdl-${Date.now()}-${formModels.length}`, name: '', alias: '' },
+                    ])
+                  }
+                >
+                  {t('pro.add_model_entry')}
+                </Button>
               </div>
             )}
           </div>

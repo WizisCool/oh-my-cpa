@@ -257,4 +257,40 @@ func TestManagementProviderCreateUpdateDelete(t *testing.T) {
 	if finalCount != 1 {
 		t.Fatalf("expected 1 provider after delete, got %d", finalCount)
 	}
+
+	// 4. Create provider with multi-key, proxy_url and weight
+	multiKeyBody := `{"family":"openai-compatibility","name":"Multi Key Provider","base_url":"https://api.example.com","keys":[{"api_key":"sk-key-alpha-1234","proxy_url":"http://127.0.0.1:7890","weight":5},{"api_key":"sk-key-beta-5678","weight":10}]}`
+	resp, payload = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/providers", multiKeyBody)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("create multi-key provider status = %d body %s", resp.StatusCode, payload)
+	}
+
+	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers")
+	var providersResp struct {
+		Providers []ProviderItemDTO `json:"providers"`
+	}
+	if err := json.Unmarshal(payload, &providersResp); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, p := range providersResp.Providers {
+		if p.Name == "Multi Key Provider" {
+			found = true
+			if len(p.KeyEntries) != 2 {
+				t.Fatalf("expected 2 key entries, got %d", len(p.KeyEntries))
+			}
+			if p.KeyEntries[0].ProxyURL != "http://127.0.0.1:7890" {
+				t.Fatalf("expected proxy url http://127.0.0.1:7890, got %s", p.KeyEntries[0].ProxyURL)
+			}
+			if p.KeyEntries[0].Weight == nil || *p.KeyEntries[0].Weight != 5 {
+				t.Fatalf("expected weight 5, got %v", p.KeyEntries[0].Weight)
+			}
+			if p.KeyEntries[1].Weight == nil || *p.KeyEntries[1].Weight != 10 {
+				t.Fatalf("expected weight 10, got %v", p.KeyEntries[1].Weight)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("Multi Key Provider not found in list")
+	}
 }
