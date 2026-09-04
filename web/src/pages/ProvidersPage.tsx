@@ -8,10 +8,10 @@ import {
   InputNumber,
   Checkbox,
   Switch,
-  Typography,
   Alert,
   Drawer,
   Modal,
+  Tooltip,
   Tabs,
   Popconfirm,
   Form,
@@ -26,6 +26,7 @@ import {
   PlusOutlined,
   DeleteOutlined,
   EditOutlined,
+  EyeOutlined,
   CopyOutlined,
   KeyOutlined,
   ThunderboltOutlined,
@@ -50,7 +51,6 @@ import type {
   SaveProviderModelItem,
 } from '../types/providers';
 
-const { Text } = Typography;
 
 const THINKING_LEVEL_OPTIONS = [
   { value: 'none', labelKey: 'pro.level_none' },
@@ -631,7 +631,9 @@ export const ProvidersPage: React.FC = () => {
   };
 
   // Columns for Providers
+  // Columns for Providers (matching CPAMC specifications)
   const providerColumns: ColumnsType<ProviderItem> = [
+    // 1. 图标+显示名称
     {
       title: t('pro.col_provider'),
       key: 'name',
@@ -665,102 +667,187 @@ export const ProvidersPage: React.FC = () => {
               <LobeIcon iconId={iconId} size={22} />
             </div>
             <div>
-              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--fg)' }}>{record.name}</div>
-              <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                <Tag color="purple" style={{ fontFamily: 'monospace', fontSize: 10, margin: 0 }}>
-                  {record.family}
-                </Tag>
-                {record.prefix && (
-                  <Tag color="geekblue" style={{ fontSize: 10, margin: 0 }}>
-                    prefix: {record.prefix}
-                  </Tag>
-                )}
-                {record.priority != null && (
-                  <Tag style={{ fontSize: 10, margin: 0 }}>
-                    pri: {record.priority}
-                  </Tag>
-                )}
+              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--fg)' }}>
+                {record.name}
               </div>
+              {record.key_masked && (
+                <div style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--meta)', marginTop: 2 }}>
+                  {record.key_masked}
+                </div>
+              )}
             </div>
           </div>
         );
       },
     },
+
+    // 2. 协议驱动
     {
       title: t('pro.col_protocol'),
       key: 'protocol',
-      render: (_, record) => <Tag color="blue">{record.protocol}</Tag>,
+      render: (_, record) => (
+        <Tag color="blue" style={{ margin: 0 }}>
+          {familyDisplayNames[record.family] || record.protocol || record.family}
+        </Tag>
+      ),
     },
+
+    // 3. 服务地址 (过长自动截断)
     {
       title: t('pro.col_endpoint'),
       key: 'base_url',
-      render: (_, record) =>
-        record.base_url ? (
-          <code style={{ fontSize: 11, wordBreak: 'break-all' }}>{record.base_url}</code>
-        ) : (
-          <span style={{ color: 'var(--meta)' }}>-</span>
-        ),
+      render: (_, record) => {
+        if (!record.base_url) return <span style={{ color: 'var(--meta)' }}>{t('pro.none_text')}</span>;
+        return (
+          <Tooltip title={record.base_url}>
+            <div
+              style={{
+                maxWidth: 240,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                fontFamily: 'monospace',
+                fontSize: 12,
+                color: 'var(--fg)',
+              }}
+            >
+              {record.base_url}
+            </div>
+          </Tooltip>
+        );
+      },
     },
+
+    // 4. 前缀 (没有则显无)
     {
-      title: t('pro.col_models'),
-      key: 'models',
+      title: t('pro.field_prefix'),
+      key: 'prefix',
       render: (_, record) =>
-        record.models && record.models.length > 0 ? (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-            {record.models.map((m) => (
-              <Tag key={m} style={{ fontSize: 11 }}>
-                {m}
-              </Tag>
-            ))}
-          </div>
-        ) : (
-          <span style={{ color: 'var(--meta)' }}>-</span>
-        ),
-    },
-    {
-      title: t('pro.col_key'),
-      key: 'key',
-      render: (_, record) =>
-        record.key_configured ? (
-          <Tag color="success" style={{ fontFamily: 'monospace' }}>
-            {record.key_masked || 'Configured'}
+        record.prefix ? (
+          <Tag color="geekblue" style={{ fontFamily: 'monospace', margin: 0 }}>
+            {record.prefix}
           </Tag>
         ) : (
-          <Tag color="default">Unset</Tag>
+          <span style={{ color: 'var(--meta)', fontSize: 13 }}>{t('pro.none_text')}</span>
         ),
     },
+
+    // 5. 模型/请求头
+    {
+      title: t('pro.col_models_headers'),
+      key: 'models_headers',
+      render: (_, record) => {
+        const modelCount = record.model_entries?.length || record.models?.length || 0;
+        const keyCount = record.key_entries?.length || (record.key_configured ? 1 : 0);
+        const headerCount = record.headers ? Object.keys(record.headers).length : 0;
+        const modelNames =
+          record.model_entries?.map((m) => m.name).join(', ') ||
+          record.models?.join(', ') ||
+          '';
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <Tooltip title={modelNames || undefined}>
+                <Tag
+                  style={{
+                    borderRadius: 12,
+                    fontSize: 11,
+                    margin: 0,
+                    padding: '0 8px',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                  }}
+                >
+                  {t('pro.model_count_pill', { n: modelCount })}
+                </Tag>
+              </Tooltip>
+              <Tag
+                style={{
+                  borderRadius: 12,
+                  fontSize: 11,
+                  margin: 0,
+                  padding: '0 8px',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                }}
+              >
+                {t('pro.key_count_pill', { n: keyCount })}
+              </Tag>
+            </div>
+            <div>
+              <Tag
+                style={{
+                  borderRadius: 12,
+                  fontSize: 11,
+                  margin: 0,
+                  padding: '0 8px',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                }}
+              >
+                {t('pro.header_count_pill', { n: headerCount })}
+              </Tag>
+            </div>
+          </div>
+        );
+      },
+    },
+
+    // 6. 状态
     {
       title: t('pro.col_status'),
       key: 'status',
-      width: 100,
+      render: (_, record) =>
+        record.disabled ? (
+          <Tag color="warning" style={{ borderRadius: 4, padding: '2px 8px', margin: 0 }}>
+            ⚠ {t('pro.status_disabled')}
+          </Tag>
+        ) : (
+          <Tag color="success" style={{ borderRadius: 4, padding: '2px 8px', margin: 0 }}>
+            {t('pro.status_active')}
+          </Tag>
+        ),
+    },
+
+    // 7. 开关
+    {
+      title: t('pro.col_switch'),
+      key: 'switch',
+      width: 70,
       render: (_, record) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Switch
-            size="small"
-            checked={!record.disabled}
-            disabled={record.family !== 'openai-compatibility' || statusMutation.isPending}
-            onChange={(checked) => {
-              const idx = parseInt(record.id.split('-').pop() || '0', 10);
-              statusMutation.mutate({ family: record.family, index: idx, disabled: !checked });
-            }}
-          />
-          <Text type="secondary" style={{ fontSize: 11 }}>
-            {record.disabled ? t('af.disabled') : t('af.enabled')}
-          </Text>
-        </div>
+        <Switch
+          size="small"
+          checked={!record.disabled}
+          disabled={record.family !== 'openai-compatibility' || statusMutation.isPending}
+          onChange={(checked) => {
+            const idx = parseInt(record.id.split('-').pop() || '0', 10);
+            statusMutation.mutate({ family: record.family, index: idx, disabled: !checked });
+          }}
+        />
       ),
     },
+
+    // 8. 操作
     {
       title: t('common.actions'),
       key: 'actions',
-      width: 110,
+      width: 100,
       align: 'right',
       render: (_, record) => (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4 }}>
+          <Button
+            size="small"
+            type="text"
+            icon={<EyeOutlined />}
+            title={t('common.details')}
+            onClick={() => handleOpenEdit(record)}
+          />
           <Button
             size="small"
             type="text"
             icon={<EditOutlined />}
+            title={t('common.edit')}
             onClick={() => handleOpenEdit(record)}
           />
           <Popconfirm
@@ -774,6 +861,7 @@ export const ProvidersPage: React.FC = () => {
               type="text"
               danger
               icon={<DeleteOutlined />}
+              title={t('common.delete')}
               loading={deleteProviderMutation.isPending && deleteProviderMutation.variables === record.id}
             />
           </Popconfirm>
@@ -782,7 +870,7 @@ export const ProvidersPage: React.FC = () => {
     },
   ];
 
-  // Client Key Columns
+    // Client Key Columns
   const keyColumns: ColumnsType<ClientAPIKeyItem> = [
     {
       title: '#',

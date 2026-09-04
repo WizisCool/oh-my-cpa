@@ -831,6 +831,14 @@ const DICT: Record<string, [string, string]> = {
   'pro.level_xhigh': ['超高', 'Extra high'],
   'pro.level_max': ['最大', 'Max'],
   'pro.level_auto': ['自动', 'Auto'],
+  'pro.col_models_headers': ['模型/请求头', 'Models / Headers'],
+  'pro.col_switch': ['开关', 'Switch'],
+  'pro.model_count_pill': ['模型 {n}', 'Model {n}'],
+  'pro.key_count_pill': ['密钥 {n}', 'Key {n}'],
+  'pro.header_count_pill': ['请求头 {n}', 'Header {n}'],
+  'pro.none_text': ['无', 'None'],
+  'pro.status_disabled': ['已停用', 'Disabled'],
+  'pro.status_active': ['正常', 'Active'],
 
 
   // ── usage events ──────────────────────────────────────────────────────────
