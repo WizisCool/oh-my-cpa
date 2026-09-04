@@ -38,17 +38,51 @@ func startOAuthTestServer(t *testing.T) (*http.Client, string, *oauthCPAState, *
 		path := request.URL.Path
 
 		switch {
+		case strings.HasPrefix(path, "/v0/management/nostate-auth-url"):
+			_, _ = writer.Write([]byte(`{"url":"https://auth.example.test/authorize?client_id=nostate"}`))
 		case strings.HasSuffix(path, "-auth-url"):
-			_, _ = writer.Write([]byte(`{"url":"https://auth.example.test/authorize?client_id=123"}`))
+			isWebUI := request.URL.Query().Get("is_webui")
+			stateVal := "cpa-state-123"
+			if isWebUI == "true" {
+				stateVal = "cpa-state-webui"
+			}
+			_, _ = writer.Write([]byte(fmt.Sprintf(`{"url":"https://auth.example.test/authorize?client_id=123","state":"%s"}`, stateVal)))
 		case path == "/v0/management/get-auth-status":
-			_, _ = writer.Write([]byte(`{"status":"pending","message":"waiting for callback"}`))
+			reqState := request.URL.Query().Get("state")
+			if reqState == "" {
+				reqState = request.URL.Query().Get("session_id")
+			}
+			// A session whose browser auto-callback already finished the
+			// exchange reports completed, so the facade can reconcile a
+			// repeated manual submission.
+			if reqState == "already-done" {
+				_, _ = writer.Write([]byte(`{"status":"ok"}`))
+				return
+			}
+			_, _ = writer.Write([]byte(fmt.Sprintf(`{"status":"wait","message":"waiting for callback: %s"}`, reqState)))
 		case path == "/v0/management/oauth-callback":
 			var body map[string]string
 			_ = json.NewDecoder(request.Body).Decode(&body)
 			state.lastCallback = body
+			if strings.Contains(body["redirect_url"], "error=invalid") {
+				writer.WriteHeader(http.StatusBadRequest)
+				_, _ = writer.Write([]byte(`{"error":"invalid redirect_url","status":"error"}`))
+				return
+			}
+			// Simulate the CPA auto-callback race: the browser redirect has
+			// already completed the flow, so a repeated manual submission for
+			// the same state must surface 409 instead of a second success.
+			if strings.Contains(body["redirect_url"], "state=already-done") {
+				writer.WriteHeader(http.StatusConflict)
+				_, _ = writer.Write([]byte(`{"error":"oauth flow is already completed","status":"error"}`))
+				return
+			}
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 		case path == "/v0/management/oauth-session" && request.Method == http.MethodDelete:
-			state.cancelled = request.URL.Query().Get("session_id")
+			state.cancelled = request.URL.Query().Get("state")
+			if state.cancelled == "" {
+				state.cancelled = request.URL.Query().Get("session_id")
+			}
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 		case path == "/v0/management/reset-quota":
 			var body map[string]string
@@ -136,41 +170,93 @@ func TestOAuthFlowLifecycle(t *testing.T) {
 	}
 	var startRes struct {
 		URL       string `json:"url"`
+		State     string `json:"state"`
 		SessionID string `json:"session_id"`
 		Provider  string `json:"provider"`
 	}
-	if err := json.Unmarshal(payload, &startRes); err != nil || startRes.URL == "" || startRes.SessionID == "" {
+	if err := json.Unmarshal(payload, &startRes); err != nil || startRes.URL == "" || startRes.SessionID != "cpa-state-webui" || startRes.State != "cpa-state-webui" {
 		t.Fatalf("invalid start response: %s", payload)
 	}
 
-	// 3. Poll OAuth status
-	statusURL := fmt.Sprintf("%s/omc/api/v1/management/oauth/status?session_id=%s", baseURL, startRes.SessionID)
+	// 2b. Reject invalid provider
+	badResp, _ := doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/oauth/start", `{"provider":"../../bad"}`)
+	if badResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for bad provider, got %d", badResp.StatusCode)
+	}
+
+	// 3. Poll OAuth status with state
+	statusURL := fmt.Sprintf("%s/omc/api/v1/management/oauth/status?state=%s", baseURL, startRes.State)
 	resp, payload = getJSON(t, client, statusURL)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("poll oauth status = %d body %s", resp.StatusCode, payload)
 	}
 	var pollRes struct {
-		Status string `json:"status"`
+		Status  string `json:"status"`
+		Message string `json:"message"`
 	}
-	if err := json.Unmarshal(payload, &pollRes); err != nil || pollRes.Status != "pending" {
+	if err := json.Unmarshal(payload, &pollRes); err != nil || pollRes.Status != "wait" || !strings.Contains(pollRes.Message, "cpa-state-webui") {
 		t.Fatalf("unexpected poll status: %s", payload)
 	}
 
-	// 4. Handle OAuth callback
-	callbackBody := `{"code":"oauth-code-1234","state":"csrf-state-5678"}`
-	resp, _ = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/oauth/callback", callbackBody)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("callback status = %d", resp.StatusCode)
+	// 3b. Legacy CPA aliases ("success"/"pending") normalize to the facade contract.
+	if got := normalizeOAuthStatus("success"); got != "ok" {
+		t.Fatalf("normalize success = %q, want ok", got)
 	}
-	state.mu.Lock()
-	lastCb := state.lastCallback
-	state.mu.Unlock()
-	if lastCb["code"] != "oauth-code-1234" || lastCb["state"] != "csrf-state-5678" {
-		t.Fatalf("CPA received wrong callback: %#v", lastCb)
+	if got := normalizeOAuthStatus("pending"); got != "wait" {
+		t.Fatalf("normalize pending = %q, want wait", got)
+	}
+	if got := normalizeOAuthStatus("ok"); got != "ok" {
+		t.Fatalf("normalize ok = %q, want ok", got)
 	}
 
-	// 5. Cancel OAuth session
-	cancelURL := fmt.Sprintf("%s/omc/api/v1/management/oauth/session?session_id=%s", baseURL, startRes.SessionID)
+	// 4. Reject legacy code/state callback without redirect_url
+	legacyBody := `{"code":"oauth-code-1234","state":"csrf-state-5678"}`
+	resp, _ = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/oauth/callback", legacyBody)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for legacy code/state callback without redirect_url, got %d", resp.StatusCode)
+	}
+
+	// 4b. Handle OAuth callback with provider & redirect_url
+	redirectBody := `{"provider":"codex","redirect_url":"http://127.0.0.1:56121/callback?code=xyz&state=abc"}`
+	resp, _ = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/oauth/callback", redirectBody)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("redirect callback status = %d", resp.StatusCode)
+	}
+	state.mu.Lock()
+	lastRedirectCb := state.lastCallback
+	state.mu.Unlock()
+	if lastRedirectCb["provider"] != "codex" || lastRedirectCb["redirect_url"] != "http://127.0.0.1:56121/callback?code=xyz&state=abc" {
+		t.Fatalf("CPA received wrong redirect callback: %#v", lastRedirectCb)
+	}
+	if len(lastRedirectCb) != 2 || lastRedirectCb["code"] != "" || lastRedirectCb["state"] != "" {
+		t.Fatalf("redirect callback must only carry provider and redirect_url, got: %#v", lastRedirectCb)
+	}
+
+	// 4c. Propagate upstream CPA error faithfully
+	errBody := `{"provider":"codex","redirect_url":"http://127.0.0.1:56121/callback?error=invalid"}`
+	resp, payload = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/oauth/callback", errBody)
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("expected error propagation status = 502, got %d body %s", resp.StatusCode, payload)
+	}
+
+	// 4d. A repeated submission after the CPA auto-callback completed the
+	// flow must be idempotent: CPA answers 409, the facade re-checks the
+	// session state (now ok) and reports success with completed=true.
+	replayBody := `{"provider":"codex","redirect_url":"http://127.0.0.1:8317/codex/callback?code=replayed&state=already-done"}`
+	resp, replayPayload := doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/oauth/callback", replayBody)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected idempotent success status = 200, got %d body %s", resp.StatusCode, replayPayload)
+	}
+	var replayRes struct {
+		Status    string `json:"status"`
+		Completed bool   `json:"completed"`
+	}
+	if err := json.Unmarshal(replayPayload, &replayRes); err != nil || replayRes.Status != "ok" || !replayRes.Completed {
+		t.Fatalf("expected completed replay response, got %s", replayPayload)
+	}
+
+	// 5. Cancel OAuth session with state
+	cancelURL := fmt.Sprintf("%s/omc/api/v1/management/oauth/session?state=%s", baseURL, startRes.State)
 	resp, _ = doJSON(t, client, http.MethodDelete, cancelURL, "")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("cancel status = %d", resp.StatusCode)
@@ -178,8 +264,22 @@ func TestOAuthFlowLifecycle(t *testing.T) {
 	state.mu.Lock()
 	cancelledID := state.cancelled
 	state.mu.Unlock()
-	if cancelledID != startRes.SessionID {
-		t.Fatalf("CPA cancel session mismatch: %s vs %s", cancelledID, startRes.SessionID)
+	if cancelledID != startRes.State {
+		t.Fatalf("CPA cancel session mismatch: %s vs %s", cancelledID, startRes.State)
+	}
+
+	// 5b. Start OAuth flow without state from CPA (verifies no random UUID generated)
+	noStateResp, noStatePayload := doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/oauth/start", `{"provider":"nostate"}`)
+	if noStateResp.StatusCode != http.StatusOK {
+		t.Fatalf("nostate start status = %d", noStateResp.StatusCode)
+	}
+	var noStateRes struct {
+		URL       string `json:"url"`
+		State     string `json:"state"`
+		SessionID string `json:"session_id"`
+	}
+	if err := json.Unmarshal(noStatePayload, &noStateRes); err != nil || noStateRes.State != "" || noStateRes.SessionID != "" {
+		t.Fatalf("expected empty state and session_id when CPA returns none, got %#v", noStateRes)
 	}
 
 	// 6. Verify audit records

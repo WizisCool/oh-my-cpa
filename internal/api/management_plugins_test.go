@@ -43,7 +43,7 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 
 		switch {
 		case path == "/v0/management/plugins" && request.Method == http.MethodGet:
-			_, _ = writer.Write([]byte(`{"plugins":[{"id":"logger","name":"Logger","version":"1.0.0","enabled":true,"permissions":["read_request"]}]}`))
+			_, _ = writer.Write([]byte(`{"plugins":[{"id":"logger","name":"Logger","version":"1.0.0","enabled":true,"effective_enabled":true,"supports_oauth":true,"oauth_provider":"logger-oauth","logo":"https://example.com/logo.png","permissions":["read_request"]}]}`))
 		case strings.HasPrefix(path, "/v0/management/plugins/") && strings.HasSuffix(path, "/status"):
 			parts := strings.Split(path, "/")
 			id := parts[len(parts)-2]
@@ -148,6 +148,9 @@ func TestPluginsLifecycle(t *testing.T) {
 	resp.Body.Close()
 	if len(pluginsData.Plugins) != 1 || pluginsData.Plugins[0]["id"] != "logger" {
 		t.Fatalf("unexpected plugins list: %#v", pluginsData)
+	}
+	if pluginsData.Plugins[0]["supports_oauth"] != true || pluginsData.Plugins[0]["oauth_provider"] != "logger-oauth" {
+		t.Fatalf("expected supports_oauth and oauth_provider preserved, got: %#v", pluginsData.Plugins[0])
 	}
 
 	// 2. Set plugin status (disable)
