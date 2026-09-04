@@ -963,10 +963,23 @@ type APIKeyEntry struct {
 	Weight    *int   `json:"weight,omitempty"`
 }
 
+type ThinkingSupport struct {
+	Min            int      `json:"min,omitempty"`
+	Max            int      `json:"max,omitempty"`
+	ZeroAllowed    bool     `json:"zero_allowed,omitempty"`
+	DynamicAllowed bool     `json:"dynamic_allowed,omitempty"`
+	Levels         []string `json:"levels,omitempty"`
+}
+
 type ModelAlias struct {
-	Name        string `json:"name"`
-	Alias       string `json:"alias,omitempty"`
-	DisplayName string `json:"display-name,omitempty"`
+	Name             string           `json:"name"`
+	Alias            string           `json:"alias,omitempty"`
+	DisplayName      string           `json:"display-name,omitempty"`
+	Image            bool             `json:"image,omitempty"`
+	MaxContextLength int              `json:"max-context-length,omitempty"`
+	ForceMapping     bool             `json:"force-mapping,omitempty"`
+	IsCompat         bool             `json:"is-compat,omitempty"`
+	Thinking         *ThinkingSupport `json:"thinking,omitempty"`
 }
 
 // UsageQueue pops up to count usage records from CPA's redis-backed usage

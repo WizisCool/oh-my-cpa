@@ -317,6 +317,19 @@ export const api = {
     });
   },
 
+  async pullProviderModels(payload: {
+    provider_id?: string;
+    base_url?: string;
+    api_key?: string;
+    proxy_url?: string;
+    headers?: Record<string, string>;
+  }): Promise<{ models: string[]; total: number }> {
+    return request<{ models: string[]; total: number }>('/management/providers/pull-models', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
     /** getLogsStatus answers why a tail is empty: CPA only logs to file on demand. */
   async getLogsStatus(): Promise<LogsStatus> {
     return request<LogsStatus>('/management/logs/status', { method: 'GET' });

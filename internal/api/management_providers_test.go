@@ -303,4 +303,88 @@ func TestManagementProviderCreateUpdateDelete(t *testing.T) {
 	if !found {
 		t.Fatalf("Multi Key Provider not found in list")
 	}
+
+	// 5. Create provider with custom models, image support and thinking levels
+	thinkingBody := `{"family":"openai-compatibility","name":"Reasoning Provider","base_url":"https://api.reasoning.com/v1","model_entries":[{"name":"deepseek-r1","alias":"r1","image":true,"thinking":{"levels":["low","medium","high","xhigh"]}}]}`
+	resp, payload = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/providers", thinkingBody)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("create reasoning provider status = %d body %s", resp.StatusCode, payload)
+	}
+
+	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers")
+	if err := json.Unmarshal(payload, &providersResp); err != nil {
+		t.Fatal(err)
+	}
+	foundReasoning := false
+	for _, p := range providersResp.Providers {
+		if p.Name == "Reasoning Provider" {
+			foundReasoning = true
+			if len(p.ModelEntries) != 1 {
+				t.Fatalf("expected 1 model entry, got %d", len(p.ModelEntries))
+			}
+			m := p.ModelEntries[0]
+			if m.Name != "deepseek-r1" || m.Alias != "r1" || !m.Image {
+				t.Fatalf("unexpected model entry fields: %#v", m)
+			}
+			if m.Thinking == nil || len(m.Thinking.Levels) != 4 || m.Thinking.Levels[0] != "low" {
+				t.Fatalf("unexpected thinking levels: %#v", m.Thinking)
+			}
+		}
+	}
+	if !foundReasoning {
+		t.Fatalf("Reasoning Provider not found in list")
+	}
+}
+
+func TestPullProviderModels(t *testing.T) {
+	// Fake upstream AI provider endpoint serving /v1/models
+	fakeUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer sk-test-upstream-key" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{
+				{"id": "DeepSeek-V4-Flash"},
+				{"id": "DeepSeek-V4-Flash-Vision-Exp"},
+				{"id": "MiniCPM5-1B"},
+				{"id": "Qwen3.8-Flash-Next"},
+			},
+		})
+	}))
+	defer fakeUpstream.Close()
+
+	client, baseURL, _ := startProviderTestServer(t)
+
+	// 1. Successful pull from endpoint
+	pullReq := fmt.Sprintf(`{"base_url":"%s/v1","api_key":"sk-test-upstream-key"}`, fakeUpstream.URL)
+	resp, payload := doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/providers/pull-models", pullReq)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("pull models status = %d body %s", resp.StatusCode, payload)
+	}
+
+	var pullResp struct {
+		Models []string `json:"models"`
+		Total  int      `json:"total"`
+	}
+	if err := json.Unmarshal(payload, &pullResp); err != nil {
+		t.Fatal(err)
+	}
+	if len(pullResp.Models) != 4 || pullResp.Models[0] != "DeepSeek-V4-Flash" {
+		t.Fatalf("unexpected models list: %#v", pullResp)
+	}
+
+	// 2. Reject missing base_url
+	resp, _ = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/providers/pull-models", `{"api_key":"sk-xxx"}`)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for missing base_url, got %d", resp.StatusCode)
+	}
+
+	// 3. Upstream 401 returns bad gateway
+	badKeyReq := fmt.Sprintf(`{"base_url":"%s/v1","api_key":"wrong-key"}`, fakeUpstream.URL)
+	resp, _ = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/providers/pull-models", badKeyReq)
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("expected 502 for upstream unauthorized, got %d", resp.StatusCode)
+	}
 }

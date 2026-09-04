@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Card,
   Table,
@@ -33,6 +33,8 @@ import {
   CloseOutlined,
   UpOutlined,
   DownOutlined,
+  DownloadOutlined,
+  SearchOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
@@ -49,6 +51,18 @@ import type {
 } from '../types/providers';
 
 const { Text } = Typography;
+
+const THINKING_LEVEL_OPTIONS = [
+  { value: 'none', labelKey: 'pro.level_none' },
+  { value: 'minimal', labelKey: 'pro.level_minimal' },
+  { value: 'low', labelKey: 'pro.level_low' },
+  { value: 'medium', labelKey: 'pro.level_medium' },
+  { value: 'high', labelKey: 'pro.level_high' },
+  { value: 'xhigh', labelKey: 'pro.level_xhigh' },
+  { value: 'max', labelKey: 'pro.level_max' },
+  { value: 'auto', labelKey: 'pro.level_auto' },
+];
+
 
 interface FormKeyItem {
   id: string;
@@ -69,6 +83,10 @@ interface FormModelItem {
   id: string;
   name: string;
   alias: string;
+  image?: boolean;
+  thinking?: {
+    levels?: string[];
+  };
 }
 
 export const ProvidersPage: React.FC = () => {
@@ -107,6 +125,123 @@ export const ProvidersPage: React.FC = () => {
   const [targetProviderForIcon, setTargetProviderForIcon] = useState<ProviderItem | null>(null);
   const [formIcon, setFormIcon] = useState<string>('OpenAI');
   const [iconManuallySelected, setIconManuallySelected] = useState<boolean>(false);
+
+  // Endpoint models pull state & custom models expand state
+  const [pullPanelOpen, setPullPanelOpen] = useState(false);
+  const [isPullingModels, setIsPullingModels] = useState(false);
+  const [endpointModels, setEndpointModels] = useState<string[]>([]);
+  const [modelSearchQuery, setModelSearchQuery] = useState('');
+  const [selectedEndpointModels, setSelectedEndpointModels] = useState<Set<string>>(new Set());
+  const [expandedModelIds, setExpandedModelIds] = useState<Set<string>>(new Set());
+
+  const filteredEndpointModels = useMemo(() => {
+    const q = modelSearchQuery.trim().toLowerCase();
+    if (!q) return endpointModels;
+    return endpointModels.filter((m) => m.toLowerCase().includes(q));
+  }, [endpointModels, modelSearchQuery]);
+
+  const selectableModels = useMemo(() => {
+    return filteredEndpointModels.filter((m) => !formModels.some((item) => item.name === m));
+  }, [filteredEndpointModels, formModels]);
+
+  const handlePullModels = async () => {
+    const rawUrl = formBaseURL.trim();
+    if (!rawUrl) {
+      message.warning(t('pro.pull_requires_base_url'));
+      return;
+    }
+
+    const firstKey = formKeys.find((k) => k.apiKey && k.apiKey.trim() !== '')?.apiKey || '';
+    const firstProxy = formKeys.find((k) => k.proxyUrl && k.proxyUrl.trim() !== '')?.proxyUrl || '';
+
+    const headersPayload: Record<string, string> = {};
+    for (const h of formHeaders) {
+      if (h.key.trim() !== '') {
+        headersPayload[h.key.trim()] = h.value.trim();
+      }
+    }
+
+    setIsPullingModels(true);
+    try {
+      const res = await api.pullProviderModels({
+        provider_id: editingProvider ? editingProvider.id : undefined,
+        base_url: rawUrl,
+        api_key: firstKey,
+        proxy_url: firstProxy,
+        headers: headersPayload,
+      });
+      setEndpointModels(res.models || []);
+      setSelectedEndpointModels(new Set());
+      if (res.models && res.models.length > 0) {
+        message.success(t('pro.pull_models_success', { count: res.models.length }));
+      } else {
+        message.info(t('pro.pull_models_empty'));
+      }
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : String(err);
+      message.error(msg);
+    } finally {
+      setIsPullingModels(false);
+    }
+  };
+
+  const handleOpenPullPanel = () => {
+    setPullPanelOpen(true);
+    if (endpointModels.length === 0) {
+      void handlePullModels();
+    }
+  };
+
+  const handleApplySelectedModels = () => {
+    if (selectedEndpointModels.size === 0) return;
+    const newItems: FormModelItem[] = [];
+    for (const mName of selectedEndpointModels) {
+      if (!formModels.some((item) => item.name === mName)) {
+        newItems.push({
+          id: `mdl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          name: mName,
+          alias: '',
+          image: false,
+          thinking: { levels: [] },
+        });
+      }
+    }
+    setFormModels((prev) => [...prev, ...newItems]);
+    message.success(t('pro.models_applied', { count: newItems.length }));
+    setSelectedEndpointModels(new Set());
+    setPullPanelOpen(false);
+  };
+
+  const toggleModelExpanded = (id: string) => {
+    setExpandedModelIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const updateModelImage = (id: string, image: boolean) => {
+    setFormModels((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, image } : item))
+    );
+  };
+
+  const toggleThinkingLevel = (modelId: string, level: string) => {
+    setFormModels((prev) =>
+      prev.map((item) => {
+        if (item.id !== modelId) return item;
+        const currentLevels = item.thinking?.levels || [];
+        const nextLevels = currentLevels.includes(level)
+          ? currentLevels.filter((l) => l !== level)
+          : [...currentLevels, level];
+        return {
+          ...item,
+          thinking: { levels: nextLevels },
+        };
+      })
+    );
+  };
 
   const handleSelectIcon = (selectedIconId: string) => {
     if (targetProviderForIcon) {
@@ -269,6 +404,10 @@ export const ProvidersPage: React.FC = () => {
     setExpandedKeyIds(new Set([initKeyId]));
     setFormHeaders([]);
     setFormModels([]);
+    setEndpointModels([]);
+    setSelectedEndpointModels(new Set());
+    setPullPanelOpen(false);
+    setExpandedModelIds(new Set());
     setKeysSectionOpen(true);
     setHeadersSectionOpen(false);
     setModelsSectionOpen(false);
@@ -343,7 +482,9 @@ export const ProvidersPage: React.FC = () => {
         provider.model_entries.map((m, i) => ({
           id: `model-edit-${i}`,
           name: m.name,
-          alias: m.alias || m.name,
+          alias: m.alias || '',
+          image: m.image || false,
+          thinking: m.thinking ? { levels: m.thinking.levels || [] } : { levels: [] },
         }))
       );
     } else if (provider.models && provider.models.length > 0) {
@@ -351,12 +492,18 @@ export const ProvidersPage: React.FC = () => {
         provider.models.map((m, i) => ({
           id: `model-edit-${i}`,
           name: m,
-          alias: m,
+          alias: '',
+          image: false,
+          thinking: { levels: [] },
         }))
       );
     } else {
       setFormModels([]);
     }
+    setEndpointModels([]);
+    setSelectedEndpointModels(new Set());
+    setPullPanelOpen(false);
+    setExpandedModelIds(new Set());
 
     setProviderDrawerOpen(true);
   };
@@ -372,7 +519,12 @@ export const ProvidersPage: React.FC = () => {
       .filter((m) => m.name.trim() !== '')
       .map((m) => ({
         name: m.name.trim(),
-        alias: m.alias.trim() || m.name.trim(),
+        alias: m.alias.trim() || undefined,
+        image: m.image || false,
+        thinking:
+          m.thinking && m.thinking.levels && m.thinking.levels.length > 0
+            ? { levels: m.thinking.levels }
+            : undefined,
       }));
 
     const headersPayload: Record<string, string> = {};
@@ -1365,6 +1517,7 @@ export const ProvidersPage: React.FC = () => {
               overflow: 'hidden',
             }}
           >
+            {/* Header row */}
             <div
               style={{
                 padding: '12px 16px',
@@ -1391,56 +1544,390 @@ export const ProvidersPage: React.FC = () => {
 
             {modelsSectionOpen && (
               <div style={{ padding: '0 16px 16px 16px' }}>
-                {formModels.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-                    {formModels.map((m) => (
-                      <div key={m.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <Input
-                          value={m.name}
-                          onChange={(e) =>
-                            setFormModels((prev) =>
-                              prev.map((item) =>
-                                item.id === m.id ? { ...item, name: e.target.value } : item
-                              )
-                            )
+                {/* Action Row: Pull from endpoint on right */}
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    alignItems: 'center',
+                    marginBottom: 12,
+                  }}
+                >
+                  <Button
+                    icon={<DownloadOutlined />}
+                    onClick={handleOpenPullPanel}
+                  >
+                    {t('pro.pull_from_endpoint')}
+                  </Button>
+                </div>
+
+                {/* Endpoint Pull Panel (Card) */}
+                {pullPanelOpen && (
+                  <div
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 6,
+                      background: 'var(--bg)',
+                      padding: 14,
+                      marginBottom: 14,
+                    }}
+                  >
+                    {/* Search & Reload */}
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                      <Input
+                        prefix={<SearchOutlined style={{ color: 'var(--meta)' }} />}
+                        placeholder={t('pro.search_models')}
+                        value={modelSearchQuery}
+                        onChange={(e) => setModelSearchQuery(e.target.value)}
+                        allowClear
+                        style={{ flex: 1 }}
+                      />
+                      <Button
+                        icon={<SyncOutlined spin={isPullingModels} />}
+                        onClick={handlePullModels}
+                        loading={isPullingModels}
+                      >
+                        {t('pro.reload')}
+                      </Button>
+                    </div>
+
+                    {/* Select All & Counter */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '4px 2px 8px 2px',
+                        borderBottom: '1px solid var(--border)',
+                        marginBottom: 8,
+                      }}
+                    >
+                      <Checkbox
+                        checked={
+                          selectableModels.length > 0 &&
+                          selectableModels.every((m) => selectedEndpointModels.has(m))
+                        }
+                        indeterminate={
+                          selectableModels.some((m) => selectedEndpointModels.has(m)) &&
+                          !selectableModels.every((m) => selectedEndpointModels.has(m))
+                        }
+                        disabled={selectableModels.length === 0}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedEndpointModels(new Set(selectableModels));
+                          } else {
+                            setSelectedEndpointModels(new Set());
                           }
-                          placeholder={t('pro.model_name')}
-                          style={{ flex: 1 }}
-                        />
-                        <Input
-                          value={m.alias}
-                          onChange={(e) =>
-                            setFormModels((prev) =>
-                              prev.map((item) =>
-                                item.id === m.id ? { ...item, alias: e.target.value } : item
-                              )
-                            )
-                          }
-                          placeholder={t('pro.model_alias')}
-                          style={{ flex: 1 }}
-                        />
-                        <Button
-                          size="small"
-                          type="text"
-                          danger
-                          icon={<CloseOutlined />}
-                          onClick={() =>
-                            setFormModels((prev) => prev.filter((item) => item.id !== m.id))
-                          }
-                        />
-                      </div>
-                    ))}
+                        }}
+                      >
+                        <span style={{ fontSize: 13 }}>{t('pro.select_all')}</span>
+                      </Checkbox>
+                      <span style={{ fontSize: 12, color: 'var(--meta)' }}>
+                        {selectedEndpointModels.size} / {filteredEndpointModels.length}
+                      </span>
+                    </div>
+
+                    {/* Endpoint Models List */}
+                    <div
+                      style={{
+                        maxHeight: 220,
+                        overflowY: 'auto',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 6,
+                      }}
+                    >
+                      {filteredEndpointModels.length === 0 ? (
+                        <div
+                          style={{
+                            textAlign: 'center',
+                            color: 'var(--meta)',
+                            padding: '20px 0',
+                            fontSize: 13,
+                          }}
+                        >
+                          {isPullingModels ? t('common.loading') : t('pro.pull_models_empty')}
+                        </div>
+                      ) : (
+                        filteredEndpointModels.map((mName) => {
+                          const isAlreadyAdded = formModels.some((item) => item.name === mName);
+                          const isChecked = selectedEndpointModels.has(mName);
+
+                          return (
+                            <div
+                              key={mName}
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                padding: '8px 10px',
+                                background: 'var(--surface)',
+                                borderRadius: 4,
+                                border: '1px solid var(--border)',
+                              }}
+                            >
+                              {isAlreadyAdded ? (
+                                <>
+                                  <span
+                                    style={{
+                                      fontFamily: 'monospace',
+                                      fontSize: 13,
+                                      color: 'var(--fg)',
+                                    }}
+                                  >
+                                    {mName}
+                                  </span>
+                                  <Tag style={{ margin: 0, fontSize: 11 }}>
+                                    {t('pro.model_added')}
+                                  </Tag>
+                                </>
+                              ) : (
+                                <Checkbox
+                                  checked={isChecked}
+                                  onChange={() => {
+                                    setSelectedEndpointModels((prev) => {
+                                      const next = new Set(prev);
+                                      if (next.has(mName)) next.delete(mName);
+                                      else next.add(mName);
+                                      return next;
+                                    });
+                                  }}
+                                  style={{ width: '100%' }}
+                                >
+                                  <span style={{ fontFamily: 'monospace', fontSize: 13 }}>
+                                    {mName}
+                                  </span>
+                                </Checkbox>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Action buttons */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'flex-end',
+                        gap: 8,
+                        marginTop: 12,
+                      }}
+                    >
+                      <Button onClick={() => setPullPanelOpen(false)}>
+                        {t('common.close')}
+                      </Button>
+                      <Button
+                        type="primary"
+                        disabled={selectedEndpointModels.size === 0}
+                        onClick={handleApplySelectedModels}
+                      >
+                        {t('pro.apply_models', { n: selectedEndpointModels.size })}
+                      </Button>
+                    </div>
                   </div>
                 )}
+
+                {/* Configured Models List */}
+                {formModels.length > 0 && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 12,
+                      marginBottom: 12,
+                    }}
+                  >
+                    {formModels.map((m) => {
+                      const isExpanded = expandedModelIds.has(m.id);
+
+                      return (
+                        <div
+                          key={m.id}
+                          style={{
+                            border: '1px solid var(--border)',
+                            borderRadius: 6,
+                            background: 'var(--bg)',
+                            overflow: 'hidden',
+                          }}
+                        >
+                          {/* Model Card Header */}
+                          <div
+                            style={{
+                              padding: '10px 12px',
+                              display: 'flex',
+                              gap: 8,
+                              alignItems: 'center',
+                              background: 'rgba(255, 255, 255, 0.02)',
+                            }}
+                          >
+                            <Input
+                              value={m.name}
+                              onChange={(e) =>
+                                setFormModels((prev) =>
+                                  prev.map((item) =>
+                                    item.id === m.id ? { ...item, name: e.target.value } : item
+                                  )
+                                )
+                              }
+                              placeholder={t('pro.model_name')}
+                              style={{ flex: 1, fontFamily: 'monospace' }}
+                            />
+                            <Input
+                              value={m.alias}
+                              onChange={(e) =>
+                                setFormModels((prev) =>
+                                  prev.map((item) =>
+                                    item.id === m.id ? { ...item, alias: e.target.value } : item
+                                  )
+                                )
+                              }
+                              placeholder={t('pro.alias_optional')}
+                              style={{ flex: 1 }}
+                            />
+                            <Button
+                              type="text"
+                              size="small"
+                              icon={isExpanded ? <UpOutlined /> : <DownOutlined />}
+                              onClick={() => toggleModelExpanded(m.id)}
+                            />
+                            <Button
+                              size="small"
+                              type="text"
+                              danger
+                              icon={<CloseOutlined />}
+                              onClick={() => {
+                                setFormModels((prev) => prev.filter((item) => item.id !== m.id));
+                                setExpandedModelIds((prev) => {
+                                  const next = new Set(prev);
+                                  next.delete(m.id);
+                                  return next;
+                                });
+                              }}
+                            />
+                          </div>
+
+                          {/* Model Card Body (expanded) */}
+                          {isExpanded && (
+                            <div
+                              style={{
+                                padding: '14px 16px',
+                                borderTop: '1px solid var(--border)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 14,
+                              }}
+                            >
+                              {/* Option: Allow Image Endpoint */}
+                              <div>
+                                <Checkbox
+                                  checked={m.image || false}
+                                  onChange={(e) => updateModelImage(m.id, e.target.checked)}
+                                >
+                                  <span style={{ fontWeight: 500 }}>
+                                    {t('pro.allow_image_endpoint')}
+                                  </span>
+                                </Checkbox>
+                                <div
+                                  style={{
+                                    fontSize: 12,
+                                    color: 'var(--meta)',
+                                    marginLeft: 24,
+                                    marginTop: 2,
+                                  }}
+                                >
+                                  {t('pro.allow_image_endpoint_desc')}
+                                </div>
+                              </div>
+
+                              {/* Option: Allowed Thinking Levels */}
+                              <div>
+                                <div
+                                  style={{
+                                    fontWeight: 500,
+                                    fontSize: 13,
+                                    marginBottom: 8,
+                                    color: 'var(--fg)',
+                                  }}
+                                >
+                                  {t('pro.allowed_thinking_levels')}
+                                </div>
+                                <Row gutter={[10, 10]}>
+                                  {THINKING_LEVEL_OPTIONS.map((opt) => {
+                                    const isChecked =
+                                      m.thinking?.levels?.includes(opt.value) || false;
+                                    return (
+                                      <Col xs={24} sm={12} key={opt.value}>
+                                        <div
+                                          onClick={() => toggleThinkingLevel(m.id, opt.value)}
+                                          style={{
+                                            border: isChecked
+                                              ? '1px solid var(--accent, #1677ff)'
+                                              : '1px solid var(--border)',
+                                            borderRadius: 6,
+                                            padding: '8px 12px',
+                                            background: isChecked
+                                              ? 'rgba(22, 119, 255, 0.08)'
+                                              : 'var(--surface)',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            transition: 'all 0.15s ease',
+                                            userSelect: 'none',
+                                          }}
+                                        >
+                                          <Checkbox
+                                            checked={isChecked}
+                                            onChange={(e) => {
+                                              e.stopPropagation();
+                                              toggleThinkingLevel(m.id, opt.value);
+                                            }}
+                                          >
+                                            <span style={{ fontWeight: isChecked ? 600 : 400 }}>
+                                              {t(opt.labelKey)}
+                                            </span>
+                                          </Checkbox>
+                                          <span
+                                            style={{
+                                              fontSize: 11,
+                                              fontFamily: 'monospace',
+                                              color: 'var(--meta)',
+                                            }}
+                                          >
+                                            {opt.value}
+                                          </span>
+                                        </div>
+                                      </Col>
+                                    );
+                                  })}
+                                </Row>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
                 <Button
                   style={{ borderStyle: 'dashed' }}
                   icon={<PlusOutlined />}
-                  onClick={() =>
+                  onClick={() => {
+                    const newId = `mdl-${Date.now()}-${formModels.length}`;
                     setFormModels((prev) => [
                       ...prev,
-                      { id: `mdl-${Date.now()}-${formModels.length}`, name: '', alias: '' },
-                    ])
-                  }
+                      {
+                        id: newId,
+                        name: '',
+                        alias: '',
+                        image: false,
+                        thinking: { levels: [] },
+                      },
+                    ]);
+                    setExpandedModelIds((prev) => new Set([...prev, newId]));
+                  }}
                 >
                   {t('pro.add_model_entry')}
                 </Button>

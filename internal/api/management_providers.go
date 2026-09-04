@@ -1,10 +1,15 @@
 package api
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
@@ -25,9 +30,15 @@ type ProviderKeyEntryDTO struct {
 	Weight   *int   `json:"weight,omitempty"`
 }
 
+type ThinkingDTO struct {
+	Levels []string `json:"levels,omitempty"`
+}
+
 type ProviderModelDTO struct {
-	Name  string `json:"name"`
-	Alias string `json:"alias,omitempty"`
+	Name     string       `json:"name"`
+	Alias    string       `json:"alias,omitempty"`
+	Image    bool         `json:"image,omitempty"`
+	Thinking *ThinkingDTO `json:"thinking,omitempty"`
 }
 
 type ProviderItemDTO struct {
@@ -249,9 +260,15 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 
 			modelEntries := make([]ProviderModelDTO, 0, len(entry.Models))
 			for _, m := range entry.Models {
+				var th *ThinkingDTO
+				if m.Thinking != nil && len(m.Thinking.Levels) > 0 {
+					th = &ThinkingDTO{Levels: m.Thinking.Levels}
+				}
 				modelEntries = append(modelEntries, ProviderModelDTO{
-					Name:  m.Name,
-					Alias: m.Alias,
+					Name:     m.Name,
+					Alias:    m.Alias,
+					Image:    m.Image,
+					Thinking: th,
 				})
 			}
 
@@ -398,8 +415,10 @@ type SaveProviderKeyEntry struct {
 }
 
 type SaveProviderModelEntry struct {
-	Name  string `json:"name"`
-	Alias string `json:"alias,omitempty"`
+	Name     string       `json:"name"`
+	Alias    string       `json:"alias,omitempty"`
+	Image    bool         `json:"image,omitempty"`
+	Thinking *ThinkingDTO `json:"thinking,omitempty"`
 }
 
 type SaveProviderRequest struct {
@@ -474,7 +493,16 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 				if alias == "" {
 					alias = mName
 				}
-				models = append(models, management.ModelAlias{Name: mName, Alias: alias})
+				var th *management.ThinkingSupport
+				if m.Thinking != nil && len(m.Thinking.Levels) > 0 {
+					th = &management.ThinkingSupport{Levels: m.Thinking.Levels}
+				}
+				models = append(models, management.ModelAlias{
+					Name:     mName,
+					Alias:    alias,
+					Image:    m.Image,
+					Thinking: th,
+				})
 			}
 		}
 	} else {
@@ -620,7 +648,16 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 				if alias == "" {
 					alias = mName
 				}
-				models = append(models, management.ModelAlias{Name: mName, Alias: alias})
+				var th *management.ThinkingSupport
+				if m.Thinking != nil && len(m.Thinking.Levels) > 0 {
+					th = &management.ThinkingSupport{Levels: m.Thinking.Levels}
+				}
+				models = append(models, management.ModelAlias{
+					Name:     mName,
+					Alias:    alias,
+					Image:    m.Image,
+					Thinking: th,
+				})
 			}
 		}
 	} else {
@@ -880,4 +917,212 @@ func (h *Handler) deleteManagementProvider(writer http.ResponseWriter, request *
 		"status": "ok",
 		"id":     id,
 	})
+}
+
+
+type pullModelsRequest struct {
+	ProviderID string            `json:"provider_id,omitempty"`
+	BaseURL    string            `json:"base_url,omitempty"`
+	APIKey     string            `json:"api_key,omitempty"`
+	ProxyURL   string            `json:"proxy_url,omitempty"`
+	Headers    map[string]string `json:"headers,omitempty"`
+}
+
+func (h *Handler) pullProviderModels(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	var req pullModelsRequest
+	if err := decodeManagementJSON(writer, request, 32*1024, &req); err != nil {
+		return
+	}
+
+	baseURL := strings.TrimSpace(req.BaseURL)
+	apiKey := strings.TrimSpace(req.APIKey)
+	proxyURL := strings.TrimSpace(req.ProxyURL)
+	headers := req.Headers
+
+	if req.ProviderID != "" && (baseURL == "" || apiKey == "") {
+		client, ok := h.managementClientOrError(writer, request)
+		if ok {
+			family, index, err := parseProviderID(req.ProviderID)
+			if err == nil && family == "openai-compatibility" {
+				resp, err := client.OpenAICompatibility(request.Context())
+				if err == nil && index >= 0 && index < len(resp.Entries) {
+					entry := resp.Entries[index]
+					if baseURL == "" {
+						baseURL = entry.BaseURL
+					}
+					if apiKey == "" && len(entry.APIKeyEntries) > 0 {
+						apiKey = entry.APIKeyEntries[0].APIKey
+						if proxyURL == "" {
+							proxyURL = entry.APIKeyEntries[0].ProxyURL
+						}
+					}
+					if len(headers) == 0 && len(entry.Headers) > 0 {
+						headers = entry.Headers
+					}
+				}
+			}
+		}
+	}
+
+	if baseURL == "" {
+		writeError(writer, http.StatusBadRequest, "base_url is required")
+		return
+	}
+
+	models, err := fetchEndpointModels(request.Context(), baseURL, apiKey, proxyURL, headers)
+	if err != nil {
+		writeError(writer, http.StatusBadGateway, fmt.Sprintf("failed to pull models: %v", err))
+		return
+	}
+
+	writeJSON(writer, http.StatusOK, map[string]any{
+		"models": models,
+		"total":  len(models),
+	})
+}
+
+func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr string, customHeaders map[string]string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	parsed, err := url.Parse(rawBaseURL)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return nil, fmt.Errorf("invalid base URL scheme: %s", rawBaseURL)
+	}
+
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+	}
+	if proxyStr != "" {
+		if pURL, err := url.Parse(proxyStr); err == nil {
+			transport.Proxy = http.ProxyURL(pURL)
+		}
+	}
+	client := &http.Client{
+		Timeout:   15 * time.Second,
+		Transport: transport,
+	}
+
+	trimmed := strings.TrimRight(rawBaseURL, "/")
+	targetURL := trimmed + "/models"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	if apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+	for k, v := range customHeaders {
+		req.Header.Set(k, v)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound && !strings.HasSuffix(trimmed, "/v1") {
+		retryURL := trimmed + "/v1/models"
+		req2, err := http.NewRequestWithContext(ctx, http.MethodGet, retryURL, nil)
+		if err == nil {
+			if apiKey != "" {
+				req2.Header.Set("Authorization", "Bearer "+apiKey)
+			}
+			for k, v := range customHeaders {
+				req2.Header.Set(k, v)
+			}
+			if resp2, err2 := client.Do(req2); err2 == nil {
+				defer resp2.Body.Close()
+				if resp2.StatusCode == http.StatusOK {
+					return parseModelsResponse(resp2.Body)
+				}
+			}
+		}
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		bodySnippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(bodySnippet)))
+	}
+
+	return parseModelsResponse(resp.Body)
+}
+
+func parseModelsResponse(r io.Reader) ([]string, error) {
+	data, err := io.ReadAll(io.LimitReader(r, 2*1024*1024))
+	if err != nil {
+		return nil, err
+	}
+
+	var oaiResp struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(data, &oaiResp); err == nil && len(oaiResp.Data) > 0 {
+		models := make([]string, 0, len(oaiResp.Data))
+		seen := make(map[string]bool)
+		for _, m := range oaiResp.Data {
+			id := strings.TrimSpace(m.ID)
+			if id != "" && !seen[id] {
+				seen[id] = true
+				models = append(models, id)
+			}
+		}
+		return models, nil
+	}
+
+	var objResp struct {
+		Models []json.RawMessage `json:"models"`
+	}
+	if err := json.Unmarshal(data, &objResp); err == nil && len(objResp.Models) > 0 {
+		models := make([]string, 0, len(objResp.Models))
+		seen := make(map[string]bool)
+		for _, raw := range objResp.Models {
+			var str string
+			if json.Unmarshal(raw, &str) == nil && str != "" {
+				if !seen[str] {
+					seen[str] = true
+					models = append(models, str)
+				}
+				continue
+			}
+			var item struct {
+				ID   string `json:"id"`
+				Name string `json:"name"`
+			}
+			if json.Unmarshal(raw, &item) == nil {
+				val := firstNonEmpty(item.ID, item.Name)
+				if val != "" && !seen[val] {
+					seen[val] = true
+					models = append(models, val)
+				}
+			}
+		}
+		if len(models) > 0 {
+			return models, nil
+		}
+	}
+
+	var arrResp []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(data, &arrResp); err == nil && len(arrResp) > 0 {
+		models := make([]string, 0, len(arrResp))
+		seen := make(map[string]bool)
+		for _, item := range arrResp {
+			val := firstNonEmpty(item.ID, item.Name)
+			if val != "" && !seen[val] {
+				seen[val] = true
+				models = append(models, val)
+			}
+		}
+		return models, nil
+	}
+
+	return []string{}, nil
 }

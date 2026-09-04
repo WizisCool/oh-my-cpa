@@ -12,9 +12,15 @@ export interface ProviderKeyEntry {
   weight?: number;
 }
 
+export interface ThinkingSupportConfig {
+  levels?: string[];
+}
+
 export interface ProviderModelItem {
   name: string;
   alias?: string;
+  image?: boolean;
+  thinking?: ThinkingSupportConfig;
 }
 
 export interface ProviderItem {
@@ -46,6 +52,8 @@ export interface SaveProviderKeyItem {
 export interface SaveProviderModelItem {
   name: string;
   alias?: string;
+  image?: boolean;
+  thinking?: ThinkingSupportConfig;
 }
 
 export interface SaveProviderPayload {

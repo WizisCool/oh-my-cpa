@@ -116,6 +116,7 @@ func (h *Handler) Router() http.Handler {
 				v1.Delete("/management/api-keys/{index}", h.deleteClientAPIKey)
 								v1.Get("/management/providers", h.listManagementProviders)
 				v1.Post("/management/providers", h.createManagementProvider)
+				v1.Post("/management/providers/pull-models", h.pullProviderModels)
 				v1.Put("/management/providers/{id}", h.updateManagementProvider)
 				v1.Delete("/management/providers/{id}", h.deleteManagementProvider)
 				v1.Patch("/management/providers/status", h.patchManagementProviderStatus)
