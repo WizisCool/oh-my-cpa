@@ -244,14 +244,14 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 
 		prior := h.loadPriorNormalizedQuota(ctx, targetIndex)
 		svc := quota.NewService(client)
-		refreshed, err := svc.RefreshCredentialQuota(ctx, targetIndex, file.Name, file.Type, file.Provider, file.Disabled, prior)
+		refreshed, err := svc.RefreshCredentialQuota(ctx, file, prior)
 		if err != nil {
 			writeError(writer, http.StatusBadGateway, fmt.Sprintf("refresh quota failed: %v", err))
 			return
 		}
 
-		// Persist snapshot to DB if healthy, warning, or exhausted
-		if h.repo != nil && refreshed.Status != "error" {
+		// Persist snapshot to DB only when successful (healthy, warning, or exhausted), never stale or error
+		if h.repo != nil && refreshed.Status != "error" && refreshed.Status != "stale" {
 			_ = h.persistNormalizedQuotaSnapshot(ctx, refreshed)
 		}
 
@@ -294,10 +294,10 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 			defer func() { <-sem }()
 
 			prior := h.loadPriorNormalizedQuota(ctx, authIdx)
-			refreshed, rErr := svc.RefreshCredentialQuota(ctx, authIdx, f.Name, f.Type, f.Provider, f.Disabled, prior)
+			refreshed, rErr := svc.RefreshCredentialQuota(ctx, f, prior)
 			if rErr == nil && refreshed != nil {
 				results[index] = refreshed
-				if h.repo != nil && refreshed.Status != "error" {
+				if h.repo != nil && refreshed.Status != "error" && refreshed.Status != "stale" {
 					_ = h.persistNormalizedQuotaSnapshot(ctx, refreshed)
 				}
 			}
@@ -417,6 +417,25 @@ func (h *Handler) clearCredentialCooldownWithAction(writer http.ResponseWriter, 
 		return
 	}
 
+	// Validate that authIndex exists in CPA
+	ctx := request.Context()
+	filesResp, err := client.AuthFiles(ctx)
+	if err != nil {
+		writeCPAFacadeError(writer, err)
+		return
+	}
+	var found bool
+	for _, f := range filesResp.Files {
+		if strings.TrimSpace(f.AuthIndex) == authIndex {
+			found = true
+			break
+		}
+	}
+	if !found {
+		writeError(writer, http.StatusNotFound, fmt.Sprintf("credential %q not found", authIndex))
+		return
+	}
+
 	if auditErr := h.recordAudit(request, action, "quota", authIndex, "attempt", nil); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit failure; clear cooldown aborted")
 		return
@@ -426,6 +445,11 @@ func (h *Handler) clearCredentialCooldownWithAction(writer http.ResponseWriter, 
 		_ = h.recordAudit(request, action, "quota", authIndex, "failure", map[string]any{"error": err.Error()})
 		writeCPAFacadeError(writer, err)
 		return
+	}
+
+	// Durably clear local cooldown evidence from database
+	if h.repo != nil {
+		_ = h.repo.ClearCooldownEvidence(request.Context(), authIndex)
 	}
 
 	_ = h.recordAudit(request, action, "quota", authIndex, "success", nil)
@@ -499,8 +523,8 @@ func (h *Handler) redeemCodexResetCredit(writer http.ResponseWriter, request *ht
 
 	// Immediately refresh quota to obtain updated credit count and usage windows
 	prior := h.loadPriorNormalizedQuota(ctx, authIndex)
-	refreshed, _ := svc.RefreshCredentialQuota(ctx, authIndex, foundFile.Name, foundFile.Type, foundFile.Provider, foundFile.Disabled, prior)
-	if refreshed != nil && h.repo != nil {
+	refreshed, _ := svc.RefreshCredentialQuota(ctx, *foundFile, prior)
+	if refreshed != nil && h.repo != nil && refreshed.Status != "error" && refreshed.Status != "stale" {
 		_ = h.persistNormalizedQuotaSnapshot(ctx, refreshed)
 	}
 

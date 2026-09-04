@@ -2,6 +2,7 @@ package management
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -233,6 +234,28 @@ func TestClientApiCall(t *testing.T) {
 	}
 	if !strings.Contains(string(resp.Body), `"plan_type":"pro"`) {
 		t.Fatalf("unexpected body: %s", string(resp.Body))
+	}
+}
+
+func TestClientApiCallNormalizedBody(t *testing.T) {
+	// 1. JSON object shape
+	respObj := ApiCallResponse{
+		StatusCode: 200,
+		Body:       json.RawMessage(`{"plan_type":"pro"}`),
+	}
+	b1, err := respObj.NormalizedBody()
+	if err != nil || !strings.Contains(string(b1), `"plan_type":"pro"`) {
+		t.Fatalf("NormalizedBody for object failed: %s, err: %v", string(b1), err)
+	}
+
+	// 2. JSON-encoded string shape (escaped quotes)
+	respStr := ApiCallResponse{
+		StatusCode: 200,
+		Body:       json.RawMessage(`"{\"plan_type\":\"plus\"}"`),
+	}
+	b2, err := respStr.NormalizedBody()
+	if err != nil || !strings.Contains(string(b2), `"plan_type":"plus"`) {
+		t.Fatalf("NormalizedBody for string failed: %s, err: %v", string(b2), err)
 	}
 }
 

@@ -2,6 +2,7 @@ package quota
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -12,30 +13,41 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
 
+// Official Upstream URLs
 const (
-	CodexUsageURL               = "https://chatgpt.com/backend-api/wham/usage"
-	CodexRedeemCreditURL        = "https://chatgpt.com/backend-api/wham/rate_limits/reset_credits/consume"
-	ClaudeProfileURL            = "https://claude.ai/api/account"
-	ClaudeUsageBaseURL          = "https://claude.ai/api/organizations"
-	ClaudeApiUsageBaseURL       = "https://api.anthropic.com/api/organizations"
-	AntigravityQuotaURLAlkali   = "https://alkalimakersuite-pa.clients6.google.com/v1alpha/projects"
-	AntigravityQuotaURLCloud    = "https://cloudconsole-pa.clients6.google.com/v1alpha/projects"
-	KimiUsageURL                = "https://api.moonshot.cn/v1/users/me/usage"
-	XaiBillingMonthlyURL        = "https://x.ai/api/billing/usage/monthly"
-	XaiBillingWeeklyURL         = "https://x.ai/api/billing/usage/weekly"
-	XaiSubscriptionURL          = "https://api.x.ai/v1/billing/subscription"
+	CodexUsageURL              = "https://chatgpt.com/backend-api/wham/usage"
+	CodexRedeemCreditURL       = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume"
+	ClaudeProfileURL           = "https://api.anthropic.com/api/oauth/profile"
+	ClaudeUsageURL             = "https://api.anthropic.com/api/oauth/usage"
+	AntigravityQuotaURLDaily   = "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary"
+	AntigravityQuotaURLSandbox = "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:retrieveUserQuotaSummary"
+	AntigravityQuotaURLCloud   = "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary"
+	KimiUsageURL               = "https://api.kimi.com/coding/v1/usages"
+	XaiBillingMonthlyURL       = "https://cli-chat-proxy.grok.com/v1/billing"
+	XaiBillingWeeklyURL        = "https://cli-chat-proxy.grok.com/v1/billing?format=credits"
+	XaiApiMeURL                = "https://api.x.ai/v1/me"
+	XaiApiChatURL              = "https://api.x.ai/v1/chat/completions"
+)
+
+// Official Upstream Headers
+const (
+	CodexUserAgent       = "codex-tui/0.149.1 (Mac OS 26.5.2; arm64) iTerm.app/3.6.11 (codex-tui; 0.149.1)"
+	AntigravityUserAgent = "antigravity/cli/1.0.13 (aidev_client; os_type=darwin; arch=arm64)"
+	XaiGrokClientVersion = "0.2.91"
+	XaiGrokUserAgent     = "grok-pager/0.2.91 grok-shell/0.2.91 (macos; aarch64)"
+	XaiPaidHealthModel   = "grok-4.5"
 )
 
 // AllowedURLPrefixes strictly limits which upstream domains and endpoints may be called via CPA api-call.
 var AllowedURLPrefixes = []string{
 	"https://chatgpt.com/backend-api/wham/",
-	"https://claude.ai/api/",
-	"https://api.anthropic.com/api/",
-	"https://alkalimakersuite-pa.clients6.google.com/v1alpha/projects/",
-	"https://cloudconsole-pa.clients6.google.com/v1alpha/projects/",
-	"https://api.moonshot.cn/v1/",
-	"https://x.ai/api/billing/",
-	"https://api.x.ai/v1/billing/",
+	"https://api.anthropic.com/api/oauth/",
+	"https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary",
+	"https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:retrieveUserQuotaSummary",
+	"https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary",
+	"https://api.kimi.com/coding/v1/",
+	"https://cli-chat-proxy.grok.com/v1/billing",
+	"https://api.x.ai/v1/",
 }
 
 // IsAllowedQuotaURL verifies that a target URL is in the strict quota allowlist.
@@ -70,17 +82,18 @@ func NewService(client CPAClient) *Service {
 }
 
 // DetectProvider maps file Type and Provider to a standard quota provider key.
+// Note: generic gemini is NOT classified as antigravity!
 func DetectProvider(fileType, provider string) string {
 	t := strings.ToLower(strings.TrimSpace(fileType))
 	p := strings.ToLower(strings.TrimSpace(provider))
 
 	switch {
+	case t == "antigravity" || p == "antigravity":
+		return "antigravity"
 	case strings.Contains(t, "codex") || strings.Contains(p, "codex") || strings.Contains(t, "chatgpt"):
 		return "codex"
 	case strings.Contains(t, "claude") || strings.Contains(p, "claude") || strings.Contains(t, "anthropic") || strings.Contains(p, "anthropic"):
 		return "claude"
-	case strings.Contains(t, "antigravity") || strings.Contains(p, "antigravity") || strings.Contains(t, "gemini") || strings.Contains(p, "gemini"):
-		return "antigravity"
 	case strings.Contains(t, "kimi") || strings.Contains(p, "kimi") || strings.Contains(t, "moonshot") || strings.Contains(p, "moonshot"):
 		return "kimi"
 	case strings.Contains(t, "xai") || strings.Contains(p, "xai") || strings.Contains(t, "grok") || strings.Contains(p, "grok"):
@@ -141,23 +154,70 @@ func (s *Service) SafeApiCall(ctx context.Context, authIndex, method, targetURL 
 	return s.client.ApiCall(ctx, req)
 }
 
-// RefreshCredentialQuota performs a live upstream query for a credential and returns normalized quota.
-func (s *Service) RefreshCredentialQuota(ctx context.Context, authIndex, name, fileType, provider string, disabled bool, prior *NormalizedQuota) (*NormalizedQuota, error) {
+func sanitizeError(statusCode int, rawBody []byte) string {
+	if statusCode == 0 {
+		return "request failed"
+	}
+	// Extract simple message if JSON error
+	bodyStr := string(rawBody)
+	if strings.Contains(bodyStr, "message") {
+		var errObj struct {
+			Message string `json:"message"`
+			Error   any    `json:"error"`
+		}
+		if err := json.Unmarshal(rawBody, &errObj); err == nil {
+			if errObj.Message != "" {
+				return fmt.Sprintf("HTTP %d: %s", statusCode, errObj.Message)
+			}
+			if msgStr, ok := errObj.Error.(string); ok && msgStr != "" {
+				return fmt.Sprintf("HTTP %d: %s", statusCode, msgStr)
+			}
+		}
+	}
+	return fmt.Sprintf("HTTP %d", statusCode)
+}
+
+func resolveAntigravityProjectID(file management.AuthFile) string {
+	if pid := strings.TrimSpace(file.ProjectID); pid != "" {
+		return pid
+	}
+	if file.Quota != nil {
+		if pid, ok := file.Quota["project_id"].(string); ok && strings.TrimSpace(pid) != "" {
+			return strings.TrimSpace(pid)
+		}
+	}
+	return ""
+}
+
+func resolveCodexAccountID(file management.AuthFile) string {
+	if acc := strings.TrimSpace(file.Account); acc != "" {
+		return acc
+	}
+	if file.Quota != nil {
+		if aid, ok := file.Quota["account_id"].(string); ok && strings.TrimSpace(aid) != "" {
+			return strings.TrimSpace(aid)
+		}
+	}
+	return ""
+}
+
+// RefreshCredentialQuota performs a live upstream query using full AuthFile metadata.
+func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.AuthFile, prior *NormalizedQuota) (*NormalizedQuota, error) {
 	nowMS := time.Now().UnixMilli()
-	stdProvider := DetectProvider(fileType, provider)
+	authIndex := strings.TrimSpace(file.AuthIndex)
+	stdProvider := DetectProvider(file.Type, file.Provider)
 	caps := CapabilitiesForProvider(stdProvider)
 
 	result := &NormalizedQuota{
 		AuthIndex:    authIndex,
-		Name:         name,
-		Type:         fileType,
+		Name:         file.Name,
+		Type:         file.Type,
 		Provider:     stdProvider,
-		Disabled:     disabled,
+		Disabled:     file.Disabled,
 		ObservedAtMS: nowMS,
 		Capabilities: caps,
 	}
 
-	// If prior had raw signals or cooldown, preserve them
 	if prior != nil {
 		result.RawSignals = prior.RawSignals
 		result.ActiveCooldown = prior.ActiveCooldown
@@ -166,7 +226,7 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, authIndex, name, f
 		result.ResetCredits = prior.ResetCredits
 	}
 
-	if disabled {
+	if file.Disabled {
 		result.Status = "idle"
 		EvaluateStatusAndRecommendation(result, nowMS)
 		return result, nil
@@ -176,7 +236,7 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, authIndex, name, f
 
 	switch stdProvider {
 	case "codex":
-		plan, windows, credits, err := s.fetchCodexQuota(ctx, authIndex, nowMS)
+		plan, windows, credits, err := s.fetchCodexQuota(ctx, file, nowMS)
 		if err != nil {
 			fetchErr = err
 		} else {
@@ -186,7 +246,7 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, authIndex, name, f
 		}
 
 	case "claude":
-		plan, windows, extraUsage, err := s.fetchClaudeQuota(ctx, authIndex, nowMS)
+		plan, windows, extraUsage, err := s.fetchClaudeQuota(ctx, file, nowMS)
 		if err != nil {
 			fetchErr = err
 		} else {
@@ -198,7 +258,7 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, authIndex, name, f
 		}
 
 	case "antigravity":
-		windows, err := s.fetchAntigravityQuota(ctx, authIndex, nowMS)
+		windows, err := s.fetchAntigravityQuota(ctx, file, nowMS)
 		if err != nil {
 			fetchErr = err
 		} else {
@@ -209,18 +269,18 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, authIndex, name, f
 		}
 
 	case "kimi":
-		windows, err := s.fetchKimiQuota(ctx, authIndex, nowMS)
+		windows, err := s.fetchKimiQuota(ctx, file, nowMS)
 		if err != nil {
 			fetchErr = err
 		} else {
 			result.Windows = windows
 			if result.Plan == nil {
-				result.Plan = &QuotaPlan{PlanType: "standard", PlanLabel: "Kimi API", Tier: "standard"}
+				result.Plan = &QuotaPlan{PlanType: "standard", PlanLabel: "Kimi Coding API", Tier: "standard"}
 			}
 		}
 
 	case "xai":
-		plan, windows, err := s.fetchXaiQuota(ctx, authIndex, nowMS)
+		plan, windows, err := s.fetchXaiQuota(ctx, file, nowMS)
 		if err != nil {
 			fetchErr = err
 		} else {
@@ -234,7 +294,6 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, authIndex, name, f
 
 	if fetchErr != nil {
 		result.Error = fetchErr.Error()
-		// If prior had windows, mark as stale rather than wiping them out!
 		if prior != nil && len(prior.Windows) > 0 {
 			result.Status = "stale"
 			result.Windows = prior.Windows
@@ -249,114 +308,165 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, authIndex, name, f
 	return result, nil
 }
 
-func (s *Service) fetchCodexQuota(ctx context.Context, authIndex string, nowMS int64) (*QuotaPlan, []QuotaWindow, *CodexResetCreditsInfo, error) {
+func (s *Service) fetchCodexQuota(ctx context.Context, file management.AuthFile, nowMS int64) (*QuotaPlan, []QuotaWindow, *CodexResetCreditsInfo, error) {
 	headers := map[string]string{
-		"User-Agent": "ChatGPT/1.2025.0 (Android; 14)",
+		"User-Agent": CodexUserAgent,
 		"Accept":     "application/json",
 	}
-	resp, err := s.SafeApiCall(ctx, authIndex, "GET", CodexUsageURL, headers, "")
+	if accountID := resolveCodexAccountID(file); accountID != "" {
+		headers["Openai-Account-Id"] = accountID
+	}
+
+	resp, err := s.SafeApiCall(ctx, file.AuthIndex, "GET", CodexUsageURL, headers, "")
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	normBody, err := resp.NormalizedBody()
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, nil, nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(resp.Body))
+		return nil, nil, nil, errors.New(sanitizeError(resp.StatusCode, normBody))
 	}
 
-	return ParseCodexUsage(resp.Body, nowMS)
+	return ParseCodexUsage(normBody, nowMS)
 }
 
-func (s *Service) fetchClaudeQuota(ctx context.Context, authIndex string, nowMS int64) (*QuotaPlan, []QuotaWindow, *QuotaExtraUsage, error) {
+func (s *Service) fetchClaudeQuota(ctx context.Context, file management.AuthFile, nowMS int64) (*QuotaPlan, []QuotaWindow, *QuotaExtraUsage, error) {
 	headers := map[string]string{
-		"Accept": "application/json",
+		"Accept":         "application/json",
+		"anthropic-beta": "oauth-2025-04-20",
 	}
-	// Try account profile first for plan
+
+	// 1. Profile query for plan tier
 	var plan *QuotaPlan
-	profResp, profErr := s.SafeApiCall(ctx, authIndex, "GET", ClaudeProfileURL, headers, "")
+	profResp, profErr := s.SafeApiCall(ctx, file.AuthIndex, "GET", ClaudeProfileURL, headers, "")
 	if profErr == nil && profResp.StatusCode == 200 {
-		plan = ParseClaudeProfile(profResp.Body)
+		if normProf, err := profResp.NormalizedBody(); err == nil {
+			plan = ParseClaudeProfile(normProf)
+		}
 	}
 
-	// Try organizations usage endpoint
-	usageURL := ClaudeUsageBaseURL + "/current/usage"
-	usageResp, usageErr := s.SafeApiCall(ctx, authIndex, "GET", usageURL, headers, "")
-	if usageErr != nil || usageResp.StatusCode != 200 {
-		// Fallback to anthropic api usage endpoint
-		usageURL = ClaudeApiUsageBaseURL + "/current/usage"
-		usageResp, usageErr = s.SafeApiCall(ctx, authIndex, "GET", usageURL, headers, "")
-	}
-
+	// 2. Usage query for rolling & weekly windows
+	usageResp, usageErr := s.SafeApiCall(ctx, file.AuthIndex, "GET", ClaudeUsageURL, headers, "")
 	if usageErr != nil {
 		return plan, nil, nil, usageErr
 	}
+	normUsage, err := usageResp.NormalizedBody()
+	if err != nil {
+		return plan, nil, nil, err
+	}
 	if usageResp.StatusCode < 200 || usageResp.StatusCode >= 300 {
-		return plan, nil, nil, fmt.Errorf("HTTP %d: %s", usageResp.StatusCode, string(usageResp.Body))
+		return plan, nil, nil, errors.New(sanitizeError(usageResp.StatusCode, normUsage))
 	}
 
-	windows, extraUsage, err := ParseClaudeUsage(usageResp.Body, nowMS)
+	windows, extraUsage, err := ParseClaudeUsage(normUsage, nowMS)
 	if err != nil {
 		return plan, nil, nil, err
 	}
 	return plan, windows, extraUsage, nil
 }
 
-func (s *Service) fetchAntigravityQuota(ctx context.Context, authIndex string, nowMS int64) ([]QuotaWindow, error) {
+func (s *Service) fetchAntigravityQuota(ctx context.Context, file management.AuthFile, nowMS int64) ([]QuotaWindow, error) {
+	projectID := resolveAntigravityProjectID(file)
+	if projectID == "" {
+		return nil, errors.New("antigravity auth file missing project_id")
+	}
+
 	headers := map[string]string{
 		"Content-Type": "application/json",
 		"Accept":       "application/json",
+		"User-Agent":   AntigravityUserAgent,
 	}
-	reqData := `{"project":"default"}`
+	reqData := fmt.Sprintf(`{"project":%q}`, projectID)
 
-	// Try Alkali MakerSuite first
-	targetURL := AntigravityQuotaURLAlkali + "/default:getQuotaSummary"
-	resp, err := s.SafeApiCall(ctx, authIndex, "POST", targetURL, headers, reqData)
-	if err != nil || resp.StatusCode != 200 {
-		// Fallback to CloudConsole
-		targetURL = AntigravityQuotaURLCloud + "/default:getQuotaSummary"
-		resp, err = s.SafeApiCall(ctx, authIndex, "POST", targetURL, headers, reqData)
+	urls := []string{
+		AntigravityQuotaURLDaily,
+		AntigravityQuotaURLSandbox,
+		AntigravityQuotaURLCloud,
 	}
 
+	var lastErr error
+	for _, targetURL := range urls {
+		resp, err := s.SafeApiCall(ctx, file.AuthIndex, "POST", targetURL, headers, reqData)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		normBody, bErr := resp.NormalizedBody()
+		if bErr != nil {
+			lastErr = bErr
+			continue
+		}
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return ParseAntigravityUsage(normBody, nowMS, 0)
+		}
+		lastErr = errors.New(sanitizeError(resp.StatusCode, normBody))
+	}
+
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, errors.New("antigravity quota query failed")
+}
+
+func (s *Service) fetchKimiQuota(ctx context.Context, file management.AuthFile, nowMS int64) ([]QuotaWindow, error) {
+	headers := map[string]string{
+		"Accept": "application/json",
+	}
+	resp, err := s.SafeApiCall(ctx, file.AuthIndex, "GET", KimiUsageURL, headers, "")
+	if err != nil {
+		return nil, err
+	}
+	normBody, err := resp.NormalizedBody()
 	if err != nil {
 		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(resp.Body))
+		return nil, errors.New(sanitizeError(resp.StatusCode, normBody))
 	}
 
-	return ParseAntigravityUsage(resp.Body, nowMS, 0)
+	return ParseKimiUsage(normBody, nowMS)
 }
 
-func (s *Service) fetchKimiQuota(ctx context.Context, authIndex string, nowMS int64) ([]QuotaWindow, error) {
+func (s *Service) fetchXaiQuota(ctx context.Context, file management.AuthFile, nowMS int64) (*QuotaPlan, []QuotaWindow, error) {
 	headers := map[string]string{
+		"x-xai-token-auth":      "xai-grok-cli",
+		"x-grok-client-version": XaiGrokClientVersion,
+		"user-agent":            XaiGrokUserAgent,
+		"Accept":                "*/*",
+	}
+
+	// 1. Try free billing endpoint
+	resp, err := s.SafeApiCall(ctx, file.AuthIndex, "GET", XaiBillingMonthlyURL, headers, "")
+	if err == nil && resp.StatusCode == 200 {
+		if normBody, bErr := resp.NormalizedBody(); bErr == nil {
+			return ParseXaiBilling(normBody, nowMS)
+		}
+	}
+
+	// 2. Fallback to paid health check
+	paidHeaders := map[string]string{
 		"Accept": "application/json",
 	}
-	resp, err := s.SafeApiCall(ctx, authIndex, "GET", KimiUsageURL, headers, "")
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(resp.Body))
-	}
-
-	return ParseKimiUsage(resp.Body, nowMS)
-}
-
-func (s *Service) fetchXaiQuota(ctx context.Context, authIndex string, nowMS int64) (*QuotaPlan, []QuotaWindow, error) {
-	headers := map[string]string{
-		"Accept": "application/json",
-	}
-	resp, err := s.SafeApiCall(ctx, authIndex, "GET", XaiBillingMonthlyURL, headers, "")
-	if err != nil || resp.StatusCode != 200 {
-		resp, err = s.SafeApiCall(ctx, authIndex, "GET", XaiSubscriptionURL, headers, "")
+	meResp, meErr := s.SafeApiCall(ctx, file.AuthIndex, "GET", XaiApiMeURL, paidHeaders, "")
+	if meErr == nil && meResp.StatusCode == 200 {
+		plan := &QuotaPlan{
+			PlanType:  "paid",
+			PlanLabel: "xAI API Paid",
+			Tier:      "standard",
+		}
+		return plan, []QuotaWindow{}, nil
 	}
 
+	if resp.StatusCode != 0 {
+		normBody, _ := resp.NormalizedBody()
+		return nil, nil, errors.New(sanitizeError(resp.StatusCode, normBody))
+	}
 	if err != nil {
 		return nil, nil, err
 	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(resp.Body))
-	}
-
-	return ParseXaiBilling(resp.Body, nowMS)
+	return nil, nil, errors.New("xAI quota fetch failed")
 }
 
 // RedeemCodexCredit consumes an available rate limit reset credit for a Codex credential.
@@ -369,15 +479,19 @@ func (s *Service) RedeemCodexCredit(ctx context.Context, authIndex string) error
 	headers := map[string]string{
 		"Content-Type": "application/json",
 		"Accept":       "application/json",
-		"User-Agent":   "ChatGPT/1.2025.0 (Android; 14)",
+		"User-Agent":   CodexUserAgent,
 	}
 
 	resp, err := s.SafeApiCall(ctx, authIndex, "POST", CodexRedeemCreditURL, headers, body)
 	if err != nil {
 		return fmt.Errorf("redeem codex credit: %w", err)
 	}
+	normBody, err := resp.NormalizedBody()
+	if err != nil {
+		return err
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("redeem failed (HTTP %d): %s", resp.StatusCode, string(resp.Body))
+		return errors.New(sanitizeError(resp.StatusCode, normBody))
 	}
 	return nil
 }

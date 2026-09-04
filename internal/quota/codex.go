@@ -311,12 +311,19 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 
 		// Determine label based on window seconds
 		label := defaultLabel
-		if winSec >= WeeklySeconds-3600 && winSec <= WeeklySeconds+3600 {
-			label = "每周用量上限 (Weekly)"
-			id = "weekly"
-		} else if winSec >= FiveHourSeconds-600 && winSec <= FiveHourSeconds+600 {
-			label = "5小时用量上限 (5-Hour)"
-			id = "five_hour"
+		kind := "custom"
+		if scope == "standard" && model == "" {
+			if winSec >= WeeklySeconds-3600 && winSec <= WeeklySeconds+3600 {
+				label = "每周用量上限 (Weekly)"
+				id = "weekly"
+				kind = "weekly"
+			} else if winSec >= FiveHourSeconds-600 && winSec <= FiveHourSeconds+600 {
+				label = "5小时用量上限 (5-Hour)"
+				id = "five_hour"
+				kind = "five_hour"
+			}
+		} else if scope == "model" {
+			kind = "model_scoped"
 		}
 
 		var usedPercent *float64
@@ -336,6 +343,7 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 		windows = append(windows, QuotaWindow{
 			ID:               id,
 			Label:            label,
+			Kind:             kind,
 			Scope:            scope,
 			Model:            model,
 			UsedPercent:      usedPercent,

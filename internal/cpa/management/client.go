@@ -398,7 +398,6 @@ func (c *Client) ApiCall(ctx context.Context, req ApiCallRequest) (ApiCallRespon
 	}
 	if authIndex := strings.TrimSpace(req.AuthIndex); authIndex != "" {
 		payload["auth_index"] = authIndex
-		payload["authIndex"] = authIndex
 	}
 	if len(req.Header) > 0 {
 		payload["header"] = req.Header
@@ -412,6 +411,24 @@ func (c *Client) ApiCall(ctx context.Context, req ApiCallRequest) (ApiCallRespon
 		return ApiCallResponse{}, err
 	}
 	return resp, nil
+}
+
+// NormalizedBody unwraps the body if CPA returned it as a JSON-encoded string.
+func (r ApiCallResponse) NormalizedBody() ([]byte, error) {
+	trimmed := bytes.TrimSpace(r.Body)
+	if len(trimmed) == 0 {
+		return []byte("{}"), nil
+	}
+	if trimmed[0] == '"' && trimmed[len(trimmed)-1] == '"' {
+		var unquoted string
+		if err := json.Unmarshal(trimmed, &unquoted); err == nil {
+			unquotedTrimmed := strings.TrimSpace(unquoted)
+			if unquotedTrimmed != "" {
+				return []byte(unquotedTrimmed), nil
+			}
+		}
+	}
+	return trimmed, nil
 }
 
 // PatchAuthFileStatus changes only the disabled state of a named auth file.

@@ -7,22 +7,46 @@ import (
 	"time"
 )
 
+type RawKimiDetail struct {
+	Used         any    `json:"used"`
+	Limit        any    `json:"limit"`
+	Remaining    any    `json:"remaining"`
+	ResetAt      string `json:"reset_at"`
+	ResetAtAlt   string `json:"resetAt"`
+	ResetTime    string `json:"reset_time"`
+	ResetTimeAlt string `json:"resetTime"`
+	ResetIn      any    `json:"reset_in"`
+	ResetInAlt   any    `json:"resetIn"`
+	TTL          any    `json:"ttl"`
+}
+
+type RawKimiWindow struct {
+	Duration    any    `json:"duration"`
+	TimeUnit    string `json:"time_unit"`
+	TimeUnitAlt string `json:"timeUnit"`
+}
+
 type RawKimiLimitItem struct {
-	Name     string `json:"name"`
-	Title    string `json:"title"`
-	Scope    string `json:"scope"`
-	Used     any    `json:"used"`
-	Limit    any    `json:"limit"`
-	Duration any    `json:"duration"`
-	TimeUnit string `json:"timeUnit"`
-	ResetAt  string `json:"resetAt"`
-	ResetIn  any    `json:"resetIn"`
-	TTL      any    `json:"ttl"`
+	Name        string         `json:"name"`
+	Title       string         `json:"title"`
+	Scope       string         `json:"scope"`
+	Used        any            `json:"used"`
+	Limit       any            `json:"limit"`
+	Duration    any            `json:"duration"`
+	TimeUnit    string         `json:"timeUnit"`
+	TimeUnitAlt string         `json:"time_unit"`
+	ResetAt     string         `json:"resetAt"`
+	ResetAtAlt  string         `json:"reset_at"`
+	ResetIn     any            `json:"resetIn"`
+	ResetInAlt  any            `json:"reset_in"`
+	TTL         any            `json:"ttl"`
+	Detail      *RawKimiDetail `json:"detail"`
+	Window      *RawKimiWindow `json:"window"`
 }
 
 type RawKimiUsagePayload struct {
-	Usage  *RawKimiLimitItem   `json:"usage"`
-	Limits []RawKimiLimitItem  `json:"limits"`
+	Usage  *RawKimiLimitItem  `json:"usage"`
+	Limits []RawKimiLimitItem `json:"limits"`
 }
 
 // ParseKimiUsage parses Kimi usage data into normalized quota windows.
@@ -48,8 +72,67 @@ func ParseKimiUsage(raw []byte, nowMS int64) ([]QuotaWindow, error) {
 			label = fmt.Sprintf("限制项 %d", i+1)
 		}
 
-		usedVal, hasUsed := toFloat(item.Used)
-		limVal, hasLim := toFloat(item.Limit)
+		rawUsed := item.Used
+		rawLimit := item.Limit
+		rawResetAt := item.ResetAt
+		if rawResetAt == "" {
+			rawResetAt = item.ResetAtAlt
+		}
+		rawResetIn := item.ResetIn
+		if rawResetIn == nil {
+			rawResetIn = item.ResetInAlt
+		}
+		rawTTL := item.TTL
+
+		if item.Detail != nil {
+			if rawUsed == nil {
+				rawUsed = item.Detail.Used
+			}
+			if rawLimit == nil {
+				rawLimit = item.Detail.Limit
+			}
+			if rawResetAt == "" {
+				rawResetAt = item.Detail.ResetAt
+				if rawResetAt == "" {
+					rawResetAt = item.Detail.ResetAtAlt
+				}
+				if rawResetAt == "" {
+					rawResetAt = item.Detail.ResetTime
+				}
+				if rawResetAt == "" {
+					rawResetAt = item.Detail.ResetTimeAlt
+				}
+			}
+			if rawResetIn == nil {
+				rawResetIn = item.Detail.ResetIn
+				if rawResetIn == nil {
+					rawResetIn = item.Detail.ResetInAlt
+				}
+			}
+			if rawTTL == nil {
+				rawTTL = item.Detail.TTL
+			}
+		}
+
+		rawDuration := item.Duration
+		rawTimeUnit := item.TimeUnit
+		if rawTimeUnit == "" {
+			rawTimeUnit = item.TimeUnitAlt
+		}
+		if item.Window != nil {
+			if rawDuration == nil {
+				rawDuration = item.Window.Duration
+			}
+			if rawTimeUnit == "" {
+				rawTimeUnit = item.Window.TimeUnit
+				if rawTimeUnit == "" {
+					rawTimeUnit = item.Window.TimeUnitAlt
+				}
+			}
+		}
+
+		usedVal, hasUsed := toFloat(rawUsed)
+		limVal, hasLim := toFloat(rawLimit)
 
 		var usedPercent *float64
 		var remainingPercent *float64
@@ -77,33 +160,41 @@ func ParseKimiUsage(raw []byte, nowMS int64) ([]QuotaWindow, error) {
 
 		var resetAtMS *int64
 		var resetLabel string
-		if item.ResetAt != "" {
-			if t, err := time.Parse(time.RFC3339, item.ResetAt); err == nil {
+		if rawResetAt != "" {
+			if t, err := time.Parse(time.RFC3339, rawResetAt); err == nil {
+				ms := t.UnixMilli()
+				resetAtMS = &ms
+				resetLabel = formatResetInstant(ms, nowMS)
+			} else if t, err := time.Parse(time.RFC3339Nano, rawResetAt); err == nil {
 				ms := t.UnixMilli()
 				resetAtMS = &ms
 				resetLabel = formatResetInstant(ms, nowMS)
 			}
-		} else if rIn, ok := toFloat(item.ResetIn); ok && rIn > 0 {
+		} else if rIn, ok := toFloat(rawResetIn); ok && rIn > 0 {
 			ms := nowMS + int64(rIn*1000)
 			resetAtMS = &ms
 			resetLabel = formatResetInstant(ms, nowMS)
-		} else if ttl, ok := toFloat(item.TTL); ok && ttl > 0 {
+		} else if ttl, ok := toFloat(rawTTL); ok && ttl > 0 {
 			ms := nowMS + int64(ttl*1000)
 			resetAtMS = &ms
 			resetLabel = formatResetInstant(ms, nowMS)
 		}
 
 		var periodHours *float64
-		if dur, ok := toFloat(item.Duration); ok && dur > 0 {
-			tu := strings.ToLower(item.TimeUnit)
+		if dur, ok := toFloat(rawDuration); ok && dur > 0 {
+			tu := strings.ToUpper(strings.TrimSpace(rawTimeUnit))
+			tu = strings.TrimPrefix(tu, "TIME_UNIT_")
 			switch tu {
-			case "hour", "hours", "h":
+			case "HOURS", "HOUR", "H":
 				periodHours = &dur
-			case "day", "days", "d":
+			case "DAYS", "DAY", "D":
 				h := dur * 24
 				periodHours = &h
-			case "minute", "minutes", "m":
+			case "MINUTES", "MINUTE", "M":
 				h := dur / 60
+				periodHours = &h
+			case "WEEKS", "WEEK", "W":
+				h := dur * 168
 				periodHours = &h
 			}
 		}
@@ -116,6 +207,7 @@ func ParseKimiUsage(raw []byte, nowMS int64) ([]QuotaWindow, error) {
 		windows = append(windows, QuotaWindow{
 			ID:               fmt.Sprintf("kimi_%d", i),
 			Label:            label,
+			Kind:             "custom",
 			Scope:            scope,
 			Model:            item.Scope,
 			Used:             usedPtr,

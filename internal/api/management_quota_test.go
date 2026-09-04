@@ -178,7 +178,7 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 	}
 
 	var refreshResult struct {
-		Status string               `json:"status"`
+		Status string                `json:"status"`
 		Quota  quota.NormalizedQuota `json:"quota"`
 	}
 	if err := json.NewDecoder(refResp.Body).Decode(&refreshResult); err != nil {
@@ -232,7 +232,7 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 	}
 
 	var detailResult struct {
-		Quota   quota.NormalizedQuota          `json:"quota"`
+		Quota   quota.NormalizedQuota            `json:"quota"`
 		History []repository.QuotaSnapshotRecord `json:"history"`
 	}
 	if err := json.NewDecoder(detailResp.Body).Decode(&detailResult); err != nil {

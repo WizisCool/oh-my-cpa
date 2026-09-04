@@ -79,12 +79,8 @@ func (r *Repository) SaveQuotaSnapshot(ctx context.Context, snapshot QuotaSnapsh
 		return fmt.Errorf("insert quota snapshot: %w", err)
 	}
 
-	// Bounded retention: keep latest 50 snapshots per auth_index
-	go func(authIndex string) {
-		trimCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = r.trimQuotaSnapshots(trimCtx, authIndex, 50)
-	}(snapshot.AuthIndex)
+	// Bounded retention: keep latest 50 snapshots per auth_index synchronously
+	_ = r.trimQuotaSnapshots(ctx, snapshot.AuthIndex, 50)
 
 	return nil
 }
@@ -227,6 +223,20 @@ func (r *Repository) GetQuotaSnapshotHistory(ctx context.Context, authIndex stri
 	return records, rows.Err()
 }
 
+// ClearCooldownEvidence durably resets local quota_exceeded flags in error_events when cooldown is cleared.
+func (r *Repository) ClearCooldownEvidence(ctx context.Context, authIndex string) error {
+	if r == nil || r.SQL() == nil {
+		return errors.New("repository is not initialized")
+	}
+	query := `
+		UPDATE error_events
+		SET quota_exceeded = 0, next_recover_at_ms = NULL, next_retry_after_ms = NULL
+		WHERE auth_index = ? AND quota_exceeded = 1
+	`
+	_, err := r.SQL().ExecContext(ctx, query, strings.TrimSpace(authIndex))
+	return err
+}
+
 // BatchCorrelatedCooldowns efficiently batches correlated error events for auth indexes and derives active cooldown status.
 func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes []string, nowMS int64) (map[string]ActiveCooldownRecord, error) {
 	result := make(map[string]ActiveCooldownRecord)
@@ -248,10 +258,10 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 	placeholders := strings.Repeat("?,", len(validIndexes))
 	placeholders = placeholders[:len(placeholders)-1]
 
-	// Query errors within the last 6 hours (past that, unrecovered cooldowns are definitely stale)
-	windowStartMS := nowMS - 6*60*60*1000
-	args := make([]any, 0, len(validIndexes)+1)
-	args = append(args, windowStartMS)
+	// Look back 6 hours for recent errors, or any future recovery time
+	recentThresholdMS := nowMS - 6*60*60*1000
+	args := make([]any, 0, len(validIndexes)+2)
+	args = append(args, nowMS, recentThresholdMS)
 	for _, v := range validIndexes {
 		args = append(args, v)
 	}
@@ -259,7 +269,7 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 	query := fmt.Sprintf(`
 		SELECT auth_index, quota_reason, next_retry_after_ms, next_recover_at_ms, timestamp_ms
 		FROM error_events
-		WHERE quota_exceeded = 1 AND timestamp_ms >= ? AND auth_index IN (%s)
+		WHERE quota_exceeded = 1 AND (next_recover_at_ms > ? OR timestamp_ms >= ?) AND auth_index IN (%s)
 		ORDER BY timestamp_ms DESC
 	`, placeholders)
 

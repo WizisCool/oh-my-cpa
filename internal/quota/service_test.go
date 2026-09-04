@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -88,7 +89,12 @@ func TestServiceRefreshPreservesPreviousStateOnTransientError(t *testing.T) {
 		},
 	}
 
-	res, err := svc.RefreshCredentialQuota(context.Background(), "auth-1", "test.json", "codex", "codex", false, prior)
+	res, err := svc.RefreshCredentialQuota(context.Background(), management.AuthFile{
+		AuthIndex: "auth-1",
+		Name:      "test.json",
+		Type:      "codex",
+		Provider:  "codex",
+	}, prior)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -175,6 +181,135 @@ func TestRedeemCodexCreditCallsConsumeEndpoint(t *testing.T) {
 	}
 	if !containsStr(calledBody, "redeem_request_id") {
 		t.Errorf("calledBody missing redeem_request_id: %s", calledBody)
+	}
+}
+
+func TestServiceAllProvidersContract(t *testing.T) {
+	calledURLs := make(map[string]bool)
+	calledHeaders := make(map[string]map[string]string)
+
+	client := &mockCPAClient{
+		apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+			calledURLs[req.URL] = true
+			calledHeaders[req.URL] = req.Header
+
+			switch {
+			case strings.Contains(req.URL, "retrieveUserQuotaSummary"):
+				return management.ApiCallResponse{
+					StatusCode: 200,
+					Body:       json.RawMessage(`{"groups":[{"displayName":"Gemini models","buckets":[{"bucketId":"5h","window":"5h","remainingFraction":0.8}]}]}`),
+				}, nil
+			case strings.Contains(req.URL, "oauth/profile"):
+				return management.ApiCallResponse{
+					StatusCode: 200,
+					Body:       json.RawMessage(`{"account":{"has_claude_pro":true}}`),
+				}, nil
+			case strings.Contains(req.URL, "oauth/usage"):
+				return management.ApiCallResponse{
+					StatusCode: 200,
+					Body:       json.RawMessage(`{"five_hour":{"utilization":30}}`),
+				}, nil
+			case strings.Contains(req.URL, "backend-api/wham/usage"):
+				return management.ApiCallResponse{
+					StatusCode: 200,
+					Body:       json.RawMessage(`{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":20}}}`),
+				}, nil
+			case strings.Contains(req.URL, "coding/v1/usages"):
+				return management.ApiCallResponse{
+					StatusCode: 200,
+					Body:       json.RawMessage(`{"limits":[{"name":"daily","used":10,"limit":100}]}`),
+				}, nil
+			case strings.Contains(req.URL, "cli-chat-proxy.grok.com"):
+				return management.ApiCallResponse{
+					StatusCode: 200,
+					Body:       json.RawMessage(`{"config":{"credit_usage_percent":40}}`),
+				}, nil
+			default:
+				return management.ApiCallResponse{StatusCode: 404}, nil
+			}
+		},
+	}
+
+	svc := NewService(client)
+
+	// 1. Antigravity
+	agFile := management.AuthFile{
+		AuthIndex: "ag-1",
+		Name:      "antigravity.json",
+		Type:      "antigravity",
+		Provider:  "antigravity",
+		ProjectID: "my-gcp-project",
+	}
+	agRes, err := svc.RefreshCredentialQuota(context.Background(), agFile, nil)
+	if err != nil || agRes.Status != "healthy" || len(agRes.Windows) == 0 {
+		t.Fatalf("antigravity refresh failed: %v, res: %+v", err, agRes)
+	}
+	if !calledURLs[AntigravityQuotaURLDaily] {
+		t.Errorf("expected Antigravity URL to be called")
+	}
+
+	// 2. Claude
+	claudeFile := management.AuthFile{
+		AuthIndex: "cl-1",
+		Name:      "claude.json",
+		Type:      "claude",
+		Provider:  "claude",
+	}
+	clRes, err := svc.RefreshCredentialQuota(context.Background(), claudeFile, nil)
+	if err != nil || clRes.Status != "healthy" || len(clRes.Windows) == 0 {
+		t.Fatalf("claude refresh failed: %v, res: %+v", err, clRes)
+	}
+	if !calledURLs[ClaudeUsageURL] || !calledURLs[ClaudeProfileURL] {
+		t.Errorf("expected Claude URLs to be called")
+	}
+
+	// 3. Codex
+	codexFile := management.AuthFile{
+		AuthIndex: "cx-1",
+		Name:      "codex.json",
+		Type:      "codex",
+		Provider:  "codex",
+		Account:   "acc-openai-123",
+	}
+	cxRes, err := svc.RefreshCredentialQuota(context.Background(), codexFile, nil)
+	if err != nil || cxRes.Status != "healthy" || len(cxRes.Windows) == 0 {
+		t.Fatalf("codex refresh failed: %v, res: %+v", err, cxRes)
+	}
+	if !calledURLs[CodexUsageURL] {
+		t.Errorf("expected Codex URL to be called")
+	}
+	if calledHeaders[CodexUsageURL]["Openai-Account-Id"] != "acc-openai-123" {
+		t.Errorf("expected Openai-Account-Id header on codex call")
+	}
+
+	// 4. Kimi
+	kimiFile := management.AuthFile{
+		AuthIndex: "km-1",
+		Name:      "kimi.json",
+		Type:      "kimi",
+		Provider:  "kimi",
+	}
+	kmRes, err := svc.RefreshCredentialQuota(context.Background(), kimiFile, nil)
+	if err != nil || kmRes.Status != "healthy" || len(kmRes.Windows) == 0 {
+		t.Fatalf("kimi refresh failed: %v, res: %+v", err, kmRes)
+	}
+	if !calledURLs[KimiUsageURL] {
+		t.Errorf("expected Kimi URL to be called")
+	}
+
+	// 5. xAI
+	xaiFile := management.AuthFile{
+		AuthIndex: "xa-1",
+		Name:      "xai.json",
+		Type:      "xai",
+		Provider:  "xai",
+	}
+	xaRes, err := svc.RefreshCredentialQuota(context.Background(), xaiFile, nil)
+	if err != nil || xaRes.Status != "healthy" || len(xaRes.Windows) == 0 {
+		t.Fatalf("xai refresh failed: %v, res: %+v", err, xaRes)
+	}
+	if !calledURLs[XaiBillingMonthlyURL] {
+		t.Errorf("expected xAI billing URL to be called")
 	}
 }
 
