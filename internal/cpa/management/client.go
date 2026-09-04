@@ -182,18 +182,24 @@ func (c *Client) UpdateOpenAICompatibility(ctx context.Context, entries []OpenAI
 	return c.doJSONBody(ctx, http.MethodPut, "/openai-compatibility", entries, nil)
 }
 
-type SimpleKeyEntry struct {
-	APIKey    string `json:"api-key"`
-	AuthIndex string `json:"auth-index,omitempty"`
-	BaseURL   string `json:"base-url,omitempty"`
-	ProxyURL  string `json:"proxy-url,omitempty"`
+type ClaudeAPIKey struct {
+	APIKey         string            `json:"api-key"`
+	AuthIndex      string            `json:"auth-index,omitempty"`
+	Priority       *int              `json:"priority,omitempty"`
+	Weight         *int              `json:"weight,omitempty"`
+	Prefix         string            `json:"prefix,omitempty"`
+	BaseURL        string            `json:"base-url,omitempty"`
+	ProxyURL       string            `json:"proxy-url,omitempty"`
+	Models         []ModelAlias      `json:"models,omitempty"`
+	Headers        map[string]string `json:"headers,omitempty"`
+	DisableCooling *bool             `json:"disable-cooling,omitempty"`
 }
 
 type ClaudeAPIKeysResponse struct {
-	Entries []SimpleKeyEntry `json:"claude-api-key"`
+	Entries []ClaudeAPIKey `json:"claude-api-key"`
 }
 
-func (c *Client) ClaudeAPIKeys(ctx context.Context) ([]SimpleKeyEntry, error) {
+func (c *Client) ClaudeAPIKeys(ctx context.Context) ([]ClaudeAPIKey, error) {
 	var response ClaudeAPIKeysResponse
 	if err := c.DoJSON(ctx, http.MethodGet, "/claude-api-key", &response); err != nil {
 		return nil, err
@@ -201,11 +207,24 @@ func (c *Client) ClaudeAPIKeys(ctx context.Context) ([]SimpleKeyEntry, error) {
 	return response.Entries, nil
 }
 
-type GeminiAPIKeysResponse struct {
-	Entries []SimpleKeyEntry `json:"gemini-api-key"`
+type GeminiAPIKey struct {
+	APIKey         string            `json:"api-key"`
+	AuthIndex      string            `json:"auth-index,omitempty"`
+	Priority       *int              `json:"priority,omitempty"`
+	Weight         *int              `json:"weight,omitempty"`
+	Prefix         string            `json:"prefix,omitempty"`
+	BaseURL        string            `json:"base-url,omitempty"`
+	ProxyURL       string            `json:"proxy-url,omitempty"`
+	Models         []ModelAlias      `json:"models,omitempty"`
+	Headers        map[string]string `json:"headers,omitempty"`
+	DisableCooling *bool             `json:"disable-cooling,omitempty"`
 }
 
-func (c *Client) GeminiAPIKeys(ctx context.Context) ([]SimpleKeyEntry, error) {
+type GeminiAPIKeysResponse struct {
+	Entries []GeminiAPIKey `json:"gemini-api-key"`
+}
+
+func (c *Client) GeminiAPIKeys(ctx context.Context) ([]GeminiAPIKey, error) {
 	var response GeminiAPIKeysResponse
 	if err := c.DoJSON(ctx, http.MethodGet, "/gemini-api-key", &response); err != nil {
 		return nil, err
@@ -213,16 +232,16 @@ func (c *Client) GeminiAPIKeys(ctx context.Context) ([]SimpleKeyEntry, error) {
 	return response.Entries, nil
 }
 
-func (c *Client) UpdateClaudeAPIKeys(ctx context.Context, entries []SimpleKeyEntry) error {
+func (c *Client) UpdateClaudeAPIKeys(ctx context.Context, entries []ClaudeAPIKey) error {
 	if entries == nil {
-		entries = []SimpleKeyEntry{}
+		entries = []ClaudeAPIKey{}
 	}
 	return c.doJSONBody(ctx, http.MethodPut, "/claude-api-key", entries, nil)
 }
 
-func (c *Client) UpdateGeminiAPIKeys(ctx context.Context, entries []SimpleKeyEntry) error {
+func (c *Client) UpdateGeminiAPIKeys(ctx context.Context, entries []GeminiAPIKey) error {
 	if entries == nil {
-		entries = []SimpleKeyEntry{}
+		entries = []GeminiAPIKey{}
 	}
 	return c.doJSONBody(ctx, http.MethodPut, "/gemini-api-key", entries, nil)
 }
@@ -929,14 +948,16 @@ type CodexAPIKeysResponse struct {
 
 type CodexAPIKey struct {
 	APIKey         string            `json:"api-key"`
-	AuthIndex      string            `json:"auth-index"`
-	BaseURL        string            `json:"base-url"`
-	ProxyURL       string            `json:"proxy-url"`
-	Headers        map[string]string `json:"headers"`
-	Models         []ModelAlias      `json:"models"`
-	ExcludedModels []string          `json:"excluded-models"`
-	Priority       int               `json:"priority"`
-	Prefix         string            `json:"prefix"`
+	AuthIndex      string            `json:"auth-index,omitempty"`
+	BaseURL        string            `json:"base-url,omitempty"`
+	ProxyURL       string            `json:"proxy-url,omitempty"`
+	Headers        map[string]string `json:"headers,omitempty"`
+	Models         []ModelAlias      `json:"models,omitempty"`
+	ExcludedModels []string          `json:"excluded-models,omitempty"`
+	Priority       *int              `json:"priority,omitempty"`
+	Weight         *int              `json:"weight,omitempty"`
+	Prefix         string            `json:"prefix,omitempty"`
+	DisableCooling *bool             `json:"disable-cooling,omitempty"`
 }
 
 type OpenAICompatibilityResponse struct {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
@@ -191,6 +192,87 @@ func (h *Handler) deleteClientAPIKey(writer http.ResponseWriter, request *http.R
 	})
 }
 
+
+func (h *Handler) loadProviderNames(ctx context.Context) map[string]string {
+	if h.repo == nil {
+		return nil
+	}
+	raw, found, err := h.repo.GetPreference(ctx, repository.PreferenceProviderNames)
+	if err != nil || !found || raw == "" {
+		return nil
+	}
+	var res map[string]string
+	if err := json.Unmarshal([]byte(raw), &res); err != nil {
+		return nil
+	}
+	return res
+}
+
+func (h *Handler) saveProviderName(ctx context.Context, id, name string) {
+	if h.repo == nil || id == "" || name == "" {
+		return
+	}
+	names := h.loadProviderNames(ctx)
+	if names == nil {
+		names = make(map[string]string)
+	}
+	names[id] = name
+	encoded, err := json.Marshal(names)
+	if err == nil {
+		_ = h.repo.PutPreference(ctx, repository.PreferenceProviderNames, string(encoded))
+	}
+}
+
+func (h *Handler) removeProviderName(ctx context.Context, id string) {
+	if h.repo == nil || id == "" {
+		return
+	}
+	names := h.loadProviderNames(ctx)
+	if names == nil {
+		return
+	}
+	delete(names, id)
+	encoded, err := json.Marshal(names)
+	if err == nil {
+		_ = h.repo.PutPreference(ctx, repository.PreferenceProviderNames, string(encoded))
+	}
+}
+
+func (h *Handler) loadDisabledProviders(ctx context.Context) map[string]bool {
+	if h.repo == nil {
+		return nil
+	}
+	raw, found, err := h.repo.GetPreference(ctx, repository.PreferenceDisabledProviders)
+	if err != nil || !found || raw == "" {
+		return nil
+	}
+	var res map[string]bool
+	if err := json.Unmarshal([]byte(raw), &res); err != nil {
+		return nil
+	}
+	return res
+}
+
+func (h *Handler) toggleDisabledProvider(ctx context.Context, id string, disabled bool) {
+	if h.repo == nil || id == "" {
+		return
+	}
+	m := h.loadDisabledProviders(ctx)
+	if m == nil {
+		m = make(map[string]bool)
+	}
+	if disabled {
+		m[id] = true
+	} else {
+		delete(m, id)
+	}
+	encoded, err := json.Marshal(m)
+	if err == nil {
+		_ = h.repo.PutPreference(ctx, repository.PreferenceDisabledProviders, string(encoded))
+	}
+}
+
+
 func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
@@ -200,27 +282,75 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 
 	ctx := request.Context()
 	items := make([]ProviderItemDTO, 0)
+	customNames := h.loadProviderNames(ctx)
+	disabledMap := h.loadDisabledProviders(ctx)
 
 	// 1. Codex API Keys
 	if codexResp, err := client.CodexAPIKeys(ctx); err == nil {
 		for i, entry := range codexResp.Entries {
+			id := fmt.Sprintf("codex-%d", i)
+			name := "Codex / Responses"
+			if customNames != nil && customNames[id] != "" {
+				name = customNames[id]
+			} else if entry.Prefix != "" {
+				name = fmt.Sprintf("Codex (%s)", entry.Prefix)
+			}
+
 			models := make([]string, 0, len(entry.Models))
+			modelEntries := make([]ProviderModelDTO, 0, len(entry.Models))
 			for _, m := range entry.Models {
 				if m.Name != "" {
 					models = append(models, m.Name)
 				}
+				var th *ThinkingDTO
+				if m.Thinking != nil && len(m.Thinking.Levels) > 0 {
+					th = &ThinkingDTO{Levels: m.Thinking.Levels}
+				}
+				modelEntries = append(modelEntries, ProviderModelDTO{
+					Name:     m.Name,
+					Alias:    m.Alias,
+					Image:    m.Image,
+					Thinking: th,
+				})
 			}
+
+			keyEntries := make([]ProviderKeyEntryDTO, 0)
+			if strings.TrimSpace(entry.APIKey) != "" {
+				keyEntries = append(keyEntries, ProviderKeyEntryDTO{
+					Index:    0,
+					Masked:   maskSecretKey(entry.APIKey),
+					ProxyURL: entry.ProxyURL,
+					Weight:   entry.Weight,
+				})
+			}
+
+			var disableCoolingVal bool
+			if entry.DisableCooling != nil {
+				disableCoolingVal = *entry.DisableCooling
+			}
+
+			isDisabled := false
+			if disabledMap != nil && disabledMap[id] {
+				isDisabled = true
+			}
+
 			items = append(items, ProviderItemDTO{
-				ID:              fmt.Sprintf("codex-%d", i),
+				ID:              id,
 				Family:          "codex",
-				Name:            firstNonEmpty(entry.Prefix, "Codex / Responses"),
+				Name:            name,
 				Protocol:        "OpenAI Responses",
 				BaseURL:         security.PublicURL(entry.BaseURL),
+				Prefix:          entry.Prefix,
+				Priority:        entry.Priority,
+				DisableCooling:  disableCoolingVal,
 				AuthIndex:       entry.AuthIndex,
 				Models:          models,
-				Disabled:        false,
+				ModelEntries:    modelEntries,
+				Disabled:        isDisabled,
 				KeyConfigured:   strings.TrimSpace(entry.APIKey) != "",
 				KeyMasked:       maskSecretKey(entry.APIKey),
+				KeyEntries:      keyEntries,
+				Headers:         entry.Headers,
 				ProxyConfigured: strings.TrimSpace(entry.ProxyURL) != "",
 			})
 		}
@@ -229,12 +359,30 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 	// 2. OpenAI Compatibility
 	if oaiResp, err := client.OpenAICompatibility(ctx); err == nil {
 		for i, entry := range oaiResp.Entries {
+			id := fmt.Sprintf("openai-compat-%d", i)
+			name := firstNonEmpty(entry.Name, "OpenAI Compatible")
+			if customNames != nil && customNames[id] != "" {
+				name = customNames[id]
+			}
+
 			models := make([]string, 0, len(entry.Models))
+			modelEntries := make([]ProviderModelDTO, 0, len(entry.Models))
 			for _, m := range entry.Models {
 				if m.Name != "" {
 					models = append(models, m.Name)
 				}
+				var th *ThinkingDTO
+				if m.Thinking != nil && len(m.Thinking.Levels) > 0 {
+					th = &ThinkingDTO{Levels: m.Thinking.Levels}
+				}
+				modelEntries = append(modelEntries, ProviderModelDTO{
+					Name:     m.Name,
+					Alias:    m.Alias,
+					Image:    m.Image,
+					Thinking: th,
+				})
 			}
+
 			hasKey := len(entry.LegacyAPIKeys) > 0 || len(entry.APIKeyEntries) > 0
 			var firstKey string
 			if len(entry.LegacyAPIKeys) > 0 {
@@ -258,24 +406,10 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 				})
 			}
 
-			modelEntries := make([]ProviderModelDTO, 0, len(entry.Models))
-			for _, m := range entry.Models {
-				var th *ThinkingDTO
-				if m.Thinking != nil && len(m.Thinking.Levels) > 0 {
-					th = &ThinkingDTO{Levels: m.Thinking.Levels}
-				}
-				modelEntries = append(modelEntries, ProviderModelDTO{
-					Name:     m.Name,
-					Alias:    m.Alias,
-					Image:    m.Image,
-					Thinking: th,
-				})
-			}
-
 			items = append(items, ProviderItemDTO{
-				ID:              fmt.Sprintf("openai-compat-%d", i),
+				ID:              id,
 				Family:          "openai-compatibility",
-				Name:            firstNonEmpty(entry.Name, "OpenAI Compatible"),
+				Name:            name,
 				Protocol:        "OpenAI Chat Completions",
 				BaseURL:         security.PublicURL(entry.BaseURL),
 				Prefix:          entry.Prefix,
@@ -296,16 +430,69 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 	// 3. Claude API Keys
 	if claudeEntries, err := client.ClaudeAPIKeys(ctx); err == nil {
 		for i, entry := range claudeEntries {
+			id := fmt.Sprintf("claude-%d", i)
+			name := "Anthropic Claude"
+			if customNames != nil && customNames[id] != "" {
+				name = customNames[id]
+			} else if entry.Prefix != "" {
+				name = fmt.Sprintf("Claude (%s)", entry.Prefix)
+			}
+
+			models := make([]string, 0, len(entry.Models))
+			modelEntries := make([]ProviderModelDTO, 0, len(entry.Models))
+			for _, m := range entry.Models {
+				if m.Name != "" {
+					models = append(models, m.Name)
+				}
+				var th *ThinkingDTO
+				if m.Thinking != nil && len(m.Thinking.Levels) > 0 {
+					th = &ThinkingDTO{Levels: m.Thinking.Levels}
+				}
+				modelEntries = append(modelEntries, ProviderModelDTO{
+					Name:     m.Name,
+					Alias:    m.Alias,
+					Image:    m.Image,
+					Thinking: th,
+				})
+			}
+
+			keyEntries := make([]ProviderKeyEntryDTO, 0)
+			if strings.TrimSpace(entry.APIKey) != "" {
+				keyEntries = append(keyEntries, ProviderKeyEntryDTO{
+					Index:    0,
+					Masked:   maskSecretKey(entry.APIKey),
+					ProxyURL: entry.ProxyURL,
+					Weight:   entry.Weight,
+				})
+			}
+
+			var disableCoolingVal bool
+			if entry.DisableCooling != nil {
+				disableCoolingVal = *entry.DisableCooling
+			}
+
+			isDisabled := false
+			if disabledMap != nil && disabledMap[id] {
+				isDisabled = true
+			}
+
 			items = append(items, ProviderItemDTO{
-				ID:              fmt.Sprintf("claude-%d", i),
+				ID:              id,
 				Family:          "claude",
-				Name:            "Anthropic Claude",
+				Name:            name,
 				Protocol:        "Anthropic Messages",
 				BaseURL:         security.PublicURL(entry.BaseURL),
+				Prefix:          entry.Prefix,
+				Priority:        entry.Priority,
+				DisableCooling:  disableCoolingVal,
 				AuthIndex:       entry.AuthIndex,
-				Disabled:        false,
+				Models:          models,
+				ModelEntries:    modelEntries,
+				Disabled:        isDisabled,
 				KeyConfigured:   strings.TrimSpace(entry.APIKey) != "",
 				KeyMasked:       maskSecretKey(entry.APIKey),
+				KeyEntries:      keyEntries,
+				Headers:         entry.Headers,
 				ProxyConfigured: strings.TrimSpace(entry.ProxyURL) != "",
 			})
 		}
@@ -314,16 +501,69 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 	// 4. Gemini API Keys
 	if geminiEntries, err := client.GeminiAPIKeys(ctx); err == nil {
 		for i, entry := range geminiEntries {
+			id := fmt.Sprintf("gemini-%d", i)
+			name := "Google Gemini"
+			if customNames != nil && customNames[id] != "" {
+				name = customNames[id]
+			} else if entry.Prefix != "" {
+				name = fmt.Sprintf("Gemini (%s)", entry.Prefix)
+			}
+
+			models := make([]string, 0, len(entry.Models))
+			modelEntries := make([]ProviderModelDTO, 0, len(entry.Models))
+			for _, m := range entry.Models {
+				if m.Name != "" {
+					models = append(models, m.Name)
+				}
+				var th *ThinkingDTO
+				if m.Thinking != nil && len(m.Thinking.Levels) > 0 {
+					th = &ThinkingDTO{Levels: m.Thinking.Levels}
+				}
+				modelEntries = append(modelEntries, ProviderModelDTO{
+					Name:     m.Name,
+					Alias:    m.Alias,
+					Image:    m.Image,
+					Thinking: th,
+				})
+			}
+
+			keyEntries := make([]ProviderKeyEntryDTO, 0)
+			if strings.TrimSpace(entry.APIKey) != "" {
+				keyEntries = append(keyEntries, ProviderKeyEntryDTO{
+					Index:    0,
+					Masked:   maskSecretKey(entry.APIKey),
+					ProxyURL: entry.ProxyURL,
+					Weight:   entry.Weight,
+				})
+			}
+
+			var disableCoolingVal bool
+			if entry.DisableCooling != nil {
+				disableCoolingVal = *entry.DisableCooling
+			}
+
+			isDisabled := false
+			if disabledMap != nil && disabledMap[id] {
+				isDisabled = true
+			}
+
 			items = append(items, ProviderItemDTO{
-				ID:              fmt.Sprintf("gemini-%d", i),
+				ID:              id,
 				Family:          "gemini",
-				Name:            "Google Gemini",
+				Name:            name,
 				Protocol:        "Gemini Generate Content",
 				BaseURL:         security.PublicURL(entry.BaseURL),
+				Prefix:          entry.Prefix,
+				Priority:        entry.Priority,
+				DisableCooling:  disableCoolingVal,
 				AuthIndex:       entry.AuthIndex,
-				Disabled:        false,
+				Models:          models,
+				ModelEntries:    modelEntries,
+				Disabled:        isDisabled,
 				KeyConfigured:   strings.TrimSpace(entry.APIKey) != "",
 				KeyMasked:       maskSecretKey(entry.APIKey),
+				KeyEntries:      keyEntries,
+				Headers:         entry.Headers,
 				ProxyConfigured: strings.TrimSpace(entry.ProxyURL) != "",
 			})
 		}
@@ -354,7 +594,7 @@ func (h *Handler) patchManagementProviderStatus(writer http.ResponseWriter, requ
 	}
 
 	ctx := request.Context()
-	targetID := fmt.Sprintf("%s:%d", req.Family, req.Index)
+	targetID := fmt.Sprintf("%s-%d", req.Family, req.Index)
 
 	if auditErr := h.recordAudit(request, "provider.toggle_status", "provider", targetID, "attempt", map[string]any{"disabled": req.Disabled}); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit failure; status update aborted")
@@ -378,6 +618,8 @@ func (h *Handler) patchManagementProviderStatus(writer http.ResponseWriter, requ
 			writeCPAFacadeError(writer, err)
 			return
 		}
+	case "claude", "codex", "gemini":
+		h.toggleDisabledProvider(ctx, targetID, req.Disabled)
 	default:
 		writeError(writer, http.StatusBadRequest, "provider family does not support status toggle")
 		return
@@ -514,6 +756,23 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 		}
 	}
 
+	firstKey := apiKey
+	firstProxy := ""
+	var firstWeight *int
+	if len(req.Keys) > 0 {
+		if kVal := strings.TrimSpace(req.Keys[0].APIKey); kVal != "" {
+			firstKey = kVal
+		}
+		firstProxy = strings.TrimSpace(req.Keys[0].ProxyURL)
+		firstWeight = req.Keys[0].Weight
+	}
+
+	var disableCoolingPtr *bool
+	if req.DisableCooling {
+		t := true
+		disableCoolingPtr = &t
+	}
+
 	if auditErr := h.recordAudit(request, "provider.create", "provider", family, "attempt", map[string]any{"name": name}); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit failure; provider creation aborted")
 		return
@@ -555,6 +814,9 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 			writeCPAFacadeError(writer, err)
 			return
 		}
+		targetID := fmt.Sprintf("openai-compat-%d", len(resp.Entries)-1)
+		h.saveProviderName(ctx, targetID, name)
+
 	case "codex":
 		resp, err := client.CodexAPIKeys(ctx)
 		if err != nil {
@@ -562,9 +824,15 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 			return
 		}
 		newEntry := management.CodexAPIKey{
-			APIKey:  apiKey,
-			BaseURL: baseURL,
-			Models:  models,
+			APIKey:         firstKey,
+			BaseURL:        baseURL,
+			ProxyURL:       firstProxy,
+			Prefix:         strings.TrimSpace(req.Prefix),
+			Priority:       req.Priority,
+			Weight:         firstWeight,
+			Headers:        req.Headers,
+			Models:         models,
+			DisableCooling: disableCoolingPtr,
 		}
 		resp.Entries = append(resp.Entries, newEntry)
 		if err := client.UpdateCodexAPIKeys(ctx, resp.Entries); err != nil {
@@ -572,36 +840,61 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 			writeCPAFacadeError(writer, err)
 			return
 		}
+		targetID := fmt.Sprintf("codex-%d", len(resp.Entries)-1)
+		h.saveProviderName(ctx, targetID, name)
+
 	case "claude":
 		entries, err := client.ClaudeAPIKeys(ctx)
 		if err != nil {
 			writeCPAFacadeError(writer, err)
 			return
 		}
-		entries = append(entries, management.SimpleKeyEntry{
-			APIKey:  apiKey,
-			BaseURL: baseURL,
-		})
+		newEntry := management.ClaudeAPIKey{
+			APIKey:         firstKey,
+			BaseURL:        baseURL,
+			ProxyURL:       firstProxy,
+			Prefix:         strings.TrimSpace(req.Prefix),
+			Priority:       req.Priority,
+			Weight:         firstWeight,
+			Headers:        req.Headers,
+			Models:         models,
+			DisableCooling: disableCoolingPtr,
+		}
+		entries = append(entries, newEntry)
 		if err := client.UpdateClaudeAPIKeys(ctx, entries); err != nil {
 			_ = h.recordAudit(request, "provider.create", "provider", family, "failure", map[string]any{"error": err.Error()})
 			writeCPAFacadeError(writer, err)
 			return
 		}
+		targetID := fmt.Sprintf("claude-%d", len(entries)-1)
+		h.saveProviderName(ctx, targetID, name)
+
 	case "gemini":
 		entries, err := client.GeminiAPIKeys(ctx)
 		if err != nil {
 			writeCPAFacadeError(writer, err)
 			return
 		}
-		entries = append(entries, management.SimpleKeyEntry{
-			APIKey:  apiKey,
-			BaseURL: baseURL,
-		})
+		newEntry := management.GeminiAPIKey{
+			APIKey:         firstKey,
+			BaseURL:        baseURL,
+			ProxyURL:       firstProxy,
+			Prefix:         strings.TrimSpace(req.Prefix),
+			Priority:       req.Priority,
+			Weight:         firstWeight,
+			Headers:        req.Headers,
+			Models:         models,
+			DisableCooling: disableCoolingPtr,
+		}
+		entries = append(entries, newEntry)
 		if err := client.UpdateGeminiAPIKeys(ctx, entries); err != nil {
 			_ = h.recordAudit(request, "provider.create", "provider", family, "failure", map[string]any{"error": err.Error()})
 			writeCPAFacadeError(writer, err)
 			return
 		}
+		targetID := fmt.Sprintf("gemini-%d", len(entries)-1)
+		h.saveProviderName(ctx, targetID, name)
+
 	default:
 		writeError(writer, http.StatusBadRequest, "unsupported provider family: "+family)
 		return
@@ -667,6 +960,27 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 				models = append(models, management.ModelAlias{Name: m, Alias: m})
 			}
 		}
+	}
+
+	firstKey := apiKey
+	firstProxy := ""
+	var firstWeight *int
+	if len(req.Keys) > 0 {
+		if kVal := strings.TrimSpace(req.Keys[0].APIKey); kVal != "" {
+			firstKey = kVal
+		}
+		firstProxy = strings.TrimSpace(req.Keys[0].ProxyURL)
+		firstWeight = req.Keys[0].Weight
+	}
+
+	var disableCoolingPtr *bool
+	if req.DisableCooling {
+		t := true
+		disableCoolingPtr = &t
+	}
+
+	if name != "" {
+		h.saveProviderName(ctx, id, name)
 	}
 
 	if auditErr := h.recordAudit(request, "provider.update", "provider", id, "attempt", map[string]any{"name": name}); auditErr != nil {
@@ -739,10 +1053,16 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 		}
 		entry := &resp.Entries[index]
 		entry.BaseURL = baseURL
-		entry.Models = models
-		if apiKey != "" {
-			entry.APIKey = apiKey
+		if firstKey != "" {
+			entry.APIKey = firstKey
 		}
+		entry.ProxyURL = firstProxy
+		entry.Prefix = strings.TrimSpace(req.Prefix)
+		entry.Priority = req.Priority
+		entry.Weight = firstWeight
+		entry.Models = models
+		entry.Headers = req.Headers
+		entry.DisableCooling = disableCoolingPtr
 		if err := client.UpdateCodexAPIKeys(ctx, resp.Entries); err != nil {
 			_ = h.recordAudit(request, "provider.update", "provider", id, "failure", map[string]any{"error": err.Error()})
 			writeCPAFacadeError(writer, err)
@@ -760,9 +1080,16 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 		}
 		entry := &entries[index]
 		entry.BaseURL = baseURL
-		if apiKey != "" {
-			entry.APIKey = apiKey
+		if firstKey != "" {
+			entry.APIKey = firstKey
 		}
+		entry.ProxyURL = firstProxy
+		entry.Prefix = strings.TrimSpace(req.Prefix)
+		entry.Priority = req.Priority
+		entry.Weight = firstWeight
+		entry.Models = models
+		entry.Headers = req.Headers
+		entry.DisableCooling = disableCoolingPtr
 		if err := client.UpdateClaudeAPIKeys(ctx, entries); err != nil {
 			_ = h.recordAudit(request, "provider.update", "provider", id, "failure", map[string]any{"error": err.Error()})
 			writeCPAFacadeError(writer, err)
@@ -780,9 +1107,16 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 		}
 		entry := &entries[index]
 		entry.BaseURL = baseURL
-		if apiKey != "" {
-			entry.APIKey = apiKey
+		if firstKey != "" {
+			entry.APIKey = firstKey
 		}
+		entry.ProxyURL = firstProxy
+		entry.Prefix = strings.TrimSpace(req.Prefix)
+		entry.Priority = req.Priority
+		entry.Weight = firstWeight
+		entry.Models = models
+		entry.Headers = req.Headers
+		entry.DisableCooling = disableCoolingPtr
 		if err := client.UpdateGeminiAPIKeys(ctx, entries); err != nil {
 			_ = h.recordAudit(request, "provider.update", "provider", id, "failure", map[string]any{"error": err.Error()})
 			writeCPAFacadeError(writer, err)
@@ -874,7 +1208,7 @@ func (h *Handler) deleteManagementProvider(writer http.ResponseWriter, request *
 			writeError(writer, http.StatusNotFound, "provider index out of bounds")
 			return
 		}
-		updated := make([]management.SimpleKeyEntry, 0, len(entries)-1)
+		updated := make([]management.ClaudeAPIKey, 0, len(entries)-1)
 		for i, e := range entries {
 			if i != index {
 				updated = append(updated, e)
@@ -895,7 +1229,7 @@ func (h *Handler) deleteManagementProvider(writer http.ResponseWriter, request *
 			writeError(writer, http.StatusNotFound, "provider index out of bounds")
 			return
 		}
-		updated := make([]management.SimpleKeyEntry, 0, len(entries)-1)
+		updated := make([]management.GeminiAPIKey, 0, len(entries)-1)
 		for i, e := range entries {
 			if i != index {
 				updated = append(updated, e)
@@ -911,14 +1245,14 @@ func (h *Handler) deleteManagementProvider(writer http.ResponseWriter, request *
 		return
 	}
 
+	h.removeProviderName(ctx, id)
 	_ = h.recordAudit(request, "provider.delete", "provider", id, "success", nil)
 
 	writeJSON(writer, http.StatusOK, map[string]any{
-		"status": "ok",
-		"id":     id,
+		"status":  "ok",
+		"deleted": id,
 	})
 }
-
 
 type pullModelsRequest struct {
 	ProviderID string            `json:"provider_id,omitempty"`

@@ -819,7 +819,7 @@ export const ProvidersPage: React.FC = () => {
         <Switch
           size="small"
           checked={!record.disabled}
-          disabled={record.family !== 'openai-compatibility' || statusMutation.isPending}
+          disabled={statusMutation.isPending}
           onChange={(checked) => {
             const idx = parseInt(record.id.split('-').pop() || '0', 10);
             statusMutation.mutate({ family: record.family, index: idx, disabled: !checked });

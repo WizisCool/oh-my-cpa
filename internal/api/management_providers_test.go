@@ -21,9 +21,12 @@ import (
 )
 
 type providerFakeServerState struct {
-	mu           sync.Mutex
-	clientKeys   []string
-	oaiProviders []map[string]any
+	mu              sync.Mutex
+	clientKeys      []string
+	oaiProviders    []map[string]any
+	codexProviders  []map[string]any
+	claudeProviders []map[string]any
+	geminiProviders []map[string]any
 }
 
 func startProviderTestServer(t *testing.T) (*http.Client, string, *providerFakeServerState) {
@@ -37,6 +40,27 @@ func startProviderTestServer(t *testing.T) (*http.Client, string, *providerFakeS
 				"disabled": false,
 				"api-keys": []string{"sk-provider-secret-key-1234"},
 				"models":   []map[string]string{{"name": "gpt-4o"}},
+			},
+		},
+		codexProviders: []map[string]any{
+			{
+				"prefix":     "codex-line",
+				"auth-index": "c-1",
+				"base-url":   "https://api.openai.com",
+				"api-key":    "sk-codex-secret-key-9999",
+			},
+		},
+		claudeProviders: []map[string]any{
+			{
+				"api-key":    "sk-ant-secret-1234",
+				"auth-index": "ant-1",
+				"base-url":   "https://api.anthropic.com",
+			},
+		},
+		geminiProviders: []map[string]any{
+			{
+				"api-key":    "gemini-test-token-1234",
+				"auth-index": "gem-1",
 			},
 		},
 	}
@@ -61,7 +85,12 @@ func startProviderTestServer(t *testing.T) (*http.Client, string, *providerFakeS
 			}
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 		case path == "/v0/management/codex-api-key" && request.Method == http.MethodGet:
-			_, _ = writer.Write([]byte(`{"codex-api-key":[{"prefix":"codex-line","auth-index":"c-1","base-url":"https://api.openai.com","api-key":"sk-codex-secret-key-9999"}]}`))
+			_ = json.NewEncoder(writer).Encode(map[string]any{"codex-api-key": state.codexProviders})
+		case path == "/v0/management/codex-api-key" && request.Method == http.MethodPut:
+			var arr []map[string]any
+			_ = json.NewDecoder(request.Body).Decode(&arr)
+			state.codexProviders = arr
+			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 		case path == "/v0/management/openai-compatibility" && request.Method == http.MethodGet:
 			_ = json.NewEncoder(writer).Encode(map[string]any{"openai-compatibility": state.oaiProviders})
 		case path == "/v0/management/openai-compatibility" && request.Method == http.MethodPut:
@@ -75,9 +104,19 @@ func startProviderTestServer(t *testing.T) (*http.Client, string, *providerFakeS
 			}
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 		case path == "/v0/management/claude-api-key" && request.Method == http.MethodGet:
-			_, _ = writer.Write([]byte(`{"claude-api-key":[{"api-key":"sk-ant-secret-1234","auth-index":"ant-1","base-url":"https://api.anthropic.com"}]}`))
+			_ = json.NewEncoder(writer).Encode(map[string]any{"claude-api-key": state.claudeProviders})
+		case path == "/v0/management/claude-api-key" && request.Method == http.MethodPut:
+			var arr []map[string]any
+			_ = json.NewDecoder(request.Body).Decode(&arr)
+			state.claudeProviders = arr
+			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 		case path == "/v0/management/gemini-api-key" && request.Method == http.MethodGet:
-			_, _ = writer.Write([]byte(`{"gemini-api-key":[{"api-key":"gemini-test-token-1234","auth-index":"gem-1"}]}`))
+			_ = json.NewEncoder(writer).Encode(map[string]any{"gemini-api-key": state.geminiProviders})
+		case path == "/v0/management/gemini-api-key" && request.Method == http.MethodPut:
+			var arr []map[string]any
+			_ = json.NewDecoder(request.Body).Decode(&arr)
+			state.geminiProviders = arr
+			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 		default:
 			writer.WriteHeader(http.StatusOK)
 			_, _ = writer.Write([]byte(`{}`))
@@ -386,5 +425,86 @@ func TestPullProviderModels(t *testing.T) {
 	resp, _ = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/providers/pull-models", badKeyReq)
 	if resp.StatusCode != http.StatusBadGateway {
 		t.Fatalf("expected 502 for upstream unauthorized, got %d", resp.StatusCode)
+	}
+}
+
+
+func TestUnifiedProviderArchitectureClaudeCodexGemini(t *testing.T) {
+	client, baseURL, _ := startProviderTestServer(t)
+
+	// 1. Verify Claude provider displays key entries and can be updated with custom name & new key
+	updateClaude := `{"family":"claude","name":"Claude 3.5 专线","base_url":"https://api.anthropic.com","keys":[{"api_key":"sk-ant-new-secret-5678","proxy_url":"http://127.0.0.1:7890","weight":3}],"prefix":"fast"}`
+	resp, payload := doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/providers/claude-0", updateClaude)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("update claude provider status = %d body %s", resp.StatusCode, payload)
+	}
+
+	// Read providers list and verify custom name and masked key in list
+	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers")
+	var providersResp struct {
+		Providers []ProviderItemDTO `json:"providers"`
+	}
+	if err := json.Unmarshal(payload, &providersResp); err != nil {
+		t.Fatal(err)
+	}
+
+	var foundClaude *ProviderItemDTO
+	for i := range providersResp.Providers {
+		p := &providersResp.Providers[i]
+		if p.ID == "claude-0" {
+			foundClaude = p
+			break
+		}
+	}
+	if foundClaude == nil {
+		t.Fatalf("claude-0 provider not found in list")
+	}
+	if foundClaude.Name != "Claude 3.5 专线" {
+		t.Fatalf("expected custom name Claude 3.5 专线, got %q", foundClaude.Name)
+	}
+	if len(foundClaude.KeyEntries) != 1 {
+		t.Fatalf("expected 1 key entry for claude, got %d", len(foundClaude.KeyEntries))
+	}
+	if foundClaude.KeyEntries[0].ProxyURL != "http://127.0.0.1:7890" {
+		t.Fatalf("expected proxy url on claude key entry, got %q", foundClaude.KeyEntries[0].ProxyURL)
+	}
+
+	// 2. Toggle status on Claude provider and verify it reflects in list
+	patchClaude := `{"family":"claude","index":0,"disabled":true}`
+	resp, payload = doJSON(t, client, http.MethodPatch, baseURL+"/omc/api/v1/management/providers/status", patchClaude)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("patch claude status = %d body %s", resp.StatusCode, payload)
+	}
+
+	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers")
+	_ = json.Unmarshal(payload, &providersResp)
+	for i := range providersResp.Providers {
+		if providersResp.Providers[i].ID == "claude-0" {
+			if !providersResp.Providers[i].Disabled {
+				t.Fatalf("expected claude-0 to be disabled after toggle")
+			}
+		}
+	}
+
+	// 3. Create Gemini provider with custom name and verify it persists
+	createGemini := `{"family":"gemini","name":"Gemini Pro Line","base_url":"https://generativelanguage.googleapis.com","keys":[{"api_key":"gemini-secret-9999"}],"prefix":"gem-pro"}`
+	resp, payload = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/providers", createGemini)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("create gemini provider status = %d body %s", resp.StatusCode, payload)
+	}
+
+	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers")
+	_ = json.Unmarshal(payload, &providersResp)
+	foundGemini := false
+	for _, p := range providersResp.Providers {
+		if p.Name == "Gemini Pro Line" {
+			foundGemini = true
+			if len(p.KeyEntries) != 1 {
+				t.Fatalf("expected 1 key entry on gemini, got %d", len(p.KeyEntries))
+			}
+		}
+	}
+	if !foundGemini {
+		t.Fatalf("newly created Gemini Pro Line not found in providers list")
 	}
 }

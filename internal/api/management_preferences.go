@@ -18,9 +18,11 @@ import (
 // here before a browser can write it — otherwise this becomes an arbitrary
 // blob store reachable through the session.
 var knownPreferences = map[string]bool{
-	repository.PreferenceDashboardRange: true,
-	repository.PreferenceLogFilters:     true,
-	repository.PreferenceProviderIcons:  true,
+	repository.PreferenceDashboardRange:    true,
+	repository.PreferenceLogFilters:        true,
+	repository.PreferenceProviderIcons:     true,
+	repository.PreferenceProviderNames:     true,
+	repository.PreferenceDisabledProviders: true,
 }
 
 // preferenceValue is a stored JSON document kept exactly as the client sent it.

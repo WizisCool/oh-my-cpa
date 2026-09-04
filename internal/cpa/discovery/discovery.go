@@ -136,6 +136,10 @@ func (d *Discoverer) fromCodexAPIKey(instanceID string, index int, entry managem
 	if strings.TrimSpace(entry.AuthIndex) == "" && strings.TrimSpace(entry.APIKey) == "" {
 		extra["identity_collision"] = "true"
 	}
+	var priorityVal int
+	if entry.Priority != nil {
+		priorityVal = *entry.Priority
+	}
 	return domain.DiscoveredResource{
 		InstanceID:      instanceID,
 		ResourceKey:     key,
@@ -150,7 +154,7 @@ func (d *Discoverer) fromCodexAPIKey(instanceID string, index int, entry managem
 		Details: domain.ResourceDetails{
 			Models:   modelNames(entry.Models),
 			AuthType: "api_key",
-			Priority: entry.Priority,
+			Priority: priorityVal,
 			Prefix:   safeDisplayText(entry.Prefix, 128),
 			Extra:    omitEmptyExtra(extra),
 		},
