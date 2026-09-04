@@ -44,6 +44,7 @@ type Handler struct {
 	grantMu      sync.RWMutex
 	revealGrants map[string]time.Time
 	startTime    time.Time
+	limiter      *loginLimiter
 }
 
 func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypto.Cipher, logger *slog.Logger, authManager *auth.Manager) *Handler {
@@ -56,11 +57,13 @@ func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypt
 		auth:         authManager,
 		revealGrants: make(map[string]time.Time),
 		startTime:    time.Now(),
+		limiter:      newLoginLimiter(),
 	}
 }
 
 func (h *Handler) Router() http.Handler {
 	router := chi.NewRouter()
+	router.Use(securityHeaders)
 	base := h.cfg.BasePath
 	if base == "" {
 		base = "/"
@@ -128,6 +131,8 @@ func (h *Handler) Router() http.Handler {
 				v1.Put("/management/plugins/{id}/config", h.setPluginConfig)
 				v1.Get("/management/plugin-store", h.listPluginStore)
 				v1.Post("/management/plugin-store/{id}/install", h.installPlugin)
+				v1.Get("/management/audit/events", h.listAuditEvents)
+				v1.Get("/management/audit/export", h.exportAuditEvents)
 				v1.NotFound(h.notFound)
 				v1.MethodNotAllowed(h.methodNotAllowed)
 			})
@@ -168,6 +173,13 @@ func (h *Handler) login(writer http.ResponseWriter, request *http.Request) {
 		writeError(writer, http.StatusForbidden, "same-origin request required")
 		return
 	}
+
+	ip := resolveClientIP(request)
+	if h.limiter != nil && h.limiter.isLocked(ip) {
+		writeError(writer, http.StatusTooManyRequests, "too many failed login attempts; please try again later")
+		return
+	}
+
 	if h.auth == nil {
 		writeError(writer, http.StatusServiceUnavailable, "CPA management key is not configured yet; set OMCPA_CPA_MANAGEMENT_KEY first")
 		return
@@ -180,9 +192,17 @@ func (h *Handler) login(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	if !h.auth.KeyMatches(payload.Password) {
+		if h.limiter != nil {
+			h.limiter.recordFailure(ip)
+		}
+		_ = h.recordAudit(request, "auth.login", "auth", "operator", "failure", map[string]any{"ip": security.MaskIP(ip)})
 		writeError(writer, http.StatusUnauthorized, "invalid CPA management key")
 		return
 	}
+	if h.limiter != nil {
+		h.limiter.reset(ip)
+	}
+	_ = h.recordAudit(request, "auth.login", "auth", "operator", "success", map[string]any{"ip": security.MaskIP(ip)})
 	if err := h.auth.Issue(writer); err != nil {
 		writeInternalError(writer, err)
 		return
@@ -707,6 +727,11 @@ func securityHeaders(next http.Handler) http.Handler {
 		writer.Header().Set("X-Content-Type-Options", "nosniff")
 		writer.Header().Set("Referrer-Policy", "no-referrer")
 		writer.Header().Set("X-Frame-Options", "SAMEORIGIN")
+		writer.Header().Set("Permissions-Policy", "geolocation=(), camera=(), microphone=(), payment=()")
+		writer.Header().Set("Content-Security-Policy-Report-Only", "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' blob:; worker-src 'self' blob:; frame-ancestors 'self';")
+		if request.TLS != nil || strings.EqualFold(request.Header.Get("X-Forwarded-Proto"), "https") {
+			writer.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
 		next.ServeHTTP(writer, request)
 	})
 }
