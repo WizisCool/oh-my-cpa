@@ -73,7 +73,7 @@ async function browserStorage(page) {
   });
 }
 
-async function auditPage(page, responseBodies, route, selector) {
+async function auditPage(page, responseBodies, route, selector, { pageSecrets = [] } = {}) {
   await page.goto(`${appURL}${route}`, { waitUntil: 'networkidle' });
   await page.locator(selector).first().waitFor({ state: 'visible', timeout: 15000 });
   const bodyText = await page.locator('body').innerText();
@@ -81,9 +81,21 @@ async function auditPage(page, responseBodies, route, selector) {
   check(`${route} renders`, bodyText.length > 0, selector);
   check(`${route} has no document overflow`, overflow <= 1, `overflow=${overflow}`);
   const stored = await browserStorage(page);
-  const protectedValues = [FAKE_CPA_MANAGEMENT_KEY, FAKE_PROVIDER_SECRET, FAKE_ACCOUNT_SECRET];
-  for (const value of protectedValues) {
-    check(`${route} excludes fixture credentials`, !bodyText.includes(value) && !stored.includes(value) && !responseBodies.some((body) => body.includes(value)));
+  // Secret policy follows the current product contract: the management key
+  // and OAuth credential material must never appear in DOM, browser
+  // storage, or ordinary page responses. Downstream client/provider API
+  // keys are intentionally returned in plaintext (see
+  // `refactor(providers): show keys unmasked ...`), so they are asserted
+  // per-page instead: pages whose contract includes plaintext key
+  // management opt back in through `pageSecrets`.
+  const strictSecrets = [FAKE_CPA_MANAGEMENT_KEY, FAKE_ACCOUNT_SECRET];
+  for (const value of strictSecrets) {
+    check(`${route} excludes management and OAuth credentials`, !bodyText.includes(value) && !stored.includes(value) && !responseBodies.some((body) => body.includes(value)));
+  }
+  if (pageSecrets.length > 0) {
+    for (const value of pageSecrets) {
+      check(`${route} excludes fixture credentials`, !bodyText.includes(value) && !stored.includes(value) && !responseBodies.some((body) => body.includes(value)));
+    }
   }
   responseBodies.length = 0;
 }
@@ -158,13 +170,13 @@ try {
   await page.locator('.app-shell').waitFor({ state: 'visible', timeout: 15000 });
   check('valid sign-in creates an administrator session', await page.locator('.app-shell').isVisible());
 
-  await auditPage(page, responseBodies, '/dashboard', '.dashboard-page');
-  await auditPage(page, responseBodies, '/usage/events', '.usage-events-page');
+  await auditPage(page, responseBodies, '/dashboard', '.dashboard-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
+  await auditPage(page, responseBodies, '/usage/events', '.usage-events-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
   await auditPage(page, responseBodies, '/ai-providers', '.providers-page');
-  await auditPage(page, responseBodies, '/auth-files', '.auth-files-page');
-  await auditPage(page, responseBodies, '/oauth', '.oauth-page');
-  await auditPage(page, responseBodies, '/quota', '.quota-page');
-  await auditPage(page, responseBodies, '/logs', '.logs-page');
+  await auditPage(page, responseBodies, '/auth-files', '.auth-files-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
+  await auditPage(page, responseBodies, '/oauth', '.oauth-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
+  await auditPage(page, responseBodies, '/quota', '.quota-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
+  await auditPage(page, responseBodies, '/logs', '.logs-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
   await auditPage(page, responseBodies, '/config', '.config-page');
 
   // Config Page: Source tab switch requires reauthentication modal
@@ -182,10 +194,10 @@ try {
     await sourceToolbar.waitFor({ state: 'visible', timeout: 10000 });
     check('source mode unlocks after valid reauthentication', await sourceToolbar.isVisible());
   }
-  await auditPage(page, responseBodies, '/plugins', '.plugins-page');
-  await auditPage(page, responseBodies, '/plugin-store', '.plugin-store-page');
-  await auditPage(page, responseBodies, '/system', '.system-page');
-  await auditPage(page, responseBodies, '/quick-start', '.quick-start-page');
+  await auditPage(page, responseBodies, '/plugins', '.plugins-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
+  await auditPage(page, responseBodies, '/plugin-store', '.plugin-store-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
+  await auditPage(page, responseBodies, '/system', '.system-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
+  await auditPage(page, responseBodies, '/quick-start', '.quick-start-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
 
   await page.goto(`${appURL}/dashboard`, { waitUntil: 'networkidle' });
   await page.evaluate(() => localStorage.setItem('omc-theme', 'light'));
@@ -194,6 +206,32 @@ try {
   const mobileOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   check('390px light view has no document overflow', mobileOverflow <= 1, `overflow=${mobileOverflow}`);
   check('light theme is active', await page.evaluate(() => document.documentElement.dataset.theme === 'light'));
+
+  // OAuth end-to-end against the deterministic fake: start a flow, confirm
+  // the card polls `waiting`, submit a callback whose session already
+  // completed on the CPA side (409), and assert the card converges to the
+  // success state instead of painting an error over saved credentials.
+  await page.goto(`${appURL}/oauth`, { waitUntil: 'networkidle' });
+  await page.locator('.oauth-page').first().waitFor({ state: 'visible', timeout: 15000 });
+  responseBodies.length = 0;
+  const codexStart = page.locator('[data-oauth-start="codex"]');
+  await codexStart.waitFor({ state: 'visible', timeout: 15000 });
+  await codexStart.click();
+  // The auth URL box (or the waiting status) proves the flow started and
+  // the 3s status poller is running.
+  const codexCard = page.locator('[data-oauth-card="codex"]');
+  await codexCard.getByText(/等待|waiting/i).first().waitFor({ state: 'visible', timeout: 15000 });
+  check('oauth start shows waiting state while polling', true);
+  const callbackInput = codexCard.locator('[data-oauth-callback-input]');
+  await callbackInput.waitFor({ state: 'visible', timeout: 15000 });
+  await callbackInput.fill('http://127.0.0.1:8317/codex/callback?code=e2e-replayed&state=already-done');
+  await codexCard.locator('[data-oauth-callback-submit]').click();
+  // Idempotent success: the pre-completed session resolves to the
+  // success badge, never to the callback error copy.
+  await codexCard.getByText(/授权成功|认证成功|success/i).first().waitFor({ state: 'visible', timeout: 20000 });
+  check('oauth replay callback converges to success', true);
+  const replayError = await codexCard.getByText(/提交失败|failed to submit/i).count();
+  check('oauth replay callback shows no error', replayError === 0, `errorBadges=${replayError}`);
 
   // Bundle budget check
   const assetsDir = path.join(root, 'web', 'dist', 'assets');

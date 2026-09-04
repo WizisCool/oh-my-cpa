@@ -83,11 +83,18 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       return;
     }
     if (request.method === 'GET' && path.endsWith('-auth-url')) {
-      json(response, 200, { url: 'https://auth.example.test/oauth?session=e2e' });
+      json(response, 200, { url: 'https://auth.example.test/oauth?session=e2e', state: 'e2e-state' });
       return;
     }
     if (request.method === 'GET' && path === '/get-auth-status') {
-      json(response, 200, { status: 'waiting', message: 'waiting for user' });
+      const state = url.searchParams.get('state') || url.searchParams.get('session_id') || '';
+      // Sessions whose browser auto-callback already finished report
+      // completed, so the facade idempotency path is exercisable in E2E.
+      if (state === 'already-done') {
+        json(response, 200, { status: 'ok' });
+        return;
+      }
+      json(response, 200, { status: 'wait', message: 'waiting for user' });
       return;
     }
     if (request.method === 'DELETE' && path === '/oauth-session') {
@@ -95,6 +102,17 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       return;
     }
     if (request.method === 'POST' && path === '/oauth-callback') {
+      let state = '';
+      try {
+        const body = JSON.parse(requests[requests.length - 1].body || '{}');
+        state = new URL(body.redirect_url || '', 'http://placeholder.local').searchParams.get('state') || '';
+      } catch { /* keep state empty */ }
+      // Simulate the CPA auto-callback race: a repeated manual submission
+      // for an already-completed session answers 409.
+      if (state === 'already-done') {
+        json(response, 409, { status: 'error', error: 'oauth flow is already completed' });
+        return;
+      }
       json(response, 200, { status: 'ok' });
       return;
     }
