@@ -47,7 +47,7 @@ import { useThemeMode } from '../theme/ThemeContext';
 import { ConfigDirtyBar } from '../components/config/ConfigDirtyBar';
 import { PayloadRulesEditor, type PayloadValidationIssue } from '../components/config/PayloadRulesEditor';
 import { updateFieldWithBaseline, isConfigSemanticallyEqual } from '../components/config/configDirty';
-import { maskKeyText } from '../components/MaskedText';
+import { maskKeyText } from '../utils/maskKey';
 import type { YamlSourceEditorRef } from '../components/config/YamlSourceEditor';
 
 const YamlSourceEditor = React.lazy(() => import('../components/config/YamlSourceEditor'));

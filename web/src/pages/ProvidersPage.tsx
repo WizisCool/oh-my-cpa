@@ -36,7 +36,7 @@ import { useT } from '../i18n';
 import { usePreference } from '../hooks/usePreference';
 import { LobeIcon, getProviderDefaultIcon } from '../components/LobeIcon';
 import { IconPickerModal } from '../components/IconPickerModal';
-import { MaskedText } from '../components/MaskedText';
+import { maskKeyText } from '../utils/maskKey';
 import type {
   ProviderItem,
   SaveProviderPayload,
@@ -656,8 +656,20 @@ export const ProvidersPage: React.FC = () => {
                 {record.name}
               </div>
               {record.api_key && (
-                <div style={{ marginTop: 2, maxWidth: 240 }}>
-                  <MaskedText value={record.api_key} />
+                <div
+                  title={record.api_key}
+                  style={{
+                    fontFamily: 'monospace',
+                    fontSize: 11,
+                    color: 'var(--meta)',
+                    marginTop: 2,
+                    maxWidth: 220,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {maskKeyText(record.api_key)}
                 </div>
               )}
             </div>
@@ -1275,7 +1287,24 @@ export const ProvidersPage: React.FC = () => {
                             onClick={(e) => e.stopPropagation()}
                           >
                             {displayKey && (
-                              <MaskedText value={displayKey} style={{ maxWidth: 240, fontSize: 13, fontWeight: 600, color: 'var(--fg)' }} />
+                              <span
+                                title={displayKey}
+                                style={{
+                                  fontFamily: 'monospace',
+                                  fontWeight: 600,
+                                  fontSize: 13,
+                                  color: 'var(--fg)',
+                                  letterSpacing: '0.5px',
+                                  maxWidth: 220,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                  display: 'inline-block',
+                                  verticalAlign: 'middle',
+                                }}
+                              >
+                                {maskKeyText(displayKey)}
+                              </span>
                             )}
                             <Button
                               type="link"
