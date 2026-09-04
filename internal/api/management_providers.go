@@ -1256,10 +1256,42 @@ func (h *Handler) deleteManagementProvider(writer http.ResponseWriter, request *
 
 type pullModelsRequest struct {
 	ProviderID string            `json:"provider_id,omitempty"`
+	Family     string            `json:"family,omitempty"`
 	BaseURL    string            `json:"base_url,omitempty"`
 	APIKey     string            `json:"api_key,omitempty"`
 	ProxyURL   string            `json:"proxy_url,omitempty"`
 	Headers    map[string]string `json:"headers,omitempty"`
+}
+
+// mergePullDefaults fills empty pull parameters from a stored provider entry,
+// letting values the user typed in the form win over stored ones.
+func mergePullDefaults(entryBaseURL, entryAPIKey, entryProxyURL string, entryHeaders map[string]string, baseURL, apiKey, proxyURL string, headers map[string]string) (string, string, string, map[string]string) {
+	if baseURL == "" {
+		baseURL = entryBaseURL
+	}
+	if apiKey == "" {
+		apiKey = entryAPIKey
+	}
+	if proxyURL == "" {
+		proxyURL = entryProxyURL
+	}
+	if len(headers) == 0 && len(entryHeaders) > 0 {
+		headers = entryHeaders
+	}
+	return baseURL, apiKey, proxyURL, headers
+}
+
+// pullProtocol maps a provider family to the auth dialect of its upstream so
+// model-list requests are authenticated the same way CPA itself would be.
+func pullProtocol(family string) string {
+	switch family {
+	case "claude":
+		return "anthropic"
+	case "gemini":
+		return "gemini"
+	default:
+		return "openai"
+	}
 }
 
 func (h *Handler) pullProviderModels(writer http.ResponseWriter, request *http.Request) {
@@ -1273,28 +1305,52 @@ func (h *Handler) pullProviderModels(writer http.ResponseWriter, request *http.R
 	apiKey := strings.TrimSpace(req.APIKey)
 	proxyURL := strings.TrimSpace(req.ProxyURL)
 	headers := req.Headers
+	family := strings.ToLower(strings.TrimSpace(req.Family))
 
 	if req.ProviderID != "" && (baseURL == "" || apiKey == "") {
 		client, ok := h.managementClientOrError(writer, request)
 		if ok {
-			family, index, err := parseProviderID(req.ProviderID)
-			if err == nil && family == "openai-compatibility" {
-				resp, err := client.OpenAICompatibility(request.Context())
-				if err == nil && index >= 0 && index < len(resp.Entries) {
-					entry := resp.Entries[index]
-					if baseURL == "" {
-						baseURL = entry.BaseURL
-					}
-					if apiKey == "" && len(entry.APIKeyEntries) > 0 {
-						apiKey = entry.APIKeyEntries[0].APIKey
-						if proxyURL == "" {
-							proxyURL = entry.APIKeyEntries[0].ProxyURL
+			storedFamily, index, err := parseProviderID(req.ProviderID)
+			if err == nil && index >= 0 {
+				ctx := request.Context()
+				switch storedFamily {
+				case "openai-compatibility":
+					resp, err := client.OpenAICompatibility(ctx)
+					if err == nil && index < len(resp.Entries) {
+						entry := resp.Entries[index]
+						if baseURL == "" {
+							baseURL = entry.BaseURL
+						}
+						if apiKey == "" && len(entry.APIKeyEntries) > 0 {
+							apiKey = entry.APIKeyEntries[0].APIKey
+							if proxyURL == "" {
+								proxyURL = entry.APIKeyEntries[0].ProxyURL
+							}
+						}
+						if len(headers) == 0 && len(entry.Headers) > 0 {
+							headers = entry.Headers
 						}
 					}
-					if len(headers) == 0 && len(entry.Headers) > 0 {
-						headers = entry.Headers
+				case "codex":
+					resp, err := client.CodexAPIKeys(ctx)
+					if err == nil && index < len(resp.Entries) {
+						entry := resp.Entries[index]
+						baseURL, apiKey, proxyURL, headers = mergePullDefaults(entry.BaseURL, entry.APIKey, entry.ProxyURL, entry.Headers, baseURL, apiKey, proxyURL, headers)
+					}
+				case "claude":
+					entries, err := client.ClaudeAPIKeys(ctx)
+					if err == nil && index < len(entries) {
+						entry := entries[index]
+						baseURL, apiKey, proxyURL, headers = mergePullDefaults(entry.BaseURL, entry.APIKey, entry.ProxyURL, entry.Headers, baseURL, apiKey, proxyURL, headers)
+					}
+				case "gemini":
+					entries, err := client.GeminiAPIKeys(ctx)
+					if err == nil && index < len(entries) {
+						entry := entries[index]
+						baseURL, apiKey, proxyURL, headers = mergePullDefaults(entry.BaseURL, entry.APIKey, entry.ProxyURL, entry.Headers, baseURL, apiKey, proxyURL, headers)
 					}
 				}
+				family = storedFamily
 			}
 		}
 	}
@@ -1304,7 +1360,7 @@ func (h *Handler) pullProviderModels(writer http.ResponseWriter, request *http.R
 		return
 	}
 
-	models, err := fetchEndpointModels(request.Context(), baseURL, apiKey, proxyURL, headers)
+	models, err := fetchEndpointModels(request.Context(), baseURL, apiKey, proxyURL, pullProtocol(family), headers)
 	if err != nil {
 		writeError(writer, http.StatusBadGateway, fmt.Sprintf("failed to pull models: %v", err))
 		return
@@ -1316,7 +1372,7 @@ func (h *Handler) pullProviderModels(writer http.ResponseWriter, request *http.R
 	})
 }
 
-func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr string, customHeaders map[string]string) ([]string, error) {
+func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr, protocol string, customHeaders map[string]string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
@@ -1339,17 +1395,21 @@ func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr strin
 	}
 
 	trimmed := strings.TrimRight(rawBaseURL, "/")
-	targetURL := trimmed + "/models"
+	buildRequest := func(target string) (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+		if err != nil {
+			return nil, err
+		}
+		setModelPullAuthHeaders(req, apiKey, protocol)
+		for k, v := range customHeaders {
+			req.Header.Set(k, v)
+		}
+		return req, nil
+	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
+	req, err := buildRequest(trimmed + "/models")
 	if err != nil {
 		return nil, err
-	}
-	if apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+apiKey)
-	}
-	for k, v := range customHeaders {
-		req.Header.Set(k, v)
 	}
 
 	resp, err := client.Do(req)
@@ -1360,14 +1420,8 @@ func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr strin
 
 	if resp.StatusCode == http.StatusNotFound && !strings.HasSuffix(trimmed, "/v1") {
 		retryURL := trimmed + "/v1/models"
-		req2, err := http.NewRequestWithContext(ctx, http.MethodGet, retryURL, nil)
+		req2, err := buildRequest(retryURL)
 		if err == nil {
-			if apiKey != "" {
-				req2.Header.Set("Authorization", "Bearer "+apiKey)
-			}
-			for k, v := range customHeaders {
-				req2.Header.Set(k, v)
-			}
 			if resp2, err2 := client.Do(req2); err2 == nil {
 				defer resp2.Body.Close()
 				if resp2.StatusCode == http.StatusOK {
@@ -1383,6 +1437,26 @@ func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr strin
 	}
 
 	return parseModelsResponse(resp.Body)
+}
+
+// setModelPullAuthHeaders authenticates a model-list request the way each
+// protocol's upstream expects. Relays commonly gate /models behind
+// Authorization, while the official Anthropic API requires x-api-key, so the
+// anthropic dialect sends both; custom headers can still override any of them.
+func setModelPullAuthHeaders(req *http.Request, apiKey, protocol string) {
+	if apiKey == "" {
+		return
+	}
+	switch protocol {
+	case "anthropic":
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+		req.Header.Set("x-api-key", apiKey)
+		req.Header.Set("anthropic-version", "2023-06-01")
+	case "gemini":
+		req.Header.Set("x-goog-api-key", apiKey)
+	default:
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
 }
 
 func parseModelsResponse(r io.Reader) ([]string, error) {

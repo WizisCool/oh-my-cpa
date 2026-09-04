@@ -319,6 +319,7 @@ export const api = {
 
   async pullProviderModels(payload: {
     provider_id?: string;
+    family?: string;
     base_url?: string;
     api_key?: string;
     proxy_url?: string;

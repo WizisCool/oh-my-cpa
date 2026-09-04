@@ -203,6 +203,7 @@ export const ProvidersPage: React.FC = () => {
     try {
       const res = await api.pullProviderModels({
         provider_id: editingProvider ? editingProvider.id : undefined,
+        family: formFamily,
         base_url: rawUrl,
         api_key: firstKey,
         proxy_url: firstProxy,
