@@ -212,16 +212,16 @@
 }
 
 .planElite {
-  background: rgba(0, 122, 255, 0.12);
+  background: var(--hover-inset);
   color: var(--accent);
-  border-color: rgba(0, 122, 255, 0.3);
+  border-color: var(--accent);
   font-weight: 700;
 }
 
 .planPremium {
-  background: rgba(255, 159, 10, 0.12);
+  background: var(--hover-inset);
   color: var(--warn);
-  border-color: rgba(255, 159, 10, 0.3);
+  border-color: var(--warn);
 }
 
 .planStandard {
@@ -480,4 +480,17 @@
   margin-bottom: 10px;
   padding-bottom: 4px;
   border-bottom: 1px solid var(--border-soft);
+}
+
+@media (max-width: 768px) {
+  .kpiStrip {
+    grid-template-columns: 1fr 1fr;
+  }
+  .cardsGrid {
+    grid-template-columns: 1fr;
+  }
+  .toolbarTopRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }

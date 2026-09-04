@@ -197,12 +197,14 @@ export const QuotaMatrix: React.FC<QuotaMatrixProps> = ({
                     <Button
                       size="small"
                       icon={<SyncOutlined spin={isRefreshing} />}
+                      aria-label={t('common.refresh')}
                       disabled={item.disabled || isRefreshing}
                       onClick={() => onRefresh(item.auth_index)}
                     />
                     <Button
                       size="small"
                       icon={<RightOutlined />}
+                      aria-label={t('common.details')}
                       onClick={() => onOpenDetail(item)}
                     />
                   </div>

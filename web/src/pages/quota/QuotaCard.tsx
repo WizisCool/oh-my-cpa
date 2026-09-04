@@ -214,6 +214,7 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
           <Button
             size="small"
             icon={<SyncOutlined spin={isRefreshing} />}
+            aria-label={t('common.refresh')}
             disabled={item.disabled || isRefreshing}
             onClick={() => onRefresh(item.auth_index)}
           >
@@ -223,6 +224,7 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
             size="small"
             type="text"
             icon={<RightOutlined />}
+            aria-label={t('common.details')}
             onClick={() => onOpenDetail(item)}
           >
             {t('common.details')}

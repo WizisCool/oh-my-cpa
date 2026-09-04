@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { ClockCircleOutlined } from '@ant-design/icons';
 import { useT } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
+import { computeTimelinePercent } from './quotaModel';
 import styles from './QuotaPage.module.css';
 
 interface QuotaTimelineProps {
@@ -15,8 +16,6 @@ interface TimelineEntry {
   resetAtMS: number;
   label: string;
 }
-
-const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const QuotaTimeline: React.FC<QuotaTimelineProps> = ({ items }) => {
   const t = useT();
@@ -86,7 +85,7 @@ export const QuotaTimeline: React.FC<QuotaTimelineProps> = ({ items }) => {
       <div className={styles.timelineLanes}>
         {timelineEntries.map((entry, idx) => {
           const diff = Math.max(0, entry.resetAtMS - nowMS);
-          const percent = Math.min(100, Math.max(2, (diff / SEVEN_DAYS_MS) * 100));
+          const percent = computeTimelinePercent(diff);
           const dateStr = new Date(entry.resetAtMS).toLocaleString();
 
           return (

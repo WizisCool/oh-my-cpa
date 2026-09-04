@@ -207,6 +207,7 @@ export const QuotaTable: React.FC<QuotaTableProps> = ({
             <Button
               size="small"
               icon={<SyncOutlined spin={isRefreshing} />}
+              aria-label={t('common.refresh')}
               disabled={r.disabled || isRefreshing}
               onClick={() => onRefresh(r.auth_index)}
             />
@@ -214,6 +215,7 @@ export const QuotaTable: React.FC<QuotaTableProps> = ({
             <Button
               size="small"
               icon={<RightOutlined />}
+              aria-label={t('common.details')}
               onClick={() => onOpenDetail(r)}
             />
           </Space>

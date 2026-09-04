@@ -1650,11 +1650,6 @@ export const ProvidersPage: React.FC = () => {
                             <AutoComplete
                               value={m.name}
                               options={modelOptions}
-                              filterOption={(inputValue, option) =>
-                                String(option?.value ?? '')
-                                  .toLowerCase()
-                                  .includes(inputValue.toLowerCase())
-                              }
                               onSelect={(val) => {
                                 setFormModels((prev) =>
                                   prev.map((item) =>

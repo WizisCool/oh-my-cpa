@@ -24,13 +24,35 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
     const path = url.pathname.replace(/^\/v0\/management/, '');
 
     if (request.method === 'GET' && path === '/auth-files') {
-      json(response, 200, { files: [{
-        id: 'auth-e2e-1', auth_index: 'auth-index-e2e-1', name: 'fixture-auth.json', type: 'codex', provider: 'codex',
-        label: 'Primary fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: false,
-        email: 'owner@example.test', account_type: 'oauth', account: FAKE_ACCOUNT_SECRET,
-        success: 12, failed: 1, recent_requests: [{ time: '2026-09-01T12:00:00Z', success: 12, failed: 1 }],
-        models: [{ id: 'gpt-e2e', display_name: 'GPT E2E' }], priority: 1, weight: 1, note: 'deterministic fixture',
-      }] });
+      json(response, 200, { files: [
+        {
+          id: 'auth-e2e-1', auth_index: 'auth-index-e2e-1', name: 'fixture-auth.json', type: 'codex', provider: 'codex',
+          label: 'Primary fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: false,
+          email: 'owner@example.test', account_type: 'oauth', account: FAKE_ACCOUNT_SECRET,
+          success: 12, failed: 1, recent_requests: [{ time: '2026-09-01T12:00:00Z', success: 12, failed: 1 }],
+          models: [{ id: 'gpt-e2e', display_name: 'GPT E2E' }], priority: 1, weight: 1, note: 'deterministic fixture',
+        },
+        {
+          id: 'auth-e2e-2', auth_index: 'auth-index-e2e-2', name: 'claude-fixture.json', type: 'claude', provider: 'claude',
+          label: 'Claude fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: false,
+          success: 8, failed: 0, models: [{ id: 'claude-3-5-sonnet', display_name: 'Claude 3.5 Sonnet' }], priority: 1, weight: 1,
+        },
+        {
+          id: 'auth-e2e-3', auth_index: 'auth-index-e2e-3', name: 'antigravity-fixture.json', type: 'antigravity', provider: 'antigravity',
+          project_id: 'e2e-project', label: 'Antigravity fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: false,
+          success: 5, failed: 0, models: [], priority: 1, weight: 1,
+        },
+        {
+          id: 'auth-e2e-4', auth_index: 'auth-index-e2e-4', name: 'kimi-fixture.json', type: 'kimi', provider: 'kimi',
+          label: 'Kimi fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: false,
+          success: 3, failed: 0, models: [], priority: 1, weight: 1,
+        },
+        {
+          id: 'auth-e2e-5', auth_index: 'auth-index-e2e-5', name: 'xai-fixture.json', type: 'xai', provider: 'xai',
+          label: 'xAI fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: false,
+          success: 2, failed: 0, models: [], priority: 1, weight: 1,
+        },
+      ] });
       return;
     }
     if (request.method === 'GET' && path === '/auth-files/models') {
@@ -118,6 +140,79 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
     }
     if (request.method === 'POST' && path === '/reset-quota') {
       json(response, 200, { status: 'ok' });
+      return;
+    }
+    if (request.method === 'POST' && path === '/api-call') {
+      let body = {};
+      try {
+        body = JSON.parse(requests[requests.length - 1].body || '{}');
+      } catch {}
+      const targetURL = body.url || '';
+      if (targetURL.includes('rate-limit-reset-credits/consume') || targetURL.includes('reset_credits/consume')) {
+        json(response, 200, { status_code: 200, header: { 'content-type': ['application/json'] }, body: { status: 'ok' } });
+        return;
+      }
+      if (targetURL.includes('backend-api/wham/usage')) {
+        json(response, 200, {
+          status_code: 200,
+          header: { 'content-type': ['application/json'] },
+          body: {
+            plan_type: 'pro',
+            rate_limit: {
+              primary_window: { used_percent: 25, limit_window_seconds: 18000, reset_after_seconds: 7200 },
+              secondary_window: { used_percent: 60, limit_window_seconds: 604800, reset_after_seconds: 172800 },
+            },
+            rate_limit_reset_credits: { available_count: 2, applicable_available_count: 1 },
+          },
+        });
+        return;
+      }
+      if (targetURL.includes('oauth/usage')) {
+        json(response, 200, {
+          status_code: 200,
+          header: { 'content-type': ['application/json'] },
+          body: {
+            five_hour: { utilization: 20.0, resets_at: new Date(Date.now() + 7200000).toISOString() },
+            seven_day: { utilization: 50.0, resets_at: new Date(Date.now() + 86400000).toISOString() },
+          },
+        });
+        return;
+      }
+      if (targetURL.includes('oauth/profile')) {
+        json(response, 200, { status_code: 200, header: { 'content-type': ['application/json'] }, body: { account: { has_claude_pro: true } } });
+        return;
+      }
+      if (targetURL.includes('retrieveUserQuotaSummary')) {
+        json(response, 200, {
+          status_code: 200,
+          header: { 'content-type': ['application/json'] },
+          body: {
+            groups: [{ displayName: 'Gemini models', buckets: [{ bucketId: '5h', window: '5h', remainingFraction: 0.85 }] }],
+          },
+        });
+        return;
+      }
+      if (targetURL.includes('coding/v1/usages')) {
+        json(response, 200, {
+          status_code: 200,
+          header: { 'content-type': ['application/json'] },
+          body: {
+            limits: [{ name: 'daily', title: 'Daily limit', used: 15, limit: 100 }],
+          },
+        });
+        return;
+      }
+      if (targetURL.includes('cli-chat-proxy.grok.com') || targetURL.includes('x.ai')) {
+        json(response, 200, {
+          status_code: 200,
+          header: { 'content-type': ['application/json'] },
+          body: {
+            config: { credit_usage_percent: 30.0, monthly_limit: 10000, used: 3000 },
+          },
+        });
+        return;
+      }
+      json(response, 200, { status_code: 200, header: {}, body: {} });
       return;
     }
     if (request.method === 'GET' && path === '/plugins') {

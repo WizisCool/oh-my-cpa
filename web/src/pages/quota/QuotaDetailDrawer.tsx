@@ -156,8 +156,14 @@ export const QuotaDetailDrawer: React.FC<QuotaDetailDrawerProps> = ({
                 <Tag color="success">{t('quota.status_normal')}</Tag>
               ) : currentQuota.status === 'warning' ? (
                 <Tag color="warning">{t('quota.status_warning')}</Tag>
-              ) : (
+              ) : currentQuota.status === 'exhausted' ? (
                 <Tag color="error">{t('quota.status_exceeded')}</Tag>
+              ) : currentQuota.status === 'error' ? (
+                <Tag color="error">{t('quota.status_error')}</Tag>
+              ) : currentQuota.status === 'stale' ? (
+                <Tag color="default">{t('quota.status_stale')}</Tag>
+              ) : (
+                <Tag color="default">{t('quota.status_idle')}</Tag>
               )}
             </Descriptions.Item>
           </Descriptions>

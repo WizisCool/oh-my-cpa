@@ -11,6 +11,7 @@ import { QuotaMatrix } from './quota/QuotaMatrix';
 import { QuotaTable } from './quota/QuotaTable';
 import { QuotaTimeline } from './quota/QuotaTimeline';
 import { QuotaDetailDrawer } from './quota/QuotaDetailDrawer';
+import { filterQuotaItems, sortQuotaItems, computeFleetSummary } from './quota/quotaModel';
 import styles from './quota/QuotaPage.module.css';
 
 const PROVIDER_KEYS = ['all', 'codex', 'claude', 'antigravity', 'kimi', 'xai'] as const;
@@ -55,53 +56,7 @@ export const QuotaPage: React.FC = () => {
     if (quotaData?.summary) {
       return quotaData.summary;
     }
-    let healthy = 0;
-    let warning = 0;
-    let exhausted = 0;
-    let cooldown = 0;
-    let attention = 0;
-    let soonest: number | undefined;
-    const nowMS = Date.now();
-
-    allQuotas.forEach((q) => {
-      if (q.active_cooldown?.is_active) {
-        cooldown++;
-        attention++;
-        if (q.active_cooldown.recover_at_ms && q.active_cooldown.recover_at_ms > nowMS) {
-          if (!soonest || q.active_cooldown.recover_at_ms < soonest) {
-            soonest = q.active_cooldown.recover_at_ms;
-          }
-        }
-      } else if (q.status === 'healthy') {
-        healthy++;
-      } else if (q.status === 'warning') {
-        warning++;
-        attention++;
-      } else if (q.status === 'exhausted') {
-        exhausted++;
-        attention++;
-      } else if (q.status === 'error') {
-        attention++;
-      }
-
-      q.windows?.forEach((w) => {
-        if (w.reset_at_ms && w.reset_at_ms > nowMS) {
-          if (!soonest || w.reset_at_ms < soonest) {
-            soonest = w.reset_at_ms;
-          }
-        }
-      });
-    });
-
-    return {
-      total_credentials: allQuotas.length,
-      healthy_count: healthy,
-      warning_count: warning,
-      exhausted_count: exhausted,
-      cooldown_count: cooldown,
-      attention_count: attention,
-      soonest_recovery_ms: soonest,
-    };
+    return computeFleetSummary(allQuotas);
   }, [quotaData, allQuotas]);
 
   // 3. Provider counts for tabs
@@ -130,89 +85,12 @@ export const QuotaPage: React.FC = () => {
 
   // 4. Filtering and searching
   const filteredItems = useMemo(() => {
-    return allQuotas.filter((item) => {
-      // Provider filter
-      if (activeProvider !== 'all') {
-        if (item.provider?.toLowerCase() !== activeProvider.toLowerCase()) {
-          return false;
-        }
-      }
-
-      // Status filter
-      if (statusFilter === 'healthy' && item.status !== 'healthy') return false;
-      if (statusFilter === 'warning' && item.status !== 'warning') return false;
-      if (statusFilter === 'exhausted' && item.status !== 'exhausted') return false;
-      if (statusFilter === 'cooldown' && !item.active_cooldown?.is_active) return false;
-
-      // Text search
-      if (searchText.trim()) {
-        const query = searchText.trim().toLowerCase();
-        const matchesName = item.name.toLowerCase().includes(query);
-        const matchesAuthIndex = item.auth_index.toLowerCase().includes(query);
-        const matchesModel = item.windows?.some((w) => w.model?.toLowerCase().includes(query));
-        if (!matchesName && !matchesAuthIndex && !matchesModel) {
-          return false;
-        }
-      }
-
-      return true;
-    });
+    return filterQuotaItems(allQuotas, activeProvider, statusFilter, searchText);
   }, [allQuotas, activeProvider, statusFilter, searchText]);
 
   // 5. Sorting
   const sortedItems = useMemo(() => {
-    const list = [...filteredItems];
-    const nowMS = Date.now();
-
-    const getMinRemaining = (q: QuotaItem) => {
-      if (!q.windows || q.windows.length === 0) return 100;
-      return Math.min(...q.windows.map((w) => w.remaining_percent ?? 100));
-    };
-
-    const getSoonestReset = (q: QuotaItem) => {
-      if (q.active_cooldown?.is_active && q.active_cooldown.recover_at_ms) {
-        return q.active_cooldown.recover_at_ms;
-      }
-      let minReset = Number.MAX_SAFE_INTEGER;
-      q.windows?.forEach((w) => {
-        if (w.reset_at_ms && w.reset_at_ms > nowMS && w.reset_at_ms < minReset) {
-          minReset = w.reset_at_ms;
-        }
-      });
-      return minReset;
-    };
-
-    switch (sortMode) {
-      case 'recovery':
-        list.sort((a, b) => getSoonestReset(a) - getSoonestReset(b));
-        break;
-      case 'least_remaining':
-        list.sort((a, b) => getMinRemaining(a) - getMinRemaining(b));
-        break;
-      case 'most_remaining':
-        list.sort((a, b) => getMinRemaining(b) - getMinRemaining(a));
-        break;
-      case 'name':
-        list.sort((a, b) => a.name.localeCompare(b.name));
-        break;
-      default:
-        // Default: attention/cooldown/exhausted first, then alphabetical
-        list.sort((a, b) => {
-          const priorityRank = (q: QuotaItem) => {
-            if (q.active_cooldown?.is_active) return 5;
-            if (q.status === 'exhausted') return 4;
-            if (q.status === 'warning') return 3;
-            if (q.status === 'error') return 2;
-            if (q.status === 'healthy') return 1;
-            return 0;
-          };
-          const diff = priorityRank(b) - priorityRank(a);
-          if (diff !== 0) return diff;
-          return a.name.localeCompare(b.name);
-        });
-    }
-
-    return list;
+    return sortQuotaItems(filteredItems, sortMode);
   }, [filteredItems, sortMode]);
 
   // 6. Action Mutations
@@ -224,6 +102,7 @@ export const QuotaPage: React.FC = () => {
     onSuccess: (res) => {
       message.success(t('quota.refresh_success'));
       void queryClient.invalidateQueries({ queryKey: ['management-quota'] });
+      void queryClient.invalidateQueries({ queryKey: ['quota-detail'] });
       if (selectedItem?.auth_index === res.quota.auth_index) {
         setSelectedItem(res.quota);
       }
@@ -253,6 +132,7 @@ export const QuotaPage: React.FC = () => {
     onSuccess: () => {
       message.success(t('quota.batch_refresh_success'));
       void queryClient.invalidateQueries({ queryKey: ['management-quota'] });
+      void queryClient.invalidateQueries({ queryKey: ['quota-detail'] });
     },
     onError: (err: unknown) => {
       const msg = err instanceof ApiError ? err.message : String(err);
@@ -273,6 +153,7 @@ export const QuotaPage: React.FC = () => {
       message.success(t('quota.clear_cooldown_success'));
       void queryClient.invalidateQueries({ queryKey: ['management-quota'] });
       void queryClient.invalidateQueries({ queryKey: ['management-auth-files'] });
+      void queryClient.invalidateQueries({ queryKey: ['quota-detail'] });
     },
     onError: (err: unknown) => {
       const msg = err instanceof ApiError ? err.message : String(err);
@@ -285,6 +166,7 @@ export const QuotaPage: React.FC = () => {
     onSuccess: (res) => {
       message.success(t('quota.redeem_credit_success'));
       void queryClient.invalidateQueries({ queryKey: ['management-quota'] });
+      void queryClient.invalidateQueries({ queryKey: ['quota-detail'] });
       if (selectedItem?.auth_index === res.quota.auth_index) {
         setSelectedItem(res.quota);
       }
@@ -316,7 +198,7 @@ export const QuotaPage: React.FC = () => {
   }, [allQuotas, clearCooldownMutation]);
 
   return (
-    <div className={`terminal-page ${styles.quotaPage}`}>
+    <div className={`terminal-page quota-page ${styles.quotaPage}`}>
       {/* Header */}
       <div className="terminal-page-head">
         <div>
