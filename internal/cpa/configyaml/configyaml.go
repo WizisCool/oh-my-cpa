@@ -11,8 +11,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// UnchangedSentinel is the placeholder used for sensitive fields in visual
-// configuration mode so that original secrets are not exposed to the browser.
+// UnchangedSentinel is the placeholder used for management credentials (e.g.
+// remote-management.secret-key) and TLS private keys in visual configuration
+// mode so those secrets are not exposed to the browser. Upstream/downstream
+// API keys are intentionally returned in plaintext.
 const UnchangedSentinel = "__OMCPA_UNCHANGED__"
 
 // ComputeRevision returns the lowercase SHA-256 hex digest of a YAML document.
@@ -225,15 +227,10 @@ func isSensitivePath(path []string) bool {
 	joined = strings.ReplaceAll(joined, "_", "-")
 	switch joined {
 	case "remote-management.secret-key",
-		"tls.key",
-		"api-keys",
-		"codex-api-key.api-key",
-		"openai-compatibility.api-key",
-		"openai-compatibility.api-keys",
-		"openai-compatibility.api-key-entries.api-key":
+		"tls.key":
 		return true
 	default:
-		return strings.HasSuffix(joined, ".secret-key") || strings.HasSuffix(joined, ".key") || strings.HasSuffix(joined, ".api-key")
+		return strings.HasSuffix(joined, ".secret-key") || strings.HasSuffix(joined, ".key")
 	}
 }
 

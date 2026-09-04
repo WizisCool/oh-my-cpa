@@ -74,14 +74,21 @@ tls:
 		t.Fatalf("SanitizeSafeYAML failed: %v", err)
 	}
 
-	// 1. Assert secrets are never in the safe YAML
-	for _, secret := range []string{"top-secret-mgmt-key-1234", "user:pass@", "?token=secret", "sk-client-key-1", "sk-client-key-2", "/etc/ssl/private.key"} {
+	// 1. Management/TLS secrets are never in the safe YAML…
+	for _, secret := range []string{"top-secret-mgmt-key-1234", "user:pass@", "?token=secret", "/etc/ssl/private.key"} {
 		if strings.Contains(safe, secret) {
 			t.Fatalf("safe YAML leaked secret %q: %s", secret, safe)
 		}
 	}
 
-	// 2. Assert sentinels and cleaned proxy URL are present
+	// 2. …while client API keys must be returned in plaintext.
+	for _, key := range []string{"sk-client-key-1", "sk-client-key-2"} {
+		if !strings.Contains(safe, key) {
+			t.Fatalf("safe YAML must keep API key %q in plaintext: %s", key, safe)
+		}
+	}
+
+	// 3. Assert sentinels and cleaned proxy URL are present
 	if !strings.Contains(safe, UnchangedSentinel) {
 		t.Fatalf("safe YAML missing sentinel %q: %s", UnchangedSentinel, safe)
 	}
@@ -89,7 +96,7 @@ tls:
 		t.Fatalf("safe YAML proxy-url corrupted: %s", safe)
 	}
 
-	// 3. Test RestoreSentinels when user did NOT touch secret-key (keeps sentinel)
+	// 4. Test RestoreSentinels when user did NOT touch secret-key (keeps sentinel)
 	userEditNoSecretChange := strings.Replace(safe, "port: 8317", "port: 9000", 1)
 	restored, err := RestoreSentinels(userEditNoSecretChange, original)
 	if err != nil {
@@ -108,7 +115,7 @@ tls:
 		t.Fatalf("restored YAML failed to restore original api-keys: %s", restored)
 	}
 
-	// 4. Test RestoreSentinels when user explicitly CHANGED the secret-key
+	// 5. Test RestoreSentinels when user explicitly CHANGED the secret-key
 	userEditChangedSecret := strings.Replace(safe, UnchangedSentinel, "brand-new-secret-key", 1)
 	restoredChanged, err := RestoreSentinels(userEditChangedSecret, original)
 	if err != nil {
