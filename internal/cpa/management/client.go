@@ -162,18 +162,24 @@ func (c *Client) ClientAPIKeys(ctx context.Context) ([]string, error) {
 }
 
 func (c *Client) UpdateClientAPIKeys(ctx context.Context, keys []string) error {
-	payload := map[string]any{"api-keys": keys}
-	return c.doJSONBody(ctx, http.MethodPut, "/api-keys", payload, nil)
+	if keys == nil {
+		keys = []string{}
+	}
+	return c.doJSONBody(ctx, http.MethodPut, "/api-keys", keys, nil)
 }
 
 func (c *Client) UpdateCodexAPIKeys(ctx context.Context, entries []CodexAPIKey) error {
-	payload := map[string]any{"codex-api-key": entries}
-	return c.doJSONBody(ctx, http.MethodPut, "/codex-api-key", payload, nil)
+	if entries == nil {
+		entries = []CodexAPIKey{}
+	}
+	return c.doJSONBody(ctx, http.MethodPut, "/codex-api-key", entries, nil)
 }
 
 func (c *Client) UpdateOpenAICompatibility(ctx context.Context, entries []OpenAICompatibility) error {
-	payload := map[string]any{"openai-compatibility": entries}
-	return c.doJSONBody(ctx, http.MethodPut, "/openai-compatibility", payload, nil)
+	if entries == nil {
+		entries = []OpenAICompatibility{}
+	}
+	return c.doJSONBody(ctx, http.MethodPut, "/openai-compatibility", entries, nil)
 }
 
 type SimpleKeyEntry struct {
@@ -208,13 +214,17 @@ func (c *Client) GeminiAPIKeys(ctx context.Context) ([]SimpleKeyEntry, error) {
 }
 
 func (c *Client) UpdateClaudeAPIKeys(ctx context.Context, entries []SimpleKeyEntry) error {
-	payload := map[string]any{"claude-api-key": entries}
-	return c.doJSONBody(ctx, http.MethodPut, "/claude-api-key", payload, nil)
+	if entries == nil {
+		entries = []SimpleKeyEntry{}
+	}
+	return c.doJSONBody(ctx, http.MethodPut, "/claude-api-key", entries, nil)
 }
 
 func (c *Client) UpdateGeminiAPIKeys(ctx context.Context, entries []SimpleKeyEntry) error {
-	payload := map[string]any{"gemini-api-key": entries}
-	return c.doJSONBody(ctx, http.MethodPut, "/gemini-api-key", payload, nil)
+	if entries == nil {
+		entries = []SimpleKeyEntry{}
+	}
+	return c.doJSONBody(ctx, http.MethodPut, "/gemini-api-key", entries, nil)
 }
 
 type OAuthAuthURLResponse struct {

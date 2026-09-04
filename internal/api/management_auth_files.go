@@ -433,6 +433,14 @@ func writeCPAFacadeError(writer http.ResponseWriter, err error) {
 			status = http.StatusBadGateway
 			code = "cpa_rejected_request"
 			message = "CPA rejected the management request"
+			if httpErr.Body != "" {
+				var cpaErr struct {
+					Error string `json:"error"`
+				}
+				if errJson := json.Unmarshal([]byte(httpErr.Body), &cpaErr); errJson == nil && cpaErr.Error != "" {
+					message = fmt.Sprintf("CPA rejected the management request: %s", cpaErr.Error)
+				}
+			}
 		}
 	}
 	writeJSON(writer, status, map[string]string{"error": message, "code": code})

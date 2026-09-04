@@ -51,18 +51,28 @@ func startProviderTestServer(t *testing.T) (*http.Client, string, *providerFakeS
 		case path == "/v0/management/api-keys" && request.Method == http.MethodGet:
 			_ = json.NewEncoder(writer).Encode(map[string]any{"api-keys": state.clientKeys})
 		case path == "/v0/management/api-keys" && request.Method == http.MethodPut:
-			var req map[string][]string
-			_ = json.NewDecoder(request.Body).Decode(&req)
-			state.clientKeys = req["api-keys"]
+			var arr []string
+			if err := json.NewDecoder(request.Body).Decode(&arr); err == nil {
+				state.clientKeys = arr
+			} else {
+				var req map[string][]string
+				_ = json.NewDecoder(request.Body).Decode(&req)
+				state.clientKeys = req["api-keys"]
+			}
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 		case path == "/v0/management/codex-api-key" && request.Method == http.MethodGet:
 			_, _ = writer.Write([]byte(`{"codex-api-key":[{"prefix":"codex-line","auth-index":"c-1","base-url":"https://api.openai.com","api-key":"sk-codex-secret-key-9999"}]}`))
 		case path == "/v0/management/openai-compatibility" && request.Method == http.MethodGet:
 			_ = json.NewEncoder(writer).Encode(map[string]any{"openai-compatibility": state.oaiProviders})
 		case path == "/v0/management/openai-compatibility" && request.Method == http.MethodPut:
-			var req map[string][]map[string]any
-			_ = json.NewDecoder(request.Body).Decode(&req)
-			state.oaiProviders = req["openai-compatibility"]
+			var arr []map[string]any
+			if err := json.NewDecoder(request.Body).Decode(&arr); err == nil {
+				state.oaiProviders = arr
+			} else {
+				var req map[string][]map[string]any
+				_ = json.NewDecoder(request.Body).Decode(&req)
+				state.oaiProviders = req["openai-compatibility"]
+			}
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 		case path == "/v0/management/claude-api-key" && request.Method == http.MethodGet:
 			_, _ = writer.Write([]byte(`{"claude-api-key":[{"api-key":"sk-ant-secret-1234","auth-index":"ant-1","base-url":"https://api.anthropic.com"}]}`))
