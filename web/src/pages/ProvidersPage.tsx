@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Card,
   Table,
@@ -18,6 +18,7 @@ import {
   Select,
   Row,
   Col,
+  AutoComplete,
   App as AntdApp,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -34,8 +35,6 @@ import {
   CloseOutlined,
   UpOutlined,
   DownOutlined,
-  DownloadOutlined,
-  SearchOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
@@ -89,6 +88,55 @@ interface FormModelItem {
   };
 }
 
+interface ProtocolMeta {
+  labelKey: string;
+  color: string;
+  iconId: string;
+}
+
+const PROTOCOL_META: Record<string, ProtocolMeta> = {
+  'openai-compatibility': {
+    labelKey: 'pro.family_openai_compat',
+    color: '#10A37F',
+    iconId: 'OpenAI',
+  },
+  'codex': {
+    labelKey: 'pro.family_codex',
+    color: '#60A5FA',
+    iconId: 'Codex',
+  },
+  'claude': {
+    labelKey: 'pro.family_claude',
+    color: '#D97757',
+    iconId: 'Anthropic',
+  },
+  'gemini': {
+    labelKey: 'pro.family_gemini',
+    color: '#A78BFA',
+    iconId: 'Gemini',
+  },
+};
+
+const getProtocolMeta = (family?: string, protocol?: string): ProtocolMeta | undefined => {
+  if (!family && !protocol) return undefined;
+  const f = (family || '').toLowerCase().trim();
+  const p = (protocol || '').toLowerCase().trim();
+
+  if (f === 'openai-compatibility' || f.includes('openai') || p.includes('chat completion')) {
+    return PROTOCOL_META['openai-compatibility'];
+  }
+  if (f === 'codex' || f.includes('response') || p.includes('response')) {
+    return PROTOCOL_META['codex'];
+  }
+  if (f === 'claude' || f.includes('claude') || f.includes('anthropic') || p.includes('anthropic') || p.includes('messages')) {
+    return PROTOCOL_META['claude'];
+  }
+  if (f === 'gemini' || f.includes('gemini') || f.includes('google') || p.includes('gemini')) {
+    return PROTOCOL_META['gemini'];
+  }
+  return undefined;
+};
+
 export const ProvidersPage: React.FC = () => {
   const t = useT();
   const { message } = AntdApp.useApp();
@@ -127,22 +175,10 @@ export const ProvidersPage: React.FC = () => {
   const [iconManuallySelected, setIconManuallySelected] = useState<boolean>(false);
 
   // Endpoint models pull state & custom models expand state
-  const [pullPanelOpen, setPullPanelOpen] = useState(false);
+  const modelFetchSeqRef = useRef<number>(0);
   const [isPullingModels, setIsPullingModels] = useState(false);
   const [endpointModels, setEndpointModels] = useState<string[]>([]);
-  const [modelSearchQuery, setModelSearchQuery] = useState('');
-  const [selectedEndpointModels, setSelectedEndpointModels] = useState<Set<string>>(new Set());
   const [expandedModelIds, setExpandedModelIds] = useState<Set<string>>(new Set());
-
-  const filteredEndpointModels = useMemo(() => {
-    const q = modelSearchQuery.trim().toLowerCase();
-    if (!q) return endpointModels;
-    return endpointModels.filter((m) => m.toLowerCase().includes(q));
-  }, [endpointModels, modelSearchQuery]);
-
-  const selectableModels = useMemo(() => {
-    return filteredEndpointModels.filter((m) => !formModels.some((item) => item.name === m));
-  }, [filteredEndpointModels, formModels]);
 
   const handlePullModels = async () => {
     const rawUrl = formBaseURL.trim();
@@ -161,7 +197,9 @@ export const ProvidersPage: React.FC = () => {
       }
     }
 
+    const seq = ++modelFetchSeqRef.current;
     setIsPullingModels(true);
+    setEndpointModels([]);
     try {
       const res = await api.pullProviderModels({
         provider_id: editingProvider ? editingProvider.id : undefined,
@@ -170,55 +208,73 @@ export const ProvidersPage: React.FC = () => {
         proxy_url: firstProxy,
         headers: headersPayload,
       });
-      setEndpointModels(res.models || []);
-      setSelectedEndpointModels(new Set());
-      if (res.models && res.models.length > 0) {
-        message.success(t('pro.pull_models_success', { count: res.models.length }));
+
+      if (seq !== modelFetchSeqRef.current) return;
+
+      const rawModels = res.models || [];
+      const models = Array.from(
+        new Set(
+          rawModels
+            .filter((name): name is string => typeof name === 'string')
+            .map((name) => name.trim())
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b));
+      setEndpointModels(models);
+      if (models.length > 0) {
+        message.success(t('pro.pull_models_success', { count: models.length }));
       } else {
-        message.info(t('pro.pull_models_empty'));
+        message.info(t('pro.model_list_empty'));
       }
     } catch (err) {
+      if (seq !== modelFetchSeqRef.current) return;
       const msg = err instanceof ApiError ? err.message : String(err);
       message.error(msg);
     } finally {
-      setIsPullingModels(false);
-    }
-  };
-
-  const handleOpenPullPanel = () => {
-    setPullPanelOpen(true);
-    if (endpointModels.length === 0) {
-      void handlePullModels();
-    }
-  };
-
-  const handleApplySelectedModels = () => {
-    if (selectedEndpointModels.size === 0) return;
-    const newItems: FormModelItem[] = [];
-    for (const mName of selectedEndpointModels) {
-      if (!formModels.some((item) => item.name === mName)) {
-        newItems.push({
-          id: `mdl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          name: mName,
-          alias: '',
-          image: false,
-          thinking: { levels: [] },
-        });
+      if (seq === modelFetchSeqRef.current) {
+        setIsPullingModels(false);
       }
     }
-    setFormModels((prev) => [...prev, ...newItems]);
-    message.success(t('pro.models_applied', { count: newItems.length }));
-    setSelectedEndpointModels(new Set());
-    setPullPanelOpen(false);
   };
 
   const toggleModelExpanded = (id: string) => {
     setExpandedModelIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      const willExpand = !next.has(id);
+      if (willExpand) {
+        next.add(id);
+        setTimeout(() => {
+          const el = document.getElementById(`model-card-${id}`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }, 80);
+      } else {
+        next.delete(id);
+      }
       return next;
     });
+  };
+
+  const handleAddModel = () => {
+    const newId = `mdl-${Date.now()}-${formModels.length}`;
+    setFormModels((prev) => [
+      ...prev,
+      {
+        id: newId,
+        name: '',
+        alias: '',
+        image: false,
+        thinking: { levels: [] },
+      },
+    ]);
+    setExpandedModelIds((prev) => new Set([...prev, newId]));
+    setTimeout(() => {
+      const el = document.getElementById(`model-card-${newId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }
+    }, 80);
   };
 
   const updateModelImage = (id: string, image: boolean) => {
@@ -335,6 +391,13 @@ export const ProvidersPage: React.FC = () => {
 
   const providers = providersData?.providers || [];
 
+  const handleCloseProviderDrawer = () => {
+    modelFetchSeqRef.current += 1;
+    setEndpointModels([]);
+    setIsPullingModels(false);
+    setProviderDrawerOpen(false);
+  };
+
   const statusMutation = useMutation({
     mutationFn: ({ family, index, disabled }: { family: string; index: number; disabled: boolean }) =>
       api.patchManagementProviderStatus(family, index, disabled),
@@ -352,7 +415,7 @@ export const ProvidersPage: React.FC = () => {
     mutationFn: (payload: SaveProviderPayload) => api.createManagementProvider(payload),
     onSuccess: () => {
       message.success(t('pro.provider_created'));
-      setProviderDrawerOpen(false);
+      handleCloseProviderDrawer();
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
     },
     onError: (err: unknown) => {
@@ -366,7 +429,7 @@ export const ProvidersPage: React.FC = () => {
       api.updateManagementProvider(id, payload),
     onSuccess: () => {
       message.success(t('pro.provider_updated'));
-      setProviderDrawerOpen(false);
+      handleCloseProviderDrawer();
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
     },
     onError: (err: unknown) => {
@@ -403,10 +466,10 @@ export const ProvidersPage: React.FC = () => {
     setFormKeys([{ id: initKeyId, apiKey: '', proxyUrl: '', weight: 1, isChanging: true }]);
     setExpandedKeyIds(new Set([initKeyId]));
     setFormHeaders([]);
+    modelFetchSeqRef.current++;
     setFormModels([]);
     setEndpointModels([]);
-    setSelectedEndpointModels(new Set());
-    setPullPanelOpen(false);
+    setIsPullingModels(false);
     setExpandedModelIds(new Set());
     setKeysSectionOpen(true);
     setHeadersSectionOpen(false);
@@ -500,9 +563,9 @@ export const ProvidersPage: React.FC = () => {
     } else {
       setFormModels([]);
     }
+    modelFetchSeqRef.current++;
     setEndpointModels([]);
-    setSelectedEndpointModels(new Set());
-    setPullPanelOpen(false);
+    setIsPullingModels(false);
     setExpandedModelIds(new Set());
 
     setProviderDrawerOpen(true);
@@ -624,10 +687,10 @@ export const ProvidersPage: React.FC = () => {
   };
 
   const familyDisplayNames: Record<string, string> = {
-    'openai-compatibility': 'OpenAI 兼容',
-    'codex': 'Codex / Responses',
-    'claude': 'Anthropic Claude',
-    'gemini': 'Google Gemini',
+    'openai-compatibility': t(PROTOCOL_META['openai-compatibility'].labelKey),
+    'codex': t(PROTOCOL_META['codex'].labelKey),
+    'claude': t(PROTOCOL_META['claude'].labelKey),
+    'gemini': t(PROTOCOL_META['gemini'].labelKey),
   };
 
   // Columns for Providers
@@ -685,11 +748,42 @@ export const ProvidersPage: React.FC = () => {
     {
       title: t('pro.col_protocol'),
       key: 'protocol',
-      render: (_, record) => (
-        <Tag color="blue" style={{ margin: 0 }}>
-          {familyDisplayNames[record.family] || record.protocol || record.family}
-        </Tag>
-      ),
+      render: (_, record) => {
+        const meta = getProtocolMeta(record.family, record.protocol);
+        if (!meta) {
+          return (
+            <Tag style={{ margin: 0 }}>
+              {record.protocol || record.family || t('pro.none_text')}
+            </Tag>
+          );
+        }
+        return (
+          <Tag
+            style={{
+              margin: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              padding: '2px 8px',
+              borderRadius: 4,
+              color: meta.color,
+              borderColor: `${meta.color}66`,
+              backgroundColor: `${meta.color}18`,
+              fontWeight: 500,
+              fontSize: 12,
+              lineHeight: '18px',
+            }}
+          >
+            <LobeIcon
+              iconId={meta.iconId}
+              size={13}
+              variant="mono"
+              style={{ color: meta.color, flexShrink: 0, display: 'inline-flex' }}
+            />
+            <span>{t(meta.labelKey)}</span>
+          </Tag>
+        );
+      },
     },
 
     // 3. 服务地址 (过长自动截断)
@@ -950,7 +1044,7 @@ export const ProvidersPage: React.FC = () => {
             ),
             children: (
               <div>
-                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-start' }}>
+                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
                   <Button
                     type="primary"
                     icon={<PlusOutlined />}
@@ -1003,7 +1097,7 @@ export const ProvidersPage: React.FC = () => {
                   />
                 )}
 
-                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
                   <Button
                     type="primary"
                     icon={<PlusOutlined />}
@@ -1052,11 +1146,11 @@ export const ProvidersPage: React.FC = () => {
           </div>
         }
         open={providerDrawerOpen}
-        onClose={() => setProviderDrawerOpen(false)}
+        onClose={handleCloseProviderDrawer}
         size="large"
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, padding: '4px 0' }}>
-            <Button onClick={() => setProviderDrawerOpen(false)}>
+            <Button onClick={handleCloseProviderDrawer}>
               {t('common.cancel')}
             </Button>
             <Button
@@ -1151,10 +1245,10 @@ export const ProvidersPage: React.FC = () => {
                 }}
                   disabled={!!editingProvider}
                   options={[
-                    { label: 'OpenAI 兼容 (openai-compatibility)', value: 'openai-compatibility' },
-                    { label: 'Codex / Responses (codex)', value: 'codex' },
-                    { label: 'Anthropic Claude (claude)', value: 'claude' },
-                    { label: 'Google Gemini (gemini)', value: 'gemini' },
+                    { label: `${t(PROTOCOL_META['openai-compatibility'].labelKey)} (openai-compatibility)`, value: 'openai-compatibility' },
+                    { label: `${t(PROTOCOL_META['codex'].labelKey)} (codex)`, value: 'codex' },
+                    { label: `${t(PROTOCOL_META['claude'].labelKey)} (claude)`, value: 'claude' },
+                    { label: `${t(PROTOCOL_META['gemini'].labelKey)} (gemini)`, value: 'gemini' },
                   ]}
                 />
               </Form.Item>
@@ -1192,6 +1286,9 @@ export const ProvidersPage: React.FC = () => {
               onChange={(e) => {
                 const val = e.target.value;
                 setFormBaseURL(val);
+                modelFetchSeqRef.current += 1;
+                setEndpointModels([]);
+                setIsPullingModels(false);
                 if (!iconManuallySelected) {
                   setFormIcon(getProviderDefaultIcon(formFamily, formName, val));
                 }
@@ -1207,7 +1304,7 @@ export const ProvidersPage: React.FC = () => {
                 <Input
                   value={formPrefix}
                   onChange={(e) => setFormPrefix(e.target.value)}
-                  placeholder="e.g. glm"
+                  placeholder="e.g. prefix"
                 />
               </Form.Item>
             </Col>
@@ -1226,15 +1323,17 @@ export const ProvidersPage: React.FC = () => {
           {/* Test Model */}
           <Form.Item label={t('pro.field_test_model')}>
             <Select
-              value={formTestModel}
+              value={
+                formTestModel === 'auto' || formModels.some((m) => m.name === formTestModel)
+                  ? formTestModel
+                  : 'auto'
+              }
               onChange={setFormTestModel}
               options={[
                 {
-                  label: t('pro.test_auto', {
-                    model:
-                      formModels[0]?.name ||
-                      (formFamily === 'openai-compatibility' ? 'glm-5.3-flash' : 'default'),
-                  }),
+                  label: formModels[0]?.name
+                    ? t('pro.test_auto', { model: formModels[0].name })
+                    : t('pro.test_auto_default'),
                   value: 'auto',
                 },
                 ...formModels
@@ -1632,187 +1731,48 @@ export const ProvidersPage: React.FC = () => {
 
             {modelsSectionOpen && (
               <div style={{ padding: '0 16px 16px 16px' }}>
-                {/* Action Row: Pull from endpoint on right */}
+                {/* Action Row: Fetch model list on right */}
                 <div
                   style={{
                     display: 'flex',
-                    justifyContent: 'flex-end',
+                    justifyContent: 'space-between',
                     alignItems: 'center',
                     marginBottom: 12,
                   }}
                 >
+                  <div style={{ fontSize: 12, color: 'var(--meta)' }}>
+                    {endpointModels.length > 0 && (
+                      <span style={{ color: 'var(--accent, #1677ff)', fontWeight: 500 }}>
+                        {t('pro.model_list_fetched', { n: endpointModels.length })}
+                      </span>
+                    )}
+                  </div>
                   <Button
-                    icon={<DownloadOutlined />}
-                    onClick={handleOpenPullPanel}
+                    icon={<SyncOutlined spin={isPullingModels} />}
+                    loading={isPullingModels}
+                    onClick={handlePullModels}
                   >
-                    {t('pro.pull_from_endpoint')}
+                    {endpointModels.length > 0
+                      ? t('pro.refresh_model_list')
+                      : t('pro.fetch_model_list')}
                   </Button>
                 </div>
 
-                {/* Endpoint Pull Panel (Card) */}
-                {pullPanelOpen && (
+                {/* Column Titles */}
+                {formModels.length > 0 && (
                   <div
                     style={{
-                      border: '1px solid var(--border)',
-                      borderRadius: 6,
-                      background: 'var(--bg)',
-                      padding: 14,
-                      marginBottom: 14,
+                      display: 'flex',
+                      gap: 8,
+                      padding: '0 12px 6px 12px',
+                      fontSize: 12,
+                      color: 'var(--meta)',
+                      fontWeight: 500,
                     }}
                   >
-                    {/* Search & Reload */}
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                      <Input
-                        prefix={<SearchOutlined style={{ color: 'var(--meta)' }} />}
-                        placeholder={t('pro.search_models')}
-                        value={modelSearchQuery}
-                        onChange={(e) => setModelSearchQuery(e.target.value)}
-                        allowClear
-                        style={{ flex: 1 }}
-                      />
-                      <Button
-                        icon={<SyncOutlined spin={isPullingModels} />}
-                        onClick={handlePullModels}
-                        loading={isPullingModels}
-                      >
-                        {t('pro.reload')}
-                      </Button>
-                    </div>
-
-                    {/* Select All & Counter */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '4px 2px 8px 2px',
-                        borderBottom: '1px solid var(--border)',
-                        marginBottom: 8,
-                      }}
-                    >
-                      <Checkbox
-                        checked={
-                          selectableModels.length > 0 &&
-                          selectableModels.every((m) => selectedEndpointModels.has(m))
-                        }
-                        indeterminate={
-                          selectableModels.some((m) => selectedEndpointModels.has(m)) &&
-                          !selectableModels.every((m) => selectedEndpointModels.has(m))
-                        }
-                        disabled={selectableModels.length === 0}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedEndpointModels(new Set(selectableModels));
-                          } else {
-                            setSelectedEndpointModels(new Set());
-                          }
-                        }}
-                      >
-                        <span style={{ fontSize: 13 }}>{t('pro.select_all')}</span>
-                      </Checkbox>
-                      <span style={{ fontSize: 12, color: 'var(--meta)' }}>
-                        {selectedEndpointModels.size} / {filteredEndpointModels.length}
-                      </span>
-                    </div>
-
-                    {/* Endpoint Models List */}
-                    <div
-                      style={{
-                        maxHeight: 220,
-                        overflowY: 'auto',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 6,
-                      }}
-                    >
-                      {filteredEndpointModels.length === 0 ? (
-                        <div
-                          style={{
-                            textAlign: 'center',
-                            color: 'var(--meta)',
-                            padding: '20px 0',
-                            fontSize: 13,
-                          }}
-                        >
-                          {isPullingModels ? t('common.loading') : t('pro.pull_models_empty')}
-                        </div>
-                      ) : (
-                        filteredEndpointModels.map((mName) => {
-                          const isAlreadyAdded = formModels.some((item) => item.name === mName);
-                          const isChecked = selectedEndpointModels.has(mName);
-
-                          return (
-                            <div
-                              key={mName}
-                              style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                padding: '8px 10px',
-                                background: 'var(--surface)',
-                                borderRadius: 4,
-                                border: '1px solid var(--border)',
-                              }}
-                            >
-                              {isAlreadyAdded ? (
-                                <>
-                                  <span
-                                    style={{
-                                      fontFamily: 'monospace',
-                                      fontSize: 13,
-                                      color: 'var(--fg)',
-                                    }}
-                                  >
-                                    {mName}
-                                  </span>
-                                  <Tag style={{ margin: 0, fontSize: 11 }}>
-                                    {t('pro.model_added')}
-                                  </Tag>
-                                </>
-                              ) : (
-                                <Checkbox
-                                  checked={isChecked}
-                                  onChange={() => {
-                                    setSelectedEndpointModels((prev) => {
-                                      const next = new Set(prev);
-                                      if (next.has(mName)) next.delete(mName);
-                                      else next.add(mName);
-                                      return next;
-                                    });
-                                  }}
-                                  style={{ width: '100%' }}
-                                >
-                                  <span style={{ fontFamily: 'monospace', fontSize: 13 }}>
-                                    {mName}
-                                  </span>
-                                </Checkbox>
-                              )}
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-
-                    {/* Action buttons */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'flex-end',
-                        gap: 8,
-                        marginTop: 12,
-                      }}
-                    >
-                      <Button onClick={() => setPullPanelOpen(false)}>
-                        {t('common.close')}
-                      </Button>
-                      <Button
-                        type="primary"
-                        disabled={selectedEndpointModels.size === 0}
-                        onClick={handleApplySelectedModels}
-                      >
-                        {t('pro.apply_models', { n: selectedEndpointModels.size })}
-                      </Button>
-                    </div>
+                    <div style={{ flex: 1 }}>{t('pro.actual_request_model')}</div>
+                    <div style={{ flex: 1 }}>{t('pro.alias_optional')}</div>
+                    <div style={{ width: 56 }} />
                   </div>
                 )}
 
@@ -1828,15 +1788,25 @@ export const ProvidersPage: React.FC = () => {
                   >
                     {formModels.map((m) => {
                       const isExpanded = expandedModelIds.has(m.id);
+                      const otherSelected = new Set(
+                        formModels
+                          .filter((item) => item.id !== m.id && item.name.trim() !== '')
+                          .map((item) => item.name)
+                      );
+                      const modelOptions = endpointModels
+                        .filter((name) => !otherSelected.has(name) || name === m.name)
+                        .map((name) => ({ label: name, value: name }));
 
                       return (
                         <div
                           key={m.id}
+                          id={`model-card-${m.id}`}
                           style={{
                             border: '1px solid var(--border)',
                             borderRadius: 6,
                             background: 'var(--bg)',
                             overflow: 'hidden',
+                            scrollMarginBottom: 24,
                           }}
                         >
                           {/* Model Card Header */}
@@ -1849,18 +1819,48 @@ export const ProvidersPage: React.FC = () => {
                               background: 'rgba(255, 255, 255, 0.02)',
                             }}
                           >
-                            <Input
+                            <AutoComplete
                               value={m.name}
-                              onChange={(e) =>
+                              options={modelOptions}
+                              filterOption={(inputValue, option) =>
+                                String(option?.value ?? '')
+                                  .toLowerCase()
+                                  .includes(inputValue.toLowerCase())
+                              }
+                              onSelect={(val) => {
                                 setFormModels((prev) =>
                                   prev.map((item) =>
-                                    item.id === m.id ? { ...item, name: e.target.value } : item
+                                    item.id === m.id
+                                      ? {
+                                          ...item,
+                                          name: val,
+                                          alias: item.alias.trim() ? item.alias : val,
+                                        }
+                                      : item
                                   )
-                                )
-                              }
-                              placeholder={t('pro.model_name')}
-                              style={{ flex: 1, fontFamily: 'monospace' }}
-                            />
+                                );
+                              }}
+                              onChange={(val) => {
+                                setFormModels((prev) =>
+                                  prev.map((item) =>
+                                    item.id === m.id ? { ...item, name: val } : item
+                                  )
+                                );
+                              }}
+                              style={{ flex: 1 }}
+                            >
+                              <Input
+                                placeholder={t('pro.actual_request_model')}
+                                suffix={
+                                  endpointModels.length > 0 ? (
+                                    <DownOutlined
+                                      style={{ fontSize: 11, color: 'var(--meta)' }}
+                                    />
+                                  ) : undefined
+                                }
+                                style={{ fontFamily: 'monospace' }}
+                              />
+                            </AutoComplete>
                             <Input
                               value={m.alias}
                               onChange={(e) =>
@@ -1947,7 +1947,15 @@ export const ProvidersPage: React.FC = () => {
                                     return (
                                       <Col xs={24} sm={12} key={opt.value}>
                                         <div
+                                          role="button"
+                                          tabIndex={0}
                                           onClick={() => toggleThinkingLevel(m.id, opt.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === ' ' || e.key === 'Enter') {
+                                              e.preventDefault();
+                                              toggleThinkingLevel(m.id, opt.value);
+                                            }
+                                          }}
                                           style={{
                                             border: isChecked
                                               ? '1px solid var(--accent, #1677ff)'
@@ -1967,10 +1975,8 @@ export const ProvidersPage: React.FC = () => {
                                         >
                                           <Checkbox
                                             checked={isChecked}
-                                            onChange={(e) => {
-                                              e.stopPropagation();
-                                              toggleThinkingLevel(m.id, opt.value);
-                                            }}
+                                            tabIndex={-1}
+                                            style={{ pointerEvents: 'none' }}
                                           >
                                             <span style={{ fontWeight: isChecked ? 600 : 400 }}>
                                               {t(opt.labelKey)}
@@ -2002,20 +2008,7 @@ export const ProvidersPage: React.FC = () => {
                 <Button
                   style={{ borderStyle: 'dashed' }}
                   icon={<PlusOutlined />}
-                  onClick={() => {
-                    const newId = `mdl-${Date.now()}-${formModels.length}`;
-                    setFormModels((prev) => [
-                      ...prev,
-                      {
-                        id: newId,
-                        name: '',
-                        alias: '',
-                        image: false,
-                        thinking: { levels: [] },
-                      },
-                    ]);
-                    setExpandedModelIds((prev) => new Set([...prev, newId]));
-                  }}
+                  onClick={handleAddModel}
                 >
                   {t('pro.add_model_entry')}
                 </Button>
