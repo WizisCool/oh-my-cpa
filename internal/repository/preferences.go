@@ -15,12 +15,13 @@ import (
 const (
 	PreferenceDashboardRange = "dashboard_range"
 	PreferenceLogFilters     = "log_filters"
+	PreferenceProviderIcons  = "provider_icons"
 )
 
 // MaxPreferenceValueBytes bounds a stored value. Preferences are small UI
 // state; anything larger is a client bug or an attempt to use this table as a
 // data dump.
-const MaxPreferenceValueBytes = 4096
+const MaxPreferenceValueBytes = 32 * 1024
 
 // GetPreference returns the stored JSON for one key. The boolean is false when
 // nothing has been saved yet, which is a normal state, not an error: the first

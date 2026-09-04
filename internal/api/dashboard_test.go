@@ -950,9 +950,15 @@ func TestPreferencesRoundTripThroughTheDatabase(t *testing.T) {
 		t.Fatalf("log filters status = %d body %s", response.StatusCode, payload)
 	}
 
+	// Provider icons are also persisted in the database so custom brand assignments survive restarts.
+	if response, payload = doJSON(t, client, http.MethodPut, base+"/provider_icons", `{"openai-compat-0":"DeepSeek","relay":"OpenAI"}`); response.StatusCode != http.StatusOK {
+		t.Fatalf("provider icons status = %d body %s", response.StatusCode, payload)
+	}
+
 	_, payload = getJSON(t, client, base)
 	if !strings.Contains(string(payload), `"dashboard_range":{"preset":"6h"}`) ||
-		!strings.Contains(string(payload), `"log_filters":{"hideManagement":true,"levels":["warn"],"statusClass":"all"}`) {
+		!strings.Contains(string(payload), `"log_filters":{"hideManagement":true,"levels":["warn"],"statusClass":"all"}`) ||
+		!strings.Contains(string(payload), `"provider_icons":{"openai-compat-0":"DeepSeek","relay":"OpenAI"}`) {
 		t.Fatalf("stored values did not come back verbatim: %s", payload)
 	}
 	stored, found, err := repo.GetPreference(context.Background(), repository.PreferenceDashboardRange)
@@ -964,6 +970,9 @@ func TestPreferencesRoundTripThroughTheDatabase(t *testing.T) {
 	}
 	if _, found, err = repo.GetPreference(context.Background(), repository.PreferenceLogFilters); err != nil || !found {
 		t.Fatalf("log filters not persisted: found=%v err=%v", found, err)
+	}
+	if _, found, err = repo.GetPreference(context.Background(), repository.PreferenceProviderIcons); err != nil || !found {
+		t.Fatalf("provider icons not persisted: found=%v err=%v", found, err)
 	}
 }
 

@@ -20,6 +20,7 @@ import (
 var knownPreferences = map[string]bool{
 	repository.PreferenceDashboardRange: true,
 	repository.PreferenceLogFilters:     true,
+	repository.PreferenceProviderIcons:  true,
 }
 
 // preferenceValue is a stored JSON document kept exactly as the client sent it.
