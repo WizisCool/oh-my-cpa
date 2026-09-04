@@ -360,6 +360,60 @@ func (c *Client) ResetQuota(ctx context.Context, authIndex string) error {
 	return c.doJSONBody(ctx, http.MethodPost, "/reset-quota", payload, nil)
 }
 
+// ApiCallRequest represents the payload passed to CPA's /api-call proxy endpoint.
+// It is used internally by quota service facades and must never be exposed as an
+// arbitrary browser proxy.
+type ApiCallRequest struct {
+	AuthIndex string            `json:"auth_index,omitempty"`
+	Method    string            `json:"method"`
+	URL       string            `json:"url"`
+	Header    map[string]string `json:"header,omitempty"`
+	Data      string            `json:"data,omitempty"`
+}
+
+// ApiCallResponse represents the response returned by CPA's /api-call endpoint.
+type ApiCallResponse struct {
+	StatusCode int                 `json:"status_code"`
+	Header     map[string][]string `json:"header"`
+	Body       json.RawMessage     `json:"body"`
+}
+
+// ApiCall forwards an authenticated HTTP probe to CPA's /api-call endpoint.
+func (c *Client) ApiCall(ctx context.Context, req ApiCallRequest) (ApiCallResponse, error) {
+	if c == nil {
+		return ApiCallResponse{}, errors.New("CPA client is not initialized")
+	}
+	method := strings.ToUpper(strings.TrimSpace(req.Method))
+	if method == "" {
+		return ApiCallResponse{}, errors.New("method is required")
+	}
+	targetURL := strings.TrimSpace(req.URL)
+	if targetURL == "" {
+		return ApiCallResponse{}, errors.New("url is required")
+	}
+
+	payload := map[string]any{
+		"method": method,
+		"url":    targetURL,
+	}
+	if authIndex := strings.TrimSpace(req.AuthIndex); authIndex != "" {
+		payload["auth_index"] = authIndex
+		payload["authIndex"] = authIndex
+	}
+	if len(req.Header) > 0 {
+		payload["header"] = req.Header
+	}
+	if req.Data != "" {
+		payload["data"] = req.Data
+	}
+
+	var resp ApiCallResponse
+	if err := c.doJSONBody(ctx, http.MethodPost, "/api-call", payload, &resp); err != nil {
+		return ApiCallResponse{}, err
+	}
+	return resp, nil
+}
+
 // PatchAuthFileStatus changes only the disabled state of a named auth file.
 // The endpoint and request shape are fixed here rather than supplied by an
 // HTTP caller.

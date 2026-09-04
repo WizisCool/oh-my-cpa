@@ -198,6 +198,44 @@ func TestClientDoesNotLeakKeyInHTTPError(t *testing.T) {
 	}
 }
 
+func TestClientApiCall(t *testing.T) {
+	const key = "management-secret"
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/v0/management/api-call" {
+			t.Fatalf("request path = %q", request.URL.Path)
+		}
+		if request.Method != http.MethodPost {
+			t.Fatalf("request method = %q", request.Method)
+		}
+		if got := request.Header.Get("Authorization"); got != "Bearer "+key {
+			t.Fatalf("authorization = %q", got)
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"status_code":200,"header":{"content-type":["application/json"]},"body":{"plan_type":"pro"}}`))
+	}))
+	defer server.Close()
+
+	client, err := NewClient(server.URL, key, time.Second, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := client.ApiCall(context.Background(), ApiCallRequest{
+		AuthIndex: "auth-123",
+		Method:    "GET",
+		URL:       "https://chatgpt.com/backend-api/wham/usage",
+	})
+	if err != nil {
+		t.Fatalf("ApiCall failed: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected status 200, got %d", resp.StatusCode)
+	}
+	if !strings.Contains(string(resp.Body), `"plan_type":"pro"`) {
+		t.Fatalf("unexpected body: %s", string(resp.Body))
+	}
+}
+
 func TestNewClientValidatesURLAndKey(t *testing.T) {
 	for _, test := range []struct {
 		name string
