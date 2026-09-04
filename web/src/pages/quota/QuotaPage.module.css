@@ -1,0 +1,483 @@
+.quotaPage {
+  padding-bottom: 40px;
+}
+
+/* ── KPI Strip ── */
+.kpiStrip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.kpiCard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.kpiLabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--meta);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kpiValueRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.kpiNumber {
+  font-size: 24px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: var(--fg);
+}
+
+.kpiPip {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+}
+
+.pipSuccess { background: var(--success); }
+.pipWarn { background: var(--warn); }
+.pipDanger { background: var(--danger); }
+.pipMeta { background: var(--meta); }
+.pipAccent { background: var(--accent); }
+
+/* ── Toolbar ── */
+.toolbar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.toolbarTopRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.providerTabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.providerTabBtn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--fg-2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all var(--motion-fast);
+}
+
+.providerTabBtn:hover {
+  background: var(--hover-inset);
+  color: var(--fg);
+}
+
+.providerTabBtnActive {
+  background: var(--hover-inset);
+  border-color: var(--border);
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.tabBadge {
+  background: var(--border);
+  border-radius: 2px;
+  padding: 1px 5px;
+  font-size: 10px;
+  color: var(--meta);
+}
+
+.toolbarControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── View Modes: Cards Grid ── */
+.cardsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 14px;
+}
+
+.quotaCard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: border-color var(--motion-fast);
+}
+
+.quotaCard:hover {
+  border-color: var(--meta);
+}
+
+.cardHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.cardTitleWrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.cardIcon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-soft);
+  background: var(--hover-inset);
+}
+
+.cardNameBlock {
+  min-width: 0;
+}
+
+.cardName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 190px;
+}
+
+.cardAuthIndex {
+  font-size: 11px;
+  color: var(--meta);
+  font-family: var(--font-mono);
+}
+
+.cardTags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.planTag {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  border: 1px solid var(--border);
+}
+
+.planElite {
+  background: rgba(0, 122, 255, 0.12);
+  color: var(--accent);
+  border-color: rgba(0, 122, 255, 0.3);
+  font-weight: 700;
+}
+
+.planPremium {
+  background: rgba(255, 159, 10, 0.12);
+  color: var(--warn);
+  border-color: rgba(255, 159, 10, 0.3);
+}
+
+.planStandard {
+  background: var(--hover-inset);
+  color: var(--fg-2);
+}
+
+/* ── Progress Bar ── */
+.progressWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.progressLabelRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 11px;
+}
+
+.progressLabel {
+  color: var(--fg-2);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.progressValue {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+  margin-left: 8px;
+}
+
+.progressTrack {
+  width: 100%;
+  height: 6px;
+  background: var(--hover-inset);
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progressBar {
+  height: 100%;
+  border-radius: 1px;
+  transition: width 200ms ease;
+}
+
+.barSuccess { background: var(--success); }
+.barAccent { background: var(--accent); }
+.barWarn { background: var(--warn); }
+.barDanger { background: var(--danger); }
+.barMuted { background: var(--meta); }
+
+.progressResetRow {
+  font-size: 10px;
+  color: var(--meta);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── Recommendation Alert in Card ── */
+.recBanner {
+  background: var(--hover-inset);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.recBannerDanger {
+  border-left-color: var(--danger);
+}
+
+.recBannerWarn {
+  border-left-color: var(--warn);
+}
+
+.recText {
+  color: var(--fg-2);
+  line-height: 1.4;
+  flex: 1;
+}
+
+/* ── Card Footer ── */
+.cardFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 10px;
+  margin-top: auto;
+}
+
+.cardMetaTime {
+  font-size: 11px;
+  color: var(--meta);
+  font-family: var(--font-mono);
+}
+
+.cardActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── Matrix Table ── */
+.matrixTableWrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+}
+
+.matrixTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: left;
+}
+
+.matrixTable th {
+  background: var(--hover-inset);
+  color: var(--meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.matrixTable td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-soft);
+  vertical-align: middle;
+}
+
+.matrixTable tr:last-child td {
+  border-bottom: none;
+}
+
+.matrixTable tr:hover td {
+  background: var(--hover-inset);
+}
+
+.matrixCellProgress {
+  min-width: 140px;
+  max-width: 200px;
+}
+
+/* ── Timeline ── */
+.timelineContainer {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  margin-top: 16px;
+}
+
+.timelineHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.timelineTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.timelineAxis {
+  position: relative;
+  height: 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  padding: 0 4px;
+  font-size: 10px;
+  color: var(--meta);
+  font-family: var(--font-mono);
+}
+
+.timelineLanes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.timelineLane {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+}
+
+.timelineLaneLabel {
+  width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--fg-2);
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
+
+.timelineTrack {
+  flex: 1;
+  height: 16px;
+  background: var(--hover-inset);
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+  position: relative;
+  overflow: hidden;
+}
+
+.timelineMarker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--accent);
+  opacity: 0.85;
+  border-radius: 2px;
+}
+
+/* ── Drawer Sections ── */
+.drawerSection {
+  margin-bottom: 24px;
+}
+
+.drawerSectionTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--meta);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 10px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-soft);
+}

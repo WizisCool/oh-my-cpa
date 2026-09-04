@@ -13,7 +13,7 @@ import { CapabilityProbeReport } from '../types/capability';
 import { ConfigScalarsResponse, ConfigSourceResponse, ConfigGrantResponse } from '../types/configManagement';
 import { ClientAPIKeyItem, ProviderItem, SaveProviderPayload } from '../types/providers';
 import { OAuthProviderItem, StartOAuthResponse, OAuthStatusResponse, OAuthCallbackResponse } from '../types/oauth';
-import { QuotaOverviewResponse } from '../types/quota';
+import { QuotaOverviewResponse, CredentialQuotaDetailResponse, QuotaItem } from '../types/quota';
 import { SystemInfoResponse } from '../types/system';
 import { PluginsResponse, PluginStoreResponse } from '../types/plugin';
 
@@ -536,10 +536,44 @@ export const api = {
     return request<QuotaOverviewResponse>('/management/quota', { method: 'GET' });
   },
 
+  async refreshCredentialQuota(authIndex: string): Promise<{ status: string; quota: QuotaItem }> {
+    return request<{ status: string; quota: QuotaItem }>('/management/quota/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ auth_index: authIndex }),
+    });
+  },
+
+  async batchRefreshCredentialQuotas(authIndexes: string[]): Promise<{ status: string; quotas: QuotaItem[] }> {
+    return request<{ status: string; quotas: QuotaItem[] }>('/management/quota/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ auth_indexes: authIndexes }),
+    });
+  },
+
+  async clearCredentialCooldown(authIndex: string): Promise<{ status: string; auth_index: string }> {
+    return request<{ status: string; auth_index: string }>('/management/quota/clear-cooldown', {
+      method: 'POST',
+      body: JSON.stringify({ auth_index: authIndex }),
+    });
+  },
+
   async resetCredentialQuota(authIndex: string): Promise<{ status: string; auth_index: string }> {
     return request<{ status: string; auth_index: string }>('/management/quota/reset', {
       method: 'POST',
       body: JSON.stringify({ auth_index: authIndex }),
+    });
+  },
+
+  async redeemCodexResetCredit(authIndex: string): Promise<{ status: string; quota: QuotaItem }> {
+    return request<{ status: string; quota: QuotaItem }>('/management/quota/redeem-credit', {
+      method: 'POST',
+      body: JSON.stringify({ auth_index: authIndex }),
+    });
+  },
+
+  async getCredentialQuotaDetail(authIndex: string): Promise<CredentialQuotaDetailResponse> {
+    return request<CredentialQuotaDetailResponse>(`/management/quota/${encodeURIComponent(authIndex)}`, {
+      method: 'GET',
     });
   },
 
