@@ -44,10 +44,19 @@ export default defineConfig(({ command }) => ({
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-antd': ['antd', '@ant-design/icons'],
-          'vendor-query': ['@tanstack/react-query'],
+        manualChunks: (id) => {
+          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router-dom')) {
+            return 'vendor-react';
+          }
+          if (id.includes('node_modules/@ant-design/charts') || id.includes('node_modules/@antv')) {
+            return 'vendor-charts';
+          }
+          if (id.includes('node_modules/@ant-design/icons') || id.includes('node_modules/antd')) {
+            return 'vendor-antd';
+          }
+          if (id.includes('node_modules/@tanstack/react-query')) {
+            return 'vendor-query';
+          }
         },
       },
     },

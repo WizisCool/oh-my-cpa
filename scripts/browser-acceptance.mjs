@@ -188,7 +188,7 @@ try {
   await auditPage(page, responseBodies, '/plugins', '.plugins-page');
   await auditPage(page, responseBodies, '/plugin-store', '.plugin-store-page');
   await auditPage(page, responseBodies, '/system', '.system-page');
-  await auditPage(page, responseBodies, '/quick-start', '.capability-page');
+  await auditPage(page, responseBodies, '/quick-start', '.quick-start-page');
 
   await page.goto(`${appURL}/dashboard`, { waitUntil: 'networkidle' });
   await page.evaluate(() => localStorage.setItem('omc-theme', 'light'));
@@ -197,6 +197,16 @@ try {
   const mobileOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   check('390px light view has no document overflow', mobileOverflow <= 1, `overflow=${mobileOverflow}`);
   check('light theme is active', await page.evaluate(() => document.documentElement.dataset.theme === 'light'));
+
+  // Bundle budget check
+  const assetsDir = path.join(root, 'web', 'dist', 'assets');
+  if (fs.existsSync(assetsDir)) {
+    const mainEntry = fs.readdirSync(assetsDir).find((f) => f.startsWith('index-') && f.endsWith('.js'));
+    if (mainEntry) {
+      const entrySize = fs.statSync(path.join(assetsDir, mainEntry)).size;
+      check('bundle budget: main entry under 250 kB', entrySize <= 250 * 1024, `${(entrySize / 1024).toFixed(2)} kB`);
+    }
+  }
 
   check('browser console has no unexplained errors', consoleErrors.length === 0, consoleErrors.join(' | '));
   check('browser has no page errors', pageErrors.length === 0, pageErrors.join(' | '));

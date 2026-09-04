@@ -11,22 +11,23 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { getAppConfig } from './types/config';
 import { createThemeConfig, type ThemeMode } from './theme/themeConfig';
 import { AppLayout } from './components/common/AppLayout';
-import { TriagePage } from './pages/TriagePage';
-import { AllResourcesPage } from './pages/AllResourcesPage';
-import { UsageEventsPage } from './pages/UsageEventsPage';
-import { ProvidersPage } from './pages/ProvidersPage';
-import { InstanceStatusPage } from './pages/InstanceStatusPage';
 import { AuthGate } from './components/common/AuthGate';
-import { DashboardPage } from './pages/DashboardPage';
-import { LogsPage } from './pages/LogsPage';
-import { ConfigPage } from './pages/ConfigPage';
-import { AuthFilesPage } from './pages/AuthFilesPage';
-import { OAuthPage } from './pages/OAuthPage';
-import { QuotaPage } from './pages/QuotaPage';
-import { SystemPage } from './pages/SystemPage';
-import { PluginsPage } from './pages/PluginsPage';
-import { PluginStorePage } from './pages/PluginStorePage';
-import { CapabilityPlaceholderPage } from './pages/CapabilityPlaceholderPage';
+
+const TriagePage = React.lazy(() => import('./pages/TriagePage').then(m => ({ default: m.TriagePage })));
+const AllResourcesPage = React.lazy(() => import('./pages/AllResourcesPage').then(m => ({ default: m.AllResourcesPage })));
+const UsageEventsPage = React.lazy(() => import('./pages/UsageEventsPage').then(m => ({ default: m.UsageEventsPage })));
+const ProvidersPage = React.lazy(() => import('./pages/ProvidersPage').then(m => ({ default: m.ProvidersPage })));
+const InstanceStatusPage = React.lazy(() => import('./pages/InstanceStatusPage').then(m => ({ default: m.InstanceStatusPage })));
+const DashboardPage = React.lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
+const QuickStartPage = React.lazy(() => import('./pages/QuickStartPage').then(m => ({ default: m.QuickStartPage })));
+const LogsPage = React.lazy(() => import('./pages/LogsPage').then(m => ({ default: m.LogsPage })));
+const ConfigPage = React.lazy(() => import('./pages/ConfigPage').then(m => ({ default: m.ConfigPage })));
+const AuthFilesPage = React.lazy(() => import('./pages/AuthFilesPage').then(m => ({ default: m.AuthFilesPage })));
+const OAuthPage = React.lazy(() => import('./pages/OAuthPage').then(m => ({ default: m.OAuthPage })));
+const QuotaPage = React.lazy(() => import('./pages/QuotaPage').then(m => ({ default: m.QuotaPage })));
+const SystemPage = React.lazy(() => import('./pages/SystemPage').then(m => ({ default: m.SystemPage })));
+const PluginsPage = React.lazy(() => import('./pages/PluginsPage').then(m => ({ default: m.PluginsPage })));
+const PluginStorePage = React.lazy(() => import('./pages/PluginStorePage').then(m => ({ default: m.PluginStorePage })));
 import { ThemeContext } from './theme/ThemeContext';
 import { I18nProvider, useI18n } from './i18n';
 
@@ -102,7 +103,7 @@ const AppRoutes: React.FC = () => {
       children: [
         { index: true, element: <Navigate to="/dashboard" replace /> },
         { path: 'dashboard', element: <DashboardPage /> },
-        { path: 'quick-start', element: <CapabilityPlaceholderPage navKey="quick_start" capability="quick-start" /> },
+        { path: 'quick-start', element: <QuickStartPage /> },
         { path: 'ai-providers', element: <ProvidersPage /> },
         { path: 'auth-files', element: <AuthFilesPage /> },
         { path: 'oauth', element: <OAuthPage /> },

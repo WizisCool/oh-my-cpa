@@ -1,5 +1,5 @@
 import React from 'react';
-import { App as AntdApp, Layout, Menu, Drawer, Tooltip, Button, Breadcrumb } from 'antd';
+import { App as AntdApp, Layout, Menu, Drawer, Tooltip, Button, Breadcrumb, Spin } from 'antd';
 import {
   ApiOutlined,
   CloudServerOutlined,
@@ -328,7 +328,9 @@ export const AppLayout: React.FC = () => {
           {/* Keyed by pathname so each view cross-fades in instead of hard
               swapping, and the scroll position resets with the new page. */}
           <div key={location.pathname} className="route-transition">
-            <Outlet context={{ triggerDiscovery: () => discoverMutation.mutate(), isDiscovering: discoverMutation.isPending }} />
+            <React.Suspense fallback={<div style={{ padding: 60, textAlign: 'center' }}><Spin size="large" /></div>}>
+              <Outlet context={{ triggerDiscovery: () => discoverMutation.mutate(), isDiscovering: discoverMutation.isPending }} />
+            </React.Suspense>
           </div>
         </Content>
       </Layout>

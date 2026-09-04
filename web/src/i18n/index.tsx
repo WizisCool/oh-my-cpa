@@ -889,6 +889,31 @@ const DICT: Record<string, [string, string]> = {
   'store.empty': ['商店暂无可供安装的插件', 'No plugins available in the store'],
   'store.security_alert': ['安装第三方插件可能引入网络或执行安全风险。请仔细核验权限清单后再行安装。', 'Installing third-party plugins introduces runtime security implications. Review the permission list before installing.'],
 
+  // ── quick start ───────────────────────────────────────────────────────────
+  'qs.title': ['快速上手与客户端接入指引', 'Quick Start & Client Integration'],
+  'qs.subtitle': ['四步快速完成 Oh My CPA 网关配置，将聚合的大模型能力安全分发至下游开发工具', 'Complete Oh My CPA gateway setup in four steps to securely distribute aggregated AI models to downstream tools'],
+  'qs.step1_title': ['步骤 1：配置上游 AI 提供商', 'Step 1: Configure Upstream AI Providers'],
+  'qs.step1_desc': ['在「AI Providers」中配置 OpenAI 兼容、Codex、Claude 或 Gemini 提供商接入点与密钥。', 'Configure OpenAI-compatible, Codex, Claude, or Gemini endpoints and keys in “AI Providers”.'],
+  'qs.step1_btn': ['前往配置提供商', 'Go to AI Providers'],
+  'qs.step2_title': ['步骤 2：完成 OAuth 授权或上传凭据', 'Step 2: Complete OAuth or Upload Auth Files'],
+  'qs.step2_desc': ['通过「OAuth 登录」直连官方提供商账号，或在「认证文件」中上传已有凭据 JSON 文件。', 'Connect official provider accounts via “OAuth sign-in” or upload existing credential JSON in “Auth files”.'],
+  'qs.step2_btn_oauth': ['前往 OAuth 授权', 'Go to OAuth'],
+  'qs.step2_btn_auth': ['管理认证文件', 'Go to Auth Files'],
+  'qs.step3_title': ['步骤 3：生成代理客户端 API Key', 'Step 3: Generate Client API Key'],
+  'qs.step3_desc': ['在提供商管理页的「客户端 API Keys」中生成专属代理密钥，杜绝向下游工具泄露上游主密钥。', 'Generate a proxy client API key in “Client API Keys” to prevent upstream master key leakage to clients.'],
+  'qs.step3_btn': ['生成客户端密钥', 'Generate Client Key'],
+  'qs.step4_title': ['步骤 4：接入下游应用与开发工具', 'Step 4: Connect Downstream Applications'],
+  'qs.step4_desc': ['在 Cursor、Claude Code、Codex、LibreChat 或代码中使用下列统一端点接入代理：', 'Configure Cursor, Claude Code, Codex, LibreChat, or SDKs using the unified proxy endpoints below:'],
+  'qs.endpoint_chat': ['Chat Completions 端点', 'Chat Completions Endpoint'],
+  'qs.endpoint_models': ['模型发现端点', 'Models Endpoint'],
+  'qs.auth_header': ['鉴权请求头', 'Authorization Header'],
+  'qs.tab_curl': ['cURL 示例', 'cURL Example'],
+  'qs.tab_python': ['Python 示例', 'Python Example'],
+  'qs.tab_nodejs': ['Node.js 示例', 'Node.js Example'],
+  'qs.copy': ['复制', 'Copy'],
+  'qs.copied': ['已复制到剪贴板', 'Copied to clipboard'],
+
+
 
 
 };
