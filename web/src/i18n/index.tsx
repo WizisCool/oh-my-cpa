@@ -22,6 +22,7 @@ const DICT: Record<string, [string, string]> = {
   'common.loading': ['加载中…', 'Loading…'],
   'common.actions': ['操作', 'Actions'],
   'common.details': ['详情', 'Details'],
+  'common.all': ['全部', 'All'],
 
   // ── navigation ───────────────────────────────────────────────────────────
   'nav.group.operate': ['运行', 'Operate'],
@@ -796,6 +797,17 @@ const DICT: Record<string, [string, string]> = {
   'pro.testing_all': ['正在测试所有密钥...', 'Testing all keys...'],
   'pro.test_all_ok': ['所有密钥测试完成 ({count} 个)', 'All keys tested successfully ({count})'],
   'pro.test_key_empty': ['请先输入或配置 API 密钥', 'Please enter or configure an API key first'],
+  'pro.icon_picker_title': ['选择 AI 提供商图标', 'Select AI Provider Icon'],
+  'pro.search_icon_ph': ['搜索品牌、提供商或模型图标 (如 OpenAI, Claude, DeepSeek, Qwen)...', 'Search brand, provider, or model icon (e.g. OpenAI, Claude, DeepSeek, Qwen)...'],
+  'pro.no_icons_found': ['未找到匹配的图标', 'No matching icons found'],
+  'pro.change_icon': ['更改图标', 'Change Icon'],
+  'pro.select_icon': ['选择图标', 'Select Icon'],
+  'pro.reset_icon': ['恢复默认', 'Reset to Default'],
+  'pro.field_icon': ['提供商图标', 'Provider Icon'],
+  'pro.icon_updated': ['提供商图标已更新', 'Provider icon updated'],
+  'pro.group_providers': ['提供商', 'Providers'],
+  'pro.group_models': ['模型', 'Models'],
+  'pro.group_apps': ['应用', 'Applications'],
 
 
   // ── usage events ──────────────────────────────────────────────────────────

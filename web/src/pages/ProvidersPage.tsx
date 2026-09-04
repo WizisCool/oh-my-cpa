@@ -37,6 +37,9 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
+import { usePreference } from '../hooks/usePreference';
+import { LobeIcon, getProviderDefaultIcon } from '../components/LobeIcon';
+import { IconPickerModal } from '../components/IconPickerModal';
 import type {
   ClientAPIKeyItem,
   ProviderItem,
@@ -93,6 +96,32 @@ export const ProvidersPage: React.FC = () => {
   const [headersSectionOpen, setHeadersSectionOpen] = useState<boolean>(false);
   const [modelsSectionOpen, setModelsSectionOpen] = useState<boolean>(false);
   const [formTestModel, setFormTestModel] = useState<string>('auto');
+
+  // Stored icon preferences
+  const { value: providerIcons, set: setProviderIcons } = usePreference<Record<string, string>>(
+    'provider_icons',
+    {},
+    (raw) => (typeof raw === 'object' && raw ? (raw as Record<string, string>) : {}),
+  );
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const [targetProviderForIcon, setTargetProviderForIcon] = useState<ProviderItem | null>(null);
+  const [formIcon, setFormIcon] = useState<string>('OpenAI');
+  const [iconManuallySelected, setIconManuallySelected] = useState<boolean>(false);
+
+  const handleSelectIcon = (selectedIconId: string) => {
+    if (targetProviderForIcon) {
+      setProviderIcons({
+        ...providerIcons,
+        [targetProviderForIcon.id]: selectedIconId,
+        [targetProviderForIcon.name]: selectedIconId,
+      });
+      message.success(t('pro.icon_updated'));
+      setTargetProviderForIcon(null);
+    } else {
+      setFormIcon(selectedIconId);
+      setIconManuallySelected(true);
+    }
+  };
 
   const toggleKeyExpanded = (id: string) => {
     setExpandedKeyIds((prev) => {
@@ -233,6 +262,8 @@ export const ProvidersPage: React.FC = () => {
     setFormDisabled(false);
     setFormDisableCooling(false);
     setFormTestModel('auto');
+    setFormIcon('OpenAI');
+    setIconManuallySelected(false);
     const initKeyId = 'key-init-1';
     setFormKeys([{ id: initKeyId, apiKey: '', proxyUrl: '', weight: 1, isChanging: true }]);
     setExpandedKeyIds(new Set([initKeyId]));
@@ -255,6 +286,12 @@ export const ProvidersPage: React.FC = () => {
     setFormDisableCooling(Boolean(provider.disable_cooling));
 
     setFormTestModel('auto');
+    const existingIcon =
+      providerIcons[provider.id] ||
+      providerIcons[provider.name] ||
+      getProviderDefaultIcon(provider.family, provider.name, provider.base_url);
+    setFormIcon(existingIcon);
+    setIconManuallySelected(Boolean(providerIcons[provider.id] || providerIcons[provider.name]));
     // Populate keys
     if (provider.key_entries && provider.key_entries.length > 0) {
       setFormKeys(
@@ -360,8 +397,17 @@ export const ProvidersPage: React.FC = () => {
 
     if (editingProvider) {
       updateProviderMutation.mutate({ id: editingProvider.id, payload });
+      setProviderIcons({
+        ...providerIcons,
+        [editingProvider.id]: formIcon,
+        [formName.trim()]: formIcon,
+      });
     } else {
       createProviderMutation.mutate(payload);
+      setProviderIcons({
+        ...providerIcons,
+        [formName.trim()]: formIcon,
+      });
     }
   };
 
@@ -437,26 +483,56 @@ export const ProvidersPage: React.FC = () => {
     {
       title: t('pro.col_provider'),
       key: 'name',
-      render: (_, record) => (
-        <div>
-          <div style={{ fontWeight: 600 }}>{record.name}</div>
-          <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-            <Tag color="purple" style={{ fontFamily: 'monospace', fontSize: 10 }}>
-              {record.family}
-            </Tag>
-            {record.prefix && (
-              <Tag color="geekblue" style={{ fontSize: 10 }}>
-                prefix: {record.prefix}
-              </Tag>
-            )}
-            {record.priority != null && (
-              <Tag style={{ fontSize: 10 }}>
-                pri: {record.priority}
-              </Tag>
-            )}
+      render: (_, record) => {
+        const iconId =
+          providerIcons[record.id] ||
+          providerIcons[record.name] ||
+          getProviderDefaultIcon(record.family, record.name, record.base_url);
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                border: '1px solid var(--border)',
+                background: 'var(--surface)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                flexShrink: 0,
+                transition: 'all 0.15s ease',
+              }}
+              title={t('pro.change_icon')}
+              onClick={() => {
+                setTargetProviderForIcon(record);
+                setIconPickerOpen(true);
+              }}
+            >
+              <LobeIcon iconId={iconId} size={22} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--fg)' }}>{record.name}</div>
+              <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                <Tag color="purple" style={{ fontFamily: 'monospace', fontSize: 10, margin: 0 }}>
+                  {record.family}
+                </Tag>
+                {record.prefix && (
+                  <Tag color="geekblue" style={{ fontSize: 10, margin: 0 }}>
+                    prefix: {record.prefix}
+                  </Tag>
+                )}
+                {record.priority != null && (
+                  <Tag style={{ fontSize: 10, margin: 0 }}>
+                    pri: {record.priority}
+                  </Tag>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       title: t('pro.col_protocol'),
@@ -754,13 +830,85 @@ export const ProvidersPage: React.FC = () => {
         }
       >
         <Form layout="vertical">
+          {/* Provider Icon Card */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 14,
+              marginBottom: 16,
+              padding: '12px 14px',
+              background: 'var(--surface)',
+              borderRadius: 6,
+              border: '1px solid var(--border)',
+            }}
+          >
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 8,
+                border: '1px solid var(--border)',
+                background: 'var(--bg)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                flexShrink: 0,
+              }}
+              onClick={() => {
+                setTargetProviderForIcon(null);
+                setIconPickerOpen(true);
+              }}
+              title={t('pro.change_icon')}
+            >
+              <LobeIcon iconId={formIcon} size={30} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, color: 'var(--meta)', marginBottom: 2 }}>
+                {t('pro.field_icon')}
+              </div>
+              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--fg)' }}>
+                {formIcon}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button
+                size="small"
+                onClick={() => {
+                  setTargetProviderForIcon(null);
+                  setIconPickerOpen(true);
+                }}
+              >
+                {t('pro.change_icon')}
+              </Button>
+              {formIcon !== getProviderDefaultIcon(formFamily, formName, formBaseURL) && (
+                <Button
+                  size="small"
+                  type="link"
+                  onClick={() => {
+                    setFormIcon(getProviderDefaultIcon(formFamily, formName, formBaseURL));
+                    setIconManuallySelected(false);
+                  }}
+                >
+                  {t('pro.reset_icon')}
+                </Button>
+              )}
+            </div>
+          </div>
+
           {/* Driver & Name */}
           <Row gutter={16}>
             <Col xs={24} sm={12}>
               <Form.Item label={t('pro.field_family')} required>
                 <Select
                   value={formFamily}
-                  onChange={setFormFamily}
+                  onChange={(val) => {
+                  setFormFamily(val);
+                  if (!iconManuallySelected) {
+                    setFormIcon(getProviderDefaultIcon(val, formName, formBaseURL));
+                  }
+                }}
                   disabled={!!editingProvider}
                   options={[
                     { label: 'OpenAI 兼容 (openai-compatibility)', value: 'openai-compatibility' },
@@ -775,7 +923,13 @@ export const ProvidersPage: React.FC = () => {
               <Form.Item label={t('pro.field_name')} required>
                 <Input
                   value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
+                  onChange={(e) => {
+                  const val = e.target.value;
+                  setFormName(val);
+                  if (!iconManuallySelected) {
+                    setFormIcon(getProviderDefaultIcon(formFamily, val, formBaseURL));
+                  }
+                }}
                   placeholder={t('pro.field_name_ph')}
                 />
               </Form.Item>
@@ -795,7 +949,13 @@ export const ProvidersPage: React.FC = () => {
           >
             <Input
               value={formBaseURL}
-              onChange={(e) => setFormBaseURL(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setFormBaseURL(val);
+                if (!iconManuallySelected) {
+                  setFormIcon(getProviderDefaultIcon(formFamily, formName, val));
+                }
+              }}
               placeholder={t('pro.field_base_url_ph')}
             />
           </Form.Item>
@@ -1345,6 +1505,26 @@ export const ProvidersPage: React.FC = () => {
           />
         </div>
       </Modal>
+      {/* LobeHub Icon Picker Modal */}
+      <IconPickerModal
+        open={iconPickerOpen}
+        currentIcon={
+          targetProviderForIcon
+            ? providerIcons[targetProviderForIcon.id] ||
+              providerIcons[targetProviderForIcon.name] ||
+              getProviderDefaultIcon(
+                targetProviderForIcon.family,
+                targetProviderForIcon.name,
+                targetProviderForIcon.base_url,
+              )
+            : formIcon
+        }
+        onSelect={handleSelectIcon}
+        onClose={() => {
+          setIconPickerOpen(false);
+          setTargetProviderForIcon(null);
+        }}
+      />
     </div>
   );
 };
