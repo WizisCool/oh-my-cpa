@@ -146,12 +146,12 @@ func TestRecommendationEngine(t *testing.T) {
 	}
 
 	// 3. Auth failure
-	q3 := &NormalizedQuota{
+	quotaAuthErr := &NormalizedQuota{
 		Error: "HTTP 401 Unauthorized: token expired",
 	}
-	EvaluateStatusAndRecommendation(q3, nowMS)
-	if q3.Status != "error" || q3.Recommendation.Action != "reauth" || q3.Recommendation.Priority != "critical" {
-		t.Errorf("q3 = %+v", q3)
+	EvaluateStatusAndRecommendation(quotaAuthErr, nowMS)
+	if quotaAuthErr.Status != "error" || quotaAuthErr.Recommendation.Action != "reauth" || quotaAuthErr.Recommendation.Priority != "critical" {
+		t.Errorf("quotaAuthErr = %+v", quotaAuthErr)
 	}
 }
 
