@@ -6,9 +6,11 @@ import {
   Button,
   Input,
   InputNumber,
+  Checkbox,
   Switch,
   Typography,
   Alert,
+  Drawer,
   Modal,
   Tabs,
   Popconfirm,
@@ -70,8 +72,8 @@ export const ProvidersPage: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'providers' | 'keys'>('providers');
 
-  // Provider Modal state
-  const [providerModalOpen, setProviderModalOpen] = useState(false);
+  // Provider Drawer state
+  const [providerDrawerOpen, setProviderDrawerOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<ProviderItem | null>(null);
   const [formFamily, setFormFamily] = useState<string>('openai-compatibility');
   const [formName, setFormName] = useState<string>('');
@@ -117,7 +119,7 @@ export const ProvidersPage: React.FC = () => {
     mutationFn: (payload: SaveProviderPayload) => api.createManagementProvider(payload),
     onSuccess: () => {
       message.success(t('pro.provider_created'));
-      setProviderModalOpen(false);
+      setProviderDrawerOpen(false);
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
     },
     onError: (err: unknown) => {
@@ -131,7 +133,7 @@ export const ProvidersPage: React.FC = () => {
       api.updateManagementProvider(id, payload),
     onSuccess: () => {
       message.success(t('pro.provider_updated'));
-      setProviderModalOpen(false);
+      setProviderDrawerOpen(false);
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
     },
     onError: (err: unknown) => {
@@ -164,7 +166,7 @@ export const ProvidersPage: React.FC = () => {
     setFormKeys([{ id: 'key-init-1', apiKey: '', proxyUrl: '' }]);
     setFormHeaders([]);
     setFormModels([]);
-    setProviderModalOpen(true);
+    setProviderDrawerOpen(true);
   };
 
   const handleOpenEdit = (provider: ProviderItem) => {
@@ -233,7 +235,7 @@ export const ProvidersPage: React.FC = () => {
       setFormModels([]);
     }
 
-    setProviderModalOpen(true);
+    setProviderDrawerOpen(true);
   };
 
   const handleSaveProvider = () => {
@@ -334,6 +336,13 @@ export const ProvidersPage: React.FC = () => {
     void navigator.clipboard.writeText(text).then(() => {
       message.success(t('res.copied'));
     });
+  };
+
+  const familyDisplayNames: Record<string, string> = {
+    'openai-compatibility': 'OpenAI 兼容',
+    'codex': 'Codex / Responses',
+    'claude': 'Anthropic Claude',
+    'gemini': 'Google Gemini',
   };
 
   // Columns for Providers
@@ -622,18 +631,42 @@ export const ProvidersPage: React.FC = () => {
         ]}
       />
 
-      {/* Provider Rich Create/Edit Modal */}
-      <Modal
-        title={editingProvider ? t('pro.edit_provider_title') : t('pro.add_provider_title')}
-        open={providerModalOpen}
-        onCancel={() => setProviderModalOpen(false)}
-        onOk={handleSaveProvider}
-        confirmLoading={createProviderMutation.isPending || updateProviderMutation.isPending}
-        okText={t('common.confirm')}
-        cancelText={t('common.cancel')}
-        width={720}
+      {/* Provider Rich Drawer */}
+      <Drawer
+        title={
+          <div>
+            <div style={{ fontSize: 12, color: 'var(--meta)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              {editingProvider ? t('common.edit') : t('pro.add_provider')}
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--fg)', marginTop: 2 }}>
+              {editingProvider
+                ? `${t('common.edit')} · ${familyDisplayNames[formFamily] || formFamily}`
+                : `${t('pro.add_provider')} · ${familyDisplayNames[formFamily] || formFamily}`}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+              {t('pro.manage_resource_subtitle', { path: `/ai-providers/${formFamily}` })}
+            </div>
+          </div>
+        }
+        open={providerDrawerOpen}
+        onClose={() => setProviderDrawerOpen(false)}
+        size="large"
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, padding: '4px 0' }}>
+            <Button onClick={() => setProviderDrawerOpen(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              type="primary"
+              loading={createProviderMutation.isPending || updateProviderMutation.isPending}
+              onClick={handleSaveProvider}
+            >
+              {t('common.save')}
+            </Button>
+          </div>
+        }
       >
-        <Form layout="vertical" style={{ marginTop: 16 }}>
+        <Form layout="vertical">
           {/* Driver & Name */}
           <Row gutter={16}>
             <Col xs={24} sm={12}>
@@ -664,8 +697,14 @@ export const ProvidersPage: React.FC = () => {
 
           {/* Base URL */}
           <Form.Item
-            label={t('pro.field_base_url')}
-            extra={<span style={{ fontSize: 12, color: 'var(--meta)' }}>{t('pro.field_base_url_desc')}</span>}
+            label={
+              <span>
+                {t('pro.field_base_url')}{' '}
+                <span style={{ fontSize: 12, color: 'var(--meta)', fontWeight: 400 }}>
+                  · {t('pro.field_base_url_desc')}
+                </span>
+              </span>
+            }
           >
             <Input
               value={formBaseURL}
@@ -698,59 +737,61 @@ export const ProvidersPage: React.FC = () => {
           </Row>
 
           {/* Flags: Disabled & Disable Cooling */}
-          <Row gutter={16} style={{ marginBottom: 16 }}>
-            <Col xs={24} sm={12}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                <Switch
-                  checked={formDisabled}
-                  onChange={(checked) => setFormDisabled(checked)}
-                />
-                <div>
-                  <Text strong>{t('pro.field_disabled')}</Text>
-                  <div style={{ fontSize: 12, color: 'var(--meta)' }}>
-                    {t('pro.field_disabled_desc')}
-                  </div>
-                </div>
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ marginBottom: 12 }}>
+              <Checkbox
+                checked={formDisabled}
+                onChange={(e) => setFormDisabled(e.target.checked)}
+              >
+                <span style={{ fontWeight: 500 }}>{t('pro.field_disabled')}</span>
+              </Checkbox>
+              <div style={{ fontSize: 12, color: 'var(--meta)', marginLeft: 24, marginTop: 2 }}>
+                {t('pro.field_disabled_desc')}
               </div>
-            </Col>
-            <Col xs={24} sm={12}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                <Switch
-                  checked={formDisableCooling}
-                  onChange={(checked) => setFormDisableCooling(checked)}
-                />
-                <div>
-                  <Text strong>{t('pro.field_disable_cooling')}</Text>
-                  <div style={{ fontSize: 12, color: 'var(--meta)' }}>
-                    {t('pro.field_disable_cooling_desc')}
-                  </div>
-                </div>
+            </div>
+
+            <div>
+              <Checkbox
+                checked={formDisableCooling}
+                onChange={(e) => setFormDisableCooling(e.target.checked)}
+              >
+                <span style={{ fontWeight: 500 }}>{t('pro.field_disable_cooling')}</span>
+              </Checkbox>
+              <div style={{ fontSize: 12, color: 'var(--meta)', marginLeft: 24, marginTop: 2 }}>
+                {t('pro.field_disable_cooling_desc')}
               </div>
-            </Col>
-          </Row>
+            </div>
+          </div>
 
           {/* Section: API Keys */}
-          <Card
-            size="small"
-            title={
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>{t('pro.section_keys')} ({formKeys.length})</span>
-                <Button
-                  size="small"
-                  icon={<PlusOutlined />}
-                  onClick={() =>
-                    setFormKeys((prev) => [
-                      ...prev,
-                      { id: `key-${Date.now()}-${prev.length}`, apiKey: '', proxyUrl: '', isChanging: true },
-                    ])
-                  }
-                >
-                  {t('pro.add_key_entry')}
-                </Button>
-              </div>
-            }
-            style={{ marginBottom: 16 }}
+          <div
+            style={{
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              background: 'var(--surface)',
+              padding: 16,
+              marginBottom: 20,
+            }}
           >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>
+                {t('pro.section_keys')}{' '}
+                <span style={{ color: 'var(--meta)', fontWeight: 400, marginLeft: 4 }}>{formKeys.length}</span>
+              </div>
+              <Button
+                size="small"
+                icon={<PlusOutlined />}
+                onClick={() =>
+                  setFormKeys((prev) => [
+                    ...prev,
+                    { id: `key-${Date.now()}-${prev.length}`, apiKey: '', proxyUrl: '', isChanging: true },
+                  ])
+                }
+              >
+                {t('pro.add_key_entry')}
+              </Button>
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {formKeys.map((k, idx) => (
                 <div
@@ -758,21 +799,22 @@ export const ProvidersPage: React.FC = () => {
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 8,
-                    background: 'var(--card-bg, rgba(0,0,0,0.02))',
+                    gap: 12,
+                    background: 'var(--bg)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 4,
                     padding: '8px 12px',
-                    borderRadius: 6,
                   }}
                 >
-                  <Text strong style={{ minWidth: 60, fontSize: 12 }}>
+                  <span style={{ fontWeight: 500, fontSize: 13, minWidth: 60 }}>
                     {t('pro.key_label', { n: idx + 1 })}
-                  </Text>
+                  </span>
 
                   {k.masked && !k.isChanging ? (
-                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Tag color="success" style={{ fontFamily: 'monospace' }}>
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontFamily: 'monospace', fontSize: 13, color: 'var(--fg)', letterSpacing: '1px' }}>
                         {k.masked}
-                      </Tag>
+                      </span>
                       <Button
                         size="small"
                         type="link"
@@ -821,7 +863,7 @@ export const ProvidersPage: React.FC = () => {
                         prev.map((item) => (item.id === k.id ? { ...item, proxyUrl: e.target.value } : item))
                       )
                     }
-                    placeholder="proxy-url (optional)"
+                    placeholder="proxy-url (可选)"
                     style={{ width: 160 }}
                   />
 
@@ -836,34 +878,41 @@ export const ProvidersPage: React.FC = () => {
                 </div>
               ))}
             </div>
-          </Card>
+          </div>
 
           {/* Section: Custom Headers */}
-          <Card
-            size="small"
-            title={
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>{t('pro.section_headers')} ({formHeaders.length})</span>
-                <Button
-                  size="small"
-                  icon={<PlusOutlined />}
-                  onClick={() =>
-                    setFormHeaders((prev) => [
-                      ...prev,
-                      { id: `hdr-${Date.now()}-${prev.length}`, key: '', value: '' },
-                    ])
-                  }
-                >
-                  {t('pro.add_header_entry')}
-                </Button>
-              </div>
-            }
-            style={{ marginBottom: 16 }}
+          <div
+            style={{
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              background: 'var(--surface)',
+              padding: 16,
+              marginBottom: 20,
+            }}
           >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>
+                {t('pro.section_headers')}{' '}
+                <span style={{ color: 'var(--meta)', fontWeight: 400, marginLeft: 4 }}>{formHeaders.length}</span>
+              </div>
+              <Button
+                size="small"
+                icon={<PlusOutlined />}
+                onClick={() =>
+                  setFormHeaders((prev) => [
+                    ...prev,
+                    { id: `hdr-${Date.now()}-${prev.length}`, key: '', value: '' },
+                  ])
+                }
+              >
+                {t('pro.add_header_entry')}
+              </Button>
+            </div>
+
             {formHeaders.length === 0 ? (
-              <Text type="secondary" style={{ fontSize: 12 }}>
+              <div style={{ color: 'var(--meta)', fontSize: 13, textAlign: 'center', padding: '12px 0' }}>
                 -
-              </Text>
+              </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {formHeaders.map((h) => (
@@ -899,33 +948,40 @@ export const ProvidersPage: React.FC = () => {
                 ))}
               </div>
             )}
-          </Card>
+          </div>
 
           {/* Section: Custom Models */}
-          <Card
-            size="small"
-            title={
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>{t('pro.section_models')} ({formModels.length})</span>
-                <Button
-                  size="small"
-                  icon={<PlusOutlined />}
-                  onClick={() =>
-                    setFormModels((prev) => [
-                      ...prev,
-                      { id: `mdl-${Date.now()}-${prev.length}`, name: '', alias: '' },
-                    ])
-                  }
-                >
-                  {t('pro.add_model_entry')}
-                </Button>
-              </div>
-            }
+          <div
+            style={{
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              background: 'var(--surface)',
+              padding: 16,
+            }}
           >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>
+                {t('pro.section_models')}{' '}
+                <span style={{ color: 'var(--meta)', fontWeight: 400, marginLeft: 4 }}>{formModels.length}</span>
+              </div>
+              <Button
+                size="small"
+                icon={<PlusOutlined />}
+                onClick={() =>
+                  setFormModels((prev) => [
+                    ...prev,
+                    { id: `mdl-${Date.now()}-${prev.length}`, name: '', alias: '' },
+                  ])
+                }
+              >
+                {t('pro.add_model_entry')}
+              </Button>
+            </div>
+
             {formModels.length === 0 ? (
-              <Text type="secondary" style={{ fontSize: 12 }}>
+              <div style={{ color: 'var(--meta)', fontSize: 13, textAlign: 'center', padding: '12px 0' }}>
                 -
-              </Text>
+              </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {formModels.map((m) => (
@@ -961,9 +1017,9 @@ export const ProvidersPage: React.FC = () => {
                 ))}
               </div>
             )}
-          </Card>
+          </div>
         </Form>
-      </Modal>
+      </Drawer>
 
       {/* Add Client Key Modal */}
       <Modal
