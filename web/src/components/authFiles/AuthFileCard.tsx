@@ -319,7 +319,7 @@ export const AuthFileCard: React.FC<AuthFileCardProps> = ({
           checked={!disabled}
           disabled={busy || file.runtime_only}
           onChange={onToggle}
-          aria-label={t('af.select_one', { name: file.name })}
+          aria-label={t('af.status_toggle_label', { name: file.name })}
         />
       </div>
     </Card>

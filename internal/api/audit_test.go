@@ -30,7 +30,7 @@ func startAuditTestEnvironment(t *testing.T) (*http.Client, string, *repository.
 			_, _ = writer.Write([]byte(`{"account":"secret-downloaded-token","provider":"openai"}`))
 		case strings.HasPrefix(path, "/v0/management/auth-files") && request.Method == http.MethodDelete:
 			writer.WriteHeader(http.StatusOK)
-			_, _ = writer.Write([]byte(`{"deleted":1}`))
+			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 		case strings.HasPrefix(path, "/v0/management/logs") && request.Method == http.MethodDelete:
 			writer.WriteHeader(http.StatusOK)
 			_, _ = writer.Write([]byte(`{"status":"cleared"}`))

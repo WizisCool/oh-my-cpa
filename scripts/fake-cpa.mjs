@@ -11,6 +11,43 @@ function json(response, status, body, headers = {}) {
 
 export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } = {}) {
   const requests = [];
+  const initialAuthFiles = [
+    {
+      id: 'auth-e2e-1', auth_index: 'auth-index-e2e-1', name: 'fixture-auth.json', type: 'codex', provider: 'codex',
+      label: 'Primary fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: false,
+      email: 'owner@example.test', account_type: 'oauth', account: FAKE_ACCOUNT_SECRET,
+      id_token: { chatgpt_account_id: 'chatgpt-e2e-account', chatgpt_subscription_active_until: Math.floor((Date.now() + 24 * 86400000) / 1000), plan_type: 'pro' },
+      success: 12, failed: 1, recent_requests: [{ time: '2026-09-01T12:00:00Z', success: 12, failed: 1 }],
+      models: [{ id: 'gpt-e2e', display_name: 'GPT E2E' }], priority: 1, weight: 1, note: 'deterministic fixture',
+    },
+    {
+      id: 'auth-e2e-2', auth_index: 'auth-index-e2e-2', name: 'claude-fixture.json', type: 'claude', provider: 'claude',
+      label: 'Claude fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: false,
+      success: 8, failed: 0, models: [{ id: 'claude-3-5-sonnet', display_name: 'Claude 3.5 Sonnet' }], priority: 1, weight: 1,
+    },
+    {
+      id: 'auth-e2e-3', auth_index: 'auth-index-e2e-3', name: 'antigravity-fixture.json', type: 'antigravity', provider: 'antigravity',
+      project_id: 'e2e-project', label: 'Antigravity fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: false,
+      success: 5, failed: 0, models: [], priority: 1, weight: 1,
+    },
+    {
+      id: 'auth-e2e-4', auth_index: 'auth-index-e2e-4', name: 'kimi-fixture.json', type: 'kimi', provider: 'kimi',
+      label: 'Kimi fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: false,
+      success: 3, failed: 0, models: [], priority: 1, weight: 1,
+    },
+    {
+      id: 'auth-e2e-5', auth_index: 'auth-index-e2e-5', name: 'xai-fixture.json', type: 'xai', provider: 'xai',
+      label: 'xAI fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: false,
+      success: 2, failed: 0, models: [], priority: 1, weight: 1,
+    },
+    {
+      id: 'auth-e2e-virtual', auth_index: 'auth-index-e2e-virtual', name: 'virtual-runtime.json', type: 'codex', provider: 'codex',
+      label: 'Virtual fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: true,
+      success: 0, failed: 0, models: [], priority: 0, weight: 1,
+    },
+  ];
+  let authFiles = JSON.parse(JSON.stringify(initialAuthFiles));
+
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url, 'http://fake-cpa.local');
     const chunks = [];
@@ -24,36 +61,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
     const path = url.pathname.replace(/^\/v0\/management/, '');
 
     if (request.method === 'GET' && path === '/auth-files') {
-      json(response, 200, { files: [
-        {
-          id: 'auth-e2e-1', auth_index: 'auth-index-e2e-1', name: 'fixture-auth.json', type: 'codex', provider: 'codex',
-          label: 'Primary fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: false,
-          email: 'owner@example.test', account_type: 'oauth', account: FAKE_ACCOUNT_SECRET,
-          id_token: { chatgpt_account_id: 'chatgpt-e2e-account', chatgpt_subscription_active_until: Math.floor((Date.now() + 24 * 86400000) / 1000), plan_type: 'pro' },
-          success: 12, failed: 1, recent_requests: [{ time: '2026-09-01T12:00:00Z', success: 12, failed: 1 }],
-          models: [{ id: 'gpt-e2e', display_name: 'GPT E2E' }], priority: 1, weight: 1, note: 'deterministic fixture',
-        },
-        {
-          id: 'auth-e2e-2', auth_index: 'auth-index-e2e-2', name: 'claude-fixture.json', type: 'claude', provider: 'claude',
-          label: 'Claude fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: false,
-          success: 8, failed: 0, models: [{ id: 'claude-3-5-sonnet', display_name: 'Claude 3.5 Sonnet' }], priority: 1, weight: 1,
-        },
-        {
-          id: 'auth-e2e-3', auth_index: 'auth-index-e2e-3', name: 'antigravity-fixture.json', type: 'antigravity', provider: 'antigravity',
-          project_id: 'e2e-project', label: 'Antigravity fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: false,
-          success: 5, failed: 0, models: [], priority: 1, weight: 1,
-        },
-        {
-          id: 'auth-e2e-4', auth_index: 'auth-index-e2e-4', name: 'kimi-fixture.json', type: 'kimi', provider: 'kimi',
-          label: 'Kimi fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: false,
-          success: 3, failed: 0, models: [], priority: 1, weight: 1,
-        },
-        {
-          id: 'auth-e2e-5', auth_index: 'auth-index-e2e-5', name: 'xai-fixture.json', type: 'xai', provider: 'xai',
-          label: 'xAI fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: false,
-          success: 2, failed: 0, models: [], priority: 1, weight: 1,
-        },
-      ] });
+      json(response, 200, { files: authFiles });
       return;
     }
     if (request.method === 'GET' && path === '/auth-files/models') {
@@ -61,15 +69,64 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       return;
     }
     if (request.method === 'PATCH' && path === '/auth-files/status') {
-      json(response, 200, { status: 'ok' });
+      const bodyText = Buffer.concat(chunks).toString('utf8');
+      let payload = {};
+      try { payload = JSON.parse(bodyText || '{}'); } catch {}
+      const target = authFiles.find(f => f.name === payload.name);
+      if (target) {
+        target.disabled = Boolean(payload.disabled);
+        target.status = payload.disabled ? 'disabled' : 'ok';
+      }
+      json(response, 200, { status: 'ok', disabled: payload.disabled });
       return;
     }
     if (request.method === 'PATCH' && path === '/auth-files/fields') {
+      const bodyText = Buffer.concat(chunks).toString('utf8');
+      let payload = {};
+      try { payload = JSON.parse(bodyText || '{}'); } catch {}
+      const target = authFiles.find(f => f.name === payload.name);
+      if (target) {
+        if (payload.priority !== undefined) target.priority = payload.priority;
+        if (payload.weight !== undefined) target.weight = payload.weight;
+        if (payload.note !== undefined) target.note = payload.note;
+      }
       json(response, 200, { status: 'ok' });
       return;
     }
     if (request.method === 'DELETE' && path === '/auth-files') {
-      json(response, 200, { status: 'ok', deleted: 1, files: ['claude-fixture.json'] });
+      const bodyText = Buffer.concat(chunks).toString('utf8');
+      let requestedNames = [];
+      try {
+        const parsed = JSON.parse(bodyText || '{}');
+        requestedNames = parsed.names || (parsed.name ? [parsed.name] : []);
+      } catch {}
+      if (requestedNames.length === 0 && url.searchParams.get('name')) {
+        requestedNames = [url.searchParams.get('name')];
+      }
+      const deletedFiles = [];
+      const failed = [];
+      for (const name of requestedNames) {
+        if (name === 'fail-delete.json') {
+          failed.push({ name, error: 'permission denied' });
+          continue;
+        }
+        const idx = authFiles.findIndex(f => f.name === name);
+        if (idx >= 0) {
+          authFiles.splice(idx, 1);
+          deletedFiles.push(name);
+        } else {
+          failed.push({ name, error: 'file not found' });
+        }
+      }
+      if (failed.length > 0) {
+        json(response, 207, { status: 'partial', deleted: deletedFiles.length, files: deletedFiles, failed });
+        return;
+      }
+      if (requestedNames.length === 1) {
+        json(response, 200, { status: 'ok' });
+        return;
+      }
+      json(response, 200, { status: 'ok', deleted: deletedFiles.length, files: deletedFiles });
       return;
     }
     if (request.method === 'GET' && path === '/config') {

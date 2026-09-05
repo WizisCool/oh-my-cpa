@@ -63,6 +63,7 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
             size="small"
             type="link"
             style={{ padding: 0 }}
+            disabled={isMutating}
             onClick={onSelectPage}
           >
             {t('af.select_page')}
@@ -73,6 +74,7 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
           type="link"
           icon={<CloseOutlined />}
           style={{ padding: 0, color: 'var(--muted)' }}
+          disabled={isMutating}
           onClick={onClearSelection}
         >
           {t('af.clear_selection')}

@@ -415,6 +415,10 @@ func normalizeDeleteResponse(requested []string, cpaResp map[string]any) ([]stri
 	seenSuccess := make(map[string]bool)
 	confirmedDeleted := make([]string, 0, len(requested))
 
+	_, hasFiles := cpaResp["files"]
+	_, hasFailed := cpaResp["failed"]
+	_, hasDeleted := cpaResp["deleted"]
+
 	if rawFiles, ok := cpaResp["files"].([]any); ok {
 		for _, item := range rawFiles {
 			rawName, isStr := item.(string)
@@ -424,22 +428,45 @@ func normalizeDeleteResponse(requested []string, cpaResp map[string]any) ([]stri
 			confirmedDeleted = append(confirmedDeleted, rawName)
 			seenSuccess[rawName] = true
 		}
-	} else if len(requested) == 1 && len(failures) == 0 {
-		// Documented CPA single-file contract: returns {"status": "ok"} or {"deleted": 1} without files array
+	} else if len(requested) == 1 && !hasFiles && !hasFailed && !hasDeleted {
+		// Documented CPA single-file contract: returns {"status": "ok"} without files/failed/deleted keys
 		name := requested[0]
 		if status, isStr := cpaResp["status"].(string); isStr && (status == "ok" || status == "success") {
-			confirmedDeleted = append(confirmedDeleted, name)
-			seenSuccess[name] = true
-		} else if deleted, isNum := cpaResp["deleted"].(float64); isNum && deleted == 1 {
-			confirmedDeleted = append(confirmedDeleted, name)
-			seenSuccess[name] = true
-		} else if deletedInt, isInt := cpaResp["deleted"].(int); isInt && deletedInt == 1 {
 			confirmedDeleted = append(confirmedDeleted, name)
 			seenSuccess[name] = true
 		}
 	}
 
-	// 3. Any requested file neither confirmed deleted nor explicitly failed is unconfirmed
+	// 3. Validate consistency if `deleted` count is present
+	if hasDeleted {
+		var upstreamDeletedCount int64 = -1
+		if dFloat, ok := cpaResp["deleted"].(float64); ok && dFloat >= 0 {
+			upstreamDeletedCount = int64(dFloat)
+		} else if dInt, ok := cpaResp["deleted"].(int); ok && dInt >= 0 {
+			upstreamDeletedCount = int64(dInt)
+		} else if dInt64, ok := cpaResp["deleted"].(int64); ok && dInt64 >= 0 {
+			upstreamDeletedCount = dInt64
+		} else if dNum, ok := cpaResp["deleted"].(json.Number); ok {
+			if parsed, err := dNum.Int64(); err == nil && parsed >= 0 {
+				upstreamDeletedCount = parsed
+			}
+		}
+
+		// If upstream explicitly reports deleted == 0, contradiction overrides success
+		if upstreamDeletedCount == 0 && len(confirmedDeleted) > 0 {
+			for _, name := range confirmedDeleted {
+				failures = append(failures, authFileDeleteFailureItem{
+					Name:  name,
+					Error: "deletion unconfirmed by upstream",
+				})
+				seenFailed[name] = true
+			}
+			confirmedDeleted = confirmedDeleted[:0]
+			seenSuccess = make(map[string]bool)
+		}
+	}
+
+	// 4. Any requested file neither confirmed deleted nor explicitly failed is unconfirmed
 	for _, name := range requested {
 		if !seenSuccess[name] && !seenFailed[name] {
 			failures = append(failures, authFileDeleteFailureItem{
@@ -450,7 +477,7 @@ func normalizeDeleteResponse(requested []string, cpaResp map[string]any) ([]stri
 		}
 	}
 
-	// 4. Compute status
+	// 5. Compute status
 	if len(confirmedDeleted) == len(requested) && len(failures) == 0 {
 		return confirmedDeleted, failures, "ok"
 	}

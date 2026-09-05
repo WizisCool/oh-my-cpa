@@ -306,6 +306,9 @@ const DICT: Record<string, [string, string]> = {
   'af.status_disabled_badge': ['已禁用', 'DISABLED'],
   'af.status_problem_badge': ['异常', 'PROBLEM'],
   'af.status_virtual_badge': ['虚拟', 'VIRTUAL'],
+  'af.status_toggle_label': ['切换 {name} 启用状态', 'Toggle enable status for {name}'],
+  'af.val_priority_int': ['优先级必须为 0 到 100 之间的整数', 'Priority must be an integer between 0 and 100'],
+  'af.val_weight_int': ['权重必须为 0 到 1000 之间的整数', 'Weight must be an integer between 0 and 1000'],
 
   // ── config management ───────────────────────────────────────────────────
   'cfg.search_placeholder': ['搜索配置项（标签或 YAML 键名）', 'Search settings (label or YAML key)'],

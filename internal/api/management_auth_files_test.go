@@ -635,42 +635,69 @@ func TestManagementAuthFilesEmptyOrContradictoryResponse(t *testing.T) {
 	}
 }
 
-func TestManagementAuthFilesConflictingSuccessFailure(t *testing.T) {
-	// If upstream reports both files: ["conflict.json"] and failed: [{"name": "conflict.json"}],
-	// failure must take precedence.
-	handler := func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("Content-Type", "application/json")
-		if request.URL.Path == "/v0/management/auth-files" && request.Method == http.MethodDelete {
-			writer.WriteHeader(http.StatusOK)
-			_, _ = writer.Write([]byte(`{"files":["conflict.json"],"failed":[{"name":"conflict.json","error":"busy"}]}`))
-			return
-		}
-		writer.WriteHeader(http.StatusOK)
-		_, _ = writer.Write([]byte(`{"status":"success"}`))
+func TestNormalizeDeleteResponseTableDriven(t *testing.T) {
+	tests := []struct {
+		name              string
+		requested         []string
+		cpaResp           map[string]any
+		expectedStatus    string
+		expectedDeleted   []string
+		expectedFailCount int
+	}{
+		{
+			name:              "single file documented ok",
+			requested:         []string{"test.json"},
+			cpaResp:           map[string]any{"status": "ok"},
+			expectedStatus:    "ok",
+			expectedDeleted:   []string{"test.json"},
+			expectedFailCount: 0,
+		},
+		{
+			name:              "contradictory status ok with deleted 0",
+			requested:         []string{"test.json"},
+			cpaResp:           map[string]any{"status": "ok", "deleted": 0},
+			expectedStatus:    "failure",
+			expectedDeleted:   []string{},
+			expectedFailCount: 1,
+		},
+		{
+			name:              "malformed files and failed",
+			requested:         []string{"test.json"},
+			cpaResp:           map[string]any{"files": "not-an-array", "failed": 123},
+			expectedStatus:    "failure",
+			expectedDeleted:   []string{},
+			expectedFailCount: 1,
+		},
+		{
+			name:              "batch count-only response without files",
+			requested:         []string{"a.json", "b.json"},
+			cpaResp:           map[string]any{"deleted": 2},
+			expectedStatus:    "failure",
+			expectedDeleted:   []string{},
+			expectedFailCount: 2,
+		},
+		{
+			name:              "case distinct names",
+			requested:         []string{"File.json", "file.json"},
+			cpaResp:           map[string]any{"files": []any{"File.json"}},
+			expectedStatus:    "partial",
+			expectedDeleted:   []string{"File.json"},
+			expectedFailCount: 1,
+		},
 	}
-	client, baseURL, _ := startAuthFilesTestServer(t, "management-secret-value", handler)
-	base := baseURL + "/omc/api/v1/management/auth-files"
 
-	response, raw := doJSON(t, client, http.MethodDelete, base, `{"names":["conflict.json"]}`)
-	if response.StatusCode != http.StatusMultiStatus {
-		t.Fatalf("expected status 207, got %d: %s", response.StatusCode, raw)
-	}
-	var res struct {
-		Status  string `json:"status"`
-		Deleted int    `json:"deleted"`
-		Files   []string `json:"files"`
-		Failed  []struct {
-			Name  string `json:"name"`
-			Error string `json:"error"`
-		} `json:"failed"`
-	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		t.Fatal(err)
-	}
-	if res.Deleted != 0 || len(res.Files) != 0 {
-		t.Fatalf("conflicted file must not be counted as deleted: %#v", res)
-	}
-	if len(res.Failed) != 1 || res.Failed[0].Error != "file in use" {
-		t.Fatalf("expected sanitized 'file in use', got %#v", res.Failed)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			deleted, failures, status := normalizeDeleteResponse(tc.requested, tc.cpaResp)
+			if status != tc.expectedStatus {
+				t.Fatalf("expected status %s, got %s", tc.expectedStatus, status)
+			}
+			if len(deleted) != len(tc.expectedDeleted) {
+				t.Fatalf("expected deleted %#v, got %#v", tc.expectedDeleted, deleted)
+			}
+			if len(failures) != tc.expectedFailCount {
+				t.Fatalf("expected %d failures, got %d (%#v)", tc.expectedFailCount, len(failures), failures)
+			}
+		})
 	}
 }

@@ -200,7 +200,7 @@ try {
     await codexTab.click();
     await page.waitForTimeout(300);
     const codexCount = await page.locator('.auth-files-page .ant-card').count();
-    check('auth-files provider tab filters to Codex', codexCount === 1, `count=${codexCount}`);
+    check('auth-files provider tab filters to Codex', codexCount === 2, `count=${codexCount}`);
     const allTab = page.locator('.auth-files-page .ant-tabs-tab').first();
     await allTab.click();
     await page.waitForTimeout(300);
@@ -261,7 +261,39 @@ try {
     await clearBtn.click();
   }
 
-  // 7. Viewports at 390px and 320px for auth-files
+  // 7. Actual status toggle on card
+  const kimiCard = page.locator('.auth-files-page .ant-card').filter({ hasText: 'kimi-fixture.json' }).first();
+  check('auth-files kimi card found', await kimiCard.isVisible());
+  const kimiSwitch = kimiCard.locator('.ant-switch');
+  await kimiSwitch.click();
+  await page.waitForTimeout(800);
+  check('auth-files single toggle disables card', await kimiCard.getByText(/DISABLED|已禁用/).first().isVisible());
+  await kimiSwitch.click();
+  await page.waitForTimeout(800);
+  check('auth-files single toggle re-enables card', await kimiCard.getByText(/ACTIVE|正常/).first().isVisible());
+
+  // 8. Runtime-only card guard
+  const runtimeCard = page.locator('.auth-files-page .ant-card').filter({ hasText: 'virtual-runtime.json' }).first();
+  check('auth-files runtime card renders VIRTUAL badge', await runtimeCard.getByText(/VIRTUAL|虚拟/).first().isVisible());
+  check('auth-files runtime card has no selection checkbox', (await runtimeCard.locator('input[type="checkbox"]').count()) === 0);
+  check('auth-files runtime card switch is disabled', await runtimeCard.locator('.ant-switch-disabled').isVisible());
+
+  // 9. Drawer save submits patch and updates UI
+  const xaiCard = page.locator('.auth-files-page .ant-card').filter({ hasText: 'xai-fixture.json' }).first();
+  const xaiEditBtn = xaiCard.locator('button').filter({ hasText: /编辑|Edit/i });
+  await xaiEditBtn.click();
+  const saveDrawer = page.locator('.ant-drawer');
+  await saveDrawer.waitFor({ state: 'visible', timeout: 5000 });
+  const noteInput = saveDrawer.locator('textarea').first();
+  await noteInput.fill('persisted note by acceptance test');
+  const saveBtn = saveDrawer.locator('button').filter({ hasText: /保存|Save/i }).first();
+  await saveBtn.click();
+  await page.locator('.ant-drawer-open').waitFor({ state: 'hidden', timeout: 5000 });
+  const updatedNote = xaiCard.getByText('persisted note by acceptance test');
+  await updatedNote.waitFor({ state: 'visible', timeout: 5000 });
+  check('auth-files card displays updated note after save', await updatedNote.isVisible());
+
+  // 10. Viewports at 390px and 320px for auth-files
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 800 });
     await page.waitForTimeout(200);

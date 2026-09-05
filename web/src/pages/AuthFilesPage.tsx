@@ -186,18 +186,20 @@ export const AuthFilesPage: React.FC = () => {
     [pagedFiles]
   );
 
-  const invalidate = (clearSelection = false) => {
+  const invalidate = async (clearSelection = false) => {
     if (clearSelection) {
       setSelected([]);
     }
-    queryClient.invalidateQueries({ queryKey: ['management-auth-files'] });
-    queryClient.invalidateQueries({ queryKey: ['management-overview'] });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['management-auth-files'] }),
+      queryClient.invalidateQueries({ queryKey: ['management-overview'] }),
+    ]);
   };
 
   // Upload mutation
   const uploadMutation = useMutation({
     mutationFn: (uploadFiles: File[]) => api.uploadManagementAuthFiles(uploadFiles),
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       if (result.failed && result.failed.length > 0) {
         modal.warning({
           title: t('af.failure_details_title'),
@@ -214,9 +216,12 @@ export const AuthFilesPage: React.FC = () => {
       } else {
         message.success(t('af.uploaded', { n: result.uploaded ?? 0 }));
       }
-      invalidate(false);
+      await invalidate(false);
     },
     onError: (error) => message.error(safeError(error, t)),
+    onSettled: () => {
+      releaseLock();
+    },
   });
 
   // Single file download (with runtime-only guard)
@@ -247,7 +252,7 @@ export const AuthFilesPage: React.FC = () => {
       if (isConfirmed) {
         message.success(t('af.deleted', { n: 1 }));
         setSelected((prev) => prev.filter((n) => n !== name));
-        invalidate(false);
+        await invalidate(false);
       } else {
         const errMsg = (result.failed && result.failed[0]?.error) || t('af.request_failed');
         message.error(errMsg);
@@ -275,7 +280,7 @@ export const AuthFilesPage: React.FC = () => {
       setBusyFiles((prev) => ({ ...prev, [target.name]: true }));
       const isCurrentlyDisabled = isAuthFileDisabled(target);
       await api.setManagementAuthFileStatus(target.name, !isCurrentlyDisabled, target.auth_index);
-      invalidate(false);
+      await invalidate(false);
     } catch (err) {
       message.error(safeError(err, t));
     } finally {
@@ -329,7 +334,7 @@ export const AuthFilesPage: React.FC = () => {
           : t('af.batch_enable_success', { n: outcome.succeeded.length });
         message.success(successMsg);
       }
-      invalidate(false);
+      await invalidate(false);
     } catch (err) {
       message.error(safeError(err, t));
     } finally {
@@ -389,7 +394,7 @@ export const AuthFilesPage: React.FC = () => {
       } else if (confirmedDeletedNames.length > 0) {
         message.success(t('af.deleted', { n: confirmedDeletedNames.length }));
       }
-      invalidate(false);
+      await invalidate(false);
     } catch (err) {
       message.error(safeError(err, t));
     } finally {
@@ -398,21 +403,21 @@ export const AuthFilesPage: React.FC = () => {
   };
 
   const handleSelectPage = () => {
-    if (isOperating) return;
+    if (operationLockRef.current) return;
     setSelected((prev) => Array.from(new Set([...prev, ...selectableOnPage])));
   };
 
   const handleClearSelection = () => {
-    if (isOperating) return;
+    if (operationLockRef.current) return;
     setSelected([]);
   };
 
   const handleUploadChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const filesToUpload = Array.from(event.target.files ?? []);
     event.target.value = '';
-    if (filesToUpload.length > 0) {
-      uploadMutation.mutate(filesToUpload);
-    }
+    if (filesToUpload.length === 0) return;
+    if (!acquireLock()) return;
+    uploadMutation.mutate(filesToUpload);
   };
 
   if (filesQuery.isLoading) {

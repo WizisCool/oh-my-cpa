@@ -317,7 +317,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                       type: 'integer',
                       min: 0,
                       max: 100,
-                      message: 'Priority must be an integer between 0 and 100',
+                      message: t('af.val_priority_int'),
                     },
                   ]}
                 >
@@ -331,7 +331,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                       type: 'integer',
                       min: 0,
                       max: 1000,
-                      message: 'Weight must be an integer between 0 and 1000',
+                      message: t('af.val_weight_int'),
                     },
                   ]}
                 >
