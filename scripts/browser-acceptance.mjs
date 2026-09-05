@@ -260,6 +260,18 @@ try {
   const replayError = await codexCard.getByText(/提交失败|failed to submit/i).count();
   check('oauth replay callback shows no error', replayError === 0, `errorBadges=${replayError}`);
 
+  // Plugin-discovered OAuth: a CPA plugin advertising supports_oauth with an
+  // oauth_provider joins the page with the same start/poll flow, and shows
+  // the plugin's own logo (data-URI in the fixture, no network needed).
+  const pluginCard = page.locator('[data-oauth-card="iflow"]');
+  await pluginCard.waitFor({ state: 'visible', timeout: 15000 });
+  check('oauth page renders plugin-discovered provider card', (await pluginCard.count()) > 0);
+  check('plugin oauth card shows plugin logo', (await pluginCard.locator('img').count()) > 0);
+  const pluginStart = page.locator('[data-oauth-start="iflow"]');
+  await pluginStart.click();
+  await pluginCard.getByText(/等待|waiting/i).first().waitFor({ state: 'visible', timeout: 15000 });
+  check('plugin oauth start polls waiting state', true);
+
   // Bundle budget check
   const assetsDir = path.join(root, 'web', 'dist', 'assets');
   if (fs.existsSync(assetsDir)) {

@@ -244,16 +244,32 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       return;
     }
     if (request.method === 'GET' && path === '/plugins') {
-      json(response, 200, { plugins: [{
-        id: 'fixture-logger',
-        name: 'Request Logger Plugin',
-        description: 'Audits and logs request metadata to internal store',
-        version: '1.0.0',
-        author: 'cpa-official',
-        enabled: true,
-        permissions: ['read_request', 'write_log'],
-        config: { level: 'info' }
-      }] });
+      json(response, 200, { plugins: [
+        {
+          id: 'fixture-logger',
+          name: 'Request Logger Plugin',
+          description: 'Audits and logs request metadata to internal store',
+          version: '1.0.0',
+          author: 'cpa-official',
+          enabled: true,
+          permissions: ['read_request', 'write_log'],
+          config: { level: 'info' }
+        },
+        {
+          id: 'iflow-auth',
+          name: 'iFlow Alliance Auth',
+          description: 'iFlow alliance OAuth login plugin',
+          version: '1.0.0',
+          author: 'cpa-official',
+          enabled: true,
+          effective_enabled: true,
+          registered: true,
+          supports_oauth: true,
+          oauth_provider: 'iflow',
+          logo: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%234F46E5'/%3E%3Ctext x='12' y='16' font-size='9' font-family='monospace' fill='white' text-anchor='middle'%3EiF%3C/text%3E%3C/svg%3E",
+          permissions: ['oauth'],
+        },
+      ] });
       return;
     }
     if (request.method === 'GET' && path === '/plugin-store') {

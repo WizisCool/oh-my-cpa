@@ -59,6 +59,7 @@ interface PluginOAuthDefinition {
   title: string;
   rawTitle: string;
   description: string;
+  logo?: string;
   flowKind: 'manual-callback';
 }
 
@@ -236,6 +237,7 @@ export const OAuthPage: React.FC = () => {
         title: t('oauth.plugin_title', { name: title }),
         rawTitle: title,
         description: plugin.description?.trim() || t('oauth.plugin_hint', { name: title }),
+        logo: (plugin.logo || plugin.metadata?.logo || '').trim() || undefined,
         flowKind: 'manual-callback',
       });
     }
@@ -614,6 +616,26 @@ export const OAuthPage: React.FC = () => {
     }
   };
 
+  // Plugin logos come straight from the plugin manifest (store logos are
+  // absolute/data URLs). A logo that fails to load degrades to the
+  // name-matched lobe icon, mirroring CPAMC's plug fallback.
+  const PluginLogo: React.FC<{ logo?: string; fallbackIconId: string }> = ({ logo, fallbackIconId }) => {
+    const [failed, setFailed] = React.useState(false);
+    if (logo && !failed) {
+      return (
+        <img
+          src={logo}
+          alt=""
+          width={28}
+          height={28}
+          style={{ borderRadius: 6, objectFit: 'contain', display: 'block' }}
+          onError={() => setFailed(true)}
+        />
+      );
+    }
+    return <LobeIcon iconId={fallbackIconId} size={28} />;
+  };
+
   const renderIcon = (card: OAuthCardDefinition) => {
     const iconId = card.kind === 'builtin'
       ? card.iconId
@@ -621,7 +643,11 @@ export const OAuthPage: React.FC = () => {
 
     return (
       <div className={styles.iconBox}>
-        <LobeIcon iconId={iconId} size={28} />
+        {card.kind === 'plugin' ? (
+          <PluginLogo key={card.logo || 'none'} logo={card.logo} fallbackIconId={iconId} />
+        ) : (
+          <LobeIcon iconId={iconId} size={28} />
+        )}
       </div>
     );
   };
