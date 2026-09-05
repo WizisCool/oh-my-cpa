@@ -278,8 +278,17 @@ func TestServiceAllProvidersContract(t *testing.T) {
 	if !calledURLs[CodexUsageURL] {
 		t.Errorf("expected Codex URL to be called")
 	}
-	if calledHeaders[CodexUsageURL]["Openai-Account-Id"] != "acc-openai-123" {
-		t.Errorf("expected Openai-Account-Id header on codex call")
+	if calledHeaders[CodexUsageURL]["Chatgpt-Account-Id"] != "acc-openai-123" {
+		t.Errorf("expected Chatgpt-Account-Id header on codex call, got %q", calledHeaders[CodexUsageURL]["Chatgpt-Account-Id"])
+	}
+	if calledHeaders[CodexUsageURL]["Authorization"] != "Bearer $TOKEN$" {
+		t.Errorf("expected CPA credential marker on codex call, got %q", calledHeaders[CodexUsageURL]["Authorization"])
+	}
+	if calledHeaders[AntigravityQuotaURLDaily]["Authorization"] != "Bearer $TOKEN$" {
+		t.Errorf("expected CPA credential marker on antigravity call, got %q", calledHeaders[AntigravityQuotaURLDaily]["Authorization"])
+	}
+	if calledHeaders[ClaudeUsageURL]["Authorization"] != "Bearer $TOKEN$" {
+		t.Errorf("expected CPA credential marker on claude call, got %q", calledHeaders[ClaudeUsageURL]["Authorization"])
 	}
 
 	// 4. Kimi
@@ -296,6 +305,9 @@ func TestServiceAllProvidersContract(t *testing.T) {
 	if !calledURLs[KimiUsageURL] {
 		t.Errorf("expected Kimi URL to be called")
 	}
+	if calledHeaders[KimiUsageURL]["Authorization"] != "Bearer $TOKEN$" {
+		t.Errorf("expected CPA credential marker on kimi call, got %q", calledHeaders[KimiUsageURL]["Authorization"])
+	}
 
 	// 5. xAI
 	xaiFile := management.AuthFile{
@@ -310,6 +322,9 @@ func TestServiceAllProvidersContract(t *testing.T) {
 	}
 	if !calledURLs[XaiBillingMonthlyURL] {
 		t.Errorf("expected xAI billing URL to be called")
+	}
+	if calledHeaders[XaiBillingMonthlyURL]["Authorization"] != "Bearer $TOKEN$" {
+		t.Errorf("expected CPA credential marker on xai call, got %q", calledHeaders[XaiBillingMonthlyURL]["Authorization"])
 	}
 }
 

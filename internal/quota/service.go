@@ -190,6 +190,13 @@ func resolveAntigravityProjectID(file management.AuthFile) string {
 }
 
 func resolveCodexAccountID(file management.AuthFile) string {
+	// Prefer the ChatGPT account id from CPA-projected id_token claims. The
+	// auth-file Account column holds the login email, which the usage
+	// endpoint ignores (but does not reject), so a wrong-looking id must
+	// never shadow the real claim.
+	if accountID := file.CodexChatgptAccountID(); accountID != "" {
+		return accountID
+	}
 	if acc := strings.TrimSpace(file.Account); acc != "" {
 		return acc
 	}
@@ -309,12 +316,17 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.Au
 }
 
 func (s *Service) fetchCodexQuota(ctx context.Context, file management.AuthFile, nowMS int64) (*QuotaPlan, []QuotaWindow, *CodexResetCreditsInfo, error) {
-	headers := map[string]string{
-		"User-Agent": CodexUserAgent,
-		"Accept":     "application/json",
-	}
+	// CPA substitutes "Bearer $TOKEN$" with the stored OAuth access token
+	// for auth_index (see management.QuotaTokenPlaceholder). Without the
+	// marker CPA forwards the request with no credential and every OAuth
+	// refresh fails with 401.
+	headers := management.WithQuotaCredential(map[string]string{
+		"Content-Type": "application/json",
+		"User-Agent":   CodexUserAgent,
+		"Accept":       "application/json",
+	})
 	if accountID := resolveCodexAccountID(file); accountID != "" {
-		headers["Openai-Account-Id"] = accountID
+		headers["Chatgpt-Account-Id"] = accountID
 	}
 
 	resp, err := s.SafeApiCall(ctx, file.AuthIndex, "GET", CodexUsageURL, headers, "")
@@ -333,10 +345,11 @@ func (s *Service) fetchCodexQuota(ctx context.Context, file management.AuthFile,
 }
 
 func (s *Service) fetchClaudeQuota(ctx context.Context, file management.AuthFile, nowMS int64) (*QuotaPlan, []QuotaWindow, *QuotaExtraUsage, error) {
-	headers := map[string]string{
+	headers := management.WithQuotaCredential(map[string]string{
 		"Accept":         "application/json",
+		"Content-Type":   "application/json",
 		"anthropic-beta": "oauth-2025-04-20",
-	}
+	})
 
 	// 1. Profile query for plan tier
 	var plan *QuotaPlan
@@ -373,11 +386,11 @@ func (s *Service) fetchAntigravityQuota(ctx context.Context, file management.Aut
 		return nil, errors.New("antigravity auth file missing project_id")
 	}
 
-	headers := map[string]string{
+	headers := management.WithQuotaCredential(map[string]string{
 		"Content-Type": "application/json",
 		"Accept":       "application/json",
 		"User-Agent":   AntigravityUserAgent,
-	}
+	})
 	reqData := fmt.Sprintf(`{"project":%q}`, projectID)
 
 	urls := []string{
@@ -411,9 +424,9 @@ func (s *Service) fetchAntigravityQuota(ctx context.Context, file management.Aut
 }
 
 func (s *Service) fetchKimiQuota(ctx context.Context, file management.AuthFile, nowMS int64) ([]QuotaWindow, error) {
-	headers := map[string]string{
+	headers := management.WithQuotaCredential(map[string]string{
 		"Accept": "application/json",
-	}
+	})
 	resp, err := s.SafeApiCall(ctx, file.AuthIndex, "GET", KimiUsageURL, headers, "")
 	if err != nil {
 		return nil, err
@@ -430,12 +443,12 @@ func (s *Service) fetchKimiQuota(ctx context.Context, file management.AuthFile, 
 }
 
 func (s *Service) fetchXaiQuota(ctx context.Context, file management.AuthFile, nowMS int64) (*QuotaPlan, []QuotaWindow, error) {
-	headers := map[string]string{
+	headers := management.WithQuotaCredential(map[string]string{
 		"x-xai-token-auth":      "xai-grok-cli",
 		"x-grok-client-version": XaiGrokClientVersion,
 		"user-agent":            XaiGrokUserAgent,
 		"Accept":                "*/*",
-	}
+	})
 
 	// 1. Try free billing endpoint
 	resp, err := s.SafeApiCall(ctx, file.AuthIndex, "GET", XaiBillingMonthlyURL, headers, "")
@@ -446,9 +459,9 @@ func (s *Service) fetchXaiQuota(ctx context.Context, file management.AuthFile, n
 	}
 
 	// 2. Fallback to paid health check
-	paidHeaders := map[string]string{
+	paidHeaders := management.WithQuotaCredential(map[string]string{
 		"Accept": "application/json",
-	}
+	})
 	meResp, meErr := s.SafeApiCall(ctx, file.AuthIndex, "GET", XaiApiMeURL, paidHeaders, "")
 	if meErr == nil && meResp.StatusCode == 200 {
 		plan := &QuotaPlan{
@@ -476,11 +489,11 @@ func (s *Service) RedeemCodexCredit(ctx context.Context, authIndex string) error
 	}
 	redeemID := uuid.New().String()
 	body := fmt.Sprintf(`{"redeem_request_id":%q}`, redeemID)
-	headers := map[string]string{
+	headers := management.WithQuotaCredential(map[string]string{
 		"Content-Type": "application/json",
 		"Accept":       "application/json",
 		"User-Agent":   CodexUserAgent,
-	}
+	})
 
 	resp, err := s.SafeApiCall(ctx, authIndex, "POST", CodexRedeemCreditURL, headers, body)
 	if err != nil {
