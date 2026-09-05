@@ -26,6 +26,7 @@ const DICT: Record<string, [string, string]> = {
   'common.reveal_secret': ['显示密钥', 'Reveal secret'],
   'common.hide_secret': ['隐藏密钥', 'Hide secret'],
   'common.all': ['全部', 'All'],
+  'common.copy': ['复制', 'Copy'],
   'common.copied': ['已复制', 'Copied'],
   'common.search': ['搜索', 'Search'],
 
@@ -281,6 +282,8 @@ const DICT: Record<string, [string, string]> = {
   'af.runtime_only_badge': ['运行时虚拟', 'Runtime Only'],
   'af.warning_status': ['状态告警', 'Status Warning'],
   'af.models_btn': ['模型', 'Models'],
+  'af.model_id': ['模型 ID', 'Model ID'],
+  'af.model_name': ['显示名称', 'Display Name'],
   'af.field_prefix': ['路由前缀 (Prefix)', 'Prefix'],
   'af.field_proxy_url': ['代理地址 (Proxy URL)', 'Proxy URL'],
   'af.field_disable_cooling': ['禁用冷却机制 (Disable Cooling)', 'Disable Cooling'],
@@ -289,6 +292,13 @@ const DICT: Record<string, [string, string]> = {
   'af.unsaved_confirm_title': ['放弃未保存的修改？', 'Discard unsaved changes?'],
   'af.unsaved_confirm_desc': ['当前抽屉中包含未保存的修改，关闭将丢失这些修改。', 'There are unsaved changes in this drawer. Closing will discard them.'],
   'af.upload_partial': ['已上传 {uploaded} 个文件，{failed} 个失败', 'Uploaded {uploaded} files, {failed} failed'],
+  'af.page_size_n': ['{n} / 页', '{n} / page'],
+  'af.select_page_hint': ['选择本页可操作项', 'Select actionable on page'],
+  'af.failure_details_title': ['部分操作未成功', 'Some operations failed'],
+  'af.status_active': ['正常', 'ACTIVE'],
+  'af.status_disabled_badge': ['已禁用', 'DISABLED'],
+  'af.status_problem_badge': ['异常', 'PROBLEM'],
+  'af.status_virtual_badge': ['虚拟', 'VIRTUAL'],
 
   // ── config management ───────────────────────────────────────────────────
   'cfg.search_placeholder': ['搜索配置项（标签或 YAML 键名）', 'Search settings (label or YAML key)'],

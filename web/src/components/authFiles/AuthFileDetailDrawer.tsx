@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Drawer,
   Descriptions,
@@ -10,7 +10,6 @@ import {
   InputNumber,
   Form,
   Table,
-  Switch,
   App as AntdApp,
 } from 'antd';
 import {
@@ -42,10 +41,6 @@ interface AuthFileDetailDrawerProps {
 interface FormValues {
   priority?: number;
   weight?: number;
-  prefix?: string;
-  proxy_url?: string;
-  disable_cooling?: boolean;
-  excluded_models?: string;
   note?: string;
 }
 
@@ -62,22 +57,26 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   const [baseline, setBaseline] = useState<FormValues>({});
   const [isDirty, setIsDirty] = useState(false);
 
+  const sessionCounterRef = useRef(0);
+  const currentSessionRef = useRef<number>(0);
+
   // Initialize form baseline whenever a new file is opened
   useEffect(() => {
     if (file && open) {
+      sessionCounterRef.current += 1;
+      const sid = sessionCounterRef.current;
+      currentSessionRef.current = sid;
+
       const initial: FormValues = {
         priority: file.priority ?? 0,
         weight: file.weight ?? 1,
-        prefix: '',
-        proxy_url: '',
-        disable_cooling: false,
-        excluded_models: '',
         note: file.note ?? '',
       };
       setBaseline(initial);
       form.setFieldsValue(initial);
       setIsDirty(false);
     } else {
+      currentSessionRef.current = 0;
       form.resetFields();
       setBaseline({});
       setIsDirty(false);
@@ -89,15 +88,37 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
     const changed =
       current.priority !== baseline.priority ||
       current.weight !== baseline.weight ||
-      (current.prefix || '') !== (baseline.prefix || '') ||
-      (current.proxy_url || '') !== (baseline.proxy_url || '') ||
-      Boolean(current.disable_cooling) !== Boolean(baseline.disable_cooling) ||
-      (current.excluded_models || '').trim() !== (baseline.excluded_models || '').trim() ||
       (current.note || '') !== (baseline.note || '');
     setIsDirty(changed);
   };
 
+  const saveMutation = useMutation({
+    mutationFn: async ({
+      fileName,
+      patch,
+    }: {
+      fileName: string;
+      patch: Record<string, unknown>;
+      sessionId: number;
+    }) => {
+      return api.patchManagementAuthFileFields(fileName, patch);
+    },
+    onSuccess: (_, variables) => {
+      onSaved();
+      if (variables.sessionId === currentSessionRef.current) {
+        message.success(t('af.save_fields_success'));
+        setIsDirty(false);
+        onClose();
+      }
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof ApiError ? err.message : String(err);
+      message.error(msg);
+    },
+  });
+
   const handleAttemptClose = useCallback(() => {
+    if (saveMutation.isPending) return;
     if (isDirty) {
       modal.confirm({
         title: t('af.unsaved_confirm_title'),
@@ -114,7 +135,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
     } else {
       onClose();
     }
-  }, [isDirty, modal, onClose, t]);
+  }, [isDirty, modal, onClose, saveMutation.isPending, t]);
 
   const {
     data: modelsData,
@@ -128,59 +149,30 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
     staleTime: 60000,
   });
 
-  const saveMutation = useMutation({
-    mutationFn: async ({ fileName, values }: { fileName: string; values: FormValues }) => {
-      const patch: Record<string, unknown> = {};
-
-      if (values.priority !== baseline.priority && values.priority !== undefined) {
-        patch.priority = values.priority;
-      }
-      if (values.weight !== baseline.weight && values.weight !== undefined) {
-        patch.weight = values.weight;
-      }
-      if ((values.note || '') !== (baseline.note || '')) {
-        patch.note = values.note || '';
-      }
-      if ((values.prefix || '') !== (baseline.prefix || '')) {
-        patch.prefix = values.prefix || '';
-      }
-      if ((values.proxy_url || '') !== (baseline.proxy_url || '')) {
-        patch.proxy_url = values.proxy_url || '';
-      }
-      if (Boolean(values.disable_cooling) !== Boolean(baseline.disable_cooling)) {
-        patch.disable_cooling = Boolean(values.disable_cooling);
-      }
-      if ((values.excluded_models || '').trim() !== (baseline.excluded_models || '').trim()) {
-        const modelsList = (values.excluded_models || '')
-          .split(/[\n,]+/)
-          .map((s) => s.trim())
-          .filter(Boolean);
-        patch.excluded_models = modelsList;
-      }
-
-      if (Object.keys(patch).length === 0) {
-        return { status: 'noop' };
-      }
-
-      return api.patchManagementAuthFileFields(fileName, patch);
-    },
-    onSuccess: (_, variables) => {
-      // Guard against stale save callback if file changed
-      if (file && variables.fileName === file.name) {
-        message.success(t('af.save_fields_success'));
-        setIsDirty(false);
-        onSaved();
-      }
-    },
-    onError: (err: unknown) => {
-      const msg = err instanceof ApiError ? err.message : String(err);
-      message.error(msg);
-    },
-  });
-
   const handleFinish = (values: FormValues) => {
-    if (!file) return;
-    saveMutation.mutate({ fileName: file.name, values });
+    if (!file || file.runtime_only) return;
+
+    const patch: Record<string, unknown> = {};
+    if (values.priority !== baseline.priority && values.priority !== undefined) {
+      patch.priority = values.priority;
+    }
+    if (values.weight !== baseline.weight && values.weight !== undefined) {
+      patch.weight = values.weight;
+    }
+    if ((values.note || '') !== (baseline.note || '')) {
+      patch.note = values.note || '';
+    }
+
+    if (Object.keys(patch).length === 0) {
+      onClose();
+      return;
+    }
+
+    saveMutation.mutate({
+      fileName: file.name,
+      patch,
+      sessionId: currentSessionRef.current,
+    });
   };
 
   const models: ManagementAuthFileModel[] = modelsData?.models || file?.models || [];
@@ -201,7 +193,11 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
       const is501 = modelsError instanceof ApiError && modelsError.status === 501;
       return (
         <Text type="secondary">
-          {is501 ? t('af.unsupported') : (modelsError instanceof Error ? modelsError.message : t('af.request_failed'))}
+          {is501
+            ? t('af.unsupported')
+            : modelsError instanceof Error
+              ? modelsError.message
+              : t('af.request_failed')}
         </Text>
       );
     }
@@ -217,13 +213,13 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
           dataSource={models}
           columns={[
             {
-              title: 'Model ID',
+              title: t('af.model_id'),
               dataIndex: 'id',
               key: 'id',
               render: (id: string) => <span className="mono-num">{id}</span>,
             },
             {
-              title: 'Display Name',
+              title: t('af.model_name'),
               dataIndex: 'display_name',
               key: 'display_name',
               render: (name: string) => name || '-',
@@ -257,7 +253,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
               </Descriptions.Item>
               <Descriptions.Item label="Status">
                 {file.runtime_only ? (
-                  <Tag color="default">{t('af.runtime_only_badge')}</Tag>
+                  <Tag>{t('af.runtime_only_badge')}</Tag>
                 ) : isDisabled ? (
                   <Tag color="error">{t('af.disabled')}</Tag>
                 ) : isProblem ? (
@@ -310,33 +306,8 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                 </Form.Item>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                <Form.Item name="prefix" label={t('af.field_prefix')}>
-                  <Input placeholder="/custom-prefix" allowClear />
-                </Form.Item>
-                <Form.Item name="proxy_url" label={t('af.field_proxy_url')}>
-                  <Input placeholder="http://127.0.0.1:7890" allowClear />
-                </Form.Item>
-              </div>
-
-              <Form.Item
-                name="disable_cooling"
-                label={t('af.field_disable_cooling')}
-                valuePropName="checked"
-              >
-                <Switch />
-              </Form.Item>
-
-              <Form.Item
-                name="excluded_models"
-                label={t('af.field_excluded_models')}
-                extra={t('af.field_excluded_models_hint')}
-              >
-                <Input.TextArea rows={2} placeholder="model-a, model-b" />
-              </Form.Item>
-
               <Form.Item name="note" label={t('af.field_note')}>
-                <Input.TextArea rows={2} maxLength={500} showCount />
+                <Input.TextArea rows={3} maxLength={500} showCount />
               </Form.Item>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>

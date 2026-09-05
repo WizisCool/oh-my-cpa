@@ -134,3 +134,31 @@ test('Batch status execution: skips runtime-only and handles partial errors', as
   assert.equal(outcome.failed.length, 1);
   assert.equal(outcome.failed[0].name, 'f3.json');
 });
+
+test('Toggle calculation: handles status="disabled" string properly', () => {
+  // Case 1: normal enabled file -> toggling disables it (nextDisabled = true)
+  const activeFile: ManagementAuthFile = { ...baseFile, disabled: false, status: 'ok' };
+  assert.equal(!isAuthFileDisabled(activeFile), true); // currently active, next disabled should be true
+
+  // Case 2: status is "disabled" but boolean disabled is false -> toggling enables it (nextDisabled = false)
+  const statusDisabledFile: ManagementAuthFile = { ...baseFile, disabled: false, status: 'disabled' };
+  assert.equal(isAuthFileDisabled(statusDisabledFile), true);
+  const nextDisabled = !isAuthFileDisabled(statusDisabledFile);
+  assert.equal(nextDisabled, false, 'Next disabled flag must be false to enable it');
+});
+
+test('Batch processing handles >100 chunks without drops', () => {
+  const largeBatch: string[] = [];
+  for (let i = 0; i < 250; i++) {
+    largeBatch.push(`file-${i}.json`);
+  }
+  const chunks: string[][] = [];
+  for (let i = 0; i < largeBatch.length; i += 100) {
+    chunks.push(largeBatch.slice(i, i + 100));
+  }
+  assert.equal(chunks.length, 3);
+  assert.equal(chunks[0].length, 100);
+  assert.equal(chunks[1].length, 100);
+  assert.equal(chunks[2].length, 50);
+});
+

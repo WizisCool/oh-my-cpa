@@ -27,6 +27,7 @@ import {
   isAuthFileProblem,
   providerOf,
 } from './authFileLogic';
+import styles from '../../pages/authFiles/AuthFilesPage.module.css';
 
 const { Text, Paragraph } = Typography;
 
@@ -75,6 +76,7 @@ export const AuthFileCard: React.FC<AuthFileCardProps> = ({
     if (disabled) {
       return (
         <Tag color="error" style={{ margin: 0, fontSize: 11 }}>
+          <span className={`${styles.statDot} ${styles.dotDisabled}`} style={{ marginRight: 4 }} />
           {t('af.disabled')}
         </Tag>
       );
@@ -82,16 +84,26 @@ export const AuthFileCard: React.FC<AuthFileCardProps> = ({
     if (problem) {
       return (
         <Tag color="warning" style={{ margin: 0, fontSize: 11 }}>
+          <span className={`${styles.statDot} ${styles.dotProblem}`} style={{ marginRight: 4 }} />
           {t('af.status_problem')}
         </Tag>
       );
     }
     return (
       <Tag color="success" style={{ margin: 0, fontSize: 11 }}>
+        <span className={`${styles.statDot} ${styles.dotActive}`} style={{ marginRight: 4 }} />
         {t('af.enabled')}
       </Tag>
     );
   };
+
+  const footerStatusText = file.runtime_only
+    ? t('af.status_virtual_badge')
+    : disabled
+      ? t('af.status_disabled_badge')
+      : problem
+        ? t('af.status_problem_badge')
+        : t('af.status_active');
 
   return (
     <Card
@@ -206,7 +218,7 @@ export const AuthFileCard: React.FC<AuthFileCardProps> = ({
       )}
 
       {/* Requests Telemetry */}
-      <Space size={6} style={{ fontSize: 11, fontFamily: 'var(--font-mono)' }}>
+      <Space size={6} wrap style={{ fontSize: 11, fontFamily: 'var(--font-mono)' }}>
         <Text style={{ color: 'var(--success)' }}>
           {t('dash.success_n', { n: file.success })}
         </Text>
@@ -244,13 +256,7 @@ export const AuthFileCard: React.FC<AuthFileCardProps> = ({
             letterSpacing: '0.08em',
           }}
         >
-          {file.runtime_only
-            ? 'VIRTUAL'
-            : disabled
-              ? 'DISABLED'
-              : problem
-                ? 'PROBLEM'
-                : 'ACTIVE'}
+          {footerStatusText}
         </Text>
 
         <Button
@@ -259,6 +265,7 @@ export const AuthFileCard: React.FC<AuthFileCardProps> = ({
           icon={<AppstoreOutlined />}
           onClick={onShowModels}
           title={t('af.models_btn')}
+          aria-label={t('af.models_btn')}
           style={{ fontSize: 12, padding: '0 4px' }}
         >
           {t('af.models_btn')}
@@ -269,6 +276,9 @@ export const AuthFileCard: React.FC<AuthFileCardProps> = ({
           size="small"
           icon={<EditOutlined />}
           onClick={onEdit}
+          title={t('common.edit')}
+          aria-label={t('common.edit')}
+          disabled={busy}
           style={{ fontSize: 12, padding: '0 4px' }}
         >
           {t('common.edit')}
@@ -280,6 +290,7 @@ export const AuthFileCard: React.FC<AuthFileCardProps> = ({
           icon={<DownloadOutlined />}
           disabled={busy || file.runtime_only}
           onClick={onDownload}
+          title={t('af.download_one', { name: file.name })}
           aria-label={t('af.download_one', { name: file.name })}
         />
 
@@ -297,6 +308,7 @@ export const AuthFileCard: React.FC<AuthFileCardProps> = ({
             size="small"
             icon={<DeleteOutlined />}
             disabled={busy || file.runtime_only}
+            title={t('af.delete_one', { name: file.name })}
             aria-label={t('af.delete_one', { name: file.name })}
           />
         </Popconfirm>
@@ -306,6 +318,7 @@ export const AuthFileCard: React.FC<AuthFileCardProps> = ({
           checked={!disabled}
           disabled={busy || file.runtime_only}
           onChange={onToggle}
+          aria-label={t('af.select_one', { name: file.name })}
         />
       </div>
     </Card>

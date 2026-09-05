@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { App as AntdApp, Modal, Table, Input, Typography, Button } from 'antd';
 import { CopyOutlined, SearchOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
@@ -19,6 +19,13 @@ export const ModelsModal: React.FC<ModelsModalProps> = ({ file, open, onClose })
   const { message } = AntdApp.useApp();
   const [filter, setFilter] = useState('');
 
+  // Reset search filter whenever file or open changes
+  useEffect(() => {
+    if (open) {
+      setFilter('');
+    }
+  }, [open, file?.name]);
+
   const {
     data: modelsData,
     isLoading,
@@ -35,13 +42,20 @@ export const ModelsModal: React.FC<ModelsModalProps> = ({ file, open, onClose })
   const filteredModels = rawModels.filter((m) => {
     const q = filter.trim().toLowerCase();
     if (!q) return true;
-    return m.id.toLowerCase().includes(q) || (m.display_name && m.display_name.toLowerCase().includes(q));
+    return (
+      m.id.toLowerCase().includes(q) ||
+      (m.display_name && m.display_name.toLowerCase().includes(q))
+    );
   });
 
   const handleCopy = (text: string) => {
+    if (!navigator.clipboard?.writeText) {
+      message.info(text);
+      return;
+    }
     navigator.clipboard.writeText(text).then(
       () => message.success(t('common.copied')),
-      () => message.error('Failed to copy')
+      () => message.error(t('common.save_failed', { msg: 'clipboard error' }))
     );
   };
 
@@ -57,13 +71,21 @@ export const ModelsModal: React.FC<ModelsModalProps> = ({ file, open, onClose })
       return (
         <div style={{ padding: 16 }}>
           <Text type="secondary">
-            {is501 ? t('af.unsupported') : (error instanceof Error ? error.message : t('af.request_failed'))}
+            {is501
+              ? t('af.unsupported')
+              : error instanceof Error
+                ? error.message
+                : t('af.request_failed')}
           </Text>
         </div>
       );
     }
     if (rawModels.length === 0) {
-      return <div style={{ padding: 24, textAlign: 'center' }}><Text type="secondary">{t('af.models_empty')}</Text></div>;
+      return (
+        <div style={{ padding: 24, textAlign: 'center' }}>
+          <Text type="secondary">{t('af.models_empty')}</Text>
+        </div>
+      );
     }
 
     return (
@@ -85,13 +107,13 @@ export const ModelsModal: React.FC<ModelsModalProps> = ({ file, open, onClose })
             dataSource={filteredModels}
             columns={[
               {
-                title: 'Model ID',
+                title: t('af.model_id'),
                 dataIndex: 'id',
                 key: 'id',
                 render: (id: string) => <span className="mono-num">{id}</span>,
               },
               {
-                title: 'Display Name',
+                title: t('af.model_name'),
                 dataIndex: 'display_name',
                 key: 'display_name',
                 render: (name: string) => name || '-',
@@ -106,6 +128,7 @@ export const ModelsModal: React.FC<ModelsModalProps> = ({ file, open, onClose })
                     size="small"
                     icon={<CopyOutlined />}
                     onClick={() => handleCopy(record.id)}
+                    aria-label={t('common.copy')}
                   />
                 ),
               },

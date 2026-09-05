@@ -506,7 +506,7 @@ func TestManagementAuthFilesPartialDeletion(t *testing.T) {
 		writer.Header().Set("Content-Type", "application/json")
 		if request.URL.Path == "/v0/management/auth-files" && request.Method == http.MethodDelete {
 			writer.WriteHeader(http.StatusOK)
-			_, _ = writer.Write([]byte(`{"deleted":1,"files":["ok.json"],"failed":[{"name":"missing.json","error":"file not found"}]}`))
+			_, _ = writer.Write([]byte(`{"deleted":1,"files":["ok.json"],"failed":[{"name":"missing.json","error":"file not found","upstream_secret":"LEAK_ME"}]}`))
 			return
 		}
 		writer.WriteHeader(http.StatusOK)
@@ -519,18 +519,75 @@ func TestManagementAuthFilesPartialDeletion(t *testing.T) {
 	if response.StatusCode != http.StatusMultiStatus {
 		t.Fatalf("expected status 207, got %d: %s", response.StatusCode, raw)
 	}
-	var res map[string]any
+	var res struct {
+		Status  string `json:"status"`
+		Deleted int    `json:"deleted"`
+		Files   []string `json:"files"`
+		Failed  []struct {
+			Name  string `json:"name"`
+			Error string `json:"error"`
+		} `json:"failed"`
+	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		t.Fatal(err)
 	}
-	if res["status"] != "partial" {
-		t.Fatalf("expected status partial, got %v", res["status"])
+	if res.Status != "partial" {
+		t.Fatalf("expected status partial, got %v", res.Status)
 	}
-	if res["deleted"] != float64(1) {
-		t.Fatalf("expected deleted 1, got %v", res["deleted"])
+	if res.Deleted != 1 {
+		t.Fatalf("expected deleted 1, got %v", res.Deleted)
 	}
-	failed, ok := res["failed"].([]any)
-	if !ok || len(failed) != 1 {
-		t.Fatalf("expected 1 failure in %#v", res["failed"])
+	if len(res.Files) != 1 || res.Files[0] != "ok.json" {
+		t.Fatalf("expected files to contain only confirmed deleted ['ok.json'], got %#v", res.Files)
+	}
+	if len(res.Failed) != 1 || res.Failed[0].Name != "missing.json" {
+		t.Fatalf("expected 1 failure for missing.json, got %#v", res.Failed)
+	}
+	if strings.Contains(string(raw), "LEAK_ME") {
+		t.Fatalf("expected deletion response to sanitize arbitrary upstream fields, leaked: %s", raw)
+	}
+}
+
+func TestManagementAuthFilesAllFailureDeletion(t *testing.T) {
+	handler := func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		if request.URL.Path == "/v0/management/auth-files" && request.Method == http.MethodDelete {
+			writer.WriteHeader(http.StatusOK)
+			_, _ = writer.Write([]byte(`{"deleted":0,"files":[],"failed":[{"name":"fail1.json","error":"denied"},{"name":"fail2.json","error":"denied"}]}`))
+			return
+		}
+		writer.WriteHeader(http.StatusOK)
+		_, _ = writer.Write([]byte(`{"status":"success"}`))
+	}
+	client, baseURL, _ := startAuthFilesTestServer(t, "management-secret-value", handler)
+	base := baseURL + "/omc/api/v1/management/auth-files"
+
+	response, raw := doJSON(t, client, http.MethodDelete, base, `{"names":["fail1.json","fail2.json"]}`)
+	if response.StatusCode != http.StatusMultiStatus {
+		t.Fatalf("expected status 207, got %d: %s", response.StatusCode, raw)
+	}
+	var res struct {
+		Status  string `json:"status"`
+		Deleted int    `json:"deleted"`
+		Files   []string `json:"files"`
+		Failed  []struct {
+			Name  string `json:"name"`
+			Error string `json:"error"`
+		} `json:"failed"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != "failure" {
+		t.Fatalf("expected status failure, got %v", res.Status)
+	}
+	if res.Deleted != 0 {
+		t.Fatalf("expected deleted 0, got %v", res.Deleted)
+	}
+	if len(res.Files) != 0 {
+		t.Fatalf("expected files to be empty on all failure, got %#v", res.Files)
+	}
+	if len(res.Failed) != 2 {
+		t.Fatalf("expected 2 failures, got %#v", res.Failed)
 	}
 }
