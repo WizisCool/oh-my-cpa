@@ -42,10 +42,17 @@ export interface ManagementAuthFilesResponse {
   total: number;
 }
 
+export interface ManagementAuthFileMutationFailure {
+  name: string;
+  error?: string;
+}
+
 export interface ManagementAuthFileMutationResponse {
   status: string;
   disabled?: boolean;
   uploaded?: number;
   deleted?: number;
   files?: string[];
+  failed?: ManagementAuthFileMutationFailure[];
 }
+

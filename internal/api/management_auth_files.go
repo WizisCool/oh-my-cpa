@@ -327,16 +327,43 @@ func (h *Handler) deleteManagementAuthFiles(writer http.ResponseWriter, request 
 	if !ok {
 		return
 	}
-	if _, err := client.DeleteAuthFiles(request.Context(), unique); err != nil {
+	cpaResp, err := client.DeleteAuthFiles(request.Context(), unique)
+	if err != nil {
 		_ = h.recordAudit(request, "auth_file.delete", "auth_file", strings.Join(unique, ","), "failure", map[string]any{"error": err.Error()})
 		writeCPAFacadeError(writer, err)
 		return
 	}
-	if auditErr := h.recordAudit(request, "auth_file.delete", "auth_file", strings.Join(unique, ","), "success", map[string]any{"deleted": len(unique)}); auditErr != nil {
+	deletedCount := len(unique)
+	var failedList []any
+	if cpaResp != nil {
+		if rawFailed, ok := cpaResp["failed"].([]any); ok && len(rawFailed) > 0 {
+			failedList = rawFailed
+		}
+		if rawDeleted, ok := cpaResp["deleted"].(float64); ok {
+			deletedCount = int(rawDeleted)
+		} else if rawDeletedInt, ok := cpaResp["deleted"].(int); ok {
+			deletedCount = rawDeletedInt
+		} else if len(failedList) > 0 {
+			deletedCount = len(unique) - len(failedList)
+			if deletedCount < 0 {
+				deletedCount = 0
+			}
+		}
+	}
+	if auditErr := h.recordAudit(request, "auth_file.delete", "auth_file", strings.Join(unique, ","), "success", map[string]any{"deleted": deletedCount, "failed_count": len(failedList)}); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit log failure; operation aborted")
 		return
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "deleted": len(unique), "files": unique})
+	if len(failedList) > 0 {
+		writeJSON(writer, http.StatusMultiStatus, map[string]any{
+			"status":  "partial",
+			"deleted": deletedCount,
+			"files":   unique,
+			"failed":  failedList,
+		})
+		return
+	}
+	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "deleted": deletedCount, "files": unique})
 }
 
 func (h *Handler) downloadManagementAuthFile(writer http.ResponseWriter, request *http.Request) {

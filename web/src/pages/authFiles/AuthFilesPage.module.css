@@ -1,0 +1,382 @@
+.authFilesPage {
+  padding-bottom: 60px;
+}
+
+/* ── Header Telemetry Strip ── */
+.headTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.statsMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.statPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.statDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.dotActive {
+  background: var(--success);
+}
+
+.dotDisabled {
+  background: var(--muted);
+}
+
+.dotProblem {
+  background: var(--danger);
+  box-shadow: 0 0 4px var(--danger);
+}
+
+.statProblemAlert {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* ── Provider Tabs ── */
+.filterTabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: none;
+}
+
+.filterTabs::-webkit-scrollbar {
+  display: none;
+}
+
+.filterTab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 8px 12px 11px;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--fg-2);
+  white-space: nowrap;
+  transition:
+    color var(--motion-fast),
+    background-color var(--motion-fast);
+}
+
+.filterTab::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 999px;
+  background: transparent;
+  transition: background-color var(--motion-fast);
+}
+
+.filterTab:active {
+  transform: translateY(0.5px);
+}
+
+.filterTab:hover {
+  color: var(--fg);
+  background: var(--hover-inset);
+}
+
+.filterTabActive {
+  color: var(--fg);
+  font-weight: 650;
+}
+
+.filterTabActive::after {
+  background: var(--fg);
+}
+
+.filterTabGlyph {
+  font-size: 14px;
+  color: var(--meta);
+}
+
+.filterTabActive .filterTabGlyph {
+  color: var(--fg);
+}
+
+.filterTabIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.filterTabLabel {
+  line-height: 1.4;
+}
+
+.filterTabCount {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+  color: var(--meta);
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--hover-inset);
+}
+
+.filterTabActive .filterTabCount {
+  color: var(--fg);
+}
+
+/* ── Toolbar ── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.searchBox {
+  flex: 1;
+  min-width: 220px;
+}
+
+.toolbarActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── Floating Batch Bar ── */
+.batchBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  margin-bottom: 16px;
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font-size: 12px;
+}
+
+.batchBarActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── Cards Grid ── */
+.cardsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.compactGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 1100px) {
+  .cardsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .cardsGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Card Presentation ── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color var(--motion-fast);
+}
+
+.card:hover {
+  border-color: var(--meta);
+}
+
+.cardSelected {
+  border-color: var(--accent) !important;
+}
+
+.cardDisabled {
+  opacity: 0.72;
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.cardCheckbox {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.cardIcon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-soft);
+  background: var(--hover-inset);
+}
+
+.cardBadges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.cardIdentity {
+  min-width: 0;
+}
+
+.cardPrimary {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardPrimaryMono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.cardSecondary {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+.cardNote {
+  padding: 4px 8px;
+  border-left: 2px solid var(--border);
+  color: var(--fg-2);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+  background: var(--hover-inset);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.cardWarning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 159, 10, 0.12);
+  border: 1px solid rgba(255, 159, 10, 0.4);
+  color: var(--warn);
+  font-size: 11px;
+}
+
+.cardTelemetry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.telemetrySuccess {
+  color: var(--success);
+}
+
+.telemetryFailed {
+  color: var(--danger);
+}
+
+.cardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.cardFooter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.cardFooterStatus {
+  margin-right: auto;
+  font-size: 9px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.paginationWrap {
+  margin-top: 24px;
+  display: flex;
+  justify-content: flex-end;
+}

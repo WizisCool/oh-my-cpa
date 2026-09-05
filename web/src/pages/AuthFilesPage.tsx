@@ -1,21 +1,47 @@
-import React from 'react';
-import { Alert, App as AntdApp, Button, Empty, Input, Popconfirm, Select, Spin, Switch, Tag } from 'antd';
-import { DeleteOutlined, DownloadOutlined, EditOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import {
+  Alert,
+  App as AntdApp,
+  Button,
+  Empty,
+  Input,
+  Pagination,
+  Segmented,
+  Select,
+  Space,
+  Spin,
+  Tag,
+} from 'antd';
+import {
+  AppstoreOutlined,
+  BarsOutlined,
+  ReloadOutlined,
+  SearchOutlined,
+  UploadOutlined,
+} from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import { useT, type TFunc } from '../i18n';
 import type { ManagementAuthFile } from '../types/managementAuthFile';
+import {
+  executeBatchStatus,
+  filterAuthFiles,
+  isAuthFileDisabled,
+  isAuthFileHealthy,
+  isAuthFileProblem,
+  providerOf,
+  sortAuthFiles,
+  type AuthFileSortKey,
+  type AuthFileStatusFilter,
+} from '../components/authFiles/authFileLogic';
+import { AuthFileCard } from '../components/authFiles/AuthFileCard';
 import { AuthFileDetailDrawer } from '../components/authFiles/AuthFileDetailDrawer';
+import { BatchActionBar } from '../components/authFiles/BatchActionBar';
+import { ModelsModal } from '../components/authFiles/ModelsModal';
+import { ProviderTabs } from '../components/authFiles/ProviderTabs';
+import styles from './authFiles/AuthFilesPage.module.css';
 
-function providerOf(file: ManagementAuthFile): string {
-  return (file.type || file.provider || 'unknown').trim().toLowerCase();
-}
-
-function statusOf(file: ManagementAuthFile): string {
-  if (file.disabled) return 'disabled';
-  if (file.unavailable) return 'unavailable';
-  return 'enabled';
-}
+const KNOWN_PROVIDERS = ['claude', 'antigravity', 'codex', 'xai', 'kimi'];
 
 function safeError(error: unknown, t: TFunc): string {
   if (error instanceof ApiError && error.status === 501) return t('af.unsupported');
@@ -35,139 +61,501 @@ export const AuthFilesPage: React.FC = () => {
   const t = useT();
   const { message } = AntdApp.useApp();
   const queryClient = useQueryClient();
-  const [query, setQuery] = React.useState('');
-  const [provider, setProvider] = React.useState('all');
-  const [status, setStatus] = React.useState('all');
-  const [selected, setSelected] = React.useState<string[]>([]);
-  const [selectedFile, setSelectedFile] = React.useState<ManagementAuthFile | null>(null);
-  const fileInput = React.useRef<HTMLInputElement>(null);
 
-  const statusOptions = React.useMemo(() => [
-    { value: 'all', label: t('af.status_all') },
-    { value: 'enabled', label: t('af.enabled') },
-    { value: 'disabled', label: t('af.disabled') },
-    { value: 'unavailable', label: t('af.unavailable') },
-  ], [t]);
+  // Filters, sorting, view modes
+  const [query, setQuery] = useState('');
+  const [provider, setProvider] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<AuthFileStatusFilter>('all');
+  const [sortMode, setSortMode] = useState<AuthFileSortKey>('name-asc');
+  const [compactMode, setCompactMode] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
+
+  // Selection and modal state
+  const [selected, setSelected] = useState<string[]>([]);
+  const [selectedFile, setSelectedFile] = useState<ManagementAuthFile | null>(null);
+  const [modelsFile, setModelsFile] = useState<ManagementAuthFile | null>(null);
+  const [busyFiles, setBusyFiles] = useState<Record<string, boolean>>({});
+  const [isBatchMutating, setIsBatchMutating] = useState(false);
+
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const filesQuery = useQuery({
     queryKey: ['management-auth-files'],
     queryFn: () => api.getManagementAuthFiles(),
     refetchInterval: 60000,
     staleTime: 10000,
-    // Existing cards stay on screen during a refresh instead of swapping out.
     placeholderData: keepPreviousData,
   });
 
-  const invalidate = () => {
-    setSelected([]);
+  const files = useMemo(() => filesQuery.data?.files ?? [], [filesQuery.data?.files]);
+
+  // Non-runtime files lookup map for reconciling selection
+  const nonRuntimeFilesMap = useMemo(() => {
+    const map = new Map<string, ManagementAuthFile>();
+    for (const f of files) {
+      if (!f.runtime_only) {
+        map.set(f.name, f);
+      }
+    }
+    return map;
+  }, [files]);
+
+  // Reconcile selection with available non-runtime files
+  useEffect(() => {
+    setSelected((prev) => {
+      const filtered = prev.filter((name) => nonRuntimeFilesMap.has(name));
+      if (filtered.length !== prev.length) {
+        return filtered;
+      }
+      return prev;
+    });
+  }, [nonRuntimeFilesMap]);
+
+  // Telemetry counts across the full dataset
+  const totalCount = files.length;
+  const activeCount = useMemo(() => files.filter(isAuthFileHealthy).length, [files]);
+  const disabledCount = useMemo(() => files.filter(isAuthFileDisabled).length, [files]);
+  const problemCount = useMemo(() => files.filter(isAuthFileProblem).length, [files]);
+
+  // Provider tabs calculation
+  const tabProviders = useMemo(() => {
+    const extras = files
+      .map(providerOf)
+      .filter((p) => p && !KNOWN_PROVIDERS.includes(p) && p !== 'unknown');
+    return ['all', ...KNOWN_PROVIDERS, ...Array.from(new Set(extras)).sort()];
+  }, [files]);
+
+  const tabCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: files.length };
+    for (const f of files) {
+      const p = providerOf(f);
+      counts[p] = (counts[p] ?? 0) + 1;
+    }
+    return counts;
+  }, [files]);
+
+  // Filter & Sort
+  const filtered = useMemo(
+    () => filterAuthFiles(files, query, provider, statusFilter),
+    [files, query, provider, statusFilter]
+  );
+
+  const sorted = useMemo(() => sortAuthFiles(filtered, sortMode), [filtered, sortMode]);
+
+  // Reset page when filter / provider / query changes
+  useEffect(() => {
+    setPage(1);
+  }, [query, provider, statusFilter, sortMode]);
+
+  // Clamped pagination
+  const maxPage = Math.max(1, Math.ceil(sorted.length / pageSize));
+  useEffect(() => {
+    if (page > maxPage) {
+      setPage(maxPage);
+    }
+  }, [page, maxPage]);
+
+  const pagedFiles = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return sorted.slice(start, start + pageSize);
+  }, [sorted, page, pageSize]);
+
+  // Current page selectable items
+  const selectableOnPage = useMemo(
+    () => pagedFiles.filter((f) => !f.runtime_only).map((f) => f.name),
+    [pagedFiles]
+  );
+
+  const invalidate = (clearSelection = false) => {
+    if (clearSelection) {
+      setSelected([]);
+    }
     queryClient.invalidateQueries({ queryKey: ['management-auth-files'] });
     queryClient.invalidateQueries({ queryKey: ['management-overview'] });
   };
 
-  const statusMutation = useMutation({
-    mutationFn: ({ file, disabled }: { file: ManagementAuthFile; disabled: boolean }) => api.setManagementAuthFileStatus(file.name, disabled, file.auth_index),
-    onSuccess: invalidate,
-    onError: (error) => message.error(safeError(error, t)),
-  });
-  const deleteMutation = useMutation({
-    mutationFn: (names: string[]) => api.deleteManagementAuthFiles(names),
-    onSuccess: (result) => { message.success(t('af.deleted', { n: result.deleted ?? selected.length })); invalidate(); },
-    onError: (error) => message.error(safeError(error, t)),
-  });
+  // Upload mutation
   const uploadMutation = useMutation({
-    mutationFn: (files: File[]) => api.uploadManagementAuthFiles(files),
-    onSuccess: (result) => { message.success(t('af.uploaded', { n: result.uploaded ?? 0 })); invalidate(); },
+    mutationFn: (uploadFiles: File[]) => api.uploadManagementAuthFiles(uploadFiles),
+    onSuccess: (result) => {
+      if (result.failed && result.failed.length > 0) {
+        message.warning(
+          t('af.upload_partial', {
+            uploaded: result.uploaded ?? 0,
+            failed: result.failed.length,
+          })
+        );
+      } else {
+        message.success(t('af.uploaded', { n: result.uploaded ?? 0 }));
+      }
+      invalidate(false);
+    },
     onError: (error) => message.error(safeError(error, t)),
   });
+
+  // Single file download
   const downloadMutation = useMutation({
     mutationFn: (file: ManagementAuthFile) => api.downloadManagementAuthFile(file.name),
     onSuccess: (blob, file) => downloadBlob(blob, file.name),
     onError: (error) => message.error(safeError(error, t)),
   });
 
-  const files = filesQuery.data?.files ?? [];
-  const providers = Array.from(new Set(files.map(providerOf))).sort();
-  const filtered = files.filter((file) => {
-    const normalizedQuery = query.trim().toLowerCase();
-    const matchesQuery = !normalizedQuery || [file.name, file.email, file.project_id, file.type, file.provider, file.auth_index].some((value) => value?.toLowerCase().includes(normalizedQuery));
-    return matchesQuery && (provider === 'all' || providerOf(file) === provider) && (status === 'all' || statusOf(file) === status);
-  });
-
-  const handleUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const filesToUpload = Array.from(event.target.files ?? []);
-    event.target.value = '';
-    if (filesToUpload.length > 0) uploadMutation.mutate(filesToUpload);
+  // Single file delete
+  const deleteSingle = async (name: string) => {
+    try {
+      setBusyFiles((prev) => ({ ...prev, [name]: true }));
+      const result = await api.deleteManagementAuthFiles([name]);
+      if (result.failed && result.failed.length > 0) {
+        message.error(result.failed[0]?.error || t('af.request_failed'));
+      } else {
+        message.success(t('af.deleted', { n: 1 }));
+        setSelected((prev) => prev.filter((n) => n !== name));
+        invalidate(false);
+      }
+    } catch (err) {
+      message.error(safeError(err, t));
+    } finally {
+      setBusyFiles((prev) => {
+        const next = { ...prev };
+        delete next[name];
+        return next;
+      });
+    }
   };
 
-  if (filesQuery.isLoading) return <div className="dashboard-loading"><Spin tip={t('af.loading')}><div style={{ minHeight: 80, minWidth: 200 }} /></Spin></div>;
-  if (filesQuery.isError) return <div className="terminal-page"><Alert type="error" showIcon description={`${t('af.error')} — ${safeError(filesQuery.error, t)}`} action={<Button onClick={() => filesQuery.refetch()}>{t('common.retry')}</Button>} /></div>;
+  // Single file status toggle (preserves selected list!)
+  const toggleSingleStatus = async (file: ManagementAuthFile) => {
+    const nextDisabled = !file.disabled;
+    try {
+      setBusyFiles((prev) => ({ ...prev, [file.name]: true }));
+      await api.setManagementAuthFileStatus(file.name, nextDisabled, file.auth_index);
+      invalidate(false);
+    } catch (err) {
+      message.error(safeError(err, t));
+    } finally {
+      setBusyFiles((prev) => {
+        const next = { ...prev };
+        delete next[file.name];
+        return next;
+      });
+    }
+  };
+
+  // Batch status change
+  const handleBatchStatus = async (disabled: boolean) => {
+    const targetFiles = selected
+      .map((name) => nonRuntimeFilesMap.get(name))
+      .filter((f): f is ManagementAuthFile => Boolean(f));
+
+    if (targetFiles.length === 0) return;
+
+    setIsBatchMutating(true);
+    try {
+      const outcome = await executeBatchStatus(
+        targetFiles,
+        disabled,
+        (name, dis, authIdx) => api.setManagementAuthFileStatus(name, dis, authIdx),
+        5
+      );
+
+      if (outcome.failed.length > 0) {
+        message.warning(
+          t('af.batch_partial_failed', {
+            succeeded: outcome.succeeded.length,
+            failed: outcome.failed.length,
+          })
+        );
+        const failedNames = new Set(outcome.failed.map((f) => f.name));
+        setSelected((prev) => prev.filter((name) => failedNames.has(name)));
+      } else {
+        const successMsg = disabled
+          ? t('af.batch_disable_success', { n: outcome.succeeded.length })
+          : t('af.batch_enable_success', { n: outcome.succeeded.length });
+        message.success(successMsg);
+        setSelected([]);
+      }
+      invalidate(false);
+    } catch (err) {
+      message.error(safeError(err, t));
+    } finally {
+      setIsBatchMutating(false);
+    }
+  };
+
+  // Batch delete (respects 100 limit)
+  const handleBatchDelete = async () => {
+    if (selected.length === 0) return;
+    const namesToDelete = selected.slice(0, 100);
+
+    setIsBatchMutating(true);
+    try {
+      const res = await api.deleteManagementAuthFiles(namesToDelete);
+      if (res.failed && res.failed.length > 0) {
+        message.warning(
+          t('af.batch_partial_failed', {
+            succeeded: res.deleted ?? 0,
+            failed: res.failed.length,
+          })
+        );
+        const failedNames = new Set(res.failed.map((f) => f.name));
+        setSelected((prev) => prev.filter((name) => failedNames.has(name)));
+      } else {
+        message.success(t('af.deleted', { n: res.deleted ?? namesToDelete.length }));
+        const deletedSet = new Set(res.files ?? namesToDelete);
+        setSelected((prev) => prev.filter((name) => !deletedSet.has(name)));
+      }
+      invalidate(false);
+    } catch (err) {
+      message.error(safeError(err, t));
+    } finally {
+      setIsBatchMutating(false);
+    }
+  };
+
+  const handleSelectPage = () => {
+    setSelected((prev) => Array.from(new Set([...prev, ...selectableOnPage])));
+  };
+
+  const handleClearSelection = () => {
+    setSelected([]);
+  };
+
+  const handleUploadChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const filesToUpload = Array.from(event.target.files ?? []);
+    event.target.value = '';
+    if (filesToUpload.length > 0) {
+      uploadMutation.mutate(filesToUpload);
+    }
+  };
+
+  if (filesQuery.isLoading) {
+    return (
+      <div className="dashboard-loading">
+        <Spin tip={t('af.loading')}>
+          <div style={{ minHeight: 80, minWidth: 200 }} />
+        </Spin>
+      </div>
+    );
+  }
+
+  if (filesQuery.isError) {
+    return (
+      <div className="terminal-page">
+        <Alert
+          type="error"
+          showIcon
+          description={`${t('af.error')} — ${safeError(filesQuery.error, t)}`}
+          action={<Button onClick={() => filesQuery.refetch()}>{t('common.retry')}</Button>}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="terminal-page auth-files-page">
-      <div className="terminal-page-head"><div><h1 className="terminal-title">{t('nav.auth_files')}</h1><p className="terminal-subtitle">{t('af.subtitle', { n: files.length })}</p></div><div className="auth-files-actions"><input ref={fileInput} type="file" accept=".json,application/json" multiple hidden onChange={handleUpload} /><Button icon={<UploadOutlined />} onClick={() => fileInput.current?.click()} loading={uploadMutation.isPending}>{t('af.upload')}</Button><Button type="text" icon={<ReloadOutlined />} onClick={() => filesQuery.refetch()} loading={filesQuery.isFetching}>{t('common.refresh')}</Button></div></div>
-      {selected.length > 0 && <div className="batch-bar"><span>{t('af.selected_n', { n: selected.length })}</span><Popconfirm title={t('af.delete_selected_title')} description={t('af.delete_selected_desc')} onConfirm={() => deleteMutation.mutate(selected)} okText={t('common.delete')} cancelText={t('common.cancel')}><Button danger icon={<DeleteOutlined />} loading={deleteMutation.isPending}>{t('af.delete_selected')}</Button></Popconfirm></div>}
-      <div className="auth-files-toolbar"><Input allowClear placeholder={t('af.search_ph')} value={query} onChange={(event) => setQuery(event.target.value)} /><Select value={provider} onChange={setProvider} options={[{ value: 'all', label: t('af.all_providers') }, ...providers.map((value) => ({ value, label: value }))]} /><Select value={status} onChange={setStatus} options={statusOptions} /></div>
-      {filtered.length === 0 ? <div className="terminal-panel auth-files-empty"><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={files.length === 0 ? t('af.empty_all') : t('af.empty_filter')} /></div> : <div className="auth-files-grid">{filtered.map((file) => <AuthFileCard key={`${file.name}:${file.auth_index ?? ''}`} file={file} selected={selected.includes(file.name)} busy={statusMutation.isPending || downloadMutation.isPending} onSelect={(checked) => setSelected((current) => checked ? [...current, file.name] : current.filter((name) => name !== file.name))} onToggle={() => statusMutation.mutate({ file, disabled: !file.disabled })} onDownload={() => downloadMutation.mutate(file)} onDelete={() => deleteMutation.mutate([file.name])} onEdit={() => setSelectedFile(file)} />)}</div>}
+    <div className={`terminal-page ${styles.authFilesPage}`}>
+      {/* Page Header */}
+      <header className={styles.headTop}>
+        <div>
+          <h1 className="terminal-title">{t('nav.auth_files')}</h1>
+          <Space size={8} wrap style={{ marginTop: 6 }}>
+            <Tag style={{ margin: 0 }}>
+              {t('af.meta_total', { n: totalCount })}
+            </Tag>
+            <Tag color="success" style={{ margin: 0 }}>
+              {t('af.meta_active', { n: activeCount })}
+            </Tag>
+            <Tag style={{ margin: 0 }}>
+              {t('af.meta_disabled', { n: disabledCount })}
+            </Tag>
+            {problemCount > 0 && (
+              <Tag color="error" style={{ margin: 0 }}>
+                {t('af.meta_problem', { n: problemCount })}
+              </Tag>
+            )}
+          </Space>
+        </div>
 
+        <div className="auth-files-actions">
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".json,application/json"
+            multiple
+            hidden
+            onChange={handleUploadChange}
+          />
+          <Button
+            icon={<UploadOutlined />}
+            onClick={() => fileInput.current?.click()}
+            loading={uploadMutation.isPending}
+          >
+            {t('af.upload')}
+          </Button>
+          <Button
+            type="text"
+            icon={<ReloadOutlined />}
+            onClick={() => filesQuery.refetch()}
+            loading={filesQuery.isFetching}
+          >
+            {t('common.refresh')}
+          </Button>
+        </div>
+      </header>
+
+      {/* Provider Filter Tabs (Ant Design Tabs) */}
+      <ProviderTabs
+        providers={tabProviders}
+        counts={tabCounts}
+        active={provider}
+        onChange={setProvider}
+      />
+
+      {/* Floating Batch Action Bar */}
+      <BatchActionBar
+        selectedCount={selected.length}
+        selectablePageCount={selectableOnPage.length}
+        isMutating={isBatchMutating}
+        onSelectPage={handleSelectPage}
+        onClearSelection={handleClearSelection}
+        onEnable={() => handleBatchStatus(false)}
+        onDisable={() => handleBatchStatus(true)}
+        onDelete={handleBatchDelete}
+      />
+
+      {/* Toolbar */}
+      <div className={styles.toolbar}>
+        <div className={styles.searchBox}>
+          <Input
+            prefix={<SearchOutlined style={{ color: 'var(--meta)' }} />}
+            allowClear
+            placeholder={t('af.search_ph')}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+
+        <Segmented<AuthFileStatusFilter>
+          value={statusFilter}
+          onChange={(val) => setStatusFilter(val)}
+          options={[
+            { label: t('af.status_all'), value: 'all' },
+            { label: t('af.enabled'), value: 'enabled' },
+            { label: t('af.disabled'), value: 'disabled' },
+            {
+              label: (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <span className={`${styles.statDot} ${styles.dotProblem}`} />
+                  {t('af.status_problem')}
+                </span>
+              ),
+              value: 'problem',
+            },
+          ]}
+        />
+
+        <Select<AuthFileSortKey>
+          value={sortMode}
+          onChange={setSortMode}
+          style={{ width: 170 }}
+          options={[
+            { value: 'name-asc', label: t('af.sort_name_asc') },
+            { value: 'name-desc', label: t('af.sort_name_desc') },
+            { value: 'requests-desc', label: t('af.sort_requests') },
+            { value: 'priority-desc', label: t('af.sort_priority') },
+            { value: 'weight-desc', label: t('af.sort_weight') },
+          ]}
+        />
+
+        <Segmented
+          value={compactMode ? 'compact' : 'grid'}
+          onChange={(val) => setCompactMode(val === 'compact')}
+          options={[
+            { value: 'grid', icon: <AppstoreOutlined />, title: t('af.view_regular') },
+            { value: 'compact', icon: <BarsOutlined />, title: t('af.view_compact') },
+          ]}
+        />
+
+        <Select
+          value={pageSize}
+          onChange={setPageSize}
+          style={{ width: 95 }}
+          options={[
+            { value: 12, label: '12 / 页' },
+            { value: 24, label: '24 / 页' },
+            { value: 48, label: '48 / 页' },
+          ]}
+        />
+      </div>
+
+      {/* Cards Grid / Empty State */}
+      {sorted.length === 0 ? (
+        <div className="terminal-panel auth-files-empty">
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={files.length === 0 ? t('af.empty_all') : t('af.empty_filter')}
+          />
+        </div>
+      ) : (
+        <>
+          <div className={compactMode ? styles.compactGrid : styles.cardsGrid}>
+            {pagedFiles.map((file) => {
+              const fileBusy = busyFiles[file.name] === true || isBatchMutating;
+              return (
+                <AuthFileCard
+                  key={`${file.name}:${file.auth_index ?? ''}`}
+                  file={file}
+                  compact={compactMode}
+                  selected={selected.includes(file.name)}
+                  busy={fileBusy}
+                  onSelect={(checked) =>
+                    setSelected((curr) =>
+                      checked ? [...curr, file.name] : curr.filter((name) => name !== file.name)
+                    )
+                  }
+                  onToggle={() => toggleSingleStatus(file)}
+                  onDownload={() => downloadMutation.mutate(file)}
+                  onDelete={() => deleteSingle(file.name)}
+                  onEdit={() => setSelectedFile(file)}
+                  onShowModels={() => setModelsFile(file)}
+                />
+              );
+            })}
+          </div>
+
+          {sorted.length > pageSize && (
+            <div className={styles.paginationWrap}>
+              <Pagination
+                current={page}
+                pageSize={pageSize}
+                total={sorted.length}
+                onChange={(newPage) => setPage(newPage)}
+                showSizeChanger={false}
+                showQuickJumper
+              />
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Details & Configuration Drawer */}
       <AuthFileDetailDrawer
         file={selectedFile}
         open={Boolean(selectedFile)}
         onClose={() => setSelectedFile(null)}
         onSaved={() => {
           setSelectedFile(null);
-          invalidate();
+          invalidate(false);
         }}
         onDownload={(f) => downloadMutation.mutate(f)}
       />
-    </div>
-  );
-};
 
-const AuthFileCard: React.FC<{
-  file: ManagementAuthFile;
-  selected: boolean;
-  busy: boolean;
-  onSelect: (checked: boolean) => void;
-  onToggle: () => void;
-  onDownload: () => void;
-  onDelete: () => void;
-  onEdit: () => void;
-}> = ({ file, selected, busy, onSelect, onToggle, onDownload, onDelete, onEdit }) => {
-  const t = useT();
-  return (
-    <article className={`terminal-panel auth-file-card ${selected ? 'is-selected' : ''}`}>
-      <div className="auth-file-card-head">
-        <input type="checkbox" checked={selected} onChange={(event) => onSelect(event.target.checked)} aria-label={t('af.select_one', { name: file.name })} />
-        <span className={`auth-status ${file.disabled ? 'is-disabled' : file.unavailable ? 'is-unavailable' : 'is-active'}`} />
-        <div className="auth-file-name" title={file.name}>{file.name}</div>
-        <Tag>{file.type || file.provider || 'unknown'}</Tag>
-      </div>
-      <div className="auth-file-identity">{file.email || file.project_id || t('af.identity_missing')}</div>
-      <div className="auth-file-meta">
-        <span>auth: {file.auth_index || '—'}</span>
-        <span>{t('dash.success_n', { n: file.success })}</span>
-        <span>{t('dash.failure_n', { n: file.failed })}</span>
-        {file.priority !== undefined && file.priority > 0 && <Tag style={{ margin: 0, fontSize: 10 }}>P:{file.priority}</Tag>}
-        {file.weight !== undefined && file.weight !== 1 && <Tag style={{ margin: 0, fontSize: 10 }}>W:{file.weight}</Tag>}
-      </div>
-      {file.note && <div className="auth-file-note">{file.note}</div>}
-      <div className="auth-file-footer">
-        <span className="terminal-muted">{file.disabled ? 'DISABLED' : file.unavailable ? 'UNAVAILABLE' : 'ACTIVE'}</span>
-        <Button
-          type="link"
-          size="small"
-          icon={<EditOutlined />}
-          onClick={onEdit}
-          style={{ padding: '0 4px', fontSize: 12 }}
-        >
-          {t('common.edit')}
-        </Button>
-        <Switch size="small" checked={!file.disabled} disabled={busy || file.runtime_only} onChange={onToggle} />
-        <Button type="text" size="small" icon={<DownloadOutlined />} disabled={busy || file.runtime_only} onClick={onDownload} aria-label={t('af.download_one', { name: file.name })} />
-        <Popconfirm title={t('af.delete_one_title')} onConfirm={onDelete} okText={t('common.delete')} cancelText={t('common.cancel')}>
-          <Button type="text" danger size="small" icon={<DeleteOutlined />} disabled={busy || file.runtime_only} aria-label={t('af.delete_one', { name: file.name })} />
-        </Popconfirm>
-      </div>
-    </article>
+      {/* Quick Models Modal */}
+      <ModelsModal
+        file={modelsFile}
+        open={Boolean(modelsFile)}
+        onClose={() => setModelsFile(null)}
+      />
+    </div>
   );
 };
