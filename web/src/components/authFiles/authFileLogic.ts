@@ -153,6 +153,15 @@ export function filterAuthFiles(
   });
 }
 
+export function chunkItems<T>(items: T[], chunkSize = 100): T[][] {
+  if (chunkSize <= 0) return [items];
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += chunkSize) {
+    chunks.push(items.slice(i, i + chunkSize));
+  }
+  return chunks;
+}
+
 export async function executeBatchStatus(
   files: ManagementAuthFile[],
   disabled: boolean,

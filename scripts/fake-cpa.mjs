@@ -60,6 +60,18 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       json(response, 200, { models: [{ id: 'gpt-e2e', display_name: 'GPT E2E' }] });
       return;
     }
+    if (request.method === 'PATCH' && path === '/auth-files/status') {
+      json(response, 200, { status: 'ok' });
+      return;
+    }
+    if (request.method === 'PATCH' && path === '/auth-files/fields') {
+      json(response, 200, { status: 'ok' });
+      return;
+    }
+    if (request.method === 'DELETE' && path === '/auth-files') {
+      json(response, 200, { status: 'ok', deleted: 1, files: ['claude-fixture.json'] });
+      return;
+    }
     if (request.method === 'GET' && path === '/config') {
       json(response, 200, {
         host: '127.0.0.1', port: 8317, debug: false, 'proxy-url': '', 'request-log': true,

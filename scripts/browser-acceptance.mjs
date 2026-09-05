@@ -174,6 +174,102 @@ try {
   await auditPage(page, responseBodies, '/usage/events', '.usage-events-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
   await auditPage(page, responseBodies, '/ai-providers', '.providers-page');
   await auditPage(page, responseBodies, '/auth-files', '.auth-files-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
+
+  // Auth Files Page Flow & Behavioral Checks
+  await page.goto(`${appURL}/auth-files`, { waitUntil: 'networkidle' });
+  await page.locator('.auth-files-page').first().waitFor({ state: 'visible', timeout: 15000 });
+
+  // 1. Initial card count
+  const authCardCount = await page.locator('.auth-files-page .ant-card').count();
+  check('auth-files page renders credential cards', authCardCount >= 5, `cards=${authCardCount}`);
+
+  // 2. Search filtering
+  const searchInput = page.locator('.auth-files-page input[placeholder*="Search"], .auth-files-page input[placeholder*="搜索"]').first();
+  if (await searchInput.isVisible()) {
+    await searchInput.fill('claude');
+    await page.waitForTimeout(300);
+    const claudeCardCount = await page.locator('.auth-files-page .ant-card').count();
+    check('auth-files search filters to matching file', claudeCardCount === 1, `count=${claudeCardCount}`);
+    await searchInput.fill('');
+    await page.waitForTimeout(300);
+  }
+
+  // 3. Provider tabs
+  const codexTab = page.locator('.auth-files-page .ant-tabs-tab').filter({ hasText: /Codex/i }).first();
+  if (await codexTab.isVisible()) {
+    await codexTab.click();
+    await page.waitForTimeout(300);
+    const codexCount = await page.locator('.auth-files-page .ant-card').count();
+    check('auth-files provider tab filters to Codex', codexCount === 1, `count=${codexCount}`);
+    const allTab = page.locator('.auth-files-page .ant-tabs-tab').first();
+    await allTab.click();
+    await page.waitForTimeout(300);
+  }
+
+  // 4. Quick Models modal
+  const modelsBtn = page.locator('.auth-files-page button').filter({ hasText: /模型|Models/i }).first();
+  if (await modelsBtn.isVisible()) {
+    await modelsBtn.click();
+    const modelsModal = page.locator('.ant-modal').filter({ hasText: /模型|Models/i });
+    await modelsModal.waitFor({ state: 'visible', timeout: 5000 });
+    check('auth-files models modal opens', await modelsModal.isVisible());
+    const closeBtn = modelsModal.getByRole('button', { name: /关闭|Close/i });
+    await closeBtn.click();
+    await modelsModal.waitFor({ state: 'hidden', timeout: 5000 });
+  }
+
+  // 5. Drawer opening & dirty discard confirmation
+  const editBtn = page.locator('.auth-files-page button').filter({ hasText: /编辑|Edit/i }).first();
+  if (await editBtn.isVisible()) {
+    await editBtn.click();
+    const drawer = page.locator('.ant-drawer');
+    await drawer.waitFor({ state: 'visible', timeout: 5000 });
+    check('auth-files drawer opens', await drawer.isVisible());
+
+    // Modify a field to dirty the form
+    const noteArea = drawer.locator('textarea').first();
+    await noteArea.fill('new dirty test note');
+
+    // Attempt close while dirty -> triggers confirm modal
+    const drawerCloseBtn = drawer.locator('.ant-drawer-close');
+    await drawerCloseBtn.click();
+    const confirmModal = page.locator('.ant-modal-confirm');
+    await confirmModal.waitFor({ state: 'visible', timeout: 5000 });
+    check('auth-files drawer dirty close prompts confirmation', await confirmModal.isVisible());
+
+    // Cancel keeping it open
+    const cancelConfirm = confirmModal.locator('.ant-btn').filter({ hasText: /取\s*消|Cancel/i }).first();
+    await cancelConfirm.click();
+    await confirmModal.waitFor({ state: 'hidden', timeout: 5000 });
+    check('auth-files cancel keeps drawer open', await drawer.isVisible());
+
+    // Confirm discard
+    await drawerCloseBtn.click();
+    await confirmModal.waitFor({ state: 'visible', timeout: 5000 });
+    const okConfirm = confirmModal.locator('.ant-btn').filter({ hasText: /确\s*定|Confirm/i }).first();
+    await okConfirm.click();
+    await page.locator('.ant-drawer-open').waitFor({ state: 'hidden', timeout: 5000 });
+    check('auth-files discard closes drawer', (await page.locator('.ant-drawer-open').count()) === 0);
+  }
+
+  // 6. Select page & Batch bar
+  const selectPageBtn = page.locator('.auth-files-page button').filter({ hasText: /全选|选择本页|Select/i }).first();
+  if (await selectPageBtn.isVisible()) {
+    await selectPageBtn.click();
+    const clearBtn = page.locator('.auth-files-page button').filter({ hasText: /取消选择|Clear/i }).first();
+    check('auth-files batch bar appears after selection', await clearBtn.isVisible());
+    await clearBtn.click();
+  }
+
+  // 7. Viewports at 390px and 320px for auth-files
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.waitForTimeout(200);
+    const overflow = await page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - window.innerWidth));
+    check(`auth-files ${width}px viewport has no overflow`, overflow === 0, `overflow=${overflow}`);
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+
   await auditPage(page, responseBodies, '/oauth', '.oauth-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
   await auditPage(page, responseBodies, '/quota', '.quota-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
 

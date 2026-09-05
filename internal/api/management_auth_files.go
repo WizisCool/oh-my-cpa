@@ -334,43 +334,30 @@ func (h *Handler) deleteManagementAuthFiles(writer http.ResponseWriter, request 
 		return
 	}
 
-	normalizedFailures, failedSet := normalizeUpstreamDeleteFailures(cpaResp["failed"])
-	confirmedDeleted := make([]string, 0, len(unique))
-	for _, name := range unique {
-		if _, isFailed := failedSet[strings.ToLower(name)]; !isFailed {
-			confirmedDeleted = append(confirmedDeleted, name)
-		}
-	}
-	deletedCount := len(confirmedDeleted)
+	confirmedDeleted, normalizedFailures, outcomeStatus := normalizeDeleteResponse(unique, cpaResp)
 
 	auditOutcome := "success"
-	if len(normalizedFailures) > 0 {
-		if deletedCount == 0 {
-			auditOutcome = "failure"
-		} else {
-			auditOutcome = "partial"
-		}
+	if outcomeStatus == "partial" {
+		auditOutcome = "partial"
+	} else if outcomeStatus == "failure" {
+		auditOutcome = "failure"
 	}
 
-	if auditErr := h.recordAudit(request, "auth_file.delete", "auth_file", strings.Join(unique, ","), auditOutcome, map[string]any{"deleted": deletedCount, "failed_count": len(normalizedFailures)}); auditErr != nil {
+	if auditErr := h.recordAudit(request, "auth_file.delete", "auth_file", strings.Join(unique, ","), auditOutcome, map[string]any{"deleted": len(confirmedDeleted), "failed_count": len(normalizedFailures)}); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit log failure after deletion")
 		return
 	}
 
-	if len(normalizedFailures) > 0 {
-		status := "partial"
-		if deletedCount == 0 {
-			status = "failure"
-		}
+	if outcomeStatus != "ok" {
 		writeJSON(writer, http.StatusMultiStatus, map[string]any{
-			"status":  status,
-			"deleted": deletedCount,
+			"status":  outcomeStatus,
+			"deleted": len(confirmedDeleted),
 			"files":   confirmedDeleted,
 			"failed":  normalizedFailures,
 		})
 		return
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "deleted": deletedCount, "files": confirmedDeleted})
+	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "deleted": len(confirmedDeleted), "files": confirmedDeleted})
 }
 
 type authFileDeleteFailureItem struct {
@@ -378,34 +365,99 @@ type authFileDeleteFailureItem struct {
 	Error string `json:"error"`
 }
 
-func normalizeUpstreamDeleteFailures(raw any) ([]authFileDeleteFailureItem, map[string]struct{}) {
-	failedSlice, ok := raw.([]any)
-	if !ok || len(failedSlice) == 0 {
-		return nil, make(map[string]struct{})
+func sanitizeDeleteError(raw string) string {
+	lower := strings.ToLower(raw)
+	switch {
+	case strings.Contains(lower, "not found") || strings.Contains(lower, "no such"):
+		return "file not found"
+	case strings.Contains(lower, "permission") || strings.Contains(lower, "denied"):
+		return "permission denied"
+	case strings.Contains(lower, "in use") || strings.Contains(lower, "busy"):
+		return "file in use"
+	default:
+		return "deletion failed"
 	}
-	result := make([]authFileDeleteFailureItem, 0, len(failedSlice))
-	failedSet := make(map[string]struct{}, len(failedSlice))
-	for _, item := range failedSlice {
-		record, isMap := item.(map[string]any)
-		if !isMap {
-			continue
-		}
-		rawName, _ := record["name"].(string)
-		name := boundedText(rawName, managementAuthFileNameLimit)
-		rawErr, _ := record["error"].(string)
-		if rawErr == "" {
-			rawErr, _ = record["message"].(string)
-		}
-		errMsg := boundedText(rawErr, managementAuthFileFieldLimit)
-		if errMsg == "" {
-			errMsg = "deletion failed"
-		}
-		if name != "" {
-			failedSet[strings.ToLower(name)] = struct{}{}
-			result = append(result, authFileDeleteFailureItem{Name: name, Error: errMsg})
+}
+
+func normalizeDeleteResponse(requested []string, cpaResp map[string]any) ([]string, []authFileDeleteFailureItem, string) {
+	requestedSet := make(map[string]bool, len(requested))
+	for _, name := range requested {
+		requestedSet[name] = true
+	}
+
+	seenFailed := make(map[string]bool)
+	failures := make([]authFileDeleteFailureItem, 0)
+
+	// 1. Process upstream explicit failures
+	if rawFailed, ok := cpaResp["failed"].([]any); ok {
+		for _, item := range rawFailed {
+			record, isMap := item.(map[string]any)
+			if !isMap {
+				continue
+			}
+			rawName, _ := record["name"].(string)
+			if !requestedSet[rawName] || seenFailed[rawName] {
+				continue
+			}
+			rawErr, _ := record["error"].(string)
+			if rawErr == "" {
+				rawErr, _ = record["message"].(string)
+			}
+			failures = append(failures, authFileDeleteFailureItem{
+				Name:  rawName,
+				Error: sanitizeDeleteError(rawErr),
+			})
+			seenFailed[rawName] = true
 		}
 	}
-	return result, failedSet
+
+	// 2. Process upstream explicit successes
+	seenSuccess := make(map[string]bool)
+	confirmedDeleted := make([]string, 0, len(requested))
+
+	if rawFiles, ok := cpaResp["files"].([]any); ok {
+		for _, item := range rawFiles {
+			rawName, isStr := item.(string)
+			if !isStr || !requestedSet[rawName] || seenSuccess[rawName] || seenFailed[rawName] {
+				continue
+			}
+			confirmedDeleted = append(confirmedDeleted, rawName)
+			seenSuccess[rawName] = true
+		}
+	} else if len(requested) == 1 && len(failures) == 0 {
+		// Documented CPA single-file contract: returns {"status": "ok"} or {"deleted": 1} without files array
+		name := requested[0]
+		if status, isStr := cpaResp["status"].(string); isStr && (status == "ok" || status == "success") {
+			confirmedDeleted = append(confirmedDeleted, name)
+			seenSuccess[name] = true
+		} else if deleted, isNum := cpaResp["deleted"].(float64); isNum && deleted == 1 {
+			confirmedDeleted = append(confirmedDeleted, name)
+			seenSuccess[name] = true
+		} else if deletedInt, isInt := cpaResp["deleted"].(int); isInt && deletedInt == 1 {
+			confirmedDeleted = append(confirmedDeleted, name)
+			seenSuccess[name] = true
+		}
+	}
+
+	// 3. Any requested file neither confirmed deleted nor explicitly failed is unconfirmed
+	for _, name := range requested {
+		if !seenSuccess[name] && !seenFailed[name] {
+			failures = append(failures, authFileDeleteFailureItem{
+				Name:  name,
+				Error: "deletion unconfirmed by upstream",
+			})
+			seenFailed[name] = true
+		}
+	}
+
+	// 4. Compute status
+	if len(confirmedDeleted) == len(requested) && len(failures) == 0 {
+		return confirmedDeleted, failures, "ok"
+	}
+	if len(confirmedDeleted) == 0 {
+		return confirmedDeleted, failures, "failure"
+	}
+	return confirmedDeleted, failures, "partial"
 }
 
 func (h *Handler) downloadManagementAuthFile(writer http.ResponseWriter, request *http.Request) {

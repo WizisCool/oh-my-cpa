@@ -241,6 +241,7 @@ export const AuthFileCard: React.FC<AuthFileCardProps> = ({
         style={{
           display: 'flex',
           alignItems: 'center',
+          flexWrap: 'wrap',
           gap: 6,
           marginTop: 'auto',
           paddingTop: 8,

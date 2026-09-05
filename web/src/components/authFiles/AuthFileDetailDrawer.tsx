@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
+  Alert,
   Drawer,
   Descriptions,
   Tag,
@@ -59,6 +60,15 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
 
   const sessionCounterRef = useRef(0);
   const currentSessionRef = useRef<number>(0);
+  const isPendingRef = useRef<boolean>(false);
+
+  // Invalidate session on unmount
+  useEffect(() => {
+    return () => {
+      currentSessionRef.current = 0;
+      isPendingRef.current = false;
+    };
+  }, []);
 
   // Initialize form baseline whenever a new file is opened
   useEffect(() => {
@@ -104,6 +114,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
       return api.patchManagementAuthFileFields(fileName, patch);
     },
     onSuccess: (_, variables) => {
+      isPendingRef.current = false;
       onSaved();
       if (variables.sessionId === currentSessionRef.current) {
         message.success(t('af.save_fields_success'));
@@ -112,13 +123,14 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
       }
     },
     onError: (err: unknown) => {
+      isPendingRef.current = false;
       const msg = err instanceof ApiError ? err.message : String(err);
       message.error(msg);
     },
   });
 
   const handleAttemptClose = useCallback(() => {
-    if (saveMutation.isPending) return;
+    if (saveMutation.isPending || isPendingRef.current) return;
     if (isDirty) {
       modal.confirm({
         title: t('af.unsaved_confirm_title'),
@@ -150,7 +162,8 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   });
 
   const handleFinish = (values: FormValues) => {
-    if (!file || file.runtime_only) return;
+    if (!file || file.runtime_only || isPendingRef.current || saveMutation.isPending) return;
+    isPendingRef.current = true;
 
     const patch: Record<string, unknown> = {};
     if (values.priority !== baseline.priority && values.priority !== undefined) {
@@ -164,6 +177,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
     }
 
     if (Object.keys(patch).length === 0) {
+      isPendingRef.current = false;
       onClose();
       return;
     }
@@ -242,16 +256,16 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
           {/* Identity & Status Card */}
           <Card size="small" className="terminal-panel">
             <Descriptions column={{ xs: 1, sm: 2 }} size="small" bordered>
-              <Descriptions.Item label="File Name">
+              <Descriptions.Item label={t('af.detail_file_name')}>
                 <span className="mono-num">{file.name}</span>
               </Descriptions.Item>
-              <Descriptions.Item label="Provider">
+              <Descriptions.Item label={t('af.detail_provider')}>
                 <Tag color="purple">{file.type || file.provider || 'unknown'}</Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="Auth Index">
+              <Descriptions.Item label={t('af.detail_auth_index')}>
                 <span className="mono-num">{file.auth_index || '—'}</span>
               </Descriptions.Item>
-              <Descriptions.Item label="Status">
+              <Descriptions.Item label={t('af.detail_status')}>
                 {file.runtime_only ? (
                   <Tag>{t('af.runtime_only_badge')}</Tag>
                 ) : isDisabled ? (
@@ -262,29 +276,26 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                   <Tag color="success">{t('af.enabled')}</Tag>
                 )}
               </Descriptions.Item>
-              <Descriptions.Item label="Identity">
+              <Descriptions.Item label={t('af.detail_identity')}>
                 {identity?.primary || t('af.identity_missing')}
               </Descriptions.Item>
-              <Descriptions.Item label="Total Requests">
+              <Descriptions.Item label={t('af.detail_total_requests')}>
                 <span className="mono-num">
                   {t('dash.success_n', { n: file.success })} · {t('dash.failure_n', { n: file.failed })}
                 </span>
               </Descriptions.Item>
             </Descriptions>
             {hasWarning && file.status_message && (
-              <div
-                style={{
-                  marginTop: 10,
-                  padding: '6px 10px',
-                  background: 'rgba(255, 159, 10, 0.12)',
-                  border: '1px solid rgba(255, 159, 10, 0.4)',
-                  borderRadius: 4,
-                  color: 'var(--warn)',
-                  fontSize: 12,
-                }}
-              >
-                <b>{t('af.warning_status')}:</b> {file.status_message}
-              </div>
+              <Alert
+                type="warning"
+                showIcon
+                description={
+                  <span>
+                    <b>{t('af.warning_status')}:</b> {file.status_message}
+                  </span>
+                }
+                style={{ marginTop: 12 }}
+              />
             )}
           </Card>
 
@@ -298,11 +309,33 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
               disabled={saveMutation.isPending || file.runtime_only}
             >
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                <Form.Item name="priority" label={t('af.field_priority')}>
-                  <InputNumber style={{ width: '100%' }} min={0} max={100} />
+                <Form.Item
+                  name="priority"
+                  label={t('af.field_priority')}
+                  rules={[
+                    {
+                      type: 'integer',
+                      min: 0,
+                      max: 100,
+                      message: 'Priority must be an integer between 0 and 100',
+                    },
+                  ]}
+                >
+                  <InputNumber style={{ width: '100%' }} min={0} max={100} precision={0} />
                 </Form.Item>
-                <Form.Item name="weight" label={t('af.field_weight')}>
-                  <InputNumber style={{ width: '100%' }} min={0} max={1000} />
+                <Form.Item
+                  name="weight"
+                  label={t('af.field_weight')}
+                  rules={[
+                    {
+                      type: 'integer',
+                      min: 0,
+                      max: 1000,
+                      message: 'Weight must be an integer between 0 and 1000',
+                    },
+                  ]}
+                >
+                  <InputNumber style={{ width: '100%' }} min={0} max={1000} precision={0} />
                 </Form.Item>
               </div>
 

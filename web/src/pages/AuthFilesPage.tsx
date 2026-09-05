@@ -25,6 +25,7 @@ import { api, ApiError } from '../api/client';
 import { useT, type TFunc } from '../i18n';
 import type { ManagementAuthFile } from '../types/managementAuthFile';
 import {
+  chunkItems,
   executeBatchStatus,
   filterAuthFiles,
   isAuthFileDisabled,
@@ -77,9 +78,23 @@ export const AuthFilesPage: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<ManagementAuthFile | null>(null);
   const [modelsFile, setModelsFile] = useState<ManagementAuthFile | null>(null);
   const [busyFiles, setBusyFiles] = useState<Record<string, boolean>>({});
-  const [isBatchMutating, setIsBatchMutating] = useState(false);
+  const [isOperating, setIsOperating] = useState(false);
 
+  // Synchronous operation gate
+  const operationLockRef = useRef<boolean>(false);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  const acquireLock = (): boolean => {
+    if (operationLockRef.current) return false;
+    operationLockRef.current = true;
+    setIsOperating(true);
+    return true;
+  };
+
+  const releaseLock = () => {
+    operationLockRef.current = false;
+    setIsOperating(false);
+  };
 
   const filesQuery = useQuery({
     queryKey: ['management-auth-files'],
@@ -119,11 +134,11 @@ export const AuthFilesPage: React.FC = () => {
   const disabledCount = useMemo(() => files.filter(isAuthFileDisabled).length, [files]);
   const problemCount = useMemo(() => files.filter(isAuthFileProblem).length, [files]);
 
-  // Provider tabs calculation: known providers first, then any extra providers observed
+  // Provider tabs calculation: known providers first, then any extra providers observed (including unknown)
   const tabProviders = useMemo(() => {
     const extras = files
       .map(providerOf)
-      .filter((p) => p && !KNOWN_PROVIDERS.includes(p) && p !== 'unknown');
+      .filter((p) => p && !KNOWN_PROVIDERS.includes(p));
     return ['all', ...KNOWN_PROVIDERS, ...Array.from(new Set(extras)).sort()];
   }, [files]);
 
@@ -171,8 +186,6 @@ export const AuthFilesPage: React.FC = () => {
     [pagedFiles]
   );
 
-  const isAnyMutating = isBatchMutating || Object.keys(busyFiles).length > 0;
-
   const invalidate = (clearSelection = false) => {
     if (clearSelection) {
       setSelected([]);
@@ -209,29 +222,35 @@ export const AuthFilesPage: React.FC = () => {
   // Single file download (with runtime-only guard)
   const downloadMutation = useMutation({
     mutationFn: (file: ManagementAuthFile) => {
-      if (file.runtime_only) {
+      const currentFiles = filesQuery.data?.files ?? [];
+      const target = currentFiles.find((f) => f.name === file.name);
+      if (!target || target.runtime_only) {
         throw new Error(t('af.runtime_only_badge'));
       }
-      return api.downloadManagementAuthFile(file.name);
+      return api.downloadManagementAuthFile(target.name);
     },
     onSuccess: (blob, file) => downloadBlob(blob, file.name),
     onError: (error) => message.error(safeError(error, t)),
   });
 
-  // Single file delete (revalidates non-runtime eligibility)
+  // Single file delete (revalidates non-runtime eligibility and confirmed returned files)
   const deleteSingle = async (name: string) => {
-    const target = nonRuntimeFilesMap.get(name);
-    if (!target || target.runtime_only) return;
-
+    if (!acquireLock()) return;
     try {
+      const currentFiles = filesQuery.data?.files ?? [];
+      const target = currentFiles.find((f) => f.name === name);
+      if (!target || target.runtime_only) return;
+
       setBusyFiles((prev) => ({ ...prev, [name]: true }));
       const result = await api.deleteManagementAuthFiles([name]);
-      if (result.failed && result.failed.length > 0) {
-        message.error(result.failed[0]?.error || t('af.request_failed'));
-      } else {
+      const isConfirmed = result.files && result.files.includes(name);
+      if (isConfirmed) {
         message.success(t('af.deleted', { n: 1 }));
         setSelected((prev) => prev.filter((n) => n !== name));
         invalidate(false);
+      } else {
+        const errMsg = (result.failed && result.failed[0]?.error) || t('af.request_failed');
+        message.error(errMsg);
       }
     } catch (err) {
       message.error(safeError(err, t));
@@ -241,18 +260,21 @@ export const AuthFilesPage: React.FC = () => {
         delete next[name];
         return next;
       });
+      releaseLock();
     }
   };
 
   // Single file status toggle (uses isAuthFileDisabled to correctly toggle both disabled flag and status='disabled')
   const toggleSingleStatus = async (file: ManagementAuthFile) => {
-    if (file.runtime_only) return;
-    const isCurrentlyDisabled = isAuthFileDisabled(file);
-    const nextDisabled = !isCurrentlyDisabled;
-
+    if (!acquireLock()) return;
     try {
-      setBusyFiles((prev) => ({ ...prev, [file.name]: true }));
-      await api.setManagementAuthFileStatus(file.name, nextDisabled, file.auth_index);
+      const currentFiles = filesQuery.data?.files ?? [];
+      const target = currentFiles.find((f) => f.name === file.name);
+      if (!target || target.runtime_only) return;
+
+      setBusyFiles((prev) => ({ ...prev, [target.name]: true }));
+      const isCurrentlyDisabled = isAuthFileDisabled(target);
+      await api.setManagementAuthFileStatus(target.name, !isCurrentlyDisabled, target.auth_index);
       invalidate(false);
     } catch (err) {
       message.error(safeError(err, t));
@@ -262,19 +284,21 @@ export const AuthFilesPage: React.FC = () => {
         delete next[file.name];
         return next;
       });
+      releaseLock();
     }
   };
 
   // Batch status change (preserves failed selections and removes only confirmed successes)
   const handleBatchStatus = async (disabled: boolean) => {
-    const targetFiles = selected
-      .map((name) => nonRuntimeFilesMap.get(name))
-      .filter((f): f is ManagementAuthFile => Boolean(f && !f.runtime_only));
-
-    if (targetFiles.length === 0) return;
-
-    setIsBatchMutating(true);
+    if (!acquireLock()) return;
     try {
+      const currentFiles = filesQuery.data?.files ?? [];
+      const targetFiles = selected
+        .map((name) => currentFiles.find((f) => f.name === name))
+        .filter((f): f is ManagementAuthFile => Boolean(f && !f.runtime_only));
+
+      if (targetFiles.length === 0) return;
+
       const outcome = await executeBatchStatus(
         targetFiles,
         disabled,
@@ -309,26 +333,26 @@ export const AuthFilesPage: React.FC = () => {
     } catch (err) {
       message.error(safeError(err, t));
     } finally {
-      setIsBatchMutating(false);
+      releaseLock();
     }
   };
 
   // Batch delete (processes in chunks of 100, removes only confirmed deleted names)
   const handleBatchDelete = async () => {
-    const targetNames = selected.filter((name) => {
-      const f = nonRuntimeFilesMap.get(name);
-      return Boolean(f && !f.runtime_only);
-    });
-
-    if (targetNames.length === 0) return;
-
-    setIsBatchMutating(true);
-    const confirmedDeletedNames: string[] = [];
-    const failedItems: Array<{ name: string; error: string }> = [];
-
+    if (!acquireLock()) return;
     try {
-      for (let i = 0; i < targetNames.length; i += 100) {
-        const chunk = targetNames.slice(i, i + 100);
+      const currentFiles = filesQuery.data?.files ?? [];
+      const targetNames = selected.filter((name) => {
+        const f = currentFiles.find((item) => item.name === name);
+        return Boolean(f && !f.runtime_only);
+      });
+
+      if (targetNames.length === 0) return;
+
+      const confirmedDeletedNames: string[] = [];
+      const failedItems: Array<{ name: string; error: string }> = [];
+
+      for (const chunk of chunkItems(targetNames, 100)) {
         try {
           const res = await api.deleteManagementAuthFiles(chunk);
           if (res.files && res.files.length > 0) {
@@ -369,15 +393,17 @@ export const AuthFilesPage: React.FC = () => {
     } catch (err) {
       message.error(safeError(err, t));
     } finally {
-      setIsBatchMutating(false);
+      releaseLock();
     }
   };
 
   const handleSelectPage = () => {
+    if (isOperating) return;
     setSelected((prev) => Array.from(new Set([...prev, ...selectableOnPage])));
   };
 
   const handleClearSelection = () => {
+    if (isOperating) return;
     setSelected([]);
   };
 
@@ -449,7 +475,7 @@ export const AuthFilesPage: React.FC = () => {
             icon={<UploadOutlined />}
             onClick={() => fileInput.current?.click()}
             loading={uploadMutation.isPending}
-            disabled={isAnyMutating}
+            disabled={isOperating}
           >
             {t('af.upload')}
           </Button>
@@ -458,7 +484,7 @@ export const AuthFilesPage: React.FC = () => {
             icon={<ReloadOutlined />}
             onClick={() => filesQuery.refetch()}
             loading={filesQuery.isFetching}
-            disabled={isAnyMutating}
+            disabled={isOperating}
           >
             {t('common.refresh')}
           </Button>
@@ -477,7 +503,7 @@ export const AuthFilesPage: React.FC = () => {
       <BatchActionBar
         selectedCount={selected.length}
         selectablePageCount={selectableOnPage.length}
-        isMutating={isBatchMutating}
+        isMutating={isOperating}
         onSelectPage={handleSelectPage}
         onClearSelection={handleClearSelection}
         onEnable={() => handleBatchStatus(false)}
@@ -502,7 +528,7 @@ export const AuthFilesPage: React.FC = () => {
             size="middle"
             icon={<CheckSquareOutlined />}
             onClick={handleSelectPage}
-            disabled={isAnyMutating}
+            disabled={isOperating}
           >
             {t('af.select_page_hint')}
           </Button>
@@ -573,7 +599,7 @@ export const AuthFilesPage: React.FC = () => {
         <>
           <div className={compactMode ? styles.compactGrid : styles.cardsGrid}>
             {pagedFiles.map((file) => {
-              const fileBusy = busyFiles[file.name] === true || isBatchMutating;
+              const fileBusy = busyFiles[file.name] === true || isOperating;
               return (
                 <AuthFileCard
                   key={`${file.name}:${file.auth_index ?? ''}`}
@@ -581,16 +607,21 @@ export const AuthFilesPage: React.FC = () => {
                   compact={compactMode}
                   selected={selected.includes(file.name)}
                   busy={fileBusy}
-                  onSelect={(checked) =>
+                  onSelect={(checked) => {
+                    if (isOperating) return;
                     setSelected((curr) =>
                       checked ? [...curr, file.name] : curr.filter((name) => name !== file.name)
-                    )
-                  }
+                    );
+                  }}
                   onToggle={() => toggleSingleStatus(file)}
                   onDownload={() => downloadMutation.mutate(file)}
                   onDelete={() => deleteSingle(file.name)}
-                  onEdit={() => setSelectedFile(file)}
-                  onShowModels={() => setModelsFile(file)}
+                  onEdit={() => {
+                    if (!isOperating) setSelectedFile(file);
+                  }}
+                  onShowModels={() => {
+                    if (!isOperating) setModelsFile(file);
+                  }}
                 />
               );
             })}
@@ -617,7 +648,6 @@ export const AuthFilesPage: React.FC = () => {
         open={Boolean(selectedFile)}
         onClose={() => setSelectedFile(null)}
         onSaved={() => {
-          setSelectedFile(null);
           invalidate(false);
         }}
         onDownload={(f) => downloadMutation.mutate(f)}

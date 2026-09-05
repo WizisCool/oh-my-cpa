@@ -10,6 +10,7 @@ import {
   sortAuthFiles,
   filterAuthFiles,
   executeBatchStatus,
+  chunkItems,
 } from '../web/src/components/authFiles/authFileLogic.ts';
 import type { ManagementAuthFile } from '../web/src/types/managementAuthFile.ts';
 
@@ -147,18 +148,19 @@ test('Toggle calculation: handles status="disabled" string properly', () => {
   assert.equal(nextDisabled, false, 'Next disabled flag must be false to enable it');
 });
 
-test('Batch processing handles >100 chunks without drops', () => {
+test('Production chunkItems splits lists correctly for batch operations', () => {
   const largeBatch: string[] = [];
   for (let i = 0; i < 250; i++) {
     largeBatch.push(`file-${i}.json`);
   }
-  const chunks: string[][] = [];
-  for (let i = 0; i < largeBatch.length; i += 100) {
-    chunks.push(largeBatch.slice(i, i + 100));
-  }
+  const chunks = chunkItems(largeBatch, 100);
   assert.equal(chunks.length, 3);
   assert.equal(chunks[0].length, 100);
   assert.equal(chunks[1].length, 100);
   assert.equal(chunks[2].length, 50);
+
+  // Edge cases
+  assert.deepEqual(chunkItems([]), []);
+  assert.deepEqual(chunkItems(['single']), [['single']]);
 });
 

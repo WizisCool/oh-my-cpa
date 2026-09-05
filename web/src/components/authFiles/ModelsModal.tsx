@@ -55,7 +55,7 @@ export const ModelsModal: React.FC<ModelsModalProps> = ({ file, open, onClose })
     }
     navigator.clipboard.writeText(text).then(
       () => message.success(t('common.copied')),
-      () => message.error(t('common.save_failed', { msg: 'clipboard error' }))
+      () => message.error(t('af.clipboard_error'))
     );
   };
 

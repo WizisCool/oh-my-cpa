@@ -41,6 +41,7 @@ export const ProviderTabs: React.FC<ProviderTabsProps> = ({
           <span>{label}</span>
           <Badge
             count={count}
+            showZero
             overflowCount={999}
             style={{
               backgroundColor: provider === active ? 'var(--accent)' : 'var(--border)',
