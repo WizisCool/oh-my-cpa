@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useT } from '../../i18n';
+import { formatTimeWithCountdown } from './quotaFormat';
 import styles from './QuotaPage.module.css';
 
 interface QuotaProgressBarProps {
@@ -22,13 +23,13 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
   remainingPercent,
   resetAtMS,
   resetLabel,
-  height = 6,
+  height = 8,
   showPercent = true,
 }) => {
   const t = useT();
   const [nowMS, setNowMS] = useState(Date.now());
 
-  // Live timer every 15 seconds for relative reset text
+  // Live ticker so reset countdowns tick without a refetch
   useEffect(() => {
     if (!resetAtMS) return;
     const interval = setInterval(() => setNowMS(Date.now()), 15000);
@@ -44,17 +45,15 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
   const hasData = rem != null;
   const safeRem = hasData ? Math.max(0, Math.min(100, rem!)) : 0;
 
-  // Determine semantic color class
+  // CPAMC-style three buckets: plenty green, getting low yellow, nearly gone red
   let barClass = styles.barMuted;
   if (hasData) {
-    if (safeRem <= 0) {
-      barClass = styles.barDanger;
-    } else if (safeRem < 20) {
-      barClass = styles.barWarn;
-    } else if (safeRem >= 70) {
+    if (safeRem >= 70) {
       barClass = styles.barSuccess;
+    } else if (safeRem >= 25) {
+      barClass = styles.barWarn;
     } else {
-      barClass = styles.barAccent;
+      barClass = styles.barDanger;
     }
   }
 
@@ -68,39 +67,33 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
     return label || '';
   })();
 
-  // Compute live relative reset string
-  const computedResetLabel = (() => {
-    if (!resetAtMS) return resetLabel;
-    const diff = resetAtMS - nowMS;
-    if (diff <= 0) return t('quota.recovered');
-    const totalMinutes = Math.ceil(diff / 60000);
-    if (totalMinutes < 60) return `${totalMinutes} ${t('quota.mins_later')}`;
-    const hours = Math.floor(totalMinutes / 60);
-    const mins = totalMinutes % 60;
-    const timeStr = new Date(resetAtMS).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    if (hours < 24) {
-      return mins > 0
-        ? `${timeStr} (${hours}h ${mins}m ${t('quota.later')})`
-        : `${timeStr} (${hours}h ${t('quota.later')})`;
+  // Reset cell: "09/05 19:43 · 4小时后"; backend-provided label as fallback
+  const computedResetText = (() => {
+    if (resetAtMS) {
+      if (resetAtMS - nowMS <= 0) return t('quota.recovered');
+      return formatTimeWithCountdown(resetAtMS, nowMS, t);
     }
-    const days = Math.floor(hours / 24);
-    const remH = hours % 24;
-    return `${timeStr} (${days}d ${remH}h ${t('quota.later')})`;
+    return resetLabel || '';
   })();
 
   const displayPercent = hasData ? `${Math.round(safeRem)}%` : '--';
 
   return (
     <div className={styles.progressWrap}>
-      {(resolvedLabel || showPercent) && (
-        <div className={styles.progressLabelRow}>
-          <span className={styles.progressLabel} title={resolvedLabel}>
-            {resolvedLabel}
-            {subLabel && <span style={{ color: 'var(--meta)', marginLeft: 6 }}>{subLabel}</span>}
+      <div className={styles.progressLabelRow}>
+        <span className={styles.progressLabel} title={resolvedLabel}>
+          {resolvedLabel}
+          {subLabel && <span className={styles.progressSubLabel}>{subLabel}</span>}
+        </span>
+        {showPercent && (
+          <span className={styles.progressValue} style={{ color: hasData ? undefined : 'var(--meta)' }}>
+            {displayPercent}
           </span>
-          {showPercent && <span className={styles.progressValue}>{displayPercent}</span>}
-        </div>
-      )}
+        )}
+        <span className={styles.progressReset} title={computedResetText || undefined}>
+          {computedResetText}
+        </span>
+      </div>
 
       <div
         className={styles.progressTrack}
@@ -114,15 +107,9 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
       >
         <div
           className={`${styles.progressBar} ${barClass}`}
-          style={{ width: `${safeRem}%` }}
+          style={{ width: hasData ? `${safeRem}%` : '0%' }}
         />
       </div>
-
-      {computedResetLabel && (
-        <div className={styles.progressResetRow}>
-          <span>{computedResetLabel}</span>
-        </div>
-      )}
     </div>
   );
 };

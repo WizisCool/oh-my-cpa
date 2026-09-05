@@ -177,64 +177,23 @@ try {
   await auditPage(page, responseBodies, '/oauth', '.oauth-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
   await auditPage(page, responseBodies, '/quota', '.quota-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
 
-  // Quota Workbench Interactive Flow & Screenshots
+  // Quota Cards Flow & Screenshots (cards-only page)
   await page.goto(`${appURL}/quota`, { waitUntil: 'networkidle' });
   await page.locator('.quota-page').first().waitFor({ state: 'visible', timeout: 15000 });
 
-  // Verify KPI cards and initial card view
-  const kpiCount = await page.locator('[class*="kpiCard"]').count();
-  check('quota workbench renders 5 KPI cards', kpiCount === 5, `kpiCards=${kpiCount}`);
+  // Verify card grid renders one card per credential
+  const cardCount = await page.locator('article[class*="quotaCard"]').count();
+  check('quota page renders credential cards', cardCount > 0, `quotaCards=${cardCount}`);
 
-  // Screenshot 1: Card Grid View (Desktop Dark)
-  await page.screenshot({ path: path.join(root, 'tmp', 'quota-cards-desktop.png') });
-
-  // Click "刷新当前凭据" to trigger quota refresh
-  const refreshAllBtn = page.getByRole('button', { name: /刷新当前凭据|Refresh visible/i });
+  // Click header refresh to trigger live quota refresh (cards have their own 刷新额度 buttons)
+  const refreshAllBtn = page.locator('.terminal-page-head').getByRole('button', { name: /刷新|Refresh/i });
   if (await refreshAllBtn.isVisible()) {
     await refreshAllBtn.click();
     await page.waitForTimeout(1000);
   }
 
-  // Screenshot 1: Card Grid View with refreshed quota data
+  // Screenshot: Card Grid View with refreshed quota data
   await page.screenshot({ path: path.join(root, 'tmp', 'quota-cards-desktop.png') });
-
-  // Switch to Matrix view
-  const matrixBtn = page.locator('.ant-segmented-item').filter({ hasText: /矩阵|Matrix/ });
-  if (await matrixBtn.isVisible()) {
-    await matrixBtn.click();
-    await page.locator('table[class*="matrixTable"]').waitFor({ state: 'visible', timeout: 5000 });
-    check('quota matrix view switches and renders table', await page.locator('table[class*="matrixTable"]').isVisible());
-    // Screenshot 2: Matrix View (Desktop Dark)
-    await page.screenshot({ path: path.join(root, 'tmp', 'quota-matrix-desktop.png') });
-  }
-
-  // Switch to Table view
-  const tableBtn = page.locator('.ant-segmented-item').filter({ hasText: /列表|Table/ });
-  if (await tableBtn.isVisible()) {
-    await tableBtn.click();
-    await page.locator('.ant-table').waitFor({ state: 'visible', timeout: 5000 });
-    check('quota table view switches and renders antd table', await page.locator('.ant-table').isVisible());
-  }
-
-  // Switch back to Cards and open Detail Drawer
-  const cardsBtn = page.locator('.ant-segmented-item').filter({ hasText: /卡片|Cards/ });
-  if (await cardsBtn.isVisible()) {
-    await cardsBtn.click();
-    await page.locator('article[class*="quotaCard"]').first().waitFor({ state: 'visible', timeout: 5000 });
-    // Click Details button on the first card
-    const detailBtn = page.locator('article[class*="quotaCard"]').first().getByRole('button', { name: /详情|Details/i });
-    await detailBtn.click();
-    const openDrawer = page.locator('.ant-drawer-open');
-    await openDrawer.waitFor({ state: 'visible', timeout: 8000 });
-    await page.waitForTimeout(500); // allow drawer slide-in animation to complete
-    check('quota detail drawer opens on credential click', await openDrawer.isVisible());
-    // Screenshot 3: Detail Drawer (Desktop Dark)
-    await page.screenshot({ path: path.join(root, 'tmp', 'quota-drawer-desktop.png') });
-    // Close drawer
-    await openDrawer.locator('.ant-drawer-close').click();
-    await page.locator('.ant-drawer-open').waitFor({ state: 'hidden', timeout: 5000 });
-    check('quota detail drawer closes cleanly', true);
-  }
 
   // Mobile & Light mode view for Quota page
   await page.setViewportSize({ width: 390, height: 844 });

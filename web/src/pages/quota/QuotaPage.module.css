@@ -2,133 +2,7 @@
   padding-bottom: 40px;
 }
 
-/* ── KPI Strip ── */
-.kpiStrip {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.kpiCard {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-.kpiLabel {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--meta);
-  margin-bottom: 6px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.kpiValueRow {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-}
-
-.kpiNumber {
-  font-size: 24px;
-  font-weight: 700;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
-  color: var(--fg);
-}
-
-.kpiPip {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 2px;
-}
-
-.pipSuccess { background: var(--success); }
-.pipWarn { background: var(--warn); }
-.pipDanger { background: var(--danger); }
-.pipMeta { background: var(--meta); }
-.pipAccent { background: var(--accent); }
-
-/* ── Toolbar ── */
-.toolbar {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 12px 16px;
-  margin-bottom: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.toolbarTopRow {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.providerTabs {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-
-.providerTabBtn {
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  padding: 4px 10px;
-  font-size: 12px;
-  font-family: var(--font-mono);
-  color: var(--fg-2);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: all var(--motion-fast);
-}
-
-.providerTabBtn:hover {
-  background: var(--hover-inset);
-  color: var(--fg);
-}
-
-.providerTabBtnActive {
-  background: var(--hover-inset);
-  border-color: var(--border);
-  color: var(--fg);
-  font-weight: 600;
-}
-
-.tabBadge {
-  background: var(--border);
-  border-radius: 2px;
-  padding: 1px 5px;
-  font-size: 10px;
-  color: var(--meta);
-}
-
-.toolbarControls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-/* ── View Modes: Cards Grid ── */
+/* ── Cards Grid ── */
 .cardsGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
@@ -169,8 +43,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-soft);
   background: var(--hover-inset);
@@ -203,94 +77,155 @@
   flex-shrink: 0;
 }
 
-.planTag {
+/* ── Plan summary strip: 套餐 | 续期时间 | 重置次数 ── */
+.metaRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 16px;
+  row-gap: 4px;
   font-size: 11px;
-  padding: 1px 6px;
+}
+
+.metaItem {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+}
+
+.metaLabel {
+  color: var(--meta);
+  flex-shrink: 0;
+}
+
+.metaValue {
+  color: var(--fg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Card sections (reset credits / limits) ── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sectionTitle {
+  font-size: 11px;
+  color: var(--meta);
+  letter-spacing: 0.2px;
+}
+
+.resetList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.resetRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 10px;
+  font-size: 11px;
+  background: var(--hover-inset);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  border: 1px solid var(--border);
 }
 
-.planElite {
-  background: var(--hover-inset);
-  color: var(--accent);
-  border-color: var(--accent);
-  font-weight: 700;
+.windowsList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.planPremium {
-  background: var(--hover-inset);
-  color: var(--warn);
-  border-color: var(--warn);
+.windowDivider {
+  height: 1px;
+  background: var(--border-soft);
+  margin: 2px 0;
 }
 
-.planStandard {
-  background: var(--hover-inset);
-  color: var(--fg-2);
+.noWindow {
+  font-size: 11px;
+  color: var(--meta);
+  padding: 8px 0;
+  text-align: center;
 }
 
 /* ── Progress Bar ── */
 .progressWrap {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   width: 100%;
 }
 
 .progressLabelRow {
   display: flex;
-  justify-content: space-between;
   align-items: baseline;
+  gap: 8px;
   font-size: 11px;
 }
 
 .progressLabel {
   color: var(--fg-2);
-  font-size: 11px;
+  flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.progressSubLabel {
+  color: var(--meta);
+  margin-left: 6px;
+}
+
 .progressValue {
+  flex: none;
   font-family: var(--font-mono);
-  font-weight: 600;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--fg);
-  margin-left: 8px;
+}
+
+.progressReset {
+  flex: 1;
+  text-align: right;
+  color: var(--meta);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .progressTrack {
   width: 100%;
-  height: 6px;
+  height: 8px;
   background: var(--hover-inset);
   border: 1px solid var(--border-soft);
-  border-radius: 2px;
+  border-radius: 4px;
   overflow: hidden;
   position: relative;
 }
 
 .progressBar {
   height: 100%;
-  border-radius: 1px;
+  border-radius: 3px;
   transition: width 200ms ease;
 }
 
 .barSuccess { background: var(--success); }
-.barAccent { background: var(--accent); }
 .barWarn { background: var(--warn); }
 .barDanger { background: var(--danger); }
 .barMuted { background: var(--meta); }
 
-.progressResetRow {
-  font-size: 10px;
-  color: var(--meta);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-/* ── Recommendation Alert in Card ── */
+/* ── Cooldown / notice banner in Card ── */
 .recBanner {
   background: var(--hover-inset);
   border: 1px solid var(--border);
@@ -318,11 +253,18 @@
   flex: 1;
 }
 
+.recSubDanger {
+  font-size: 10px;
+  color: var(--danger);
+  margin-top: 2px;
+}
+
 /* ── Card Footer ── */
 .cardFooter {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   border-top: 1px solid var(--border-soft);
   padding-top: 10px;
   margin-top: auto;
@@ -340,157 +282,8 @@
   gap: 6px;
 }
 
-/* ── Matrix Table ── */
-.matrixTableWrap {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  overflow-x: auto;
-}
-
-.matrixTable {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-  text-align: left;
-}
-
-.matrixTable th {
-  background: var(--hover-inset);
-  color: var(--meta);
-  font-weight: 600;
-  text-transform: uppercase;
-  font-size: 11px;
-  letter-spacing: 0.05em;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
-  white-space: nowrap;
-}
-
-.matrixTable td {
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border-soft);
-  vertical-align: middle;
-}
-
-.matrixTable tr:last-child td {
-  border-bottom: none;
-}
-
-.matrixTable tr:hover td {
-  background: var(--hover-inset);
-}
-
-.matrixCellProgress {
-  min-width: 140px;
-  max-width: 200px;
-}
-
-/* ── Timeline ── */
-.timelineContainer {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 14px 16px;
-  margin-top: 16px;
-}
-
-.timelineHeader {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.timelineTitle {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--fg);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.timelineAxis {
-  position: relative;
-  height: 24px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  justify-content: space-between;
-  padding: 0 4px;
-  font-size: 10px;
-  color: var(--meta);
-  font-family: var(--font-mono);
-}
-
-.timelineLanes {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.timelineLane {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 11px;
-}
-
-.timelineLaneLabel {
-  width: 120px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--fg-2);
-  flex-shrink: 0;
-  font-family: var(--font-mono);
-}
-
-.timelineTrack {
-  flex: 1;
-  height: 16px;
-  background: var(--hover-inset);
-  border: 1px solid var(--border-soft);
-  border-radius: 2px;
-  position: relative;
-  overflow: hidden;
-}
-
-.timelineMarker {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  background: var(--accent);
-  opacity: 0.85;
-  border-radius: 2px;
-}
-
-/* ── Drawer Sections ── */
-.drawerSection {
-  margin-bottom: 24px;
-}
-
-.drawerSectionTitle {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--meta);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin-bottom: 10px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid var(--border-soft);
-}
-
 @media (max-width: 768px) {
-  .kpiStrip {
-    grid-template-columns: 1fr 1fr;
-  }
   .cardsGrid {
     grid-template-columns: 1fr;
-  }
-  .toolbarTopRow {
-    flex-direction: column;
-    align-items: stretch;
   }
 }

@@ -1,41 +1,22 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { Alert, App as AntdApp, Empty } from 'antd';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useState } from 'react';
+import { Alert, App as AntdApp, Button, Empty, Spin } from 'antd';
+import { ReloadOutlined } from '@ant-design/icons';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
-import type { QuotaItem, QuotaOverviewSummary } from '../types/quota';
-import { QuotaSummaryMetrics } from './quota/QuotaSummaryMetrics';
-import { QuotaToolbar, type ViewMode, type SortMode, type StatusFilter } from './quota/QuotaToolbar';
+import type { QuotaItem } from '../types/quota';
 import { QuotaCard } from './quota/QuotaCard';
-import { QuotaMatrix } from './quota/QuotaMatrix';
-import { QuotaTable } from './quota/QuotaTable';
-import { QuotaTimeline } from './quota/QuotaTimeline';
-import { QuotaDetailDrawer } from './quota/QuotaDetailDrawer';
-import { filterQuotaItems, sortQuotaItems, computeFleetSummary } from './quota/quotaModel';
 import styles from './quota/QuotaPage.module.css';
-
-const PROVIDER_KEYS = ['all', 'codex', 'claude', 'antigravity', 'kimi', 'xai'] as const;
 
 export const QuotaPage: React.FC = () => {
   const t = useT();
   const { message } = AntdApp.useApp();
   const queryClient = useQueryClient();
 
-  // Preferences & Filters
-  const [activeProvider, setActiveProvider] = useState('all');
-  const [searchText, setSearchText] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [sortMode, setSortMode] = useState<SortMode>('default');
-  const [viewMode, setViewMode] = useState<ViewMode>('cards');
-
-  // Detail Drawer state
-  const [selectedItem, setSelectedItem] = useState<QuotaItem | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-
   // Tracking refreshing auth indexes
   const [refreshingIndexes, setRefreshingIndexes] = useState<Set<string>>(new Set());
 
-  // 1. Fetch quota overview
+  // Fetch quota overview (snapshots + live windows after refresh)
   const {
     data: quotaData,
     isLoading,
@@ -49,101 +30,70 @@ export const QuotaPage: React.FC = () => {
     staleTime: 15000,
   });
 
-  const allQuotas: QuotaItem[] = quotaData?.quotas || [];
+  const quotas: QuotaItem[] = quotaData?.quotas ?? [];
 
-  // 2. Compute fleet summary
-  const summary: QuotaOverviewSummary = useMemo(() => {
-    if (quotaData?.summary) {
-      return quotaData.summary;
-    }
-    return computeFleetSummary(allQuotas);
-  }, [quotaData, allQuotas]);
+  const invalidateQuota = () => {
+    void queryClient.invalidateQueries({ queryKey: ['management-quota'] });
+  };
 
-  // 3. Provider counts for tabs
-  const providerTabs = useMemo(() => {
-    const counts: Record<string, number> = { all: allQuotas.length };
-    PROVIDER_KEYS.forEach((k) => {
-      if (k !== 'all') counts[k] = 0;
+  const markRefreshing = (authIndexes: string[]) => {
+    setRefreshingIndexes((prev) => {
+      const next = new Set(prev);
+      authIndexes.forEach((idx) => next.add(idx));
+      return next;
     });
+  };
 
-    allQuotas.forEach((q) => {
-      const p = q.provider?.toLowerCase() || 'other';
-      if (counts[p] !== undefined) {
-        counts[p]++;
-      }
+  const unmarkRefreshing = (authIndexes: string[]) => {
+    setRefreshingIndexes((prev) => {
+      const next = new Set(prev);
+      authIndexes.forEach((idx) => next.delete(idx));
+      return next;
     });
+  };
 
-    return PROVIDER_KEYS.map((key) => {
-      const label = key === 'all' ? t('quota.filter_all') : key.toUpperCase();
-      return {
-        key,
-        label,
-        count: counts[key] ?? 0,
-      };
-    });
-  }, [allQuotas, t]);
-
-  // 4. Filtering and searching
-  const filteredItems = useMemo(() => {
-    return filterQuotaItems(allQuotas, activeProvider, statusFilter, searchText);
-  }, [allQuotas, activeProvider, statusFilter, searchText]);
-
-  // 5. Sorting
-  const sortedItems = useMemo(() => {
-    return sortQuotaItems(filteredItems, sortMode);
-  }, [filteredItems, sortMode]);
-
-  // 6. Action Mutations
+  // Single credential live refresh
   const refreshMutation = useMutation({
     mutationFn: (authIndex: string) => {
-      setRefreshingIndexes((prev) => new Set(prev).add(authIndex));
+      markRefreshing([authIndex]);
       return api.refreshCredentialQuota(authIndex);
     },
-    onSuccess: (res) => {
+    onSuccess: () => {
       message.success(t('quota.refresh_success'));
-      void queryClient.invalidateQueries({ queryKey: ['management-quota'] });
-      void queryClient.invalidateQueries({ queryKey: ['quota-detail'] });
-      if (selectedItem?.auth_index === res.quota.auth_index) {
-        setSelectedItem(res.quota);
-      }
+      invalidateQuota();
     },
     onError: (err: unknown) => {
       const msg = err instanceof ApiError ? err.message : String(err);
       message.error(t('quota.refresh_failed', { msg }));
     },
     onSettled: (_, __, authIndex) => {
-      setRefreshingIndexes((prev) => {
-        const next = new Set(prev);
-        next.delete(authIndex);
-        return next;
-      });
+      unmarkRefreshing([authIndex]);
     },
   });
 
+  // Global refresh: live-refresh every credential in chunks of 10
+  // (backend caps one batch call at 10).
   const batchRefreshMutation = useMutation({
-    mutationFn: (authIndexes: string[]) => {
-      setRefreshingIndexes((prev) => {
-        const next = new Set(prev);
-        authIndexes.forEach((idx) => next.add(idx));
-        return next;
-      });
-      return api.batchRefreshCredentialQuotas(authIndexes);
+    mutationFn: async (authIndexes: string[]) => {
+      markRefreshing(authIndexes);
+      const all: QuotaItem[] = [];
+      for (let i = 0; i < authIndexes.length; i += 10) {
+        const chunk = authIndexes.slice(i, i + 10);
+        const res = await api.batchRefreshCredentialQuotas(chunk);
+        all.push(...res.quotas);
+      }
+      return { status: 'ok', quotas: all };
     },
     onSuccess: () => {
       message.success(t('quota.batch_refresh_success'));
-      void queryClient.invalidateQueries({ queryKey: ['management-quota'] });
-      void queryClient.invalidateQueries({ queryKey: ['quota-detail'] });
+      invalidateQuota();
     },
     onError: (err: unknown) => {
       const msg = err instanceof ApiError ? err.message : String(err);
       message.error(t('quota.refresh_failed', { msg }));
     },
     onSettled: (_, __, authIndexes) => {
-      setRefreshingIndexes((prev) => {
-        const next = new Set(prev);
-        authIndexes.forEach((idx) => next.delete(idx));
-        return next;
-      });
+      unmarkRefreshing(authIndexes);
     },
   });
 
@@ -151,9 +101,8 @@ export const QuotaPage: React.FC = () => {
     mutationFn: (authIndex: string) => api.clearCredentialCooldown(authIndex),
     onSuccess: () => {
       message.success(t('quota.clear_cooldown_success'));
-      void queryClient.invalidateQueries({ queryKey: ['management-quota'] });
+      invalidateQuota();
       void queryClient.invalidateQueries({ queryKey: ['management-auth-files'] });
-      void queryClient.invalidateQueries({ queryKey: ['quota-detail'] });
     },
     onError: (err: unknown) => {
       const msg = err instanceof ApiError ? err.message : String(err);
@@ -163,13 +112,9 @@ export const QuotaPage: React.FC = () => {
 
   const redeemCreditMutation = useMutation({
     mutationFn: (authIndex: string) => api.redeemCodexResetCredit(authIndex),
-    onSuccess: (res) => {
+    onSuccess: () => {
       message.success(t('quota.redeem_credit_success'));
-      void queryClient.invalidateQueries({ queryKey: ['management-quota'] });
-      void queryClient.invalidateQueries({ queryKey: ['quota-detail'] });
-      if (selectedItem?.auth_index === res.quota.auth_index) {
-        setSelectedItem(res.quota);
-      }
+      invalidateQuota();
     },
     onError: (err: unknown) => {
       const msg = err instanceof ApiError ? err.message : String(err);
@@ -177,78 +122,84 @@ export const QuotaPage: React.FC = () => {
     },
   });
 
-  // Handlers
-  const handleOpenDetail = useCallback((item: QuotaItem) => {
-    setSelectedItem(item);
-    setDrawerOpen(true);
-  }, []);
-
-  const handleRefreshAllVisible = useCallback(() => {
-    const visibleIndexes = sortedItems.slice(0, 10).map((item) => item.auth_index);
-    if (visibleIndexes.length > 0) {
-      batchRefreshMutation.mutate(visibleIndexes);
-    } else {
+  const handleRefreshAll = () => {
+    if (quotas.length === 0) {
       void refetch();
+      return;
     }
-  }, [sortedItems, batchRefreshMutation, refetch]);
+    batchRefreshMutation.mutate(quotas.map((item) => item.auth_index));
+  };
 
-  const handleClearAllCooldowns = useCallback(() => {
-    const cooldownItems = allQuotas.filter((q) => q.active_cooldown?.is_active);
-    cooldownItems.forEach((q) => clearCooldownMutation.mutate(q.auth_index));
-  }, [allQuotas, clearCooldownMutation]);
+  if (isLoading) {
+    return (
+      <div className="terminal-page quota-page">
+        <div className="terminal-page-head">
+          <div>
+            <h1 className="terminal-title">{t('quota.title')}</h1>
+            <p className="terminal-subtitle">{t('quota.subtitle')}</p>
+          </div>
+        </div>
+        <div className="dashboard-loading">
+          <Spin>
+            <div style={{ minHeight: 80, minWidth: 200 }} />
+          </Spin>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className={`terminal-page quota-page ${styles.quotaPage}`}>
+        <div className="terminal-page-head">
+          <div>
+            <h1 className="terminal-title">{t('quota.title')}</h1>
+            <p className="terminal-subtitle">{t('quota.subtitle')}</p>
+          </div>
+          <div>
+            <Button icon={<ReloadOutlined />} onClick={() => void refetch()}>
+              {t('common.retry')}
+            </Button>
+          </div>
+        </div>
+        <Alert
+          type="error"
+          showIcon
+          description={error instanceof ApiError ? error.message : String(error)}
+        />
+      </div>
+    );
+  }
+
+  const isRefreshingAll = isFetching || batchRefreshMutation.isPending;
 
   return (
     <div className={`terminal-page quota-page ${styles.quotaPage}`}>
-      {/* Header */}
       <div className="terminal-page-head">
         <div>
           <h1 className="terminal-title">{t('quota.title')}</h1>
           <p className="terminal-subtitle">{t('quota.subtitle')}</p>
         </div>
+        <div>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={handleRefreshAll}
+            loading={isRefreshingAll}
+          >
+            {t('common.refresh')}
+          </Button>
+        </div>
       </div>
 
-      {/* KPI Overview */}
-      <QuotaSummaryMetrics
-        summary={summary}
-        isRefreshing={isFetching || batchRefreshMutation.isPending}
-        onRefreshAll={handleRefreshAllVisible}
-        onClearAllCooldowns={summary.cooldown_count > 0 ? handleClearAllCooldowns : undefined}
-      />
-
-      {/* Toolbar */}
-      <QuotaToolbar
-        providers={providerTabs}
-        activeProvider={activeProvider}
-        onProviderChange={setActiveProvider}
-        searchText={searchText}
-        onSearchChange={setSearchText}
-        statusFilter={statusFilter}
-        onStatusFilterChange={setStatusFilter}
-        sortMode={sortMode}
-        onSortModeChange={setSortMode}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
-      />
-
-      {isError && (
-        <Alert
-          type="error"
-          showIcon
-          style={{ marginBottom: 16 }}
-          description={error instanceof ApiError ? error.message : String(error)}
-        />
-      )}
-
-      {/* Main View Area */}
-      {sortedItems.length === 0 && !isLoading ? (
+      {quotas.length === 0 ? (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           description={t('quota.empty')}
           style={{ padding: '40px 0', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}
         />
-      ) : viewMode === 'cards' ? (
+      ) : (
         <div className={styles.cardsGrid}>
-          {sortedItems.map((item) => (
+          {quotas.map((item) => (
             <QuotaCard
               key={item.auth_index}
               item={item}
@@ -256,44 +207,10 @@ export const QuotaPage: React.FC = () => {
               onRefresh={(idx) => refreshMutation.mutate(idx)}
               onClearCooldown={(idx) => clearCooldownMutation.mutate(idx)}
               onRedeemCredit={(idx) => redeemCreditMutation.mutate(idx)}
-              onOpenDetail={handleOpenDetail}
             />
           ))}
         </div>
-      ) : viewMode === 'matrix' ? (
-        <QuotaMatrix
-          items={sortedItems}
-          refreshingIndexes={refreshingIndexes}
-          onRefresh={(idx) => refreshMutation.mutate(idx)}
-          onClearCooldown={(idx) => clearCooldownMutation.mutate(idx)}
-          onOpenDetail={handleOpenDetail}
-        />
-      ) : (
-        <QuotaTable
-          items={sortedItems}
-          loading={isLoading}
-          refreshingIndexes={refreshingIndexes}
-          onRefresh={(idx) => refreshMutation.mutate(idx)}
-          onBatchRefresh={(idxs) => batchRefreshMutation.mutate(idxs)}
-          onClearCooldown={(idx) => clearCooldownMutation.mutate(idx)}
-          onRedeemCredit={(idx) => redeemCreditMutation.mutate(idx)}
-          onOpenDetail={handleOpenDetail}
-        />
       )}
-
-      {/* Quota Timeline Comparison */}
-      <QuotaTimeline items={sortedItems} />
-
-      {/* Deep Inspection Drawer */}
-      <QuotaDetailDrawer
-        item={selectedItem}
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        onRefresh={(idx) => refreshMutation.mutate(idx)}
-        onClearCooldown={(idx) => clearCooldownMutation.mutate(idx)}
-        onRedeemCredit={(idx) => redeemCreditMutation.mutate(idx)}
-        isRefreshing={selectedItem ? refreshingIndexes.has(selectedItem.auth_index) : false}
-      />
     </div>
   );
 };

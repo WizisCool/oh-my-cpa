@@ -3,6 +3,7 @@ import { ManagementQuotaObservation } from './managementAuthFile';
 export interface QuotaWindow {
   id: string;
   label: string;
+  kind?: 'five_hour' | 'weekly' | 'daily' | 'monthly' | 'credit_usage' | 'model_scoped' | 'custom';
   scope: 'standard' | 'model' | 'group';
   model?: string;
   used?: number;

@@ -29,6 +29,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
           id: 'auth-e2e-1', auth_index: 'auth-index-e2e-1', name: 'fixture-auth.json', type: 'codex', provider: 'codex',
           label: 'Primary fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: false,
           email: 'owner@example.test', account_type: 'oauth', account: FAKE_ACCOUNT_SECRET,
+          id_token: { chatgpt_account_id: 'chatgpt-e2e-account', chatgpt_subscription_active_until: Math.floor((Date.now() + 24 * 86400000) / 1000), plan_type: 'pro' },
           success: 12, failed: 1, recent_requests: [{ time: '2026-09-01T12:00:00Z', success: 12, failed: 1 }],
           models: [{ id: 'gpt-e2e', display_name: 'GPT E2E' }], priority: 1, weight: 1, note: 'deterministic fixture',
         },
@@ -152,6 +153,22 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
         json(response, 200, { status_code: 200, header: { 'content-type': ['application/json'] }, body: { status: 'ok' } });
         return;
       }
+      if (targetURL.includes('rate-limit-reset-credits')) {
+        json(response, 200, {
+          status_code: 200,
+          header: { 'content-type': ['application/json'] },
+          body: {
+            available_count: 2,
+            applicable_available_count: 1,
+            credits: [
+              { id: 'credit-1', status: 'available', reset_type: 'codex_rate_limits', granted_at: String(Date.now() - 86400000), expires_at: String(Date.now() + 28 * 86400000) },
+              { id: 'credit-2', status: 'available', reset_type: 'codex_rate_limits', granted_at: String(Date.now() - 86400000), expires_at: String(Date.now() + 29 * 86400000) },
+              { id: 'credit-3', status: 'used', reset_type: 'codex_rate_limits', granted_at: String(Date.now() - 3 * 86400000), expires_at: String(Date.now() + 2 * 86400000) },
+            ],
+          },
+        });
+        return;
+      }
       if (targetURL.includes('backend-api/wham/usage')) {
         json(response, 200, {
           status_code: 200,
@@ -183,11 +200,22 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
         return;
       }
       if (targetURL.includes('retrieveUserQuotaSummary')) {
+        // Mirrors the real antigravity summary: two groups, weekly bucket listed
+        // before the five-hour one, display names like "Five Hour Limit".
         json(response, 200, {
           status_code: 200,
           header: { 'content-type': ['application/json'] },
           body: {
-            groups: [{ displayName: 'Gemini models', buckets: [{ bucketId: '5h', window: '5h', remainingFraction: 0.85 }] }],
+            groups: [
+              { displayName: 'Gemini Models', buckets: [
+                { bucketId: 'gemini-week', displayName: 'Weekly Limit', window: 'weekly', remainingFraction: 0.51, resetTime: new Date(Date.now() + 5.5 * 86400000).toISOString() },
+                { bucketId: 'gemini-5h', displayName: 'Five Hour Limit', window: '5h', remainingFraction: 1.0, resetTime: new Date(Date.now() + 5 * 3600000).toISOString() },
+              ] },
+              { displayName: 'Claude and GPT models', buckets: [
+                { bucketId: 'aerolith-week', displayName: 'Weekly Limit', window: 'weekly', remainingFraction: 1.0, resetTime: new Date(Date.now() + 7 * 86400000).toISOString() },
+                { bucketId: 'aerolith-5h', displayName: 'Five Hour Limit', window: '5h', remainingFraction: 1.0, resetTime: new Date(Date.now() + 5 * 3600000).toISOString() },
+              ] },
+            ],
           },
         });
         return;

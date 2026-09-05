@@ -1,10 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button, Tag, Popconfirm } from 'antd';
 import {
   SyncOutlined,
   StopOutlined,
   ThunderboltOutlined,
-  RightOutlined,
   CheckCircleOutlined,
   WarningOutlined,
   CloseCircleOutlined,
@@ -13,6 +12,11 @@ import { LobeIcon, getProviderDefaultIcon } from '../../components/LobeIcon';
 import { useT } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
 import { QuotaProgressBar } from './QuotaProgressBar';
+import {
+  formatGmtOffsetLabel,
+  formatObservedAgo,
+  formatTimeWithCountdown,
+} from './quotaFormat';
 import styles from './QuotaPage.module.css';
 
 interface QuotaCardProps {
@@ -21,7 +25,6 @@ interface QuotaCardProps {
   onRefresh: (authIndex: string) => void;
   onClearCooldown: (authIndex: string) => void;
   onRedeemCredit: (authIndex: string) => void;
-  onOpenDetail: (item: QuotaItem) => void;
 }
 
 export const QuotaCard: React.FC<QuotaCardProps> = ({
@@ -30,9 +33,15 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
   onRefresh,
   onClearCooldown,
   onRedeemCredit,
-  onOpenDetail,
 }) => {
   const t = useT();
+  const [nowMS, setNowMS] = useState(Date.now());
+
+  // Ticker for plan-expiry and credit-expiry countdowns on this card
+  useEffect(() => {
+    const interval = setInterval(() => setNowMS(Date.now()), 15000);
+    return () => clearInterval(interval);
+  }, []);
 
   const iconId = getProviderDefaultIcon(item.provider, item.name);
 
@@ -85,40 +94,56 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
     }
   };
 
-  // Plan tier class
-  const getPlanClass = () => {
-    if (!item.plan) return styles.planStandard;
-    switch (item.plan.tier) {
-      case 'elite':
-        return styles.planElite;
-      case 'premium':
-        return styles.planPremium;
-      default:
-        return styles.planStandard;
-    }
-  };
+  // Standard windows first (5h, weekly), then upstream order; never truncated —
+  // antigravity alone carries six group windows (Claude/ChatGPT/Gemini × 5h/weekly)
+  const displayWindows = [...item.windows].sort(
+    (a, b) => windowRank(a.kind) - windowRank(b.kind)
+  );
 
-  // Select primary windows to show (e.g. 5h and weekly, or up to 2)
-  const displayWindows = item.windows.slice(0, 2);
+  const availableCredits = item.reset_credits?.available_count ?? 0;
+  const creditSupported = item.capabilities.reset_credit_supported;
+  const canRedeem = creditSupported && availableCredits > 0 && !item.disabled;
 
-  // Relative time for observed_at
-  const formatObservedTime = (ms?: number) => {
-    if (!ms) return '-';
-    const diffSec = Math.floor((Date.now() - ms) / 1000);
-    if (diffSec < 60) return t('quota.just_now');
-    const diffMin = Math.floor(diffSec / 60);
-    if (diffMin < 60) return `${diffMin} ${t('quota.mins_ago')}`;
-    const diffHours = Math.floor(diffMin / 60);
-    return `${diffHours} ${t('quota.hours_ago')}`;
+  // Upcoming credit expiries for the "manual reset expiry" block
+  const creditRows = (item.reset_credits?.credits ?? [])
+    .filter((c) => c.expires_at_ms)
+    .sort((a, b) => (a.expires_at_ms ?? 0) - (b.expires_at_ms ?? 0));
+
+  // Group-scoped windows (antigravity) render under their model group; a
+  // hairline divider separates consecutive groups, e.g. Gemini vs Claude and GPT.
+  const renderWindowRows = (windows: QuotaItem['windows']) => {
+    const rows: React.ReactNode[] = [];
+    let lastGroup: string | null = null;
+    windows.forEach((win) => {
+      const group = win.scope === 'group' ? win.label.split(' · ')[0] : null;
+      if (group && lastGroup && group !== lastGroup) {
+        rows.push(<div key={`divider-${win.id}`} className={styles.windowDivider} aria-hidden="true" />);
+      }
+      rows.push(
+        <QuotaProgressBar
+          key={win.id}
+          kind={win.kind}
+          label={win.label}
+          usedPercent={win.used_percent}
+          remainingPercent={win.remaining_percent}
+          resetAtMS={win.reset_at_ms}
+          resetLabel={win.reset_label}
+        />
+      );
+      if (group) {
+        lastGroup = group;
+      }
+    });
+    return rows;
   };
 
   return (
     <article className={styles.quotaCard}>
-      {/* Header */}
+      {/* Header: provider icon + credential name + status */}
       <div className={styles.cardHead}>
         <div className={styles.cardTitleWrap}>
           <div className={styles.cardIcon}>
-            <LobeIcon iconId={iconId} size={18} />
+            <LobeIcon iconId={iconId} size={20} />
           </div>
           <div className={styles.cardNameBlock}>
             <div className={styles.cardName} title={item.name}>
@@ -129,16 +154,35 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
             </div>
           </div>
         </div>
+        <div className={styles.cardTags}>{renderStatus()}</div>
+      </div>
 
-        <div className={styles.cardTags}>
+      {/* Plan summary strip: 套餐 | 续期时间 | 重置次数 — omit empty slots
+          instead of showing "—" dummies (CPAMC behavior) */}
+      {(item.plan?.plan_label || item.plan?.expires_at_ms || item.reset_credits) && (
+        <div className={styles.metaRow}>
           {item.plan?.plan_label && (
-            <span className={`${styles.planTag} ${getPlanClass()}`}>
-              {item.plan.plan_label}
+            <span className={styles.metaItem}>
+              <span className={styles.metaLabel}>{t('quota.col_plan')}</span>
+              <span className={styles.metaValue}>{item.plan.plan_label}</span>
             </span>
           )}
-          {renderStatus()}
+          {item.plan?.expires_at_ms && (
+            <span className={styles.metaItem}>
+              <span className={styles.metaLabel}>{t('quota.col_renewal')}</span>
+              <span className={styles.metaValue}>
+                {formatTimeWithCountdown(item.plan.expires_at_ms, nowMS, t)}
+              </span>
+            </span>
+          )}
+          {item.reset_credits && (
+            <span className={styles.metaItem}>
+              <span className={styles.metaLabel}>{t('quota.col_reset_count')}</span>
+              <span className={styles.metaValue}>{availableCredits}</span>
+            </span>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Active Cooldown Banner */}
       {item.active_cooldown?.is_active && (
@@ -146,8 +190,8 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
           <div className={styles.recText}>
             <div>{item.active_cooldown.reason || t('quota.cooldown_active_desc')}</div>
             {item.active_cooldown.recover_at_ms && (
-              <div style={{ fontSize: 10, color: 'var(--danger)', marginTop: 2 }}>
-                {t('quota.recover_at', { time: new Date(item.active_cooldown.recover_at_ms).toLocaleTimeString() })}
+              <div className={styles.recSubDanger}>
+                {t('quota.recover_at', { time: formatTimeWithCountdown(item.active_cooldown.recover_at_ms, nowMS, t) })}
               </div>
             )}
           </div>
@@ -161,76 +205,84 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
         </div>
       )}
 
-      {/* Codex Reset Credits Available Banner */}
-      {!item.active_cooldown?.is_active && item.reset_credits && item.reset_credits.available_count > 0 && (
-        <div className={`${styles.recBanner} ${styles.recBannerWarn}`}>
-          <div className={styles.recText}>
-            <span style={{ fontWeight: 600 }}>{t('quota.credits_available_title', { count: item.reset_credits.available_count })}</span>
+      {/* Manual reset credit expiries */}
+      {item.reset_credits && creditRows.length > 0 && (
+        <div className={styles.section}>
+          <div className={styles.sectionTitle}>
+            {t('quota.reset_expiry_title')}（{formatGmtOffsetLabel(new Date(nowMS))}）
           </div>
-          <Popconfirm
-            title={t('quota.redeem_credit_confirm_title')}
-            description={t('quota.redeem_credit_confirm_desc')}
-            onConfirm={() => onRedeemCredit(item.auth_index)}
-            okText={t('common.confirm')}
-            cancelText={t('common.cancel')}
-          >
-            <Button
-              size="small"
-              icon={<ThunderboltOutlined />}
-              style={{ color: 'var(--warn)', borderColor: 'var(--warn)' }}
-            >
-              {t('quota.redeem_credit')}
-            </Button>
-          </Popconfirm>
+          <div className={styles.resetList}>
+            {creditRows.map((credit, idx) => (
+              <div className={styles.resetRow} key={credit.id || idx}>
+                <span className={styles.metaLabel}>{t('quota.reset_occurrence', { n: idx + 1 })}</span>
+                <span className={styles.metaValue}>
+                  {credit.expires_at_ms
+                    ? formatTimeWithCountdown(credit.expires_at_ms, nowMS, t)
+                    : '—'}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* Windows list */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
-        {displayWindows.length > 0 ? (
-          displayWindows.map((win) => (
-            <QuotaProgressBar
-              key={win.id}
-              label={win.label}
-              usedPercent={win.used_percent}
-              remainingPercent={win.remaining_percent}
-              resetLabel={win.reset_label}
-            />
-          ))
-        ) : (
-          <div style={{ fontSize: 11, color: 'var(--meta)', padding: '12px 0', textAlign: 'center' }}>
-            {item.disabled ? t('quota.credential_disabled') : t('quota.no_window_data')}
-          </div>
-        )}
+      {/* Usage limits */}
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>{t('quota.windows_title')}</div>
+        <div className={styles.windowsList}>
+          {displayWindows.length > 0 ? (
+            renderWindowRows(displayWindows)
+          ) : (
+            <div className={styles.noWindow}>
+              {item.disabled ? t('quota.credential_disabled') : t('quota.no_window_data')}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Footer */}
+      {/* Footer: observed time + primary actions */}
       <div className={styles.cardFooter}>
         <div className={styles.cardMetaTime}>
-          {formatObservedTime(item.observed_at_ms)}
+          {formatObservedAgo(item.observed_at_ms, nowMS, t)}
         </div>
-
         <div className={styles.cardActions}>
+          {canRedeem && (
+            <Popconfirm
+              title={t('quota.redeem_credit_confirm_title')}
+              description={t('quota.redeem_credit_confirm_desc')}
+              onConfirm={() => onRedeemCredit(item.auth_index)}
+              okText={t('common.confirm')}
+              cancelText={t('common.cancel')}
+              okButtonProps={{ danger: true }}
+            >
+              <Button
+                size="small"
+                icon={<ThunderboltOutlined />}
+              >
+                {t('quota.btn_reset_quota')}
+              </Button>
+            </Popconfirm>
+          )}
           <Button
             size="small"
             icon={<SyncOutlined spin={isRefreshing} />}
-            aria-label={t('common.refresh')}
+            aria-label={t('quota.btn_refresh_quota')}
             disabled={item.disabled || isRefreshing}
             onClick={() => onRefresh(item.auth_index)}
           >
-            {t('common.refresh')}
-          </Button>
-          <Button
-            size="small"
-            type="text"
-            icon={<RightOutlined />}
-            aria-label={t('common.details')}
-            onClick={() => onOpenDetail(item)}
-          >
-            {t('common.details')}
+            {t('quota.btn_refresh_quota')}
           </Button>
         </div>
       </div>
     </article>
   );
 };
+
+// five_hour before weekly before everything else
+function windowRank(kind?: string): number {
+  if (kind === 'five_hour') return 0;
+  if (kind === 'weekly') return 1;
+  if (kind === 'daily') return 2;
+  if (kind === 'monthly') return 3;
+  return 4;
+}
