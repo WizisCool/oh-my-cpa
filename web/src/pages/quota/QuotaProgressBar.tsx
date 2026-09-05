@@ -97,15 +97,16 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
       </div>
 
       <div
-        className={styles.progressTrack}
-        style={{ height }}
+        style={{ width: '100%', lineHeight: 1 }}
         title={hasData ? `${resolvedLabel}: ${displayPercent}` : undefined}
       >
         <Progress
-          percent={hasData ? Math.round(safeRem) : 0}
+          percent={hasData ? safeRem : 0}
           showInfo={false}
           strokeColor={strokeColor}
-          size={['100%', height]}
+          strokeWidth={height}
+          trailColor="var(--hover-inset)"
+          style={{ margin: 0, padding: 0, display: 'block' }}
           aria-label={resolvedLabel || t('quota.col_windows')}
         />
       </div>

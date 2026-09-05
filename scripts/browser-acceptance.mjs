@@ -218,6 +218,21 @@ try {
   const kimiSvgHtml = await kimiTab.locator('svg').innerHTML();
   check('Kimi tab icon is not OpenAI', !kimiSvgHtml.includes('OpenAI'));
 
+  // Verify tab hover stability
+  await codexTab.hover();
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: path.join(root, 'tmp', 'auth-files-hover-desktop.png') });
+  const hoverCheck = await codexTab.evaluate((el) => {
+    const computed = window.getComputedStyle(el);
+    const btn = el.querySelector('.ant-tabs-tab-btn');
+    const btnComputed = btn ? window.getComputedStyle(btn) : null;
+    return {
+      bg: computed.backgroundColor,
+      btnColor: btnComputed ? btnComputed.color : null,
+    };
+  });
+  check('tab hover has valid background', hoverCheck.bg !== 'transparent' && hoverCheck.bg !== 'rgba(0, 0, 0, 0)');
+
   // 4. Quick Models modal
   const modelsBtn = page.locator('.auth-files-page button').filter({ hasText: /模型|Models/i }).first();
   if (await modelsBtn.isVisible()) {
@@ -325,11 +340,24 @@ try {
   const cardCount = await page.locator('article[class*="quotaCard"]').count();
   check('quota page renders credential cards', cardCount > 0, `quotaCards=${cardCount}`);
 
+  // Verify quota tab brand icons are not OpenAI
+  const quotaAntigravitySvg = await page.locator('.quota-page .ant-tabs-tab').filter({ hasText: /Antigravity/i }).locator('svg').innerHTML();
+  check('quota page Antigravity tab icon is not OpenAI', !quotaAntigravitySvg.includes('OpenAI'));
+
   // Click header refresh to trigger live quota refresh (cards have their own 刷新额度 buttons)
   const refreshAllBtn = page.locator('.terminal-page-head').getByRole('button', { name: /刷新|Refresh/i });
   if (await refreshAllBtn.isVisible()) {
     await refreshAllBtn.click();
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1500);
+  }
+
+  // Verify progress bars are visible with positive fill width after live refresh
+  const progressCount = await page.locator('.quota-page .ant-progress').count();
+  check('quota page renders progress bars', progressCount > 0, `count=${progressCount}`);
+  if (progressCount > 0) {
+    const firstProgressBg = page.locator('.quota-page .ant-progress-bg').first();
+    const progressWidth = await firstProgressBg.evaluate((el) => parseFloat(window.getComputedStyle(el).width));
+    check('quota progress bar fill has positive width', progressWidth > 0, `width=${progressWidth}`);
   }
 
   // Screenshot: Card Grid View with refreshed quota data

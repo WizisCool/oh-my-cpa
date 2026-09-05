@@ -19,21 +19,47 @@
 .tabsWrap :global(.ant-tabs-tab) {
   padding: 8px 12px 11px !important;
   margin: 0 2px 0 0 !important;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0 !important;
   color: var(--fg-2) !important;
   font-family: inherit !important;
   font-size: 13px !important;
   font-weight: 550 !important;
-  transition: color var(--motion-fast), background-color var(--motion-fast) !important;
+  cursor: pointer !important;
+  transition:
+    color var(--motion-fast),
+    background-color var(--motion-fast) !important;
+}
+
+.tabsWrap :global(.ant-tabs-tab .ant-tabs-tab-btn) {
+  color: var(--fg-2) !important;
+  transition: color var(--motion-fast) !important;
+  outline: none !important;
 }
 
 .tabsWrap :global(.ant-tabs-tab:hover) {
-  color: var(--fg) !important;
   background: var(--hover-inset) !important;
+}
+
+.tabsWrap :global(.ant-tabs-tab:hover .ant-tabs-tab-btn) {
+  color: var(--fg) !important;
+}
+
+.tabsWrap :global(.ant-tabs-tab:hover) .tabCount {
+  color: var(--fg) !important;
 }
 
 .tabsWrap :global(.ant-tabs-tab-active .ant-tabs-tab-btn) {
   color: var(--fg) !important;
   font-weight: 650 !important;
+  text-shadow: none !important;
+}
+
+.tabsWrap :global(.ant-tabs-tab-focus:not(:focus-visible)) {
+  background: transparent !important;
+}
+
+.tabsWrap :global(.ant-tabs-tab-btn:focus:not(:focus-visible)) {
+  outline: none !important;
 }
 
 .tabIcon {
@@ -56,8 +82,9 @@
   padding: 0 6px;
   border-radius: 999px;
   background: var(--hover-inset);
+  transition: color var(--motion-fast);
 }
 
 .tabCountActive {
-  color: var(--fg);
+  color: var(--fg) !important;
 }
