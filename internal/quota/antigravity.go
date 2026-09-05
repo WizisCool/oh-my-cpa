@@ -3,6 +3,7 @@ package quota
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -67,6 +68,20 @@ func translateAntigravityBucketLabel(groupName, bucketName string) string {
 	return windowLabel
 }
 
+// antigravityBucketWindowOrder ranks buckets inside a group: the 5-hour
+// window leads, then weekly, then anything else — matching CPAMC's builder,
+// since upstream lists the weekly bucket first.
+func antigravityBucketWindowOrder(bucket RawAntigravityBucket) int {
+	switch hours := parseAntigravityWindowHours(bucket.Window); hours {
+	case 5:
+		return 0
+	case 168:
+		return 1
+	default:
+		return 2
+	}
+}
+
 // ParseAntigravityUsage parses Antigravity quota response and returns normalized windows.
 func ParseAntigravityUsage(raw []byte, nowMS int64, serverOffsetMS int64) ([]QuotaWindow, error) {
 	var payload RawAntigravityPayload
@@ -85,7 +100,14 @@ func ParseAntigravityUsage(raw []byte, nowMS int64, serverOffsetMS int64) ([]Quo
 			gName = fmt.Sprintf("Group %d", gIdx+1)
 		}
 
-		for bIdx, bucket := range group.Buckets {
+		// Keep each group's windows contiguous while ordering 5h before weekly.
+		buckets := make([]RawAntigravityBucket, len(group.Buckets))
+		copy(buckets, group.Buckets)
+		sort.SliceStable(buckets, func(i, j int) bool {
+			return antigravityBucketWindowOrder(buckets[i]) < antigravityBucketWindowOrder(buckets[j])
+		})
+
+		for bIdx, bucket := range buckets {
 			bID := bucket.BucketID
 			if bID == "" {
 				bID = bucket.BucketIDAlt
