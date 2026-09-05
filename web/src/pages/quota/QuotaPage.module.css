@@ -147,7 +147,8 @@
 
 .windowDivider {
   height: 1px;
-  background: var(--border-soft);
+  /* --border-soft equals --surface in dark mode, which would hide the line */
+  background: var(--border);
   margin: 2px 0;
 }
 
