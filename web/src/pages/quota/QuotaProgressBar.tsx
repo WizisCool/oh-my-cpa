@@ -105,7 +105,6 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
           showInfo={false}
           strokeColor={strokeColor}
           strokeWidth={height}
-          trailColor="var(--hover-inset)"
           style={{ margin: 0, padding: 0, display: 'block' }}
           aria-label={resolvedLabel || t('quota.col_windows')}
         />
