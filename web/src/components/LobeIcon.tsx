@@ -114,13 +114,49 @@ const COMMON_ALIASES: Record<string, string> = {
   'anthropic': 'Claude',
   'claude': 'Claude',
   'gemini': 'Gemini',
+  'antigravity': 'Antigravity',
+  'kimi': 'Kimi',
+  'moonshot': 'Kimi',
+  'xai': 'XAI',
+  'grok': 'XAI',
+  'codex': 'Codex',
+  'vertex': 'Google',
+};
+
+const KNOWN_PROVIDER_ICONS: Record<string, string> = {
+  claude: 'Claude',
+  anthropic: 'Claude',
+  antigravity: 'Antigravity',
+  codex: 'Codex',
+  xai: 'XAI',
+  grok: 'XAI',
+  kimi: 'Kimi',
+  moonshot: 'Kimi',
+  openai: 'OpenAI',
+  gemini: 'Gemini',
+  google: 'Gemini',
+  vertex: 'Google',
+  qwen: 'Qwen',
+  deepseek: 'DeepSeek',
+  minimax: 'Minimax',
+  stepfun: 'Stepfun',
+  baichuan: 'Baichuan',
+  zhipu: 'Zhipu',
+  doubao: 'Doubao',
+  spark: 'Spark',
 };
 
 export function getProviderDefaultIcon(family: string, name?: string, baseURL?: string): string {
+  const f = (family || '').toLowerCase().trim();
   const n = (name || '').toLowerCase().trim();
   const url = (baseURL || '').toLowerCase().trim();
-  const f = (family || '').toLowerCase().trim();
-  const combined = `${n} ${url}`.trim();
+
+  // 1. Direct match on provider family name
+  if (KNOWN_PROVIDER_ICONS[f]) {
+    return KNOWN_PROVIDER_ICONS[f];
+  }
+
+  const combined = `${f} ${n} ${url}`.trim();
   const normalized = combined.replace(/[\s\-_./:]/g, '');
 
   if (normalized) {
@@ -151,5 +187,10 @@ export function getProviderDefaultIcon(family: string, name?: string, baseURL?: 
   if (f.includes('claude') || f.includes('anthropic')) return 'Claude';
   if (f.includes('gemini') || f.includes('google')) return 'Gemini';
   if (f.includes('codex')) return 'Codex';
+  if (f.includes('antigravity')) return 'Antigravity';
+  if (f.includes('xai') || f.includes('grok')) return 'XAI';
+  if (f.includes('kimi') || f.includes('moonshot')) return 'Kimi';
+  if (f.includes('qwen')) return 'Qwen';
+  if (f.includes('deepseek')) return 'DeepSeek';
   return 'OpenAI';
 }

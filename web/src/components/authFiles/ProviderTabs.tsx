@@ -1,8 +1,8 @@
 import React from 'react';
-import { Tabs, Badge, Space } from 'antd';
 import { AppstoreOutlined } from '@ant-design/icons';
 import { LobeIcon, getProviderDefaultIcon } from '../LobeIcon';
 import { useT } from '../../i18n';
+import styles from '../../pages/authFiles/AuthFilesPage.module.css';
 
 interface ProviderTabsProps {
   providers: string[];
@@ -11,6 +11,10 @@ interface ProviderTabsProps {
   onChange: (provider: string) => void;
 }
 
+/**
+ * CPAMC / Quota Management unified provider filter tabs:
+ * quiet underline row, brand color only on icons, mono count pills, active indicator using var(--fg).
+ */
 export const ProviderTabs: React.FC<ProviderTabsProps> = ({
   providers,
   counts,
@@ -19,45 +23,36 @@ export const ProviderTabs: React.FC<ProviderTabsProps> = ({
 }) => {
   const t = useT();
 
-  const items = providers.map((provider) => {
-    const label =
-      provider === 'all'
-        ? t('af.all_providers')
-        : provider.charAt(0).toUpperCase() + provider.slice(1);
-    const iconId = provider === 'all' ? null : getProviderDefaultIcon(provider);
-    const count = counts[provider] ?? 0;
-
-    return {
-      key: provider,
-      label: (
-        <Space size={6} align="center">
-          {iconId ? (
-            <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-              <LobeIcon iconId={iconId} size={15} />
-            </span>
-          ) : (
-            <AppstoreOutlined />
-          )}
-          <span>{label}</span>
-          <Badge
-            count={count}
-            showZero
-            overflowCount={999}
-            style={{
-              backgroundColor: provider === active ? 'var(--accent)' : 'var(--border)',
-              color: provider === active ? '#fff' : 'var(--muted)',
-              fontSize: 10,
-              boxShadow: 'none',
-            }}
-          />
-        </Space>
-      ),
-    };
-  });
-
   return (
-    <div style={{ marginBottom: 16 }}>
-      <Tabs activeKey={active} onChange={onChange} items={items} size="small" />
+    <div className={styles.filterTabs} role="group" aria-label={t('common.all')}>
+      {providers.map((provider) => {
+        const isActive = provider === active;
+        const label =
+          provider === 'all'
+            ? t('common.all')
+            : provider.charAt(0).toUpperCase() + provider.slice(1);
+        const iconId = provider === 'all' ? null : getProviderDefaultIcon(provider);
+
+        return (
+          <button
+            key={provider}
+            type="button"
+            className={`${styles.filterTab} ${isActive ? styles.filterTabActive : ''}`}
+            aria-pressed={isActive}
+            onClick={() => onChange(provider)}
+          >
+            {iconId ? (
+              <span className={styles.filterTabIcon}>
+                <LobeIcon iconId={iconId} size={15} />
+              </span>
+            ) : (
+              <AppstoreOutlined className={styles.filterTabGlyph} />
+            )}
+            <span className={styles.filterTabLabel}>{label}</span>
+            <span className={styles.filterTabCount}>{counts[provider] ?? 0}</span>
+          </button>
+        );
+      })}
     </div>
   );
 };

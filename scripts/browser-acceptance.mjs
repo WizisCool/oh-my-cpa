@@ -195,13 +195,13 @@ try {
   }
 
   // 3. Provider tabs
-  const codexTab = page.locator('.auth-files-page .ant-tabs-tab').filter({ hasText: /Codex/i }).first();
+  const codexTab = page.locator('.auth-files-page button[class*="filterTab"]').filter({ hasText: /Codex/i }).first();
   if (await codexTab.isVisible()) {
     await codexTab.click();
     await page.waitForTimeout(300);
     const codexCount = await page.locator('.auth-files-page .ant-card').count();
     check('auth-files provider tab filters to Codex', codexCount === 2, `count=${codexCount}`);
-    const allTab = page.locator('.auth-files-page .ant-tabs-tab').first();
+    const allTab = page.locator('.auth-files-page button[class*="filterTab"]').first();
     await allTab.click();
     await page.waitForTimeout(300);
   }

@@ -32,6 +32,110 @@
   background: var(--danger);
 }
 
+/* ── Provider filter tabs (CPAMC / Quota Management style underline row) ── */
+.filterTabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: none;
+}
+
+.filterTabs::-webkit-scrollbar {
+  display: none;
+}
+
+.filterTab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 8px 12px 11px;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--fg-2);
+  white-space: nowrap;
+  transition:
+    color var(--motion-fast),
+    background-color var(--motion-fast);
+}
+
+.filterTab::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 999px;
+  background: transparent;
+  transition: background-color var(--motion-fast);
+}
+
+.filterTab:active {
+  transform: translateY(0.5px);
+}
+
+.filterTab:hover {
+  color: var(--fg);
+  background: var(--hover-inset);
+}
+
+.filterTabActive {
+  color: var(--fg);
+  font-weight: 650;
+}
+
+.filterTabActive::after {
+  background: var(--fg);
+}
+
+.filterTabGlyph {
+  font-size: 14px;
+  color: var(--meta);
+}
+
+.filterTabActive .filterTabGlyph {
+  color: var(--fg);
+}
+
+.filterTabIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.filterTabLabel {
+  line-height: 1.4;
+}
+
+.filterTabCount {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+  color: var(--meta);
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--hover-inset);
+}
+
+.filterTabActive .filterTabCount {
+  color: var(--fg);
+}
+
 /* ── Toolbar ── */
 .toolbar {
   display: flex;
