@@ -46,10 +46,14 @@ type RawCodexAdditionalRateLimit struct {
 }
 
 type RawCodexResetCredit struct {
-	ID        string `json:"id"`
-	Status    string `json:"status"`
-	GrantedAt string `json:"grantedAt"`
-	ExpiresAt string `json:"expiresAt"`
+	ID           string `json:"id"`
+	Status       string `json:"status"`
+	ResetType    string `json:"reset_type"`
+	ResetTypeAlt string `json:"resetType"`
+	GrantedAt    string `json:"grantedAt"`
+	GrantedAtAlt string `json:"granted_at"`
+	ExpiresAt    string `json:"expiresAt"`
+	ExpiresAtAlt string `json:"expires_at"`
 }
 
 type RawCodexResetCreditsSummary struct {
@@ -430,40 +434,104 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 
 	var resetCreditsInfo *CodexResetCreditsInfo
 	if resetCreditsRaw != nil {
-		availVal, _ := toFloat(resetCreditsRaw.AvailableCount)
-		if availVal == 0 {
-			availVal, _ = toFloat(resetCreditsRaw.AvailableCountAlt)
-		}
-
-		appVal, _ := toFloat(resetCreditsRaw.ApplicableAvailableCount)
-		if appVal == 0 {
-			appVal, _ = toFloat(resetCreditsRaw.ApplicableCountAlt)
-		}
-
-		credits := make([]CodexResetCredit, 0)
-		for _, rc := range resetCreditsRaw.Credits {
-			var grantedMS *int64
-			if g, ok := toInt64(rc.GrantedAt); ok {
-				grantedMS = &g
-			}
-			var expMS *int64
-			if e, ok := toInt64(rc.ExpiresAt); ok {
-				expMS = &e
-			}
-			credits = append(credits, CodexResetCredit{
-				ID:          rc.ID,
-				Status:      rc.Status,
-				GrantedAtMS: grantedMS,
-				ExpiresAtMS: expMS,
-			})
-		}
-
-		resetCreditsInfo = &CodexResetCreditsInfo{
-			AvailableCount:           int(availVal),
-			ApplicableAvailableCount: int(appVal),
-			Credits:                  credits,
-		}
+		resetCreditsInfo = parseCodexResetCreditsSummary(resetCreditsRaw)
 	}
 
 	return plan, windows, resetCreditsInfo, nil
+}
+
+// parseCodexResetCreditsSummary normalizes a raw Codex rate-limit reset credits
+// summary. Only usable credits survive: CPAMC-parity filtering keeps credits
+// whose reset_type (when projected) targets codex_rate_limits and whose status
+// is "available", so consumed/expired credits never inflate the reset count.
+func parseCodexResetCreditsSummary(resetCreditsRaw *RawCodexResetCreditsSummary) *CodexResetCreditsInfo {
+	availVal, _ := toFloat(resetCreditsRaw.AvailableCount)
+	if availVal == 0 {
+		availVal, _ = toFloat(resetCreditsRaw.AvailableCountAlt)
+	}
+
+	appVal, _ := toFloat(resetCreditsRaw.ApplicableAvailableCount)
+	if appVal == 0 {
+		appVal, _ = toFloat(resetCreditsRaw.ApplicableCountAlt)
+	}
+
+	credits := make([]CodexResetCredit, 0)
+	for _, rc := range resetCreditsRaw.Credits {
+		if !isRedeemableCodexCredit(rc) {
+			continue
+		}
+		var grantedMS *int64
+		if g, ok := parseCreditInstantToMS(creditInstant(rc.GrantedAt, rc.GrantedAtAlt)); ok {
+			grantedMS = &g
+		}
+		var expMS *int64
+		if e, ok := parseCreditInstantToMS(creditInstant(rc.ExpiresAt, rc.ExpiresAtAlt)); ok {
+			expMS = &e
+		}
+		credits = append(credits, CodexResetCredit{
+			ID:          rc.ID,
+			Status:      rc.Status,
+			GrantedAtMS: grantedMS,
+			ExpiresAtMS: expMS,
+		})
+	}
+
+	return &CodexResetCreditsInfo{
+		AvailableCount:           int(availVal),
+		ApplicableAvailableCount: int(appVal),
+		Credits:                  credits,
+	}
+}
+
+// isRedeemableCodexCredit mirrors CPAMC's credit filter: the upstream payload
+// mixes consumed and expired credits into the same list.
+func isRedeemableCodexCredit(rc RawCodexResetCredit) bool {
+	if strings.TrimSpace(rc.Status) != "available" {
+		return false
+	}
+	resetType := strings.TrimSpace(rc.ResetType)
+	if resetType == "" {
+		resetType = strings.TrimSpace(rc.ResetTypeAlt)
+	}
+	return resetType == "" || resetType == "codex_rate_limits"
+}
+
+// creditInstant prefers snake_case (current upstream) and falls back to the
+// legacy camelCase spelling; values are epoch seconds or milliseconds.
+func creditInstant(primary, alt string) string {
+	if strings.TrimSpace(primary) != "" {
+		return primary
+	}
+	return alt
+}
+
+// parseCreditInstantToMS parses a credit timestamp the way CPAMC does: the
+// upstream field may be ISO-8601 or a Unix epoch in seconds or milliseconds,
+// disambiguated by magnitude.
+func parseCreditInstantToMS(value string) (int64, bool) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return 0, false
+	}
+	if t, err := time.Parse(time.RFC3339, trimmed); err == nil {
+		return t.UnixMilli(), true
+	}
+	if ms, ok := toInt64(trimmed); ok && ms > 0 {
+		if ms < 100000000000 {
+			ms *= 1000
+		}
+		return ms, true
+	}
+	return 0, false
+}
+
+// ParseCodexResetCreditsPayload parses the dedicated rate-limit reset credits
+// endpoint (GET https://chatgpt.com/backend-api/wham/rate-limit-reset-credits),
+// which returns the same summary shape as the usage payload's credits block.
+func ParseCodexResetCreditsPayload(raw []byte) (*CodexResetCreditsInfo, error) {
+	var summary RawCodexResetCreditsSummary
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		return nil, fmt.Errorf("invalid codex reset credits payload: %w", err)
+	}
+	return parseCodexResetCreditsSummary(&summary), nil
 }

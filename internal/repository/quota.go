@@ -19,6 +19,7 @@ type QuotaSnapshotRecord struct {
 	Status           string `json:"status"`
 	PlanType         string `json:"plan_type"`
 	PlanTier         string `json:"plan_tier"`
+	PlanJSON         string `json:"plan_json,omitempty"`
 	WindowsJSON      string `json:"windows_json"`
 	ResetCreditsJSON string `json:"reset_credits_json,omitempty"`
 	ObservedAtMS     int64  `json:"observed_at_ms"`
@@ -59,9 +60,9 @@ func (r *Repository) SaveQuotaSnapshot(ctx context.Context, snapshot QuotaSnapsh
 
 	query := `
 		INSERT INTO quota_snapshots (
-			id, auth_index, provider, status, plan_type, plan_tier,
+			id, auth_index, provider, status, plan_type, plan_tier, plan_json,
 			windows_json, reset_credits_json, observed_at_ms, created_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	_, err := r.SQL().ExecContext(ctx, query,
 		snapshot.ID,
@@ -70,6 +71,7 @@ func (r *Repository) SaveQuotaSnapshot(ctx context.Context, snapshot QuotaSnapsh
 		snapshot.Status,
 		snapshot.PlanType,
 		snapshot.PlanTier,
+		snapshot.PlanJSON,
 		snapshot.WindowsJSON,
 		snapshot.ResetCreditsJSON,
 		snapshot.ObservedAtMS,
@@ -132,7 +134,7 @@ func (r *Repository) GetLatestQuotaSnapshots(ctx context.Context, authIndexes []
 	// Single query using window function to pick top 1 per auth_index
 	query := fmt.Sprintf(`
 		SELECT id, auth_index, provider, status, plan_type, plan_tier,
-		       windows_json, reset_credits_json, observed_at_ms, created_at_ms
+		       windows_json, reset_credits_json, plan_json, observed_at_ms, created_at_ms
 		FROM (
 			SELECT *, ROW_NUMBER() OVER(PARTITION BY auth_index ORDER BY observed_at_ms DESC) as rn
 			FROM quota_snapshots
@@ -148,29 +150,41 @@ func (r *Repository) GetLatestQuotaSnapshots(ctx context.Context, authIndexes []
 	defer rows.Close()
 
 	for rows.Next() {
-		var rec QuotaSnapshotRecord
-		var resetCredits sql.NullString
-		if err := rows.Scan(
-			&rec.ID,
-			&rec.AuthIndex,
-			&rec.Provider,
-			&rec.Status,
-			&rec.PlanType,
-			&rec.PlanTier,
-			&rec.WindowsJSON,
-			&resetCredits,
-			&rec.ObservedAtMS,
-			&rec.CreatedAtMS,
-		); err != nil {
-			return result, fmt.Errorf("scan latest snapshot: %w", err)
-		}
-		if resetCredits.Valid {
-			rec.ResetCreditsJSON = resetCredits.String
+		rec, scanErr := scanQuotaSnapshot(rows)
+		if scanErr != nil {
+			return result, scanErr
 		}
 		result[rec.AuthIndex] = rec
 	}
 
 	return result, rows.Err()
+}
+
+func scanQuotaSnapshot(rows *sql.Rows) (QuotaSnapshotRecord, error) {
+	var rec QuotaSnapshotRecord
+	var resetCredits, planJSON sql.NullString
+	if err := rows.Scan(
+		&rec.ID,
+		&rec.AuthIndex,
+		&rec.Provider,
+		&rec.Status,
+		&rec.PlanType,
+		&rec.PlanTier,
+		&rec.WindowsJSON,
+		&resetCredits,
+		&planJSON,
+		&rec.ObservedAtMS,
+		&rec.CreatedAtMS,
+	); err != nil {
+		return rec, fmt.Errorf("scan quota snapshot: %w", err)
+	}
+	if resetCredits.Valid {
+		rec.ResetCreditsJSON = resetCredits.String
+	}
+	if planJSON.Valid {
+		rec.PlanJSON = planJSON.String
+	}
+	return rec, nil
 }
 
 // GetQuotaSnapshotHistory retrieves historical snapshots for a specific auth index.
@@ -185,7 +199,7 @@ func (r *Repository) GetQuotaSnapshotHistory(ctx context.Context, authIndex stri
 
 	query := `
 		SELECT id, auth_index, provider, status, plan_type, plan_tier,
-		       windows_json, reset_credits_json, observed_at_ms, created_at_ms
+		       windows_json, reset_credits_json, plan_json, observed_at_ms, created_at_ms
 		FROM quota_snapshots
 		WHERE auth_index = ?
 		ORDER BY observed_at_ms DESC
@@ -198,24 +212,9 @@ func (r *Repository) GetQuotaSnapshotHistory(ctx context.Context, authIndex stri
 	defer rows.Close()
 
 	for rows.Next() {
-		var rec QuotaSnapshotRecord
-		var resetCredits sql.NullString
-		if err := rows.Scan(
-			&rec.ID,
-			&rec.AuthIndex,
-			&rec.Provider,
-			&rec.Status,
-			&rec.PlanType,
-			&rec.PlanTier,
-			&rec.WindowsJSON,
-			&resetCredits,
-			&rec.ObservedAtMS,
-			&rec.CreatedAtMS,
-		); err != nil {
-			return records, fmt.Errorf("scan snapshot history: %w", err)
-		}
-		if resetCredits.Valid {
-			rec.ResetCreditsJSON = resetCredits.String
+		rec, scanErr := scanQuotaSnapshot(rows)
+		if scanErr != nil {
+			return records, scanErr
 		}
 		records = append(records, rec)
 	}

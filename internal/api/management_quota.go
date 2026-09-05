@@ -115,12 +115,8 @@ func (h *Handler) getQuotaOverview(writer http.ResponseWriter, request *http.Req
 		// Merge persisted snapshot if present
 		if snap, ok := latestSnapshots[authIndex]; ok {
 			normalized.ObservedAtMS = snap.ObservedAtMS
-			if snap.PlanType != "" {
-				normalized.Plan = &quota.QuotaPlan{
-					PlanType:  snap.PlanType,
-					PlanLabel: snap.PlanType,
-					Tier:      snap.PlanTier,
-				}
+			if plan := planFromSnapshot(snap); plan != nil {
+				normalized.Plan = plan
 			}
 			if snap.WindowsJSON != "" && snap.WindowsJSON != "[]" {
 				var windows []quota.QuotaWindow
@@ -338,12 +334,8 @@ func (h *Handler) loadPriorNormalizedQuota(ctx context.Context, authIndex string
 		Status:       snap.Status,
 		ObservedAtMS: snap.ObservedAtMS,
 	}
-	if snap.PlanType != "" {
-		q.Plan = &quota.QuotaPlan{
-			PlanType:  snap.PlanType,
-			PlanLabel: snap.PlanType,
-			Tier:      snap.PlanTier,
-		}
+	if plan := planFromSnapshot(snap); plan != nil {
+		q.Plan = plan
 	}
 	if snap.WindowsJSON != "" {
 		var windows []quota.QuotaWindow
@@ -378,9 +370,13 @@ func (h *Handler) persistNormalizedQuotaSnapshot(ctx context.Context, q *quota.N
 	}
 	planType := ""
 	planTier := ""
+	planJSON := ""
 	if q.Plan != nil {
 		planType = q.Plan.PlanType
 		planTier = q.Plan.Tier
+		if b, err := json.Marshal(q.Plan); err == nil {
+			planJSON = string(b)
+		}
 	}
 
 	return h.repo.SaveQuotaSnapshot(ctx, repository.QuotaSnapshotRecord{
@@ -389,10 +385,31 @@ func (h *Handler) persistNormalizedQuotaSnapshot(ctx context.Context, q *quota.N
 		Status:           q.Status,
 		PlanType:         planType,
 		PlanTier:         planTier,
+		PlanJSON:         planJSON,
 		WindowsJSON:      winJSON,
 		ResetCreditsJSON: creditsJSON,
 		ObservedAtMS:     q.ObservedAtMS,
 	})
+}
+
+// planFromSnapshot rebuilds the full normalized plan (including subscription
+// expiry and extra usage) from the persisted plan payload, falling back to the
+// legacy plan_type/plan_tier columns for snapshots written before plan_json.
+func planFromSnapshot(snap repository.QuotaSnapshotRecord) *quota.QuotaPlan {
+	if snap.PlanJSON != "" {
+		var plan quota.QuotaPlan
+		if err := json.Unmarshal([]byte(snap.PlanJSON), &plan); err == nil && plan.PlanType != "" {
+			return &plan
+		}
+	}
+	if snap.PlanType != "" {
+		return &quota.QuotaPlan{
+			PlanType:  snap.PlanType,
+			PlanLabel: snap.PlanType,
+			Tier:      snap.PlanTier,
+		}
+	}
+	return nil
 }
 
 type quotaActionRequest struct {
@@ -598,12 +615,8 @@ func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *
 		if snaps, err := h.repo.GetLatestQuotaSnapshots(ctx, []string{authIndex}); err == nil {
 			if snap, ok := snaps[authIndex]; ok {
 				normalized.ObservedAtMS = snap.ObservedAtMS
-				if snap.PlanType != "" {
-					normalized.Plan = &quota.QuotaPlan{
-						PlanType:  snap.PlanType,
-						PlanLabel: snap.PlanType,
-						Tier:      snap.PlanTier,
-					}
+				if plan := planFromSnapshot(snap); plan != nil {
+					normalized.Plan = plan
 				}
 				if snap.WindowsJSON != "" && snap.WindowsJSON != "[]" {
 					var windows []quota.QuotaWindow

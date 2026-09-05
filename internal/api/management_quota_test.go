@@ -40,7 +40,11 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 						"auth_index": "codex-idx-1",
 						"type": "codex",
 						"provider": "codex",
-						"disabled": false
+						"disabled": false,
+						"id_token": {
+							"chatgpt_account_id": "acct-e2e",
+							"chatgpt_subscription_active_until": 1800000000
+						}
 					},
 					{
 						"id": "file-2",
@@ -74,6 +78,36 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 				_, _ = writer.Write([]byte(`{
 					"status_code": 200,
 					"body": {"status": "ok"}
+				}`))
+			} else if strings.Contains(payload.URL, "rate-limit-reset-credits") {
+				_, _ = writer.Write([]byte(`{
+					"status_code": 200,
+					"body": {
+						"available_count": 2,
+						"credits": [
+							{
+								"id": "credit-1",
+								"status": "available",
+								"reset_type": "codex_rate_limits",
+								"granted_at": "1790000000",
+								"expires_at": "1810000000"
+							},
+							{
+								"id": "credit-2",
+								"status": "available",
+								"reset_type": "codex_rate_limits",
+								"granted_at": "1790000000",
+								"expires_at": "1820000000"
+							},
+							{
+								"id": "credit-3",
+								"status": "used",
+								"reset_type": "codex_rate_limits",
+								"granted_at": "1790000000",
+								"expires_at": "1805000000"
+							}
+						]
+					}
 				}`))
 			} else if strings.Contains(payload.URL, "backend-api/wham/usage") {
 				_, _ = writer.Write([]byte(`{
@@ -188,11 +222,42 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 	if refreshResult.Quota.Plan == nil || refreshResult.Quota.Plan.Tier != "elite" {
 		t.Errorf("plan = %+v, want elite", refreshResult.Quota.Plan)
 	}
+	if refreshResult.Quota.Plan == nil || refreshResult.Quota.Plan.ExpiresAtMS == nil {
+		t.Errorf("plan expiry missing, want id_token fallback: %+v", refreshResult.Quota.Plan)
+	}
 	if len(refreshResult.Quota.Windows) != 1 || *refreshResult.Quota.Windows[0].UsedPercent != 15.0 {
 		t.Errorf("windows = %+v, want 15%% used", refreshResult.Quota.Windows)
 	}
 	if refreshResult.Quota.ResetCredits == nil || refreshResult.Quota.ResetCredits.AvailableCount != 2 {
 		t.Errorf("reset credits = %+v, want 2", refreshResult.Quota.ResetCredits)
+	}
+	if refreshResult.Quota.ResetCredits == nil || len(refreshResult.Quota.ResetCredits.Credits) != 2 {
+		t.Errorf("reset credit rows = %+v, want 2 available credits after filtering", refreshResult.Quota.ResetCredits)
+	}
+
+	// Refreshed plan must survive the snapshot round-trip (renewal time persists).
+	overviewAfter, err := client.Get(appServer.URL + "/api/v1/management/quota")
+	if err != nil {
+		t.Fatalf("GET /quota after refresh failed: %v", err)
+	}
+	defer overviewAfter.Body.Close()
+	var overviewAfterBody quota.QuotaOverviewResponse
+	if err := json.NewDecoder(overviewAfter.Body).Decode(&overviewAfterBody); err != nil {
+		t.Fatalf("decode overview after refresh failed: %v", err)
+	}
+	for _, item := range overviewAfterBody.Quotas {
+		if item.AuthIndex != "codex-idx-1" {
+			continue
+		}
+		if item.Plan == nil || item.Plan.PlanType != "pro" {
+			t.Errorf("snapshot plan = %+v, want pro", item.Plan)
+		}
+		if item.Plan == nil || item.Plan.ExpiresAtMS == nil || *item.Plan.ExpiresAtMS != 1800000000000 {
+			t.Errorf("snapshot plan expiry = %+v, want 1800000000000", item.Plan)
+		}
+		if item.ResetCredits == nil || item.ResetCredits.AvailableCount != 2 {
+			t.Errorf("snapshot reset credits = %+v, want 2", item.ResetCredits)
+		}
 	}
 
 	// 3. POST /api/v1/management/quota/clear-cooldown

@@ -127,3 +127,61 @@ func TestParseCodexUsageCamelCaseAndClamping(t *testing.T) {
 		t.Errorf("w.ResetAccuracy = %q, want derived", w.ResetAccuracy)
 	}
 }
+
+func TestParseCodexResetCreditsPayload(t *testing.T) {
+	raw := []byte(`{
+		"available_count": 3,
+		"applicable_available_count": 1,
+		"credits": [
+			{
+				"id": "credit-1",
+				"status": "available",
+				"reset_type": "codex_rate_limits",
+				"granted_at": "1790000000",
+				"expires_at": "1810000000"
+			},
+			{
+				"id": "credit-2",
+				"status": "used",
+				"reset_type": "codex_rate_limits",
+				"granted_at": "1790000000",
+				"expires_at": "1805000000"
+			},
+			{
+				"id": "credit-3",
+				"status": "available",
+				"reset_type": "sponsor_perk",
+				"granted_at": "1790000000",
+				"expires_at": "1820000000"
+			},
+			{
+				"id": "credit-4",
+				"status": "available",
+				"grantedAt": "1790000000",
+				"expiresAt": "1830000000"
+			}
+		]
+	}`)
+
+	info, err := ParseCodexResetCreditsPayload(raw)
+	if err != nil {
+		t.Fatalf("ParseCodexResetCreditsPayload returned error: %v", err)
+	}
+	if info.AvailableCount != 3 {
+		t.Errorf("AvailableCount = %d, want 3", info.AvailableCount)
+	}
+	if info.ApplicableAvailableCount != 1 {
+		t.Errorf("ApplicableAvailableCount = %d, want 1", info.ApplicableAvailableCount)
+	}
+	// Only codex_rate_limits + available credits survive: credit-1 and credit-4.
+	if len(info.Credits) != 2 {
+		t.Fatalf("len(credits) = %d, want 2", len(info.Credits))
+	}
+	first := info.Credits[0]
+	if first.ID != "credit-1" || first.ExpiresAtMS == nil || *first.ExpiresAtMS != 1810000000000 {
+		t.Errorf("first credit = %+v, want credit-1 expiring at 1810000000000", first)
+	}
+	if second := info.Credits[1]; second.ID != "credit-4" {
+		t.Errorf("second credit = %+v, want credit-4 (camelCase fallback)", second)
+	}
+}

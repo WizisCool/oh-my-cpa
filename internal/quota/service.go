@@ -17,6 +17,7 @@ import (
 const (
 	CodexUsageURL              = "https://chatgpt.com/backend-api/wham/usage"
 	CodexRedeemCreditURL       = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume"
+	CodexResetCreditsURL       = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"
 	ClaudeProfileURL           = "https://api.anthropic.com/api/oauth/profile"
 	ClaudeUsageURL             = "https://api.anthropic.com/api/oauth/usage"
 	AntigravityQuotaURLDaily   = "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary"
@@ -341,7 +342,76 @@ func (s *Service) fetchCodexQuota(ctx context.Context, file management.AuthFile,
 		return nil, nil, nil, errors.New(sanitizeError(resp.StatusCode, normBody))
 	}
 
-	return ParseCodexUsage(normBody, nowMS)
+	plan, windows, credits, err := ParseCodexUsage(normBody, nowMS)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// The usage payload omits subscription expiry for most accounts, so fall
+	// back to the CPA-projected id_token claim (CPAMC's renewal source).
+	if plan != nil && plan.ExpiresAtMS == nil {
+		if untilMS, ok := file.CodexSubscriptionActiveUntil(); ok && untilMS > 0 {
+			plan.ExpiresAtMS = &untilMS
+		}
+	}
+
+	credits = s.fetchCodexResetCredits(ctx, file, headers, credits)
+	return plan, windows, credits, nil
+}
+
+// fetchCodexResetCredits queries the dedicated rate-limit-reset-credits
+// endpoint, which lists individual credit expiries that the usage payload
+// omits. CPAMC precedence: dedicated available_count first, usage payload as
+// fallback; the richer credits list wins; applicable counts prefer usage.
+func (s *Service) fetchCodexResetCredits(ctx context.Context, file management.AuthFile, headers map[string]string, usageCredits *CodexResetCreditsInfo) *CodexResetCreditsInfo {
+	creditsHeaders := map[string]string{
+		"Content-Type":    "application/json",
+		"User-Agent":      CodexUserAgent,
+		"Accept":          "application/json",
+		"OpenAI-Beta":     "codex-1",
+		"Originator":      "Codex Desktop",
+	}
+	for key, value := range headers {
+		if key != "Content-Type" {
+			creditsHeaders[key] = value
+		}
+	}
+
+	resp, err := s.SafeApiCall(ctx, file.AuthIndex, "GET", CodexResetCreditsURL, creditsHeaders, "")
+	if err != nil {
+		return usageCredits
+	}
+	normBody, err := resp.NormalizedBody()
+	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return usageCredits
+	}
+	dedicated, err := ParseCodexResetCreditsPayload(normBody)
+	if err != nil || dedicated == nil {
+		return usageCredits
+	}
+
+	if usageCredits == nil {
+		return dedicated
+	}
+
+	merged := &CodexResetCreditsInfo{
+		AvailableCount:           usageCredits.AvailableCount,
+		ApplicableAvailableCount: usageCredits.ApplicableAvailableCount,
+		Credits:                  usageCredits.Credits,
+		Error:                    usageCredits.Error,
+	}
+	if dedicated.AvailableCount > 0 {
+		merged.AvailableCount = dedicated.AvailableCount
+	} else if merged.AvailableCount == 0 && len(dedicated.Credits) > 0 {
+		merged.AvailableCount = len(dedicated.Credits)
+	}
+	if len(dedicated.Credits) > 0 {
+		merged.Credits = dedicated.Credits
+	}
+	if merged.ApplicableAvailableCount == 0 {
+		merged.ApplicableAvailableCount = dedicated.ApplicableAvailableCount
+	}
+	return merged
 }
 
 func (s *Service) fetchClaudeQuota(ctx context.Context, file management.AuthFile, nowMS int64) (*QuotaPlan, []QuotaWindow, *QuotaExtraUsage, error) {
