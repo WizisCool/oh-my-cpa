@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Alert, App as AntdApp, Button, Empty, Spin } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -6,7 +6,12 @@ import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
 import type { QuotaItem } from '../types/quota';
 import { QuotaCard } from './quota/QuotaCard';
+import { ProviderFilterTabs } from './quota/ProviderFilterTabs';
 import styles from './quota/QuotaPage.module.css';
+
+// Fixed provider tabs, shown even when their count is zero (CPAMC parity);
+// providers present in the data but not listed here are appended.
+const KNOWN_PROVIDERS = ['claude', 'antigravity', 'codex', 'xai', 'kimi'];
 
 export const QuotaPage: React.FC = () => {
   const t = useT();
@@ -15,6 +20,7 @@ export const QuotaPage: React.FC = () => {
 
   // Tracking refreshing auth indexes
   const [refreshingIndexes, setRefreshingIndexes] = useState<Set<string>>(new Set());
+  const [providerTab, setProviderTab] = useState<string>('all');
 
   // Fetch quota overview (snapshots + live windows after refresh)
   const {
@@ -31,6 +37,26 @@ export const QuotaPage: React.FC = () => {
   });
 
   const quotas: QuotaItem[] = quotaData?.quotas ?? [];
+
+  const tabProviders = useMemo(() => {
+    const extras = quotas
+      .map((item) => item.provider)
+      .filter((p) => p && !KNOWN_PROVIDERS.includes(p));
+    return ['all', ...KNOWN_PROVIDERS, ...Array.from(new Set(extras)).sort()];
+  }, [quotas]);
+
+  const tabCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: quotas.length };
+    for (const item of quotas) {
+      counts[item.provider] = (counts[item.provider] ?? 0) + 1;
+    }
+    return counts;
+  }, [quotas]);
+
+  const filteredQuotas = useMemo(
+    () => (providerTab === 'all' ? quotas : quotas.filter((item) => item.provider === providerTab)),
+    [quotas, providerTab]
+  );
 
   const invalidateQuota = () => {
     void queryClient.invalidateQueries({ queryKey: ['management-quota'] });
@@ -198,18 +224,34 @@ export const QuotaPage: React.FC = () => {
           style={{ padding: '40px 0', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}
         />
       ) : (
-        <div className={styles.cardsGrid}>
-          {quotas.map((item) => (
-            <QuotaCard
-              key={item.auth_index}
-              item={item}
-              isRefreshing={refreshingIndexes.has(item.auth_index)}
-              onRefresh={(idx) => refreshMutation.mutate(idx)}
-              onClearCooldown={(idx) => clearCooldownMutation.mutate(idx)}
-              onRedeemCredit={(idx) => redeemCreditMutation.mutate(idx)}
+        <>
+          <ProviderFilterTabs
+            providers={tabProviders}
+            counts={tabCounts}
+            active={providerTab}
+            onChange={setProviderTab}
+          />
+          {filteredQuotas.length === 0 ? (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={t('quota.empty_provider')}
+              style={{ padding: '40px 0', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}
             />
-          ))}
-        </div>
+          ) : (
+            <div className={styles.cardsGrid}>
+              {filteredQuotas.map((item) => (
+                <QuotaCard
+                  key={item.auth_index}
+                  item={item}
+                  isRefreshing={refreshingIndexes.has(item.auth_index)}
+                  onRefresh={(idx) => refreshMutation.mutate(idx)}
+                  onClearCooldown={(idx) => clearCooldownMutation.mutate(idx)}
+                  onRedeemCredit={(idx) => redeemCreditMutation.mutate(idx)}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

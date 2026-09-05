@@ -996,6 +996,8 @@ const DICT: Record<string, [string, string]> = {
   'quota.in_days_min': ['{d}天{h}小时后', '{d}d {h}h left'],
   'quota.expired': ['已过期', 'Expired'],
   'quota.days_ago': ['{n}天前', '{n}d ago'],
+  'quota.filter_tabs': ['按提供商筛选', 'Filter by provider'],
+  'quota.empty_provider': ['该提供商暂无凭据', 'No credentials for this provider'],
 
   // ── system ───────────────────────────────────────────────────────────────
   'sys.title': ['系统信息与自检诊断', 'System Information & Diagnostics'],
