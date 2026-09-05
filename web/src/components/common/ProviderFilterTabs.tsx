@@ -1,0 +1,69 @@
+import React from 'react';
+import { Tabs, Space } from 'antd';
+import { AppstoreOutlined } from '@ant-design/icons';
+import { LobeIcon } from '../LobeIcon';
+import { getCredentialProviderMetadata } from './providerMetadata';
+import { useT } from '../../i18n';
+import styles from './ProviderFilterTabs.module.css';
+
+export interface ProviderFilterTabsProps {
+  providers: string[];
+  counts: Record<string, number>;
+  active: string;
+  onChange: (provider: string) => void;
+}
+
+/**
+ * Shared Provider Filter Tabs built with Ant Design Tabs, customized
+ * strictly to Oh My CPA's terminal-flat design specification:
+ * - Quiet underline with var(--fg) ink-bar indicator (no bright blue)
+ * - Mono count pills (showZero) styled with var(--hover-inset) and tabular nums
+ * - Explicit credential provider brand icons (Codex, Claude, Antigravity, xAI, Kimi)
+ */
+export const ProviderFilterTabs: React.FC<ProviderFilterTabsProps> = ({
+  providers,
+  counts,
+  active,
+  onChange,
+}) => {
+  const t = useT();
+
+  const items = providers.map((provider) => {
+    const isAll = provider === 'all';
+    const isActive = provider === active;
+    const meta = isAll ? null : getCredentialProviderMetadata(provider);
+    const label = isAll ? t('common.all') : meta?.label ?? provider;
+    const iconId = isAll ? null : meta?.iconId ?? '';
+    const count = counts[provider] ?? 0;
+
+    return {
+      key: provider,
+      label: (
+        <Space size={6} align="center">
+          <span className={styles.tabIcon}>
+            {iconId ? (
+              <LobeIcon iconId={iconId} size={15} />
+            ) : (
+              <AppstoreOutlined style={{ fontSize: 14, color: isActive ? 'var(--fg)' : 'var(--meta)' }} />
+            )}
+          </span>
+          <span>{label}</span>
+          <span className={`${styles.tabCount} ${isActive ? styles.tabCountActive : ''}`}>
+            {count}
+          </span>
+        </Space>
+      ),
+    };
+  });
+
+  return (
+    <div className={styles.tabsWrap}>
+      <Tabs
+        activeKey={active}
+        onChange={onChange}
+        items={items}
+        size="small"
+      />
+    </div>
+  );
+};

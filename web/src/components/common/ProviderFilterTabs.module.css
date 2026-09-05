@@ -1,0 +1,63 @@
+.tabsWrap {
+  margin-bottom: 16px;
+}
+
+.tabsWrap :global(.ant-tabs-nav) {
+  margin-bottom: 0 !important;
+}
+
+.tabsWrap :global(.ant-tabs-nav::before) {
+  border-bottom: 1px solid var(--border) !important;
+}
+
+.tabsWrap :global(.ant-tabs-ink-bar) {
+  background: var(--fg) !important;
+  height: 2px !important;
+  border-radius: 999px !important;
+}
+
+.tabsWrap :global(.ant-tabs-tab) {
+  padding: 8px 12px 11px !important;
+  margin: 0 2px 0 0 !important;
+  color: var(--fg-2) !important;
+  font-family: inherit !important;
+  font-size: 13px !important;
+  font-weight: 550 !important;
+  transition: color var(--motion-fast), background-color var(--motion-fast) !important;
+}
+
+.tabsWrap :global(.ant-tabs-tab:hover) {
+  color: var(--fg) !important;
+  background: var(--hover-inset) !important;
+}
+
+.tabsWrap :global(.ant-tabs-tab-active .ant-tabs-tab-btn) {
+  color: var(--fg) !important;
+  font-weight: 650 !important;
+}
+
+.tabIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.tabCount {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+  color: var(--meta);
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--hover-inset);
+}
+
+.tabCountActive {
+  color: var(--fg);
+}

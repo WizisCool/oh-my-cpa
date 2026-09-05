@@ -18,6 +18,7 @@ import {
   AppstoreOutlined,
 } from '@ant-design/icons';
 import { LobeIcon, getProviderDefaultIcon } from '../LobeIcon';
+import { getCredentialProviderMetadata } from '../common/providerMetadata';
 import { useT } from '../../i18n';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
 import {
@@ -58,7 +59,8 @@ export const AuthFileCard: React.FC<AuthFileCardProps> = ({
 }) => {
   const t = useT();
   const provider = providerOf(file);
-  const iconId = getProviderDefaultIcon(provider, file.name);
+  const meta = getCredentialProviderMetadata(provider);
+  const iconId = meta.iconId || getProviderDefaultIcon(provider, file.name);
   const identity = deriveAuthFileIdentity(file);
 
   const disabled = isAuthFileDisabled(file);

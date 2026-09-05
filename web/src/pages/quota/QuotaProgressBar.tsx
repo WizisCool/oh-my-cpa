@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Progress } from 'antd';
 import { useT } from '../../i18n';
 import { formatTimeWithCountdown } from './quotaFormat';
 import styles from './QuotaPage.module.css';
@@ -46,14 +47,14 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
   const safeRem = hasData ? Math.max(0, Math.min(100, rem!)) : 0;
 
   // CPAMC-style three buckets: plenty green, getting low yellow, nearly gone red
-  let barClass = styles.barMuted;
+  let strokeColor = 'var(--muted)';
   if (hasData) {
     if (safeRem >= 70) {
-      barClass = styles.barSuccess;
+      strokeColor = 'var(--success)';
     } else if (safeRem >= 25) {
-      barClass = styles.barWarn;
+      strokeColor = 'var(--warn)';
     } else {
-      barClass = styles.barDanger;
+      strokeColor = 'var(--danger)';
     }
   }
 
@@ -98,16 +99,14 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
       <div
         className={styles.progressTrack}
         style={{ height }}
-        role="progressbar"
-        aria-valuenow={Math.round(safeRem)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label={resolvedLabel || t('quota.col_windows')}
         title={hasData ? `${resolvedLabel}: ${displayPercent}` : undefined}
       >
-        <div
-          className={`${styles.progressBar} ${barClass}`}
-          style={{ width: hasData ? `${safeRem}%` : '0%' }}
+        <Progress
+          percent={hasData ? Math.round(safeRem) : 0}
+          showInfo={false}
+          strokeColor={strokeColor}
+          size={['100%', height]}
+          aria-label={resolvedLabel || t('quota.col_windows')}
         />
       </div>
     </div>

@@ -9,6 +9,7 @@ import {
   CloseCircleOutlined,
 } from '@ant-design/icons';
 import { LobeIcon, getProviderDefaultIcon } from '../../components/LobeIcon';
+import { getCredentialProviderMetadata } from '../../components/common/providerMetadata';
 import { useT } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
 import { QuotaProgressBar } from './QuotaProgressBar';
@@ -43,7 +44,8 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  const iconId = getProviderDefaultIcon(item.provider, item.name);
+  const meta = getCredentialProviderMetadata(item.provider);
+  const iconId = meta.iconId || getProviderDefaultIcon(item.provider, item.name);
 
   // Status badge config
   const renderStatus = () => {
@@ -138,7 +140,7 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
   };
 
   return (
-    <article className={styles.quotaCard}>
+    <article className={`terminal-panel ${styles.quotaCard}`}>
       {/* Header: provider icon + credential name + status */}
       <div className={styles.cardHead}>
         <div className={styles.cardTitleWrap}>

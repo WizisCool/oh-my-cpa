@@ -6,7 +6,7 @@ import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
 import type { QuotaItem } from '../types/quota';
 import { QuotaCard } from './quota/QuotaCard';
-import { ProviderFilterTabs } from './quota/ProviderFilterTabs';
+import { ProviderFilterTabs } from '../components/common/ProviderFilterTabs';
 import styles from './quota/QuotaPage.module.css';
 
 // Fixed provider tabs, shown even when their count is zero (CPAMC parity);

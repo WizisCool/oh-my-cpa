@@ -40,7 +40,7 @@ import { AuthFileCard } from '../components/authFiles/AuthFileCard';
 import { AuthFileDetailDrawer } from '../components/authFiles/AuthFileDetailDrawer';
 import { BatchActionBar } from '../components/authFiles/BatchActionBar';
 import { ModelsModal } from '../components/authFiles/ModelsModal';
-import { ProviderTabs } from '../components/authFiles/ProviderTabs';
+import { ProviderFilterTabs } from '../components/common/ProviderFilterTabs';
 import styles from './authFiles/AuthFilesPage.module.css';
 
 const KNOWN_PROVIDERS = ['claude', 'antigravity', 'codex', 'xai', 'kimi'];
@@ -496,8 +496,8 @@ export const AuthFilesPage: React.FC = () => {
         </div>
       </header>
 
-      {/* Provider Filter Tabs (Ant Design Tabs) */}
-      <ProviderTabs
+      {/* Provider Filter Tabs (Ant Design Tabs Customized to Theme) */}
+      <ProviderFilterTabs
         providers={tabProviders}
         counts={tabCounts}
         active={provider}

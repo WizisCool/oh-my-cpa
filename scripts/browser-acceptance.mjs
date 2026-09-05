@@ -194,17 +194,29 @@ try {
     await page.waitForTimeout(300);
   }
 
-  // 3. Provider tabs
-  const codexTab = page.locator('.auth-files-page button[class*="filterTab"]').filter({ hasText: /Codex/i }).first();
-  if (await codexTab.isVisible()) {
-    await codexTab.click();
-    await page.waitForTimeout(300);
-    const codexCount = await page.locator('.auth-files-page .ant-card').count();
-    check('auth-files provider tab filters to Codex', codexCount === 2, `count=${codexCount}`);
-    const allTab = page.locator('.auth-files-page button[class*="filterTab"]').first();
-    await allTab.click();
-    await page.waitForTimeout(300);
-  }
+  // 3. Provider tabs & brand icons verification
+  const codexTab = page.locator('.auth-files-page .ant-tabs-tab').filter({ hasText: /Codex/i }).first();
+  await codexTab.waitFor({ state: 'visible', timeout: 5000 });
+  await codexTab.click();
+  await page.waitForTimeout(300);
+  const codexCount = await page.locator('.auth-files-page .ant-card').count();
+  check('auth-files provider tab filters to Codex', codexCount === 2, `count=${codexCount}`);
+  const allTab = page.locator('.auth-files-page .ant-tabs-tab').first();
+  await allTab.click();
+  await page.waitForTimeout(300);
+
+  // Verify brand icons on tabs are NOT OpenAI
+  const antigravityTab = page.locator('.auth-files-page .ant-tabs-tab').filter({ hasText: /Antigravity/i }).first();
+  const antigravitySvgHtml = await antigravityTab.locator('svg').innerHTML();
+  check('Antigravity tab icon is not OpenAI', !antigravitySvgHtml.includes('OpenAI'));
+
+  const xaiTab = page.locator('.auth-files-page .ant-tabs-tab').filter({ hasText: /xAI|Xai/i }).first();
+  const xaiSvgHtml = await xaiTab.locator('svg').innerHTML();
+  check('xAI tab icon is not OpenAI', !xaiSvgHtml.includes('OpenAI'));
+
+  const kimiTab = page.locator('.auth-files-page .ant-tabs-tab').filter({ hasText: /Kimi/i }).first();
+  const kimiSvgHtml = await kimiTab.locator('svg').innerHTML();
+  check('Kimi tab icon is not OpenAI', !kimiSvgHtml.includes('OpenAI'));
 
   // 4. Quick Models modal
   const modelsBtn = page.locator('.auth-files-page button').filter({ hasText: /模型|Models/i }).first();
