@@ -11,6 +11,12 @@ interface LobeIconProps {
   variant?: 'color' | 'mono';
 }
 
+// Kimi's Color variant draws a fixed white glyph — invisible on light
+// surfaces. Fall back to the mono (currentColor) variant so the mark adapts
+// to the theme instead. (Codex's Color variant is a white tile with a
+// gradient glyph and reads fine on both themes, so it stays Color.)
+const WHITE_GLYPH_COLOR_ICONS = new Set(['Kimi']);
+
 export const LobeIcon: React.FC<LobeIconProps> = memo(({
   iconId,
   size = 24,
@@ -27,12 +33,14 @@ export const LobeIcon: React.FC<LobeIconProps> = memo(({
     return <CloudServerOutlined style={{ fontSize: size, ...style }} className={className} />;
   }
 
-  if (variant !== 'mono' && IconComp.Color) {
-    const ColorComp = IconComp.Color;
-    return <ColorComp size={size} style={style} className={className} />;
+  if (variant !== 'mono' && IconComp.Color && !WHITE_GLYPH_COLOR_ICONS.has(iconId)) {
+    return <IconComp.Color size={size} style={style} className={className} />;
   }
 
-  return <IconComp size={size} style={style} className={className} />;
+  // Mono glyphs draw with currentColor; pin it to --fg so the mark follows the
+  // data-theme CSS variables instead of an inherited antd token color, which
+  // can disagree with the visual theme.
+  return <IconComp size={size} style={{ color: 'var(--fg)', ...style }} className={className} />;
 });
 
 interface TocCandidate {
