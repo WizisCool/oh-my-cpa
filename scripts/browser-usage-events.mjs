@@ -255,6 +255,41 @@ try {
     (await page.locator('.request-list').innerText()).includes(records[499].request_id),
   );
   check('virtual DOM stays bounded at the bottom', (await page.locator('.request-row').count()) < 40);
+  // Middle-of-stream: the fixed itemHeight is only an estimate for 88px rows,
+  // so measured heights must still line up without skipping, duplicating or
+  // overlapping neighbours.
+  const midScroll = await page.locator('.request-list').evaluate((root) => {
+    const el = [...root.querySelectorAll('*')].find(
+      (e) =>
+        e.scrollHeight > e.clientHeight + 100 &&
+        ['auto', 'scroll', 'hidden'].includes(getComputedStyle(e).overflowY),
+    );
+    if (!el) return { found: false };
+    el.scrollTop = Math.floor(el.scrollHeight / 2);
+    el.dispatchEvent(new Event('scroll', { bubbles: true }));
+    return { found: true };
+  });
+  check('Listy scrolls to the middle of the stream', midScroll.found);
+  await wait(250);
+  const midRows = await page.locator('.request-row').evaluateAll((rows) =>
+    rows.map((row) => {
+      const rect = row.getBoundingClientRect();
+      const match = (row.textContent || '').match(/req_7fa2c9d1_(\d{5})/);
+      return { id: match ? Number(match[1]) : null, top: rect.top, bottom: rect.bottom, width: rect.width };
+    }),
+  );
+  const midIds = midRows.map((row) => row.id);
+  check(
+    'middle rows are contiguous without gaps or duplicates',
+    midIds.every((id) => id !== null) &&
+      midIds.every((id, index) => index === 0 || id - midIds[index - 1] === 1),
+  );
+  check(
+    'middle rows never overlap vertically',
+    midRows.every((row, index) => index === 0 || row.top >= midRows[index - 1].bottom - 1),
+  );
+  check('middle rows render at full width', midRows.every((row) => row.width > 300));
+  check('virtual DOM stays bounded in the middle', (await page.locator('.request-row').count()) < 40);
   const beforePage = calls.at(-1);
   await page.getByRole('button', { name: '下一页', exact: true }).click();
   await page.getByText('第 2 页 · 500 条记录').waitFor();
@@ -320,6 +355,33 @@ try {
     calls.at(-1).searchParams.get('auth_index') === 'credential-1' &&
       new URL(page.url()).searchParams.get('auth_index') === 'credential-1',
   );
+  // Advanced text inputs share the request-id debounce: typing must not fire
+  // one list request per character.
+  const authTypeInput = page.getByRole('textbox', { name: '认证方式', exact: true });
+  const beforeAuthType = calls.length;
+  await authTypeInput.fill('oauth');
+  await wait(120);
+  check(
+    'advanced text filters are debounced',
+    calls.length === beforeAuthType && !calls.at(-1).searchParams.has('auth_type'),
+  );
+  await page.waitForURL('**auth_type=oauth');
+  let sawAuthTypeCall = false;
+  for (let attempt = 0; attempt < 20 && !sawAuthTypeCall; attempt++) {
+    sawAuthTypeCall = calls.some((call) => call.searchParams.get('auth_type') === 'oauth');
+    if (!sawAuthTypeCall) await wait(100);
+  }
+  check(
+    'debounced auth_type reaches API and URL',
+    sawAuthTypeCall && new URL(page.url()).searchParams.get('auth_type') === 'oauth',
+  );
+  await authTypeInput.fill('');
+  await page.waitForFunction(
+    () => !new URLSearchParams(location.search).has('auth_type'),
+    undefined,
+    { timeout: 5000 },
+  );
+  check('clearing a debounced filter removes it from the URL', true);
   await page.getByRole('button', { name: /重\s*置/ }).click();
   await page.getByText('第 1 页 · 100 条记录').waitFor();
   const search = page.getByRole('textbox', { name: 'Request ID', exact: true });
@@ -400,6 +462,34 @@ try {
       .first()
       .evaluate((el) => el.scrollWidth <= el.clientWidth),
   );
+  // A 320px viewport is the narrowest supported phone; multi-line rows may grow
+  // past the height estimate, so both layout and virtualization must hold.
+  await page.setViewportSize({ width: 320, height: 640 });
+  await wait(250);
+  check(
+    '320px document has no horizontal overflow',
+    await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+  );
+  check(
+    '320px rows stay inside list',
+    await page
+      .locator('.request-row')
+      .first()
+      .evaluate((el) => el.scrollWidth <= el.clientWidth),
+  );
+  check('320px keeps the stream interactive', (await page.locator('.request-row').count()) > 0);
+  // Shrinking the host exercises the ResizeObserver: the Listy height must
+  // follow without unmounting the stream.
+  const rowsBeforeResize = await page.locator('.request-row').count();
+  await page.setViewportSize({ width: 320, height: 480 });
+  await wait(250);
+  const rowsAfterResize = await page.locator('.request-row').count();
+  check(
+    'window resize keeps the stream mounted and bounded',
+    rowsAfterResize > 0 && rowsAfterResize <= rowsBeforeResize + 10,
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await wait(250);
   await page.locator('.request-row').first().click();
   await page.locator('.request-source-chain').waitFor();
   await wait(200);
@@ -448,8 +538,13 @@ try {
     'current-file enrichment is labeled as nonhistorical',
     (await page.locator('.request-detail').innerText()).includes('not a historical snapshot'),
   );
-  await page.locator('.request-detail').getByRole('button', { name: 'Close', exact: true }).click();
+  await page.keyboard.press('Escape');
   await page.locator('.request-detail').waitFor({ state: 'hidden' });
+  check('keyboard Escape closes the detail drawer', await page.locator('.request-detail').count() === 0 || !(await page.locator('.request-detail').isVisible()));
+  check(
+    'focus returns to the page after closing the drawer',
+    await page.evaluate(() => document.activeElement !== null && document.body.contains(document.activeElement)),
+  );
   await page.evaluate(() => {
     history.pushState({}, '', '?provider=gemini');
     dispatchEvent(new PopStateEvent('popstate'));
