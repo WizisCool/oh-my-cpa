@@ -9,6 +9,85 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
 )
 
+// A rename keeps the resource identity (id) stable while the displayed name
+// follows the current metadata: usage rows bind to the resource, not to the
+// string that happened to be its name when the request happened.
+func TestCPARenameKeepsBindingAndFollowsCurrentName(t *testing.T) {
+	repo := usageTestRepository(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	resList, err := repo.UpsertDiscoveredResources(ctx, "default", []domain.DiscoveredResource{
+		{
+			ResourceKey:     "auth-index:codex-api-key:idx-rename",
+			CPAResourceType: "codex-api-key",
+			CPAAuthIndex:    "idx-rename",
+			CPAResourceName: "original-name.json",
+			CPADriver:       "codex",
+		},
+	}, now, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resourceID := resList[0].ID
+
+	eventID, err := repo.InsertUsageEvents(ctx, []usage.Event{{
+		InstanceID:  "default",
+		EventKey:    "req-rename",
+		AuthIndex:   "idx-rename",
+		TimestampMS: now.UnixMilli(),
+		Model:       "gpt-5",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	row, err := repo.GetUsageEvent(ctx, eventID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.ResourceID == nil || *row.ResourceID != resourceID || row.ResourceName == nil || *row.ResourceName != "original-name.json" {
+		t.Fatalf("initial binding wrong: id=%v name=%v", row.ResourceID, row.ResourceName)
+	}
+
+	// The next discovery sweep renames the resource in place.
+	later := now.Add(5 * time.Minute)
+	if _, err = repo.UpsertDiscoveredResources(ctx, "default", []domain.DiscoveredResource{
+		{
+			ResourceKey:     "auth-index:codex-api-key:idx-rename",
+			CPAResourceType: "codex-api-key",
+			CPAAuthIndex:    "idx-rename",
+			CPAResourceName: "renamed-team.json",
+			CPADriver:       "codex",
+		},
+	}, later, true);	err != nil {
+		t.Fatal(err)
+	}
+
+	rowAfter, err := repo.GetUsageEvent(ctx, eventID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rowAfter.ResourceID == nil || *rowAfter.ResourceID != resourceID {
+		t.Fatalf("rename must keep the resource identity: %v", rowAfter.ResourceID)
+	}
+	if rowAfter.ResourceName == nil || *rowAfter.ResourceName != "renamed-team.json" {
+		t.Fatalf("displayed name must follow current metadata, got %v", rowAfter.ResourceName)
+	}
+
+	// Listing follows the same join, so stream and detail cannot disagree.
+	page, err := repo.ListUsageEvents(ctx, UsageEventFilter{
+		InstanceID: "default",
+		FromMS:     now.Add(-time.Minute).UnixMilli(),
+		ToMS:       now.Add(time.Minute).UnixMilli(),
+	})
+	if err != nil || len(page.Items) != 1 {
+		t.Fatalf("listing after rename failed: %v %#v", err, page.Items)
+	}
+	if page.Items[0].ResourceName == nil || *page.Items[0].ResourceName != "renamed-team.json" {
+		t.Fatalf("list binding disagrees with detail: %v", page.Items[0].ResourceName)
+	}
+}
+
 func TestCPABindingsSyncAndHistoricalUsagePreservation(t *testing.T) {
 	repo := usageTestRepository(t)
 	ctx := context.Background()
