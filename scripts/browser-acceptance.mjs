@@ -355,7 +355,7 @@ try {
   const progressCount = await page.locator('.quota-page .ant-progress').count();
   check('quota page renders progress bars', progressCount > 0, `count=${progressCount}`);
   if (progressCount > 0) {
-    const firstProgressBg = page.locator('.quota-page .ant-progress-bg').first();
+    const firstProgressBg = page.locator('.quota-page .ant-progress-track').first();
     const progressWidth = await firstProgressBg.evaluate((el) => parseFloat(window.getComputedStyle(el).width));
     check('quota progress bar fill has positive width', progressWidth > 0, `width=${progressWidth}`);
   }
