@@ -658,6 +658,61 @@ func TestUsageEventsListFilterAndCursor(t *testing.T) {
 	}
 }
 
+// The list view is an identity surface: it names who called and what it cost,
+// but the client IP, forwarded-for chain, user agent and full endpoint stay in
+// the single-record detail where diagnosis actually needs them.
+func TestUsageEventListOmitsDiagnosticFields(t *testing.T) {
+	client, baseURL, repo := startDashboardTestServer(t, nil)
+	now := time.Now().UTC()
+	event := eventFor("private-scope", now.Add(-time.Minute), usage.TokenStats{TotalTokens: 4}, false)
+	event.Endpoint = "https://internal-relay.example.internal/v1/responses"
+	clientIP := "192.0.2.44"
+	forwarded := "203.0.113.9"
+	agent := "secret-client/9.9"
+	event.ClientIP = &clientIP
+	event.XForwardedFor = &forwarded
+	event.UserAgent = &agent
+	seedEvents(t, repo, now, []repository.UsageDecoded{{Event: event}})
+	listURL := baseURL + "/omc/api/v1/usage/events?preset=24h"
+
+	response, payload := getJSON(t, client, listURL)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d body %s", response.StatusCode, payload)
+	}
+	for _, forbidden := range []string{"client_ip", "x_forwarded_for", "user_agent", "endpoint", "192.0.2.", "203.0.113.", "secret-client", "internal-relay"} {
+		if strings.Contains(string(payload), forbidden) {
+			t.Fatalf("list payload leaked diagnostic field %q: %s", forbidden, payload)
+		}
+	}
+	var list struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.Unmarshal(payload, &list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Items) != 1 {
+		t.Fatalf("expected one listed record, got %d", len(list.Items))
+	}
+	// Identity attribution itself must survive: provider, credential index and
+	// the caller group are the legitimate list fields.
+	for _, required := range []string{"provider", "auth_index", "api_group_key", "source"} {
+		if _, ok := list.Items[0][required]; !ok {
+			t.Fatalf("list payload dropped identity field %q", required)
+		}
+	}
+
+	// The same record on the detail view keeps diagnosis data behind one id.
+	id := int64(list.Items[0]["id"].(float64))
+	_, detail := getJSON(t, client, fmt.Sprintf("%s/omc/api/v1/usage/events/%d", baseURL, id))
+	// Stored values arrive already minimized: IPs are masked to /24 and the user
+	// agent is reduced, so the detail view leaks neither the host nor the client.
+	for _, expected := range []string{"client_ip", "x_forwarded_for", "user_agent", "endpoint", "192.0.2.0/24", "secret-client"} {
+		if !strings.Contains(string(detail), expected) {
+			t.Fatalf("detail payload missing diagnostic field %q: %s", expected, detail)
+		}
+	}
+}
+
 func TestUsageEventsRejectBadLimits(t *testing.T) {
 	client, baseURL, _ := startDashboardTestServer(t, nil)
 	for _, suffix := range []string{"limit=0", "limit=-5", "limit=abc", "result=maybe"} {
