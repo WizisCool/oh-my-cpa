@@ -1,280 +1,334 @@
 import React from 'react';
-import {
-  Drawer,
-  Descriptions,
-  Tag,
-  Button,
-  Typography,
-  Card,
-  Alert,
-  Skeleton,
-  Modal,
-  App as AntdApp,
-} from 'antd';
-import {
-  CopyOutlined,
-  DownloadOutlined,
-  ExclamationCircleOutlined,
-} from '@ant-design/icons';
+import { Alert, App as AntdApp, Button, Descriptions, Drawer, Empty, Modal, Skeleton, Tabs } from 'antd';
+import { ArrowRightOutlined, CopyOutlined, DownloadOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';
-
-const { Text } = Typography;
+import {
+  resolveCredential,
+  requestGroupName,
+  formatEventDuration,
+  type CredentialIndex,
+} from '../../types/usageEventView';
 
 interface UsageEventDrawerProps {
   eventId: number | null;
+  credentials: CredentialIndex;
   onClose: () => void;
 }
 
-export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({ eventId, onClose }) => {
+export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({ eventId, onClose, credentials }) => {
   const t = useT();
   const { message } = AntdApp.useApp();
   const [downloadModalOpen, setDownloadModalOpen] = React.useState(false);
   const [downloading, setDownloading] = React.useState(false);
-
-  const { data, isLoading, isError, error } = useQuery({
+  const [tab, setTab] = React.useState('overview');
+  React.useEffect(() => {
+    setTab('overview');
+    setDownloadModalOpen(false);
+  }, [eventId]);
+  const result = useQuery({
     queryKey: ['usage-event', eventId],
     queryFn: () => api.getUsageEvent(eventId!),
     enabled: eventId != null,
   });
-
-  const event = data?.event;
-  const relatedErrors = data?.related_errors || [];
-
-  const handleCopy = (text: string) => {
-    void navigator.clipboard.writeText(text);
-    message.success(t('res.copied'));
+  const event = result.data?.event;
+  const identity = event ? resolveCredential(event, credentials) : undefined;
+  const errors = result.data?.related_errors || [];
+  const missing = <span className="terminal-muted">{t('events.not_captured')}</span>;
+  const value = (text: string | null | undefined) => text || missing;
+  const fields = (items: Array<[string, React.ReactNode]>) => (
+    <Descriptions
+      size="small"
+      column={1}
+      colon={false}
+      items={items.map(([label, children], index) => ({ key: index, label, children }))}
+    />
+  );
+  const section = (title: string, content: React.ReactNode) => (
+    <section className="request-detail-section">
+      <h3>{title}</h3>
+      {content}
+    </section>
+  );
+  const copy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      message.success(t('res.copied'));
+    } catch {
+      message.error(t('events.copy_failed'));
+    }
   };
-
-  const handleDownloadLog = async () => {
-    if (!eventId || !event?.request_id) return;
+  const download = async () => {
+    if (eventId == null || !event?.request_id) return;
     setDownloading(true);
     try {
       const blob = await api.downloadUsageEventRequestLog(eventId);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${event.request_id}.log`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${event.request_id.replace(/[^a-zA-Z0-9._-]/g, '_')}.log`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
       setDownloadModalOpen(false);
       message.success(t('events.download_success'));
     } catch {
-      message.error(t('common.save_failed', { msg: 'Download failed' }));
+      message.error(t('events.download_failed'));
     } finally {
       setDownloading(false);
     }
   };
-
   return (
     <Drawer
       title={t('events.details_title')}
-      size="large"
+      size={720}
       open={eventId != null}
       onClose={onClose}
+      className="request-detail"
+      closable={{ 'aria-label': t('common.close') }}
     >
-      {isLoading ? (
-        <Skeleton active paragraph={{ rows: 10 }} />
-      ) : isError ? (
+      {result.isLoading ? (
+        <Skeleton active={false} paragraph={{ rows: 12 }} />
+      ) : result.isError ? (
         <Alert
           type="error"
           showIcon
-          description={error instanceof Error ? error.message : String(error)}
+          title={t('events.load_error')}
+          description={result.error instanceof Error ? result.error.message : undefined}
+          action={<Button onClick={() => void result.refetch()}>{t('common.retry')}</Button>}
         />
       ) : event ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Top Key Info */}
-          <Card size="small" className="terminal-panel">
-            <Descriptions column={{ xs: 1, sm: 2 }} size="small" bordered>
-              <Descriptions.Item label="Event Key">
-                <span className="mono-num">{event.event_key}</span>
-              </Descriptions.Item>
-              <Descriptions.Item label="Request ID">
-                {event.request_id ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span className="mono-num">{event.request_id}</span>
-                    <Button
-                      size="small"
-                      type="text"
-                      icon={<CopyOutlined />}
-                      onClick={() => handleCopy(event.request_id!)}
-                    />
-                  </div>
-                ) : (
-                  '-'
-                )}
-              </Descriptions.Item>
-              <Descriptions.Item label={t('events.col_time')}>
-                {dayjs(event.timestamp_ms).format('YYYY-MM-DD HH:mm:ss.SSS')}
-              </Descriptions.Item>
-              <Descriptions.Item label={t('events.col_result')}>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {event.failed ? (
-                    <Tag color="error">{t('events.filter_failed')}</Tag>
-                  ) : (
-                    <Tag color="success">{t('events.filter_success')}</Tag>
-                  )}
-                  {event.generate === false && <Tag>Warm-up</Tag>}
-                </div>
-              </Descriptions.Item>
-              <Descriptions.Item label={t('events.col_latency')}>
-                {event.latency_ms} ms {event.ttft_ms != null && `(TTFT: ${event.ttft_ms} ms)`}
-              </Descriptions.Item>
-              <Descriptions.Item label={t('events.col_resource')}>
-                {event.resource_id ? (
-                  <Tag color="blue">{event.resource_name || event.resource_id}</Tag>
-                ) : (
-                  <Text type="secondary">{t('events.unbound')}</Text>
-                )}
-              </Descriptions.Item>
-            </Descriptions>
-          </Card>
-
-          {/* Token Breakdown */}
-          <Card size="small" title={t('events.token_breakdown')} className="terminal-panel">
-            <Descriptions column={{ xs: 2, sm: 4 }} size="small" bordered>
-              <Descriptions.Item label={t('dash.unit_tokens')}>
-                <Text strong className="mono-num">{event.tokens.total}</Text>
-              </Descriptions.Item>
-              <Descriptions.Item label={t('events.input_tokens')}>
-                <span className="mono-num">{event.tokens.input}</span>
-              </Descriptions.Item>
-              <Descriptions.Item label={t('events.output_tokens')}>
-                <span className="mono-num">{event.tokens.output}</span>
-              </Descriptions.Item>
-              <Descriptions.Item label={t('events.reasoning_tokens')}>
-                <span className="mono-num">{event.tokens.reasoning}</span>
-              </Descriptions.Item>
-              <Descriptions.Item label={t('events.cached_tokens')}>
-                <span className="mono-num">{event.tokens.cached}</span>
-              </Descriptions.Item>
-              <Descriptions.Item label={t('events.cache_read_tokens')}>
-                <span className="mono-num">{event.tokens.cache_read}</span>
-              </Descriptions.Item>
-              <Descriptions.Item label={t('events.cache_creation_tokens')}>
-                <span className="mono-num">{event.tokens.cache_creation}</span>
-              </Descriptions.Item>
-            </Descriptions>
-          </Card>
-
-          {/* Endpoint, Model & Network Profile */}
-          <Card size="small" title="Routing & Identity" className="terminal-panel">
-            <Descriptions column={{ xs: 1, sm: 2 }} size="small" bordered>
-              <Descriptions.Item label={t('events.col_model')}>
-                <div>
-                  <Text strong>{event.model}</Text>
-                  {event.model_alias && (
-                    <div style={{ fontSize: 11, color: 'var(--meta)' }}>
-                      alias: {event.model_alias}
-                    </div>
-                  )}
-                </div>
-              </Descriptions.Item>
-              <Descriptions.Item label="Provider">{event.provider || '-'}</Descriptions.Item>
-              <Descriptions.Item label="Endpoint">
-                <span className="mono-num">{event.endpoint || '-'}</span>
-              </Descriptions.Item>
-              <Descriptions.Item label="Executor Type">{event.executor_type || '-'}</Descriptions.Item>
-              <Descriptions.Item label="Auth Type / Index">
-                {event.auth_type} / {event.auth_index || '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="Client IP">{event.client_ip || '-'}</Descriptions.Item>
-              <Descriptions.Item label="User Agent">{event.user_agent || '-'}</Descriptions.Item>
-              <Descriptions.Item label="Service Tier">
-                {event.service_tier || '-'}{' '}
-                {event.response_service_tier && `(${event.response_service_tier})`}
-              </Descriptions.Item>
-            </Descriptions>
-          </Card>
-
-          {/* Correlated Errors */}
-          {relatedErrors.length > 0 && (
-            <Card
-              size="small"
-              title={
-                <span style={{ color: 'var(--danger)' }}>
-                  <ExclamationCircleOutlined style={{ marginRight: 6 }} />
-                  {t('events.correlated_errors')} ({relatedErrors.length})
-                </span>
-              }
-              className="terminal-panel"
-            >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {relatedErrors.map((err) => (
-                  <div
-                    key={err.id}
-                    style={{
-                      padding: 10,
-                      borderRadius: 4,
-                      background: 'var(--surface)',
-                      border: '1px solid var(--border)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <Tag color="error">Status {err.status_code}</Tag>
-                      <Text type="secondary">
-                        {dayjs(err.timestamp_ms).format('HH:mm:ss.SSS')}
-                      </Text>
-                    </div>
-                    {err.code && <div><strong>Code:</strong> {err.code}</div>}
-                    {err.body && (
-                      <div style={{ marginTop: 4 }}>
-                        <strong>Error Body:</strong>
-                        <pre style={{ margin: '4px 0 0 0', fontSize: 11, whiteSpace: 'pre-wrap' }}>
-                          {err.body}
-                        </pre>
-                      </div>
-                    )}
-                    {err.quota_reason && (
-                      <div style={{ marginTop: 4, color: 'var(--warn)' }}>
-                        <strong>Quota Reason:</strong> {err.quota_reason}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {/* Request Log Actions */}
-          {event.has_request_log && (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 8 }}>
-              <Button
-                type="primary"
-                icon={<DownloadOutlined />}
-                onClick={() => setDownloadModalOpen(true)}
-              >
-                {t('events.download_log')}
-              </Button>
+        <>
+          <div className="request-detail-hero">
+            <div className="request-detail-heading">
+              <h2>{event.model || t('events.not_captured')}</h2>
+              <span className={`request-result ${event.failed ? 'is-failed' : ''}`}>
+                <i />
+                {t(event.failed ? 'events.filter_failed' : 'events.filter_success')}
+              </span>
             </div>
-          )}
-
-          {/* Download Log Confirmation Modal */}
-          <Modal
-            open={downloadModalOpen}
-            title={t('events.download_log_confirm')}
-            onOk={() => void handleDownloadLog()}
-            onCancel={() => setDownloadModalOpen(false)}
-            confirmLoading={downloading}
-            okText={t('common.confirm')}
-            cancelText={t('common.cancel')}
-          >
-            <Alert
-              type="warning"
-              showIcon
-              description={t('events.download_log_desc')}
-              style={{ marginBottom: 16 }}
-            />
-            <p>
-              Request ID: <code className="mono-num">{event.request_id}</code>
-            </p>
-          </Modal>
-        </div>
+            <div className="request-detail-id">
+              <span>{event.request_id || t('events.no_request_id')}</span>
+              {event.request_id && (
+                <Button
+                  size="small"
+                  type="text"
+                  icon={<CopyOutlined />}
+                  aria-label={t('events.copy_id')}
+                  onClick={() => void copy(event.request_id!)}
+                />
+              )}
+            </div>
+            <p className="request-window">{dayjs(event.timestamp_ms).format('YYYY-MM-DD HH:mm:ss.SSS')}</p>
+          </div>
+          <div className="request-detail-metrics">
+            <div>
+              <span>{t('events.duration')}</span>
+              <strong>{formatEventDuration(event.latency_ms)}</strong>
+            </div>
+            <div>
+              <span>{t('events.ttft')}</span>
+              <strong>{formatEventDuration(event.ttft_ms)}</strong>
+            </div>
+            <div>
+              <span>{t('events.col_tokens')}</span>
+              <strong>{event.tokens.total.toLocaleString()}</strong>
+            </div>
+          </div>
+          <Tabs
+            activeKey={tab}
+            onChange={setTab}
+            animated={false}
+            items={[
+              {
+                key: 'overview',
+                label: t('events.overview'),
+                children: (
+                  <>
+                    <div className="request-source-chain" aria-label={t('events.routing')}>
+                      <div>
+                        <span>{t('events.caller')}</span>
+                        <strong>{value(requestGroupName(event))}</strong>
+                      </div>
+                      <ArrowRightOutlined />
+                      <div>
+                        <span>{t('events.provider')}</span>
+                        <strong>{value(event.provider)}</strong>
+                      </div>
+                      <ArrowRightOutlined />
+                      <div>
+                        <span>{t('events.credential')}</span>
+                        <strong>{value(identity?.name)}</strong>
+                      </div>
+                    </div>
+                    {section(
+                      t('events.routing'),
+                      fields([
+                        [t('events.provider'), value(event.provider)],
+                        [t('events.credential'), value(identity?.name)],
+                        [
+                          t('events.identity_basis'),
+                          identity ? t(`events.credential_${identity.kind}`) : missing,
+                        ],
+                        [t('events.resource_name'), value(event.resource_name)],
+                        [t('events.source'), value(event.source)],
+                        [t('events.auth_index'), value(event.auth_index)],
+                        [t('events.auth_type'), value(event.auth_type)],
+                        [t('events.caller'), value(requestGroupName(event))],
+                        [t('events.api_group_key'), value(event.api_group_key)],
+                        [t('events.group_category'), value(event.api_group_label)],
+                        [t('events.resource_id'), value(event.resource_id)],
+                        [t('events.executor'), value(event.executor_type)],
+                        [t('events.endpoint'), value(event.endpoint)],
+                      ]),
+                    )}
+                    {section(
+                      t('events.request_parameters'),
+                      fields([
+                        [t('events.col_model'), value(event.model)],
+                        [t('events.model_alias'), value(event.model_alias)],
+                        [t('events.reasoning_effort'), value(event.reasoning_effort)],
+                        [t('events.service_tier'), value(event.service_tier)],
+                        [t('events.response_tier'), value(event.response_service_tier)],
+                        [
+                          t('events.generation'),
+                          t(event.generate ? 'events.generation_yes' : 'events.preflight'),
+                        ],
+                        [t('events.event_key'), value(event.event_key)],
+                      ]),
+                    )}
+                  </>
+                ),
+              },
+              {
+                key: 'usage',
+                label: t('events.performance'),
+                children: (
+                  <>
+                    {section(
+                      t('events.timing'),
+                      fields([
+                        [t('events.duration'), `${event.latency_ms.toLocaleString()} ms`],
+                        [
+                          t('events.ttft'),
+                          event.ttft_ms == null ? missing : `${event.ttft_ms.toLocaleString()} ms`,
+                        ],
+                      ]),
+                    )}
+                    {section(
+                      t('events.token_breakdown'),
+                      fields([
+                        [t('events.input_tokens'), event.tokens.input.toLocaleString()],
+                        [t('events.output_tokens'), event.tokens.output.toLocaleString()],
+                        [t('events.reasoning_tokens'), event.tokens.reasoning.toLocaleString()],
+                        [t('events.cached_tokens'), event.tokens.cached.toLocaleString()],
+                        [t('events.cache_read_tokens'), event.tokens.cache_read.toLocaleString()],
+                        [t('events.cache_creation_tokens'), event.tokens.cache_creation.toLocaleString()],
+                        [t('events.total_tokens'), event.tokens.total.toLocaleString()],
+                      ]),
+                    )}
+                    <p className="request-detail-note">{t('events.token_note')}</p>
+                  </>
+                ),
+              },
+              {
+                key: 'diagnostics',
+                label: `${t('events.diagnostics')}${errors.length ? ` (${errors.length})` : ''}`,
+                children: (
+                  <>
+                    {section(
+                      t('events.network'),
+                      fields([
+                        [t('events.client_ip'), value(event.client_ip)],
+                        ['X-Forwarded-For', value(event.x_forwarded_for)],
+                        ['User-Agent', value(event.user_agent)],
+                      ]),
+                    )}
+                    {section(
+                      t('events.correlated_errors'),
+                      <>
+                        <p className="request-detail-note">{t('events.correlation_note')}</p>
+                        {!!result.data?.partial_errors?.length && (
+                          <Alert
+                            type="warning"
+                            showIcon
+                            title={t('events.partial_errors')}
+                            description={result.data.partial_errors.join(' · ')}
+                          />
+                        )}
+                        {errors.length
+                          ? errors.map((error) => (
+                              <article className="request-error" key={error.id}>
+                                <header>
+                                  <strong>HTTP {error.status_code}</strong>
+                                  <span>{dayjs(error.timestamp_ms).format('MM-DD HH:mm:ss.SSS')}</span>
+                                </header>
+                                {fields([
+                                  [t('events.error_code'), value(error.code)],
+                                  [t('events.retryable'), t(error.retryable ? 'events.yes' : 'events.no')],
+                                  [
+                                    t('events.quota_exceeded'),
+                                    t(error.quota_exceeded ? 'events.yes' : 'events.no'),
+                                  ],
+                                  ...(error.quota_reason
+                                    ? [
+                                        [t('events.quota_reason'), error.quota_reason] as [
+                                          string,
+                                          React.ReactNode,
+                                        ],
+                                      ]
+                                    : []),
+                                ])}
+                                {error.body && <pre>{error.body}</pre>}
+                              </article>
+                            ))
+                          : !result.data?.partial_errors?.length && (
+                              <Empty
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                description={t('events.no_correlated_errors')}
+                              />
+                            )}
+                      </>,
+                    )}
+                    {section(
+                      t('events.raw_log'),
+                      <>
+                        <p className="request-detail-note">{t('events.raw_log_note')}</p>
+                        <Button
+                          aria-label={t('events.download_log')}
+                          icon={<DownloadOutlined />}
+                          disabled={!event.has_request_log || !event.request_id}
+                          onClick={() => setDownloadModalOpen(true)}
+                        >
+                          {t('events.download_log')}
+                        </Button>
+                        {(!event.has_request_log || !event.request_id) && (
+                          <p className="request-detail-note">{t('events.log_unavailable')}</p>
+                        )}
+                      </>,
+                    )}
+                  </>
+                ),
+              },
+            ]}
+          />
+        </>
       ) : null}
+      <Modal
+        open={downloadModalOpen && eventId != null}
+        title={t('events.download_log_confirm')}
+        onOk={() => void download()}
+        onCancel={() => setDownloadModalOpen(false)}
+        confirmLoading={downloading}
+        okText={t('common.confirm')}
+        cancelText={t('common.cancel')}
+      >
+        <Alert type="warning" showIcon description={t('events.download_log_desc')} />
+        <p className="request-detail-id">Request ID: {event?.request_id}</p>
+      </Modal>
     </Drawer>
   );
 };

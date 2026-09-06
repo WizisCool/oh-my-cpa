@@ -25,6 +25,7 @@ export interface UsageEvent {
   auth_type?: string;
   auth_index?: string;
   api_group_key?: string;
+  api_group_label?: string;
   source?: string;
   model: string;
   model_alias?: string;

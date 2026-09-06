@@ -1,43 +1,55 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React from 'react';
 import {
-  Card,
-  Descriptions,
-  Table,
-  Tag,
-  Button,
-  Input,
-  Select,
-  Radio,
-  Typography,
-  Tooltip,
   Alert,
-  Popover,
   Badge,
+  Button,
+  Descriptions,
+  Empty,
+  Input,
+  Listy,
+  Popover,
+  Segmented,
+  Select,
+  Skeleton,
+  Tooltip,
 } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
 import {
-  SearchOutlined,
-  SyncOutlined,
-  CopyOutlined,
+  ArrowRightOutlined,
+  FileTextOutlined,
+  FilterOutlined,
   InfoCircleOutlined,
-  RightOutlined,
   LeftOutlined,
+  ReloadOutlined,
+  RightOutlined,
+  SearchOutlined,
 } from '@ant-design/icons';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { api } from '../api/client';
 import { useT } from '../i18n';
 import {
-  UsageEvent,
-  UsageResultFilter,
   usageEventParams,
+  type UsageEvent,
+  type UsageEventPage,
+  type UsageFacetValue,
 } from '../types/usageEvents';
+import {
+  indexCredentialFiles,
+  resolveCredential,
+  requestGroupName,
+  type CredentialIndex,
+  EVENT_FILTER_KEYS,
+  EVENT_PRESETS,
+  eventPageMetrics,
+  eventWindow,
+  formatEventDuration,
+  readEventQuery,
+} from '../types/usageEventView';
 import { UsageEventDrawer } from '../components/usage/UsageEventDrawer';
+import './UsageEventsPage.css';
 
-const { Text } = Typography;
-
-interface IngestPipelineStatusDTO {
+interface IngestStatus {
   enabled?: boolean;
   healthy?: boolean;
   collector?: {
@@ -47,500 +59,506 @@ interface IngestPipelineStatusDTO {
     coverage_gaps?: number;
     last_error?: string;
   };
-  stats?: {
-    events?: number;
-    pending?: number;
-    processed?: number;
-    discarded?: number;
-  };
-  recent_gaps?: Array<{
-    id: number;
-    source_mode: string;
-    estimated_count: number;
-    reason_code: string;
-    summary: string;
-    started_at_ms: number;
-  }>;
+  stats?: { pending?: number };
 }
+
+const RequestRow = React.memo(
+  ({
+    event,
+    credentials,
+    onOpen,
+  }: {
+    event: UsageEvent;
+    credentials: CredentialIndex;
+    onOpen: (id: number) => void;
+  }) => {
+    const t = useT();
+    const identity = resolveCredential(event, credentials);
+    const credential = identity.name;
+    return (
+      <button
+        type="button"
+        className="request-row"
+        onClick={() => onOpen(event.id)}
+        aria-label={`${t('common.details')}: ${event.model}, ${event.request_id || event.id}`}
+      >
+        <div className="request-identity">
+          <div className="request-primary">
+            <span className={`request-result ${event.failed ? 'is-failed' : ''}`}>
+              <i />
+              {t(event.failed ? 'events.filter_failed' : 'events.filter_success')}
+            </span>
+            <strong className="request-model" title={event.model}>
+              {event.model || t('events.not_captured')}
+            </strong>
+            {!event.generate && <span className="request-preflight">{t('events.preflight')}</span>}
+          </div>
+          <div className="request-secondary">
+            <time
+              dateTime={new Date(event.timestamp_ms).toISOString()}
+              title={dayjs(event.timestamp_ms).format('YYYY-MM-DD HH:mm:ss.SSS')}
+            >
+              {dayjs(event.timestamp_ms).format('MM-DD HH:mm:ss')}
+            </time>
+            <span className="request-id" title={event.request_id}>
+              {event.request_id || t('events.no_request_id')}
+            </span>
+          </div>
+        </div>
+        <div className="request-origin">
+          <div className="request-route">
+            <span title={event.provider}>{event.provider || t('events.unknown_provider')}</span>
+            <ArrowRightOutlined />
+            <span title={`${t(`events.credential_${identity.kind}`)}: ${credential || '—'}`}>
+              <FileTextOutlined /> {credential || t('events.unknown_credential')}
+            </span>
+          </div>
+          <div className="request-secondary">
+            <span title={requestGroupName(event)}>
+              {t('events.caller')}: {requestGroupName(event) || '—'}
+            </span>
+            {event.auth_type && <span>{event.auth_type}</span>}
+          </div>
+        </div>
+        <div className="request-metric">
+          <strong>{formatEventDuration(event.latency_ms)}</strong>
+          <span>TTFT {formatEventDuration(event.ttft_ms)}</span>
+        </div>
+        <div className="request-metric request-token">
+          <strong>
+            {event.tokens.total.toLocaleString()} <small>tokens</small>
+          </strong>
+          <span>
+            ↑ {event.tokens.input.toLocaleString()} · ↓ {event.tokens.output.toLocaleString()}
+          </span>
+        </div>
+        <RightOutlined className="request-chevron" />
+      </button>
+    );
+  },
+);
 
 export const UsageEventsPage: React.FC = () => {
   const t = useT();
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  // URL search params sync
-  const initialPreset = searchParams.get('preset') || '1h';
-  const initialResult = (searchParams.get('result') as UsageResultFilter) || 'all';
-  const initialModel = searchParams.get('model') || '';
-  const initialProvider = searchParams.get('provider') || '';
-  const initialRequestId = searchParams.get('request_id') || '';
-  const initialLimit = parseInt(searchParams.get('limit') || '50', 10);
-
-  const [preset, setPreset] = useState<string>(initialPreset);
-  const [resultFilter, setResultFilter] = useState<UsageResultFilter>(initialResult);
-  const [modelFilter, setModelFilter] = useState<string>(initialModel);
-  const [providerFilter, setProviderFilter] = useState<string>(initialProvider);
-  const [requestIdSearch, setRequestIdSearch] = useState<string>(initialRequestId);
-  const [limit, setLimit] = useState<number>(initialLimit);
-
-  // Pagination state: cursor stack for previous/next keyset navigation
-  const [cursorStack, setCursorStack] = useState<string[]>([]);
-  const currentCursor = cursorStack.length > 0 ? cursorStack[cursorStack.length - 1] : '';
-
-  const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
-
-  // Sync URL search params
-  const updateParams = useCallback((newParams: Record<string, string | number | undefined>) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      Object.entries(newParams).forEach(([k, v]) => {
-        if (v === undefined || v === '' || (k === 'result' && v === 'all') || (k === 'preset' && v === '1h')) {
-          next.delete(k);
-        } else {
-          next.set(k, String(v));
-        }
-      });
-      return next;
-    }, { replace: true });
-  }, [setSearchParams]);
-
-  // Facets query
-  const facetsQueryStr = useMemo(() => {
-    return usageEventParams({ preset });
-  }, [preset]);
-
-  const { data: facetsData } = useQuery({
-    queryKey: ['usage-facets', facetsQueryStr],
-    queryFn: () => api.getUsageFacets(facetsQueryStr),
-    staleTime: 30000,
+  const [params, setParams] = useSearchParams();
+  const signature = params.toString();
+  const query = React.useMemo(() => readEventQuery(new URLSearchParams(signature)), [signature]);
+  const [refresh, setRefresh] = React.useState(0);
+  const window = React.useMemo(() => eventWindow(query, Date.now()), [query, refresh]);
+  const scope = `${signature}:${refresh}`;
+  const [pagination, setPagination] = React.useState<{ scope: string; cursors: string[] }>({
+    scope,
+    cursors: [],
   });
-
-  // Ingest status query
-  const { data: rawIngestStatus } = useQuery({
+  const cursors = pagination.scope === scope ? pagination.cursors : [];
+  const cursor = cursors.at(-1);
+  const [selected, setSelected] = React.useState<number | null>(null);
+  const [advanced, setAdvanced] = React.useState(false);
+  const [grouping, setGrouping] = React.useState('time');
+  const [search, setSearch] = React.useState(query.request_id || '');
+  React.useEffect(() => setSearch(query.request_id || ''), [query.request_id]);
+  const update = React.useCallback(
+    (values: Record<string, string | undefined>) => {
+      setParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          for (const [key, value] of Object.entries(values)) {
+            if (!value) next.delete(key);
+            else next.set(key, value);
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setParams],
+  );
+  React.useEffect(() => {
+    if (search.trim() === (query.request_id || '')) return;
+    const timer = setTimeout(() => update({ request_id: search.trim() }), 350);
+    return () => clearTimeout(timer);
+  }, [search, query.request_id, update]);
+  const facetParams = usageEventParams(window);
+  const facets = useQuery({
+    queryKey: ['usage-facets', facetParams, refresh],
+    queryFn: () => api.getUsageFacets(facetParams),
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+  const ingest = useQuery({
     queryKey: ['usage-ingest-status'],
     queryFn: api.getUsageIngestStatus,
-    refetchInterval: 15000,
+    refetchInterval: 15_000,
   });
-  const ingestStatus = rawIngestStatus as IngestPipelineStatusDTO | undefined;
-
-  // Events query
-  const queryStr = useMemo(() => {
-    return usageEventParams({
-      preset,
-      result: resultFilter,
-      model: modelFilter || undefined,
-      provider: providerFilter || undefined,
-      request_id: requestIdSearch.trim() || undefined,
-      cursor: currentCursor || undefined,
-      limit,
-    });
-  }, [preset, resultFilter, modelFilter, providerFilter, requestIdSearch, currentCursor, limit]);
-
-  const {
-    data: pageData,
-    isLoading,
-    isFetching,
-    isError,
-    error,
-    refetch,
-  } = useQuery({
-    queryKey: ['usage-events', queryStr],
-    queryFn: () => api.getUsageEvents(queryStr),
-    staleTime: 10000,
+  const status = ingest.data as IngestStatus | undefined;
+  const queryString = usageEventParams({ ...query, ...window, cursor });
+  const result = useQuery({
+    queryKey: ['usage-events', queryString, refresh],
+    queryFn: () => api.getUsageEvents(queryString),
+    placeholderData: keepPreviousData,
+    staleTime: 10_000,
   });
-
-  const events = pageData?.items || [];
-  const hasMore = Boolean(pageData?.has_more);
-  const nextCursor = pageData?.next_cursor;
-
-  const handleNextPage = () => {
-    if (nextCursor) {
-      setCursorStack((prev) => [...prev, nextCursor]);
-    }
-  };
-
-  const handlePrevPage = () => {
-    setCursorStack((prev) => (prev.length > 0 ? prev.slice(0, -1) : []));
-  };
-
-  const handleResetFilters = () => {
-    setCursorStack([]);
-    setModelFilter('');
-    setProviderFilter('');
-    setRequestIdSearch('');
-    setResultFilter('all');
-    updateParams({ model: '', provider: '', request_id: '', result: 'all' });
-  };
-
-  const handleCopy = (text: string) => {
-    void navigator.clipboard.writeText(text);
-  };
-
-  // Ingest Status Popover content
-  const ingestPopoverContent = (
-    <div style={{ maxWidth: 320 }}>
-      <div style={{ marginBottom: 8 }}>
-        <Text strong>{t('events.delivery_semantics_hint')}</Text>
-      </div>
-      <Descriptions size="small" column={1} bordered>
-        <Descriptions.Item label="Collector Mode">
-          <code>{ingestStatus?.collector?.mode || 'auto'}</code>
-        </Descriptions.Item>
-        <Descriptions.Item label="Captured Requests">
-          <span className="mono-num">{ingestStatus?.collector?.captured ?? 0}</span>
-        </Descriptions.Item>
-        <Descriptions.Item label="Coverage Gaps">
-          <span className="mono-num" style={{ color: (ingestStatus?.collector?.coverage_gaps ?? 0) > 0 ? 'var(--danger)' : undefined }}>
-            {ingestStatus?.collector?.coverage_gaps ?? 0}
-          </span>
-        </Descriptions.Item>
-        <Descriptions.Item label="Inbox Backlog">
-          <span className="mono-num">{ingestStatus?.stats?.pending ?? 0}</span>
-        </Descriptions.Item>
-      </Descriptions>
-      {(ingestStatus?.recent_gaps?.length ?? 0) > 0 && (
-        <div style={{ marginTop: 8, fontSize: 11, color: 'var(--danger)' }}>
-          {t('events.ingest_gaps', { n: ingestStatus!.recent_gaps!.length })}
-        </div>
-      )}
-    </div>
+  // keepPreviousData covers in-flight changes; retain the last successful page
+  // after a failed query too, with an explicit stale-data label.
+  const [lastPage, setLastPage] = React.useState<UsageEventPage>();
+  React.useEffect(() => {
+    if (result.data && !result.isPlaceholderData) setLastPage(result.data);
+  }, [result.data, result.isPlaceholderData]);
+  const displayedPage = result.data || (result.isError ? lastPage : undefined);
+  const stale = result.isPlaceholderData || (result.isError && !!lastPage);
+  const events = displayedPage?.items || [];
+  const metrics = eventPageMetrics(events);
+  // Safe file metadata only: never download credential contents for the stream.
+  const authFiles = useQuery({
+    queryKey: ['management-auth-files'],
+    queryFn: () => api.getManagementAuthFiles(),
+    staleTime: 60_000,
+  });
+  const credentials = React.useMemo(
+    () => indexCredentialFiles(authFiles.data?.files || []),
+    [authFiles.data],
   );
-
-  const columns: ColumnsType<UsageEvent> = [
-    {
-      title: t('events.col_time'),
-      key: 'timestamp',
-      width: 130,
-      render: (_, r) => (
-        <span className="mono-num" style={{ fontSize: 12 }}>
-          {dayjs(r.timestamp_ms).format('HH:mm:ss.SSS')}
-        </span>
-      ),
-    },
-    {
-      title: t('events.col_result'),
-      key: 'result',
-      width: 100,
-      render: (_, r) => (
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          {r.failed ? (
-            <Tag color="error">{t('events.filter_failed')}</Tag>
-          ) : (
-            <Tag color="success">{t('events.filter_success')}</Tag>
-          )}
-          {r.generate === false && <Tag style={{ fontSize: 10 }}>Pre</Tag>}
-        </div>
-      ),
-    },
-    {
-      title: t('events.col_model'),
-      key: 'model',
-      render: (_, r) => (
-        <div>
-          <Text strong style={{ fontSize: 13 }}>{r.model}</Text>
-          {r.model_alias && (
-            <div style={{ fontSize: 11, color: 'var(--meta)' }}>
-              alias: {r.model_alias}
+  const activeFilters = EVENT_FILTER_KEYS.filter((key) => query[key]);
+  const extraCount = activeFilters.filter((key) => !['model', 'provider', 'request_id'].includes(key)).length;
+  const listHost = React.useRef<HTMLDivElement>(null);
+  const [height, setHeight] = React.useState(480);
+  React.useLayoutEffect(() => {
+    const host = listHost.current;
+    if (!host) return;
+    const observer = new ResizeObserver(([entry]) =>
+      setHeight(Math.max(240, Math.floor(entry.contentRect.height))),
+    );
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, []);
+  const options = (values: UsageFacetValue[] | undefined) =>
+    (values || []).map((v) => ({ value: v.value, label: `${v.value} (${v.requests})` }));
+  const facet = (
+    key: 'model' | 'provider' | 'source' | 'auth_index' | 'api_key' | 'executor',
+    label: string,
+    values?: UsageFacetValue[],
+  ) => (
+    <Select
+      aria-label={label}
+      placeholder={label}
+      value={query[key]}
+      allowClear
+      showSearch={{ optionFilterProp: 'label' }}
+      onChange={(value) => update({ [key]: value })}
+      options={
+        key === 'auth_index'
+          ? options(values).map((option) => ({
+              ...option,
+              label: credentials.get(option.value)?.name
+                ? `${credentials.get(option.value)!.name} · ${option.value}`
+                : option.label,
+            }))
+          : options(values)
+      }
+    />
+  );
+  const group =
+    grouping === 'time'
+      ? undefined
+      : {
+          key: (event: UsageEvent) =>
+            grouping === 'provider'
+              ? event.provider || t('events.unknown_provider')
+              : JSON.stringify([
+                  event.provider,
+                  event.auth_index || event.source || event.resource_id || 'unknown',
+                ]),
+          title: (key: React.Key, items: UsageEvent[]) => (
+            <div className="request-group-title">
+              <strong>
+                {grouping === 'provider'
+                  ? String(key)
+                  : `${items[0].provider || t('events.unknown_provider')} / ${resolveCredential(items[0], credentials).name || t('events.unknown_credential')}`}
+              </strong>
+              <span>{t('events.record_count', { n: items.length })}</span>
             </div>
-          )}
-        </div>
-      ),
-    },
-    {
-      title: t('events.col_provider_cred'),
-      key: 'provider',
-      render: (_, r) => (
-        <div>
-          <Tag color="blue">{r.provider || '-'}</Tag>
-          {r.auth_index && (
-            <div style={{ fontSize: 10, color: 'var(--meta)', fontFamily: 'monospace' }}>
-              idx: {r.auth_index}
-            </div>
-          )}
-        </div>
-      ),
-    },
-    {
-      title: t('events.col_latency'),
-      key: 'latency',
-      width: 130,
-      render: (_, r) => (
-        <div>
-          <span className="mono-num" style={{ fontSize: 12 }}>{r.latency_ms} ms</span>
-          {r.ttft_ms != null && (
-            <div style={{ fontSize: 10, color: 'var(--meta)' }} className="mono-num">
-              TTFT: {r.ttft_ms} ms
-            </div>
-          )}
-        </div>
-      ),
-    },
-    {
-      title: t('events.col_tokens'),
-      key: 'tokens',
-      width: 120,
-      render: (_, r) => (
-        <Tooltip
-          title={`In: ${r.tokens.input} · Out: ${r.tokens.output} · Reasoning: ${r.tokens.reasoning} · Cache: ${r.tokens.cached}`}
-        >
-          <Text strong className="mono-num" style={{ fontSize: 12 }}>
-            {r.tokens.total}
-          </Text>
-        </Tooltip>
-      ),
-    },
-    {
-      title: t('events.col_request_id'),
-      key: 'request_id',
-      width: 160,
-      render: (_, r) =>
-        r.request_id ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span
-              className="mono-num"
-              style={{ fontSize: 11, maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-            >
-              {r.request_id}
-            </span>
-            <Button
-              size="small"
-              type="text"
-              icon={<CopyOutlined style={{ fontSize: 11 }} />}
-              onClick={() => handleCopy(r.request_id!)}
-            />
-          </div>
-        ) : (
-          <span style={{ color: 'var(--meta)' }}>-</span>
-        ),
-    },
-    {
-      title: t('common.actions'),
-      key: 'actions',
-      width: 80,
-      align: 'right',
-      render: (_, r) => (
-        <Button size="small" type="link" onClick={() => setSelectedEventId(r.id)}>
-          {t('common.details')}
-        </Button>
-      ),
-    },
-  ];
+          ),
+        };
+  const ingestTone =
+    !status || ingest.isError
+      ? 'default'
+      : status.enabled === false
+        ? 'default'
+        : status.healthy === true && !status.collector?.coverage_gaps
+          ? 'success'
+          : 'warning';
+  const ingestLabel =
+    !status || ingest.isError
+      ? 'events.ingest_unknown'
+      : status.enabled === false
+        ? 'events.ingest_disabled'
+        : ingestTone === 'success'
+          ? 'events.ingest_healthy'
+          : 'events.ingest_attention';
 
   return (
-    <div className="terminal-page usage-events-page">
-      {/* Head */}
-      <div className="terminal-page-head">
+    <div className="terminal-page usage-events-page request-events-page">
+      <header className="terminal-page-head">
         <div>
           <h1 className="terminal-title">{t('events.title')}</h1>
-          <p className="terminal-subtitle">{t('events.subtitle')}</p>
+          <p className="request-window">
+            {dayjs(window.from).format('MM-DD HH:mm')} — {dayjs(window.to).format('MM-DD HH:mm')}
+          </p>
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {/* Ingest Status Badge */}
-          <Popover content={ingestPopoverContent} title="Ingestion Health & Semantics" trigger="click">
-            <Button size="small" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              {(ingestStatus?.collector?.coverage_gaps ?? 0) > 0 ? (
-                <Badge status="warning" text={t('events.ingest_gaps', { n: ingestStatus!.collector!.coverage_gaps! })} />
-              ) : ingestStatus?.healthy ? (
-                <Badge status="success" text={t('events.ingest_healthy')} />
-              ) : (
-                <Badge status="default" text="Ingest Off" />
-              )}
-              <InfoCircleOutlined style={{ color: 'var(--muted)' }} />
+        <div className="request-actions">
+          <Popover
+            trigger="click"
+            title={t('events.ingest_status')}
+            content={
+              <div className="request-ingest">
+                <Descriptions
+                  size="small"
+                  column={1}
+                  items={[
+                    {
+                      key: 'mode',
+                      label: t('events.collector_mode'),
+                      children: status?.collector?.mode || '—',
+                    },
+                    {
+                      key: 'captured',
+                      label: t('events.captured'),
+                      children: status?.collector?.captured ?? '—',
+                    },
+                    {
+                      key: 'gaps',
+                      label: t('events.coverage_gaps'),
+                      children: status?.collector?.coverage_gaps ?? '—',
+                    },
+                    { key: 'pending', label: t('events.pending'), children: status?.stats?.pending ?? '—' },
+                  ]}
+                />
+                <p>{t('events.delivery_semantics_hint')}</p>
+                {status?.collector?.last_error && <p>{status.collector.last_error}</p>}
+              </div>
+            }
+          >
+            <Button type="text" icon={<InfoCircleOutlined />}>
+              <Badge status={ingestTone} text={t(ingestLabel)} />
             </Button>
           </Popover>
-
           <Button
-            size="small"
-            icon={<SyncOutlined spin={isFetching} />}
-            onClick={() => void refetch()}
+            aria-label={t('common.refresh')}
+            icon={<ReloadOutlined spin={result.isFetching} />}
+            disabled={result.isFetching}
+            onClick={() => {
+              setRefresh((v) => v + 1);
+              void ingest.refetch();
+            }}
           >
             {t('common.refresh')}
           </Button>
         </div>
-      </div>
-
-      {isError && (
+      </header>
+      {result.isError && (
         <Alert
           type="error"
           showIcon
-          description={`${t('events.load_error')} — ${error instanceof Error ? error.message : String(error)}`}
-          action={
-            <Button size="small" type="primary" onClick={() => void refetch()}>
-              {t('common.retry')}
-            </Button>
-          }
-          style={{ marginBottom: 16 }}
+          title={t('events.load_error')}
+          description={result.error instanceof Error ? result.error.message : undefined}
+          action={<Button onClick={() => void result.refetch()}>{t('common.retry')}</Button>}
         />
       )}
-
-      {/* Filter Toolbar */}
-      <Card size="small" className="terminal-panel" style={{ marginBottom: 16 }} styles={{ body: { padding: '12px 16px' } }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-            {/* Time Presets */}
-            <Radio.Group
-              size="small"
-              value={preset}
-              onChange={(e) => {
-                setPreset(e.target.value);
-                setCursorStack([]);
-                updateParams({ preset: e.target.value });
-              }}
-              buttonStyle="solid"
-            >
-              <Radio.Button value="15m">{t('dash.range.15m')}</Radio.Button>
-              <Radio.Button value="1h">{t('dash.range.1h')}</Radio.Button>
-              <Radio.Button value="6h">6h</Radio.Button>
-              <Radio.Button value="24h">24h</Radio.Button>
-              <Radio.Button value="7d">7d</Radio.Button>
-            </Radio.Group>
-
-            {/* Result Filter */}
-            <Radio.Group
-              size="small"
-              value={resultFilter}
-              onChange={(e) => {
-                setResultFilter(e.target.value);
-                setCursorStack([]);
-                updateParams({ result: e.target.value });
-              }}
-              buttonStyle="solid"
-            >
-              <Radio.Button value="all">{t('events.filter_all')}</Radio.Button>
-              <Radio.Button value="success">{t('events.filter_success')}</Radio.Button>
-              <Radio.Button value="failed">{t('events.filter_failed')}</Radio.Button>
-            </Radio.Group>
-
-            {/* Model Facet Selector */}
-            <Select
-              size="small"
-              style={{ width: 160 }}
-              placeholder={t('events.col_model')}
-              allowClear
-              value={modelFilter || undefined}
-              onChange={(val) => {
-                setModelFilter(val || '');
-                setCursorStack([]);
-                updateParams({ model: val || '' });
-              }}
-              options={(facetsData?.facets.models || []).map((m) => ({
-                value: m.value,
-                label: `${m.value} (${m.requests})`,
-              }))}
-            />
-
-            {/* Provider Facet Selector */}
-            <Select
-              size="small"
-              style={{ width: 140 }}
-              placeholder="Provider"
-              allowClear
-              value={providerFilter || undefined}
-              onChange={(val) => {
-                setProviderFilter(val || '');
-                setCursorStack([]);
-                updateParams({ provider: val || '' });
-              }}
-              options={(facetsData?.facets.providers || []).map((p) => ({
-                value: p.value,
-                label: `${p.value} (${p.requests})`,
-              }))}
-            />
-
-            {/* Request ID Search */}
+      <section className="request-toolbar" aria-label={t('events.filters')}>
+        <div className="request-filters">
+          <Input
+            className="request-search"
+            aria-label={t('events.col_request_id')}
+            placeholder={t('events.search_hint')}
+            prefix={<SearchOutlined />}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            allowClear
+          />
+          <Select
+            aria-label={t('events.time_range')}
+            value={query.from !== undefined ? 'custom' : query.preset}
+            onChange={(value) => update({ preset: value, from: undefined, to: undefined })}
+            options={[
+              ...(query.from !== undefined ? [{ value: 'custom', label: t('events.custom_range') }] : []),
+              ...Object.keys(EVENT_PRESETS).map((value) => ({
+                value,
+                label: t('events.last_range', { range: value }),
+              })),
+            ]}
+          />
+          {facet('model', t('events.col_model'), facets.data?.facets.models)}
+          {facet('provider', t('events.provider'), facets.data?.facets.providers)}
+          <Button
+            aria-label={t('events.more_filters')}
+            icon={<FilterOutlined />}
+            aria-expanded={advanced}
+            onClick={() => setAdvanced((v) => !v)}
+          >
+            {t('events.more_filters')}
+            {extraCount > 0 ? ` (${extraCount})` : ''}
+          </Button>
+        </div>
+        {advanced && (
+          <div className="request-advanced">
+            {facet('source', t('events.source'), facets.data?.facets.sources)}
+            {facet('auth_index', t('events.credential_filter'), facets.data?.facets.auth_indexes)}
+            {facet('api_key', t('events.caller'), facets.data?.facets.api_group_keys)}
+            {facet('executor', t('events.executor'), facets.data?.facets.executors)}
             <Input
-              size="small"
-              placeholder={t('events.col_request_id')}
-              prefix={<SearchOutlined style={{ color: 'var(--muted)' }} />}
-              style={{ width: 170 }}
-              value={requestIdSearch}
+              aria-label={t('events.auth_type')}
+              placeholder={t('events.auth_type')}
+              value={query.auth_type || ''}
               allowClear
-              onChange={(e) => {
-                setRequestIdSearch(e.target.value);
-                setCursorStack([]);
-                updateParams({ request_id: e.target.value });
-              }}
+              onChange={(e) => update({ auth_type: e.target.value })}
+            />
+            <Input
+              aria-label={t('events.model_alias')}
+              placeholder={t('events.model_alias')}
+              value={query.model_alias || ''}
+              allowClear
+              onChange={(e) => update({ model_alias: e.target.value })}
+            />
+            {facets.isError && <span role="status">{t('events.facets_error')}</span>}
+          </div>
+        )}
+        <div className="request-toolbar-bottom">
+          <Segmented
+            aria-label={t('events.col_result')}
+            value={query.result}
+            onChange={(value) => update({ result: value === 'all' ? undefined : String(value) })}
+            options={['all', 'success', 'failed'].map((value) => ({
+              value,
+              label: t(`events.filter_${value}`),
+            }))}
+          />
+          <div className="request-actions">
+            {(activeFilters.length > 0 ||
+              query.result !== 'all' ||
+              query.preset !== '1h' ||
+              query.from !== undefined) && (
+              <Button
+                type="text"
+                onClick={() => {
+                  setSearch('');
+                  setParams({}, { replace: true });
+                }}
+              >
+                {t('events.reset')}
+                {activeFilters.length ? ` (${activeFilters.length})` : ''}
+              </Button>
+            )}
+            <Select
+              aria-label={t('events.group_by')}
+              value={grouping}
+              onChange={setGrouping}
+              options={['time', 'provider', 'credential'].map((value) => ({
+                value,
+                label: t(`events.group_${value}`),
+              }))}
             />
           </div>
-
-          {(modelFilter || providerFilter || requestIdSearch || resultFilter !== 'all' || preset !== '1h') && (
-            <Button size="small" onClick={handleResetFilters}>
-              {t('res.reset')}
-            </Button>
+        </div>
+      </section>
+      {authFiles.isError && (
+        <div className="request-detail-note" role="status">
+          {t('events.credentials_unavailable')}
+        </div>
+      )}
+      <section className="request-stream" aria-label={t('events.title')} aria-busy={result.isFetching}>
+        <div className="request-summary">
+          <span>{t(stale ? 'events.previous_results' : 'events.this_page')}</span>
+          <strong>
+            {result.isLoading ? '—' : metrics.count.toLocaleString()}{' '}
+            <small>{t('events.requests_unit')}</small>
+          </strong>
+          <span>
+            {t('events.filter_failed')} <b>{result.isLoading ? '—' : metrics.failed}</b>
+          </span>
+          <span>
+            {t('events.mean_latency')} <b>{formatEventDuration(metrics.latency)}</b>
+          </span>
+          <span>
+            {t('events.col_tokens')} <b>{result.isLoading ? '—' : metrics.tokens.toLocaleString()}</b>
+          </span>
+        </div>
+        <div ref={listHost} className="request-list-host">
+          {result.isLoading ? (
+            <div className="request-loading">
+              <Skeleton active={false} paragraph={{ rows: 8 }} title={false} />
+            </div>
+          ) : events.length ? (
+            <Listy<UsageEvent>
+              key={`${queryString}:${grouping}`}
+              virtual
+              height={height}
+              items={events}
+              rowKey="id"
+              group={group}
+              sticky
+              className="request-list"
+              itemRender={(event) => (
+                <RequestRow event={event} credentials={credentials} onOpen={setSelected} />
+              )}
+            />
+          ) : !result.isError ? (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={
+                <>
+                  <strong>{t('events.empty_title')}</strong>
+                  <p>
+                    {t(
+                      activeFilters.length || query.result !== 'all'
+                        ? 'events.empty_filtered'
+                        : 'events.empty_hint',
+                    )}
+                  </p>
+                </>
+              }
+            />
+          ) : (
+            <div className="request-empty-error">{t('events.load_error')}</div>
           )}
         </div>
-      </Card>
-
-      {/* Events Table Container */}
-      <Card size="small" className="terminal-panel" styles={{ body: { padding: 0 } }}>
-        <div className="table-responsive-wrapper" style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          <Table<UsageEvent>
-            columns={columns}
-            dataSource={events}
-            rowKey="id"
-            loading={isLoading}
-            pagination={false}
-            scroll={{ x: 'max-content' }}
-            size="small"
-          />
-        </div>
-
-        {/* Keyset Pagination Bar */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '12px 16px',
-            borderTop: '1px solid var(--border-soft)',
-          }}
-        >
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            {cursorStack.length > 0
-              ? `Page ${cursorStack.length + 1} (${events.length} records)`
-              : `${events.length} records loaded`}
-          </Text>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <footer className="request-pagination">
+          <span aria-live="polite">
+            {stale
+              ? t('events.previous_results')
+              : t('events.page_loaded', { page: cursors.length + 1, n: events.length })}
+            {result.isPlaceholderData && ` · ${t('events.updating')}`}
+          </span>
+          <div className="request-actions">
             <Select
-              size="small"
-              value={limit}
-              onChange={(val) => {
-                setLimit(val);
-                setCursorStack([]);
-                updateParams({ limit: val });
-              }}
-              options={[
-                { value: 20, label: '20 / page' },
-                { value: 50, label: '50 / page' },
-                { value: 100, label: '100 / page' },
-              ]}
+              aria-label={t('events.page_size')}
+              value={query.limit}
+              onChange={(value) => update({ limit: String(value) })}
+              options={Array.from(new Set([100, 250, 500, query.limit!]))
+                .sort((a, b) => a - b)
+                .map((value) => ({ value, label: t('events.per_page', { n: value }) }))}
             />
-            <Button
-              size="small"
-              icon={<LeftOutlined />}
-              disabled={cursorStack.length === 0 || isLoading}
-              onClick={handlePrevPage}
-            >
-              {t('events.prev_page')}
-            </Button>
-            <Button
-              size="small"
-              icon={<RightOutlined />}
-              disabled={!hasMore || isLoading}
-              onClick={handleNextPage}
-            >
-              {t('events.next_page')}
-            </Button>
+            <Tooltip title={t('events.prev_page')}>
+              <Button
+                aria-label={t('events.prev_page')}
+                icon={<LeftOutlined />}
+                disabled={!cursors.length || result.isFetching}
+                onClick={() => setPagination({ scope, cursors: cursors.slice(0, -1) })}
+              />
+            </Tooltip>
+            <Tooltip title={t('events.next_page')}>
+              <Button
+                aria-label={t('events.next_page')}
+                icon={<RightOutlined />}
+                disabled={
+                  !result.data?.has_more || !result.data?.next_cursor || result.isFetching || result.isError
+                }
+                onClick={() => setPagination({ scope, cursors: [...cursors, result.data!.next_cursor!] })}
+              />
+            </Tooltip>
           </div>
-        </div>
-      </Card>
-
-      {/* Detail Drawer */}
-      <UsageEventDrawer
-        eventId={selectedEventId}
-        onClose={() => setSelectedEventId(null)}
-      />
+        </footer>
+      </section>
+      <UsageEventDrawer credentials={credentials} eventId={selected} onClose={() => setSelected(null)} />
     </div>
   );
 };
