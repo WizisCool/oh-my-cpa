@@ -138,6 +138,24 @@ const RequestRow = React.memo(
   },
 );
 
+/** Text filters commit to the URL only after typing pauses: one keystroke
+ *  must never fire one list request per character. Used by the request-id
+ *  search and the advanced auth_type / model_alias inputs alike. */
+function useDebouncedTextFilter(
+  queryValue: string,
+  update: (values: Record<string, string | undefined>) => void,
+  key: 'request_id' | 'auth_type' | 'model_alias',
+) {
+  const [value, setValue] = React.useState(queryValue);
+  React.useEffect(() => setValue(queryValue), [queryValue]);
+  React.useEffect(() => {
+    if (value.trim() === queryValue) return;
+    const timer = setTimeout(() => update({ [key]: value.trim() }), 350);
+    return () => clearTimeout(timer);
+  }, [value, queryValue, update, key]);
+  return [value, setValue] as const;
+}
+
 export const UsageEventsPage: React.FC = () => {
   const t = useT();
   const [params, setParams] = useSearchParams();
@@ -155,8 +173,6 @@ export const UsageEventsPage: React.FC = () => {
   const [selected, setSelected] = React.useState<number | null>(null);
   const [advanced, setAdvanced] = React.useState(false);
   const [grouping, setGrouping] = React.useState('time');
-  const [search, setSearch] = React.useState(query.request_id || '');
-  React.useEffect(() => setSearch(query.request_id || ''), [query.request_id]);
   const update = React.useCallback(
     (values: Record<string, string | undefined>) => {
       setParams(
@@ -173,11 +189,9 @@ export const UsageEventsPage: React.FC = () => {
     },
     [setParams],
   );
-  React.useEffect(() => {
-    if (search.trim() === (query.request_id || '')) return;
-    const timer = setTimeout(() => update({ request_id: search.trim() }), 350);
-    return () => clearTimeout(timer);
-  }, [search, query.request_id, update]);
+  const [search, setSearch] = useDebouncedTextFilter(query.request_id || '', update, 'request_id');
+  const [authType, setAuthType] = useDebouncedTextFilter(query.auth_type || '', update, 'auth_type');
+  const [modelAlias, setModelAlias] = useDebouncedTextFilter(query.model_alias || '', update, 'model_alias');
   const facetParams = usageEventParams(window);
   const facets = useQuery({
     queryKey: ['usage-facets', facetParams, refresh],
@@ -408,16 +422,16 @@ export const UsageEventsPage: React.FC = () => {
             <Input
               aria-label={t('events.auth_type')}
               placeholder={t('events.auth_type')}
-              value={query.auth_type || ''}
+              value={authType}
               allowClear
-              onChange={(e) => update({ auth_type: e.target.value })}
+              onChange={(e) => setAuthType(e.target.value)}
             />
             <Input
               aria-label={t('events.model_alias')}
               placeholder={t('events.model_alias')}
-              value={query.model_alias || ''}
+              value={modelAlias}
               allowClear
-              onChange={(e) => update({ model_alias: e.target.value })}
+              onChange={(e) => setModelAlias(e.target.value)}
             />
             {facets.isError && <span role="status">{t('events.facets_error')}</span>}
           </div>
