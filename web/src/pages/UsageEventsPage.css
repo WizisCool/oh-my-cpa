@@ -76,7 +76,7 @@
 .request-stream {
   container-type: inline-size;
   container-name: reqstream;
-  --req-grid-columns: 110px minmax(180px, 1.4fr) minmax(160px, 1.3fr) 95px 150px 80px 110px 14px;
+  --req-grid-columns: 110px minmax(160px, 1.35fr) minmax(150px, 1.25fr) 85px 95px 145px 75px 105px 14px;
   --req-grid-gap: 16px;
   --req-pad-inline: 16px;
   flex: 1;
@@ -165,6 +165,7 @@
 }
 
 .req-th-latency,
+.req-th-tps,
 .req-th-tokens,
 .req-th-cache {
   text-align: right;
@@ -369,6 +370,26 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Column 5: TPS (Generation Speed) */
+.req-col-tps {
+  align-items: flex-end;
+  text-align: right;
+  justify-content: center;
+}
+.req-tps-val {
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+.req-tps-none {
+  font-size: 12px;
+  color: var(--muted);
+  font-family: var(--font-mono, monospace);
+  text-align: right;
+}
+
 /* Column 5: Tokens */
 .req-col-tokens {
   align-items: flex-end;
@@ -501,6 +522,7 @@
     width: 100%;
   }
   .req-col-latency,
+  .req-col-tps,
   .req-col-tokens,
   .req-col-cache {
     align-items: flex-start;
@@ -528,6 +550,7 @@
     width: 100%;
   }
   .req-col-latency,
+  .req-col-tps,
   .req-col-tokens,
   .req-col-cache {
     align-items: flex-start;

@@ -553,6 +553,7 @@ export const UsageEventsPage: React.FC = () => {
           <span className="req-th req-th-provider">{t('events.provider')}</span>
           <span className="req-th req-th-model">{t('events.col_model')}</span>
           <span className="req-th req-th-latency">{t('events.col_latency')}</span>
+          <span className="req-th req-th-tps">{t('events.col_tps')}</span>
           <span className="req-th req-th-tokens">{t('events.col_tokens')}</span>
           <span className="req-th req-th-cache">{t('events.col_cache_rate')}</span>
           <span className="req-th req-th-executor">{t('events.col_executor')}</span>

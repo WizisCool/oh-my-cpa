@@ -7,6 +7,7 @@ import { useT } from '../../i18n';
 import type { UsageEvent } from '../../types/usageEvents';
 import {
   eventCacheRate,
+  eventTokensPerSecond,
   formatEventDuration,
   requestGroupName,
   resolveProviderInfo,
@@ -44,7 +45,10 @@ export const RequestRow = React.memo<RequestRowProps>(
     // 2. Cache rate calculation
     const cache = eventCacheRate(event.tokens);
 
-    // 3. Caller name
+    // 3. Tokens Per Second (TPS) calculation
+    const tpsInfo = eventTokensPerSecond(event);
+
+    // 4. Caller name
     const caller = requestGroupName(event);
 
     const formattedTime = dayjs(event.timestamp_ms).format('MM-DD HH:mm:ss');
@@ -132,7 +136,24 @@ export const RequestRow = React.memo<RequestRowProps>(
           </span>
         </div>
 
-        {/* Column 5: Token（总数，输入，输出，推理） */}
+        {/* Column 5: TPS 生成速度 */}
+        <div className="req-col req-col-tps">
+          {tpsInfo.tps !== null ? (
+            <Tooltip
+              title={
+                tpsInfo.hasTTFT
+                  ? `${t('events.tps_hint_ttft')} (${tpsInfo.formatted})`
+                  : `${t('events.tps_hint_total')} (${tpsInfo.formatted})`
+              }
+            >
+              <span className="req-tps-val">{tpsInfo.formatted}</span>
+            </Tooltip>
+          ) : (
+            <span className="req-tps-none">—</span>
+          )}
+        </div>
+
+        {/* Column 6: Token（总数，输入，输出，推理） */}
         <div className="req-col req-col-tokens">
           <div className="req-tokens-total">
             <strong>{event.tokens.total.toLocaleString()}</strong>

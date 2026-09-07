@@ -260,6 +260,11 @@ try {
     'AI provider displays only clean Name and no technical driver subtitle',
     row3Text.includes('Opencode') && !row3Text.includes('openai-compatible-opencode go'),
   );
+  check(
+    'TPS column header and generation speed metric are rendered',
+    (await page.locator('.req-th-tps').innerText()).includes('TPS') &&
+      (await page.locator('.req-col-tps').first().innerText()).includes('t/s'),
+  );
   await page.screenshot({ path: path.join(output, 'desktop-light.png'), fullPage: true });
   // Discover the actual scroll container rather than depending on rc internals.
   const scrollResult = await page.locator('.request-list').evaluate((root) => {

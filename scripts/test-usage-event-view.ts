@@ -13,6 +13,7 @@ import {
   hasExplicitEventQuery,
   eventCacheRate,
   resolveProviderInfo,
+  eventTokensPerSecond,
 } from '../web/src/types/usageEventView.ts';
 import { usageEventParams, type UsageEvent } from '../web/src/types/usageEvents.ts';
 
@@ -279,5 +280,44 @@ assert.equal(fallbackOpencodeResolved.title, 'Opencode');
 assert.equal(fallbackOpencodeResolved.subtitle, undefined);
 
 console.log('PASS provider info resolution: OAuth account identity, configured provider custom name/icon, fallback');
+
+// Tokens Per Second (TPS) tests
+assert.equal(eventTokensPerSecond(undefined).formatted, '—');
+assert.equal(eventTokensPerSecond({ generate: false, latency_ms: 1000, tokens: { total: 500, input: 400, output: 100, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 } }).formatted, '—');
+assert.equal(eventTokensPerSecond({ generate: true, latency_ms: 1000, tokens: { total: 400, input: 400, output: 0, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 } }).formatted, '—');
+assert.equal(eventTokensPerSecond({ generate: true, latency_ms: 0, tokens: { total: 100, input: 50, output: 50, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 } }).formatted, '—');
+
+// Exact 109.21 t/s with TTFT subtraction:
+// output = 10921, latency = 120000 ms, ttft = 20000 ms -> generation = 100000 ms -> 109.21 t/s
+const tpsExact = eventTokensPerSecond({
+  generate: true,
+  latency_ms: 120_000,
+  ttft_ms: 20_000,
+  tokens: { total: 20000, input: 9079, output: 10921, reasoning: 500, cached: 0, cache_read: 0, cache_creation: 0 },
+});
+assert.equal(tpsExact.formatted, '109.21 t/s');
+assert.equal(tpsExact.hasTTFT, true);
+
+// Fallback without TTFT: output = 500, latency = 2500 ms -> 200.00 t/s
+const tpsNoTTFT = eventTokensPerSecond({
+  generate: true,
+  latency_ms: 2500,
+  tokens: { total: 1000, input: 500, output: 500, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 },
+});
+assert.equal(tpsNoTTFT.formatted, '200.00 t/s');
+assert.equal(tpsNoTTFT.hasTTFT, false);
+
+// Invalid TTFT (ttft >= latency) falls back safely to total latency rather than division by zero / negative
+const tpsInvalidTTFT = eventTokensPerSecond({
+  generate: true,
+  latency_ms: 2000,
+  ttft_ms: 2500,
+  tokens: { total: 500, input: 400, output: 100, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 },
+});
+assert.equal(tpsInvalidTTFT.formatted, '50.00 t/s');
+assert.equal(tpsInvalidTTFT.hasTTFT, false);
+
+console.log('PASS tokens per second (TPS): TTFT-aware generation speed, fallback end-to-end average, edge boundaries');
+
 
 

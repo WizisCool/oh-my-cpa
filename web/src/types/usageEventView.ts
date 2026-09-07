@@ -262,6 +262,57 @@ export function eventCacheRate(tokens?: UsageEvent['tokens']): EventCacheRateRes
   };
 }
 
+export interface EventTokensPerSecondResult {
+  tps: number | null;
+  formatted: string;
+  hasTTFT: boolean;
+}
+
+/**
+ * eventTokensPerSecond estimates output generation throughput in tokens per second:
+ * - When valid TTFT (0 <= ttft_ms < latency_ms) is available: output * 1000 / (latency_ms - ttft_ms)
+ * - Fallback when TTFT is missing: output * 1000 / latency_ms (end-to-end average)
+ * - Returns formatted string (e.g. "109.21 t/s") or "—" when not measurable (non-generation, zero output, invalid latency).
+ */
+export function eventTokensPerSecond(
+  event?: Partial<Pick<UsageEvent, 'generate' | 'latency_ms' | 'ttft_ms' | 'tokens'>>,
+): EventTokensPerSecondResult {
+  if (!event || event.generate === false) {
+    return { tps: null, formatted: '—', hasTTFT: false };
+  }
+  const output = Number(event.tokens?.output);
+  if (!Number.isFinite(output) || output <= 0) {
+    return { tps: null, formatted: '—', hasTTFT: false };
+  }
+  const latency = Number(event.latency_ms);
+  if (!Number.isFinite(latency) || latency <= 0) {
+    return { tps: null, formatted: '—', hasTTFT: false };
+  }
+
+  const ttft = event.ttft_ms != null ? Number(event.ttft_ms) : null;
+  let durationMs: number;
+  let hasTTFT = false;
+
+  if (ttft !== null && Number.isFinite(ttft) && ttft >= 0 && ttft < latency) {
+    durationMs = latency - ttft;
+    hasTTFT = true;
+  } else {
+    durationMs = latency;
+    hasTTFT = false;
+  }
+
+  if (durationMs <= 0) {
+    return { tps: null, formatted: '—', hasTTFT: false };
+  }
+
+  const tps = (output * 1000) / durationMs;
+  return {
+    tps,
+    formatted: `${tps.toFixed(2)} t/s`,
+    hasTTFT,
+  };
+}
+
 export interface ProviderLookupEntry {
   id: string;
   name: string;
