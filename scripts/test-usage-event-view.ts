@@ -11,6 +11,8 @@ import {
   DEFAULT_USAGE_EVENTS_VIEW,
   parseUsageEventsView,
   hasExplicitEventQuery,
+  eventCacheRate,
+  resolveProviderInfo,
 } from '../web/src/types/usageEventView.ts';
 import { usageEventParams, type UsageEvent } from '../web/src/types/usageEvents.ts';
 
@@ -189,4 +191,69 @@ assert.equal(hasExplicitEventQuery(new URLSearchParams('limit=250')), true);
 assert.equal(hasExplicitEventQuery(new URLSearchParams('request_id=abc')), true);
 
 console.log('PASS usage event view preference: parsing, validation, field whitelisting, URL precedence helpers');
+
+// Cache rate tests
+assert.equal(eventCacheRate(undefined).formatted, '—');
+assert.equal(eventCacheRate({ input: 0, output: 0, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0, total: 0 }).formatted, '0%');
+// OpenAI style: input=1000, cache_read=800 -> 80%
+assert.equal(
+  eventCacheRate({ input: 1000, output: 100, reasoning: 0, cached: 0, cache_read: 800, cache_creation: 0, total: 1100 }).formatted,
+  '80%',
+);
+// Anthropic style: input=200, cache_read=800 -> denominator=1000, 80%
+assert.equal(
+  eventCacheRate({ input: 200, output: 100, reasoning: 0, cached: 0, cache_read: 800, cache_creation: 0, total: 1100 }).formatted,
+  '80%',
+);
+// Fallback cached tokens
+assert.equal(
+  eventCacheRate({ input: 1000, output: 100, reasoning: 0, cached: 500, cache_read: 0, cache_creation: 0, total: 1100 }).formatted,
+  '50%',
+);
+console.log('PASS cache rate calculation: OpenAI vs Anthropic conventions, fallback handling, edge boundaries');
+
+// Provider info resolution tests
+const credFiles = indexCredentialFiles([
+  { name: 'oauth-claude.json', auth_index: 'auth-oauth', provider: 'claude', type: 'oauth', email: 'user@example.com' },
+  { name: 'apiKey-custom.json', auth_index: 'auth-apikey', provider: 'openai' },
+]);
+
+const oauthEvent = {
+  id: 10,
+  provider: 'claude',
+  auth_type: 'oauth',
+  auth_index: 'auth-oauth',
+  tokens: { total: 100, input: 50, output: 50, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 },
+} as UsageEvent;
+
+const oauthResolved = resolveProviderInfo(oauthEvent, credFiles);
+assert.equal(oauthResolved.isOAuth, true);
+assert.equal(oauthResolved.title, 'user@example.com');
+assert.equal(oauthResolved.iconId, 'Claude');
+assert.equal(oauthResolved.accountIdentity, 'user@example.com');
+
+const apiKeyEvent = {
+  id: 11,
+  provider: 'openai',
+  auth_index: 'auth-apikey',
+  tokens: { total: 100, input: 50, output: 50, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 },
+} as UsageEvent;
+
+const apiKeyResolved = resolveProviderInfo(apiKeyEvent, credFiles, { 'openai': 'OpenAI' });
+assert.equal(apiKeyResolved.isOAuth, false);
+assert.equal(apiKeyResolved.title, 'Openai');
+assert.equal(apiKeyResolved.subtitle, '(apiKey-custom.json)');
+
+// Configured AI provider match
+const configuredProviders = [
+  { id: 'custom-deepseek', name: 'DeepSeek 专线', family: 'deepseek', auth_index: 'auth-apikey' },
+];
+const customResolved = resolveProviderInfo(apiKeyEvent, credFiles, { 'custom-deepseek': 'DeepSeek' }, configuredProviders);
+assert.equal(customResolved.isOAuth, false);
+assert.equal(customResolved.title, 'DeepSeek 专线');
+assert.equal(customResolved.iconId, 'DeepSeek');
+assert.equal(customResolved.subtitle, '(apiKey-custom.json)');
+
+console.log('PASS provider info resolution: OAuth account identity, configured provider custom name/icon, fallback');
+
 

@@ -161,7 +161,14 @@ export function formatEventDuration(ms: number | null | undefined): string {
   return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(2)} s`;
 }
 
-export type CredentialFile = { name: string; auth_index?: string; provider?: string; type?: string };
+export type CredentialFile = {
+  name: string;
+  auth_index?: string;
+  provider?: string;
+  type?: string;
+  email?: string;
+  project_id?: string;
+};
 export type CredentialIndex = ReadonlyMap<string, CredentialFile | null>;
 export type CredentialIdentity = {
   name?: string;
@@ -188,6 +195,158 @@ export function resolveCredential(event: UsageEvent, files: CredentialIndex): Cr
   if (event.auth_index?.trim()) return { name: event.auth_index.trim(), kind: 'index' };
   if (event.source?.trim()) return { name: event.source.trim(), kind: 'source' };
   return { kind: 'unknown' };
+}
+
+export const KNOWN_PROVIDER_ICONS: Record<string, string> = {
+  claude: 'Claude',
+  anthropic: 'Claude',
+  antigravity: 'Antigravity',
+  codex: 'Codex',
+  xai: 'XAI',
+  grok: 'XAI',
+  kimi: 'Kimi',
+  moonshot: 'Kimi',
+  openai: 'OpenAI',
+  gemini: 'Gemini',
+  google: 'Gemini',
+  vertex: 'Google',
+  qwen: 'Qwen',
+  deepseek: 'DeepSeek',
+  minimax: 'Minimax',
+  stepfun: 'Stepfun',
+  baichuan: 'Baichuan',
+  zhipu: 'Zhipu',
+  doubao: 'Doubao',
+  spark: 'Spark',
+};
+
+export interface EventCacheRateResult {
+  rate: number;
+  formatted: string;
+  cached: number;
+  hasData: boolean;
+}
+
+/**
+ * eventCacheRate calculates the prompt cache hit percentage matching the dashboard's
+ * cacheRateParts convention:
+ * - OpenAI style: input tokens already includes cached prefix (cache_read <= input)
+ * - Anthropic style: input tokens counts only new tokens, prompt = input + cache_read
+ * Returns rate (0..100), formatted string (e.g. "85%" or "—" if no prompt data), and cached tokens.
+ */
+export function eventCacheRate(tokens?: UsageEvent['tokens']): EventCacheRateResult {
+  if (!tokens) {
+    return { rate: 0, formatted: '—', cached: 0, hasData: false };
+  }
+  const cached = Math.max(0, tokens.cache_read || tokens.cached || 0);
+  if (cached === 0) {
+    return { rate: 0, formatted: '0%', cached: 0, hasData: true };
+  }
+  let prompt = Math.max(0, tokens.input || (tokens.total - tokens.output));
+  if (prompt <= 0 && tokens.total > 0) {
+    prompt = tokens.total;
+  }
+  let denominator = prompt;
+  if (cached > prompt) {
+    denominator = prompt + cached;
+  }
+  if (denominator <= 0) {
+    return { rate: 0, formatted: '—', cached: 0, hasData: false };
+  }
+  const rate = Math.min(100, Math.max(0, (cached / denominator) * 100));
+  return {
+    rate: Math.round(rate),
+    formatted: `${Math.round(rate)}%`,
+    cached,
+    hasData: true,
+  };
+}
+
+export interface ProviderLookupEntry {
+  id: string;
+  name: string;
+  family?: string;
+  auth_index?: string;
+  base_url?: string;
+}
+
+export interface ResolvedProviderInfo {
+  isOAuth: boolean;
+  iconId: string;
+  title: string;
+  subtitle?: string;
+  authFile?: string;
+  accountIdentity?: string;
+}
+
+export function resolveProviderInfo(
+  event: UsageEvent,
+  credentials: CredentialIndex,
+  providerIcons: Record<string, string> = {},
+  configuredProviders: ProviderLookupEntry[] = [],
+  fallbackIconResolver?: (family: string, name?: string, url?: string) => string,
+): ResolvedProviderInfo {
+  const file = event.auth_index ? credentials.get(event.auth_index) : undefined;
+  const isOAuth =
+    event.auth_type?.toLowerCase() === 'oauth' ||
+    file?.type?.toLowerCase() === 'oauth' ||
+    Boolean(file?.email || file?.project_id);
+
+  const resolveIcon = (family: string, name?: string, url?: string): string => {
+    if (fallbackIconResolver) return fallbackIconResolver(family, name, url);
+    const key = (family || '').toLowerCase().trim();
+    return KNOWN_PROVIDER_ICONS[key] || 'CloudServerOutlined';
+  };
+
+  if (isOAuth) {
+    const providerFamily = (file?.provider || file?.type || event.provider || 'oauth').toLowerCase();
+    const iconId = resolveIcon(providerFamily, file?.name);
+    const account = file?.email || file?.project_id;
+    const credIdentity = resolveCredential(event, credentials);
+    const fileName = credIdentity.name || file?.name || event.source || '';
+
+    // For OAuth: display account identity prominently (e.g. email / project_id / file name)
+    const displayName = account || fileName || event.resource_name || event.auth_index || providerFamily;
+    const providerLabel = providerFamily ? providerFamily.charAt(0).toUpperCase() + providerFamily.slice(1) : 'OAuth';
+    const secondary = account && fileName && fileName !== account ? `${providerLabel} OAuth · ${fileName}` : `${providerLabel} OAuth`;
+
+    return {
+      isOAuth: true,
+      iconId,
+      title: displayName,
+      subtitle: secondary,
+      authFile: fileName,
+      accountIdentity: account || undefined,
+    };
+  }
+
+  // AI Provider flow
+  const matched = configuredProviders.find(
+    (p) =>
+      (event.auth_index && p.auth_index === event.auth_index) ||
+      (event.resource_id && p.id === event.resource_id) ||
+      (p.id && p.id.toLowerCase() === (event.provider || '').toLowerCase()) ||
+      (p.name && p.name.toLowerCase() === (event.provider || '').toLowerCase()),
+  );
+
+  const providerFamily = (matched?.family || event.provider || '').toLowerCase();
+  const credIdentity = resolveCredential(event, credentials);
+  const fileName = credIdentity.name || event.source || '';
+
+  const providerName = matched?.name || (event.provider ? event.provider.charAt(0).toUpperCase() + event.provider.slice(1) : 'Unknown');
+  const iconId =
+    (matched && (providerIcons[matched.id] || providerIcons[matched.name])) ||
+    providerIcons[event.provider] ||
+    providerIcons[providerName] ||
+    resolveIcon(providerFamily, providerName, matched?.base_url);
+
+  return {
+    isOAuth: false,
+    iconId,
+    title: providerName,
+    subtitle: fileName ? `(${fileName})` : undefined,
+    authFile: fileName,
+  };
 }
 
 /** api_group_label is a grouping category, NOT a user-assigned API key name. */
