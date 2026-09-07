@@ -23,6 +23,7 @@ var knownPreferences = map[string]bool{
 	repository.PreferenceProviderIcons:     true,
 	repository.PreferenceProviderNames:     true,
 	repository.PreferenceDisabledProviders: true,
+	repository.PreferenceUsageEventsView:   true,
 }
 
 // preferenceValue is a stored JSON document kept exactly as the client sent it.

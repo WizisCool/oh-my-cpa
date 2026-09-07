@@ -18,6 +18,7 @@ const (
 	PreferenceProviderIcons      = "provider_icons"
 	PreferenceProviderNames      = "provider_names"
 	PreferenceDisabledProviders  = "disabled_providers"
+	PreferenceUsageEventsView    = "usage_events_view"
 )
 
 // MaxPreferenceValueBytes bounds a stored value. Preferences are small UI

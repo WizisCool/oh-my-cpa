@@ -1010,10 +1010,16 @@ func TestPreferencesRoundTripThroughTheDatabase(t *testing.T) {
 		t.Fatalf("provider icons status = %d body %s", response.StatusCode, payload)
 	}
 
+	// Usage events view settings (filters, grouping, advanced visibility) are also persisted.
+	if response, payload = doJSON(t, client, http.MethodPut, base+"/usage_events_view", `{"preset":"24h","result":"failed","grouping":"provider","advanced":true}`); response.StatusCode != http.StatusOK {
+		t.Fatalf("usage events view status = %d body %s", response.StatusCode, payload)
+	}
+
 	_, payload = getJSON(t, client, base)
 	if !strings.Contains(string(payload), `"dashboard_range":{"preset":"6h"}`) ||
 		!strings.Contains(string(payload), `"log_filters":{"hideManagement":true,"levels":["warn"],"statusClass":"all"}`) ||
-		!strings.Contains(string(payload), `"provider_icons":{"openai-compat-0":"DeepSeek","relay":"OpenAI"}`) {
+		!strings.Contains(string(payload), `"provider_icons":{"openai-compat-0":"DeepSeek","relay":"OpenAI"}`) ||
+		!strings.Contains(string(payload), `"usage_events_view":{"preset":"24h","result":"failed","grouping":"provider","advanced":true}`) {
 		t.Fatalf("stored values did not come back verbatim: %s", payload)
 	}
 	stored, found, err := repo.GetPreference(context.Background(), repository.PreferenceDashboardRange)
@@ -1028,6 +1034,9 @@ func TestPreferencesRoundTripThroughTheDatabase(t *testing.T) {
 	}
 	if _, found, err = repo.GetPreference(context.Background(), repository.PreferenceProviderIcons); err != nil || !found {
 		t.Fatalf("provider icons not persisted: found=%v err=%v", found, err)
+	}
+	if _, found, err = repo.GetPreference(context.Background(), repository.PreferenceUsageEventsView); err != nil || !found {
+		t.Fatalf("usage events view not persisted: found=%v err=%v", found, err)
 	}
 }
 
