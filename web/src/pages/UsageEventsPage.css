@@ -74,6 +74,11 @@
   min-width: 140px;
 }
 .request-stream {
+  container-type: inline-size;
+  container-name: reqstream;
+  --req-grid-columns: 110px minmax(180px, 1.4fr) minmax(160px, 1.3fr) 95px 150px 80px 110px 14px;
+  --req-grid-gap: 16px;
+  --req-pad-inline: 16px;
   flex: 1;
   min-height: 310px;
   display: flex;
@@ -128,17 +133,12 @@
   padding: 0;
   border: 0;
 }
-:root {
-  --req-grid-columns: 130px minmax(200px, 1.4fr) minmax(180px, 1.3fr) 95px 150px 75px 110px 14px;
-  --req-grid-gap: 16px;
-}
-
 .request-table-header {
   display: grid;
   grid-template-columns: var(--req-grid-columns);
   align-items: center;
   gap: var(--req-grid-gap);
-  padding: 0 16px;
+  padding: 0 var(--req-pad-inline);
   height: 38px;
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
@@ -157,13 +157,17 @@
   white-space: nowrap;
 }
 
-.req-th-latency,
-.req-th-tokens {
-  text-align: right;
+.req-th-time,
+.req-th-provider,
+.req-th-model,
+.req-th-executor {
+  text-align: left;
 }
 
+.req-th-latency,
+.req-th-tokens,
 .req-th-cache {
-  text-align: center;
+  text-align: right;
 }
 
 .request-row {
@@ -173,7 +177,7 @@
   align-items: center;
   gap: var(--req-grid-gap);
   min-height: 88px;
-  padding: 16px;
+  padding: 16px var(--req-pad-inline);
   border: 0;
   border-bottom: 1px solid var(--border-soft);
   border-radius: 0;
@@ -245,6 +249,7 @@
   display: flex;
   flex-direction: row;
   align-items: center;
+  justify-content: flex-start;
   gap: 10px;
   min-width: 0;
 }
@@ -262,6 +267,7 @@
 .req-provider-content {
   display: flex;
   flex-direction: column;
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   gap: 2px;
@@ -400,13 +406,14 @@
 
 /* Column 6: Cache Rate */
 .req-col-cache {
-  align-items: center;
-  text-align: center;
+  align-items: flex-end;
+  text-align: right;
+  justify-content: center;
 }
 .req-cache-hit {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
   gap: 2px;
 }
 .req-cache-pill {
@@ -438,6 +445,7 @@
   font-size: 12px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 /* Column 7: Executor */
@@ -476,7 +484,7 @@
   color: var(--fg);
 }
 
-@media (max-width: 900px) {
+@container reqstream (max-width: 920px) {
   .request-table-header {
     display: none;
   }
@@ -493,10 +501,34 @@
     width: 100%;
   }
   .req-col-latency,
-  .req-col-tokens {
+  .req-col-tokens,
+  .req-col-cache {
     align-items: flex-start;
     text-align: left;
   }
+  .request-chevron {
+    display: none;
+  }
+}
+
+@media (max-width: 920px) {
+  .request-table-header {
+    display: none;
+  }
+  .request-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 14px 16px;
+    width: 100%;
+    min-height: auto;
+  }
+  .req-col {
+    width: 100%;
+  }
+  .req-col-latency,
+  .req-col-tokens,
   .req-col-cache {
     align-items: flex-start;
     text-align: left;
