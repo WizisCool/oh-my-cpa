@@ -20,6 +20,7 @@ import {
   USAGE_EVENTS_COLUMNS_PREFERENCE,
   parseUsageEventsColumns,
   buildGridTemplateColumns,
+  computeGridMinWidth,
 } from '../web/src/components/usage/requestColumns.ts';
 import { usageEventParams, type UsageEvent } from '../web/src/types/usageEvents.ts';
 
@@ -336,20 +337,20 @@ assert.deepEqual(parseUsageEventsColumns({ unknown_col: 200, time: 'not-a-number
 
 // Clamping to min/max
 const parsedWidths = parseUsageEventsColumns({
-  time: 50, // below min 95 -> clamped to 95
-  provider: 800, // above max 450 -> clamped to 450
-  model: 210, // valid in [120, 450] -> 210
+  time: 50, // below min 92 -> clamped to 92
+  provider: 800, // above max 460 -> clamped to 460
+  model: 210, // valid in [108, 460] -> 210
   latency: 85,
 });
-assert.equal(parsedWidths.time, 95);
-assert.equal(parsedWidths.provider, 450);
+assert.equal(parsedWidths.time, 92);
+assert.equal(parsedWidths.provider, 460);
 assert.equal(parsedWidths.model, 210);
 assert.equal(parsedWidths.latency, 85);
 
 // buildGridTemplateColumns: adaptive defaults with fr for provider and model
 const defaultGrid = buildGridTemplateColumns({});
-assert.ok(defaultGrid.includes('minmax(130px, 1.3fr)'));
-assert.ok(defaultGrid.includes('minmax(120px, 1.2fr)'));
+assert.ok(defaultGrid.includes('minmax(118px, 1.3fr)'));
+assert.ok(defaultGrid.includes('minmax(108px, 1.2fr)'));
 assert.ok(defaultGrid.endsWith('14px')); // chevron track
 
 // Manual overrides lock specified tracks to exact px
@@ -358,7 +359,18 @@ assert.ok(manualGrid.includes('250px'));
 assert.ok(manualGrid.includes('200px'));
 assert.ok(manualGrid.endsWith('14px'));
 
-console.log('PASS column definitions: clamping, sanitization, adaptive and fixed grid template generation');
+// computeGridMinWidth: fixed defaults + flexible mins + 8 gaps + inline padding
+// 100 + 118 + 108 + 76 + 82 + 122 + 64 + 92 + 14 = 776; gaps 8*12 = 96; padding 24
+assert.equal(computeGridMinWidth({}), 776 + 96 + 24);
+// A manual override replaces the flexible minimum with the requested width
+assert.equal(computeGridMinWidth({ provider: 300 }), 776 - 118 + 300 + 96 + 24);
+// Out-of-range overrides are clamped exactly as the template builder clamps them
+assert.equal(computeGridMinWidth({ provider: 9999 }), 776 - 118 + 460 + 96 + 24);
+assert.ok(computeGridMinWidth({}, 8, 12) < computeGridMinWidth({}, 12, 12));
+
+console.log(
+  'PASS column definitions: clamping, sanitization, adaptive and fixed grid template generation, measured min-width floor',
+);
 
 
 

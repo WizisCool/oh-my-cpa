@@ -50,6 +50,16 @@ import {
   type UsageEventsViewPreference,
   type EventGrouping,
 } from '../types/usageEventView';
+import {
+  REQUEST_COLUMNS,
+  COLUMN_MAP,
+  USAGE_EVENTS_COLUMNS_PREFERENCE,
+  type RequestColumnId,
+  type RequestColumnWidths,
+  parseUsageEventsColumns,
+  buildGridTemplateColumns,
+  computeGridMinWidth,
+} from '../components/usage/requestColumns';
 import { RequestRow } from '../components/usage/RequestRow';
 import { UsageEventDrawer } from '../components/usage/UsageEventDrawer';
 import './UsageEventsPage.css';
@@ -95,6 +105,136 @@ export const UsageEventsPage: React.FC = () => {
     USAGE_EVENTS_VIEW_PREFERENCE,
     DEFAULT_USAGE_EVENTS_VIEW,
     parseUsageEventsView,
+  );
+
+  const {
+    value: columnWidthsPref,
+    ready: columnWidthsReady,
+    set: setColumnWidthsPref,
+  } = usePreference<RequestColumnWidths>(
+    USAGE_EVENTS_COLUMNS_PREFERENCE,
+    {},
+    parseUsageEventsColumns,
+  );
+
+  const [colWidths, setColWidths] = React.useState<RequestColumnWidths>({});
+
+  React.useEffect(() => {
+    if (columnWidthsReady) {
+      setColWidths(columnWidthsPref);
+    }
+  }, [columnWidthsReady, columnWidthsPref]);
+
+  const gridTemplate = React.useMemo(
+    () => buildGridTemplateColumns(colWidths),
+    [colWidths],
+  );
+  const gridMinWidth = React.useMemo(() => computeGridMinWidth(colWidths), [colWidths]);
+
+  // The row list scrolls vertically and therefore loses a scrollbar's worth of
+  // inner width that the header never loses. Measuring the real gutter (rather
+  // than assuming a platform width) lets the header pad exactly that much, so
+  // column boundaries line up on Windows, macOS overlay scrollbars and touch.
+  const [scrollbarGutter, setScrollbarGutter] = React.useState(0);
+  React.useEffect(() => {
+    const probe = document.createElement('div');
+    probe.style.cssText =
+      'position:absolute;top:-9999px;left:-9999px;width:64px;height:64px;overflow:scroll;';
+    document.body.appendChild(probe);
+    setScrollbarGutter(Math.max(0, probe.offsetWidth - probe.clientWidth));
+    probe.remove();
+  }, []);
+
+  const handleResizeStart = React.useCallback(
+    (colId: RequestColumnId, e: React.PointerEvent<HTMLSpanElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const target = e.currentTarget;
+      target.setPointerCapture(e.pointerId);
+
+      const colDef = COLUMN_MAP.get(colId)!;
+      const thElement = target.parentElement as HTMLElement;
+      const startWidth = thElement
+        ? thElement.getBoundingClientRect().width
+        : (colWidths[colId] || colDef.defaultWidth);
+      const startX = e.clientX;
+
+      let latestWidth = startWidth;
+
+      const onPointerMove = (moveEvent: PointerEvent) => {
+        const delta = moveEvent.clientX - startX;
+        latestWidth = Math.round(
+          Math.min(colDef.maxWidth, Math.max(colDef.minWidth, startWidth + delta)),
+        );
+        setColWidths((prev) => ({
+          ...prev,
+          [colId]: latestWidth,
+        }));
+      };
+
+      const onPointerUp = (upEvent: PointerEvent) => {
+        try {
+          target.releasePointerCapture(upEvent.pointerId);
+        } catch {}
+        target.removeEventListener('pointermove', onPointerMove);
+        target.removeEventListener('pointerup', onPointerUp);
+        target.removeEventListener('pointercancel', onPointerUp);
+
+        setColWidths((prev) => {
+          const next = { ...prev, [colId]: latestWidth };
+          setColumnWidthsPref(next);
+          return next;
+        });
+      };
+
+      target.addEventListener('pointermove', onPointerMove);
+      target.addEventListener('pointerup', onPointerUp);
+      target.addEventListener('pointercancel', onPointerUp);
+    },
+    [colWidths, setColumnWidthsPref],
+  );
+
+  const handleResetColumn = React.useCallback(
+    (colId: RequestColumnId) => {
+      setColWidths((prev) => {
+        const next = { ...prev };
+        delete next[colId];
+        setColumnWidthsPref(next);
+        return next;
+      });
+    },
+    [setColumnWidthsPref],
+  );
+
+  const handleResetAllColumns = React.useCallback(() => {
+    setColWidths({});
+    setColumnWidthsPref({});
+  }, [setColumnWidthsPref]);
+
+  const handleResizeKeyDown = React.useCallback(
+    (colId: RequestColumnId, e: React.KeyboardEvent) => {
+      const colDef = COLUMN_MAP.get(colId)!;
+      const currentWidth = colWidths[colId] ?? colDef.defaultWidth;
+      let nextWidth: number | null = null;
+      if (e.key === 'ArrowLeft') {
+        nextWidth = Math.max(colDef.minWidth, currentWidth - 10);
+      } else if (e.key === 'ArrowRight') {
+        nextWidth = Math.min(colDef.maxWidth, currentWidth + 10);
+      } else if (e.key === 'Enter' || e.key === 'Escape') {
+        handleResetColumn(colId);
+        return;
+      }
+      if (nextWidth !== null) {
+        e.preventDefault();
+        const finalWidth = nextWidth;
+        setColWidths((prev) => {
+          const next = { ...prev, [colId]: finalWidth };
+          setColumnWidthsPref(next);
+          return next;
+        });
+      }
+    },
+    [colWidths, handleResetColumn, setColumnWidthsPref],
   );
 
   // Initial URL check: did the user enter with explicit query params (e.g. from dashboard drill-down)?
@@ -491,7 +631,10 @@ export const UsageEventsPage: React.FC = () => {
             {(activeFilters.length > 0 ||
               query.result !== 'all' ||
               query.preset !== '1h' ||
-              query.from !== undefined) && (
+              query.from !== undefined ||
+              Boolean(search) ||
+              Boolean(authType) ||
+              Boolean(modelAlias)) && (
               <Button
                 type="text"
                 onClick={() => {
@@ -531,7 +674,18 @@ export const UsageEventsPage: React.FC = () => {
           {t('events.credentials_unavailable')}
         </div>
       )}
-      <section className="request-stream" aria-label={t('events.title')} aria-busy={result.isFetching}>
+      <section
+        className="request-stream"
+        aria-label={t('events.title')}
+        aria-busy={result.isFetching}
+        style={
+          {
+            '--req-grid-columns': gridTemplate,
+            '--req-min-width': `${gridMinWidth}px`,
+            '--req-gutter': `${scrollbarGutter}px`,
+          } as React.CSSProperties
+        }
+      >
         <div className="request-summary">
           <span>{t(stale ? 'events.previous_results' : 'events.this_page')}</span>
           <strong>
@@ -547,62 +701,86 @@ export const UsageEventsPage: React.FC = () => {
           <span>
             {t('events.col_tokens')} <b>{result.isLoading ? '—' : metrics.tokens.toLocaleString()}</b>
           </span>
-        </div>
-        <div className="request-table-header" aria-hidden="true">
-          <span className="req-th req-th-time">{t('events.col_time')}</span>
-          <span className="req-th req-th-provider">{t('events.provider')}</span>
-          <span className="req-th req-th-model">{t('events.col_model')}</span>
-          <span className="req-th req-th-latency">{t('events.col_latency')}</span>
-          <span className="req-th req-th-tps">{t('events.col_tps')}</span>
-          <span className="req-th req-th-tokens">{t('events.col_tokens')}</span>
-          <span className="req-th req-th-cache">{t('events.col_cache_rate')}</span>
-          <span className="req-th req-th-executor">{t('events.col_executor')}</span>
-          <span className="req-th req-th-chevron" />
-        </div>
-        <div ref={listHost} className="request-list-host">
-          {!isQueryEnabled || result.isLoading ? (
-            <div className="request-loading">
-              <Skeleton active={false} paragraph={{ rows: 8 }} title={false} />
-            </div>
-          ) : events.length ? (
-            <Listy<UsageEvent>
-              key={`${queryString}:${grouping}`}
-              virtual
-              height={height}
-              items={events}
-              rowKey="id"
-              group={group}
-              sticky
-              className="request-list"
-              itemRender={(event) => (
-                <RequestRow
-                  event={event}
-                  credentials={credentials}
-                  providerIcons={providerIcons}
-                  configuredProviders={configuredProviders}
-                  onOpen={setSelected}
-                />
-              )}
-            />
-          ) : !result.isError ? (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={
-                <>
-                  <strong>{t('events.empty_title')}</strong>
-                  <p>
-                    {t(
-                      activeFilters.length || query.result !== 'all'
-                        ? 'events.empty_filtered'
-                        : 'events.empty_hint',
-                    )}
-                  </p>
-                </>
-              }
-            />
-          ) : (
-            <div className="request-empty-error">{t('events.load_error')}</div>
+          {Object.keys(colWidths).length > 0 && (
+            <Button
+              size="small"
+              type="dashed"
+              className="req-reset-columns-btn"
+              onClick={handleResetAllColumns}
+            >
+              {t('events.reset_columns')}
+            </Button>
           )}
+        </div>
+        <div className="request-table-scroll-area">
+          <div className="request-table-header">
+            {REQUEST_COLUMNS.map((col) => (
+              <div key={col.id} className={`req-th req-th-${col.id}`}>
+                <span className="req-th-label">{t(col.labelKey)}</span>
+                {col.resizable && (
+                  <span
+                    className="req-col-resizer"
+                    role="separator"
+                    aria-orientation="vertical"
+                    aria-label={t('events.col_resizer')}
+                    aria-valuenow={colWidths[col.id] ?? col.defaultWidth}
+                    aria-valuemin={col.minWidth}
+                    aria-valuemax={col.maxWidth}
+                    tabIndex={0}
+                    onPointerDown={(e) => handleResizeStart(col.id, e)}
+                    onDoubleClick={() => handleResetColumn(col.id)}
+                    onKeyDown={(e) => handleResizeKeyDown(col.id, e)}
+                  />
+                )}
+              </div>
+            ))}
+            <span className="req-th req-th-chevron" />
+          </div>
+          <div ref={listHost} className="request-list-host">
+            {!isQueryEnabled || result.isLoading ? (
+              <div className="request-loading">
+                <Skeleton active={false} paragraph={{ rows: 8 }} title={false} />
+              </div>
+            ) : events.length ? (
+              <Listy<UsageEvent>
+                key={`${queryString}:${grouping}`}
+                virtual
+                height={height}
+                items={events}
+                rowKey="id"
+                group={group}
+                sticky
+                className="request-list"
+                itemRender={(event) => (
+                  <RequestRow
+                    event={event}
+                    credentials={credentials}
+                    providerIcons={providerIcons}
+                    configuredProviders={configuredProviders}
+                    onOpen={setSelected}
+                  />
+                )}
+              />
+            ) : !result.isError ? (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={
+                  <>
+                    <strong>{t('events.empty_title')}</strong>
+                    <p>
+                      {t(
+                        activeFilters.length || query.result !== 'all'
+                          ? 'events.empty_filtered'
+                          : 'events.empty_hint',
+                      )}
+                    </p>
+                  </>
+                }
+              />
+            ) : (
+              <div className="request-empty-error">{t('events.load_error')}</div>
+            )}
+          </div>
         </div>
         <footer className="request-pagination">
           <span aria-live="polite">

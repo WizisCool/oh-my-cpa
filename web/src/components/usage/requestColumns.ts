@@ -24,8 +24,8 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     id: 'time',
     labelKey: 'events.col_time',
     align: 'left',
-    defaultWidth: 115,
-    minWidth: 95,
+    defaultWidth: 100,
+    minWidth: 92,
     maxWidth: 220,
     flexGrow: 0,
     resizable: true,
@@ -35,8 +35,8 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     labelKey: 'events.provider',
     align: 'left',
     defaultWidth: 180,
-    minWidth: 130,
-    maxWidth: 450,
+    minWidth: 118,
+    maxWidth: 460,
     flexGrow: 1.3,
     resizable: true,
   },
@@ -45,8 +45,8 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     labelKey: 'events.col_model',
     align: 'left',
     defaultWidth: 160,
-    minWidth: 120,
-    maxWidth: 450,
+    minWidth: 108,
+    maxWidth: 460,
     flexGrow: 1.2,
     resizable: true,
   },
@@ -54,7 +54,7 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     id: 'latency',
     labelKey: 'events.col_latency',
     align: 'right',
-    defaultWidth: 85,
+    defaultWidth: 76,
     minWidth: 70,
     maxWidth: 160,
     flexGrow: 0,
@@ -64,8 +64,8 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     id: 'tps',
     labelKey: 'events.col_tps',
     align: 'right',
-    defaultWidth: 90,
-    minWidth: 75,
+    defaultWidth: 82,
+    minWidth: 72,
     maxWidth: 160,
     flexGrow: 0,
     resizable: true,
@@ -74,8 +74,8 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     id: 'tokens',
     labelKey: 'events.col_tokens',
     align: 'right',
-    defaultWidth: 140,
-    minWidth: 110,
+    defaultWidth: 122,
+    minWidth: 112,
     maxWidth: 240,
     flexGrow: 0,
     resizable: true,
@@ -84,8 +84,8 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     id: 'cache',
     labelKey: 'events.col_cache_rate',
     align: 'right',
-    defaultWidth: 75,
-    minWidth: 60,
+    defaultWidth: 64,
+    minWidth: 58,
     maxWidth: 140,
     flexGrow: 0,
     resizable: true,
@@ -94,8 +94,8 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     id: 'executor',
     labelKey: 'events.col_executor',
     align: 'left',
-    defaultWidth: 105,
-    minWidth: 85,
+    defaultWidth: 92,
+    minWidth: 84,
     maxWidth: 220,
     flexGrow: 0,
     resizable: true,
@@ -155,4 +155,31 @@ export function buildGridTemplateColumns(widths: RequestColumnWidths = {}): stri
 
   tracks.push(`${CHEVRON_TRACK_WIDTH}px`);
   return tracks.join(' ');
+}
+
+/**
+ * computeGridMinWidth returns the narrowest total inline size (in px) that the
+ * header/row grid can occupy before its tracks start clipping content: every
+ * flexible track contributes its minWidth, fixed tracks contribute their width,
+ * plus the inter-column gaps and the horizontal row padding.
+ *
+ * Using this measured floor instead of `min-width: max-content` keeps the header
+ * and the virtualized rows on one shared track list, lets long provider/model
+ * names ellipsize instead of pushing the executor column out of view, and only
+ * scrolls horizontally when the user's own column widths genuinely demand it.
+ */
+export function computeGridMinWidth(
+  widths: RequestColumnWidths = {},
+  gap = 12,
+  paddingInline = 12,
+): number {
+  const total = REQUEST_COLUMNS.reduce((sum, col) => {
+    const manual = widths[col.id];
+    if (manual !== undefined && Number.isFinite(manual)) {
+      return sum + Math.min(col.maxWidth, Math.max(col.minWidth, manual));
+    }
+    return sum + (col.flexGrow > 0 ? col.minWidth : col.defaultWidth);
+  }, CHEVRON_TRACK_WIDTH);
+  const gaps = REQUEST_COLUMNS.length * gap; // 8 gaps between 9 tracks
+  return Math.round(total + gaps + paddingInline * 2);
 }

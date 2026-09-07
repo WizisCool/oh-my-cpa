@@ -76,9 +76,10 @@
 .request-stream {
   container-type: inline-size;
   container-name: reqstream;
-  --req-grid-columns: 110px minmax(160px, 1.35fr) minmax(150px, 1.25fr) 85px 95px 145px 75px 105px 14px;
-  --req-grid-gap: 16px;
-  --req-pad-inline: 16px;
+  --req-grid-columns: 100px minmax(118px, 1.3fr) minmax(108px, 1.2fr) 76px 82px 122px 64px 92px 14px;
+  --req-grid-gap: 12px;
+  --req-pad-inline: 12px;
+  --req-min-width: 896px;
   flex: 1;
   min-height: 310px;
   display: flex;
@@ -113,6 +114,7 @@
 .request-list-host {
   flex: 1;
   min-height: 240px;
+  min-width: calc(var(--req-min-width, 896px) + var(--req-gutter, 0px));
   overflow: hidden;
   position: relative;
 }
@@ -133,12 +135,26 @@
   padding: 0;
   border: 0;
 }
+.request-table-scroll-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 240px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  position: relative;
+}
+
 .request-table-header {
   display: grid;
   grid-template-columns: var(--req-grid-columns);
   align-items: center;
   gap: var(--req-grid-gap);
   padding: 0 var(--req-pad-inline);
+  /* The row list reserves its vertical scrollbar inside the same track width; the
+   * header has no scrollbar, so it pads the same gutter to keep both grids on one
+   * set of column boundaries. */
+  padding-inline-end: calc(var(--req-pad-inline) + var(--req-gutter, 0px));
   height: 38px;
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
@@ -148,19 +164,75 @@
   letter-spacing: 0.02em;
   user-select: none;
   flex-shrink: 0;
+  width: 100%;
+  min-width: calc(var(--req-min-width, 896px) + var(--req-gutter, 0px));
 }
 
 .req-th {
+  min-width: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+
+.req-th-label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.req-col-resizer {
+  position: absolute;
+  right: -8px;
+  top: 0;
+  bottom: 0;
+  width: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: col-resize;
+  z-index: 2;
+  touch-action: none;
+  user-select: none;
+}
+
+.req-col-resizer::after {
+  content: '';
+  width: 2px;
+  height: 16px;
+  background: transparent;
+  border-radius: 1px;
+  transition: background 0.15s ease;
+}
+
+.req-col-resizer:hover::after,
+.req-col-resizer:focus-visible::after,
+.req-col-resizer:active::after {
+  background: var(--accent);
+}
+
+.req-col-resizer:focus-visible {
+  outline: none;
+}
+
+.req-reset-columns-btn {
+  font-size: 11px;
+  height: 22px;
+  padding: 0 8px;
+  margin-left: auto;
+  color: var(--muted);
+}
+.req-reset-columns-btn:hover {
+  color: var(--accent);
+}
+
 .req-th-time,
 .req-th-provider,
 .req-th-model,
 .req-th-executor {
+  justify-content: flex-start;
   text-align: left;
 }
 
@@ -168,11 +240,21 @@
 .req-th-tps,
 .req-th-tokens,
 .req-th-cache {
+  justify-content: flex-end;
   text-align: right;
+}
+
+.req-th-latency .req-th-label,
+.req-th-tps .req-th-label,
+.req-th-tokens .req-th-label,
+.req-th-cache .req-th-label {
+  text-align: right;
+  width: 100%;
 }
 
 .request-row {
   width: 100%;
+  min-width: var(--req-min-width, 896px);
   display: grid;
   grid-template-columns: var(--req-grid-columns);
   align-items: center;
@@ -496,6 +578,16 @@
   max-width: 100%;
 }
 
+.req-mobile-label {
+  display: none;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 2px;
+}
+
 .request-chevron {
   color: var(--muted);
   font-size: 11px;
@@ -506,8 +598,17 @@
 }
 
 @container reqstream (max-width: 920px) {
+  .request-table-scroll-area {
+    overflow-x: visible;
+  }
   .request-table-header {
     display: none;
+  }
+  .request-list-host {
+    min-width: 100%;
+  }
+  .req-mobile-label {
+    display: block;
   }
   .request-row {
     display: flex;
@@ -516,6 +617,7 @@
     gap: 10px;
     padding: 14px 16px;
     width: 100%;
+    min-width: 100%;
     min-height: auto;
   }
   .req-col {
@@ -534,8 +636,17 @@
 }
 
 @media (max-width: 920px) {
+  .request-table-scroll-area {
+    overflow-x: visible;
+  }
   .request-table-header {
     display: none;
+  }
+  .request-list-host {
+    min-width: 100%;
+  }
+  .req-mobile-label {
+    display: block;
   }
   .request-row {
     display: flex;
@@ -544,6 +655,7 @@
     gap: 10px;
     padding: 14px 16px;
     width: 100%;
+    min-width: 100%;
     min-height: auto;
   }
   .req-col {

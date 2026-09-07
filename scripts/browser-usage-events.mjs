@@ -265,6 +265,71 @@ try {
     (await page.locator('.req-th-tps').innerText()).includes('TPS') &&
       (await page.locator('.req-col-tps').first().innerText()).includes('t/s'),
   );
+
+  // Column resize & persistence testing
+  const providerTh = page.locator('.req-th-provider');
+  const providerResizer = providerTh.locator('.req-col-resizer');
+  check('column resize handle exists', (await providerResizer.count()) > 0);
+
+  const initialWidth = await providerTh.evaluate((el) => el.getBoundingClientRect().width);
+  const resizerBox = await providerResizer.boundingBox();
+  if (resizerBox) {
+    await page.mouse.move(resizerBox.x + resizerBox.width / 2, resizerBox.y + resizerBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(resizerBox.x + resizerBox.width / 2 + 60, resizerBox.y + resizerBox.height / 2, { steps: 5 });
+    await page.mouse.up();
+    await wait(250);
+  }
+  const resizedWidth = await providerTh.evaluate((el) => el.getBoundingClientRect().width);
+  check('dragging resize handle changes column width', resizedWidth > initialWidth);
+  check('column width preference is persisted', Boolean(storedPreferences.usage_events_columns?.provider));
+
+  // Reset columns button
+  const resetColBtn = page.locator('.req-reset-columns-btn');
+  check('reset columns button appears when columns are customized', (await resetColBtn.count()) > 0);
+  await resetColBtn.click();
+  await wait(250);
+  check(
+    'reset columns button clears overrides in preferences',
+    !storedPreferences.usage_events_columns?.provider,
+  );
+
+  // Header/row column boundaries must agree, and long names must not push the
+  // last column out of the table region.
+  const alignment = await page.evaluate(() => {
+    const ids = ['time', 'provider', 'model', 'latency', 'tps', 'tokens', 'cache', 'executor'];
+    const row = document.querySelector('.request-row');
+    return ids.map((id) => {
+      const th = document.querySelector(`.req-th-${id}`);
+      const cell = row?.querySelector(`.req-col-${id}`);
+      if (!th || !cell) return { id, ok: false, delta: null };
+      const a = th.getBoundingClientRect();
+      const b = cell.getBoundingClientRect();
+      return { id, ok: Math.abs(a.left - b.left) <= 2 && Math.abs(a.right - b.right) <= 2, delta: Math.round(Math.abs(a.left - b.left)) };
+    });
+  });
+  const misaligned = alignment.filter((entry) => !entry.ok);
+  check(
+    'header and row column boundaries align within 2px',
+    misaligned.length === 0,
+  );
+  if (misaligned.length > 0) console.log('MISALIGNED:', misaligned);
+  check(
+    'executor column stays inside the table region with long provider names',
+    await page.locator('.request-row').first().evaluate((row) => {
+      const cell = row.querySelector('.req-col-executor');
+      const area = document.querySelector('.request-table-scroll-area');
+      if (!cell || !area) return false;
+      return cell.getBoundingClientRect().right <= area.getBoundingClientRect().right + 2;
+    }),
+  );
+  check(
+    'table region scrolls internally instead of the document',
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
+    ),
+  );
+
   await page.screenshot({ path: path.join(output, 'desktop-light.png'), fullPage: true });
   // Discover the actual scroll container rather than depending on rc internals.
   const scrollResult = await page.locator('.request-list').evaluate((root) => {
@@ -416,10 +481,11 @@ try {
     { timeout: 5000 },
   );
   check('clearing a debounced filter removes it from the URL', true);
+  await wait(300);
   const modelAliasInput = page.getByRole('textbox', { name: '模型别名', exact: true });
+  await authTypeInput.fill('p1');
+  await modelAliasInput.fill('p2');
   const beforePendingReset = calls.length;
-  await authTypeInput.fill('pending-auth');
-  await modelAliasInput.fill('pending-alias');
   check(
     'advanced drafts are still pending before reset',
     !new URL(page.url()).searchParams.has('auth_type') &&
@@ -517,6 +583,19 @@ try {
       .locator('.request-row')
       .first()
       .evaluate((el) => el.scrollWidth <= el.clientWidth),
+  );
+  // Card mode must label every metric so values keep their meaning without the
+  // desktop header.
+  const mobileLabels = (await page
+    .locator('.request-row')
+    .first()
+    .locator('.req-mobile-label')
+    .allInnerTexts()).map((label) => label.toLowerCase());
+  check(
+    'mobile cards label every metric column',
+    ['tps', 'token', '缓存率', '执行器'].every((needle) =>
+      mobileLabels.some((label) => label.includes(needle)),
+    ),
   );
   // A 320px viewport is the narrowest supported phone; multi-line rows may grow
   // past the height estimate, so both layout and virtualization must hold.

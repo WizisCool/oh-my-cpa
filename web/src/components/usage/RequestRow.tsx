@@ -130,6 +130,7 @@ export const RequestRow = React.memo<RequestRowProps>(
 
         {/* Column 4: 延时 */}
         <div className="req-col req-col-latency">
+          <span className="req-mobile-label">{t('events.col_latency')}</span>
           <strong className="req-latency-val">{formatEventDuration(event.latency_ms)}</strong>
           <span className="req-ttft-val">
             TTFT {formatEventDuration(event.ttft_ms)}
@@ -138,6 +139,7 @@ export const RequestRow = React.memo<RequestRowProps>(
 
         {/* Column 5: TPS 生成速度 */}
         <div className="req-col req-col-tps">
+          <span className="req-mobile-label">{t('events.col_tps')}</span>
           {tpsInfo.tps !== null ? (
             <Tooltip
               title={
@@ -155,6 +157,7 @@ export const RequestRow = React.memo<RequestRowProps>(
 
         {/* Column 6: Token（总数，输入，输出，推理） */}
         <div className="req-col req-col-tokens">
+          <span className="req-mobile-label">{t('events.col_tokens')}</span>
           <div className="req-tokens-total">
             <strong>{event.tokens.total.toLocaleString()}</strong>
             <small>tokens</small>
@@ -177,8 +180,9 @@ export const RequestRow = React.memo<RequestRowProps>(
           </div>
         </div>
 
-        {/* Column 6: 缓存率 */}
+        {/* Column 7: 缓存率 */}
         <div className="req-col req-col-cache">
+          <span className="req-mobile-label">{t('events.col_cache_rate')}</span>
           {cache.hasData && cache.cached > 0 ? (
             <Tooltip
               title={`缓存命中率: ${cache.formatted} (命中 ${cache.cached.toLocaleString()} 缓存 Tokens)`}
@@ -198,8 +202,9 @@ export const RequestRow = React.memo<RequestRowProps>(
           )}
         </div>
 
-        {/* Column 7: 执行器 */}
+        {/* Column 8: 执行器 */}
         <div className="req-col req-col-executor">
+          <span className="req-mobile-label">{t('events.col_executor')}</span>
           <span className="req-executor-badge" title={`执行器: ${event.executor_type || 'default'}`}>
             {event.executor_type || 'default'}
           </span>
