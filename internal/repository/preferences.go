@@ -13,12 +13,13 @@ import (
 // settings. Named here so the API and every page agree on the key instead of
 // each hardcoding its own string.
 const (
-	PreferenceDashboardRange     = "dashboard_range"
-	PreferenceLogFilters         = "log_filters"
-	PreferenceProviderIcons      = "provider_icons"
-	PreferenceProviderNames      = "provider_names"
-	PreferenceDisabledProviders  = "disabled_providers"
-	PreferenceUsageEventsView    = "usage_events_view"
+	PreferenceDashboardRange        = "dashboard_range"
+	PreferenceLogFilters            = "log_filters"
+	PreferenceProviderIcons         = "provider_icons"
+	PreferenceProviderNames         = "provider_names"
+	PreferenceDisabledProviders     = "disabled_providers"
+	PreferenceUsageEventsView       = "usage_events_view"
+	PreferenceUsageEventsColumns    = "usage_events_columns"
 )
 
 // MaxPreferenceValueBytes bounds a stored value. Preferences are small UI
