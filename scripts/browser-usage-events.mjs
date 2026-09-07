@@ -20,14 +20,14 @@ const records = Array.from({ length: 1100 }, (_, index) => ({
   event_key: `event-${index}`,
   request_id: `req_7fa2c9d1_${String(index).padStart(5, '0')}`,
   timestamp_ms: now - index * 1000,
-  provider: ['openai', 'claude', 'gemini'][index % 3],
+  provider: index === 3 ? 'openai-compatible-opencode go' : ['openai', 'claude', 'gemini'][index % 3],
   model: ['gpt-5.4', 'claude-sonnet-4-6', 'gemini-2.5-pro'][index % 3],
   model_alias: index % 4 === 0 ? 'coding-fast' : undefined,
   source: `hmac:source-fingerprint-${index % 3}`,
   resource_name: index % 3 === 0 ? 'codex-team-production.json' : undefined,
   resource_id: index % 3 === 0 ? 'resource-1' : undefined,
-  auth_index: `credential-${index % 3}`,
-  auth_type: 'oauth',
+  auth_index: index === 3 ? 'opencode-idx' : `credential-${index % 3}`,
+  auth_type: index === 3 ? 'api_key' : 'oauth',
   api_group_key: 'hmac:9f2a4c87b11e285daa03',
   api_group_label: 'api_key',
   executor_type: 'responses',
@@ -110,6 +110,14 @@ try {
       return fulfill({ ok: true });
     }
     if (url.pathname.endsWith('/api/auth/session')) return fulfill({ authenticated: true });
+    if (url.pathname.endsWith('/management/providers')) {
+      return fulfill({
+        providers: [
+          { id: 'opencode-1', name: 'Opencode', family: 'openai-compatibility', auth_index: 'opencode-idx' },
+        ],
+        total: 1,
+      });
+    }
     if (url.pathname.endsWith('/management/auth-files') && failMetadata)
       return fulfill({ error: 'Fixture metadata unavailable' }, 503);
     if (url.pathname.endsWith('/management/auth-files'))
@@ -246,6 +254,11 @@ try {
   check(
     'source and caller appear in stream',
     (await page.locator('.request-row').first().innerText()).includes('codex-team-production.json'),
+  );
+  const row3Text = await page.locator('.request-row').nth(3).innerText();
+  check(
+    'AI provider displays only clean Name and no technical driver subtitle',
+    row3Text.includes('Opencode') && !row3Text.includes('openai-compatible-opencode go'),
   );
   await page.screenshot({ path: path.join(output, 'desktop-light.png'), fullPage: true });
   // Discover the actual scroll container rather than depending on rc internals.

@@ -321,30 +321,62 @@ export function resolveProviderInfo(
   }
 
   // AI Provider flow
-  const matched = configuredProviders.find(
+  // 1. Try exact matches first: auth_index, resource_id, resource_name, id, or name
+  let matched = configuredProviders.find(
     (p) =>
       (event.auth_index && p.auth_index === event.auth_index) ||
       (event.resource_id && p.id === event.resource_id) ||
+      (event.resource_name && p.name.toLowerCase() === event.resource_name.toLowerCase()) ||
       (p.id && p.id.toLowerCase() === (event.provider || '').toLowerCase()) ||
       (p.name && p.name.toLowerCase() === (event.provider || '').toLowerCase()),
   );
 
-  const providerFamily = (matched?.family || event.provider || '').toLowerCase();
+  // 2. If no exact match, check if any unique configured provider's name is contained in event.provider or event.resource_name
+  if (!matched && configuredProviders.length > 0) {
+    const candidateText = `${event.provider || ''} ${event.resource_name || ''}`.toLowerCase();
+    const candidateMatches = configuredProviders.filter(
+      (p) => p.name && candidateText.includes(p.name.toLowerCase()),
+    );
+    if (candidateMatches.length === 1) {
+      matched = candidateMatches[0];
+    }
+  }
+
   const credIdentity = resolveCredential(event, credentials);
   const fileName = credIdentity.name || event.source || '';
 
-  const providerName = matched?.name || (event.provider ? event.provider.charAt(0).toUpperCase() + event.provider.slice(1) : 'Unknown');
+  // Determine clean display name: configured name -> resource name -> cleaned provider text
+  let providerName = matched?.name;
+  if (!providerName && event.resource_name?.trim()) {
+    providerName = event.resource_name.trim();
+  }
+  if (!providerName && event.provider) {
+    // Strip technical prefixes like openai-compatible- and trailing -go/ go
+    let cleaned = event.provider.trim().replace(/^openai-compat(ibility|ible)?[-/_\s]*/i, '');
+    cleaned = cleaned.replace(/[-_\s]+go$/i, '');
+    if (cleaned) {
+      providerName = cleaned === cleaned.toLowerCase() ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : cleaned;
+    } else {
+      providerName = event.provider;
+    }
+  }
+  if (!providerName) {
+    providerName = 'Unknown';
+  }
+
+  const providerFamily = (matched?.family || event.provider || '').toLowerCase();
   const iconId =
     (matched && (providerIcons[matched.id] || providerIcons[matched.name])) ||
     providerIcons[event.provider] ||
     providerIcons[providerName] ||
     resolveIcon(providerFamily, providerName, matched?.base_url);
 
+  // For AI Providers, show only the clean Name (no technical driver subtitle)
   return {
     isOAuth: false,
     iconId,
     title: providerName,
-    subtitle: fileName ? `(${fileName})` : undefined,
+    subtitle: undefined,
     authFile: fileName,
   };
 }

@@ -550,7 +550,7 @@ export const UsageEventsPage: React.FC = () => {
         </div>
         <div className="request-table-header" aria-hidden="true">
           <span className="req-th req-th-time">{t('events.col_time')}</span>
-          <span className="req-th req-th-provider">{t('events.col_provider_cred')}</span>
+          <span className="req-th req-th-provider">{t('events.provider')}</span>
           <span className="req-th req-th-model">{t('events.col_model')}</span>
           <span className="req-th req-th-latency">{t('events.col_latency')}</span>
           <span className="req-th req-th-tokens">{t('events.col_tokens')}</span>

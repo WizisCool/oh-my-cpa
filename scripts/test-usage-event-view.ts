@@ -242,17 +242,41 @@ const apiKeyEvent = {
 const apiKeyResolved = resolveProviderInfo(apiKeyEvent, credFiles, { 'openai': 'OpenAI' });
 assert.equal(apiKeyResolved.isOAuth, false);
 assert.equal(apiKeyResolved.title, 'Openai');
-assert.equal(apiKeyResolved.subtitle, '(apiKey-custom.json)');
+assert.equal(apiKeyResolved.subtitle, undefined);
 
 // Configured AI provider match
 const configuredProviders = [
   { id: 'custom-deepseek', name: 'DeepSeek 专线', family: 'deepseek', auth_index: 'auth-apikey' },
+  { id: 'opencode-1', name: 'Opencode', family: 'openai-compatibility', auth_index: 'auth-opencode' },
 ];
 const customResolved = resolveProviderInfo(apiKeyEvent, credFiles, { 'custom-deepseek': 'DeepSeek' }, configuredProviders);
 assert.equal(customResolved.isOAuth, false);
 assert.equal(customResolved.title, 'DeepSeek 专线');
 assert.equal(customResolved.iconId, 'DeepSeek');
-assert.equal(customResolved.subtitle, '(apiKey-custom.json)');
+assert.equal(customResolved.subtitle, undefined);
+
+// Technical driver string: openai-compatible-opencode go -> Opencode with no subtitle
+const opencodeEvent = {
+  id: 12,
+  provider: 'openai-compatible-opencode go',
+  auth_index: 'auth-opencode',
+  tokens: { total: 100, input: 50, output: 50, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 },
+} as UsageEvent;
+const opencodeResolved = resolveProviderInfo(opencodeEvent, credFiles, {}, configuredProviders);
+assert.equal(opencodeResolved.isOAuth, false);
+assert.equal(opencodeResolved.title, 'Opencode');
+assert.equal(opencodeResolved.subtitle, undefined);
+
+// Unconfigured fallback also cleans technical prefixes/suffixes
+const fallbackOpencodeEvent = {
+  id: 13,
+  provider: 'openai-compatible-opencode go',
+  tokens: { total: 100, input: 50, output: 50, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 },
+} as UsageEvent;
+const fallbackOpencodeResolved = resolveProviderInfo(fallbackOpencodeEvent, credFiles, {}, []);
+assert.equal(fallbackOpencodeResolved.isOAuth, false);
+assert.equal(fallbackOpencodeResolved.title, 'Opencode');
+assert.equal(fallbackOpencodeResolved.subtitle, undefined);
 
 console.log('PASS provider info resolution: OAuth account identity, configured provider custom name/icon, fallback');
 
