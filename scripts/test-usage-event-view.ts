@@ -15,6 +15,12 @@ import {
   resolveProviderInfo,
   eventTokensPerSecond,
 } from '../web/src/types/usageEventView.ts';
+import {
+  REQUEST_COLUMNS,
+  USAGE_EVENTS_COLUMNS_PREFERENCE,
+  parseUsageEventsColumns,
+  buildGridTemplateColumns,
+} from '../web/src/components/usage/requestColumns.ts';
 import { usageEventParams, type UsageEvent } from '../web/src/types/usageEvents.ts';
 
 const read = (input: string) => readEventQuery(new URLSearchParams(input));
@@ -318,6 +324,42 @@ assert.equal(tpsInvalidTTFT.formatted, '50.00 t/s');
 assert.equal(tpsInvalidTTFT.hasTTFT, false);
 
 console.log('PASS tokens per second (TPS): TTFT-aware generation speed, fallback end-to-end average, edge boundaries');
+
+// Request columns tests
+assert.equal(USAGE_EVENTS_COLUMNS_PREFERENCE, 'usage_events_columns');
+assert.equal(REQUEST_COLUMNS.length, 8);
+
+// Sanitization & clamping
+assert.deepEqual(parseUsageEventsColumns(null), {});
+assert.deepEqual(parseUsageEventsColumns('invalid'), {});
+assert.deepEqual(parseUsageEventsColumns({ unknown_col: 200, time: 'not-a-number' }), {});
+
+// Clamping to min/max
+const parsedWidths = parseUsageEventsColumns({
+  time: 50, // below min 95 -> clamped to 95
+  provider: 800, // above max 450 -> clamped to 450
+  model: 210, // valid in [120, 450] -> 210
+  latency: 85,
+});
+assert.equal(parsedWidths.time, 95);
+assert.equal(parsedWidths.provider, 450);
+assert.equal(parsedWidths.model, 210);
+assert.equal(parsedWidths.latency, 85);
+
+// buildGridTemplateColumns: adaptive defaults with fr for provider and model
+const defaultGrid = buildGridTemplateColumns({});
+assert.ok(defaultGrid.includes('minmax(130px, 1.3fr)'));
+assert.ok(defaultGrid.includes('minmax(120px, 1.2fr)'));
+assert.ok(defaultGrid.endsWith('14px')); // chevron track
+
+// Manual overrides lock specified tracks to exact px
+const manualGrid = buildGridTemplateColumns({ provider: 250, model: 200 });
+assert.ok(manualGrid.includes('250px'));
+assert.ok(manualGrid.includes('200px'));
+assert.ok(manualGrid.endsWith('14px'));
+
+console.log('PASS column definitions: clamping, sanitization, adaptive and fixed grid template generation');
+
 
 
 
