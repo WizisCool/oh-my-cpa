@@ -21,6 +21,99 @@ export const EVENT_FILTER_KEYS = [
   'request_id',
 ] as const;
 
+export const USAGE_EVENTS_VIEW_PREFERENCE = 'usage_events_view';
+
+export const EVENT_GROUPING_VALUES = ['time', 'provider', 'credential'] as const;
+export type EventGrouping = (typeof EVENT_GROUPING_VALUES)[number];
+
+export interface UsageEventsViewPreference {
+  preset?: string;
+  from?: number;
+  to?: number;
+  result?: UsageResultFilter;
+  limit?: number;
+  model?: string;
+  provider?: string;
+  auth_index?: string;
+  source?: string;
+  api_key?: string;
+  executor?: string;
+  auth_type?: string;
+  model_alias?: string;
+  request_id?: string;
+  grouping?: EventGrouping;
+  advanced?: boolean;
+}
+
+export const DEFAULT_USAGE_EVENTS_VIEW: UsageEventsViewPreference = {
+  preset: '1h',
+  result: 'all',
+  limit: 100,
+  grouping: 'time',
+  advanced: false,
+};
+
+/**
+ * parseUsageEventsView validates a stored view preference document.
+ * Unwhitelisted fields, out-of-range limits, invalid presets or malformed
+ * timestamps are sanitized or dropped so stale storage cannot crash the UI.
+ */
+export function parseUsageEventsView(raw: unknown): UsageEventsViewPreference | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const val = raw as Record<string, unknown>;
+
+  const grouping = (EVENT_GROUPING_VALUES as readonly string[]).includes(String(val.grouping))
+    ? (String(val.grouping) as EventGrouping)
+    : 'time';
+
+  const advanced = typeof val.advanced === 'boolean' ? val.advanced : false;
+
+  const resultVal = String(val.result ?? '');
+  const result: UsageResultFilter = resultVal === 'success' || resultVal === 'failed' ? resultVal : 'all';
+
+  const limitNum = Number(val.limit);
+  const limit = Number.isInteger(limitNum) && limitNum > 0 ? Math.min(Math.max(limitNum, 1), 500) : 100;
+
+  const pref: UsageEventsViewPreference = {
+    result,
+    limit,
+    grouping,
+    advanced,
+  };
+
+  const from = Number(val.from);
+  const to = Number(val.to);
+  if (val.from !== undefined && Number.isSafeInteger(from) && from >= 0) {
+    pref.from = from;
+    if (val.to !== undefined && Number.isSafeInteger(to) && to > from) {
+      pref.to = to;
+    }
+  } else {
+    const presetStr = String(val.preset ?? '1h');
+    pref.preset = Object.prototype.hasOwnProperty.call(EVENT_PRESETS, presetStr) ? presetStr : '1h';
+  }
+
+  for (const key of EVENT_FILTER_KEYS) {
+    const str = typeof val[key] === 'string' ? (val[key] as string).trim() : '';
+    if (str) {
+      pref[key] = str;
+    }
+  }
+
+  return pref;
+}
+
+/** Check if the given URL search parameters contain any explicit event query keys */
+export function hasExplicitEventQuery(params: URLSearchParams): boolean {
+  if (params.has('preset') || params.has('from') || params.has('to') || params.has('result') || params.has('limit')) {
+    return true;
+  }
+  for (const key of EVENT_FILTER_KEYS) {
+    if (params.has(key)) return true;
+  }
+  return false;
+}
+
 /** URL is the single source of truth, including dashboard drill-downs and Back. */
 export function readEventQuery(params: URLSearchParams): UsageEventQuery {
   const preset = params.get('preset') || '1h';

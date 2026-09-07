@@ -7,6 +7,10 @@ import {
   requestGroupName,
   eventPageMetrics,
   formatEventDuration,
+  USAGE_EVENTS_VIEW_PREFERENCE,
+  DEFAULT_USAGE_EVENTS_VIEW,
+  parseUsageEventsView,
+  hasExplicitEventQuery,
 } from '../web/src/types/usageEventView.ts';
 import { usageEventParams, type UsageEvent } from '../web/src/types/usageEvents.ts';
 
@@ -98,3 +102,91 @@ assert.equal(read('preset=30d').preset, '30d');
 assert.equal(read('preset=90d').preset, '90d');
 assert.deepEqual(eventWindow(read('from=100'), 999), { from: 100, to: 999 });
 assert.deepEqual(eventWindow(read('from=100&to=2000'), 999), { from: 100, to: 999 });
+
+// Usage events view preference parsing and validation tests
+assert.equal(USAGE_EVENTS_VIEW_PREFERENCE, 'usage_events_view');
+assert.equal(parseUsageEventsView(null), undefined);
+assert.equal(parseUsageEventsView('invalid string'), undefined);
+assert.equal(parseUsageEventsView(123), undefined);
+assert.deepEqual(parseUsageEventsView({}), {
+  preset: '1h',
+  result: 'all',
+  limit: 100,
+  grouping: 'time',
+  advanced: false,
+});
+
+// Full valid document
+const fullDoc = {
+  preset: '24h',
+  result: 'failed',
+  limit: 250,
+  grouping: 'provider',
+  advanced: true,
+  model: 'gpt-4o',
+  provider: 'openai',
+  auth_index: 'idx-1',
+  source: 'src.json',
+  api_key: 'key-1',
+  executor: 'exec-1',
+  auth_type: 'oauth',
+  model_alias: 'alias-1',
+  request_id: 'req-123',
+  unknown_garbage: 'dropped',
+  __proto__: { polluted: true },
+};
+const parsedFull = parseUsageEventsView(fullDoc);
+assert.deepEqual(parsedFull, {
+  preset: '24h',
+  result: 'failed',
+  limit: 250,
+  grouping: 'provider',
+  advanced: true,
+  model: 'gpt-4o',
+  provider: 'openai',
+  auth_index: 'idx-1',
+  source: 'src.json',
+  api_key: 'key-1',
+  executor: 'exec-1',
+  auth_type: 'oauth',
+  model_alias: 'alias-1',
+  request_id: 'req-123',
+});
+assert.equal((parsedFull as Record<string, unknown>).unknown_garbage, undefined);
+
+// Custom from/to range vs preset
+const customDoc = parseUsageEventsView({ from: 1000, to: 2000, preset: 'ignore-me' });
+assert.equal(customDoc?.from, 1000);
+assert.equal(customDoc?.to, 2000);
+assert.equal(customDoc?.preset, undefined);
+
+// Invalid from/to range falls back to preset
+const invalidRange = parseUsageEventsView({ from: 2000, to: 1000, preset: '6h' });
+assert.equal(invalidRange?.from, 2000);
+assert.equal(invalidRange?.to, undefined);
+
+// Preset sanitization
+assert.equal(parseUsageEventsView({ preset: 'invalid-preset' })?.preset, '1h');
+assert.equal(parseUsageEventsView({ preset: '7d' })?.preset, '7d');
+
+// Limit clamping
+assert.equal(parseUsageEventsView({ limit: -5 })?.limit, 100);
+assert.equal(parseUsageEventsView({ limit: 0 })?.limit, 100);
+assert.equal(parseUsageEventsView({ limit: 9999 })?.limit, 500);
+assert.equal(parseUsageEventsView({ limit: 50 })?.limit, 50);
+
+// Grouping sanitization
+assert.equal(parseUsageEventsView({ grouping: 'credential' })?.grouping, 'credential');
+assert.equal(parseUsageEventsView({ grouping: 'malformed' })?.grouping, 'time');
+
+// hasExplicitEventQuery detection
+assert.equal(hasExplicitEventQuery(new URLSearchParams('')), false);
+assert.equal(hasExplicitEventQuery(new URLSearchParams('unrelated=123')), false);
+assert.equal(hasExplicitEventQuery(new URLSearchParams('preset=6h')), true);
+assert.equal(hasExplicitEventQuery(new URLSearchParams('model=claude')), true);
+assert.equal(hasExplicitEventQuery(new URLSearchParams('result=failed')), true);
+assert.equal(hasExplicitEventQuery(new URLSearchParams('limit=250')), true);
+assert.equal(hasExplicitEventQuery(new URLSearchParams('request_id=abc')), true);
+
+console.log('PASS usage event view preference: parsing, validation, field whitelisting, URL precedence helpers');
+
