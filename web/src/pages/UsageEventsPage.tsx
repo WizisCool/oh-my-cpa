@@ -14,8 +14,6 @@ import {
   Tooltip,
 } from 'antd';
 import {
-  ArrowRightOutlined,
-  FileTextOutlined,
   FilterOutlined,
   InfoCircleOutlined,
   LeftOutlined,
@@ -39,8 +37,6 @@ import {
 import {
   indexCredentialFiles,
   resolveCredential,
-  requestGroupName,
-  type CredentialIndex,
   EVENT_FILTER_KEYS,
   EVENT_PRESETS,
   eventPageMetrics,
@@ -54,6 +50,7 @@ import {
   type UsageEventsViewPreference,
   type EventGrouping,
 } from '../types/usageEventView';
+import { RequestRow } from '../components/usage/RequestRow';
 import { UsageEventDrawer } from '../components/usage/UsageEventDrawer';
 import './UsageEventsPage.css';
 
@@ -69,82 +66,6 @@ interface IngestStatus {
   };
   stats?: { pending?: number };
 }
-
-const RequestRow = React.memo(
-  ({
-    event,
-    credentials,
-    onOpen,
-  }: {
-    event: UsageEvent;
-    credentials: CredentialIndex;
-    onOpen: (id: number) => void;
-  }) => {
-    const t = useT();
-    const identity = resolveCredential(event, credentials);
-    const credential = identity.name;
-    return (
-      <button
-        type="button"
-        className="request-row"
-        onClick={() => onOpen(event.id)}
-        aria-label={`${t('common.details')}: ${event.model}, ${event.request_id || event.id}`}
-      >
-        <div className="request-identity">
-          <div className="request-primary">
-            <span className={`request-result ${event.failed ? 'is-failed' : ''}`}>
-              <i />
-              {t(event.failed ? 'events.filter_failed' : 'events.filter_success')}
-            </span>
-            <strong className="request-model" title={event.model}>
-              {event.model || t('events.not_captured')}
-            </strong>
-            {!event.generate && <span className="request-preflight">{t('events.preflight')}</span>}
-          </div>
-          <div className="request-secondary">
-            <time
-              dateTime={new Date(event.timestamp_ms).toISOString()}
-              title={dayjs(event.timestamp_ms).format('YYYY-MM-DD HH:mm:ss.SSS')}
-            >
-              {dayjs(event.timestamp_ms).format('MM-DD HH:mm:ss')}
-            </time>
-            <span className="request-id" title={event.request_id}>
-              {event.request_id || t('events.no_request_id')}
-            </span>
-          </div>
-        </div>
-        <div className="request-origin">
-          <div className="request-route">
-            <span title={event.provider}>{event.provider || t('events.unknown_provider')}</span>
-            <ArrowRightOutlined />
-            <span title={`${t(`events.credential_${identity.kind}`)}: ${credential || '—'}`}>
-              <FileTextOutlined /> {credential || t('events.unknown_credential')}
-            </span>
-          </div>
-          <div className="request-secondary">
-            <span title={requestGroupName(event)}>
-              {t('events.caller')}: {requestGroupName(event) || '—'}
-            </span>
-            {event.auth_type && <span>{event.auth_type}</span>}
-          </div>
-        </div>
-        <div className="request-metric">
-          <strong>{formatEventDuration(event.latency_ms)}</strong>
-          <span>TTFT {formatEventDuration(event.ttft_ms)}</span>
-        </div>
-        <div className="request-metric request-token">
-          <strong>
-            {event.tokens.total.toLocaleString()} <small>tokens</small>
-          </strong>
-          <span>
-            ↑ {event.tokens.input.toLocaleString()} · ↓ {event.tokens.output.toLocaleString()}
-          </span>
-        </div>
-        <RightOutlined className="request-chevron" />
-      </button>
-    );
-  },
-);
 
 /** Text filters commit to the URL only after typing pauses: one keystroke
  *  must never fire one list request per character. Used by the request-id
@@ -337,6 +258,17 @@ export const UsageEventsPage: React.FC = () => {
     () => indexCredentialFiles(authFiles.data?.files || []),
     [authFiles.data],
   );
+  const { value: providerIcons } = usePreference<Record<string, string>>(
+    'provider_icons',
+    {},
+    (raw) => (typeof raw === 'object' && raw ? (raw as Record<string, string>) : {}),
+  );
+  const providersQuery = useQuery({
+    queryKey: ['management-providers'],
+    queryFn: api.getManagementProviders,
+    staleTime: 60_000,
+  });
+  const configuredProviders = providersQuery.data?.providers;
   const activeFilters = EVENT_FILTER_KEYS.filter((key) => query[key]);
   const extraCount = activeFilters.filter((key) => !['model', 'provider', 'request_id'].includes(key)).length;
   const listHost = React.useRef<HTMLDivElement>(null);
@@ -616,6 +548,16 @@ export const UsageEventsPage: React.FC = () => {
             {t('events.col_tokens')} <b>{result.isLoading ? '—' : metrics.tokens.toLocaleString()}</b>
           </span>
         </div>
+        <div className="request-table-header" aria-hidden="true">
+          <span className="req-th req-th-time">{t('events.col_time')}</span>
+          <span className="req-th req-th-provider">{t('events.col_provider_cred')}</span>
+          <span className="req-th req-th-model">{t('events.col_model')}</span>
+          <span className="req-th req-th-latency">{t('events.col_latency')}</span>
+          <span className="req-th req-th-tokens">{t('events.col_tokens')}</span>
+          <span className="req-th req-th-cache">{t('events.col_cache_rate')}</span>
+          <span className="req-th req-th-executor">{t('events.col_executor')}</span>
+          <span className="req-th req-th-chevron" />
+        </div>
         <div ref={listHost} className="request-list-host">
           {!isQueryEnabled || result.isLoading ? (
             <div className="request-loading">
@@ -632,7 +574,13 @@ export const UsageEventsPage: React.FC = () => {
               sticky
               className="request-list"
               itemRender={(event) => (
-                <RequestRow event={event} credentials={credentials} onOpen={setSelected} />
+                <RequestRow
+                  event={event}
+                  credentials={credentials}
+                  providerIcons={providerIcons}
+                  configuredProviders={configuredProviders}
+                  onOpen={setSelected}
+                />
               )}
             />
           ) : !result.isError ? (

@@ -996,6 +996,8 @@ const DICT: Record<string, [string, string]> = {
   'events.col_provider_cred': ['提供商 / 凭据', 'Provider / Credential'],
   'events.col_latency': ['耗时 / TTFT', 'Latency / TTFT'],
   'events.col_tokens': ['Token 消耗', 'Tokens'],
+  'events.col_cache_rate': ['缓存率', 'Cache Rate'],
+  'events.col_executor': ['执行器', 'Executor'],
   'events.col_request_id': ['Request ID', 'Request ID'],
   'events.details_title': ['请求详情', 'Request details'],
   'events.token_breakdown': ['Token 详细明细', 'Token Breakdown'],
