@@ -455,6 +455,8 @@ export const UsageEventsPage: React.FC = () => {
                 type="text"
                 onClick={() => {
                   setSearch('');
+                  setAuthType('');
+                  setModelAlias('');
                   setParams({}, { replace: true });
                 }}
               >

@@ -382,8 +382,30 @@ try {
     { timeout: 5000 },
   );
   check('clearing a debounced filter removes it from the URL', true);
+  const modelAliasInput = page.getByRole('textbox', { name: '模型别名', exact: true });
+  const beforePendingReset = calls.length;
+  await authTypeInput.fill('pending-auth');
+  await modelAliasInput.fill('pending-alias');
+  check(
+    'advanced drafts are still pending before reset',
+    !new URL(page.url()).searchParams.has('auth_type') &&
+      !new URL(page.url()).searchParams.has('model_alias'),
+  );
   await page.getByRole('button', { name: /重\s*置/ }).click();
   await page.getByText('第 1 页 · 100 条记录').waitFor();
+  await wait(800);
+  check(
+    'reset clears both pending advanced drafts',
+    (await authTypeInput.inputValue()) === '' && (await modelAliasInput.inputValue()) === '',
+  );
+  check(
+    'reset cancels pending advanced filter URL and API updates',
+    !new URL(page.url()).searchParams.has('auth_type') &&
+      !new URL(page.url()).searchParams.has('model_alias') &&
+      calls.slice(beforePendingReset).every(
+        (call) => !call.searchParams.has('auth_type') && !call.searchParams.has('model_alias'),
+      ),
+  );
   const search = page.getByRole('textbox', { name: 'Request ID', exact: true });
   const beforeSearch = calls.length;
   await search.fill(records[0].request_id);
