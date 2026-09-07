@@ -27,12 +27,14 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { api } from '../api/client';
+import { usePreference } from '../hooks/usePreference';
 import { useT } from '../i18n';
 import {
   usageEventParams,
   type UsageEvent,
   type UsageEventPage,
   type UsageFacetValue,
+  type UsageResultFilter,
 } from '../types/usageEvents';
 import {
   indexCredentialFiles,
@@ -45,6 +47,12 @@ import {
   eventWindow,
   formatEventDuration,
   readEventQuery,
+  USAGE_EVENTS_VIEW_PREFERENCE,
+  DEFAULT_USAGE_EVENTS_VIEW,
+  parseUsageEventsView,
+  hasExplicitEventQuery,
+  type UsageEventsViewPreference,
+  type EventGrouping,
 } from '../types/usageEventView';
 import { UsageEventDrawer } from '../components/usage/UsageEventDrawer';
 import './UsageEventsPage.css';
@@ -161,6 +169,18 @@ export const UsageEventsPage: React.FC = () => {
   const [params, setParams] = useSearchParams();
   const signature = params.toString();
   const query = React.useMemo(() => readEventQuery(new URLSearchParams(signature)), [signature]);
+
+  const { value: viewPref, ready: prefReady, set: setViewPref } = usePreference<UsageEventsViewPreference>(
+    USAGE_EVENTS_VIEW_PREFERENCE,
+    DEFAULT_USAGE_EVENTS_VIEW,
+    parseUsageEventsView,
+  );
+
+  // Initial URL check: did the user enter with explicit query params (e.g. from dashboard drill-down)?
+  const initialParamsRef = React.useRef(params);
+  const hasExplicit = React.useMemo(() => hasExplicitEventQuery(initialParamsRef.current), []);
+  const [hydrated, setHydrated] = React.useState(hasExplicit);
+
   const [refresh, setRefresh] = React.useState(0);
   const window = React.useMemo(() => eventWindow(query, Date.now()), [query, refresh]);
   const scope = `${signature}:${refresh}`;
@@ -172,7 +192,72 @@ export const UsageEventsPage: React.FC = () => {
   const cursor = cursors.at(-1);
   const [selected, setSelected] = React.useState<number | null>(null);
   const [advanced, setAdvanced] = React.useState(false);
-  const [grouping, setGrouping] = React.useState('time');
+  const [grouping, setGrouping] = React.useState<EventGrouping>('time');
+
+  // One-time hydration from server preferences when entering bare route without query parameters
+  React.useEffect(() => {
+    if (!prefReady || hydrated) return;
+    setHydrated(true);
+    if (viewPref.grouping) setGrouping(viewPref.grouping);
+    if (typeof viewPref.advanced === 'boolean') setAdvanced(viewPref.advanced);
+
+    if (!hasExplicit) {
+      const nextParams = new URLSearchParams();
+      if (viewPref.from !== undefined) {
+        nextParams.set('from', String(viewPref.from));
+        if (viewPref.to !== undefined) nextParams.set('to', String(viewPref.to));
+      } else if (viewPref.preset && viewPref.preset !== '1h') {
+        nextParams.set('preset', viewPref.preset);
+      }
+      if (viewPref.result && viewPref.result !== 'all') {
+        nextParams.set('result', viewPref.result);
+      }
+      if (viewPref.limit && viewPref.limit !== 100) {
+        nextParams.set('limit', String(viewPref.limit));
+      }
+      for (const key of EVENT_FILTER_KEYS) {
+        if (viewPref[key]) nextParams.set(key, viewPref[key]!);
+      }
+      if (nextParams.toString()) {
+        setParams(nextParams, { replace: true });
+      }
+    }
+  }, [prefReady, hydrated, hasExplicit, viewPref, setParams]);
+
+  // Restore grouping/advanced layout preferences even when on a drill-down link
+  React.useEffect(() => {
+    if (!prefReady || !hasExplicit) return;
+    if (viewPref.grouping) setGrouping(viewPref.grouping);
+    if (typeof viewPref.advanced === 'boolean') setAdvanced(viewPref.advanced);
+  }, [prefReady, hasExplicit, viewPref.grouping, viewPref.advanced]);
+
+  const persistView = React.useCallback(
+    (overrides?: Partial<UsageEventsViewPreference>) => {
+      const nextPref: UsageEventsViewPreference = {
+        result: query.result,
+        limit: query.limit,
+        grouping,
+        advanced,
+        ...overrides,
+      };
+      if (overrides?.from !== undefined || (query.from !== undefined && overrides?.preset === undefined)) {
+        nextPref.from = overrides?.from ?? query.from;
+        nextPref.to = overrides?.to ?? query.to;
+        delete nextPref.preset;
+      } else {
+        nextPref.preset = overrides?.preset ?? query.preset ?? '1h';
+        delete nextPref.from;
+        delete nextPref.to;
+      }
+      for (const key of EVENT_FILTER_KEYS) {
+        const val = overrides?.[key] !== undefined ? overrides[key] : query[key];
+        if (val) nextPref[key] = val;
+      }
+      setViewPref(nextPref);
+    },
+    [query, grouping, advanced, setViewPref],
+  );
+
   const update = React.useCallback(
     (values: Record<string, string | undefined>) => {
       setParams(
@@ -186,16 +271,35 @@ export const UsageEventsPage: React.FC = () => {
         },
         { replace: true },
       );
+      const nextQuery: Partial<UsageEventsViewPreference> = {};
+      for (const [key, value] of Object.entries(values)) {
+        if (!value) {
+          (nextQuery as Record<string, unknown>)[key] = undefined;
+        } else if (key === 'limit') {
+          nextQuery.limit = Number(value);
+        } else if (key === 'result') {
+          nextQuery.result = value as UsageResultFilter;
+        } else if (key === 'from') {
+          nextQuery.from = Number(value);
+        } else if (key === 'to') {
+          nextQuery.to = Number(value);
+        } else {
+          (nextQuery as Record<string, unknown>)[key] = value;
+        }
+      }
+      persistView(nextQuery);
     },
-    [setParams],
+    [persistView, setParams],
   );
   const [search, setSearch] = useDebouncedTextFilter(query.request_id || '', update, 'request_id');
   const [authType, setAuthType] = useDebouncedTextFilter(query.auth_type || '', update, 'auth_type');
   const [modelAlias, setModelAlias] = useDebouncedTextFilter(query.model_alias || '', update, 'model_alias');
+  const isQueryEnabled = hasExplicit || prefReady;
   const facetParams = usageEventParams(window);
   const facets = useQuery({
     queryKey: ['usage-facets', facetParams, refresh],
     queryFn: () => api.getUsageFacets(facetParams),
+    enabled: isQueryEnabled,
     placeholderData: keepPreviousData,
     staleTime: 30_000,
   });
@@ -209,6 +313,7 @@ export const UsageEventsPage: React.FC = () => {
   const result = useQuery({
     queryKey: ['usage-events', queryString, refresh],
     queryFn: () => api.getUsageEvents(queryString),
+    enabled: isQueryEnabled,
     placeholderData: keepPreviousData,
     staleTime: 10_000,
   });
@@ -407,7 +512,11 @@ export const UsageEventsPage: React.FC = () => {
             aria-label={t('events.more_filters')}
             icon={<FilterOutlined />}
             aria-expanded={advanced}
-            onClick={() => setAdvanced((v) => !v)}
+            onClick={() => {
+              const next = !advanced;
+              setAdvanced(next);
+              persistView({ advanced: next });
+            }}
           >
             {t('events.more_filters')}
             {extraCount > 0 ? ` (${extraCount})` : ''}
@@ -458,6 +567,11 @@ export const UsageEventsPage: React.FC = () => {
                   setAuthType('');
                   setModelAlias('');
                   setParams({}, { replace: true });
+                  setViewPref({
+                    ...DEFAULT_USAGE_EVENTS_VIEW,
+                    grouping,
+                    advanced,
+                  });
                 }}
               >
                 {t('events.reset')}
@@ -467,7 +581,11 @@ export const UsageEventsPage: React.FC = () => {
             <Select
               aria-label={t('events.group_by')}
               value={grouping}
-              onChange={setGrouping}
+              onChange={(value) => {
+                const next = value as EventGrouping;
+                setGrouping(next);
+                persistView({ grouping: next });
+              }}
               options={['time', 'provider', 'credential'].map((value) => ({
                 value,
                 label: t(`events.group_${value}`),
@@ -499,7 +617,7 @@ export const UsageEventsPage: React.FC = () => {
           </span>
         </div>
         <div ref={listHost} className="request-list-host">
-          {result.isLoading ? (
+          {!isQueryEnabled || result.isLoading ? (
             <div className="request-loading">
               <Skeleton active={false} paragraph={{ rows: 8 }} title={false} />
             </div>

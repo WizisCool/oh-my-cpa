@@ -92,10 +92,23 @@ try {
     if (!localStorage.getItem('omc-theme')) localStorage.setItem('omc-theme', 'light');
   });
   page = await context.newPage();
+  const storedPreferences = {};
   page.on('pageerror', (error) => errors.push(error.message));
   await page.route('**/omc/api/**', async (route) => {
     const url = new URL(route.request().url());
     const fulfill = (body, status = 200) => route.fulfill({ status, json: body });
+    if (url.pathname.endsWith('/preferences') && route.request().method() === 'GET') {
+      return fulfill({ preferences: storedPreferences });
+    }
+    if (url.pathname.includes('/preferences/') && route.request().method() === 'PUT') {
+      const key = url.pathname.split('/').at(-1);
+      try {
+        storedPreferences[key] = JSON.parse(route.request().postData() || '{}');
+      } catch {
+        storedPreferences[key] = {};
+      }
+      return fulfill({ ok: true });
+    }
     if (url.pathname.endsWith('/api/auth/session')) return fulfill({ authenticated: true });
     if (url.pathname.endsWith('/management/auth-files') && failMetadata)
       return fulfill({ error: 'Fixture metadata unavailable' }, 503);
@@ -112,6 +125,9 @@ try {
         ),
         total: 3,
       });
+    if (url.pathname.includes('/preferences')) {
+      return fulfill({ preferences: {} });
+    }
     if (url.pathname.endsWith('/health'))
       return fulfill({ cpa_connected: true, version: 'fixture', status: 'ok' });
     if (url.pathname.endsWith('/usage/ingest-status'))
@@ -601,6 +617,25 @@ try {
   check(
     'initial load failure is not presented as empty history',
     (await page.getByText('No request records', { exact: true }).count()) === 0,
+  );
+  failList = false;
+  failMetadata = false;
+  // Test preference persistence: seed a preference, revisit bare route /usage/events without query params
+  storedPreferences.usage_events_view = {
+    preset: '24h',
+    result: 'failed',
+    grouping: 'provider',
+    limit: 250,
+  };
+  await page.goto(base + '/usage/events');
+  await page.locator('.request-row').first().waitFor();
+  await wait(300);
+  const rehydratedUrl = new URL(page.url());
+  check(
+    'bare route rehydrates filters and view settings from stored preferences',
+    rehydratedUrl.searchParams.get('preset') === '24h' &&
+      rehydratedUrl.searchParams.get('result') === 'failed' &&
+      rehydratedUrl.searchParams.get('limit') === '250',
   );
   check('no browser runtime errors', errors.length === 0);
   console.log(`Screenshots: ${output}`);

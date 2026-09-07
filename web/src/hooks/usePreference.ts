@@ -10,15 +10,17 @@ export interface Preference<T> {
   set: (next: T) => void;
 }
 
+const writeQueues = new Map<string, Promise<void>>();
+
 /**
  * usePreference reads and writes one server-stored console preference.
  *
- * These live in the database rather than in browser storage on purpose: a
- * reload, a service restart and a container rebuild all wipe localStorage, and
- * an operator's chosen view should survive all three. The write is optimistic
- * into the shared query cache, so the control answers on the frame it was used;
- * only persistence can fail, and that is said out loud rather than swallowed,
- * because the silent failure is "your setting is gone after the next restart".
+ * These live in the database rather than in browser storage on purpose: an
+ * incognito window, a browser data reset, a service restart and a container
+ * rebuild all drop local browser storage, and an operator's chosen view should
+ * survive them all. The write is optimistic into the shared query cache, so the
+ * control answers on the frame it was used; writes are serialized per key so
+ * rapid concurrent updates never arrive out of order at the server.
  */
 export function usePreference<T>(
   key: string,
@@ -42,9 +44,14 @@ export function usePreference<T>(
       ...(previous ?? {}),
       [key]: next,
     }));
-    api.putPreference(key, next).catch((err: unknown) => {
-      message.error(err instanceof ApiError ? err.message : String(err));
-    });
+    const previousPromise = writeQueues.get(key) ?? Promise.resolve();
+    const nextPromise = previousPromise
+      .catch(() => {})
+      .then(() => api.putPreference(key, next))
+      .catch((err: unknown) => {
+        message.error(err instanceof ApiError ? err.message : String(err));
+      });
+    writeQueues.set(key, nextPromise);
   }, [key, message, queryClient]);
 
   return { value, ready: !isPending || isError, set };
