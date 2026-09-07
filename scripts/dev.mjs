@@ -3,8 +3,8 @@
 //   pnpm dev:api   -> Air only
 //   pnpm dev:web   -> Vite only (declared in package.json)
 //
-// The browser entry is always Vite at http://127.0.0.1:5173/omc/. Vite sends
-// /omc/api to Go at 127.0.0.1:8080. CPA remains an external dependency and can
+// The browser entry is Vite at http://127.0.0.1:5173/omc/ (or http://<tailscale-ip>:5173/omc/).
+// Vite sends /omc/api to Go at 127.0.0.1:8080. CPA remains an external dependency and can
 // be started separately with `pnpm cpa:start` when real integration is needed.
 
 import { execFileSync, spawn } from 'node:child_process';
@@ -170,8 +170,8 @@ try {
   if (apiOnly) {
     console.log('[dev] mode: Go API only (:8080)');
   } else {
-    console.log('[dev] topology: browser -> Vite :5173 -> Go API :8080 -> external CPA');
-    console.log('[dev] open: http://127.0.0.1:5173/omc/');
+    console.log('[dev] topology: browser -> Vite :5173 (0.0.0.0) -> Go API :8080 (127.0.0.1) -> external CPA');
+    console.log('[dev] open: http://127.0.0.1:5173/omc/ (or http://<tailscale-ip>:5173/omc/)');
   }
   console.log('[dev] CPA is external; start it separately with `pnpm cpa:start` when needed.\n');
 

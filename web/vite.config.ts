@@ -23,9 +23,9 @@ export default defineConfig(({ command }) => ({
   },
   server: {
     port: 5173,
-    // Use a deterministic loopback address across platforms and fail clearly
-    // instead of silently selecting a different port.
-    host: '127.0.0.1',
+    // Bind all network interfaces (0.0.0.0) so LAN and Tailscale devices can access
+    // the dev server, while keeping backend services bound safely to 127.0.0.1.
+    host: '0.0.0.0',
     strictPort: true,
     proxy: {
       '/omc/api': {

@@ -37,7 +37,7 @@ cp .env.example .env
 pnpm dev
 ```
 
-日常开发只使用一个浏览器入口：**`http://127.0.0.1:5173/omc/`**。
+日常开发只使用一个浏览器入口：**`http://127.0.0.1:5173/omc/`**（在 Tailscale 或局域网环境中也可通过 **`http://<Tailscale-IP>:5173/omc/`** 访问，后端与 CPA 保持绑定在 `127.0.0.1` 本地回环，由 Vite 代理请求）。
 
 ```text
 浏览器 → Vite :5173 → Go API :8080 → CLIProxyAPI :8317
