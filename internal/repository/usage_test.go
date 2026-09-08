@@ -145,7 +145,7 @@ func TestUsageEventKeyMaskBoundary(t *testing.T) {
 
 	masked := usageEventAt("default", "masked", base, usage.TokenStats{TotalTokens: 1}, false)
 	masked.APIGroupLabel = "api_key"
-	masked.APIKeyMask = "sk-12345xxxxxxx7890"
+	masked.APIKeyMask = "sk-12345••••••••7890"
 	// A caller that forgets to mask must not be able to smuggle a raw key
 	// through the display column.
 	raw := usageEventAt("default", "raw", base.Add(time.Minute), usage.TokenStats{TotalTokens: 1}, false)
@@ -169,7 +169,7 @@ func TestUsageEventKeyMaskBoundary(t *testing.T) {
 	for _, item := range page.Items {
 		byRequest[item.RequestID] = item
 	}
-	if got := byRequest["masked"].APIKeyMask; got != "sk-12345xxxxxxx7890" {
+	if got := byRequest["masked"].APIKeyMask; got != "sk-12345••••••••7890" {
 		t.Fatalf("stored mask = %q", got)
 	}
 	if got := byRequest["raw"].APIKeyMask; got != "" {

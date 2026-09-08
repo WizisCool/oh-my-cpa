@@ -300,7 +300,7 @@ func TestDecodeEventWithFingerprinterUsesStableCredentialFingerprint(t *testing.
 	}
 	// The display mask keeps the key recognisable without storing or exposing
 	// it: the raw value must never survive decoding.
-	if event.APIKeyMask != "fixture-xxxxxxx-123" {
+	if event.APIKeyMask != "fixture-••••••••-123" {
 		t.Fatalf("api key mask = %q", event.APIKeyMask)
 	}
 	if strings.Contains(event.APIKeyMask, apiKey) || strings.Contains(event.APIKeyMask, "credential-val") {

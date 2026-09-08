@@ -208,14 +208,20 @@ func IsSensitiveKey(key string) bool {
 }
 
 // maskRun is the fixed filler a display mask uses. It is a constant length so
-// the mask never reveals how long the underlying secret is.
-const maskRun = "xxxxxxx"
+// the mask never reveals how long the underlying secret is. MaskRun exports it
+// for callers that recognize or re-render masks.
+const maskRun = MaskRun
 
 // MaskSecret renders a credential as a recognisable but non-recoverable display
-// label ("sk-12345xxxxxxx7890"). The caller keeps the keyed fingerprint for
-// identity; this value exists only so a human can tell two keys apart in the
-// UI. Only a short head and tail survive, and a secret short enough that the
-// head/tail would cover most of it is masked completely.
+// label: a short head and tail survive and everything between them becomes a
+// fixed run of bullets ("sk-1234••••••••7890"). The caller keeps the keyed
+// fingerprint for identity; this value exists only so a human can tell two keys
+// apart in the UI.
+//
+// A secret too short for a head and tail to stay informative is hidden
+// completely — exposing four of an eight-character key would say nothing and
+// give away half the secret. The filler is a constant length so the mask never
+// reveals the secret's length.
 func MaskSecret(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -224,23 +230,52 @@ func MaskSecret(value string) string {
 	runes := []rune(value)
 	switch {
 	case len(runes) >= 20:
-		return string(runes[:8]) + maskRun + string(runes[len(runes)-4:])
+		return string(runes[:8]) + MaskRun + string(runes[len(runes)-4:])
 	case len(runes) >= 12:
-		return string(runes[:4]) + maskRun + string(runes[len(runes)-2:])
+		return string(runes[:4]) + MaskRun + string(runes[len(runes)-2:])
 	default:
-		return maskRun
+		return MaskRun
 	}
 }
 
-// IsMask reports whether value has the shape MaskSecret produces: a single
-// unbroken token carrying the fixed filler run. Persistence boundaries use it
-// to refuse anything that is not already a mask.
+// MaskRun is the filler a display mask uses. Callers that need to recognise or
+// re-render a mask use it instead of spelling the runes out.
+const MaskRun = "••••••••"
+
+// legacyMaskRun is the filler used before the mask switched to bullets. Rows
+// ingested earlier still carry it, so projections normalize it on read.
+const legacyMaskRun = "xxxxxxx"
+
+// NormalizeMask converts a stored display mask to the current filler.
+//
+// Only the filler changes: the visible edges are preserved, because they are
+// what lets an operator tell two keys apart. A value that is not a mask (a raw
+// key, a fingerprint, an empty string) is returned untouched — this function
+// never guesses at or reconstructs a secret, and it is not a security boundary.
+func NormalizeMask(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || !strings.Contains(value, legacyMaskRun) {
+		return value
+	}
+	return strings.Replace(value, legacyMaskRun, MaskRun, 1)
+}
+
+// IsMask reports whether value has the shape of a display mask: a single
+// unbroken token carrying a current or legacy filler run.
+//
+// This is shape checking for a persistence boundary, not proof that a value is
+// not a secret — a credential may itself contain the filler. Mask provenance
+// comes from masking at ingestion; this only stops a caller that forgot to mask
+// from writing an obviously unmasked value into a display column.
 func IsMask(value string) bool {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return false
 	}
-	return strings.Contains(value, maskRun) && !strings.ContainsAny(value, " \t\r\n")
+	if strings.ContainsAny(value, " \t\r\n") {
+		return false
+	}
+	return strings.Contains(value, MaskRun) || strings.Contains(value, legacyMaskRun)
 }
 
 // MaskIP keeps only a coarse network prefix. Invalid input is omitted.
