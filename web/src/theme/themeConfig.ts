@@ -40,6 +40,9 @@ export const palette = {
     success: '#30d158',
     warn: '#ff9f0a',
     danger: '#ff3b30',
+    /* Cache-rate scale (design.md §2): yellow → green, no red. */
+    cacheRateYellow: '#ffd60a',
+    cacheRateGreen: '#30d158',
   },
   light: {
     bg: '#fdfcfc',
@@ -57,6 +60,11 @@ export const palette = {
     success: '#30d158',
     warn: '#ff9f0a',
     danger: '#ff3b30',
+    /* Darker steps of the same two hues so badge text stays legible on a light
+       page; the low end is ochre because yellow cannot be both saturated and
+       4.5:1 there. */
+    cacheRateYellow: '#6e5b00',
+    cacheRateGreen: '#00662a',
   },
 } as const;
 

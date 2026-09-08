@@ -43,6 +43,16 @@
   --success: #30d158;
   --warn: #ff9f0a;
   --danger: #ff3b30;
+  /* Cache-rate sequential scale (design.md §2): 0% yellow → 100% green,
+     interpolated in OKLCH so the hue sweep stays perceptually even. Red is
+     deliberately absent — a low hit rate is not a failure, and the danger hue
+     belongs to failed requests. These are steps of the semantic hues lightened
+     until 11px badge text clears 4.5:1 against the badge's own tint over --bg;
+     the tint/edge alphas belong to the badge, not to the hue. */
+  --cache-rate-yellow: #ffd60a;
+  --cache-rate-green: #30d158;
+  --cache-rate-tint: 12%;
+  --cache-rate-edge: 32%;
   --radius-sm: 4px;
   /* The inset step for a control that sits on an elevated panel. "One step
      down from the popover" is --bg in dark and --surface in light, so the two
@@ -65,6 +75,12 @@
   --border: rgba(15, 0, 0, 0.12);
   --border-soft: rgba(15, 0, 0, 0.07);
   --hover-inset: var(--surface);
+  /* The same two hues read as their darker steps on a light page; a saturated
+     yellow cannot also be legible there, so the low end is ochre. */
+  --cache-rate-yellow: #6e5b00;
+  --cache-rate-green: #00662a;
+  --cache-rate-tint: 22%;
+  --cache-rate-edge: 34%;
 }
 
 * { box-sizing: border-box; }

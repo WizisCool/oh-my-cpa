@@ -74,6 +74,81 @@ when it is above zero and `meta` when it is not, because "0 failures" is not a
 success worth painting green. Success rate thresholds: `100 → success`,
 `≥ 95 → warn`, `< 95 → danger`, no traffic → `neutral`.
 
+### Cache-rate scale
+
+The request list's cache-rate badge is the one continuous reading in the app:
+the value itself is a quality, so the badge paints it instead of bucketing it.
+`0%` yellow → `100%` green, with no thresholds and no steps. **Red is not on the
+scale**: a low hit rate is not a failure, and the danger hue is reserved for
+failed requests, so a weakly-cached request never reads as an error.
+
+| Token | Dark | Light | Role |
+| --- | --- | --- | --- |
+| `--cache-rate-yellow` | `#ffd60a` | `#6e5b00` | 0% stop |
+| `--cache-rate-green` | `#30d158` | `#00662a` | 100% stop |
+| `--cache-rate-tint` | `12%` | `22%` | badge fill = hue over `--bg` |
+| `--cache-rate-edge` | `32%` | `34%` | badge border = hue over `--bg` |
+
+Rules:
+
+1. **Interpolate in OKLCH**, via `color-mix(in oklch, …)`. Letting the browser
+   mix keeps the stops as design tokens instead of hex values baked into a
+   component, and OKLCH keeps the hue sweep even. The component never names a
+   colour: `cacheScale.ts` returns the two stops as `var()` references plus the
+   low stop's weight, and the CSS mixes them.
+2. **The stops are palette steps, not new colours.** The dark stops are the
+   semantic hues lightened until the 11px badge text clears **4.5:1** against the
+   badge's own tint; the light stops are the darker reading of the same hues
+   (the low end is ochre — a saturated yellow cannot also be legible on a light
+   page). Measured worst case across the ramp in the browser harness: **6.70:1**
+   dark, **4.69:1** light (asserted at ≥ 4.5:1 for every sampled rate, including
+   the row's hover state). The light fill is stronger than the dark one because
+   a light page needs more tint before the badge reads as a badge, which is why
+   the two values differ.
+3. **The top of the scale is presentation policy.** `100%` is not shown: the
+   badge stops at **99.9%** (`MAX_CACHE_RATE`; the Go dashboard aggregate caps
+   identically) so the app never claims a perfect hit rate. Readings carry **one
+   decimal**; a rate that rounds to zero reads as `0%`, never `0.0%`.
+4. **No data is not 0%.** A record with no token data gets the same badge shape
+   at the neutral step (`--muted`) with an em dash, never a zero: "nothing
+   cached" and "nothing measured" are different facts. The dashboard tile shows
+   the same em dash when the window carried no prompt tokens.
+5. The hue is redundant encoding — the percentage is printed in the badge — so
+   the ramp needs no legend and no colour-only reading.
+
+**Deferred: cache-write accounting.** A provider that accounts cache buckets
+separately (Anthropic-style) reports prompt tokens as `input + cache_read +
+cache_creation`, so its hit ratio currently reads high because the written
+tokens sit outside the denominator. Counting them needs evidence the app does
+not keep: CPA classifies each payload by provider/executor and emits a canonical
+breakdown, but the decoder persists only the raw counts, and the hourly/daily
+rollups carry no provider column, so a window cannot be split by convention.
+Fixing it means persisting the breakdown (or per-convention token columns in the
+rollup) before any arithmetic change. Until then the ratio is a bounded estimate
+for cache-writing providers, and the request list is exact only for providers
+whose input already includes the cached prefix.
+
+### Caller-key display mask
+
+The request list's Key column and the caller-key facet show a mask, never the
+key. The shape is a short head, a fixed bullet run, and a short tail:
+`sk-1234••••••••7890`. A key too short for edges to identify it is masked
+completely (`••••••••`) — exposing four of an eight-character key would give
+away half the secret while still failing to name it, so short keys are
+intentionally indistinguishable from one another. The filler is a constant
+length, so the mask never reveals the secret's length.
+
+- **Identity is the fingerprint.** Grouping, filtering and deduplication use the
+  keyed HMAC (`api_group_key`), which is also what the detail drawer shows. The
+  mask exists only for a human reading the list.
+- **Legacy masks are converted on read.** Rows ingested before the filler
+  changed still carry `xxxxxxx`; the list, detail and facet projections
+  normalize the filler and keep the visible edges. Nothing reconstructs a
+  secret, and a missing mask stays missing.
+- **Shape checking is not a security boundary.** A credential can contain the
+  filler, so `IsMask` only stops an obviously unmasked value from being written
+  to a display column; provenance comes from masking at ingestion.
+
 ## 3. Typography
 
 ```text
@@ -334,6 +409,8 @@ no-blank rule still applies — fall back to a static loading state.
 
 ## 8. Checklist for new UI
 - [ ] Colors only via `palette` / CSS vars; semantic colors carry meaning
+- [ ] A continuous scale (cache rate) reads from its own tokens, never a
+      per-component hex, and stays ≥ 4.5:1 against its own badge fill
 - [ ] No shadows, no gradients, 4px radius
 - [ ] Mono font inherited (never set a new font-family)
 - [ ] One page title; subtitles only with live data; no zh/en duplication
