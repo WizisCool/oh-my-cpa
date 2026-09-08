@@ -30,6 +30,7 @@ const records = Array.from({ length: 1100 }, (_, index) => ({
   auth_type: index === 3 ? 'api_key' : 'oauth',
   api_group_key: 'hmac:9f2a4c87b11e285daa03',
   api_group_label: 'api_key',
+  user_agent: index % 10 === 0 ? undefined : 'codex-cli/0.46',
   executor_type: 'responses',
   failed: index % 7 === 0,
   generate: true,
@@ -265,6 +266,35 @@ try {
     (await page.locator('.req-th-tps').innerText()).includes('TPS') &&
       (await page.locator('.req-col-tps').first().innerText()).includes('t/s'),
   );
+  const firstResultText = await page.locator('.req-col-result').first().innerText();
+  check(
+    'result column renders a success/failed capsule with text',
+    (await page.locator('.req-th-result').innerText()).includes('结果') &&
+      ['成功', '失败'].some((label) => firstResultText.includes(label)),
+  );
+  check(
+    'result capsule tone matches the stored failed flag',
+    await page.locator('.request-row').first().evaluate((row) => {
+      const pill = row.querySelector('.req-result-pill');
+      if (!pill) return false;
+      // Fixture record 0 is a failed request (index % 7 === 0).
+      return pill.classList.contains('is-failed') && pill.textContent?.includes('失败');
+    }),
+  );
+  check(
+    'Key column renders the masked caller key',
+    (await page.locator('.req-th-key').innerText()).trim().length > 0 &&
+      (await page.locator('.req-col-key').first().innerText()).includes('API Key · 9f2a4c87b11e'),
+  );
+  check(
+    'UA column renders the minimized client label',
+    (await page.locator('.req-th-ua').innerText()).trim().length > 0 &&
+      (await page.locator('.req-col-ua').nth(1).innerText()).includes('codex-cli/0.46'),
+  );
+  check(
+    'records without a user agent read as an em dash',
+    (await page.locator('.req-col-ua').first().innerText()).trim() === '—',
+  );
 
   // Column resize & persistence testing
   const providerTh = page.locator('.req-th-provider');
@@ -297,7 +327,7 @@ try {
   // Header/row column boundaries must agree, and long names must not push the
   // last column out of the table region.
   const alignment = await page.evaluate(() => {
-    const ids = ['time', 'provider', 'model', 'latency', 'tps', 'tokens', 'cache', 'executor'];
+    const ids = ['time', 'result', 'provider', 'model', 'latency', 'tps', 'tokens', 'cache', 'executor', 'key', 'ua'];
     const row = document.querySelector('.request-row');
     return ids.map((id) => {
       const th = document.querySelector(`.req-th-${id}`);
@@ -593,7 +623,7 @@ try {
     .allInnerTexts()).map((label) => label.toLowerCase());
   check(
     'mobile cards label every metric column',
-    ['tps', 'token', '缓存率', '执行器'].every((needle) =>
+    ['结果', 'tps', 'token', '缓存率', '执行器', 'key', 'ua'].every((needle) =>
       mobileLabels.some((label) => label.includes(needle)),
     ),
   );

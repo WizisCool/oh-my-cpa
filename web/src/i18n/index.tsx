@@ -1001,6 +1001,8 @@ const DICT: Record<string, [string, string]> = {
   'events.col_tokens': ['Token 消耗', 'Tokens'],
   'events.col_cache_rate': ['缓存率', 'Cache Rate'],
   'events.col_executor': ['执行器', 'Executor'],
+  'events.col_key': ['Key', 'Key'],
+  'events.col_ua': ['UA', 'UA'],
   'events.col_resizer': ['调整列宽 (可双击重置)', 'Resize column (double-click to reset)'],
   'events.reset_columns': ['恢复默认列宽', 'Reset Columns'],
   'events.col_request_id': ['Request ID', 'Request ID'],

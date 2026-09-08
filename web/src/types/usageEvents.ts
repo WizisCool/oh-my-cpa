@@ -26,6 +26,8 @@ export interface UsageEvent {
   auth_index?: string;
   api_group_key?: string;
   api_group_label?: string;
+  /** Client product label, redacted and shortened on the persistence path. */
+  user_agent?: string | null;
   source?: string;
   model: string;
   model_alias?: string;
@@ -67,7 +69,6 @@ export interface UsageEventDetail {
     endpoint?: string;
     client_ip?: string | null;
     x_forwarded_for?: string | null;
-    user_agent?: string | null;
   };
   related_errors?: UsageEventRelatedError[];
   partial_errors?: string[];

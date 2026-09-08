@@ -7,6 +7,9 @@ import {
   requestGroupName,
   eventPageMetrics,
   formatEventDuration,
+  eventKeyLabel,
+  eventResultLabelKey,
+  eventUserAgentLabel,
   USAGE_EVENTS_VIEW_PREFERENCE,
   DEFAULT_USAGE_EVENTS_VIEW,
   parseUsageEventsView,
@@ -104,6 +107,43 @@ assert.equal(
 );
 assert.equal(requestGroupName({ ...event, api_group_label: 'provider', api_group_key: 'openai' }), 'openai');
 assert.equal(requestGroupName({ ...event, api_group_key: 'unknown' }), undefined);
+
+// List-row labels: result capsule, UA column and Key column
+assert.equal(eventResultLabelKey({ failed: false }), 'events.filter_success');
+assert.equal(eventResultLabelKey({ failed: true }), 'events.filter_failed');
+assert.equal(eventUserAgentLabel({ user_agent: 'codex-cli/0.46' }), 'codex-cli/0.46');
+assert.equal(eventUserAgentLabel({ user_agent: '  ' }), '—');
+assert.equal(eventUserAgentLabel({}), '—');
+assert.equal(eventUserAgentLabel({ user_agent: null }), '—');
+// A minimized-but-long label is shown verbatim; the column ellipsizes visually
+const longUA = 'some-client/1.2.3-' + 'x'.repeat(100);
+assert.equal(eventUserAgentLabel({ user_agent: longUA }), longUA);
+// Key falls back from the masked API-key group to the caller fingerprint
+assert.equal(
+  eventKeyLabel({ ...event, api_group_label: 'api_key', api_group_key: 'hmac:12345678901234567890' }),
+  'API Key · 123456789012…',
+);
+// A provider or endpoint group is NOT a caller key: the column must never show
+// the provider name or the upstream URL as if it were one.
+assert.equal(
+  eventKeyLabel({ ...event, api_group_label: 'provider', api_group_key: 'openai' }),
+  'original.json',
+);
+assert.equal(
+  eventKeyLabel({ ...event, api_group_label: 'endpoint', api_group_key: 'https://relay.example/v1' }),
+  'original.json',
+);
+assert.equal(
+  eventKeyLabel({ ...event, api_group_label: 'provider', api_group_key: 'openai', source: '' }),
+  '—',
+);
+assert.equal(
+  eventKeyLabel({ ...event, api_group_label: 'endpoint', api_group_key: 'https://relay.example/v1', source: undefined }),
+  '—',
+);
+assert.equal(eventKeyLabel({ ...event, api_group_key: 'unknown', source: 'hmac:source-fingerprint' }), 'hmac:source-fingerprint');
+assert.equal(eventKeyLabel({ ...event, api_group_key: 'unknown', source: '' }), '—');
+assert.equal(eventKeyLabel({ ...event, api_group_key: '', source: undefined }), '—');
 console.log(
   'PASS credential provenance: current vs linked resources, provider mismatch, ambiguity, fingerprints, API group categories',
 );
@@ -328,7 +368,7 @@ console.log('PASS tokens per second (TPS): TTFT-aware generation speed, fallback
 
 // Request columns tests
 assert.equal(USAGE_EVENTS_COLUMNS_PREFERENCE, 'usage_events_columns');
-assert.equal(REQUEST_COLUMNS.length, 8);
+assert.equal(REQUEST_COLUMNS.length, 11);
 
 // Sanitization & clamping
 assert.deepEqual(parseUsageEventsColumns(null), {});
@@ -347,10 +387,12 @@ assert.equal(parsedWidths.provider, 460);
 assert.equal(parsedWidths.model, 210);
 assert.equal(parsedWidths.latency, 85);
 
-// buildGridTemplateColumns: adaptive defaults with fr for provider and model
+// buildGridTemplateColumns: adaptive defaults with fr for provider, model, key and ua
 const defaultGrid = buildGridTemplateColumns({});
 assert.ok(defaultGrid.includes('minmax(118px, 1.3fr)'));
 assert.ok(defaultGrid.includes('minmax(108px, 1.2fr)'));
+assert.ok(defaultGrid.includes('minmax(92px, 0.6fr)'));
+assert.ok(defaultGrid.includes('minmax(88px, 0.6fr)'));
 assert.ok(defaultGrid.endsWith('14px')); // chevron track
 
 // Manual overrides lock specified tracks to exact px
@@ -359,13 +401,13 @@ assert.ok(manualGrid.includes('250px'));
 assert.ok(manualGrid.includes('200px'));
 assert.ok(manualGrid.endsWith('14px'));
 
-// computeGridMinWidth: fixed defaults + flexible mins + 8 gaps + inline padding
-// 100 + 118 + 108 + 76 + 82 + 122 + 64 + 92 + 14 = 776; gaps 8*12 = 96; padding 24
-assert.equal(computeGridMinWidth({}), 776 + 96 + 24);
+// computeGridMinWidth: fixed defaults + flexible mins + 11 gaps + inline padding
+// 100 + 92 + 118 + 108 + 76 + 82 + 122 + 64 + 92 + 92 + 88 + 14 = 1048; gaps 11*12 = 132; padding 24
+assert.equal(computeGridMinWidth({}), 1048 + 132 + 24);
 // A manual override replaces the flexible minimum with the requested width
-assert.equal(computeGridMinWidth({ provider: 300 }), 776 - 118 + 300 + 96 + 24);
+assert.equal(computeGridMinWidth({ provider: 300 }), 1048 - 118 + 300 + 132 + 24);
 // Out-of-range overrides are clamped exactly as the template builder clamps them
-assert.equal(computeGridMinWidth({ provider: 9999 }), 776 - 118 + 460 + 96 + 24);
+assert.equal(computeGridMinWidth({ provider: 9999 }), 1048 - 118 + 460 + 132 + 24);
 assert.ok(computeGridMinWidth({}, 8, 12) < computeGridMinWidth({}, 12, 12));
 
 console.log(

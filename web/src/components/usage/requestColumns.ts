@@ -1,12 +1,15 @@
 export type RequestColumnId =
   | 'time'
+  | 'result'
   | 'provider'
   | 'model'
   | 'latency'
   | 'tps'
   | 'tokens'
   | 'cache'
-  | 'executor';
+  | 'executor'
+  | 'key'
+  | 'ua';
 
 export interface RequestColumnDefinition {
   id: RequestColumnId;
@@ -27,6 +30,16 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     defaultWidth: 100,
     minWidth: 92,
     maxWidth: 220,
+    flexGrow: 0,
+    resizable: true,
+  },
+  {
+    id: 'result',
+    labelKey: 'events.col_result',
+    align: 'left',
+    defaultWidth: 92,
+    minWidth: 80,
+    maxWidth: 140,
     flexGrow: 0,
     resizable: true,
   },
@@ -100,6 +113,26 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     flexGrow: 0,
     resizable: true,
   },
+  {
+    id: 'key',
+    labelKey: 'events.col_key',
+    align: 'left',
+    defaultWidth: 120,
+    minWidth: 92,
+    maxWidth: 280,
+    flexGrow: 0.6,
+    resizable: true,
+  },
+  {
+    id: 'ua',
+    labelKey: 'events.col_ua',
+    align: 'left',
+    defaultWidth: 110,
+    minWidth: 88,
+    maxWidth: 260,
+    flexGrow: 0.6,
+    resizable: true,
+  },
 ] as const;
 
 export const CHEVRON_TRACK_WIDTH = 14;
@@ -135,7 +168,7 @@ export function parseUsageEventsColumns(raw: unknown): RequestColumnWidths {
 
 /**
  * buildGridTemplateColumns constructs the CSS grid-template-columns specification
- * for the 8 data columns plus the fixed action chevron track.
+ * for the 11 data columns plus the fixed action chevron track.
  * If a column has a manual override, it renders as a fixed pixel track (e.g. 210px).
  * If no override exists and flexGrow > 0, it renders as minmax(minWidth, flexGrow fr) for adaptive sizing.
  * If no override exists and flexGrow === 0, it renders as defaultWidth px.
@@ -180,6 +213,6 @@ export function computeGridMinWidth(
     }
     return sum + (col.flexGrow > 0 ? col.minWidth : col.defaultWidth);
   }, CHEVRON_TRACK_WIDTH);
-  const gaps = REQUEST_COLUMNS.length * gap; // 8 gaps between 9 tracks
+  const gaps = REQUEST_COLUMNS.length * gap; // 11 gaps between 12 tracks
   return Math.round(total + gaps + paddingInline * 2);
 }

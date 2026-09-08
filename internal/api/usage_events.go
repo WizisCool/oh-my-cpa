@@ -17,9 +17,11 @@ import (
 
 // usageEventResponse trims a stored row into what the browser needs.
 //
-// The detail table intentionally keeps client IP, forwarded-for and user agent
-// for operator diagnosis, but list payloads never carry them: an identity
-// listing should not leak who called from where.
+// The detail table keeps client IP, forwarded-for and the full endpoint for
+// operator diagnosis; list payloads still never carry those. The user agent is
+// the one network field the list does expose: it is stored already reduced to a
+// short redacted product label (security.MinimizeUserAgent on the persistence
+// path), so it names the calling client without carrying the raw header.
 type usageEventResponse struct {
 	ID                  int64  `json:"id"`
 	EventKey            string `json:"event_key"`
@@ -33,6 +35,7 @@ type usageEventResponse struct {
 	APIGroupKey         string `json:"api_group_key,omitempty"`
 	APIGroupLabel       string `json:"api_group_label,omitempty"`
 	Source              string `json:"source,omitempty"`
+	UserAgent           string `json:"user_agent,omitempty"`
 	Model               string `json:"model"`
 	ModelAlias          string `json:"model_alias,omitempty"`
 	ReasoningEffort     string `json:"reasoning_effort,omitempty"`
@@ -69,6 +72,9 @@ func projectUsageEvent(row repository.UsageEventRow) usageEventResponse {
 	item.APIGroupKey = row.APIGroupKey
 	item.APIGroupLabel = row.APIGroupLabel
 	item.Source = row.Source
+	if row.UserAgent != nil {
+		item.UserAgent = *row.UserAgent
+	}
 	item.Model = row.Model
 	item.ReasoningEffort = row.ReasoningEffort
 	item.ServiceTier = row.ServiceTier

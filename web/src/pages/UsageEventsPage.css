@@ -76,10 +76,10 @@
 .request-stream {
   container-type: inline-size;
   container-name: reqstream;
-  --req-grid-columns: 100px minmax(118px, 1.3fr) minmax(108px, 1.2fr) 76px 82px 122px 64px 92px 14px;
+  --req-grid-columns: 100px 92px minmax(118px, 1.3fr) minmax(108px, 1.2fr) 76px 82px 122px 64px 92px minmax(92px, 0.6fr) minmax(88px, 0.6fr) 14px;
   --req-grid-gap: 12px;
   --req-pad-inline: 12px;
-  --req-min-width: 896px;
+  --req-min-width: 1204px;
   flex: 1;
   min-height: 310px;
   display: flex;
@@ -114,7 +114,7 @@
 .request-list-host {
   flex: 1;
   min-height: 240px;
-  min-width: calc(var(--req-min-width, 896px) + var(--req-gutter, 0px));
+  min-width: calc(var(--req-min-width, 1204px) + var(--req-gutter, 0px));
   overflow: hidden;
   position: relative;
 }
@@ -172,7 +172,7 @@
   user-select: none;
   flex-shrink: 0;
   width: 100%;
-  min-width: calc(var(--req-min-width, 896px) + var(--req-gutter, 0px));
+  min-width: calc(var(--req-min-width, 1204px) + var(--req-gutter, 0px));
 }
 
 .req-th {
@@ -236,9 +236,12 @@
 }
 
 .req-th-time,
+.req-th-result,
 .req-th-provider,
 .req-th-model,
-.req-th-executor {
+.req-th-executor,
+.req-th-key,
+.req-th-ua {
   justify-content: flex-start;
   text-align: left;
 }
@@ -261,7 +264,7 @@
 
 .request-row {
   width: 100%;
-  min-width: var(--req-min-width, 896px);
+  min-width: var(--req-min-width, 1204px);
   display: grid;
   grid-template-columns: var(--req-grid-columns);
   align-items: center;
@@ -295,25 +298,6 @@
 .req-col-time {
   gap: 3px;
 }
-.req-time-primary {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.req-status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.req-status-dot.is-success {
-  background: #10b981;
-  box-shadow: 0 0 5px rgba(16, 185, 129, 0.45);
-}
-.req-status-dot.is-failed {
-  background: #ef4444;
-  box-shadow: 0 0 5px rgba(239, 68, 68, 0.45);
-}
 .req-time-text {
   font-size: 12px;
   font-weight: 500;
@@ -329,7 +313,40 @@
   white-space: nowrap;
 }
 
-/* Column 2: Provider & Credential */
+/* Column 2: Result (success/failed pill) */
+.req-col-result {
+  align-items: flex-start;
+  justify-content: center;
+}
+.req-result-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 9999px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.req-result-pill.is-success {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.req-result-pill.is-failed {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.req-result-bullet {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* Column 3: Provider & Credential */
 .req-col-provider {
   display: flex;
   flex-direction: row;
@@ -390,7 +407,7 @@
   white-space: nowrap;
 }
 
-/* Column 3: Model [Reasoning Effort] */
+/* Column 4: Model [Reasoning Effort] */
 .req-col-model {
   gap: 2px;
 }
@@ -436,7 +453,7 @@
   white-space: nowrap;
 }
 
-/* Column 4: Latency */
+/* Column 5: Latency */
 .req-col-latency {
   align-items: flex-end;
   text-align: right;
@@ -454,7 +471,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Column 5: TPS (Generation Speed) */
+/* Column 6: TPS (Generation Speed) */
 .req-col-tps {
   align-items: flex-end;
   text-align: right;
@@ -474,7 +491,7 @@
   text-align: right;
 }
 
-/* Column 5: Tokens */
+/* Column 6: Tokens */
 .req-col-tokens {
   align-items: flex-end;
   text-align: right;
@@ -509,7 +526,7 @@
   font-weight: 500;
 }
 
-/* Column 6: Cache Rate */
+/* Column 8: Cache Rate */
 .req-col-cache {
   align-items: flex-end;
   text-align: right;
@@ -553,7 +570,7 @@
   text-align: right;
 }
 
-/* Column 7: Executor */
+/* Column 9: Executor */
 .req-col-executor {
   align-items: flex-start;
   gap: 3px;
@@ -573,6 +590,36 @@
 }
 .req-caller-sub {
   font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* Column 10: Key (caller key / group label) */
+.req-col-key {
+  align-items: flex-start;
+  gap: 3px;
+}
+.req-key-val {
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-mono, monospace);
+  color: var(--fg-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* Column 11: UA (ingestion-minimized client product label) */
+.req-col-ua {
+  align-items: flex-start;
+}
+.req-ua-val {
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;

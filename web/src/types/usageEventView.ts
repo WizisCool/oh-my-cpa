@@ -441,3 +441,33 @@ export function requestGroupName(event: UsageEvent): string | undefined {
   }
   return key;
 }
+
+/** Result-capsule label key for one record: the stored failed flag is the only
+ *  success signal, so the capsule can never disagree with the filter counts. */
+export function eventResultLabelKey(event: Pick<UsageEvent, 'failed'>): string {
+  return event.failed ? 'events.filter_failed' : 'events.filter_success';
+}
+
+/** The client label for the list's UA column. The stored value is the one the
+ *  ingestion/persistence path already reduced to a short product label, so the
+ *  list shows it verbatim; a record captured without one reads as an em dash. */
+export function eventUserAgentLabel(event: Pick<UsageEvent, 'user_agent'>): string {
+  const value = event.user_agent?.trim();
+  return value || '—';
+}
+
+/** The caller key for the list's Key column.
+ *
+ *  Only an `api_key` group is a caller key; `provider` and `endpoint` groups
+ *  carry a provider name or a public URL instead, so they fall through to the
+ *  source fingerprint rather than mislabeling a provider as a key. Both values
+ *  are stored in safe form (fingerprint or public endpoint), so no raw secret
+ *  can surface. */
+export function eventKeyLabel(event: UsageEvent): string {
+  const category = event.api_group_label?.trim().toLowerCase();
+  const key = event.api_group_key?.trim();
+  if (key && key !== 'unknown' && (category === 'api_key' || category === 'apikey')) {
+    return `API Key · ${key.startsWith('hmac:') ? `${key.slice(5, 17)}…` : key}`;
+  }
+  return event.source?.trim() || '—';
+}

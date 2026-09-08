@@ -658,9 +658,10 @@ func TestUsageEventsListFilterAndCursor(t *testing.T) {
 	}
 }
 
-// The list view is an identity surface: it names who called and what it cost,
-// but the client IP, forwarded-for chain, user agent and full endpoint stay in
-// the single-record detail where diagnosis actually needs them.
+// The list view is an identity surface: it names who called and what it cost.
+// Client IP, the forwarded-for chain and the full endpoint stay in the
+// single-record detail where diagnosis actually needs them. The user agent is
+// list-safe because ingestion minimizes it to a product label before storage.
 func TestUsageEventListOmitsDiagnosticFields(t *testing.T) {
 	client, baseURL, repo := startDashboardTestServer(t, nil)
 	now := time.Now().UTC()
@@ -668,7 +669,7 @@ func TestUsageEventListOmitsDiagnosticFields(t *testing.T) {
 	event.Endpoint = "https://internal-relay.example.internal/v1/responses"
 	clientIP := "192.0.2.44"
 	forwarded := "203.0.113.9"
-	agent := "secret-client/9.9"
+	agent := "secret-client/9.9 (fixture)"
 	event.ClientIP = &clientIP
 	event.XForwardedFor = &forwarded
 	event.UserAgent = &agent
@@ -679,7 +680,7 @@ func TestUsageEventListOmitsDiagnosticFields(t *testing.T) {
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d body %s", response.StatusCode, payload)
 	}
-	for _, forbidden := range []string{"client_ip", "x_forwarded_for", "user_agent", "endpoint", "192.0.2.", "203.0.113.", "secret-client", "internal-relay"} {
+	for _, forbidden := range []string{"client_ip", "x_forwarded_for", "endpoint", "192.0.2.", "203.0.113.", "internal-relay"} {
 		if strings.Contains(string(payload), forbidden) {
 			t.Fatalf("list payload leaked diagnostic field %q: %s", forbidden, payload)
 		}
@@ -699,6 +700,11 @@ func TestUsageEventListOmitsDiagnosticFields(t *testing.T) {
 		if _, ok := list.Items[0][required]; !ok {
 			t.Fatalf("list payload dropped identity field %q", required)
 		}
+	}
+	// The user agent is allowed on the list, but only in its minimized
+	// product-label form: the diagnostic suffix must have been stripped.
+	if got := list.Items[0]["user_agent"]; got != "secret-client/9.9" {
+		t.Fatalf("list user_agent = %v, want minimized product label", got)
 	}
 
 	// The same record on the detail view keeps diagnosis data behind one id.
