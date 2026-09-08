@@ -117,7 +117,7 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     id: 'key',
     labelKey: 'events.col_key',
     align: 'left',
-    // Wide enough for the stored display mask (sk-12345xxxxxxx7890, 19 chars):
+    // Wide enough for the stored display mask (sk-12345••••••••7890, 20 chars):
     // truncating the tail would hide the part that tells two keys apart, so the
     // minimum is the width the mask needs rather than a squeeze point.
     defaultWidth: 145,

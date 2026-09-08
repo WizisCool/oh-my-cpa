@@ -27,6 +27,7 @@ import {
   computeGridMinWidth,
 } from '../web/src/components/usage/requestColumns.ts';
 import { usageEventParams, type UsageEvent } from '../web/src/types/usageEvents.ts';
+import { cacheScaleMix, formatCacheRate, MAX_CACHE_RATE } from '../web/src/theme/cacheScale.ts';
 
 const read = (input: string) => readEventQuery(new URLSearchParams(input));
 assert.deepEqual(read(''), { preset: '1h', result: 'all', limit: 100 });
@@ -107,9 +108,9 @@ assert.equal(
     ...event,
     api_group_label: 'api_key',
     api_group_key: 'hmac:12345678901234567890',
-    api_key_mask: 'sk-12345xxxxxxx7890',
+    api_key_mask: 'sk-12345••••••••7890',
   }),
-  'sk-12345xxxxxxx7890',
+  'sk-12345••••••••7890',
 );
 // The stored group key is a fingerprint, which is not a readable key: a record
 // ingested before the mask column existed resolves to nothing.
@@ -136,10 +137,13 @@ assert.equal(
     ...event,
     api_group_label: 'api_key',
     api_group_key: 'hmac:12345678901234567890',
-    api_key_mask: 'sk-12345xxxxxxx7890',
+    api_key_mask: 'sk-12345••••••••7890',
   }),
-  'sk-12345xxxxxxx7890',
+  'sk-12345••••••••7890',
 );
+// A short key is masked completely rather than shown with readable edges, so
+// the column never exposes most of a small secret.
+assert.equal(eventKeyLabel({ ...event, api_group_label: 'api_key', api_key_mask: '••••••••' }), '••••••••');
 // No mask means the key was never retained, so the column stays honest.
 assert.equal(
   eventKeyLabel({ ...event, api_group_label: 'api_key', api_group_key: 'hmac:12345678901234567890' }),
@@ -175,7 +179,7 @@ assert.equal(eventKeyLabel({ ...event, api_group_key: '', source: undefined }), 
 
 // Filter dropdown labels: the caller-key facet shows its mask, every other
 // facet keeps showing the stored value.
-assert.equal(usageFacetLabel({ value: 'hmac:12345678901234567890', requests: 3, mask: 'sk-12345xxxxxxx7890' }), 'sk-12345xxxxxxx7890 (3)');
+assert.equal(usageFacetLabel({ value: 'hmac:12345678901234567890', requests: 3, mask: 'sk-12345••••••••7890' }), 'sk-12345••••••••7890 (3)');
 assert.equal(usageFacetLabel({ value: 'hmac:12345678901234567890', requests: 3 }), 'hmac:12345678901234567890 (3)');
 assert.equal(usageFacetLabel({ value: 'gpt-5.4', requests: 7, mask: '   ' }), 'gpt-5.4 (7)');
 console.log(
@@ -274,25 +278,76 @@ assert.equal(hasExplicitEventQuery(new URLSearchParams('request_id=abc')), true)
 
 console.log('PASS usage event view preference: parsing, validation, field whitelisting, URL precedence helpers');
 
-// Cache rate tests
-assert.equal(eventCacheRate(undefined).formatted, '—');
-assert.equal(eventCacheRate({ input: 0, output: 0, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0, total: 0 }).formatted, '0%');
+// Cache rate tests. The reading is formatted by cacheScale.formatCacheRate, so
+// these assert the computed rate and the rendered string together.
+const cacheShown = (tokens: UsageEvent['tokens']) => formatCacheRate(eventCacheRate(tokens).rate);
+assert.equal(eventCacheRate(undefined).hasData, false);
+assert.equal(cacheShown({ input: 0, output: 0, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0, total: 0 }), '0%');
 // OpenAI style: input=1000, cache_read=800 -> 80%
-assert.equal(
-  eventCacheRate({ input: 1000, output: 100, reasoning: 0, cached: 0, cache_read: 800, cache_creation: 0, total: 1100 }).formatted,
-  '80%',
-);
+assert.equal(cacheShown({ input: 1000, output: 100, reasoning: 0, cached: 0, cache_read: 800, cache_creation: 0, total: 1100 }), '80.0%');
 // Anthropic style: input=200, cache_read=800 -> denominator=1000, 80%
-assert.equal(
-  eventCacheRate({ input: 200, output: 100, reasoning: 0, cached: 0, cache_read: 800, cache_creation: 0, total: 1100 }).formatted,
-  '80%',
-);
+assert.equal(cacheShown({ input: 200, output: 100, reasoning: 0, cached: 0, cache_read: 800, cache_creation: 0, total: 1100 }), '80.0%');
 // Fallback cached tokens
-assert.equal(
-  eventCacheRate({ input: 1000, output: 100, reasoning: 0, cached: 500, cache_read: 0, cache_creation: 0, total: 1100 }).formatted,
-  '50%',
-);
-console.log('PASS cache rate calculation: OpenAI vs Anthropic conventions, fallback handling, edge boundaries');
+assert.equal(cacheShown({ input: 1000, output: 100, reasoning: 0, cached: 500, cache_read: 0, cache_creation: 0, total: 1100 }), '50.0%');
+// Cache writes are deliberately outside the denominator: the persisted row
+// carries no canonical breakdown proving which accounting convention produced
+// its raw counts, so 1000/(200+1000) = 83.3% is what is shown today. Making
+// writes count is deferred until that evidence exists.
+assert.equal(cacheShown({ input: 200, output: 300, reasoning: 0, cached: 0, cache_read: 1000, cache_creation: 500, total: 2000 }), '83.3%');
+// A whole-prompt hit is not shown: the cap holds the reading below 100%.
+assert.equal(cacheShown({ input: 1000, output: 100, reasoning: 0, cached: 0, cache_read: 1000, cache_creation: 0, total: 1100 }), '99.9%');
+assert.equal(cacheShown({ input: 0, output: 0, reasoning: 0, cached: 0, cache_read: 1000, cache_creation: 0, total: 1000 }), '99.9%');
+console.log('PASS cache rate calculation: OpenAI vs Anthropic conventions, cache writes, cap, fallback handling, edge boundaries');
+
+// The badge paints a continuous scale, so the numeric rate must keep its
+// fraction while the printed reading stays rounded to one decimal.
+const third = eventCacheRate({ input: 3, output: 0, reasoning: 0, cached: 0, cache_read: 1, cache_creation: 0, total: 3 });
+assert.ok(Math.abs(third.rate - 100 / 3) < 1e-9, `fractional rate kept: ${third.rate}`);
+assert.equal(formatCacheRate(third.rate), '33.3%');
+const almost = eventCacheRate({ input: 2000, output: 0, reasoning: 0, cached: 0, cache_read: 1999, cache_creation: 0, total: 2000 });
+assert.equal(almost.rate, 99.95);
+assert.equal(formatCacheRate(almost.rate), '99.9%');
+assert.equal(eventCacheRate(undefined).rate, 0);
+assert.equal(eventCacheRate({ input: 0, output: 0, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0, total: 0 }).rate, 0);
+// One decimal, and a rate that rounds to zero reads as plain 0%.
+assert.equal(formatCacheRate(0), '0%');
+assert.equal(formatCacheRate(0.04), '0%');
+assert.equal(formatCacheRate(0.06), '0.1%');
+assert.equal(formatCacheRate(47.63), '47.6%');
+assert.equal(formatCacheRate(99.94), '99.9%');
+assert.equal(formatCacheRate(99.95), '99.9%');
+assert.equal(formatCacheRate(100), '99.9%');
+assert.equal(formatCacheRate(Number.NaN), '0%');
+// A window with no prompt tokens at all is a dash, never a zero.
+assert.equal(formatCacheRate(null), '—');
+assert.equal(formatCacheRate(undefined), '—');
+assert.equal(MAX_CACHE_RATE, 99.9);
+console.log('PASS cache rate reading: unrounded rate for the colour scale, one decimal and the <100% presentation cap for the badge');
+
+// Cache-rate colour scale: two stops, 0% yellow → 100% green, no red.
+const YELLOW = 'var(--cache-rate-yellow)';
+const GREEN = 'var(--cache-rate-green)';
+assert.deepEqual(cacheScaleMix(0), { from: YELLOW, to: GREEN, fromShare: '100%' });
+assert.deepEqual(cacheScaleMix(50), { from: YELLOW, to: GREEN, fromShare: '50%' });
+assert.deepEqual(cacheScaleMix(100), { from: YELLOW, to: GREEN, fromShare: '0%' });
+// Fractional rates must land between the stops instead of snapping to one.
+assert.deepEqual(cacheScaleMix(0.5), { from: YELLOW, to: GREEN, fromShare: '99.5%' });
+assert.deepEqual(cacheScaleMix(12.5), { from: YELLOW, to: GREEN, fromShare: '87.5%' });
+assert.deepEqual(cacheScaleMix(99.5), { from: YELLOW, to: GREEN, fromShare: '0.5%' });
+// Clamping: the scale is defined on 0..100 only, and a non-finite rate is the
+// safe (yellow) end rather than a broken custom property.
+assert.deepEqual(cacheScaleMix(-10), cacheScaleMix(0));
+assert.deepEqual(cacheScaleMix(140), cacheScaleMix(100));
+assert.deepEqual(cacheScaleMix(Number.NaN), cacheScaleMix(0));
+assert.deepEqual(cacheScaleMix(Number.POSITIVE_INFINITY), cacheScaleMix(100));
+assert.deepEqual(cacheScaleMix(Number.NEGATIVE_INFINITY), cacheScaleMix(0));
+// The weight of the low stop decreases monotonically, so the rendered hue
+// sweeps yellow → green without reversing.
+const weights = [0, 10, 25, 50, 75, 90, 100].map((rate) => Number.parseFloat(cacheScaleMix(rate).fromShare));
+assert.ok(weights.every((weight, index) => index === 0 || weight < weights[index - 1]), `monotonic yellow→green: ${weights}`);
+// Red must never appear on the scale: a low hit rate is not a failure.
+assert.ok([0, 25, 50, 75, 100].every((rate) => !cacheScaleMix(rate).from.includes('red') && !cacheScaleMix(rate).to.includes('red')));
+console.log('PASS cache-rate scale: two-stop yellow→green, weight, fractional rates, clamping, monotonic sweep, no red');
 
 // Provider info resolution tests
 const credFiles = indexCredentialFiles([

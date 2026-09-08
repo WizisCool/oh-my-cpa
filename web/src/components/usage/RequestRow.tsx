@@ -4,6 +4,7 @@ import { RightOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { LobeIcon, getProviderDefaultIcon } from '../LobeIcon';
 import { useT } from '../../i18n';
+import { cacheScaleMix, formatCacheRate } from '../../theme/cacheScale';
 import type { UsageEvent } from '../../types/usageEvents';
 import {
   eventCacheRate,
@@ -44,8 +45,19 @@ export const RequestRow = React.memo<RequestRowProps>(
       getProviderDefaultIcon,
     );
 
-    // 2. Cache rate calculation
+    // 2. Cache rate calculation, plus its stop on the 0–100% colour scale.
+    //    The scale stops are design tokens; the badge mixes them in OKLCH via
+    //    CSS, so no colour is named here (docs/design.md §2).
     const cache = eventCacheRate(event.tokens);
+    const cacheLabel = cache.hasData ? formatCacheRate(cache.rate) : '—';
+    const cacheScale = cacheScaleMix(cache.rate);
+    const cacheScaleStyle = cache.hasData
+      ? ({
+          '--cache-rate-from': cacheScale.from,
+          '--cache-rate-to': cacheScale.to,
+          '--cache-rate-from-share': cacheScale.fromShare,
+        } as React.CSSProperties)
+      : undefined;
 
     // 3. Tokens Per Second (TPS) calculation
     const tpsInfo = eventTokensPerSecond(event);
@@ -175,7 +187,9 @@ export const RequestRow = React.memo<RequestRowProps>(
           )}
         </div>
 
-        {/* Column 7: Token（总数，输入，输出，推理） */}
+        {/* Column 7: Token（总数，输入，输出）
+            Reasoning tokens are dropped from the list to keep this cell on one
+            line; the detail drawer keeps the full breakdown. */}
         <div className="req-col req-col-tokens">
           <span className="req-mobile-label">{t('events.col_tokens')}</span>
           <div className="req-tokens-total">
@@ -189,37 +203,40 @@ export const RequestRow = React.memo<RequestRowProps>(
             <span title={`输出 Tokens: ${event.tokens.output.toLocaleString()}`}>
               ↓ {event.tokens.output.toLocaleString()}
             </span>
-            {event.tokens.reasoning > 0 && (
-              <span
-                className="req-tokens-reasoning"
-                title={`推理 Tokens: ${event.tokens.reasoning.toLocaleString()}`}
-              >
-                🧠 {event.tokens.reasoning.toLocaleString()}
-              </span>
-            )}
           </div>
         </div>
 
         {/* Column 8: 缓存率 */}
         <div className="req-col req-col-cache">
           <span className="req-mobile-label">{t('events.col_cache_rate')}</span>
-          {cache.hasData && cache.cached > 0 ? (
-            <Tooltip
-              title={`缓存命中率: ${cache.formatted} (命中 ${cache.cached.toLocaleString()} 缓存 Tokens)`}
-            >
-              <div className="req-cache-hit">
-                <span className="req-cache-pill">
-                  <i className="req-cache-bullet" />
-                  {cache.formatted}
+          <Tooltip
+            title={
+              cache.hasData
+                ? t('events.cache_rate_tooltip', {
+                    rate: cacheLabel,
+                    count: cache.cached.toLocaleString(),
+                  })
+                : t('events.cache_no_data')
+            }
+          >
+            <div className="req-cache-hit">
+              {/* One badge for every reading: 0% keeps the pill, the dot and the
+                  count line — it is a real value, not a missing one. Only the
+                  no-data case drops to the neutral stop. */}
+              <span
+                className={`req-cache-pill${cache.hasData ? '' : ' is-empty'}`}
+                style={cacheScaleStyle}
+              >
+                <i className="req-cache-bullet" />
+                {cacheLabel}
+              </span>
+              {cache.hasData && (
+                <span className="req-cache-count">
+                  {t('events.cache_hit_count', { count: cache.cached.toLocaleString() })}
                 </span>
-                <span className="req-cache-count">{cache.cached.toLocaleString()} hit</span>
-              </div>
-            </Tooltip>
-          ) : (
-            <span className="req-cache-none" title="无缓存命中">
-              0%
-            </span>
-          )}
+              )}
+            </div>
+          </Tooltip>
         </div>
 
         {/* Column 9: 执行器 */}

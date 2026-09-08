@@ -222,7 +222,6 @@ export const KNOWN_PROVIDER_ICONS: Record<string, string> = {
 
 export interface EventCacheRateResult {
   rate: number;
-  formatted: string;
   cached: number;
   hasData: boolean;
 }
@@ -230,17 +229,26 @@ export interface EventCacheRateResult {
 /**
  * eventCacheRate calculates the prompt cache hit percentage matching the dashboard's
  * cacheRateParts convention:
- * - OpenAI style: input tokens already includes cached prefix (cache_read <= input)
- * - Anthropic style: input tokens counts only new tokens, prompt = input + cache_read
- * Returns rate (0..100), formatted string (e.g. "85%" or "—" if no prompt data), and cached tokens.
+ * - OpenAI-style: input tokens already includes the cached prefix (cache_read <= input)
+ * - Anthropic-style: input tokens counts only new tokens, prompt = input + cache_read
+ * Returns the raw rate (0..100), the cached token count, and whether the record
+ * carried token data at all. Presentation (one decimal, the sub-100% cap, the em
+ * dash for no data) lives in theme/cacheScale.ts, which imports nothing so this
+ * module stays loadable on its own by the test harness.
+ *
+ * Cache-write tokens are deliberately not in the denominator. CPA reports them
+ * only for providers whose accounting treats cache buckets as separate from
+ * input, but the persisted row carries no canonical breakdown to prove which
+ * convention produced its raw counts, so widening the denominator here would be
+ * a guess. See docs/design.md §2 for the deferred work.
  */
 export function eventCacheRate(tokens?: UsageEvent['tokens']): EventCacheRateResult {
   if (!tokens) {
-    return { rate: 0, formatted: '—', cached: 0, hasData: false };
+    return { rate: 0, cached: 0, hasData: false };
   }
   const cached = Math.max(0, tokens.cache_read || tokens.cached || 0);
   if (cached === 0) {
-    return { rate: 0, formatted: '0%', cached: 0, hasData: true };
+    return { rate: 0, cached: 0, hasData: true };
   }
   let prompt = Math.max(0, tokens.input || (tokens.total - tokens.output));
   if (prompt <= 0 && tokens.total > 0) {
@@ -251,15 +259,10 @@ export function eventCacheRate(tokens?: UsageEvent['tokens']): EventCacheRateRes
     denominator = prompt + cached;
   }
   if (denominator <= 0) {
-    return { rate: 0, formatted: '—', cached: 0, hasData: false };
+    return { rate: 0, cached: 0, hasData: false };
   }
   const rate = Math.min(100, Math.max(0, (cached / denominator) * 100));
-  return {
-    rate: Math.round(rate),
-    formatted: `${Math.round(rate)}%`,
-    cached,
-    hasData: true,
-  };
+  return { rate, cached, hasData: true };
 }
 
 export interface EventTokensPerSecondResult {

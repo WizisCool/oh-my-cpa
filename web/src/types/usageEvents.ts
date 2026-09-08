@@ -26,7 +26,7 @@ export interface UsageEvent {
   auth_index?: string;
   api_group_key?: string;
   api_group_label?: string;
-  /** Display mask of the caller key (sk-12345xxxxxxx7890). Empty for records
+  /** Display mask of the caller key (sk-12345••••••••7890). Empty for records
    *  ingested before the mask column existed: those rows keep only the
    *  fingerprint, which cannot be turned back into a readable mask. */
   api_key_mask?: string;

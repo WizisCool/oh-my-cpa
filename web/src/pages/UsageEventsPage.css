@@ -518,17 +518,23 @@
 .req-tokens-breakdown {
   display: flex;
   align-items: center;
+  /* The two counts are one line by construction: they never wrap, so the row
+     keeps its height whatever the numbers are. */
+  flex-wrap: nowrap;
   gap: 6px;
   font-size: 11px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
-.req-tokens-reasoning {
-  color: #8b5cf6;
-  font-weight: 500;
+.req-tokens-breakdown > span {
+  white-space: nowrap;
 }
 
-/* Column 8: Cache Rate */
+/* Column 8: Cache Rate — one continuous scale, 0% yellow → 100% green. Red is
+   deliberately absent: a low hit rate is not a failure, and the danger hue
+   belongs to failed requests. The component supplies the two stops and the
+   weight; the mix happens here in OKLCH so the hue sweep stays even, and every
+   value derives from tokens (docs/design.md §2). */
 .req-col-cache {
   align-items: flex-end;
   text-align: right;
@@ -541,35 +547,39 @@
   gap: 2px;
 }
 .req-cache-pill {
+  --cache-rate-hue: color-mix(
+    in oklch,
+    var(--cache-rate-from) var(--cache-rate-from-share),
+    var(--cache-rate-to)
+  );
   display: inline-flex;
   align-items: center;
   gap: 4px;
   font-size: 11px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: #10b981;
-  background: rgba(16, 185, 129, 0.1);
-  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: var(--cache-rate-hue);
+  background: color-mix(in oklch, var(--cache-rate-hue) var(--cache-rate-tint), transparent);
+  border: 1px solid color-mix(in oklch, var(--cache-rate-hue) var(--cache-rate-edge), transparent);
   padding: 1px 6px;
   border-radius: 9999px;
   line-height: 1.3;
+}
+/* No token data at all is not a 0% reading: the badge keeps its shape but
+   drops to the neutral step, so the ramp only ever means "measured". */
+.req-cache-pill.is-empty {
+  --cache-rate-hue: var(--muted);
 }
 .req-cache-bullet {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: #10b981;
+  background: var(--cache-rate-hue);
 }
 .req-cache-count {
   font-size: 10px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-}
-.req-cache-none {
-  font-size: 12px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
 }
 
 /* Column 9: Executor */

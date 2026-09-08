@@ -10,6 +10,7 @@ import { useT } from '../i18n';
 import { useThemeMode } from '../theme/ThemeContext';
 import { usePreference } from '../hooks/usePreference';
 import { lineOptions, sparkDomain, sparkOptions, type ChartTone } from '../charts/chartTheme';
+import { formatCacheRate } from '../theme/cacheScale';
 import { TimeRangeControl } from '../components/dashboard/TimeRangeControl';
 import type { ManagementOverview, ManagementOverviewProvider } from '../types/management';
 import {
@@ -357,7 +358,7 @@ export const DashboardPage: React.FC = () => {
               <QuestionCircleOutlined className="tile-help" />
             </Tooltip>
           </div>
-          <div className="tile-value is-small">{formatRate(data.metrics.cache_rate)}</div>
+          <div className="tile-value is-small">{formatCacheRate(data.metrics.cache_rate)}</div>
           <div className="tile-caption">
             <span>{t('dash.tokens_cache_read')} <b>{formatCompact(data.tokens.cache_read)}</b></span>
             <span>{t('dash.tokens_input')} <b>{formatCompact(data.tokens.input)}</b></span>
