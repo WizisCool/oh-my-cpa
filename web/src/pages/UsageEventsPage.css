@@ -134,6 +134,13 @@
   transition: none;
   padding: 0;
   border: 0;
+  /* Kill antd Listy's built-in item hover background too: rows recycle under
+     the cursor while scrolling and a hover fill on every recycled row reads
+     as flicker. The row keeps cursor:pointer; keyboard focus keeps its ring. */
+  background: transparent;
+}
+.request-list .ant-listy-item:hover {
+  background: transparent;
 }
 .request-table-scroll-area {
   flex: 1;
@@ -269,11 +276,6 @@
   text-align: left;
   cursor: pointer;
   font-size: 12px;
-  transition: background 0.12s ease;
-}
-
-.request-row:hover {
-  background: var(--surface);
 }
 
 .request-row:focus-visible {
@@ -591,10 +593,6 @@
 .request-chevron {
   color: var(--muted);
   font-size: 11px;
-  transition: color 0.15s ease;
-}
-.request-row:hover .request-chevron {
-  color: var(--fg);
 }
 
 @container reqstream (max-width: 920px) {
