@@ -113,32 +113,39 @@ export const RequestRow = React.memo<RequestRowProps>(
           </div>
         </div>
 
-        {/* Column 4: 模型[推理强度] */}
+        {/* Column 4: 模型（上：模型名，下：推理强度） */}
         <div className="req-col req-col-model">
           <div className="req-model-primary">
-            <strong className="req-model-name" title={event.model}>
+            <strong
+              className="req-model-name"
+              title={
+                event.model_alias && event.model_alias !== event.model
+                  ? `${event.model || ''} · ${t('events.model_alias')}: ${event.model_alias}`
+                  : event.model
+              }
+            >
               {event.model || t('events.not_captured')}
             </strong>
-            {event.reasoning_effort && (
-              <span className="req-effort-badge" title={`推理强度: ${event.reasoning_effort}`}>
-                [{event.reasoning_effort}]
-              </span>
-            )}
             {!event.generate && (
               <span className="req-preflight-badge" title="预检请求 (非生成)">
                 {t('events.preflight')}
               </span>
             )}
           </div>
-          {event.model_alias && event.model_alias !== event.model ? (
-            <span className="req-model-sub" title={`模型别名: ${event.model_alias}`}>
-              别名: {event.model_alias}
-            </span>
-          ) : (
-            <span className="req-model-sub">
-              {event.service_tier || (event.failed ? t('events.filter_failed') : t('events.filter_success'))}
-            </span>
-          )}
+          {/* The requested service tier ("auto") is not a model fact operators
+              scan for; the alias and the tier stay in the detail drawer. */}
+          <span className="req-model-sub">
+            {event.reasoning_effort ? (
+              <span
+                className="req-effort-badge"
+                title={`${t('events.reasoning_effort')}: ${event.reasoning_effort}`}
+              >
+                [{event.reasoning_effort}]
+              </span>
+            ) : (
+              '—'
+            )}
+          </span>
         </div>
 
         {/* Column 5: 延时 */}

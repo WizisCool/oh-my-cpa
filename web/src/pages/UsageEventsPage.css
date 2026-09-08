@@ -407,7 +407,7 @@
   white-space: nowrap;
 }
 
-/* Column 4: Model [Reasoning Effort] */
+/* Column 4: Model name with reasoning effort beneath */
 .req-col-model {
   gap: 2px;
 }
@@ -446,6 +446,8 @@
   flex-shrink: 0;
 }
 .req-model-sub {
+  display: flex;
+  align-items: center;
   font-size: 11px;
   color: var(--muted);
   overflow: hidden;

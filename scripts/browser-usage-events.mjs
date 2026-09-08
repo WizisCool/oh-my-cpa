@@ -23,6 +23,9 @@ const records = Array.from({ length: 1100 }, (_, index) => ({
   provider: index === 3 ? 'openai-compatible-opencode go' : ['openai', 'claude', 'gemini'][index % 3],
   model: ['gpt-5.4', 'claude-sonnet-4-6', 'gemini-2.5-pro'][index % 3],
   model_alias: index % 4 === 0 ? 'coding-fast' : undefined,
+  reasoning_effort: index % 3 === 0 ? 'high' : undefined,
+  // Present on every record: the list must never render the requested tier.
+  service_tier: 'auto',
   source: `hmac:source-fingerprint-${index % 3}`,
   resource_name: index % 3 === 0 ? 'codex-team-production.json' : undefined,
   resource_id: index % 3 === 0 ? 'resource-1' : undefined,
@@ -265,6 +268,25 @@ try {
     'TPS column header and generation speed metric are rendered',
     (await page.locator('.req-th-tps').innerText()).includes('TPS') &&
       (await page.locator('.req-col-tps').first().innerText()).includes('t/s'),
+  );
+  check(
+    'model column stacks the reasoning effort under the model name',
+    await page.locator('.req-col-model').first().evaluate((col) => {
+      const name = col.querySelector('.req-model-name')?.textContent || '';
+      const effort = col.querySelector('.req-model-sub .req-effort-badge')?.textContent || '';
+      // Fixture record 0 is gpt-5.4 with reasoning_effort high.
+      return name.includes('gpt-5.4') && effort.includes('high');
+    }),
+  );
+  check(
+    'model column drops the requested service tier and the alias line',
+    await page.locator('.request-row').first().evaluate((row) => {
+      const text = row.textContent || '';
+      // Record 0 carries service_tier auto and model_alias coding-fast; the tier
+      // is never a model fact and the alias now lives in the name tooltip.
+      const alias = row.querySelector('.req-model-name')?.getAttribute('title') || '';
+      return !text.includes('auto') && !text.includes('coding-fast') && alias.includes('coding-fast');
+    }),
   );
   const firstResultText = await page.locator('.req-col-result').first().innerText();
   check(
