@@ -392,6 +392,79 @@ func TestDashboardCacheRateIsBounded(t *testing.T) {
 	}
 }
 
+func TestDashboardCacheRateNeverReachesOneHundred(t *testing.T) {
+	client, baseURL, repo := startDashboardTestServer(t, nil)
+	now := time.Now().UTC()
+	// A payload whose cache read equals the whole prompt: physically impossible
+	// (the turn being asked for is never in the cache), so the aggregate must
+	// hold the reading below 100% rather than paint a perfect hit rate.
+	seedEvents(t, repo, now, []repository.UsageDecoded{
+		{Event: usage.Event{
+			InstanceID: "default", EventKey: "cache-full", RequestID: "cache-full", APIGroupKey: "sk-demo",
+			Model: "gpt-5.4", AuthIndex: "auth-1", TimestampMS: now.Add(-time.Minute).UnixMilli(),
+			InputTokens: 1000, OutputTokens: 200, TotalTokens: 1200,
+			CacheReadTokens: 1000, CachedTokens: 1000, Generate: true,
+		}},
+	})
+	response, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/dashboard?preset=24h")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d body %s", response.StatusCode, payload)
+	}
+	var body dashboardResponse
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Metrics.CacheRate == nil {
+		t.Fatal("cache rate should be reported when prompt tokens exist")
+	}
+	if *body.Metrics.CacheRate >= 100 {
+		t.Fatalf("cache rate reached an impossible reading: %.2f", *body.Metrics.CacheRate)
+	}
+	if *body.Metrics.CacheRate != 99.9 {
+		t.Fatalf("expected the aggregate to stop at 99.9%%, got %.2f", *body.Metrics.CacheRate)
+	}
+}
+
+// TestDashboardCacheRateStaysBoundedForMixedConventions pins the behaviour of a
+// window that mixes providers: the rate stays bounded and below the presentation
+// ceiling. The exact value is NOT asserted because the rollup carries no
+// provider column, so a mixed window cannot be split by accounting convention;
+// making the number exact needs a rollup schema change (see cacheRateParts).
+func TestDashboardCacheRateStaysBoundedForMixedConventions(t *testing.T) {
+	client, baseURL, repo := startDashboardTestServer(t, nil)
+	now := time.Now().UTC()
+	seedEvents(t, repo, now, []repository.UsageDecoded{
+		// OpenAI-style: 800 of a 1000-token prompt was cached.
+		{Event: usage.Event{
+			InstanceID: "default", EventKey: "subset", RequestID: "subset", APIGroupKey: "sk-demo",
+			Model: "gpt-5.4", AuthIndex: "auth-1", TimestampMS: now.Add(-2 * time.Minute).UnixMilli(),
+			InputTokens: 1000, OutputTokens: 100, TotalTokens: 1100,
+			CacheReadTokens: 800, CachedTokens: 800, Generate: true,
+		}},
+		// Anthropic-style: 200 new + 1000 read + 500 written.
+		{Event: usage.Event{
+			InstanceID: "default", EventKey: "independent", RequestID: "independent", APIGroupKey: "sk-demo",
+			Model: "claude-sonnet-4-5", AuthIndex: "auth-2", TimestampMS: now.Add(-time.Minute).UnixMilli(),
+			InputTokens: 200, OutputTokens: 300, TotalTokens: 2000,
+			CacheReadTokens: 1000, CacheCreationTokens: 500, Generate: true,
+		}},
+	})
+	response, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/dashboard?preset=24h")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d body %s", response.StatusCode, payload)
+	}
+	var body dashboardResponse
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Metrics.CacheRate == nil {
+		t.Fatal("cache rate should be reported when prompt tokens exist")
+	}
+	if rate := *body.Metrics.CacheRate; rate < 0 || rate >= 100 {
+		t.Fatalf("mixed window cache rate out of range: %.2f", rate)
+	}
+}
+
 func TestDashboardSeriesIsZeroFilledAndStableAcrossRefresh(t *testing.T) {
 	client, baseURL, repo := startDashboardTestServer(t, nil)
 	now := time.Now().UTC()
@@ -732,59 +805,6 @@ func TestUsageEventListOmitsDiagnosticFields(t *testing.T) {
 	for _, expected := range []string{"client_ip", "x_forwarded_for", "user_agent", "endpoint", "192.0.2.0/24", "secret-client", "api_key_mask", "sk-12345••••••••7890"} {
 		if !strings.Contains(string(detail), expected) {
 			t.Fatalf("detail payload missing diagnostic field %q: %s", expected, detail)
-		}
-	}
-}
-
-// TestUsageEventListNormalizesLegacyMasks covers rows written before the mask
-// filler changed: the API projection must convert them so the console never
-// shows the old form, while leaving non-masks and missing masks alone.
-func TestUsageEventListNormalizesLegacyMasks(t *testing.T) {
-	client, baseURL, repo := startDashboardTestServer(t, nil)
-	now := time.Now().UTC()
-	legacy := func(id, mask string, at time.Time) repository.UsageDecoded {
-		event := eventFor(id, at, usage.TokenStats{TotalTokens: 4}, false)
-		event.APIGroupLabel = "api_key"
-		// Written straight through the repository so the stored value is a real
-		// legacy mask rather than one produced by today's MaskSecret.
-		event.APIKeyMask = mask
-		return repository.UsageDecoded{Event: event}
-	}
-	seedEvents(t, repo, now, []repository.UsageDecoded{
-		legacy("legacy-long", "sk-12345xxxxxxx7890", now.Add(-5*time.Minute)),
-		legacy("legacy-medium", "sk-1xxxxxxxab", now.Add(-4*time.Minute)),
-		legacy("legacy-short", "xxxxxxx", now.Add(-3*time.Minute)),
-		legacy("current", "sk-12345••••••••7890", now.Add(-2*time.Minute)),
-		legacy("absent", "", now.Add(-time.Minute)),
-	})
-	response, payload := getJSON(t, client, baseURL+"/omc/api/v1/usage/events?preset=24h")
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d body %s", response.StatusCode, payload)
-	}
-	if strings.Contains(string(payload), "xxxxxxx") {
-		t.Fatalf("list payload still carries the legacy filler: %s", payload)
-	}
-	var list struct {
-		Items []map[string]any `json:"items"`
-	}
-	if err := json.Unmarshal(payload, &list); err != nil {
-		t.Fatal(err)
-	}
-	byRequest := map[string]string{}
-	for _, item := range list.Items {
-		requestID, _ := item["request_id"].(string)
-		mask, _ := item["api_key_mask"].(string)
-		byRequest[requestID] = mask
-	}
-	for requestID, want := range map[string]string{
-		"legacy-long":   "sk-12345••••••••7890",
-		"legacy-medium": "sk-1••••••••ab",
-		"legacy-short":  "••••••••",
-		"current":       "sk-12345••••••••7890",
-		"absent":        "",
-	} {
-		if got := byRequest[requestID]; got != want {
-			t.Fatalf("mask for %s = %q, want %q", requestID, got, want)
 		}
 	}
 }

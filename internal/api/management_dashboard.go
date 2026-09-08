@@ -366,6 +366,11 @@ func (h *Handler) queryDashboard(ctx context.Context, window dashboardWindow) (d
 	// are alternatives, never a sum.
 	if numerator, denominator := cacheRateParts(totals); denominator > 0 {
 		rate := roundPercent(float64(numerator) / float64(denominator))
+		// Presentation policy: the list caps its per-event badge at 99.9%, and
+		// the aggregate follows so the two readings agree.
+		if rate > 99.9 {
+			rate = 99.9
+		}
 		facts.metrics.CacheRate = &rate
 	}
 	if totals.Requests > 0 {
@@ -494,8 +499,16 @@ func dashboardWindowFromRequest(request *http.Request, now time.Time) (dashboard
 //     input and the prompt side is really input + cache_read.
 //
 // Comparing the two selects the right denominator for either convention and
-// keeps the ratio bounded at 100%. cached_tokens overlaps cache_read_tokens, so
-// it only serves as a fallback for older payloads without the read field.
+// keeps the ratio bounded. cached_tokens overlaps cache_read_tokens, so it only
+// serves as a fallback for older payloads without the read field.
+//
+// Cache-write tokens are NOT added to the denominator. They exist for providers
+// whose accounting separates cache buckets from input, but these are window
+// totals: the rollup carries no provider column and no canonical per-event
+// breakdown, so a window cannot be split by convention. Adding writes for some
+// events while leaving others alone is not expressible here, and guessing would
+// misreport mixed windows. Deferred until the rollup can carry per-convention
+// token columns.
 func cacheRateParts(totals repository.UsageTotals) (int64, int64) {
 	numerator := totals.CacheReadTokens
 	if numerator == 0 {
