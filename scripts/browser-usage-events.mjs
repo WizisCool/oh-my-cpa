@@ -253,7 +253,8 @@ try {
   );
   check(
     'API grouping categories are not mistaken for client names',
-    (await page.locator('.request-row').first().innerText()).includes('API Key · 9f2a4c87b11e'),
+    (await page.locator('.request-row').first().innerText()).includes('9f2a4c87b11e') &&
+      !(await page.locator('.request-row').first().innerText()).includes('API Key · '),
   );
   check(
     'source and caller appear in stream',
@@ -304,9 +305,16 @@ try {
     }),
   );
   check(
-    'Key column renders the masked caller key',
+    'Key column renders the caller key without a prefix label',
     (await page.locator('.req-th-key').innerText()).trim().length > 0 &&
-      (await page.locator('.req-col-key').first().innerText()).includes('API Key · 9f2a4c87b11e'),
+      await page.locator('.req-col-key').first().evaluate((col) => {
+        const cell = col.querySelector('.req-key-val');
+        return (
+          cell?.textContent?.trim() === '9f2a4c87b11e…' &&
+          !(cell.textContent || '').includes('API Key') &&
+          (cell.getAttribute('title') || '').startsWith('hmac:9f2a4c87b11e')
+        );
+      }),
   );
   check(
     'UA column renders the minimized client label',

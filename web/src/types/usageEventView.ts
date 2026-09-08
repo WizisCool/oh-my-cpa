@@ -462,12 +462,22 @@ export function eventUserAgentLabel(event: Pick<UsageEvent, 'user_agent'>): stri
  *  carry a provider name or a public URL instead, so they fall through to the
  *  source fingerprint rather than mislabeling a provider as a key. Both values
  *  are stored in safe form (fingerprint or public endpoint), so no raw secret
- *  can surface. */
+ *  can surface. The column header already says Key, so the value stands alone
+ *  without an "API Key ·" prefix. */
 export function eventKeyLabel(event: UsageEvent): string {
   const category = event.api_group_label?.trim().toLowerCase();
   const key = event.api_group_key?.trim();
   if (key && key !== 'unknown' && (category === 'api_key' || category === 'apikey')) {
-    return `API Key · ${key.startsWith('hmac:') ? `${key.slice(5, 17)}…` : key}`;
+    return key.startsWith('hmac:') ? `${key.slice(5, 17)}…` : key;
   }
   return event.source?.trim() || '—';
+}
+
+/** The full stored value behind the Key column's abbreviated label, so hovering
+ *  reveals the whole fingerprint the api_key filter matches on. */
+export function eventKeyTitle(event: UsageEvent): string | undefined {
+  const category = event.api_group_label?.trim().toLowerCase();
+  const key = event.api_group_key?.trim();
+  if (key && key !== 'unknown' && (category === 'api_key' || category === 'apikey')) return key;
+  return event.source?.trim() || undefined;
 }

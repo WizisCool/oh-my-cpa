@@ -8,6 +8,7 @@ import {
   eventPageMetrics,
   formatEventDuration,
   eventKeyLabel,
+  eventKeyTitle,
   eventResultLabelKey,
   eventUserAgentLabel,
   USAGE_EVENTS_VIEW_PREFERENCE,
@@ -121,8 +122,21 @@ assert.equal(eventUserAgentLabel({ user_agent: longUA }), longUA);
 // Key falls back from the masked API-key group to the caller fingerprint
 assert.equal(
   eventKeyLabel({ ...event, api_group_label: 'api_key', api_group_key: 'hmac:12345678901234567890' }),
-  'API Key · 123456789012…',
+  '123456789012…',
 );
+// The column header already says Key: the value stands alone, no prefix.
+assert.equal(
+  eventKeyLabel({ ...event, api_group_label: 'api_key', api_group_key: 'plain-key-label' }),
+  'plain-key-label',
+);
+// Hovering the cell reveals the full fingerprint the api_key filter matches on.
+assert.equal(
+  eventKeyTitle({ ...event, api_group_label: 'api_key', api_group_key: 'hmac:12345678901234567890' }),
+  'hmac:12345678901234567890',
+);
+assert.equal(eventKeyTitle({ ...event, api_group_label: 'api_key', api_group_key: 'plain-key-label' }), 'plain-key-label');
+assert.equal(eventKeyTitle({ ...event, api_group_label: 'provider', api_group_key: 'openai' }), 'original.json');
+assert.equal(eventKeyTitle({ ...event, api_group_label: 'provider', api_group_key: 'openai', source: '' }), undefined);
 // A provider or endpoint group is NOT a caller key: the column must never show
 // the provider name or the upstream URL as if it were one.
 assert.equal(
