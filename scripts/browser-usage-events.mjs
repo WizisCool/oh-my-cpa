@@ -15,6 +15,14 @@ let server;
 let browser;
 let page;
 const now = Date.now();
+// Cache-hit rates pinned per row index so the stream renders the whole
+// red→yellow→green scale, including a real 0% and fractional neighbours.
+// 2150 input tokens and rate/100 * input cached tokens make eventCacheRate
+// resolve back to the pinned rate exactly.
+const CACHE_RATES = [0, 25, 50, 75, 100, 33.33, 47.63, 12.5, 87.5, 99.9];
+const CACHE_INPUT = 2150;
+const cacheReadFor = (index) =>
+  Math.round((CACHE_INPUT * (CACHE_RATES[index] ?? 47.63)) / 100);
 const records = Array.from({ length: 1100 }, (_, index) => ({
   id: 1100 - index,
   event_key: `event-${index}`,
@@ -34,8 +42,10 @@ const records = Array.from({ length: 1100 }, (_, index) => ({
   api_group_key: 'hmac:9f2a4c87b11e285daa03',
   api_group_label: 'api_key',
   // Display mask the pipeline stores alongside the fingerprint. Record 5 has
-  // none, standing in for rows ingested before the mask column existed.
-  api_key_mask: index === 5 ? undefined : 'sk-12345xxxxxxx7890',
+  // none, standing in for rows ingested before the mask column existed, and
+  // record 6 stands in for a short key, which is masked completely.
+  api_key_mask:
+    index === 5 ? undefined : index === 6 ? '••••••••' : 'sk-12345••••••••7890',
   user_agent: index % 10 === 0 ? undefined : 'codex-cli/0.46',
   executor_type: 'responses',
   failed: index % 7 === 0,
@@ -43,11 +53,11 @@ const records = Array.from({ length: 1100 }, (_, index) => ({
   latency_ms: 1830 + index * 3,
   ttft_ms: index % 5 === 0 ? null : 284,
   tokens: {
-    input: 2150,
+    input: CACHE_INPUT,
     output: 485,
     reasoning: 120,
-    cached: 1024,
-    cache_read: 1024,
+    cached: cacheReadFor(index),
+    cache_read: cacheReadFor(index),
     cache_creation: 0,
     total: 2635,
   },
@@ -64,6 +74,173 @@ const check = (name, condition) => {
   console.log(`PASS ${name}`);
 };
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Cache-rate badge measurement, run inside the page.
+ *
+ * It reads rendered pixels instead of trusting CSS text: the badge fill is a
+ * translucent tint over whatever sits behind the row, and the text colour is a
+ * `color-mix()` the browser resolves. Contrast is therefore measured against
+ * the composited surface the operator actually sees.
+ */
+const CACHE_MEASURE = (indices) => {
+  const root = getComputedStyle(document.documentElement);
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 1;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const paint = (layers) => {
+    ctx.clearRect(0, 0, 1, 1);
+    for (const layer of layers) {
+      ctx.fillStyle = layer;
+      ctx.fillRect(0, 0, 1, 1);
+    }
+    return [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3);
+  };
+  const linear = (value) => {
+    const v = value / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = ([r, g, b]) => 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+  const contrast = (a, b) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+  // sRGB → OKLCH hue: "red → yellow → green" as a number, not a colour name.
+  const hue = ([r, g, b]) => {
+    const [lr, lg, lb] = [linear(r), linear(g), linear(b)];
+    const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb);
+    const m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb);
+    const s = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb);
+    const a = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s;
+    const bb = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
+    return ((Math.atan2(bb, a) * 180) / Math.PI + 360) % 360;
+  };
+  const measure = (row) => {
+    if (!row) return null;
+    const pill = row.querySelector('.req-cache-pill');
+    const cell = row.querySelector('.req-col-cache');
+    const bullet = row.querySelector('.req-cache-bullet');
+    if (!pill || !cell || !bullet) return null;
+    const style = getComputedStyle(pill);
+    // Every background from the document root down to the badge, then the badge's
+    // own tint: that stack is the surface the text sits on.
+    const layers = [];
+    for (let el = pill; el; el = el.parentElement) layers.unshift(getComputedStyle(el).backgroundColor);
+    const behind = paint(layers);
+    const text = paint([...layers, style.color]);
+    return {
+      text: (pill.textContent || '').trim(),
+      count: (row.querySelector('.req-cache-count')?.textContent || '').trim(),
+      behind,
+      textColor: text,
+      contrast: contrast(text, behind),
+      hue: hue(text),
+      display: style.display,
+      borderWidth: Number.parseFloat(style.borderTopWidth) || 0,
+      bulletWidth: Number.parseFloat(getComputedStyle(bullet).width) || 0,
+      overflow: cell.scrollWidth - cell.clientWidth,
+    };
+  };
+  const rows = [...document.querySelectorAll('.request-row')];
+  return {
+    theme: document.documentElement.dataset.theme,
+    anchors: {
+      yellow: root.getPropertyValue('--cache-rate-yellow').trim(),
+      green: root.getPropertyValue('--cache-rate-green').trim(),
+    },
+    samples: indices.map((index) => measure(rows[index])),
+  };
+};
+
+const hexRgb = (hex) => [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16));
+const nearRgb = (a, b, tolerance = 2) => a.every((channel, i) => Math.abs(channel - b[i]) <= tolerance);
+
+/**
+ * Asserts the cache-rate badge in the live DOM for the active theme. Rows 0..4
+ * are pinned by the fixture at 0 / 25 / 50 / 75 / 100%.
+ */
+async function checkCacheScale(theme) {
+  const measured = await page.evaluate(CACHE_MEASURE, [0, 1, 2, 3, 4]);
+  const samples = measured.samples;
+  if (process.env.OMCPA_CACHE_DEBUG) console.log('CACHE SAMPLES', JSON.stringify(measured, null, 2));
+  check(`cache scale (${theme}): theme is applied`, measured.theme === theme);
+  check(
+    `cache scale (${theme}): every rate renders a full badge`,
+    samples.every(
+      (sample) =>
+        sample &&
+        // A flex item's `inline-flex` blockifies to `flex`, so accept both.
+        (sample.display === 'flex' || sample.display === 'inline-flex') &&
+        sample.borderWidth >= 1 &&
+        sample.bulletWidth >= 4 &&
+        sample.text.length > 0,
+    ),
+  );
+  check(
+    `cache scale (${theme}): 0% is the yellow end of the scale`,
+    samples[0].text === '0%' &&
+      samples[0].hue > 75 &&
+      samples[0].hue < 115 &&
+      nearRgb(samples[0].textColor, hexRgb(measured.anchors.yellow)),
+  );
+  check(
+    `cache scale (${theme}): red is never used — a low rate is not a failure`,
+    samples.every((sample) => !(sample.hue < 45 && sample.hue > 0) || nearRgb(sample.textColor, hexRgb(measured.anchors.yellow), 6)),
+  );
+  check(
+    `cache scale (${theme}): 100% is capped, so the top reading is 99.9%`,
+    samples[4].text === '99.9%' &&
+      samples[4].hue > 130 &&
+      nearRgb(samples[4].textColor, hexRgb(measured.anchors.green)),
+  );
+  check(
+    `cache scale (${theme}): 50% sits between the two stops`,
+    samples[2].text === '50.0%' && samples[2].hue > 95 && samples[2].hue < 145,
+  );
+  check(
+    `cache scale (${theme}): readings keep one decimal`,
+    [samples[1].text, samples[3].text].every((text) => /^\d+\.\d%$/.test(text)),
+  );
+  const hues = samples.map((sample) => sample.hue);
+  check(
+    `cache scale (${theme}): hue sweeps monotonically yellow → green`,
+    hues.every((value, index) => index === 0 || value > hues[index - 1]),
+  );
+  check(
+    `cache scale (${theme}): badge text clears 4.5:1 against its own fill`,
+    samples.every((sample) => sample.contrast >= 4.5),
+  );
+  check(
+    `cache scale (${theme}): badge stays inside its column`,
+    samples.every((sample) => sample.overflow <= 1),
+  );
+  check(
+    `cache scale (${theme}): 0% still reports its hit count`,
+    /^0\s/.test(samples[0].count) && samples[0].count.length > 1,
+  );
+  // Visual artifact: the cache column of the first ten rows, so the ramp can be
+  // eyeballed as well as measured.
+  const boxes = await page.locator('.req-col-cache').evaluateAll((cells) =>
+    cells.slice(0, 10).map((cell) => {
+      const rect = cell.getBoundingClientRect();
+      return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+    }),
+  );
+  if (boxes.length > 0) {
+    const left = Math.min(...boxes.map((box) => box.x));
+    const top = Math.min(...boxes.map((box) => box.y));
+    const right = Math.max(...boxes.map((box) => box.x + box.width));
+    const bottom = Math.max(...boxes.map((box) => box.y + box.height));
+    await page.screenshot({
+      path: path.join(output, `cache-scale-${theme}.png`),
+      clip: { x: left, y: top, width: right - left, height: bottom - top },
+    });
+  }
+  // Hovering a row must not move the composited surface under the badge text.
+  await page.locator('.request-row').nth(2).hover();
+  const hovered = await page.evaluate(CACHE_MEASURE, [2]);
+  check(`cache scale (${theme}): contrast holds while the row is hovered`, hovered.samples[0].contrast >= 4.5);
+}
 
 try {
   if (!process.env.OMCPA_EVENTS_TEST_URL) {
@@ -159,7 +336,7 @@ try {
       // backend: the value stays the stored identity used for filtering.
       const apiGroupKeys = facet('api_group_key').map((entry) => ({
         ...entry,
-        mask: 'sk-12345xxxxxxx7890',
+        mask: 'sk-12345••••••••7890',
       }));
       return fulfill({
         window: { from: now - 3600000, to: now },
@@ -262,7 +439,7 @@ try {
   );
   check(
     'API grouping categories are not mistaken for client names',
-    (await page.locator('.request-row').first().innerText()).includes('sk-12345xxxxxxx7890') &&
+    (await page.locator('.request-row').first().innerText()).includes('sk-12345••••••••7890') &&
       !(await page.locator('.request-row').first().innerText()).includes('hmac:') &&
       !(await page.locator('.request-row').first().innerText()).includes('API Key · '),
   );
@@ -320,12 +497,21 @@ try {
       await page.locator('.req-col-key').first().evaluate((col) => {
         const cell = col.querySelector('.req-key-val');
         const text = cell?.textContent?.trim() || '';
-        return text === 'sk-12345xxxxxxx7890' && !text.includes('hmac:') && !text.includes('API Key');
+        return text === 'sk-12345••••••••7890' && !text.includes('hmac:') && !text.includes('API Key');
       }),
   );
   check(
     'records without a stored key mask read as an em dash',
     (await page.locator('.req-col-key').nth(5).innerText()).trim() === '—',
+  );
+  // A short key exposes nothing: the mask is bullets only, so a small secret
+  // cannot be read off the list, and it is still distinguishable as "masked".
+  check(
+    'a short key is masked to bullets only, with no readable characters',
+    await page.locator('.req-col-key').nth(6).evaluate((col) => {
+      const text = (col.querySelector('.req-key-val')?.textContent || '').trim();
+      return text === '••••••••' && !/[A-Za-z0-9]/.test(text);
+    }),
   );
   check(
     'the key mask is not clipped by its column',
@@ -354,6 +540,114 @@ try {
     'records without a user agent read as an em dash',
     (await page.locator('.req-col-ua').first().innerText()).trim() === '—',
   );
+  // Reasoning tokens are dropped from the list to keep the cell on one line and
+  // the row height stable; the detail drawer keeps the full breakdown. The
+  // check drives the token column to its minimum width with the large numbers
+  // from the field screenshot, because the original bug only appears when the
+  // numbers are long.
+  const tokenBreakdown = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('.request-row')];
+    const cells = rows.map((row) => row.querySelector('.req-tokens-breakdown')).filter(Boolean);
+    const first = cells[0];
+    const children = first ? [...first.children] : [];
+    return {
+      reasoningElements: document.querySelectorAll('.req-tokens-reasoning').length,
+      // Every count on one baseline means one line; a wrapped count sits lower.
+      tops: children.map((child) => Math.round(child.getBoundingClientRect().top)),
+      text: cells.map((cell) => cell.textContent || '').join(' '),
+      // The fixture carries reasoning tokens on every record, so a leak shows here.
+      leaked: cells.some((cell) => /🧠/.test(cell.textContent || '')),
+    };
+  });
+  check(
+    'token column lists only input and output, not reasoning',
+    tokenBreakdown.reasoningElements === 0 &&
+      !tokenBreakdown.leaked &&
+      !tokenBreakdown.text.includes('🧠'),
+  );
+  check(
+    'token breakdown stays on one line',
+    tokenBreakdown.tops.length > 0 &&
+      tokenBreakdown.tops.every((top) => top === tokenBreakdown.tops[0]),
+  );
+  // Reproduce the screenshot's long numbers at the narrowest allowed column.
+  // The width is set through the same persisted column preference the resize
+  // handle writes, so the measured width is the real 112px minimum rather than
+  // a hand-edited grid expression.
+  await page.evaluate(async () => {
+    const response = await fetch('/omc/api/v1/preferences/usage_events_columns', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tokens: 112 }),
+    });
+    return response.ok;
+  });
+  await page.reload();
+  await page.locator('.request-row').first().waitFor();
+  await wait(300);
+  const longest = await page.evaluate(async () => {
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const cell = document.querySelector('.req-col-tokens');
+    const row = cell?.closest('.request-row');
+    if (!cell || !row) return null;
+    const strong = cell.querySelector('.req-tokens-total strong');
+    const small = cell.querySelector('.req-tokens-total small');
+    const parts = [...cell.querySelectorAll('.req-tokens-breakdown > span')];
+    const original = { strong: strong.textContent, small: small.textContent, parts: parts.map((p) => p.textContent) };
+    strong.textContent = '176,815';
+    small.textContent = 'TOKENS';
+    parts[0].textContent = '↑ 176,238';
+    parts[1].textContent = '↓ 577';
+    await sleep(120);
+    const cellBox = cell.getBoundingClientRect();
+    const totalBox = cell.querySelector('.req-tokens-total').getBoundingClientRect();
+    const cacheCell = row.querySelector('.req-col-cache');
+    const cacheBox = cacheCell?.getBoundingClientRect();
+    // Measure each count's text box, not the flex item: a wrapped line shows up
+    // as a Range with two client rects, and as differing line tops.
+    const ranges = parts.map((part) => {
+      const range = document.createRange();
+      range.selectNodeContents(part);
+      const rects = [...range.getClientRects()];
+      return {
+        rectCount: rects.length,
+        top: rects.length ? Math.round(Math.min(...rects.map((r) => r.top))) : null,
+        left: rects.length ? Math.min(...rects.map((r) => r.left)) : null,
+        right: rects.length ? Math.max(...rects.map((r) => r.right)) : null,
+        text: (part.textContent || '').trim(),
+      };
+    });
+    const result = {
+      // One client rect per count means the arrow and number stayed together.
+      singleLine: ranges.every((entry) => entry.rectCount === 1),
+      sameBaseline: ranges.length === 2 && ranges[0].top !== null && ranges[0].top === ranges[1].top,
+      pairsIntact: ranges.every((entry) => /^[↑↓]\s[\d,]+$/.test(entry.text)),
+      // Containment against the cell and against the neighbouring column.
+      insideCell: ranges.every((entry) => entry.left >= cellBox.left - 1 && entry.right <= cellBox.right + 1),
+      clearOfCache: !cacheBox || ranges.every((entry) => entry.right <= cacheBox.left + 1),
+      measuredWidth: Math.round(cellBox.width),
+      strongText: strong.textContent,
+    };
+    strong.textContent = original.strong;
+    small.textContent = original.small;
+    parts.forEach((p, index) => { p.textContent = original.parts[index]; });
+    return result;
+  });
+  check(
+    'token column reached its 112px minimum through the stored preference',
+    longest && longest.measuredWidth === 112,
+  );
+  check(
+    'token cell holds the largest real numbers at its minimum width',
+    longest &&
+      longest.singleLine &&
+      longest.sameBaseline &&
+      longest.pairsIntact &&
+      longest.insideCell &&
+      longest.clearOfCache &&
+      longest.strongText === '176,815',
+  );
+  await checkCacheScale('light');
 
   // Column resize & persistence testing
   const providerTh = page.locator('.req-th-provider');
@@ -536,7 +830,7 @@ try {
   await wait(150);
   await page.getByRole('button', { name: '更多筛选', exact: true }).click();
   await page.getByRole('combobox', { name: '请求来源' }).click();
-  const callerFacetOption = page.getByText('sk-12345xxxxxxx7890 (100)', { exact: true }).last();
+  const callerFacetOption = page.getByText('sk-12345••••••••7890 (100)', { exact: true }).last();
   check(
     'caller key facet lists the display mask instead of the stored fingerprint',
     await callerFacetOption.isVisible(),
@@ -666,6 +960,7 @@ try {
   );
   await wait(200);
   await page.screenshot({ path: path.join(output, 'desktop-dark.png'), fullPage: true });
+  await checkCacheScale('dark');
   await page.setViewportSize({ width: 390, height: 844 });
   await wait(250);
   await page.screenshot({ path: path.join(output, 'mobile-dark.png'), fullPage: true });
