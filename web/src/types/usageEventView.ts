@@ -432,14 +432,17 @@ export function resolveProviderInfo(
   };
 }
 
-/** api_group_label is a grouping category, NOT a user-assigned API key name. */
+/** api_group_label is a grouping category, NOT a user-assigned API key name.
+ *  An api_key group resolves to its display mask, never to the stored
+ *  fingerprint: records from before the mask column existed have no readable
+ *  key form at all and resolve to undefined. */
 export function requestGroupName(event: UsageEvent): string | undefined {
-  const key = event.api_group_key?.trim();
-  if (!key || key === 'unknown') return undefined;
-  if (event.api_group_label === 'api_key' || event.api_group_label === 'apikey') {
-    return `API Key · ${key.startsWith('hmac:') ? `${key.slice(5, 17)}…` : key}`;
+  const category = event.api_group_label?.trim().toLowerCase();
+  if (category === 'api_key' || category === 'apikey') {
+    return event.api_key_mask?.trim() || undefined;
   }
-  return key;
+  const key = event.api_group_key?.trim();
+  return key && key !== 'unknown' ? key : undefined;
 }
 
 /** Result-capsule label key for one record: the stored failed flag is the only
@@ -458,26 +461,21 @@ export function eventUserAgentLabel(event: Pick<UsageEvent, 'user_agent'>): stri
 
 /** The caller key for the list's Key column.
  *
- *  Only an `api_key` group is a caller key; `provider` and `endpoint` groups
- *  carry a provider name or a public URL instead, so they fall through to the
- *  source fingerprint rather than mislabeling a provider as a key. Both values
- *  are stored in safe form (fingerprint or public endpoint), so no raw secret
- *  can surface. The column header already says Key, so the value stands alone
- *  without an "API Key ·" prefix. */
+ *  Only an `api_key` group is a caller key, and the only readable form of it we
+ *  hold is the stored display mask; records ingested before the mask column
+ *  existed show an em dash rather than a fingerprint. `provider` and `endpoint`
+ *  groups carry a provider name or a public URL, which is not a key, so they
+ *  fall through to the source fingerprint instead. */
 export function eventKeyLabel(event: UsageEvent): string {
   const category = event.api_group_label?.trim().toLowerCase();
-  const key = event.api_group_key?.trim();
-  if (key && key !== 'unknown' && (category === 'api_key' || category === 'apikey')) {
-    return key.startsWith('hmac:') ? `${key.slice(5, 17)}…` : key;
+  if (category === 'api_key' || category === 'apikey') {
+    return event.api_key_mask?.trim() || '—';
   }
   return event.source?.trim() || '—';
 }
 
-/** The full stored value behind the Key column's abbreviated label, so hovering
- *  reveals the whole fingerprint the api_key filter matches on. */
-export function eventKeyTitle(event: UsageEvent): string | undefined {
-  const category = event.api_group_label?.trim().toLowerCase();
-  const key = event.api_group_key?.trim();
-  if (key && key !== 'unknown' && (category === 'api_key' || category === 'apikey')) return key;
-  return event.source?.trim() || undefined;
+/** One filter-dropdown label. Key-shaped facets carry a mask so the list reads
+ *  as caller keys instead of stored fingerprints. */
+export function usageFacetLabel(value: { value: string; requests: number; mask?: string }): string {
+  return `${value.mask?.trim() || value.value} (${value.requests})`;
 }

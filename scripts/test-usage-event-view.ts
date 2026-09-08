@@ -8,9 +8,9 @@ import {
   eventPageMetrics,
   formatEventDuration,
   eventKeyLabel,
-  eventKeyTitle,
   eventResultLabelKey,
   eventUserAgentLabel,
+  usageFacetLabel,
   USAGE_EVENTS_VIEW_PREFERENCE,
   DEFAULT_USAGE_EVENTS_VIEW,
   parseUsageEventsView,
@@ -103,8 +103,19 @@ assert.deepEqual(resolveCredential({ ...unbound, auth_index: '' }, files), {
 });
 assert.equal(resolveCredential({ ...unbound, auth_index: '', source: '' }, files).kind, 'unknown');
 assert.equal(
+  requestGroupName({
+    ...event,
+    api_group_label: 'api_key',
+    api_group_key: 'hmac:12345678901234567890',
+    api_key_mask: 'sk-12345xxxxxxx7890',
+  }),
+  'sk-12345xxxxxxx7890',
+);
+// The stored group key is a fingerprint, which is not a readable key: a record
+// ingested before the mask column existed resolves to nothing.
+assert.equal(
   requestGroupName({ ...event, api_group_label: 'api_key', api_group_key: 'hmac:12345678901234567890' }),
-  'API Key · 123456789012…',
+  undefined,
 );
 assert.equal(requestGroupName({ ...event, api_group_label: 'provider', api_group_key: 'openai' }), 'openai');
 assert.equal(requestGroupName({ ...event, api_group_key: 'unknown' }), undefined);
@@ -119,24 +130,27 @@ assert.equal(eventUserAgentLabel({ user_agent: null }), '—');
 // A minimized-but-long label is shown verbatim; the column ellipsizes visually
 const longUA = 'some-client/1.2.3-' + 'x'.repeat(100);
 assert.equal(eventUserAgentLabel({ user_agent: longUA }), longUA);
-// Key falls back from the masked API-key group to the caller fingerprint
+// Key shows the stored display mask; the raw key is never available to show.
+assert.equal(
+  eventKeyLabel({
+    ...event,
+    api_group_label: 'api_key',
+    api_group_key: 'hmac:12345678901234567890',
+    api_key_mask: 'sk-12345xxxxxxx7890',
+  }),
+  'sk-12345xxxxxxx7890',
+);
+// No mask means the key was never retained, so the column stays honest.
 assert.equal(
   eventKeyLabel({ ...event, api_group_label: 'api_key', api_group_key: 'hmac:12345678901234567890' }),
-  '123456789012…',
+  '—',
 );
-// The column header already says Key: the value stands alone, no prefix.
+assert.equal(eventKeyLabel({ ...event, api_group_label: 'api_key', api_key_mask: '   ' }), '—');
+// The fingerprint must never be rendered as if it were the key.
 assert.equal(
-  eventKeyLabel({ ...event, api_group_label: 'api_key', api_group_key: 'plain-key-label' }),
-  'plain-key-label',
+  eventKeyLabel({ ...event, api_group_label: 'api_key', api_group_key: 'hmac:12345678901234567890', source: 'hmac:src' }),
+  '—',
 );
-// Hovering the cell reveals the full fingerprint the api_key filter matches on.
-assert.equal(
-  eventKeyTitle({ ...event, api_group_label: 'api_key', api_group_key: 'hmac:12345678901234567890' }),
-  'hmac:12345678901234567890',
-);
-assert.equal(eventKeyTitle({ ...event, api_group_label: 'api_key', api_group_key: 'plain-key-label' }), 'plain-key-label');
-assert.equal(eventKeyTitle({ ...event, api_group_label: 'provider', api_group_key: 'openai' }), 'original.json');
-assert.equal(eventKeyTitle({ ...event, api_group_label: 'provider', api_group_key: 'openai', source: '' }), undefined);
 // A provider or endpoint group is NOT a caller key: the column must never show
 // the provider name or the upstream URL as if it were one.
 assert.equal(
@@ -158,6 +172,12 @@ assert.equal(
 assert.equal(eventKeyLabel({ ...event, api_group_key: 'unknown', source: 'hmac:source-fingerprint' }), 'hmac:source-fingerprint');
 assert.equal(eventKeyLabel({ ...event, api_group_key: 'unknown', source: '' }), '—');
 assert.equal(eventKeyLabel({ ...event, api_group_key: '', source: undefined }), '—');
+
+// Filter dropdown labels: the caller-key facet shows its mask, every other
+// facet keeps showing the stored value.
+assert.equal(usageFacetLabel({ value: 'hmac:12345678901234567890', requests: 3, mask: 'sk-12345xxxxxxx7890' }), 'sk-12345xxxxxxx7890 (3)');
+assert.equal(usageFacetLabel({ value: 'hmac:12345678901234567890', requests: 3 }), 'hmac:12345678901234567890 (3)');
+assert.equal(usageFacetLabel({ value: 'gpt-5.4', requests: 7, mask: '   ' }), 'gpt-5.4 (7)');
 console.log(
   'PASS credential provenance: current vs linked resources, provider mismatch, ambiguity, fingerprints, API group categories',
 );
@@ -405,7 +425,7 @@ assert.equal(parsedWidths.latency, 85);
 const defaultGrid = buildGridTemplateColumns({});
 assert.ok(defaultGrid.includes('minmax(118px, 1.3fr)'));
 assert.ok(defaultGrid.includes('minmax(108px, 1.2fr)'));
-assert.ok(defaultGrid.includes('minmax(92px, 0.6fr)'));
+assert.ok(defaultGrid.includes('minmax(145px, 0.6fr)'));
 assert.ok(defaultGrid.includes('minmax(88px, 0.6fr)'));
 assert.ok(defaultGrid.endsWith('14px')); // chevron track
 
@@ -416,12 +436,12 @@ assert.ok(manualGrid.includes('200px'));
 assert.ok(manualGrid.endsWith('14px'));
 
 // computeGridMinWidth: fixed defaults + flexible mins + 11 gaps + inline padding
-// 100 + 92 + 118 + 108 + 76 + 82 + 122 + 64 + 92 + 92 + 88 + 14 = 1048; gaps 11*12 = 132; padding 24
-assert.equal(computeGridMinWidth({}), 1048 + 132 + 24);
+// 100 + 92 + 118 + 108 + 76 + 82 + 122 + 64 + 92 + 145 + 88 + 14 = 1101; gaps 11*12 = 132; padding 24
+assert.equal(computeGridMinWidth({}), 1101 + 132 + 24);
 // A manual override replaces the flexible minimum with the requested width
-assert.equal(computeGridMinWidth({ provider: 300 }), 1048 - 118 + 300 + 132 + 24);
+assert.equal(computeGridMinWidth({ provider: 300 }), 1101 - 118 + 300 + 132 + 24);
 // Out-of-range overrides are clamped exactly as the template builder clamps them
-assert.equal(computeGridMinWidth({ provider: 9999 }), 1048 - 118 + 460 + 132 + 24);
+assert.equal(computeGridMinWidth({ provider: 9999 }), 1101 - 118 + 460 + 132 + 24);
 assert.ok(computeGridMinWidth({}, 8, 12) < computeGridMinWidth({}, 12, 12));
 
 console.log(

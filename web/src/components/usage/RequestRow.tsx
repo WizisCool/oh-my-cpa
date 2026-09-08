@@ -8,7 +8,6 @@ import type { UsageEvent } from '../../types/usageEvents';
 import {
   eventCacheRate,
   eventKeyLabel,
-  eventKeyTitle,
   eventResultLabelKey,
   eventTokensPerSecond,
   eventUserAgentLabel,
@@ -53,7 +52,6 @@ export const RequestRow = React.memo<RequestRowProps>(
 
     // 4. Caller key / group label shown in the Key column
     const keyLabel = eventKeyLabel(event);
-    const keyTitle = eventKeyTitle(event);
     const uaLabel = eventUserAgentLabel(event);
     const resultLabel = t(eventResultLabelKey(event));
 
@@ -235,7 +233,7 @@ export const RequestRow = React.memo<RequestRowProps>(
         {/* Column 10: Key（仅 api_key 类别的调用方 Key，掩码展示；其他类别回退到来源指纹） */}
         <div className="req-col req-col-key">
           <span className="req-mobile-label">{t('events.col_key')}</span>
-          <span className="req-key-val" title={keyTitle}>
+          <span className="req-key-val" title={keyLabel}>
             {keyLabel}
           </span>
         </div>

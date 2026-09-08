@@ -26,6 +26,10 @@ export interface UsageEvent {
   auth_index?: string;
   api_group_key?: string;
   api_group_label?: string;
+  /** Display mask of the caller key (sk-12345xxxxxxx7890). Empty for records
+   *  ingested before the mask column existed: those rows keep only the
+   *  fingerprint, which cannot be turned back into a readable mask. */
+  api_key_mask?: string;
   /** Client product label, redacted and shortened on the persistence path. */
   user_agent?: string | null;
   source?: string;
@@ -77,6 +81,9 @@ export interface UsageEventDetail {
 export interface UsageFacetValue {
   value: string;
   requests: number;
+  /** Display label for key-shaped facets (api_group_keys): the stored value is
+   *  a fingerprint, the mask is what a human recognises. */
+  mask?: string;
 }
 
 export interface UsageFacets {

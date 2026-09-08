@@ -33,6 +33,9 @@ const records = Array.from({ length: 1100 }, (_, index) => ({
   auth_type: index === 3 ? 'api_key' : 'oauth',
   api_group_key: 'hmac:9f2a4c87b11e285daa03',
   api_group_label: 'api_key',
+  // Display mask the pipeline stores alongside the fingerprint. Record 5 has
+  // none, standing in for rows ingested before the mask column existed.
+  api_key_mask: index === 5 ? undefined : 'sk-12345xxxxxxx7890',
   user_agent: index % 10 === 0 ? undefined : 'codex-cli/0.46',
   executor_type: 'responses',
   failed: index % 7 === 0,
@@ -152,6 +155,12 @@ try {
     if (url.pathname.endsWith('/usage/facets')) {
       const facet = (key) =>
         [...new Set(records.map((r) => r[key]))].filter(Boolean).map((value) => ({ value, requests: 100 }));
+      // The caller-key facet carries the display mask, exactly like the real
+      // backend: the value stays the stored identity used for filtering.
+      const apiGroupKeys = facet('api_group_key').map((entry) => ({
+        ...entry,
+        mask: 'sk-12345xxxxxxx7890',
+      }));
       return fulfill({
         window: { from: now - 3600000, to: now },
         facets: {
@@ -159,7 +168,7 @@ try {
           providers: facet('provider'),
           sources: facet('source'),
           auth_indexes: facet('auth_index'),
-          api_group_keys: facet('api_group_key'),
+          api_group_keys: apiGroupKeys,
           executors: facet('executor_type'),
         },
       });
@@ -253,7 +262,8 @@ try {
   );
   check(
     'API grouping categories are not mistaken for client names',
-    (await page.locator('.request-row').first().innerText()).includes('9f2a4c87b11e') &&
+    (await page.locator('.request-row').first().innerText()).includes('sk-12345xxxxxxx7890') &&
+      !(await page.locator('.request-row').first().innerText()).includes('hmac:') &&
       !(await page.locator('.request-row').first().innerText()).includes('API Key · '),
   );
   check(
@@ -305,16 +315,24 @@ try {
     }),
   );
   check(
-    'Key column renders the caller key without a prefix label',
+    'Key column renders the stored display mask, never the fingerprint',
     (await page.locator('.req-th-key').innerText()).trim().length > 0 &&
       await page.locator('.req-col-key').first().evaluate((col) => {
         const cell = col.querySelector('.req-key-val');
-        return (
-          cell?.textContent?.trim() === '9f2a4c87b11e…' &&
-          !(cell.textContent || '').includes('API Key') &&
-          (cell.getAttribute('title') || '').startsWith('hmac:9f2a4c87b11e')
-        );
+        const text = cell?.textContent?.trim() || '';
+        return text === 'sk-12345xxxxxxx7890' && !text.includes('hmac:') && !text.includes('API Key');
       }),
+  );
+  check(
+    'records without a stored key mask read as an em dash',
+    (await page.locator('.req-col-key').nth(5).innerText()).trim() === '—',
+  );
+  check(
+    'the key mask is not clipped by its column',
+    await page.locator('.req-col-key').first().evaluate((col) => {
+      const cell = col.querySelector('.req-key-val');
+      return cell ? cell.scrollWidth <= cell.clientWidth + 1 : false;
+    }),
   );
   check(
     'executor column shows only the executor, never the auth type beneath it',
@@ -517,6 +535,13 @@ try {
   await page.locator('.request-detail').waitFor({ state: 'hidden' });
   await wait(150);
   await page.getByRole('button', { name: '更多筛选', exact: true }).click();
+  await page.getByRole('combobox', { name: '请求来源' }).click();
+  const callerFacetOption = page.getByText('sk-12345xxxxxxx7890 (100)', { exact: true }).last();
+  check(
+    'caller key facet lists the display mask instead of the stored fingerprint',
+    await callerFacetOption.isVisible(),
+  );
+  await page.keyboard.press('Escape');
   await page.getByRole('combobox', { name: '认证文件 / 索引' }).click();
   await page.getByText('claude-developer.json · credential-1', { exact: true }).last().click();
   await wait(350);

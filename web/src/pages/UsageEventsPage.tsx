@@ -47,6 +47,7 @@ import {
   DEFAULT_USAGE_EVENTS_VIEW,
   parseUsageEventsView,
   hasExplicitEventQuery,
+  usageFacetLabel,
   type UsageEventsViewPreference,
   type EventGrouping,
 } from '../types/usageEventView';
@@ -428,7 +429,7 @@ export const UsageEventsPage: React.FC = () => {
     return () => observer.disconnect();
   }, []);
   const options = (values: UsageFacetValue[] | undefined) =>
-    (values || []).map((v) => ({ value: v.value, label: `${v.value} (${v.requests})` }));
+    (values || []).map((v) => ({ value: v.value, label: usageFacetLabel(v) }));
   const facet = (
     key: 'model' | 'provider' | 'source' | 'auth_index' | 'api_key' | 'executor',
     label: string,

@@ -76,10 +76,10 @@
 .request-stream {
   container-type: inline-size;
   container-name: reqstream;
-  --req-grid-columns: 100px 92px minmax(118px, 1.3fr) minmax(108px, 1.2fr) 76px 82px 122px 64px 92px minmax(92px, 0.6fr) minmax(88px, 0.6fr) 14px;
+  --req-grid-columns: 100px 92px minmax(118px, 1.3fr) minmax(108px, 1.2fr) 76px 82px 122px 64px 92px minmax(145px, 0.6fr) minmax(88px, 0.6fr) 14px;
   --req-grid-gap: 12px;
   --req-pad-inline: 12px;
-  --req-min-width: 1204px;
+  --req-min-width: 1257px;
   flex: 1;
   min-height: 310px;
   display: flex;
@@ -114,7 +114,7 @@
 .request-list-host {
   flex: 1;
   min-height: 240px;
-  min-width: calc(var(--req-min-width, 1204px) + var(--req-gutter, 0px));
+  min-width: calc(var(--req-min-width, 1257px) + var(--req-gutter, 0px));
   overflow: hidden;
   position: relative;
 }
@@ -172,7 +172,7 @@
   user-select: none;
   flex-shrink: 0;
   width: 100%;
-  min-width: calc(var(--req-min-width, 1204px) + var(--req-gutter, 0px));
+  min-width: calc(var(--req-min-width, 1257px) + var(--req-gutter, 0px));
 }
 
 .req-th {
@@ -264,7 +264,7 @@
 
 .request-row {
   width: 100%;
-  min-width: var(--req-min-width, 1204px);
+  min-width: var(--req-min-width, 1257px);
   display: grid;
   grid-template-columns: var(--req-grid-columns);
   align-items: center;
