@@ -298,6 +298,27 @@ func TestDecodeEventWithFingerprinterUsesStableCredentialFingerprint(t *testing.
 	if event.UserAgent == nil || *event.UserAgent != "codex-cli/0.46" {
 		t.Fatalf("user agent = %v", event.UserAgent)
 	}
+	// The display mask keeps the key recognisable without storing or exposing
+	// it: the raw value must never survive decoding.
+	if event.APIKeyMask != "fixture-xxxxxxx-123" {
+		t.Fatalf("api key mask = %q", event.APIKeyMask)
+	}
+	if strings.Contains(event.APIKeyMask, apiKey) || strings.Contains(event.APIKeyMask, "credential-val") {
+		t.Fatalf("api key mask leaks the key: %q", event.APIKeyMask)
+	}
+}
+
+func TestDecodeEventWithoutAPIKeyHasNoMask(t *testing.T) {
+	event, err := DecodeEvent(`{"request_id":"r2","provider":"openai"}`, "default", time.Unix(0, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if event.APIKeyMask != "" {
+		t.Fatalf("mask for a keyless record = %q", event.APIKeyMask)
+	}
+	if event.APIGroupLabel != "provider" {
+		t.Fatalf("group label = %q", event.APIGroupLabel)
+	}
 }
 
 func TestDecodeErrorEventRedactsBody(t *testing.T) {

@@ -136,6 +136,10 @@ type Event struct {
 	EventKey            string
 	APIGroupKey         string
 	APIGroupLabel       string
+	// APIKeyMask is the display mask of the client key CPA published. It is not
+	// an identity: grouping, filtering and credential binding all use
+	// APIGroupKey, because two different keys can share a mask.
+	APIKeyMask          string
 	Provider            string
 	Endpoint            string
 	AuthType            string
@@ -196,6 +200,10 @@ func DecodeEventWithFingerprinter(raw string, instanceID string, observedAt time
 		EventKey:            requestID,
 		APIGroupKey:         groupKey,
 		APIGroupLabel:       groupLabel,
+		// Display-only: the recognisable mask of the client key CPA published.
+		// Identity stays the keyed fingerprint in APIGroupKey; the mask never
+		// reaches the fingerprint or the binding logic.
+		APIKeyMask:          security.MaskSecret(payload.APIKey),
 		Provider:            boundedSafe(payload.Provider, 256),
 		Endpoint:            security.PublicEndpoint(payload.Endpoint),
 		AuthType:            normalizeAuthType(payload.AuthType),

@@ -673,6 +673,8 @@ func TestUsageEventListOmitsDiagnosticFields(t *testing.T) {
 	event.ClientIP = &clientIP
 	event.XForwardedFor = &forwarded
 	event.UserAgent = &agent
+	event.APIGroupLabel = "api_key"
+	event.APIKeyMask = "sk-12345xxxxxxx7890"
 	seedEvents(t, repo, now, []repository.UsageDecoded{{Event: event}})
 	listURL := baseURL + "/omc/api/v1/usage/events?preset=24h"
 
@@ -706,13 +708,18 @@ func TestUsageEventListOmitsDiagnosticFields(t *testing.T) {
 	if got := list.Items[0]["user_agent"]; got != "secret-client/9.9" {
 		t.Fatalf("list user_agent = %v, want minimized product label", got)
 	}
+	// The caller key reaches the console as a display mask only: the raw key is
+	// never stored, and the mask is not the identity used for grouping.
+	if got := list.Items[0]["api_key_mask"]; got != "sk-12345xxxxxxx7890" {
+		t.Fatalf("list api_key_mask = %v", got)
+	}
 
 	// The same record on the detail view keeps diagnosis data behind one id.
 	id := int64(list.Items[0]["id"].(float64))
 	_, detail := getJSON(t, client, fmt.Sprintf("%s/omc/api/v1/usage/events/%d", baseURL, id))
 	// Stored values arrive already minimized: IPs are masked to /24 and the user
 	// agent is reduced, so the detail view leaks neither the host nor the client.
-	for _, expected := range []string{"client_ip", "x_forwarded_for", "user_agent", "endpoint", "192.0.2.0/24", "secret-client"} {
+	for _, expected := range []string{"client_ip", "x_forwarded_for", "user_agent", "endpoint", "192.0.2.0/24", "secret-client", "api_key_mask", "sk-12345xxxxxxx7890"} {
 		if !strings.Contains(string(detail), expected) {
 			t.Fatalf("detail payload missing diagnostic field %q: %s", expected, detail)
 		}
@@ -869,9 +876,10 @@ func TestUsageEventRequestLogRejectsTraversalIDs(t *testing.T) {
 func TestUsageFacetsListOnlyPresentValues(t *testing.T) {
 	client, baseURL, repo := startDashboardTestServer(t, nil)
 	now := time.Now().UTC()
-	seedEvents(t, repo, now, []repository.UsageDecoded{
-		{Event: eventFor("f1", now.Add(-time.Minute), usage.TokenStats{TotalTokens: 1}, false)},
-	})
+	event := eventFor("f1", now.Add(-time.Minute), usage.TokenStats{TotalTokens: 1}, false)
+	event.APIGroupLabel = "api_key"
+	event.APIKeyMask = "sk-12345xxxxxxx7890"
+	seedEvents(t, repo, now, []repository.UsageDecoded{{Event: event}})
 	response, payload := getJSON(t, client, baseURL+"/omc/api/v1/usage/facets?preset=24h")
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d body %s", response.StatusCode, payload)
@@ -887,6 +895,14 @@ func TestUsageFacetsListOnlyPresentValues(t *testing.T) {
 	}
 	if body.Facets.Models[0].Requests != 1 {
 		t.Fatalf("facet count wrong: %#v", body.Facets.Models[0])
+	}
+	// The caller-key facet is what the filter dropdown lists, so it must carry
+	// the display mask instead of the stored group fingerprint.
+	if len(body.Facets.APIGroupKey) != 1 || body.Facets.APIGroupKey[0].Mask != "sk-12345xxxxxxx7890" {
+		t.Fatalf("api key facet mask wrong: %#v", body.Facets.APIGroupKey)
+	}
+	if strings.Contains(body.Facets.APIGroupKey[0].Value, "sk-12345") {
+		t.Fatalf("facet value must stay the stored identity: %#v", body.Facets.APIGroupKey[0])
 	}
 	// Empty dimensions must be present as empty arrays, not null.
 	encoded := string(payload)

@@ -23,17 +23,21 @@ import (
 // short redacted product label (security.MinimizeUserAgent on the persistence
 // path), so it names the calling client without carrying the raw header.
 type usageEventResponse struct {
-	ID                  int64  `json:"id"`
-	EventKey            string `json:"event_key"`
-	RequestID           string `json:"request_id,omitempty"`
-	TimestampMS         int64  `json:"timestamp_ms"`
-	Provider            string `json:"provider"`
-	Endpoint            string `json:"endpoint,omitempty"`
-	ExecutorType        string `json:"executor_type,omitempty"`
-	AuthType            string `json:"auth_type,omitempty"`
-	AuthIndex           string `json:"auth_index,omitempty"`
-	APIGroupKey         string `json:"api_group_key,omitempty"`
-	APIGroupLabel       string `json:"api_group_label,omitempty"`
+	ID            int64  `json:"id"`
+	EventKey      string `json:"event_key"`
+	RequestID     string `json:"request_id,omitempty"`
+	TimestampMS   int64  `json:"timestamp_ms"`
+	Provider      string `json:"provider"`
+	Endpoint      string `json:"endpoint,omitempty"`
+	ExecutorType  string `json:"executor_type,omitempty"`
+	AuthType      string `json:"auth_type,omitempty"`
+	AuthIndex     string `json:"auth_index,omitempty"`
+	APIGroupKey   string `json:"api_group_key,omitempty"`
+	APIGroupLabel string `json:"api_group_label,omitempty"`
+	// APIKeyMask is the display-only label for the caller key. The request
+	// record keeps only a fingerprint, so records ingested before the mask
+	// column existed omit it.
+	APIKeyMask          string `json:"api_key_mask,omitempty"`
 	Source              string `json:"source,omitempty"`
 	UserAgent           string `json:"user_agent,omitempty"`
 	Model               string `json:"model"`
@@ -71,6 +75,7 @@ func projectUsageEvent(row repository.UsageEventRow) usageEventResponse {
 	item.AuthIndex = row.AuthIndex
 	item.APIGroupKey = row.APIGroupKey
 	item.APIGroupLabel = row.APIGroupLabel
+	item.APIKeyMask = row.APIKeyMask
 	item.Source = row.Source
 	if row.UserAgent != nil {
 		item.UserAgent = *row.UserAgent
@@ -228,6 +233,7 @@ func projectUsageEventDetail(row repository.UsageEventRow) map[string]any {
 		"auth_index":            item.AuthIndex,
 		"api_group_key":         item.APIGroupKey,
 		"api_group_label":       item.APIGroupLabel,
+		"api_key_mask":          item.APIKeyMask,
 		"source":                item.Source,
 		"model":                 item.Model,
 		"model_alias":           item.ModelAlias,

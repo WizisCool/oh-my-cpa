@@ -173,13 +173,13 @@ func (r *Repository) CommitUsageDecoded(ctx context.Context, decoded []UsageDeco
 
 	insert, err := tx.PrepareContext(ctx, `
 		INSERT INTO usage_events (
-			instance_id, event_key, api_group_key, api_group_label, provider, endpoint, auth_type, request_id,
+			instance_id, event_key, api_group_key, api_group_label, api_key_mask, provider, endpoint, auth_type, request_id,
 			client_ip, x_forwarded_for, user_agent, model, model_alias, reasoning_effort,
 			service_tier, response_service_tier, executor_type, timestamp_ms, source, auth_index,
 			failed, generate, latency_ms, ttft_ms,
 			input_tokens, output_tokens, reasoning_tokens, cached_tokens,
 			cache_read_tokens, cache_creation_tokens, total_tokens, created_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, fmt.Errorf("prepare usage event insert: %w", err)
 	}
@@ -199,7 +199,8 @@ func (r *Repository) CommitUsageDecoded(ctx context.Context, decoded []UsageDeco
 	for _, item := range decoded {
 		event := r.sanitizeUsageEvent(item.Event)
 		if _, errExec := insert.ExecContext(ctx,
-			event.InstanceID, event.EventKey, event.APIGroupKey, event.APIGroupLabel, event.Provider, event.Endpoint,
+			event.InstanceID, event.EventKey, event.APIGroupKey, event.APIGroupLabel, event.APIKeyMask,
+			event.Provider, event.Endpoint,
 			event.AuthType, event.RequestID, event.ClientIP, event.XForwardedFor, event.UserAgent,
 			event.Model, event.ModelAlias, event.ReasoningEffort, event.ServiceTier,
 			event.ResponseServiceTier, event.ExecutorType, event.TimestampMS, event.Source,
@@ -370,13 +371,13 @@ func (r *Repository) InsertUsageEvents(ctx context.Context, events []usage.Event
 
 	statement, err := tx.PrepareContext(ctx, `
 		INSERT INTO usage_events (
-			instance_id, event_key, api_group_key, api_group_label, provider, endpoint, auth_type, request_id,
+			instance_id, event_key, api_group_key, api_group_label, api_key_mask, provider, endpoint, auth_type, request_id,
 			client_ip, x_forwarded_for, user_agent, model, model_alias, reasoning_effort,
 			service_tier, response_service_tier, executor_type, timestamp_ms, source, auth_index,
 			failed, generate, latency_ms, ttft_ms,
 			input_tokens, output_tokens, reasoning_tokens, cached_tokens,
 			cache_read_tokens, cache_creation_tokens, total_tokens, created_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, fmt.Errorf("prepare usage event insert: %w", err)
 	}
@@ -387,7 +388,8 @@ func (r *Repository) InsertUsageEvents(ctx context.Context, events []usage.Event
 	for _, event := range events {
 		event = r.sanitizeUsageEvent(event)
 		result, errExec := statement.ExecContext(ctx,
-			event.InstanceID, event.EventKey, event.APIGroupKey, event.APIGroupLabel, event.Provider, event.Endpoint,
+			event.InstanceID, event.EventKey, event.APIGroupKey, event.APIGroupLabel, event.APIKeyMask,
+			event.Provider, event.Endpoint,
 			event.AuthType, event.RequestID, event.ClientIP, event.XForwardedFor, event.UserAgent,
 			event.Model, event.ModelAlias, event.ReasoningEffort, event.ServiceTier,
 			event.ResponseServiceTier, event.ExecutorType, event.TimestampMS, event.Source,
@@ -600,6 +602,10 @@ func (r *Repository) sanitizeUsageEvent(event usage.Event) usage.Event {
 	event.ExecutorType = persistedText(event.ExecutorType, 128)
 	event.Source = r.persistedFingerprint("usage-source", event.Source)
 	event.APIGroupKey, event.APIGroupLabel = r.persistedAPIGroup(event.APIGroupKey, event.APIGroupLabel, event.Provider, event.Endpoint)
+	// The mask is non-reversible by construction, so it must bypass
+	// persistedText/RedactText: those match the "sk-..." shape and would replace
+	// the label with the redaction marker.
+	event.APIKeyMask = boundedMask(event.APIKeyMask)
 	event.ClientIP = persistedPointerWith(event.ClientIP, security.MaskIP)
 	event.XForwardedFor = persistedPointerWith(event.XForwardedFor, security.MaskForwardedFor)
 	event.UserAgent = security.MinimizeUserAgent(pointerValue(event.UserAgent))
@@ -665,6 +671,17 @@ func (r *Repository) persistedFingerprint(purpose, value string) string {
 		return value
 	}
 	return security.FingerprintOrRedacted(r.db.Cipher(), purpose, value)
+}
+
+// boundedMask accepts only a value already shaped like a display mask. Anything
+// else (a raw key, a fingerprint, empty) is dropped rather than stored, so a
+// caller that forgets to mask cannot leak a secret through this column.
+func boundedMask(value string) string {
+	value = strings.TrimSpace(value)
+	if !security.IsMask(value) || len([]rune(value)) > 128 {
+		return ""
+	}
+	return value
 }
 
 func persistedText(value string, limit int) string {

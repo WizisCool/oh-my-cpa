@@ -138,6 +138,54 @@ func TestUsageInboxDiscardsPoisonAfterRetries(t *testing.T) {
 	}
 }
 
+func TestUsageEventKeyMaskBoundary(t *testing.T) {
+	repo := usageTestRepository(t)
+	ctx := context.Background()
+	base := time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC)
+
+	masked := usageEventAt("default", "masked", base, usage.TokenStats{TotalTokens: 1}, false)
+	masked.APIGroupLabel = "api_key"
+	masked.APIKeyMask = "sk-12345xxxxxxx7890"
+	// A caller that forgets to mask must not be able to smuggle a raw key
+	// through the display column.
+	raw := usageEventAt("default", "raw", base.Add(time.Minute), usage.TokenStats{TotalTokens: 1}, false)
+	raw.APIGroupLabel = "api_key"
+	raw.APIKeyMask = "sk-raw-secret-value"
+
+	if _, err := repo.InsertUsageEvents(ctx, []usage.Event{masked, raw}); err != nil {
+		t.Fatal(err)
+	}
+
+	page, err := repo.ListUsageEvents(ctx, UsageEventFilter{
+		InstanceID: "default", FromMS: base.Add(-time.Minute).UnixMilli(), ToMS: base.Add(2 * time.Minute).UnixMilli(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 2 {
+		t.Fatalf("expected two records, got %d", len(page.Items))
+	}
+	byRequest := map[string]UsageEventRow{}
+	for _, item := range page.Items {
+		byRequest[item.RequestID] = item
+	}
+	if got := byRequest["masked"].APIKeyMask; got != "sk-12345xxxxxxx7890" {
+		t.Fatalf("stored mask = %q", got)
+	}
+	if got := byRequest["raw"].APIKeyMask; got != "" {
+		t.Fatalf("raw key survived the display column: %q", got)
+	}
+	// Defense in depth: the rejected value must not be in the database at all.
+	var stored string
+	if err := repo.SQL().QueryRowContext(ctx,
+		`SELECT api_key_mask FROM usage_events WHERE request_id = 'raw'`).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored != "" {
+		t.Fatalf("raw key reached the database: %q", stored)
+	}
+}
+
 func TestUsageAnalyticsFromEventsWithoutRollup(t *testing.T) {
 	repo := usageTestRepository(t)
 	ctx := context.Background()

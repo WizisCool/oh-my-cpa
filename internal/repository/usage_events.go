@@ -60,18 +60,22 @@ type UsageEventFilter struct {
 
 // UsageEventRow is one stored request record.
 type UsageEventRow struct {
-	ID                  int64            `json:"id"`
-	InstanceID          string           `json:"instance_id"`
-	EventKey            string           `json:"event_key"`
-	RequestID           string           `json:"request_id"`
-	TimestampMS         int64            `json:"timestamp_ms"`
-	Provider            string           `json:"provider"`
-	Endpoint            string           `json:"endpoint"`
-	ExecutorType        string           `json:"executor_type"`
-	AuthType            string           `json:"auth_type"`
-	AuthIndex           string           `json:"auth_index"`
-	APIGroupKey         string           `json:"api_group_key"`
-	APIGroupLabel       string           `json:"api_group_label"`
+	ID            int64  `json:"id"`
+	InstanceID    string `json:"instance_id"`
+	EventKey      string `json:"event_key"`
+	RequestID     string `json:"request_id"`
+	TimestampMS   int64  `json:"timestamp_ms"`
+	Provider      string `json:"provider"`
+	Endpoint      string `json:"endpoint"`
+	ExecutorType  string `json:"executor_type"`
+	AuthType      string `json:"auth_type"`
+	AuthIndex     string `json:"auth_index"`
+	APIGroupKey   string `json:"api_group_key"`
+	APIGroupLabel string `json:"api_group_label"`
+	// APIKeyMask is the display-only mask of the client key. It is empty for
+	// records ingested before the mask column existed: the request record keeps
+	// only the fingerprint, which cannot be turned back into a readable mask.
+	APIKeyMask          string           `json:"api_key_mask,omitempty"`
 	Source              string           `json:"source"`
 	Model               string           `json:"model"`
 	ModelAlias          *string          `json:"model_alias,omitempty"`
@@ -134,7 +138,7 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 	query := `
 		SELECT e.id, e.instance_id, e.event_key, e.request_id, e.timestamp_ms,
 		       e.provider, e.endpoint, e.executor_type, e.auth_type, e.auth_index,
-		       e.api_group_key, e.api_group_label, e.source, e.model, e.model_alias, e.reasoning_effort,
+		       e.api_group_key, e.api_group_label, e.api_key_mask, e.source, e.model, e.model_alias, e.reasoning_effort,
 		       e.service_tier, e.response_service_tier, e.failed, e.generate,
 		       e.latency_ms, e.ttft_ms, e.client_ip, e.x_forwarded_for, e.user_agent,
 		       e.input_tokens, e.output_tokens, e.reasoning_tokens, e.cached_tokens,
@@ -168,7 +172,7 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 		if errScan := rows.Scan(
 			&row.ID, &row.InstanceID, &row.EventKey, &row.RequestID, &row.TimestampMS,
 			&row.Provider, &row.Endpoint, &row.ExecutorType, &row.AuthType, &row.AuthIndex,
-			&row.APIGroupKey, &row.APIGroupLabel, &row.Source, &row.Model, &row.ModelAlias, &row.ReasoningEffort,
+			&row.APIGroupKey, &row.APIGroupLabel, &row.APIKeyMask, &row.Source, &row.Model, &row.ModelAlias, &row.ReasoningEffort,
 			&row.ServiceTier, &row.ResponseServiceTier, &failed, &generate,
 			&row.LatencyMS, &row.TTFTMS, &row.ClientIP, &row.XForwardedFor, &row.UserAgent,
 			&row.Tokens.InputTokens, &row.Tokens.OutputTokens, &row.Tokens.ReasoningTokens,
@@ -216,7 +220,7 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 	err := r.SQL().QueryRowContext(ctx, `
 		SELECT e.id, e.instance_id, e.event_key, e.request_id, e.timestamp_ms,
 		       e.provider, e.endpoint, e.executor_type, e.auth_type, e.auth_index,
-		       e.api_group_key, e.api_group_label, e.source, e.model, e.model_alias, e.reasoning_effort,
+		       e.api_group_key, e.api_group_label, e.api_key_mask, e.source, e.model, e.model_alias, e.reasoning_effort,
 		       e.service_tier, e.response_service_tier, e.failed, e.generate,
 		       e.latency_ms, e.ttft_ms, e.client_ip, e.x_forwarded_for, e.user_agent,
 		       e.input_tokens, e.output_tokens, e.reasoning_tokens, e.cached_tokens,
@@ -234,7 +238,7 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 		WHERE e.id = ?`, id).Scan(
 		&row.ID, &row.InstanceID, &row.EventKey, &row.RequestID, &row.TimestampMS,
 		&row.Provider, &row.Endpoint, &row.ExecutorType, &row.AuthType, &row.AuthIndex,
-		&row.APIGroupKey, &row.APIGroupLabel, &row.Source, &row.Model, &row.ModelAlias, &row.ReasoningEffort,
+		&row.APIGroupKey, &row.APIGroupLabel, &row.APIKeyMask, &row.Source, &row.Model, &row.ModelAlias, &row.ReasoningEffort,
 		&row.ServiceTier, &row.ResponseServiceTier, &failed, &generate,
 		&row.LatencyMS, &row.TTFTMS, &row.ClientIP, &row.XForwardedFor, &row.UserAgent,
 		&row.Tokens.InputTokens, &row.Tokens.OutputTokens, &row.Tokens.ReasoningTokens,
@@ -336,10 +340,13 @@ type UsageFacets struct {
 	Executors   []UsageFacetValue `json:"executors"`
 }
 
-// UsageFacetValue is one distinct value plus how often it occurred.
+// UsageFacetValue is one distinct value plus how often it occurred. Mask carries
+// the display label for a key-shaped facet (api_group_keys) so the dropdown can
+// show a recognisable mask instead of the stored fingerprint.
 type UsageFacetValue struct {
 	Value    string `json:"value"`
 	Requests int64  `json:"requests"`
+	Mask     string `json:"mask,omitempty"`
 }
 
 // GetUsageFacets enumerates filter options within a time window.
@@ -356,22 +363,30 @@ func (r *Repository) GetUsageFacets(ctx context.Context, instanceID string, from
 		return facets, errors.New("repository is not initialized")
 	}
 	columns := []struct {
-		column string
-		target *[]UsageFacetValue
+		column     string
+		maskColumn string
+		target     *[]UsageFacetValue
 	}{
-		{"model", &facets.Models},
-		{"provider", &facets.Providers},
-		{"api_group_key", &facets.APIGroupKey},
-		{"auth_index", &facets.AuthIndexes},
-		{"source", &facets.Sources},
-		{"executor_type", &facets.Executors},
+		{column: "model", target: &facets.Models},
+		{column: "provider", target: &facets.Providers},
+		// The api_group_keys facet is the caller-key list, so it carries the
+		// display mask. The mask is deterministic per key, so any non-empty mask
+		// in the group labels the whole group.
+		{column: "api_group_key", maskColumn: "api_key_mask", target: &facets.APIGroupKey},
+		{column: "auth_index", target: &facets.AuthIndexes},
+		{column: "source", target: &facets.Sources},
+		{column: "executor_type", target: &facets.Executors},
 	}
 	for _, entry := range columns {
 		if strings.TrimSpace(entry.column) == "" {
 			continue
 		}
+		maskExpression := "''"
+		if entry.maskColumn != "" {
+			maskExpression = `COALESCE(MAX(NULLIF(` + entry.maskColumn + `, '')), '')`
+		}
 		rows, err := r.SQL().QueryContext(ctx, `
-			SELECT `+entry.column+`, COUNT(1)
+			SELECT `+entry.column+`, COUNT(1), `+maskExpression+`
 			FROM usage_events
 			WHERE instance_id = ? AND timestamp_ms BETWEEN ? AND ? AND `+entry.column+` <> ''
 			GROUP BY `+entry.column+`
@@ -383,7 +398,7 @@ func (r *Repository) GetUsageFacets(ctx context.Context, instanceID string, from
 		values := []UsageFacetValue{}
 		for rows.Next() {
 			var value UsageFacetValue
-			if errScan := rows.Scan(&value.Value, &value.Requests); errScan != nil {
+			if errScan := rows.Scan(&value.Value, &value.Requests, &value.Mask); errScan != nil {
 				rows.Close()
 				return facets, fmt.Errorf("scan usage facet %s: %w", entry.column, errScan)
 			}
