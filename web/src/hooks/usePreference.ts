@@ -36,7 +36,16 @@ export function usePreference<T>(
     meta: { silent: true },
   });
 
-  const stored = parse(data?.[key]);
+  // The parsed value must be reference-stable across renders. Callers feed it
+  // straight into effect deps (e.g. the request-events column widths sync
+  // `setColWidths(pref)` on change); a fresh object per render there turned
+  // every render into the next effect run — an idle render loop that
+  // re-reconciles the whole page (list, toolbar and the detail drawer)
+  // hundreds of times per second without ever writing to the DOM. This
+  // requires object-valued fallbacks and catch-free parsers to live at module
+  // scope (see call sites); inline closures would defeat the memo.
+  const raw = data?.[key];
+  const stored = React.useMemo(() => parse(raw), [key, raw, parse]);
   const value = stored ?? fallback;
 
   const set = React.useCallback((next: T) => {

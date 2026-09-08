@@ -60,6 +60,11 @@ import {
   buildGridTemplateColumns,
   computeGridMinWidth,
 } from '../components/usage/requestColumns';
+import {
+  PROVIDER_ICONS_PREFERENCE,
+  EMPTY_PROVIDER_ICONS,
+  parseProviderIcons,
+} from '../types/providerIcons';
 import { RequestRow } from '../components/usage/RequestRow';
 import { UsageEventDrawer } from '../components/usage/UsageEventDrawer';
 import './UsageEventsPage.css';
@@ -399,9 +404,9 @@ export const UsageEventsPage: React.FC = () => {
     [authFiles.data],
   );
   const { value: providerIcons } = usePreference<Record<string, string>>(
-    'provider_icons',
-    {},
-    (raw) => (typeof raw === 'object' && raw ? (raw as Record<string, string>) : {}),
+    PROVIDER_ICONS_PREFERENCE,
+    EMPTY_PROVIDER_ICONS,
+    parseProviderIcons,
   );
   const providersQuery = useQuery({
     queryKey: ['management-providers'],
