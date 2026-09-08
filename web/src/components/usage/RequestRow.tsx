@@ -230,9 +230,6 @@ export const RequestRow = React.memo<RequestRowProps>(
           <span className="req-executor-badge" title={`执行器: ${event.executor_type || 'default'}`}>
             {event.executor_type || 'default'}
           </span>
-          <span className="req-caller-sub" title={event.auth_type || '—'}>
-            {event.auth_type || '—'}
-          </span>
         </div>
 
         {/* Column 10: Key（仅 api_key 类别的调用方 Key，掩码展示；其他类别回退到来源指纹） */}

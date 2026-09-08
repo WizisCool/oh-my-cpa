@@ -575,7 +575,6 @@
 /* Column 9: Executor */
 .req-col-executor {
   align-items: flex-start;
-  gap: 3px;
 }
 .req-executor-badge {
   font-size: 11px;
@@ -585,14 +584,6 @@
   background: var(--surface-2);
   border: 1px solid var(--border);
   color: var(--fg-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
-}
-.req-caller-sub {
-  font-size: 11px;
-  color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

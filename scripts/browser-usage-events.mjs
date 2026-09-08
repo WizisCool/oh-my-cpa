@@ -317,6 +317,17 @@ try {
       }),
   );
   check(
+    'executor column shows only the executor, never the auth type beneath it',
+    await page.locator('.req-col-executor').evaluateAll((cells) =>
+      cells
+        .slice(0, 4)
+        .map((cell) => (cell.textContent || '').trim())
+        // Every fixture record runs the responses executor; record 3 is the only
+        // api_key auth record, so a leaked auth type would surface here.
+        .every((text) => text.includes('responses') && !/oauth|api_key/i.test(text)),
+    ),
+  );
+  check(
     'UA column renders the minimized client label',
     (await page.locator('.req-th-ua').innerText()).trim().length > 0 &&
       (await page.locator('.req-col-ua').nth(1).innerText()).includes('codex-cli/0.46'),
