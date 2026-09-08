@@ -229,7 +229,7 @@ func TestManagementProvidersEndpoints(t *testing.T) {
 	client, baseURL, state := startProviderTestServer(t)
 
 	// 1. GET providers: assert plaintext keys and raw URLs are returned unmasked
-	resp, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/providers")
+	resp, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/providers?include_keys=true")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("get providers status = %d body %s", resp.StatusCode, payload)
 	}
@@ -245,6 +245,19 @@ func TestManagementProvidersEndpoints(t *testing.T) {
 	}
 	if err := json.Unmarshal(payload, &res); err != nil || len(res.Providers) < 4 {
 		t.Fatalf("unexpected providers count: %s", payload)
+	}
+
+	// The default projection is sanitized: key_configured stays, plaintext
+	// key material never reaches pages whose contract excludes it.
+	_, sanitized := getJSON(t, client, baseURL+"/omc/api/v1/management/providers")
+	sanitizedStr := string(sanitized)
+	for _, secret := range []string{"sk-provider-secret-key-1234", "sk-codex-secret-key-9999", "sk-ant-secret-1234"} {
+		if strings.Contains(sanitizedStr, secret) {
+			t.Fatalf("sanitized providers list must not contain %q: %s", secret, sanitizedStr)
+		}
+	}
+	if !strings.Contains(sanitizedStr, `"key_configured":true`) {
+		t.Fatalf("sanitized list must keep the configured signal: %s", sanitizedStr)
 	}
 
 	// 2. PATCH provider status
@@ -314,7 +327,7 @@ func TestManagementProviderCreateUpdateDelete(t *testing.T) {
 		t.Fatalf("create multi-key provider status = %d body %s", resp.StatusCode, payload)
 	}
 
-	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers")
+	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers?include_keys=true")
 	var providersResp struct {
 		Providers []ProviderItemDTO `json:"providers"`
 	}
@@ -350,7 +363,7 @@ func TestManagementProviderCreateUpdateDelete(t *testing.T) {
 		t.Fatalf("create reasoning provider status = %d body %s", resp.StatusCode, payload)
 	}
 
-	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers")
+	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers?include_keys=true")
 	if err := json.Unmarshal(payload, &providersResp); err != nil {
 		t.Fatal(err)
 	}
@@ -515,7 +528,7 @@ func TestUnifiedProviderArchitectureClaudeCodexGemini(t *testing.T) {
 	}
 
 	// Read providers list and verify custom name and plaintext key in list
-	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers")
+	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers?include_keys=true")
 	var providersResp struct {
 		Providers []ProviderItemDTO `json:"providers"`
 	}
@@ -551,7 +564,7 @@ func TestUnifiedProviderArchitectureClaudeCodexGemini(t *testing.T) {
 		t.Fatalf("patch claude status = %d body %s", resp.StatusCode, payload)
 	}
 
-	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers")
+	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers?include_keys=true")
 	_ = json.Unmarshal(payload, &providersResp)
 	for i := range providersResp.Providers {
 		if providersResp.Providers[i].ID == "claude-0" {
@@ -568,7 +581,7 @@ func TestUnifiedProviderArchitectureClaudeCodexGemini(t *testing.T) {
 		t.Fatalf("create gemini provider status = %d body %s", resp.StatusCode, payload)
 	}
 
-	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers")
+	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/providers?include_keys=true")
 	_ = json.Unmarshal(payload, &providersResp)
 	foundGemini := false
 	for _, p := range providersResp.Providers {

@@ -366,7 +366,9 @@ export const ProvidersPage: React.FC = () => {
     refetch: refetchProviders,
   } = useQuery({
     queryKey: ['management-providers'],
-    queryFn: api.getManagementProviders,
+    // The providers page owns key management, so it is the one consumer that
+    // opts back into plaintext key material (display is masked client-side).
+    queryFn: () => api.getManagementProviders(true),
     staleTime: 30000,
   });
 

@@ -286,8 +286,11 @@ export const api = {
     return request<{ status: string; deleted: number }>(`/management/api-keys/${index}`, { method: 'DELETE' });
   },
 
-  async getManagementProviders(): Promise<{ providers: ProviderItem[]; total: number }> {
-    return request<{ providers: ProviderItem[]; total: number }>('/management/providers', { method: 'GET' });
+  async getManagementProviders(includeKeys = false): Promise<{ providers: ProviderItem[]; total: number }> {
+    return request<{ providers: ProviderItem[]; total: number }>(
+      `/management/providers${includeKeys ? '?include_keys=true' : ''}`,
+      { method: 'GET' },
+    );
   },
 
   async createManagementProvider(payload: SaveProviderPayload): Promise<{ status: string }> {

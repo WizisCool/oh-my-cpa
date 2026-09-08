@@ -410,8 +410,10 @@ export const UsageEventsPage: React.FC = () => {
     parseProviderIcons,
   );
   const providersQuery = useQuery({
-    queryKey: ['management-providers'],
-    queryFn: api.getManagementProviders,
+    // Distinct cache key: this page must never read (or populate) the cache
+    // entry that carries plaintext key material for the providers page.
+    queryKey: ['management-providers-sanitized'],
+    queryFn: () => api.getManagementProviders(false),
     staleTime: 60_000,
   });
   const configuredProviders = providersQuery.data?.providers;

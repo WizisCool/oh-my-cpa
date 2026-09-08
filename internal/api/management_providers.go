@@ -279,6 +279,11 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 	if !ok {
 		return
 	}
+	// Downstream provider keys are plaintext only for the page whose contract
+	// includes key management. Every other consumer (icon resolution, usage
+	// pages) must request the sanitized projection; the secret never reaches
+	// responses those pages receive.
+	includeKeys := strings.EqualFold(request.URL.Query().Get("include_keys"), "true")
 
 	ctx := request.Context()
 	items := make([]ProviderItemDTO, 0)
@@ -569,6 +574,14 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 		}
 	}
 
+	if !includeKeys {
+		// The sanitized projection keeps the configured/absent signal but
+		// strips plaintext key material and its per-entry detail.
+		for index := range items {
+			items[index].APIKey = ""
+			items[index].KeyEntries = nil
+		}
+	}
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"providers": items,
 		"total":     len(items),
