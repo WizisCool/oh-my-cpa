@@ -673,11 +673,13 @@ func (r *Repository) persistedFingerprint(purpose, value string) string {
 	return security.FingerprintOrRedacted(r.db.Cipher(), purpose, value)
 }
 
-// boundedMask accepts only a value already shaped like a display mask. Anything
-// else (a raw key, a fingerprint, empty) is dropped rather than stored, so a
-// caller that forgets to mask cannot leak a secret through this column.
+// boundedMask accepts a value already shaped like a display mask, normalizing
+// the legacy filler so reinserted or imported rows keep working. Anything else
+// (a raw key, a fingerprint, empty) is dropped rather than stored, so a caller
+// that forgets to mask cannot leak a secret through this column. Shape checking
+// is defense in depth: provenance comes from masking at ingestion.
 func boundedMask(value string) string {
-	value = strings.TrimSpace(value)
+	value = security.NormalizeMask(value)
 	if !security.IsMask(value) || len([]rune(value)) > 128 {
 		return ""
 	}

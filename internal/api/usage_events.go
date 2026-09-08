@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
 // usageEventResponse trims a stored row into what the browser needs.
@@ -75,7 +76,9 @@ func projectUsageEvent(row repository.UsageEventRow) usageEventResponse {
 	item.AuthIndex = row.AuthIndex
 	item.APIGroupKey = row.APIGroupKey
 	item.APIGroupLabel = row.APIGroupLabel
-	item.APIKeyMask = row.APIKeyMask
+	// Legacy rows carry the old filler; the console only ever shows the current
+	// one, so the conversion happens once, here, rather than in the UI.
+	item.APIKeyMask = security.NormalizeMask(row.APIKeyMask)
 	item.Source = row.Source
 	if row.UserAgent != nil {
 		item.UserAgent = *row.UserAgent

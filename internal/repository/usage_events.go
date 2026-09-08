@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
 )
 
@@ -402,6 +403,9 @@ func (r *Repository) GetUsageFacets(ctx context.Context, instanceID string, from
 				rows.Close()
 				return facets, fmt.Errorf("scan usage facet %s: %w", entry.column, errScan)
 			}
+			// Facet masks are stored values too, so legacy rows are converted here
+			// as well; the list and detail views do the same in the API projection.
+			value.Mask = security.NormalizeMask(value.Mask)
 			values = append(values, value)
 		}
 		if err := rows.Err(); err != nil {
