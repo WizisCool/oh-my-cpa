@@ -67,3 +67,31 @@ func TestPrivacyProjections(t *testing.T) {
 		t.Fatalf("minimized user agent = %v", got)
 	}
 }
+
+func TestMaskSecretKeepsOnlyRecognisableEdges(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{"empty", "", ""},
+		{"long key keeps 8+4", "sk-1234567890abcdefghij7890", "sk-12345xxxxxxx7890"},
+		{"medium key keeps 4+2", "sk-1234567890ab", "sk-1xxxxxxxab"},
+		{"short key is fully hidden", "sk-local", maskRun},
+		{"boundary 19 runes keeps 4+2", "sk-1234567890123456", "sk-1xxxxxxx56"},
+		{"boundary 20 runes keeps 8+4", "sk-12345678901234567", "sk-12345xxxxxxx4567"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			if got := MaskSecret(test.value); got != test.want {
+				t.Fatalf("MaskSecret(%q) = %q, want %q", test.value, got, test.want)
+			}
+		})
+	}
+	// The mask must never carry the whole secret, whatever its length.
+	for _, value := range []string{"sk-local", "sk-1234567890ab", "sk-1234567890abcdefghij7890"} {
+		if masked := MaskSecret(value); masked == value {
+			t.Fatalf("MaskSecret(%q) leaked the value unchanged", value)
+		}
+	}
+}

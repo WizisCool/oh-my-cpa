@@ -207,6 +207,42 @@ func IsSensitiveKey(key string) bool {
 		strings.Contains(normalized, "password") || strings.Contains(normalized, "credential")
 }
 
+// maskRun is the fixed filler a display mask uses. It is a constant length so
+// the mask never reveals how long the underlying secret is.
+const maskRun = "xxxxxxx"
+
+// MaskSecret renders a credential as a recognisable but non-recoverable display
+// label ("sk-12345xxxxxxx7890"). The caller keeps the keyed fingerprint for
+// identity; this value exists only so a human can tell two keys apart in the
+// UI. Only a short head and tail survive, and a secret short enough that the
+// head/tail would cover most of it is masked completely.
+func MaskSecret(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	runes := []rune(value)
+	switch {
+	case len(runes) >= 20:
+		return string(runes[:8]) + maskRun + string(runes[len(runes)-4:])
+	case len(runes) >= 12:
+		return string(runes[:4]) + maskRun + string(runes[len(runes)-2:])
+	default:
+		return maskRun
+	}
+}
+
+// IsMask reports whether value has the shape MaskSecret produces: a single
+// unbroken token carrying the fixed filler run. Persistence boundaries use it
+// to refuse anything that is not already a mask.
+func IsMask(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	return strings.Contains(value, maskRun) && !strings.ContainsAny(value, " \t\r\n")
+}
+
 // MaskIP keeps only a coarse network prefix. Invalid input is omitted.
 func MaskIP(value string) *string {
 	value = strings.TrimSpace(value)
