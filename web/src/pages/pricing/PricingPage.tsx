@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, App as AntdApp, Button, Empty, Form, Input, InputNumber, Modal, Popconfirm, Table, Tooltip } from 'antd';
+import { Alert, App as AntdApp, Button, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Table, Tooltip } from 'antd';
 import {
   ReloadOutlined,
   SyncOutlined,
@@ -25,11 +25,11 @@ function formatRate(value: number): string {
 /** Form values for the manual price editor; every rate is USD per 1M tokens. */
 interface PriceFormValues {
   model: string;
-  prompt: number;
-  completion: number;
-  cacheRead: number;
-  cacheWrite: number;
-  multiplier: number;
+  prompt?: number | string;
+  completion?: number | string;
+  cacheRead?: number | string;
+  cacheWrite?: number | string;
+  multiplier?: number | string;
 }
 
 interface EditorState {
@@ -49,9 +49,9 @@ export const PricingPage: React.FC = () => {
   const [editor, setEditor] = React.useState<EditorState>(CLOSED_EDITOR);
   const [form] = Form.useForm<PriceFormValues>();
 
-  const watchedPrompt = Form.useWatch('prompt', form) ?? 0;
-  const watchedCompletion = Form.useWatch('completion', form) ?? 0;
-  const watchedMultiplier = Form.useWatch('multiplier', form) ?? 1;
+  const watchedPrompt = Number(Form.useWatch('prompt', form) ?? 0) || 0;
+  const watchedCompletion = Number(Form.useWatch('completion', form) ?? 0) || 0;
+  const watchedMultiplier = Number(Form.useWatch('multiplier', form) ?? 1) || 1;
 
   const result = useQuery({
     queryKey: ['pricing'],
@@ -103,6 +103,17 @@ export const PricingPage: React.FC = () => {
     },
   });
 
+  const updateScheduleMutation = useMutation({
+    mutationFn: (intervalHours: number) => api.updatePricingSyncSchedule(intervalHours),
+    onSuccess: () => {
+      message.success(t('pricing.sync.schedule_updated'));
+      invalidate();
+    },
+    onError: (err) => {
+      message.error(err instanceof ApiError ? err.message : String(err));
+    },
+  });
+
   const models = result.data?.models ?? [];
   const unpricedList = result.data?.unpriced ?? [];
   const sync = result.data?.sync;
@@ -113,7 +124,14 @@ export const PricingPage: React.FC = () => {
   const unpricedCount = unpricedList.length;
 
   const openAdd = (model = '') => {
-    form.setFieldsValue({ model, prompt: 0, completion: 0, cacheRead: 0, cacheWrite: 0, multiplier: 1 });
+    form.setFieldsValue({
+      model,
+      prompt: undefined,
+      completion: undefined,
+      cacheRead: undefined,
+      cacheWrite: undefined,
+      multiplier: 1,
+    });
     setEditor({ open: true, editing: null });
   };
 
@@ -133,13 +151,18 @@ export const PricingPage: React.FC = () => {
     void form
       .validateFields()
       .then((values) => {
+        const parseRate = (val: unknown) => {
+          if (val === undefined || val === null || val === '') return 0;
+          const num = Number(val);
+          return Number.isFinite(num) && num >= 0 ? num : 0;
+        };
         const row: ModelPrice = {
           model: values.model.trim(),
-          prompt_price_per_1m: values.prompt,
-          completion_price_per_1m: values.completion,
-          cache_read_price_per_1m: values.cacheRead,
-          cache_write_price_per_1m: values.cacheWrite,
-          price_multiplier: values.multiplier,
+          prompt_price_per_1m: parseRate(values.prompt),
+          completion_price_per_1m: parseRate(values.completion),
+          cache_read_price_per_1m: parseRate(values.cacheRead),
+          cache_write_price_per_1m: parseRate(values.cacheWrite),
+          price_multiplier: parseRate(values.multiplier) || 1,
           source: 'manual',
           synced_at_ms: 0,
           updated_at_ms: Date.now(),
@@ -366,7 +389,7 @@ export const PricingPage: React.FC = () => {
               : t('pricing.desc')}
           </p>
         </div>
-        <div className="request-actions">
+        <div className={styles.headerActions}>
           <Button
             icon={<ReloadOutlined spin={result.isFetching} />}
             disabled={result.isFetching}
@@ -438,6 +461,30 @@ export const PricingPage: React.FC = () => {
               手动定制 <strong>{manualCount}</strong> 个
             </span>
           </div>
+        </div>
+        <div className={styles.telemetryRight}>
+          <span className={styles.autoSyncLabel}>{t('pricing.sync.auto_label')}:</span>
+          <Select
+            size="small"
+            className={styles.autoSyncSelect}
+            value={state?.auto_sync_interval_hours ?? 24}
+            onChange={(val) => updateScheduleMutation.mutate(val)}
+            loading={updateScheduleMutation.isPending}
+            options={[
+              { label: t('pricing.sync.off'), value: 0 },
+              { label: t('pricing.sync.every_1h'), value: 1 },
+              { label: t('pricing.sync.every_6h'), value: 6 },
+              { label: t('pricing.sync.every_12h'), value: 12 },
+              { label: t('pricing.sync.every_24h'), value: 24 },
+            ]}
+          />
+          {state?.auto_sync_interval_hours !== 0 && state?.next_sync_at_ms && (
+            <span className={styles.nextSyncText}>
+              {t('pricing.sync.next', {
+                time: dayjs(state.next_sync_at_ms).format('MM-DD HH:mm'),
+              })}
+            </span>
+          )}
         </div>
       </div>
 
@@ -519,7 +566,6 @@ export const PricingPage: React.FC = () => {
           </div>
 
           <div className={styles.toolbarRight}>
-            <span className={styles.unitTag}>{t('pricing.per_1m')}</span>
             <Button type="primary" icon={<PlusOutlined />} onClick={() => openAdd()}>
               {t('pricing.add')}
             </Button>
@@ -549,9 +595,12 @@ export const PricingPage: React.FC = () => {
           <span>
             显示 {filteredData.length} / {models.length} 个模型价格条目
           </span>
-          <span>
-            {sync?.running ? '正在与 models.dev 保持同步' : '计费系统就绪 · 精度最高支持 6 位小数'}
-          </span>
+          {sync?.running && (
+            <span className={styles.syncRunningText}>
+              <SyncOutlined spin />
+              {t('pricing.sync.running')}
+            </span>
+          )}
         </div>
       </div>
 
@@ -619,28 +668,58 @@ export const PricingPage: React.FC = () => {
               label={t('pricing.editor.prompt')}
               rules={[{ required: true, message: t('pricing.editor.required') }]}
             >
-              <InputNumber min={0} step={0.000001} style={{ width: '100%' }} suffix="$ / 1M" />
+              <InputNumber
+                placeholder="0.00"
+                min={0}
+                step={0.000001}
+                controls={false}
+                stringMode
+                style={{ width: '100%' }}
+                suffix="$ / 1M"
+              />
             </Form.Item>
             <Form.Item
               name="completion"
               label={t('pricing.editor.completion')}
               rules={[{ required: true, message: t('pricing.editor.required') }]}
             >
-              <InputNumber min={0} step={0.000001} style={{ width: '100%' }} suffix="$ / 1M" />
+              <InputNumber
+                placeholder="0.00"
+                min={0}
+                step={0.000001}
+                controls={false}
+                stringMode
+                style={{ width: '100%' }}
+                suffix="$ / 1M"
+              />
             </Form.Item>
             <Form.Item
               name="cacheRead"
               label={t('pricing.editor.cache_read')}
-              rules={[{ required: true, message: t('pricing.editor.required') }]}
             >
-              <InputNumber min={0} step={0.000001} style={{ width: '100%' }} suffix="$ / 1M" />
+              <InputNumber
+                placeholder="0.00"
+                min={0}
+                step={0.000001}
+                controls={false}
+                stringMode
+                style={{ width: '100%' }}
+                suffix="$ / 1M"
+              />
             </Form.Item>
             <Form.Item
               name="cacheWrite"
               label={t('pricing.editor.cache_write')}
-              rules={[{ required: true, message: t('pricing.editor.required') }]}
             >
-              <InputNumber min={0} step={0.000001} style={{ width: '100%' }} suffix="$ / 1M" />
+              <InputNumber
+                placeholder="0.00"
+                min={0}
+                step={0.000001}
+                controls={false}
+                stringMode
+                style={{ width: '100%' }}
+                suffix="$ / 1M"
+              />
             </Form.Item>
           </div>
 
@@ -649,9 +728,8 @@ export const PricingPage: React.FC = () => {
             label={t('pricing.editor.multiplier')}
             initialValue={1}
             rules={[{ required: true, message: t('pricing.editor.required') }]}
-            extra={t('pricing.editor.multiplier_hint')}
           >
-            <InputNumber min={0} step={0.01} style={{ width: '100%' }} suffix="×" />
+            <InputNumber min={0.01} step={0.01} controls={false} style={{ width: '100%' }} suffix="×" />
           </Form.Item>
 
           {/* Live Estimation Sample Preview */}
