@@ -71,8 +71,8 @@ func NewMetadataClientWithTransport(transport http.RoundTripper, baseURL string)
 // return an error; the caller keeps the last good prices on failure.
 func (c *MetadataClient) Fetch(ctx context.Context) (Catalog, error) {
 	parsed, err := url.Parse(c.baseURL)
-	if err != nil || parsed.Scheme != "https" {
-		return Catalog{}, fmt.Errorf("pricing source URL must be https")
+	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") {
+		return Catalog{}, fmt.Errorf("pricing source URL must be http(s)")
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL, nil)
 	if err != nil {
@@ -141,3 +141,6 @@ func DecodeCatalog(body []byte) ([]CatalogEntry, error) {
 	}
 	return entries, nil
 }
+
+
+

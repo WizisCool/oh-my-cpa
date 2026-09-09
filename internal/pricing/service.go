@@ -214,7 +214,7 @@ func (s *Service) SyncOnce(ctx context.Context) (SyncResult, error) {
 
 func (s *Service) recordFailure(ctx context.Context, syncErr error) {
 	state, err := s.store.GetPricingSyncState(ctx, SourceModelsDev)
-	if err != nil && !errors.Is(err, context.Canceled) {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) && !errors.Is(err, context.Canceled) {
 		return
 	}
 	state.Source = SourceModelsDev

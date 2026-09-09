@@ -32,7 +32,7 @@ func dashboardMemoryDSN(purpose string) string {
 
 // startDashboardTestServer wires the real router over a fake CPA so dashboard
 // and request-event endpoints are exercised exactly as the product runs them.
-func startDashboardTestServer(t *testing.T, handler func(http.ResponseWriter, *http.Request)) (*http.Client, string, *repository.Repository) {
+func startDashboardTestServer(t *testing.T, handler func(http.ResponseWriter, *http.Request), hooks ...func(*Handler)) (*http.Client, string, *repository.Repository) {
 	t.Helper()
 	cpaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Header.Get("Authorization") != "Bearer management-secret-value" {
@@ -75,6 +75,11 @@ func startDashboardTestServer(t *testing.T, handler func(http.ResponseWriter, *h
 		t.Fatal(err)
 	}
 	appHandler := NewHandler(config.Config{BasePath: "/omc", Version: "test", RequestTimeout: 5 * time.Second}, repo, cipher, nil, authManager)
+	// Optional per-test wiring (e.g. attaching the pricing service) happens
+	// before the router serves; it mirrors the app construction order.
+	for _, hook := range hooks {
+		hook(appHandler)
+	}
 	server := httptest.NewServer(appHandler.Router())
 	t.Cleanup(server.Close)
 
