@@ -754,7 +754,7 @@ export const ProvidersPage: React.FC = () => {
       key: 'prefix',
       render: (_, record) =>
         record.prefix ? (
-          <Tag color="geekblue" style={{ fontFamily: 'monospace', margin: 0 }}>
+          <Tag color="geekblue" style={{ fontFamily: 'monospace', margin: 0, borderRadius: 'var(--radius-sm, 4px)' }}>
             {record.prefix}
           </Tag>
         ) : (
@@ -781,7 +781,7 @@ export const ProvidersPage: React.FC = () => {
               <Tooltip title={modelNames || undefined}>
                 <Tag
                   style={{
-                    borderRadius: 12,
+                    borderRadius: 'var(--radius-sm, 4px)',
                     fontSize: 11,
                     margin: 0,
                     padding: '0 8px',
@@ -794,7 +794,7 @@ export const ProvidersPage: React.FC = () => {
               </Tooltip>
               <Tag
                 style={{
-                  borderRadius: 12,
+                  borderRadius: 'var(--radius-sm, 4px)',
                   fontSize: 11,
                   margin: 0,
                   padding: '0 8px',
@@ -808,7 +808,7 @@ export const ProvidersPage: React.FC = () => {
             <div>
               <Tag
                 style={{
-                  borderRadius: 12,
+                  borderRadius: 'var(--radius-sm, 4px)',
                   fontSize: 11,
                   margin: 0,
                   padding: '0 8px',
@@ -828,15 +828,18 @@ export const ProvidersPage: React.FC = () => {
     {
       title: t('pro.col_status'),
       key: 'status',
+      width: 100,
       render: (_, record) =>
         record.disabled ? (
-          <Tag color="warning" style={{ borderRadius: 4, padding: '2px 8px', margin: 0 }}>
-            ⚠ {t('pro.status_disabled')}
-          </Tag>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+            <span style={{ width: 7, height: 7, borderRadius: 2, background: 'var(--warn)', flexShrink: 0 }} />
+            <span style={{ color: 'var(--text-muted)' }}>{t('pro.status_disabled')}</span>
+          </span>
         ) : (
-          <Tag color="success" style={{ borderRadius: 4, padding: '2px 8px', margin: 0 }}>
-            {t('pro.status_active')}
-          </Tag>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+            <span style={{ width: 7, height: 7, borderRadius: 2, background: 'var(--success)', flexShrink: 0 }} />
+            <span style={{ color: 'var(--text)' }}>{t('pro.status_active')}</span>
+          </span>
         ),
     },
 
@@ -862,38 +865,73 @@ export const ProvidersPage: React.FC = () => {
     {
       title: t('common.actions'),
       key: 'actions',
-      width: 100,
+      width: 110,
       align: 'right',
       render: (_, record) => (
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4 }}>
-          <Button
-            size="small"
-            type="text"
-            icon={<EyeOutlined />}
-            title={t('common.details')}
-            onClick={() => handleOpenEdit(record)}
-          />
-          <Button
-            size="small"
-            type="text"
-            icon={<EditOutlined />}
-            title={t('common.edit')}
-            onClick={() => handleOpenEdit(record)}
-          />
+          <Tooltip title={t('common.details')}>
+            <Button
+              size="small"
+              icon={<EyeOutlined />}
+              onClick={() => handleOpenEdit(record)}
+              style={{
+                width: 28,
+                height: 28,
+                padding: 0,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 'var(--radius-sm, 4px)',
+                borderColor: 'var(--border)',
+                background: 'var(--surface)',
+                color: 'var(--text-muted)',
+              }}
+            />
+          </Tooltip>
+          <Tooltip title={t('common.edit')}>
+            <Button
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => handleOpenEdit(record)}
+              style={{
+                width: 28,
+                height: 28,
+                padding: 0,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 'var(--radius-sm, 4px)',
+                borderColor: 'var(--border)',
+                background: 'var(--surface)',
+                color: 'var(--text-muted)',
+              }}
+            />
+          </Tooltip>
           <Popconfirm
             title={t('pro.delete_provider_confirm')}
             onConfirm={() => deleteProviderMutation.mutate(record.id)}
             okText={t('common.confirm')}
             cancelText={t('common.cancel')}
           >
-            <Button
-              size="small"
-              type="text"
-              danger
-              icon={<DeleteOutlined />}
-              title={t('common.delete')}
-              loading={deleteProviderMutation.isPending && deleteProviderMutation.variables === record.id}
-            />
+            <Tooltip title={t('common.delete')}>
+              <Button
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                loading={deleteProviderMutation.isPending && deleteProviderMutation.variables === record.id}
+                style={{
+                  width: 28,
+                  height: 28,
+                  padding: 0,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 'var(--radius-sm, 4px)',
+                  borderColor: 'var(--border)',
+                  background: 'var(--surface)',
+                }}
+              />
+            </Tooltip>
           </Popconfirm>
         </div>
       ),
@@ -1339,7 +1377,7 @@ export const ProvidersPage: React.FC = () => {
                                 <CloseOutlined
                                   style={{
                                     cursor: 'pointer',
-                                    color: '#ff4d4f',
+                                    color: 'var(--danger)',
                                     fontSize: 12,
                                     marginLeft: 2,
                                   }}
@@ -1572,7 +1610,7 @@ export const ProvidersPage: React.FC = () => {
                 >
                   <div style={{ fontSize: 12, color: 'var(--meta)' }}>
                     {endpointModels.length > 0 && (
-                      <span style={{ color: 'var(--accent, #1677ff)', fontWeight: 500 }}>
+                      <span style={{ color: 'var(--accent)', fontWeight: 500 }}>
                         {t('pro.model_list_fetched', { n: endpointModels.length })}
                       </span>
                     )}

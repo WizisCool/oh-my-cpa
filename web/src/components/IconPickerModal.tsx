@@ -128,11 +128,11 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
                   justifyContent: 'center',
                   gap: 6,
                   padding: '10px 4px',
-                  borderRadius: 6,
-                  border: isSelected ? '2px solid var(--accent, #1677ff)' : '1px solid var(--border)',
-                  background: isSelected ? 'rgba(22, 119, 255, 0.08)' : 'var(--surface)',
+                  borderRadius: 'var(--radius-sm, 4px)',
+                  border: isSelected ? '2px solid var(--accent)' : '1px solid var(--border)',
+                  background: isSelected ? 'color-mix(in srgb, var(--accent) 12%, var(--surface))' : 'var(--surface)',
                   cursor: 'pointer',
-                  transition: 'all 0.15s ease',
+                  transition: 'border-color var(--motion-fast, 50ms), background-color var(--motion-fast, 50ms)',
                   userSelect: 'none',
                 }}
                 title={`${item.fullTitle} (${item.id})`}
@@ -147,7 +147,7 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
                     whiteSpace: 'nowrap',
                     width: '100%',
                     padding: '0 4px',
-                    color: isSelected ? 'var(--accent, #1677ff)' : 'var(--fg)',
+                    color: isSelected ? 'var(--accent)' : 'var(--fg)',
                     fontWeight: isSelected ? 600 : 400,
                   }}
                 >

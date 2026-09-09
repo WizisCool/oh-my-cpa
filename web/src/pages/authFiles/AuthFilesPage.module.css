@@ -75,7 +75,7 @@
   right: 10px;
   bottom: -1px;
   height: 2px;
-  border-radius: 999px;
+  border-radius: 0;
   background: transparent;
   transition: background-color var(--motion-fast);
 }
@@ -128,7 +128,7 @@
   line-height: 1.6;
   color: var(--meta);
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm, 4px);
   background: var(--hover-inset);
 }
 

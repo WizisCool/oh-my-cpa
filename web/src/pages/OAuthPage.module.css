@@ -20,7 +20,8 @@
 }
 
 .pageTitle {
-  font-size: 24px;
+  font-size: 22px;
+  line-height: 1.25;
   font-weight: 700;
   color: var(--fg);
   margin: 0;
@@ -44,7 +45,7 @@
   position: relative;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm, 4px);
   padding: 18px 22px;
   box-shadow: none;
   transition: border-color var(--motion-base) var(--ease-standard);

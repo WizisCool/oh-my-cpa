@@ -628,7 +628,7 @@ export const OAuthPage: React.FC = () => {
           alt=""
           width={28}
           height={28}
-          style={{ borderRadius: 6, objectFit: 'contain', display: 'block' }}
+          style={{ borderRadius: 4, objectFit: 'contain', display: 'block' }}
           onError={() => setFailed(true)}
         />
       );

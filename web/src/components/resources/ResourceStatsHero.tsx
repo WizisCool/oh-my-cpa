@@ -63,7 +63,7 @@ export const ResourceStatsHero: React.FC<ResourceStatsHeroProps> = ({
               </span>
             </div>
 
-            <Title level={2} style={{ margin: '0 0 10px 0', fontSize: '24px', letterSpacing: '-0.5px' }}>
+            <Title level={2} style={{ margin: '0 0 10px 0', fontSize: '22px', letterSpacing: '-0.5px' }}>
               {t('tri.hero_title')}
             </Title>
 
@@ -84,7 +84,7 @@ export const ResourceStatsHero: React.FC<ResourceStatsHeroProps> = ({
                     textAlign: 'center',
                   }}
                 >
-                  <Text style={{ color: 'var(--warn)', fontSize: '24px', fontWeight: 700, display: 'block' }}>
+                  <Text style={{ color: 'var(--warn)', fontSize: '28px', fontWeight: 700, display: 'block' }}>
                     {unclaimedCount}
                   </Text>
                   <Text style={{ color: 'var(--muted)', fontSize: '12px' }}>{t('tri.metric_unclaimed')}</Text>
@@ -100,7 +100,7 @@ export const ResourceStatsHero: React.FC<ResourceStatsHeroProps> = ({
                     textAlign: 'center',
                   }}
                 >
-                  <Text style={{ color: 'var(--success)', fontSize: '24px', fontWeight: 700, display: 'block' }}>
+                  <Text style={{ color: 'var(--success)', fontSize: '28px', fontWeight: 700, display: 'block' }}>
                     {claimedCount}
                   </Text>
                   <Text style={{ color: 'var(--muted)', fontSize: '12px' }}>{t('tri.metric_claimed')}</Text>
@@ -116,7 +116,7 @@ export const ResourceStatsHero: React.FC<ResourceStatsHeroProps> = ({
                     textAlign: 'center',
                   }}
                 >
-                  <Text style={{ color: 'var(--fg)', fontSize: '24px', fontWeight: 700, display: 'block' }}>
+                  <Text style={{ color: 'var(--fg)', fontSize: '28px', fontWeight: 700, display: 'block' }}>
                     {totalCount}
                   </Text>
                   <Text style={{ color: 'var(--muted)', fontSize: '12px' }}>{t('tri.metric_total')}</Text>
