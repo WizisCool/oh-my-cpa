@@ -172,6 +172,15 @@ try {
 
   await auditPage(page, responseBodies, '/dashboard', '.dashboard-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
   await auditPage(page, responseBodies, '/usage/events', '.usage-events-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
+  await auditPage(page, responseBodies, '/pricing', '.pricing-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
+
+  // The pricing page must open fast: a full table render is the budget, not a
+  // spinner wait. This is the regression guard for the old 5s page freeze.
+  const pricingOpenStart = Date.now();
+  await page.goto(`${appURL}/pricing`);
+  await page.locator('.pricing-page').first().waitFor({ state: 'visible', timeout: 3000 });
+  const pricingOpenMS = Date.now() - pricingOpenStart;
+  check('pricing page opens under 3s', pricingOpenMS < 3000, `${pricingOpenMS}ms`);
   await auditPage(page, responseBodies, '/ai-providers', '.providers-page');
   await auditPage(page, responseBodies, '/auth-files', '.auth-files-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
 
@@ -481,3 +490,5 @@ if (failures.length > 0) {
 } else {
   console.log(`\n${checks.length} deterministic browser checks passed.`);
 }
+
+
