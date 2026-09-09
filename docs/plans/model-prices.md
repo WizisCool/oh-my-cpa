@@ -21,6 +21,8 @@ replacing the earlier heavier valuation prototype (removed before this work).
 ## Components
 
 - `migrations/015_model_prices.sql`: `model_prices` + `pricing_sync_state`.
+- `migrations/016_pricing_sync_state_repair.sql`: normalises sync-state rows
+  that the first revision of the upsert wrote with TEXT in an INTEGER column.
 - `internal/pricing`: domain types, catalog fetch/decode, match, sync service.
   The package defines the `Store` interface; `internal/repository` implements it
   (dependency direction: repository → pricing).
@@ -36,6 +38,19 @@ replacing the earlier heavier valuation prototype (removed before this work).
 stripped, or normalized, with official provider families ranked first. Ties
 between different providers at the same rank stay unmatched — auto sync never
 guesses; the model shows up on the pricing page as unpriced for manual setup.
+
+## Sync-state write rule
+
+SQLite column types are advisory, so a mistyped value is stored happily and only
+explodes on read. `SavePricingSyncState` therefore keeps every `DO UPDATE SET`
+term on `excluded.` or the target row: the first revision bound a seventh
+placeholder inside the UPDATE clause and passed the source name for it, which
+wrote `modelsdev` into `last_success_at_ms` on every repeat sync and made
+`GET /v1/pricing` fail. The read guards the column with `typeof()` so one dirty
+bookkeeping field can never blank the page, and migration 016 heals stored rows.
+`GET /v1/pricing` also degrades instead of failing: an unreadable sync state
+returns `sync.known = false` with the reason in `sync.state.last_error`, while
+the price table and unpriced models still load.
 
 ## Known limits
 
