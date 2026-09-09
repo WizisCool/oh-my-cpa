@@ -1,22 +1,21 @@
-/* ── Pricing Leaderboard: Opencode Style Model Capacity & Benchmark ── */
+/* ── Pricing Leaderboard: Pure Display Model Capacity & Algorithmic Scale ── */
 
 .leaderboardCard {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 6px);
-  padding: 20px;
+  border-radius: var(--radius-sm, 4px);
+  padding: 16px 20px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  gap: 14px;
 }
 
 .header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 14px;
+  gap: 12px;
 }
 
 .titleArea {
@@ -32,10 +31,21 @@
 }
 
 .title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--fg);
   margin: 0;
+}
+
+.budgetBadge {
+  font-size: 11px;
+  font-family: monospace;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 15%, var(--surface));
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .subtitle {
@@ -44,129 +54,56 @@
   margin: 0;
 }
 
-.tagBadge {
-  font-size: 11px;
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.modelCountBadge {
+  font-size: 12px;
+  color: var(--muted);
   font-family: monospace;
-  font-weight: 600;
-  padding: 1px 7px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
-  color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
-/* ── Interactive Controls Bar ── */
-.controlsBar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-  padding: 10px 14px;
-  background: color-mix(in srgb, var(--surface) 95%, var(--border));
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);
-}
-
-.controlsLeft {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.controlGroup {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.controlLabel {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.budgetTabs {
-  display: inline-flex;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);
-  padding: 2px;
-  gap: 2px;
-}
-
-.budgetTab {
-  background: none;
-  border: none;
-  padding: 3px 10px;
-  font-size: 12px;
-  font-family: monospace;
-  font-weight: 500;
-  color: var(--muted);
-  border-radius: 3px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.budgetTab:hover {
-  color: var(--fg);
-}
-
-.budgetTabActive {
-  background: var(--accent);
-  color: #fff !important;
-  font-weight: 600;
-}
-
-.customTokensBox {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  padding: 10px 14px;
-  background: color-mix(in srgb, var(--surface) 90%, var(--border));
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-sm, 4px);
-}
-
-.tokenInputGroup {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-/* ── Opencode Style Chart Area ── */
+/* ── Chart Container ── */
 .chartContainer {
+  --plot-width: 60%;
   position: relative;
   background: color-mix(in srgb, var(--surface) 96%, #000);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 6px);
-  padding: 20px 24px 16px 24px;
+  border-radius: var(--radius-sm, 4px);
+  padding: 16px 20px 12px 20px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  max-height: 520px;
+  overflow-y: auto;
   overflow-x: auto;
 }
 
-/* Vertical guide lines across the chart */
-.gridLines {
+/* Chart Body (Contains Grid and Bar Rows) */
+.chartBody {
+  position: relative;
+  width: 100%;
+}
+
+/* Algorithmic Grid Lines Overlay: Matches the exact width of barPlotCol */
+.gridOverlay {
   position: absolute;
   top: 0;
-  bottom: 30px;
-  left: 24px;
-  right: 24px;
+  bottom: 0;
+  left: 0;
+  width: var(--plot-width);
   pointer-events: none;
-  display: flex;
-  justify-content: space-between;
+  z-index: 0;
 }
 
 .gridLine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
   width: 1px;
-  height: 100%;
   background: color-mix(in srgb, var(--border) 40%, transparent);
 }
 
@@ -175,57 +112,51 @@
   z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .barRow {
   display: flex;
   align-items: center;
-  cursor: pointer;
-  padding: 2px 4px;
-  border-radius: 4px;
+  gap: 16px;
+  height: 22px;
+  padding: 0 4px;
+  border-radius: 3px;
   transition: background 0.15s ease;
+  cursor: default;
 }
 
 .barRow:hover {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 
-.barTrack {
-  position: relative;
+/* Bar Plot Column: Where the bar extends */
+.barPlotCol {
+  width: var(--plot-width);
+  height: 100%;
   display: flex;
   align-items: center;
-  width: 100%;
-  height: 22px;
-}
-
-/* The horizontal bar with Opencode olive-gold aesthetic */
-.barFill {
-  height: 14px;
-  border-radius: 2px;
-  background: #c3cb46;
-  box-shadow: 0 1px 3px rgba(195, 203, 70, 0.25);
-  display: flex;
   position: relative;
-  transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   flex-shrink: 0;
 }
 
-/* For models with high cache savings or 2x efficiency */
-.barBonus {
-  background: #8b9420;
-  height: 100%;
-  border-top-right-radius: 2px;
-  border-bottom-right-radius: 2px;
+.barFill {
+  height: 12px;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  flex-shrink: 0;
 }
 
-.barMeta {
-  display: inline-flex;
+/* Meta Column: Request count, model name, and multiplier ratio badge */
+.barMetaCol {
+  flex: 1;
+  min-width: 0;
+  display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: 10px;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1;
 }
 
@@ -233,109 +164,98 @@
   font-family: monospace;
   font-weight: 700;
   color: var(--fg);
-  font-size: 13px;
+  font-size: 12px;
+  flex-shrink: 0;
 }
 
 .modelName {
   color: var(--fg);
   font-weight: 500;
   opacity: 0.9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
 }
 
-.badgeTag {
+.ratioBadge {
   font-size: 10px;
-  padding: 0 4px;
-  border-radius: 3px;
-  line-height: 16px;
-  background: color-mix(in srgb, var(--border) 60%, var(--surface));
-  color: var(--muted);
-  border: 1px solid var(--border);
-}
-
-.badgeBonus {
-  background: color-mix(in srgb, #c3cb46 15%, var(--surface));
-  color: #8b9420;
-  border-color: color-mix(in srgb, #c3cb46 40%, transparent);
-  font-weight: 600;
-}
-
-/* ── X-Axis Scale Marks at bottom (1x, 10x, 25x, 50x, 100x, 250x...) ── */
-.scaleAxis {
-  position: relative;
-  display: flex;
-  justify-content: space-between;
-  padding-top: 8px;
-  margin-top: 4px;
-  border-top: 1px solid var(--border);
   font-family: monospace;
-  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  flex-shrink: 0;
+}
+
+.ratioBaseline {
+  background: color-mix(in srgb, var(--muted) 12%, var(--surface));
   color: var(--muted);
+  border-color: color-mix(in srgb, var(--muted) 28%, transparent);
+}
+
+/* ── Expand/Collapse row ── */
+.expandRow {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 0 2px;
+  border-top: 1px dashed color-mix(in srgb, var(--border) 60%, transparent);
+  margin-top: 2px;
+}
+
+.expandBtn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 3px;
+  transition: all 0.15s ease;
+}
+
+.expandBtn:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+/* ── Bottom Algorithmic Scale Axis ── */
+.scaleFooter {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-top: 6px;
+  margin-top: 2px;
+  border-top: 1px solid var(--border);
+}
+
+.scalePlotArea {
+  width: var(--plot-width);
+  height: 18px;
+  position: relative;
+  flex-shrink: 0;
   user-select: none;
 }
 
-.scaleTick {
-  position: relative;
-  text-align: center;
+.scaleTickMark {
+  position: absolute;
+  top: 0;
+  white-space: nowrap;
 }
 
-/* ── Hover Tooltip Card (CommandCode style) ── */
-.tooltipCard {
-  width: 280px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  font-size: 12px;
-}
-
-.tooltipHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 6px;
-}
-
-.tooltipModelTitle {
-  font-weight: 600;
-  font-family: monospace;
-  color: var(--fg);
-  font-size: 13px;
-}
-
-.tooltipMetricRow {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-}
-
-.tooltipMetricValue {
-  font-family: monospace;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--accent);
-}
-
-.tooltipBreakdown {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  background: color-mix(in srgb, var(--surface) 92%, var(--border));
-  border-radius: 4px;
-  padding: 6px 8px;
+.scaleTickLabel {
   font-family: monospace;
   font-size: 11px;
+  color: var(--muted);
 }
 
-.breakdownItem {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.savingsNote {
-  color: var(--success);
-  font-size: 11px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
+.scaleMetaSpacer {
+  flex: 1;
 }

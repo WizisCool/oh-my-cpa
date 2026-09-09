@@ -274,11 +274,11 @@ export const PricingPage: React.FC = () => {
         ),
     },
     {
-      title: t('pricing.col.multiplier'),
+      title: <span style={{ whiteSpace: 'nowrap' }}>{t('pricing.col.multiplier')}</span>,
       dataIndex: 'price_multiplier',
       key: 'multiplier',
       align: 'center' as const,
-      width: 90,
+      width: 115,
       render: (val: number, row: ModelPrice) =>
         row.updated_at_ms === 0 ? (
           <span className={styles.priceDimmed}>—</span>
@@ -306,7 +306,7 @@ export const PricingPage: React.FC = () => {
               border: '1px solid color-mix(in srgb, var(--warn) 30%, var(--border))',
             }}
           >
-            未定价
+            {t('pricing.source.unpriced')}
           </span>
         ) : source === 'manual' ? (
           <span className={`${styles.sourceBadge} ${styles.sourceManual}`}>
@@ -386,7 +386,7 @@ export const PricingPage: React.FC = () => {
           <h1 className="terminal-title">{t('pricing.title')}</h1>
           <p className="terminal-subtitle">
             {models.length > 0
-              ? `共 ${models.length} 个模型已定价 · 数据源 models.dev · 手动价格优先`
+              ? t('pricing.subtitle_count', { count: models.length })
               : t('pricing.desc')}
           </p>
         </div>
@@ -459,7 +459,7 @@ export const PricingPage: React.FC = () => {
             </span>
             <div className={styles.telemetryDivider} />
             <span className={styles.telemetryItem}>
-              手动定制 <strong>{manualCount}</strong> 个
+              {t('pricing.sync.manual', { n: manualCount })}
             </span>
           </div>
         </div>
@@ -524,7 +524,7 @@ export const PricingPage: React.FC = () => {
                 className={`${styles.filterTab} ${activeTab === 'all' ? styles.filterTabActive : ''}`}
                 onClick={() => setActiveTab('all')}
               >
-                全部
+                {t('pricing.tab.all')}
                 <span className={styles.filterCount}>{models.length}</span>
               </button>
               <button
@@ -549,7 +549,7 @@ export const PricingPage: React.FC = () => {
                   className={`${styles.filterTab} ${activeTab === 'unpriced' ? styles.filterTabActive : ''}`}
                   onClick={() => setActiveTab('unpriced')}
                 >
-                  未定价
+                  {t('pricing.tab.unpriced')}
                   <span className={styles.filterCount}>{unpricedCount}</span>
                 </button>
               )}
@@ -558,7 +558,7 @@ export const PricingPage: React.FC = () => {
             {/* Monospace Search Input */}
             <Input
               className={styles.searchBox}
-              placeholder="搜索模型名称..."
+              placeholder={t('pricing.search_placeholder')}
               prefix={<SearchOutlined style={{ color: 'var(--meta)' }} />}
               value={search}
               allowClear
@@ -594,7 +594,7 @@ export const PricingPage: React.FC = () => {
         {/* Workbench Footer Status */}
         <div className={styles.workbenchFooter}>
           <span>
-            显示 {filteredData.length} / {models.length} 个模型价格条目
+            {t('pricing.footer_count', { current: filteredData.length, total: models.length })}
           </span>
           {sync?.running && (
             <span className={styles.syncRunningText}>
@@ -738,7 +738,7 @@ export const PricingPage: React.FC = () => {
 
           {/* Live Estimation Sample Preview */}
           <div className={styles.liveEstimateBox}>
-            <div className={styles.liveEstimateTitle}>成本试算示例 (100K Prompt + 20K Completion)</div>
+            <div className={styles.liveEstimateTitle}>{t('pricing.editor.live_sample_title')}</div>
             <div className={styles.liveEstimateValue}>
               ${(((watchedPrompt * 0.1) + (watchedCompletion * 0.02)) * watchedMultiplier).toFixed(6)}
             </div>

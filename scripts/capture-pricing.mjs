@@ -5,7 +5,7 @@ const baseUrl = 'http://localhost:5173/omc';
 
 async function main() {
   const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ viewport: { width: 1440, height: 1300 } });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1200 } });
   const page = await context.newPage();
 
   console.log('Navigating to login...');
@@ -23,51 +23,51 @@ async function main() {
   await page.goto(`${baseUrl}/pricing`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(1000);
 
-  // 1. Dark mode full viewport
-  await page.screenshot({ path: `${outDir}/pricing_dark.png` });
-  console.log('Saved pricing_dark.png');
-
-  // Scroll to leaderboard
   const leaderboard = page.locator('[data-testid="pricing-leaderboard"]');
+
+  // 1. Chinese mode leaderboard
   if (await leaderboard.count() > 0) {
     await leaderboard.scrollIntoViewIfNeeded();
     await page.waitForTimeout(500);
-    // Hover on first bar to show popover
-    const firstBar = leaderboard.locator('[class*="barRow"]').first();
-    if (await firstBar.count() > 0) {
-      await firstBar.hover();
-      await page.waitForTimeout(500);
-    }
-    await page.screenshot({ path: `${outDir}/pricing_leaderboard_dark.png` });
-    console.log('Saved pricing_leaderboard_dark.png');
+    await leaderboard.screenshot({ path: `${outDir}/pricing_leaderboard_zh.png` });
+    console.log('Saved pricing_leaderboard_zh.png');
   }
 
-  // Toggle theme to light mode: Header has theme toggle icon
-  const themeBtn = page.locator('.ant-layout-header button:has(.anticon-sun), .ant-layout-header button:has(.anticon-moon), button[title*="主题"], button[aria-label*="主题"]');
-  if (await themeBtn.count() > 0) {
-    await themeBtn.first().click();
-    await page.waitForTimeout(800);
-
-    // Light mode leaderboard
-    if (await leaderboard.count() > 0) {
-      await leaderboard.scrollIntoViewIfNeeded();
-      const firstBar = leaderboard.locator('[class*="barRow"]').first();
-      if (await firstBar.count() > 0) {
-        await firstBar.hover();
-        await page.waitForTimeout(500);
-      }
-      await page.screenshot({ path: `${outDir}/pricing_leaderboard_light.png` });
-      console.log('Saved pricing_leaderboard_light.png');
+  // 2. Toggle language to English: click language button
+  const langBtn = page.locator('button:has(span.terminal-mono:text("EN")), button:has(span.terminal-mono:text("中"))');
+  if (await langBtn.count() > 0) {
+    const text = await langBtn.innerText();
+    // If it says EN, clicking it switches to EN
+    if (text.includes('EN')) {
+      await langBtn.click();
+      await page.waitForTimeout(600);
     }
-
-    // Full page light
-    await page.screenshot({ path: `${outDir}/pricing_light.png` });
-    console.log('Saved pricing_light.png');
-
-    // Toggle back to dark
-    await themeBtn.first().click();
-    await page.waitForTimeout(400);
   }
+
+  // 3. English mode leaderboard
+  if (await leaderboard.count() > 0) {
+    await leaderboard.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(500);
+    await leaderboard.screenshot({ path: `${outDir}/pricing_leaderboard_en.png` });
+    console.log('Saved pricing_leaderboard_en.png');
+  }
+
+  // 4. English mode full pricing page
+  await page.screenshot({ path: `${outDir}/pricing_full_en.png` });
+  console.log('Saved pricing_full_en.png');
+
+  // Switch back to Chinese
+  if (await langBtn.count() > 0) {
+    const text = await langBtn.innerText();
+    if (text.includes('中')) {
+      await langBtn.click();
+      await page.waitForTimeout(600);
+    }
+  }
+
+  // 5. Chinese mode full pricing page
+  await page.screenshot({ path: `${outDir}/pricing_full_zh.png` });
+  console.log('Saved pricing_full_zh.png');
 
   await browser.close();
   console.log('Done!');
