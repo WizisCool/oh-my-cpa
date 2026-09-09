@@ -219,7 +219,7 @@ export const PricingPage: React.FC = () => {
   ];
 
   return (
-    <div className={`terminal-page ${styles['pricing-page']}`} data-testid="pricing-page">
+    <div className={`terminal-page pricing-page ${styles['pricing-page']}`} data-testid="pricing-page">
       <header className="terminal-page-head">
         <div>
           <h1 className="terminal-title">{t('pricing.title')}</h1>
@@ -406,5 +406,8 @@ export const PricingPage: React.FC = () => {
     </div>
   );
 };
+
+
+
 
 
