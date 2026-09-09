@@ -1,4 +1,4 @@
-/* ── Pricing Leaderboard: Pure Display Model Capacity & Algorithmic Scale ── */
+/* ── Pricing Leaderboard: Natural In-place Display Model Capacity & Usage ── */
 
 .leaderboardCard {
   background: var(--surface);
@@ -68,7 +68,6 @@
 
 /* ── Chart Container ── */
 .chartContainer {
-  --plot-width: 60%;
   position: relative;
   background: color-mix(in srgb, var(--surface) 96%, #000);
   border: 1px solid var(--border);
@@ -88,13 +87,13 @@
   width: 100%;
 }
 
-/* Algorithmic Grid Lines Overlay: Matches the exact width of barPlotCol */
+/* Algorithmic Grid Lines Overlay */
 .gridOverlay {
   position: absolute;
   top: 0;
   bottom: 0;
   left: 0;
-  width: var(--plot-width);
+  right: 0;
   pointer-events: none;
   z-index: 0;
 }
@@ -118,7 +117,6 @@
 .barRow {
   display: flex;
   align-items: center;
-  gap: 16px;
   height: 22px;
   padding: 0 4px;
   border-radius: 3px;
@@ -130,16 +128,15 @@
   background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 
-/* Bar Plot Column: Where the bar extends */
-.barPlotCol {
-  width: var(--plot-width);
-  height: 100%;
+.barTrack {
+  position: relative;
   display: flex;
   align-items: center;
-  position: relative;
-  flex-shrink: 0;
+  width: 100%;
+  height: 100%;
 }
 
+/* Native Project Accent Color Bar */
 .barFill {
   height: 12px;
   border-radius: 2px;
@@ -148,16 +145,16 @@
   flex-shrink: 0;
 }
 
-/* Meta Column: Request count, model name, and multiplier ratio badge */
-.barMetaCol {
-  flex: 1;
-  min-width: 0;
-  display: flex;
+/* Meta: request count and model name immediately beside the bar */
+.barMeta {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
+  margin-left: 10px;
   white-space: nowrap;
   font-size: 12px;
   line-height: 1;
+  flex-shrink: 0;
 }
 
 .requestCount {
@@ -165,34 +162,12 @@
   font-weight: 700;
   color: var(--fg);
   font-size: 12px;
-  flex-shrink: 0;
 }
 
 .modelName {
   color: var(--fg);
   font-weight: 500;
   opacity: 0.9;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex-shrink: 1;
-}
-
-.ratioBadge {
-  font-size: 10px;
-  font-family: monospace;
-  font-weight: 600;
-  padding: 1px 6px;
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
-  color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
-  flex-shrink: 0;
-}
-
-.ratioBaseline {
-  background: color-mix(in srgb, var(--muted) 12%, var(--surface));
-  color: var(--muted);
-  border-color: color-mix(in srgb, var(--muted) 28%, transparent);
 }
 
 /* ── Expand/Collapse row ── */
@@ -230,17 +205,15 @@
 .scaleFooter {
   display: flex;
   align-items: center;
-  gap: 16px;
   padding-top: 6px;
   margin-top: 2px;
   border-top: 1px solid var(--border);
 }
 
 .scalePlotArea {
-  width: var(--plot-width);
-  height: 18px;
   position: relative;
-  flex-shrink: 0;
+  width: 100%;
+  height: 18px;
   user-select: none;
 }
 
@@ -254,8 +227,4 @@
   font-family: monospace;
   font-size: 11px;
   color: var(--muted);
-}
-
-.scaleMetaSpacer {
-  flex: 1;
 }

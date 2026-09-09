@@ -15,47 +15,112 @@ const PROMPT_TOKENS = 1000;
 const COMPLETION_TOKENS = 300;
 const CACHE_READ_TOKENS = 35000;
 
+const MIN_BAR_WIDTH_PCT = 4;
+const MAX_BAR_WIDTH_PCT = 58;
+
 type DisplayLimit = '10' | '25' | 'all';
 
-/**
- * Dynamic tick generator based on actual data range.
- * Produces 4 to 6 clean, rounded multiplier ticks starting at 1.
- */
-function generateTicks(maxRatio: number): number[] {
-  if (maxRatio <= 1.2) return [1];
-  if (maxRatio <= 2) return [1, 1.25, 1.5, 1.75, 2];
-  if (maxRatio <= 3) return [1, 1.5, 2, 2.5, 3];
-  if (maxRatio <= 5) return [1, 2, 3, 4, 5];
-  if (maxRatio <= 10) return [1, 2.5, 5, 7.5, 10];
-  if (maxRatio <= 20) return [1, 5, 10, 15, 20];
-  if (maxRatio <= 35) return [1, 5, 10, 20, 30];
-  if (maxRatio <= 60) return [1, 10, 25, 40, 50];
-  if (maxRatio <= 120) return [1, 10, 25, 50, 75, 100];
-  if (maxRatio <= 300) return [1, 10, 50, 100, 200, Math.ceil(maxRatio / 50) * 50];
-  if (maxRatio <= 600) return [1, 25, 100, 250, 500];
-  if (maxRatio <= 1200) return [1, 50, 200, 500, 1000];
-  return [1, 10, 100, 500, 1000, Math.ceil(maxRatio / 500) * 500];
+/** Format a number into clean K / M notation (e.g. 1K, 10K, 50K, 260K) */
+function formatReqTick(val: number): string {
+  if (val >= 1_000_000) {
+    const m = val / 1_000_000;
+    return `${m % 1 === 0 ? m : m.toFixed(1)}M`;
+  }
+  if (val >= 1_000) {
+    const k = val / 1_000;
+    return `${k % 1 === 0 ? k : k.toFixed(1)}K`;
+  }
+  return String(Math.round(val));
 }
 
 /**
- * Maps a ratio (>= 1) to percentage width (from minBarPct up to 100%).
- * Uses linear scale for small ranges (<= 5x), and power (sqrt) scale for larger ranges
- * to keep smaller models visible while accentuating the contrast for higher-volume models.
+ * Generate 4 to 6 clean, algorithmic ticks based on actual request range.
  */
-function getRatioPosition(r: number, topTick: number, isLinear: boolean): number {
-  if (topTick <= 1) return 50;
-  const clamped = Math.max(1, Math.min(topTick, r));
-  const minBarPct = 6;
-  const maxBarPct = 100;
+function generateRequestTicks(minReq: number, maxReq: number): number[] {
+  if (maxReq <= 0) return [];
+  if (maxReq === minReq || maxReq / Math.max(1, minReq) <= 1.2) {
+    return [Math.round(minReq)];
+  }
+
+  const ratio = maxReq / Math.max(1, minReq);
+
+  // For narrow range (<= 5x), use linear steps
+  if (ratio <= 5) {
+    const range = maxReq - minReq;
+    const rawStep = range / 4;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+    const niceSteps = [1, 2, 2.5, 5, 10].map((s) => s * magnitude);
+    const step = niceSteps.find((s) => s >= rawStep) || niceSteps[niceSteps.length - 1];
+
+    const start = Math.floor(minReq / step) * step;
+    const ticks: number[] = [];
+    for (let cur = Math.max(0, start); cur <= maxReq + step * 0.5; cur += step) {
+      if (cur >= minReq * 0.8) ticks.push(cur);
+    }
+    if (ticks.length < 3) ticks.push(maxReq);
+    return ticks;
+  }
+
+  // For wide range (> 5x), use power/logarithmic checkpoints
+  const allCheckpoints = [
+    100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 75000, 100000,
+    150000, 200000, 250000, 300000, 400000, 500000, 750000, 1000000, 2000000,
+  ];
+
+  // Starting nice tick around minReq
+  const startTick =
+    minReq < 1000
+      ? 1000
+      : allCheckpoints.find((cp) => cp >= minReq * 0.85) || minReq;
+
+  // Ending nice tick around maxReq
+  const endTick =
+    allCheckpoints.find((cp) => cp >= maxReq) ||
+    Math.ceil(maxReq / 50000) * 50000;
+
+  // Pick intermediate checkpoints
+  const between = allCheckpoints.filter((cp) => cp > startTick && cp < endTick);
+
+  if (between.length <= 4) {
+    return [startTick, ...between, endTick];
+  }
+
+  // Sample ~3 checkpoints between start and end
+  const stepIdx = (between.length - 1) / 3;
+  const sampled = [
+    between[Math.round(stepIdx)],
+    between[Math.round(stepIdx * 2)],
+    between[Math.round(stepIdx * 3)],
+  ].filter((v, i, arr) => arr.indexOf(v) === i);
+
+  return [startTick, ...sampled, endTick];
+}
+
+/**
+ * Maps a request count to bar width percentage (MIN_BAR_WIDTH_PCT to MAX_BAR_WIDTH_PCT).
+ */
+function getBarWidth(
+  requests: number,
+  minReq: number,
+  maxTick: number,
+  isLinear: boolean
+): number {
+  if (maxTick <= minReq) return MIN_BAR_WIDTH_PCT;
+  const clamped = Math.max(minReq, Math.min(maxTick, requests));
 
   if (isLinear) {
-    const fraction = (clamped - 1) / (topTick - 1);
-    return minBarPct + (maxBarPct - minBarPct) * fraction;
+    const fraction = (clamped - minReq) / (maxTick - minReq);
+    return MIN_BAR_WIDTH_PCT + (MAX_BAR_WIDTH_PCT - MIN_BAR_WIDTH_PCT) * fraction;
   }
 
   // Sqrt power scale
-  const fraction = (Math.sqrt(clamped) - 1) / (Math.sqrt(topTick) - 1);
-  return minBarPct + (maxBarPct - minBarPct) * fraction;
+  const fraction =
+    (Math.sqrt(clamped) - Math.sqrt(minReq)) /
+    (Math.sqrt(maxTick) - Math.sqrt(minReq));
+  return (
+    MIN_BAR_WIDTH_PCT +
+    (MAX_BAR_WIDTH_PCT - MIN_BAR_WIDTH_PCT) * Math.max(0, Math.min(1, fraction))
+  );
 }
 
 export const PricingLeaderboard: React.FC<PricingLeaderboardProps> = ({ models }) => {
@@ -109,26 +174,22 @@ export const PricingLeaderboard: React.FC<PricingLeaderboardProps> = ({ models }
       return { scaleTicks: [], calculatedRows: [] };
     }
 
-    const baseline = visibleRows[0].requests; // Most expensive model is baseline (1x)
-    const maxRequests = Math.max(...visibleRows.map((r) => r.requests));
-    const maxRatio = Math.max(1, maxRequests / baseline);
-
-    const rawTicks = generateTicks(maxRatio);
-    const topTick = rawTicks[rawTicks.length - 1];
-    const isLinear = maxRatio <= 5;
+    const minReq = visibleRows[0].requests; // Most expensive model
+    const maxReq = Math.max(...visibleRows.map((r) => r.requests));
+    const rawTicks = generateRequestTicks(minReq, maxReq);
+    const maxTick = rawTicks[rawTicks.length - 1] || maxReq;
+    const isLinear = maxReq / Math.max(1, minReq) <= 5;
 
     const scaleTicks = rawTicks.map((val) => ({
       val,
-      label: `${val}x`,
-      position: getRatioPosition(val, topTick, isLinear),
+      label: formatReqTick(val),
+      position: getBarWidth(val, minReq, maxTick, isLinear),
     }));
 
     const calculatedRows = visibleRows.map((r) => {
-      const ratio = r.requests / baseline;
-      const widthPct = getRatioPosition(ratio, topTick, isLinear);
+      const widthPct = getBarWidth(r.requests, minReq, maxTick, isLinear);
       return {
         ...r,
-        ratio,
         widthPct,
       };
     });
@@ -188,28 +249,21 @@ export const PricingLeaderboard: React.FC<PricingLeaderboardProps> = ({ models }
                 ))}
               </div>
 
-              {/* Model Bar Rows */}
+              {/* Model Bar Rows: Request count and model name directly beside each bar */}
               <div className={styles.barList}>
                 {calculatedRows.map((row) => (
                   <div key={row.model} className={styles.barRow}>
-                    <div className={styles.barPlotCol}>
+                    <div className={styles.barTrack}>
                       <div
                         className={styles.barFill}
                         style={{ width: `${row.widthPct}%` }}
                       />
-                    </div>
-                    <div className={styles.barMetaCol}>
-                      <span className={styles.requestCount}>
-                        {t('pricing.leaderboard.req_count', { n: row.requests.toLocaleString() })}
-                      </span>
-                      <span className={styles.modelName}>{row.model}</span>
-                      <span
-                        className={`${styles.ratioBadge} ${row.ratio === 1 ? styles.ratioBaseline : ''}`}
-                      >
-                        {row.ratio === 1
-                          ? t('pricing.leaderboard.baseline')
-                          : `${row.ratio < 10 ? row.ratio.toFixed(1) : Math.round(row.ratio)}x`}
-                      </span>
+                      <div className={styles.barMeta}>
+                        <span className={styles.requestCount}>
+                          {t('pricing.leaderboard.req_count', { n: row.requests.toLocaleString() })}
+                        </span>
+                        <span className={styles.modelName}>{row.model}</span>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -244,7 +298,7 @@ export const PricingLeaderboard: React.FC<PricingLeaderboardProps> = ({ models }
               <div className={styles.scalePlotArea}>
                 {scaleTicks.map((tick, idx) => {
                   let alignStyle: React.CSSProperties = { transform: 'translateX(-50%)' };
-                  if (idx === 0) alignStyle = { transform: 'translateX(-30%)' };
+                  if (idx === 0) alignStyle = { transform: 'translateX(-20%)' };
                   else if (idx === scaleTicks.length - 1) alignStyle = { transform: 'translateX(-80%)' };
 
                   return (
@@ -258,7 +312,6 @@ export const PricingLeaderboard: React.FC<PricingLeaderboardProps> = ({ models }
                   );
                 })}
               </div>
-              <div className={styles.scaleMetaSpacer} />
             </div>
           </>
         )}
