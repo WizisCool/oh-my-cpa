@@ -59,7 +59,7 @@ func TestCPARenameKeepsBindingAndFollowsCurrentName(t *testing.T) {
 			CPAResourceName: "renamed-team.json",
 			CPADriver:       "codex",
 		},
-	}, later, true);	err != nil {
+	}, later, true); err != nil {
 		t.Fatal(err)
 	}
 
