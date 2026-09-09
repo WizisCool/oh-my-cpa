@@ -210,8 +210,8 @@
   width: 2px;
   height: 16px;
   background: transparent;
-  border-radius: 1px;
-  transition: background 0.15s ease;
+  border-radius: 0;
+  transition: background var(--motion-fast, 50ms) ease;
 }
 
 .req-col-resizer:hover::after,
@@ -323,28 +323,28 @@
 .req-result-pill {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   font-size: 11px;
   font-weight: 600;
-  padding: 2px 9px;
-  border-radius: 9999px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm, 4px);
   line-height: 1.4;
   white-space: nowrap;
 }
 .req-result-pill.is-success {
-  color: #10b981;
-  background: rgba(16, 185, 129, 0.1);
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--success) 30%, transparent);
 }
 .req-result-pill.is-failed {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
 }
 .req-result-bullet {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
   background: currentColor;
 }
 
@@ -360,7 +360,7 @@
 .req-provider-icon-wrapper {
   width: 30px;
   height: 30px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm, 4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -385,6 +385,7 @@
 .req-provider-title {
   font-size: 13px;
   font-weight: 600;
+  font-family: var(--font-mono, monospace);
   color: var(--fg);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -393,11 +394,12 @@
 .req-badge-oauth {
   font-size: 10px;
   font-weight: 600;
+  font-family: var(--font-mono, monospace);
   padding: 1px 5px;
-  border-radius: 4px;
-  background: rgba(59, 130, 246, 0.12);
-  color: #3b82f6;
-  border: 1px solid rgba(59, 130, 246, 0.28);
+  border-radius: var(--radius-sm, 4px);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
   flex-shrink: 0;
   line-height: 1.2;
 }
@@ -432,17 +434,18 @@
   font-size: 10px;
   font-weight: 600;
   font-family: var(--font-mono, monospace);
-  padding: 0 4px;
-  border-radius: 3px;
-  background: rgba(139, 92, 246, 0.12);
-  color: #8b5cf6;
-  border: 1px solid rgba(139, 92, 246, 0.25);
+  padding: 0 5px;
+  border-radius: var(--radius-sm, 4px);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
   flex-shrink: 0;
 }
 .req-preflight-badge {
   font-size: 10px;
-  padding: 0 4px;
-  border-radius: 3px;
+  font-family: var(--font-mono, monospace);
+  padding: 0 5px;
+  border-radius: var(--radius-sm, 4px);
   border: 1px solid var(--border);
   color: var(--muted);
   flex-shrink: 0;
@@ -580,7 +583,7 @@
   background: color-mix(in oklch, var(--cache-rate-hue) var(--cache-rate-tint), transparent);
   border: 1px solid color-mix(in oklch, var(--cache-rate-hue) var(--cache-rate-edge), transparent);
   padding: 1px 6px;
-  border-radius: 9999px;
+  border-radius: var(--radius-sm, 4px);
   line-height: 1.3;
 }
 /* No token data at all is not a 0% reading: the badge keeps its shape but
@@ -589,9 +592,9 @@
   --cache-rate-hue: var(--muted);
 }
 .req-cache-bullet {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
   background: var(--cache-rate-hue);
 }
 .req-cache-count {
@@ -798,8 +801,8 @@
   gap: 16px;
 }
 .request-detail-heading h2 {
-  font-size: 20px;
-  line-height: 1.4;
+  font-size: 22px;
+  line-height: 1.25;
   margin: 0;
   overflow-wrap: anywhere;
 }
@@ -831,7 +834,7 @@
   color: var(--muted);
 }
 .request-detail-metrics strong {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -968,7 +971,7 @@
     gap: 12px;
   }
   .request-detail-metrics strong {
-    font-size: 17px;
+    font-size: 16px;
   }
   .request-source-chain {
     grid-template-columns: 1fr;
