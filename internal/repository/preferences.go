@@ -17,7 +17,6 @@ const (
 	PreferenceLogFilters         = "log_filters"
 	PreferenceProviderIcons      = "provider_icons"
 	PreferenceProviderNames      = "provider_names"
-	PreferenceDisabledProviders  = "disabled_providers"
 	PreferenceUsageEventsView    = "usage_events_view"
 	PreferenceUsageEventsColumns = "usage_events_columns"
 )

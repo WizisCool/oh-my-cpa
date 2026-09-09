@@ -237,40 +237,6 @@ func (h *Handler) removeProviderName(ctx context.Context, id string) {
 	}
 }
 
-func (h *Handler) loadDisabledProviders(ctx context.Context) map[string]bool {
-	if h.repo == nil {
-		return nil
-	}
-	raw, found, err := h.repo.GetPreference(ctx, repository.PreferenceDisabledProviders)
-	if err != nil || !found || raw == "" {
-		return nil
-	}
-	var res map[string]bool
-	if err := json.Unmarshal([]byte(raw), &res); err != nil {
-		return nil
-	}
-	return res
-}
-
-func (h *Handler) toggleDisabledProvider(ctx context.Context, id string, disabled bool) {
-	if h.repo == nil || id == "" {
-		return
-	}
-	m := h.loadDisabledProviders(ctx)
-	if m == nil {
-		m = make(map[string]bool)
-	}
-	if disabled {
-		m[id] = true
-	} else {
-		delete(m, id)
-	}
-	encoded, err := json.Marshal(m)
-	if err == nil {
-		_ = h.repo.PutPreference(ctx, repository.PreferenceDisabledProviders, string(encoded))
-	}
-}
-
 func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
@@ -286,7 +252,6 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 	ctx := request.Context()
 	items := make([]ProviderItemDTO, 0)
 	customNames := h.loadProviderNames(ctx)
-	disabledMap := h.loadDisabledProviders(ctx)
 
 	// 1. Codex API Keys
 	if codexResp, err := client.CodexAPIKeys(ctx); err == nil {
@@ -332,10 +297,9 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 				disableCoolingVal = *entry.DisableCooling
 			}
 
-			isDisabled := false
-			if disabledMap != nil && disabledMap[id] {
-				isDisabled = true
-			}
+			// CPA disables config API-key credentials through the excluded-all
+			// marker in excluded-models; the UI state must follow that truth.
+			isDisabled := management.IsExcludedAll(entry.ExcludedModels)
 
 			items = append(items, ProviderItemDTO{
 				ID:              id,
@@ -474,10 +438,9 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 				disableCoolingVal = *entry.DisableCooling
 			}
 
-			isDisabled := false
-			if disabledMap != nil && disabledMap[id] {
-				isDisabled = true
-			}
+			// CPA disables config API-key credentials through the excluded-all
+			// marker in excluded-models; the UI state must follow that truth.
+			isDisabled := management.IsExcludedAll(entry.ExcludedModels)
 
 			items = append(items, ProviderItemDTO{
 				ID:              id,
@@ -545,10 +508,9 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 				disableCoolingVal = *entry.DisableCooling
 			}
 
-			isDisabled := false
-			if disabledMap != nil && disabledMap[id] {
-				isDisabled = true
-			}
+			// CPA disables config API-key credentials through the excluded-all
+			// marker in excluded-models; the UI state must follow that truth.
+			isDisabled := management.IsExcludedAll(entry.ExcludedModels)
 
 			items = append(items, ProviderItemDTO{
 				ID:              id,
@@ -630,7 +592,62 @@ func (h *Handler) patchManagementProviderStatus(writer http.ResponseWriter, requ
 			return
 		}
 	case "claude", "codex", "gemini":
-		h.toggleDisabledProvider(ctx, targetID, req.Disabled)
+		// Config API-key entries have no disabled field in CPA's schema, so the
+		// gateway cannot see a local preference. CPA's own disable mechanism is
+		// the excluded-all marker in excluded-models; anything else only repaints
+		// the UI while the gateway keeps routing — that is exactly the fallback
+		// leak this used to cause.
+		switch req.Family {
+		case "claude":
+			entries, fetchErr := client.ClaudeAPIKeys(ctx)
+			if fetchErr != nil {
+				writeCPAFacadeError(writer, fetchErr)
+				return
+			}
+			if req.Index >= len(entries) {
+				writeError(writer, http.StatusNotFound, "provider index out of bounds")
+				return
+			}
+			entries[req.Index].ExcludedModels = management.SetExcludedAll(entries[req.Index].ExcludedModels, req.Disabled)
+			if updateErr := client.UpdateClaudeAPIKeys(ctx, entries); updateErr != nil {
+				_ = h.recordAudit(request, "provider.toggle_status", "provider", targetID, "failure", map[string]any{"error": updateErr.Error()})
+				writeCPAFacadeError(writer, updateErr)
+				return
+			}
+		case "codex":
+			response, fetchErr := client.CodexAPIKeys(ctx)
+			if fetchErr != nil {
+				writeCPAFacadeError(writer, fetchErr)
+				return
+			}
+			entries := response.Entries
+			if req.Index >= len(entries) {
+				writeError(writer, http.StatusNotFound, "provider index out of bounds")
+				return
+			}
+			entries[req.Index].ExcludedModels = management.SetExcludedAll(entries[req.Index].ExcludedModels, req.Disabled)
+			if updateErr := client.UpdateCodexAPIKeys(ctx, entries); updateErr != nil {
+				_ = h.recordAudit(request, "provider.toggle_status", "provider", targetID, "failure", map[string]any{"error": updateErr.Error()})
+				writeCPAFacadeError(writer, updateErr)
+				return
+			}
+		case "gemini":
+			entries, fetchErr := client.GeminiAPIKeys(ctx)
+			if fetchErr != nil {
+				writeCPAFacadeError(writer, fetchErr)
+				return
+			}
+			if req.Index >= len(entries) {
+				writeError(writer, http.StatusNotFound, "provider index out of bounds")
+				return
+			}
+			entries[req.Index].ExcludedModels = management.SetExcludedAll(entries[req.Index].ExcludedModels, req.Disabled)
+			if updateErr := client.UpdateGeminiAPIKeys(ctx, entries); updateErr != nil {
+				_ = h.recordAudit(request, "provider.toggle_status", "provider", targetID, "failure", map[string]any{"error": updateErr.Error()})
+				writeCPAFacadeError(writer, updateErr)
+				return
+			}
+		}
 	default:
 		writeError(writer, http.StatusBadRequest, "provider family does not support status toggle")
 		return

@@ -193,6 +193,7 @@ type ClaudeAPIKey struct {
 	Models         []ModelAlias      `json:"models,omitempty"`
 	Headers        map[string]string `json:"headers,omitempty"`
 	DisableCooling *bool             `json:"disable-cooling,omitempty"`
+	ExcludedModels []string          `json:"excluded-models,omitempty"`
 }
 
 type ClaudeAPIKeysResponse struct {
@@ -218,6 +219,7 @@ type GeminiAPIKey struct {
 	Models         []ModelAlias      `json:"models,omitempty"`
 	Headers        map[string]string `json:"headers,omitempty"`
 	DisableCooling *bool             `json:"disable-cooling,omitempty"`
+	ExcludedModels []string          `json:"excluded-models,omitempty"`
 }
 
 type GeminiAPIKeysResponse struct {

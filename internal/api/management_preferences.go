@@ -22,7 +22,6 @@ var knownPreferences = map[string]bool{
 	repository.PreferenceLogFilters:         true,
 	repository.PreferenceProviderIcons:      true,
 	repository.PreferenceProviderNames:      true,
-	repository.PreferenceDisabledProviders:  true,
 	repository.PreferenceUsageEventsView:    true,
 	repository.PreferenceUsageEventsColumns: true,
 }

@@ -595,3 +595,81 @@ func TestUnifiedProviderArchitectureClaudeCodexGemini(t *testing.T) {
 		t.Fatalf("newly created Gemini Pro Line not found in providers list")
 	}
 }
+
+// Disabling a claude/codex/gemini API-key provider used to write a local
+// preference only, so the gateway kept routing to it and fallback still picked
+// the "disabled" credential. The toggle must reach CPA itself, and CPA's own
+// mechanism is the excluded-all marker in excluded-models.
+func TestProviderStatusToggleReachesCPA(t *testing.T) {
+	client, baseURL, state := startProviderTestServer(t)
+
+	patch := func(body string) *http.Response {
+		resp, payload := doJSON(t, client, http.MethodPatch, baseURL+"/omc/api/v1/management/providers/status", body)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("patch status = %d body %s", resp.StatusCode, payload)
+		}
+		return resp
+	}
+	providerByID := func(id string) *ProviderItemDTO {
+		resp, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/providers")
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("providers status = %d body %s", resp.StatusCode, payload)
+		}
+		var res struct {
+			Providers []ProviderItemDTO `json:"providers"`
+		}
+		if err := json.Unmarshal(payload, &res); err != nil {
+			t.Fatal(err)
+		}
+		for i := range res.Providers {
+			if res.Providers[i].ID == id {
+				return &res.Providers[i]
+			}
+		}
+		return nil
+	}
+
+	// The codex family is the reported case: DeepSeek official sits behind it,
+	// and a request that failed on another provider used to fall back into it.
+	patch(`{"family":"codex","index":0,"disabled":true}`)
+	state.mu.Lock()
+	codexExcluded := state.codexProviders[0]["excluded-models"]
+	state.mu.Unlock()
+	if codexExcluded == nil || !strings.Contains(fmt.Sprintf("%v", codexExcluded), "*") {
+		t.Fatalf("codex disable must reach CPA excluded-models, got %#v", codexExcluded)
+	}
+	if provider := providerByID("codex-0"); provider == nil || !provider.Disabled {
+		t.Fatalf("codex-0 must be reported disabled, got %#v", provider)
+	}
+
+	// Operator-defined exclusions must survive the toggle untouched.
+	state.mu.Lock()
+	state.codexProviders[0]["excluded-models"] = []any{"custom-model-*", "*"}
+	state.mu.Unlock()
+	patch(`{"family":"codex","index":0,"disabled":false}`)
+	state.mu.Lock()
+	codexAfterEnable := state.codexProviders[0]["excluded-models"]
+	state.mu.Unlock()
+	if fmt.Sprintf("%v", codexAfterEnable) != "[custom-model-*]" {
+		t.Fatalf("enable must drop only the marker, got %#v", codexAfterEnable)
+	}
+	if provider := providerByID("codex-0"); provider == nil || provider.Disabled {
+		t.Fatalf("codex-0 must be enabled again, got %#v", provider)
+	}
+
+	// Same contract for claude and gemini.
+	patch(`{"family":"claude","index":0,"disabled":true}`)
+	state.mu.Lock()
+	claudeExcluded := state.claudeProviders[0]["excluded-models"]
+	state.mu.Unlock()
+	if claudeExcluded == nil || !strings.Contains(fmt.Sprintf("%v", claudeExcluded), "*") {
+		t.Fatalf("claude disable must reach CPA excluded-models, got %#v", claudeExcluded)
+	}
+	patch(`{"family":"gemini","index":0,"disabled":true}`)
+	state.mu.Lock()
+	geminiExcluded := state.geminiProviders[0]["excluded-models"]
+	state.mu.Unlock()
+	if geminiExcluded == nil || !strings.Contains(fmt.Sprintf("%v", geminiExcluded), "*") {
+		t.Fatalf("gemini disable must reach CPA excluded-models, got %#v", geminiExcluded)
+	}
+}
