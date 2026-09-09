@@ -36,3 +36,26 @@
 .pricing-number {
   font-variant-numeric: tabular-nums;
 }
+
+.pricing-editor-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.pricing-editor-note {
+  margin-bottom: 16px;
+}
+
+.pricing-editor-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 12px;
+}
+
+@media (max-width: 560px) {
+  .pricing-editor-grid {
+    grid-template-columns: 1fr;
+  }
+}

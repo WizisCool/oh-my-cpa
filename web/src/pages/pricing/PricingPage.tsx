@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, App as AntdApp, Button, Card, Descriptions, Empty, Input, InputNumber, Modal, Popconfirm, Space, Table, Tag, Tooltip } from 'antd';
+import { Alert, App as AntdApp, Button, Card, Descriptions, Empty, Form, Input, InputNumber, Modal, Popconfirm, Space, Table, Tag, Tooltip } from 'antd';
 import { ReloadOutlined, SyncOutlined, PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -13,9 +13,8 @@ function formatRate(value: number): string {
   return value.toLocaleString(undefined, { maximumFractionDigits: 6 });
 }
 
-interface EditorState {
-  open: boolean;
-  editing: ModelPrice | null;
+/** Form values for the manual price editor; every rate is USD per 1M tokens. */
+interface PriceFormValues {
   model: string;
   prompt: number;
   completion: number;
@@ -24,23 +23,20 @@ interface EditorState {
   multiplier: number;
 }
 
-const EMPTY_EDITOR: EditorState = {
-  open: false,
-  editing: null,
-  model: '',
-  prompt: 0,
-  completion: 0,
-  cacheRead: 0,
-  cacheWrite: 0,
-  multiplier: 1,
-};
+interface EditorState {
+  open: boolean;
+  editing: ModelPrice | null;
+}
+
+const CLOSED_EDITOR: EditorState = { open: false, editing: null };
 
 export const PricingPage: React.FC = () => {
   const t = useT();
   const { message } = AntdApp.useApp();
   const queryClient = useQueryClient();
   const [search, setSearch] = React.useState('');
-  const [editor, setEditor] = React.useState<EditorState>(EMPTY_EDITOR);
+  const [editor, setEditor] = React.useState<EditorState>(CLOSED_EDITOR);
+  const [form] = Form.useForm<PriceFormValues>();
 
   const result = useQuery({
     queryKey: ['pricing'],
@@ -59,7 +55,8 @@ export const PricingPage: React.FC = () => {
     },
     onSuccess: () => {
       message.success(t('pricing.saved'));
-      setEditor(EMPTY_EDITOR);
+      setEditor(CLOSED_EDITOR);
+      form.resetFields();
       invalidate();
     },
     onError: (err) => {
@@ -97,13 +94,12 @@ export const PricingPage: React.FC = () => {
   );
 
   const openAdd = (model = '') => {
-    setEditor({ ...EMPTY_EDITOR, open: true, model });
+    form.setFieldsValue({ model, prompt: 0, completion: 0, cacheRead: 0, cacheWrite: 0, multiplier: 1 });
+    setEditor({ open: true, editing: null });
   };
 
   const openEdit = (row: ModelPrice) => {
-    setEditor({
-      open: true,
-      editing: row,
+    form.setFieldsValue({
       model: row.model,
       prompt: row.prompt_price_per_1m,
       completion: row.completion_price_per_1m,
@@ -111,27 +107,28 @@ export const PricingPage: React.FC = () => {
       cacheWrite: row.cache_write_price_per_1m,
       multiplier: row.price_multiplier,
     });
+    setEditor({ open: true, editing: row });
   };
 
   const submitEditor = () => {
-    const model = editor.model.trim();
-    if (!model) {
-      message.warning(t('pricing.editor.model_required'));
-      return;
-    }
-    const row: ModelPrice = {
-      model,
-      prompt_price_per_1m: editor.prompt,
-      completion_price_per_1m: editor.completion,
-      cache_read_price_per_1m: editor.cacheRead,
-      cache_write_price_per_1m: editor.cacheWrite,
-      price_multiplier: editor.multiplier,
-      // source is decided server-side: operator edits always land as manual.
-      source: 'manual',
-      synced_at_ms: 0,
-      updated_at_ms: Date.now(),
-    };
-    saveMutation.mutate([row]);
+    void form
+      .validateFields()
+      .then((values) => {
+        const row: ModelPrice = {
+          model: values.model.trim(),
+          prompt_price_per_1m: values.prompt,
+          completion_price_per_1m: values.completion,
+          cache_read_price_per_1m: values.cacheRead,
+          cache_write_price_per_1m: values.cacheWrite,
+          price_multiplier: values.multiplier,
+          // source is decided server-side: operator edits always land as manual.
+          source: 'manual',
+          synced_at_ms: 0,
+          updated_at_ms: Date.now(),
+        };
+        saveMutation.mutate([row]);
+      })
+      .catch(() => undefined);
   };
 
   const sync = result.data?.sync;
@@ -342,66 +339,69 @@ export const PricingPage: React.FC = () => {
       <Modal
         open={editor.open}
         title={editor.editing ? t('pricing.editor.edit_title', { model: editor.editing.model }) : t('pricing.editor.new_title')}
+        width={520}
         okText={t('common.save')}
         cancelText={t('common.cancel')}
         confirmLoading={saveMutation.isPending}
         onOk={submitEditor}
-        onCancel={() => setEditor(EMPTY_EDITOR)}
+        onCancel={() => setEditor(CLOSED_EDITOR)}
         destroyOnHidden
+        // forceRender keeps the Form instance connected so prefill values set
+        // while the modal is closed actually land in the fields.
+        forceRender
       >
-        <Space vertical size={12} style={{ width: '100%' }}>
-          <Input
-            aria-label={t('pricing.editor.model')}
-            placeholder={t('pricing.editor.model')}
-            value={editor.model}
-            disabled={Boolean(editor.editing)}
-            onChange={(e) => setEditor((prev) => ({ ...prev, model: e.target.value }))}
+        {editor.editing ? (
+          <div className={styles['pricing-editor-meta']}>
+            <Tag color={editor.editing.source === 'manual' ? 'gold' : 'blue'}>
+              {t(`pricing.source.${editor.editing.source}`)}
+            </Tag>
+            <span className={styles['pricing-perm-note']}>
+              {t('pricing.editor.updated_at', {
+                time: editor.editing.updated_at_ms ? dayjs(editor.editing.updated_at_ms).format('YYYY-MM-DD HH:mm') : '—',
+              })}
+            </span>
+          </div>
+        ) : null}
+        {editor.editing && editor.editing.source !== 'manual' ? (
+          <Alert
+            type="info"
+            showIcon
+            className={styles['pricing-editor-note']}
+            title={t('pricing.editor.convert_note')}
           />
-          <Space size={12} wrap>
-            <InputNumber
-              aria-label={t('pricing.editor.prompt')}
-              placeholder={t('pricing.editor.prompt')}
-              value={editor.prompt}
-              min={0}
-              step={0.000001}
-              onChange={(v) => setEditor((prev) => ({ ...prev, prompt: v ?? 0 }))}
-            />
-            <InputNumber
-              aria-label={t('pricing.editor.completion')}
-              placeholder={t('pricing.editor.completion')}
-              value={editor.completion}
-              min={0}
-              step={0.000001}
-              onChange={(v) => setEditor((prev) => ({ ...prev, completion: v ?? 0 }))}
-            />
-            <InputNumber
-              aria-label={t('pricing.editor.cache_read')}
-              placeholder={t('pricing.editor.cache_read')}
-              value={editor.cacheRead}
-              min={0}
-              step={0.000001}
-              onChange={(v) => setEditor((prev) => ({ ...prev, cacheRead: v ?? 0 }))}
-            />
-            <InputNumber
-              aria-label={t('pricing.editor.cache_write')}
-              placeholder={t('pricing.editor.cache_write')}
-              value={editor.cacheWrite}
-              min={0}
-              step={0.000001}
-              onChange={(v) => setEditor((prev) => ({ ...prev, cacheWrite: v ?? 0 }))}
-            />
-            <Tooltip title={t('pricing.editor.multiplier_hint')}>
-              <InputNumber
-                aria-label={t('pricing.editor.multiplier')}
-                placeholder={t('pricing.editor.multiplier')}
-                value={editor.multiplier}
-                min={0}
-                step={0.01}
-                onChange={(v) => setEditor((prev) => ({ ...prev, multiplier: v ?? 1 }))}
-              />
-            </Tooltip>
-          </Space>
-        </Space>
+        ) : null}
+        <Form form={form} layout="vertical" className={`pricing-editor-form ${styles['pricing-editor-form']}`}>
+          <Form.Item
+            name="model"
+            label={t('pricing.editor.model')}
+            rules={[{ required: true, message: t('pricing.editor.model_required') }]}
+          >
+            <Input disabled={Boolean(editor.editing)} placeholder="gpt-5.6-luna" />
+          </Form.Item>
+          <div className={styles['pricing-editor-grid']}>
+            <Form.Item name="prompt" label={t('pricing.editor.prompt')} rules={[{ required: true, message: t('pricing.editor.required') }]}>
+              <InputNumber min={0} step={0.000001} style={{ width: '100%' }} suffix="$ / 1M" />
+            </Form.Item>
+            <Form.Item name="completion" label={t('pricing.editor.completion')} rules={[{ required: true, message: t('pricing.editor.required') }]}>
+              <InputNumber min={0} step={0.000001} style={{ width: '100%' }} suffix="$ / 1M" />
+            </Form.Item>
+            <Form.Item name="cacheRead" label={t('pricing.editor.cache_read')} rules={[{ required: true, message: t('pricing.editor.required') }]}>
+              <InputNumber min={0} step={0.000001} style={{ width: '100%' }} suffix="$ / 1M" />
+            </Form.Item>
+            <Form.Item name="cacheWrite" label={t('pricing.editor.cache_write')} rules={[{ required: true, message: t('pricing.editor.required') }]}>
+              <InputNumber min={0} step={0.000001} style={{ width: '100%' }} suffix="$ / 1M" />
+            </Form.Item>
+          </div>
+          <Form.Item
+            name="multiplier"
+            label={t('pricing.editor.multiplier')}
+            initialValue={1}
+            rules={[{ required: true, message: t('pricing.editor.required') }]}
+            extra={t('pricing.editor.multiplier_hint')}
+          >
+            <InputNumber min={0} step={0.01} style={{ width: '100%' }} suffix="×" />
+          </Form.Item>
+        </Form>
       </Modal>
     </div>
   );

@@ -181,6 +181,19 @@ try {
   await page.locator('.pricing-page').first().waitFor({ state: 'visible', timeout: 3000 });
   const pricingOpenMS = Date.now() - pricingOpenStart;
   check('pricing page opens under 3s', pricingOpenMS < 3000, `${pricingOpenMS}ms`);
+
+  // The manual price editor must be a real form: labeled fields with units, not
+  // bare number inputs. This guards the redesigned modal structure.
+  await page.getByRole('button', { name: /添加价格|Add price/ }).first().click();
+  await page.locator('.pricing-editor-form .ant-form-item').first().waitFor({ state: 'visible', timeout: 5000 });
+  const editorLabels = await page.locator('.pricing-editor-form .ant-form-item-label label').allInnerTexts();
+  check('price editor shows labeled fields', editorLabels.length >= 6, `labels=${editorLabels.length}`);
+  const rateUnits = await page.locator('.pricing-editor-form .ant-input-number-suffix').allInnerTexts();
+  check('price editor shows $/1M units', rateUnits.filter((u) => u.includes('/ 1M')).length === 4, `units=${rateUnits.length}`);
+  await page.keyboard.press('Escape');
+  // forceRender keeps the form mounted, so closing hides it instead of detaching.
+  await page.locator('.pricing-editor-form').first().waitFor({ state: 'hidden', timeout: 5000 });
+  check('price editor closes cleanly', true);
   await auditPage(page, responseBodies, '/ai-providers', '.providers-page');
   await auditPage(page, responseBodies, '/auth-files', '.auth-files-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
 
