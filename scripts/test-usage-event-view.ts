@@ -457,7 +457,7 @@ console.log('PASS tokens per second (TPS): TTFT-aware generation speed, fallback
 
 // Request columns tests
 assert.equal(USAGE_EVENTS_COLUMNS_PREFERENCE, 'usage_events_columns');
-assert.equal(REQUEST_COLUMNS.length, 11);
+assert.equal(REQUEST_COLUMNS.length, 12);
 
 // Sanitization & clamping
 assert.deepEqual(parseUsageEventsColumns(null), {});
@@ -490,13 +490,14 @@ assert.ok(manualGrid.includes('250px'));
 assert.ok(manualGrid.includes('200px'));
 assert.ok(manualGrid.endsWith('14px'));
 
-// computeGridMinWidth: fixed defaults + flexible mins + 11 gaps + inline padding
-// 100 + 92 + 118 + 108 + 76 + 82 + 122 + 64 + 92 + 145 + 88 + 14 = 1101; gaps 11*12 = 132; padding 24
-assert.equal(computeGridMinWidth({}), 1101 + 132 + 24);
+// computeGridMinWidth: fixed defaults + flexible mins + 12 gaps + inline padding
+// 100 + 92 + 118 + 108 + 76 + 82 + 122 + 92 (cost) + 64 + 92 + 145 + 88 + 14 = 1193; gaps 12*12 = 144; padding 24 = 1361
+const baseMin = 1193;
+assert.equal(computeGridMinWidth({}), baseMin + 144 + 24);
 // A manual override replaces the flexible minimum with the requested width
-assert.equal(computeGridMinWidth({ provider: 300 }), 1101 - 118 + 300 + 132 + 24);
+assert.equal(computeGridMinWidth({ provider: 300 }), baseMin - 118 + 300 + 144 + 24);
 // Out-of-range overrides are clamped exactly as the template builder clamps them
-assert.equal(computeGridMinWidth({ provider: 9999 }), 1101 - 118 + 460 + 132 + 24);
+assert.equal(computeGridMinWidth({ provider: 9999 }), baseMin - 118 + 460 + 144 + 24);
 assert.ok(computeGridMinWidth({}, 8, 12) < computeGridMinWidth({}, 12, 12));
 
 console.log(

@@ -249,6 +249,7 @@ export const UsageEventsPage: React.FC = () => {
   const [hydrated, setHydrated] = React.useState(hasExplicit);
 
   const [refresh, setRefresh] = React.useState(0);
+  const [autoRefreshInterval, setAutoRefreshInterval] = React.useState<number>(0);
   const window = React.useMemo(() => eventWindow(query, Date.now()), [query, refresh]);
   const scope = `${signature}:${refresh}`;
   const [pagination, setPagination] = React.useState<{ scope: string; cursors: string[] }>({
@@ -384,6 +385,18 @@ export const UsageEventsPage: React.FC = () => {
     placeholderData: keepPreviousData,
     staleTime: 10_000,
   });
+
+  React.useEffect(() => {
+    if (!autoRefreshInterval) return;
+    const intervalMs = autoRefreshInterval * 1000;
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible' && !result.isFetching) {
+        setRefresh((v) => v + 1);
+      }
+    }, intervalMs);
+    return () => clearInterval(timer);
+  }, [autoRefreshInterval, result.isFetching]);
+
   // keepPreviousData covers in-flight changes; retain the last successful page
   // after a failed query too, with an explicit stale-data label.
   const [lastPage, setLastPage] = React.useState<UsageEventPage>();
@@ -394,6 +407,24 @@ export const UsageEventsPage: React.FC = () => {
   const stale = result.isPlaceholderData || (result.isError && !!lastPage);
   const events = displayedPage?.items || [];
   const metrics = eventPageMetrics(events);
+
+  const totalCostUSD = React.useMemo(() => {
+    let sum = 0;
+    let hasAny = false;
+    for (const ev of events) {
+      if (ev.cost_usd != null) {
+        sum += ev.cost_usd;
+        hasAny = true;
+      }
+    }
+    return hasAny ? sum : null;
+  }, [events]);
+
+  const successCount = Math.max(0, metrics.count - metrics.failed);
+  const successRate = metrics.count > 0 ? (successCount / metrics.count) * 100 : 100;
+  const successRateStr = metrics.count > 0 ? `${successRate.toFixed(1)}%` : '—';
+  const successTone = successRate < 95 ? 'danger' : successRate < 99 ? 'warn' : 'success';
+
   // Safe file metadata only: never download credential contents for the stream.
   const authFiles = useQuery({
     queryKey: ['management-auth-files'],
@@ -419,6 +450,75 @@ export const UsageEventsPage: React.FC = () => {
   const configuredProviders = providersQuery.data?.providers;
   const activeFilters = EVENT_FILTER_KEYS.filter((key) => query[key]);
   const extraCount = activeFilters.filter((key) => !['model', 'provider', 'request_id'].includes(key)).length;
+
+  const activeChips = React.useMemo(() => {
+    const chips: Array<{ key: string; label: string; onRemove: () => void }> = [];
+    if (query.model) {
+      chips.push({
+        key: 'model',
+        label: t('events.filter_chip_model', { val: query.model }),
+        onRemove: () => update({ model: undefined }),
+      });
+    }
+    if (query.provider) {
+      chips.push({
+        key: 'provider',
+        label: t('events.filter_chip_provider', { val: query.provider }),
+        onRemove: () => update({ provider: undefined }),
+      });
+    }
+    if (query.source) {
+      chips.push({
+        key: 'source',
+        label: t('events.filter_chip_source', { val: query.source }),
+        onRemove: () => update({ source: undefined }),
+      });
+    }
+    if (query.auth_index) {
+      const credName = credentials.get(query.auth_index)?.name || query.auth_index;
+      chips.push({
+        key: 'auth_index',
+        label: t('events.filter_chip_credential', { val: credName }),
+        onRemove: () => update({ auth_index: undefined }),
+      });
+    }
+    if (query.api_key) {
+      chips.push({
+        key: 'api_key',
+        label: t('events.filter_chip_caller', { val: query.api_key }),
+        onRemove: () => update({ api_key: undefined }),
+      });
+    }
+    if (query.executor) {
+      chips.push({
+        key: 'executor',
+        label: t('events.filter_chip_executor', { val: query.executor }),
+        onRemove: () => update({ executor: undefined }),
+      });
+    }
+    if (search) {
+      chips.push({
+        key: 'search',
+        label: t('events.filter_chip_search', { val: search }),
+        onRemove: () => setSearch(''),
+      });
+    }
+    if (authType) {
+      chips.push({
+        key: 'auth_type',
+        label: t('events.filter_chip_auth_type', { val: authType }),
+        onRemove: () => setAuthType(''),
+      });
+    }
+    if (modelAlias) {
+      chips.push({
+        key: 'model_alias',
+        label: t('events.filter_chip_model_alias', { val: modelAlias }),
+        onRemove: () => setModelAlias(''),
+      });
+    }
+    return chips;
+  }, [query, search, authType, modelAlias, credentials, t, update, setSearch, setAuthType, setModelAlias]);
   const listHost = React.useRef<HTMLDivElement>(null);
   const [height, setHeight] = React.useState(480);
   React.useLayoutEffect(() => {
@@ -505,6 +605,23 @@ export const UsageEventsPage: React.FC = () => {
           </p>
         </div>
         <div className="request-actions">
+          <div className="req-auto-refresh-control">
+            {autoRefreshInterval > 0 && (
+              <span className="req-live-pulse-dot" title={t('events.auto_refreshing')} />
+            )}
+            <Select
+              className="req-auto-refresh-select"
+              aria-label={t('events.auto_refresh')}
+              value={autoRefreshInterval}
+              onChange={setAutoRefreshInterval}
+              options={[
+                { value: 0, label: `${t('events.auto_refresh')}: ${t('events.auto_refresh_off')}` },
+                { value: 5, label: `${t('events.auto_refresh')}: ${t('events.auto_refresh_sec', { s: 5 })}` },
+                { value: 10, label: `${t('events.auto_refresh')}: ${t('events.auto_refresh_sec', { s: 10 })}` },
+                { value: 30, label: `${t('events.auto_refresh')}: ${t('events.auto_refresh_sec', { s: 30 })}` },
+              ]}
+            />
+          </div>
           <Popover
             trigger="click"
             title={t('events.ingest_status')}
@@ -677,6 +794,44 @@ export const UsageEventsPage: React.FC = () => {
           </div>
         </div>
       </section>
+      {activeChips.length > 0 && (
+        <div className="req-active-chips-bar" aria-label={t('events.active_filters')}>
+          <span className="req-active-chips-label">{t('events.active_filters')}:</span>
+          <div className="req-active-chips-list">
+            {activeChips.map((chip) => (
+              <span key={chip.key} className="req-filter-chip">
+                <span className="req-filter-chip-text">{chip.label}</span>
+                <button
+                  type="button"
+                  className="req-filter-chip-remove"
+                  onClick={chip.onRemove}
+                  aria-label={`${t('common.delete')}: ${chip.label}`}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <Button
+              size="small"
+              type="link"
+              className="req-clear-all-chips"
+              onClick={() => {
+                setSearch('');
+                setAuthType('');
+                setModelAlias('');
+                setParams({}, { replace: true });
+                setViewPref({
+                  ...DEFAULT_USAGE_EVENTS_VIEW,
+                  grouping,
+                  advanced,
+                });
+              }}
+            >
+              {t('events.clear_all')}
+            </Button>
+          </div>
+        </div>
+      )}
       {authFiles.isError && (
         <div className="request-detail-note" role="status">
           {t('events.credentials_unavailable')}
@@ -695,20 +850,61 @@ export const UsageEventsPage: React.FC = () => {
         }
       >
         <div className="request-summary">
-          <span>{t(stale ? 'events.previous_results' : 'events.this_page')}</span>
-          <strong>
-            {result.isLoading ? '—' : metrics.count.toLocaleString()}{' '}
-            <small>{t('events.requests_unit')}</small>
-          </strong>
-          <span>
-            {t('events.filter_failed')} <b>{result.isLoading ? '—' : metrics.failed}</b>
-          </span>
-          <span>
-            {t('events.mean_latency')} <b>{formatEventDuration(metrics.latency)}</b>
-          </span>
-          <span>
-            {t('events.col_tokens')} <b>{result.isLoading ? '—' : metrics.tokens.toLocaleString()}</b>
-          </span>
+          <div className="req-kpi-item">
+            <span className="req-kpi-label">{t(stale ? 'events.previous_results' : 'events.this_page')}</span>
+            <div className="req-kpi-val">
+              <strong>
+                {result.isLoading ? '—' : metrics.count.toLocaleString()}{' '}
+                <small>{t('events.requests_unit')}</small>
+              </strong>
+            </div>
+          </div>
+
+          <div className="req-kpi-divider" />
+
+          <div className="req-kpi-item">
+            <span className="req-kpi-label">{t('events.success_rate')}</span>
+            <div className="req-kpi-rate-content">
+              <span className={`req-rate-pip is-${metrics.count === 0 ? 'neutral' : successTone}`} />
+              <div className="req-kpi-val">
+                <strong>{result.isLoading ? '—' : successRateStr}</strong>
+              </div>
+              <span className="req-kpi-sub-failed">
+                ({t('events.filter_failed')}: <b>{result.isLoading ? '—' : metrics.failed}</b>)
+              </span>
+            </div>
+          </div>
+
+          <div className="req-kpi-divider" />
+
+          <div className="req-kpi-item">
+            <span className="req-kpi-label">{t('events.mean_latency')}</span>
+            <div className="req-kpi-val">
+              <strong>{result.isLoading ? '—' : formatEventDuration(metrics.latency)}</strong>
+            </div>
+          </div>
+
+          <div className="req-kpi-divider" />
+
+          <div className="req-kpi-item">
+            <span className="req-kpi-label">{t('events.col_tokens')}</span>
+            <div className="req-kpi-val">
+              <strong>{result.isLoading ? '—' : metrics.tokens.toLocaleString()}</strong>
+            </div>
+          </div>
+
+          {totalCostUSD != null && (
+            <>
+              <div className="req-kpi-divider" />
+              <div className="req-kpi-item">
+                <span className="req-kpi-label">{t('events.total_cost')}</span>
+                <div className="req-kpi-val">
+                  <strong>${totalCostUSD.toFixed(4)}</strong>
+                </div>
+              </div>
+            </>
+          )}
+
           {Object.keys(colWidths).length > 0 && (
             <Button
               size="small"
@@ -766,6 +962,7 @@ export const UsageEventsPage: React.FC = () => {
                     providerIcons={providerIcons}
                     configuredProviders={configuredProviders}
                     onOpen={setSelected}
+                    isSelected={selected === event.id}
                   />
                 )}
               />
@@ -827,7 +1024,13 @@ export const UsageEventsPage: React.FC = () => {
           </div>
         </footer>
       </section>
-      <UsageEventDrawer credentials={credentials} eventId={selected} onClose={() => setSelected(null)} />
+      <UsageEventDrawer
+        credentials={credentials}
+        eventId={selected}
+        onClose={() => setSelected(null)}
+        events={events}
+        onSelectEvent={setSelected}
+      />
     </div>
   );
 };

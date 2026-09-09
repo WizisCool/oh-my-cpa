@@ -1,10 +1,17 @@
 import React from 'react';
 import { Alert, App as AntdApp, Button, Descriptions, Drawer, Empty, Modal, Skeleton, Tabs } from 'antd';
-import { ArrowRightOutlined, CopyOutlined, DownloadOutlined } from '@ant-design/icons';
+import {
+  ArrowRightOutlined,
+  CopyOutlined,
+  DownloadOutlined,
+  DownOutlined,
+  UpOutlined,
+} from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';
+import type { UsageEvent } from '../../types/usageEvents';
 import {
   resolveCredential,
   requestGroupName,
@@ -12,13 +19,21 @@ import {
   type CredentialIndex,
 } from '../../types/usageEventView';
 
-interface UsageEventDrawerProps {
+export interface UsageEventDrawerProps {
   eventId: number | null;
   credentials: CredentialIndex;
   onClose: () => void;
+  events?: UsageEvent[];
+  onSelectEvent?: (id: number) => void;
 }
 
-export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({ eventId, onClose, credentials }) => {
+export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
+  eventId,
+  onClose,
+  credentials,
+  events,
+  onSelectEvent,
+}) => {
   const t = useT();
   const { message } = AntdApp.useApp();
   const [downloadModalOpen, setDownloadModalOpen] = React.useState(false);
@@ -81,9 +96,85 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({ eventId, onC
       setDownloading(false);
     }
   };
+
+  const currentIndex = events && eventId != null ? events.findIndex((e) => e.id === eventId) : -1;
+  const hasPrev = events != null && currentIndex > 0;
+  const hasNext = events != null && currentIndex >= 0 && currentIndex < events.length - 1;
+  const prevEvent = hasPrev ? events![currentIndex - 1] : null;
+  const nextEvent = hasNext ? events![currentIndex + 1] : null;
+
+  const handlePrev = React.useCallback(() => {
+    if (prevEvent && onSelectEvent) {
+      onSelectEvent(prevEvent.id);
+    }
+  }, [prevEvent, onSelectEvent]);
+
+  const handleNext = React.useCallback(() => {
+    if (nextEvent && onSelectEvent) {
+      onSelectEvent(nextEvent.id);
+    }
+  }, [nextEvent, onSelectEvent]);
+
+  React.useEffect(() => {
+    if (eventId == null) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+      if (e.key === '[' || (e.altKey && e.key === 'ArrowUp')) {
+        e.preventDefault();
+        handlePrev();
+      } else if (e.key === ']' || (e.altKey && e.key === 'ArrowDown')) {
+        e.preventDefault();
+        handleNext();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [eventId, handlePrev, handleNext]);
+
+  const drawerTitle = (
+    <div className="req-drawer-title-wrapper">
+      <span className="req-drawer-title-text">{t('events.details_title')}</span>
+      {events && events.length > 0 && currentIndex >= 0 && (
+        <div className="req-drawer-nav">
+          <span className="req-drawer-nav-counter">
+            {t('events.record_nav', {
+              current: currentIndex + 1,
+              total: events.length,
+            })}
+          </span>
+          <Button
+            size="small"
+            type="text"
+            icon={<UpOutlined />}
+            disabled={!hasPrev}
+            onClick={handlePrev}
+            title={`${t('events.prev_item')} ([)`}
+            aria-label={t('events.prev_item')}
+          />
+          <Button
+            size="small"
+            type="text"
+            icon={<DownOutlined />}
+            disabled={!hasNext}
+            onClick={handleNext}
+            title={`${t('events.next_item')} (])`}
+            aria-label={t('events.next_item')}
+          />
+        </div>
+      )}
+    </div>
+  );
+
+  const latency = event?.latency_ms ?? 0;
+  const ttft = event?.ttft_ms != null && event.ttft_ms > 0 && event.ttft_ms <= latency ? event.ttft_ms : 0;
+  const streamTime = Math.max(0, latency - ttft);
+  const ttftPercent = latency > 0 && ttft > 0 ? Math.min(100, Math.max(2, (ttft / latency) * 100)) : 0;
+  const streamPercent = latency > 0 && streamTime > 0 ? Math.min(100 - ttftPercent, Math.max(2, (streamTime / latency) * 100)) : 0;
+
   return (
     <Drawer
-      title={t('events.details_title')}
+      title={drawerTitle}
       size={720}
       open={eventId != null}
       onClose={onClose}
@@ -152,6 +243,43 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({ eventId, onC
                 label: t('events.overview'),
                 children: (
                   <>
+                    {event.failed && (
+                      <div className="req-overview-error-card">
+                        <div className="req-overview-error-top">
+                          <span className="req-overview-error-status">
+                            {errors.length > 0 ? `HTTP ${errors[0].status_code}` : t('events.filter_failed')}
+                          </span>
+                          <span className="req-overview-error-code">
+                            {errors.length > 0 ? errors[0].code || 'ERROR' : t('events.error_banner_title')}
+                          </span>
+                          <div className="req-overview-error-btns">
+                            {errors.length > 0 && errors[0].body && (
+                              <Button
+                                size="small"
+                                type="text"
+                                icon={<CopyOutlined />}
+                                onClick={() => void copy(errors[0].body || '')}
+                              >
+                                {t('events.copy_error')}
+                              </Button>
+                            )}
+                            <Button
+                              size="small"
+                              type="link"
+                              onClick={() => setTab('diagnostics')}
+                            >
+                              {t('events.view_diagnostics')} →
+                            </Button>
+                          </div>
+                        </div>
+                        {errors.length > 0 && errors[0].quota_reason && (
+                          <div className="req-overview-error-reason">{errors[0].quota_reason}</div>
+                        )}
+                        {errors.length > 0 && errors[0].body && (
+                          <pre className="req-overview-error-body">{errors[0].body}</pre>
+                        )}
+                      </div>
+                    )}
                     <div className="request-source-chain" aria-label={t('events.routing')}>
                       <div>
                         <span>{t('events.caller')}</span>
@@ -212,6 +340,64 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({ eventId, onC
                 label: t('events.performance'),
                 children: (
                   <>
+                    {latency > 0 && (
+                      <div className="req-waterfall-box">
+                        <div className="req-waterfall-header">
+                          <h4>{t('events.waterfall_title')}</h4>
+                          <span className="req-waterfall-total">{formatEventDuration(latency)}</span>
+                        </div>
+                        {ttft > 0 ? (
+                          <>
+                            <div className="req-waterfall-track">
+                              <div
+                                className="req-waterfall-seg-ttft"
+                                style={{ width: `${ttftPercent}%` }}
+                                title={`TTFT: ${formatEventDuration(ttft)} (${Math.round((ttft / latency) * 100)}%)`}
+                              />
+                              <div
+                                className="req-waterfall-seg-stream"
+                                style={{ width: `${streamPercent}%` }}
+                                title={`${t('events.waterfall_stream')}: ${formatEventDuration(streamTime)} (${Math.round((streamTime / latency) * 100)}%)`}
+                              />
+                            </div>
+                            <div className="req-waterfall-legend">
+                              <div className="req-waterfall-legend-item">
+                                <span className="req-waterfall-pip req-waterfall-pip-ttft" />
+                                <span>{t('events.waterfall_ttft')}</span>
+                                <strong>{formatEventDuration(ttft)}</strong>
+                              </div>
+                              <div className="req-waterfall-legend-item">
+                                <span className="req-waterfall-pip req-waterfall-pip-stream" />
+                                <span>{t('events.waterfall_stream')}</span>
+                                <strong>{formatEventDuration(streamTime)}</strong>
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="req-waterfall-legend">
+                            <span>{formatEventDuration(latency)}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div className="req-token-cards-grid">
+                      <div className="req-token-card">
+                        <span>{t('events.total_tokens')}</span>
+                        <strong>{event.tokens.total.toLocaleString()}</strong>
+                      </div>
+                      <div className="req-token-card">
+                        <span>{t('events.input_tokens')}</span>
+                        <strong>{event.tokens.input.toLocaleString()}</strong>
+                      </div>
+                      <div className="req-token-card">
+                        <span>{t('events.output_tokens')}</span>
+                        <strong>{event.tokens.output.toLocaleString()}</strong>
+                      </div>
+                      <div className="req-token-card">
+                        <span>{t('events.cached_tokens')}</span>
+                        <strong>{event.tokens.cached.toLocaleString()}</strong>
+                      </div>
+                    </div>
                     {section(
                       t('events.timing'),
                       fields([

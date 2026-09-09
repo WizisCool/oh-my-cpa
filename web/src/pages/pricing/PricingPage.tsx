@@ -444,6 +444,10 @@ export const PricingPage: React.FC = () => {
           <div className={styles.telemetryDivider} />
           <div className={styles.telemetryMetrics}>
             <span className={styles.telemetryItem}>
+              {t('pricing.sync.manual', { n: manualCount })}
+            </span>
+            <div className={styles.telemetryDivider} />
+            <span className={styles.telemetryItem}>
               {t('pricing.sync.last_success', {
                 time: state?.last_success_at_ms
                   ? dayjs(state.last_success_at_ms).format('YYYY-MM-DD HH:mm')
@@ -456,10 +460,6 @@ export const PricingPage: React.FC = () => {
             </span>
             <span className={styles.telemetryItem}>
               {t('pricing.sync.unmatched', { n: state?.last_unmatched ?? 0 })}
-            </span>
-            <div className={styles.telemetryDivider} />
-            <span className={styles.telemetryItem}>
-              {t('pricing.sync.manual', { n: manualCount })}
             </span>
           </div>
         </div>
