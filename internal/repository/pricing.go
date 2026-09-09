@@ -19,7 +19,14 @@ type ModelPrice = pricing.ModelPrice
 // is an in-memory property of the service and is never trusted from disk.
 type PricingSyncState = pricing.SyncState
 
-const pricingSyncStateSelect = `SELECT source, last_success_at_ms, last_error, last_matched, last_unmatched, updated_at_ms FROM pricing_sync_state`
+// pricingSyncStateSelect reads last_success_at_ms through a typeof() guard: SQLite
+// does not enforce column types, so the defective upsert below once stored TEXT in an
+// INTEGER column, and one unreadable bookkeeping field must not take the whole
+// pricing page down. Migration 016 repairs the stored rows; the guard keeps a dirty
+// row non-fatal.
+const pricingSyncStateSelect = `SELECT source,
+	CASE WHEN typeof(last_success_at_ms) = 'integer' THEN last_success_at_ms ELSE NULL END AS last_success_at_ms,
+	last_error, last_matched, last_unmatched, updated_at_ms FROM pricing_sync_state`
 
 func scanPricingSyncState(row *sql.Row, state *pricing.SyncState) error {
 	var lastSuccess sql.NullInt64
@@ -142,18 +149,23 @@ func (r *Repository) SavePricingSyncState(ctx context.Context, state PricingSync
 	if state.LastSuccessAtMS != nil {
 		lastSuccess = *state.LastSuccessAtMS
 	}
+	// Every UPDATE term must read from excluded/ or the target row: an earlier
+	// revision put a seventh placeholder in COALESCE() here and passed the source
+	// name for it, so each repeat sync overwrote last_success_at_ms with the TEXT
+	// 'modelsdev' and the pricing page could no longer read its own state.
+	// COALESCE against the existing row still keeps the last good success when a
+	// sync fails, without any placeholder in the UPDATE clause.
 	_, err := r.SQL().ExecContext(ctx, `INSERT INTO pricing_sync_state (
 		source, running, last_success_at_ms, last_error, last_matched, last_unmatched, updated_at_ms
 	) VALUES (?, 0, ?, ?, ?, ?, ?)
 	ON CONFLICT(source) DO UPDATE SET
 		running = 0,
-		last_success_at_ms = COALESCE(?, last_success_at_ms),
+		last_success_at_ms = COALESCE(excluded.last_success_at_ms, pricing_sync_state.last_success_at_ms),
 		last_error = excluded.last_error,
 		last_matched = excluded.last_matched,
 		last_unmatched = excluded.last_unmatched,
 		updated_at_ms = excluded.updated_at_ms`,
-		state.Source, lastSuccess, state.LastError, state.LastMatched, state.LastUnmatched, time.Now().UnixMilli(),
-		state.Source)
+		state.Source, lastSuccess, state.LastError, state.LastMatched, state.LastUnmatched, time.Now().UnixMilli())
 	if err != nil {
 		return fmt.Errorf("save pricing sync state: %w", err)
 	}

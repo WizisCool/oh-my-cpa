@@ -142,3 +142,123 @@ func TestListEffectiveModelsFollowsTraffic(t *testing.T) {
 		}
 	}
 }
+
+// Sync bookkeeping is written through an UPSERT. The first revision bound an
+// extra placeholder inside the DO UPDATE clause and passed the source name for
+// it, so the second and every later sync stored TEXT in the INTEGER column
+// last_success_at_ms; the pricing page then failed with a 500. Repeat syncs must
+// update the success timestamp, and a failed sync must keep the last good one.
+func TestSavePricingSyncStateSurvivesRepeatedUpserts(t *testing.T) {
+	repo := usageTestRepository(t)
+	ctx := context.Background()
+	first := int64(1788935416510)
+	if err := repo.SavePricingSyncState(ctx, PricingSyncState{
+		Source: pricing.SourceModelsDev, LastSuccessAtMS: &first, LastMatched: 4, LastUnmatched: 3,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	second := first + 60_000
+	if err := repo.SavePricingSyncState(ctx, PricingSyncState{
+		Source: pricing.SourceModelsDev, LastSuccessAtMS: &second, LastMatched: 5, LastUnmatched: 2,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	state, err := repo.GetPricingSyncState(ctx, pricing.SourceModelsDev)
+	if err != nil {
+		t.Fatalf("read state after a repeat sync: %v", err)
+	}
+	if state.LastSuccessAtMS == nil || *state.LastSuccessAtMS != second {
+		t.Fatalf("repeat sync must store its own success timestamp, got %v", state.LastSuccessAtMS)
+	}
+	if state.LastMatched != 5 || state.LastUnmatched != 2 {
+		t.Fatalf("counters must update together, got %+v", state)
+	}
+	// A failed sync records the error and preserves the last good success.
+	if err := repo.SavePricingSyncState(ctx, PricingSyncState{
+		Source: pricing.SourceModelsDev, LastError: "models.dev is unreachable",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	state, err = repo.GetPricingSyncState(ctx, pricing.SourceModelsDev)
+	if err != nil {
+		t.Fatalf("read state after a failed sync: %v", err)
+	}
+	if state.LastSuccessAtMS == nil || *state.LastSuccessAtMS != second {
+		t.Fatalf("failed sync must keep the last good success, got %v", state.LastSuccessAtMS)
+	}
+	if state.LastError != "models.dev is unreachable" {
+		t.Fatalf("last_error = %q", state.LastError)
+	}
+}
+
+// SQLite treats column types as advisory, so rows already written by that
+// defective upsert hold TEXT in an INTEGER column. Reading them must degrade to
+// "no recorded success" instead of failing, and the next sync must heal the row.
+func TestGetPricingSyncStateToleratesCorruptSuccessTimestamp(t *testing.T) {
+	repo := usageTestRepository(t)
+	ctx := context.Background()
+	success := int64(1788935416510)
+	if err := repo.SavePricingSyncState(ctx, PricingSyncState{
+		Source: pricing.SourceModelsDev, LastSuccessAtMS: &success, LastMatched: 4, LastUnmatched: 3,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.SQL().ExecContext(ctx,
+		`UPDATE pricing_sync_state SET last_success_at_ms = 'modelsdev' WHERE source = ?`, pricing.SourceModelsDev); err != nil {
+		t.Fatal(err)
+	}
+	state, err := repo.GetPricingSyncState(ctx, pricing.SourceModelsDev)
+	if err != nil {
+		t.Fatalf("corrupt success must stay readable: %v", err)
+	}
+	if state.LastSuccessAtMS != nil {
+		t.Fatalf("corrupt success must read as unknown, got %v", *state.LastSuccessAtMS)
+	}
+	if state.LastMatched != 4 {
+		t.Fatalf("healthy fields must survive, got %+v", state)
+	}
+	next := success + 1000
+	if err := repo.SavePricingSyncState(ctx, PricingSyncState{
+		Source: pricing.SourceModelsDev, LastSuccessAtMS: &next, LastMatched: 6,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.GetPricingSyncState(ctx, pricing.SourceModelsDev); err != nil {
+		t.Fatalf("resync after corruption: %v", err)
+	}
+}
+
+// Migration 016 normalises the stored damage so no reader has to guess.
+func TestMigrationRepairsCorruptPricingSyncState(t *testing.T) {
+	repo := usageTestRepository(t)
+	ctx := context.Background()
+	if _, err := repo.SQL().ExecContext(ctx, `INSERT INTO pricing_sync_state (
+		source, running, last_success_at_ms, last_error, last_matched, last_unmatched, updated_at_ms
+	) VALUES ('modelsdev', 0, 'modelsdev', '', 'three', 'four', 'fifteen')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.SQL().ExecContext(ctx, `DELETE FROM schema_migrations WHERE version = 16`); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.db.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var successType, matchedType, unmatchedType, updatedAtType string
+	if err := repo.SQL().QueryRowContext(ctx, `SELECT
+		typeof(last_success_at_ms), typeof(last_matched), typeof(last_unmatched), typeof(updated_at_ms)
+		FROM pricing_sync_state WHERE source = 'modelsdev'`).
+		Scan(&successType, &matchedType, &unmatchedType, &updatedAtType); err != nil {
+		t.Fatal(err)
+	}
+	if successType != "null" {
+		t.Fatalf("text success timestamp must be repaired to NULL, got %q", successType)
+	}
+	for column, kind := range map[string]string{"last_matched": matchedType, "last_unmatched": unmatchedType, "updated_at_ms": updatedAtType} {
+		if kind != "integer" {
+			t.Fatalf("%s must be repaired to an integer, got %q", column, kind)
+		}
+	}
+	if _, err := repo.GetPricingSyncState(ctx, pricing.SourceModelsDev); err != nil {
+		t.Fatalf("repaired state must read cleanly: %v", err)
+	}
+}
