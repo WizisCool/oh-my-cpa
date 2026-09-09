@@ -6,9 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 )
+
+// ModelLister returns all models currently configured in the deployment (e.g. CPA instance).
+type ModelLister interface {
+	ListConfiguredModels(context.Context) ([]string, error)
+}
 
 // SyncState is the durable outcome of the last models.dev sync.
 type SyncState struct {
@@ -54,6 +61,7 @@ type SyncResult struct {
 type Service struct {
 	store                 Store
 	fetcher               Fetcher
+	modelLister           ModelLister
 	logger                *slog.Logger
 	interval              time.Duration
 	autoSyncIntervalHours int64
@@ -80,6 +88,61 @@ func NewService(store Store, fetcher Fetcher, logger *slog.Logger) *Service {
 		clock:                 time.Now,
 		wakeCh:                make(chan struct{}, 1),
 	}
+}
+
+// SetModelLister connects a source of deployment-configured models (e.g. CPA instance).
+func (s *Service) SetModelLister(lister ModelLister) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.modelLister = lister
+	s.mu.Unlock()
+}
+
+// effectiveModels gathers all models from CPA configuration, supplemented by historical traffic.
+func (s *Service) effectiveModels(ctx context.Context) ([]string, error) {
+	modelSet := make(map[string]struct{})
+
+	// 1. All currently connected models in CPA (primary)
+	s.mu.Lock()
+	lister := s.modelLister
+	s.mu.Unlock()
+
+	if lister != nil {
+		configured, err := lister.ListConfiguredModels(ctx)
+		if err != nil {
+			s.logger.Warn("list configured CPA models failed", "error", err)
+		} else {
+			for _, m := range configured {
+				m = strings.TrimSpace(m)
+				if m != "" {
+					modelSet[m] = struct{}{}
+				}
+			}
+		}
+	}
+
+	// 2. Also union with models that appeared in historical request traffic
+	if s.store != nil {
+		trafficModels, err := s.store.ListEffectiveModels(ctx)
+		if err != nil && len(modelSet) == 0 {
+			return nil, err
+		}
+		for _, m := range trafficModels {
+			m = strings.TrimSpace(m)
+			if m != "" {
+				modelSet[m] = struct{}{}
+			}
+		}
+	}
+
+	result := make([]string, 0, len(modelSet))
+	for m := range modelSet {
+		result = append(result, m)
+	}
+	sort.Strings(result)
+	return result, nil
 }
 
 // SetInterval overrides the background sync cadence (tests).
@@ -238,7 +301,7 @@ func (s *Service) SyncOnce(ctx context.Context) (SyncResult, error) {
 		s.recordFailure(ctx, err)
 		return SyncResult{}, err
 	}
-	models, err := s.store.ListEffectiveModels(ctx)
+	models, err := s.effectiveModels(ctx)
 	if err != nil {
 		return SyncResult{}, err
 	}
@@ -341,7 +404,7 @@ func (s *Service) UsedUnpricedModels(ctx context.Context, limit int) ([]string, 
 	if limit <= 0 || limit > 500 {
 		limit = 200
 	}
-	models, err := s.store.ListEffectiveModels(ctx)
+	models, err := s.effectiveModels(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -277,3 +277,37 @@ func TestNewClientValidatesURLAndKey(t *testing.T) {
 		})
 	}
 }
+
+func TestListAllConfiguredModels(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v0/management/auth-files":
+			_, _ = w.Write([]byte(`{"files":[{"models":[{"id":"claude-3-7-sonnet"}]}]}`))
+		case "/v0/management/codex-api-key":
+			_, _ = w.Write([]byte(`{"codex-api-key":[{"models":[{"name":"gpt-5","alias":"gpt-5-alias"}]}]}`))
+		case "/v0/management/openai-compatibility":
+			_, _ = w.Write([]byte(`{"openai-compatibility":[{"models":[{"name":"deepseek-chat"}]}]}`))
+		case "/v0/management/claude-api-key":
+			_, _ = w.Write([]byte(`{"claude-api-key":[{"models":[{"name":"claude-3-5-sonnet"}]}]}`))
+		case "/v0/management/gemini-api-key":
+			_, _ = w.Write([]byte(`{"gemini-api-key":[{"models":[{"name":"gemini-2.5-flash"}]}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client, err := NewClient(server.URL, "key", time.Second, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	models, err := client.ListAllConfiguredModels(context.Background())
+	if err != nil {
+		t.Fatalf("ListAllConfiguredModels failed: %v", err)
+	}
+	want := []string{"claude-3-5-sonnet", "claude-3-7-sonnet", "deepseek-chat", "gemini-2.5-flash", "gpt-5", "gpt-5-alias"}
+	if strings.Join(models, ",") != strings.Join(want, ",") {
+		t.Fatalf("models = %v, want %v", models, want)
+	}
+}

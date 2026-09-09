@@ -1416,3 +1416,109 @@ func (c *Client) InstallPlugin(ctx context.Context, id string) error {
 	endpoint := fmt.Sprintf("/plugin-store/%s/install", url.PathEscape(id))
 	return c.doJSONBody(ctx, http.MethodPost, endpoint, map[string]any{}, nil)
 }
+
+// ListAllConfiguredModels collects all models configured across all providers and auth files in CPA.
+func (c *Client) ListAllConfiguredModels(ctx context.Context) ([]string, error) {
+	if c == nil {
+		return nil, errors.New("CPA client is not initialized")
+	}
+	modelSet := make(map[string]struct{})
+	var errs []string
+
+	// 1. Auth files
+	if authResp, err := c.AuthFiles(ctx); err != nil {
+		errs = append(errs, "auth-files: "+err.Error())
+	} else {
+		for _, file := range authResp.Files {
+			for _, m := range file.Models {
+				id := strings.TrimSpace(m.ID)
+				if id != "" {
+					modelSet[id] = struct{}{}
+				}
+			}
+		}
+	}
+
+	// 2. Codex
+	if codexResp, err := c.CodexAPIKeys(ctx); err != nil {
+		errs = append(errs, "codex: "+err.Error())
+	} else {
+		for _, entry := range codexResp.Entries {
+			for _, m := range entry.Models {
+				name := strings.TrimSpace(m.Name)
+				if name != "" {
+					modelSet[name] = struct{}{}
+				}
+				alias := strings.TrimSpace(m.Alias)
+				if alias != "" {
+					modelSet[alias] = struct{}{}
+				}
+			}
+		}
+	}
+
+	// 3. OpenAI Compatibility
+	if oaiResp, err := c.OpenAICompatibility(ctx); err != nil {
+		errs = append(errs, "openai-compatibility: "+err.Error())
+	} else {
+		for _, entry := range oaiResp.Entries {
+			for _, m := range entry.Models {
+				name := strings.TrimSpace(m.Name)
+				if name != "" {
+					modelSet[name] = struct{}{}
+				}
+				alias := strings.TrimSpace(m.Alias)
+				if alias != "" {
+					modelSet[alias] = struct{}{}
+				}
+			}
+		}
+	}
+
+	// 4. Claude
+	if claudeEntries, err := c.ClaudeAPIKeys(ctx); err != nil {
+		errs = append(errs, "claude: "+err.Error())
+	} else {
+		for _, entry := range claudeEntries {
+			for _, m := range entry.Models {
+				name := strings.TrimSpace(m.Name)
+				if name != "" {
+					modelSet[name] = struct{}{}
+				}
+				alias := strings.TrimSpace(m.Alias)
+				if alias != "" {
+					modelSet[alias] = struct{}{}
+				}
+			}
+		}
+	}
+
+	// 5. Gemini
+	if geminiEntries, err := c.GeminiAPIKeys(ctx); err != nil {
+		errs = append(errs, "gemini: "+err.Error())
+	} else {
+		for _, entry := range geminiEntries {
+			for _, m := range entry.Models {
+				name := strings.TrimSpace(m.Name)
+				if name != "" {
+					modelSet[name] = struct{}{}
+				}
+				alias := strings.TrimSpace(m.Alias)
+				if alias != "" {
+					modelSet[alias] = struct{}{}
+				}
+			}
+		}
+	}
+
+	if len(modelSet) == 0 && len(errs) == 5 {
+		return nil, fmt.Errorf("all CPA model endpoints failed: %s", strings.Join(errs, "; "))
+	}
+
+	result := make([]string, 0, len(modelSet))
+	for m := range modelSet {
+		result = append(result, m)
+	}
+	sort.Strings(result)
+	return result, nil
+}

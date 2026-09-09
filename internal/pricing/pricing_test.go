@@ -318,3 +318,40 @@ func TestTriggerSyncRunsOnce(t *testing.T) {
 		t.Fatal("background sync never wrote prices")
 	}
 }
+
+type fakeModelLister struct {
+	models []string
+	err    error
+}
+
+func (f *fakeModelLister) ListConfiguredModels(context.Context) ([]string, error) {
+	return f.models, f.err
+}
+
+func TestSyncOnceWithModelLister(t *testing.T) {
+	// Store has zero traffic events
+	store := &fakeStore{models: nil}
+	lister := &fakeModelLister{models: []string{"openai/gpt-5", "claude-sonnet-5", "totally-unknown-model"}}
+	service := NewService(store, &fakeFetcher{catalog: catalogFixture()}, nil)
+	service.SetModelLister(lister)
+
+	result, err := service.SyncOnce(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Matched != 2 || result.Unmatched != 1 {
+		t.Fatalf("expected 2 matched, 1 unmatched; got %+v", result)
+	}
+	if len(store.upserted) != 2 {
+		t.Fatalf("expected 2 prices upserted, got %d", len(store.upserted))
+	}
+
+	unpriced, err := service.UsedUnpricedModels(context.Background(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(unpriced) != 1 || unpriced[0] != "totally-unknown-model" {
+		t.Fatalf("expected ['totally-unknown-model'] unpriced, got %v", unpriced)
+	}
+}
+

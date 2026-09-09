@@ -79,6 +79,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 	// manual operator rows always win. Failures degrade to stale prices, never
 	// to wrong ones.
 	pricingService := pricing.NewService(repo, nil, logger)
+	pricingService.SetModelLister(&cpaModelLister{repo: repo, cipher: cipher, cfg: cfg})
 	handler.SetPricing(pricingService)
 
 	pipeline, err := buildUsagePipeline(cfg, repo, handler, logger, cipher)
@@ -124,6 +125,41 @@ func (u usageUpstream) PopUsageQueue(ctx context.Context, count int) ([]string, 
 
 func (u usageUpstream) UsageQueueJSON(ctx context.Context, count int) ([]string, error) {
 	return u.client.UsageQueueJSON(ctx, count)
+}
+
+// cpaModelLister satisfies pricing.ModelLister by discovering all models and
+// aliases configured across all providers and auth-files in the default CPA instance.
+type cpaModelLister struct {
+	repo   *repository.Repository
+	cipher *crypto.Cipher
+	cfg    config.Config
+}
+
+func (l *cpaModelLister) ListConfiguredModels(ctx context.Context) ([]string, error) {
+	instance, err := l.repo.GetInstance(ctx, "default")
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || strings.Contains(err.Error(), "no rows") {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if strings.TrimSpace(instance.BaseURL) == "" {
+		return nil, nil
+	}
+	key, err := l.cipher.Decrypt(instance.ManagementKeyCiphertext, instance.ManagementKeyNonce)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt CPA management key: %w", err)
+	}
+	defer func() {
+		for i := range key {
+			key[i] = 0
+		}
+	}()
+	client, err := management.NewClient(instance.BaseURL, string(key), l.cfg.RequestTimeout, l.cfg.TLSSkipVerify)
+	if err != nil {
+		return nil, fmt.Errorf("build CPA management client: %w", err)
+	}
+	return client.ListAllConfiguredModels(ctx)
 }
 
 // buildUsagePipeline wires capture, decode and maintenance over the default CPA
