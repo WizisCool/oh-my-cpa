@@ -192,7 +192,6 @@ func (h *Handler) deleteClientAPIKey(writer http.ResponseWriter, request *http.R
 	})
 }
 
-
 func (h *Handler) loadProviderNames(ctx context.Context) map[string]string {
 	if h.repo == nil {
 		return nil
@@ -271,7 +270,6 @@ func (h *Handler) toggleDisabledProvider(ctx context.Context, id string, disable
 		_ = h.repo.PutPreference(ctx, repository.PreferenceDisabledProviders, string(encoded))
 	}
 }
-
 
 func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
@@ -406,7 +404,7 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 			}
 			for ki, k := range entry.LegacyAPIKeys {
 				keyEntries = append(keyEntries, ProviderKeyEntryDTO{
-					Index: len(entry.APIKeyEntries) + ki,
+					Index:  len(entry.APIKeyEntries) + ki,
 					APIKey: k,
 				})
 			}

@@ -1036,26 +1036,26 @@ type AuthFilesResponse struct {
 }
 
 type AuthFile struct {
-	ID             string                    `json:"id"`
-	AuthIndex      string                    `json:"auth_index"`
-	Name           string                    `json:"name"`
-	Type           string                    `json:"type"`
-	Provider       string                    `json:"provider"`
-	Label          string                    `json:"label"`
-	Status         string                    `json:"status"`
-	StatusMessage  string                    `json:"status_message"`
-	Disabled       bool                      `json:"disabled"`
-	Unavailable    bool                      `json:"unavailable"`
-	RuntimeOnly    bool                      `json:"runtime_only"`
-	Source         string                    `json:"source"`
-	Email          string                    `json:"email"`
-	ProjectID      string                    `json:"project_id"`
-	AccountType    string                    `json:"account_type"`
-	Account        string                    `json:"account"`
+	ID            string `json:"id"`
+	AuthIndex     string `json:"auth_index"`
+	Name          string `json:"name"`
+	Type          string `json:"type"`
+	Provider      string `json:"provider"`
+	Label         string `json:"label"`
+	Status        string `json:"status"`
+	StatusMessage string `json:"status_message"`
+	Disabled      bool   `json:"disabled"`
+	Unavailable   bool   `json:"unavailable"`
+	RuntimeOnly   bool   `json:"runtime_only"`
+	Source        string `json:"source"`
+	Email         string `json:"email"`
+	ProjectID     string `json:"project_id"`
+	AccountType   string `json:"account_type"`
+	Account       string `json:"account"`
 	// IDToken carries CPA-projected identity claims (e.g. Codex
 	// chatgpt_account_id). It is non-secret metadata used to scope
 	// upstream quota queries, never a credential.
-	IDToken json.RawMessage `json:"id_token,omitempty"`
+	IDToken        json.RawMessage           `json:"id_token,omitempty"`
 	Success        int64                     `json:"success"`
 	Failed         int64                     `json:"failed"`
 	RecentRequests []RecentRequest           `json:"recent_requests"`

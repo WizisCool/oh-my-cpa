@@ -522,8 +522,8 @@ func TestManagementAuthFilesPartialDeletion(t *testing.T) {
 		t.Fatalf("expected status 207, got %d: %s", response.StatusCode, raw)
 	}
 	var res struct {
-		Status  string `json:"status"`
-		Deleted int    `json:"deleted"`
+		Status  string   `json:"status"`
+		Deleted int      `json:"deleted"`
 		Files   []string `json:"files"`
 		Failed  []struct {
 			Name  string `json:"name"`
@@ -572,8 +572,8 @@ func TestManagementAuthFilesAllFailureDeletion(t *testing.T) {
 		t.Fatalf("expected status 207, got %d: %s", response.StatusCode, raw)
 	}
 	var res struct {
-		Status  string `json:"status"`
-		Deleted int    `json:"deleted"`
+		Status  string   `json:"status"`
+		Deleted int      `json:"deleted"`
 		Files   []string `json:"files"`
 		Failed  []struct {
 			Name  string `json:"name"`

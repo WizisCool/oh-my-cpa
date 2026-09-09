@@ -132,10 +132,10 @@ type Payload struct {
 
 // Event is the decoded row for usage_events.
 type Event struct {
-	InstanceID          string
-	EventKey            string
-	APIGroupKey         string
-	APIGroupLabel       string
+	InstanceID    string
+	EventKey      string
+	APIGroupKey   string
+	APIGroupLabel string
 	// APIKeyMask is the display mask of the client key CPA published. It is not
 	// an identity: grouping, filtering and credential binding all use
 	// APIGroupKey, because two different keys can share a mask.
@@ -196,10 +196,10 @@ func DecodeEventWithFingerprinter(raw string, instanceID string, observedAt time
 	}
 	groupKey, groupLabel := apiGroupIdentity(payload, fingerprinter)
 	event := Event{
-		InstanceID:          boundedSafe(instanceID, 256),
-		EventKey:            requestID,
-		APIGroupKey:         groupKey,
-		APIGroupLabel:       groupLabel,
+		InstanceID:    boundedSafe(instanceID, 256),
+		EventKey:      requestID,
+		APIGroupKey:   groupKey,
+		APIGroupLabel: groupLabel,
 		// Display-only: the recognisable mask of the client key CPA published.
 		// Identity stays the keyed fingerprint in APIGroupKey; the mask never
 		// reaches the fingerprint or the binding logic.

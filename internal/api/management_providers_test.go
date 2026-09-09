@@ -516,7 +516,6 @@ func TestPullProviderModelsByProviderID(t *testing.T) {
 	}
 }
 
-
 func TestUnifiedProviderArchitectureClaudeCodexGemini(t *testing.T) {
 	client, baseURL, _ := startProviderTestServer(t)
 

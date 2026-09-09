@@ -365,11 +365,11 @@ func (s *Service) fetchCodexQuota(ctx context.Context, file management.AuthFile,
 // fallback; the richer credits list wins; applicable counts prefer usage.
 func (s *Service) fetchCodexResetCredits(ctx context.Context, file management.AuthFile, headers map[string]string, usageCredits *CodexResetCreditsInfo) *CodexResetCreditsInfo {
 	creditsHeaders := map[string]string{
-		"Content-Type":    "application/json",
-		"User-Agent":      CodexUserAgent,
-		"Accept":          "application/json",
-		"OpenAI-Beta":     "codex-1",
-		"Originator":      "Codex Desktop",
+		"Content-Type": "application/json",
+		"User-Agent":   CodexUserAgent,
+		"Accept":       "application/json",
+		"OpenAI-Beta":  "codex-1",
+		"Originator":   "Codex Desktop",
 	}
 	for key, value := range headers {
 		if key != "Content-Type" {

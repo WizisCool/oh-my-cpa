@@ -141,6 +141,3 @@ func DecodeCatalog(body []byte) ([]CatalogEntry, error) {
 	}
 	return entries, nil
 }
-
-
-
