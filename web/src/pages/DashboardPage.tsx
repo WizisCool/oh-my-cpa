@@ -381,7 +381,14 @@ export const DashboardPage: React.FC = () => {
           </div>
           <div className="tile-value is-small">${data.metrics.cost.toFixed(2)}</div>
           <div className="tile-caption">
-            <span>{t('dash.cost_placeholder_note')}</span>
+            {/* The backend distinguishes a true placeholder from a partial
+                estimate; keep both visible so an unpriced model never reads as
+                fully priced. */}
+            <span>
+              {data.metrics.cost_source === 'partial'
+                ? t('dash.cost_partial_note')
+                : t('dash.cost_placeholder_note')}
+            </span>
           </div>
           <Trend points={data.tokens.series} pick={(point) => point.tokens ?? 0} tone="neutral" height={44} variant="line" />
         </Card>
@@ -496,3 +503,4 @@ const OverviewSecondary: React.FC = () => {
 };
 
 export type { DashboardResponse };
+

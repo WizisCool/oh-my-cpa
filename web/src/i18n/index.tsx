@@ -44,6 +44,7 @@ const DICT: Record<string, [string, string]> = {
   'nav.quota': ['配额管理', 'Quota'],
   'nav.logs': ['日志查看', 'Logs'],
   'nav.usage_events': ['请求记录', 'Request Events'],
+  'nav.pricing': ['费用与定价', 'Cost & Pricing'],
   'nav.config': ['配置面板', 'Config'],
   'nav.plugins': ['插件管理', 'Plugin manager'],
   'nav.plugin_store': ['插件商店', 'Plugin store'],
@@ -185,6 +186,7 @@ const DICT: Record<string, [string, string]> = {
   'dash.total_cost': ['总成本', 'Total cost'],
   'dash.cost_hint': ['模型定价尚未配置，当前为占位值', 'Model pricing is not configured yet; this is a placeholder'],
   'dash.cost_placeholder_note': ['未配置定价', 'pricing not configured'],
+  'dash.cost_partial_note': ['部分模型未定价，金额为下限估算', 'some unpriced models; amount is a lower-bound estimate'],
   'dash.source_note': ['数据来自 Oh My CPA 捕获的 CPA 请求记录', 'Sourced from CPA request records captured by Oh My CPA'],
   'dash.empty_title': ['尚未捕获任何请求记录', 'No request records captured yet'],
   'dash.empty_desc': ['发送一次代理请求，或确认 CPA 已开启 usage-statistics-enabled。', 'Send a proxy request, or confirm CPA has usage-statistics-enabled turned on.'],
@@ -998,6 +1000,8 @@ const DICT: Record<string, [string, string]> = {
   'events.col_tps': ['生成速度 (TPS)', 'TPS'],
   'events.tps_hint_ttft': ['基于生成阶段 (总耗时 - 首字延迟) 计算的每秒生成 Token 速率', 'Tokens generated per second during generation (Latency - TTFT)'],
   'events.tps_hint_total': ['未记录首字延迟，基于总耗时估算的端到端平均 Token 速率', 'End-to-end average tokens per second (Latency)'],
+  'events.col_cost': ['费用', 'Cost'],
+  'events.cost_unpriced': ['该模型未定价，费用未知', 'Model unpriced; cost unknown'],
   'events.col_tokens': ['Token 消耗', 'Tokens'],
   'events.col_cache_rate': ['缓存率', 'Cache Rate'],
   'events.col_executor': ['执行器', 'Executor'],
@@ -1248,6 +1252,56 @@ const DICT: Record<string, [string, string]> = {
 
 
 
+  // ── pricing ──────────────────────────────────────────────────────────────
+  'pricing.title': ['费用与定价', 'Cost & Pricing'],
+  'pricing.desc': ['价格来自 models.dev，自动同步；手动价格优先且不会被同步覆盖', 'Prices come from models.dev and sync automatically; manual prices win and are never overwritten by sync'],
+  'pricing.load_error': ['无法读取定价数据', 'Failed to load pricing data'],
+  'pricing.sync.title': ['models.dev 同步', 'models.dev sync'],
+  'pricing.sync.never': ['从未同步', 'Never synced'],
+  'pricing.sync.running': ['同步中…', 'Syncing…'],
+  'pricing.sync.last_success': ['上次成功：{time}', 'Last success: {time}'],
+  'pricing.sync.matched': ['命中 {n} 个模型', '{n} models matched'],
+  'pricing.sync.unmatched': ['未匹配 {n} 个模型', '{n} models unmatched'],
+  'pricing.sync.error': ['上次失败：{error}', 'Last failure: {error}'],
+  'pricing.sync_now': ['立即同步', 'Sync now'],
+  'pricing.sync_started': ['已开始同步，稍后自动刷新', 'Sync started; the page refreshes shortly'],
+  'pricing.sync_conflict': ['同步已在进行中', 'A sync is already running'],
+  'pricing.sync_failed': ['同步失败：{msg}', 'Sync failed: {msg}'],
+  'pricing.table.title': ['模型价格', 'Model prices'],
+  'pricing.table.empty': ['尚无价格数据，点击“立即同步”或手动添加', 'No prices yet; run a sync or add one manually'],
+  'pricing.col.model': ['模型', 'Model'],
+  'pricing.col.prompt': ['输入价', 'Input'],
+  'pricing.col.completion': ['输出价', 'Output'],
+  'pricing.col.cache_read': ['缓存读', 'Cache read'],
+  'pricing.col.cache_write': ['缓存写', 'Cache write'],
+  'pricing.col.multiplier': ['倍率', 'Multiplier'],
+  'pricing.col.source': ['来源', 'Source'],
+  'pricing.col.updated': ['更新时间', 'Updated'],
+  'pricing.source.manual': ['手动', 'Manual'],
+  'pricing.source.modelsdev': ['models.dev', 'models.dev'],
+  'pricing.per_1m': ['$ / 1M tokens', '$ / 1M tokens'],
+  'pricing.add': ['添加价格', 'Add price'],
+  'pricing.edit': ['编辑', 'Edit'],
+  'pricing.remove': ['删除', 'Delete'],
+  'pricing.delete_confirm': ['删除 {model} 的价格？下次同步可能按 models.dev 自动重建。', 'Delete the price for {model}? The next sync may recreate it from models.dev.'],
+  'pricing.delete_failed': ['删除失败：{msg}', 'Delete failed: {msg}'],
+  'pricing.editor.new_title': ['添加手动价格', 'Add manual price'],
+  'pricing.editor.edit_title': ['编辑 {model}', 'Edit {model}'],
+  'pricing.editor.model': ['模型名称', 'Model name'],
+  'pricing.editor.prompt': ['输入价 ($/1M)', 'Input ($/1M)'],
+  'pricing.editor.completion': ['输出价 ($/1M)', 'Output ($/1M)'],
+  'pricing.editor.cache_read': ['缓存读价 ($/1M)', 'Cache read ($/1M)'],
+  'pricing.editor.cache_write': ['缓存写价 ($/1M)', 'Cache write ($/1M)'],
+  'pricing.editor.multiplier': ['计费倍率', 'Billing multiplier'],
+  'pricing.editor.multiplier_hint': ['峰谷电价等场景按倍率缩放计费', 'Scale billing (e.g. peak/off-peak rates)'],
+  'pricing.editor.model_required': ['请填写模型名称', 'Model name is required'],
+  'pricing.saved': ['价格已保存', 'Prices saved'],
+  'pricing.save_failed': ['保存失败：{msg}', 'Save failed: {msg}'],
+  'pricing.unpriced.title': ['未定价模型', 'Unpriced models'],
+  'pricing.unpriced.hint': ['最近请求中出现但 models.dev 未命中的模型，可手动补价', 'Models seen in recent requests without a models.dev match; add prices manually'],
+  'pricing.unpriced.empty': ['所有近期模型都已定价', 'All recent models are priced'],
+  'pricing.unpriced.add': ['补价', 'Add price'],
+
 };
 
 export type TFunc = (key: string, vars?: Record<string, string | number>) => string;
@@ -1314,3 +1368,8 @@ export function useI18n(): I18nContextValue {
 export function useT(): TFunc {
   return React.useContext(I18nContext).t;
 }
+
+
+
+
+

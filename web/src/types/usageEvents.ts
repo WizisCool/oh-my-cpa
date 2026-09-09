@@ -47,6 +47,8 @@ export interface UsageEvent {
   resource_id?: string | null;
   resource_name?: string | null;
   has_request_log: boolean;
+  /** Estimated USD cost from model_prices; absent means unpriced, never zero. */
+  cost_usd?: number | null;
 }
 
 export interface UsageEventPage {
@@ -146,3 +148,4 @@ export function usageEventParams(query: UsageEventQuery): string {
   assign('limit', query.limit);
   return search.toString();
 }
+

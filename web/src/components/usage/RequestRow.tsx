@@ -206,7 +206,18 @@ export const RequestRow = React.memo<RequestRowProps>(
           </div>
         </div>
 
-        {/* Column 8: 缓存率 */}
+        {/* Column 8: 费用（来自 model_prices 的估算；未定价保持 —，不造假 0） */}
+        <div className="req-col req-col-cost">
+          <span className="req-mobile-label">{t('events.col_cost')}</span>
+          {event.cost_usd != null ? (
+            <strong className="req-cost-val">${event.cost_usd.toFixed(4)}</strong>
+          ) : (
+            <Tooltip title={t('events.cost_unpriced')}>
+              <span className="req-cost-none">—</span>
+            </Tooltip>
+          )}
+        </div>
+        {/* Column 9: 缓存率 */}
         <div className="req-col req-col-cache">
           <span className="req-mobile-label">{t('events.col_cache_rate')}</span>
           <Tooltip
@@ -239,7 +250,7 @@ export const RequestRow = React.memo<RequestRowProps>(
           </Tooltip>
         </div>
 
-        {/* Column 9: 执行器 */}
+        {/* Column 10: 执行器 */}
         <div className="req-col req-col-executor">
           <span className="req-mobile-label">{t('events.col_executor')}</span>
           <span className="req-executor-badge" title={`执行器: ${event.executor_type || 'default'}`}>
@@ -247,7 +258,7 @@ export const RequestRow = React.memo<RequestRowProps>(
           </span>
         </div>
 
-        {/* Column 10: Key（仅 api_key 类别的调用方 Key，掩码展示；其他类别回退到来源指纹） */}
+        {/* Column 11: Key（仅 api_key 类别的调用方 Key，掩码展示；其他类别回退到来源指纹） */}
         <div className="req-col req-col-key">
           <span className="req-mobile-label">{t('events.col_key')}</span>
           <span className="req-key-val" title={keyLabel}>
@@ -255,7 +266,7 @@ export const RequestRow = React.memo<RequestRowProps>(
           </span>
         </div>
 
-        {/* Column 11: UA（入库已最小化的客户端产品标签） */}
+        {/* Column 12: UA（入库已最小化的客户端产品标签） */}
         <div className="req-col req-col-ua">
           <span className="req-mobile-label">{t('events.col_ua')}</span>
           <span className="req-ua-val" title={uaLabel}>
@@ -269,3 +280,8 @@ export const RequestRow = React.memo<RequestRowProps>(
     );
   },
 );
+
+
+
+
+

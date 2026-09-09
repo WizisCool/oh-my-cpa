@@ -14,6 +14,7 @@ import { AppLayout } from './components/common/AppLayout';
 import { AuthGate } from './components/common/AuthGate';
 
 const UsageEventsPage = React.lazy(() => import('./pages/UsageEventsPage').then(m => ({ default: m.UsageEventsPage })));
+const PricingPage = React.lazy(() => import('./pages/pricing/PricingPage').then(m => ({ default: m.PricingPage })));
 const ProvidersPage = React.lazy(() => import('./pages/ProvidersPage').then(m => ({ default: m.ProvidersPage })));
 const DashboardPage = React.lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
 const QuickStartPage = React.lazy(() => import('./pages/QuickStartPage').then(m => ({ default: m.QuickStartPage })));
@@ -107,6 +108,7 @@ const AppRoutes: React.FC = () => {
         { path: 'quota', element: <QuotaPage /> },
         { path: 'logs', element: <LogsPage /> },
         { path: 'usage/events', element: <UsageEventsPage /> },
+        { path: 'pricing', element: <PricingPage /> },
         { path: 'config', element: <ConfigPage /> },
         { path: 'plugins', element: <PluginsPage /> },
         { path: 'plugin-store', element: <PluginStorePage /> },
@@ -123,3 +125,5 @@ const AppRoutes: React.FC = () => {
     </AuthGate>
   );
 };
+
+

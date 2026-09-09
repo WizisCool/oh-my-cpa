@@ -6,6 +6,7 @@ export type RequestColumnId =
   | 'latency'
   | 'tps'
   | 'tokens'
+  | 'cost'
   | 'cache'
   | 'executor'
   | 'key'
@@ -93,6 +94,16 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
     flexGrow: 0,
     resizable: true,
   },
+    {
+      id: 'cost',
+      labelKey: 'events.col_cost',
+      align: 'right',
+      defaultWidth: 92,
+      minWidth: 80,
+      maxWidth: 160,
+      flexGrow: 0,
+      resizable: true,
+    },
   {
     id: 'cache',
     labelKey: 'events.col_cache_rate',
@@ -216,6 +227,10 @@ export function computeGridMinWidth(
     }
     return sum + (col.flexGrow > 0 ? col.minWidth : col.defaultWidth);
   }, CHEVRON_TRACK_WIDTH);
-  const gaps = REQUEST_COLUMNS.length * gap; // 11 gaps between 12 tracks
+  const gaps = REQUEST_COLUMNS.length * gap; // 12 gaps between 13 tracks
   return Math.round(total + gaps + paddingInline * 2);
 }
+
+
+
+

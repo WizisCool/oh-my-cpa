@@ -249,6 +249,7 @@
 .req-th-latency,
 .req-th-tps,
 .req-th-tokens,
+.req-th-cost,
 .req-th-cache {
   justify-content: flex-end;
   text-align: right;
@@ -257,6 +258,7 @@
 .req-th-latency .req-th-label,
 .req-th-tps .req-th-label,
 .req-th-tokens .req-th-label,
+.req-th-cost .req-th-label,
 .req-th-cache .req-th-label {
   text-align: right;
   width: 100%;
@@ -530,6 +532,22 @@
   white-space: nowrap;
 }
 
+/* Column 8: Cost — estimated USD from model_prices; an unpriced model stays
+   "—" because zero would fake free usage. */
+.req-col-cost {
+  align-items: flex-end;
+  text-align: right;
+  gap: 2px;
+}
+.req-cost-val {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+.req-cost-none {
+  color: var(--muted);
+}
 /* Column 8: Cache Rate — one continuous scale, 0% yellow → 100% green. Red is
    deliberately absent: a low hit rate is not a failure, and the danger hue
    belongs to failed requests. The component supplies the two stops and the
@@ -674,6 +692,7 @@
   .req-col-latency,
   .req-col-tps,
   .req-col-tokens,
+  .req-col-cost,
   .req-col-cache {
     align-items: flex-start;
     text-align: left;
@@ -712,6 +731,7 @@
   .req-col-latency,
   .req-col-tps,
   .req-col-tokens,
+  .req-col-cost,
   .req-col-cache {
     align-items: flex-start;
     text-align: left;
@@ -958,3 +978,8 @@
     justify-self: start;
   }
 }
+
+
+
+
+

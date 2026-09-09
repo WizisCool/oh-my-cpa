@@ -1,0 +1,38 @@
+.pricing-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pricing-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pricing-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.pricing-search {
+  width: 260px;
+  max-width: 100%;
+}
+
+.pricing-unpriced {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pricing-perm-note {
+  color: var(--ant-color-text-tertiary, #999);
+  font-size: 12px;
+}
+
+.pricing-number {
+  font-variant-numeric: tabular-nums;
+}

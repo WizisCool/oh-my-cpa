@@ -5,6 +5,7 @@ import {
   CloudServerOutlined,
   ControlOutlined,
   DashboardOutlined,
+  DollarOutlined,
   FieldTimeOutlined,
   FileProtectOutlined,
   HistoryOutlined,
@@ -66,6 +67,7 @@ const navGroups: NavGroup[] = [
     labelKey: 'nav.group.observe',
     items: [
       { key: '/usage/events', labelKey: 'nav.usage_events', icon: <HistoryOutlined /> },
+      { key: '/pricing', labelKey: 'nav.pricing', icon: <DollarOutlined /> },
       { key: '/logs', labelKey: 'nav.logs', icon: <ProfileOutlined /> },
     ],
   },
@@ -315,3 +317,7 @@ export const AppLayout: React.FC = () => {
     </Layout>
   );
 };
+
+
+
+

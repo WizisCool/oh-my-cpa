@@ -16,6 +16,7 @@ import { OAuthProviderItem, StartOAuthResponse, OAuthStatusResponse, OAuthCallba
 import { QuotaOverviewResponse, CredentialQuotaDetailResponse, QuotaItem } from '../types/quota';
 import { SystemInfoResponse } from '../types/system';
 import { PluginsResponse, PluginStoreResponse } from '../types/plugin';
+import { PricingResponse, PricingUpdatePayload } from '../types/pricing';
 
 
 /** DEFAULT_LOG_PAGE is the page size a fresh tail read asks for. */
@@ -586,4 +587,27 @@ export const api = {
       body: JSON.stringify(payload),
     });
   },
+
+  // Pricing: one read endpoint for the page plus three operator actions.
+  async getPricing(): Promise<PricingResponse> {
+    return request<PricingResponse>('/pricing', { method: 'GET' });
+  },
+
+  async updatePricingModels(payload: PricingUpdatePayload): Promise<{ updated: number }> {
+    return request<{ updated: number }>('/pricing/models', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deletePricingModel(model: string): Promise<{ deleted: boolean }> {
+    return request<{ deleted: boolean }>(`/pricing/models/${encodeURIComponent(model)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async startPricingSync(): Promise<{ started: boolean }> {
+    return request<{ started: boolean }>('/pricing/sync', { method: 'POST' });
+  },
 };
+
