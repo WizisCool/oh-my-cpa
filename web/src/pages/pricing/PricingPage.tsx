@@ -15,6 +15,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';
 import type { ModelPrice } from '../../types/pricing';
+import { PricingLeaderboard } from './PricingLeaderboard';
 import styles from './PricingPage.module.css';
 
 /** Per-1M rates share one cell format: plain number with up to 6 decimal places. */
@@ -604,7 +605,10 @@ export const PricingPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 6. Price Editor Modal */}
+      {/* 6. Opencode Style Model Capacity Leaderboard */}
+      <PricingLeaderboard models={models} />
+
+      {/* 7. Price Editor Modal */}
       <Modal
         open={editor.open}
         title={

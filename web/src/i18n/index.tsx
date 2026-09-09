@@ -1312,7 +1312,24 @@ const DICT: Record<string, [string, string]> = {
   'pricing.unpriced.hint': ['最近请求中出现但 models.dev 未命中的模型，可手动补价', 'Models seen in recent requests without a models.dev match; add prices manually'],
   'pricing.unpriced.empty': ['所有近期模型都已定价', 'All recent models are priced'],
   'pricing.unpriced.add': ['补价', 'Add price'],
-
+  'pricing.leaderboard.title': ['模型容量与性价比排行榜', 'Model Capacity & Value Leaderboard'],
+  'pricing.leaderboard.subtitle': ['在设定预算下测算各模型可承担的实际请求次数（参考 Opencode / CommandCode 典型会话）', 'Estimated available requests per model under a configured budget (Opencode / CommandCode benchmark)'],
+  'pricing.leaderboard.budget': ['预算', 'Budget'],
+  'pricing.leaderboard.scenario': ['测算场景', 'Scenario'],
+  'pricing.leaderboard.scenario_coding': ['代码助手会话 (1K+300+35K缓存)', 'Coding Agent (1K+300+35K cache)'],
+  'pricing.leaderboard.scenario_heavy': ['工程大重构 (3K+1.2K+80K缓存)', 'Heavy Refactor (3K+1.2K+80K cache)'],
+  'pricing.leaderboard.scenario_chat': ['纯问答对话 (1.5K+500 无缓存)', 'Direct Chat (1.5K+500 no cache)'],
+  'pricing.leaderboard.scenario_custom': ['自定义 Token 参数', 'Custom Tokens'],
+  'pricing.leaderboard.prompt_tokens': ['Prompt 新增', 'Fresh Prompt'],
+  'pricing.leaderboard.comp_tokens': ['Completion 补全', 'Completion'],
+  'pricing.leaderboard.cache_read_tokens': ['Cache Read 缓存读取', 'Cache Read'],
+  'pricing.leaderboard.cost_per_req': ['单次成本', 'Cost / Req'],
+  'pricing.leaderboard.req_unit': ['次', 'reqs'],
+  'pricing.leaderboard.daily_avg': ['日均约 {n} 次/天 (按 30 天)', '~{n} reqs/day (30-day)'],
+  'pricing.leaderboard.cache_saving': ['缓存节省 {pct}% 费用', 'Cache saves {pct}%'],
+  'pricing.leaderboard.empty': ['当前尚无可用于测算的模型价格条目', 'No priced models available for benchmark'],
+  'pricing.leaderboard.sort_highest': ['请求量最多', 'Most Requests'],
+  'pricing.leaderboard.sort_cheapest': ['单次最省', 'Cheapest per Req'],
 };
 
 export type TFunc = (key: string, vars?: Record<string, string | number>) => string;

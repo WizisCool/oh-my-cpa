@@ -1,0 +1,341 @@
+/* ── Pricing Leaderboard: Opencode Style Model Capacity & Benchmark ── */
+
+.leaderboardCard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.titleArea {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--fg);
+  margin: 0;
+}
+
+.subtitle {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.tagBadge {
+  font-size: 11px;
+  font-family: monospace;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* ── Interactive Controls Bar ── */
+.controlsBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--surface) 95%, var(--border));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+}
+
+.controlsLeft {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.controlGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.controlLabel {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.budgetTabs {
+  display: inline-flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  padding: 2px;
+  gap: 2px;
+}
+
+.budgetTab {
+  background: none;
+  border: none;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-family: monospace;
+  font-weight: 500;
+  color: var(--muted);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.budgetTab:hover {
+  color: var(--fg);
+}
+
+.budgetTabActive {
+  background: var(--accent);
+  color: #fff !important;
+  font-weight: 600;
+}
+
+.customTokensBox {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--surface) 90%, var(--border));
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm, 4px);
+}
+
+.tokenInputGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── Opencode Style Chart Area ── */
+.chartContainer {
+  position: relative;
+  background: color-mix(in srgb, var(--surface) 96%, #000);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  padding: 20px 24px 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-x: auto;
+}
+
+/* Vertical guide lines across the chart */
+.gridLines {
+  position: absolute;
+  top: 0;
+  bottom: 30px;
+  left: 24px;
+  right: 24px;
+  pointer-events: none;
+  display: flex;
+  justify-content: space-between;
+}
+
+.gridLine {
+  width: 1px;
+  height: 100%;
+  background: color-mix(in srgb, var(--border) 40%, transparent);
+}
+
+.barList {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.barRow {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+}
+
+.barRow:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.barTrack {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 22px;
+}
+
+/* The horizontal bar with Opencode olive-gold aesthetic */
+.barFill {
+  height: 14px;
+  border-radius: 2px;
+  background: #c3cb46;
+  box-shadow: 0 1px 3px rgba(195, 203, 70, 0.25);
+  display: flex;
+  position: relative;
+  transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  flex-shrink: 0;
+}
+
+/* For models with high cache savings or 2x efficiency */
+.barBonus {
+  background: #8b9420;
+  height: 100%;
+  border-top-right-radius: 2px;
+  border-bottom-right-radius: 2px;
+}
+
+.barMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 10px;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.requestCount {
+  font-family: monospace;
+  font-weight: 700;
+  color: var(--fg);
+  font-size: 13px;
+}
+
+.modelName {
+  color: var(--fg);
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.badgeTag {
+  font-size: 10px;
+  padding: 0 4px;
+  border-radius: 3px;
+  line-height: 16px;
+  background: color-mix(in srgb, var(--border) 60%, var(--surface));
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.badgeBonus {
+  background: color-mix(in srgb, #c3cb46 15%, var(--surface));
+  color: #8b9420;
+  border-color: color-mix(in srgb, #c3cb46 40%, transparent);
+  font-weight: 600;
+}
+
+/* ── X-Axis Scale Marks at bottom (1x, 10x, 25x, 50x, 100x, 250x...) ── */
+.scaleAxis {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  padding-top: 8px;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--muted);
+  user-select: none;
+}
+
+.scaleTick {
+  position: relative;
+  text-align: center;
+}
+
+/* ── Hover Tooltip Card (CommandCode style) ── */
+.tooltipCard {
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.tooltipHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+
+.tooltipModelTitle {
+  font-weight: 600;
+  font-family: monospace;
+  color: var(--fg);
+  font-size: 13px;
+}
+
+.tooltipMetricRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.tooltipMetricValue {
+  font-family: monospace;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.tooltipBreakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: color-mix(in srgb, var(--surface) 92%, var(--border));
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-family: monospace;
+  font-size: 11px;
+}
+
+.breakdownItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.savingsNote {
+  color: var(--success);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
