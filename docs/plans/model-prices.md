@@ -34,10 +34,17 @@ replacing the earlier heavier valuation prototype (removed before this work).
 
 ## Matching rule
 
-`Catalog.MatchModel` resolves one strong identity: exact, provider-prefix
-stripped, or normalized, with official provider families ranked first. Ties
-between different providers at the same rank stay unmatched — auto sync never
-guesses; the model shows up on the pricing page as unpriced for manual setup.
+`Catalog.MatchModel` ranks candidates instead of refusing them. Exact id,
+name and normalized identities all enter the candidate set; the winner is
+decided by the chain `plan-zero last → first-party provider (family list) →
+match precision → longest true id match → fewest namespaces → not deprecated →
+most recently updated → provider/model id`. The family lists mirror
+cpa-usage-keeper and are verified against the live catalog (glm → zai/zhipuai,
+qwen → alibaba-cn/alibaba, mimo → xiaomi, ...), which is what fixed the old
+"only GPT models get priced" behavior. Entries without explicit input/output
+rates are never selected — a missing rate must not become zero. A model with
+no catalog identity at all stays unpriced for manual setup (the manual editor
+pre-fills nothing and never guesses).
 
 ## Sync-state write rule
 

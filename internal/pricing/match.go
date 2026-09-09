@@ -1,30 +1,89 @@
 package pricing
 
 import (
+	"sort"
 	"strings"
+	"unicode"
 )
 
-// Model family → official catalog provider id. Keeper's ranking insight: when
-// several providers list the same model, the first-party provider entry is the
-// right default estimate; relays and aggregates are fallbacks.
-var providerFamilies = map[string]string{
-	"claude": "anthropic", "gemini": "google", "gpt": "openai", "chatgpt": "openai",
-	"o1": "openai", "o3": "openai", "o4": "openai", "deepseek": "deepseek",
-	"glm": "zhipu", "qwen": "qwen", "grok": "xai", "llama": "meta",
-	"mistral": "mistral", "kimi": "moonshot", "minimax": "minimax",
-	"doubao": "bytedance", "ernie": "baidu",
+// Model family → ordered first-party models.dev provider ids, most
+// authoritative first. models.dev publishes relays and aggregates under their
+// own provider ids (302ai, aihubmix, ...), so "the provider that shares the
+// model prefix" must come from this table, not from the id. Lists verified
+// against the live catalog; they follow cpa-usage-keeper's ordering.
+func officialProvidersByFamily(family string) []string {
+	switch family {
+	case "openai":
+		return []string{"openai", "azure", "azure-cognitive-services"}
+	case "anthropic":
+		return []string{"anthropic", "google-vertex-anthropic"}
+	case "deepseek":
+		return []string{"deepseek", "siliconflow-cn", "siliconflow"}
+	case "glm":
+		return []string{"zai", "zhipuai", "zai-coding-plan", "zhipuai-coding-plan"}
+	case "qwen":
+		return []string{"alibaba-cn", "alibaba", "aliyun-bailian"}
+	case "google":
+		return []string{"google", "google-vertex"}
+	case "xai":
+		return []string{"xai"}
+	case "minimax":
+		return []string{"minimax-cn", "minimax", "minimax-cn-coding-plan", "minimax-coding-plan"}
+	case "moonshot":
+		return []string{"moonshotai-cn", "moonshotai", "kimi-for-coding"}
+	case "doubao":
+		return []string{"doubao"}
+	case "mistral":
+		return []string{"mistral"}
+	case "cohere":
+		return []string{"cohere"}
+	case "llama":
+		return []string{"llama"}
+	case "xiaomi":
+		return []string{"xiaomi"}
+	default:
+		return nil
+	}
 }
 
-// NormalizeModelKey lowercases and removes whitespace so trivial formatting
-// differences (CPA prefixes aside) cannot hide an identical model identity.
+// modelFamilyOf maps a model id prefix to a catalog family. Covers the
+// manufacturer prefixes that actually appear in traffic; unknown prefixes have
+// no official provider and fall back to relay ranking.
+func modelFamilyOf(model string) string {
+	identity := NormalizeModelKey(StripProviderPrefix(model))
+	prefixes := []struct {
+		prefix string
+		family string
+	}{
+		{"gpt", "openai"}, {"chatgpt", "openai"}, {"o1", "openai"}, {"o3", "openai"}, {"o4", "openai"},
+		{"claude", "anthropic"}, {"deepseek", "deepseek"}, {"glm", "glm"}, {"qwen", "qwen"},
+		{"gemini", "google"}, {"grok", "xai"}, {"minimax", "minimax"}, {"moonshot", "moonshot"},
+		{"kimi", "moonshot"}, {"doubao", "doubao"}, {"mimo", "xiaomi"}, {"command", "cohere"},
+		{"llama", "llama"},
+	}
+	for _, item := range prefixes {
+		if strings.HasPrefix(identity, item.prefix) {
+			return item.family
+		}
+	}
+	for _, prefix := range []string{"mistral", "devstral", "codestral", "magistral", "ministral", "mixtral", "pixtral", "voxtral"} {
+		if strings.HasPrefix(identity, prefix) {
+			return "mistral"
+		}
+	}
+	return ""
+}
+
+// NormalizeModelKey lowercases and keeps only letters and digits, so separators
+// and regional decorations ("GLM-5.3 Flash" vs "glm-5.3-flash") cannot hide an
+// identical model identity.
 func NormalizeModelKey(value string) string {
 	var b strings.Builder
 	b.Grow(len(value))
-	for _, r := range strings.ToLower(strings.TrimSpace(value)) {
-		if r == ' ' || r == '\t' {
-			continue
+	for _, r := range value {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(unicode.ToLower(r))
 		}
-		b.WriteRune(r)
 	}
 	return b.String()
 }
@@ -39,90 +98,209 @@ func StripProviderPrefix(value string) string {
 }
 
 type catalogIndex struct {
-	byKey map[string][]CatalogEntry
+	exact      map[string][]CatalogEntry
+	normalized map[string][]CatalogEntry
 }
 
 func buildCatalogIndex(entries []CatalogEntry) catalogIndex {
-	index := catalogIndex{byKey: make(map[string][]CatalogEntry, len(entries)*3)}
-	add := func(key string, entry CatalogEntry) {
-		if key == "" {
-			return
+	index := catalogIndex{
+		exact:      make(map[string][]CatalogEntry, len(entries)*3),
+		normalized: make(map[string][]CatalogEntry, len(entries)*3),
+	}
+	register := func(target map[string][]CatalogEntry, entry CatalogEntry, values ...string) {
+		seen := make(map[string]struct{}, len(values))
+		for _, value := range values {
+			key := strings.ToLower(strings.TrimSpace(value))
+			if key == "" {
+				continue
+			}
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			target[key] = append(target[key], entry)
 		}
-		index.byKey[key] = append(index.byKey[key], entry)
 	}
 	for _, entry := range entries {
 		id, name := entry.Model.ID, entry.Model.Name
-		add(id, entry)
-		add(name, entry)
-		add(StripProviderPrefix(id), entry)
-		add(StripProviderPrefix(name), entry)
-		add(NormalizeModelKey(id), entry)
-		add(NormalizeModelKey(name), entry)
-		add(NormalizeModelKey(StripProviderPrefix(id)), entry)
-		add(NormalizeModelKey(StripProviderPrefix(name)), entry)
+		register(index.exact, entry, id, name, StripProviderPrefix(id), StripProviderPrefix(name))
+		register(index.normalized, entry,
+			NormalizeModelKey(id), NormalizeModelKey(name),
+			NormalizeModelKey(StripProviderPrefix(id)), NormalizeModelKey(StripProviderPrefix(name)))
 	}
 	return index
 }
 
-func providerRank(model, providerID string) int {
-	identity := NormalizeModelKey(StripProviderPrefix(model))
-	provider := strings.ToLower(strings.TrimSpace(providerID))
-	for prefix, family := range providerFamilies {
-		if strings.HasPrefix(identity, prefix) && provider == family {
-			return 0
-		}
-	}
-	if idx := strings.Index(model, "/"); idx > 0 && strings.EqualFold(model[:idx], provider) {
-		return 0
-	}
-	return 1
+// matchScore ranks how directly a catalog entry answered the lookup. Higher is
+// more specific; a CPA prefix must not steer provider inference, so the
+// stripped id always outranks the full routed name.
+const (
+	scoreExactSuffix      = 100
+	scoreExactFull        = 96
+	scoreNormalizedSuffix = 92
+	scoreNormalizedFull   = 88
+)
+
+type rankedCandidate struct {
+	entry         CatalogEntry
+	score         int
+	idMatchLength int
+	officialRank  int // index into the family list; -1 when the provider is a relay
+	planZero      bool
+	deprecated    bool
 }
 
-// MatchModel resolves one strong catalog identity for a model. Multiple
-// same-rank candidates are ambiguous and return nothing: auto sync never
-// guesses between providers, it leaves the model unpriced for manual setup.
-func (c Catalog) MatchModel(model string) *CatalogEntry {
+func buildCandidates(model string, index catalogIndex) []rankedCandidate {
 	model = strings.TrimSpace(model)
 	if model == "" {
 		return nil
 	}
-	index := buildCatalogIndex(c.Entries)
 	suffix := StripProviderPrefix(model)
-	for _, key := range []string{model, NormalizeModelKey(model), suffix, NormalizeModelKey(suffix)} {
-		candidates := uniqueEntries(index.byKey[key])
-		if len(candidates) == 0 {
-			continue
+	type lookup struct {
+		key   string
+		score int
+	}
+	var lookups []lookup
+	if suffix != model {
+		lookups = []lookup{
+			{strings.ToLower(suffix), scoreExactSuffix},
+			{NormalizeModelKey(suffix), scoreNormalizedSuffix},
+			{strings.ToLower(model), scoreExactFull},
+			{NormalizeModelKey(model), scoreNormalizedFull},
 		}
-		var winner *CatalogEntry
-		bestRank := 2
-		count := 0
-		for i := range candidates {
-			rank := providerRank(model, candidates[i].ProviderID)
-			if rank < bestRank {
-				bestRank, winner, count = rank, &candidates[i], 1
-				continue
-			}
-			if rank == bestRank {
-				count++
-			}
+	} else {
+		lookups = []lookup{
+			{strings.ToLower(model), scoreExactSuffix},
+			{NormalizeModelKey(model), scoreNormalizedSuffix},
 		}
-		if winner != nil && count == 1 {
-			return winner
+	}
+	best := make(map[string]rankedCandidate, 8)
+	family := modelFamilyOf(model)
+	officials := officialProvidersByFamily(family)
+	officialRank := make(map[string]int, len(officials))
+	for i, provider := range officials {
+		officialRank[provider] = i
+	}
+	add := func(entry CatalogEntry, score int) {
+		candidate := rankedCandidate{
+			entry:         entry,
+			score:         score,
+			officialRank:  -1,
+			deprecated:    strings.EqualFold(strings.TrimSpace(entry.Model.Status), "deprecated"),
+			idMatchLength: idMatchLength(model, entry.Model.ID),
+		}
+		if rank, ok := officialRank[strings.ToLower(strings.TrimSpace(entry.ProviderID))]; ok {
+			candidate.officialRank = rank
+		} else if isPlanZeroProvider(entry.ProviderID) && costIsZero(entry.Model.Cost) {
+			// Subscription-plan catalogs list $0 quotas, not USD rates.
+			candidate.planZero = true
+		}
+		key := entry.ProviderID + "\x00" + entry.Model.ID
+		if existing, ok := best[key]; !ok || candidateLess(candidate, existing) {
+			best[key] = candidate
+		}
+	}
+	for _, item := range lookups {
+		key := strings.ToLower(item.key)
+		for _, entry := range index.exact[key] {
+			add(entry, item.score)
+		}
+		for _, entry := range index.normalized[NormalizeModelKey(item.key)] {
+			add(entry, item.score)
+		}
+	}
+	result := make([]rankedCandidate, 0, len(best))
+	for _, candidate := range best {
+		result = append(result, candidate)
+	}
+	sort.Slice(result, func(i, j int) bool { return candidateLess(result[i], result[j]) })
+	return result
+}
+
+// candidateLess orders candidates the way Keeper does: subscription-plan zero
+// prices last, first-party providers first, then match precision, then the
+// freshest, shortest-namespace entry. The chain is total, so the winner is
+// deterministic across syncs.
+func candidateLess(left, right rankedCandidate) bool {
+	if left.planZero != right.planZero {
+		return !left.planZero
+	}
+	if left.officialRank != right.officialRank && (left.officialRank >= 0 || right.officialRank >= 0) {
+		if left.officialRank < 0 {
+			return false
+		}
+		if right.officialRank < 0 {
+			return true
+		}
+		return left.officialRank < right.officialRank
+	}
+	if left.score != right.score {
+		return left.score > right.score
+	}
+	if left.idMatchLength != right.idMatchLength {
+		return left.idMatchLength > right.idMatchLength
+	}
+	leftNamespaces := strings.Count(left.entry.Model.ID, "/")
+	rightNamespaces := strings.Count(right.entry.Model.ID, "/")
+	if leftNamespaces != rightNamespaces {
+		return leftNamespaces < rightNamespaces
+	}
+	if left.deprecated != right.deprecated {
+		return !left.deprecated
+	}
+	if left.entry.Model.LastUpdated != right.entry.Model.LastUpdated {
+		return left.entry.Model.LastUpdated > right.entry.Model.LastUpdated
+	}
+	if left.entry.ProviderID != right.entry.ProviderID {
+		return left.entry.ProviderID < right.entry.ProviderID
+	}
+	return left.entry.Model.ID < right.entry.Model.ID
+}
+
+// idMatchLength scores how concretely a catalog id answered the lookup: only a
+// true identity (equal, routed suffix, or prefix-stripped equal) counts;
+// unrelated longer ids must not outrank an exact bare id.
+func idMatchLength(model, id string) int {
+	model = strings.ToLower(strings.TrimSpace(model))
+	id = strings.ToLower(strings.TrimSpace(id))
+	if id == "" {
+		return 0
+	}
+	if model == id || strings.HasSuffix(model, "/"+id) || strings.HasSuffix(model, ":"+id) ||
+		NormalizeModelKey(StripProviderPrefix(model)) == NormalizeModelKey(StripProviderPrefix(id)) {
+		return len(id)
+	}
+	return 0
+}
+
+// isPlanZeroProvider marks subscription-plan catalogs (coding-plan /
+// token-plan) whose listed prices are zero: they describe plan quotas, not USD.
+func isPlanZeroProvider(providerID string) bool {
+	provider := strings.ToLower(strings.TrimSpace(providerID))
+	return strings.Contains(provider, "coding-plan") || strings.Contains(provider, "token-plan")
+}
+
+func costIsZero(cost MetadataCost) bool {
+	return cost.Input != nil && cost.Output != nil && *cost.Input == 0 && *cost.Output == 0
+}
+
+// usableCost requires explicit input and output rates; a catalog entry without
+// them must not become a zero-completion price.
+func usableCost(cost MetadataCost) bool {
+	return cost.Input != nil && cost.Output != nil &&
+		*cost.Input >= 0 && *cost.Output >= 0
+}
+
+// MatchModel resolves the strongest catalog identity for a model. First-party
+// providers win over relays; among relays the most specific, freshest entry
+// wins deterministically. A model with no catalog entry at all stays unpriced.
+func (c Catalog) MatchModel(model string) *CatalogEntry {
+	index := buildCatalogIndex(c.Entries)
+	for _, candidate := range buildCandidates(model, index) {
+		if usableCost(candidate.entry.Model.Cost) {
+			entry := candidate.entry
+			return &entry
 		}
 	}
 	return nil
-}
-
-func uniqueEntries(entries []CatalogEntry) []CatalogEntry {
-	seen := make(map[string]struct{}, len(entries))
-	result := make([]CatalogEntry, 0, len(entries))
-	for _, entry := range entries {
-		key := entry.ProviderID + "\x00" + entry.Model.ID
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		result = append(result, entry)
-	}
-	return result
 }

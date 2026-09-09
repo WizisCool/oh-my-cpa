@@ -88,13 +88,61 @@ func TestMatchModelStripsProviderPrefix(t *testing.T) {
 	}
 }
 
-func TestMatchModelAmbiguousStaysUnpriced(t *testing.T) {
+// Relay noise is the normal case: a bare traffic model id appears under
+// dozens of aggregators. The family's first-party provider must win.
+func TestMatchModelPrefersFamilyProviderOverRelays(t *testing.T) {
+	entry := func(provider string) CatalogEntry {
+		in, out := 1.0, 2.0
+		return CatalogEntry{ProviderID: provider, Model: MetadataModel{ID: "glm-5.3-flash", Cost: MetadataCost{Input: &in, Output: &out}}}
+	}
 	catalog := Catalog{Entries: []CatalogEntry{
-		{ProviderID: "acme", Model: MetadataModel{ID: "shared-name"}},
-		{ProviderID: "beta", Model: MetadataModel{ID: "shared-name"}},
+		entry("302ai"), entry("aihubmix"), entry("zhipuai"), entry("zai"), entry("above"),
 	}}
-	if entry := catalog.MatchModel("shared-name"); entry != nil {
-		t.Fatalf("ambiguous match must be nil, got %+v", entry)
+	got := catalog.MatchModel("glm-5.3-flash")
+	if got == nil || (got.ProviderID != "zai" && got.ProviderID != "zhipuai") {
+		t.Fatalf("first-party GLM provider must win, got %+v", got)
+	}
+}
+
+// Subscription-plan catalogs publish $0 quotas, not USD rates; they must never
+// win while a real price exists.
+func TestMatchModelDemotesPlanZeroPricing(t *testing.T) {
+	zero := 0.0
+	real := 0.075
+	catalog := Catalog{Entries: []CatalogEntry{
+		{ProviderID: "zhipuai-coding-plan", Model: MetadataModel{ID: "glm-5.3-flash", Cost: MetadataCost{Input: &zero, Output: &zero}}},
+		{ProviderID: "zhipuai", Model: MetadataModel{ID: "glm-5.3-flash", Cost: MetadataCost{Input: &real, Output: &real}}},
+	}}
+	got := catalog.MatchModel("glm-5.3-flash")
+	if got == nil || got.ProviderID != "zhipuai" {
+		t.Fatalf("plan-zero price must lose to the real rate, got %+v", got)
+	}
+}
+
+// An entry without explicit input/output rates must not become a free model.
+func TestMatchModelSkipsEntriesWithoutPrices(t *testing.T) {
+	in := 0.2
+	catalog := Catalog{Entries: []CatalogEntry{
+		{ProviderID: "broken", Model: MetadataModel{ID: "mystery-model", Cost: MetadataCost{Input: &in}}},
+	}}
+	if entry := catalog.MatchModel("mystery-model"); entry != nil {
+		t.Fatalf("entry without output price must stay unpriced, got %+v", entry)
+	}
+}
+
+// Deterministic chain: when no first-party provider exists, the most specific,
+// freshest relay wins instead of leaving the model unpriced.
+func TestMatchModelFallsBackToDeterministicRelay(t *testing.T) {
+	entry := func(provider string, updated string, input float64) CatalogEntry {
+		in, out := input, input*2
+		return CatalogEntry{ProviderID: provider, Model: MetadataModel{
+			ID: "qwen3.8-flash", LastUpdated: updated, Cost: MetadataCost{Input: &in, Output: &out},
+		}}
+	}
+	catalog := Catalog{Entries: []CatalogEntry{entry("older-relay", "2026-01-01", 9), entry("newer-relay", "2026-09-01", 1)}}
+	got := catalog.MatchModel("qwen3.8-flash")
+	if got == nil || got.ProviderID != "newer-relay" {
+		t.Fatalf("freshest relay must win deterministically, got %+v", got)
 	}
 }
 
