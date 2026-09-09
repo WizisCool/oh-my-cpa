@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -53,10 +54,14 @@ func (h *Handler) listPricing(writer http.ResponseWriter, request *http.Request)
 		writeInternalError(writer, err)
 		return
 	}
+	// Sync bookkeeping is auxiliary. Pricing the recorded traffic must not depend
+	// on it, so a state read that still fails degrades to "unknown" with the
+	// reason shown as last_error instead of blanking the whole page.
 	state, known, err := h.pricing.SyncStateView(ctx)
 	if err != nil {
-		writeInternalError(writer, err)
-		return
+		slog.Warn("pricing sync state unavailable", "error", err)
+		state = pricing.SyncState{Source: pricing.SourceModelsDev, LastError: err.Error()}
+		known = false
 	}
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"source":   pricing.SourceModelsDev,

@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
@@ -20,6 +22,7 @@ type fakePricing struct {
 	saved      []pricing.ModelPrice
 	deleted    []string
 	started    bool
+	stateErr   error
 }
 
 func (f *fakePricing) ListPrices(context.Context) ([]pricing.ModelPrice, error) {
@@ -37,6 +40,9 @@ func (f *fakePricing) UsedUnpricedModels(context.Context, int) ([]string, error)
 	return f.unpriced, nil
 }
 func (f *fakePricing) SyncStateView(context.Context) (pricing.SyncState, bool, error) {
+	if f.stateErr != nil {
+		return pricing.SyncState{}, false, f.stateErr
+	}
 	return f.state, f.known, nil
 }
 func (f *fakePricing) TriggerSync() bool {
@@ -149,5 +155,45 @@ func TestPricingManualEditAndDeleteAndSync(t *testing.T) {
 	response.Body.Close()
 	if !fake.started {
 		t.Fatal("TriggerSync was never called")
+	}
+}
+
+// Sync bookkeeping is a side panel, not a precondition for pricing. When its row
+// cannot be read at all, the page must still get every price and see the reason
+// as a sync error instead of a blank 500 screen.
+func TestPricingPageDegradesWhenSyncStateUnreadable(t *testing.T) {
+	fake := &fakePricing{
+		listRows: []pricing.ModelPrice{{
+			Model: "openai/gpt-5", PromptPricePer1M: 2, CompletionPer1M: 10,
+			PriceMultiplier: 1, Source: pricing.SourceModelsDev,
+		}},
+		unpriced: []string{"mystery-model"},
+		stateErr: errors.New("corrupt sync state"),
+	}
+	client, baseURL := startPricingTestServer(t, fake)
+
+	response, payload := getJSON(t, client, baseURL+"/omc/api/v1/pricing")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("pricing status = %d body %s", response.StatusCode, payload)
+	}
+	var body struct {
+		Models   []pricing.ModelPrice `json:"models"`
+		Unpriced []string             `json:"unpriced"`
+		Sync     struct {
+			Known bool              `json:"known"`
+			State pricing.SyncState `json:"state"`
+		} `json:"sync"`
+	}
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Models) != 1 || len(body.Unpriced) != 1 {
+		t.Fatalf("prices must still load: %s", payload)
+	}
+	if body.Sync.Known {
+		t.Fatal("an unreadable state must report known=false")
+	}
+	if !strings.Contains(body.Sync.State.LastError, "corrupt sync state") {
+		t.Fatalf("the reason must reach the UI as last_error, got %q", body.Sync.State.LastError)
 	}
 }
