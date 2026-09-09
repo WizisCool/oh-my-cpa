@@ -189,6 +189,7 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
       {/* Active Cooldown Banner */}
       {item.active_cooldown?.is_active && (
         <div className={`${styles.recBanner} ${styles.recBannerDanger}`}>
+          <span className={styles.bannerDot} style={{ background: 'var(--danger)' }} />
           <div className={styles.recText}>
             <div>{item.active_cooldown.reason || t('quota.cooldown_active_desc')}</div>
             {item.active_cooldown.recover_at_ms && (
