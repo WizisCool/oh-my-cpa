@@ -18,6 +18,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage/ingest"
 )
@@ -33,6 +34,8 @@ type App struct {
 	// pipeline captures CPA request records into the local database. Nil when
 	// ingestion is disabled or no CPA instance is configured yet.
 	pipeline *ingest.Pipeline
+	// pricing keeps model prices fresh from models.dev; nil-safe service.
+	pricing *pricing.Service
 }
 
 func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, error) {
@@ -72,19 +75,28 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 	}
 	handler := api.NewHandler(cfg, repo, cipher, logger, authManager)
 
+	// Zero-config pricing: the service syncs once at startup and then daily, and
+	// manual operator rows always win. Failures degrade to stale prices, never
+	// to wrong ones.
+	pricingService := pricing.NewService(repo, nil, logger)
+	handler.SetPricing(pricingService)
+
 	pipeline, err := buildUsagePipeline(cfg, repo, handler, logger, cipher)
 	if err != nil {
 		db.Close()
 		return nil, err
 	}
 	return &App{
-		cfg:      cfg,
-		db:       db,
-		repo:     repo,
-		cipher:   cipher,
-		handler:  handler,
-		logger:   logger,
+		cfg:     cfg,
+		db:      db,
+		repo:    repo,
+		cipher:  cipher,
+		handler: handler,
+		logger:  logger,
+
 		pipeline: pipeline,
+
+		pricing: pricingService,
 	}, nil
 }
 
@@ -187,6 +199,14 @@ func (a *App) Run(ctx context.Context) error {
 			pipelineErrors <- a.pipeline.Run(ctx)
 		}()
 	}
+
+	// The pricing loop is best-effort: losing it keeps prices stale but never
+	// stops request capture or the HTTP server.
+	go func() {
+		if err := a.pricing.Run(ctx); err != nil {
+			a.logger.Warn("pricing sync loop stopped", "error", err)
+		}
+	}()
 
 	select {
 	case err := <-pipelineErrors:

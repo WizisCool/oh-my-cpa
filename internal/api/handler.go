@@ -39,6 +39,8 @@ type Handler struct {
 	auth       *auth.Manager
 	// usage reports the background capture pipeline; nil when ingestion is off.
 	usage usagePipeline
+	// pricing serves model prices and the models.dev sync; nil until SetPricing.
+	pricing PricingManager
 
 	configMu     sync.Mutex
 	grantMu      sync.RWMutex
@@ -94,6 +96,11 @@ func (h *Handler) Router() http.Handler {
 				v1.Get("/preferences", h.listPreferences)
 				v1.Put("/preferences/{key}", h.putPreference)
 				v1.Get("/usage/ingest-status", h.dashboardIngestStatus)
+				// Pricing: one read endpoint for the page plus three operator actions.
+				v1.Get("/pricing", h.listPricing)
+				v1.Put("/pricing/models", h.updatePricingModels)
+				v1.Delete("/pricing/models/{model}", h.deletePricingModel)
+				v1.Post("/pricing/sync", h.startPricingSync)
 				v1.Get("/usage/events", h.listUsageEvents)
 				v1.Get("/usage/events/{id}", h.getUsageEvent)
 				v1.Get("/usage/events/{id}/request-log", h.downloadUsageEventRequestLog)

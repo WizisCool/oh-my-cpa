@@ -381,8 +381,24 @@ func (h *Handler) queryDashboard(ctx context.Context, window dashboardWindow) (d
 		ttft := roundTwo(float64(totals.TTFTSumMS) / float64(totals.TTFTCount))
 		facts.metrics.AvgTTFTMS = &ttft
 	}
-	// Cost stays a documented zero until a pricing model exists.
-	facts.metrics.Cost = 0
+	// Cost is an on-the-fly estimate from model_prices; unpriced models keep
+	// the window honest via CostSource instead of a fabricated zero.
+	costStats, err := h.repo.QueryUsageCost(ctx, defaultInstanceID(), window.FromMS, window.ToMS)
+	if err != nil {
+		return facts, err
+	}
+	switch {
+	case costStats.PricedEvents == 0 && costStats.UnpricedEvents == 0:
+		// No events in the window: keep the explicit placeholder.
+	case costStats.UnpricedEvents > 0:
+		facts.metrics.Cost = costStats.CostUSD
+		facts.metrics.CostSource = "partial"
+		facts.metrics.CostNote = "some models are unpriced; the amount is a partial estimate"
+	default:
+		facts.metrics.Cost = costStats.CostUSD
+		facts.metrics.CostSource = "estimated"
+		facts.metrics.CostNote = ""
+	}
 
 	// Zero-fill every bucket in the window. A GROUP BY over sparse data returns
 	// only the buckets that have rows, and because the window slides with

@@ -99,6 +99,9 @@ type UsageEventRow struct {
 	// HasRequestLog reports whether CPA's request log can be fetched for this
 	// record. It depends only on having a request id.
 	HasRequestLog bool `json:"has_request_log"`
+	// CostUSD is the estimated cost from model_prices; nil means unpriced,
+	// never a fabricated zero.
+	CostUSD *float64 `json:"cost_usd,omitempty"`
 }
 
 // UsageEventPage is one keyset-paginated result set.
@@ -144,7 +147,13 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 		       e.latency_ms, e.ttft_ms, e.client_ip, e.x_forwarded_for, e.user_agent,
 		       e.input_tokens, e.output_tokens, e.reasoning_tokens, e.cached_tokens,
 		       e.cache_read_tokens, e.cache_creation_tokens, e.total_tokens,
-		       d.id, d.cpa_resource_name AS resource_name
+		       d.id, d.cpa_resource_name AS resource_name,
+		       CASE WHEN mp.model IS NULL THEN NULL ELSE (
+		           max(e.input_tokens - e.cache_read_tokens - e.cache_creation_tokens, 0) / 1000000.0 * mp.prompt_price_per_1m
+		         + e.cache_read_tokens / 1000000.0 * mp.cache_read_price_per_1m
+		         + e.cache_creation_tokens / 1000000.0 * mp.cache_write_price_per_1m
+		         + e.output_tokens / 1000000.0 * mp.completion_price_per_1m
+		       ) * mp.price_multiplier END AS cost_usd
 		FROM usage_events e
 		LEFT JOIN (
 			SELECT instance_id, cpa_auth_index,
@@ -153,7 +162,8 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 			FROM discovered_resources d
 			WHERE cpa_auth_index IS NOT NULL AND cpa_auth_index <> ''
 			GROUP BY instance_id, cpa_auth_index
-		) d ON d.instance_id = e.instance_id AND d.cpa_auth_index = e.auth_index`
+		) d ON d.instance_id = e.instance_id AND d.cpa_auth_index = e.auth_index
+		LEFT JOIN model_prices mp ON mp.model = e.model`
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -170,6 +180,7 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 		var row UsageEventRow
 		var failed, generate int
 		var resourceID, resourceName sql.NullString
+		var costUSD sql.NullFloat64
 		if errScan := rows.Scan(
 			&row.ID, &row.InstanceID, &row.EventKey, &row.RequestID, &row.TimestampMS,
 			&row.Provider, &row.Endpoint, &row.ExecutorType, &row.AuthType, &row.AuthIndex,
@@ -178,7 +189,7 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 			&row.LatencyMS, &row.TTFTMS, &row.ClientIP, &row.XForwardedFor, &row.UserAgent,
 			&row.Tokens.InputTokens, &row.Tokens.OutputTokens, &row.Tokens.ReasoningTokens,
 			&row.Tokens.CachedTokens, &row.Tokens.CacheReadTokens, &row.Tokens.CacheCreationTokens,
-			&row.Tokens.TotalTokens, &resourceID, &resourceName); errScan != nil {
+			&row.Tokens.TotalTokens, &resourceID, &resourceName, &costUSD); errScan != nil {
 			return page, fmt.Errorf("scan usage event: %w", errScan)
 		}
 		row.Failed = failed == 1
@@ -190,6 +201,9 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 		if resourceName.Valid && strings.TrimSpace(resourceName.String) != "" {
 			value := resourceName.String
 			row.ResourceName = &value
+		}
+		if costUSD.Valid {
+			row.CostUSD = &costUSD.Float64
 		}
 		row.HasRequestLog = strings.TrimSpace(row.RequestID) != ""
 		page.Items = append(page.Items, row)
@@ -218,6 +232,7 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 	}
 	var failed, generate int
 	var resourceID, resourceName sql.NullString
+	var costUSD sql.NullFloat64
 	err := r.SQL().QueryRowContext(ctx, `
 		SELECT e.id, e.instance_id, e.event_key, e.request_id, e.timestamp_ms,
 		       e.provider, e.endpoint, e.executor_type, e.auth_type, e.auth_index,
@@ -226,7 +241,13 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 		       e.latency_ms, e.ttft_ms, e.client_ip, e.x_forwarded_for, e.user_agent,
 		       e.input_tokens, e.output_tokens, e.reasoning_tokens, e.cached_tokens,
 		       e.cache_read_tokens, e.cache_creation_tokens, e.total_tokens,
-		       d.id, d.cpa_resource_name AS resource_name
+		       d.id, d.cpa_resource_name AS resource_name,
+		       CASE WHEN mp.model IS NULL THEN NULL ELSE (
+		           max(e.input_tokens - e.cache_read_tokens - e.cache_creation_tokens, 0) / 1000000.0 * mp.prompt_price_per_1m
+		         + e.cache_read_tokens / 1000000.0 * mp.cache_read_price_per_1m
+		         + e.cache_creation_tokens / 1000000.0 * mp.cache_write_price_per_1m
+		         + e.output_tokens / 1000000.0 * mp.completion_price_per_1m
+		       ) * mp.price_multiplier END AS cost_usd
 		FROM usage_events e
 		LEFT JOIN (
 			SELECT instance_id, cpa_auth_index,
@@ -236,6 +257,7 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 			WHERE cpa_auth_index IS NOT NULL AND cpa_auth_index <> ''
 			GROUP BY instance_id, cpa_auth_index
 		) d ON d.instance_id = e.instance_id AND d.cpa_auth_index = e.auth_index
+		LEFT JOIN model_prices mp ON mp.model = e.model
 		WHERE e.id = ?`, id).Scan(
 		&row.ID, &row.InstanceID, &row.EventKey, &row.RequestID, &row.TimestampMS,
 		&row.Provider, &row.Endpoint, &row.ExecutorType, &row.AuthType, &row.AuthIndex,
@@ -244,7 +266,7 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 		&row.LatencyMS, &row.TTFTMS, &row.ClientIP, &row.XForwardedFor, &row.UserAgent,
 		&row.Tokens.InputTokens, &row.Tokens.OutputTokens, &row.Tokens.ReasoningTokens,
 		&row.Tokens.CachedTokens, &row.Tokens.CacheReadTokens, &row.Tokens.CacheCreationTokens,
-		&row.Tokens.TotalTokens, &resourceID, &resourceName)
+		&row.Tokens.TotalTokens, &resourceID, &resourceName, &costUSD)
 	if errors.Is(err, sql.ErrNoRows) {
 		return row, ErrNotFound
 	}
@@ -260,6 +282,9 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 	if resourceName.Valid && strings.TrimSpace(resourceName.String) != "" {
 		value := resourceName.String
 		row.ResourceName = &value
+	}
+	if costUSD.Valid {
+		row.CostUSD = &costUSD.Float64
 	}
 	row.HasRequestLog = strings.TrimSpace(row.RequestID) != ""
 	return row, nil
