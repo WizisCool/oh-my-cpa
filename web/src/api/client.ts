@@ -16,7 +16,7 @@ import { OAuthProviderItem, StartOAuthResponse, OAuthStatusResponse, OAuthCallba
 import { QuotaOverviewResponse, CredentialQuotaDetailResponse, QuotaItem } from '../types/quota';
 import { SystemInfoResponse } from '../types/system';
 import { PluginsResponse, PluginStoreResponse } from '../types/plugin';
-import { PricingResponse, PricingUpdatePayload } from '../types/pricing';
+import { PricingResponse, PricingSyncState, PricingUpdatePayload } from '../types/pricing';
 
 
 /** DEFAULT_LOG_PAGE is the page size a fresh tail read asks for. */
@@ -608,6 +608,13 @@ export const api = {
 
   async startPricingSync(): Promise<{ started: boolean }> {
     return request<{ started: boolean }>('/pricing/sync', { method: 'POST' });
+  },
+
+  async updatePricingSyncSchedule(intervalHours: number): Promise<{ interval_hours: number; state: PricingSyncState }> {
+    return request<{ interval_hours: number; state: PricingSyncState }>('/pricing/sync-schedule', {
+      method: 'PUT',
+      body: JSON.stringify({ interval_hours: intervalHours }),
+    });
   },
 };
 

@@ -24,6 +24,8 @@ export interface PricingSyncState {
   last_unmatched: number;
   last_success_at_ms?: number | null;
   updated_at_ms: number;
+  auto_sync_interval_hours?: number;
+  next_sync_at_ms?: number | null;
 }
 
 export interface PricingResponse {
