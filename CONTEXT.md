@@ -20,6 +20,15 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
 
 User-facing names, icons, colors, ownership, and subscription metadata belong to Oh My CPA. CPA driver names, auth indexes, base URLs, and raw provider fields remain technical details and are shown secondarily.
 
+## Provider disable rule
+
+A provider toggle must change the gateway, not the console. `openai-compatibility`
+entries carry CPA's native `disabled` field; claude/codex/gemini API-key entries
+have none, so OMC applies CPA's own mechanism instead: the excluded-all marker
+`*` in `excluded-models` (`management.SetExcludedAll`). Writing a local
+preference only used to repaint the UI while fallback kept routing into the
+"disabled" credential.
+
 ## Auth model
 
 There is exactly one credential in the whole system: the CPA management key
