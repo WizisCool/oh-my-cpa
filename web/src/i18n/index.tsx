@@ -44,7 +44,7 @@ const DICT: Record<string, [string, string]> = {
   'nav.quota': ['配额管理', 'Quota'],
   'nav.logs': ['日志查看', 'Logs'],
   'nav.usage_events': ['请求记录', 'Request Events'],
-  'nav.pricing': ['费用与定价', 'Cost & Pricing'],
+  'nav.pricing': ['费用与用量', 'Cost & Usage'],
   'nav.config': ['配置面板', 'Config'],
   'nav.plugins': ['插件管理', 'Plugin manager'],
   'nav.plugin_store': ['插件商店', 'Plugin store'],
@@ -1253,7 +1253,7 @@ const DICT: Record<string, [string, string]> = {
 
 
   // ── pricing ──────────────────────────────────────────────────────────────
-  'pricing.title': ['费用与定价', 'Cost & Pricing'],
+  'pricing.title': ['费用与用量', 'Cost & Usage'],
   'pricing.desc': ['价格来自 models.dev，自动同步；手动价格优先且不会被同步覆盖', 'Prices come from models.dev and sync automatically; manual prices win and are never overwritten by sync'],
   'pricing.load_error': ['无法读取定价数据', 'Failed to load pricing data'],
   'pricing.sync.title': ['models.dev 同步', 'models.dev sync'],

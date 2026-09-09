@@ -205,7 +205,6 @@ export const PricingLeaderboard: React.FC<PricingLeaderboardProps> = ({ models }
           <div className={styles.titleRow}>
             <BarChartOutlined style={{ color: 'var(--accent)', fontSize: 16 }} />
             <h2 className={styles.title}>{t('pricing.leaderboard.title')}</h2>
-            <span className={styles.budgetBadge}>{t('pricing.leaderboard.budget_tag', { n: FIXED_BUDGET })}</span>
           </div>
           <p className={styles.subtitle}>{t('pricing.leaderboard.subtitle')}</p>
         </div>
