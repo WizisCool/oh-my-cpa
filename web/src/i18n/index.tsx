@@ -1254,7 +1254,7 @@ const DICT: Record<string, [string, string]> = {
 
   // ── pricing ──────────────────────────────────────────────────────────────
   'pricing.title': ['费用与用量', 'Cost & Usage'],
-  'pricing.desc': ['价格来自 models.dev，自动同步；手动价格优先且不会被同步覆盖', 'Prices come from models.dev and sync automatically; manual prices win and are never overwritten by sync'],
+  'pricing.desc': ['暂无已定价模型', 'No models priced yet'],
   'pricing.load_error': ['无法读取定价数据', 'Failed to load pricing data'],
   'pricing.sync.title': ['models.dev 同步', 'models.dev sync'],
   'pricing.sync.never': ['从未同步', 'Never synced'],
@@ -1275,7 +1275,7 @@ const DICT: Record<string, [string, string]> = {
   'pricing.sync_started': ['已开始同步，稍后自动刷新', 'Sync started; the page refreshes shortly'],
   'pricing.sync_conflict': ['同步已在进行中', 'A sync is already running'],
   'pricing.sync_failed': ['同步失败：{msg}', 'Sync failed: {msg}'],
-  'pricing.subtitle_count': ['共 {count} 个模型已定价 · 数据源 models.dev · 手动价格优先', '{count} models priced · source models.dev · manual prices prioritized'],
+  'pricing.subtitle_count': ['共 {count} 个模型已定价', '{count} models priced'],
   'pricing.sync.manual': ['手动定制 {n} 个', '{n} manual models'],
   'pricing.tab.all': ['全部', 'All'],
   'pricing.tab.unpriced': ['未定价', 'Unpriced'],

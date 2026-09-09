@@ -149,11 +149,11 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 		       e.cache_read_tokens, e.cache_creation_tokens, e.total_tokens,
 		       d.id, d.cpa_resource_name AS resource_name,
 		       CASE WHEN mp.model IS NULL THEN NULL ELSE (
-		           max(e.input_tokens - e.cache_read_tokens - e.cache_creation_tokens, 0) / 1000000.0 * mp.prompt_price_per_1m
-		         + e.cache_read_tokens / 1000000.0 * mp.cache_read_price_per_1m
-		         + e.cache_creation_tokens / 1000000.0 * mp.cache_write_price_per_1m
-		         + e.output_tokens / 1000000.0 * mp.completion_price_per_1m
-		       ) * mp.price_multiplier END AS cost_usd
+		           max(COALESCE(e.input_tokens, 0) - COALESCE(e.cache_read_tokens, 0) - COALESCE(e.cache_creation_tokens, 0), 0) / 1000000.0 * COALESCE(mp.prompt_price_per_1m, 0)
+		         + COALESCE(e.cache_read_tokens, 0) / 1000000.0 * COALESCE(mp.cache_read_price_per_1m, 0)
+		         + COALESCE(e.cache_creation_tokens, 0) / 1000000.0 * COALESCE(mp.cache_write_price_per_1m, 0)
+		         + COALESCE(e.output_tokens, 0) / 1000000.0 * COALESCE(mp.completion_price_per_1m, 0)
+		       ) * COALESCE(mp.price_multiplier, 1.0) END AS cost_usd
 		FROM usage_events e
 		LEFT JOIN (
 			SELECT instance_id, cpa_auth_index,
@@ -243,11 +243,11 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 		       e.cache_read_tokens, e.cache_creation_tokens, e.total_tokens,
 		       d.id, d.cpa_resource_name AS resource_name,
 		       CASE WHEN mp.model IS NULL THEN NULL ELSE (
-		           max(e.input_tokens - e.cache_read_tokens - e.cache_creation_tokens, 0) / 1000000.0 * mp.prompt_price_per_1m
-		         + e.cache_read_tokens / 1000000.0 * mp.cache_read_price_per_1m
-		         + e.cache_creation_tokens / 1000000.0 * mp.cache_write_price_per_1m
-		         + e.output_tokens / 1000000.0 * mp.completion_price_per_1m
-		       ) * mp.price_multiplier END AS cost_usd
+		           max(COALESCE(e.input_tokens, 0) - COALESCE(e.cache_read_tokens, 0) - COALESCE(e.cache_creation_tokens, 0), 0) / 1000000.0 * COALESCE(mp.prompt_price_per_1m, 0)
+		         + COALESCE(e.cache_read_tokens, 0) / 1000000.0 * COALESCE(mp.cache_read_price_per_1m, 0)
+		         + COALESCE(e.cache_creation_tokens, 0) / 1000000.0 * COALESCE(mp.cache_write_price_per_1m, 0)
+		         + COALESCE(e.output_tokens, 0) / 1000000.0 * COALESCE(mp.completion_price_per_1m, 0)
+		       ) * COALESCE(mp.price_multiplier, 1.0) END AS cost_usd
 		FROM usage_events e
 		LEFT JOIN (
 			SELECT instance_id, cpa_auth_index,

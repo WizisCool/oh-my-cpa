@@ -137,6 +137,10 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({ eventId, onC
               <span>{t('events.col_tokens')}</span>
               <strong>{event.tokens.total.toLocaleString()}</strong>
             </div>
+            <div>
+              <span>{t('events.col_cost')}</span>
+              <strong>{event.cost_usd != null ? `$${event.cost_usd.toFixed(4)}` : '—'}</strong>
+            </div>
           </div>
           <Tabs
             activeKey={tab}
@@ -228,6 +232,21 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({ eventId, onC
                         [t('events.cache_read_tokens'), event.tokens.cache_read.toLocaleString()],
                         [t('events.cache_creation_tokens'), event.tokens.cache_creation.toLocaleString()],
                         [t('events.total_tokens'), event.tokens.total.toLocaleString()],
+                      ]),
+                    )}
+                    {section(
+                      t('events.col_cost'),
+                      fields([
+                        [
+                          t('events.col_cost'),
+                          event.cost_usd != null ? (
+                            <strong style={{ color: 'var(--fg)', fontVariantNumeric: 'tabular-nums' }}>
+                              ${event.cost_usd.toFixed(6)}
+                            </strong>
+                          ) : (
+                            <span className="terminal-muted">{t('events.cost_unpriced')}</span>
+                          ),
+                        ],
                       ]),
                     )}
                     <p className="request-detail-note">{t('events.token_note')}</p>
