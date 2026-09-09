@@ -144,7 +144,7 @@ a { color: inherit; }
   color: var(--muted) !important;
   background: var(--bg) !important;
 }
-.ant-drawer-title, .ant-modal-title { font-size: 15px; font-weight: 600; }
+.ant-drawer-title, .ant-modal-title { font-size: 16px; font-weight: 600; }
 .ant-drawer-header { border-bottom: 1px solid var(--border); }
 .ant-drawer-footer { border-top: 1px solid var(--border); }
 .ant-modal-header, .ant-modal-footer { border: 0 !important; }
@@ -389,7 +389,7 @@ a { color: inherit; }
 .provider-name { display: flex; align-items: center; gap: 8px; color: var(--fg); }
 .status-pip { width: 7px; height: 7px; border-radius: 2px; background: var(--success); }
 .provider-credentials, .provider-rate { color: var(--muted); font-size: 13px; }
-.provider-total { font-size: 15px; font-variant-numeric: tabular-nums; }
+.provider-total { font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .dashboard-lower { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .dashboard-card { min-height: 250px; padding: 20px; }
 .health-meter { display: flex; height: 8px; gap: 2px; margin: 24px 0 14px; background: var(--border); }
@@ -406,7 +406,7 @@ a { color: inherit; }
 .runtime-list dt { color: var(--muted); font-size: 13px; }
 .runtime-list dd { max-width: 65%; margin: 0; color: var(--fg); font-size: 13px; text-align: right; overflow-wrap: anywhere; }
 .capability-content { display: flex; flex-direction: column; gap: 16px; }
-.capability-status-banner { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 2px; }
+.capability-status-banner { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm, 4px); }
 .capability-status-tag { font-size: 13px; padding: 2px 8px; font-weight: 500; }
 .capability-probe-time { font-size: 12px; font-family: var(--font-mono); }
 
@@ -442,7 +442,7 @@ a { color: inherit; }
 .auth-file-meta { display: flex; flex-wrap: wrap; gap: 10px; color: var(--muted); font-size: 10px; }
 .auth-file-note { padding: 6px 8px; border-left: 2px solid var(--border); color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
 .auth-file-footer { display: flex; align-items: center; gap: 6px; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border-soft); }
-.auth-file-footer .terminal-muted { margin-right: auto; font-size: 9px; letter-spacing: .08em; }
+.auth-file-footer .terminal-muted { margin-right: auto; font-size: 10px; letter-spacing: .08em; }
 .auth-files-empty { padding: 64px 24px; }
 
 @media (max-width: 900px) {
@@ -519,7 +519,7 @@ a { color: inherit; }
 
 /* ── range control: one button, one popover, two modes ────────────────────── */
 .range-trigger { min-width: 138px; justify-content: space-between; gap: 10px; color: var(--fg-2); }
-.range-trigger-caret { color: var(--meta); font-size: 9px; }
+.range-trigger-caret { color: var(--meta); font-size: 10px; }
 .range-panel { width: 168px; }
 /* The custom tab hosts antd's range input, which needs its real width; the
    calendar it opens belongs to the viewport, not to this panel. */
@@ -734,7 +734,7 @@ a { color: inherit; }
 
 .config-toolbar-left .terminal-title {
   margin: 0;
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
   letter-spacing: -.02em;
 }
@@ -831,7 +831,7 @@ a { color: inherit; }
 
 .config-section-title {
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--fg);
 }
@@ -1345,7 +1345,7 @@ a { color: inherit; }
 
 .config-monaco-shell,
 .config-monaco-shell .monaco-editor {
-  border-radius: calc(var(--radius-sm) - 1px);
+  border-radius: var(--radius-sm);
 }
 
 .config-monaco-shell {
