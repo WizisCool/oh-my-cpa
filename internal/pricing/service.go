@@ -35,11 +35,14 @@ type Fetcher interface {
 	Fetch(context.Context) (Catalog, error)
 }
 
-// SyncResult summarizes one sync run for logs, API and audit.
+// SyncResult summarizes one sync run for logs, API and audit. Pruned counts
+// auto rows dropped because their model left the traffic scope; manual rows
+// are never pruned.
 type SyncResult struct {
 	Matched   int64
 	Unmatched int64
 	Updated   int64
+	Pruned    int64
 }
 
 // Service keeps the price table fresh with zero operator setup: sync runs at
@@ -175,12 +178,14 @@ func (s *Service) SyncOnce(ctx context.Context) (SyncResult, error) {
 	now := s.clock().UnixMilli()
 	rows := make([]ModelPrice, 0, 256)
 	var matched, unmatched, updated int64
+	matchedModels := make(map[string]struct{}, len(models))
 	for _, model := range models {
 		entry := catalog.MatchModel(model)
 		if entry == nil {
 			unmatched++
 			continue
 		}
+		matchedModels[model] = struct{}{}
 		price := ModelPrice{
 			Model:            model,
 			PromptPricePer1M: derefOrZero(entry.Model.Cost.Input),
@@ -201,15 +206,30 @@ func (s *Service) SyncOnce(ctx context.Context) (SyncResult, error) {
 		return SyncResult{}, err
 	}
 	updated = int64(len(rows))
+	// Auto rows for models that left the traffic scope are dropped so the
+	// table stays as small as the traffic it serves. Manual rows survive.
+	var pruned int64
+	for _, row := range existing {
+		if row.Source != SourceModelsDev {
+			continue
+		}
+		if _, stillUsed := matchedModels[row.Model]; stillUsed {
+			continue
+		}
+		if _, err := s.store.DeleteModelPrice(ctx, row.Model); err != nil {
+			return SyncResult{}, err
+		}
+		pruned++
+	}
 	state := SyncState{
 		Source: SourceModelsDev, LastMatched: matched, LastUnmatched: unmatched,
 	}
 	success := now
 	state.LastSuccessAtMS = &success
 	if err := s.store.SavePricingSyncState(ctx, state); err != nil {
-		return SyncResult{Matched: matched, Unmatched: unmatched, Updated: updated}, err
+		return SyncResult{Matched: matched, Unmatched: unmatched, Updated: updated, Pruned: pruned}, err
 	}
-	return SyncResult{Matched: matched, Unmatched: unmatched, Updated: updated}, nil
+	return SyncResult{Matched: matched, Unmatched: unmatched, Updated: updated, Pruned: pruned}, nil
 }
 
 func (s *Service) recordFailure(ctx context.Context, syncErr error) {
@@ -237,7 +257,7 @@ func (s *Service) ListPrices(ctx context.Context) ([]ModelPrice, error) {
 	return s.store.ListModelPrices(ctx)
 }
 
-// UsedUnpricedModels lists models that appear in usage or provider catalogs
+// UsedUnpricedModels lists models that appear in real usage traffic
 // but have no price row, capped for the UI.
 func (s *Service) UsedUnpricedModels(ctx context.Context, limit int) ([]string, error) {
 	if limit <= 0 || limit > 500 {

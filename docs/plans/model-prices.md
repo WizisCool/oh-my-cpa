@@ -7,12 +7,15 @@ replacing the earlier heavier valuation prototype (removed before this work).
 
 1. Zero-config by default. The pricing service syncs from models.dev at startup
    and then daily; unique strong model matches become price rows automatically.
-2. One source. `https://models.dev/api.json` is the only pricing source.
-3. Manual wins. Operator edits are saved with source `manual` and are never
+2. Pricing follows traffic. The sync scope is the models actually seen in usage
+   events (most recent first), never the provider catalog: configured-but-unused
+   models stay out of the price table so the page stays light.
+3. One source. `https://models.dev/api.json` is the only pricing source.
+4. Manual wins. Operator edits are saved with source `manual` and are never
    overwritten by sync; deleting a row returns the model to automatic pricing.
-4. Unpriced is not zero. Events without a price row report `cost_usd` absent,
+5. Unpriced is not zero. Events without a price row report `cost_usd` absent,
    and the dashboard marks the window `partial` instead of fabricating money.
-5. Estimates stay estimates. Costs are float64, per-1M-token rates times token
+6. Estimates stay estimates. Costs are float64, per-1M-token rates times token
    buckets times one optional multiplier (covers peak/off-peak billing).
 
 ## Components
@@ -40,3 +43,4 @@ guesses; the model shows up on the pricing page as unpriced for manual setup.
   last good prices and records `last_error` on the sync state.
 - Cached-token prices differ per provider; a missing field in the catalog means
   that bucket is billed at zero in estimates (recorded as-is, not invented).
+

@@ -195,6 +195,35 @@ func TestSyncOnceFailureKeepsLastGoodPrices(t *testing.T) {
 	}
 }
 
+// Auto rows for models that left the traffic scope are pruned on the next
+// sync; manual rows are never touched by pruning.
+func TestSyncOncePrunesAutoRowsOutsideTraffic(t *testing.T) {
+	store := &fakeStore{models: []string{"openai/gpt-5"}}
+	store.prices = []ModelPrice{
+		{Model: "stale/catalog-model", PromptPricePer1M: 1, PriceMultiplier: 1, Source: SourceModelsDev},
+		{Model: "manual-keep", PromptPricePer1M: 5, PriceMultiplier: 1, Source: SourceManual},
+	}
+	service := NewService(store, &fakeFetcher{catalog: catalogFixture()}, nil)
+	result, err := service.SyncOnce(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Pruned != 1 {
+		t.Fatalf("pruned = %d, want 1", result.Pruned)
+	}
+	if len(store.deleted) != 1 || store.deleted[0] != "stale/catalog-model" {
+		t.Fatalf("stale auto row not pruned: deleted=%v", store.deleted)
+	}
+	manualSurvived := false
+	for _, row := range store.prices {
+		if row.Model == "manual-keep" && row.Source == SourceManual {
+			manualSurvived = true
+		}
+	}
+	if !manualSurvived {
+		t.Fatal("manual row must survive pruning")
+	}
+}
 func TestSaveManualPricesForcesManualSource(t *testing.T) {
 	store := &fakeStore{}
 	service := NewService(store, &fakeFetcher{}, nil)

@@ -2,9 +2,11 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
 )
@@ -97,29 +99,46 @@ func TestPricingRoundTripAndUsageCost(t *testing.T) {
 	}
 }
 
-// ListEffectiveModels feeds the sync: recent usage models plus provider catalog
-// models, deduplicated and capped.
-func TestListEffectiveModels(t *testing.T) {
+// ListEffectiveModels feeds the sync from real traffic only: models that show
+// up in usage events, most recent first. A provider catalog model that was
+// never called must stay out of pricing, or the table bloats with hundreds of
+// configured-but-unused models.
+func TestListEffectiveModelsFollowsTraffic(t *testing.T) {
 	repo := usageTestRepository(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
 	if _, err := repo.InsertUsageEvents(ctx, []usage.Event{
-		{InstanceID: "default", EventKey: "e1", Model: "openai/gpt-5", Generate: true, TimestampMS: now.UnixMilli()},
-		{InstanceID: "default", EventKey: "e2", Model: "openai/gpt-5", Generate: true, TimestampMS: now.UnixMilli()},
+		{InstanceID: "default", EventKey: "e-old", Model: "old/used-model", Generate: true, TimestampMS: now.Add(-time.Hour).UnixMilli()},
+		{InstanceID: "default", EventKey: "e-new", Model: "openai/gpt-5", Generate: true, TimestampMS: now.UnixMilli()},
 	}); err != nil {
+		t.Fatal(err)
+	}
+	// A catalog-only model claimed by a configured resource, never requested.
+	if _, err := repo.UpsertDiscoveredResources(ctx, "default", []domain.DiscoveredResource{
+		{
+			ResourceKey:     "auth-index:codex-api-key:idx-catalog",
+			CPAResourceType: "codex-api-key",
+			CPAAuthIndex:    "idx-catalog",
+			CPAResourceName: "catalog-only.json",
+			CPADriver:       "codex",
+			Details:         domain.ResourceDetails{Models: []string{"catalog/only-model", "another/catalog-model"}},
+		},
+	}, now, false); err != nil {
 		t.Fatal(err)
 	}
 	models, err := repo.ListEffectiveModels(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	found := false
-	for _, model := range models {
-		if model == "openai/gpt-5" {
-			found = true
-		}
+	if len(models) != 2 {
+		t.Fatalf("expected exactly the two used models, got %v", models)
 	}
-	if !found {
-		t.Fatalf("usage models missing from effective list: %v", models)
+	if models[0] != "openai/gpt-5" || models[1] != "old/used-model" {
+		t.Fatalf("ordering must be most recent first, got %v", models)
+	}
+	for _, model := range models {
+		if strings.Contains(model, "catalog") {
+			t.Fatalf("provider-catalog model leaked into pricing scope: %v", models)
+		}
 	}
 }

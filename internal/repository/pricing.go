@@ -160,54 +160,38 @@ func (r *Repository) SavePricingSyncState(ctx context.Context, state PricingSync
 	return nil
 }
 
-// ListEffectiveModels merges historically observed models with the models each
-// discovered provider/auth file claims, so pricing can pre-provision for
-// configured-but-unused models too. Bounded like every other catalog read.
+// ListEffectiveModels returns only models actually seen in usage events, most
+// recently used first. Provider catalogs list hundreds of configured models;
+// pricing must follow traffic, not the catalog, or the table bloats with
+// models the deployment never calls. Bounded like every other read.
 func (r *Repository) ListEffectiveModels(ctx context.Context) ([]string, error) {
 	if err := r.requirePricingSchema(ctx); err != nil {
 		return nil, err
 	}
-	rows, err := r.SQL().QueryContext(ctx, `SELECT DISTINCT model FROM usage_events WHERE model <> '' ORDER BY model LIMIT 1000`)
+	rows, err := r.SQL().QueryContext(ctx, `SELECT model, MAX(timestamp_ms) AS last_seen FROM usage_events WHERE model <> '' GROUP BY model ORDER BY last_seen DESC LIMIT 1000`)
 	if err != nil {
 		return nil, fmt.Errorf("list used models: %w", err)
 	}
 	defer rows.Close()
 	seen := make(map[string]struct{}, 256)
 	result := make([]string, 0, 256)
-	add := func(model string) {
+	for rows.Next() {
+		var lastSeen int64
+		var model string
+		if err := rows.Scan(&model, &lastSeen); err != nil {
+			return nil, fmt.Errorf("scan used model: %w", err)
+		}
 		model = strings.TrimSpace(model)
 		if model == "" || len(model) > 512 {
-			return
+			continue
 		}
 		if _, ok := seen[model]; ok {
-			return
+			continue
 		}
 		seen[model] = struct{}{}
 		result = append(result, model)
 	}
-	for rows.Next() {
-		var model string
-		if err := rows.Scan(&model); err != nil {
-			return nil, fmt.Errorf("scan used model: %w", err)
-		}
-		add(model)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	resources, err := r.ListResources(ctx, "")
-	if err != nil {
-		return nil, err
-	}
-	for _, resource := range resources {
-		for _, model := range resource.Details.Models {
-			if len(result) >= 1000 {
-				return result, nil
-			}
-			add(model)
-		}
-	}
-	return result, nil
+	return result, rows.Err()
 }
 
 // requirePricingSchema refuses to touch pricing tables when migration 015 has
