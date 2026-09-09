@@ -12,12 +12,14 @@ import (
 
 // SyncState is the durable outcome of the last models.dev sync.
 type SyncState struct {
-	Source          string `json:"source"`
-	LastError       string `json:"last_error"`
-	LastMatched     int64  `json:"last_matched"`
-	LastUnmatched   int64  `json:"last_unmatched"`
-	LastSuccessAtMS *int64 `json:"last_success_at_ms"`
-	UpdatedAtMS     int64  `json:"updated_at_ms"`
+	Source                string `json:"source"`
+	LastError             string `json:"last_error"`
+	LastMatched           int64  `json:"last_matched"`
+	LastUnmatched         int64  `json:"last_unmatched"`
+	LastSuccessAtMS       *int64 `json:"last_success_at_ms"`
+	UpdatedAtMS           int64  `json:"updated_at_ms"`
+	AutoSyncIntervalHours int64  `json:"auto_sync_interval_hours"`
+	NextSyncAtMS          *int64 `json:"next_sync_at_ms,omitempty"`
 }
 
 // Store is the persistence boundary; repository implements it.
@@ -28,6 +30,7 @@ type Store interface {
 	ListEffectiveModels(context.Context) ([]string, error)
 	GetPricingSyncState(context.Context, string) (SyncState, error)
 	SavePricingSyncState(context.Context, SyncState) error
+	UpdatePricingSyncSchedule(context.Context, string, int64) error
 }
 
 // Fetcher decodes the fixed models.dev catalog.
@@ -49,14 +52,16 @@ type SyncResult struct {
 // startup and daily, unique strong matches apply automatically, manual rows
 // always win, and a failed fetch keeps the last good prices.
 type Service struct {
-	store    Store
-	fetcher  Fetcher
-	logger   *slog.Logger
-	interval time.Duration
-	clock    func() time.Time
+	store                 Store
+	fetcher               Fetcher
+	logger                *slog.Logger
+	interval              time.Duration
+	autoSyncIntervalHours int64
+	clock                 func() time.Time
 
 	mu      sync.Mutex
 	running bool
+	wakeCh  chan struct{}
 }
 
 func NewService(store Store, fetcher Fetcher, logger *slog.Logger) *Service {
@@ -66,7 +71,15 @@ func NewService(store Store, fetcher Fetcher, logger *slog.Logger) *Service {
 	if fetcher == nil {
 		fetcher = NewMetadataClient()
 	}
-	return &Service{store: store, fetcher: fetcher, logger: logger, interval: 24 * time.Hour, clock: time.Now}
+	return &Service{
+		store:                 store,
+		fetcher:               fetcher,
+		logger:                logger,
+		interval:              24 * time.Hour,
+		autoSyncIntervalHours: 24,
+		clock:                 time.Now,
+		wakeCh:                make(chan struct{}, 1),
+	}
 }
 
 // SetInterval overrides the background sync cadence (tests).
@@ -74,7 +87,38 @@ func (s *Service) SetInterval(interval time.Duration) {
 	if s == nil || interval <= 0 {
 		return
 	}
+	s.mu.Lock()
 	s.interval = interval
+	s.mu.Unlock()
+	select {
+	case s.wakeCh <- struct{}{}:
+	default:
+	}
+}
+
+// SetAutoSyncInterval persists and applies the auto-sync interval in hours.
+// 0 disables background auto-sync.
+func (s *Service) SetAutoSyncInterval(ctx context.Context, hours int64) error {
+	if s == nil || s.store == nil {
+		return errors.New("pricing service is not initialized")
+	}
+	if hours < 0 || hours > 168 {
+		return fmt.Errorf("invalid auto sync interval: %d hours (must be 0-168)", hours)
+	}
+	if err := s.store.UpdatePricingSyncSchedule(ctx, SourceModelsDev, hours); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.autoSyncIntervalHours = hours
+	if hours > 0 {
+		s.interval = time.Duration(hours) * time.Hour
+	}
+	s.mu.Unlock()
+	select {
+	case s.wakeCh <- struct{}{}:
+	default:
+	}
+	return nil
 }
 
 // IsRunning reports whether a sync is in flight right now.
@@ -122,16 +166,50 @@ func (s *Service) Run(ctx context.Context) error {
 	if s == nil || s.store == nil {
 		return errors.New("pricing service is not initialized")
 	}
+	if state, err := s.store.GetPricingSyncState(ctx, SourceModelsDev); err == nil {
+		s.mu.Lock()
+		s.autoSyncIntervalHours = state.AutoSyncIntervalHours
+		if state.AutoSyncIntervalHours > 0 {
+			s.interval = time.Duration(state.AutoSyncIntervalHours) * time.Hour
+		}
+		s.mu.Unlock()
+	}
 	if err := s.syncLogged(ctx); err != nil && errors.Is(err, context.Canceled) {
 		return nil
 	}
-	ticker := time.NewTicker(s.interval)
-	defer ticker.Stop()
+
+	s.mu.Lock()
+	interval := s.interval
+	enabled := s.autoSyncIntervalHours > 0
+	s.mu.Unlock()
+
+	var ticker *time.Ticker
+	var tickerC <-chan time.Time
+	if enabled && interval > 0 {
+		ticker = time.NewTicker(interval)
+		tickerC = ticker.C
+		defer ticker.Stop()
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-ticker.C:
+		case <-s.wakeCh:
+			s.mu.Lock()
+			newInterval := s.interval
+			newEnabled := s.autoSyncIntervalHours > 0
+			s.mu.Unlock()
+			if ticker != nil {
+				ticker.Stop()
+				ticker = nil
+				tickerC = nil
+			}
+			if newEnabled && newInterval > 0 {
+				ticker = time.NewTicker(newInterval)
+				tickerC = ticker.C
+			}
+		case <-tickerC:
 			if err := s.syncLogged(ctx); err != nil && errors.Is(err, context.Canceled) {
 				return nil
 			}
@@ -291,12 +369,27 @@ func (s *Service) UsedUnpricedModels(ctx context.Context, limit int) ([]string, 
 // SyncStateView returns the durable sync state for the API; sql.ErrNoRows from
 // the store means "never synced" and surfaces as zero values.
 func (s *Service) SyncStateView(ctx context.Context) (SyncState, bool, error) {
+	s.mu.Lock()
+	cachedHours := s.autoSyncIntervalHours
+	s.mu.Unlock()
+
 	state, err := s.store.GetPricingSyncState(ctx, SourceModelsDev)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return SyncState{Source: SourceModelsDev}, false, nil
+			hours := cachedHours
+			if hours <= 0 && cachedHours == 0 {
+				hours = 24
+			}
+			return SyncState{Source: SourceModelsDev, AutoSyncIntervalHours: hours}, false, nil
 		}
 		return SyncState{}, false, err
+	}
+	if state.AutoSyncIntervalHours <= 0 && cachedHours > 0 {
+		state.AutoSyncIntervalHours = cachedHours
+	}
+	if state.AutoSyncIntervalHours > 0 && state.LastSuccessAtMS != nil {
+		next := *state.LastSuccessAtMS + (state.AutoSyncIntervalHours * 3600 * 1000)
+		state.NextSyncAtMS = &next
 	}
 	return state, true, nil
 }

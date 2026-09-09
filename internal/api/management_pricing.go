@@ -21,6 +21,7 @@ type PricingManager interface {
 	SyncStateView(ctx context.Context) (pricing.SyncState, bool, error)
 	TriggerSync() bool
 	IsRunning() bool
+	SetAutoSyncInterval(ctx context.Context, hours int64) error
 }
 
 // SetPricing attaches the pricing service after construction so the app can
@@ -168,4 +169,46 @@ func (h *Handler) startPricingSync(writer http.ResponseWriter, request *http.Req
 		return
 	}
 	writeJSON(writer, http.StatusAccepted, map[string]any{"started": true})
+}
+
+// pricingScheduleRequest is the auto-sync interval update payload.
+type pricingScheduleRequest struct {
+	IntervalHours *int64 `json:"interval_hours"`
+}
+
+// updatePricingSyncSchedule modifies the background sync interval (0 = disabled).
+func (h *Handler) updatePricingSyncSchedule(writer http.ResponseWriter, request *http.Request) {
+	if h.pricing == nil {
+		writeError(writer, http.StatusServiceUnavailable, "pricing service is not available")
+		return
+	}
+	var body pricingScheduleRequest
+	if err := decodeManagementJSON(writer, request, 1024, &body); err != nil {
+		return
+	}
+	if body.IntervalHours == nil {
+		writeError(writer, http.StatusBadRequest, "interval_hours is required")
+		return
+	}
+	hours := *body.IntervalHours
+	if hours < 0 || hours > 168 {
+		writeError(writer, http.StatusBadRequest, "interval_hours must be between 0 and 168")
+		return
+	}
+	if err := h.pricing.SetAutoSyncInterval(request.Context(), hours); err != nil {
+		writeInternalError(writer, err)
+		return
+	}
+	if err := h.recordAudit(request, "pricing.sync_schedule.update", "pricing", pricing.SourceModelsDev, "success", map[string]any{
+		"interval_hours": hours,
+	}); err != nil {
+		writeInternalError(writer, err)
+		return
+	}
+	state, known, _ := h.pricing.SyncStateView(request.Context())
+	writeJSON(writer, http.StatusOK, map[string]any{
+		"interval_hours": hours,
+		"known":          known,
+		"state":          state,
+	})
 }

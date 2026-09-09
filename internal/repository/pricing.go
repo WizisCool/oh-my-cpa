@@ -26,12 +26,15 @@ type PricingSyncState = pricing.SyncState
 // row non-fatal.
 const pricingSyncStateSelect = `SELECT source,
 	CASE WHEN typeof(last_success_at_ms) = 'integer' THEN last_success_at_ms ELSE NULL END AS last_success_at_ms,
-	last_error, last_matched, last_unmatched, updated_at_ms FROM pricing_sync_state`
+	last_error, last_matched, last_unmatched, updated_at_ms,
+	CASE WHEN typeof(auto_sync_interval_hours) = 'integer' THEN auto_sync_interval_hours ELSE 24 END AS auto_sync_interval_hours
+	FROM pricing_sync_state`
 
 func scanPricingSyncState(row *sql.Row, state *pricing.SyncState) error {
 	var lastSuccess sql.NullInt64
 	var updatedAt sql.NullInt64
-	if err := row.Scan(&state.Source, &lastSuccess, &state.LastError, &state.LastMatched, &state.LastUnmatched, &updatedAt); err != nil {
+	var autoSyncHours sql.NullInt64
+	if err := row.Scan(&state.Source, &lastSuccess, &state.LastError, &state.LastMatched, &state.LastUnmatched, &updatedAt, &autoSyncHours); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
@@ -43,6 +46,11 @@ func scanPricingSyncState(row *sql.Row, state *pricing.SyncState) error {
 	}
 	if updatedAt.Valid {
 		state.UpdatedAtMS = updatedAt.Int64
+	}
+	if autoSyncHours.Valid {
+		state.AutoSyncIntervalHours = autoSyncHours.Int64
+	} else {
+		state.AutoSyncIntervalHours = 24
 	}
 	return nil
 }
@@ -155,9 +163,13 @@ func (r *Repository) SavePricingSyncState(ctx context.Context, state PricingSync
 	// 'modelsdev' and the pricing page could no longer read its own state.
 	// COALESCE against the existing row still keeps the last good success when a
 	// sync fails, without any placeholder in the UPDATE clause.
+	autoInterval := state.AutoSyncIntervalHours
+	if autoInterval <= 0 {
+		autoInterval = 24
+	}
 	_, err := r.SQL().ExecContext(ctx, `INSERT INTO pricing_sync_state (
-		source, running, last_success_at_ms, last_error, last_matched, last_unmatched, updated_at_ms
-	) VALUES (?, 0, ?, ?, ?, ?, ?)
+		source, running, last_success_at_ms, last_error, last_matched, last_unmatched, auto_sync_interval_hours, updated_at_ms
+	) VALUES (?, 0, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(source) DO UPDATE SET
 		running = 0,
 		last_success_at_ms = COALESCE(excluded.last_success_at_ms, pricing_sync_state.last_success_at_ms),
@@ -165,9 +177,35 @@ func (r *Repository) SavePricingSyncState(ctx context.Context, state PricingSync
 		last_matched = excluded.last_matched,
 		last_unmatched = excluded.last_unmatched,
 		updated_at_ms = excluded.updated_at_ms`,
-		state.Source, lastSuccess, state.LastError, state.LastMatched, state.LastUnmatched, time.Now().UnixMilli())
+		state.Source, lastSuccess, state.LastError, state.LastMatched, state.LastUnmatched, autoInterval, time.Now().UnixMilli())
 	if err != nil {
 		return fmt.Errorf("save pricing sync state: %w", err)
+	}
+	return nil
+}
+
+// UpdatePricingSyncSchedule sets the background auto sync interval in hours.
+// 0 disables background auto sync.
+func (r *Repository) UpdatePricingSyncSchedule(ctx context.Context, source string, intervalHours int64) error {
+	if err := r.requirePricingSchema(ctx); err != nil {
+		return err
+	}
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return errors.New("pricing sync source is required")
+	}
+	if intervalHours < 0 || intervalHours > 168 {
+		return fmt.Errorf("invalid auto sync interval: %d hours (must be 0-168)", intervalHours)
+	}
+	_, err := r.SQL().ExecContext(ctx, `INSERT INTO pricing_sync_state (
+		source, running, last_success_at_ms, last_error, last_matched, last_unmatched, auto_sync_interval_hours, updated_at_ms
+	) VALUES (?, 0, NULL, '', 0, 0, ?, ?)
+	ON CONFLICT(source) DO UPDATE SET
+		auto_sync_interval_hours = excluded.auto_sync_interval_hours,
+		updated_at_ms = excluded.updated_at_ms`,
+		source, intervalHours, time.Now().UnixMilli())
+	if err != nil {
+		return fmt.Errorf("update pricing sync schedule: %w", err)
 	}
 	return nil
 }

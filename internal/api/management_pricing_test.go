@@ -50,6 +50,10 @@ func (f *fakePricing) TriggerSync() bool {
 	return f.acceptSync
 }
 func (f *fakePricing) IsRunning() bool { return f.running }
+func (f *fakePricing) SetAutoSyncInterval(_ context.Context, hours int64) error {
+	f.state.AutoSyncIntervalHours = hours
+	return nil
+}
 
 // startPricingTestServer boots the real router with a fake pricing manager
 // attached through the same SetPricing seam the app uses at startup.
@@ -195,5 +199,40 @@ func TestPricingPageDegradesWhenSyncStateUnreadable(t *testing.T) {
 	}
 	if !strings.Contains(body.Sync.State.LastError, "corrupt sync state") {
 		t.Fatalf("the reason must reach the UI as last_error, got %q", body.Sync.State.LastError)
+	}
+}
+
+func TestUpdatePricingSyncSchedule(t *testing.T) {
+	fake := &fakePricing{
+		state: pricing.SyncState{
+			Source:                pricing.SourceModelsDev,
+			AutoSyncIntervalHours: 24,
+		},
+		known: true,
+	}
+	client, baseURL := startPricingTestServer(t, fake)
+
+	// Update interval to 6 hours
+	response, payload := doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/pricing/sync-schedule", `{"interval_hours":6}`)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("update schedule status = %d body %s", response.StatusCode, payload)
+	}
+	if fake.state.AutoSyncIntervalHours != 6 {
+		t.Fatalf("expected AutoSyncIntervalHours=6, got %d", fake.state.AutoSyncIntervalHours)
+	}
+
+	// Disable auto sync (0 hours)
+	response, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/pricing/sync-schedule", `{"interval_hours":0}`)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("disable schedule status = %d body %s", response.StatusCode, payload)
+	}
+	if fake.state.AutoSyncIntervalHours != 0 {
+		t.Fatalf("expected AutoSyncIntervalHours=0, got %d", fake.state.AutoSyncIntervalHours)
+	}
+
+	// Invalid interval (> 168)
+	response, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/pricing/sync-schedule", `{"interval_hours":999}`)
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("invalid schedule status = %d, want 400", response.StatusCode)
 	}
 }

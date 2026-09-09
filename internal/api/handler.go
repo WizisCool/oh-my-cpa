@@ -101,6 +101,7 @@ func (h *Handler) Router() http.Handler {
 				v1.Put("/pricing/models", h.updatePricingModels)
 				v1.Delete("/pricing/models/{model}", h.deletePricingModel)
 				v1.Post("/pricing/sync", h.startPricingSync)
+				v1.Put("/pricing/sync-schedule", h.updatePricingSyncSchedule)
 				v1.Get("/usage/events", h.listUsageEvents)
 				v1.Get("/usage/events/{id}", h.getUsageEvent)
 				v1.Get("/usage/events/{id}/request-log", h.downloadUsageEventRequestLog)

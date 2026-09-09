@@ -193,6 +193,11 @@ func (s *fakeStore) SavePricingSyncState(_ context.Context, state SyncState) err
 	s.stateKnown = true
 	return nil
 }
+func (s *fakeStore) UpdatePricingSyncSchedule(_ context.Context, _ string, intervalHours int64) error {
+	s.state.AutoSyncIntervalHours = intervalHours
+	s.stateKnown = true
+	return nil
+}
 
 type fakeFetcher struct {
 	catalog Catalog
