@@ -1,0 +1,260 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-09T15:58:00.000Z",
+  "title": "Design System: Oh My CPA",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Deep Accent Blue",
+        "canonical": "oklch(45% 0.18 250)",
+        "tonalRamp": ["#001429", "#002447", "#00386b", "#0056b3", "#007aff", "#3395ff", "#80bfff", "#ccf0ff"]
+      },
+      "primary-accent": {
+        "role": "primary",
+        "displayName": "Terminal Cyan Accent",
+        "canonical": "oklch(58% 0.22 250)",
+        "tonalRamp": ["#001833", "#002b5c", "#00458f", "#0056b3", "#007aff", "#409eff", "#80bfff", "#d9ecff"]
+      },
+      "neutral-bg": {
+        "role": "neutral",
+        "displayName": "Console Background",
+        "canonical": "oklch(22% 0.005 30)",
+        "tonalRamp": ["#121010", "#181616", "#201d1d", "#282424", "#302c2c", "#423e3e", "#565252", "#706c6c"]
+      },
+      "neutral-surface": {
+        "role": "neutral",
+        "displayName": "Graphite Surface",
+        "canonical": "oklch(28% 0.005 30)",
+        "tonalRamp": ["#1a1717", "#242020", "#302c2c", "#3c3737", "#4a4444", "#5e5858", "#787272", "#948e8e"]
+      },
+      "neutral-border": {
+        "role": "neutral",
+        "displayName": "Hairline Border",
+        "canonical": "oklch(38% 0.005 30)",
+        "tonalRamp": ["#201d1d", "#2e2b2b", "#3c3838", "#464343", "#5c5858", "#767272", "#949090", "#b5b1b1"]
+      },
+      "neutral-fg": {
+        "role": "neutral",
+        "displayName": "Chalk White Text",
+        "canonical": "oklch(99% 0.002 80)",
+        "tonalRamp": ["#706e6e", "#8c8a8a", "#aaa8a8", "#c8c6c4", "#e2e0e0", "#f4f2f2", "#fdfcfc", "#ffffff"]
+      },
+      "status-success": {
+        "role": "success",
+        "displayName": "Terminal Green",
+        "canonical": "oklch(76% 0.22 142)",
+        "tonalRamp": ["#05240c", "#0a3d16", "#125e24", "#1d8234", "#28a745", "#30d158", "#63e280", "#aef5be"]
+      },
+      "status-warn": {
+        "role": "warning",
+        "displayName": "Degraded Amber",
+        "canonical": "oklch(72% 0.20 65)",
+        "tonalRamp": ["#2b1800", "#452800", "#693d00", "#945600", "#c77500", "#ff9f0a", "#ffbe52", "#ffdfa3"]
+      },
+      "status-danger": {
+        "role": "error",
+        "displayName": "Danger Red",
+        "canonical": "oklch(62% 0.24 25)",
+        "tonalRamp": ["#2e0705", "#4d0d0a", "#781611", "#a81f18", "#d6281e", "#ff3b30", "#ff736b", "#ffb2ad"]
+      },
+      "brand-openai": {
+        "role": "accent",
+        "displayName": "OpenAI Brand Green",
+        "canonical": "#10A37F",
+        "tonalRamp": ["#06392c", "#0b5e49", "#0e7f63", "#10A37F", "#29bf99", "#56d4b5", "#8ee4cf", "#cef5ec"]
+      },
+      "brand-codex": {
+        "role": "accent",
+        "displayName": "Codex Brand Blue",
+        "canonical": "#60A5FA",
+        "tonalRamp": ["#162d50", "#1e4479", "#275fa7", "#3b82f6", "#60A5FA", "#93c5fd", "#bfdbfe", "#e0edff"]
+      },
+      "brand-claude": {
+        "role": "accent",
+        "displayName": "Claude Brand Terra Cotta",
+        "canonical": "#D97757",
+        "tonalRamp": ["#3f1d13", "#693020", "#9b472f", "#D97757", "#e59378", "#efb09d", "#f8d1c6", "#fdf0ec"]
+      },
+      "brand-gemini": {
+        "role": "accent",
+        "displayName": "Gemini Brand Violet",
+        "canonical": "#A78BFA",
+        "tonalRamp": ["#281d4e", "#3f2d7a", "#5b41af", "#805ad5", "#A78BFA", "#c4b5fd", "#ddd6fe", "#f1eeff"]
+      },
+      "border-light": {
+        "role": "neutral",
+        "displayName": "Light Theme Border Hairline",
+        "canonical": "rgba(15, 0, 0, 0.12)",
+        "tonalRamp": ["rgba(15,0,0,0.03)", "rgba(15,0,0,0.06)", "rgba(15,0,0,0.09)", "rgba(15,0,0,0.12)", "rgba(15,0,0,0.18)", "rgba(15,0,0,0.25)", "rgba(15,0,0,0.35)", "rgba(15,0,0,0.5)"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Primary hero telemetry and dashboard KPI values." },
+      "tile": { "displayName": "Tile Value", "purpose": "34px dashboard primary metric figures." },
+      "kpi": { "displayName": "KPI", "purpose": "Primary stat card numbers." },
+      "tile-sm": { "displayName": "Tile Secondary", "purpose": "26px dashboard secondary rate and metric figures." },
+      "headline": { "displayName": "Headline", "purpose": "Single page verdict titles and navigation headings." },
+      "title": { "displayName": "Title", "purpose": "Section titles, drawer banners, and modal headers." },
+      "body": { "displayName": "Body", "purpose": "Default UI copy, descriptions, and form control text." },
+      "sub": { "displayName": "Subtext", "purpose": "Secondary descriptions and medium table cells." },
+      "data": { "displayName": "Data/Mono", "purpose": "Dense tabular data, code, and log metrics." },
+      "caption": { "displayName": "Caption", "purpose": "Table headers, badge text, and status tags." },
+      "label": { "displayName": "Label", "purpose": "Eyebrow captions, group labels, and status annotations." }
+    },
+    "shadows": [
+      { "name": "focus-ring", "value": "0 0 0 2px #007aff", "purpose": "High-contrast accessibility focus ring on active controls." },
+      { "name": "inset-tick", "value": "inset 2px 0 0 #fdfcfc", "purpose": "Active nav and row selection left indicator mark." }
+    ],
+    "motion": [
+      { "name": "fast", "value": "50ms", "purpose": "Immediate state transitions and hover response." },
+      { "name": "base", "value": "100ms", "purpose": "Modal, drawer, and route fading with 3px subtle rise." },
+      { "name": "ease", "value": "cubic-bezier(0.2, 0, 0, 1)", "purpose": "Snappy non-overshooting terminal easing." }
+    ],
+    "breakpoints": [
+      { "name": "mobile", "value": "576px" },
+      { "name": "tablet", "value": "768px" },
+      { "name": "desktop", "value": "1024px" },
+      { "name": "wide", "value": "1440px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "32px height filled button for confirmation, submit, and primary actions.",
+      "html": "<button class=\"ds-btn-primary\">保存更改</button>",
+      "css": ".ds-btn-primary { background: #0056b3; color: #fdfcfc; font-family: monospace; font-size: 14px; height: 32px; padding: 0 16px; border: 1px solid #0056b3; border-radius: 4px; box-shadow: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; } .ds-btn-primary:hover { background: #007aff; border-color: #007aff; } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 2px #007aff; }"
+    },
+    {
+      "name": "Ghost / Surface Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Default bordered button on elevated panels and table headers.",
+      "html": "<button class=\"ds-btn-surface\">重置筛选</button>",
+      "css": ".ds-btn-surface { background: #302c2c; color: #fdfcfc; font-family: monospace; font-size: 14px; height: 32px; padding: 0 16px; border: 1px solid #464343; border-radius: 4px; box-shadow: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; } .ds-btn-surface:hover { background: #3c3737; border-color: #6e6e73; } .ds-btn-surface:focus-visible { outline: none; box-shadow: 0 0 0 2px #007aff; }"
+    },
+    {
+      "name": "Square Action Button",
+      "kind": "button",
+      "refersTo": "button-action-square",
+      "description": "32x32px square action trigger for table rows and toolbar actions.",
+      "html": "<button class=\"ds-btn-square\" title=\"刷新\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M23 4v6h-6\"/><path d=\"M20.49 15a9 9 0 1 1-2.12-9.36L23 10\"/></svg></button>",
+      "css": ".ds-btn-square { background: #302c2c; color: #fdfcfc; width: 32px; height: 32px; border: 1px solid #464343; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: none; } .ds-btn-square:hover { background: #3c3737; border-color: #6e6e73; } .ds-btn-square:focus-visible { outline: none; box-shadow: 0 0 0 2px #007aff; }"
+    },
+    {
+      "name": "Input Field",
+      "kind": "input",
+      "refersTo": "input-base",
+      "description": "Monospace input well with dark background and crisp cyan focus ring.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"筛选资源或模型...\" value=\"\" />",
+      "css": ".ds-input { background: #201d1d; color: #fdfcfc; font-family: monospace; font-size: 14px; height: 32px; padding: 4px 12px; border: 1px solid #464343; border-radius: 4px; outline: none; box-shadow: none; } .ds-input:focus { border-color: #007aff; box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.35); } .ds-input::placeholder { color: #6e6e73; }"
+    },
+    {
+      "name": "Status Indicator Pip",
+      "kind": "chip",
+      "refersTo": "status-pip",
+      "description": "7x7px square status pip with 2px radius paired with explicit status text.",
+      "html": "<span class=\"ds-status-wrap\"><span class=\"ds-pip ds-pip-success\"></span><span class=\"ds-status-text\">运行中</span></span>",
+      "css": ".ds-status-wrap { display: inline-flex; align-items: center; gap: 6px; font-family: monospace; font-size: 13px; color: #fdfcfc; } .ds-pip { width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0; } .ds-pip-success { background: #30d158; } .ds-pip-warn { background: #ff9f0a; } .ds-pip-danger { background: #ff3b30; } .ds-pip-meta { background: #6e6e73; }"
+    },
+    {
+      "name": "Cache Rate Badge",
+      "kind": "chip",
+      "refersTo": "cache-rate-badge",
+      "description": "Continuous OKLCH tint badge displaying cache hit rate up to 99.9%.",
+      "html": "<span class=\"ds-cache-badge\">94.2%</span>",
+      "css": ".ds-cache-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px; font-family: monospace; font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; background: rgba(48, 209, 88, 0.12); color: #30d158; border: 1px solid rgba(48, 209, 88, 0.32); }"
+    },
+    {
+      "name": "KPI Stat Card",
+      "kind": "card",
+      "refersTo": "card-kpi",
+      "description": "Top-level KPI block with eyebrow label, big tabular metric, and flat boundary.",
+      "html": "<div class=\"ds-card-kpi\"><div class=\"ds-kpi-eyebrow\">TOTAL REQUESTS (15M)</div><div class=\"ds-kpi-value\">1,428</div><div class=\"ds-kpi-footer\"><span class=\"ds-pip ds-pip-success\"></span> 99.8% 成功率</div></div>",
+      "css": ".ds-card-kpi { background: #302c2c; border: 1px solid #464343; border-radius: 4px; padding: 20px; font-family: monospace; } .ds-kpi-eyebrow { font-size: 10px; font-weight: 500; letter-spacing: 0.16em; color: #9a9898; text-transform: uppercase; margin-bottom: 8px; } .ds-kpi-value { font-size: 32px; font-weight: 700; color: #fdfcfc; font-variant-numeric: tabular-nums; line-height: 1.1; margin-bottom: 8px; } .ds-kpi-footer { font-size: 12px; color: #c8c6c4; display: flex; align-items: center; gap: 6px; } .ds-pip { width: 7px; height: 7px; border-radius: 2px; background: #30d158; }"
+    },
+    {
+      "name": "Navigation Row Item",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Sider navigation entry with 2px inset rule selection indicator.",
+      "html": "<div class=\"ds-nav-item ds-nav-item-active\"><span class=\"ds-nav-icon\">›_</span><span class=\"ds-nav-label\">资源整理</span></div>",
+      "css": ".ds-nav-item { display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 14px; font-family: monospace; font-size: 13px; color: #c8c6c4; cursor: pointer; border-radius: 0; } .ds-nav-item:hover { background: #302c2c; color: #fdfcfc; } .ds-nav-item-active { background: transparent; color: #fdfcfc; font-weight: 600; box-shadow: inset 2px 0 0 #fdfcfc; } .ds-nav-icon { font-size: 14px; width: 16px; text-align: center; color: inherit; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Terminal-Flat Console",
+    "overview": "Oh My CPA is a dedicated developer control plane for AI resources and proxy telemetry. Built upon an OpenCode-inspired minimalist console philosophy, the system delivers dense, honest, and high-frequency operational visibility without aesthetic clutter. It repudiates decorative gradients, glassmorphism, heavy shadows, and artificial entrance animations in favor of strict terminal discipline. Depth is achieved purely through 1px hairline borders and subtle tonal shifts between dark background tiers (#201d1d base and #302c2c elevated surface). Typography is universally monospaced across Latin, Cyrillic, and CJK characters, anchoring every token count, timestamp, and latency reading on stable tabular columns. The interface follows the doctrine of 'Quiet chrome, loud data'—the surrounding scaffolding remains dark and muted, reserving saturated chromatic accents exclusively for genuine operational states.",
+    "keyCharacteristics": [
+      "Terminal-Flat Structure: Zero drop shadows (box-shadow: none), no rounded bubble aesthetics, crisp 1px borders.",
+      "Monospace Everywhere: Sarasa Mono SC, Berkeley Mono, and IBM Plex Mono stacks across labels, titles, inputs, and tabular numbers.",
+      "Quiet Chrome, Loud Data: Dark charcoal scaffolding ensures that green, amber, red, and blue badges instantly telegraph system health.",
+      "Immediate Feedback: Motion budget capped at <= 100ms with zero spring physics; hover states paint on pointer arrival."
+    ],
+    "rules": [
+      {
+        "name": "The Semantic Color Rule",
+        "body": "Color is never applied as casual visual decoration. Green, amber, and red strictly communicate boolean health, degradation, or active errors. Scaffolding, icons, and containers remain neutral.",
+        "section": "colors"
+      },
+      {
+        "name": "The Honest Cache Scale Rule",
+        "body": "Cache-rate indicators never display danger red. A cache miss or low hit rate is an inherent trait of novel prompts, not an infrastructure defect. Red is reserved exclusively for failed executions.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Verdict Rule",
+        "body": "Exactly one top-level title is permitted per page. Subtitles exist strictly to carry live dynamic data (e.g. Default CPA · 已连接), never static marketing boilerplate or repetitive English translations.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Numerals Rule",
+        "body": "All numbers, financial values, latency figures, and timestamps must inherit font-variant-numeric: tabular-nums to ensure perfectly steady columns during real-time streaming updates.",
+        "section": "typography"
+      },
+      {
+        "name": "The Independent Column Rule",
+        "body": "The sider and the main content area scroll independently with overscroll-behavior: contain. Wheel events only affect the container currently beneath the cursor; the page never scrolls globally.",
+        "section": "layout"
+      },
+      {
+        "name": "The Open List Rule",
+        "body": "Prefer border-separated open rows (border-bottom: 1px solid var(--border-soft)) over nested card wrappers for resource, provider, and model lists. Cards are reserved for summaries, metrics, and comparisons.",
+        "section": "layout"
+      },
+      {
+        "name": "The Zero-Shadow Rule",
+        "body": "Never use drop shadows, ambient blur, or frosted glass effects to establish spatial elevation. Layering is always rendered via hairline 1px borders and tonal background steps.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Inset Marker Rule",
+        "body": "Active navigation items and row selections are marked by a 2px --fg inset left rule (box-shadow: inset 2px 0 0 var(--fg)), never by a heavy solid background pill or vibrant primary color block.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Uniform 4px Geometry Rule",
+        "body": "Every interactive widget, form field, and card container in the system adheres to the 4px terminal corner radius, preserving a coherent geometric silhouette throughout the entire UI.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do import colors exclusively from palette or CSS variables (var(--bg), var(--surface), var(--border)).",
+      "Do pair every status indicator pip with explicit text labels so colorblind users can immediately identify states.",
+      "Do inherit monospaced font families across all components and enable tabular-nums for numeric telemetry.",
+      "Do pin motion durations to <= 100ms and animate only opacity and transform.",
+      "Do preserve previous rendered content during query filter updates using placeholderData: keepPreviousData.",
+      "Do delay loading spinners by 200ms (DataProgress) to eliminate flicker on fast responses."
+    ],
+    "donts": [
+      "Don't add drop shadows (box-shadow: 0 4px...) or blurred lighting effects anywhere in the application.",
+      "Don't use decorative gradients, animated skeleton sweeps, or spring/bounce easing curves.",
+      "Don't use danger red on the cache-rate scale; cache misses are not system execution failures.",
+      "Don't hard-swap an active screen to a blank white canvas during navigation or background polling.",
+      "Don't display duplicated English and Chinese text strings side-by-side in the interface.",
+      "Don't pack single settings or isolated input fields into individual card boxes."
+    ]
+  }
+}
