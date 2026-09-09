@@ -176,6 +176,9 @@ func (h *Handler) patchManagementAuthFileFields(writer http.ResponseWriter, requ
 		writeCPAFacadeError(writer, err)
 		return
 	}
+	if h.pricing != nil {
+		h.pricing.TriggerSync()
+	}
 	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok"})
 }
 
@@ -208,7 +211,7 @@ func (h *Handler) uploadManagementAuthFiles(writer http.ResponseWriter, request 
 			writeError(writer, http.StatusBadRequest, "too many files")
 			return
 		}
-		handleUploadResults(writer, request.Context(), client, files)
+		h.handleUploadResults(writer, request.Context(), client, files)
 		return
 	}
 
@@ -234,6 +237,9 @@ func (h *Handler) uploadManagementAuthFiles(writer http.ResponseWriter, request 
 		writeCPAFacadeError(writer, err)
 		return
 	}
+	if h.pricing != nil {
+		h.pricing.TriggerSync()
+	}
 	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "uploaded": 1, "files": []string{name}})
 }
 
@@ -242,7 +248,7 @@ type multipartFileHeader struct {
 	open     func() (multipart.File, error)
 }
 
-func handleUploadResults(writer http.ResponseWriter, ctx context.Context, client *management.Client, files []*multipartFileHeader) {
+func (h *Handler) handleUploadResults(writer http.ResponseWriter, ctx context.Context, client *management.Client, files []*multipartFileHeader) {
 	uploaded := make([]string, 0, len(files))
 	failed := make([]map[string]string, 0)
 	for _, file := range files {
@@ -271,6 +277,9 @@ func handleUploadResults(writer http.ResponseWriter, ctx context.Context, client
 			continue
 		}
 		uploaded = append(uploaded, name)
+	}
+	if len(uploaded) > 0 && h.pricing != nil {
+		h.pricing.TriggerSync()
 	}
 	if len(failed) > 0 {
 		status := http.StatusMultiStatus
@@ -346,6 +355,10 @@ func (h *Handler) deleteManagementAuthFiles(writer http.ResponseWriter, request 
 	if auditErr := h.recordAudit(request, "auth_file.delete", "auth_file", strings.Join(unique, ","), auditOutcome, map[string]any{"deleted": len(confirmedDeleted), "failed_count": len(normalizedFailures)}); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit log failure after deletion")
 		return
+	}
+
+	if len(confirmedDeleted) > 0 && h.pricing != nil {
+		h.pricing.TriggerSync()
 	}
 
 	if outcomeStatus != "ok" {
