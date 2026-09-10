@@ -164,6 +164,29 @@ tables use `unixepoch()` seconds. Rollups are gated by
 `usage_aggregation_checkpoints` so aggregation is incremental rather than a
 full rescan.
 
+### Why the request list is ordered by `id`, not `timestamp_ms`
+
+`timestamp_ms` is when the request *started*. An agent request can run for
+minutes, so a row written to `usage_events` just now can carry a timestamp older
+than requests that started after it. Ordering the request list by timestamp
+therefore buries the newest row in the middle of the list, and a live view looks
+frozen while records are arriving. `ListUsageEvents` orders by `id` — recording
+order — so the collector's latest write is always the first row, and the keyset
+cursor is a single `id < ?` predicate.
+
+That order needs its own index. Without `idx_usage_events_instance_id`
+(migration 021) SQLite satisfies the instance/time filter from
+`idx_usage_events_instance_time` and then sorts every matching row in a temp
+B-tree: measured against 200k rows, `LIMIT 101` cost **22 ms** instead of
+**0.1 ms**. The index is `(instance_id, id DESC)`, and because `id` is the rowid
+alias it also serves the cursor seek.
+
+Request *time* remains the windowing key (`timestamp_ms >= from AND <= to`) and
+the axis of every rollup and chart. Users compare rows against the timestamps
+printed on them, so the two orderings are allowed to disagree — which is why the
+page states the order next to the window instead of silently re-sorting rows the
+reader can see are out of time order.
+
 ## 7. Pricing flow
 
 The catalog, the editable current price, and the immutable version history are

@@ -54,7 +54,8 @@ type UsageEventFilter struct {
 	Result       string
 	// RequestID looks up one request by its CPA id.
 	RequestID string
-	// Cursor is an opaque (timestamp, id) position for keyset pagination.
+	// Cursor is an opaque recording-order position for keyset pagination. The
+	// client only ever echoes it back.
 	Cursor string
 	Limit  int
 }
@@ -115,11 +116,19 @@ type UsageEventPage struct {
 	Limit int `json:"limit"`
 }
 
-// ListUsageEvents returns newest-first records matching the filter.
+// ListUsageEvents returns records newest recorded first.
 //
-// Keyset pagination on (timestamp_ms, id) is used instead of OFFSET: request
-// records are append-only and high volume, and OFFSET would degrade linearly as
-// the user pages deeper.
+// The order is the row id, not the request timestamp. CPA reports the time a
+// request *started*, and an agent request can run for minutes, so a record
+// written just now can carry a timestamp older than requests that started after
+// it; ordering by timestamp buries that record in the middle of the list and
+// makes the live view look stuck. Ordering by id puts whatever the collector
+// wrote last at the top, which is what a request log is read for.
+//
+// Keyset pagination on the id is used instead of OFFSET: records are append-only
+// and high volume, and OFFSET would degrade linearly as the user pages deeper.
+// Migration 021 adds the (instance_id, id) index that keeps this order a plain
+// index scan instead of a sort of every matching row.
 func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilter) (UsageEventPage, error) {
 	page := UsageEventPage{Items: []UsageEventRow{}, Limit: normalizeEventLimit(filter.Limit)}
 	if r == nil || r.SQL() == nil {
@@ -130,15 +139,15 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 	if err != nil {
 		return page, err
 	}
-	cursorTime, cursorID, err := decodeEventCursor(filter.Cursor)
+	cursorID, err := decodeEventCursor(filter.Cursor)
 	if err != nil {
 		return page, err
 	}
 	if cursorID > 0 {
 		// The columns must be qualified: the query joins discovered_resources,
 		// which also has an id, and an unqualified name is ambiguous to SQLite.
-		where = append(where, `(e.timestamp_ms < ? OR (e.timestamp_ms = ? AND e.id < ?))`)
-		args = append(args, cursorTime, cursorTime, cursorID)
+		where = append(where, `e.id < ?`)
+		args = append(args, cursorID)
 	}
 
 	query := `
@@ -163,7 +172,7 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
-	query += " ORDER BY e.timestamp_ms DESC, e.id DESC LIMIT ?"
+	query += " ORDER BY e.id DESC LIMIT ?"
 	args = append(args, page.Limit+1)
 
 	rows, err := r.SQL().QueryContext(ctx, query, args...)
@@ -212,7 +221,7 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 		page.Items = page.Items[:page.Limit]
 		page.HasMore = true
 		last := page.Items[len(page.Items)-1]
-		page.NextCursor = encodeEventCursor(last.TimestampMS, last.ID)
+		page.NextCursor = encodeEventCursor(last.ID)
 	}
 	return page, nil
 }
@@ -498,37 +507,31 @@ func normalizeEventLimit(limit int) int {
 // ValidUsageCursor reports whether a client-supplied cursor is well formed, so
 // handlers can answer 400 instead of surfacing a storage error as 500.
 func ValidUsageCursor(cursor string) error {
-	_, _, err := decodeEventCursor(cursor)
+	_, err := decodeEventCursor(cursor)
 	return err
 }
 
 // encodeEventCursor builds an opaque keyset position. It is intentionally not
 // user-parsable: the client treats it as a token, which lets the ordering change
 // later without breaking callers.
-func encodeEventCursor(timestampMS, id int64) string {
-	raw := strconv.FormatInt(timestampMS, 10) + ":" + strconv.FormatInt(id, 10)
-	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+func encodeEventCursor(id int64) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(strconv.FormatInt(id, 10)))
 }
 
-func decodeEventCursor(cursor string) (int64, int64, error) {
+func decodeEventCursor(cursor string) (int64, error) {
 	trimmed := strings.TrimSpace(cursor)
 	if trimmed == "" {
-		return 0, 0, nil
+		return 0, nil
 	}
 	decoded, err := base64.RawURLEncoding.DecodeString(trimmed)
 	if err != nil {
-		return 0, 0, errors.New("cursor is not valid")
+		return 0, errors.New("cursor is not valid")
 	}
-	parts := strings.SplitN(string(decoded), ":", 2)
-	if len(parts) != 2 {
-		return 0, 0, errors.New("cursor is malformed")
+	id, err := strconv.ParseInt(string(decoded), 10, 64)
+	if err != nil || id <= 0 {
+		return 0, errors.New("cursor is malformed")
 	}
-	timestampMS, errTime := strconv.ParseInt(parts[0], 10, 64)
-	id, errID := strconv.ParseInt(parts[1], 10, 64)
-	if errTime != nil || errID != nil || timestampMS <= 0 || id <= 0 {
-		return 0, 0, errors.New("cursor is malformed")
-	}
-	return timestampMS, id, nil
+	return id, nil
 }
 
 // UsageEventSpan returns the earliest and latest stored event times, which the
