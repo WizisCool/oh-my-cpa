@@ -207,9 +207,8 @@ func IsSensitiveKey(key string) bool {
 		strings.Contains(normalized, "password") || strings.Contains(normalized, "credential")
 }
 
-// maskRun is the fixed filler a display mask uses. It is a constant length so
-// the mask never reveals how long the underlying secret is. MaskRun exports it
-// for callers that recognize or re-render masks.
+// maskRun is the test-visible alias of MaskRun, so the masking expectations can
+// assert an exact filler without spelling the runes out.
 const maskRun = MaskRun
 
 // MaskSecret renders a credential as a recognisable but non-recoverable display

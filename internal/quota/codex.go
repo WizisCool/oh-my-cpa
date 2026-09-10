@@ -79,11 +79,11 @@ type RawCodexUsagePayload struct {
 	RateLimitResetCredsAlt  *RawCodexResetCreditsSummary  `json:"rateLimitResetCredits"`
 }
 
-func toFloat(val any) (float64, bool) {
-	if val == nil {
+func toFloat(value any) (float64, bool) {
+	if value == nil {
 		return 0, false
 	}
-	switch v := val.(type) {
+	switch v := value.(type) {
 	case float64:
 		return v, true
 	case float32:
@@ -105,11 +105,11 @@ func toFloat(val any) (float64, bool) {
 	return 0, false
 }
 
-func toInt64(val any) (int64, bool) {
-	if val == nil {
+func toInt64(value any) (int64, bool) {
+	if value == nil {
 		return 0, false
 	}
-	switch v := val.(type) {
+	switch v := value.(type) {
 	case int64:
 		return v, true
 	case int:
@@ -125,7 +125,6 @@ func toInt64(val any) (int64, bool) {
 		if i, err := strconv.ParseInt(v, 10, 64); err == nil {
 			return i, true
 		}
-		// Could be an ISO timestamp
 		if t, err := time.Parse(time.RFC3339, v); err == nil {
 			return t.UnixMilli(), true
 		}
@@ -136,14 +135,14 @@ func toInt64(val any) (int64, bool) {
 	return 0, false
 }
 
-func clamp(val, min, max float64) float64 {
-	if val < min {
+func clamp(value, min, max float64) float64 {
+	if value < min {
 		return min
 	}
-	if val > max {
+	if value > max {
 		return max
 	}
-	return val
+	return value
 }
 
 func parseWindowDurationHours(seconds float64) float64 {
@@ -187,7 +186,6 @@ func formatResetInstant(resetAtMS int64, nowMS int64) string {
 		return "已恢复"
 	}
 	rel := formatDurationShort(diff)
-	// Local clock time format: HH:mm or MM-DD HH:mm
 	if diff < 24*time.Hour {
 		return fmt.Sprintf("%s (%s后恢复)", resetTime.Format("15:04"), rel)
 	}
@@ -257,7 +255,6 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 		ExpiresLabel: expiresLabel,
 	}
 
-	// Parse Rate Limits
 	rateLimit := payload.RateLimit
 	if rateLimit == nil {
 		rateLimit = payload.RateLimitAlt
@@ -313,7 +310,6 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 			periodHours = &hours
 		}
 
-		// Determine label based on window seconds
 		label := defaultLabel
 		kind := "custom"
 		if scope == "standard" && model == "" {
@@ -373,7 +369,6 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 		addWindow(secondary, "weekly", "每周用量上限 (Weekly)", "standard", "")
 	}
 
-	// Code review rate limit
 	codeReview := payload.CodeReviewRateLimit
 	if codeReview == nil {
 		codeReview = payload.CodeReviewRateLimitAlt
@@ -426,7 +421,6 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 		}
 	}
 
-	// Parse Rate Limit Reset Credits
 	resetCreditsRaw := payload.RateLimitResetCredits
 	if resetCreditsRaw == nil {
 		resetCreditsRaw = payload.RateLimitResetCredsAlt

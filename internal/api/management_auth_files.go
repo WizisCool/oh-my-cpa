@@ -401,7 +401,6 @@ func normalizeDeleteResponse(requested []string, cpaResp map[string]any) ([]stri
 	seenFailed := make(map[string]bool)
 	failures := make([]authFileDeleteFailureItem, 0)
 
-	// 1. Process upstream explicit failures
 	if rawFailed, ok := cpaResp["failed"].([]any); ok {
 		for _, item := range rawFailed {
 			record, isMap := item.(map[string]any)
@@ -424,7 +423,6 @@ func normalizeDeleteResponse(requested []string, cpaResp map[string]any) ([]stri
 		}
 	}
 
-	// 2. Process upstream explicit successes
 	seenSuccess := make(map[string]bool)
 	confirmedDeleted := make([]string, 0, len(requested))
 
@@ -450,7 +448,6 @@ func normalizeDeleteResponse(requested []string, cpaResp map[string]any) ([]stri
 		}
 	}
 
-	// 3. Validate consistency if `deleted` count is present
 	if hasDeleted {
 		var upstreamDeletedCount int64 = -1
 		if dFloat, ok := cpaResp["deleted"].(float64); ok && dFloat >= 0 {
@@ -479,7 +476,8 @@ func normalizeDeleteResponse(requested []string, cpaResp map[string]any) ([]stri
 		}
 	}
 
-	// 4. Any requested file neither confirmed deleted nor explicitly failed is unconfirmed
+	// A file CPA neither confirmed deleted nor reported as failed is unconfirmed;
+	// reporting it as success would let a partial upstream delete look complete.
 	for _, name := range requested {
 		if !seenSuccess[name] && !seenFailed[name] {
 			failures = append(failures, authFileDeleteFailureItem{
@@ -490,7 +488,6 @@ func normalizeDeleteResponse(requested []string, cpaResp map[string]any) ([]stri
 		}
 	}
 
-	// 5. Compute status
 	if len(confirmedDeleted) == len(requested) && len(failures) == 0 {
 		return confirmedDeleted, failures, "ok"
 	}

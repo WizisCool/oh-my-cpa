@@ -23,7 +23,7 @@ const dashboardTargetBuckets = 48
 
 // dashboardPresets maps the UI range picker to a window length.
 //
-// "15m" is what the picker labels 实时: one minute per bucket over fifteen, so
+// "15m" is what the picker labels Live: one minute per bucket over fifteen, so
 // the newest bucket visibly grows instead of waiting an hour to appear.
 var dashboardPresets = map[string]time.Duration{
 	"15m": 15 * time.Minute,
@@ -59,8 +59,9 @@ type dashboardWindow struct {
 	BucketMS int64  `json:"bucket_ms"`
 	Minutes  int    `json:"minutes"`
 	Complete bool   `json:"complete"`
-	// OpenEnd marks a range whose end tracks the current time ("至今"). The
-	// client polls those the same way it polls a relative preset.
+	// OpenEnd marks a range whose end tracks the current time (the picker's
+	// open-ended "through now" mode). The client polls those the same way it
+	// polls a relative preset.
 	OpenEnd bool `json:"open_end"`
 }
 
@@ -456,7 +457,7 @@ func dashboardWindowFromRequest(request *http.Request, now time.Time) (dashboard
 			return dashboardWindow{}, "from and to must be epoch milliseconds"
 		}
 		parsedTo := nowMS
-		// A range with no end is "至今": the end keeps following the current
+		// A range with no end is open-ended: the end keeps following the current
 		// time, which is what makes it worth polling.
 		if rawTo != "" {
 			var errTo error
@@ -473,8 +474,8 @@ func dashboardWindowFromRequest(request *http.Request, now time.Time) (dashboard
 			return dashboardWindow{}, "from must be earlier than to"
 		}
 		// Bound the window: an unbounded custom range should be an export job,
-		// not an interactive query. A "至今" range is unbounded by definition,
-		// so it is bounded by the same cap measured back from now.
+		// not an interactive query. An open-ended range is unbounded by
+		// definition, so it is bounded by the same cap measured back from now.
 		if parsedTo-parsedFrom > maxDashboardWindow.Milliseconds() {
 			return dashboardWindow{}, fmt.Sprintf("custom range must not exceed %s", maxDashboardWindow)
 		}

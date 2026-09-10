@@ -30,7 +30,9 @@ const (
 	XaiApiChatURL              = "https://api.x.ai/v1/chat/completions"
 )
 
-// Official Upstream Headers
+// Official upstream headers, plus the model id the xAI paid-account health probe
+// sends. The user-agent strings impersonate each vendor's official CLI because
+// the quota endpoints reject anything else.
 const (
 	CodexUserAgent       = "codex-tui/0.149.1 (Mac OS 26.5.2; arm64) iTerm.app/3.6.11 (codex-tui; 0.149.1)"
 	AntigravityUserAgent = "antigravity/cli/1.0.13 (aidev_client; os_type=darwin; arch=arm64)"
@@ -77,7 +79,7 @@ type Service struct {
 	client CPAClient
 }
 
-// NewService creates a new Quota Service.
+// NewService creates a quota service bound to a CPA management client.
 func NewService(client CPAClient) *Service {
 	return &Service{client: client}
 }
@@ -155,11 +157,13 @@ func (s *Service) SafeApiCall(ctx context.Context, authIndex, method, targetURL 
 	return s.client.ApiCall(ctx, req)
 }
 
+// sanitizeError keeps the operator-facing text short. CPA error bodies are not a
+// stable contract, so the JSON `message` is preferred and the bare status is the
+// fallback.
 func sanitizeError(statusCode int, rawBody []byte) string {
 	if statusCode == 0 {
 		return "request failed"
 	}
-	// Extract simple message if JSON error
 	bodyStr := string(rawBody)
 	if strings.Contains(bodyStr, "message") {
 		var errObj struct {
@@ -421,7 +425,6 @@ func (s *Service) fetchClaudeQuota(ctx context.Context, file management.AuthFile
 		"anthropic-beta": "oauth-2025-04-20",
 	})
 
-	// 1. Profile query for plan tier
 	var plan *QuotaPlan
 	profResp, profErr := s.SafeApiCall(ctx, file.AuthIndex, "GET", ClaudeProfileURL, headers, "")
 	if profErr == nil && profResp.StatusCode == 200 {
@@ -430,7 +433,6 @@ func (s *Service) fetchClaudeQuota(ctx context.Context, file management.AuthFile
 		}
 	}
 
-	// 2. Usage query for rolling & weekly windows
 	usageResp, usageErr := s.SafeApiCall(ctx, file.AuthIndex, "GET", ClaudeUsageURL, headers, "")
 	if usageErr != nil {
 		return plan, nil, nil, usageErr
@@ -512,6 +514,8 @@ func (s *Service) fetchKimiQuota(ctx context.Context, file management.AuthFile, 
 	return ParseKimiUsage(normBody, nowMS)
 }
 
+// fetchXaiQuota prefers the free billing endpoint; the paid-account health probe
+// is the fallback for credentials the billing endpoint does not recognise.
 func (s *Service) fetchXaiQuota(ctx context.Context, file management.AuthFile, nowMS int64) (*QuotaPlan, []QuotaWindow, error) {
 	headers := management.WithQuotaCredential(map[string]string{
 		"x-xai-token-auth":      "xai-grok-cli",
@@ -520,7 +524,6 @@ func (s *Service) fetchXaiQuota(ctx context.Context, file management.AuthFile, n
 		"Accept":                "*/*",
 	})
 
-	// 1. Try free billing endpoint
 	resp, err := s.SafeApiCall(ctx, file.AuthIndex, "GET", XaiBillingMonthlyURL, headers, "")
 	if err == nil && resp.StatusCode == 200 {
 		if normBody, bErr := resp.NormalizedBody(); bErr == nil {
@@ -528,7 +531,6 @@ func (s *Service) fetchXaiQuota(ctx context.Context, file management.AuthFile, n
 		}
 	}
 
-	// 2. Fallback to paid health check
 	paidHeaders := management.WithQuotaCredential(map[string]string{
 		"Accept": "application/json",
 	})

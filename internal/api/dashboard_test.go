@@ -1159,8 +1159,8 @@ func TestPreferencesRoundTripThroughTheDatabase(t *testing.T) {
 	}
 }
 
-// A range with no end is "至今": the end tracks the current time, so the newest
-// bucket keeps appearing without the user touching anything.
+// A range with no end is open-ended: the end tracks the current time, so the
+// newest bucket keeps appearing without the user touching anything.
 func TestDashboardOpenEndedWindowTracksNow(t *testing.T) {
 	client, baseURL, repo := startDashboardTestServer(t, nil)
 	now := time.Now().UTC()
@@ -1193,9 +1193,10 @@ func TestDashboardOpenEndedWindowTracksNow(t *testing.T) {
 	}
 }
 
-// 实时 is a fifteen-minute window: one bucket per minute, so the newest point
-// moves on the scale the collector actually delivers at. Five minutes would be
-// too narrow to read as a trend; an hour is too coarse to feel live.
+// The Live preset is a fifteen-minute window: one bucket per minute, so the
+// newest point moves on the scale the collector actually delivers at. Five
+// minutes would be too narrow to read as a trend; an hour is too coarse to
+// feel live.
 func TestDashboardRealtimePresetIsFifteenMinutes(t *testing.T) {
 	client, baseURL, repo := startDashboardTestServer(t, nil)
 	now := time.Now().UTC()

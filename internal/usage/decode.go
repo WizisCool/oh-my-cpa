@@ -362,13 +362,6 @@ func apiGroupIdentity(payload Payload, fingerprinter security.Fingerprinter) (st
 	return "unknown", "unknown"
 }
 
-// apiGroupKey is retained for package-local callers and always returns a safe
-// value, never the payload API key.
-func apiGroupKey(payload Payload) string {
-	key, _ := apiGroupIdentity(payload, nil)
-	return key
-}
-
 // normalizeAuthType matches CPA's stored vocabulary where api keys are "apikey".
 func normalizeAuthType(value string) string {
 	trimmed := strings.ToLower(trim(value))
@@ -412,17 +405,6 @@ func orUnknown(value string) string {
 		return trimmed
 	}
 	return "unknown"
-}
-
-func cleanString(value *string) *string {
-	if value == nil {
-		return nil
-	}
-	trimmed := strings.TrimSpace(*value)
-	if trimmed == "" {
-		return nil
-	}
-	return &trimmed
 }
 
 func boundedSafe(value string, limit int) string {

@@ -96,7 +96,7 @@ func (h *Handler) Router() http.Handler {
 				v1.Get("/preferences", h.listPreferences)
 				v1.Put("/preferences/{key}", h.putPreference)
 				v1.Get("/usage/ingest-status", h.dashboardIngestStatus)
-				// Pricing: one read endpoint for the page plus three operator actions.
+				// Pricing: one read endpoint for the page plus four operator actions.
 				v1.Get("/pricing", h.listPricing)
 				v1.Put("/pricing/models", h.updatePricingModels)
 				v1.Delete("/pricing/models/{model}", h.deletePricingModel)

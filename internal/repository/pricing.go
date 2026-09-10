@@ -77,8 +77,9 @@ func (r *Repository) ListModelPrices(ctx context.Context) ([]ModelPrice, error) 
 	return result, rows.Err()
 }
 
-// UpsertModelPrices writes a batch of validated rows in one transaction. It is
-// auto-sync cannot overwrite manual rows, including concurrent edits.
+// UpsertModelPrices writes a batch of validated rows in one transaction. The
+// ON CONFLICT guard keeps an automatic sync from overwriting a manual row, so a
+// concurrent operator edit always wins.
 func (r *Repository) UpsertModelPrices(ctx context.Context, rows []ModelPrice) error {
 	if err := r.requirePricingSchema(ctx); err != nil {
 		return err

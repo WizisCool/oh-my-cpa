@@ -180,7 +180,6 @@ func restoreMapping(subNode, srvNode *yaml.Node, parentPath []string) {
 		}
 
 		if valNode.Kind == yaml.ScalarNode && valNode.Value == UnchangedSentinel {
-			// Restore original value from server node
 			valNode.Value = srvVal.Value
 			valNode.Tag = srvVal.Tag
 			continue

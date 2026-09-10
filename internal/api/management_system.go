@@ -57,7 +57,6 @@ func (h *Handler) getSystemInfo(writer http.ResponseWriter, request *http.Reques
 	writer.Header().Set("Cache-Control", "no-store")
 	ctx := request.Context()
 
-	// 1. OMC Version & Uptime
 	omcVersion := h.cfg.Version
 	if omcVersion == "" {
 		omcVersion = "v0.1.0"
@@ -67,13 +66,11 @@ func (h *Handler) getSystemInfo(writer http.ResponseWriter, request *http.Reques
 		uptime = int64(time.Since(h.startTime).Seconds())
 	}
 
-	// 2. Database Status
 	dbStatus := "ok"
 	if h.repo == nil || h.repo.SQL() == nil || h.repo.SQL().PingContext(ctx) != nil {
 		dbStatus = "error"
 	}
 
-	// 3. CPA Connection & Version
 	cpaStatus := "offline"
 	cpaVersion := "unknown"
 	latestVersion := ""
@@ -110,7 +107,6 @@ func (h *Handler) getSystemInfo(writer http.ResponseWriter, request *http.Reques
 		}
 	}
 
-	// 4. Collector & Ingest Gaps
 	collectorStatus := "disabled"
 	if h.cfg.Usage.Enabled {
 		collectorStatus = "active"
@@ -126,7 +122,6 @@ func (h *Handler) getSystemInfo(writer http.ResponseWriter, request *http.Reques
 		}
 	}
 
-	// 5. Audit Summary
 	auditSummary := SystemAuditSummaryDTO{
 		ActionCounts: make(map[string]int),
 	}
@@ -139,7 +134,6 @@ func (h *Handler) getSystemInfo(writer http.ResponseWriter, request *http.Reques
 		}
 	}
 
-	// 6. Runtime Stats
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
 

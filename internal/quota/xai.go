@@ -41,16 +41,16 @@ type RawXaiBillingPayload struct {
 	Config *RawXaiBillingConfig `json:"config"`
 }
 
-func parseCentVal(val any) int64 {
-	if val == nil {
+func parseCentVal(value any) int64 {
+	if value == nil {
 		return 0
 	}
-	if m, ok := val.(map[string]any); ok {
+	if m, ok := value.(map[string]any); ok {
 		if v, ok := toInt64(m["val"]); ok {
 			return v
 		}
 	}
-	if v, ok := toInt64(val); ok {
+	if v, ok := toInt64(value); ok {
 		return v
 	}
 	return 0
@@ -97,7 +97,8 @@ func ParseXaiBilling(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, error)
 	if creditPct, ok := toFloat(rawCreditPct); ok {
 		clampedUsed := clamp(creditPct, 0, 100)
 		clampedRem := clamp(100-clampedUsed, 0, 100)
-		periodHours := 168.0 // default weekly billing period
+		// The billing payload carries no period, so a weekly window is assumed.
+		periodHours := 168.0
 		windows = append(windows, QuotaWindow{
 			ID:               "xai_credit_usage",
 			Label:            "额度总使用率 (Credit Usage)",

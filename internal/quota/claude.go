@@ -120,7 +120,6 @@ func ParseClaudeUsage(raw []byte, nowMS int64) ([]QuotaWindow, *QuotaExtraUsage,
 		})
 	}
 
-	// 1. Standard rolling windows
 	addWindow(payload.FiveHour, "five_hour", "5小时滚动用量 (5-Hour)", "standard", "", 5)
 	addWindow(payload.SevenDay, "seven_day", "每周总用量上限 (Weekly)", "standard", "", 168)
 	addWindow(payload.SevenDaySonnet, "seven_day_sonnet", "Sonnet 每周用量", "model", "claude-3-5-sonnet", 168)
@@ -128,7 +127,8 @@ func ParseClaudeUsage(raw []byte, nowMS int64) ([]QuotaWindow, *QuotaExtraUsage,
 	addWindow(payload.SevenDayOAuthApps, "seven_day_oauth_apps", "第三方应用 每周用量", "standard", "", 168)
 	addWindow(payload.SevenDayCowork, "seven_day_cowork", "Cowork 协作每周用量", "standard", "", 168)
 
-	// 2. Fable limit (modern scoped or legacy iguana_necktie)
+	// Fable arrives either as a modern model-scoped limit or under the legacy
+	// iguana_necktie window, so both spellings are probed.
 	var foundFable bool
 	for _, lim := range payload.Limits {
 		modelName := ""
@@ -169,7 +169,6 @@ func ParseClaudeUsage(raw []byte, nowMS int64) ([]QuotaWindow, *QuotaExtraUsage,
 		addWindow(payload.IguanaNecktie, "seven_day_fable", "Fable 每周用量", "model", "fable", 168)
 	}
 
-	// 3. Extra usage
 	var extraUsage *QuotaExtraUsage
 	if eu := payload.ExtraUsage; eu != nil && eu.IsEnabled {
 		monLim, _ := toInt64(eu.MonthlyLimit)
@@ -193,7 +192,8 @@ func ParseClaudeUsage(raw []byte, nowMS int64) ([]QuotaWindow, *QuotaExtraUsage,
 	return windows, extraUsage, nil
 }
 
-// ParseClaudeProfile derives subscription plan from /api/account profile response.
+// ParseClaudeProfile derives the subscription plan from the /api/oauth/profile
+// response (ClaudeProfileURL), not from a billing endpoint.
 func ParseClaudeProfile(raw []byte) *QuotaPlan {
 	var profile RawClaudeProfileResponse
 	if err := json.Unmarshal(raw, &profile); err != nil {

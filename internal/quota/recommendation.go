@@ -2,9 +2,12 @@ package quota
 
 import "strings"
 
-// EvaluateStatusAndRecommendation calculates the lifecycle status and actionable guidance.
+// EvaluateStatusAndRecommendation calculates the lifecycle status and actionable
+// guidance. The checks are exclusive and ordered by how much they constrain the
+// operator: an active cooldown outranks a disabled credential, which outranks a
+// transport error, which outranks window arithmetic, and only a credential that
+// fails none of them is reported as idle.
 func EvaluateStatusAndRecommendation(q *NormalizedQuota, nowMS int64) {
-	// 1. Check CPA Cooldown first
 	if q.ActiveCooldown != nil && q.ActiveCooldown.IsActive {
 		q.Status = "cooldown"
 		reason := "CPA 冷却保护生效中"
@@ -20,7 +23,6 @@ func EvaluateStatusAndRecommendation(q *NormalizedQuota, nowMS int64) {
 		return
 	}
 
-	// 2. Disabled credentials
 	if q.Disabled {
 		q.Status = "idle"
 		q.Recommendation = QuotaRecommendation{
@@ -32,7 +34,6 @@ func EvaluateStatusAndRecommendation(q *NormalizedQuota, nowMS int64) {
 		return
 	}
 
-	// 3. Error state
 	if q.Error != "" {
 		errLower := strings.ToLower(q.Error)
 		if strings.Contains(errLower, "401") || strings.Contains(errLower, "403") ||
@@ -61,7 +62,6 @@ func EvaluateStatusAndRecommendation(q *NormalizedQuota, nowMS int64) {
 		return
 	}
 
-	// 4. Evaluate quota windows
 	if len(q.Windows) > 0 {
 		minRemaining := 100.0
 		hasRemaining := false
@@ -128,7 +128,6 @@ func EvaluateStatusAndRecommendation(q *NormalizedQuota, nowMS int64) {
 		}
 	}
 
-	// 5. Idle / No active observations
 	q.Status = "idle"
 	q.Recommendation = QuotaRecommendation{
 		Status:   "idle",
