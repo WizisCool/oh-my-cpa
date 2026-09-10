@@ -99,9 +99,11 @@ type UsageEventRow struct {
 	// HasRequestLog reports whether CPA's request log can be fetched for this
 	// record. It depends only on having a request id.
 	HasRequestLog bool `json:"has_request_log"`
-	// CostUSD is the estimated cost from model_prices; nil means unpriced,
+	// CostUSD is the locked request estimate; nil means no price was known,
 	// never a fabricated zero.
-	CostUSD *float64 `json:"cost_usd,omitempty"`
+	CostUSD        *float64 `json:"cost_usd,omitempty"`
+	PricingStatus  string   `json:"pricing_status"`
+	PriceVersionID *int64   `json:"price_version_id,omitempty"`
 }
 
 // UsageEventPage is one keyset-paginated result set.
@@ -148,12 +150,7 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 		       e.input_tokens, e.output_tokens, e.reasoning_tokens, e.cached_tokens,
 		       e.cache_read_tokens, e.cache_creation_tokens, e.total_tokens,
 		       d.id, d.cpa_resource_name AS resource_name,
-		       CASE WHEN mp.model IS NULL THEN NULL ELSE (
-		           max(COALESCE(e.input_tokens, 0) - COALESCE(e.cache_read_tokens, 0) - COALESCE(e.cache_creation_tokens, 0), 0) / 1000000.0 * COALESCE(mp.prompt_price_per_1m, 0)
-		         + COALESCE(e.cache_read_tokens, 0) / 1000000.0 * COALESCE(mp.cache_read_price_per_1m, 0)
-		         + COALESCE(e.cache_creation_tokens, 0) / 1000000.0 * COALESCE(mp.cache_write_price_per_1m, 0)
-		         + COALESCE(e.output_tokens, 0) / 1000000.0 * COALESCE(mp.completion_price_per_1m, 0)
-		       ) * COALESCE(mp.price_multiplier, 1.0) END AS cost_usd
+		       e.cost_nanos / 1000000000.0 AS cost_usd, e.pricing_status, e.price_version_id
 		FROM usage_events e
 		LEFT JOIN (
 			SELECT instance_id, cpa_auth_index,
@@ -162,8 +159,7 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 			FROM discovered_resources d
 			WHERE cpa_auth_index IS NOT NULL AND cpa_auth_index <> ''
 			GROUP BY instance_id, cpa_auth_index
-		) d ON d.instance_id = e.instance_id AND d.cpa_auth_index = e.auth_index
-		LEFT JOIN model_prices mp ON mp.model = e.model`
+		) d ON d.instance_id = e.instance_id AND d.cpa_auth_index = e.auth_index`
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -189,7 +185,7 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 			&row.LatencyMS, &row.TTFTMS, &row.ClientIP, &row.XForwardedFor, &row.UserAgent,
 			&row.Tokens.InputTokens, &row.Tokens.OutputTokens, &row.Tokens.ReasoningTokens,
 			&row.Tokens.CachedTokens, &row.Tokens.CacheReadTokens, &row.Tokens.CacheCreationTokens,
-			&row.Tokens.TotalTokens, &resourceID, &resourceName, &costUSD); errScan != nil {
+			&row.Tokens.TotalTokens, &resourceID, &resourceName, &costUSD, &row.PricingStatus, &row.PriceVersionID); errScan != nil {
 			return page, fmt.Errorf("scan usage event: %w", errScan)
 		}
 		row.Failed = failed == 1
@@ -242,12 +238,7 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 		       e.input_tokens, e.output_tokens, e.reasoning_tokens, e.cached_tokens,
 		       e.cache_read_tokens, e.cache_creation_tokens, e.total_tokens,
 		       d.id, d.cpa_resource_name AS resource_name,
-		       CASE WHEN mp.model IS NULL THEN NULL ELSE (
-		           max(COALESCE(e.input_tokens, 0) - COALESCE(e.cache_read_tokens, 0) - COALESCE(e.cache_creation_tokens, 0), 0) / 1000000.0 * COALESCE(mp.prompt_price_per_1m, 0)
-		         + COALESCE(e.cache_read_tokens, 0) / 1000000.0 * COALESCE(mp.cache_read_price_per_1m, 0)
-		         + COALESCE(e.cache_creation_tokens, 0) / 1000000.0 * COALESCE(mp.cache_write_price_per_1m, 0)
-		         + COALESCE(e.output_tokens, 0) / 1000000.0 * COALESCE(mp.completion_price_per_1m, 0)
-		       ) * COALESCE(mp.price_multiplier, 1.0) END AS cost_usd
+		       e.cost_nanos / 1000000000.0 AS cost_usd, e.pricing_status, e.price_version_id
 		FROM usage_events e
 		LEFT JOIN (
 			SELECT instance_id, cpa_auth_index,
@@ -257,7 +248,6 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 			WHERE cpa_auth_index IS NOT NULL AND cpa_auth_index <> ''
 			GROUP BY instance_id, cpa_auth_index
 		) d ON d.instance_id = e.instance_id AND d.cpa_auth_index = e.auth_index
-		LEFT JOIN model_prices mp ON mp.model = e.model
 		WHERE e.id = ?`, id).Scan(
 		&row.ID, &row.InstanceID, &row.EventKey, &row.RequestID, &row.TimestampMS,
 		&row.Provider, &row.Endpoint, &row.ExecutorType, &row.AuthType, &row.AuthIndex,
@@ -266,7 +256,7 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 		&row.LatencyMS, &row.TTFTMS, &row.ClientIP, &row.XForwardedFor, &row.UserAgent,
 		&row.Tokens.InputTokens, &row.Tokens.OutputTokens, &row.Tokens.ReasoningTokens,
 		&row.Tokens.CachedTokens, &row.Tokens.CacheReadTokens, &row.Tokens.CacheCreationTokens,
-		&row.Tokens.TotalTokens, &resourceID, &resourceName, &costUSD)
+		&row.Tokens.TotalTokens, &resourceID, &resourceName, &costUSD, &row.PricingStatus, &row.PriceVersionID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return row, ErrNotFound
 	}

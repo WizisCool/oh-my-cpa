@@ -77,7 +77,7 @@ func (r *Repository) ListModelPrices(ctx context.Context) ([]ModelPrice, error) 
 }
 
 // UpsertModelPrices writes a batch of validated rows in one transaction. It is
-// the caller's job to keep manual rows out of auto-sync batches.
+// auto-sync cannot overwrite manual rows, including concurrent edits.
 func (r *Repository) UpsertModelPrices(ctx context.Context, rows []ModelPrice) error {
 	if err := r.requirePricingSchema(ctx); err != nil {
 		return err
@@ -110,7 +110,8 @@ func (r *Repository) UpsertModelPrices(ctx context.Context, rows []ModelPrice) e
 			price_multiplier = excluded.price_multiplier,
 			source = excluded.source,
 			synced_at_ms = excluded.synced_at_ms,
-			updated_at_ms = excluded.updated_at_ms`,
+			updated_at_ms = excluded.updated_at_ms
+        WHERE excluded.source = 'manual' OR model_prices.source <> 'manual'`,
 			row.Model, row.PromptPricePer1M, row.CompletionPer1M, row.CacheReadPer1M,
 			row.CacheWritePer1M, row.PriceMultiplier, row.Source, row.SyncedAtMS, row.UpdatedAtMS); err != nil {
 			return fmt.Errorf("upsert model price %q: %w", row.Model, err)
@@ -267,25 +268,11 @@ type UsageCostStats struct {
 	UnpricedEvents int64
 }
 
-// QueryUsageCost estimates one window's cost by joining model prices at query
-// time. Events without a price row count as unpriced instead of free.
+// QueryUsageCost sums locked request costs, never the mutable price catalog.
 func (r *Repository) QueryUsageCost(ctx context.Context, instanceID string, fromMS, toMS int64) (UsageCostStats, error) {
-	if err := r.requirePricingSchema(ctx); err != nil {
-		return UsageCostStats{}, err
-	}
-	costExpr := `CASE WHEN mp.model IS NULL THEN 0 ELSE (
-		           max(e.input_tokens - e.cache_read_tokens - e.cache_creation_tokens, 0) / 1000000.0 * mp.prompt_price_per_1m
-		         + e.cache_read_tokens / 1000000.0 * mp.cache_read_price_per_1m
-		         + e.cache_creation_tokens / 1000000.0 * mp.cache_write_price_per_1m
-		         + e.output_tokens / 1000000.0 * mp.completion_price_per_1m
-		       ) * mp.price_multiplier END`
-	query := `SELECT
-			COALESCE(SUM(` + costExpr + `), 0),
-			COALESCE(SUM(CASE WHEN mp.model IS NOT NULL THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN mp.model IS NULL THEN 1 ELSE 0 END), 0)
-		FROM usage_events e
-		LEFT JOIN model_prices mp ON mp.model = e.model
-		WHERE e.instance_id = ? AND e.timestamp_ms >= ? AND e.timestamp_ms <= ?`
+	query := `SELECT COALESCE(TOTAL(cost_nanos), 0) / 1000000000.0,
+ COALESCE(SUM(pricing_status = 'priced'), 0), COALESCE(SUM(pricing_status <> 'priced'), 0)
+ FROM usage_events WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms <= ?`
 	var stats UsageCostStats
 	if err := r.SQL().QueryRowContext(ctx, query, instanceID, fromMS, toMS).Scan(&stats.CostUSD, &stats.PricedEvents, &stats.UnpricedEvents); err != nil {
 		return UsageCostStats{}, fmt.Errorf("query usage cost: %w", err)

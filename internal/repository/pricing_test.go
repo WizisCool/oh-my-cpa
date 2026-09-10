@@ -41,7 +41,7 @@ func TestPricingRoundTripAndUsageCost(t *testing.T) {
 	}
 
 	// Two usage events: one priced (1M input at $2/1M × 1.5 = $3), one unpriced.
-	timestamp := now.UnixMilli()
+	timestamp := time.Now().UnixMilli()
 	if _, err := repo.InsertUsageEvents(ctx, []usage.Event{
 		{InstanceID: "default", EventKey: "priced", Model: "openai/gpt-5",
 			Generate: true, TimestampMS: timestamp, InputTokens: 1_000_000, TotalTokens: 1_000_000},

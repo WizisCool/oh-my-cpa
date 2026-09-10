@@ -59,10 +59,12 @@ type usageEventResponse struct {
 		CacheCreation int64 `json:"cache_creation"`
 		Total         int64 `json:"total"`
 	} `json:"tokens"`
-	ResourceID    *string  `json:"resource_id,omitempty"`
-	ResourceName  *string  `json:"resource_name,omitempty"`
-	HasRequestLog bool     `json:"has_request_log"`
-	CostUSD       *float64 `json:"cost_usd,omitempty"`
+	ResourceID     *string  `json:"resource_id,omitempty"`
+	ResourceName   *string  `json:"resource_name,omitempty"`
+	HasRequestLog  bool     `json:"has_request_log"`
+	CostUSD        *float64 `json:"cost_usd,omitempty"`
+	PricingStatus  string   `json:"pricing_status"`
+	PriceVersionID *int64   `json:"price_version_id,omitempty"`
 }
 
 func projectUsageEvent(row repository.UsageEventRow) usageEventResponse {
@@ -96,6 +98,8 @@ func projectUsageEvent(row repository.UsageEventRow) usageEventResponse {
 	item.ResourceName = row.ResourceName
 	item.HasRequestLog = row.HasRequestLog
 	item.CostUSD = row.CostUSD
+	item.PricingStatus = row.PricingStatus
+	item.PriceVersionID = row.PriceVersionID
 	item.Tokens = usageEventTokens(row)
 	if row.ModelAlias != nil {
 		item.ModelAlias = *row.ModelAlias
@@ -254,6 +258,8 @@ func projectUsageEventDetail(row repository.UsageEventRow) map[string]any {
 		"resource_name":         item.ResourceName,
 		"has_request_log":       item.HasRequestLog,
 		"cost_usd":              row.CostUSD,
+		"pricing_status":        row.PricingStatus,
+		"price_version_id":      row.PriceVersionID,
 		"client_ip":             row.ClientIP,
 		"x_forwarded_for":       row.XForwardedFor,
 		"user_agent":            row.UserAgent,

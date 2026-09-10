@@ -31,7 +31,7 @@ func TestUsageEventsSurfaceCostUSD(t *testing.T) {
 	}
 
 	// Insert 2 events: 1 with priced model, 1 with unpriced model
-	timestamp := now.UnixMilli()
+	timestamp := time.Now().UnixMilli()
 	if _, err := repo.InsertUsageEvents(ctx, []usage.Event{
 		{
 			InstanceID:  "default",

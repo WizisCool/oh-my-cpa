@@ -178,8 +178,8 @@ func (r *Repository) CommitUsageDecoded(ctx context.Context, decoded []UsageDeco
 			service_tier, response_service_tier, executor_type, timestamp_ms, source, auth_index,
 			failed, generate, latency_ms, ttft_ms,
 			input_tokens, output_tokens, reasoning_tokens, cached_tokens,
-			cache_read_tokens, cache_creation_tokens, total_tokens, created_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+			cache_read_tokens, cache_creation_tokens, total_tokens, created_at_ms, cost_nanos, price_version_id, pricing_status
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, fmt.Errorf("prepare usage event insert: %w", err)
 	}
@@ -198,6 +198,10 @@ func (r *Repository) CommitUsageDecoded(ctx context.Context, decoded []UsageDeco
 	committed := 0
 	for _, item := range decoded {
 		event := r.sanitizeUsageEvent(item.Event)
+		cost, version, status, err := lockUsagePrice(ctx, tx, event)
+		if err != nil {
+			return 0, err
+		}
 		if _, errExec := insert.ExecContext(ctx,
 			event.InstanceID, event.EventKey, event.APIGroupKey, event.APIGroupLabel, event.APIKeyMask,
 			event.Provider, event.Endpoint,
@@ -207,7 +211,7 @@ func (r *Repository) CommitUsageDecoded(ctx context.Context, decoded []UsageDeco
 			event.AuthIndex, boolInt(event.Failed), boolInt(event.Generate), event.LatencyMS,
 			event.TTFTMS, event.InputTokens, event.OutputTokens, event.ReasoningTokens,
 			event.CachedTokens, event.CacheReadTokens, event.CacheCreationTokens,
-			event.TotalTokens, createdMS); errExec != nil {
+			event.TotalTokens, createdMS, cost, version, status); errExec != nil {
 			return 0, fmt.Errorf("insert usage event %s: %w", event.EventKey, errExec)
 		}
 		if _, errExec := mark.ExecContext(ctx, event.EventKey, createdMS, item.InboxID); errExec != nil {
@@ -376,8 +380,8 @@ func (r *Repository) InsertUsageEvents(ctx context.Context, events []usage.Event
 			service_tier, response_service_tier, executor_type, timestamp_ms, source, auth_index,
 			failed, generate, latency_ms, ttft_ms,
 			input_tokens, output_tokens, reasoning_tokens, cached_tokens,
-			cache_read_tokens, cache_creation_tokens, total_tokens, created_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+			cache_read_tokens, cache_creation_tokens, total_tokens, created_at_ms, cost_nanos, price_version_id, pricing_status
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, fmt.Errorf("prepare usage event insert: %w", err)
 	}
@@ -387,6 +391,10 @@ func (r *Repository) InsertUsageEvents(ctx context.Context, events []usage.Event
 	var lastID int64
 	for _, event := range events {
 		event = r.sanitizeUsageEvent(event)
+		cost, version, status, err := lockUsagePrice(ctx, tx, event)
+		if err != nil {
+			return 0, err
+		}
 		result, errExec := statement.ExecContext(ctx,
 			event.InstanceID, event.EventKey, event.APIGroupKey, event.APIGroupLabel, event.APIKeyMask,
 			event.Provider, event.Endpoint,
@@ -396,7 +404,7 @@ func (r *Repository) InsertUsageEvents(ctx context.Context, events []usage.Event
 			event.AuthIndex, boolInt(event.Failed), boolInt(event.Generate), event.LatencyMS,
 			event.TTFTMS, event.InputTokens, event.OutputTokens, event.ReasoningTokens,
 			event.CachedTokens, event.CacheReadTokens, event.CacheCreationTokens,
-			event.TotalTokens, createdMS)
+			event.TotalTokens, createdMS, cost, version, status)
 		if errExec != nil {
 			return lastID, fmt.Errorf("insert usage event: %w", errExec)
 		}
