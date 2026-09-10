@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Progress } from 'antd';
 import { useT } from '../../i18n';
 import { formatTimeWithCountdown } from './quotaFormat';
 import styles from './QuotaPage.module.css';
 
 interface QuotaProgressBarProps {
+  nowMS: number;
   kind?: string;
   label?: string;
   subLabel?: string;
@@ -17,6 +18,7 @@ interface QuotaProgressBarProps {
 }
 
 export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
+  nowMS,
   kind,
   label,
   subLabel,
@@ -28,14 +30,6 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
   showPercent = true,
 }) => {
   const t = useT();
-  const [nowMS, setNowMS] = useState(Date.now());
-
-  // Live ticker so reset countdowns tick without a refetch
-  useEffect(() => {
-    if (!resetAtMS) return;
-    const interval = setInterval(() => setNowMS(Date.now()), 15000);
-    return () => clearInterval(interval);
-  }, [resetAtMS]);
 
   // Derive remaining and used percentages
   let rem = remainingPercent;

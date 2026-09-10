@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { useVisibleNow } from '../../hooks/useVisibleNow';
 import { Button, Tag, Popconfirm } from 'antd';
 import {
   SyncOutlined,
@@ -36,13 +37,7 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
   onRedeemCredit,
 }) => {
   const t = useT();
-  const [nowMS, setNowMS] = useState(Date.now());
-
-  // Ticker for plan-expiry and credit-expiry countdowns on this card
-  useEffect(() => {
-    const interval = setInterval(() => setNowMS(Date.now()), 15000);
-    return () => clearInterval(interval);
-  }, []);
+  const nowMS = useVisibleNow();
 
   const meta = getCredentialProviderMetadata(item.provider);
   const iconId = meta.iconId || getProviderDefaultIcon(item.provider, item.name);
@@ -124,6 +119,7 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
       rows.push(
         <QuotaProgressBar
           key={win.id}
+          nowMS={nowMS}
           kind={win.kind}
           label={win.label}
           usedPercent={win.used_percent}

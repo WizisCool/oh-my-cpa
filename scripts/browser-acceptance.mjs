@@ -172,27 +172,27 @@ try {
 
   await auditPage(page, responseBodies, '/dashboard', '.dashboard-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
   await auditPage(page, responseBodies, '/usage/events', '.usage-events-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
-  await auditPage(page, responseBodies, '/pricing', '.pricing-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
+  await auditPage(page, responseBodies, '/pricing', '[data-testid="pricing-page"]', { pageSecrets: [FAKE_PROVIDER_SECRET] });
 
   // The pricing page must open fast: a full table render is the budget, not a
   // spinner wait. This is the regression guard for the old 5s page freeze.
   const pricingOpenStart = Date.now();
   await page.goto(`${appURL}/pricing`);
-  await page.locator('.pricing-page').first().waitFor({ state: 'visible', timeout: 3000 });
+  await page.locator('[data-testid="pricing-page"]').first().waitFor({ state: 'visible', timeout: 3000 });
   const pricingOpenMS = Date.now() - pricingOpenStart;
   check('pricing page opens under 3s', pricingOpenMS < 3000, `${pricingOpenMS}ms`);
 
   // The manual price editor must be a real form: labeled fields with units, not
   // bare number inputs. This guards the redesigned modal structure.
   await page.getByRole('button', { name: /添加价格|Add price/ }).first().click();
-  await page.locator('.pricing-editor-form .ant-form-item').first().waitFor({ state: 'visible', timeout: 5000 });
-  const editorLabels = await page.locator('.pricing-editor-form .ant-form-item-label label').allInnerTexts();
+  await page.locator('.ant-modal .ant-form .ant-form-item').first().waitFor({ state: 'visible', timeout: 5000 });
+  const editorLabels = await page.locator('.ant-modal .ant-form .ant-form-item-label label').allInnerTexts();
   check('price editor shows labeled fields', editorLabels.length >= 6, `labels=${editorLabels.length}`);
-  const rateUnits = await page.locator('.pricing-editor-form .ant-input-number-suffix').allInnerTexts();
+  const rateUnits = await page.locator('.ant-modal .ant-form .ant-input-number-suffix').allInnerTexts();
   check('price editor shows $/1M units', rateUnits.filter((u) => u.includes('/ 1M')).length === 4, `units=${rateUnits.length}`);
   await page.keyboard.press('Escape');
   // forceRender keeps the form mounted, so closing hides it instead of detaching.
-  await page.locator('.pricing-editor-form').first().waitFor({ state: 'hidden', timeout: 5000 });
+  await page.locator('.ant-modal .ant-form').first().waitFor({ state: 'hidden', timeout: 5000 });
   check('price editor closes cleanly', true);
   await auditPage(page, responseBodies, '/ai-providers', '.providers-page');
   await auditPage(page, responseBodies, '/auth-files', '.auth-files-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
