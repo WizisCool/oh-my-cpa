@@ -92,12 +92,12 @@ func (h *Handler) managementCapabilityProbe(writer http.ResponseWriter, request 
 
 	for i, checkDef := range checks {
 		wg.Add(1)
-		go func(idx int, chk capabilityEndpointCheck) {
+		go func(idx int, check capabilityEndpointCheck) {
 			defer wg.Done()
-			probe := client.ProbeEndpoint(ctx, chk.Endpoint)
+			probe := client.ProbeEndpoint(ctx, check.Endpoint)
 			results[idx] = CapabilityCheckItem{
-				Name:       chk.Name,
-				Endpoint:   "/v0/management" + chk.Endpoint,
+				Name:       check.Name,
+				Endpoint:   "/v0/management" + check.Endpoint,
 				Status:     probe.Status,
 				HTTPStatus: probe.StatusCode,
 				LatencyMs:  probe.LatencyMs,

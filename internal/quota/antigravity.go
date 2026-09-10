@@ -91,13 +91,13 @@ func ParseAntigravityUsage(raw []byte, nowMS int64, serverOffsetMS int64) ([]Quo
 
 	windows := make([]QuotaWindow, 0)
 
-	for gIdx, group := range payload.Groups {
+	for groupIndex, group := range payload.Groups {
 		gName := group.DisplayName
 		if gName == "" {
 			gName = group.DisplayNameAlt
 		}
 		if gName == "" {
-			gName = fmt.Sprintf("Group %d", gIdx+1)
+			gName = fmt.Sprintf("Group %d", groupIndex+1)
 		}
 
 		// Keep each group's windows contiguous while ordering 5h before weekly.
@@ -107,13 +107,13 @@ func ParseAntigravityUsage(raw []byte, nowMS int64, serverOffsetMS int64) ([]Quo
 			return antigravityBucketWindowOrder(buckets[i]) < antigravityBucketWindowOrder(buckets[j])
 		})
 
-		for bIdx, bucket := range buckets {
-			bID := bucket.BucketID
-			if bID == "" {
-				bID = bucket.BucketIDAlt
+		for bucketIndex, bucket := range buckets {
+			bucketID := bucket.BucketID
+			if bucketID == "" {
+				bucketID = bucket.BucketIDAlt
 			}
-			if bID == "" {
-				bID = fmt.Sprintf("bucket_%d_%d", gIdx, bIdx)
+			if bucketID == "" {
+				bucketID = fmt.Sprintf("bucket_%d_%d", groupIndex, bucketIndex)
 			}
 
 			bName := bucket.DisplayName
@@ -121,7 +121,7 @@ func ParseAntigravityUsage(raw []byte, nowMS int64, serverOffsetMS int64) ([]Quo
 				bName = bucket.DisplayNameAlt
 			}
 			if bName == "" {
-				bName = bID
+				bName = bucketID
 			}
 
 			fullLabel := translateAntigravityBucketLabel(gName, bName)
@@ -168,7 +168,7 @@ func ParseAntigravityUsage(raw []byte, nowMS int64, serverOffsetMS int64) ([]Quo
 			periodHours := parseAntigravityWindowHours(bucket.Window)
 
 			windows = append(windows, QuotaWindow{
-				ID:               fmt.Sprintf("ag_%s_%s", gName, bID),
+				ID:               fmt.Sprintf("ag_%s_%s", gName, bucketID),
 				Label:            fullLabel,
 				Scope:            "group",
 				UsedPercent:      usedPercent,

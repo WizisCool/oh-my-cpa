@@ -12,21 +12,21 @@ import (
 func TestPullPacer(t *testing.T) {
 	p := pullPacer{base: time.Second, maximum: 10 * time.Second}
 	for i, want := range []time.Duration{1, 2, 4, 8, 10, 10} {
-		if got := p.next(0, 1000); got != want*time.Second {
+		if got := p.nextDelay(0, 1000); got != want*time.Second {
 			t.Fatalf("empty %d: %v", i, got)
 		}
 	}
-	if got := p.next(1000, 1000); got != 0 {
+	if got := p.nextDelay(1000, 1000); got != 0 {
 		t.Fatalf("full batch delayed: %v", got)
 	}
-	if got := p.next(0, 1000); got != time.Second {
+	if got := p.nextDelay(0, 1000); got != time.Second {
 		t.Fatalf("activity did not reset: %v", got)
 	}
-	p.next(0, 1000)
-	if got := p.next(1, 1000); got != time.Second {
+	p.nextDelay(0, 1000)
+	if got := p.nextDelay(1, 1000); got != time.Second {
 		t.Fatalf("partial batch delayed: %v", got)
 	}
-	if got := p.next(0, 1000); got != time.Second {
+	if got := p.nextDelay(0, 1000); got != time.Second {
 		t.Fatalf("partial reset: %v", got)
 	}
 }
@@ -34,7 +34,7 @@ func TestPullPacer(t *testing.T) {
 func TestPullPacerFixedInterval(t *testing.T) {
 	p := pullPacer{base: 3 * time.Second, maximum: 3 * time.Second}
 	for i := 0; i < 10; i++ {
-		if got := p.next(0, 10); got != 3*time.Second {
+		if got := p.nextDelay(0, 10); got != 3*time.Second {
 			t.Fatal(got)
 		}
 	}
@@ -43,7 +43,7 @@ func TestPullPacerFixedInterval(t *testing.T) {
 func TestPullPacerIdleRequestBudget(t *testing.T) {
 	p := pullPacer{base: time.Second, maximum: 10 * time.Second}
 	calls := 0
-	for elapsed := time.Duration(0); elapsed < time.Hour; elapsed += p.next(0, 1000) {
+	for elapsed := time.Duration(0); elapsed < time.Hour; elapsed += p.nextDelay(0, 1000) {
 		calls++
 	}
 	if calls != 363 {

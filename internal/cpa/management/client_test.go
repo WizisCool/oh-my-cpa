@@ -37,7 +37,7 @@ func TestClientUsesManagementAuthorizationAndDecodesResponses(t *testing.T) {
 	if len(response.Entries) != 1 || response.Entries[0].AuthIndex != "a1" {
 		t.Fatalf("decoded response = %#v", response)
 	}
-	if !client.ManagementKeyPresent() {
+	if !client.HasManagementKey() {
 		t.Fatal("management key should be present")
 	}
 }

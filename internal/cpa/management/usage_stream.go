@@ -76,10 +76,10 @@ type UsageStream struct {
 	messages chan string
 	channel  string
 	// done signals the reader to stop; sends never block on a dead consumer.
-	done   chan struct{}
-	close  sync.Once
-	mu     sync.Mutex
-	closed bool
+	done     chan struct{}
+	close    sync.Once
+	mu       sync.Mutex
+	isClosed bool
 }
 
 // OpenUsageStream subscribes to a CPA channel. Callers must Close the stream.
@@ -131,7 +131,7 @@ func (s *UsageStream) Close() error {
 	var err error
 	s.close.Do(func() {
 		s.mu.Lock()
-		s.closed = true
+		s.isClosed = true
 		s.mu.Unlock()
 		close(s.done)
 		// Closing the socket also unblocks the reader's pending ReadMessage.

@@ -36,7 +36,7 @@ var ErrKeyRequired = errors.New("CPA management key is required")
 type Manager struct {
 	secret     []byte
 	cookiePath string
-	secure     bool
+	isSecure   bool
 	now        func() time.Time
 }
 
@@ -56,7 +56,7 @@ func New(managementKey, basePath, publicURL string) (*Manager, error) {
 	return &Manager{
 		secret:     derived,
 		cookiePath: cookiePath(basePath),
-		secure:     isHTTPS(publicURL),
+		isSecure:   isHTTPS(publicURL),
 		now:        time.Now,
 	}, nil
 }
@@ -93,7 +93,7 @@ func (m *Manager) Issue(w http.ResponseWriter) error {
 		Path:     m.cookiePath,
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
-		Secure:   m.secure,
+		Secure:   m.isSecure,
 		Expires:  now.Add(12 * time.Hour),
 	})
 	w.Header().Add("Cache-Control", "no-store")
@@ -107,7 +107,7 @@ func (m *Manager) Clear(w http.ResponseWriter) {
 		Path:     m.cookiePath,
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
-		Secure:   m.secure,
+		Secure:   m.isSecure,
 		Expires:  time.Unix(0, 0),
 	})
 	w.Header().Add("Cache-Control", "no-store")

@@ -78,11 +78,11 @@ func (h *Handler) listClientAPIKeys(writer http.ResponseWriter, request *http.Re
 	items := make([]ClientAPIKeyItemDTO, 0, len(keys))
 	for i, key := range keys {
 		trimmed := strings.TrimSpace(key)
-		fp := security.FingerprintOrRedacted(h.cipher, "client-key", trimmed)
+		fingerprint := security.FingerprintOrRedacted(h.cipher, "client-key", trimmed)
 		items = append(items, ClientAPIKeyItemDTO{
 			Index:       i,
 			Key:         trimmed,
-			Fingerprint: fp,
+			Fingerprint: fingerprint,
 			Length:      len(trimmed),
 		})
 	}
@@ -253,7 +253,6 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 	items := make([]ProviderItemDTO, 0)
 	customNames := h.loadProviderNames(ctx)
 
-	// 1. Codex API Keys
 	if codexResp, err := client.CodexAPIKeys(ctx); err == nil {
 		for i, entry := range codexResp.Entries {
 			id := fmt.Sprintf("codex-%d", i)
@@ -270,15 +269,15 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 				if m.Name != "" {
 					models = append(models, m.Name)
 				}
-				var th *ThinkingDTO
+				var thinking *ThinkingDTO
 				if m.Thinking != nil && len(m.Thinking.Levels) > 0 {
-					th = &ThinkingDTO{Levels: m.Thinking.Levels}
+					thinking = &ThinkingDTO{Levels: m.Thinking.Levels}
 				}
 				modelEntries = append(modelEntries, ProviderModelDTO{
 					Name:     m.Name,
 					Alias:    m.Alias,
 					Image:    m.Image,
-					Thinking: th,
+					Thinking: thinking,
 				})
 			}
 
@@ -323,7 +322,6 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 		}
 	}
 
-	// 2. OpenAI Compatibility
 	if oaiResp, err := client.OpenAICompatibility(ctx); err == nil {
 		for i, entry := range oaiResp.Entries {
 			id := fmt.Sprintf("openai-compat-%d", i)
@@ -338,15 +336,15 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 				if m.Name != "" {
 					models = append(models, m.Name)
 				}
-				var th *ThinkingDTO
+				var thinking *ThinkingDTO
 				if m.Thinking != nil && len(m.Thinking.Levels) > 0 {
-					th = &ThinkingDTO{Levels: m.Thinking.Levels}
+					thinking = &ThinkingDTO{Levels: m.Thinking.Levels}
 				}
 				modelEntries = append(modelEntries, ProviderModelDTO{
 					Name:     m.Name,
 					Alias:    m.Alias,
 					Image:    m.Image,
-					Thinking: th,
+					Thinking: thinking,
 				})
 			}
 
@@ -394,7 +392,6 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 		}
 	}
 
-	// 3. Claude API Keys
 	if claudeEntries, err := client.ClaudeAPIKeys(ctx); err == nil {
 		for i, entry := range claudeEntries {
 			id := fmt.Sprintf("claude-%d", i)
@@ -411,15 +408,15 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 				if m.Name != "" {
 					models = append(models, m.Name)
 				}
-				var th *ThinkingDTO
+				var thinking *ThinkingDTO
 				if m.Thinking != nil && len(m.Thinking.Levels) > 0 {
-					th = &ThinkingDTO{Levels: m.Thinking.Levels}
+					thinking = &ThinkingDTO{Levels: m.Thinking.Levels}
 				}
 				modelEntries = append(modelEntries, ProviderModelDTO{
 					Name:     m.Name,
 					Alias:    m.Alias,
 					Image:    m.Image,
-					Thinking: th,
+					Thinking: thinking,
 				})
 			}
 
@@ -464,7 +461,6 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 		}
 	}
 
-	// 4. Gemini API Keys
 	if geminiEntries, err := client.GeminiAPIKeys(ctx); err == nil {
 		for i, entry := range geminiEntries {
 			id := fmt.Sprintf("gemini-%d", i)
@@ -481,15 +477,15 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 				if m.Name != "" {
 					models = append(models, m.Name)
 				}
-				var th *ThinkingDTO
+				var thinking *ThinkingDTO
 				if m.Thinking != nil && len(m.Thinking.Levels) > 0 {
-					th = &ThinkingDTO{Levels: m.Thinking.Levels}
+					thinking = &ThinkingDTO{Levels: m.Thinking.Levels}
 				}
 				modelEntries = append(modelEntries, ProviderModelDTO{
 					Name:     m.Name,
 					Alias:    m.Alias,
 					Image:    m.Image,
-					Thinking: th,
+					Thinking: thinking,
 				})
 			}
 
@@ -748,15 +744,15 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 				if alias == "" {
 					alias = mName
 				}
-				var th *management.ThinkingSupport
+				var thinking *management.ThinkingSupport
 				if m.Thinking != nil && len(m.Thinking.Levels) > 0 {
-					th = &management.ThinkingSupport{Levels: m.Thinking.Levels}
+					thinking = &management.ThinkingSupport{Levels: m.Thinking.Levels}
 				}
 				models = append(models, management.ModelAlias{
 					Name:     mName,
 					Alias:    alias,
 					Image:    m.Image,
-					Thinking: th,
+					Thinking: thinking,
 				})
 			}
 		}
@@ -958,15 +954,15 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 				if alias == "" {
 					alias = mName
 				}
-				var th *management.ThinkingSupport
+				var thinking *management.ThinkingSupport
 				if m.Thinking != nil && len(m.Thinking.Levels) > 0 {
-					th = &management.ThinkingSupport{Levels: m.Thinking.Levels}
+					thinking = &management.ThinkingSupport{Levels: m.Thinking.Levels}
 				}
 				models = append(models, management.ModelAlias{
 					Name:     mName,
 					Alias:    alias,
 					Image:    m.Image,
-					Thinking: th,
+					Thinking: thinking,
 				})
 			}
 		}

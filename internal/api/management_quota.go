@@ -15,7 +15,8 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
 
-// Backwards-compatible fields embedded into quota DTO.
+// QuotaItemDTO keeps the legacy quota_exceeded/quota_reason fields alongside the
+// embedded normalized quota, so older clients still see the summary they expect.
 type QuotaItemDTO struct {
 	quota.NormalizedQuota
 	Quota            *managementQuotaObservation           `json:"quota,omitempty"`
@@ -56,11 +57,11 @@ func (h *Handler) getQuotaOverview(writer http.ResponseWriter, request *http.Req
 	var activeCooldowns map[string]repository.ActiveCooldownRecord
 
 	if h.repo != nil && len(authIndexes) > 0 {
-		if snaps, err := h.repo.GetLatestQuotaSnapshots(ctx, authIndexes); err == nil {
-			latestSnapshots = snaps
+		if snapshots, err := h.repo.GetLatestQuotaSnapshots(ctx, authIndexes); err == nil {
+			latestSnapshots = snapshots
 		}
-		if cds, err := h.repo.BatchCorrelatedCooldowns(ctx, authIndexes, nowMS); err == nil {
-			activeCooldowns = cds
+		if cooldowns, err := h.repo.BatchCorrelatedCooldowns(ctx, authIndexes, nowMS); err == nil {
+			activeCooldowns = cooldowns
 		}
 	}
 
@@ -85,7 +86,6 @@ func (h *Handler) getQuotaOverview(writer http.ResponseWriter, request *http.Req
 			Windows:      []quota.QuotaWindow{},
 		}
 
-		// Raw signals from passive observation
 		if file.Quota != nil {
 			if signals, ok := file.Quota["signals"].(map[string]any); ok {
 				rawSigs := make(map[string]string)
@@ -96,31 +96,29 @@ func (h *Handler) getQuotaOverview(writer http.ResponseWriter, request *http.Req
 			}
 		}
 
-		// Correlated active cooldown
-		if cd, ok := activeCooldowns[authIndex]; ok && cd.IsActive {
+		if cooldown, ok := activeCooldowns[authIndex]; ok && cooldown.IsActive {
 			normalized.ActiveCooldown = &quota.ActiveCooldown{
 				IsActive:          true,
-				Reason:            cd.Reason,
-				RecoverAtMS:       cd.RecoverAtMS,
-				RetryAfterSeconds: cd.RetryAfterSeconds,
-				CorrelatedAtMS:    cd.CorrelatedAtMS,
+				Reason:            cooldown.Reason,
+				RecoverAtMS:       cooldown.RecoverAtMS,
+				RetryAfterSeconds: cooldown.RetryAfterSeconds,
+				CorrelatedAtMS:    cooldown.CorrelatedAtMS,
 			}
-			if cd.RecoverAtMS != nil && *cd.RecoverAtMS > nowMS {
-				if soonestRecoveryMS == nil || *cd.RecoverAtMS < *soonestRecoveryMS {
-					soonestRecoveryMS = cd.RecoverAtMS
+			if cooldown.RecoverAtMS != nil && *cooldown.RecoverAtMS > nowMS {
+				if soonestRecoveryMS == nil || *cooldown.RecoverAtMS < *soonestRecoveryMS {
+					soonestRecoveryMS = cooldown.RecoverAtMS
 				}
 			}
 		}
 
-		// Merge persisted snapshot if present
-		if snap, ok := latestSnapshots[authIndex]; ok {
-			normalized.ObservedAtMS = snap.ObservedAtMS
-			if plan := planFromSnapshot(snap); plan != nil {
+		if snapshot, ok := latestSnapshots[authIndex]; ok {
+			normalized.ObservedAtMS = snapshot.ObservedAtMS
+			if plan := planFromSnapshot(snapshot); plan != nil {
 				normalized.Plan = plan
 			}
-			if snap.WindowsJSON != "" && snap.WindowsJSON != "[]" {
+			if snapshot.WindowsJSON != "" && snapshot.WindowsJSON != "[]" {
 				var windows []quota.QuotaWindow
-				if err := json.Unmarshal([]byte(snap.WindowsJSON), &windows); err == nil {
+				if err := json.Unmarshal([]byte(snapshot.WindowsJSON), &windows); err == nil {
 					normalized.Windows = windows
 					// Check windows for soonest recovery
 					for _, w := range windows {
@@ -132,9 +130,9 @@ func (h *Handler) getQuotaOverview(writer http.ResponseWriter, request *http.Req
 					}
 				}
 			}
-			if snap.ResetCreditsJSON != "" {
+			if snapshot.ResetCreditsJSON != "" {
 				var credits quota.CodexResetCreditsInfo
-				if err := json.Unmarshal([]byte(snap.ResetCreditsJSON), &credits); err == nil {
+				if err := json.Unmarshal([]byte(snapshot.ResetCreditsJSON), &credits); err == nil {
 					normalized.ResetCredits = &credits
 				}
 			}
@@ -142,7 +140,6 @@ func (h *Handler) getQuotaOverview(writer http.ResponseWriter, request *http.Req
 
 		quota.EvaluateStatusAndRecommendation(&normalized, nowMS)
 
-		// Aggregate summary counts
 		switch normalized.Status {
 		case "healthy":
 			healthyCount++
@@ -229,7 +226,6 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 		}
 	}
 
-	// Single target refresh
 	targetIndex := strings.TrimSpace(req.AuthIndex)
 	if targetIndex != "" {
 		file, exists := fileMap[targetIndex]
@@ -262,7 +258,6 @@ func (h *Handler) refreshCredentialQuota(writer http.ResponseWriter, request *ht
 		return
 	}
 
-	// Batch target refresh
 	targetIndexes := req.AuthIndexes
 	if len(targetIndexes) == 0 {
 		writeError(writer, http.StatusBadRequest, "auth_index or auth_indexes is required")
@@ -319,33 +314,33 @@ func (h *Handler) loadPriorNormalizedQuota(ctx context.Context, authIndex string
 	if h.repo == nil {
 		return nil
 	}
-	snaps, err := h.repo.GetLatestQuotaSnapshots(ctx, []string{authIndex})
+	snapshots, err := h.repo.GetLatestQuotaSnapshots(ctx, []string{authIndex})
 	if err != nil {
 		return nil
 	}
-	snap, ok := snaps[authIndex]
+	snapshot, ok := snapshots[authIndex]
 	if !ok {
 		return nil
 	}
 
 	q := &quota.NormalizedQuota{
 		AuthIndex:    authIndex,
-		Provider:     snap.Provider,
-		Status:       snap.Status,
-		ObservedAtMS: snap.ObservedAtMS,
+		Provider:     snapshot.Provider,
+		Status:       snapshot.Status,
+		ObservedAtMS: snapshot.ObservedAtMS,
 	}
-	if plan := planFromSnapshot(snap); plan != nil {
+	if plan := planFromSnapshot(snapshot); plan != nil {
 		q.Plan = plan
 	}
-	if snap.WindowsJSON != "" {
+	if snapshot.WindowsJSON != "" {
 		var windows []quota.QuotaWindow
-		if err := json.Unmarshal([]byte(snap.WindowsJSON), &windows); err == nil {
+		if err := json.Unmarshal([]byte(snapshot.WindowsJSON), &windows); err == nil {
 			q.Windows = windows
 		}
 	}
-	if snap.ResetCreditsJSON != "" {
+	if snapshot.ResetCreditsJSON != "" {
 		var credits quota.CodexResetCreditsInfo
-		if err := json.Unmarshal([]byte(snap.ResetCreditsJSON), &credits); err == nil {
+		if err := json.Unmarshal([]byte(snapshot.ResetCreditsJSON), &credits); err == nil {
 			q.ResetCredits = &credits
 		}
 	}
@@ -395,18 +390,18 @@ func (h *Handler) persistNormalizedQuotaSnapshot(ctx context.Context, q *quota.N
 // planFromSnapshot rebuilds the full normalized plan (including subscription
 // expiry and extra usage) from the persisted plan payload, falling back to the
 // legacy plan_type/plan_tier columns for snapshots written before plan_json.
-func planFromSnapshot(snap repository.QuotaSnapshotRecord) *quota.QuotaPlan {
-	if snap.PlanJSON != "" {
+func planFromSnapshot(snapshot repository.QuotaSnapshotRecord) *quota.QuotaPlan {
+	if snapshot.PlanJSON != "" {
 		var plan quota.QuotaPlan
-		if err := json.Unmarshal([]byte(snap.PlanJSON), &plan); err == nil && plan.PlanType != "" {
+		if err := json.Unmarshal([]byte(snapshot.PlanJSON), &plan); err == nil && plan.PlanType != "" {
 			return &plan
 		}
 	}
-	if snap.PlanType != "" {
+	if snapshot.PlanType != "" {
 		return &quota.QuotaPlan{
-			PlanType:  snap.PlanType,
-			PlanLabel: snap.PlanType,
-			Tier:      snap.PlanTier,
+			PlanType:  snapshot.PlanType,
+			PlanLabel: snapshot.PlanType,
+			Tier:      snapshot.PlanTier,
 		}
 	}
 	return nil
@@ -434,7 +429,6 @@ func (h *Handler) clearCredentialCooldownWithAction(writer http.ResponseWriter, 
 		return
 	}
 
-	// Validate that authIndex exists in CPA
 	ctx := request.Context()
 	filesResp, err := client.AuthFiles(ctx)
 	if err != nil {
@@ -538,7 +532,8 @@ func (h *Handler) redeemCodexResetCredit(writer http.ResponseWriter, request *ht
 		return
 	}
 
-	// Immediately refresh quota to obtain updated credit count and usage windows
+	// Re-read usage right away so the redeemed credit is reflected before the
+	// next scheduled poll.
 	prior := h.loadPriorNormalizedQuota(ctx, authIndex)
 	refreshed, _ := svc.RefreshCredentialQuota(ctx, *foundFile, prior)
 	if refreshed != nil && h.repo != nil && refreshed.Status != "error" && refreshed.Status != "stale" {
@@ -601,32 +596,32 @@ func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *
 	}
 
 	if h.repo != nil {
-		if cds, err := h.repo.BatchCorrelatedCooldowns(ctx, []string{authIndex}, nowMS); err == nil {
-			if cd, ok := cds[authIndex]; ok && cd.IsActive {
+		if cooldowns, err := h.repo.BatchCorrelatedCooldowns(ctx, []string{authIndex}, nowMS); err == nil {
+			if cooldown, ok := cooldowns[authIndex]; ok && cooldown.IsActive {
 				normalized.ActiveCooldown = &quota.ActiveCooldown{
 					IsActive:          true,
-					Reason:            cd.Reason,
-					RecoverAtMS:       cd.RecoverAtMS,
-					RetryAfterSeconds: cd.RetryAfterSeconds,
-					CorrelatedAtMS:    cd.CorrelatedAtMS,
+					Reason:            cooldown.Reason,
+					RecoverAtMS:       cooldown.RecoverAtMS,
+					RetryAfterSeconds: cooldown.RetryAfterSeconds,
+					CorrelatedAtMS:    cooldown.CorrelatedAtMS,
 				}
 			}
 		}
-		if snaps, err := h.repo.GetLatestQuotaSnapshots(ctx, []string{authIndex}); err == nil {
-			if snap, ok := snaps[authIndex]; ok {
-				normalized.ObservedAtMS = snap.ObservedAtMS
-				if plan := planFromSnapshot(snap); plan != nil {
+		if snapshots, err := h.repo.GetLatestQuotaSnapshots(ctx, []string{authIndex}); err == nil {
+			if snapshot, ok := snapshots[authIndex]; ok {
+				normalized.ObservedAtMS = snapshot.ObservedAtMS
+				if plan := planFromSnapshot(snapshot); plan != nil {
 					normalized.Plan = plan
 				}
-				if snap.WindowsJSON != "" && snap.WindowsJSON != "[]" {
+				if snapshot.WindowsJSON != "" && snapshot.WindowsJSON != "[]" {
 					var windows []quota.QuotaWindow
-					if err := json.Unmarshal([]byte(snap.WindowsJSON), &windows); err == nil {
+					if err := json.Unmarshal([]byte(snapshot.WindowsJSON), &windows); err == nil {
 						normalized.Windows = windows
 					}
 				}
-				if snap.ResetCreditsJSON != "" {
+				if snapshot.ResetCreditsJSON != "" {
 					var credits quota.CodexResetCreditsInfo
-					if err := json.Unmarshal([]byte(snap.ResetCreditsJSON), &credits); err == nil {
+					if err := json.Unmarshal([]byte(snapshot.ResetCreditsJSON), &credits); err == nil {
 						normalized.ResetCredits = &credits
 					}
 				}

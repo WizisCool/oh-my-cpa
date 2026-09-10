@@ -28,8 +28,8 @@ const (
 	ModeAuto Mode = "auto"
 	// ModeSubscribe keeps a live RESP subscription.
 	ModeSubscribe Mode = "subscribe"
-	// ModeRESPull batches RESP LPOP.
-	ModeRESPull Mode = "resp_pull"
+	// ModeRESPPull batches RESP LPOP.
+	ModeRESPPull Mode = "resp_pull"
 	// ModeHTTPPull batches the HTTP usage queue.
 	ModeHTTPPull Mode = "http_pull"
 	// ModeOff disables collection.
@@ -39,7 +39,7 @@ const (
 // Valid reports whether the mode is one this runner understands.
 func (m Mode) Valid() bool {
 	switch m {
-	case ModeAuto, ModeSubscribe, ModeRESPull, ModeHTTPPull, ModeOff:
+	case ModeAuto, ModeSubscribe, ModeRESPPull, ModeHTTPPull, ModeOff:
 		return true
 	default:
 		return false
@@ -281,8 +281,8 @@ func (r *Runner) collect(ctx context.Context) (string, error) {
 	switch r.config.Mode {
 	case ModeSubscribe:
 		return string(ModeSubscribe), r.runSubscribe(ctx)
-	case ModeRESPull:
-		return string(ModeRESPull), r.runPull(ctx, ModeRESPull)
+	case ModeRESPPull:
+		return string(ModeRESPPull), r.runPull(ctx, ModeRESPPull)
 	case ModeHTTPPull:
 		return string(ModeHTTPPull), r.runPull(ctx, ModeHTTPPull)
 	}
@@ -297,7 +297,7 @@ func (r *Runner) collect(ctx context.Context) (string, error) {
 		return string(ModeHTTPPull), r.runPull(ctx, ModeHTTPPull)
 	}
 	if r.subscribeDisabled() {
-		return string(ModeRESPull), r.runPull(ctx, ModeRESPull)
+		return string(ModeRESPPull), r.runPull(ctx, ModeRESPPull)
 	}
 	err := r.runSubscribe(ctx)
 	r.noteSubscribeAttempt(err)
@@ -403,13 +403,13 @@ func (r *Runner) runSubscribe(ctx context.Context) error {
 		case <-backfill.C:
 			// A subscriber suppresses enqueue, so anything in the queue arrived
 			// during a reconnect gap and must not be lost.
-			items, err := r.pop(ctx, ModeRESPull, r.config.BatchSize)
+			items, err := r.pop(ctx, ModeRESPPull, r.config.BatchSize)
 			if err != nil {
 				r.recordError(fmt.Errorf("usage backfill pull: %w", err))
 				continue
 			}
 			for _, payload := range items {
-				if err := r.capture(ctx, ModeRESPull, payload, &batch); err != nil {
+				if err := r.capture(ctx, ModeRESPPull, payload, &batch); err != nil {
 					return err
 				}
 			}
@@ -443,7 +443,7 @@ func (r *Runner) runPull(ctx context.Context, mode Mode) error {
 		if errFlush := r.flush(ctx, mode, &batch); errFlush != nil {
 			return errFlush
 		}
-		if delay := idle.next(len(items), r.config.BatchSize); delay > 0 {
+		if delay := idle.nextDelay(len(items), r.config.BatchSize); delay > 0 {
 			if !sleepContext(ctx, delay) {
 				return nil
 			}
@@ -513,7 +513,7 @@ func (r *Runner) flush(ctx context.Context, mode Mode, batch *[]string) error {
 
 func (r *Runner) pop(ctx context.Context, mode Mode, count int) ([]string, error) {
 	switch mode {
-	case ModeRESPull:
+	case ModeRESPPull:
 		return r.upstream.PopUsageQueue(ctx, count)
 	default:
 		return r.upstream.UsageQueueJSON(ctx, count)
@@ -587,7 +587,7 @@ type pullPacer struct {
 	base, maximum, current time.Duration
 }
 
-func (p *pullPacer) next(count, batchSize int) time.Duration {
+func (p *pullPacer) nextDelay(count, batchSize int) time.Duration {
 	if count > 0 || p.current == 0 {
 		p.current = p.base
 	}

@@ -161,22 +161,22 @@ func (h *Handler) managementConfigPutScalar(writer http.ResponseWriter, request 
 	})
 }
 
-func validateScalarValue(key string, val any) (any, error) {
+func validateScalarValue(key string, value any) (any, error) {
 	switch key {
 	case "debug", "request_log", "logging_to_file", "usage_statistics_enabled", "ws_auth", "force_model_prefix":
-		if b, ok := val.(bool); ok {
+		if b, ok := value.(bool); ok {
 			return b, nil
 		}
 		return nil, errors.New("value must be a boolean for key " + key)
 
 	case "proxy_url":
-		if s, ok := val.(string); ok {
+		if s, ok := value.(string); ok {
 			return strings.TrimSpace(s), nil
 		}
 		return nil, errors.New("value must be a string for proxy_url")
 
 	case "request_retry", "max_retry_interval", "max_retry_credentials", "logs_max_total_size_mb", "error_logs_max_files":
-		switch num := val.(type) {
+		switch num := value.(type) {
 		case float64:
 			if num < 0 {
 				return nil, errors.New("value must be non-negative for key " + key)
@@ -197,7 +197,7 @@ func validateScalarValue(key string, val any) (any, error) {
 		}
 
 	case "routing_strategy":
-		if s, ok := val.(string); ok {
+		if s, ok := value.(string); ok {
 			trimmed := strings.ToLower(strings.TrimSpace(s))
 			if trimmed == "round-robin" || trimmed == "round_robin" || trimmed == "least-load" || trimmed == "least_load" || trimmed == "random" {
 				return trimmed, nil

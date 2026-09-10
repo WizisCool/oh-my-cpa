@@ -68,9 +68,9 @@ func NewClient(baseURL, managementKey string, timeout time.Duration, tlsSkipVeri
 
 func (c *Client) BaseURL() string { return c.baseURL }
 
-// ManagementKeyPresent is intentionally the only key-related observation the
+// HasManagementKey is intentionally the only key-related observation the
 // client exposes. The actual key is never returned or formatted in an error.
-func (c *Client) ManagementKeyPresent() bool { return c != nil && c.management != "" }
+func (c *Client) HasManagementKey() bool { return c != nil && c.management != "" }
 
 func (c *Client) DoJSON(ctx context.Context, method, endpoint string, output any) error {
 	_, err := c.DoJSONWithMeta(ctx, method, endpoint, output)
@@ -618,12 +618,12 @@ func KnownScalarKeys() []string {
 }
 
 // UpdateConfigScalar updates a single scalar configuration setting on CPA.
-func (c *Client) UpdateConfigScalar(ctx context.Context, key string, val any) error {
+func (c *Client) UpdateConfigScalar(ctx context.Context, key string, value any) error {
 	def, ok := knownScalarEndpoints[key]
 	if !ok {
 		return fmt.Errorf("unknown scalar key: %s", key)
 	}
-	payload := map[string]any{"value": val}
+	payload := map[string]any{"value": value}
 	return c.doJSONBody(ctx, http.MethodPut, def.Path, payload, nil)
 }
 
@@ -1427,7 +1427,9 @@ func (c *Client) InstallPlugin(ctx context.Context, id string) error {
 	return c.doJSONBody(ctx, http.MethodPost, endpoint, map[string]any{}, nil)
 }
 
-// ListAllConfiguredModels collects all models configured across all providers and auth files in CPA.
+// ListConfiguredModelCatalog collects every configured model across all
+// providers and auth files, keeping each model's routed target so aliases can
+// be resolved back to a canonical pricing identity.
 func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]string, error) {
 	if c == nil {
 		return nil, errors.New("CPA client is not initialized")
@@ -1447,7 +1449,6 @@ func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]str
 	}
 	var errs []string
 
-	// 1. Auth files
 	if authResp, err := c.AuthFiles(ctx); err != nil {
 		errs = append(errs, "auth-files: "+err.Error())
 	} else {
@@ -1486,7 +1487,6 @@ func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]str
 		}
 	}
 
-	// 2. Codex
 	if codexResp, err := c.CodexAPIKeys(ctx); err != nil {
 		errs = append(errs, "codex: "+err.Error())
 	} else {
@@ -1507,7 +1507,6 @@ func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]str
 		}
 	}
 
-	// 3. OpenAI Compatibility
 	if oaiResp, err := c.OpenAICompatibility(ctx); err != nil {
 		errs = append(errs, "openai-compatibility: "+err.Error())
 	} else {
@@ -1528,7 +1527,6 @@ func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]str
 		}
 	}
 
-	// 4. Claude
 	if claudeEntries, err := c.ClaudeAPIKeys(ctx); err != nil {
 		errs = append(errs, "claude: "+err.Error())
 	} else {
@@ -1549,7 +1547,6 @@ func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]str
 		}
 	}
 
-	// 5. Gemini
 	if geminiEntries, err := c.GeminiAPIKeys(ctx); err != nil {
 		errs = append(errs, "gemini: "+err.Error())
 	} else {

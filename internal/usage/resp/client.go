@@ -25,7 +25,7 @@ import (
 // cannot exhaust memory. CPA usage records are far below this.
 const MaxBulkSize = 4 << 20
 
-// ErrClosed reports use of a connection that has been closed.
+// ErrClosed reports use of a connection that has been isClosed.
 var ErrClosed = errors.New("resp connection closed")
 
 // Error is a RESP error reply ("-ERR ...").
@@ -52,11 +52,11 @@ type Reply struct {
 // Conn is a single RESP connection. Commands are serialized internally; a
 // subscription reader must be the only concurrent user of ReadReply.
 type Conn struct {
-	conn   net.Conn
-	br     *bufio.Reader
-	bw     *bufio.Writer
-	mu     sync.Mutex
-	closed bool
+	conn     net.Conn
+	br       *bufio.Reader
+	bw       *bufio.Writer
+	mu       sync.Mutex
+	isClosed bool
 }
 
 // Dial connects to addr and returns an unauthenticated connection.
@@ -79,10 +79,10 @@ func Dial(ctx context.Context, addr string, timeout time.Duration) (*Conn, error
 func (c *Conn) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.closed {
+	if c.isClosed {
 		return nil
 	}
-	c.closed = true
+	c.isClosed = true
 	return c.conn.Close()
 }
 
@@ -213,7 +213,7 @@ func (c *Conn) writeCommand(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return errors.New("resp command requires at least one argument")
 	}
-	if c.closed {
+	if c.isClosed {
 		return ErrClosed
 	}
 	var builder strings.Builder
@@ -262,7 +262,7 @@ func (c *Conn) applyWriteDeadline(ctx context.Context) error {
 // readReply reads one value. Callers either hold c.mu (Do) or are the sole
 // reader of a dedicated subscription connection (ReadMessage).
 func (c *Conn) readReply(ctx context.Context) (Reply, error) {
-	if c.closed {
+	if c.isClosed {
 		return Reply{}, ErrClosed
 	}
 	if err := c.applyReadDeadline(ctx); err != nil {

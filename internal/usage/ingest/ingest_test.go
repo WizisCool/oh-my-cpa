@@ -298,8 +298,8 @@ func TestRunnerAutoDegradesToRESPullAfterSubscribeFailures(t *testing.T) {
 
 	runFor(t, runner, 400*time.Millisecond)
 
-	if got := runner.Status().Mode; got != ModeRESPull {
-		t.Fatalf("mode = %q, want %q after %d subscribe failures", got, ModeRESPull, maxSubscribeFailures)
+	if got := runner.Status().Mode; got != ModeRESPPull {
+		t.Fatalf("mode = %q, want %q after %d subscribe failures", got, ModeRESPPull, maxSubscribeFailures)
 	}
 	if inboxCount(t, store, repository.InboxPending) != 2 {
 		t.Fatalf("RESP pull payloads not captured: %d", inboxCount(t, store, repository.InboxPending))

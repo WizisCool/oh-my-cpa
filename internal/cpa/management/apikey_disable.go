@@ -23,8 +23,8 @@ func IsExcludedAll(models []string) bool {
 
 // SetExcludedAll adds or removes the excluded-all marker while preserving every
 // operator-defined exclusion pattern, mirroring CPA's toggle semantics.
-func SetExcludedAll(models []string, disable bool) []string {
-	if disable {
+func SetExcludedAll(models []string, isDisabled bool) []string {
+	if isDisabled {
 		for _, model := range models {
 			if strings.TrimSpace(model) == ExcludedAllPattern {
 				return models

@@ -28,11 +28,11 @@ func newLoginLimiter() *loginLimiter {
 func (l *loginLimiter) isLocked(ip string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	att, exists := l.attempts[ip]
+	attempt, exists := l.attempts[ip]
 	if !exists {
 		return false
 	}
-	return time.Now().Before(att.lockUntil)
+	return time.Now().Before(attempt.lockUntil)
 }
 
 func (l *loginLimiter) recordFailure(ip string) time.Duration {
@@ -40,7 +40,8 @@ func (l *loginLimiter) recordFailure(ip string) time.Duration {
 	defer l.mu.Unlock()
 	now := time.Now()
 
-	// prune old records if map grows large
+	// Bound the map so a distributed credential-stuffing run cannot grow it
+	// without limit.
 	if len(l.attempts) > 5000 {
 		for k, v := range l.attempts {
 			if now.After(v.lockUntil) && now.Sub(v.lastFailure) > 15*time.Minute {
@@ -49,26 +50,26 @@ func (l *loginLimiter) recordFailure(ip string) time.Duration {
 		}
 	}
 
-	att, exists := l.attempts[ip]
+	attempt, exists := l.attempts[ip]
 	if !exists {
-		att = &loginAttempt{}
-		l.attempts[ip] = att
+		attempt = &loginAttempt{}
+		l.attempts[ip] = attempt
 	}
-	att.failures++
-	att.lastFailure = now
+	attempt.failures++
+	attempt.lastFailure = now
 
 	var lockDuration time.Duration
-	if att.failures >= 8 {
+	if attempt.failures >= 8 {
 		lockDuration = 60 * time.Second
-	} else if att.failures == 7 {
+	} else if attempt.failures == 7 {
 		lockDuration = 30 * time.Second
-	} else if att.failures == 6 {
+	} else if attempt.failures == 6 {
 		lockDuration = 15 * time.Second
-	} else if att.failures >= 5 {
+	} else if attempt.failures >= 5 {
 		lockDuration = 5 * time.Second
 	}
 	if lockDuration > 0 {
-		att.lockUntil = now.Add(lockDuration)
+		attempt.lockUntil = now.Add(lockDuration)
 	}
 	return lockDuration
 }
@@ -91,7 +92,6 @@ func resolveClientIP(request *http.Request) string {
 		host = remote
 	}
 
-	// Only trust forwarded headers if incoming connection is from local proxy
 	if host == "127.0.0.1" || host == "::1" || host == "localhost" {
 		if fwd := request.Header.Get("X-Forwarded-For"); fwd != "" {
 			parts := strings.Split(fwd, ",")

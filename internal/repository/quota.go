@@ -81,7 +81,8 @@ func (r *Repository) SaveQuotaSnapshot(ctx context.Context, snapshot QuotaSnapsh
 		return fmt.Errorf("insert quota snapshot: %w", err)
 	}
 
-	// Bounded retention: keep latest 50 snapshots per auth_index synchronously
+	// Trim synchronously so a stuck writer cannot accumulate snapshots without
+	// bound.
 	_ = r.trimQuotaSnapshots(ctx, snapshot.AuthIndex, 50)
 
 	return nil
@@ -111,10 +112,9 @@ func (r *Repository) GetLatestQuotaSnapshots(ctx context.Context, authIndexes []
 		return result, nil
 	}
 
-	// Filter empty
 	validIndexes := make([]string, 0, len(authIndexes))
-	for _, idx := range authIndexes {
-		trimmed := strings.TrimSpace(idx)
+	for _, authIndex := range authIndexes {
+		trimmed := strings.TrimSpace(authIndex)
 		if trimmed != "" {
 			validIndexes = append(validIndexes, trimmed)
 		}
@@ -127,11 +127,10 @@ func (r *Repository) GetLatestQuotaSnapshots(ctx context.Context, authIndexes []
 	placeholders = placeholders[:len(placeholders)-1]
 
 	args := make([]any, len(validIndexes))
-	for i, v := range validIndexes {
-		args[i] = v
+	for i, authIndex := range validIndexes {
+		args[i] = authIndex
 	}
 
-	// Single query using window function to pick top 1 per auth_index
 	query := fmt.Sprintf(`
 		SELECT id, auth_index, provider, status, plan_type, plan_tier,
 		       windows_json, reset_credits_json, plan_json, observed_at_ms, created_at_ms
@@ -150,41 +149,41 @@ func (r *Repository) GetLatestQuotaSnapshots(ctx context.Context, authIndexes []
 	defer rows.Close()
 
 	for rows.Next() {
-		rec, scanErr := scanQuotaSnapshot(rows)
+		record, scanErr := scanQuotaSnapshot(rows)
 		if scanErr != nil {
 			return result, scanErr
 		}
-		result[rec.AuthIndex] = rec
+		result[record.AuthIndex] = record
 	}
 
 	return result, rows.Err()
 }
 
 func scanQuotaSnapshot(rows *sql.Rows) (QuotaSnapshotRecord, error) {
-	var rec QuotaSnapshotRecord
+	var record QuotaSnapshotRecord
 	var resetCredits, planJSON sql.NullString
 	if err := rows.Scan(
-		&rec.ID,
-		&rec.AuthIndex,
-		&rec.Provider,
-		&rec.Status,
-		&rec.PlanType,
-		&rec.PlanTier,
-		&rec.WindowsJSON,
+		&record.ID,
+		&record.AuthIndex,
+		&record.Provider,
+		&record.Status,
+		&record.PlanType,
+		&record.PlanTier,
+		&record.WindowsJSON,
 		&resetCredits,
 		&planJSON,
-		&rec.ObservedAtMS,
-		&rec.CreatedAtMS,
+		&record.ObservedAtMS,
+		&record.CreatedAtMS,
 	); err != nil {
-		return rec, fmt.Errorf("scan quota snapshot: %w", err)
+		return record, fmt.Errorf("scan quota snapshot: %w", err)
 	}
 	if resetCredits.Valid {
-		rec.ResetCreditsJSON = resetCredits.String
+		record.ResetCreditsJSON = resetCredits.String
 	}
 	if planJSON.Valid {
-		rec.PlanJSON = planJSON.String
+		record.PlanJSON = planJSON.String
 	}
-	return rec, nil
+	return record, nil
 }
 
 // GetQuotaSnapshotHistory retrieves historical snapshots for a specific auth index.
@@ -212,11 +211,11 @@ func (r *Repository) GetQuotaSnapshotHistory(ctx context.Context, authIndex stri
 	defer rows.Close()
 
 	for rows.Next() {
-		rec, scanErr := scanQuotaSnapshot(rows)
+		record, scanErr := scanQuotaSnapshot(rows)
 		if scanErr != nil {
 			return records, scanErr
 		}
-		records = append(records, rec)
+		records = append(records, record)
 	}
 
 	return records, rows.Err()
@@ -244,8 +243,8 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 	}
 
 	validIndexes := make([]string, 0, len(authIndexes))
-	for _, idx := range authIndexes {
-		trimmed := strings.TrimSpace(idx)
+	for _, authIndex := range authIndexes {
+		trimmed := strings.TrimSpace(authIndex)
 		if trimmed != "" {
 			validIndexes = append(validIndexes, trimmed)
 		}
@@ -261,8 +260,8 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 	recentThresholdMS := nowMS - 6*60*60*1000
 	args := make([]any, 0, len(validIndexes)+2)
 	args = append(args, nowMS, recentThresholdMS)
-	for _, v := range validIndexes {
-		args = append(args, v)
+	for _, authIndex := range validIndexes {
+		args = append(args, authIndex)
 	}
 
 	query := fmt.Sprintf(`
@@ -295,13 +294,12 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 		}
 		seen[authIndex] = true
 
-		// Check if active
 		isActive := false
-		var recAt *int64
-		var retrySec *int64
+		var recoverAt *int64
+		var retryAfterSeconds *int64
 
 		if recoverAtMS.Valid && recoverAtMS.Int64 > 0 {
-			recAt = &recoverAtMS.Int64
+			recoverAt = &recoverAtMS.Int64
 			if recoverAtMS.Int64 > nowMS {
 				isActive = true
 			}
@@ -309,30 +307,30 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 
 		if retryAfterMS.Valid && retryAfterMS.Int64 > 0 {
 			sec := (retryAfterMS.Int64 + 999) / 1000
-			retrySec = &sec
+			retryAfterSeconds = &sec
 			if (timestampMS + retryAfterMS.Int64) > nowMS {
 				isActive = true
 			}
 		}
 
 		// If no explicit recover/retry time, grace window of 5 minutes from error event
-		if recAt == nil && retrySec == nil {
+		if recoverAt == nil && retryAfterSeconds == nil {
 			if (nowMS - timestampMS) < 5*60*1000 {
 				isActive = true
 			}
 		}
 
-		rText := ""
+		reasonText := ""
 		if reason.Valid {
-			rText = reason.String
+			reasonText = reason.String
 		}
 
 		result[authIndex] = ActiveCooldownRecord{
 			AuthIndex:         authIndex,
 			IsActive:          isActive,
-			Reason:            rText,
-			RecoverAtMS:       recAt,
-			RetryAfterSeconds: retrySec,
+			Reason:            reasonText,
+			RecoverAtMS:       recoverAt,
+			RetryAfterSeconds: retryAfterSeconds,
 			CorrelatedAtMS:    &timestampMS,
 		}
 	}

@@ -137,25 +137,25 @@ func ParseKimiUsage(raw []byte, nowMS int64) ([]QuotaWindow, error) {
 		var usedPercent *float64
 		var remainingPercent *float64
 		var usedPtr *float64
-		var limPtr *float64
+		var limitPtr *float64
 
 		if hasUsed {
 			usedPtr = &usedVal
 		}
 		if hasLim {
-			limPtr = &limVal
+			limitPtr = &limVal
 		}
 
 		if hasUsed && hasLim && limVal > 0 {
-			uPct := clamp(usedVal/limVal*100, 0, 100)
-			rPct := clamp(100-uPct, 0, 100)
-			usedPercent = &uPct
-			remainingPercent = &rPct
+			usedPct := clamp(usedVal/limVal*100, 0, 100)
+			remainingPct := clamp(100-usedPct, 0, 100)
+			usedPercent = &usedPct
+			remainingPercent = &remainingPct
 		} else if hasUsed && usedVal > 0 && (!hasLim || limVal == 0) {
-			uPct := 100.0
-			rPct := 0.0
-			usedPercent = &uPct
-			remainingPercent = &rPct
+			usedPct := 100.0
+			remainingPct := 0.0
+			usedPercent = &usedPct
+			remainingPercent = &remainingPct
 		}
 
 		var resetAtMS *int64
@@ -211,7 +211,7 @@ func ParseKimiUsage(raw []byte, nowMS int64) ([]QuotaWindow, error) {
 			Scope:            scope,
 			Model:            item.Scope,
 			Used:             usedPtr,
-			Limit:            limPtr,
+			Limit:            limitPtr,
 			UsedPercent:      usedPercent,
 			RemainingPercent: remainingPercent,
 			ResetAtMS:        resetAtMS,
