@@ -67,6 +67,23 @@ go run ./cmd/oh-my-cpa
 
 如只需同步已经生成的前端产物，可运行 `pnpm sync-web-dist`。
 
+## 用量采集与空闲开销
+
+用量采集器随 **Oh My CPA 后端** 启动，不依赖浏览器是否打开。默认 `auto` 通过 RESP `AUTH` 握手探测，优先长连接订阅；不会要求 CPA 支持通用 Redis `PING`，也不会用消耗队列的请求来探测。HTTPS/HTTP 反向代理不支持 RESP 时才回退到 HTTP 拉取。
+
+HTTP/RESP 拉取连续为空时，默认等待 `1s → 2s → 4s → 8s → 10s`，之后保持 10 秒。有数据就恢复 1 秒等待；满批次立即继续排空，不降低积压队列的吞吐。
+
+| 环境变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `OMCPA_USAGE_INGEST_MODE` | `auto` | `auto` / `subscribe` / `resp_pull` / `http_pull` / `off` |
+| `OMCPA_USAGE_IDLE_INTERVAL` | `1s` | 有数据但未满批时的等待、订阅落盘周期与解码器空闲周期 |
+| `OMCPA_USAGE_MAX_IDLE_INTERVAL` | `10s`（不低于基础间隔） | 连续空队列的最长等待；显式设置时不能小于基础间隔 |
+| `OMCPA_USAGE_BATCH_SIZE` | `1000` | 单次最多拉取条数，不代表每次都有 1000 条记录 |
+
+两种间隔设为相同值可恢复固定频率。**最长等待加请求耗时必须明显小于 CPA 的队列保留时间**，否则有过期丢数风险。默认退避下，空闲后首批数据可能等待约 10 秒再被拉取；实时性要求更高时可降低上限，支持 RESP 时优先使用订阅。修改后需重启 Oh My CPA 后端。
+
+`/v0/management/usage-queue` 是消耗式读取；多个采集器不能共享同一实例的历史队列。不要通过关闭采集来解决日志噪声，也不要用真实队列反复试跑性能测试。基准与修复记录见 [用量与界面性能审计](docs/performance-usage-audit.md)。
+
 ## Docker Compose
 
 完整部署模板位于 [`deploy/compose.full.yml`](deploy/compose.full.yml)，包含 CPA、Oh My CPA 和 Caddy：

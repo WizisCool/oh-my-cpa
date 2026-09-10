@@ -56,7 +56,7 @@ func (f *fakeStream) Close() error {
 type fakeUpstream struct {
 	mu sync.Mutex
 
-	pingErr   error
+	probeErr  error
 	streamErr error
 	opened    []string
 	streams   map[string]*fakeStream
@@ -74,10 +74,10 @@ func newFakeUpstream() *fakeUpstream {
 	return &fakeUpstream{streams: map[string]*fakeStream{}}
 }
 
-func (f *fakeUpstream) PingUsageChannel(context.Context) error {
+func (f *fakeUpstream) ProbeUsageChannel(context.Context) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.pingErr
+	return f.probeErr
 }
 
 func (f *fakeUpstream) OpenUsageStream(_ context.Context, channel string) (Stream, error) {
@@ -309,7 +309,7 @@ func TestRunnerAutoDegradesToRESPullAfterSubscribeFailures(t *testing.T) {
 func TestRunnerAutoUsesHTTPWhenRESPUnavailable(t *testing.T) {
 	store := newStore(t)
 	upstream := newFakeUpstream()
-	upstream.pingErr = fmt.Errorf("dial tcp: connection refused")
+	upstream.probeErr = fmt.Errorf("dial tcp: connection refused")
 	upstream.httpBatches = [][]string{{usagePayload("h1")}}
 	runner, err := NewRunner("default", upstream, store, nil, nil, fastConfig(ModeAuto))
 	if err != nil {
@@ -325,14 +325,14 @@ func TestRunnerAutoUsesHTTPWhenRESPUnavailable(t *testing.T) {
 		t.Fatalf("HTTP payloads not captured: %d", inboxCount(t, store, repository.InboxPending))
 	}
 	if upstream.popCalls != 0 {
-		t.Fatal("RESP must not be used when PING fails")
+		t.Fatal("RESP must not be used when the RESP handshake fails")
 	}
 }
 
 func TestRunnerUnreachableCPASurfacesErrorAndRetries(t *testing.T) {
 	store := newStore(t)
 	upstream := newFakeUpstream()
-	upstream.pingErr = fmt.Errorf("dial refused")
+	upstream.probeErr = fmt.Errorf("dial refused")
 	upstream.httpErr = fmt.Errorf("connection refused")
 	runner, err := NewRunner("default", upstream, store, nil, nil, fastConfig(ModeAuto))
 	if err != nil {

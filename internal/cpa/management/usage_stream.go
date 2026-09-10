@@ -46,6 +46,8 @@ func (c *Client) respAddress() (string, error) {
 
 // dialRESP opens and authenticates a RESP connection to CPA.
 func (c *Client) dialRESP(ctx context.Context) (*resp.Conn, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.dialTimeout())
+	defer cancel()
 	addr, err := c.respAddress()
 	if err != nil {
 		return nil, err
@@ -54,7 +56,7 @@ func (c *Client) dialRESP(ctx context.Context) (*resp.Conn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("dial CPA usage channel: %w", err)
 	}
-	if err := conn.Auth(c.management); err != nil {
+	if err := conn.AuthContext(ctx, c.management); err != nil {
 		_ = conn.Close()
 		return nil, fmt.Errorf("authenticate CPA usage channel: %w", err)
 	}
@@ -82,6 +84,8 @@ type UsageStream struct {
 
 // OpenUsageStream subscribes to a CPA channel. Callers must Close the stream.
 func (c *Client) OpenUsageStream(ctx context.Context, channel string) (*UsageStream, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.dialTimeout())
+	defer cancel()
 	if channel != UsageChannel && channel != ErrorsChannel {
 		return nil, fmt.Errorf("unknown CPA channel %q", channel)
 	}
@@ -156,25 +160,23 @@ func (s *UsageStream) read(conn *resp.Conn) {
 	}
 }
 
-// PingUsageChannel verifies the RESP endpoint answers and authenticates, without
-// subscribing. Probing by subscribing would briefly register as a subscriber,
-// and CPA suppresses queueing while any subscriber is attached, so the probe
-// could swallow records.
-func (c *Client) PingUsageChannel(ctx context.Context) error {
+// ProbeUsageChannel verifies an authenticated RESP handshake without consuming
+// records. CPA supports AUTH but some versions reject PING; requiring PING
+// incorrectly forces these perfectly usable RESP endpoints into HTTP polling.
+// Do not probe with SUBSCRIBE or LPOP: both can divert/consume usage records.
+func (c *Client) ProbeUsageChannel(ctx context.Context) error {
 	conn, err := c.dialRESP(ctx)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
-	if err := conn.Ping(ctx); err != nil {
-		return fmt.Errorf("ping CPA usage channel: %w", err)
-	}
-	return nil
+	return conn.Close()
 }
 
 // PopUsageQueue drains up to count records through RESP LPOP, the batch path
 // used when subscription is unavailable but RESP still is.
 func (c *Client) PopUsageQueue(ctx context.Context, count int) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.dialTimeout())
+	defer cancel()
 	if count <= 0 {
 		count = 1
 	}

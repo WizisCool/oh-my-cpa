@@ -547,10 +547,12 @@ func (r *Repository) UsageEventSpan(ctx context.Context, instanceID string) (fir
 	if r == nil || r.SQL() == nil {
 		return 0, 0, errors.New("repository is not initialized")
 	}
-	var count int64
+	// Separate endpoint seeks use the instance/time index. COUNT and paired
+	// MIN/MAX in one aggregate force a scan of the entire instance history.
 	err = r.SQL().QueryRowContext(ctx, `
-		SELECT COUNT(1), COALESCE(MIN(timestamp_ms), 0), COALESCE(MAX(timestamp_ms), 0)
-		FROM usage_events WHERE instance_id = ?`, instanceID).Scan(&count, &firstMS, &lastMS)
+		SELECT COALESCE((SELECT timestamp_ms FROM usage_events WHERE instance_id = ? ORDER BY timestamp_ms ASC LIMIT 1), 0),
+		       COALESCE((SELECT timestamp_ms FROM usage_events WHERE instance_id = ? ORDER BY timestamp_ms DESC LIMIT 1), 0)`,
+		instanceID, instanceID).Scan(&firstMS, &lastMS)
 	if err != nil {
 		return 0, 0, fmt.Errorf("read usage event span: %w", err)
 	}

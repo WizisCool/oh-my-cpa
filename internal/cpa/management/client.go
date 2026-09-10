@@ -16,6 +16,17 @@ import (
 	"time"
 )
 
+// Clients carry per-instance credentials, but transports must outlive requests.
+// Creating one pool per API call prevents keep-alive reuse and leaves idle
+// connections/goroutines around until their timeout. TLS policies stay isolated.
+var managementTransports = [2]*http.Transport{newManagementTransport(false), newManagementTransport(true)}
+
+func newManagementTransport(insecure bool) *http.Transport {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: insecure} // #nosec G402 -- explicit operator opt-in only.
+	return transport
+}
+
 type Client struct {
 	baseURL    string
 	management string
@@ -43,11 +54,9 @@ func NewClient(baseURL, managementKey string, timeout time.Duration, tlsSkipVeri
 	if timeout <= 0 {
 		timeout = 15 * time.Second
 	}
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport := managementTransports[0]
 	if tlsSkipVerify {
-		transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: true} // #nosec G402 -- explicit operator opt-in for private CPA deployments.
-	} else {
-		transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		transport = managementTransports[1]
 	}
 	return &Client{
 		baseURL:    baseURL,

@@ -107,8 +107,8 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 // the ingest package free of any dependency on the management client type.
 type usageUpstream struct{ client *management.Client }
 
-func (u usageUpstream) PingUsageChannel(ctx context.Context) error {
-	return u.client.PingUsageChannel(ctx)
+func (u usageUpstream) ProbeUsageChannel(ctx context.Context) error {
+	return u.client.ProbeUsageChannel(ctx)
 }
 
 func (u usageUpstream) OpenUsageStream(ctx context.Context, channel string) (ingest.Stream, error) {
@@ -181,10 +181,11 @@ func buildUsagePipeline(cfg config.Config, repo *repository.Repository, handler 
 		return nil, fmt.Errorf("build CPA usage client: %w", err)
 	}
 	runner, err := ingest.NewRunner("default", usageUpstream{client}, repo, repo, logger, ingest.Config{
-		Mode:          ingest.Mode(cfg.Usage.Mode),
-		IdleInterval:  cfg.Usage.IdleInterval,
-		BatchSize:     cfg.Usage.BatchSize,
-		CollectErrors: cfg.Usage.CollectErrors,
+		Mode:            ingest.Mode(cfg.Usage.Mode),
+		IdleInterval:    cfg.Usage.IdleInterval,
+		MaxIdleInterval: cfg.Usage.MaxIdleInterval,
+		BatchSize:       cfg.Usage.BatchSize,
+		CollectErrors:   cfg.Usage.CollectErrors,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build usage collector: %w", err)

@@ -285,14 +285,7 @@ const eventTotalsColumns = `
 
 func (r *Repository) readRollupWindow(ctx context.Context, table, instanceID string, fromMS, toMS, bucketMS int64) (UsageTotals, []UsageBucket, error) {
 	var totals UsageTotals
-	err := r.SQL().QueryRowContext(ctx, `
-		SELECT `+rollupTotalsColumns+`
-		FROM `+table+`
-		WHERE instance_id = ? AND bucket_start_ms >= ? AND bucket_start_ms < ?`,
-		instanceID, fromMS, toMS).Scan(scanTargets(&totals)...)
-	if err != nil {
-		return totals, nil, fmt.Errorf("read usage rollup totals: %w", err)
-	}
+	// Totals are the sum of the same buckets; avoid scanning the window twice.
 
 	rows, err := r.SQL().QueryContext(ctx, `
 		SELECT (bucket_start_ms / ?) * ? AS aligned, `+rollupTotalsColumns+`
@@ -312,6 +305,7 @@ func (r *Repository) readRollupWindow(ctx context.Context, table, instanceID str
 		if errScan := rows.Scan(scanBucketTargets(&bucket)...); errScan != nil {
 			return totals, nil, fmt.Errorf("scan usage rollup bucket: %w", errScan)
 		}
+		totals.add(bucket.UsageTotals)
 		buckets = append(buckets, bucket)
 	}
 	if err := rows.Err(); err != nil {
@@ -322,14 +316,7 @@ func (r *Repository) readRollupWindow(ctx context.Context, table, instanceID str
 
 func (r *Repository) readEventWindow(ctx context.Context, instanceID string, fromMS, toMS, bucketMS int64) (UsageTotals, []UsageBucket, error) {
 	var totals UsageTotals
-	err := r.SQL().QueryRowContext(ctx, `
-		SELECT `+eventTotalsColumns+`
-		FROM usage_events
-		WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms <= ?`,
-		instanceID, fromMS, toMS).Scan(scanTargets(&totals)...)
-	if err != nil {
-		return totals, nil, fmt.Errorf("read usage event totals: %w", err)
-	}
+	// Totals are the sum of the same buckets; avoid scanning the window twice.
 
 	rows, err := r.SQL().QueryContext(ctx, `
 		SELECT (timestamp_ms / ?) * ? AS aligned, `+eventTotalsColumns+`
@@ -349,6 +336,7 @@ func (r *Repository) readEventWindow(ctx context.Context, instanceID string, fro
 		if errScan := rows.Scan(scanBucketTargets(&bucket)...); errScan != nil {
 			return totals, nil, fmt.Errorf("scan usage event bucket: %w", errScan)
 		}
+		totals.add(bucket.UsageTotals)
 		buckets = append(buckets, bucket)
 	}
 	if err := rows.Err(); err != nil {

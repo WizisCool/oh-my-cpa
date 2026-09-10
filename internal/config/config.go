@@ -35,8 +35,9 @@ type UsageConfig struct {
 	Enabled bool
 	// Mode selects the collection path: auto, subscribe, resp_pull, http_pull or off.
 	Mode string
-	// IdleInterval is how long a collector waits when CPA has nothing queued.
-	IdleInterval time.Duration
+	// IdleInterval is the active polling delay; empty queues back off to MaxIdleInterval.
+	IdleInterval    time.Duration
+	MaxIdleInterval time.Duration
 	// BatchSize caps one pop.
 	BatchSize int
 	// AggregateInterval bounds how stale rollup-assisted queries can get.
@@ -192,6 +193,14 @@ func loadUsageConfig() (UsageConfig, error) {
 		}
 		idleInterval = parsed
 	}
+	maxIdleInterval := max(idleInterval, 10*time.Second)
+	if raw := strings.TrimSpace(os.Getenv("OMCPA_USAGE_MAX_IDLE_INTERVAL")); raw != "" {
+		parsed, parseErr := time.ParseDuration(raw)
+		if parseErr != nil || parsed < idleInterval {
+			return UsageConfig{}, fmt.Errorf("OMCPA_USAGE_MAX_IDLE_INTERVAL must be at least OMCPA_USAGE_IDLE_INTERVAL: %q", raw)
+		}
+		maxIdleInterval = parsed
+	}
 	aggregateInterval := 15 * time.Second
 	if raw := strings.TrimSpace(os.Getenv("OMCPA_USAGE_AGGREGATE_INTERVAL")); raw != "" {
 		parsed, parseErr := time.ParseDuration(raw)
@@ -229,6 +238,7 @@ func loadUsageConfig() (UsageConfig, error) {
 		Enabled:           enabled,
 		Mode:              mode,
 		IdleInterval:      idleInterval,
+		MaxIdleInterval:   maxIdleInterval,
 		BatchSize:         batchSize,
 		AggregateInterval: aggregateInterval,
 		RetentionDays:     retentionDays,

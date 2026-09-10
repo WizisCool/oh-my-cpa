@@ -293,8 +293,9 @@ func (r *Repository) StatsUsagePipeline(ctx context.Context) (UsagePipelineStats
 	}
 	var firstMS, lastMS int64
 	err := r.SQL().QueryRowContext(ctx, `
-		SELECT COUNT(1), COALESCE(MIN(timestamp_ms), 0), COALESCE(MAX(timestamp_ms), 0)
-		FROM usage_events`).Scan(&stats.Events, &firstMS, &lastMS)
+		SELECT (SELECT COUNT(*) FROM usage_events),
+		       COALESCE((SELECT MIN(timestamp_ms) FROM usage_events), 0),
+		       COALESCE((SELECT MAX(timestamp_ms) FROM usage_events), 0)`).Scan(&stats.Events, &firstMS, &lastMS)
 	if err != nil {
 		return stats, fmt.Errorf("read usage event stats: %w", err)
 	}
@@ -304,15 +305,14 @@ func (r *Repository) StatsUsagePipeline(ctx context.Context) (UsagePipelineStats
 		stats.FirstEventMS = &firstMS
 		stats.LastEventMS = &lastMS
 	}
-	if err := r.SQL().QueryRowContext(ctx, `SELECT COUNT(1) FROM error_events`).Scan(&stats.ErrorEvents); err != nil {
+	if err := r.SQL().QueryRowContext(ctx, `SELECT COUNT(*) FROM error_events`).Scan(&stats.ErrorEvents); err != nil {
 		return stats, fmt.Errorf("read error event stats: %w", err)
 	}
 	if err := r.SQL().QueryRowContext(ctx, `
 		SELECT
-			COALESCE(SUM(CASE WHEN status = '`+InboxPending+`' THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN status = '`+InboxProcessed+`' THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN status = '`+InboxDiscarded+`' THEN 1 ELSE 0 END), 0)
-		FROM usage_inboxes`).Scan(&stats.Pending, &stats.Processed, &stats.Discarded); err != nil {
+			(SELECT COUNT(*) FROM usage_inboxes WHERE status = '`+InboxPending+`'),
+			(SELECT COUNT(*) FROM usage_inboxes WHERE status = '`+InboxProcessed+`'),
+			(SELECT COUNT(*) FROM usage_inboxes WHERE status = '`+InboxDiscarded+`')`).Scan(&stats.Pending, &stats.Processed, &stats.Discarded); err != nil {
 		return stats, fmt.Errorf("read usage inbox stats: %w", err)
 	}
 	if stats.CheckpointHourly, err = r.UsageCheckpoint(ctx, CheckpointHourly); err != nil {

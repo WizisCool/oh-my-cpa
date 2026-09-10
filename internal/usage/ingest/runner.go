@@ -57,7 +57,7 @@ type Stream interface {
 // Upstream is the CPA surface the collector needs. The management key stays
 // inside the management client; this interface never exposes it.
 type Upstream interface {
-	PingUsageChannel(ctx context.Context) error
+	ProbeUsageChannel(ctx context.Context) error
 	OpenUsageStream(ctx context.Context, channel string) (Stream, error)
 	PopUsageQueue(ctx context.Context, count int) ([]string, error)
 	UsageQueueJSON(ctx context.Context, count int) ([]string, error)
@@ -85,8 +85,10 @@ type GapRecorder interface {
 type Config struct {
 	// Mode pins the collection path; ModeAuto probes.
 	Mode Mode
-	// IdleInterval is how long to wait when a pull returns nothing.
+	// IdleInterval is the polling delay after a non-full batch.
 	IdleInterval time.Duration
+	// MaxIdleInterval caps exponential backoff after consecutive empty pulls.
+	MaxIdleInterval time.Duration
 	// BatchSize caps one pop.
 	BatchSize int
 	// BackoffInitial/Max bound retries after a single path fails.
@@ -115,6 +117,10 @@ func (c Config) withDefaults() Config {
 	if c.IdleInterval <= 0 {
 		c.IdleInterval = time.Second
 	}
+	if c.MaxIdleInterval <= 0 {
+		c.MaxIdleInterval = 10 * time.Second
+	}
+	c.MaxIdleInterval = max(c.IdleInterval, c.MaxIdleInterval)
 	if c.BatchSize <= 0 {
 		c.BatchSize = 1000
 	}
@@ -235,7 +241,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 		mode, err := r.collect(ctx)
 		switch {
-		case errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded):
+		case ctx.Err() != nil:
 			return nil
 		case mode == "":
 			// Nothing answered the probe: CPA is likely down.
@@ -281,11 +287,11 @@ func (r *Runner) collect(ctx context.Context) (string, error) {
 		return string(ModeHTTPPull), r.runPull(ctx, ModeHTTPPull)
 	}
 
-	// Auto. Availability is probed with PING, never by popping: CPA's queue is
+	// Auto. Availability is probed with AUTH, never by popping: CPA's queue is
 	// destructive, so a probe that consumed a record would silently lose it.
 	// Subscription is preferred because it is the only path guaranteed to see
 	// every record; it is skipped only after repeated failure.
-	if err := r.upstream.PingUsageChannel(ctx); err != nil {
+	if err := r.upstream.ProbeUsageChannel(ctx); err != nil {
 		r.logger.Debug("CPA RESP channel unavailable, using the HTTP usage queue",
 			"instance", r.instanceID, "error", err.Error())
 		return string(ModeHTTPPull), r.runPull(ctx, ModeHTTPPull)
@@ -420,6 +426,7 @@ func (r *Runner) runPull(ctx context.Context, mode Mode) error {
 	r.logger.Info("usage ingest polling", "instance", r.instanceID, "mode", string(mode))
 
 	batch := make([]string, 0, r.config.BatchSize)
+	idle := pullPacer{base: r.config.IdleInterval, maximum: r.config.MaxIdleInterval}
 	for {
 		if ctx.Err() != nil {
 			return nil
@@ -436,8 +443,8 @@ func (r *Runner) runPull(ctx context.Context, mode Mode) error {
 		if errFlush := r.flush(ctx, mode, &batch); errFlush != nil {
 			return errFlush
 		}
-		if len(items) < r.config.BatchSize {
-			if !sleepContext(ctx, r.config.IdleInterval) {
+		if delay := idle.next(len(items), r.config.BatchSize); delay > 0 {
+			if !sleepContext(ctx, delay) {
 				return nil
 			}
 		}
@@ -571,4 +578,26 @@ func sleepContext(ctx context.Context, delay time.Duration) bool {
 	case <-timer.C:
 		return true
 	}
+}
+
+// pullPacer saves empty-queue work without throttling backlog drainage. A full
+// batch is drained immediately; any activity resets the next idle wait. The
+// cap must stay comfortably below the upstream's queue retention horizon.
+type pullPacer struct {
+	base, maximum, current time.Duration
+}
+
+func (p *pullPacer) next(count, batchSize int) time.Duration {
+	if count > 0 || p.current == 0 {
+		p.current = p.base
+	}
+	if count >= batchSize {
+		return 0
+	}
+	delay := p.current
+	if count == 0 {
+		// Saturating addition avoids overflowing time.Duration.
+		p.current += min(p.current, p.maximum-p.current)
+	}
+	return delay
 }

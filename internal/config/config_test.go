@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"testing"
+	"time"
 )
 
 func TestNormalizeBasePath(t *testing.T) {
@@ -52,5 +53,39 @@ func TestNormalizeBasePathRejectsURLSyntax(t *testing.T) {
 		if _, err := NormalizeBasePath(value); err == nil {
 			t.Fatalf("NormalizeBasePath(%q) unexpectedly succeeded", value)
 		}
+	}
+}
+
+func TestUsageIdleIntervals(t *testing.T) {
+	for _, tc := range []struct {
+		name, base, maximum string
+		wantBase, wantMax   time.Duration
+		invalid             bool
+	}{
+		{"defaults", "", "", time.Second, 10 * time.Second, false},
+		{"custom", "2s", "5s", 2 * time.Second, 5 * time.Second, false},
+		{"fixed", "1s", "1s", time.Second, time.Second, false},
+		{"slow base", "30s", "", 30 * time.Second, 30 * time.Second, false},
+		{"too small", "2s", "1s", 0, 0, true},
+		{"zero", "1s", "0s", 0, 0, true},
+		{"invalid", "1s", "abc", 0, 0, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("OMCPA_USAGE_IDLE_INTERVAL", tc.base)
+			t.Setenv("OMCPA_USAGE_MAX_IDLE_INTERVAL", tc.maximum)
+			cfg, err := loadUsageConfig()
+			if tc.invalid {
+				if err == nil {
+					t.Fatal("invalid interval accepted")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.IdleInterval != tc.wantBase || cfg.MaxIdleInterval != tc.wantMax {
+				t.Fatalf("intervals %v / %v", cfg.IdleInterval, cfg.MaxIdleInterval)
+			}
+		})
 	}
 }

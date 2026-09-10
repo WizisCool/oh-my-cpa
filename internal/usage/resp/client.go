@@ -88,7 +88,12 @@ func (c *Conn) Close() error {
 
 // Auth authenticates with CPA's management key.
 func (c *Conn) Auth(password string) error {
-	reply, err := c.Do(context.Background(), "AUTH", password)
+	return c.AuthContext(context.Background(), password)
+}
+
+// AuthContext bounds the handshake even when the peer accepts TCP but never replies.
+func (c *Conn) AuthContext(ctx context.Context, password string) error {
+	reply, err := c.Do(ctx, "AUTH", password)
 	if err != nil {
 		return err
 	}
