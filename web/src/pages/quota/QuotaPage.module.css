@@ -1,15 +1,15 @@
-.quotaPage {
+.quota-page {
   padding-bottom: 40px;
 }
 
 /* ── Cards Grid ── */
-.cardsGrid {
+.cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 16px;
 }
 
-.quotaCard {
+.quota-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -20,25 +20,25 @@
   transition: border-color var(--motion-fast);
 }
 
-.quotaCard:hover {
+.quota-card:hover {
   border-color: var(--meta);
 }
 
-.cardHead {
+.card-head {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 8px;
 }
 
-.cardTitleWrap {
+.card-title-wrap {
   display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
 }
 
-.cardIcon {
+.card-icon {
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -50,11 +50,11 @@
   background: var(--hover-inset);
 }
 
-.cardNameBlock {
+.card-name-block {
   min-width: 0;
 }
 
-.cardName {
+.card-name {
   font-size: 13px;
   font-weight: 600;
   color: var(--fg);
@@ -64,21 +64,21 @@
   max-width: 190px;
 }
 
-.cardAuthIndex {
+.card-auth-index {
   font-size: 11px;
   color: var(--meta);
   font-family: var(--font-mono);
 }
 
-.cardTags {
+.card-tags {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
 }
 
-/* ── Plan summary strip: 套餐 | 续期时间 | 重置次数 ── */
-.metaRow {
+/* ── Plan summary strip: plan | renewal time | reset count ── */
+.meta-row {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -87,19 +87,19 @@
   font-size: 11px;
 }
 
-.metaItem {
+.meta-item {
   display: inline-flex;
   align-items: baseline;
   gap: 5px;
   min-width: 0;
 }
 
-.metaLabel {
+.meta-label {
   color: var(--meta);
   flex-shrink: 0;
 }
 
-.metaValue {
+.meta-value {
   color: var(--fg);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -109,7 +109,7 @@
 }
 
 /* ── Provider filter tabs (CPAMC-style underline row) ── */
-.filterTabs {
+.filter-tabs {
   display: flex;
   align-items: stretch;
   gap: 2px;
@@ -119,11 +119,11 @@
   scrollbar-width: none;
 }
 
-.filterTabs::-webkit-scrollbar {
+.filter-tabs::-webkit-scrollbar {
   display: none;
 }
 
-.filterTab {
+.filter-tab {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -144,7 +144,7 @@
     background-color var(--motion-fast);
 }
 
-.filterTab::after {
+.filter-tab::after {
   content: '';
   position: absolute;
   left: 10px;
@@ -156,34 +156,34 @@
   transition: background-color var(--motion-fast);
 }
 
-.filterTab:active {
+.filter-tab:active {
   transform: translateY(0.5px);
 }
 
-.filterTab:hover {
+.filter-tab:hover {
   color: var(--fg);
   background: var(--hover-inset);
 }
 
-.filterTabActive {
+.filter-tab-active {
   color: var(--fg);
   font-weight: 650;
 }
 
-.filterTabActive::after {
+.filter-tab-active::after {
   background: var(--fg);
 }
 
-.filterTabGlyph {
+.filter-tab-glyph {
   font-size: 14px;
   color: var(--meta);
 }
 
-.filterTabActive .filterTabGlyph {
+.filter-tab-active .filter-tab-glyph {
   color: var(--fg);
 }
 
-.filterTabIcon {
+.filter-tab-icon {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -192,11 +192,11 @@
   flex-shrink: 0;
 }
 
-.filterTabLabel {
+.filter-tab-label {
   line-height: 1.4;
 }
 
-.filterTabCount {
+.filter-tab-count {
   font-family: var(--font-mono);
   font-size: 10.5px;
   font-weight: 650;
@@ -208,7 +208,7 @@
   background: var(--hover-inset);
 }
 
-.filterTabActive .filterTabCount {
+.filter-tab-active .filter-tab-count {
   color: var(--fg);
 }
 
@@ -219,19 +219,19 @@
   gap: 8px;
 }
 
-.sectionTitle {
+.section-title {
   font-size: 11px;
   color: var(--meta);
   letter-spacing: 0.2px;
 }
 
-.resetList {
+.reset-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.resetRow {
+.reset-row {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -243,20 +243,20 @@
   border-radius: var(--radius-sm);
 }
 
-.windowsList {
+.windows-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.windowDivider {
+.window-divider {
   height: 1px;
   /* --border-soft equals --surface in dark mode, which would hide the line */
   background: var(--border);
   margin: 2px 0;
 }
 
-.noWindow {
+.no-window {
   font-size: 11px;
   color: var(--meta);
   padding: 8px 0;
@@ -264,21 +264,21 @@
 }
 
 /* ── Progress Bar ── */
-.progressWrap {
+.progress-wrap {
   display: flex;
   flex-direction: column;
   gap: 6px;
   width: 100%;
 }
 
-.progressLabelRow {
+.progress-label-row {
   display: flex;
   align-items: baseline;
   gap: 8px;
   font-size: 11px;
 }
 
-.progressLabel {
+.progress-label {
   color: var(--fg-2);
   flex: 1;
   white-space: nowrap;
@@ -286,12 +286,12 @@
   text-overflow: ellipsis;
 }
 
-.progressSubLabel {
+.progress-sub-label {
   color: var(--meta);
   margin-left: 6px;
 }
 
-.progressValue {
+.progress-value {
   flex: none;
   font-family: var(--font-mono);
   font-weight: 700;
@@ -299,7 +299,7 @@
   color: var(--fg);
 }
 
-.progressReset {
+.progress-reset {
   flex: 1;
   text-align: right;
   color: var(--meta);
@@ -309,7 +309,7 @@
   text-overflow: ellipsis;
 }
 
-.progressTrack {
+.progress-track {
   width: 100%;
   height: 8px;
   background: var(--hover-inset);
@@ -319,18 +319,18 @@
   position: relative;
 }
 
-.progressBar {
+.progress-bar {
   height: 100%;
   border-radius: var(--radius-sm, 4px);
 }
 
-.barSuccess { background: var(--success); }
-.barWarn { background: var(--warn); }
-.barDanger { background: var(--danger); }
-.barMuted { background: var(--meta); }
+.bar-success { background: var(--success); }
+.bar-warn { background: var(--warn); }
+.bar-danger { background: var(--danger); }
+.bar-muted { background: var(--meta); }
 
 /* ── Cooldown / notice banner in Card ── */
-.recBanner {
+.rec-banner {
   background: var(--hover-inset);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm, 4px);
@@ -342,35 +342,35 @@
   gap: 8px;
 }
 
-.recBannerDanger {
+.rec-banner-danger {
   border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
 }
 
-.recBannerWarn {
+.rec-banner-warn {
   border-color: color-mix(in srgb, var(--warn) 35%, var(--border));
 }
 
-.recText {
+.rec-text {
   color: var(--fg-2);
   line-height: 1.4;
   flex: 1;
 }
 
-.bannerDot {
+.banner-dot {
   width: 7px;
   height: 7px;
   border-radius: 2px;
   flex-shrink: 0;
 }
 
-.recSubDanger {
+.rec-sub-danger {
   font-size: 10px;
   color: var(--danger);
   margin-top: 2px;
 }
 
 /* ── Card Footer ── */
-.cardFooter {
+.card-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -380,20 +380,20 @@
   margin-top: auto;
 }
 
-.cardMetaTime {
+.card-meta-time {
   font-size: 11px;
   color: var(--meta);
   font-family: var(--font-mono);
 }
 
-.cardActions {
+.card-actions {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
 @media (max-width: 768px) {
-  .cardsGrid {
+  .cards-grid {
     grid-template-columns: 1fr;
   }
 }

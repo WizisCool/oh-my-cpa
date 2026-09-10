@@ -216,7 +216,7 @@ export const PricingPage: React.FC = () => {
       key: 'model',
       ellipsis: true,
       render: (model: string) => (
-        <div className={styles.modelCell}>
+        <div className={styles['model-cell']}>
           <span>{model}</span>
         </div>
       ),
@@ -228,9 +228,9 @@ export const PricingPage: React.FC = () => {
       align: 'right' as const,
       render: (val: number, row: ModelPrice) =>
         row.updated_at_ms === 0 ? (
-          <span className={styles.priceDimmed}>—</span>
+          <span className={styles['price-dimmed']}>—</span>
         ) : (
-          <span className={`${styles.priceNumber} ${val === 0 ? styles.priceDimmed : ''}`}>
+          <span className={`${styles['price-number']} ${val === 0 ? styles['price-dimmed'] : ''}`}>
             ${formatRate(val)}
           </span>
         ),
@@ -242,9 +242,9 @@ export const PricingPage: React.FC = () => {
       align: 'right' as const,
       render: (val: number, row: ModelPrice) =>
         row.updated_at_ms === 0 ? (
-          <span className={styles.priceDimmed}>—</span>
+          <span className={styles['price-dimmed']}>—</span>
         ) : (
-          <span className={`${styles.priceNumber} ${val === 0 ? styles.priceDimmed : ''}`}>
+          <span className={`${styles['price-number']} ${val === 0 ? styles['price-dimmed'] : ''}`}>
             ${formatRate(val)}
           </span>
         ),
@@ -256,9 +256,9 @@ export const PricingPage: React.FC = () => {
       align: 'right' as const,
       render: (val: number, row: ModelPrice) =>
         row.updated_at_ms === 0 ? (
-          <span className={styles.priceDimmed}>—</span>
+          <span className={styles['price-dimmed']}>—</span>
         ) : (
-          <span className={`${styles.priceNumber} ${val === 0 ? styles.priceDimmed : ''}`}>
+          <span className={`${styles['price-number']} ${val === 0 ? styles['price-dimmed'] : ''}`}>
             ${formatRate(val)}
           </span>
         ),
@@ -270,9 +270,9 @@ export const PricingPage: React.FC = () => {
       align: 'right' as const,
       render: (val: number, row: ModelPrice) =>
         row.updated_at_ms === 0 ? (
-          <span className={styles.priceDimmed}>—</span>
+          <span className={styles['price-dimmed']}>—</span>
         ) : (
-          <span className={`${styles.priceNumber} ${val === 0 ? styles.priceDimmed : ''}`}>
+          <span className={`${styles['price-number']} ${val === 0 ? styles['price-dimmed'] : ''}`}>
             {val === 0 ? '—' : `$${formatRate(val)}`}
           </span>
         ),
@@ -285,11 +285,11 @@ export const PricingPage: React.FC = () => {
       width: 115,
       render: (val: number, row: ModelPrice) =>
         row.updated_at_ms === 0 ? (
-          <span className={styles.priceDimmed}>—</span>
+          <span className={styles['price-dimmed']}>—</span>
         ) : val === 1 ? (
-          <span className={styles.priceDimmed}>1.0×</span>
+          <span className={styles['price-dimmed']}>1.0×</span>
         ) : (
-          <span className={styles.multiplierBadge}>×{val}</span>
+          <span className={styles['multiplier-badge']}>×{val}</span>
         ),
     },
     {
@@ -313,12 +313,12 @@ export const PricingPage: React.FC = () => {
             {t('pricing.source.unpriced')}
           </span>
         ) : source === 'manual' ? (
-          <span className={`${styles.sourceBadge} ${styles.sourceManual}`}>
+          <span className={`${styles['source-badge']} ${styles['source-manual']}`}>
             <EditOutlined style={{ fontSize: 10 }} />
             {t('pricing.source.manual')}
           </span>
         ) : (
-          <span className={`${styles.sourceBadge} ${styles.sourceModelsDev}`}>
+          <span className={`${styles['source-badge']} ${styles['source-models-dev']}`}>
             <ThunderboltOutlined style={{ fontSize: 10 }} />
             {t('pricing.source.modelsdev')}
           </span>
@@ -330,7 +330,7 @@ export const PricingPage: React.FC = () => {
       key: 'updated',
       width: 120,
       render: (val: number) => (
-        <span className={styles.priceDimmed}>
+        <span className={styles['price-dimmed']}>
           {val ? dayjs(val).format('MM-DD HH:mm') : '—'}
         </span>
       ),
@@ -352,11 +352,11 @@ export const PricingPage: React.FC = () => {
             {t('pricing.add')}
           </Button>
         ) : (
-          <div className={styles.actionGroup}>
+          <div className={styles['action-group']}>
             <Tooltip title={t('pricing.edit')}>
               <Button
                 size="small"
-                className={styles.actionBtn}
+                className={styles['action-btn']}
                 icon={<EditOutlined />}
                 onClick={() => openEdit(row)}
               />
@@ -370,7 +370,7 @@ export const PricingPage: React.FC = () => {
               <Tooltip title={t('pricing.remove')}>
                 <Button
                   size="small"
-                  className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
+                  className={`${styles['action-btn']} ${styles['action-btn-danger']}`}
                   danger
                   icon={<DeleteOutlined />}
                   loading={deleteMutation.isPending && deleteMutation.variables === row.model}
@@ -383,7 +383,7 @@ export const PricingPage: React.FC = () => {
   ];
 
   return (
-    <div className={`terminal-page ${styles.pricingPage}`} data-testid="pricing-page">
+    <div className={`terminal-page ${styles['pricing-page']}`} data-testid="pricing-page">
       {/* 1. Header Block */}
       <header className="terminal-page-head">
         <div>
@@ -394,7 +394,7 @@ export const PricingPage: React.FC = () => {
               : t('pricing.desc')}
           </p>
         </div>
-        <div className={styles.headerActions}>
+        <div className={styles['header-actions']}>
           <Button
             icon={<ReloadOutlined spin={result.isFetching} />}
             disabled={result.isFetching}
@@ -425,16 +425,16 @@ export const PricingPage: React.FC = () => {
       )}
 
       {/* 3. Integrated Top Sync Telemetry Strip */}
-      <div className={styles.telemetryStrip}>
-        <div className={styles.telemetryLeft}>
-          <span className={styles.telemetryStatus}>
+      <div className={styles['telemetry-strip']}>
+        <div className={styles['telemetry-left']}>
+          <span className={styles['telemetry-status']}>
             <span
-              className={`${styles.statusPip} ${
+              className={`${styles['status-pip']} ${
                 sync?.running
-                  ? styles.pipRunning
+                  ? styles['pip-running']
                   : state?.last_error
-                  ? styles.pipDanger
-                  : styles.pipSuccess
+                  ? styles['pip-danger']
+                  : styles['pip-success']
               }`}
             />
             <span>
@@ -445,33 +445,33 @@ export const PricingPage: React.FC = () => {
                 : t('pricing.sync.title')}
             </span>
           </span>
-          <div className={styles.telemetryDivider} />
-          <div className={styles.telemetryMetrics}>
-            <span className={styles.telemetryItem}>
+          <div className={styles['telemetry-divider']} />
+          <div className={styles['telemetry-metrics']}>
+            <span className={styles['telemetry-item']}>
               {t('pricing.sync.manual', { n: manualCount })}
             </span>
-            <div className={styles.telemetryDivider} />
-            <span className={styles.telemetryItem}>
+            <div className={styles['telemetry-divider']} />
+            <span className={styles['telemetry-item']}>
               {t('pricing.sync.last_success', {
                 time: state?.last_success_at_ms
                   ? dayjs(state.last_success_at_ms).format('YYYY-MM-DD HH:mm')
                   : t('pricing.sync.never'),
               })}
             </span>
-            <div className={styles.telemetryDivider} />
-            <span className={styles.telemetryItem}>
+            <div className={styles['telemetry-divider']} />
+            <span className={styles['telemetry-item']}>
               {t('pricing.sync.matched', { n: state?.last_matched ?? 0 })}
             </span>
-            <span className={styles.telemetryItem}>
+            <span className={styles['telemetry-item']}>
               {t('pricing.sync.unmatched', { n: state?.last_unmatched ?? 0 })}
             </span>
           </div>
         </div>
-        <div className={styles.telemetryRight}>
-          <span className={styles.autoSyncLabel}>{t('pricing.sync.auto_label')}:</span>
+        <div className={styles['telemetry-right']}>
+          <span className={styles['auto-sync-label']}>{t('pricing.sync.auto_label')}:</span>
           <Select
             size="small"
-            className={styles.autoSyncSelect}
+            className={styles['auto-sync-select']}
             value={state?.auto_sync_interval_hours ?? 24}
             onChange={(val) => updateScheduleMutation.mutate(val)}
             loading={updateScheduleMutation.isPending}
@@ -484,7 +484,7 @@ export const PricingPage: React.FC = () => {
             ]}
           />
           {state?.auto_sync_interval_hours !== 0 && state?.next_sync_at_ms && (
-            <span className={styles.nextSyncText}>
+            <span className={styles['next-sync-text']}>
               {t('pricing.sync.next', {
                 time: dayjs(state.next_sync_at_ms).format('MM-DD HH:mm'),
               })}
@@ -495,19 +495,19 @@ export const PricingPage: React.FC = () => {
 
       {/* 4. Unpriced Models Alert Ribbon (if any detected) */}
       {unpricedList.length > 0 && (
-        <div className={styles.unpricedRibbon}>
-          <div className={styles.unpricedHead}>
-            <span className={styles.unpricedTitle}>
+        <div className={styles['unpriced-ribbon']}>
+          <div className={styles['unpriced-head']}>
+            <span className={styles['unpriced-title']}>
               <WarningOutlined style={{ color: 'var(--warn)' }} />
               {t('pricing.unpriced.title')} ({unpricedList.length})
-              <span className={styles.unpricedHint}>{t('pricing.unpriced.hint')}</span>
+              <span className={styles['unpriced-hint']}>{t('pricing.unpriced.hint')}</span>
             </span>
           </div>
-          <div className={styles.unpricedChips}>
+          <div className={styles['unpriced-chips']}>
             {unpricedList.map((model) => (
               <Tooltip key={model} title={t('pricing.unpriced.add')}>
-                <div className={styles.unpricedChip} onClick={() => openAdd(model)}>
-                  <span className={styles.unpricedChipPlus}>+</span>
+                <div className={styles['unpriced-chip']} onClick={() => openAdd(model)}>
+                  <span className={styles['unpriced-chip-plus']}>+</span>
                   <span>{model}</span>
                 </div>
               </Tooltip>
@@ -519,49 +519,49 @@ export const PricingPage: React.FC = () => {
       {/* 5. Master Console Workbench Container */}
       <div className={styles.workbench}>
         {/* Integrated Toolbar */}
-        <div className={styles.workbenchToolbar}>
-          <div className={styles.toolbarLeft}>
+        <div className={styles['workbench-toolbar']}>
+          <div className={styles['toolbar-left']}>
             {/* Filter Segmented Tabs */}
-            <div className={styles.filterTabs}>
+            <div className={styles['filter-tabs']}>
               <button
                 type="button"
-                className={`${styles.filterTab} ${activeTab === 'all' ? styles.filterTabActive : ''}`}
+                className={`${styles['filter-tab']} ${activeTab === 'all' ? styles['filter-tab-active'] : ''}`}
                 onClick={() => setActiveTab('all')}
               >
                 {t('pricing.tab.all')}
-                <span className={styles.filterCount}>{models.length}</span>
+                <span className={styles['filter-count']}>{models.length}</span>
               </button>
               <button
                 type="button"
-                className={`${styles.filterTab} ${activeTab === 'modelsdev' ? styles.filterTabActive : ''}`}
+                className={`${styles['filter-tab']} ${activeTab === 'modelsdev' ? styles['filter-tab-active'] : ''}`}
                 onClick={() => setActiveTab('modelsdev')}
               >
                 {t('pricing.source.modelsdev')}
-                <span className={styles.filterCount}>{modelsDevCount}</span>
+                <span className={styles['filter-count']}>{modelsDevCount}</span>
               </button>
               <button
                 type="button"
-                className={`${styles.filterTab} ${activeTab === 'manual' ? styles.filterTabActive : ''}`}
+                className={`${styles['filter-tab']} ${activeTab === 'manual' ? styles['filter-tab-active'] : ''}`}
                 onClick={() => setActiveTab('manual')}
               >
                 {t('pricing.source.manual')}
-                <span className={styles.filterCount}>{manualCount}</span>
+                <span className={styles['filter-count']}>{manualCount}</span>
               </button>
               {unpricedCount > 0 && (
                 <button
                   type="button"
-                  className={`${styles.filterTab} ${activeTab === 'unpriced' ? styles.filterTabActive : ''}`}
+                  className={`${styles['filter-tab']} ${activeTab === 'unpriced' ? styles['filter-tab-active'] : ''}`}
                   onClick={() => setActiveTab('unpriced')}
                 >
                   {t('pricing.tab.unpriced')}
-                  <span className={styles.filterCount}>{unpricedCount}</span>
+                  <span className={styles['filter-count']}>{unpricedCount}</span>
                 </button>
               )}
             </div>
 
             {/* Monospace Search Input */}
             <Input
-              className={styles.searchBox}
+              className={styles['search-box']}
               placeholder={t('pricing.search_placeholder')}
               prefix={<SearchOutlined style={{ color: 'var(--meta)' }} />}
               value={search}
@@ -570,7 +570,7 @@ export const PricingPage: React.FC = () => {
             />
           </div>
 
-          <div className={styles.toolbarRight}>
+          <div className={styles['toolbar-right']}>
             <Button type="primary" icon={<PlusOutlined />} onClick={() => openAdd()}>
               {t('pricing.add')}
             </Button>
@@ -596,12 +596,12 @@ export const PricingPage: React.FC = () => {
         />
 
         {/* Workbench Footer Status */}
-        <div className={styles.workbenchFooter}>
+        <div className={styles['workbench-footer']}>
           <span>
             {t('pricing.footer_count', { current: filteredData.length, total: models.length })}
           </span>
           {sync?.running && (
-            <span className={styles.syncRunningText}>
+            <span className={styles['sync-running-text']}>
               <SyncOutlined spin />
               {t('pricing.sync.running')}
             </span>
@@ -630,10 +630,10 @@ export const PricingPage: React.FC = () => {
         forceRender
       >
         {editor.editing ? (
-          <div className={styles.editorMeta}>
+          <div className={styles['editor-meta']}>
             <span
-              className={`${styles.sourceBadge} ${
-                editor.editing.source === 'manual' ? styles.sourceManual : styles.sourceModelsDev
+              className={`${styles['source-badge']} ${
+                editor.editing.source === 'manual' ? styles['source-manual'] : styles['source-models-dev']
               }`}
             >
               {t(`pricing.source.${editor.editing.source}`)}
@@ -673,7 +673,7 @@ export const PricingPage: React.FC = () => {
             />
           </Form.Item>
 
-          <div className={styles.editorGrid}>
+          <div className={styles['editor-grid']}>
             <Form.Item
               name="prompt"
               label={t('pricing.editor.prompt')}
@@ -744,9 +744,9 @@ export const PricingPage: React.FC = () => {
           </Form.Item>
 
           {/* Live Estimation Sample Preview */}
-          <div className={styles.liveEstimateBox}>
-            <div className={styles.liveEstimateTitle}>{t('pricing.editor.live_sample_title')}</div>
-            <div className={styles.liveEstimateValue}>
+          <div className={styles['live-estimate-box']}>
+            <div className={styles['live-estimate-title']}>{t('pricing.editor.live_sample_title')}</div>
+            <div className={styles['live-estimate-value']}>
               ${(((watchedPrompt * 0.1) + (watchedCompletion * 0.02)) * watchedMultiplier).toFixed(6)}
             </div>
           </div>

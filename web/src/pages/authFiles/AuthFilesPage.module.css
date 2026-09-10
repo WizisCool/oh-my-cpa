@@ -1,9 +1,9 @@
-.authFilesPage {
+.auth-files-page {
   padding-bottom: 60px;
 }
 
 /* ── Header ── */
-.headTop {
+.head-top {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -12,7 +12,7 @@
   margin-bottom: 8px;
 }
 
-.statDot {
+.stat-dot {
   width: 7px;
   height: 7px;
   border-radius: 2px;
@@ -20,20 +20,20 @@
   flex-shrink: 0;
 }
 
-.dotActive {
+.dot-active {
   background: var(--success);
 }
 
-.dotDisabled {
+.dot-disabled {
   background: var(--muted);
 }
 
-.dotProblem {
+.dot-problem {
   background: var(--danger);
 }
 
 /* ── Provider filter tabs (CPAMC / Quota Management style underline row) ── */
-.filterTabs {
+.filter-tabs {
   display: flex;
   align-items: stretch;
   gap: 2px;
@@ -43,11 +43,11 @@
   scrollbar-width: none;
 }
 
-.filterTabs::-webkit-scrollbar {
+.filter-tabs::-webkit-scrollbar {
   display: none;
 }
 
-.filterTab {
+.filter-tab {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -68,7 +68,7 @@
     background-color var(--motion-fast);
 }
 
-.filterTab::after {
+.filter-tab::after {
   content: '';
   position: absolute;
   left: 10px;
@@ -80,34 +80,34 @@
   transition: background-color var(--motion-fast);
 }
 
-.filterTab:active {
+.filter-tab:active {
   transform: translateY(0.5px);
 }
 
-.filterTab:hover {
+.filter-tab:hover {
   color: var(--fg);
   background: var(--hover-inset);
 }
 
-.filterTabActive {
+.filter-tab-active {
   color: var(--fg);
   font-weight: 650;
 }
 
-.filterTabActive::after {
+.filter-tab-active::after {
   background: var(--fg);
 }
 
-.filterTabGlyph {
+.filter-tab-glyph {
   font-size: 14px;
   color: var(--meta);
 }
 
-.filterTabActive .filterTabGlyph {
+.filter-tab-active .filter-tab-glyph {
   color: var(--fg);
 }
 
-.filterTabIcon {
+.filter-tab-icon {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -116,11 +116,11 @@
   flex-shrink: 0;
 }
 
-.filterTabLabel {
+.filter-tab-label {
   line-height: 1.4;
 }
 
-.filterTabCount {
+.filter-tab-count {
   font-family: var(--font-mono);
   font-size: 10.5px;
   font-weight: 650;
@@ -132,7 +132,7 @@
   background: var(--hover-inset);
 }
 
-.filterTabActive .filterTabCount {
+.filter-tab-active .filter-tab-count {
   color: var(--fg);
 }
 
@@ -145,25 +145,25 @@
   margin-bottom: 16px;
 }
 
-.searchBox {
+.search-box {
   flex: 1;
   min-width: 220px;
 }
 
 /* ── Cards Grid ── */
-.cardsGrid {
+.cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
   gap: 16px;
 }
 
-.compactGrid {
+.compact-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
   gap: 12px;
 }
 
-.paginationWrap {
+.pagination-wrap {
   margin-top: 24px;
   display: flex;
   justify-content: flex-end;

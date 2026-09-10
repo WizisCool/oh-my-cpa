@@ -1,22 +1,22 @@
-.tabsWrap {
+.tabs-wrap {
   margin-bottom: 16px;
 }
 
-.tabsWrap :global(.ant-tabs-nav) {
+.tabs-wrap :global(.ant-tabs-nav) {
   margin-bottom: 0 !important;
 }
 
-.tabsWrap :global(.ant-tabs-nav::before) {
+.tabs-wrap :global(.ant-tabs-nav::before) {
   border-bottom: 1px solid var(--border) !important;
 }
 
-.tabsWrap :global(.ant-tabs-ink-bar) {
+.tabs-wrap :global(.ant-tabs-ink-bar) {
   background: var(--fg) !important;
   height: 2px !important;
   border-radius: 0 !important;
 }
 
-.tabsWrap :global(.ant-tabs-tab) {
+.tabs-wrap :global(.ant-tabs-tab) {
   padding: 8px 12px 11px !important;
   margin: 0 4px 0 0 !important;
   border-radius: var(--radius-sm) var(--radius-sm) 0 0 !important;
@@ -30,46 +30,46 @@
     background-color var(--motion-fast, 50ms) ease-out !important;
 }
 
-.tabsWrap :global(.ant-tabs-tab .ant-tabs-tab-btn) {
+.tabs-wrap :global(.ant-tabs-tab .ant-tabs-tab-btn) {
   color: var(--fg-2) !important;
   transition: color var(--motion-fast, 50ms) ease-out !important;
   outline: none !important;
 }
 
 /* Elegant hover state for unselected tabs */
-.tabsWrap :global(.ant-tabs-tab:not(.ant-tabs-tab-active):hover) {
+.tabs-wrap :global(.ant-tabs-tab:not(.ant-tabs-tab-active):hover) {
   background: var(--surface) !important;
 }
 
-.tabsWrap :global(.ant-tabs-tab:not(.ant-tabs-tab-active):hover .ant-tabs-tab-btn) {
+.tabs-wrap :global(.ant-tabs-tab:not(.ant-tabs-tab-active):hover .ant-tabs-tab-btn) {
   color: var(--fg) !important;
 }
 
-.tabsWrap :global(.ant-tabs-tab:not(.ant-tabs-tab-active):hover) .tabCount {
+.tabs-wrap :global(.ant-tabs-tab:not(.ant-tabs-tab-active):hover) .tab-count {
   background: var(--border) !important;
   color: var(--fg) !important;
 }
 
 /* Active tab state */
-.tabsWrap :global(.ant-tabs-tab-active) {
+.tabs-wrap :global(.ant-tabs-tab-active) {
   background: transparent !important;
 }
 
-.tabsWrap :global(.ant-tabs-tab-active .ant-tabs-tab-btn) {
+.tabs-wrap :global(.ant-tabs-tab-active .ant-tabs-tab-btn) {
   color: var(--fg) !important;
   font-weight: 650 !important;
   text-shadow: none !important;
 }
 
-.tabsWrap :global(.ant-tabs-tab-focus:not(:focus-visible)) {
+.tabs-wrap :global(.ant-tabs-tab-focus:not(:focus-visible)) {
   background: transparent !important;
 }
 
-.tabsWrap :global(.ant-tabs-tab-btn:focus:not(:focus-visible)) {
+.tabs-wrap :global(.ant-tabs-tab-btn:focus:not(:focus-visible)) {
   outline: none !important;
 }
 
-.tabIcon {
+.tab-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -79,7 +79,7 @@
 }
 
 /* Polished count capsule badge */
-.tabCount {
+.tab-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -101,7 +101,7 @@
     border-color var(--motion-fast, 50ms) ease-out;
 }
 
-.tabCountActive {
+.tab-count-active {
   background: var(--surface) !important;
   border-color: var(--border) !important;
   color: var(--fg) !important;

@@ -42,7 +42,6 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
   const meta = getCredentialProviderMetadata(item.provider);
   const iconId = meta.iconId || getProviderDefaultIcon(item.provider, item.name);
 
-  // Status badge config
   const renderStatus = () => {
     if (item.active_cooldown?.is_active) {
       return (
@@ -101,7 +100,6 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
   const creditSupported = item.capabilities.reset_credit_supported;
   const canRedeem = creditSupported && availableCredits > 0 && !item.disabled;
 
-  // Upcoming credit expiries for the "manual reset expiry" block
   const creditRows = (item.reset_credits?.credits ?? [])
     .filter((c) => c.expires_at_ms)
     .sort((a, b) => (a.expires_at_ms ?? 0) - (b.expires_at_ms ?? 0));
@@ -114,7 +112,7 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
     windows.forEach((win) => {
       const group = win.scope === 'group' ? win.label.split(' · ')[0] : null;
       if (group && lastGroup && group !== lastGroup) {
-        rows.push(<div key={`divider-${win.id}`} className={styles.windowDivider} aria-hidden="true" />);
+        rows.push(<div key={`divider-${win.id}`} className={styles['window-divider']} aria-hidden="true" />);
       }
       rows.push(
         <QuotaProgressBar
@@ -136,47 +134,47 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
   };
 
   return (
-    <article className={`terminal-panel ${styles.quotaCard}`}>
+    <article className={`terminal-panel ${styles['quota-card']}`}>
       {/* Header: provider icon + credential name + status */}
-      <div className={styles.cardHead}>
-        <div className={styles.cardTitleWrap}>
-          <div className={styles.cardIcon}>
+      <div className={styles['card-head']}>
+        <div className={styles['card-title-wrap']}>
+          <div className={styles['card-icon']}>
             <LobeIcon iconId={iconId} size={20} />
           </div>
-          <div className={styles.cardNameBlock}>
-            <div className={styles.cardName} title={item.name}>
+          <div className={styles['card-name-block']}>
+            <div className={styles['card-name']} title={item.name}>
               {item.name}
             </div>
-            <div className={styles.cardAuthIndex} title={item.auth_index}>
+            <div className={styles['card-auth-index']} title={item.auth_index}>
               {item.auth_index}
             </div>
           </div>
         </div>
-        <div className={styles.cardTags}>{renderStatus()}</div>
+        <div className={styles['card-tags']}>{renderStatus()}</div>
       </div>
 
-      {/* Plan summary strip: 套餐 | 续期时间 | 重置次数 — omit empty slots
-          instead of showing "—" dummies (CPAMC behavior) */}
+      {/* Plan summary strip: plan | renewal date | reset count — omit empty
+          slots instead of showing "—" dummies (CPAMC behaviour) */}
       {(item.plan?.plan_label || item.plan?.expires_at_ms || item.reset_credits) && (
-        <div className={styles.metaRow}>
+        <div className={styles['meta-row']}>
           {item.plan?.plan_label && (
-            <span className={styles.metaItem}>
-              <span className={styles.metaLabel}>{t('quota.col_plan')}</span>
-              <span className={styles.metaValue}>{item.plan.plan_label}</span>
+            <span className={styles['meta-item']}>
+              <span className={styles['meta-label']}>{t('quota.col_plan')}</span>
+              <span className={styles['meta-value']}>{item.plan.plan_label}</span>
             </span>
           )}
           {item.plan?.expires_at_ms && (
-            <span className={styles.metaItem}>
-              <span className={styles.metaLabel}>{t('quota.col_renewal')}</span>
-              <span className={styles.metaValue}>
+            <span className={styles['meta-item']}>
+              <span className={styles['meta-label']}>{t('quota.col_renewal')}</span>
+              <span className={styles['meta-value']}>
                 {formatTimeWithCountdown(item.plan.expires_at_ms, nowMS, t)}
               </span>
             </span>
           )}
           {item.reset_credits && (
-            <span className={styles.metaItem}>
-              <span className={styles.metaLabel}>{t('quota.col_reset_count')}</span>
-              <span className={styles.metaValue}>{availableCredits}</span>
+            <span className={styles['meta-item']}>
+              <span className={styles['meta-label']}>{t('quota.col_reset_count')}</span>
+              <span className={styles['meta-value']}>{availableCredits}</span>
             </span>
           )}
         </div>
@@ -184,12 +182,12 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
 
       {/* Active Cooldown Banner */}
       {item.active_cooldown?.is_active && (
-        <div className={`${styles.recBanner} ${styles.recBannerDanger}`}>
-          <span className={styles.bannerDot} style={{ background: 'var(--danger)' }} />
-          <div className={styles.recText}>
+        <div className={`${styles['rec-banner']} ${styles['rec-banner-danger']}`}>
+          <span className={styles['banner-dot']} style={{ background: 'var(--danger)' }} />
+          <div className={styles['rec-text']}>
             <div>{item.active_cooldown.reason || t('quota.cooldown_active_desc')}</div>
             {item.active_cooldown.recover_at_ms && (
-              <div className={styles.recSubDanger}>
+              <div className={styles['rec-sub-danger']}>
                 {t('quota.recover_at', { time: formatTimeWithCountdown(item.active_cooldown.recover_at_ms, nowMS, t) })}
               </div>
             )}
@@ -207,14 +205,14 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
       {/* Manual reset credit expiries */}
       {item.reset_credits && creditRows.length > 0 && (
         <div className={styles.section}>
-          <div className={styles.sectionTitle}>
+          <div className={styles['section-title']}>
             {t('quota.reset_expiry_title')}（{formatGmtOffsetLabel(new Date(nowMS))}）
           </div>
-          <div className={styles.resetList}>
+          <div className={styles['reset-list']}>
             {creditRows.map((credit, idx) => (
-              <div className={styles.resetRow} key={credit.id || idx}>
-                <span className={styles.metaLabel}>{t('quota.reset_occurrence', { n: idx + 1 })}</span>
-                <span className={styles.metaValue}>
+              <div className={styles['reset-row']} key={credit.id || idx}>
+                <span className={styles['meta-label']}>{t('quota.reset_occurrence', { n: idx + 1 })}</span>
+                <span className={styles['meta-value']}>
                   {credit.expires_at_ms
                     ? formatTimeWithCountdown(credit.expires_at_ms, nowMS, t)
                     : '—'}
@@ -227,12 +225,12 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
 
       {/* Usage limits */}
       <div className={styles.section}>
-        <div className={styles.sectionTitle}>{t('quota.windows_title')}</div>
-        <div className={styles.windowsList}>
+        <div className={styles['section-title']}>{t('quota.windows_title')}</div>
+        <div className={styles['windows-list']}>
           {displayWindows.length > 0 ? (
             renderWindowRows(displayWindows)
           ) : (
-            <div className={styles.noWindow}>
+            <div className={styles['no-window']}>
               {item.disabled ? t('quota.credential_disabled') : t('quota.no_window_data')}
             </div>
           )}
@@ -240,11 +238,11 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
       </div>
 
       {/* Footer: observed time + primary actions */}
-      <div className={styles.cardFooter}>
-        <div className={styles.cardMetaTime}>
+      <div className={styles['card-footer']}>
+        <div className={styles['card-meta-time']}>
           {formatObservedAgo(item.observed_at_ms, nowMS, t)}
         </div>
-        <div className={styles.cardActions}>
+        <div className={styles['card-actions']}>
           {canRedeem && (
             <Popconfirm
               title={t('quota.redeem_credit_confirm_title')}

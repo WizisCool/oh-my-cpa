@@ -1,19 +1,19 @@
 /* ── Pricing Page: Terminal Console Workbench ──────────────────────────── */
 
-.pricingPage {
+.pricing-page {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.headerActions {
+.header-actions {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 /* ── Top Sync Telemetry Strip ── */
-.telemetryStrip {
+.telemetry-strip {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -26,44 +26,44 @@
   font-size: 12px;
 }
 
-.telemetryLeft {
+.telemetry-left {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 16px;
 }
 
-.telemetryStatus {
+.telemetry-status {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   font-weight: 500;
 }
 
-.statusPip {
+.status-pip {
   width: 7px;
   height: 7px;
   border-radius: 2px;
   flex-shrink: 0;
 }
 
-.pipSuccess {
+.pip-success {
   background: var(--success);
 }
 
-.pipWarn {
+.pip-warn {
   background: var(--warn);
 }
 
-.pipDanger {
+.pip-danger {
   background: var(--danger);
 }
 
-.pipRunning {
+.pip-running {
   background: var(--accent);
 }
 
-.telemetryMetrics {
+.telemetry-metrics {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -71,43 +71,43 @@
   color: var(--muted);
 }
 
-.telemetryItem {
+.telemetry-item {
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
 
-.telemetryItem strong {
+.telemetry-item strong {
   font-family: inherit;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   color: var(--fg);
 }
 
-.telemetryDivider {
+.telemetry-divider {
   width: 1px;
   height: 12px;
   background: var(--border);
 }
 
-.telemetryRight {
+.telemetry-right {
   display: flex;
   align-items: center;
   gap: 8px;
   color: var(--muted);
 }
 
-.autoSyncLabel {
+.auto-sync-label {
   font-size: 12px;
   color: var(--muted);
   white-space: nowrap;
 }
 
-.autoSyncSelect {
+.auto-sync-select {
   width: 115px;
 }
 
-.nextSyncText {
+.next-sync-text {
   font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
@@ -120,7 +120,7 @@
 }
 
 /* ── Unpriced Models Alert Ribbon ── */
-.unpricedRibbon {
+.unpriced-ribbon {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -130,7 +130,7 @@
   border-radius: var(--radius-sm, 4px);
 }
 
-.unpricedHead {
+.unpriced-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -139,27 +139,27 @@
   color: var(--fg);
 }
 
-.unpricedTitle {
+.unpriced-title {
   display: flex;
   align-items: center;
   gap: 8px;
   font-weight: 600;
 }
 
-.unpricedHint {
+.unpriced-hint {
   font-size: 12px;
   color: var(--muted);
   font-weight: normal;
 }
 
-.unpricedChips {
+.unpriced-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 2px;
 }
 
-.unpricedChip {
+.unpriced-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -174,13 +174,13 @@
   transition: all var(--motion-fast, 50ms) ease;
 }
 
-.unpricedChip:hover {
+.unpriced-chip:hover {
   background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   border-color: var(--accent);
   color: var(--accent);
 }
 
-.unpricedChipPlus {
+.unpriced-chip-plus {
   color: var(--accent);
   font-weight: bold;
 }
@@ -194,7 +194,7 @@
 }
 
 /* ── Integrated Workbench Toolbar ── */
-.workbenchToolbar {
+.workbench-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -205,14 +205,14 @@
   background: var(--bg);
 }
 
-.toolbarLeft {
+.toolbar-left {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
 }
 
-.toolbarRight {
+.toolbar-right {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -220,7 +220,7 @@
 }
 
 /* ── Filter Segmented Tabs ── */
-.filterTabs {
+.filter-tabs {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -230,7 +230,7 @@
   border: 1px solid var(--border);
 }
 
-.filterTab {
+.filter-tab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -245,17 +245,17 @@
   line-height: 1.4;
 }
 
-.filterTab:hover {
+.filter-tab:hover {
   color: var(--fg);
 }
 
-.filterTabActive {
+.filter-tab-active {
   background: var(--bg);
   color: var(--fg);
   font-weight: 500;
 }
 
-.filterCount {
+.filter-count {
   font-size: 10px;
   padding: 1px 5px;
   border-radius: var(--radius-sm, 4px);
@@ -264,23 +264,23 @@
   font-variant-numeric: tabular-nums;
 }
 
-.filterTabActive .filterCount {
+.filter-tab-active .filter-count {
   background: color-mix(in srgb, var(--accent) 25%, var(--border));
   color: var(--accent);
 }
 
 /* ── Search Box ── */
-.searchBox {
+.search-box {
   width: 240px;
 }
 
-.searchBox input {
+.search-box input {
   font-family: monospace;
   font-size: 12px;
 }
 
 /* ── Unit Badge ── */
-.unitTag {
+.unit-tag {
   font-family: monospace;
   font-size: 11px;
   padding: 2px 8px;
@@ -291,7 +291,7 @@
 }
 
 /* ── Table Cell Styles ── */
-.modelCell {
+.model-cell {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -301,18 +301,18 @@
   color: var(--fg);
 }
 
-.priceNumber {
+.price-number {
   font-family: monospace;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   color: var(--fg);
 }
 
-.priceDimmed {
+.price-dimmed {
   color: var(--meta);
 }
 
-.multiplierBadge {
+.multiplier-badge {
   font-family: monospace;
   font-size: 11px;
   padding: 1px 6px;
@@ -322,7 +322,7 @@
   color: var(--warn);
 }
 
-.sourceBadge {
+.source-badge {
   font-family: monospace;
   font-size: 11px;
   padding: 2px 6px;
@@ -332,27 +332,27 @@
   gap: 4px;
 }
 
-.sourceModelsDev {
+.source-models-dev {
   background: color-mix(in srgb, var(--accent) 12%, var(--bg));
   border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
   color: var(--accent);
 }
 
-.sourceManual {
+.source-manual {
   background: color-mix(in srgb, var(--warn) 12%, var(--bg));
   border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--border));
   color: var(--warn);
 }
 
 /* ── Action Buttons ── */
-.actionGroup {
+.action-group {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
 }
 
-.actionBtn {
+.action-btn {
   width: 28px !important;
   height: 28px !important;
   padding: 0 !important;
@@ -365,18 +365,18 @@
   color: var(--text-muted) !important;
 }
 
-.actionBtn:hover {
+.action-btn:hover {
   border-color: var(--accent) !important;
   color: var(--accent) !important;
 }
 
-.actionBtnDanger:hover {
+.action-btn-danger:hover {
   border-color: var(--danger) !important;
   color: var(--danger) !important;
 }
 
 /* ── Workbench Footer ── */
-.workbenchFooter {
+.workbench-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -389,7 +389,7 @@
   background: var(--bg);
 }
 
-.syncRunningText {
+.sync-running-text {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -398,7 +398,7 @@
 }
 
 /* ── Modal Price Editor ── */
-.editorMeta {
+.editor-meta {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -410,13 +410,13 @@
   font-size: 12px;
 }
 
-.editorGrid {
+.editor-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0 16px;
 }
 
-.liveEstimateBox {
+.live-estimate-box {
   margin-top: 12px;
   padding: 10px 14px;
   background: var(--bg);
@@ -424,7 +424,7 @@
   border-radius: var(--radius-sm, 4px);
 }
 
-.liveEstimateTitle {
+.live-estimate-title {
   font-size: 11px;
   color: var(--muted);
   margin-bottom: 4px;
@@ -432,7 +432,7 @@
   letter-spacing: 0.05em;
 }
 
-.liveEstimateValue {
+.live-estimate-value {
   font-family: monospace;
   font-size: 13px;
   font-weight: 600;
@@ -440,18 +440,18 @@
 }
 
 @media (max-width: 768px) {
-  .workbenchToolbar {
+  .workbench-toolbar {
     flex-direction: column;
     align-items: stretch;
   }
-  .toolbarRight {
+  .toolbar-right {
     margin-left: 0;
     justify-content: space-between;
   }
-  .searchBox {
+  .search-box {
     width: 100%;
   }
-  .editorGrid {
+  .editor-grid {
     grid-template-columns: 1fr;
   }
 }

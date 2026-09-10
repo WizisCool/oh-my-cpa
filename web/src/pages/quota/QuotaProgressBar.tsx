@@ -31,28 +31,28 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
 }) => {
   const t = useT();
 
-  // Derive remaining and used percentages
-  let rem = remainingPercent;
-  if (rem == null && usedPercent != null) {
-    rem = Math.max(0, Math.min(100, 100 - usedPercent));
+  // A credential may report only usage; derive the remaining share from it
+  // rather than showing no bar at all.
+  let remaining = remainingPercent;
+  if (remaining == null && usedPercent != null) {
+    remaining = Math.max(0, Math.min(100, 100 - usedPercent));
   }
 
-  const hasData = rem != null;
-  const safeRem = hasData ? Math.max(0, Math.min(100, rem!)) : 0;
+  const hasData = remaining != null;
+  const clampedRemaining = hasData ? Math.max(0, Math.min(100, remaining!)) : 0;
 
   // CPAMC-style three buckets: plenty green, getting low yellow, nearly gone red
   let strokeColor = 'var(--muted)';
   if (hasData) {
-    if (safeRem >= 70) {
+    if (clampedRemaining >= 70) {
       strokeColor = 'var(--success)';
-    } else if (safeRem >= 25) {
+    } else if (clampedRemaining >= 25) {
       strokeColor = 'var(--warn)';
     } else {
       strokeColor = 'var(--danger)';
     }
   }
 
-  // Localize window label
   const resolvedLabel = (() => {
     if (kind === 'five_hour') return t('quota.window_five_hour');
     if (kind === 'weekly') return t('quota.window_weekly');
@@ -62,7 +62,7 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
     return label || '';
   })();
 
-  // Reset cell: "09/05 19:43 · 4小时后"; backend-provided label as fallback
+  // Reset cell: "09/05 19:43 · in 4 hours"; backend-provided label as fallback
   const computedResetText = (() => {
     if (resetAtMS) {
       if (resetAtMS - nowMS <= 0) return t('quota.recovered');
@@ -71,21 +71,21 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
     return resetLabel || '';
   })();
 
-  const displayPercent = hasData ? `${Math.round(safeRem)}%` : '--';
+  const displayPercent = hasData ? `${Math.round(clampedRemaining)}%` : '--';
 
   return (
-    <div className={styles.progressWrap}>
-      <div className={styles.progressLabelRow}>
-        <span className={styles.progressLabel} title={resolvedLabel}>
+    <div className={styles['progress-wrap']}>
+      <div className={styles['progress-label-row']}>
+        <span className={styles['progress-label']} title={resolvedLabel}>
           {resolvedLabel}
-          {subLabel && <span className={styles.progressSubLabel}>{subLabel}</span>}
+          {subLabel && <span className={styles['progress-sub-label']}>{subLabel}</span>}
         </span>
         {showPercent && (
-          <span className={styles.progressValue} style={{ color: hasData ? undefined : 'var(--meta)' }}>
+          <span className={styles['progress-value']} style={{ color: hasData ? undefined : 'var(--meta)' }}>
             {displayPercent}
           </span>
         )}
-        <span className={styles.progressReset} title={computedResetText || undefined}>
+        <span className={styles['progress-reset']} title={computedResetText || undefined}>
           {computedResetText}
         </span>
       </div>
@@ -95,7 +95,7 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
         title={hasData ? `${resolvedLabel}: ${displayPercent}` : undefined}
       >
         <Progress
-          percent={hasData ? safeRem : 0}
+          percent={hasData ? clampedRemaining : 0}
           showInfo={false}
           strokeColor={strokeColor}
           strokeWidth={height}

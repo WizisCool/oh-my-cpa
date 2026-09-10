@@ -9,8 +9,10 @@ interface PricingLeaderboardProps {
   models: ModelPrice[];
 }
 
-/** Standard balanced coding session assumption */
-const FIXED_BUDGET = 60; // Fixed $60 budget
+// Size of one "balanced coding session" — prompt tokens in, completion tokens
+// out, at a fixed US dollar budget. Simulated load, not telemetry: it exists so
+// the leaderboard can compare models on cost and throughput on one axis.
+const FIXED_BUDGET = 60;
 const PROMPT_TOKENS = 1000;
 const COMPLETION_TOKENS = 300;
 const CACHE_READ_TOKENS = 35000;
@@ -198,18 +200,18 @@ export const PricingLeaderboard: React.FC<PricingLeaderboardProps> = ({ models }
   }, [visibleRows]);
 
   return (
-    <div className={styles.leaderboardCard} data-testid="pricing-leaderboard">
+    <div className={styles['leaderboard-card']} data-testid="pricing-leaderboard">
       {/* Header Block */}
       <div className={styles.header}>
-        <div className={styles.titleArea}>
-          <div className={styles.titleRow}>
+        <div className={styles['title-area']}>
+          <div className={styles['title-row']}>
             <BarChartOutlined style={{ color: 'var(--accent)', fontSize: 16 }} />
             <h2 className={styles.title}>{t('pricing.leaderboard.title')}</h2>
           </div>
           <p className={styles.subtitle}>{t('pricing.leaderboard.subtitle')}</p>
         </div>
 
-        <div className={styles.headerRight}>
+        <div className={styles['header-right']}>
           {rows.length > 10 ? (
             <Segmented<DisplayLimit>
               size="small"
@@ -222,13 +224,13 @@ export const PricingLeaderboard: React.FC<PricingLeaderboardProps> = ({ models }
               ]}
             />
           ) : (
-            <span className={styles.modelCountBadge}>{t('pricing.leaderboard.model_count', { n: rows.length })}</span>
+            <span className={styles['model-count-badge']}>{t('pricing.leaderboard.model_count', { n: rows.length })}</span>
           )}
         </div>
       </div>
 
       {/* Bar Chart Container */}
-      <div className={styles.chartContainer}>
+      <div className={styles['chart-container']}>
         {calculatedRows.length === 0 ? (
           <div style={{ color: 'var(--muted)', textAlign: 'center', padding: '24px 0', fontSize: 13 }}>
             {t('pricing.leaderboard.empty')}
@@ -236,32 +238,32 @@ export const PricingLeaderboard: React.FC<PricingLeaderboardProps> = ({ models }
         ) : (
           <>
             {/* Chart Body with Background Grid Lines */}
-            <div className={styles.chartBody}>
+            <div className={styles['chart-body']}>
               {/* Algorithmic Vertical Guide Lines */}
-              <div className={styles.gridOverlay}>
+              <div className={styles['grid-overlay']}>
                 {scaleTicks.map((tick) => (
                   <div
                     key={tick.val}
-                    className={styles.gridLine}
+                    className={styles['grid-line']}
                     style={{ left: `${tick.position}%` }}
                   />
                 ))}
               </div>
 
               {/* Model Bar Rows: Request count and model name directly beside each bar */}
-              <div className={styles.barList}>
+              <div className={styles['bar-list']}>
                 {calculatedRows.map((row) => (
-                  <div key={row.model} className={styles.barRow}>
-                    <div className={styles.barTrack}>
+                  <div key={row.model} className={styles['bar-row']}>
+                    <div className={styles['bar-track']}>
                       <div
-                        className={styles.barFill}
+                        className={styles['bar-fill']}
                         style={{ width: `${row.widthPct}%` }}
                       />
-                      <div className={styles.barMeta}>
-                        <span className={styles.requestCount}>
+                      <div className={styles['bar-meta']}>
+                        <span className={styles['request-count']}>
                           {t('pricing.leaderboard.req_count', { n: row.requests.toLocaleString() })}
                         </span>
-                        <span className={styles.modelName}>{row.model}</span>
+                        <span className={styles['model-name']}>{row.model}</span>
                       </div>
                     </div>
                   </div>
@@ -271,11 +273,11 @@ export const PricingLeaderboard: React.FC<PricingLeaderboardProps> = ({ models }
 
             {/* Expand / Collapse Footer row when more than 10 models exist */}
             {rows.length > 10 && (
-              <div className={styles.expandRow}>
+              <div className={styles['expand-row']}>
                 {limit !== 'all' ? (
                   <button
                     type="button"
-                    className={styles.expandBtn}
+                    className={styles['expand-btn']}
                     onClick={() => setLimit('all')}
                   >
                     {t('pricing.leaderboard.expand_all', { n: rows.length })} <DownOutlined style={{ fontSize: 10 }} />
@@ -283,7 +285,7 @@ export const PricingLeaderboard: React.FC<PricingLeaderboardProps> = ({ models }
                 ) : (
                   <button
                     type="button"
-                    className={styles.expandBtn}
+                    className={styles['expand-btn']}
                     onClick={() => setLimit('10')}
                   >
                     {t('pricing.leaderboard.collapse_to_10')} <UpOutlined style={{ fontSize: 10 }} />
@@ -293,8 +295,8 @@ export const PricingLeaderboard: React.FC<PricingLeaderboardProps> = ({ models }
             )}
 
             {/* Bottom Algorithmic Scale Axis */}
-            <div className={styles.scaleFooter}>
-              <div className={styles.scalePlotArea}>
+            <div className={styles['scale-footer']}>
+              <div className={styles['scale-plot-area']}>
                 {scaleTicks.map((tick, idx) => {
                   let alignStyle: React.CSSProperties = { transform: 'translateX(-50%)' };
                   if (idx === 0) alignStyle = { transform: 'translateX(-20%)' };
@@ -303,10 +305,10 @@ export const PricingLeaderboard: React.FC<PricingLeaderboardProps> = ({ models }
                   return (
                     <div
                       key={tick.val}
-                      className={styles.scaleTickMark}
+                      className={styles['scale-tick-mark']}
                       style={{ left: `${tick.position}%`, ...alignStyle }}
                     >
-                      <span className={styles.scaleTickLabel}>{tick.label}</span>
+                      <span className={styles['scale-tick-label']}>{tick.label}</span>
                     </div>
                   );
                 })}

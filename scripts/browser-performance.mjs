@@ -53,8 +53,8 @@ try {
     await route.fulfill({ status: 200, json: body });
   });
   await page.goto(`${base}/quota`, { waitUntil: 'networkidle' });
-  await page.locator('article[class*="quotaCard"]').first().waitFor();
-  const cards = await page.locator('article[class*="quotaCard"]').count();
+  await page.locator('article[class*="quota-card"]').first().waitFor();
+  const cards = await page.locator('article[class*="quota-card"]').count();
   const bars = await page.locator('.quota-page .ant-progress').count();
   const visibleTimers = await page.evaluate(() => window.__activeIntervals());
   await page.evaluate(() => {

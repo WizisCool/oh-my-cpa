@@ -642,7 +642,7 @@ export const OAuthPage: React.FC = () => {
       : getProviderDefaultIcon(card.id, card.rawTitle);
 
     return (
-      <div className={styles.iconBox}>
+      <div className={styles['icon-box']}>
         {card.kind === 'plugin' ? (
           <PluginLogo key={card.logo || 'none'} logo={card.logo} fallbackIconId={iconId} />
         ) : (
@@ -673,23 +673,23 @@ export const OAuthPage: React.FC = () => {
         className={styles.card}
         data-oauth-card={card.id}
       >
-        <div className={styles.cardHeader}>
-          <div className={styles.cardIdentity}>
+        <div className={styles['card-header']}>
+          <div className={styles['card-identity']}>
             {renderIcon(card)}
-            <div className={styles.cardMain}>
-              <div className={styles.cardTitleRow}>
-                <h3 className={styles.cardTitle}>{titleText}</h3>
+            <div className={styles['card-main']}>
+              <div className={styles['card-title-row']}>
+                <h3 className={styles['card-title']}>{titleText}</h3>
                 {card.kind === 'plugin' && (
-                  <Tag color="purple" icon={<ApiOutlined />} className={styles.pluginTag}>
+                  <Tag color="purple" icon={<ApiOutlined />} className={styles['plugin-tag']}>
                     {t('oauth.plugin_tag')}
                   </Tag>
                 )}
               </div>
-              <Paragraph className={styles.cardDesc}>{descText}</Paragraph>
+              <Paragraph className={styles['card-desc']}>{descText}</Paragraph>
             </div>
           </div>
 
-          <div className={styles.cardActions}>
+          <div className={styles['card-actions']}>
             {isWaiting && (
               <Button
                 danger
@@ -703,7 +703,7 @@ export const OAuthPage: React.FC = () => {
 
             <Button
               type="default"
-              className={styles.btnRegularLogin}
+              className={styles['btn-regular-login']}
               loading={state.starting}
               disabled={isWaiting}
               onClick={() => handleStartAuth(card)}
@@ -716,13 +716,13 @@ export const OAuthPage: React.FC = () => {
 
         {/* In-Card Active Session and Callback / Device Flow */}
         {isExpanded && (
-          <div className={styles.cardExpanded}>
+          <div className={styles['card-expanded']}>
             {/* 1. Auth URL Container */}
             {state.url && (
-              <div className={styles.authUrlBox}>
-                <div className={styles.authUrlHeader}>
-                  <span className={styles.authUrlLabel}>{t('oauth.auth_url_label')}</span>
-                  <div className={styles.authUrlActions}>
+              <div className={styles['auth-url-box']}>
+                <div className={styles['auth-url-header']}>
+                  <span className={styles['auth-url-label']}>{t('oauth.auth_url_label')}</span>
+                  <div className={styles['auth-url-actions']}>
                     <Button
                       size="small"
                       icon={<CopyOutlined />}
@@ -740,16 +740,16 @@ export const OAuthPage: React.FC = () => {
                     </Button>
                   </div>
                 </div>
-                <div className={styles.authUrlValue}>{state.url}</div>
+                <div className={styles['auth-url-value']}>{state.url}</div>
               </div>
             )}
 
             {/* 2. Manual Callback Section (for manual-callback flow) */}
             {card.flowKind === 'manual-callback' && Boolean(state.url) && (
-              <div className={styles.callbackBox} data-oauth-callback-box>
-                <div className={styles.callbackLabel}>{t('oauth.callback_label')}</div>
-                <div className={styles.callbackHint}>{t('oauth.callback_hint')}</div>
-                <div className={styles.callbackInputRow}>
+              <div className={styles['callback-box']} data-oauth-callback-box>
+                <div className={styles['callback-label']}>{t('oauth.callback_label')}</div>
+                <div className={styles['callback-hint']}>{t('oauth.callback_hint')}</div>
+                <div className={styles['callback-input-row']}>
                   <Input
                     value={state.callbackUrl || ''}
                     placeholder={t('oauth.callback_placeholder')}
@@ -763,7 +763,7 @@ export const OAuthPage: React.FC = () => {
                       })
                     }
                     onPressEnter={() => handleSubmitCallback(card)}
-                    className={styles.callbackInput}
+                    className={styles['callback-input']}
                   />
                   <Button
                     type="primary"
@@ -776,14 +776,14 @@ export const OAuthPage: React.FC = () => {
                 </div>
 
                 {state.callbackStatus === 'success' && state.status !== 'success' && (
-                  <div className={styles.callbackStatusArea}>
+                  <div className={styles['callback-status-area']}>
                     <Tag color="processing" icon={<CheckCircleOutlined />}>
                       {t('oauth.callback_submitted')}
                     </Tag>
                   </div>
                 )}
                 {state.callbackStatus === 'error' && (
-                  <div className={styles.callbackStatusArea}>
+                  <div className={styles['callback-status-area']}>
                     <Tag color="error" icon={<CloseCircleOutlined />}>
                       {state.callbackError || t('oauth.callback_failed', { msg: '' })}
                     </Tag>
@@ -794,9 +794,9 @@ export const OAuthPage: React.FC = () => {
 
             {/* 2b. Device Code Confirmation Section (for device flow) */}
             {card.flowKind === 'device' && Boolean(state.url) && (
-              <div className={styles.callbackBox}>
-                <div className={styles.callbackLabel}>{t('oauth.device_flow_label')}</div>
-                <div className={styles.callbackHint}>{t('oauth.device_flow_hint')}</div>
+              <div className={styles['callback-box']}>
+                <div className={styles['callback-label']}>{t('oauth.device_flow_label')}</div>
+                <div className={styles['callback-hint']}>{t('oauth.device_flow_hint')}</div>
                 <div>
                   <Button
                     type="primary"
@@ -810,8 +810,8 @@ export const OAuthPage: React.FC = () => {
             )}
 
             {/* 3. Session Status Display */}
-            <div className={styles.statusRow}>
-              <div className={styles.statusIndicator}>
+            <div className={styles['status-row']}>
+              <div className={styles['status-indicator']}>
                 {isWaiting && (
                   <>
                     <Spin size="small" />
@@ -820,23 +820,23 @@ export const OAuthPage: React.FC = () => {
                 )}
                 {isSuccess && (
                   <>
-                    <CheckCircleOutlined className={styles.successIcon} />
-                    <Text strong className={styles.successText}>
+                    <CheckCircleOutlined className={styles['success-icon']} />
+                    <Text strong className={styles['success-text']}>
                       {t('oauth.status_success_badge')}
                     </Text>
                   </>
                 )}
                 {isError && (
                   <>
-                    <CloseCircleOutlined className={styles.errorIcon} />
-                    <Text className={styles.errorText}>
+                    <CloseCircleOutlined className={styles['error-icon']} />
+                    <Text className={styles['error-text']}>
                       {t('oauth.status_error_badge', { msg: state.error || '' })}
                     </Text>
                   </>
                 )}
               </div>
 
-              <div className={styles.statusActionRow}>
+              <div className={styles['status-action-row']}>
                 {isSuccess && (
                   <Button
                     type="link"
@@ -867,10 +867,10 @@ export const OAuthPage: React.FC = () => {
   return (
     <div className={`terminal-page oauth-page ${styles.container}`}>
       {/* Header */}
-      <div className={styles.pageHead}>
-        <div className={styles.titleArea}>
-          <h1 className={styles.pageTitle}>{t('oauth.title')}</h1>
-          <p className={styles.pageSubtitle}>{t('oauth.subtitle')}</p>
+      <div className={styles['page-head']}>
+        <div className={styles['title-area']}>
+          <h1 className={styles['page-title']}>{t('oauth.title')}</h1>
+          <p className={styles['page-subtitle']}>{t('oauth.subtitle')}</p>
         </div>
 
         <Button
@@ -883,22 +883,22 @@ export const OAuthPage: React.FC = () => {
       </div>
 
       {/* Cards List */}
-      <div className={styles.cardsList}>
+      <div className={styles['cards-list']}>
         {/* 1. Built-in Cards */}
         {BUILTIN_PROVIDERS.map((card) => renderCard(card))}
 
         {/* 2. CPA Plugin Dynamic OAuth Cards */}
         {pluginCards.length > 0 && (
           <>
-            <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>{t('oauth.plugin_section_title')}</h2>
+            <div className={styles['section-header']}>
+              <h2 className={styles['section-title']}>{t('oauth.plugin_section_title')}</h2>
             </div>
             {pluginCards.map((card) => renderCard(card))}
           </>
         )}
 
         {pluginsLoading && (
-          <div className={styles.loadingCenter}>
+          <div className={styles['loading-center']}>
             <Spin size="small" />
           </div>
         )}

@@ -14,11 +14,11 @@ export interface ProviderFilterTabsProps {
 }
 
 /**
- * Shared Provider Filter Tabs built with Ant Design Tabs, customized
- * strictly to Oh My CPA's terminal-flat design specification:
- * - Quiet underline with var(--fg) ink-bar indicator (no bright blue)
- * - Mono count pills (showZero) styled with var(--hover-inset) and tabular nums
- * - Explicit credential provider brand icons (Codex, Claude, Antigravity, xAI, Kimi)
+ * Shared provider filter tabs built on Ant Design Tabs, bent to the
+ * terminal-flat spec:
+ * - quiet underline with a var(--fg) ink bar, never antd blue
+ * - mono count pills over var(--surface)/var(--border-soft), tabular numerals
+ * - explicit provider brand icons (Codex, Claude, Antigravity, xAI, Kimi)
  */
 export const ProviderFilterTabs: React.FC<ProviderFilterTabsProps> = ({
   providers,
@@ -40,7 +40,7 @@ export const ProviderFilterTabs: React.FC<ProviderFilterTabsProps> = ({
       key: provider,
       label: (
         <Space size={6} align="center">
-          <span className={styles.tabIcon}>
+          <span className={styles['tab-icon']}>
             {iconId ? (
               <LobeIcon iconId={iconId} size={15} />
             ) : (
@@ -48,7 +48,7 @@ export const ProviderFilterTabs: React.FC<ProviderFilterTabsProps> = ({
             )}
           </span>
           <span>{label}</span>
-          <span className={`${styles.tabCount} ${isActive ? styles.tabCountActive : ''}`}>
+          <span className={`${styles['tab-count']} ${isActive ? styles['tab-count-active'] : ''}`}>
             {count}
           </span>
         </Space>
@@ -57,7 +57,7 @@ export const ProviderFilterTabs: React.FC<ProviderFilterTabsProps> = ({
   });
 
   return (
-    <div className={styles.tabsWrap}>
+    <div className={styles['tabs-wrap']}>
       <Tabs
         activeKey={active}
         onChange={onChange}

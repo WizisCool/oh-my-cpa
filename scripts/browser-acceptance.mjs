@@ -359,14 +359,14 @@ try {
   await page.locator('.quota-page').first().waitFor({ state: 'visible', timeout: 15000 });
 
   // Verify card grid renders one card per credential
-  const cardCount = await page.locator('article[class*="quotaCard"]').count();
+  const cardCount = await page.locator('article[class*="quota-card"]').count();
   check('quota page renders credential cards', cardCount > 0, `quotaCards=${cardCount}`);
 
   // Verify quota tab brand icons are not OpenAI
   const quotaAntigravitySvg = await page.locator('.quota-page .ant-tabs-tab').filter({ hasText: /Antigravity/i }).locator('svg').innerHTML();
   check('quota page Antigravity tab icon is not OpenAI', !quotaAntigravitySvg.includes('OpenAI'));
 
-  // Click header refresh to trigger live quota refresh (cards have their own 刷新额度 buttons)
+  // Click header refresh to trigger live quota refresh (cards have their own refresh buttons)
   const refreshAllBtn = page.locator('.terminal-page-head').getByRole('button', { name: /刷新|Refresh/i });
   if (await refreshAllBtn.isVisible()) {
     await refreshAllBtn.click();

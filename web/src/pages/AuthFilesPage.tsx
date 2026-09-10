@@ -444,9 +444,9 @@ export const AuthFilesPage: React.FC = () => {
   }
 
   return (
-    <div className={`terminal-page auth-files-page ${styles.authFilesPage}`}>
+    <div className={`terminal-page auth-files-page ${styles['auth-files-page']}`}>
       {/* Page Header */}
-      <header className={styles.headTop}>
+      <header className={styles['head-top']}>
         <div>
           <h1 className="terminal-title">{t('nav.auth_files')}</h1>
           <Space size={8} wrap style={{ marginTop: 6 }}>
@@ -518,7 +518,7 @@ export const AuthFilesPage: React.FC = () => {
 
       {/* Toolbar */}
       <div className={styles.toolbar}>
-        <div className={styles.searchBox}>
+        <div className={styles['search-box']}>
           <Input
             prefix={<SearchOutlined style={{ color: 'var(--meta)' }} />}
             allowClear
@@ -549,7 +549,7 @@ export const AuthFilesPage: React.FC = () => {
             {
               label: (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <span className={`${styles.statDot} ${styles.dotProblem}`} />
+                  <span className={`${styles['stat-dot']} ${styles['dot-problem']}`} />
                   {t('af.status_problem')}
                 </span>
               ),
@@ -602,7 +602,7 @@ export const AuthFilesPage: React.FC = () => {
         </div>
       ) : (
         <>
-          <div className={compactMode ? styles.compactGrid : styles.cardsGrid}>
+          <div className={compactMode ? styles['compact-grid'] : styles['cards-grid']}>
             {pagedFiles.map((file) => {
               const fileBusy = busyFiles[file.name] === true || isOperating;
               return (
@@ -633,7 +633,7 @@ export const AuthFilesPage: React.FC = () => {
           </div>
 
           {sorted.length > pageSize && (
-            <div className={styles.paginationWrap}>
+            <div className={styles['pagination-wrap']}>
               <Pagination
                 current={page}
                 pageSize={pageSize}

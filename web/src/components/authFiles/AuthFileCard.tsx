@@ -78,7 +78,7 @@ export const AuthFileCard: React.FC<AuthFileCardProps> = ({
     if (disabled) {
       return (
         <Tag color="error" style={{ margin: 0, fontSize: 11 }}>
-          <span className={`${styles.statDot} ${styles.dotDisabled}`} style={{ marginRight: 4 }} />
+          <span className={`${styles['stat-dot']} ${styles['dot-disabled']}`} style={{ marginRight: 4 }} />
           {t('af.disabled')}
         </Tag>
       );
@@ -86,14 +86,14 @@ export const AuthFileCard: React.FC<AuthFileCardProps> = ({
     if (problem) {
       return (
         <Tag color="warning" style={{ margin: 0, fontSize: 11 }}>
-          <span className={`${styles.statDot} ${styles.dotProblem}`} style={{ marginRight: 4 }} />
+          <span className={`${styles['stat-dot']} ${styles['dot-problem']}`} style={{ marginRight: 4 }} />
           {t('af.status_problem')}
         </Tag>
       );
     }
     return (
       <Tag color="success" style={{ margin: 0, fontSize: 11 }}>
-        <span className={`${styles.statDot} ${styles.dotActive}`} style={{ marginRight: 4 }} />
+        <span className={`${styles['stat-dot']} ${styles['dot-active']}`} style={{ marginRight: 4 }} />
         {t('af.enabled')}
       </Tag>
     );
