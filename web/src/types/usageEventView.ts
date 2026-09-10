@@ -156,6 +156,69 @@ export function eventPageMetrics(events: UsageEvent[]) {
   };
 }
 
+/** Colour a verdict may carry. Matches the legend-dot tones in the theme. */
+export type VerdictTone = 'success' | 'warn' | 'danger' | 'neutral';
+
+/**
+ * Share of failures a window may carry before it is worth looking at.
+ *
+ * A gateway fanning out to several upstreams always produces some noise:
+ * provider 429s, a timeout that the next retry absorbs, a request the caller
+ * cancelled. At 98% success the old thresholds painted the indicator amber,
+ * which trained the operator to ignore it. Upstream noise is not a verdict.
+ */
+export const SUCCESS_ROUTINE_FAILURE_PERCENT = 5;
+
+/**
+ * Share of failures above which the window is treated as broken rather than
+ * degraded. Deliberately far from the routine band so the two never blur.
+ */
+export const SUCCESS_ELEVATED_FAILURE_PERCENT = 20;
+
+/**
+ * Requests a window needs before a failure rate may escalate on its own. Two
+ * failures out of four is a 50% rate and tells nobody anything, so a window
+ * this small stays neutral unless the failure count itself is damning.
+ */
+export const SUCCESS_VERDICT_MIN_SAMPLE = 20;
+
+/**
+ * Failures that make a window conclusive without a full sample. Nine failures
+ * out of ten requests is an outage whatever the sample size, and a small window
+ * must still be able to say so.
+ */
+export const SUCCESS_VERDICT_MIN_FAILURES = 3;
+
+/**
+ * successRateVerdict decides whether a window needs attention, which is not the
+ * same question as whether anything failed.
+ *
+ * The thresholds are on the *failure* rate rather than the success rate: "98%"
+ * is a number nobody reasons about, "2% of requests failed" is a decision.
+ *
+ *   no traffic                    -> neutral  (nothing to judge)
+ *   no failures                   -> success  (clean window)
+ *   no evidence yet               -> neutral  (below the sample floor and the
+ *                                              failure floor: a coin flip on
+ *                                              four requests is not a trend)
+ *   within the routine band       -> neutral  (upstream noise)
+ *   above the elevated band       -> danger   (broken)
+ *   otherwise                     -> warn
+ */
+export function successRateVerdict(total: number, failed: number): VerdictTone {
+  const samples = Number.isFinite(total) ? Math.max(0, Math.floor(total)) : 0;
+  if (samples === 0) return 'neutral';
+  const failures = Number.isFinite(failed) ? Math.min(Math.max(0, Math.floor(failed)), samples) : 0;
+  if (failures === 0) return 'success';
+  // A verdict needs evidence: either a real sample, or enough failures that the
+  // rate cannot be a fluke.
+  if (samples < SUCCESS_VERDICT_MIN_SAMPLE && failures < SUCCESS_VERDICT_MIN_FAILURES) return 'neutral';
+  const failurePercent = (failures / samples) * 100;
+  if (failurePercent <= SUCCESS_ROUTINE_FAILURE_PERCENT) return 'neutral';
+  if (failurePercent > SUCCESS_ELEVATED_FAILURE_PERCENT) return 'danger';
+  return 'warn';
+}
+
 export function formatEventDuration(ms: number | null | undefined): string {
   if (ms == null || !Number.isFinite(ms)) return '—';
   return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(2)} s`;

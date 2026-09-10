@@ -16,6 +16,11 @@ import {
   parseUsageEventsView,
   hasExplicitEventQuery,
   eventCacheRate,
+  successRateVerdict,
+  SUCCESS_ROUTINE_FAILURE_PERCENT,
+  SUCCESS_ELEVATED_FAILURE_PERCENT,
+  SUCCESS_VERDICT_MIN_FAILURES,
+  SUCCESS_VERDICT_MIN_SAMPLE,
   resolveProviderInfo,
   eventTokensPerSecond,
 } from '../web/src/types/usageEventView.ts';
@@ -503,6 +508,39 @@ console.log(
   'PASS column definitions: clamping, sanitization, adaptive and fixed grid template generation, measured min-width floor',
 );
 
+// successRateVerdict: the pip answers "does this window need attention", not
+// "did anything fail". Normal upstream noise must stay neutral so the amber and
+// red steps keep meaning something.
+assert.equal(successRateVerdict(0, 0), 'neutral', 'no traffic carries no verdict');
+assert.equal(successRateVerdict(500, 0), 'success', 'a clean window is green');
+// A lone failure is never a trend, however small the window: one retried
+// upstream request must not paint the page.
+assert.equal(successRateVerdict(2, 1), 'neutral', 'one failure out of two');
+assert.equal(successRateVerdict(100, 1), 'neutral', 'one failure out of a hundred');
+// The reported bug: 98% success (2% failures) used to show amber.
+assert.equal(successRateVerdict(100, 2), 'neutral', '98% success must not be amber');
+assert.equal(successRateVerdict(200, 4), 'neutral', '99%–98% band stays neutral');
+assert.equal(
+  successRateVerdict(100, SUCCESS_ROUTINE_FAILURE_PERCENT),
+  'neutral',
+  'the top of the routine band is still neutral',
+);
+assert.equal(successRateVerdict(100, 6), 'warn', 'above the routine band needs a look');
+assert.equal(successRateVerdict(100, 20), 'warn', 'the top of the elevated band is warn');
+assert.equal(successRateVerdict(100, 21), 'danger', 'above the elevated band is broken');
+assert.equal(successRateVerdict(5, 5), 'danger', 'a total outage is red even in a tiny window');
+// A middling rate in a window too small to mean anything stays neutral: two
+// failures out of four is 50% and tells nobody anything.
+assert.equal(successRateVerdict(4, 2), 'neutral', 'below the minimum sample');
+assert.equal(successRateVerdict(SUCCESS_VERDICT_MIN_SAMPLE, 2), 'warn', 'at the minimum sample it counts');
+assert.equal(successRateVerdict(SUCCESS_VERDICT_MIN_SAMPLE - 1, 2), 'neutral', 'one short of the minimum');
+// Defensive: nonsense inputs cannot produce a verdict.
+assert.equal(successRateVerdict(Number.NaN, 1), 'neutral');
+assert.equal(successRateVerdict(10, Number.NaN), 'success');
+assert.equal(successRateVerdict(10, -3), 'success', 'negative failures clamp to none');
+assert.equal(successRateVerdict(10, 99), 'danger', 'more failures than requests clamps to all');
+assert.ok(SUCCESS_ELEVATED_FAILURE_PERCENT > SUCCESS_ROUTINE_FAILURE_PERCENT);
 
-
-
+console.log(
+  'PASS success-rate verdict: routine noise stays neutral, one failure is never a trend, small samples cannot alarm',
+);

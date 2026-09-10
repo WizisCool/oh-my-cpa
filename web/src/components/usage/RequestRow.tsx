@@ -189,7 +189,7 @@ export const RequestRow = React.memo<RequestRowProps>(
         {/* Column 5: total latency */}
         <div className="req-col req-col-latency">
           <span className="req-mobile-label">{t('events.col_latency')}</span>
-          <strong className={`req-latency-val${event.latency_ms >= 4000 ? ' is-slow' : ''}`}>
+          <strong className="req-latency-val">
             {formatEventDuration(event.latency_ms)}
           </strong>
           <span className="req-ttft-val">

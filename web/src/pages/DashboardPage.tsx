@@ -11,6 +11,7 @@ import { useThemeMode } from '../theme/ThemeContext';
 import { usePreference } from '../hooks/usePreference';
 import { lineOptions, sparkDomain, sparkOptions, type ChartTone } from '../charts/chartTheme';
 import { formatCacheRate } from '../theme/cacheScale';
+import { successRateVerdict } from '../types/usageEventView';
 import { TimeRangeControl } from '../components/dashboard/TimeRangeControl';
 import type { ManagementOverview, ManagementOverviewProvider } from '../types/management';
 import {
@@ -127,15 +128,14 @@ const Pip: React.FC<{ tone: ChartTone }> = ({ tone }) => (
 /**
  * rateTone gives the tile's only pip something to mean.
  *
- * design.md reserves green/amber/red for real state, so one pip per verdict:
- * a clean window is green, a degraded one amber, a bad one red, and "no
- * traffic yet" is deliberately grey rather than dressed up as success.
+ * design.md reserves green/amber/red for real state, so one pip per verdict. The
+ * bands come from `successRateVerdict` so the dashboard and the request list can
+ * never disagree about the same window, and they are wide on purpose: a gateway
+ * fanning out to several upstreams always carries some 429/timeout noise, and
+ * painting that amber is how an indicator trains its reader to ignore it.
  */
-function rateTone(rate: number | null): ChartTone {
-  if (rate === null) return 'neutral';
-  if (rate >= 100) return 'success';
-  if (rate >= 95) return 'warn';
-  return 'danger';
+function rateTone(total: number, failed: number): ChartTone {
+  return successRateVerdict(total, failed);
 }
 
 
@@ -292,7 +292,7 @@ export const DashboardPage: React.FC = () => {
           <div className="tile-value">{formatCount(data.requests.total)}</div>
           <div className="tile-caption">
             <span className="tile-rate">
-              <Pip tone={rateTone(data.requests.success_rate)} />
+              <Pip tone={rateTone(data.requests.total, data.requests.failed)} />
               {t('dash.success_rate_short')} <b>{formatRate(data.requests.success_rate)}</b>
             </span>
             <span className="tile-split">
@@ -363,10 +363,16 @@ export const DashboardPage: React.FC = () => {
             <span>{t('dash.tokens_cache_read')} <b>{formatCompact(data.tokens.cache_read)}</b></span>
             <span>{t('dash.tokens_input')} <b>{formatCompact(data.tokens.input)}</b></span>
           </div>
+          {/* The sparkline is the token volume behind the rate, and its hue is
+              the tile's identity colour. It used to turn danger red when the
+              hit rate fell under 50%, which design.md forbids: a cache miss is
+              the shape of a novel prompt, not a failed execution, and the
+              danger hue belongs to failed requests. The rate itself is read
+              from the badge above, which owns the cache scale. */}
           <Trend
             points={data.tokens.series}
             pick={(point) => point.tokens ?? 0}
-            tone={data.metrics.cache_rate !== null && data.metrics.cache_rate < 50 ? 'danger' : 'success'}
+            tone="neutral"
             height={44}
             variant="line"
           />
