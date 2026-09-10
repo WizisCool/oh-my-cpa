@@ -1,6 +1,8 @@
 # Oh My CPA 大修复与产品推进执行目标（Codex 主任务）
 
-> **状态**：待 Codex 执行
+> **状态**：已完成并归档（阶段 0–8 全部落地，`overhaul/*` 标签齐全）。**本文件不再作为执行契约**——后续 Agent 的契约是 [`AGENTS.md`](AGENTS.md)，领域与架构文档是 `CONTEXT.md` 与 `docs/architecture.md`。
+>
+> **归档规则**：§2「当前事实基线」与 §2.4 是**计划编写时**的快照，已按后续实现重新标注；§16「执行记录」是历史条目，**不得改写**，新进展写入新文件。
 >
 > **主分支**：`master`（本项目未发布，只维护这一条主线）
 >
@@ -93,18 +95,22 @@ Go + chi 模块化单体
        capture → inbox → decode → event → hourly/daily rollup
 ```
 
-关键位置：
+关键位置（已改为符号引用，不再写易腐的行号）：
 
-- API 路由：`internal/api/handler.go:53-128`
+- API 路由与中间件：`internal/api/handler.go` 的 `Handler.Router`
 - CPA client：`internal/cpa/management/client.go`
 - Discovery：`internal/cpa/discovery/discovery.go`
 - Repository：`internal/repository/`
 - Usage：`internal/usage/ingest/`、`internal/repository/usage*.go`
-- React 路由：`web/src/App.tsx:89-121`
-- DB 迁移执行：`internal/repository/db.go`
-- 前端运行时子路径注入：`internal/api/handler.go:540-606`
+- React 路由：`web/src/App.tsx`
+- DB 迁移执行：`internal/repository/db.go` 的 `DB.Migrate`
+- 前端运行时子路径注入：`internal/api/handler.go` 的 SPA 注入分支
 
-### 2.3 当前成熟度
+完整的模块地图与数据流见 [`docs/architecture.md`](docs/architecture.md)。
+
+### 2.3 计划编写时的成熟度（历史快照，已过时）
+
+> 以下描述**只反映计划编写时**的状态，保留用于对照；当前状态见 [`docs/cpamc-parity.md`](docs/cpamc-parity.md) 与 [`README.md`](README.md)。
 
 - 首个“登录 + 资源身份覆盖 + Dashboard + Auth Files + Logs + Config + Usage ingest”纵向切片已形成，约 70–80%，可视为 Beta/内部可用。
 - 完整 CPAMC parity 约 35–45%。下列页面目前只是 capability probe：
@@ -117,7 +123,11 @@ Go + chi 模块化单体
   - System
 - Source、Subscription、Account、Credential、Endpoint、Connection、CPA Binding 已写入领域词汇，但当前数据库主要还是 `cpa_instances + discovered_resources + resource_overrides`，尚未形成完整关系。
 
-### 2.4 计划编写前已通过的验证
+**归档时的事实**：上列七个页面均已接线为真实页面；`connections` / `cpa_bindings` 已建表并按 ADR 0002 工作；计价、配额、审计、偏好、诊断包均已交付。“未认领资源分拣”页面则因导航对齐网关形态而下线，发现与绑定模型仍在后端。
+
+### 2.4 计划编写前已通过的验证（历史快照）
+
+> 这是**计划启动前**的门禁与审计结果，不代表当前状态；当前门禁是 `pnpm verify`（见 `AGENTS.md` §3）。
 
 ```bash
 go test ./...
@@ -142,7 +152,8 @@ pnpm --dir web build
 - 只使用 `master`；不要求为本次开发创建分支。
 - 计划基线快照：`78352d5`，提交信息为 `chore(repo): checkpoint accumulated beta work before overhaul`。
 - `pre-overhaul-base-20260904` 是大修前安全锚点。
-- 当前没有 Git remote。配置 origin 前，任何“已 push/已创建 PR”的说法都不成立。
+- 计划执行期间已无 Git remote（归档时仍是如此，`git remote -v` 为空）。配置 origin 前，任何“已 push/已创建 PR”的说法都不成立；CI workflow 已就位，等待 remote。
+- 归档时已存在全部阶段标签：`overhaul/00-repo-quality-gates` … `overhaul/08-release-readiness`（另有 `handoff/20260904-plan`）。
 
 ---
 

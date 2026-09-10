@@ -8,18 +8,18 @@ Oh My CPA 是面向 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 
 
 ## 当前状态
 
-当前版本实现了第一个垂直切片：
+当前版本是一个与 CPA 同栈部署的完整控制面，后端为 Go 模块化单体，前端为 React + TypeScript + Ant Design 单页应用，产物内嵌进 Go 二进制。
 
-- Go 模块化单体后端；
-- React + TypeScript + Ant Design 前端；
-- SQLite WAL 持久化；
-- CPA Management API 资源发现；
-- 未认领资源列表；
-- 自定义名称、颜色、内置图标和备注；
-- `auth-files`、`codex-api-key`、`openai-compatibility` 发现；
-- `/omc` 子路径原生支持；
-- CPA Management Key 通过 AES-GCM 加密保存，浏览器不会接触该密钥；
-- Caddy/Nginx 与 CPA 同栈部署模板。
+- **运行与观测**：用量仪表盘（15m / 1h / 6h / 24h / 7d / 30d / 90d 相对窗口与绝对自定义区间）、请求浏览器（过滤、分面、单请求详情与单请求日志下载）、实时日志尾随与错误日志下载、系统自检与脱敏诊断包导出；
+- **网关管理**：AI 提供商（含模型拉取与真实启停）、认证文件（上传 / 下载 / 删除 / 状态与字段编辑 / 模型列表）、OAuth 授权全流程、代理客户端 API Keys；
+- **配额与计费**：按凭据的配额观察与重置、冷却清除、Codex 重置积分兑换；models.dev 价格自动同步与手工行级覆盖、请求时价格快照；
+- **配置与扩展**：可视化标量编辑与 YAML 源码编辑（保留注释与未知字段）、插件与插件商店管理；
+- **平台能力**：`/omc` 子路径原生支持、管理员会话、追加写入的审计日志、服务端 console 偏好、zh/en 双语界面；
+- **部署**：Caddy/Nginx 与 CPA 同栈部署模板，SQLite WAL 单副本持久化，零 CDN 离线运行。
+
+CPA 管理密钥经 AES-GCM 加密后保存，浏览器不会接触该密钥。
+
+早期版本的「未认领资源分拣」页面已随导航对齐网关形态而下线；发现与绑定模型仍在后端运行，改由 Providers / Auth Files 页面呈现。`/api/v1/resources` 与 `/instances/default/discover` 端点保留，当前没有前端调用方。
 
 ## 本地开发
 
@@ -75,12 +75,18 @@ HTTP/RESP 拉取连续为空时，默认等待 `1s → 2s → 4s → 8s → 10s`
 
 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
+| `OMCPA_USAGE_INGEST_ENABLED` | `true` | 设为 `false` 时完全关闭后台采集（仪表盘仍服务已存数据） |
 | `OMCPA_USAGE_INGEST_MODE` | `auto` | `auto` / `subscribe` / `resp_pull` / `http_pull` / `off` |
 | `OMCPA_USAGE_IDLE_INTERVAL` | `1s` | 有数据但未满批时的等待、订阅落盘周期与解码器空闲周期 |
 | `OMCPA_USAGE_MAX_IDLE_INTERVAL` | `10s`（不低于基础间隔） | 连续空队列的最长等待；显式设置时不能小于基础间隔 |
-| `OMCPA_USAGE_BATCH_SIZE` | `1000` | 单次最多拉取条数，不代表每次都有 1000 条记录 |
+| `OMCPA_USAGE_BATCH_SIZE` | `1000` | 单次最多拉取条数（上限 10000），不代表每次都有 1000 条记录 |
+| `OMCPA_USAGE_AGGREGATE_INTERVAL` | `15s` | 小时/每日汇总的检查周期（保留期清理另有固定 1 小时周期） |
+| `OMCPA_USAGE_RETENTION_DAYS` | `90` | 明细与汇总的保留天数，`0` 表示永久保留 |
+| `OMCPA_USAGE_COLLECT_ERRORS` | `true` | 是否同时订阅 CPA 的推送式错误通道 |
 
-两种间隔设为相同值可恢复固定频率。**最长等待加请求耗时必须明显小于 CPA 的队列保留时间**，否则有过期丢数风险。默认退避下，空闲后首批数据可能等待约 10 秒再被拉取；实时性要求更高时可降低上限，支持 RESP 时优先使用订阅。修改后需重启 Oh My CPA 后端。
+两种空闲间隔设为相同值可恢复固定频率。**最长等待加请求耗时必须明显小于 CPA 的队列保留时间**，否则有过期丢数风险。默认退避下，空闲后首批数据可能等待约 10 秒再被拉取；实时性要求更高时可降低上限，支持 RESP 时优先使用订阅。修改后需重启 Oh My CPA 后端。
+
+其余服务变量（`OMCPA_LISTEN_ADDR`、`OMCPA_BASE_PATH`、`OMCPA_DATA_DIR`、`OMCPA_MASTER_KEY`、`OMCPA_CPA_BASE_URL`、`OMCPA_CPA_USAGE_ADDR`、`OMCPA_CPA_MANAGEMENT_KEY`、`OMCPA_PUBLIC_URL`、`OMCPA_REQUEST_TIMEOUT`、`OMCPA_CPA_TLS_SKIP_VERIFY`、`OMCPA_VERSION`）见 [`.env.example`](.env.example)。
 
 `/v0/management/usage-queue` 是消耗式读取；多个采集器不能共享同一实例的历史队列。不要通过关闭采集来解决日志噪声，也不要用真实队列反复试跑性能测试。基准与修复记录见 [用量与界面性能审计](docs/performance-usage-audit.md)。
 
@@ -157,4 +163,8 @@ Login sends the CPA management key (`{"password":"<management-key>"}` at `POST /
 - 不应把 CPA Management API 直接暴露到公网；
 - `OMCPA_MASTER_KEY` 丢失后无法解密已保存的密文。
 
-术语和领域模型见 [`CONTEXT.md`](CONTEXT.md)，架构决策见 [`docs/adr/0001-go-react-sqlite-modular-monolith.md`](docs/adr/0001-go-react-sqlite-modular-monolith.md)。
+术语和领域模型见 [`CONTEXT.md`](CONTEXT.md)，模块与数据流见 [`docs/architecture.md`](docs/architecture.md)，架构决策见 [`docs/adr/0001-go-react-sqlite-modular-monolith.md`](docs/adr/0001-go-react-sqlite-modular-monolith.md)。
+
+## 文档维护
+
+上下文文档（本文、`CONTEXT.md`、`docs/architecture.md`、`docs/design.md`、`PRODUCT.md`、`docs/adr/`、`docs/cpamc-parity.md` 等）与代码同属交付物。**改动触发哪份文档、必须同步改哪里**，以及完成前的文档检查清单，见 [`AGENTS.md`](AGENTS.md) —— 这是给人类维护者和 Agent 共同的契约：文档漂移在当次改动内修掉，不靠定期专项整理。

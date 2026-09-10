@@ -16,8 +16,8 @@ only.
 ## 1. Design language
 
 Terminal-flat console. Depth comes from **1px borders + background shifts**,
-never shadows or gradients. IBM Plex Mono everywhere (Berkeley Mono if
-licensed), 4px radii, dense but breathable spacing.
+never shadows or gradients. Sarasa Mono SC first (Berkeley Mono, then IBM Plex
+Mono as fallbacks), 4px radii, dense but breathable spacing.
 
 | Principle | Meaning |
 | --- | --- |
@@ -172,7 +172,7 @@ Tabular      font-variant-numeric: tabular-nums on all numeric data
 | Data / mono | 12–13px | Tables, logs, code |
 | Eyebrow | 10px / 500, letter-spacing 0.16em, uppercase, `--muted` | Tiny group labels above KPI numbers only |
 
-**Hierarchy rules** (from the prototype):
+**Hierarchy rules:**
 
 1. One page title per page — the dashboard title is the *verdict* (运行稳定。),
    other pages use the nav label. No duplicated subtitles restating it.
@@ -249,7 +249,7 @@ Oh My CPA 吸收了 OpenCode 控制台纯粹、高效、工程师优先的设计
    - 左侧保留 `›_` 品牌标识，未来支持多 CPA 实例时可复用类似工作区下拉的“实例上下文选择器”；
    - 右侧承载真实会话状态、主题与中英切换。未接入真实能力前绝不伪造头像、余额或工作区假入口。
 7. **表单与配置工作台规范 (Form Workbench & Setting Group Panels)**
-   - **全宽顶栏与视觉平衡 (Full-width Toolbar & Viewport Anchoring)**：顶部操作栏（Toolbar）与 1px 底边线 100% 贯穿全屏，右侧操作区（搜索/刷新/保存）推至最右侧（与全局 Header 右侧操作严格垂直呼应），彻底消除顶栏在半路截断导致的“右侧空旷黑洞”；下方表单工作台则保持在 216px + 920px 黄金阅读宽度，形成“通栏置顶立格局，主体聚焦易输入”的专业层次。
+   - **全宽顶栏与视觉平衡 (Full-width Toolbar & Viewport Anchoring)**：顶部操作栏（Toolbar）与 1px 底边线 100% 贯穿全屏，右侧操作区（搜索/刷新/保存）推至最右侧（与全局 Header 右侧操作严格垂直呼应），彻底消除顶栏在半路截断导致的“右侧空旷黑洞”；下方表单工作台则保持 216px 粘性分区导航 + 920px 阅读宽度 + 216px 右侧配重槽的三轨栅格（第三轨只负责居中配平，不放内容），形成“通栏置顶立格局，主体聚焦易输入”的专业层次。
    - **模块化设置面板 (Setting Group Panels)**：严禁所有字段全部生硬平铺在一条无尽的横向流水账中，也不得每个字段单独套卡片。而是将相关配置收敛为 **Setting Group Panel**（具备统一的 1px 细线外框、`--surface` 底色与 4px 终端圆角），内部依据配置性质采用三种专业结构：
      1. **Form Grid（表单网格）**：文本、数字、下拉框采用“标签与说明在上、控件在下”的局部工整网格；强相关短字段（如 Host 与 Port、重试次数与间隔）并列同行，短数字框限制为 120px，下拉框限制为 260px，输入焦点清晰聚焦；
      2. **Settings List（策略开关行）**：特性开关与运行标志行采用“左侧标题说明 + 右侧 Switch”的卡片内行列表，最大行宽收敛在卡片容器内，右侧具有坚实的边框边界，彻底杜绝孤立悬空；
@@ -333,9 +333,9 @@ Non-obvious decisions, keep these when editing:
   single-task dialogs use a clean uninterrupted body ("Title → Field/Content →
   Right-aligned Actions") without decorative header/footer hairline dividers;
   only complex Drawers retain section dividers.
-- Table: uppercase 11px `--muted` headers on `--bg`, `rowHoverBg = surface`.
+- Table: uppercase 12px `--muted` headers on `--bg`, `rowHoverBg = surface`.
 - All shadow tokens set to `'none'`; every motion token pinned to ≤ 0.1s (§7).
-- Components pinned: Button 32/26px, Input active ring `accent22`,
+- Components pinned: Button 32/28px, Input active ring `accent22`,
   Select optionSelectedBg = surface, Tag defaultBg = bg.
 - Chart tooltips are not antd. G2 renders them as `.g2-tooltip` HTML outside the
   canvas and styles that panel from `interaction.tooltip.css`, so

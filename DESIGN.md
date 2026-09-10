@@ -218,7 +218,7 @@ The application viewport uses a fixed shell architecture (`100dvh`, `body { over
 - **Top Header**: Fixed 56px height, full-width with 1px bottom border (`#464343`). Contains the `›_` terminal prompt logo, breadcrumb hierarchy, global search, and language/theme triggers.
 - **Navigation Sidebar**: Fixed 236px width (58px collapsed), 1px right border. Houses grouped navigation categories: `运行` (Runtime), `网关` (Gateway), `观测` (Observability), `控制` (Control).
 - **Content Area**: Single-scroll container with responsive padding (32px desktop / 24px tablet / 16px mobile).
-- **Settings Workbench Layout**: Anchored at 216px + 920px reading width, accompanied by a full-width sticky action bar to eliminate visual voids on wide screens.
+- **Settings Workbench Layout**: A three-track grid — 216px sticky section nav + 920px reading column + 216px balancing gutter — accompanied by a full-width sticky action bar, so the form never drifts to one side on wide screens.
 
 ### Named Rules
 **The Independent Column Rule.** The sider and the main content area scroll independently with `overscroll-behavior: contain`. Wheel events only affect the container currently beneath the cursor; the page never scrolls globally.
@@ -254,7 +254,7 @@ The geometric form language is compact, rectangular, and tightly controlled:
 
 ### Buttons
 - **Shape**: 4px radius (`--radius-sm`).
-- **Sizes**: Standard 32px height (padding 0 15px); Small 26px height (padding 0 11px); Square 32×32px for row-level action icon buttons.
+- **Sizes**: Standard 32px height (padding 0 15px); Small 28px height (antd `controlHeightSM`); Square 32×32px for row-level action icon buttons.
 - **Primary**: Deep accent fill (`#0056b3`), white text, no shadow. Hover shifts to `#007aff` with zero transition lag.
 - **Secondary / Default**: Surface fill (`#302c2c`), 1px border (`#464343`), chalk white text.
 - **Ghost**: Transparent background, borderless, text color `#fdfcfc`, hover reveals `#302c2c`.

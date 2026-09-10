@@ -15,6 +15,10 @@
    - 数据目录下包含：`oh-my-cpa.db`（主库）、`oh-my-cpa.db-wal`（写前日志）及 `oh-my-cpa.db-shm`（共享内存索引）；
    - 严禁在服务运行状态下仅复制单个 `.db` 文件作为备份，否则必然导致数据不一致或损坏。
 
+3. **单连接设计**：
+   - 连接池固定为 `MaxOpenConns(1)` / `MaxIdleConns(1)`，并启用 `busy_timeout=5000`、`foreign_keys=1`、`journal_mode=WAL`、`synchronous=NORMAL`；
+   - 这是「单副本」在代码层的体现：并发写入靠应用内串行化，而不是靠 SQLite 的锁重试。
+
 ---
 
 ## 2. 在线安全备份策略
@@ -38,7 +42,7 @@ sqlite3 /data/oh-my-cpa.db "VACUUM INTO '/data/backups/oh-my-cpa-backup-$(date +
    ```bash
    docker compose -f deploy/compose.full.yml stop oh-my-cpa
    ```
-2. 等待进程彻底刷盘并退出（Go 服务在接收 `SIGTERM` 后会自动执行 WAL Checkpoint）；
+2. 等待进程彻底刷盘并退出（Go 服务在 `SIGTERM` 后停止 HTTP 服务并关闭最后一个数据库连接，由 SQLite 在最后连接关闭时完成 WAL checkpoint 并移除 `-wal`/`-shm`）；
 3. 将整个 `/data` 目录整体打包归档并计算 SHA-256 校验和：
    ```bash
    tar -czf "omc-data-$(date +%Y%m%d_%H%M%S).tar.gz" -C /data .
@@ -101,8 +105,10 @@ sqlite3 /data/oh-my-cpa.db "VACUUM INTO '/data/backups/oh-my-cpa-backup-$(date +
 Oh My CPA 在升级启动时会自动检测并执行尚未运行的不可变 SQL 迁移脚本：
 
 1. **自动前置检查**：
-   - 检查可用磁盘空间：必须大于数据库当前大小的 3 倍，以防在重构索引或表结构时磁盘满写导致断裂；
-   - 自动生成带时间戳的前置备份；
+   - 检查可用磁盘空间：默认要求可用空间不少于「当前数据库大小 + 4 KiB」（`BackupConfig.MinFreeBytes` 未设置时的下限；显式配置可按部署策略提高，包括提高到数据库大小的 3 倍）；
+   - 对既有数据库（`schema_migrations` 已有记录）在执行任何待应用迁移前，先 `PRAGMA wal_checkpoint(TRUNCATE)`，再生成带时间戳的 AES-GCM 加密备份与 `.sha256` 校验和，解密还原为临时库并验证 schema 可读后才继续；
+   - 备份写入 `OMCPA_DATA_DIR/backups`（权限 0700/0600），按修改时间保留最近 5 份，可通过 `repository.WithMigrationBackup` 的 retention 参数调整；
+   - 校验和或还原 smoke 失败则 `ErrBackupRestoreFailed` 直接中止迁移，不留下“声称已治理”的半成品；
 2. **Expand / Contract 兼容迁移**：
    - 数据库结构变更严格遵循“扩展字段优先”原则，不直接破坏旧版本查询结构；
 3. **纠错式向前迁移（Forward Rollback）**：
@@ -114,8 +120,9 @@ Oh My CPA 在升级启动时会自动检测并执行尚未运行的不可变 SQL
 ## 6. 数据 Retention 与定期 VACUUM 维护
 
 1. **历史事件保留期**：
-   - 通过配置 `OMCPA_USAGE_RETENTION_DAYS`（默认 30 天）控制用量事件与原始记录的保留时长；
-   - 每天自动清理超期明细，保障数据库文件体积平稳可控。
+   - 通过配置 `OMCPA_USAGE_RETENTION_DAYS`（默认 90 天，`0` 表示永久保留）控制用量明细与原始记录的保留时长；
+   - 保留期清理由 `ingest.Maintenance` 每小时尝试一次，聚合汇总由同一个循环按 `OMCPA_USAGE_AGGREGATE_INTERVAL`（默认 15 秒）推进；
+   - 清理截止点由聚合 checkpoint 把关，不会出现汇总尚未覆盖就删明细的空洞。
 2. **空间回收与碎片整理**：
    - 大规模清理历史数据后，SQLite 内部可能残留空闲页面；
    - 建议每月或低峰期安排一次全量整理：

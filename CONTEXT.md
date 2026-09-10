@@ -12,7 +12,7 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
 - **Connection**: A user-facing usable line formed from a Source, optional Subscription and Account, Credential, Endpoint, and Protocol Driver. It is the primary resource users organize and name.
 - **Protocol Driver**: The technical protocol adapter used by CPA, such as Codex/Responses, OpenAI-compatible Chat Completions, Anthropic Messages, or Gemini. It is implementation metadata, not the user-facing Source.
 - **CPA Binding**: The link between a Connection and a concrete resource on one CPA instance, including the CPA resource type and runtime auth index.
-- **Unclaimed Resource**: A CPA resource discovered by Oh My CPA that has no confirmed local user identity or override yet. It is presented in the triage queue for naming and organization.
+- **Unclaimed Resource**: A CPA resource discovered by Oh My CPA that has no confirmed local user identity or override yet. Discovery, the claim status column, and `PATCH /resources/{id}/override` all still exist, but the console no longer routes a triage page: since the navigation was aligned with the gateway surfaces, CPA resources are reached through Providers and Auth Files instead. The discovered/claimed model is what those pages render from, so the term stays load-bearing even without a dedicated queue screen.
 - **Model Price**: The current CPA model catalog is the maintenance scope. Each catalog identity has one current price projection (four per-1M-token rates plus a multiplier); models.dev syncs automatically and manual rows win over sync.
 - **Price Version**: An immutable, time-effective price snapshot. A price change creates a new version; deleting a current price creates a tombstone so future requests stay unpriced while existing snapshots remain valid.
 - **Request Cost Snapshot**: The price version and USD nanos amount selected in the same transaction as a usage event, using the request timestamp. It is never recalculated from the current price projection.
@@ -49,6 +49,17 @@ Native zh/en bilingual UI. Dictionary lives in `web/src/i18n/index.tsx` as
 fully localize — a Chinese UI must not show untranslated English captions next
 to Chinese ones (proper nouns and industry terms excepted).
 
+One deliberate exception is in the code rather than the dictionary: quota
+window labels, plan labels, recommendation reasons, and the discovery fallback
+source name are composed by the Go normalizers and rendered verbatim, so an
+English console shows those strings as the backend wrote them. The same is true
+of transport-level error text: a failed `fetch`, an unreadable error body, or an
+upstream `last_error` arrives as a technical English sentence and is injected
+into an otherwise translated message (for example `dash.error_title — message`).
+Localizing any of these means returning stable identifiers instead of display
+text — the frontend already has `apiErrorCode()` for the cases where that
+matters, and the rest are deliberately shown as payload.
+
 ## Visual system
 
 `docs/design.md` is the single source of truth for brand color, typography,
@@ -73,8 +84,12 @@ palette in code; never hardcode colors in components.
   polled like a preset and grows as it runs.
 - **Preference**: Console state stored server-side rather than in the browser,
   because a reload, a service restart and a container rebuild all drop browser
-  storage. The dashboard's chosen window and the log page's view filters are
-  preferences; the values are JSON documents under a small set of named keys.
+  storage. Values are JSON documents under a closed set of named keys
+  (`repository.Preference*`); the API rejects any key not on that list, so the
+  preference endpoint cannot become a general blob store reachable through the
+  session. The keys in use are the dashboard window, the log page's filters,
+  the provider icon and display-name overrides, and the usage-event view and
+  column layout.
 - **Bucket**: One point of the sparkline. Width is chosen per window so the
   series stays near 48 points on a human step. The newest bucket is always
   partial, and the grid is aligned to bucket multiples so a sliding window does

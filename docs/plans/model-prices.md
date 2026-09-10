@@ -6,7 +6,9 @@ replacing the earlier heavier valuation prototype (removed before this work).
 ## Principles
 
 1. Zero-config by default. The pricing service syncs from models.dev at startup
-   and then daily; unique strong model matches become price rows automatically.
+   and then on a server-side interval that defaults to daily; the operator can
+   change it (off / 1h / 6h / 12h / 24h) without a restart. Unique strong model
+   matches become price rows automatically.
 2. Pricing follows the current CPA catalog. A complete catalog snapshot is
    persisted separately from usage history; removed models leave the maintenance
    list while their immutable request snapshots remain queryable.
@@ -28,13 +30,18 @@ replacing the earlier heavier valuation prototype (removed before this work).
 - `migrations/020_pricing_model_catalog.sql`: current CPA catalog projection.
 - `migrations/016_pricing_sync_state_repair.sql`: normalises sync-state rows
   that the first revision of the upsert wrote with TEXT in an INTEGER column.
+- `migrations/017_pricing_auto_sync.sql`: adds `auto_sync_interval_hours` to
+  `pricing_sync_state` (0 = disabled, default 24).
 - `internal/pricing`: domain types, catalog fetch/decode, match, sync service.
   The package defines the `Store` interface; `internal/repository` implements it
   (dependency direction: repository → pricing).
 - `internal/api/management_pricing.go`: `GET /v1/pricing`, `PUT /v1/pricing/models`,
-  `DELETE /v1/pricing/models/{model}`, `POST /v1/pricing/sync` (409 while running).
-- `web/src/pages/pricing/PricingPage.tsx`: one page, three cards (prices, sync,
-  unpriced models); a modal editor for manual rows and the multiplier.
+  `DELETE /v1/pricing/models/{model}`, `POST /v1/pricing/sync` (409 while running),
+  `PUT /v1/pricing/sync-schedule`.
+- `web/src/pages/pricing/PricingPage.tsx`: one page — a sync telemetry bar with the
+  interval selector, an unpriced-model ribbon, and a workbench whose filter tabs
+  are all / models.dev / manual / unpriced, over a modal editor for the four
+  rates and the multiplier.
 - Usage events and the dashboard read the stored request-cost snapshot; they do
   not join mutable `model_prices` when calculating historical totals.
 
