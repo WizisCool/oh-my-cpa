@@ -19,6 +19,16 @@
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
+/* States the list order next to the window. Without it a record whose request
+   started minutes ago sitting above a newer one reads as a sorting bug rather
+   than as "this is what was recorded last". */
+.request-order-hint {
+  margin-left: 6px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border-soft);
+  color: var(--meta);
+  cursor: help;
+}
 .request-actions {
   display: flex;
   align-items: center;
@@ -184,89 +194,7 @@
   border-radius: 4px;
   position: relative;
 }
-.request-summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px 24px;
-  padding: 10px 18px;
-  font-size: 12px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--muted);
-}
-.request-summary b,
-.request-summary strong {
-  color: var(--fg);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.request-summary strong {
-  font-size: 15px;
-}
-.request-summary small {
-  font-size: 11px;
-  font-weight: normal;
-  color: var(--muted);
-}
-.req-kpi-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.req-kpi-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--muted);
-}
-.req-kpi-val {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--fg);
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-}
-.req-kpi-divider {
-  width: 1px;
-  height: 22px;
-  background: var(--border);
-  flex-shrink: 0;
-}
-.req-kpi-rate-content {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.req-rate-pip {
-  width: 7px;
-  height: 7px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-.req-rate-pip.is-success {
-  background: var(--success);
-}
-.req-rate-pip.is-warn {
-  background: var(--warn);
-}
-.req-rate-pip.is-danger {
-  background: var(--danger);
-}
-.req-rate-pip.is-neutral {
-  background: var(--meta);
-}
-.req-kpi-sub-failed {
-  font-size: 11px;
-  color: var(--muted);
-}
-.req-kpi-sub-failed b {
-  color: var(--danger);
-  font-weight: 600;
-}
 .req-expand-toggle-btn {
-  margin-left: auto;
   color: var(--muted);
   display: inline-flex;
   align-items: center;
@@ -289,8 +217,7 @@
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);
-  color: var(--fg);
+  border-radius: var(--radius-sm, 4px);  color: var(--fg);
   font-size: 11px;
   font-family: var(--font-mono, monospace);
   font-weight: 500;
@@ -323,6 +250,18 @@
   color: var(--accent);
   transform: translateY(-2px);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--accent);
+}
+
+/* The pill is carrying a backlog of records the reader has not seen yet, so it
+   takes the accent the same way a selected row does: it is offering an action,
+   not reporting a state. */
+.req-back-to-top-btn.is-live {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.req-back-to-top-btn.is-live .anticon {
+  color: var(--accent);
 }
 
 .req-back-to-top-btn:active {
@@ -470,9 +409,7 @@
 
 .req-reset-columns-btn {
   font-size: 11px;
-  height: 22px;
   padding: 0 8px;
-  margin-left: auto;
   color: var(--muted);
 }
 .req-reset-columns-btn:hover {
@@ -764,9 +701,9 @@
   font-variant-numeric: tabular-nums;
   color: var(--fg);
 }
-.req-latency-val.is-slow {
-  color: var(--warn);
-}
+/* Latency carries no verdict colour. An agent request that thinks for minutes
+   is working as intended, so an amber threshold would flag normal traffic as a
+   problem; design.md reserves the semantic hues for real state. */
 .req-ttft-val {
   font-size: 11px;
   color: var(--muted);
@@ -1391,13 +1328,6 @@
   .request-filters > .ant-select {
     min-width: 100px;
     max-width: none;
-  }
-  .request-summary {
-    gap: 8px 14px;
-    padding: 12px;
-  }
-  .request-summary > span:last-child {
-    display: none;
   }
   .request-row {
     padding: 14px 10px;

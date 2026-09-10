@@ -71,8 +71,61 @@ Accent/success/warn/danger are identical in both modes.
 row that shows a rate and its two components gets one pip — on the rate. The
 components carry state by their own colour instead: a failure count is `danger`
 when it is above zero and `meta` when it is not, because "0 failures" is not a
-success worth painting green. Success rate thresholds: `100 → success`,
-`≥ 95 → warn`, `< 95 → danger`, no traffic → `neutral`.
+success worth painting green.
+
+**Success rate is a verdict, not a distance from 100%.** A gateway that fans out
+to several upstreams always carries some noise — provider 429s, a timeout the
+next retry absorbs, a request the caller cancelled — and a pip that turns amber
+for that noise teaches its reader to ignore it. So the bands are wide, and they
+are stated in *failures* rather than successes (`98% success` is a number nobody
+reasons about; `2% of requests failed` is a decision):
+
+| Window | Pip |
+| --- | --- |
+| no requests | `neutral` — nothing to judge |
+| no failures | `success` — a clean window |
+| too little evidence: under 20 requests *and* under 3 failures | `neutral` — a coin flip on four requests is not a trend |
+| ≤ 5% failed | `neutral` — routine upstream noise |
+| > 5% and ≤ 20% failed | `warn` — worth a look |
+| > 20% failed | `danger` — broken, whatever the sample |
+
+The bands live in `successRateVerdict` (`web/src/types/usageEventView.ts`). The
+dashboard tile reads them; the request list does not show a verdict of its own,
+for the reason below.
+
+### Latency is not a verdict
+
+The request list prints latency in plain `--fg` at every value. A long duration
+is not a fault when the workload includes agents: a request that thinks for
+minutes is doing its job, and the old `>= 4000 ms → amber` rule painted normal
+traffic as degraded. Latency is read against its own baseline (the TTFT/stream
+waterfall in the detail drawer), never against an absolute threshold, and the
+semantic hues stay reserved for state.
+
+### The request list carries no summary strip
+
+The page used to open with a row of aggregates — page count, success rate with a
+pip, mean latency, tokens, estimated cost. It was removed, and the rule it
+violated is worth keeping:
+
+- **Four of the five numbers restated the rows directly beneath them.** The page
+  count is in the footer, and the totals are sums of the visible page, not of the
+  window — so they changed meaning whenever the reader paged or filtered, without
+  saying so, and they measured only the loaded page rather than what the reader
+  believes they measure.
+- **The one reading that was not a restatement was the success-rate pip, and it
+  answered a question the list already answers per row.** A gateway's failure
+  rate is a dashboard concern: it is a property of a *window*, and the dashboard
+  owns windows. The list owns individual requests. Putting a window-level verdict
+  on a page-sized sample (100 rows) made a 1-in-100 failure read as a 1%
+  failure — the exact misreading that produced the 98%-shows-amber complaint.
+- **A list is not a KPI view.** The strip consumed a full row of vertical space
+  above the data it summarised, so on a 900px viewport 10% of the height went to
+  information already available further down.
+
+Totals belong where the whole window is in scope: the dashboard tiles, and the
+detail drawer for one request. If a per-page figure is ever needed again, it
+belongs in the footer next to the page count, stated as a page figure.
 
 ### Cache-rate scale
 
@@ -403,9 +456,37 @@ custom range changes, manual refresh and background refetch.
 | Any request in flight | The app-wide 2px `.data-progress` bar, shown after a 200ms delay. Regions are never dimmed or unmounted. |
 | First load with no data yet | Render the real page frame with static `Skeleton` blocks, not a bare full-page spinner swap. |
 | Error after data existed | Keep the stale data visible and surface a warning; only replace the page when nothing was ever loaded. |
+| Auto-refresh poll | Nothing moves. The poll is not a view change, so it must not reset pagination, remount the list, expand a collapsed header, or relabel the data as "previous results". |
 
 `prefers-reduced-motion` removes the fade and freezes the progress bar, but the
 no-blank rule still applies — fall back to a static loading state.
+
+### Live tail: follow at the top, hold when reading
+
+A polling list is a live tail, and a live tail has to answer one question: does
+the reader want to be carried along, or are they reading?
+
+- **At the top** (within a few pixels) the reader is following. New records appear
+  immediately; the newest is always the first row.
+- **Scrolled away** the reader is reading. The rows on screen are held exactly as
+  they are, the poll keeps running in the background, and a pill above the footer
+  reports `N 条新记录` — clicking it applies the backlog and returns to the top.
+  Scrolling back to the top by hand resumes the follow, so the pill is never the
+  only way out.
+
+The pill replaces the plain back-to-top button when there is a backlog, because
+the two are the same gesture. Jumping the reader to the top on every poll — or
+reordering the rows under the cursor — is the failure mode this exists to
+prevent: it is what Grafana, Datadog, Sentry and Vercel logs all refuse to do.
+
+Two supporting rules keep the follow honest:
+
+1. **Pagination survives a poll.** The view scope is the filters plus the page
+   the reader chose; the auto-refresh counter is deliberately outside it. It used
+   to be inside, which silently reset every reader to page one.
+2. **The list is ordered by recording order**, not by request time, so whatever
+   the collector wrote last is the first row. See `docs/architecture.md` for why
+   that needs its own index and what it costs.
 
 ## 8. Checklist for new UI
 - [ ] Colors only via `palette` / CSS vars; semantic colors carry meaning

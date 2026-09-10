@@ -111,6 +111,20 @@ try {
   appURL = `http://127.0.0.1:${appPort}/omc`;
 
   execFileSync('go', ['build', '-trimpath', '-o', executable, './cmd/oh-my-cpa'], { cwd: root, stdio: 'inherit' });
+  // Acceptance runs with ingestion disabled, so the request list would be empty
+  // and every list behaviour untestable. Seed a deterministic window through the
+  // repository itself (see the fixture's own doc comment) before the app opens
+  // the database.
+  const seeder = path.join(temporary, process.platform === 'win32' ? 'seed-usage.exe' : 'seed-usage');
+  execFileSync('go', ['build', '-trimpath', '-o', seeder, './scripts/fixture/seed-usage'], { cwd: root, stdio: 'inherit' });
+  const seedScenario = (name) => {
+    const output = execFileSync(seeder, ['-db', path.join(temporary, 'data', 'oh-my-cpa.db'), '-scenario', name], {
+      cwd: root,
+      encoding: 'utf8',
+    });
+    if (!output.includes('SEED_USAGE_OK')) throw new Error(`seed ${name} failed: ${output}`);
+  };
+  seedScenario('list');
   appProcess = spawn(executable, [], {
     cwd: root,
     env: {
@@ -171,7 +185,173 @@ try {
   check('valid sign-in creates an administrator session', await page.locator('.app-shell').isVisible());
 
   await auditPage(page, responseBodies, '/dashboard', '.dashboard-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
+
+  // Success-rate verdict: the seeded window carries 1 failure in 50 (2%), which
+  // is routine upstream noise. The pip must not paint it as a warning — the
+  // reported bug was exactly this, at 98% success.
+  const verdictPip = page.locator('.dashboard-page .legend-dot').first();
+  await verdictPip.waitFor({ state: 'visible', timeout: 10000 });
+  const verdictClasses = (await verdictPip.getAttribute('class')) ?? '';
+  check(
+    'a 98%-success window is not painted as a warning',
+    /neutral/.test(verdictClasses) && !/warn|danger/.test(verdictClasses),
+    `class="${verdictClasses}"`,
+  );
   await auditPage(page, responseBodies, '/usage/events', '.usage-events-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
+
+  // ---- request list: verdict colours, ordering, and the live tail ----
+  // These four behaviours were each reported as a bug, so each gets a browser
+  // check rather than only a unit test.
+  // Find the scroll holder by behaviour rather than by class: the list is
+  // virtualized and the scrolling element is Listy's own holder nested inside
+  // the wrapper, so naming it by class couples the check to component internals.
+  const listScroller = async () => {
+    const handle = await page.evaluateHandle(() => {
+      const root = document.querySelector('.request-list-host');
+      if (!root) return null;
+      const candidates = [root, ...root.querySelectorAll('*')];
+      // A virtualized holder reports `overflow: hidden` yet still carries the
+      // full content height and accepts programmatic scrolling, so the test is
+      // geometry, not the overflow property.
+      return (
+        candidates.find((node) => {
+          const style = getComputedStyle(node);
+          return (
+            /auto|scroll|hidden/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 20
+          );
+        }) ?? null
+      );
+    });
+    return handle.asElement();
+  };
+  const describeListTree = async () =>
+    page.evaluate(() => {
+      const root = document.querySelector('.request-list-host');
+      if (!root) return 'no .request-list-host';
+      return [root, ...root.querySelectorAll('*')]
+        .slice(0, 6)
+        .map((node) => {
+          const style = getComputedStyle(node);
+          return `${node.className || node.tagName}|overflowY=${style.overflowY}|h=${node.clientHeight}/${node.scrollHeight}`;
+        })
+        .join(' :: ');
+    });
+  const rowTimestamps = async () => {
+    const values = await page.locator('.request-row .req-col-time time').evaluateAll((nodes) =>
+      nodes.map((node) => Date.parse(node.getAttribute('datetime') ?? '')),
+    );
+    return values.filter((value) => Number.isFinite(value));
+  };
+
+  await page.goto(`${appURL}/usage/events`, { waitUntil: 'networkidle' });
+  await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 15000 });
+  // The list is virtualized, so only the visible window of rows is in the DOM;
+  // the footer reports the real page size.
+  const visibleRows = await page.locator('.request-row').count();
+  const footerText = await page.locator('.request-pagination span').first().innerText();
+  check('request list renders seeded records', visibleRows >= 2, `visibleRows=${visibleRows}`);
+  check('the whole seeded page is loaded', /50/.test(footerText), `footer="${footerText}"`);
+
+  // Latency carries no verdict colour: the fixture's first row is a nine-minute
+  // agent request, and an absolute threshold used to paint it amber.
+  const latencyColours = await page
+    .locator('.request-row .req-latency-val')
+    .evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).color));
+  const warnColour = await page.evaluate(() => {
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--warn)';
+    document.body.appendChild(probe);
+    const value = getComputedStyle(probe).color;
+    probe.remove();
+    return value;
+  });
+  const slowRowText = await page.locator('.request-row').first().locator('.req-latency-val').innerText();
+  check('long agent latency is rendered without a warning colour', !latencyColours.includes(warnColour), `slow=${slowRowText}`);
+  // Anchored so the assertion above cannot pass vacuously on an empty list.
+  check('the slow request really is long', /9\.00 s|m /.test(slowRowText) || Number.parseFloat(slowRowText) > 60, `slow=${slowRowText}`);
+
+  check('the order is stated next to the window', await page.locator('.request-order-hint').first().isVisible());
+  // The summary strip is gone, so the request page states no verdict of its own.
+  check('no KPI summary strip remains', (await page.locator('.request-summary, .req-kpi-item').count()) === 0);
+  check('the removed strip left no dead column of totals', (await page.locator('.req-kpi-val').count()) === 0);
+
+  // Ordering: the first row was recorded last but started earliest, so its
+  // timestamp is older than the row below it. That is recording order, and it is
+  // the only way a just-finished long request can reach the top.
+  const ordered = await rowTimestamps();
+  check(
+    'the list is ordered by recording order, not request time',
+    ordered.length >= 2 && ordered[0] < ordered[1],
+    `first=${new Date(ordered[0]).toISOString()} second=${new Date(ordered[1]).toISOString()}`,
+  );
+
+  // Live tail: scroll away from the top, let a poll land with a new record, and
+  // require that nothing the reader is looking at moves.
+  const pickAutoRefresh = async (label) => {
+    await page.locator('.req-auto-refresh-select').click();
+    await page
+      .locator('.ant-select-dropdown:visible .ant-select-item-option')
+      .filter({ hasText: label })
+      .first()
+      .click();
+    await page.locator('.ant-select-dropdown:visible').waitFor({ state: 'hidden', timeout: 5000 });
+  };
+  await pickAutoRefresh(/5\s*秒|5s/);
+  const scroller = await listScroller();
+  check('the request list has a scroll holder, so the scroll checks are meaningful', scroller !== null, await describeListTree());
+  if (!scroller) throw new Error(`no scrollable element in the request list: ${await describeListTree()}`);
+  await scroller.evaluate((node) => {
+    node.scrollTop = Math.round(node.scrollHeight / 2);
+  });
+  await page.waitForTimeout(400);
+  const scrollBefore = await scroller.evaluate((node) => node.scrollTop);
+  check('the list actually scrolled away from the top', scrollBefore > 100, `scrollTop=${scrollBefore}`);
+  const rowsBefore = await page.locator('.request-row').count();
+  const pageLabelBefore = await page.locator('.request-pagination span').first().innerText();
+
+  seedScenario('append');
+  await page.locator('.req-back-to-top-btn.is-live').waitFor({ state: 'visible', timeout: 20000 });
+
+  const scrollAfterPoll = await scroller.evaluate((node) => node.scrollTop);
+  const rowsAfterPoll = await page.locator('.request-row').count();
+  const pageLabelAfter = await page.locator('.request-pagination span').first().innerText();
+  check('a poll does not scroll the reader back to the top', Math.abs(scrollAfterPoll - scrollBefore) <= 4, `before=${scrollBefore} after=${scrollAfterPoll}`);
+  check('a poll does not reorder the rows under the cursor', rowsAfterPoll === rowsBefore, `before=${rowsBefore} after=${rowsAfterPoll}`);
+  check('a poll does not reset pagination or relabel the page', pageLabelAfter === pageLabelBefore, `before="${pageLabelBefore}" after="${pageLabelAfter}"`);
+  const pillText = await page.locator('.req-back-to-top-btn.is-live').innerText();
+  check('the pill reports the records that arrived', /1/.test(pillText), `pill="${pillText}"`);
+
+  await page.locator('.req-back-to-top-btn.is-live').click();
+  await page.waitForTimeout(600);
+  const newestFirst = await rowTimestamps();
+  const scrollAfterApply = await scroller.evaluate((node) => node.scrollTop);
+  check('applying the backlog returns to the top', scrollAfterApply <= 4, `scrollTop=${scrollAfterApply}`);
+  check(
+    'the new record is the first row',
+    newestFirst.length > 0 && newestFirst[0] >= Math.max(...newestFirst),
+    `first=${newestFirst.length ? new Date(newestFirst[0]).toISOString() : 'none'}`,
+  );
+  // Switching the poll off again keeps the rest of the audit deterministic.
+  await pickAutoRefresh(/关闭|Off/);
+  await page.screenshot({ path: path.join(root, 'tmp', 'req-page-desktop.png') });
+  for (const width of [768, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.waitForTimeout(250);
+    const overflow = await page.evaluate(
+      () => Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
+    );
+    check(`request records ${width}px viewport has no overflow`, overflow === 0, `overflow=${overflow}`);
+    const actionsFit = await page.evaluate(() => {
+      const actions = document.querySelector('.usage-events-page .terminal-page-head .request-actions');
+      if (!actions) return -1;
+      const box = actions.getBoundingClientRect();
+      // The action group must stay inside the viewport it sits in.
+      return Math.round(box.right - window.innerWidth);
+    });
+    check(`request records ${width}px header actions stay in view`, actionsFit <= 1, `rightOverhang=${actionsFit}`);
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  responseBodies.length = 0;
   await auditPage(page, responseBodies, '/pricing', '[data-testid="pricing-page"]', { pageSecrets: [FAKE_PROVIDER_SECRET] });
 
   // The pricing page must open fast: a full table render is the budget, not a

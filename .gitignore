@@ -44,3 +44,8 @@ caddy-config/
 .air.toml.bak
 # Local version-pinned tool cache
 .tools/
+
+# Fixture binaries built by the acceptance harness. Anchored to the repo root:
+# a bare name would also match scripts/fixture/seed-usage/, which is source.
+/seed-usage
+/seed-usage.exe

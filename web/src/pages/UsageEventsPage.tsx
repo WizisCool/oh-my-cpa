@@ -43,9 +43,7 @@ import {
   resolveCredential,
   EVENT_FILTER_KEYS,
   EVENT_PRESETS,
-  eventPageMetrics,
   eventWindow,
-  formatEventDuration,
   readEventQuery,
   USAGE_EVENTS_VIEW_PREFERENCE,
   DEFAULT_USAGE_EVENTS_VIEW,
@@ -104,6 +102,19 @@ function useDebouncedTextFilter(
   }, [value, queryValue, update, key]);
   return [value, setValue] as const;
 }
+
+/**
+ * Distance from the top at which the list counts as "following the live edge".
+ * A few pixels of slack avoids fighting the browser's fractional scroll offsets.
+ */
+const FOLLOW_TOP_PX = 4;
+
+/**
+ * Distance past which the reader counts as reading history rather than the live
+ * edge. Deliberately larger than FOLLOW_TOP_PX so the state cannot flap while a
+ * trackpad coasts to a stop near the top.
+ */
+const HOLD_FROM_PX = 60;
 
 export const UsageEventsPage: React.FC = () => {
   const t = useT();
@@ -255,12 +266,19 @@ export const UsageEventsPage: React.FC = () => {
   const [refresh, setRefresh] = React.useState(0);
   const [autoRefreshInterval, setAutoRefreshInterval] = React.useState<number>(0);
   const activeWindow = React.useMemo(() => eventWindow(query, Date.now()), [query, refresh]);
-  const scope = `${signature}:${refresh}`;
+
+  // viewScope identifies the view the reader is looking at: the filters and
+  // window they picked, plus which page of it. The auto-refresh counter is
+  // deliberately absent. It used to be part of this scope, so every poll looked
+  // like a brand-new view: pagination fell back to page one and the list was
+  // remounted by its key, which threw a reader who was halfway down the list
+  // back to the top every few seconds.
+  const viewScope = signature;
   const [pagination, setPagination] = React.useState<{ scope: string; cursors: string[] }>({
-    scope,
+    scope: viewScope,
     cursors: [],
   });
-  const cursors = pagination.scope === scope ? pagination.cursors : [];
+  const cursors = pagination.scope === viewScope ? pagination.cursors : [];
   const cursor = cursors.at(-1);
   const [selected, setSelected] = React.useState<number | null>(null);
   const [advanced, setAdvanced] = React.useState(false);
@@ -299,6 +317,15 @@ export const UsageEventsPage: React.FC = () => {
 
       // Show back-to-top button when scrolled down
       setIsScrolledDown(scrollTop > 60);
+
+      // Following vs. holding. The top of the list is the live edge: at the top
+      // the list follows new records, and scrolling away freezes the rows on
+      // screen so the reader keeps their place.
+      if (scrollTop <= FOLLOW_TOP_PX) {
+        if (heldItemsRef.current) setHeldItems(null);
+      } else if (scrollTop > HOLD_FROM_PX && !heldItemsRef.current && latestItemsRef.current.length > 0) {
+        setHeldItems(latestItemsRef.current);
+      }
 
       // Programmatic scroll-to-top during page change must not cancel collapse
       if (isNavigatingPageRef.current) {
@@ -351,21 +378,37 @@ export const UsageEventsPage: React.FC = () => {
     [isCollapsed],
   );
 
-  const handleBackToTop = React.useCallback(() => {
+  /**
+   * Scrolling a virtualized list to row one takes two passes. The first pass
+   * lands against the content height the list is holding; committing the new
+   * rows then makes it re-measure, and it re-applies the offset it was holding,
+   * which leaves a residual scroll of roughly one row's top margin. The second
+   * pass lands after that commit.
+   */
+  const scrollListToTop = React.useCallback(() => {
     listRef.current?.scrollTo({ top: 0 });
+    requestAnimationFrame(() => listRef.current?.scrollTo({ top: 0 }));
+  }, []);
+
+  const handleBackToTop = React.useCallback(() => {
+    scrollListToTop();
     setIsScrolledDown(false);
     setIsCollapsed(false);
-  }, []);
+    // Resuming is explicit here: the scroll event that follows will also clear
+    // it, but the reader clicked "apply", so do not depend on event timing.
+    setHeldItems(null);
+  }, [scrollListToTop]);
 
   const handleToggleExpand = React.useCallback(() => {
     setIsCollapsed((prev) => !prev);
   }, []);
 
-  // Reset collapse only on filter / signature changes (NOT cursor pagination)
+  // Reset collapse only on filter / window changes (NOT cursor pagination, and
+  // not on a poll: a refresh must never expand or collapse the reader's view).
   React.useEffect(() => {
     setIsCollapsed(false);
     setIsScrolledDown(false);
-  }, [signature, refresh]);
+  }, [viewScope]);
 
   // One-time hydration from server preferences when entering bare route without query parameters
   React.useEffect(() => {
@@ -494,18 +537,18 @@ export const UsageEventsPage: React.FC = () => {
   const handlePrevPage = React.useCallback(() => {
     if (!cursors.length || result.isFetching) return;
     isNavigatingPageRef.current = true;
-    setPagination({ scope, cursors: cursors.slice(0, -1) });
-    listRef.current?.scrollTo({ top: 0 });
+    setPagination({ scope: viewScope, cursors: cursors.slice(0, -1) });
+    scrollListToTop();
     schedulePageNavigationReset();
-  }, [cursors, result.isFetching, schedulePageNavigationReset, scope]);
+  }, [cursors, result.isFetching, schedulePageNavigationReset, scrollListToTop, viewScope]);
 
   const handleNextPage = React.useCallback(() => {
     if (!result.data?.has_more || !result.data?.next_cursor || result.isFetching || result.isError) return;
     isNavigatingPageRef.current = true;
-    setPagination({ scope, cursors: [...cursors, result.data.next_cursor] });
-    listRef.current?.scrollTo({ top: 0 });
+    setPagination({ scope: viewScope, cursors: [...cursors, result.data.next_cursor] });
+    scrollListToTop();
     schedulePageNavigationReset();
-  }, [cursors, result.data, result.isFetching, result.isError, schedulePageNavigationReset, scope]);
+  }, [cursors, result.data, result.isFetching, result.isError, schedulePageNavigationReset, scrollListToTop, viewScope]);
 
   React.useEffect(() => {
     if (!autoRefreshInterval) return;
@@ -525,26 +568,45 @@ export const UsageEventsPage: React.FC = () => {
     if (result.data && !result.isPlaceholderData) setLastPage(result.data);
   }, [result.data, result.isPlaceholderData]);
   const displayedPage = result.data || (result.isError ? lastPage : undefined);
-  const stale = result.isPlaceholderData || (result.isError && !!lastPage);
-  const events = displayedPage?.items || [];
-  const metrics = eventPageMetrics(events);
 
-  const totalCostUSD = React.useMemo(() => {
-    let sum = 0;
-    let hasAny = false;
-    for (const ev of events) {
-      if (ev.cost_usd != null) {
-        sum += ev.cost_usd;
-        hasAny = true;
-      }
-    }
-    return hasAny ? sum : null;
-  }, [events]);
+  // A poll is not a view change. `stale` used to flip on every poll, because the
+  // sliding window advances each time and that reads as placeholder data; the
+  // label and the "updating" note then blinked every few seconds. Compare the
+  // identity the reader chose instead - filters plus page - and let the resolved
+  // window move underneath it.
+  const queryIdentity = `${signature}:${cursor ?? ''}`;
+  const [fetchedIdentity, setFetchedIdentity] = React.useState(queryIdentity);
+  React.useEffect(() => {
+    if (result.data && !result.isPlaceholderData) setFetchedIdentity(queryIdentity);
+  }, [result.data, result.isPlaceholderData, queryIdentity]);
+  const isViewChange = fetchedIdentity !== queryIdentity;
+  const stale = isViewChange || (result.isError && !!lastPage);
 
-  const successCount = Math.max(0, metrics.count - metrics.failed);
-  const successRate = metrics.count > 0 ? (successCount / metrics.count) * 100 : 100;
-  const successRateStr = metrics.count > 0 ? `${successRate.toFixed(1)}%` : '—';
-  const successTone = successRate < 95 ? 'danger' : successRate < 99 ? 'warn' : 'success';
+  const latestItems = displayedPage?.items;
+
+  // ---- live tail ----
+  // While the reader is at the top the list follows the newest records. Once
+  // they scroll away it holds the rows they are reading and reports how many
+  // have arrived since, the way log viewers do it: applying the update would
+  // move text out from under the cursor, and jumping to the top is the worst
+  // version of that. Scrolling back to the top resumes and applies the backlog.
+  const [heldItems, setHeldItems] = React.useState<UsageEvent[] | null>(null);
+  const latestItemsRef = React.useRef<UsageEvent[]>([]);
+  latestItemsRef.current = latestItems ?? [];
+  const heldItemsRef = React.useRef<UsageEvent[] | null>(null);
+  heldItemsRef.current = heldItems;
+
+  // A different view, or a different page, starts following again.
+  React.useEffect(() => {
+    setHeldItems(null);
+  }, [viewScope, cursor]);
+
+  const events = heldItems ?? latestItems ?? [];
+  const pendingCount = React.useMemo(() => {
+    if (!heldItems || !latestItems) return 0;
+    const shown = new Set(heldItems.map((event) => event.id));
+    return latestItems.reduce((count, event) => (shown.has(event.id) ? count : count + 1), 0);
+  }, [heldItems, latestItems]);
 
   // Safe file metadata only: never download credential contents for the stream.
   const authFiles = useQuery({
@@ -724,6 +786,9 @@ export const UsageEventsPage: React.FC = () => {
             <h1 className="terminal-title">{t('events.title')}</h1>
             <p className="request-window">
               {dayjs(activeWindow.from).format('MM-DD HH:mm')} — {dayjs(activeWindow.to).format('MM-DD HH:mm')}
+              <Tooltip title={t('events.order_recorded_hint')}>
+                <span className="request-order-hint">{t('events.order_recorded')}</span>
+              </Tooltip>
             </p>
           </div>
           <div className="request-actions">
@@ -780,6 +845,26 @@ export const UsageEventsPage: React.FC = () => {
                 <Badge status={ingestTone} text={t(ingestLabel)} />
               </Button>
             </Popover>
+            {Object.keys(colWidths).length > 0 && (
+              <Button
+                size="small"
+                type="text"
+                className="req-reset-columns-btn"
+                onClick={handleResetAllColumns}
+              >
+                {t('events.reset_columns')}
+              </Button>
+            )}
+            <Tooltip title={t(isCollapsed ? 'events.collapse_view' : 'events.expand_view')}>
+              <Button
+                size="small"
+                type="text"
+                className="req-expand-toggle-btn"
+                aria-label={t(isCollapsed ? 'events.collapse_view' : 'events.expand_view')}
+                icon={isCollapsed ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+                onClick={handleToggleExpand}
+              />
+            </Tooltip>
             <Button
               aria-label={t('common.refresh')}
               icon={<ReloadOutlined spin={result.isFetching} />}
@@ -972,82 +1057,6 @@ export const UsageEventsPage: React.FC = () => {
           } as React.CSSProperties
         }
       >
-        <div className="request-summary">
-          <div className="req-kpi-item">
-            <span className="req-kpi-label">{t(stale ? 'events.previous_results' : 'events.this_page')}</span>
-            <div className="req-kpi-val">
-              <strong>
-                {result.isLoading ? '—' : metrics.count.toLocaleString()}{' '}
-                <small>{t('events.requests_unit')}</small>
-              </strong>
-            </div>
-          </div>
-
-          <div className="req-kpi-divider" />
-
-          <div className="req-kpi-item">
-            <span className="req-kpi-label">{t('events.success_rate')}</span>
-            <div className="req-kpi-rate-content">
-              <span className={`req-rate-pip is-${metrics.count === 0 ? 'neutral' : successTone}`} />
-              <div className="req-kpi-val">
-                <strong>{result.isLoading ? '—' : successRateStr}</strong>
-              </div>
-              <span className="req-kpi-sub-failed">
-                ({t('events.filter_failed')}: <b>{result.isLoading ? '—' : metrics.failed}</b>)
-              </span>
-            </div>
-          </div>
-
-          <div className="req-kpi-divider" />
-
-          <div className="req-kpi-item">
-            <span className="req-kpi-label">{t('events.mean_latency')}</span>
-            <div className="req-kpi-val">
-              <strong>{result.isLoading ? '—' : formatEventDuration(metrics.latency)}</strong>
-            </div>
-          </div>
-
-          <div className="req-kpi-divider" />
-
-          <div className="req-kpi-item">
-            <span className="req-kpi-label">{t('events.col_tokens')}</span>
-            <div className="req-kpi-val">
-              <strong>{result.isLoading ? '—' : metrics.tokens.toLocaleString()}</strong>
-            </div>
-          </div>
-
-          {totalCostUSD != null && (
-            <>
-              <div className="req-kpi-divider" />
-              <div className="req-kpi-item">
-                <span className="req-kpi-label">{t('events.total_cost')}</span>
-                <div className="req-kpi-val">
-                  <strong>${totalCostUSD.toFixed(4)}</strong>
-                </div>
-              </div>
-            </>
-          )}
-
-          {Object.keys(colWidths).length > 0 && (
-            <Button
-              size="small"
-              type="dashed"
-              className="req-reset-columns-btn"
-              onClick={handleResetAllColumns}
-            >
-              {t('events.reset_columns')}
-            </Button>
-          )}
-
-          <Button
-            size="small"
-            type="text"
-            className="req-expand-toggle-btn"
-            aria-label={t(isCollapsed ? 'events.collapse_view' : 'events.expand_view')}
-            icon={isCollapsed ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
-            onClick={handleToggleExpand}
-          />
-        </div>
         <div className="request-table-scroll-area" onWheel={handleWheel}>
           <div className="request-table-header">
             {REQUEST_COLUMNS.map((col) => (
@@ -1080,7 +1089,7 @@ export const UsageEventsPage: React.FC = () => {
             ) : events.length ? (
               <Listy<UsageEvent>
                 ref={listRef}
-                key={`${scope}:${grouping}`}
+                key={`${viewScope}:${grouping}`}
                 virtual
                 height={height}
                 items={events}
@@ -1121,15 +1130,19 @@ export const UsageEventsPage: React.FC = () => {
             )}
           </div>
         </div>
-        {isScrolledDown && (
+        {(isScrolledDown || pendingCount > 0) && (
           <button
             type="button"
-            className="req-back-to-top-btn"
+            className={`req-back-to-top-btn${pendingCount > 0 ? ' is-live' : ''}`}
             onClick={handleBackToTop}
-            aria-label={t('events.back_to_top')}
+            aria-label={
+              pendingCount > 0 ? t('events.new_records', { n: pendingCount }) : t('events.back_to_top')
+            }
           >
             <VerticalAlignTopOutlined className="req-back-to-top-icon" />
-            <span className="req-back-to-top-text">{t('events.back_to_top')}</span>
+            <span className="req-back-to-top-text">
+              {pendingCount > 0 ? t('events.new_records', { n: pendingCount }) : t('events.back_to_top')}
+            </span>
           </button>
         )}
         <footer className="request-pagination">
