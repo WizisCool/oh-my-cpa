@@ -25,6 +25,7 @@ export interface PricingSyncState {
   last_success_at_ms?: number | null;
   updated_at_ms: number;
   auto_sync_interval_hours?: number;
+  catalog_updated_at_ms?: number;
   next_sync_at_ms?: number | null;
 }
 

@@ -47,8 +47,10 @@ export interface UsageEvent {
   resource_id?: string | null;
   resource_name?: string | null;
   has_request_log: boolean;
-  /** Estimated USD cost from model_prices; absent means unpriced, never zero. */
+  /** Request-time locked USD cost; absent means no price was known at ingestion. */
   cost_usd?: number | null;
+  pricing_status?: 'priced' | 'unpriced' | 'legacy_unpriced' | 'invalid_price';
+  price_version_id?: number | null;
 }
 
 export interface UsageEventPage {

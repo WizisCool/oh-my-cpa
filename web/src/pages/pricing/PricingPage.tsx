@@ -117,6 +117,10 @@ export const PricingPage: React.FC = () => {
 
   const models = result.data?.models ?? [];
   const unpricedList = result.data?.unpriced ?? [];
+  const availableModels = React.useMemo(
+    () => [...new Set([...models.map((row) => row.model), ...unpricedList])].sort(),
+    [models, unpricedList],
+  );
   const sync = result.data?.sync;
   const state = sync?.state;
 
@@ -659,10 +663,13 @@ export const PricingPage: React.FC = () => {
             label={t('pricing.editor.model')}
             rules={[{ required: true, message: t('pricing.editor.model_required') }]}
           >
-            <Input
+            <Select
               disabled={Boolean(editor.editing)}
-              placeholder="gpt-5.6-luna"
-              style={{ fontFamily: 'monospace' }}
+              showSearch={{ optionFilterProp: 'label' }}
+              allowClear
+              placeholder={t('pricing.editor.model_placeholder')}
+              options={availableModels.map((model) => ({ label: model, value: model }))}
+              style={{ width: '100%', fontFamily: 'monospace' }}
             />
           </Form.Item>
 
@@ -748,8 +755,6 @@ export const PricingPage: React.FC = () => {
     </div>
   );
 };
-
-
 
 
 
