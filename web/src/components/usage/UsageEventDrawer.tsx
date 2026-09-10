@@ -247,7 +247,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                       <div className="req-overview-error-card">
                         <div className="req-overview-error-top">
                           <span className="req-overview-error-status">
-                            {errors.length > 0 ? `HTTP ${errors[0].status_code}` : t('events.filter_failed')}
+                            {errors.length > 0 ? `HTTP: ${errors[0].status_code}` : t('events.filter_failed')}
                           </span>
                           <span className="req-overview-error-code">
                             {errors.length > 0 ? errors[0].code || 'ERROR' : t('events.error_banner_title')}
@@ -393,6 +393,12 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                         <span>{t('events.output_tokens')}</span>
                         <strong>{event.tokens.output.toLocaleString()}</strong>
                       </div>
+                      {event.tokens.reasoning > 0 && (
+                        <div className="req-token-card">
+                          <span>{t('events.reasoning_tokens')}</span>
+                          <strong>{event.tokens.reasoning.toLocaleString()}</strong>
+                        </div>
+                      )}
                       <div className="req-token-card">
                         <span>{t('events.cached_tokens')}</span>
                         <strong>{event.tokens.cached.toLocaleString()}</strong>

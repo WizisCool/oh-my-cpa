@@ -7,6 +7,7 @@ import {
   Empty,
   Input,
   Listy,
+  type ListyRef,
   Popover,
   Segmented,
   Select,
@@ -15,11 +16,14 @@ import {
 } from 'antd';
 import {
   FilterOutlined,
+  FullscreenExitOutlined,
+  FullscreenOutlined,
   InfoCircleOutlined,
   LeftOutlined,
   ReloadOutlined,
   RightOutlined,
   SearchOutlined,
+  VerticalAlignTopOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
@@ -262,6 +266,107 @@ export const UsageEventsPage: React.FC = () => {
   const [advanced, setAdvanced] = React.useState(false);
   const [grouping, setGrouping] = React.useState<EventGrouping>('time');
 
+  // Full-height scroll-down expansion & top-bounce expand mode & back-to-top
+  const listRef = React.useRef<ListyRef>(null);
+  const [isCollapsed, setIsCollapsed] = React.useState(false);
+  const [isScrolledDown, setIsScrolledDown] = React.useState(false);
+  const lastScrollTopRef = React.useRef(0);
+  const isNavigatingPageRef = React.useRef(false);
+  const justCollapsedFromTopRef = React.useRef(false);
+  const pageNavigationTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const schedulePageNavigationReset = React.useCallback(() => {
+    if (pageNavigationTimerRef.current) clearTimeout(pageNavigationTimerRef.current);
+    pageNavigationTimerRef.current = setTimeout(() => {
+      isNavigatingPageRef.current = false;
+      lastScrollTopRef.current = 0;
+      setIsScrolledDown(false);
+      pageNavigationTimerRef.current = null;
+    }, 300);
+  }, []);
+
+  React.useEffect(
+    () => () => {
+      if (pageNavigationTimerRef.current) clearTimeout(pageNavigationTimerRef.current);
+    },
+    [],
+  );
+
+  const handleScroll = React.useCallback(
+    (e: React.UIEvent<HTMLElement>) => {
+      const { scrollTop } = e.currentTarget;
+      lastScrollTopRef.current = scrollTop;
+
+      // Show back-to-top button when scrolled down
+      setIsScrolledDown(scrollTop > 60);
+
+      // Programmatic scroll-to-top during page change must not cancel collapse
+      if (isNavigatingPageRef.current) {
+        return;
+      }
+
+      // If we just collapsed into full-screen mode from the very top,
+      // keep the list pinned at row 1 (scrollTop = 0) so the first record is never skipped
+      if (justCollapsedFromTopRef.current) {
+        justCollapsedFromTopRef.current = false;
+        if (scrollTop > 0) {
+          listRef.current?.scrollTo({ top: 0 });
+          lastScrollTopRef.current = 0;
+        }
+        return;
+      }
+
+      // Scrolling down collapses header into full-screen mode
+      if (scrollTop > 50) {
+        if (!isCollapsed) setIsCollapsed(true);
+      }
+    },
+    [isCollapsed],
+  );
+
+  // Wheel handling:
+  // 1. When at top edge and wheeling down in normal mode: collapse header and keep row 1 visible.
+  // 2. When at top edge and wheeling up in collapsed mode: intentional top-bounce overscroll expands header.
+  const handleWheel = React.useCallback(
+    (e: React.WheelEvent<HTMLElement>) => {
+      if (isNavigatingPageRef.current) return;
+
+      if (!isCollapsed && e.deltaY > 10 && lastScrollTopRef.current <= 5) {
+        // First wheel down from top: enter full-screen mode, but freeze scroll at top
+        // so row 1 stays visible in full screen mode!
+        justCollapsedFromTopRef.current = true;
+        setIsCollapsed(true);
+        listRef.current?.scrollTo({ top: 0 });
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+        return;
+      }
+
+      if (isCollapsed && e.deltaY < -15 && lastScrollTopRef.current <= 2) {
+        // Intentional top-bounce when already at the very top: unfold header
+        setIsCollapsed(false);
+      }
+    },
+    [isCollapsed],
+  );
+
+  const handleBackToTop = React.useCallback(() => {
+    listRef.current?.scrollTo({ top: 0 });
+    setIsScrolledDown(false);
+    setIsCollapsed(false);
+  }, []);
+
+  const handleToggleExpand = React.useCallback(() => {
+    setIsCollapsed((prev) => !prev);
+  }, []);
+
+  // Reset collapse only on filter / signature changes (NOT cursor pagination)
+  React.useEffect(() => {
+    setIsCollapsed(false);
+    setIsScrolledDown(false);
+  }, [signature, refresh]);
+
   // One-time hydration from server preferences when entering bare route without query parameters
   React.useEffect(() => {
     if (!prefReady || hydrated) return;
@@ -385,6 +490,22 @@ export const UsageEventsPage: React.FC = () => {
     placeholderData: keepPreviousData,
     staleTime: 10_000,
   });
+
+  const handlePrevPage = React.useCallback(() => {
+    if (!cursors.length || result.isFetching) return;
+    isNavigatingPageRef.current = true;
+    setPagination({ scope, cursors: cursors.slice(0, -1) });
+    listRef.current?.scrollTo({ top: 0 });
+    schedulePageNavigationReset();
+  }, [cursors, result.isFetching, schedulePageNavigationReset, scope]);
+
+  const handleNextPage = React.useCallback(() => {
+    if (!result.data?.has_more || !result.data?.next_cursor || result.isFetching || result.isError) return;
+    isNavigatingPageRef.current = true;
+    setPagination({ scope, cursors: [...cursors, result.data.next_cursor] });
+    listRef.current?.scrollTo({ top: 0 });
+    schedulePageNavigationReset();
+  }, [cursors, result.data, result.isFetching, result.isError, schedulePageNavigationReset, scope]);
 
   React.useEffect(() => {
     if (!autoRefreshInterval) return;
@@ -597,171 +718,225 @@ export const UsageEventsPage: React.FC = () => {
 
   return (
     <div className="terminal-page usage-events-page request-events-page">
-      <header className="terminal-page-head">
-        <div>
-          <h1 className="terminal-title">{t('events.title')}</h1>
-          <p className="request-window">
-            {dayjs(window.from).format('MM-DD HH:mm')} — {dayjs(window.to).format('MM-DD HH:mm')}
-          </p>
-        </div>
-        <div className="request-actions">
-          <div className="req-auto-refresh-control">
-            {autoRefreshInterval > 0 && (
-              <span className="req-live-pulse-dot" title={t('events.auto_refreshing')} />
-            )}
+      <div className={`request-collapsible-header ${isCollapsed ? 'is-collapsed' : ''}`}>
+        <header className="terminal-page-head">
+          <div>
+            <h1 className="terminal-title">{t('events.title')}</h1>
+            <p className="request-window">
+              {dayjs(window.from).format('MM-DD HH:mm')} — {dayjs(window.to).format('MM-DD HH:mm')}
+            </p>
+          </div>
+          <div className="request-actions">
+            <div className="req-auto-refresh-control">
+              {autoRefreshInterval > 0 && (
+                <span className="req-live-pulse-dot" title={t('events.auto_refreshing')} />
+              )}
+              <Select
+                className="req-auto-refresh-select"
+                aria-label={t('events.auto_refresh')}
+                value={autoRefreshInterval}
+                onChange={setAutoRefreshInterval}
+                options={[
+                  { value: 0, label: `${t('events.auto_refresh')}: ${t('events.auto_refresh_off')}` },
+                  { value: 5, label: `${t('events.auto_refresh')}: ${t('events.auto_refresh_sec', { s: 5 })}` },
+                  { value: 10, label: `${t('events.auto_refresh')}: ${t('events.auto_refresh_sec', { s: 10 })}` },
+                  { value: 30, label: `${t('events.auto_refresh')}: ${t('events.auto_refresh_sec', { s: 30 })}` },
+                ]}
+              />
+            </div>
+            <Popover
+              trigger="click"
+              title={t('events.ingest_status')}
+              content={
+                <div className="request-ingest">
+                  <Descriptions
+                    size="small"
+                    column={1}
+                    items={[
+                      {
+                        key: 'mode',
+                        label: t('events.collector_mode'),
+                        children: status?.collector?.mode || '—',
+                      },
+                      {
+                        key: 'captured',
+                        label: t('events.captured'),
+                        children: status?.collector?.captured ?? '—',
+                      },
+                      {
+                        key: 'gaps',
+                        label: t('events.coverage_gaps'),
+                        children: status?.collector?.coverage_gaps ?? '—',
+                      },
+                      { key: 'pending', label: t('events.pending'), children: status?.stats?.pending ?? '—' },
+                    ]}
+                  />
+                  <p>{t('events.delivery_semantics_hint')}</p>
+                  {status?.collector?.last_error && <p>{status.collector.last_error}</p>}
+                </div>
+              }
+            >
+              <Button type="text" icon={<InfoCircleOutlined />}>
+                <Badge status={ingestTone} text={t(ingestLabel)} />
+              </Button>
+            </Popover>
+            <Button
+              aria-label={t('common.refresh')}
+              icon={<ReloadOutlined spin={result.isFetching} />}
+              disabled={result.isFetching}
+              onClick={() => {
+                setRefresh((v) => v + 1);
+                void ingest.refetch();
+              }}
+            >
+              {t('common.refresh')}
+            </Button>
+          </div>
+        </header>
+        {result.isError && (
+          <Alert
+            type="error"
+            showIcon
+            title={t('events.load_error')}
+            description={result.error instanceof Error ? result.error.message : undefined}
+            action={<Button onClick={() => void result.refetch()}>{t('common.retry')}</Button>}
+          />
+        )}
+        <section className="request-toolbar" aria-label={t('events.filters')}>
+          <div className="request-filters">
+            <Input
+              className="request-search"
+              aria-label={t('events.col_request_id')}
+              placeholder={t('events.search_hint')}
+              prefix={<SearchOutlined />}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              allowClear
+            />
             <Select
-              className="req-auto-refresh-select"
-              aria-label={t('events.auto_refresh')}
-              value={autoRefreshInterval}
-              onChange={setAutoRefreshInterval}
+              aria-label={t('events.time_range')}
+              value={query.from !== undefined ? 'custom' : query.preset}
+              onChange={(value) => update({ preset: value, from: undefined, to: undefined })}
               options={[
-                { value: 0, label: `${t('events.auto_refresh')}: ${t('events.auto_refresh_off')}` },
-                { value: 5, label: `${t('events.auto_refresh')}: ${t('events.auto_refresh_sec', { s: 5 })}` },
-                { value: 10, label: `${t('events.auto_refresh')}: ${t('events.auto_refresh_sec', { s: 10 })}` },
-                { value: 30, label: `${t('events.auto_refresh')}: ${t('events.auto_refresh_sec', { s: 30 })}` },
+                ...(query.from !== undefined ? [{ value: 'custom', label: t('events.custom_range') }] : []),
+                ...Object.keys(EVENT_PRESETS).map((value) => ({
+                  value,
+                  label: t('events.last_range', { range: value }),
+                })),
               ]}
             />
-          </div>
-          <Popover
-            trigger="click"
-            title={t('events.ingest_status')}
-            content={
-              <div className="request-ingest">
-                <Descriptions
-                  size="small"
-                  column={1}
-                  items={[
-                    {
-                      key: 'mode',
-                      label: t('events.collector_mode'),
-                      children: status?.collector?.mode || '—',
-                    },
-                    {
-                      key: 'captured',
-                      label: t('events.captured'),
-                      children: status?.collector?.captured ?? '—',
-                    },
-                    {
-                      key: 'gaps',
-                      label: t('events.coverage_gaps'),
-                      children: status?.collector?.coverage_gaps ?? '—',
-                    },
-                    { key: 'pending', label: t('events.pending'), children: status?.stats?.pending ?? '—' },
-                  ]}
-                />
-                <p>{t('events.delivery_semantics_hint')}</p>
-                {status?.collector?.last_error && <p>{status.collector.last_error}</p>}
-              </div>
-            }
-          >
-            <Button type="text" icon={<InfoCircleOutlined />}>
-              <Badge status={ingestTone} text={t(ingestLabel)} />
+            {facet('model', t('events.col_model'), facets.data?.facets.models)}
+            {facet('provider', t('events.provider'), facets.data?.facets.providers)}
+            <Button
+              aria-label={t('events.more_filters')}
+              icon={<FilterOutlined />}
+              aria-expanded={advanced}
+              onClick={() => {
+                const next = !advanced;
+                setAdvanced(next);
+                persistView({ advanced: next });
+              }}
+            >
+              {t('events.more_filters')}
+              {extraCount > 0 ? ` (${extraCount})` : ''}
             </Button>
-          </Popover>
-          <Button
-            aria-label={t('common.refresh')}
-            icon={<ReloadOutlined spin={result.isFetching} />}
-            disabled={result.isFetching}
-            onClick={() => {
-              setRefresh((v) => v + 1);
-              void ingest.refetch();
-            }}
-          >
-            {t('common.refresh')}
-          </Button>
-        </div>
-      </header>
-      {result.isError && (
-        <Alert
-          type="error"
-          showIcon
-          title={t('events.load_error')}
-          description={result.error instanceof Error ? result.error.message : undefined}
-          action={<Button onClick={() => void result.refetch()}>{t('common.retry')}</Button>}
-        />
-      )}
-      <section className="request-toolbar" aria-label={t('events.filters')}>
-        <div className="request-filters">
-          <Input
-            className="request-search"
-            aria-label={t('events.col_request_id')}
-            placeholder={t('events.search_hint')}
-            prefix={<SearchOutlined />}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            allowClear
-          />
-          <Select
-            aria-label={t('events.time_range')}
-            value={query.from !== undefined ? 'custom' : query.preset}
-            onChange={(value) => update({ preset: value, from: undefined, to: undefined })}
-            options={[
-              ...(query.from !== undefined ? [{ value: 'custom', label: t('events.custom_range') }] : []),
-              ...Object.keys(EVENT_PRESETS).map((value) => ({
-                value,
-                label: t('events.last_range', { range: value }),
-              })),
-            ]}
-          />
-          {facet('model', t('events.col_model'), facets.data?.facets.models)}
-          {facet('provider', t('events.provider'), facets.data?.facets.providers)}
-          <Button
-            aria-label={t('events.more_filters')}
-            icon={<FilterOutlined />}
-            aria-expanded={advanced}
-            onClick={() => {
-              const next = !advanced;
-              setAdvanced(next);
-              persistView({ advanced: next });
-            }}
-          >
-            {t('events.more_filters')}
-            {extraCount > 0 ? ` (${extraCount})` : ''}
-          </Button>
-        </div>
-        {advanced && (
-          <div className="request-advanced">
-            {facet('source', t('events.source'), facets.data?.facets.sources)}
-            {facet('auth_index', t('events.credential_filter'), facets.data?.facets.auth_indexes)}
-            {facet('api_key', t('events.caller'), facets.data?.facets.api_group_keys)}
-            {facet('executor', t('events.executor'), facets.data?.facets.executors)}
-            <Input
-              aria-label={t('events.auth_type')}
-              placeholder={t('events.auth_type')}
-              value={authType}
-              allowClear
-              onChange={(e) => setAuthType(e.target.value)}
-            />
-            <Input
-              aria-label={t('events.model_alias')}
-              placeholder={t('events.model_alias')}
-              value={modelAlias}
-              allowClear
-              onChange={(e) => setModelAlias(e.target.value)}
-            />
-            {facets.isError && <span role="status">{t('events.facets_error')}</span>}
           </div>
-        )}
-        <div className="request-toolbar-bottom">
-          <Segmented
-            aria-label={t('events.col_result')}
-            value={query.result}
-            onChange={(value) => update({ result: value === 'all' ? undefined : String(value) })}
-            options={['all', 'success', 'failed'].map((value) => ({
-              value,
-              label: t(`events.filter_${value}`),
-            }))}
-          />
-          <div className="request-actions">
-            {(activeFilters.length > 0 ||
-              query.result !== 'all' ||
-              query.preset !== '1h' ||
-              query.from !== undefined ||
-              Boolean(search) ||
-              Boolean(authType) ||
-              Boolean(modelAlias)) && (
+          {advanced && (
+            <div className="request-advanced">
+              {facet('source', t('events.source'), facets.data?.facets.sources)}
+              {facet('auth_index', t('events.credential_filter'), facets.data?.facets.auth_indexes)}
+              {facet('api_key', t('events.caller'), facets.data?.facets.api_group_keys)}
+              {facet('executor', t('events.executor'), facets.data?.facets.executors)}
+              <Input
+                aria-label={t('events.auth_type')}
+                placeholder={t('events.auth_type')}
+                value={authType}
+                allowClear
+                onChange={(e) => setAuthType(e.target.value)}
+              />
+              <Input
+                aria-label={t('events.model_alias')}
+                placeholder={t('events.model_alias')}
+                value={modelAlias}
+                allowClear
+                onChange={(e) => setModelAlias(e.target.value)}
+              />
+              {facets.isError && <span role="status">{t('events.facets_error')}</span>}
+            </div>
+          )}
+          <div className="request-toolbar-bottom">
+            <Segmented
+              aria-label={t('events.col_result')}
+              value={query.result}
+              onChange={(value) => update({ result: value === 'all' ? undefined : String(value) })}
+              options={['all', 'success', 'failed'].map((value) => ({
+                value,
+                label: t(`events.filter_${value}`),
+              }))}
+            />
+            <div className="request-actions">
+              {(activeFilters.length > 0 ||
+                query.result !== 'all' ||
+                query.preset !== '1h' ||
+                query.from !== undefined ||
+                Boolean(search) ||
+                Boolean(authType) ||
+                Boolean(modelAlias)) && (
+                <Button
+                  type="text"
+                  onClick={() => {
+                    setSearch('');
+                    setAuthType('');
+                    setModelAlias('');
+                    setParams({}, { replace: true });
+                    setViewPref({
+                      ...DEFAULT_USAGE_EVENTS_VIEW,
+                      grouping,
+                      advanced,
+                    });
+                  }}
+                >
+                  {t('events.reset')}
+                  {activeFilters.length ? ` (${activeFilters.length})` : ''}
+                </Button>
+              )}
+              <Select
+                aria-label={t('events.group_by')}
+                value={grouping}
+                onChange={(value) => {
+                  const next = value as EventGrouping;
+                  setGrouping(next);
+                  persistView({ grouping: next });
+                }}
+                options={['time', 'provider', 'credential'].map((value) => ({
+                  value,
+                  label: t(`events.group_${value}`),
+                }))}
+              />
+            </div>
+          </div>
+        </section>
+        {activeChips.length > 0 && (
+          <div className="req-active-chips-bar" aria-label={t('events.active_filters')}>
+            <span className="req-active-chips-label">{t('events.active_filters')}:</span>
+            <div className="req-active-chips-list">
+              {activeChips.map((chip) => (
+                <span key={chip.key} className="req-filter-chip">
+                  <span className="req-filter-chip-text">{chip.label}</span>
+                  <button
+                    type="button"
+                    className="req-filter-chip-remove"
+                    onClick={chip.onRemove}
+                    aria-label={`${t('common.delete')}: ${chip.label}`}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
               <Button
-                type="text"
+                size="small"
+                type="link"
+                className="req-clear-all-chips"
                 onClick={() => {
                   setSearch('');
                   setAuthType('');
@@ -774,69 +949,17 @@ export const UsageEventsPage: React.FC = () => {
                   });
                 }}
               >
-                {t('events.reset')}
-                {activeFilters.length ? ` (${activeFilters.length})` : ''}
+                {t('events.clear_all')}
               </Button>
-            )}
-            <Select
-              aria-label={t('events.group_by')}
-              value={grouping}
-              onChange={(value) => {
-                const next = value as EventGrouping;
-                setGrouping(next);
-                persistView({ grouping: next });
-              }}
-              options={['time', 'provider', 'credential'].map((value) => ({
-                value,
-                label: t(`events.group_${value}`),
-              }))}
-            />
+            </div>
           </div>
-        </div>
-      </section>
-      {activeChips.length > 0 && (
-        <div className="req-active-chips-bar" aria-label={t('events.active_filters')}>
-          <span className="req-active-chips-label">{t('events.active_filters')}:</span>
-          <div className="req-active-chips-list">
-            {activeChips.map((chip) => (
-              <span key={chip.key} className="req-filter-chip">
-                <span className="req-filter-chip-text">{chip.label}</span>
-                <button
-                  type="button"
-                  className="req-filter-chip-remove"
-                  onClick={chip.onRemove}
-                  aria-label={`${t('common.delete')}: ${chip.label}`}
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-            <Button
-              size="small"
-              type="link"
-              className="req-clear-all-chips"
-              onClick={() => {
-                setSearch('');
-                setAuthType('');
-                setModelAlias('');
-                setParams({}, { replace: true });
-                setViewPref({
-                  ...DEFAULT_USAGE_EVENTS_VIEW,
-                  grouping,
-                  advanced,
-                });
-              }}
-            >
-              {t('events.clear_all')}
-            </Button>
+        )}
+        {authFiles.isError && (
+          <div className="request-detail-note" role="status">
+            {t('events.credentials_unavailable')}
           </div>
-        </div>
-      )}
-      {authFiles.isError && (
-        <div className="request-detail-note" role="status">
-          {t('events.credentials_unavailable')}
-        </div>
-      )}
+        )}
+      </div>
       <section
         className="request-stream"
         aria-label={t('events.title')}
@@ -915,8 +1038,17 @@ export const UsageEventsPage: React.FC = () => {
               {t('events.reset_columns')}
             </Button>
           )}
+
+          <Button
+            size="small"
+            type="text"
+            className="req-expand-toggle-btn"
+            aria-label={t(isCollapsed ? 'events.collapse_view' : 'events.expand_view')}
+            icon={isCollapsed ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+            onClick={handleToggleExpand}
+          />
         </div>
-        <div className="request-table-scroll-area">
+        <div className="request-table-scroll-area" onWheel={handleWheel}>
           <div className="request-table-header">
             {REQUEST_COLUMNS.map((col) => (
               <div key={col.id} className={`req-th req-th-${col.id}`}>
@@ -947,7 +1079,8 @@ export const UsageEventsPage: React.FC = () => {
               </div>
             ) : events.length ? (
               <Listy<UsageEvent>
-                key={`${queryString}:${grouping}`}
+                ref={listRef}
+                key={`${scope}:${grouping}`}
                 virtual
                 height={height}
                 items={events}
@@ -955,6 +1088,7 @@ export const UsageEventsPage: React.FC = () => {
                 group={group}
                 sticky
                 className="request-list"
+                onScroll={handleScroll}
                 itemRender={(event) => (
                   <RequestRow
                     event={event}
@@ -987,6 +1121,17 @@ export const UsageEventsPage: React.FC = () => {
             )}
           </div>
         </div>
+        {isScrolledDown && (
+          <button
+            type="button"
+            className="req-back-to-top-btn"
+            onClick={handleBackToTop}
+            aria-label={t('events.back_to_top')}
+          >
+            <VerticalAlignTopOutlined className="req-back-to-top-icon" />
+            <span className="req-back-to-top-text">{t('events.back_to_top')}</span>
+          </button>
+        )}
         <footer className="request-pagination">
           <span aria-live="polite">
             {stale
@@ -1008,17 +1153,15 @@ export const UsageEventsPage: React.FC = () => {
                 aria-label={t('events.prev_page')}
                 icon={<LeftOutlined />}
                 disabled={!cursors.length || result.isFetching}
-                onClick={() => setPagination({ scope, cursors: cursors.slice(0, -1) })}
+                onClick={handlePrevPage}
               />
             </Tooltip>
             <Tooltip title={t('events.next_page')}>
               <Button
                 aria-label={t('events.next_page')}
                 icon={<RightOutlined />}
-                disabled={
-                  !result.data?.has_more || !result.data?.next_cursor || result.isFetching || result.isError
-                }
-                onClick={() => setPagination({ scope, cursors: [...cursors, result.data!.next_cursor!] })}
+                disabled={!result.data?.has_more || !result.data?.next_cursor || result.isFetching || result.isError}
+                onClick={handleNextPage}
               />
             </Tooltip>
           </div>

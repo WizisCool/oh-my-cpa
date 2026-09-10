@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tooltip } from 'antd';
-import { RightOutlined } from '@ant-design/icons';
+import { BulbOutlined, CopyOutlined, RightOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { LobeIcon, getProviderDefaultIcon } from '../LobeIcon';
 import { useT } from '../../i18n';
@@ -24,6 +24,7 @@ export interface RequestRowProps {
   providerIcons?: Record<string, string>;
   configuredProviders?: ProviderLookupEntry[];
   onOpen: (id: number) => void;
+  isSelected?: boolean;
 }
 
 export const RequestRow = React.memo<RequestRowProps>(
@@ -33,6 +34,7 @@ export const RequestRow = React.memo<RequestRowProps>(
     providerIcons = {},
     configuredProviders = [],
     onOpen,
+    isSelected = false,
   }) => {
     const t = useT();
 
@@ -66,15 +68,27 @@ export const RequestRow = React.memo<RequestRowProps>(
     const keyLabel = eventKeyLabel(event);
     const uaLabel = eventUserAgentLabel(event);
     const resultLabel = t(eventResultLabelKey(event));
+    const copyRequestId = () => {
+      if (!event.request_id || !navigator.clipboard) return;
+      void navigator.clipboard.writeText(event.request_id).catch(() => undefined);
+    };
 
     const formattedTime = dayjs(event.timestamp_ms).format('MM-DD HH:mm:ss');
     const fullTime = dayjs(event.timestamp_ms).format('YYYY-MM-DD HH:mm:ss.SSS');
 
     return (
-      <button
-        type="button"
-        className="request-row"
+      <div
+        role="button"
+        tabIndex={0}
+        className={`request-row${isSelected ? ' is-selected' : ''}`}
         onClick={() => onOpen(event.id)}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onOpen(event.id);
+          }
+        }}
         aria-label={`${t('common.details')}: ${event.model}, ${event.request_id || event.id}`}
       >
         {/* Column 1: 时间 */}
@@ -85,7 +99,22 @@ export const RequestRow = React.memo<RequestRowProps>(
             </time>
           </Tooltip>
           <div className="req-time-sub" title={event.request_id}>
-            {event.request_id || t('events.no_request_id')}
+            <span>{event.request_id || t('events.no_request_id')}</span>
+            {event.request_id ? (
+              <button
+                type="button"
+                className="req-id-quick-copy"
+                title={t('common.copy')}
+                aria-label={`${t('common.copy')}: ${event.request_id}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  copyRequestId();
+                }}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                <CopyOutlined />
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -152,7 +181,7 @@ export const RequestRow = React.memo<RequestRowProps>(
                 className="req-effort-badge"
                 title={`${t('events.reasoning_effort')}: ${event.reasoning_effort}`}
               >
-                [{event.reasoning_effort}]
+                {event.reasoning_effort}
               </span>
             ) : (
               '—'
@@ -163,7 +192,9 @@ export const RequestRow = React.memo<RequestRowProps>(
         {/* Column 5: 延时 */}
         <div className="req-col req-col-latency">
           <span className="req-mobile-label">{t('events.col_latency')}</span>
-          <strong className="req-latency-val">{formatEventDuration(event.latency_ms)}</strong>
+          <strong className={`req-latency-val${event.latency_ms >= 4000 ? ' is-slow' : ''}`}>
+            {formatEventDuration(event.latency_ms)}
+          </strong>
           <span className="req-ttft-val">
             TTFT {formatEventDuration(event.ttft_ms)}
           </span>
@@ -187,9 +218,7 @@ export const RequestRow = React.memo<RequestRowProps>(
           )}
         </div>
 
-        {/* Column 7: Token（总数，输入，输出）
-            Reasoning tokens are dropped from the list to keep this cell on one
-            line; the detail drawer keeps the full breakdown. */}
+        {/* Column 7: Token（总数，输入，输出，推理） */}
         <div className="req-col req-col-tokens">
           <span className="req-mobile-label">{t('events.col_tokens')}</span>
           <div className="req-tokens-total">
@@ -197,16 +226,25 @@ export const RequestRow = React.memo<RequestRowProps>(
             <small>tokens</small>
           </div>
           <div className="req-tokens-breakdown">
-            <span title={`输入 Tokens: ${event.tokens.input.toLocaleString()}`}>
+            <span title={`${t('events.input_tokens')}: ${event.tokens.input.toLocaleString()}`}>
               ↑ {event.tokens.input.toLocaleString()}
             </span>
-            <span title={`输出 Tokens: ${event.tokens.output.toLocaleString()}`}>
+            <span title={`${t('events.output_tokens')}: ${event.tokens.output.toLocaleString()}`}>
               ↓ {event.tokens.output.toLocaleString()}
             </span>
+            {event.tokens.reasoning > 0 && (
+              <span
+                className="req-tokens-reasoning"
+                title={`${t('events.reasoning_tokens')}: ${event.tokens.reasoning.toLocaleString()}`}
+              >
+                <BulbOutlined className="req-token-icon-reasoning" />
+                {event.tokens.reasoning.toLocaleString()}
+              </span>
+            )}
           </div>
         </div>
 
-        {/* Column 8: 费用（来自 model_prices 的估算；未定价保持 —，不造假 0） */}
+        {/* Column 8: 费用（请求发生时锁定的价格；未定价保持 —，不造假 0） */}
         <div className="req-col req-col-cost">
           <span className="req-mobile-label">{t('events.col_cost')}</span>
           {event.cost_usd != null ? (
@@ -250,15 +288,7 @@ export const RequestRow = React.memo<RequestRowProps>(
           </Tooltip>
         </div>
 
-        {/* Column 10: 执行器 */}
-        <div className="req-col req-col-executor">
-          <span className="req-mobile-label">{t('events.col_executor')}</span>
-          <span className="req-executor-badge" title={`执行器: ${event.executor_type || 'default'}`}>
-            {event.executor_type || 'default'}
-          </span>
-        </div>
-
-        {/* Column 11: Key（仅 api_key 类别的调用方 Key，掩码展示；其他类别回退到来源指纹） */}
+        {/* Column 10: Key（仅 api_key 类别的调用方 Key，掩码展示；其他类别回退到来源指纹） */}
         <div className="req-col req-col-key">
           <span className="req-mobile-label">{t('events.col_key')}</span>
           <span className="req-key-val" title={keyLabel}>
@@ -266,7 +296,7 @@ export const RequestRow = React.memo<RequestRowProps>(
           </span>
         </div>
 
-        {/* Column 12: UA（入库已最小化的客户端产品标签） */}
+        {/* Column 11: UA（入库已最小化的客户端产品标签） */}
         <div className="req-col req-col-ua">
           <span className="req-mobile-label">{t('events.col_ua')}</span>
           <span className="req-ua-val" title={uaLabel}>
@@ -276,11 +306,10 @@ export const RequestRow = React.memo<RequestRowProps>(
 
         {/* Row Action Chevron */}
         <RightOutlined className="request-chevron" />
-      </button>
+      </div>
     );
   },
 );
-
 
 
 

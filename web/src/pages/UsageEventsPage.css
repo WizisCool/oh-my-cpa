@@ -149,13 +149,32 @@
   color: var(--accent);
 }
 
+.request-collapsible-header {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
+  /* The advanced filters can wrap into several rows on narrow screens; keep
+     the expanded state from clipping controls before the collapse transition. */
+  max-height: 1200px;
+  opacity: 1;
+  transition: max-height 260ms cubic-bezier(0.2, 0, 0, 1), opacity 200ms ease, margin 260ms ease;
+}
+.request-collapsible-header.is-collapsed {
+  max-height: 0;
+  opacity: 0;
+  margin-top: -16px;
+  margin-bottom: -16px;
+  pointer-events: none;
+}
+
 .request-stream {
   container-type: inline-size;
   container-name: reqstream;
   --req-grid-columns: 100px 92px minmax(118px, 1.3fr) minmax(108px, 1.2fr) 76px 82px 122px 64px 92px minmax(145px, 0.6fr) minmax(88px, 0.6fr) 14px;
   --req-grid-gap: 12px;
   --req-pad-inline: 12px;
-  --req-min-width: 1257px;
+  --req-min-width: 1250px;
   flex: 1;
   min-height: 310px;
   display: flex;
@@ -163,6 +182,7 @@
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 4px;
+  position: relative;
 }
 .request-summary {
   display: flex;
@@ -245,10 +265,100 @@
   color: var(--danger);
   font-weight: 600;
 }
+.req-expand-toggle-btn {
+  margin-left: auto;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.req-expand-toggle-btn:hover {
+  color: var(--fg);
+}
+.req-back-to-top-btn {
+  position: absolute;
+  right: 24px;
+  bottom: 60px;
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--fg);
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  outline: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28), 0 1px 3px rgba(0, 0, 0, 0.15);
+  animation: reqBackTopEnter 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              background-color 150ms ease,
+              border-color 150ms ease,
+              box-shadow 150ms ease,
+              color 150ms ease;
+}
+
+@keyframes reqBackTopEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.req-back-to-top-btn:hover {
+  background: var(--surface);
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--accent);
+}
+
+.req-back-to-top-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.req-back-to-top-btn .anticon {
+  font-size: 12px;
+  color: var(--accent);
+  transition: transform 180ms ease;
+}
+
+.req-back-to-top-btn:hover .anticon {
+  transform: translateY(-1.5px);
+}
+.request-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted);
+}
+.request-pagination .request-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .request-list-host {
   flex: 1;
   min-height: 240px;
-  min-width: calc(var(--req-min-width, 1257px) + var(--req-gutter, 0px));
+  min-width: calc(var(--req-min-width, 1250px) + var(--req-gutter, 0px));
   overflow: hidden;
   position: relative;
 }
@@ -306,7 +416,7 @@
   user-select: none;
   flex-shrink: 0;
   width: 100%;
-  min-width: calc(var(--req-min-width, 1257px) + var(--req-gutter, 0px));
+  min-width: calc(var(--req-min-width, 1250px) + var(--req-gutter, 0px));
 }
 
 .req-th {
@@ -373,7 +483,6 @@
 .req-th-result,
 .req-th-provider,
 .req-th-model,
-.req-th-executor,
 .req-th-key,
 .req-th-ua {
   justify-content: flex-start;
@@ -400,13 +509,13 @@
 
 .request-row {
   width: 100%;
-  min-width: var(--req-min-width, 1257px);
+  min-width: var(--req-min-width, 1250px);
   display: grid;
   grid-template-columns: var(--req-grid-columns);
   align-items: center;
   gap: var(--req-grid-gap);
-  min-height: 88px;
-  padding: 16px var(--req-pad-inline);
+  min-height: 68px;
+  padding: 13px var(--req-pad-inline);
   border: 0;
   border-bottom: 1px solid var(--border-soft);
   border-radius: 0;
@@ -483,6 +592,9 @@
   align-items: center;
   padding: 1px 3px;
   border-radius: 2px;
+  border: 0;
+  background: transparent;
+  font: inherit;
   flex-shrink: 0;
 }
 .request-row:hover .req-id-quick-copy,
@@ -537,8 +649,8 @@
   min-width: 0;
 }
 .req-provider-icon-wrapper {
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   border-radius: var(--radius-sm, 4px);
   display: flex;
   align-items: center;
@@ -613,6 +725,7 @@
   font-size: 10px;
   font-weight: 600;
   font-family: var(--font-mono, monospace);
+  text-transform: capitalize;
   padding: 0 5px;
   border-radius: var(--radius-sm, 4px);
   background: color-mix(in srgb, var(--accent) 12%, var(--surface));
@@ -705,10 +818,10 @@
 .req-tokens-breakdown {
   display: flex;
   align-items: center;
-  /* The two counts are one line by construction: they never wrap, so the row
+  /* The counts are one line by construction: they never wrap, so the row
      keeps its height whatever the numbers are. */
   flex-wrap: nowrap;
-  gap: 6px;
+  gap: 8px;
   font-size: 11px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -716,8 +829,17 @@
 .req-tokens-breakdown > span {
   white-space: nowrap;
 }
+.req-tokens-reasoning {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.req-token-icon-reasoning {
+  font-size: 10px;
+  line-height: 1;
+}
 
-/* Column 8: Cost — estimated USD from model_prices; an unpriced model stays
+/* Column 8: Cost — locked to the request-time price; an unpriced model stays
    "—" because zero would fake free usage. */
 .req-col-cost {
   align-items: flex-end;
@@ -785,25 +907,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Column 9: Executor */
-.req-col-executor {
-  align-items: flex-start;
-}
-.req-executor-badge {
-  font-size: 11px;
-  font-weight: 500;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--fg-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
-}
-
-/* Column 10: Key (caller key / group label) */
+/* Column 9: Key (caller key / group label) */
 .req-col-key {
   align-items: flex-start;
   gap: 3px;
@@ -819,7 +923,7 @@
   max-width: 100%;
 }
 
-/* Column 11: UA (ingestion-minimized client product label) */
+/* Column 10: UA (ingestion-minimized client product label) */
 .req-col-ua {
   align-items: flex-start;
 }
@@ -949,17 +1053,6 @@
 .request-list .ant-listy-group-header {
   background-image: none;
   padding: 0;
-}
-.request-pagination {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 12px 18px;
-  border-top: 1px solid var(--border);
-  font-size: 11px;
-  color: var(--muted);
 }
 .request-ingest {
   max-width: min(340px, calc(100vw - 60px));
@@ -1122,7 +1215,7 @@
 /* Token Cards Grid */
 .req-token-cards-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
   gap: 10px;
   margin-bottom: 20px;
 }
@@ -1322,6 +1415,15 @@
   }
   .request-pagination {
     padding: 10px;
+  }
+  .req-back-to-top-btn {
+    right: 14px;
+    bottom: 56px;
+    height: 28px;
+    padding: 0 8px;
+    font-size: 11px;
+    gap: 4px;
+    border-radius: var(--radius-sm, 4px);
   }
   .request-detail .ant-drawer-body {
     padding: 16px;

@@ -362,7 +362,7 @@ export function resolveProviderInfo(
     // For OAuth: display account identity prominently (e.g. email / project_id / file name)
     const displayName = account || fileName || event.resource_name || event.auth_index || providerFamily;
     const providerLabel = providerFamily ? providerFamily.charAt(0).toUpperCase() + providerFamily.slice(1) : 'OAuth';
-    const secondary = account && fileName && fileName !== account ? `${providerLabel} OAuth · ${fileName}` : `${providerLabel} OAuth`;
+    const secondary = `${providerLabel} OAuth`;
 
     return {
       isOAuth: true,

@@ -942,6 +942,9 @@ const DICT: Record<string, [string, string]> = {
   'events.updating': ['更新中', 'Updating'],
   'events.page_size': ['每页记录数', 'Page size'],
   'events.per_page': ['{n} 条 / 页', '{n} / page'],
+  'events.back_to_top': ['回到顶部', 'Back to top'],
+  'events.expand_view': ['列表占满全屏', 'Maximize list view'],
+  'events.collapse_view': ['还原控制面板', 'Restore control panel'],
   'events.empty_title': ['没有请求记录', 'No request records'],
   'events.empty_filtered': ['试试移除筛选条件，或扩大时间范围。', 'Remove a filter or widen the time range.'],
   'events.empty_hint': ['此时间段内还没有捕获到请求。可扩大时间范围，或查看采集状态。', 'No requests were captured in this window. Widen the time range or check collection status.'],
@@ -996,13 +999,13 @@ const DICT: Record<string, [string, string]> = {
   'events.col_model': ['模型', 'Model'],
   'events.col_resource': ['提供商 / 凭据', 'Provider / Credential'],
   'events.col_provider_cred': ['提供商 / 凭据', 'Provider / Credential'],
-  'events.col_latency': ['耗时 / TTFT', 'Latency / TTFT'],
-  'events.col_tps': ['生成速度 (TPS)', 'TPS'],
+  'events.col_latency': ['耗时', 'Latency'],
+  'events.col_tps': ['TPS', 'TPS'],
   'events.tps_hint_ttft': ['基于生成阶段 (总耗时 - 首字延迟) 计算的每秒生成 Token 速率', 'Tokens generated per second during generation (Latency - TTFT)'],
   'events.tps_hint_total': ['未记录首字延迟，基于总耗时估算的端到端平均 Token 速率', 'End-to-end average tokens per second (Latency)'],
   'events.col_cost': ['费用', 'Cost'],
   'events.cost_unpriced': ['请求发生时未锁定价格，不计入费用；补价不会追溯收费', 'No price was locked when this request occurred; it is excluded and later prices do not backfill it'],
-  'events.col_tokens': ['Token 消耗', 'Tokens'],
+  'events.col_tokens': ['消耗', 'Tokens'],
   'events.col_cache_rate': ['缓存率', 'Cache Rate'],
   'events.col_executor': ['执行器', 'Executor'],
   'events.col_key': ['Key', 'Key'],
@@ -1427,8 +1430,3 @@ export function useI18n(): I18nContextValue {
 export function useT(): TFunc {
   return React.useContext(I18nContext).t;
 }
-
-
-
-
-
