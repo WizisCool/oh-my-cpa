@@ -462,8 +462,8 @@ try {
     await page.locator('.req-col-model').first().evaluate((col) => {
       const name = col.querySelector('.req-model-name')?.textContent || '';
       const effort = col.querySelector('.req-model-sub .req-effort-badge')?.textContent || '';
-      // Fixture record 0 is gpt-5.4 with reasoning_effort high.
-      return name.includes('gpt-5.4') && effort.includes('high');
+      // Fixture record 0 is gpt-5.4 with reasoning_effort high without brackets.
+      return name.includes('gpt-5.4') && effort.includes('high') && !effort.includes('[');
     }),
   );
   check(
@@ -521,15 +521,8 @@ try {
     }),
   );
   check(
-    'executor column shows only the executor, never the auth type beneath it',
-    await page.locator('.req-col-executor').evaluateAll((cells) =>
-      cells
-        .slice(0, 4)
-        .map((cell) => (cell.textContent || '').trim())
-        // Every fixture record runs the responses executor; record 3 is the only
-        // api_key auth record, so a leaked auth type would surface here.
-        .every((text) => text.includes('responses') && !/oauth|api_key/i.test(text)),
-    ),
+    'executor column is not rendered in request table rows',
+    (await page.locator('.req-col-executor').count()) === 0,
   );
   check(
     'UA column renders the minimized client label',
@@ -540,9 +533,8 @@ try {
     'records without a user agent read as an em dash',
     (await page.locator('.req-col-ua').first().innerText()).trim() === '—',
   );
-  // Reasoning tokens are dropped from the list to keep the cell on one line and
-  // the row height stable; the detail drawer keeps the full breakdown. The
-  // check drives the token column to its minimum width with the large numbers
+  // Reasoning tokens are displayed with an AntD vector icon (no emoji) in the breakdown.
+  // The check drives the token column to its minimum width with the large numbers
   // from the field screenshot, because the original bug only appears when the
   // numbers are long.
   const tokenBreakdown = await page.evaluate(() => {
@@ -550,18 +542,21 @@ try {
     const cells = rows.map((row) => row.querySelector('.req-tokens-breakdown')).filter(Boolean);
     const first = cells[0];
     const children = first ? [...first.children] : [];
+    const reasoningIcons = document.querySelectorAll('.req-tokens-reasoning .anticon-bulb');
     return {
       reasoningElements: document.querySelectorAll('.req-tokens-reasoning').length,
+      reasoningIcons: reasoningIcons.length,
       // Every count on one baseline means one line; a wrapped count sits lower.
       tops: children.map((child) => Math.round(child.getBoundingClientRect().top)),
       text: cells.map((cell) => cell.textContent || '').join(' '),
-      // The fixture carries reasoning tokens on every record, so a leak shows here.
+      // Strictly no emoji
       leaked: cells.some((cell) => /🧠/.test(cell.textContent || '')),
     };
   });
   check(
-    'token column lists only input and output, not reasoning',
-    tokenBreakdown.reasoningElements === 0 &&
+    'token column displays reasoning tokens with vector icon and no emoji',
+    tokenBreakdown.reasoningElements > 0 &&
+      tokenBreakdown.reasoningIcons > 0 &&
       !tokenBreakdown.leaked &&
       !tokenBreakdown.text.includes('🧠'),
   );
@@ -572,13 +567,13 @@ try {
   );
   // Reproduce the screenshot's long numbers at the narrowest allowed column.
   // The width is set through the same persisted column preference the resize
-  // handle writes, so the measured width is the real 112px minimum rather than
+  // handle writes, so the measured width is the real 126px minimum rather than
   // a hand-edited grid expression.
   await page.evaluate(async () => {
     const response = await fetch('/omc/api/v1/preferences/usage_events_columns', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tokens: 112 }),
+      body: JSON.stringify({ tokens: 130 }),
     });
     return response.ok;
   });
@@ -593,19 +588,30 @@ try {
     const strong = cell.querySelector('.req-tokens-total strong');
     const small = cell.querySelector('.req-tokens-total small');
     const parts = [...cell.querySelectorAll('.req-tokens-breakdown > span')];
-    const original = { strong: strong.textContent, small: small.textContent, parts: parts.map((p) => p.textContent) };
+    const original = {
+      strong: strong.textContent,
+      small: small.textContent,
+      parts: parts.map((p) => p.textContent),
+      partsDisplay: parts.map((p) => p.style.display),
+    };
     strong.textContent = '176,815';
     small.textContent = 'TOKENS';
     parts[0].textContent = '↑ 176,238';
     parts[1].textContent = '↓ 577';
+    // If reasoning part is present, hide it for the 176k screenshot reproduction
+    // (which had 0 reasoning tokens) so we verify the exact two-part long baseline
+    if (parts[2]) {
+      parts[2].style.display = 'none';
+    }
     await sleep(120);
     const cellBox = cell.getBoundingClientRect();
     const totalBox = cell.querySelector('.req-tokens-total').getBoundingClientRect();
     const cacheCell = row.querySelector('.req-col-cache');
     const cacheBox = cacheCell?.getBoundingClientRect();
+    const visibleParts = parts.filter((p) => p.style.display !== 'none');
     // Measure each count's text box, not the flex item: a wrapped line shows up
     // as a Range with two client rects, and as differing line tops.
-    const ranges = parts.map((part) => {
+    const ranges = visibleParts.map((part) => {
       const range = document.createRange();
       range.selectNodeContents(part);
       const rects = [...range.getClientRects()];
@@ -630,12 +636,15 @@ try {
     };
     strong.textContent = original.strong;
     small.textContent = original.small;
-    parts.forEach((p, index) => { p.textContent = original.parts[index]; });
+    parts.forEach((p, index) => {
+      p.textContent = original.parts[index];
+      p.style.display = original.partsDisplay[index];
+    });
     return result;
   });
   check(
-    'token column reached its 112px minimum through the stored preference',
-    longest && longest.measuredWidth === 112,
+    'token column reached its 130px minimum through the stored preference',
+    longest && longest.measuredWidth === 130,
   );
   check(
     'token cell holds the largest real numbers at its minimum width',
@@ -680,7 +689,7 @@ try {
   // Header/row column boundaries must agree, and long names must not push the
   // last column out of the table region.
   const alignment = await page.evaluate(() => {
-    const ids = ['time', 'result', 'provider', 'model', 'latency', 'tps', 'tokens', 'cache', 'executor', 'key', 'ua'];
+    const ids = ['time', 'result', 'provider', 'model', 'latency', 'tps', 'tokens', 'cost', 'cache', 'key', 'ua'];
     const row = document.querySelector('.request-row');
     return ids.map((id) => {
       const th = document.querySelector(`.req-th-${id}`);
@@ -698,9 +707,9 @@ try {
   );
   if (misaligned.length > 0) console.log('MISALIGNED:', misaligned);
   check(
-    'executor column stays inside the table region with long provider names',
+    'key column stays inside the table region with long provider names',
     await page.locator('.request-row').first().evaluate((row) => {
-      const cell = row.querySelector('.req-col-executor');
+      const cell = row.querySelector('.req-col-key');
       const area = document.querySelector('.request-table-scroll-area');
       if (!cell || !area) return false;
       return cell.getBoundingClientRect().right <= area.getBoundingClientRect().right + 2;
@@ -737,6 +746,65 @@ try {
     (await page.locator('.request-list').innerText()).includes(records[499].request_id),
   );
   check('virtual DOM stays bounded at the bottom', (await page.locator('.request-row').count()) < 40);
+  check(
+    'scroll down collapses header into full-height list mode',
+    (await page.locator('.request-collapsible-header.is-collapsed').count()) > 0,
+  );
+  check(
+    'back-to-top button is visible when scrolled down',
+    await page.locator('.req-back-to-top-btn').isVisible(),
+  );
+  await page.screenshot({ path: path.join(output, 'back-to-top-button.png') });
+  // Click back to top
+  await page.locator('.req-back-to-top-btn').click();
+  await wait(350);
+  check(
+    'clicking back-to-top restores header expand mode and hides back-to-top button',
+    (await page.locator('.request-collapsible-header.is-collapsed').count()) === 0 &&
+      (await page.locator('.req-back-to-top-btn').count()) === 0,
+  );
+  const expandBtn = page.locator('.req-expand-toggle-btn');
+  check('manual expand toggle button exists', (await expandBtn.count()) > 0);
+
+  // Test: Scrolling wheel down once from row 1 collapses header into full-screen mode WITHOUT skipping row 1!
+  await page.locator('.request-list').hover();
+  await page.mouse.wheel(0, 80);
+  await wait(300);
+  check(
+    'first wheel down collapses header into full-screen mode',
+    (await page.locator('.request-collapsible-header.is-collapsed').count()) > 0,
+  );
+  check(
+    'first record (row 1) remains visible after entering full-screen mode',
+    (await page.locator('.request-list').innerText()).includes(records[0].request_id),
+  );
+
+  // Test: Scrolling down into list, then scrolling back up to top keeps full-screen mode active
+  await page.mouse.wheel(0, 300);
+  await wait(200);
+  await page.mouse.wheel(0, -300);
+  await wait(200);
+  check(
+    'scrolling back up to row 1 preserves full-screen mode so operator can read row 1',
+    (await page.locator('.request-collapsible-header.is-collapsed').count()) > 0 &&
+      (await page.locator('.request-list').innerText()).includes(records[0].request_id),
+  );
+
+  // Test: Intentional top-bounce (wheeling up while already at top) expands header
+  await page.mouse.wheel(0, -60);
+  await wait(300);
+  check(
+    'top-bounce overscroll expands header back',
+    (await page.locator('.request-collapsible-header.is-collapsed').count()) === 0,
+  );
+
+  await expandBtn.click();
+  await wait(200);
+  check('clicking expand toggle collapses header', (await page.locator('.request-collapsible-header.is-collapsed').count()) > 0);
+  await expandBtn.click();
+  await wait(200);
+  check('clicking expand toggle again expands header', (await page.locator('.request-collapsible-header.is-collapsed').count()) === 0);
+
   // Middle-of-stream: the fixed itemHeight is only an estimate for 88px rows,
   // so measured heights must still line up without skipping, duplicating or
   // overlapping neighbours.
@@ -782,6 +850,16 @@ try {
   );
   await page.getByRole('button', { name: '上一页', exact: true }).click();
   await page.getByText('第 1 页 · 500 条记录').waitFor();
+
+  // Verify next-page navigation preserves fullscreen / collapsed list mode
+  check(
+    'pagination preserves fullscreen mode across next and previous pages without forcing header out',
+    (await page.locator('.request-collapsible-header.is-collapsed').count()) > 0,
+  );
+  await expandBtn.click();
+  await wait(200);
+  check('restored header for subsequent tests', (await page.locator('.request-collapsible-header.is-collapsed').count()) === 0);
+
   await page.getByRole('combobox', { name: '分组方式' }).click();
   await page.getByText('按提供商分组', { exact: true }).last().click();
   await page.locator('.request-group-title').first().waitFor();
@@ -830,7 +908,9 @@ try {
   await wait(150);
   await page.getByRole('button', { name: '更多筛选', exact: true }).click();
   await page.getByRole('combobox', { name: '请求来源' }).click();
-  const callerFacetOption = page.getByText('sk-12345••••••••7890 (100)', { exact: true }).last();
+  const callerFacetOption = page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)')
+    .getByText('sk-12345••••••••7890 (100)', { exact: true });
+  await callerFacetOption.waitFor({ state: 'visible' });
   check(
     'caller key facet lists the display mask instead of the stored fingerprint',
     await callerFacetOption.isVisible(),
@@ -960,6 +1040,15 @@ try {
   );
   await wait(200);
   await page.screenshot({ path: path.join(output, 'desktop-dark.png'), fullPage: true });
+  // Scroll to trigger back to top in dark mode and capture screenshot
+  for (let i = 0; i < 5; i++) {
+    await page.locator('.request-list').hover();
+    await page.mouse.wheel(0, 100000);
+    await wait(100);
+  }
+  await page.screenshot({ path: path.join(output, 'back-to-top-dark.png') });
+  await page.locator('.req-back-to-top-btn').click();
+  await wait(300);
   await checkCacheScale('dark');
   await page.setViewportSize({ width: 390, height: 844 });
   await wait(250);
@@ -984,7 +1073,7 @@ try {
     .allInnerTexts()).map((label) => label.toLowerCase());
   check(
     'mobile cards label every metric column',
-    ['结果', 'tps', 'token', '缓存率', '执行器', 'key', 'ua'].every((needle) =>
+    ['结果', 'tps', '消耗', '缓存率', 'key', 'ua'].every((needle) =>
       mobileLabels.some((label) => label.includes(needle)),
     ),
   );

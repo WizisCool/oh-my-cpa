@@ -457,7 +457,7 @@ console.log('PASS tokens per second (TPS): TTFT-aware generation speed, fallback
 
 // Request columns tests
 assert.equal(USAGE_EVENTS_COLUMNS_PREFERENCE, 'usage_events_columns');
-assert.equal(REQUEST_COLUMNS.length, 12);
+assert.equal(REQUEST_COLUMNS.length, 11);
 
 // Sanitization & clamping
 assert.deepEqual(parseUsageEventsColumns(null), {});
@@ -466,22 +466,21 @@ assert.deepEqual(parseUsageEventsColumns({ unknown_col: 200, time: 'not-a-number
 
 // Clamping to min/max
 const parsedWidths = parseUsageEventsColumns({
-  time: 50, // below min 92 -> clamped to 92
-  provider: 800, // above max 460 -> clamped to 460
-  model: 210, // valid in [108, 460] -> 210
+  time: 50, // below min 88 -> clamped to 88
+  provider: 800, // above max 480 -> clamped to 480
+  model: 210, // valid in [130, 440] -> 210
   latency: 85,
 });
-assert.equal(parsedWidths.time, 92);
-assert.equal(parsedWidths.provider, 460);
+assert.equal(parsedWidths.time, 88);
+assert.equal(parsedWidths.provider, 480);
 assert.equal(parsedWidths.model, 210);
 assert.equal(parsedWidths.latency, 85);
 
-// buildGridTemplateColumns: adaptive defaults with fr for provider, model, key and ua
+// buildGridTemplateColumns: adaptive defaults with fr for provider, model, tokens
 const defaultGrid = buildGridTemplateColumns({});
-assert.ok(defaultGrid.includes('minmax(118px, 1.3fr)'));
-assert.ok(defaultGrid.includes('minmax(108px, 1.2fr)'));
-assert.ok(defaultGrid.includes('minmax(145px, 0.6fr)'));
-assert.ok(defaultGrid.includes('minmax(88px, 0.6fr)'));
+assert.ok(defaultGrid.includes('minmax(140px, 1.6fr)'));
+assert.ok(defaultGrid.includes('minmax(130px, 1.3fr)'));
+assert.ok(defaultGrid.includes('minmax(125px, 1fr)'));
 assert.ok(defaultGrid.endsWith('14px')); // chevron track
 
 // Manual overrides lock specified tracks to exact px
@@ -490,14 +489,14 @@ assert.ok(manualGrid.includes('250px'));
 assert.ok(manualGrid.includes('200px'));
 assert.ok(manualGrid.endsWith('14px'));
 
-// computeGridMinWidth: fixed defaults + flexible mins + 12 gaps + inline padding
-// 100 + 92 + 118 + 108 + 76 + 82 + 122 + 92 (cost) + 64 + 92 + 145 + 88 + 14 = 1193; gaps 12*12 = 144; padding 24 = 1361
-const baseMin = 1193;
-assert.equal(computeGridMinWidth({}), baseMin + 144 + 24);
+// computeGridMinWidth: fixed defaults + flexible mins + 11 gaps + inline padding
+// 96 + 88 + 140 + 130 + 76 + 78 + 125 + 72 + 64 + 135 + 76 + 14 = 1094; gaps 11*12 = 132; padding 24 = 1250
+const baseMin = 1094;
+assert.equal(computeGridMinWidth({}), baseMin + 132 + 24);
 // A manual override replaces the flexible minimum with the requested width
-assert.equal(computeGridMinWidth({ provider: 300 }), baseMin - 118 + 300 + 144 + 24);
+assert.equal(computeGridMinWidth({ provider: 300 }), baseMin - 140 + 300 + 132 + 24);
 // Out-of-range overrides are clamped exactly as the template builder clamps them
-assert.equal(computeGridMinWidth({ provider: 9999 }), baseMin - 118 + 460 + 144 + 24);
+assert.equal(computeGridMinWidth({ provider: 9999 }), baseMin - 140 + 480 + 132 + 24);
 assert.ok(computeGridMinWidth({}, 8, 12) < computeGridMinWidth({}, 12, 12));
 
 console.log(
