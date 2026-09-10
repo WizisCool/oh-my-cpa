@@ -65,7 +65,7 @@ export const QuotaPage: React.FC = () => {
   const markRefreshing = (authIndexes: string[]) => {
     setRefreshingIndexes((prev) => {
       const next = new Set(prev);
-      authIndexes.forEach((idx) => next.add(idx));
+      authIndexes.forEach((authIndex) => next.add(authIndex));
       return next;
     });
   };
@@ -73,7 +73,7 @@ export const QuotaPage: React.FC = () => {
   const unmarkRefreshing = (authIndexes: string[]) => {
     setRefreshingIndexes((prev) => {
       const next = new Set(prev);
-      authIndexes.forEach((idx) => next.delete(idx));
+      authIndexes.forEach((authIndex) => next.delete(authIndex));
       return next;
     });
   };
@@ -105,8 +105,8 @@ export const QuotaPage: React.FC = () => {
       const all: QuotaItem[] = [];
       for (let i = 0; i < authIndexes.length; i += 10) {
         const chunk = authIndexes.slice(i, i + 10);
-        const res = await api.batchRefreshCredentialQuotas(chunk);
-        all.push(...res.quotas);
+        const response = await api.batchRefreshCredentialQuotas(chunk);
+        all.push(...response.quotas);
       }
       return { status: 'ok', quotas: all };
     },
@@ -176,7 +176,7 @@ export const QuotaPage: React.FC = () => {
 
   if (isError) {
     return (
-      <div className={`terminal-page quota-page ${styles.quotaPage}`}>
+      <div className={`terminal-page quota-page ${styles['quota-page']}`}>
         <div className="terminal-page-head">
           <div>
             <h1 className="terminal-title">{t('quota.title')}</h1>
@@ -200,7 +200,7 @@ export const QuotaPage: React.FC = () => {
   const isRefreshingAll = isFetching || batchRefreshMutation.isPending;
 
   return (
-    <div className={`terminal-page quota-page ${styles.quotaPage}`}>
+    <div className={`terminal-page quota-page ${styles['quota-page']}`}>
       <div className="terminal-page-head">
         <div>
           <h1 className="terminal-title">{t('quota.title')}</h1>
@@ -238,7 +238,7 @@ export const QuotaPage: React.FC = () => {
               style={{ padding: '40px 0', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}
             />
           ) : (
-            <div className={styles.cardsGrid}>
+            <div className={styles['cards-grid']}>
               {filteredQuotas.map((item) => (
                 <QuotaCard
                   key={item.auth_index}

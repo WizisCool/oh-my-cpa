@@ -254,7 +254,7 @@ export const UsageEventsPage: React.FC = () => {
 
   const [refresh, setRefresh] = React.useState(0);
   const [autoRefreshInterval, setAutoRefreshInterval] = React.useState<number>(0);
-  const window = React.useMemo(() => eventWindow(query, Date.now()), [query, refresh]);
+  const activeWindow = React.useMemo(() => eventWindow(query, Date.now()), [query, refresh]);
   const scope = `${signature}:${refresh}`;
   const [pagination, setPagination] = React.useState<{ scope: string; cursors: string[] }>({
     scope,
@@ -468,7 +468,7 @@ export const UsageEventsPage: React.FC = () => {
   const [authType, setAuthType] = useDebouncedTextFilter(query.auth_type || '', update, 'auth_type');
   const [modelAlias, setModelAlias] = useDebouncedTextFilter(query.model_alias || '', update, 'model_alias');
   const isQueryEnabled = hasExplicit || prefReady;
-  const facetParams = usageEventParams(window);
+  const facetParams = usageEventParams(activeWindow);
   const facets = useQuery({
     queryKey: ['usage-facets', facetParams, refresh],
     queryFn: () => api.getUsageFacets(facetParams),
@@ -482,7 +482,7 @@ export const UsageEventsPage: React.FC = () => {
     refetchInterval: 15_000,
   });
   const status = ingest.data as IngestStatus | undefined;
-  const queryString = usageEventParams({ ...query, ...window, cursor });
+  const queryString = usageEventParams({ ...query, ...activeWindow, cursor });
   const result = useQuery({
     queryKey: ['usage-events', queryString, refresh],
     queryFn: () => api.getUsageEvents(queryString),
@@ -723,7 +723,7 @@ export const UsageEventsPage: React.FC = () => {
           <div>
             <h1 className="terminal-title">{t('events.title')}</h1>
             <p className="request-window">
-              {dayjs(window.from).format('MM-DD HH:mm')} — {dayjs(window.to).format('MM-DD HH:mm')}
+              {dayjs(activeWindow.from).format('MM-DD HH:mm')} — {dayjs(activeWindow.to).format('MM-DD HH:mm')}
             </p>
           </div>
           <div className="request-actions">

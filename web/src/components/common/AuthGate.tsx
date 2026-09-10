@@ -14,7 +14,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const queryClient = useQueryClient();
   const [status, setStatus] = React.useState<'loading' | 'authenticated' | 'unauthenticated'>('loading');
   const [error, setError] = React.useState<string>();
-  const [submitting, setSubmitting] = React.useState(false);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   const checkSession = React.useCallback(async () => {
     try {
@@ -36,7 +36,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
   }, [checkSession]);
 
   const login = async (values: { password: string }) => {
-    setSubmitting(true);
+    setIsSubmitting(true);
     setError(undefined);
     try {
       await api.login(values.password);
@@ -47,7 +47,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
       setError(err instanceof Error ? err.message : t('auth.failed'));
       setStatus('unauthenticated');
     } finally {
-      setSubmitting(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -123,7 +123,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
                 spellCheck={false}
               />
             </Form.Item>
-            <Button type="primary" htmlType="submit" block loading={submitting}>
+            <Button type="primary" htmlType="submit" block loading={isSubmitting}>
               {t('auth.submit')}
             </Button>
           </Form>

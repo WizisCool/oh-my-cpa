@@ -28,17 +28,17 @@ import {
 
 const { Text, Title } = Typography;
 
-const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 2 });
-const standard = new Intl.NumberFormat('en');
+const COMPACT_NUMBER_FORMAT = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 2 });
+const PLAIN_NUMBER_FORMAT = new Intl.NumberFormat('en');
 
 function formatCount(value: number | null | undefined): string {
   if (value === null || value === undefined) return '—';
-  return standard.format(value);
+  return PLAIN_NUMBER_FORMAT.format(value);
 }
 
 function formatCompact(value: number | null | undefined): string {
   if (value === null || value === undefined) return '—';
-  return compact.format(value);
+  return COMPACT_NUMBER_FORMAT.format(value);
 }
 
 function formatRate(value: number | null | undefined): string {
@@ -155,8 +155,8 @@ export const DashboardPage: React.FC = () => {
   );
 
   const query = dashboardRangeParams(range);
-  // A relative preset and an open-ended "至今" range both move with the clock,
-  // so both are worth polling; a closed range is frozen.
+  // A relative preset and an open-ended (through-now) range both move with the
+  // clock, so both are worth polling; a closed range is frozen.
   const sliding = isSlidingRange(range);
 
   // The full window is fetched on mount, on range change, on manual refresh and

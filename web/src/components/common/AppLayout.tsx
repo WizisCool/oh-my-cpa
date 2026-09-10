@@ -42,7 +42,8 @@ interface NavGroup {
   items: NavEntry[];
 }
 
-// Groups mirror the prototype: 运行 / 网关 / 观测 / 控制 (+ Oh My CPA layer).
+// Groups mirror the navigation model: Operate / Gateway / Observe / Control,
+// plus the Oh My CPA layer.
 const navGroups: NavGroup[] = [
   {
     key: 'operate',
@@ -85,8 +86,8 @@ const navGroups: NavGroup[] = [
 
 const navEntries: NavEntry[] = navGroups.flatMap((group) => group.items);
 
-function buildMenuItems(t: TFunc, collapsed: boolean): NavItem[] {
-  if (collapsed) {
+function buildMenuItems(t: TFunc, isCollapsed: boolean): NavItem[] {
+  if (isCollapsed) {
     return navEntries.map((entry) => ({ key: entry.key, icon: entry.icon, label: t(entry.labelKey), title: t(entry.labelKey) }));
   }
   return navGroups.map((group) => ({
@@ -112,15 +113,15 @@ export const AppLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const [collapsed, setCollapsed] = React.useState(false);
-  const [mobile, setMobile] = React.useState(isNarrowViewport);
-  const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
+  const [isCollapsed, setIsCollapsed] = React.useState(false);
+  const [isMobile, setIsMobile] = React.useState(isNarrowViewport);
+  const [isMobileNavOpen, setIsMobileNavOpen] = React.useState(false);
 
   React.useEffect(() => {
     const onResize = () => {
       const narrow = isNarrowViewport();
-      setMobile(narrow);
-      if (!narrow) setMobileNavOpen(false);
+      setIsMobile(narrow);
+      if (!narrow) setIsMobileNavOpen(false);
     };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
@@ -153,11 +154,11 @@ export const AppLayout: React.FC = () => {
     .sort((a, b) => b.length - a.length)[0] ?? '/dashboard';
   const currentEntry = navEntries.find((entry) => entry.key === selectedKey);
   const currentGroup = navGroups.find((group) => group.items.some((entry) => entry.key === selectedKey));
-  const menuItems = React.useMemo(() => buildMenuItems(t, collapsed), [t, collapsed]);
+  const menuItems = React.useMemo(() => buildMenuItems(t, isCollapsed), [t, isCollapsed]);
 
   const selectPage = ({ key }: { key: string }) => {
     navigate(key);
-    setMobileNavOpen(false);
+    setIsMobileNavOpen(false);
   };
 
   const menu = (
@@ -197,33 +198,33 @@ export const AppLayout: React.FC = () => {
   );
 
   React.useLayoutEffect(() => {
-    const width = mobile ? 0 : collapsed ? 58 : 236;
+    const width = isMobile ? 0 : isCollapsed ? 58 : 236;
     document.documentElement.style.setProperty('--app-sider-width', `${width}px`);
-  }, [mobile, collapsed]);
+  }, [isMobile, isCollapsed]);
 
   return (
     <Layout
       className="app-shell"
-      style={{ '--sider-width': mobile ? '0px' : collapsed ? '58px' : '236px' } as React.CSSProperties}
+      style={{ '--sider-width': isMobile ? '0px' : isCollapsed ? '58px' : '236px' } as React.CSSProperties}
     >
-      {!mobile && (
+      {!isMobile && (
         <Sider
           width={236}
           collapsedWidth={58}
           collapsible
-          collapsed={collapsed}
+          collapsed={isCollapsed}
           trigger={null}
           className="app-sider"
           theme="dark"
         >
-          {collapsed ? (
+          {isCollapsed ? (
             <div
               className="app-brand app-brand-collapsed"
-              onClick={() => setCollapsed(false)}
+              onClick={() => setIsCollapsed(false)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
-                  setCollapsed(false);
+                  setIsCollapsed(false);
                 }
               }}
               role="button"
@@ -234,7 +235,7 @@ export const AppLayout: React.FC = () => {
             </div>
           ) : brand}
           <div className="app-sider-scroll">{menu}</div>
-          {collapsed ? (
+          {isCollapsed ? (
             <Tooltip
               title={`${t('shell.cpa')} · ${health ? (health.cpa_connected ? t('shell.connected') : t('shell.offline')) : '—'}`}
               placement="right"
@@ -262,11 +263,11 @@ export const AppLayout: React.FC = () => {
       <Layout className="app-body">
         <header className="app-header">
           <div className="app-header-left">
-            {mobile ? (
-              <Button type="text" icon={<MenuUnfoldOutlined />} onClick={() => setMobileNavOpen(true)} aria-label={t('header.open_nav')} />
+            {isMobile ? (
+              <Button type="text" icon={<MenuUnfoldOutlined />} onClick={() => setIsMobileNavOpen(true)} aria-label={t('header.open_nav')} />
             ) : (
-              <Tooltip title={collapsed ? t('header.expand_sidebar') : t('header.collapse_sidebar')}>
-                <Button type="text" icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setCollapsed(!collapsed)} aria-label={t('header.collapse_sidebar')} />
+              <Tooltip title={isCollapsed ? t('header.expand_sidebar') : t('header.collapse_sidebar')}>
+                <Button type="text" icon={isCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setIsCollapsed(!isCollapsed)} aria-label={t('header.collapse_sidebar')} />
               </Tooltip>
             )}
             <Breadcrumb
@@ -285,7 +286,7 @@ export const AppLayout: React.FC = () => {
             isLoggingOut={logoutMutation.isPending}
             themeMode={themeMode}
             onToggleTheme={toggleTheme}
-            mobile={mobile}
+            isMobile={isMobile}
           />
         </header>
         <Content className="app-content" ref={contentRef}>
@@ -300,11 +301,11 @@ export const AppLayout: React.FC = () => {
           </div>
         </Content>
       </Layout>
-      {mobile && (
+      {isMobile && (
         <Drawer
           placement="left"
-          open={mobileNavOpen}
-          onClose={() => setMobileNavOpen(false)}
+          open={isMobileNavOpen}
+          onClose={() => setIsMobileNavOpen(false)}
           width={280}
           closable={false}
           className="mobile-nav-drawer"

@@ -255,7 +255,7 @@ export const ConfigPage: React.FC = () => {
         docRef.current = parseDocument(safe);
         serverDocRef.current = parseDocument(safe);
       } catch {
-        // syntax error in yaml
+        // A malformed document is expected here: the previous baseline stays in place.
       }
     }
   }, [configQuery.data?.safe_yaml, configQuery.data?.revision, viewMode]);
@@ -324,7 +324,7 @@ export const ConfigPage: React.FC = () => {
       try {
         serverDocRef.current = parseDocument(variables.yamlToSave);
       } catch {
-        // ignore
+        // A malformed document is expected here: the previous baseline stays in place.
       }
       setPayloadIssues([]);
       setShowErrorFeedback(false);
@@ -352,7 +352,7 @@ export const ConfigPage: React.FC = () => {
       docRef.current = parseDocument(serverYaml);
       serverDocRef.current = parseDocument(serverYaml);
     } catch {
-      // ignore
+      // A malformed document is expected here: the previous baseline stays in place.
     }
     setSaveError(null);
     setPayloadIssues([]);
@@ -432,7 +432,7 @@ export const ConfigPage: React.FC = () => {
           docRef.current = parseDocument(src.yaml);
           serverDocRef.current = parseDocument(src.yaml);
         } catch {
-          // ignore
+          // A malformed document is expected here: the previous baseline stays in place.
         }
         setViewMode('source');
       } catch {
@@ -465,7 +465,7 @@ export const ConfigPage: React.FC = () => {
         docRef.current = parseDocument(src.yaml);
         serverDocRef.current = parseDocument(src.yaml);
       } catch {
-        // ignore
+        // A malformed document is expected here: the previous baseline stays in place.
       }
       setViewMode('source');
       message.success(t('cfg.mode_source'));
@@ -897,7 +897,8 @@ export const ConfigPage: React.FC = () => {
 
   return (
     <div className="terminal-page config-page">
-      {/* ── Full-Width Sticky Toolbar (贯通全屏，右侧按钮对齐视口右边界) ─── */}
+      {/* Full-width sticky toolbar: the action group is pushed to the viewport's
+          right edge so it lines up with the global header. */}
       <div className="config-toolbar">
         <div className="config-toolbar-left">
           <h1 className="terminal-title">{t('nav.config')}</h1>
@@ -946,7 +947,7 @@ export const ConfigPage: React.FC = () => {
             {t('cfg.reload')}
           </Button>
 
-          {/* 放弃更改按钮：不需要二次验证，直接执行 handleDiscardChanges */}
+          {/* Discard needs no confirmation: it is the non-destructive direction. */}
           {isDirty && (
             <Button
               size="small"
@@ -958,7 +959,8 @@ export const ConfigPage: React.FC = () => {
             </Button>
           )}
 
-          {/* 保存配置按钮：需要二次验证 */}
+          {/* Save: blocking validation errors expand the error feedback instead of
+              confirming; a valid form goes through the popconfirm below. */}
           {hasConfigErrors ? (
             <Button
               size="small"
@@ -1029,9 +1031,10 @@ export const ConfigPage: React.FC = () => {
           </div>
         </Card>
       ) : viewMode === 'visual' ? (
-        /* ── Visual Mode: Two-column Setting Group Panels ───────────────── */
+        /* Visual mode: sticky section nav, settings canvas, and a balancing
+           right gutter — a three-track grid, not two columns. */
         <div className="config-workbench">
-          {/* Left: Fixed Vertical Navigation (216px) */}
+          {/* Left: sticky section navigation in the 216px track */}
           <aside className="config-section-nav" aria-label={t('cfg.nav_aria')}>
             {CONFIG_SECTIONS.map((sec) => {
               const isActive = !searchQuery && activeSection === sec.id;

@@ -92,20 +92,20 @@ export function isValidJson(str: string): boolean {
   }
 }
 
-export function detectParamType(val: unknown): { type: ParamValueType; value: unknown } {
-  if (val === null || val === undefined) {
+export function detectParamType(paramValue: unknown): { type: ParamValueType; value: unknown } {
+  if (paramValue === null || paramValue === undefined) {
     return { type: 'null', value: null };
   }
-  if (typeof val === 'boolean') {
-    return { type: 'boolean', value: val };
+  if (typeof paramValue === 'boolean') {
+    return { type: 'boolean', value: paramValue };
   }
-  if (typeof val === 'number') {
-    return { type: 'number', value: val };
+  if (typeof paramValue === 'number') {
+    return { type: 'number', value: paramValue };
   }
-  if (typeof val === 'object') {
-    return { type: 'json', value: JSON.stringify(val, null, 2) };
+  if (typeof paramValue === 'object') {
+    return { type: 'json', value: JSON.stringify(paramValue, null, 2) };
   }
-  return { type: 'string', value: String(val) };
+  return { type: 'string', value: String(paramValue) };
 }
 
 // ── Parse KV Conditions (Headers, Match, NotMatch) ───────────────────────────
@@ -113,23 +113,23 @@ function parseKvList(raw: unknown, prefix: string): PayloadKVCondition[] {
   if (!raw) return [];
   const list: PayloadKVCondition[] = [];
   if (Array.isArray(raw)) {
-    raw.forEach((entry, idx) => {
+    raw.forEach((entry, entryIndex) => {
       if (typeof entry === 'object' && entry !== null) {
-        for (const [k, v] of Object.entries(entry)) {
+        for (const [key, value] of Object.entries(entry)) {
           list.push({
-            id: `${prefix}_${idx}_${k}`,
-            key: k,
-            value: v,
+            id: `${prefix}_${entryIndex}_${key}`,
+            key,
+            value,
           });
         }
       }
     });
   } else if (typeof raw === 'object' && raw !== null) {
-    Object.entries(raw as Record<string, unknown>).forEach(([k, v], idx) => {
+    Object.entries(raw as Record<string, unknown>).forEach(([key, value], entryIndex) => {
       list.push({
-        id: `${prefix}_${idx}_${k}`,
-        key: k,
-        value: v,
+        id: `${prefix}_${entryIndex}_${key}`,
+        key,
+        value,
       });
     });
   }
@@ -401,11 +401,11 @@ export function serializeFilterRules(rules: PayloadFilterRule[]): Record<string,
 // ── Synchronize with Document AST ───────────────────────────────────────────
 export function readPayloadCategory(doc: Document | null, category: PayloadCategoryKey): unknown {
   if (!doc) return undefined;
-  const val = doc.getIn(['payload', category]);
-  if (val && typeof (val as { toJSON?: () => unknown }).toJSON === 'function') {
-    return (val as { toJSON: () => unknown }).toJSON();
+  const payloadNode = doc.getIn(['payload', category]);
+  if (payloadNode && typeof (payloadNode as { toJSON?: () => unknown }).toJSON === 'function') {
+    return (payloadNode as { toJSON: () => unknown }).toJSON();
   }
-  return val;
+  return payloadNode;
 }
 
 export function writePayloadCategory(

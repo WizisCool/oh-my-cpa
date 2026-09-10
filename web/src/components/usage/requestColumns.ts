@@ -152,13 +152,13 @@ export const COLUMN_MAP = new Map<RequestColumnId, RequestColumnDefinition>(
  */
 export function parseUsageEventsColumns(raw: unknown): RequestColumnWidths {
   if (typeof raw !== 'object' || raw === null) return {};
-  const obj = raw as Record<string, unknown>;
+  const rawRecord = raw as Record<string, unknown>;
   const result: RequestColumnWidths = {};
 
   for (const col of REQUEST_COLUMNS) {
-    const val = obj[col.id];
-    if (typeof val === 'number' && Number.isFinite(val)) {
-      const clamped = Math.round(Math.min(col.maxWidth, Math.max(col.minWidth, val)));
+    const overrideValue = rawRecord[col.id];
+    if (typeof overrideValue === 'number' && Number.isFinite(overrideValue)) {
+      const clamped = Math.round(Math.min(col.maxWidth, Math.max(col.minWidth, overrideValue)));
       result[col.id] = clamped;
     }
   }

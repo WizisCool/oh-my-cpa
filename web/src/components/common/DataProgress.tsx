@@ -28,17 +28,17 @@ export const DataProgress: React.FC = () => {
   // Silent polls are in flight too, but counting them would make the bar blink
   // every few seconds — design.md keeps background refresh invisible.
   const fetching = useIsFetching({ predicate: (query) => query.meta?.silent !== true });
-  const [visible, setVisible] = React.useState(false);
+  const [isVisible, setIsVisible] = React.useState(false);
 
   React.useEffect(() => {
     if (fetching === 0) {
-      setVisible(false);
+      setIsVisible(false);
       return;
     }
-    const timer = window.setTimeout(() => setVisible(true), SHOW_DELAY_MS);
+    const timer = window.setTimeout(() => setIsVisible(true), SHOW_DELAY_MS);
     return () => window.clearTimeout(timer);
   }, [fetching]);
 
-  if (!visible) return null;
+  if (!isVisible) return null;
   return <div className="data-progress" role="progressbar" aria-busy="true" aria-label="loading" />;
 };
