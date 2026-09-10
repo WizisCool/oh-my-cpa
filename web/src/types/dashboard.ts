@@ -69,7 +69,7 @@ export interface DashboardResponse {
 
 /**
  * Range presets offered by the dashboard picker, shortest first. "15m" is the
- * one the picker labels 实时 — see docs/design.md for why fifteen minutes and
+ * one the picker labels Live — see docs/design.md for why fifteen minutes and
  * not five.
  */
 export const DASHBOARD_PRESETS = ['15m', '1h', '6h', '24h', '7d', '30d', '90d'] as const;
@@ -91,9 +91,9 @@ export interface DashboardRange {
   /** Custom window start in epoch milliseconds. */
   from?: number;
   /**
-   * Custom window end. `null` means "至今": the end tracks the current time and
-   * the page keeps polling it, exactly like a relative preset. `undefined` means
-   * no custom range is selected at all.
+   * Custom window end. `null` means open-ended (through now): the end tracks the
+   * current time and the page keeps polling it, exactly like a relative preset.
+   * `undefined` means no custom range is selected at all.
    */
   to?: number | null;
 }

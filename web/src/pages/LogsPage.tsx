@@ -213,7 +213,6 @@ export const LogsPage: React.FC = () => {
   const mounted = rows.slice(Math.max(0, rows.length - visibleCount));
   const hiddenByFilters = parsed.length - rows.length;
 
-  // Follow the tail unless the reader has scrolled away to read something.
   React.useEffect(() => {
     const node = listRef.current;
     if (!node || !pinned) return;

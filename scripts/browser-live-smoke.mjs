@@ -163,7 +163,8 @@ async function main() {
     await page.locator('.range-trigger').click();
     await page.waitForTimeout(250);
     // The panel opens on whichever tab owns the current window, so a stored
-    // custom range lands on 自定义. Reach the quick list the way a user would.
+    // The custom range lands on the Custom tab. Reach the quick list the way a
+    // user would.
     const quickTab = page.locator('.ant-tabs-tab', { hasText: '最近' });
     if (await quickTab.count()) await quickTab.click();
     await page.waitForTimeout(200);

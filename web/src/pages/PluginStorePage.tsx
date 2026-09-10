@@ -44,7 +44,6 @@ export const PluginStorePage: React.FC = () => {
 
   const storePlugins: StorePluginItem[] = storeData?.plugins || [];
 
-  // Install Mutation
   const installMutation = useMutation({
     mutationFn: (id: string) => api.installPlugin(id),
     onSuccess: () => {

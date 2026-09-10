@@ -617,10 +617,10 @@ export const ProvidersPage: React.FC = () => {
     'gemini': t(PROTOCOL_META['gemini'].labelKey),
   };
 
-  // Columns for Providers
-  // Columns for Providers (matching CPAMC specifications)
+  // Column order mirrors the CPAMC provider table so operators moving between
+  // the two consoles find the same facts in the same sequence.
   const providerColumns: ColumnsType<ProviderItem> = [
-    // 1. 图标+显示名称
+    // 1. icon + display name
     {
       title: t('pro.col_provider'),
       key: 'name',
@@ -680,7 +680,7 @@ export const ProvidersPage: React.FC = () => {
       },
     },
 
-    // 2. 协议驱动
+    // 2. protocol driver
     {
       title: t('pro.col_protocol'),
       key: 'protocol',
@@ -722,7 +722,7 @@ export const ProvidersPage: React.FC = () => {
       },
     },
 
-    // 3. 服务地址 (过长自动截断)
+    // 3. endpoint (truncated when too long)
     {
       title: t('pro.col_endpoint'),
       key: 'base_url',
@@ -748,7 +748,7 @@ export const ProvidersPage: React.FC = () => {
       },
     },
 
-    // 4. 前缀 (没有则显无)
+    // 4. prefix (shows "none" when absent)
     {
       title: t('pro.field_prefix'),
       key: 'prefix',
@@ -762,7 +762,7 @@ export const ProvidersPage: React.FC = () => {
         ),
     },
 
-    // 5. 模型/请求头
+    // 5. models / request headers
     {
       title: t('pro.col_models_headers'),
       key: 'models_headers',
@@ -824,7 +824,7 @@ export const ProvidersPage: React.FC = () => {
       },
     },
 
-    // 6. 状态
+    // 6. status
     {
       title: t('pro.col_status'),
       key: 'status',
@@ -843,7 +843,7 @@ export const ProvidersPage: React.FC = () => {
         ),
     },
 
-    // 7. 开关
+    // 7. enable switch
     {
       title: t('pro.col_switch'),
       key: 'switch',
@@ -861,7 +861,7 @@ export const ProvidersPage: React.FC = () => {
       ),
     },
 
-    // 8. 操作
+    // 8. row actions
     {
       title: t('common.actions'),
       key: 'actions',

@@ -115,12 +115,13 @@ export const TimeRangeControl: React.FC<TimeRangeControlProps> = ({ range, onCha
                 size="small"
                 className="range-picker"
                 onOpenChange={setPickerOpen}
-                // An empty end *is* "至今" — antd built allowEmpty for exactly
-                // this. It only works while the picker is day-granular: with
-                // showTime on, antd collapses to a single panel and keeps 确
-                // 定 disabled until the end has a value, which is what forces a
-                // second control on top. Day granularity is also what the
-                // two-month calendar is for.
+                // An empty end *is* the open-ended (through-now) mode — antd
+                // built allowEmpty for exactly this. It only works while the
+                // picker is day-granular: with showTime on, antd collapses to a
+                // single panel and keeps its confirm button disabled until the
+                // end has a value, which is what forces a second control on
+                // top. Day granularity is also what the two-month calendar is
+                // for.
                 allowEmpty={[false, true]}
                 placeholder={[t('dash.range.start_date'), t('dash.range.until_now')]}
                 value={[

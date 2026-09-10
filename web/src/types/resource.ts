@@ -36,7 +36,7 @@ export interface DiscoveredResource {
   protocol_driver: ProtocolDriver;
   protocol_display?: string; // e.g. "OpenAI Responses", "Anthropic Claude", "OpenAI Compatible"
   base_url?: string;
-  suggested_source?: string; // e.g. "DeepSeek 官方", "Command Code GOAT", "OpenAI"
+  suggested_source?: string; // e.g. "DeepSeek", "Command Code GOAT", "OpenAI"
   suggested_plan?: string;
   display_name: string; // resolved effective name
   custom_display_name?: string | null;

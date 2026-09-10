@@ -50,7 +50,8 @@ interface TocCandidate {
   priority: number;
 }
 
-// Dynamically index all 300+ icons from @lobehub/icons toc catalog
+// Flatten @lobehub/icons' toc catalog into one prioritised lookup list at
+// module load, so a model-name lookup never walks the icon namespace.
 const TOC_CANDIDATES: TocCandidate[] = (() => {
   const list: TocCandidate[] = [];
   const seen = new Set<string>();
@@ -167,7 +168,7 @@ export function getProviderDefaultIcon(family: string, name?: string, baseURL?: 
       }
     }
 
-    // 2. Common aliases & acronyms (e.g. gpt -> OpenAI, glm -> Zhipu, 通义 -> Qwen)
+    // 2. Common aliases & acronyms (e.g. gpt -> OpenAI, glm -> Zhipu, tongyi -> Qwen)
     for (const [kw, iconId] of Object.entries(COMMON_ALIASES)) {
       const cleanKw = kw.replace(/[\s\-_]/g, '');
       if (combined.includes(kw) || normalized.includes(cleanKw)) {

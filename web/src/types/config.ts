@@ -19,7 +19,6 @@ export function getAppConfig(): AppConfig {
   const injected = typeof window !== 'undefined' ? window.__OMCPA_CONFIG__ : undefined;
 
   let basePath = (injected?.basePath ?? '/omc').trim();
-  // Ensure basePath starts with / if non-empty, and remove trailing slash
   if (basePath && !basePath.startsWith('/')) {
     basePath = '/' + basePath;
   }

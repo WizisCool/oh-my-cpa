@@ -66,7 +66,7 @@ function authUrl(path: string): string {
 
 async function readError(response: Response): Promise<{ data: unknown; message: string }> {
   let errorData: unknown = null;
-  let message = `请求失败 [HTTP ${response.status}]`;
+  let message = `Request failed [HTTP ${response.status}]`;
   try {
     errorData = await response.json();
     if (typeof errorData === 'object' && errorData !== null) {
@@ -110,7 +110,7 @@ async function downloadBlob(url: string): Promise<Blob> {
     });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    throw new ApiError(`网络连接失败 (${errorMsg})，请检查后端服务是否正常运行`, 0);
+    throw new ApiError(`Network request failed (${errorMsg}); check that the backend is running`, 0);
   }
   if (!response.ok) {
     const error = await readError(response);
@@ -140,7 +140,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     response = await fetch(url, { ...options, credentials: 'same-origin', headers });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    throw new ApiError(`网络连接失败 (${errorMsg})，请检查后端服务是否正常运行`, 0);
+    throw new ApiError(`Network request failed (${errorMsg}); check that the backend is running`, 0);
   }
   if (!response.ok) {
     const error = await readError(response);
@@ -173,7 +173,7 @@ export const api = {
       });
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      throw new ApiError(`网络连接失败 (${errorMsg})，请检查后端服务是否正常运行`, 0);
+      throw new ApiError(`Network request failed (${errorMsg}); check that the backend is running`, 0);
     }
     if (!response.ok) {
       const error = await readError(response);

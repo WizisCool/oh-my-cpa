@@ -19,9 +19,10 @@ const monoFont = [
 ].join(', ');
 
 /**
- * Design tokens mirroring the prototype's `:root` block
- * (cli-proxy-api-management-center.html). Both modes read from the same
- * source so the app never falls back to antd's default blue.
+ * Design tokens for both mode palettes. `docs/design.md` is the source of
+ * truth; this object and the `:root` variables in `web/src/index.css` are the
+ * only two places that may name a colour, so the app never falls back to
+ * antd's default blue.
  */
 export const palette = {
   dark: {
@@ -98,8 +99,8 @@ export function createThemeConfig(mode: ThemeMode = 'dark'): ThemeConfig {
       // Terminal-flat elevation: borders + background shifts, zero shadows.
       ...noShadow,
 
-      // Brand accent — the prototype drives filled controls with the deeper
-      // accent-hover step and reserves the bright accent for links/info.
+      // Brand accent — filled controls use the deeper accent-hover step; the
+      // bright accent is reserved for links and info (docs/design.md §6).
       colorPrimary: t.accentHover,
       colorPrimaryHover: t.accentActive,
       colorPrimaryActive: t.accentActive,
@@ -110,7 +111,7 @@ export function createThemeConfig(mode: ThemeMode = 'dark'): ThemeConfig {
       colorWarning: t.warn,
       colorError: t.danger,
 
-      // Text / background mapping straight from the prototype.
+      // Text and background mapping from the palette above.
       colorTextBase: t.fg,
       colorBgBase: t.bg,
       colorText: t.fg,

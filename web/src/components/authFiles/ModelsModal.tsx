@@ -19,7 +19,6 @@ export const ModelsModal: React.FC<ModelsModalProps> = ({ file, open, onClose })
   const { message } = AntdApp.useApp();
   const [filter, setFilter] = useState('');
 
-  // Reset search filter whenever file or open changes
   useEffect(() => {
     if (open) {
       setFilter('');

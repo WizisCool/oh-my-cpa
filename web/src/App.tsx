@@ -29,7 +29,6 @@ const PluginStorePage = React.lazy(() => import('./pages/PluginStorePage').then(
 import { ThemeContext } from './theme/ThemeContext';
 import { I18nProvider, useI18n } from './i18n';
 
-// Configure TanStack Query
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

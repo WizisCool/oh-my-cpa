@@ -108,8 +108,8 @@ interface SparkOverrides {
 
 /**
  * sparkOptions configures a compact trend: hairline stroke, flat low-opacity
- * fill (0.13, matching the prototype's inline sparkline), no axes, no legend,
- * no entrance animation.
+ * fill (0.13, enough to read the trend without competing with the numbers),
+ * no axes, no legend, no entrance animation.
  */
 export function sparkOptions(mode: ThemeMode, tone: ChartTone = 'accent', overrides: SparkOverrides = {}) {
   const colors = chartColors(mode);

@@ -1,4 +1,4 @@
-/* ── Sarasa Gothic (更纱黑体) subsetted font-face ───────────────────────── */
+/* ── Sarasa Gothic subsetted font-face ──────────────────────────── */
 @font-face {
   font-family: "Sarasa Mono SC";
   src: local("Sarasa Mono SC"),
@@ -360,8 +360,8 @@ a { color: inherit; }
 .hero-split b, .health-legend b { color: var(--fg); font-weight: 500; }
 /* Status pips: 7×7, 2px radius (design.md). Both vocabularies are covered —
    the chart tone names and the older health-legend names — because a pip that
-   matches no rule silently falls back to grey, which is how "失败" ended up
-   reading as healthy. */
+   matches no rule silently falls back to grey, which is how a failed
+   request once ended up reading as healthy. */
 .legend-dot { width: 7px; height: 7px; display: inline-block; border-radius: 2px; background: var(--meta); }
 .legend-dot.success { background: var(--success); }
 .legend-dot.warn, .legend-dot.warning { background: var(--warn); }
@@ -1381,7 +1381,7 @@ a { color: inherit; }
   border-radius: 2px;
 }
 
-/* ── Floating Dirty Action Bar (吸底浮动操作条) ────────────────────────── */
+/* ── Floating dirty action bar (sticky bottom bar) ──────────────────── */
 .config-dirty-bar-portal {
   position: fixed;
   inset-inline-start: var(--app-sider-width, 236px);
@@ -1465,7 +1465,7 @@ a { color: inherit; }
   border-color: var(--accent-hover) !important;
 }
 
-/* ── Payload Rules Builder (规则构建器) ─────────────────────────────────── */
+/* ── Payload rules builder (rule builder) ───────────────────── */
 .payload-builder-group {
   padding: 0 !important;
   background: transparent !important;

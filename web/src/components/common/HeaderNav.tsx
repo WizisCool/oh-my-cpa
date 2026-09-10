@@ -21,11 +21,12 @@ interface HeaderNavProps {
   isLoggingOut?: boolean;
   themeMode: ThemeMode;
   onToggleTheme: () => void;
-  mobile?: boolean;
+  isMobile?: boolean;
 }
 
 // Right-hand header actions (connection pill, refresh, theme, language, sign out).
-// The breadcrumb and collapse toggle live in AppLayout, matching the prototype.
+// HeaderNav is not self-contained: the breadcrumb and collapse toggle belong to
+// AppLayout, which owns the shell grid these actions sit in.
 export const HeaderNav: React.FC<HeaderNavProps> = ({
   health,
   isDiscovering = false,
@@ -34,7 +35,7 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
   isLoggingOut = false,
   themeMode,
   onToggleTheme,
-  mobile = false,
+  isMobile = false,
 }) => {
   const t = useT();
   const { lang, toggleLang } = useI18n();
@@ -45,7 +46,7 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
 
   return (
     <div className="app-header-actions">
-      {!mobile && (
+      {!isMobile && (
         <Tooltip title={t('header.base_path', { path: config.basePath || '/' })}>
           <Tag className="base-path-tag">{config.basePath || '/'}</Tag>
         </Tooltip>

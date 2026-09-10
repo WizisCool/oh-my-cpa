@@ -58,7 +58,7 @@ export interface ConfigGroupDefinition {
 }
 
 export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
-  // ── 1. 接入与认证 (connectivity) ──────────────────────────────────────────
+  // ── 1. Connectivity & auth ──────────────────────────────────────────
   {
     id: 'grp_service',
     sectionId: 'connectivity',
@@ -92,7 +92,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     fieldIds: ['rmAllowRemote', 'rmSecretKey', 'rmDisableControlPanel', 'rmDisableAutoUpdatePanel', 'rmPanelRepo'],
   },
 
-  // ── 2. 网络配置 (network) ────────────────────────────────────────────────
+  // ── 2. Network ────────────────────────────────────────────────
   {
     id: 'grp_proxy_retry',
     sectionId: 'network',
@@ -118,7 +118,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     fieldIds: ['disableImageGeneration', 'gptImage2BaseModel', 'forceModelPrefix', 'passthroughHeaders', 'disableCooling', 'wsAuth'],
   },
 
-  // ── 3. 日志与诊断 (logging) ──────────────────────────────────────────────
+  // ── 3. Logging & diagnostics ──────────────────────────────────────────────
   {
     id: 'grp_logging_mode',
     sectionId: 'logging',
@@ -136,7 +136,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     fieldIds: ['logsMaxTotalSizeMb', 'errorLogsMaxFiles', 'redisUsageQueueRetentionSeconds'],
   },
 
-  // ── 4. 配额回退 (quota) ──────────────────────────────────────────────────
+  // ── 4. Quota fallback ──────────────────────────────────────────────────
   {
     id: 'grp_quota_strategy',
     sectionId: 'quota',
@@ -146,7 +146,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     fieldIds: ['quotaSwitchProject', 'quotaSwitchPreviewModel', 'quotaAntigravityCredits'],
   },
 
-  // ── 5. 流式传输 (streaming) ──────────────────────────────────────────────
+  // ── 5. Streaming ──────────────────────────────────────────────
   {
     id: 'grp_streaming_transport',
     sectionId: 'streaming',
@@ -156,7 +156,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     fieldIds: ['streamingKeepaliveSeconds', 'streamingBootstrapRetries', 'streamingNonstreamKeepalive'],
   },
 
-  // ── 6. 高级与实验 (advanced) ────────────────────────────────────────────
+  // ── 6. Advanced & experimental ────────────────────────────────────────────
   {
     id: 'grp_plugins',
     sectionId: 'advanced',
@@ -190,7 +190,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     fieldIds: ['codexHeaderUserAgent', 'codexHeaderBetaFeatures'],
   },
 
-  // ── 7. Payload 配置 (payload) ────────────────────────────────────────────
+  // ── 7. Payload rules ────────────────────────────────────────────
   {
     id: 'grp_payload_rules',
     sectionId: 'payload',
@@ -221,7 +221,7 @@ export function getGroupsForSection(sectionId: ConfigSectionId): ConfigGroupDefi
 }
 
 export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
-  // ── 1. 接入与认证 (connectivity) ──────────────────────────────────────────
+  // ── 1. Connectivity & auth ──────────────────────────────────────────
   {
     id: 'host',
     sectionId: 'connectivity',
@@ -344,7 +344,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     keywords: ['repo', 'github'],
   },
 
-  // ── 2. 网络配置 (network) ────────────────────────────────────────────────
+  // ── 2. Network ────────────────────────────────────────────────
   {
     id: 'proxyUrl',
     sectionId: 'network',
@@ -507,7 +507,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     keywords: ['ws', 'websocket', 'auth'],
   },
 
-  // ── 3. 日志与诊断 (logging) ──────────────────────────────────────────────
+  // ── 3. Logging & diagnostics ──────────────────────────────────────────────
   {
     id: 'debug',
     sectionId: 'logging',
@@ -601,7 +601,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     keywords: ['usage', 'stats', 'token'],
   },
 
-  // ── 4. 配额回退 (quota) ──────────────────────────────────────────────────
+  // ── 4. Quota fallback ──────────────────────────────────────────────────
   {
     id: 'quotaSwitchProject',
     sectionId: 'quota',
@@ -633,7 +633,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     keywords: ['antigravity', 'credits'],
   },
 
-  // ── 5. 流式传输配置 (streaming) ──────────────────────────────────────────
+  // ── 5. Streaming ──────────────────────────────────────────
   {
     id: 'streamingKeepaliveSeconds',
     sectionId: 'streaming',
@@ -669,7 +669,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     keywords: ['stream', 'nonstream', 'keepalive'],
   },
 
-  // ── 6. 高级与实验 (advanced) ────────────────────────────────────────────
+  // ── 6. Advanced & experimental ────────────────────────────────────────────
   {
     id: 'pluginsEnabled',
     sectionId: 'advanced',
@@ -801,7 +801,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     keywords: ['codex', 'beta'],
   },
 
-  // ── 7. Payload 配置 (payload) ────────────────────────────────────────────
+  // ── 7. Payload rules ────────────────────────────────────────────
   {
     id: 'payloadDefaultRules',
     sectionId: 'payload',

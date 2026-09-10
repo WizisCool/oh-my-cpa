@@ -91,7 +91,6 @@ main();`;
         </div>
       </div>
 
-      {/* Step 1: Upstream Providers */}
       <Card
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -113,7 +112,6 @@ main();`;
         </Button>
       </Card>
 
-      {/* Step 2: Auth Files or OAuth */}
       <Card
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -143,7 +141,6 @@ main();`;
         </div>
       </Card>
 
-      {/* Step 3: Client API Key */}
       <Card
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -165,7 +162,6 @@ main();`;
         </Button>
       </Card>
 
-      {/* Step 4: Client Integration & Code Snippets */}
       <Card
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -178,8 +174,7 @@ main();`;
           {t('qs.step4_desc')}
         </Paragraph>
 
-        {/* Endpoints overview */}
-        <div style={{ background: 'var(--card-bg, rgba(0,0,0,0.02))', padding: 16, borderRadius: 6, marginBottom: 20 }}>
+          <div style={{ background: 'var(--card-bg, rgba(0,0,0,0.02))', padding: 16, borderRadius: 6, marginBottom: 20 }}>
           <Row gutter={[16, 12]}>
             <Col xs={24} md={12}>
               <Text type="secondary" style={{ fontSize: 12 }}>{t('qs.endpoint_chat')}:</Text>
@@ -210,8 +205,7 @@ main();`;
           </Row>
         </div>
 
-        {/* Code tabs */}
-        <Tabs
+          <Tabs
           defaultActiveKey="curl"
           items={[
             {

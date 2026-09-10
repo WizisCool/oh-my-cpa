@@ -54,7 +54,7 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
         </div>
 
         <Space size={10} className="config-dirty-bar-actions">
-          {/* 放弃更改：不需要二次验证，直接执行 onDiscard */}
+          {/* Discard needs no confirmation, invoking the rollback directly. */}
           <Button
             size="small"
             icon={<CloseOutlined />}
@@ -65,7 +65,8 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
             {t('cfg.dirty_bar_discard')}
           </Button>
 
-          {/* 保存更改：验证未通过时点击提示校验并展开，通过时触发二次验证 */}
+          {/* Save with invalid input highlights and expands the errors instead;
+              a valid form goes through confirmation. */}
           {hasErrors ? (
             <Button
               size="small"

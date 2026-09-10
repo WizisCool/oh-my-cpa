@@ -50,7 +50,6 @@ export const PluginsPage: React.FC = () => {
 
   const plugins: PluginItem[] = pluginsData?.plugins || [];
 
-  // 1. Status Mutation
   const statusMutation = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
       api.setPluginStatus(id, enabled),
@@ -64,7 +63,6 @@ export const PluginsPage: React.FC = () => {
     },
   });
 
-  // 2. Delete Mutation
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.deletePlugin(id),
     onSuccess: () => {
@@ -78,7 +76,6 @@ export const PluginsPage: React.FC = () => {
     },
   });
 
-  // 3. Config Mutation
   const configMutation = useMutation({
     mutationFn: ({ id, config }: { id: string; config: Record<string, unknown> }) =>
       api.setPluginConfig(id, config),

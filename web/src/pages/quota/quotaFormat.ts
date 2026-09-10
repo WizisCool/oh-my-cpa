@@ -21,7 +21,7 @@ export function formatGmtOffsetLabel(now: Date = new Date()): string {
 }
 
 /**
- * Live countdown until `targetMS`, e.g. "4小时后" / "28天后".
+ * Live countdown until `targetMS`, e.g. "in 4 hours" / "in 28 days".
  * Returns null once the target has passed (caller decides the expired copy).
  */
 export function formatCountdown(targetMS: number, nowMS: number, t: TFunc): string | null {
@@ -40,7 +40,7 @@ export function formatCountdown(targetMS: number, nowMS: number, t: TFunc): stri
 }
 
 /**
- * Combined "09/30 01:05 · 24天后" cell; falls back to the plain date when
+ * Combined "09/30 01:05 · in 24 days" cell; falls back to the plain date when
  * no countdown applies (already expired / unknown target).
  */
 export function formatTimeWithCountdown(targetMS: number, nowMS: number, t: TFunc): string {
@@ -49,7 +49,7 @@ export function formatTimeWithCountdown(targetMS: number, nowMS: number, t: TFun
   return countdown ? `${date} · ${countdown}` : date;
 }
 
-/** Relative "x分钟前 / x小时前" for observation timestamps. */
+/** Relative "x minutes ago" / "x hours ago" for observation timestamps. */
 export function formatObservedAgo(ms: number, nowMS: number, t: TFunc): string {
   const diffSec = Math.floor((nowMS - ms) / 1000);
   if (diffSec < 60) return t('quota.just_now');

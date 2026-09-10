@@ -62,7 +62,6 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   const currentSessionRef = useRef<number>(0);
   const isPendingRef = useRef<boolean>(false);
 
-  // Invalidate session on unmount
   useEffect(() => {
     return () => {
       currentSessionRef.current = 0;
@@ -70,7 +69,6 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
     };
   }, []);
 
-  // Initialize form baseline whenever a new file is opened
   useEffect(() => {
     if (file && open) {
       sessionCounterRef.current += 1;
