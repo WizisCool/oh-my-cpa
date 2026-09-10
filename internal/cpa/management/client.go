@@ -1491,6 +1491,9 @@ func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]str
 		errs = append(errs, "codex: "+err.Error())
 	} else {
 		for _, entry := range codexResp.Entries {
+			if IsExcludedAll(entry.ExcludedModels) {
+				continue
+			}
 			for _, m := range entry.Models {
 				name := strings.TrimSpace(m.Name)
 				if name != "" {
@@ -1509,6 +1512,9 @@ func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]str
 		errs = append(errs, "openai-compatibility: "+err.Error())
 	} else {
 		for _, entry := range oaiResp.Entries {
+			if entry.Disabled {
+				continue
+			}
 			for _, m := range entry.Models {
 				name := strings.TrimSpace(m.Name)
 				if name != "" {
@@ -1527,6 +1533,9 @@ func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]str
 		errs = append(errs, "claude: "+err.Error())
 	} else {
 		for _, entry := range claudeEntries {
+			if IsExcludedAll(entry.ExcludedModels) {
+				continue
+			}
 			for _, m := range entry.Models {
 				name := strings.TrimSpace(m.Name)
 				if name != "" {
@@ -1545,6 +1554,9 @@ func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]str
 		errs = append(errs, "gemini: "+err.Error())
 	} else {
 		for _, entry := range geminiEntries {
+			if IsExcludedAll(entry.ExcludedModels) {
+				continue
+			}
 			for _, m := range entry.Models {
 				name := strings.TrimSpace(m.Name)
 				if name != "" {

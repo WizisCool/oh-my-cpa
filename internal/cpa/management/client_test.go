@@ -285,13 +285,13 @@ func TestListAllConfiguredModels(t *testing.T) {
 		case "/v0/management/auth-files":
 			_, _ = w.Write([]byte(`{"files":[{"models":[{"id":"claude-3-7-sonnet"}]}]}`))
 		case "/v0/management/codex-api-key":
-			_, _ = w.Write([]byte(`{"codex-api-key":[{"models":[{"name":"gpt-5","alias":"gpt-5-alias"}]}]}`))
+			_, _ = w.Write([]byte(`{"codex-api-key":[{"models":[{"name":"gpt-5","alias":"gpt-5-alias"}]},{"excluded-models":["*"],"models":[{"name":"disabled-codex"}]}]}`))
 		case "/v0/management/openai-compatibility":
-			_, _ = w.Write([]byte(`{"openai-compatibility":[{"models":[{"name":"deepseek-chat"}]}]}`))
+			_, _ = w.Write([]byte(`{"openai-compatibility":[{"models":[{"name":"deepseek-chat"}]},{"disabled":true,"models":[{"name":"disabled-openai"}]}]}`))
 		case "/v0/management/claude-api-key":
-			_, _ = w.Write([]byte(`{"claude-api-key":[{"models":[{"name":"claude-3-5-sonnet"}]}]}`))
+			_, _ = w.Write([]byte(`{"claude-api-key":[{"models":[{"name":"claude-3-5-sonnet"}]},{"excluded-models":["*"],"models":[{"name":"disabled-claude"}]}]}`))
 		case "/v0/management/gemini-api-key":
-			_, _ = w.Write([]byte(`{"gemini-api-key":[{"models":[{"name":"gemini-2.5-flash"}]}]}`))
+			_, _ = w.Write([]byte(`{"gemini-api-key":[{"models":[{"name":"gemini-2.5-flash"}]},{"excluded-models":["*"],"models":[{"name":"disabled-gemini"}]}]}`))
 		default:
 			http.NotFound(w, r)
 		}
