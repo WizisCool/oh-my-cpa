@@ -17,6 +17,8 @@ type ModelLister interface {
 	ListConfiguredModels(context.Context) ([]string, error)
 }
 
+var ErrModelNotInCatalog = errors.New("model is not in the current CPA catalog")
+
 // SyncState is the durable outcome of the last models.dev sync.
 type SyncState struct {
 	Source                string `json:"source"`
@@ -26,6 +28,7 @@ type SyncState struct {
 	LastSuccessAtMS       *int64 `json:"last_success_at_ms"`
 	UpdatedAtMS           int64  `json:"updated_at_ms"`
 	AutoSyncIntervalHours int64  `json:"auto_sync_interval_hours"`
+	CatalogUpdatedAtMS    int64  `json:"catalog_updated_at_ms"`
 	NextSyncAtMS          *int64 `json:"next_sync_at_ms,omitempty"`
 }
 
@@ -34,7 +37,8 @@ type Store interface {
 	ListModelPrices(context.Context) ([]ModelPrice, error)
 	UpsertModelPrices(context.Context, []ModelPrice) error
 	DeleteModelPrice(context.Context, string) (bool, error)
-	ListEffectiveModels(context.Context) ([]string, error)
+	ListPricingModels(context.Context) (map[string]string, error)
+	ReplacePricingModels(context.Context, map[string]string) (int64, error)
 	GetPricingSyncState(context.Context, string) (SyncState, error)
 	SavePricingSyncState(context.Context, SyncState) error
 	UpdatePricingSyncSchedule(context.Context, string, int64) error
@@ -46,7 +50,7 @@ type Fetcher interface {
 }
 
 // SyncResult summarizes one sync run for logs, API and audit. Pruned counts
-// auto rows dropped because their model left the traffic scope; manual rows
+// auto rows retired because their model left the current CPA catalog; manual rows
 // are never pruned.
 type SyncResult struct {
 	Matched   int64
@@ -55,9 +59,9 @@ type SyncResult struct {
 	Pruned    int64
 }
 
-// Service keeps the price table fresh with zero operator setup: sync runs at
-// startup and daily, unique strong matches apply automatically, manual rows
-// always win, and a failed fetch keeps the last good prices.
+// Service keeps the current CPA catalog and its prices fresh with zero operator
+// setup. Catalog changes are coalesced, manual rows win, and failed discovery
+// keeps the last complete catalog and good prices.
 type Service struct {
 	store                 Store
 	fetcher               Fetcher
@@ -67,9 +71,17 @@ type Service struct {
 	autoSyncIntervalHours int64
 	clock                 func() time.Time
 
-	mu      sync.Mutex
-	running bool
-	wakeCh  chan struct{}
+	mu            sync.Mutex
+	running       bool
+	stopped       bool
+	wakeCh        chan struct{}
+	pending       bool
+	force         bool
+	rootCtx       context.Context
+	workers       sync.WaitGroup
+	syncMu        sync.Mutex
+	cachedCatalog *Catalog
+	cachedAt      time.Time
 }
 
 func NewService(store Store, fetcher Fetcher, logger *slog.Logger) *Service {
@@ -100,49 +112,38 @@ func (s *Service) SetModelLister(lister ModelLister) {
 	s.mu.Unlock()
 }
 
-// effectiveModels gathers all models from CPA configuration, supplemented by historical traffic.
-func (s *Service) effectiveModels(ctx context.Context) ([]string, error) {
-	modelSet := make(map[string]struct{})
-
-	// 1. All currently connected models in CPA (primary)
+// refreshModels only publishes complete authoritative snapshots. Offline CPA
+// never turns a partial/empty response into destructive catalog removal.
+func (s *Service) refreshModels(ctx context.Context) (map[string]string, int64, error) {
 	s.mu.Lock()
 	lister := s.modelLister
 	s.mu.Unlock()
-
-	if lister != nil {
-		configured, err := lister.ListConfiguredModels(ctx)
-		if err != nil {
-			s.logger.Warn("list configured CPA models failed", "error", err)
-		} else {
-			for _, m := range configured {
-				m = strings.TrimSpace(m)
-				if m != "" {
-					modelSet[m] = struct{}{}
-				}
+	if lister == nil {
+		models, err := s.store.ListPricingModels(ctx)
+		return models, 0, err
+	}
+	var models map[string]string
+	var err error
+	if rich, ok := lister.(interface {
+		ListConfiguredModelCatalog(context.Context) (map[string]string, error)
+	}); ok {
+		models, err = rich.ListConfiguredModelCatalog(ctx)
+	} else {
+		var names []string
+		names, err = lister.ListConfiguredModels(ctx)
+		models = make(map[string]string, len(names))
+		for _, name := range names {
+			name = strings.TrimSpace(name)
+			if name != "" {
+				models[name] = name
 			}
 		}
 	}
-
-	// 2. Also union with models that appeared in historical request traffic
-	if s.store != nil {
-		trafficModels, err := s.store.ListEffectiveModels(ctx)
-		if err != nil && len(modelSet) == 0 {
-			return nil, err
-		}
-		for _, m := range trafficModels {
-			m = strings.TrimSpace(m)
-			if m != "" {
-				modelSet[m] = struct{}{}
-			}
-		}
+	if err != nil {
+		return nil, 0, err
 	}
-
-	result := make([]string, 0, len(modelSet))
-	for m := range modelSet {
-		result = append(result, m)
-	}
-	sort.Strings(result)
-	return result, nil
+	pruned, err := s.store.ReplacePricingModels(ctx, models)
+	return models, pruned, err
 }
 
 // SetInterval overrides the background sync cadence (tests).
@@ -194,30 +195,58 @@ func (s *Service) IsRunning() bool {
 	return s.running
 }
 
-// TriggerSync starts one sync in the background. It returns false when a sync
-// is already running; the HTTP layer surfaces that as 409 instead of stacking
-// concurrent fetches.
-func (s *Service) TriggerSync() bool {
+// TriggerSync is an explicit price refresh. Configuration notifications use
+// NotifyModelsChanged: coalesced work is retained even during a running sync.
+func (s *Service) TriggerSync() bool    { return s.trigger(true) }
+func (s *Service) NotifyModelsChanged() { s.trigger(false) }
+func (s *Service) trigger(force bool) bool {
 	if s == nil || s.store == nil {
 		return false
 	}
 	s.mu.Lock()
+	s.pending = true
+	s.force = s.force || force
 	if s.running {
 		s.mu.Unlock()
 		return false
 	}
+	root := s.rootCtx
+	if root == nil {
+		root = context.Background()
+	}
+	if root.Err() != nil || s.stopped {
+		s.mu.Unlock()
+		return false
+	}
 	s.running = true
+	s.workers.Add(1)
 	s.mu.Unlock()
 	go func() {
-		defer func() {
+		defer s.workers.Done()
+		for {
+			timer := time.NewTimer(150 * time.Millisecond)
+			select {
+			case <-root.Done():
+				timer.Stop()
+			case <-timer.C:
+			}
 			s.mu.Lock()
-			s.running = false
+			force := s.force
+			s.force = false
+			s.pending = false
 			s.mu.Unlock()
-		}()
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cancel()
-		if _, err := s.SyncOnce(ctx); err != nil {
-			s.logger.Warn("pricing sync failed", "error", err)
+			ctx, cancel := context.WithTimeout(root, 2*time.Minute)
+			if _, err := s.syncOnce(ctx, force); err != nil && !errors.Is(err, context.Canceled) {
+				s.logger.Warn("pricing sync failed", "error", err)
+			}
+			cancel()
+			s.mu.Lock()
+			if !s.pending || root.Err() != nil {
+				s.running = false
+				s.mu.Unlock()
+				return
+			}
+			s.mu.Unlock()
 		}
 	}()
 	return true
@@ -229,6 +258,10 @@ func (s *Service) Run(ctx context.Context) error {
 	if s == nil || s.store == nil {
 		return errors.New("pricing service is not initialized")
 	}
+	s.mu.Lock()
+	s.rootCtx = ctx
+	s.mu.Unlock()
+	defer func() { s.mu.Lock(); s.stopped = true; s.mu.Unlock(); s.workers.Wait() }()
 	if state, err := s.store.GetPricingSyncState(ctx, SourceModelsDev); err == nil {
 		s.mu.Lock()
 		s.autoSyncIntervalHours = state.AutoSyncIntervalHours
@@ -237,9 +270,9 @@ func (s *Service) Run(ctx context.Context) error {
 		}
 		s.mu.Unlock()
 	}
-	if err := s.syncLogged(ctx); err != nil && errors.Is(err, context.Canceled) {
-		return nil
-	}
+	s.TriggerSync()
+	catalogTicker := time.NewTicker(5 * time.Minute)
+	defer catalogTicker.Stop()
 
 	s.mu.Lock()
 	interval := s.interval
@@ -258,6 +291,8 @@ func (s *Service) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return nil
+		case <-catalogTicker.C:
+			s.NotifyModelsChanged()
 		case <-s.wakeCh:
 			s.mu.Lock()
 			newInterval := s.interval
@@ -273,104 +308,102 @@ func (s *Service) Run(ctx context.Context) error {
 				tickerC = ticker.C
 			}
 		case <-tickerC:
-			if err := s.syncLogged(ctx); err != nil && errors.Is(err, context.Canceled) {
-				return nil
-			}
+			s.TriggerSync()
 		}
 	}
 }
 
-func (s *Service) syncLogged(ctx context.Context) error {
-	if _, err := s.SyncOnce(ctx); err != nil {
-		if errors.Is(err, context.Canceled) {
-			return err
-		}
-		s.logger.Warn("pricing sync failed", "error", err)
-	}
-	return nil
-}
-
-// SyncOnce fetches models.dev and applies unique strong matches. Manual rows
-// and existing multipliers are preserved; failures keep the last good prices.
-func (s *Service) SyncOnce(ctx context.Context) (SyncResult, error) {
+// SyncOnce refreshes prices explicitly. All sync paths serialize here.
+func (s *Service) SyncOnce(ctx context.Context) (SyncResult, error) { return s.syncOnce(ctx, true) }
+func (s *Service) syncOnce(ctx context.Context, refreshPrices bool) (result SyncResult, err error) {
 	if s == nil || s.store == nil {
-		return SyncResult{}, errors.New("pricing service is not initialized")
+		return result, errors.New("pricing service is not initialized")
 	}
-	catalog, err := s.fetcher.Fetch(ctx)
+	s.syncMu.Lock()
+	defer s.syncMu.Unlock()
+	defer func() {
+		if err != nil {
+			s.recordFailure(ctx, err)
+		}
+	}()
+	models, pruned, err := s.refreshModels(ctx)
 	if err != nil {
-		s.recordFailure(ctx, err)
-		return SyncResult{}, err
+		return result, err
 	}
-	models, err := s.effectiveModels(ctx)
-	if err != nil {
-		return SyncResult{}, err
-	}
+	result.Pruned = pruned
 	existing, err := s.store.ListModelPrices(ctx)
 	if err != nil {
-		return SyncResult{}, err
+		return result, err
 	}
-	multipliers := make(map[string]float64, len(existing))
-	for _, row := range existing {
-		if row.Source == SourceManual {
+	prices := make(map[string]ModelPrice, len(existing))
+	for _, p := range existing {
+		prices[p.Model] = p
+	}
+	needCatalog := refreshPrices
+	for model := range models {
+		if _, ok := prices[model]; !ok {
+			needCatalog = true
+		}
+	}
+	var catalog Catalog
+	if needCatalog {
+		if !refreshPrices && s.cachedCatalog != nil && s.clock().Sub(s.cachedAt) < 15*time.Minute {
+			catalog = *s.cachedCatalog
+		} else {
+			catalog, err = s.fetcher.Fetch(ctx)
+			if err != nil {
+				return result, err
+			}
+			s.cachedCatalog = &catalog
+			s.cachedAt = s.clock()
+		}
+	}
+	rows := make([]ModelPrice, 0, len(models))
+	names := make([]string, 0, len(models))
+	for model := range models {
+		names = append(names, model)
+	}
+	sort.Strings(names)
+	for _, model := range names {
+		previous, hasPrice := prices[model]
+		if hasPrice && (previous.Source == SourceManual || !refreshPrices) {
+			result.Matched++
 			continue
 		}
-		multipliers[row.Model] = row.PriceMultiplier
-	}
-	now := s.clock().UnixMilli()
-	rows := make([]ModelPrice, 0, 256)
-	var matched, unmatched, updated int64
-	matchedModels := make(map[string]struct{}, len(models))
-	for _, model := range models {
-		entry := catalog.MatchModel(model)
+		target := models[model]
+		var entry *CatalogEntry
+		if target != "" {
+			entry = catalog.MatchModel(target)
+		}
 		if entry == nil {
-			unmatched++
+			// A temporary metadata omission is not a instruction to erase a known rate.
+			if hasPrice {
+				result.Matched++
+			} else {
+				result.Unmatched++
+			}
 			continue
 		}
-		matchedModels[model] = struct{}{}
-		price := ModelPrice{
-			Model:            model,
-			PromptPricePer1M: derefOrZero(entry.Model.Cost.Input),
-			CompletionPer1M:  derefOrZero(entry.Model.Cost.Output),
-			CacheReadPer1M:   derefOrZero(entry.Model.Cost.CacheRead),
-			CacheWritePer1M:  derefOrZero(entry.Model.Cost.CacheWrite),
-			PriceMultiplier:  1,
-			Source:           SourceModelsDev,
-			SyncedAtMS:       now,
-		}
-		if multiplier, ok := multipliers[model]; ok && multiplier > 0 {
-			price.PriceMultiplier = multiplier
+		price := ModelPrice{Model: model, PromptPricePer1M: derefOrZero(entry.Model.Cost.Input), CompletionPer1M: derefOrZero(entry.Model.Cost.Output),
+			CacheReadPer1M: derefOrZero(entry.Model.Cost.CacheRead), CacheWritePer1M: derefOrZero(entry.Model.Cost.CacheWrite), PriceMultiplier: 1, Source: SourceModelsDev, SyncedAtMS: s.clock().UnixMilli()}
+		if hasPrice && previous.PriceMultiplier > 0 {
+			price.PriceMultiplier = previous.PriceMultiplier
 		}
 		rows = append(rows, price)
-		matched++
+		result.Matched++
 	}
-	if err := s.store.UpsertModelPrices(ctx, rows); err != nil {
-		return SyncResult{}, err
+	if err = s.store.UpsertModelPrices(ctx, rows); err != nil {
+		return result, err
 	}
-	updated = int64(len(rows))
-	// Auto rows for models that left the traffic scope are dropped so the
-	// table stays as small as the traffic it serves. Manual rows survive.
-	var pruned int64
-	for _, row := range existing {
-		if row.Source != SourceModelsDev {
-			continue
-		}
-		if _, stillUsed := matchedModels[row.Model]; stillUsed {
-			continue
-		}
-		if _, err := s.store.DeleteModelPrice(ctx, row.Model); err != nil {
-			return SyncResult{}, err
-		}
-		pruned++
+	result.Updated = int64(len(rows))
+	state := SyncState{Source: SourceModelsDev, LastMatched: result.Matched, LastUnmatched: result.Unmatched}
+	// Catalog-only reconciliation must not postpone the displayed price refresh.
+	if refreshPrices {
+		now := s.clock().UnixMilli()
+		state.LastSuccessAtMS = &now
 	}
-	state := SyncState{
-		Source: SourceModelsDev, LastMatched: matched, LastUnmatched: unmatched,
-	}
-	success := now
-	state.LastSuccessAtMS = &success
-	if err := s.store.SavePricingSyncState(ctx, state); err != nil {
-		return SyncResult{Matched: matched, Unmatched: unmatched, Updated: updated, Pruned: pruned}, err
-	}
-	return SyncResult{Matched: matched, Unmatched: unmatched, Updated: updated, Pruned: pruned}, nil
+	err = s.store.SavePricingSyncState(ctx, state)
+	return result, err
 }
 
 func (s *Service) recordFailure(ctx context.Context, syncErr error) {
@@ -395,16 +428,28 @@ func derefOrZero(value *float64) float64 {
 
 // ListPrices exposes the price table for the management API.
 func (s *Service) ListPrices(ctx context.Context) ([]ModelPrice, error) {
-	return s.store.ListModelPrices(ctx)
+	rows, err := s.store.ListModelPrices(ctx)
+	if err != nil {
+		return nil, err
+	}
+	models, err := s.store.ListPricingModels(ctx)
+	if err != nil {
+		return nil, err
+	}
+	current := make([]ModelPrice, 0, len(rows))
+	for _, p := range rows {
+		if _, ok := models[p.Model]; ok {
+			current = append(current, p)
+		}
+	}
+	return current, nil
 }
 
-// UsedUnpricedModels lists models that appear in real usage traffic
-// but have no price row, capped for the UI.
+// UsedUnpricedModels lists only current CPA models without a price. Historical
+// usage does not create an operator maintenance obligation.
 func (s *Service) UsedUnpricedModels(ctx context.Context, limit int) ([]string, error) {
-	if limit <= 0 || limit > 500 {
-		limit = 200
-	}
-	models, err := s.effectiveModels(ctx)
+
+	models, err := s.store.ListPricingModels(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -417,15 +462,13 @@ func (s *Service) UsedUnpricedModels(ctx context.Context, limit int) ([]string, 
 		priced[row.Model] = struct{}{}
 	}
 	result := make([]string, 0, len(models))
-	for _, model := range models {
+	for model := range models {
 		if _, ok := priced[model]; ok {
 			continue
 		}
 		result = append(result, model)
-		if len(result) >= limit {
-			break
-		}
 	}
+	sort.Strings(result)
 	return result, nil
 }
 
@@ -466,7 +509,15 @@ func (s *Service) SaveManualPrices(ctx context.Context, rows []ModelPrice) error
 	if len(rows) == 0 {
 		return nil
 	}
+	models, err := s.store.ListPricingModels(ctx)
+	if err != nil {
+		return err
+	}
 	for i := range rows {
+		rows[i].Model = strings.TrimSpace(rows[i].Model)
+		if _, ok := models[rows[i].Model]; !ok {
+			return fmt.Errorf("%w: %q", ErrModelNotInCatalog, rows[i].Model)
+		}
 		rows[i].Source = SourceManual
 		rows[i].SyncedAtMS = 0
 		if err := rows[i].Validate(); err != nil {
@@ -482,5 +533,9 @@ func (s *Service) DeletePrice(ctx context.Context, model string) (bool, error) {
 	if s == nil || s.store == nil {
 		return false, errors.New("pricing service is not initialized")
 	}
-	return s.store.DeleteModelPrice(ctx, model)
+	deleted, err := s.store.DeleteModelPrice(ctx, model)
+	if err == nil && deleted {
+		s.NotifyModelsChanged()
+	}
+	return deleted, err
 }

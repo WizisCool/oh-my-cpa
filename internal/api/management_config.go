@@ -146,6 +146,9 @@ func (h *Handler) managementConfigPutScalar(writer http.ResponseWriter, request 
 		writeCPAFacadeError(writer, err)
 		return
 	}
+	if h.pricing != nil {
+		h.pricing.NotifyModelsChanged()
+	}
 	if auditErr := h.recordAudit(request, "config.save_scalar", "config", key, "success", map[string]any{"key": key}); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit log failure; operation aborted")
 		return
@@ -326,6 +329,9 @@ func (h *Handler) managementConfigSourcePut(writer http.ResponseWriter, request 
 		return
 	}
 
+	if h.pricing != nil {
+		h.pricing.NotifyModelsChanged()
+	}
 	newRev := configyaml.ComputeRevision(finalYAML)
 	if auditErr := h.recordAudit(request, "config.save_source", "config", "config_source_yaml", "success", map[string]any{"revision": newRev, "size_bytes": len(finalYAML)}); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit log failure; operation aborted")

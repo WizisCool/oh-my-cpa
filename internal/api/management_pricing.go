@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -20,6 +21,7 @@ type PricingManager interface {
 	UsedUnpricedModels(ctx context.Context, limit int) ([]string, error)
 	SyncStateView(ctx context.Context) (pricing.SyncState, bool, error)
 	TriggerSync() bool
+	NotifyModelsChanged()
 	IsRunning() bool
 	SetAutoSyncInterval(ctx context.Context, hours int64) error
 }
@@ -50,7 +52,7 @@ func (h *Handler) listPricing(writer http.ResponseWriter, request *http.Request)
 		writeInternalError(writer, err)
 		return
 	}
-	unpriced, err := h.pricing.UsedUnpricedModels(ctx, 50)
+	unpriced, err := h.pricing.UsedUnpricedModels(ctx, 0)
 	if err != nil {
 		writeInternalError(writer, err)
 		return
@@ -82,8 +84,8 @@ type pricingUpdateRequest struct {
 	Models []pricing.ModelPrice `json:"models"`
 }
 
-// updatePricingModels validates and saves operator edits as manual rows: they
-// win over every later models.dev sync.
+// updatePricingModels validates and saves operator edits as manual rows for
+// current CPA models: they win over every later models.dev sync.
 func (h *Handler) updatePricingModels(writer http.ResponseWriter, request *http.Request) {
 	if h.pricing == nil {
 		writeError(writer, http.StatusServiceUnavailable, "pricing service is not available")
@@ -114,6 +116,10 @@ func (h *Handler) updatePricingModels(writer http.ResponseWriter, request *http.
 	rows := make([]pricing.ModelPrice, len(body.Models))
 	copy(rows, body.Models)
 	if err := h.pricing.SaveManualPrices(request.Context(), rows); err != nil {
+		if errors.Is(err, pricing.ErrModelNotInCatalog) {
+			writeError(writer, http.StatusBadRequest, err.Error())
+			return
+		}
 		writeInternalError(writer, err)
 		return
 	}
@@ -126,9 +132,8 @@ func (h *Handler) updatePricingModels(writer http.ResponseWriter, request *http.
 	writeJSON(writer, http.StatusOK, map[string]any{"updated": len(rows)})
 }
 
-// deletePricingModel removes one row. The next sync may recreate it as an auto
-// row when models.dev still matches; deleting is therefore the documented way
-// to return a model to automatic pricing.
+// deletePricingModel retires the current price. A later sync may recreate an
+// automatic price for future requests; existing request snapshots are intact.
 func (h *Handler) deletePricingModel(writer http.ResponseWriter, request *http.Request) {
 	if h.pricing == nil {
 		writeError(writer, http.StatusServiceUnavailable, "pricing service is not available")

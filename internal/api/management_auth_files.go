@@ -177,7 +177,7 @@ func (h *Handler) patchManagementAuthFileFields(writer http.ResponseWriter, requ
 		return
 	}
 	if h.pricing != nil {
-		h.pricing.TriggerSync()
+		h.pricing.NotifyModelsChanged()
 	}
 	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok"})
 }
@@ -238,7 +238,7 @@ func (h *Handler) uploadManagementAuthFiles(writer http.ResponseWriter, request 
 		return
 	}
 	if h.pricing != nil {
-		h.pricing.TriggerSync()
+		h.pricing.NotifyModelsChanged()
 	}
 	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "uploaded": 1, "files": []string{name}})
 }
@@ -279,7 +279,7 @@ func (h *Handler) handleUploadResults(writer http.ResponseWriter, ctx context.Co
 		uploaded = append(uploaded, name)
 	}
 	if len(uploaded) > 0 && h.pricing != nil {
-		h.pricing.TriggerSync()
+		h.pricing.NotifyModelsChanged()
 	}
 	if len(failed) > 0 {
 		status := http.StatusMultiStatus
@@ -358,7 +358,7 @@ func (h *Handler) deleteManagementAuthFiles(writer http.ResponseWriter, request 
 	}
 
 	if len(confirmedDeleted) > 0 && h.pricing != nil {
-		h.pricing.TriggerSync()
+		h.pricing.NotifyModelsChanged()
 	}
 
 	if outcomeStatus != "ok" {

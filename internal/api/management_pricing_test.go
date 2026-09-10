@@ -236,3 +236,5 @@ func TestUpdatePricingSyncSchedule(t *testing.T) {
 		t.Fatalf("invalid schedule status = %d, want 400", response.StatusCode)
 	}
 }
+
+func (f *fakePricing) NotifyModelsChanged() { f.TriggerSync() }

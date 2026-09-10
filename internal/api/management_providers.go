@@ -916,7 +916,7 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 	_ = h.recordAudit(request, "provider.create", "provider", family, "success", map[string]any{"name": name})
 
 	if h.pricing != nil {
-		h.pricing.TriggerSync()
+		h.pricing.NotifyModelsChanged()
 	}
 
 	writeJSON(writer, http.StatusOK, map[string]any{
@@ -1147,7 +1147,7 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 	_ = h.recordAudit(request, "provider.update", "provider", id, "success", map[string]any{"name": name})
 
 	if h.pricing != nil {
-		h.pricing.TriggerSync()
+		h.pricing.NotifyModelsChanged()
 	}
 
 	writeJSON(writer, http.StatusOK, map[string]any{
@@ -1270,7 +1270,7 @@ func (h *Handler) deleteManagementProvider(writer http.ResponseWriter, request *
 	_ = h.recordAudit(request, "provider.delete", "provider", id, "success", nil)
 
 	if h.pricing != nil {
-		h.pricing.TriggerSync()
+		h.pricing.NotifyModelsChanged()
 	}
 
 	writeJSON(writer, http.StatusOK, map[string]any{

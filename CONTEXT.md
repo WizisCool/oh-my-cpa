@@ -13,8 +13,10 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
 - **Protocol Driver**: The technical protocol adapter used by CPA, such as Codex/Responses, OpenAI-compatible Chat Completions, Anthropic Messages, or Gemini. It is implementation metadata, not the user-facing Source.
 - **CPA Binding**: The link between a Connection and a concrete resource on one CPA instance, including the CPA resource type and runtime auth index.
 - **Unclaimed Resource**: A CPA resource discovered by Oh My CPA that has no confirmed local user identity or override yet. It is presented in the triage queue for naming and organization.
-- **Model Price**: One editable USD price row per model (four per-1M-token rates plus a multiplier). models.dev syncs automatically; manual rows win over sync.
-- **Estimated Cost**: A float64 USD estimate per request from the model price; unpriced models report no cost instead of zero.
+- **Model Price**: The current CPA model catalog is the maintenance scope. Each catalog identity has one current price projection (four per-1M-token rates plus a multiplier); models.dev syncs automatically and manual rows win over sync.
+- **Price Version**: An immutable, time-effective price snapshot. A price change creates a new version; deleting a current price creates a tombstone so future requests stay unpriced while existing snapshots remain valid.
+- **Request Cost Snapshot**: The price version and USD nanos amount selected in the same transaction as a usage event, using the request timestamp. It is never recalculated from the current price projection.
+- **Unpriced Usage**: A request for which no valid price version existed at request time. It remains usage-only, is excluded from cost totals, and is never backfilled when a price is added later. Historical rows without a stored snapshot are `legacy_unpriced`.
 
 ## Naming rule
 
@@ -87,4 +89,3 @@ A future per-request live feed should follow the same convention — cheap
 repeated poll, server-issued cursor, client-side splice — but key on the
 `usage_events` row `id`, which is monotonic, rather than on a timestamp, which
 a sliding window keeps invalidating.
-

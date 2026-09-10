@@ -15,8 +15,6 @@ import (
 func TestUsageEventsSurfaceCostUSD(t *testing.T) {
 	client, baseURL, repo := startDashboardTestServer(t, nil)
 	ctx := context.Background()
-	now := time.Now().UTC()
-
 	// Seed model prices: $2/1M prompt, $10/1M completion, multiplier 1.5
 	if err := repo.UpsertModelPrices(ctx, []pricing.ModelPrice{
 		{

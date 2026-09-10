@@ -173,14 +173,52 @@ type fakeStore struct {
 func (s *fakeStore) ListModelPrices(context.Context) ([]ModelPrice, error) { return s.prices, nil }
 func (s *fakeStore) UpsertModelPrices(_ context.Context, rows []ModelPrice) error {
 	s.upserted = append(s.upserted, rows...)
-	s.prices = append(s.prices, rows...)
+	for _, row := range rows {
+		found := false
+		for i, p := range s.prices {
+			if p.Model == row.Model {
+				found = true
+				if row.Source == SourceManual || p.Source != SourceManual {
+					s.prices[i] = row
+				}
+				break
+			}
+		}
+		if !found {
+			s.prices = append(s.prices, row)
+		}
+	}
 	return nil
 }
 func (s *fakeStore) DeleteModelPrice(_ context.Context, model string) (bool, error) {
 	s.deleted = append(s.deleted, model)
 	return true, nil
 }
-func (s *fakeStore) ListEffectiveModels(context.Context) ([]string, error) { return s.models, nil }
+func (s *fakeStore) ListPricingModels(context.Context) (map[string]string, error) {
+	result := map[string]string{}
+	for _, m := range s.models {
+		result[m] = m
+	}
+	return result, nil
+}
+func (s *fakeStore) ReplacePricingModels(_ context.Context, models map[string]string) (int64, error) {
+	s.models = nil
+	for m := range models {
+		s.models = append(s.models, m)
+	}
+	var kept []ModelPrice
+	var pruned int64
+	for _, p := range s.prices {
+		if _, ok := models[p.Model]; !ok && p.Source == SourceModelsDev {
+			pruned++
+			s.deleted = append(s.deleted, p.Model)
+		} else {
+			kept = append(kept, p)
+		}
+	}
+	s.prices = kept
+	return pruned, nil
+}
 func (s *fakeStore) GetPricingSyncState(context.Context, string) (SyncState, error) {
 	if !s.stateKnown {
 		return SyncState{}, sql.ErrNoRows
@@ -250,13 +288,14 @@ func TestSyncOnceFailureKeepsLastGoodPrices(t *testing.T) {
 
 // Auto rows for models that left the traffic scope are pruned on the next
 // sync; manual rows are never touched by pruning.
-func TestSyncOncePrunesAutoRowsOutsideTraffic(t *testing.T) {
+func TestSyncOncePrunesAutoRowsOutsideCatalog(t *testing.T) {
 	store := &fakeStore{models: []string{"openai/gpt-5"}}
 	store.prices = []ModelPrice{
 		{Model: "stale/catalog-model", PromptPricePer1M: 1, PriceMultiplier: 1, Source: SourceModelsDev},
 		{Model: "manual-keep", PromptPricePer1M: 5, PriceMultiplier: 1, Source: SourceManual},
 	}
 	service := NewService(store, &fakeFetcher{catalog: catalogFixture()}, nil)
+	service.SetModelLister(&fakeModelLister{models: store.models})
 	result, err := service.SyncOnce(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -278,7 +317,7 @@ func TestSyncOncePrunesAutoRowsOutsideTraffic(t *testing.T) {
 	}
 }
 func TestSaveManualPricesForcesManualSource(t *testing.T) {
-	store := &fakeStore{}
+	store := &fakeStore{models: []string{"acme/totally-unique-model"}}
 	service := NewService(store, &fakeFetcher{}, nil)
 	rows := []ModelPrice{{Model: "acme/totally-unique-model", PromptPricePer1M: 7, PriceMultiplier: 1, Source: SourceModelsDev, SyncedAtMS: 123}}
 	if err := service.SaveManualPrices(context.Background(), rows); err != nil {
@@ -311,7 +350,7 @@ func TestTriggerSyncRunsOnce(t *testing.T) {
 		t.Fatal("second concurrent trigger should be refused")
 	}
 	deadline := time.Now().Add(2 * time.Second)
-	for len(store.upserted) == 0 && time.Now().Before(deadline) {
+	for service.IsRunning() && time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	if len(store.upserted) == 0 {
@@ -354,4 +393,3 @@ func TestSyncOnceWithModelLister(t *testing.T) {
 		t.Fatalf("expected ['totally-unknown-model'] unpriced, got %v", unpriced)
 	}
 }
-

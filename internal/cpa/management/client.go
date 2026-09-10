@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -1427,23 +1428,60 @@ func (c *Client) InstallPlugin(ctx context.Context, id string) error {
 }
 
 // ListAllConfiguredModels collects all models configured across all providers and auth files in CPA.
-func (c *Client) ListAllConfiguredModels(ctx context.Context) ([]string, error) {
+func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]string, error) {
 	if c == nil {
 		return nil, errors.New("CPA client is not initialized")
 	}
-	modelSet := make(map[string]struct{})
+	modelSet := make(map[string]string)
+	add := func(id, target string) {
+		id = strings.TrimSpace(id)
+		target = strings.TrimSpace(target)
+		if id == "" {
+			return
+		}
+		if old, ok := modelSet[id]; ok && old != target {
+			modelSet[id] = ""
+		} else if !ok {
+			modelSet[id] = target
+		}
+	}
 	var errs []string
 
 	// 1. Auth files
 	if authResp, err := c.AuthFiles(ctx); err != nil {
 		errs = append(errs, "auth-files: "+err.Error())
 	} else {
-		for _, file := range authResp.Files {
-			for _, m := range file.Models {
-				id := strings.TrimSpace(m.ID)
-				if id != "" {
-					modelSet[id] = struct{}{}
+		// Auth-files commonly omits its models. Resolve missing lists in waves
+		// of at most four, not one HTTP call per card/render or unbounded fanout.
+		resolved := make([][]AuthModel, len(authResp.Files))
+		failures := make([]error, len(authResp.Files))
+		for start := 0; start < len(authResp.Files); start += 4 {
+			var wg sync.WaitGroup
+			for i := start; i < min(start+4, len(authResp.Files)); i++ {
+				file := authResp.Files[i]
+				if file.Disabled {
+					continue
 				}
+				if len(file.Models) > 0 {
+					resolved[i] = file.Models
+					continue
+				}
+				if file.Name == "" {
+					failures[i] = errors.New("auth file is missing its model identity")
+					continue
+				}
+				wg.Add(1)
+				go func(i int, name string) { defer wg.Done(); resolved[i], failures[i] = c.AuthFileModels(ctx, name) }(i, file.Name)
+			}
+			wg.Wait()
+		}
+		for i, models := range resolved {
+			if failures[i] != nil {
+				errs = append(errs, "auth-file models: "+failures[i].Error())
+				continue
+			}
+			for _, m := range models {
+				add(m.ID, m.ID)
 			}
 		}
 	}
@@ -1456,11 +1494,11 @@ func (c *Client) ListAllConfiguredModels(ctx context.Context) ([]string, error) 
 			for _, m := range entry.Models {
 				name := strings.TrimSpace(m.Name)
 				if name != "" {
-					modelSet[name] = struct{}{}
+					add(name, name)
 				}
 				alias := strings.TrimSpace(m.Alias)
 				if alias != "" {
-					modelSet[alias] = struct{}{}
+					add(alias, name)
 				}
 			}
 		}
@@ -1474,11 +1512,11 @@ func (c *Client) ListAllConfiguredModels(ctx context.Context) ([]string, error) 
 			for _, m := range entry.Models {
 				name := strings.TrimSpace(m.Name)
 				if name != "" {
-					modelSet[name] = struct{}{}
+					add(name, name)
 				}
 				alias := strings.TrimSpace(m.Alias)
 				if alias != "" {
-					modelSet[alias] = struct{}{}
+					add(alias, name)
 				}
 			}
 		}
@@ -1492,11 +1530,11 @@ func (c *Client) ListAllConfiguredModels(ctx context.Context) ([]string, error) 
 			for _, m := range entry.Models {
 				name := strings.TrimSpace(m.Name)
 				if name != "" {
-					modelSet[name] = struct{}{}
+					add(name, name)
 				}
 				alias := strings.TrimSpace(m.Alias)
 				if alias != "" {
-					modelSet[alias] = struct{}{}
+					add(alias, name)
 				}
 			}
 		}
@@ -1510,22 +1548,31 @@ func (c *Client) ListAllConfiguredModels(ctx context.Context) ([]string, error) 
 			for _, m := range entry.Models {
 				name := strings.TrimSpace(m.Name)
 				if name != "" {
-					modelSet[name] = struct{}{}
+					add(name, name)
 				}
 				alias := strings.TrimSpace(m.Alias)
 				if alias != "" {
-					modelSet[alias] = struct{}{}
+					add(alias, name)
 				}
 			}
 		}
 	}
 
-	if len(modelSet) == 0 && len(errs) == 5 {
-		return nil, fmt.Errorf("all CPA model endpoints failed: %s", strings.Join(errs, "; "))
+	if len(errs) > 0 {
+		return nil, fmt.Errorf("incomplete CPA model catalog: %s", strings.Join(errs, "; "))
 	}
 
-	result := make([]string, 0, len(modelSet))
-	for m := range modelSet {
+	return modelSet, nil
+}
+
+// ListAllConfiguredModels is the ID-only view of the authoritative catalog.
+func (c *Client) ListAllConfiguredModels(ctx context.Context) ([]string, error) {
+	models, err := c.ListConfiguredModelCatalog(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]string, 0, len(models))
+	for m := range models {
 		result = append(result, m)
 	}
 	sort.Strings(result)

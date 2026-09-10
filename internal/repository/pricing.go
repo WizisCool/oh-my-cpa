@@ -27,14 +27,15 @@ type PricingSyncState = pricing.SyncState
 const pricingSyncStateSelect = `SELECT source,
 	CASE WHEN typeof(last_success_at_ms) = 'integer' THEN last_success_at_ms ELSE NULL END AS last_success_at_ms,
 	last_error, last_matched, last_unmatched, updated_at_ms,
-	CASE WHEN typeof(auto_sync_interval_hours) = 'integer' THEN auto_sync_interval_hours ELSE 24 END AS auto_sync_interval_hours
+	CASE WHEN typeof(auto_sync_interval_hours) = 'integer' THEN auto_sync_interval_hours ELSE 24 END AS auto_sync_interval_hours,
+ (SELECT updated_at_ms FROM pricing_catalog_state WHERE id=1)
 	FROM pricing_sync_state`
 
 func scanPricingSyncState(row *sql.Row, state *pricing.SyncState) error {
 	var lastSuccess sql.NullInt64
 	var updatedAt sql.NullInt64
 	var autoSyncHours sql.NullInt64
-	if err := row.Scan(&state.Source, &lastSuccess, &state.LastError, &state.LastMatched, &state.LastUnmatched, &updatedAt, &autoSyncHours); err != nil {
+	if err := row.Scan(&state.Source, &lastSuccess, &state.LastError, &state.LastMatched, &state.LastUnmatched, &updatedAt, &autoSyncHours, &state.CatalogUpdatedAtMS); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
@@ -211,52 +212,18 @@ func (r *Repository) UpdatePricingSyncSchedule(ctx context.Context, source strin
 	return nil
 }
 
-// ListEffectiveModels returns only models actually seen in usage events, most
-// recently used first. Provider catalogs list hundreds of configured models;
-// pricing must follow traffic, not the catalog, or the table bloats with
-// models the deployment never calls. Bounded like every other read.
-func (r *Repository) ListEffectiveModels(ctx context.Context) ([]string, error) {
-	if err := r.requirePricingSchema(ctx); err != nil {
-		return nil, err
-	}
-	rows, err := r.SQL().QueryContext(ctx, `SELECT model, MAX(timestamp_ms) AS last_seen FROM usage_events WHERE model <> '' GROUP BY model ORDER BY last_seen DESC LIMIT 1000`)
-	if err != nil {
-		return nil, fmt.Errorf("list used models: %w", err)
-	}
-	defer rows.Close()
-	seen := make(map[string]struct{}, 256)
-	result := make([]string, 0, 256)
-	for rows.Next() {
-		var lastSeen int64
-		var model string
-		if err := rows.Scan(&model, &lastSeen); err != nil {
-			return nil, fmt.Errorf("scan used model: %w", err)
-		}
-		model = strings.TrimSpace(model)
-		if model == "" || len(model) > 512 {
-			continue
-		}
-		if _, ok := seen[model]; ok {
-			continue
-		}
-		seen[model] = struct{}{}
-		result = append(result, model)
-	}
-	return result, rows.Err()
-}
-
-// requirePricingSchema refuses to touch pricing tables when migration 015 has
-// not been applied, mirroring the pattern other subsystems use.
+// requirePricingSchema refuses to touch pricing tables until the immutable
+// snapshot and current-catalog migrations are present.
 func (r *Repository) requirePricingSchema(ctx context.Context) error {
 	if r == nil || r.SQL() == nil {
 		return errors.New("repository is not initialized")
 	}
 	var applied int
-	if err := r.SQL().QueryRowContext(ctx, `SELECT COUNT(1) FROM schema_migrations WHERE version = 15`).Scan(&applied); err != nil {
+	if err := r.SQL().QueryRowContext(ctx, `SELECT COUNT(1) FROM schema_migrations WHERE version = 20`).Scan(&applied); err != nil {
 		return fmt.Errorf("pricing schema check: %w", err)
 	}
 	if applied == 0 {
-		return errors.New("model pricing schema migration 15 is not applied")
+		return errors.New("model pricing schema migration 20 is not applied")
 	}
 	return nil
 }

@@ -310,4 +310,11 @@ func TestListAllConfiguredModels(t *testing.T) {
 	if strings.Join(models, ",") != strings.Join(want, ",") {
 		t.Fatalf("models = %v, want %v", models, want)
 	}
+	catalog, err := client.ListConfiguredModelCatalog(context.Background())
+	if err != nil {
+		t.Fatalf("ListConfiguredModelCatalog failed: %v", err)
+	}
+	if catalog["gpt-5-alias"] != "gpt-5" || catalog["gpt-5"] != "gpt-5" {
+		t.Fatalf("alias catalog mapping = %v", catalog)
+	}
 }

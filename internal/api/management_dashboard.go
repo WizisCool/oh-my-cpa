@@ -381,8 +381,8 @@ func (h *Handler) queryDashboard(ctx context.Context, window dashboardWindow) (d
 		ttft := roundTwo(float64(totals.TTFTSumMS) / float64(totals.TTFTCount))
 		facts.metrics.AvgTTFTMS = &ttft
 	}
-	// Cost is an on-the-fly estimate from model_prices; unpriced models keep
-	// the window honest via CostSource instead of a fabricated zero.
+	// Cost comes from immutable request-time snapshots; unpriced and legacy rows
+	// keep the window honest via CostSource instead of a fabricated zero.
 	costStats, err := h.repo.QueryUsageCost(ctx, defaultInstanceID(), window.FromMS, window.ToMS)
 	if err != nil {
 		return facts, err
@@ -393,7 +393,7 @@ func (h *Handler) queryDashboard(ctx context.Context, window dashboardWindow) (d
 	case costStats.UnpricedEvents > 0:
 		facts.metrics.Cost = costStats.CostUSD
 		facts.metrics.CostSource = "partial"
-		facts.metrics.CostNote = "some models are unpriced; the amount is a partial estimate"
+		facts.metrics.CostNote = "some requests had no price at request time; total excludes them"
 	default:
 		facts.metrics.Cost = costStats.CostUSD
 		facts.metrics.CostSource = "estimated"

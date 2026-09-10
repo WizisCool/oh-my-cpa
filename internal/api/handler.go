@@ -368,7 +368,7 @@ func (h *Handler) discoverDefault(writer http.ResponseWriter, request *http.Requ
 	}
 	unclaimed := len(unclaimedResources)
 	if h.pricing != nil {
-		h.pricing.TriggerSync()
+		h.pricing.NotifyModelsChanged()
 	}
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"status":           "ok",

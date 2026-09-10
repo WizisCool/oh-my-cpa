@@ -117,6 +117,9 @@ func (h *Handler) getOAuthStatus(writer http.ResponseWriter, request *http.Reque
 	}
 
 	status := normalizeOAuthStatus(resp.Status)
+	if status == "ok" && h.pricing != nil {
+		h.pricing.NotifyModelsChanged()
+	}
 	message := strings.TrimSpace(resp.Message)
 	if message == "" {
 		message = strings.TrimSpace(resp.Error)

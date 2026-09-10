@@ -87,6 +87,9 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 		db.Close()
 		return nil, err
 	}
+	if pipeline != nil && pipeline.Runner() != nil {
+		pipeline.Runner().SetRefreshHandler(pricingService.NotifyModelsChanged)
+	}
 	return &App{
 		cfg:     cfg,
 		db:      db,
@@ -135,16 +138,16 @@ type cpaModelLister struct {
 	cfg    config.Config
 }
 
-func (l *cpaModelLister) ListConfiguredModels(ctx context.Context) ([]string, error) {
+func (l *cpaModelLister) ListConfiguredModelCatalog(ctx context.Context) (map[string]string, error) {
 	instance, err := l.repo.GetInstance(ctx, "default")
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) || strings.Contains(err.Error(), "no rows") {
-			return nil, nil
+			return nil, errors.New("CPA instance is not configured")
 		}
 		return nil, err
 	}
 	if strings.TrimSpace(instance.BaseURL) == "" {
-		return nil, nil
+		return nil, errors.New("CPA instance is not configured")
 	}
 	key, err := l.cipher.Decrypt(instance.ManagementKeyCiphertext, instance.ManagementKeyNonce)
 	if err != nil {
@@ -159,7 +162,7 @@ func (l *cpaModelLister) ListConfiguredModels(ctx context.Context) ([]string, er
 	if err != nil {
 		return nil, fmt.Errorf("build CPA management client: %w", err)
 	}
-	return client.ListAllConfiguredModels(ctx)
+	return client.ListConfiguredModelCatalog(ctx)
 }
 
 // buildUsagePipeline wires capture, decode and maintenance over the default CPA
@@ -308,4 +311,16 @@ func bootstrapDefaultInstance(ctx context.Context, cfg config.Config, repo *repo
 		return fmt.Errorf("load default CPA instance: %w", err)
 	}
 	return repo.UpsertInstance(ctx, instance)
+}
+
+func (l *cpaModelLister) ListConfiguredModels(ctx context.Context) ([]string, error) {
+	models, err := l.ListConfiguredModelCatalog(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]string, 0, len(models))
+	for m := range models {
+		result = append(result, m)
+	}
+	return result, nil
 }
