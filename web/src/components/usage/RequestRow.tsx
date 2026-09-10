@@ -38,7 +38,6 @@ export const RequestRow = React.memo<RequestRowProps>(
   }) => {
     const t = useT();
 
-    // 1. Resolve Provider Info (AI Provider vs OAuth credential)
     const providerInfo = resolveProviderInfo(
       event,
       credentials,
@@ -61,10 +60,8 @@ export const RequestRow = React.memo<RequestRowProps>(
         } as React.CSSProperties)
       : undefined;
 
-    // 3. Tokens Per Second (TPS) calculation
     const tpsInfo = eventTokensPerSecond(event);
 
-    // 4. Caller key / group label shown in the Key column
     const keyLabel = eventKeyLabel(event);
     const uaLabel = eventUserAgentLabel(event);
     const resultLabel = t(eventResultLabelKey(event));
@@ -91,7 +88,7 @@ export const RequestRow = React.memo<RequestRowProps>(
         }}
         aria-label={`${t('common.details')}: ${event.model}, ${event.request_id || event.id}`}
       >
-        {/* Column 1: 时间 */}
+        {/* Column 1: timestamp */}
         <div className="req-col req-col-time">
           <Tooltip title={fullTime}>
             <time dateTime={new Date(event.timestamp_ms).toISOString()} className="req-time-text">
@@ -118,7 +115,7 @@ export const RequestRow = React.memo<RequestRowProps>(
           </div>
         </div>
 
-        {/* Column 2: 结果 (成功/失败 胶囊) */}
+        {/* Column 2: outcome (success/failure pill) */}
         <div className="req-col req-col-result">
           <span className="req-mobile-label">{t('events.col_result')}</span>
           <span
@@ -130,7 +127,7 @@ export const RequestRow = React.memo<RequestRowProps>(
           </span>
         </div>
 
-        {/* Column 3: 提供商（认证文件） */}
+        {/* Column 3: provider (credential that answered) */}
         <div className="req-col req-col-provider">
           <div className="req-provider-icon-wrapper">
             <LobeIcon iconId={providerInfo.iconId} size={20} />
@@ -141,7 +138,7 @@ export const RequestRow = React.memo<RequestRowProps>(
                 {providerInfo.title}
               </strong>
               {providerInfo.isOAuth && (
-                <span className="req-badge-oauth" title="OAuth 授权账号">
+                <span className="req-badge-oauth" title={t('events.oauth_badge')}>
                   OAuth
                 </span>
               )}
@@ -154,7 +151,7 @@ export const RequestRow = React.memo<RequestRowProps>(
           </div>
         </div>
 
-        {/* Column 4: 模型（上：模型名，下：推理强度） */}
+        {/* Column 4: model, with reasoning effort underneath */}
         <div className="req-col req-col-model">
           <div className="req-model-primary">
             <strong
@@ -168,7 +165,7 @@ export const RequestRow = React.memo<RequestRowProps>(
               {event.model || t('events.not_captured')}
             </strong>
             {!event.generate && (
-              <span className="req-preflight-badge" title="预检请求 (非生成)">
+              <span className="req-preflight-badge" title={t('events.preflight_hint')}>
                 {t('events.preflight')}
               </span>
             )}
@@ -189,7 +186,7 @@ export const RequestRow = React.memo<RequestRowProps>(
           </span>
         </div>
 
-        {/* Column 5: 延时 */}
+        {/* Column 5: total latency */}
         <div className="req-col req-col-latency">
           <span className="req-mobile-label">{t('events.col_latency')}</span>
           <strong className={`req-latency-val${event.latency_ms >= 4000 ? ' is-slow' : ''}`}>
@@ -200,7 +197,7 @@ export const RequestRow = React.memo<RequestRowProps>(
           </span>
         </div>
 
-        {/* Column 6: TPS 生成速度 */}
+        {/* Column 6: generation speed in tokens per second */}
         <div className="req-col req-col-tps">
           <span className="req-mobile-label">{t('events.col_tps')}</span>
           {tpsInfo.tps !== null ? (
@@ -218,7 +215,7 @@ export const RequestRow = React.memo<RequestRowProps>(
           )}
         </div>
 
-        {/* Column 7: Token（总数，输入，输出，推理） */}
+        {/* Column 7: tokens (total, input, output, reasoning) */}
         <div className="req-col req-col-tokens">
           <span className="req-mobile-label">{t('events.col_tokens')}</span>
           <div className="req-tokens-total">
@@ -244,7 +241,8 @@ export const RequestRow = React.memo<RequestRowProps>(
           </div>
         </div>
 
-        {/* Column 8: 费用（请求发生时锁定的价格；未定价保持 —，不造假 0） */}
+        {/* Column 8: cost, locked at request time; unpriced stays an em dash
+            rather than a fabricated 0 */}
         <div className="req-col req-col-cost">
           <span className="req-mobile-label">{t('events.col_cost')}</span>
           {event.cost_usd != null ? (
@@ -255,7 +253,7 @@ export const RequestRow = React.memo<RequestRowProps>(
             </Tooltip>
           )}
         </div>
-        {/* Column 9: 缓存率 */}
+        {/* Column 9: cache hit rate */}
         <div className="req-col req-col-cache">
           <span className="req-mobile-label">{t('events.col_cache_rate')}</span>
           <Tooltip
@@ -288,7 +286,8 @@ export const RequestRow = React.memo<RequestRowProps>(
           </Tooltip>
         </div>
 
-        {/* Column 10: Key（仅 api_key 类别的调用方 Key，掩码展示；其他类别回退到来源指纹） */}
+        {/* Column 10: caller key, masked, and only for api_key callers;
+            every other auth type falls back to the source fingerprint */}
         <div className="req-col req-col-key">
           <span className="req-mobile-label">{t('events.col_key')}</span>
           <span className="req-key-val" title={keyLabel}>
@@ -296,7 +295,8 @@ export const RequestRow = React.memo<RequestRowProps>(
           </span>
         </div>
 
-        {/* Column 11: UA（入库已最小化的客户端产品标签） */}
+        {/* Column 11: user agent, already reduced to a client product label
+            at ingestion */}
         <div className="req-col req-col-ua">
           <span className="req-mobile-label">{t('events.col_ua')}</span>
           <span className="req-ua-val" title={uaLabel}>

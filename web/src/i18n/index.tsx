@@ -3,8 +3,8 @@ import React from 'react';
 export type Lang = 'zh' | 'en';
 
 /**
- * Bilingual dictionary, values are [zh, en] pairs (prototype convention).
- * Keys not found fall through to the key itself so misses are visible in dev.
+ * Bilingual dictionary, values are [zh, en] pairs. Keys not found fall through
+ * to the key itself so misses are visible in dev.
  */
 const DICT: Record<string, [string, string]> = {
   // ── app / shell ──────────────────────────────────────────────────────────
@@ -923,6 +923,8 @@ const DICT: Record<string, [string, string]> = {
   'events.unknown_credential': ['认证来源未记录', 'Credential not recorded'],
   'events.no_request_id': ['无 Request ID', 'No Request ID'],
   'events.preflight': ['未生成', 'No generation'],
+  'events.oauth_badge': ['OAuth 授权账号', 'OAuth account'],
+  'events.preflight_hint': ['预检请求（非生成）', 'Preflight request (no generation)'],
   'events.filters': ['筛选请求', 'Filter requests'],
   'events.time_range': ['时间范围', 'Time range'],
   'events.custom_range': ['自定义时间', 'Custom range'],
