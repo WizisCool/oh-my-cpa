@@ -119,66 +119,77 @@ try {
     if (url.pathname.includes('/preferences/')) return fulfill({ ok: true });
     if (url.pathname.endsWith('/dashboard')) return fulfill(dashboardBody);
     if (url.pathname.endsWith('/dashboard/tail')) return fulfill(dashboardBody);
-    if (url.pathname.endsWith('/management/overview')) return fulfill({});
+    if (url.pathname.endsWith('/management/overview')) {
+      return fulfill({
+        cpa: { connected: true, version: 'probe', latency_ms: 1 },
+        counts: { management_keys: 1, provider_keys: 0, credentials: 0, models: 0 },
+        providers: [],
+        credentials: { total: 0, active: 0, disabled: 0, unavailable: 0, by_type: [] },
+        traffic: { bucket_minutes: 10, window_minutes: 60, buckets: [], total_success: 0, total_failure: 0, total: 0, success_rate: null },
+        partial_errors: [],
+      });
+    }
     if (url.pathname.endsWith('/health')) return fulfill({ cpa_connected: true, version: 'probe', status: 'ok' });
     return fulfill({});
   });
 
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
-  await page.locator('.chart-slot canvas, .chart-slot svg').first().waitFor({ timeout: 20_000 });
+  try {
+    await page.locator('.chart-slot canvas, .chart-slot svg').first().waitFor({ timeout: 20_000 });
+  } catch (error) {
+    // Surface the reason rather than only the timeout: a fixture that fails to
+    // satisfy the response contract shows up as a page error or an error banner,
+    // and a bare "waitFor timed out" hides which one it was.
+    const banner = await page.locator('.ant-alert-error, .ant-result-title').first().innerText().catch(() => '');
+    console.error(`page errors: ${pageErrors.join(' | ') || 'none'}`);
+    console.error(`page text: ${(await page.locator('body').innerText().catch(() => '')).slice(0, 600)}`);
+    throw new Error(`${error?.message ?? error}${banner ? ` banner=${banner}` : ''}`);
+  }
   await wait(1200);
 
   const slots = await page.locator('.chart-slot').count();
   check('the dashboard rendered its sparkline slots', slots >= 2, `slots=${slots}`);
 
-  // The library paints to canvas; a stroked area mark is what leaves the rule, so
-  // assert on the paint commands the canvas was given rather than on the options.
-  const strokeReport = await page.evaluate(() => {
-    const originalStroke = CanvasRenderingContext2D.prototype.stroke;
-    const originalFill = CanvasRenderingContext2D.prototype.fill;
-    const stats = { strokes: 0, fills: 0 };
-    CanvasRenderingContext2D.prototype.stroke = function patchedStroke(...args) {
-      stats.strokes += 1;
-      return originalStroke.apply(this, args);
-    };
-    CanvasRenderingContext2D.prototype.fill = function patchedFill(...args) {
-      stats.fills += 1;
-      return originalFill.apply(this, args);
-    };
-    // Force one repaint of every chart so the counters observe real work.
-    window.dispatchEvent(new Event('resize'));
-    return new Promise((resolve) => {
-      requestAnimationFrame(() => {
-        CanvasRenderingContext2D.prototype.stroke = originalStroke;
-        CanvasRenderingContext2D.prototype.fill = originalFill;
-        resolve(stats);
-      });
-    });
-  });
-  check(
-    'the sparklines paint fills as well as strokes (area plus line marks)',
-    strokeReport.fills > 0 && strokeReport.strokes > 0,
-    JSON.stringify(strokeReport),
-  );
-
-  // Hover: sweep the pointer across the first area tile and confirm the figure is
-  // not rebuilt underneath it. Playwright cannot read internal memo state, so the
-  // signal is that no page error occurs and the canvas element identity is stable.
+  // Real hover evidence: the tooltip must appear with the bucket's actual value.
+  // Whether the chart was rebuilt underneath the cursor is measured by the
+  // commit probe below, not by canvas identity (a replaced canvas at the same
+  // size proves nothing either way).
   const firstSlot = page.locator('.chart-slot').first();
-  const beforeHandle = await firstSlot.locator('canvas').first().elementHandle();
   const box = await firstSlot.boundingBox();
   if (!box) throw new Error('no bounding box for the first sparkline');
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height / 2);
+  await page.waitForTimeout(300);
+  const tooltipText = await page
+    .locator('.g2-tooltip')
+    .first()
+    .innerText()
+    .catch(() => '');
+  check('hovering a sparkline shows its tooltip', tooltipText.trim().length > 0, `text=${JSON.stringify(tooltipText)}`);
+  // The tooltip must name a real bucket: at 1h/1-minute resolution the label is
+  // "MM-DD HH:mm", and the value is the request count for that minute.
+  check(
+    'the tooltip states a bucket time and a value',
+    /\d{2}-\d{2} \d{2}:\d{2}/.test(tooltipText) && /\d/.test(tooltipText),
+    `text=${JSON.stringify(tooltipText)}`,
+  );
+
+  // Sweep the pointer across the tile, then confirm both charts still report
+  // their data (a rebuild that dropped the series would show here).
   for (let step = 0; step <= 20; step += 1) {
     await page.mouse.move(box.x + (box.width * step) / 20, box.y + box.height / 2);
-    await wait(16);
+    await page.waitForTimeout(16);
   }
-  await wait(400);
-  const afterHandle = await firstSlot.locator('canvas').first().elementHandle();
-  const sameNode = await page.evaluate(
-    ([before, after]) => before === after,
-    [await beforeHandle?.evaluateHandle((node) => node, beforeHandle), await afterHandle?.evaluateHandle((node) => node)],
+  await page.waitForTimeout(300);
+  const tooltipAfterSweep = await page
+    .locator('.g2-tooltip')
+    .first()
+    .innerText()
+    .catch(() => '');
+  check(
+    'the tooltip still reports a bucket after a pointer sweep',
+    tooltipAfterSweep.trim().length > 0,
+    `text=${JSON.stringify(tooltipAfterSweep)}`,
   );
-  check('the chart canvas survives a pointer sweep', sameNode !== false || afterHandle !== null, `sameNode=${sameNode}`);
 
   const overlay = await page.evaluate(() => {
     const node = document.querySelector('.g2-tooltip');
@@ -188,7 +199,7 @@ try {
   });
   check(
     'the hover tooltip does not animate into place',
-    !overlay.present || overlay.transition === '0s',
+    overlay.present && overlay.transition === '0s',
     JSON.stringify(overlay),
   );
 

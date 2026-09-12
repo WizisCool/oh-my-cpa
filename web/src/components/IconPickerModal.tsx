@@ -6,18 +6,19 @@ import { LobeIcon } from './LobeIcon';
 import { useT } from '../i18n';
 
 /**
- * ANTD_CONTAINER_ZINDEX_STEP mirrors the 100-level step antd reserves per
- * container (Drawer, Modal, Popover) above `zIndexPopupBase`.
+ * ANTD_CONTAINER_ZINDEX_STEP is the step antd 6 reserves per container level
+ * (Drawer, Modal, Popover) above `zIndexPopupBase`; see
+ * `antd/es/_util/hooks/useZIndex.js`, where CONTAINER_OFFSET is 100.
  *
  * The picker is opened from inside the provider Drawer, but it is rendered as a
- * sibling of that Drawer rather than a child of it, so it cannot inherit the
- * Drawer's stacking context and the two end up competing for the same base
- * level. Relying on antd's implicit per-mount ordering made the picker an
- * overlay that could land behind the Drawer; this states the intended order.
+ * sibling of that Drawer rather than as a child of it, so it cannot inherit the
+ * Drawer's stacking context and the two compete for the same base level. Relying
+ * on antd's implicit per-mount ordering made the picker an overlay that could
+ * land behind the Drawer; this states the intended order explicitly.
  *
- * Two steps is not arbitrary: the picker must clear one container (the Drawer)
- * and its mask, and one more step above the base guarantees that for any step
- * antd chooses rather than tracking the exact value.
+ * Two steps clears one container (the Drawer) plus its mask. The base comes from
+ * the live theme token rather than the literal 1000, so a themed base is
+ * respected.
  */
 const ANTD_CONTAINER_ZINDEX_STEP = 100;
 
