@@ -1273,15 +1273,25 @@ try {
   await sourceSegment.first().waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
   if (await sourceSegment.isVisible()) {
     await sourceSegment.click();
-    const reauthModal = page.locator('.ant-modal').filter({ hasText: /源码|Source/ });
-    await reauthModal.waitFor({ state: 'visible', timeout: 5000 });
-    check('config source switch prompts for reauthentication', await reauthModal.isVisible());
-    await reauthModal.locator('input[type="password"]').fill(FAKE_CPA_MANAGEMENT_KEY);
-    await reauthModal.locator('.ant-modal-footer button.ant-btn-primary').click();
-    await reauthModal.waitFor({ state: 'hidden', timeout: 10000 });
+    // The source view is opened by the session alone: the step-up re-authentication
+    // prompt was removed as a deliberate policy change (the reveal grant
+    // re-checked the same management key the session already carries). So the
+    // observable contract is the opposite of what it used to be - the source
+    // editor opens directly, with no modal in the way.
     const sourceToolbar = page.locator('.config-source-toolbar');
     await sourceToolbar.waitFor({ state: 'visible', timeout: 10000 });
-    check('source mode unlocks after valid reauthentication', await sourceToolbar.isVisible());
+    check('source mode opens without re-authentication', await sourceToolbar.isVisible());
+    check(
+      'no re-authentication modal is raised for the source view',
+      (await page.locator('.ant-modal').filter({ hasText: /源码|Source/ }).count()) === 0,
+    );
+    // Return to the visual view so the rest of the audit starts from the same
+    // place it did before this section ran.
+    const visualSegment = page.locator('.ant-segmented-item').filter({ hasText: /可视化|Visual/ });
+    if (await visualSegment.first().isVisible().catch(() => false)) {
+      await visualSegment.first().click();
+      await page.locator('.config-workbench').waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+    }
   }
   await auditPage(page, responseBodies, '/plugins', '.plugins-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
   await auditPage(page, responseBodies, '/plugin-store', '.plugin-store-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
