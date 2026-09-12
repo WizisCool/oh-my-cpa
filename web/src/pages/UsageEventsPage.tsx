@@ -44,6 +44,7 @@ import {
   indexCredentialFiles,
   resolveCredential,
   EVENT_AUTO_REFRESH_MS,
+  EVENT_SEARCH_DEBOUNCE_MS,
   EVENT_FILTER_KEYS,
   activeFilterCount,
   eventWindow,
@@ -171,7 +172,7 @@ function useDebouncedSearch(
         timerRef.current = null;
         if (resetRef.current !== scheduledUnder) return;
         commitRef.current(next.trim());
-      }, 350);
+      }, EVENT_SEARCH_DEBOUNCE_MS);
     },
     [cancelPending, committed],
   );

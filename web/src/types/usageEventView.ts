@@ -44,6 +44,18 @@ export const EVENT_PRESETS: Record<string, number> = {
 export const EVENT_AUTO_REFRESH_MS = 10_000;
 
 /**
+ * How long the request console's search box waits after the last keystroke
+ * before committing to the URL.
+ *
+ * Exported rather than inlined because the browser acceptance suite has to time
+ * itself against this deadline: it asserts both that a keystroke lands once the
+ * debounce elapses and that a keystroke queued when a clear-all arrives never
+ * lands at all. A private copy in the test would silently keep asserting against
+ * the old cadence after a change here.
+ */
+export const EVENT_SEARCH_DEBOUNCE_MS = 350;
+
+/**
  * EVENT_FILTER_KEYS is every parameter the request console's filter panel owns,
  * in the order the panel presents them. Anything outside this list is left
  * alone by reset, so a drill-down's unrelated parameters survive.
