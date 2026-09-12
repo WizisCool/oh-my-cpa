@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import { resolveApiTarget } from '../scripts/api-target.mjs';
+
+const repoRoot = path.resolve(__dirname, '..');
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => ({
@@ -29,7 +32,9 @@ export default defineConfig(({ command }) => ({
     strictPort: true,
     proxy: {
       '/omc/api': {
-        target: 'http://127.0.0.1:8080',
+        // Follow OMCPA_LISTEN_ADDR so a taken default port only needs a .env
+        // change; OMCPA_API_TARGET overrides the resolved address.
+        target: resolveApiTarget(repoRoot),
         // Keep the browser's Host so the backend's same-origin check still
         // matches the Origin header on login and other mutating requests.
         changeOrigin: false,
