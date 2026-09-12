@@ -19,16 +19,6 @@
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
-/* States the list order next to the window. Without it a record whose request
-   started minutes ago sitting above a newer one reads as a sorting bug rather
-   than as "this is what was recorded last". */
-.request-order-hint {
-  margin-left: 6px;
-  padding-left: 6px;
-  border-left: 1px solid var(--border-soft);
-  color: var(--meta);
-  cursor: help;
-}
 .request-actions {
   display: flex;
   align-items: center;
@@ -65,6 +55,23 @@
 }
 .request-filters > .req-result-segmented {
   flex-shrink: 0;
+}
+/* The status marker in the result filter. It borrows the Result column's pill and
+   bullet so "success" and "failed" are read the same way in the filter as in the
+   rows it filters; the dot is sized down because the segment is small. */
+.req-result-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.req-result-option .req-result-pill {
+  padding: 0;
+  background: none;
+  gap: 0;
+}
+.req-result-option .req-result-bullet {
+  width: 6px;
+  height: 6px;
 }
 .request-filters > .req-time-button {
   flex: 1 1 190px;
@@ -142,11 +149,6 @@
 .req-auto-refresh-label {
   font-size: 12px;
   color: var(--fg-2);
-}
-.req-auto-refresh-cadence {
-  font-size: 11px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
 }
 .req-live-pulse-dot {
   width: 7px;
@@ -479,32 +481,27 @@
   color: var(--accent);
 }
 
-.req-th-time,
-.req-th-result,
-.req-th-provider,
-.req-th-model,
-.req-th-key,
-.req-th-ua {
+/* Alignment is driven by the shared column definitions (requestColumns.ts), not
+   by a selector list restated per column: the header and the body cell carry the
+   same is-align-* class, so they cannot disagree. */
+.req-th.is-align-left {
   justify-content: flex-start;
   text-align: left;
 }
 
-.req-th-latency,
-.req-th-tps,
-.req-th-tokens,
-.req-th-cost,
-.req-th-cache {
+.req-th.is-align-right {
   justify-content: flex-end;
   text-align: right;
 }
 
-.req-th-latency .req-th-label,
-.req-th-tps .req-th-label,
-.req-th-tokens .req-th-label,
-.req-th-cost .req-th-label,
-.req-th-cache .req-th-label {
+.req-th.is-align-right .req-th-label {
   text-align: right;
   width: 100%;
+}
+
+.req-th.is-align-center {
+  justify-content: center;
+  text-align: center;
 }
 
 .request-row {
@@ -559,6 +556,25 @@
   justify-content: center;
 }
 
+/* Body cells take their horizontal alignment from the same column definition as
+   the header, so a numeric column's header and values always agree. Vertical
+   alignment and gaps stay with the per-column rules below, which carry
+   column-specific layout. */
+.req-col.is-align-left {
+  align-items: flex-start;
+  text-align: left;
+}
+
+.req-col.is-align-right {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.req-col.is-align-center {
+  align-items: center;
+  text-align: center;
+}
+
 /* Column 1: Time */
 .req-col-time {
   gap: 3px;
@@ -608,7 +624,6 @@
 
 /* Column 2: Result (success/failed pill) */
 .req-col-result {
-  align-items: flex-start;
   justify-content: center;
 }
 .req-result-pill {
@@ -754,8 +769,6 @@
 
 /* Column 5: Latency */
 .req-col-latency {
-  align-items: flex-end;
-  text-align: right;
   gap: 2px;
 }
 .req-latency-val {
@@ -775,8 +788,6 @@
 
 /* Column 6: TPS (Generation Speed) */
 .req-col-tps {
-  align-items: flex-end;
-  text-align: right;
   justify-content: center;
 }
 .req-tps-val {
@@ -795,8 +806,6 @@
 
 /* Column 6: Tokens */
 .req-col-tokens {
-  align-items: flex-end;
-  text-align: right;
   gap: 2px;
 }
 .req-tokens-total {
@@ -842,8 +851,6 @@
 /* Column 8: Cost — locked to the request-time price; an unpriced model stays
    "—" because zero would fake free usage. */
 .req-col-cost {
-  align-items: flex-end;
-  text-align: right;
   gap: 2px;
 }
 .req-cost-val {
@@ -861,8 +868,6 @@
    weight; the mix happens here in OKLCH so the hue sweep stays even, and every
    value derives from tokens (docs/design.md §2). */
 .req-col-cache {
-  align-items: flex-end;
-  text-align: right;
   justify-content: center;
 }
 .req-cache-hit {
@@ -909,7 +914,6 @@
 
 /* Column 9: Key (caller key / group label) */
 .req-col-key {
-  align-items: flex-start;
   gap: 3px;
 }
 .req-key-val {
@@ -925,7 +929,7 @@
 
 /* Column 10: UA (ingestion-minimized client product label) */
 .req-col-ua {
-  align-items: flex-start;
+  gap: 2px;
 }
 .req-ua-val {
   font-size: 11px;

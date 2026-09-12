@@ -135,6 +135,9 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
   },
 ] as const;
 
+/** ChevronTrack is the fixed trailing action track, outside the data columns. */
+export const CHEVRON_COLUMN_ID = 'chevron' as const;
+
 export const CHEVRON_TRACK_WIDTH = 14;
 
 export const USAGE_EVENTS_COLUMNS_PREFERENCE = 'usage_events_columns';
@@ -144,6 +147,19 @@ export type RequestColumnWidths = Partial<Record<RequestColumnId, number>>;
 export const COLUMN_MAP = new Map<RequestColumnId, RequestColumnDefinition>(
   REQUEST_COLUMNS.map((c) => [c.id, c]),
 );
+
+/**
+ * requestColumnAlignClass returns the alignment class for one column.
+ *
+ * The header and the body cell both read it from the column definition, so the
+ * two can never drift apart: alignment used to be restated by hand in a header
+ * selector list and again in a cell selector list, and `align` was written but
+ * never used. Text-bearing columns are left-aligned and numeric columns are
+ * right-aligned, which is the rule the definitions already encode.
+ */
+export function requestColumnAlignClass(id: RequestColumnId): string {
+  return `is-align-${COLUMN_MAP.get(id)?.align ?? 'left'}`;
+}
 
 /**
  * parseUsageEventsColumns sanitizes column width overrides from preferences or input.

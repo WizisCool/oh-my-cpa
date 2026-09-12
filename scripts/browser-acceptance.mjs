@@ -278,7 +278,10 @@ try {
   // Anchored so the assertion above cannot pass vacuously on an empty list.
   check('the slow request really is long', /9\.00 s|m /.test(slowRowText) || Number.parseFloat(slowRowText) > 60, `slow=${slowRowText}`);
 
-  check('the order is stated next to the window', await page.locator('.request-order-hint').first().isVisible());
+  // The list order is still "newest recorded first"; the label that used to state
+  // it next to the window was removed as low-value chrome, so the absence is what
+  // is pinned now.
+  check('the window states no ordering label', (await page.locator('.request-order-hint').count()) === 0);
   // The summary strip is gone, so the request page states no verdict of its own.
   check('no KPI summary strip remains', (await page.locator('.request-summary, .req-kpi-item').count()) === 0);
   check('the removed strip left no dead column of totals', (await page.locator('.req-kpi-val').count()) === 0);
@@ -518,8 +521,8 @@ try {
   await autoRefreshSwitch.click();
   check('auto-refresh turns on', await autoRefreshSwitch.isChecked());
   check(
-    'the enabled switch states its cadence',
-    /10\s*秒|every 10s/i.test(await page.locator('.req-auto-refresh-cadence').innerText()),
+    'the enabled switch states no cadence label',
+    (await page.locator('.req-auto-refresh-cadence').count()) === 0,
   );
 
   const scroller = await listScroller();
@@ -889,7 +892,6 @@ try {
   // Switching the poll off again keeps the rest of the audit deterministic.
   await autoRefreshSwitch.click();
   check('auto-refresh turns off again', !(await autoRefreshSwitch.isChecked()));
-  check('the cadence label is hidden while the poll is off', (await page.locator('.req-auto-refresh-cadence').count()) === 0);
 
   // A manual refresh is the other event that re-reads the facets: the operator
   // asked for current data, and stale dropdown counts are on screen too.

@@ -20,7 +20,6 @@ import {
   FilterOutlined,
   FullscreenExitOutlined,
   FullscreenOutlined,
-  InfoCircleOutlined,
   LeftOutlined,
   ReloadOutlined,
   RightOutlined,
@@ -77,6 +76,7 @@ import {
   parseUsageEventsColumns,
   buildGridTemplateColumns,
   computeGridMinWidth,
+  requestColumnAlignClass,
 } from '../components/usage/requestColumns';
 import {
   PROVIDER_ICONS_PREFERENCE,
@@ -1131,9 +1131,6 @@ export const UsageEventsPage: React.FC = () => {
             <h1 className="terminal-title">{t('events.title')}</h1>
             <p className="request-window">
               {dayjs(activeWindow.from).format('MM-DD HH:mm')} — {dayjs(activeWindow.to).format('MM-DD HH:mm')}
-              <Tooltip title={t('events.order_recorded_hint')}>
-                <span className="request-order-hint">{t('events.order_recorded')}</span>
-              </Tooltip>
             </p>
           </div>
           <div className="request-actions">
@@ -1150,11 +1147,6 @@ export const UsageEventsPage: React.FC = () => {
                 onChange={toggleAutoRefresh}
                 aria-label={t('events.auto_refresh')}
               />
-              {isAutoRefresh && (
-                <span className="req-auto-refresh-cadence">
-                  {t('events.auto_refresh_sec', { s: EVENT_AUTO_REFRESH_MS / 1000 })}
-                </span>
-              )}
             </label>
             <Popover
               trigger="click"
@@ -1188,7 +1180,7 @@ export const UsageEventsPage: React.FC = () => {
                 </div>
               }
             >
-              <Button type="text" icon={<InfoCircleOutlined />}>
+              <Button type="text">
                 <Badge status={ingestTone} text={t(ingestLabel)} />
               </Button>
             </Popover>
@@ -1264,9 +1256,25 @@ export const UsageEventsPage: React.FC = () => {
                 const next = value as UsageResultFilter;
                 commit(committedParams, { result: next });
               }}
-              options={['all', 'success', 'failed'].map((value) => ({
+              options={(['all', 'success', 'failed'] as const).map((value) => ({
                 value,
-                label: t(`events.filter_${value}`),
+                // The marker reuses the Result column's own pill vocabulary, so
+                // "success" and "failed" mean the same thing in the filter and
+                // in the list it filters. 'all' is deliberately neutral: it is
+                // the absence of a verdict, not a third verdict.
+                label: (
+                  <span className="req-result-option">
+                    {value !== 'all' && (
+                      <span
+                        className={`req-result-pill ${value === 'failed' ? 'is-failed' : 'is-success'}`}
+                        aria-hidden="true"
+                      >
+                        <i className="req-result-bullet" />
+                      </span>
+                    )}
+                    {t(`events.filter_${value}`)}
+                  </span>
+                ),
               }))}
             />
             {facetMulti('model', 'events.col_model', facets.data?.facets.models)}
@@ -1353,7 +1361,10 @@ export const UsageEventsPage: React.FC = () => {
         <div className="request-table-scroll-area" onWheel={handleWheel}>
           <div className="request-table-header">
             {REQUEST_COLUMNS.map((col) => (
-              <div key={col.id} className={`req-th req-th-${col.id}`}>
+              <div
+                key={col.id}
+                className={`req-th req-th-${col.id} ${requestColumnAlignClass(col.id)}`}
+              >
                 <span className="req-th-label">{t(col.labelKey)}</span>
                 {col.resizable && (
                   <span
