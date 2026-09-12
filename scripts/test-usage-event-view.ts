@@ -30,6 +30,8 @@ import {
   SUCCESS_VERDICT_MIN_FAILURES,
   SUCCESS_VERDICT_MIN_SAMPLE,
   resolveProviderInfo,
+  createProviderNameResolver,
+  providerFacetLabel,
   eventTokensPerSecond,
 } from '../web/src/types/usageEventView.ts';
 import {
@@ -832,6 +834,55 @@ assert.equal(fallbackOpencodeResolved.title, 'Opencode');
 assert.equal(fallbackOpencodeResolved.subtitle, undefined);
 
 console.log('PASS provider info resolution: OAuth account identity, configured provider custom name/icon, fallback');
+
+// Provider-key to configured-name resolution for the request filter.
+//
+// The reported value is CPA's stored provider key, so the label has to come from
+// the operator's configuration. Guessing it from the key (stripping a prefix,
+// capitalising) would print a name the operator never chose and would disagree
+// with the providers page for the same line.
+const nameResolver = createProviderNameResolver([
+  { id: 'openai-compat-0', name: 'CommandCode GOAT', family: 'openai-compatibility', auth_index: 'shared-index' },
+  { id: 'custom-deepseek', name: 'DeepSeek 专线', family: 'openai-compatibility' },
+  { id: 'claude-1', name: 'Claude relay', family: 'claude' },
+]);
+// Exact id match wins even though the key itself carries an operator-style name.
+assert.equal(nameResolver('openai-compat-0'), 'CommandCode GOAT');
+assert.equal(nameResolver('custom-deepseek'), 'DeepSeek 专线');
+assert.equal(nameResolver('claude-1'), 'Claude relay');
+// The key CPA stores for a configured OpenAI-compatible line is its display name
+// behind a prefix, which resolves once the prefix is stripped.
+assert.equal(nameResolver('openai-compatible-commandcode goat'), 'CommandCode GOAT');
+assert.equal(nameResolver('openai-compatible-deepseek 专线'), 'DeepSeek 专线');
+// Case never decides identity, and surrounding whitespace is not a difference.
+assert.equal(nameResolver('OPENAI-COMPAT-0'), 'CommandCode GOAT');
+assert.equal(nameResolver('  openai-compat-0  '), 'CommandCode GOAT');
+// A deleted or renamed provider keeps the raw key: still true, never fabricated.
+assert.equal(nameResolver('openai-compatible-vanished-line'), 'openai-compatible-vanished-line');
+assert.equal(nameResolver('codex'), 'codex');
+assert.equal(nameResolver(''), '');
+assert.equal(nameResolver(null), '');
+assert.equal(nameResolver(undefined), '');
+// An ambiguous key is reported raw rather than resolved to an arbitrary provider.
+// An exact name still wins outright: the stripped remainder equals one
+// provider's name, and the other name is not contained in it.
+const nearMiss = createProviderNameResolver([
+  { id: 'a', name: 'Relay' },
+  { id: 'b', name: 'Relay Two' },
+]);
+assert.equal(nearMiss('openai-compatible-relay'), 'Relay');
+// A key two providers could both answer to stays raw rather than picking one:
+// neither name equals the remainder, and both are contained in it.
+const ambiguousResolver = createProviderNameResolver([
+  { id: 'a', name: 'Relay' },
+  { id: 'b', name: 'One' },
+]);
+assert.equal(ambiguousResolver('openai-compatible-relay one'), 'openai-compatible-relay one');
+// An empty configuration resolves nothing and never throws.
+const emptyResolver = createProviderNameResolver([]);
+assert.equal(emptyResolver('openai-compatible-anything'), 'openai-compatible-anything');
+assert.equal(providerFacetLabel('CommandCode GOAT', 42), 'CommandCode GOAT (42)');
+console.log('PASS provider name resolution: configured name, prefix strip, exact id, raw-key fallback, ambiguity');
 
 // Tokens Per Second (TPS) tests
 assert.equal(eventTokensPerSecond(undefined).formatted, '—');

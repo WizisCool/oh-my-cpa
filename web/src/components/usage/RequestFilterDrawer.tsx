@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button, Drawer, Input, InputNumber, Segmented, Select, Tooltip } from 'antd';
 import type { UsageCostFilter, UsageFacetValue, UsageFacets, UsageResultFilter } from '../../types/usageEvents';
-import { usageFacetLabel } from '../../types/usageEventView';
+import { providerFacetLabel, usageFacetLabel } from '../../types/usageEventView';
 import type { EventFilterKey } from '../../types/usageEventView';
 import { parseUsageRangeBound } from '../../types/usageEvents';
 import type { RangeFieldKey, RangeBound } from '../../types/usageEventFilters';
@@ -82,6 +82,9 @@ export interface RequestFilterDrawerProps {
   facets?: UsageFacets;
   facetsFailed: boolean;
   credentialName: (authIndex: string) => string;
+  /** Labels the provider dimension with the operator's name for that line; the
+   *  stored value stays CPA's key, which is what the filter is applied on. */
+  providerName: (providerKey: string) => string;
   /** Called once with the validated draft when the operator applies it. */
   onApply: (view: UsageEventsView) => void;
 }
@@ -101,6 +104,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
   facets,
   facetsFailed,
   credentialName,
+  providerName,
   onApply,
 }) => {
   const t = useT();
@@ -155,7 +159,9 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
       label:
         spec.key === 'auth_index'
           ? `${credentialName(entry.value)} · ${usageFacetLabel(entry)}`
-          : usageFacetLabel(entry),
+          : spec.key === 'provider'
+            ? providerFacetLabel(providerName(entry.value), entry.requests)
+            : usageFacetLabel(entry),
     }));
     const known = new Set(options.map((option) => option.value));
     for (const value of draft.multi[spec.key] ?? []) {
@@ -163,7 +169,12 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
       known.add(value);
       options.push({
         value,
-        label: spec.key === 'auth_index' ? `${credentialName(value)} · ${value}` : value,
+        label:
+          spec.key === 'auth_index'
+            ? `${credentialName(value)} · ${value}`
+            : spec.key === 'provider'
+              ? providerName(value)
+              : value,
       });
     }
     return options;

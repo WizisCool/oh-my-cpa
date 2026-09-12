@@ -681,6 +681,77 @@ export interface ProviderLookupEntry {
   base_url?: string;
 }
 
+/**
+ * PROVIDER_KEY_PREFIX is the namespace CPA puts in front of a provider that was
+ * configured as OpenAI-compatible. Stripping it reveals the operator's own name
+ * for the line, which is what a filter label has to say.
+ */
+export const PROVIDER_KEY_PREFIX = 'openai-compatible-';
+
+/**
+ * createProviderNameResolver maps one stored provider key to the name the
+ * operator gave that provider.
+ *
+ * The stored value is CPA's own key ("openai-compatible-commandcode goat"), so it
+ * has to be resolved against the provider list rather than prettified: guessing a
+ * display name from the key would invent a label the operator never wrote, and
+ * would disagree with the provider page for the same line.
+ *
+ * Matching is deliberately conservative. An exact id or name wins; failing that,
+ * the OpenAI-compatible prefix is stripped and the remainder is matched the same
+ * way; failing that, a single configured provider whose name appears inside the
+ * key wins. Anything unresolved - a deleted provider, a renamed one, a key two
+ * providers could answer to - falls back to the raw key, which is still the true
+ * identity of the record and never a fabrication.
+ *
+ * auth_index is intentionally not consulted even though both sides carry it: a
+ * group of keys can share one auth index, so it cannot name a single provider.
+ */
+export function createProviderNameResolver(
+  configured: readonly ProviderLookupEntry[] = [],
+): (providerKey: string | null | undefined) => string {
+  const byID = new Map<string, string>();
+  const byName = new Map<string, string>();
+  const entries: Array<{ needle: string; name: string }> = [];
+  for (const provider of configured) {
+    const id = provider.id?.trim().toLowerCase();
+    const name = provider.name?.trim();
+    if (!name) continue;
+    if (id && !byID.has(id)) byID.set(id, name);
+    const loweredName = name.toLowerCase();
+    if (!byName.has(loweredName)) byName.set(loweredName, name);
+    entries.push({ needle: loweredName, name });
+  }
+
+  const match = (candidate: string): string | undefined => {
+    const lowered = candidate.toLowerCase();
+    const exact = byID.get(lowered) ?? byName.get(lowered);
+    if (exact) return exact;
+    if (lowered.startsWith(PROVIDER_KEY_PREFIX)) {
+      const remainder = lowered.slice(PROVIDER_KEY_PREFIX.length);
+      const stripped = byID.get(remainder) ?? byName.get(remainder);
+      if (stripped) return stripped;
+      const contained = entries.filter((entry) => remainder.includes(entry.needle));
+      // Two candidates mean the key does not identify one line, so the raw key is
+      // reported rather than an arbitrary pick.
+      if (contained.length === 1) return contained[0].name;
+    }
+    return undefined;
+  };
+
+  return (providerKey) => {
+    const raw = providerKey?.trim();
+    if (!raw) return '';
+    return match(raw) ?? raw;
+  };
+}
+
+/** One provider-filter dropdown label: the operator's name for the line, plus
+ *  the window's request count that makes the option worth reading. */
+export function providerFacetLabel(name: string, requests: number): string {
+  return `${name} (${requests})`;
+}
+
 export interface ResolvedProviderInfo {
   isOAuth: boolean;
   iconId: string;

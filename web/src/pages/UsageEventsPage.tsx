@@ -60,6 +60,8 @@ import {
   parseUsageEventsView,
   hasExplicitEventQuery,
   usageFacetLabel,
+  providerFacetLabel,
+  createProviderNameResolver,
   mergeFacetOptions,
   type EventFilterKey,
   type UsageEventsViewPreference,
@@ -912,6 +914,12 @@ export const UsageEventsPage: React.FC = () => {
     staleTime: 60_000,
   });
   const configuredProviders = providersQuery.data?.providers;
+  // Resolves CPA's stored provider key to the name the operator configured, so
+  // the filter names a line the same way the providers page does.
+  const providerName = React.useMemo(
+    () => createProviderNameResolver(configuredProviders),
+    [configuredProviders],
+  );
 
   /**
    * A chip names the dimension and the value it holds, in the operator's words.
@@ -956,6 +964,9 @@ export const UsageEventsPage: React.FC = () => {
         const facet = facets.data?.facets.api_group_keys.find((entry) => entry.value === raw);
         shown = facet?.mask?.trim() || raw;
       }
+      if (key === 'provider') {
+        shown = providerName(raw);
+      }
       if (key === 'cost') {
         shown = t(raw === 'priced' ? 'events.cost_priced' : 'events.cost_unpriced_short');
       }
@@ -965,7 +976,7 @@ export const UsageEventsPage: React.FC = () => {
       }
       return { label: t(chipLabels[key], { val: shown }) };
     },
-    [credentials, facets.data, t],
+    [credentials, facets.data, t, providerName],
   );
 
   const activeFilters = EVENT_FILTER_KEYS.filter((key) => (committedParams[key]?.length ?? 0) > 0);
@@ -1009,8 +1020,20 @@ export const UsageEventsPage: React.FC = () => {
         maxTagCount="responsive"
         showSearch={{ optionFilterProp: 'label' }}
         onChange={(next) => setFilter(key, next as string[])}
-        options={mergeFacetOptions(values, selected, usageFacetLabel, (value) =>
-          key === 'auth_index' ? `${credentials.get(value)?.name || value} · ${value}` : value,
+        options={mergeFacetOptions(
+          values,
+          selected,
+          // The provider dimension is stored as CPA's key, so it is labelled with
+          // the operator's own name for that line; the value stays the key.
+          key === 'provider'
+            ? (entry) => providerFacetLabel(providerName(entry.value), entry.requests)
+            : usageFacetLabel,
+          (value) =>
+            key === 'provider'
+              ? providerName(value)
+              : key === 'auth_index'
+                ? `${credentials.get(value)?.name || value} · ${value}`
+                : value,
         )}
         notFoundContent={facets.isError ? t('events.facets_error') : undefined}
       />
@@ -1300,6 +1323,7 @@ export const UsageEventsPage: React.FC = () => {
           facets={facets.data?.facets}
           facetsFailed={facets.isError}
           credentialName={(authIndex) => credentials.get(authIndex)?.name ?? authIndex}
+          providerName={providerName}
           onApply={(next) => {
             // Apply replaces every filter dimension, so a keystroke queued in the
             // search box must not land on top of the applied view.
