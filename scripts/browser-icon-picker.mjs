@@ -50,10 +50,6 @@ const provider = {
   models: ['deepseek-v4.1-flash'],
 };
 
-const json = (route, body) =>
-  route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
-void json;
-
 try {
   server = spawn(
     process.execPath,

@@ -1016,6 +1016,10 @@ func TestUsageEndpointsRequireSession(t *testing.T) {
 		"/omc/api/v1/usage/facets",
 		"/omc/api/v1/usage/ingest-status",
 		"/omc/api/v1/usage/events/1",
+		// Reading the raw configuration source is the most sensitive config action
+		// and no longer asks for the management key a second time, so the session
+		// check is the boundary that has to hold.
+		"/omc/api/v1/management/config/source",
 	} {
 		response, err := http.Get(baseURL + path)
 		if err != nil {

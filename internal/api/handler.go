@@ -42,11 +42,9 @@ type Handler struct {
 	// pricing serves model prices and the models.dev sync; nil until SetPricing.
 	pricing PricingManager
 
-	configMu     sync.Mutex
-	grantMu      sync.RWMutex
-	revealGrants map[string]time.Time
-	startTime    time.Time
-	limiter      *loginLimiter
+	configMu  sync.Mutex
+	startTime time.Time
+	limiter   *loginLimiter
 }
 
 func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypto.Cipher, logger *slog.Logger, authManager *auth.Manager) *Handler {
@@ -57,7 +55,6 @@ func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypt
 		discoverer:   discovery.NewDiscoverer(cipher),
 		logger:       logger,
 		auth:         authManager,
-		revealGrants: make(map[string]time.Time),
 		startTime:    time.Now(),
 		limiter:      newLoginLimiter(),
 	}
@@ -116,7 +113,6 @@ func (h *Handler) Router() http.Handler {
 				v1.Get("/management/auth-files/download", h.downloadManagementAuthFile)
 				v1.Get("/management/capabilities/{key}", h.managementCapabilityProbe)
 				v1.Get("/management/config", h.managementConfigGet)
-				v1.Post("/management/config/source/grant", h.managementConfigSourceGrant)
 				v1.Put("/management/config/source", h.managementConfigSourcePut)
 				v1.Get("/management/config/source", h.managementConfigSourceGet)
 				v1.Put("/management/config/{key}", h.managementConfigPutScalar)

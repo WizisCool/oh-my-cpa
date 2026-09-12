@@ -178,54 +178,42 @@ func TestManagementConfigSourceGetAndPut(t *testing.T) {
 	fixture := &configFixtureCPA{}
 	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
 
-	// 1. GET source without grant token must fail with 403 reauth_required
+	// 1. GET source is served to the authenticated session with no step-up grant.
+	// This is the deliberate policy: the management key is the console's only
+	// credential, so the session that reaches this route already carries the
+	// authority the removed reveal grant re-checked. The reveal is still audited
+	// fail-closed server-side.
 	resp, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/config/source")
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("expected 403 without grant token, got %d body %s", resp.StatusCode, payload)
-	}
-	var errObj map[string]any
-	_ = json.Unmarshal(payload, &errObj)
-	if errObj["code"] != "reauth_required" {
-		t.Fatalf("expected code reauth_required, got %#v", errObj)
-	}
-
-	// 2. Grant request with wrong password must return 401
-	resp, _ = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/config/source/grant", `{"password":"wrong-password"}`)
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("expected 401 for wrong grant password, got %d", resp.StatusCode)
-	}
-
-	// 3. Grant request with correct password succeeds
-	resp, payload = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/config/source/grant", `{"password":"management-secret-value"}`)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 for grant, got %d body %s", resp.StatusCode, payload)
+		t.Fatalf("expected 200 with an authenticated session, got %d body %s", resp.StatusCode, payload)
 	}
-	var grantRes struct {
-		GrantToken string `json:"grant_token"`
-	}
-	if err := json.Unmarshal(payload, &grantRes); err != nil || grantRes.GrantToken == "" {
-		t.Fatalf("invalid grant response: %s", payload)
-	}
-
-	// 4. GET source with valid grant succeeds and returns revision
-	req, _ := http.NewRequest(http.MethodGet, baseURL+"/omc/api/v1/management/config/source", nil)
-	req.Header.Set("X-Reveal-Grant", grantRes.GrantToken)
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatal(err)
+	if resp.Header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("raw source must not be cacheable, got Cache-Control %q", resp.Header.Get("Cache-Control"))
 	}
 	var srcRes struct {
 		YAML      string `json:"yaml"`
 		SizeBytes int    `json:"size_bytes"`
 		Revision  string `json:"revision"`
 	}
-	_ = json.NewDecoder(resp.Body).Decode(&srcRes)
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusOK || srcRes.Revision == "" {
-		t.Fatalf("get source with grant failed: %d, rev=%s", resp.StatusCode, srcRes.Revision)
+	if err := json.Unmarshal(payload, &srcRes); err != nil {
+		t.Fatalf("decode source response: %v", err)
+	}
+	if srcRes.Revision == "" || srcRes.YAML == "" {
+		t.Fatalf("source response missing yaml or revision: %s", payload)
 	}
 
-	// 5. PUT source without revision must return 400 missing_revision
+	// 2. The removed grant endpoint is gone rather than silently ignoring input.
+	resp, _ = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/config/source/grant", `{"password":"management-secret-value"}`)
+	if resp.StatusCode != http.StatusNotFound && resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("expected the grant endpoint to be removed, got %d", resp.StatusCode)
+	}
+
+	// 2b. The remaining boundary is the session, and it is still enforced. The raw
+	// source route is covered by the unauthenticated-routes test
+	// (TestUnauthenticatedRoutesAreRejected), which now includes it: dropping
+	// step-up auth must not have opened the source to anyone who can reach the port.
+
+	// 3. PUT source without revision must return 400 missing_revision
 	putNoRev, _ := json.Marshal(map[string]string{"yaml": `host: 0.0.0.0
 `})
 	resp, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/config/source", string(putNoRev))

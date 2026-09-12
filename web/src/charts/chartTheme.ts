@@ -182,8 +182,9 @@ export function lineOptions(mode: ThemeMode, tone: ChartTone = 'accent', overrid
   return {
     ...withoutAreaLine,
     // A line chart's own top-level mark is the trend, so it keeps the stroke that
-    // the area variant had to move onto a separate `line` child.
-    style: { stroke: color, lineWidth: 1.5 },
+    // the area variant had to move onto a separate `line` child. fontFamily is
+    // restated because the spread above already replaced `style` wholesale.
+    style: { stroke: color, lineWidth: 1.5, fontFamily: chartColors(mode).fontFamily },
   } as const;
 }
 

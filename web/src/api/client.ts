@@ -10,7 +10,7 @@ import { ManagementAuthFilesResponse, ManagementAuthFileMutationResponse, Manage
 import { DashboardResponse, DashboardTailResponse } from '../types/dashboard';
 import { ErrorLogFile } from '../types/logs';
 import { CapabilityProbeReport } from '../types/capability';
-import { ConfigScalarsResponse, ConfigSourceResponse, ConfigGrantResponse } from '../types/configManagement';
+import { ConfigScalarsResponse, ConfigSourceResponse } from '../types/configManagement';
 import { ClientAPIKeyItem, ProviderItem, SaveProviderPayload } from '../types/providers';
 import { OAuthProviderItem, StartOAuthResponse, OAuthStatusResponse, OAuthCallbackResponse } from '../types/oauth';
 import { QuotaOverviewResponse, CredentialQuotaDetailResponse, QuotaItem } from '../types/quota';
@@ -245,19 +245,15 @@ export const api = {
     });
   },
 
-  async getConfigSource(grantToken?: string): Promise<ConfigSourceResponse> {
-    const headers: Record<string, string> = {};
-    if (grantToken) {
-      headers['X-Reveal-Grant'] = grantToken;
-    }
-    return request<ConfigSourceResponse>('/management/config/source', { method: 'GET', headers });
-  },
-
-  async grantConfigSourceReveal(password: string): Promise<ConfigGrantResponse> {
-    return request<ConfigGrantResponse>('/management/config/source/grant', {
-      method: 'POST',
-      body: JSON.stringify({ password }),
-    });
+  /**
+   * getConfigSource reads the raw config.yaml.
+   *
+   * No step-up grant is sent: the session that reaches this call already has the
+   * authority the old reveal grant re-checked (see managementConfigSourceGet),
+   * and the reveal is still audited server-side.
+   */
+  async getConfigSource(): Promise<ConfigSourceResponse> {
+    return request<ConfigSourceResponse>('/management/config/source', { method: 'GET' });
   },
 
   async updateConfigSource(yaml: string, revision?: string): Promise<{ status: string; size_bytes: number; revision: string }> {

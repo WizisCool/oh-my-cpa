@@ -3,15 +3,12 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
-	"fmt"
-	"time"
-
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/configyaml"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
@@ -23,52 +20,6 @@ type configPutScalarRequest struct {
 type configSourcePutRequest struct {
 	YAML     string `json:"yaml"`
 	Revision string `json:"revision,omitempty"`
-}
-
-type configGrantRequest struct {
-	Password string `json:"password"`
-}
-
-func (h *Handler) managementConfigSourceGrant(writer http.ResponseWriter, request *http.Request) {
-	writer.Header().Set("Cache-Control", "no-store")
-	if h.auth == nil {
-		writeError(writer, http.StatusServiceUnavailable, "authentication manager is unavailable")
-		return
-	}
-	var payload configGrantRequest
-	decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 8*1024))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&payload); err != nil || strings.TrimSpace(payload.Password) == "" {
-		writeError(writer, http.StatusBadRequest, "management key is required")
-		return
-	}
-	if !h.auth.KeyMatches(payload.Password) {
-		writeError(writer, http.StatusUnauthorized, "invalid CPA management key")
-		return
-	}
-	token := uuid.NewString()
-	expiresAt := time.Now().Add(5 * time.Minute)
-	h.grantMu.Lock()
-	h.revealGrants[token] = expiresAt
-	h.grantMu.Unlock()
-
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"grant_token":        token,
-		"expires_in_seconds": 300,
-	})
-}
-
-func (h *Handler) isGrantValid(token string) bool {
-	if strings.TrimSpace(token) == "" {
-		return false
-	}
-	h.grantMu.RLock()
-	expiresAt, exists := h.revealGrants[token]
-	h.grantMu.RUnlock()
-	if !exists || time.Now().After(expiresAt) {
-		return false
-	}
-	return true
 }
 
 func (h *Handler) managementConfigGet(writer http.ResponseWriter, request *http.Request) {
@@ -211,16 +162,24 @@ func validateScalarValue(key string, value any) (any, error) {
 	}
 }
 
+// managementConfigSourceGet returns the raw config.yaml.
+//
+// There is no step-up authentication here, and that is deliberate. This used to
+// require a short-lived grant obtained by re-entering the CPA management key,
+// which meant an operator who had already authenticated to reach this console had
+// to prove the same secret again to read the file they had just been editing
+// through the visual editor. The management key is the console's only credential,
+// so the session that satisfies this handler already carries exactly the authority
+// the grant was re-checking; the second prompt added a step without adding a
+// boundary, and the PUT below it never required a grant at all.
+//
+// Reading the raw source is still the most sensitive configuration action, so what
+// remains is the part that carries real weight: the route sits behind the same
+// authenticated session as every other /management call, the response is marked
+// no-store, and the reveal is audited fail-closed - if the audit record cannot be
+// written the read is refused rather than served unaudited.
 func (h *Handler) managementConfigSourceGet(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
-	grantToken := strings.TrimSpace(request.Header.Get("X-Reveal-Grant"))
-	if !h.isGrantValid(grantToken) {
-		writeJSON(writer, http.StatusForbidden, map[string]string{
-			"error": "reauthentication required to view raw configuration source",
-			"code":  "reauth_required",
-		})
-		return
-	}
 
 	client, ok := h.managementClientOrError(writer, request)
 	if !ok {

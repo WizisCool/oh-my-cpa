@@ -26,8 +26,3 @@ export interface ConfigSourceResponse {
   size_bytes: number;
   revision: string;
 }
-
-export interface ConfigGrantResponse {
-  grant_token: string;
-  expires_in_seconds: number;
-}

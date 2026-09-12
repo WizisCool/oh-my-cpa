@@ -230,12 +230,6 @@ export const ConfigPage: React.FC = () => {
     staleTime: 60000,
   });
 
-  const [grantToken, setGrantToken] = React.useState<string | null>(null);
-  const [grantExpiresAt, setGrantExpiresAt] = React.useState<number | null>(null);
-  const [isReauthModalOpen, setIsReauthModalOpen] = React.useState(false);
-  const [reauthPassword, setReauthPassword] = React.useState('');
-  const [reauthLoading, setReauthLoading] = React.useState(false);
-
   const [rawYaml, setRawYaml] = React.useState<string>('');
   const [serverYaml, setServerYaml] = React.useState<string>('');
   const [serverRevision, setServerRevision] = React.useState<string>('');
@@ -419,12 +413,14 @@ export const ConfigPage: React.FC = () => {
 
   const handleViewModeChange = async (targetMode: 'visual' | 'source') => {
     if (targetMode === 'source') {
-      if (!grantToken || (grantExpiresAt && Date.now() > grantExpiresAt)) {
-        setIsReauthModalOpen(true);
-        return;
-      }
+      // Reading the raw source no longer demands the management key again: this
+      // page is already behind the authenticated session, and the backend keeps
+      // the audit and no-store boundary. A failure here is a real read failure.
       try {
-        const src = await api.getConfigSource(grantToken);
+        const src = await api.getConfigSource();
+        // Entering the source view replaces the draft with what is on disk, so
+        // unsaved edits must be confirmed away rather than silently discarded.
+        if (isDirty && !window.confirm(t('cfg.source_switch_discard'))) return;
         setRawYaml(src.yaml);
         setServerYaml(src.yaml);
         setServerRevision(src.revision);
@@ -434,45 +430,17 @@ export const ConfigPage: React.FC = () => {
         } catch {
           // A malformed document is expected here: the previous baseline stays in place.
         }
+        setSaveError(null);
         setViewMode('source');
-      } catch {
-        setIsReauthModalOpen(true);
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.message : String(err);
+        message.error(t('cfg.source_load_failed', { msg }));
       }
     } else {
+      if (isDirty && !window.confirm(t('cfg.source_switch_discard'))) return;
       setViewMode('visual');
       queryClient.removeQueries({ queryKey: ['management-config-source'] });
       void configQuery.refetch();
-    }
-  };
-
-  const handleReauthConfirm = async () => {
-    if (!reauthPassword.trim()) {
-      message.warning(t('cfg.reveal_modal_password_placeholder'));
-      return;
-    }
-    setReauthLoading(true);
-    try {
-      const res = await api.grantConfigSourceReveal(reauthPassword);
-      setGrantToken(res.grant_token);
-      setGrantExpiresAt(Date.now() + res.expires_in_seconds * 1000);
-      setIsReauthModalOpen(false);
-      setReauthPassword('');
-      const src = await api.getConfigSource(res.grant_token);
-      setRawYaml(src.yaml);
-      setServerYaml(src.yaml);
-      setServerRevision(src.revision);
-      try {
-        docRef.current = parseDocument(src.yaml);
-        serverDocRef.current = parseDocument(src.yaml);
-      } catch {
-        // A malformed document is expected here: the previous baseline stays in place.
-      }
-      setViewMode('source');
-      message.success(t('cfg.mode_source'));
-    } catch {
-      message.error(t('cfg.reveal_grant_failed'));
-    } finally {
-      setReauthLoading(false);
     }
   };
 
@@ -1251,28 +1219,6 @@ export const ConfigPage: React.FC = () => {
         <Alert type="error" showIcon description={t('cfg.conflict_desc')} style={{ marginBottom: 16 }} />
       </Modal>
 
-      {/* ── Source Mode Reauthentication Modal ──────────────────────────── */}
-      <Modal
-        open={isReauthModalOpen}
-        title={t('cfg.reveal_modal_title')}
-        onOk={() => void handleReauthConfirm()}
-        onCancel={() => {
-          setIsReauthModalOpen(false);
-          setReauthPassword('');
-        }}
-        confirmLoading={reauthLoading}
-        okText={t('common.confirm')}
-        cancelText={t('common.cancel')}
-      >
-        <Alert type="warning" showIcon description={t('cfg.reveal_modal_desc')} style={{ marginBottom: 16 }} />
-        <Input.Password
-          placeholder={t('cfg.reveal_modal_password_placeholder')}
-          value={reauthPassword}
-          onChange={(e) => setReauthPassword(e.target.value)}
-          onPressEnter={() => void handleReauthConfirm()}
-          autoFocus
-        />
-      </Modal>
     </div>
   );
 };

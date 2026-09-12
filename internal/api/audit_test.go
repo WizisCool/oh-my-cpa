@@ -165,22 +165,10 @@ func TestAuditOperationsAreRecorded(t *testing.T) {
 		t.Fatalf("config scalar save status = %d", resp.StatusCode)
 	}
 
-	// 5. Config source reveal grant & GET
-	grantReq, _ := http.NewRequest(http.MethodPost, serverURL+"/api/v1/management/config/source/grant", bytes.NewBufferString(`{"password":"app-admin-secret"}`))
-	grantReq.Header.Set("Origin", serverURL)
-	grantReq.Header.Set("Content-Type", "application/json")
-	grantResp, err := client.Do(grantReq)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var grantData struct {
-		GrantToken string `json:"grant_token"`
-	}
-	_ = json.NewDecoder(grantResp.Body).Decode(&grantData)
-	grantResp.Body.Close()
-
+	// 5. Config source read & save. Reading the raw source no longer requires a
+	// step-up grant, so the session alone serves it (and the reveal is still
+	// audited).
 	srcGetReq, _ := http.NewRequest(http.MethodGet, serverURL+"/api/v1/management/config/source", nil)
-	srcGetReq.Header.Set("X-Reveal-Grant", grantData.GrantToken)
 	resp, err = client.Do(srcGetReq)
 	if err != nil {
 		t.Fatal(err)
@@ -305,19 +293,10 @@ func TestAuditFailureFailsClosedWithoutExposingSecrets(t *testing.T) {
 		t.Fatalf("expected 500 on audit failure, got %d", resp2.StatusCode)
 	}
 
-	// 3. Config reveal with valid grant must fail with 500 when audit write fails
-	grantReq, _ := http.NewRequest(http.MethodPost, serverURL+"/api/v1/management/config/source/grant", bytes.NewBufferString(`{"password":"app-admin-secret"}`))
-	grantReq.Header.Set("Origin", serverURL)
-	grantReq.Header.Set("Content-Type", "application/json")
-	grantResp, _ := client.Do(grantReq)
-	var grantData struct {
-		GrantToken string `json:"grant_token"`
-	}
-	_ = json.NewDecoder(grantResp.Body).Decode(&grantData)
-	grantResp.Body.Close()
-
+	// 3. Reading the raw source must fail closed when the audit write fails. This
+	// is the guarantee that made the step-up grant removable: the read is allowed
+	// by the session, but it is never served without its audit record.
 	srcGetReq, _ := http.NewRequest(http.MethodGet, serverURL+"/api/v1/management/config/source", nil)
-	srcGetReq.Header.Set("X-Reveal-Grant", grantData.GrantToken)
 	resp3, err := client.Do(srcGetReq)
 	if err != nil {
 		t.Fatal(err)

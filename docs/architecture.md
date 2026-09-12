@@ -51,7 +51,7 @@ cycle even though the `internal/usage` directory appears in both directions.
 | `internal/repository` | SQLite schema, migrations, queries, transactional invariants | `crypto`, `domain`, `pricing`, `security`, `usage` |
 | `internal/usage/ingest` | Collector loop, decode processor, rollup and retention maintenance | `repository`, `management`, `security`, `usage` |
 | `internal/quota` | Per-provider quota probes and normalization | `management` |
-| `internal/api` | Routes, DTO allowlists, secret-reveal grants, audit writes | all of the above, `internal/web` |
+| `internal/api` | Routes, DTO allowlists, audited sensitive reveals, audit writes | all of the above, `internal/web` |
 | `internal/web` | `go:embed` of the built SPA | — |
 | `internal/app` | Wiring, background loops, graceful shutdown | all of the above |
 
@@ -102,9 +102,18 @@ that hole.
    stale cookie with 401.
 4. Rotating the CPA management key changes the derived signing key, so every
    existing session fails verification without any server-side session store.
-5. Sensitive exports (raw auth file, raw config YAML, request logs) require an
-   additional short-lived reveal grant and write an `audit_events` row;
-   audit-write failure blocks the export (fail closed).
+5. Sensitive exports (raw auth file, request logs) write an `audit_events` row,
+   and audit-write failure blocks the export (fail closed).
+
+   **Raw config YAML is deliberately not behind a second credential.** It used to
+   require a short-lived reveal grant obtained by re-entering the CPA management
+   key, while `PUT /config/source` - which writes the same file - required only
+   the session. Since the management key is the console's only credential, the
+   grant re-checked exactly the authority the session already carried, so it added
+   a step without adding a boundary. Reading the raw source still sits behind
+   `requireAuthentication`, is served `no-store`, and keeps the fail-closed audit
+   write. This is a deliberate removal of step-up authentication, not a
+   frontend-only prompt change: the grant endpoint and its state are gone.
 
 The key itself is encrypted with `OMCPA_MASTER_KEY` and stored on the
 `cpa_instances` row, where `bootstrapDefaultInstance` refreshes it at every
