@@ -76,8 +76,30 @@ func PublicURL(value string) string {
 	return strings.TrimRight(parsed.String(), "/")
 }
 
+// publicPathEndpoint strips query and fragment from an absolute API path, which
+// is how CPA labels requests it serves directly rather than forwarding upstream.
+func publicPathEndpoint(value string) string {
+	if !strings.HasPrefix(value, "/") {
+		return ""
+	}
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return ""
+	}
+	parsed.RawQuery = ""
+	parsed.ForceQuery = false
+	parsed.Fragment = ""
+	parsed.RawFragment = ""
+	return parsed.String()
+}
+
+// requestLinePattern matches the endpoint label CPA publishes: the request line
+// it handled, method included ("POST /v1/chat/completions"), not a bare URL.
+var requestLinePattern = regexp.MustCompile(`^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|CONNECT|TRACE)[ \t]+(\S+)$`)
+
 // PublicEndpoint removes authority credentials and request-specific query data
-// from either a full HTTP(S) endpoint or an absolute API path.
+// from a full HTTP(S) endpoint, an absolute API path, or the method-prefixed
+// request line CPA reports.
 func PublicEndpoint(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -86,16 +108,19 @@ func PublicEndpoint(value string) string {
 	if safe := PublicURL(value); safe != "" {
 		return safe
 	}
-	if strings.HasPrefix(value, "/") {
-		parsed, err := url.Parse(value)
-		if err != nil {
-			return ""
+	if safe := publicPathEndpoint(value); safe != "" {
+		return safe
+	}
+	// CPA labels a request it proxied with the request line it served, so the
+	// path has to be salvaged from behind the method. Refusing the whole value
+	// here is what left every stored endpoint blank.
+	if match := requestLinePattern.FindStringSubmatch(value); match != nil {
+		if safe := PublicURL(match[2]); safe != "" {
+			return match[1] + " " + safe
 		}
-		parsed.RawQuery = ""
-		parsed.ForceQuery = false
-		parsed.Fragment = ""
-		parsed.RawFragment = ""
-		return parsed.String()
+		if safe := publicPathEndpoint(match[2]); safe != "" {
+			return match[1] + " " + safe
+		}
 	}
 	return ""
 }
@@ -278,6 +303,12 @@ func IsMask(value string) bool {
 }
 
 // MaskIP keeps only a coarse network prefix. Invalid input is omitted.
+//
+// Idempotent by construction, because masking runs twice on one record: the
+// ingest decoder masks the payload and the persistence boundary masks the
+// decoded event again. A CIDR is therefore reduced back to its address and
+// re-masked, which also stops a narrow prefix (a /32 is a whole address) from
+// being passed through as though it were already anonymized.
 func MaskIP(value string) *string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -286,7 +317,15 @@ func MaskIP(value string) *string {
 	if host, _, err := net.SplitHostPort(value); err == nil {
 		value = host
 	}
-	parsed := net.ParseIP(strings.Trim(value, "[]"))
+	value = strings.Trim(value, "[]")
+	if strings.Contains(value, "/") {
+		address, _, err := net.ParseCIDR(value)
+		if err != nil {
+			return nil
+		}
+		value = address.String()
+	}
+	parsed := net.ParseIP(value)
 	if parsed == nil {
 		return nil
 	}

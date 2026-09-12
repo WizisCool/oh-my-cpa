@@ -283,6 +283,16 @@ Three properties are load-bearing rather than incidental:
   deliberately excludes `client_ip`, `x_forwarded_for` and `endpoint`. `source`
   and `api_group_key` are fingerprinted at the persistence boundary, so a filter
   matches the stored fingerprint the facet offered, never the plaintext.
+- **Anonymising projections are idempotent and shape-tolerant.** A record is
+  masked twice — once by `internal/usage`, again by the persistence boundary — so
+  `security.MaskIP`/`MaskForwardedFor` accept their own output (an IPv4 `/24` or
+  an IPv6 `/64`) and re-mask it, and a narrower prefix such as `/32` is reduced to
+  the coarse network rather than passed through as already anonymised. An
+  endpoint arrives as the request line CPA handled (`POST /v1/chat/completions`),
+  not as a bare path, so `PublicEndpoint` keeps the method while still stripping
+  query, fragment and authority credentials. Both are pinned by tests that run a
+  raw payload through decode *and* insert: a unit test on either half alone cannot
+  see a second pass that destroys the first one's output.
 
 ### 6.2 Facets
 

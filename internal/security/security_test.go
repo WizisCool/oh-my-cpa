@@ -68,6 +68,114 @@ func TestPrivacyProjections(t *testing.T) {
 	}
 }
 
+// TestMaskIPIsIdempotent pins the property the ingest path depends on: a record
+// is masked twice, once by the decoder and again at the persistence boundary.
+// A mask that could not be re-masked silently erased every client address,
+// because the second pass answered nil for its own output and the column was
+// written NULL.
+func TestMaskIPIsIdempotent(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{"bare IPv4", "10.20.30.40", "10.20.30.0/24"},
+		{"already masked IPv4", "10.20.30.0/24", "10.20.30.0/24"},
+		{"IPv4 with port", "10.20.30.40:8080", "10.20.30.0/24"},
+		{"bare IPv6", "2001:db8::1234", "2001:db8::/64"},
+		{"already masked IPv6", "2001:db8::/64", "2001:db8::/64"},
+		{"IPv6 with port", "[2001:db8::1234]:443", "2001:db8::/64"},
+		// A host route is a single address, so copying the prefix through would
+		// defeat the mask entirely; it is re-masked like any other address.
+		{"IPv4 host route is narrowed", "10.20.30.40/32", "10.20.30.0/24"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			first := MaskIP(test.value)
+			if first == nil || *first != test.want {
+				t.Fatalf("MaskIP(%q) = %v, want %q", test.value, first, test.want)
+			}
+			second := MaskIP(*first)
+			if second == nil || *second != *first {
+				t.Fatalf("MaskIP is not idempotent on %q: second pass = %v", *first, second)
+			}
+		})
+	}
+	// Unusable values stay omitted rather than becoming an empty prefix.
+	for _, value := range []string{"", "not-an-ip", "999.1.1.1", "10.20.30.0/999", "10.20.30.0/"} {
+		if got := MaskIP(value); got != nil {
+			t.Fatalf("MaskIP(%q) = %v, want nil", value, got)
+		}
+	}
+}
+
+// TestMaskForwardedForIsIdempotent covers the second masking pass for the
+// forwarded chain, which has its own hop-selection rule to preserve.
+func TestMaskForwardedForIsIdempotent(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{"chain uses the first hop", "10.20.30.41, 192.0.2.9", "10.20.30.0/24"},
+		{"already masked chain", "10.20.30.0/24", "10.20.30.0/24"},
+		{"leading unusable hop is skipped", "unknown, 192.0.2.9", "192.0.2.0/24"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			first := MaskForwardedFor(test.value)
+			if first == nil || *first != test.want {
+				t.Fatalf("MaskForwardedFor(%q) = %v, want %q", test.value, first, test.want)
+			}
+			if second := MaskForwardedFor(*first); second == nil || *second != *first {
+				t.Fatalf("MaskForwardedFor is not idempotent on %q: second pass = %v", *first, second)
+			}
+		})
+	}
+	if got := MaskForwardedFor(""); got != nil {
+		t.Fatalf("empty chain = %v, want nil", got)
+	}
+}
+
+// TestPublicEndpointAcceptsRequestLines covers the label CPA actually
+// publishes. It is a method-prefixed request line, not a URL and not a bare
+// path, so an endpoint-only extractor dropped it and left the field blank.
+func TestPublicEndpointAcceptsRequestLines(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{"request line", "POST /v1/chat/completions", "POST /v1/chat/completions"},
+		{"request line keeps no query", "POST /v1/chat/completions?api_key=fixture", "POST /v1/chat/completions"},
+		{"bare path", "/v1/responses", "/v1/responses"},
+		{"full URL", "https://user:pass@example.test/v1?token=fixture#secret", "https://example.test/v1"},
+		{"lowercase method is not a request line", "post /v1/chat/completions", ""},
+		{"unstructured text", "garbage", ""},
+		{"empty", "", ""},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			if got := PublicEndpoint(test.value); got != test.want {
+				t.Fatalf("PublicEndpoint(%q) = %q, want %q", test.value, got, test.want)
+			}
+		})
+	}
+	// Query data and authority credentials must never survive, whichever shape
+	// carried them.
+	for _, value := range []string{
+		"POST /v1/chat/completions?api_key=fixture-secret",
+		"https://user:pass@example.test/v1?token=fixture-secret",
+	} {
+		got := PublicEndpoint(value)
+		for _, secret := range []string{"fixture-secret", "user:pass", "?", "token="} {
+			if strings.Contains(got, secret) {
+				t.Fatalf("PublicEndpoint(%q) = %q leaked %q", value, got, secret)
+			}
+		}
+	}
+}
+
 func TestMaskSecretKeepsOnlyRecognisableEdges(t *testing.T) {
 	cases := []struct {
 		name  string
