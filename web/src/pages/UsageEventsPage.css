@@ -53,8 +53,53 @@
   max-width: 240px;
 }
 .request-filters .request-search {
-  flex: 2 1 220px;
+  flex: 2 1 240px;
   width: auto;
+}
+/* The multi-select facets hold several tags, so they get more room than a
+   single-value dropdown and cannot be squeezed to a tag-less stub. */
+.request-filters > .req-facet-select {
+  flex: 2 1 200px;
+  min-width: 170px;
+  max-width: 320px;
+}
+.request-filters > .req-result-segmented {
+  flex-shrink: 0;
+}
+.request-filters > .req-time-button {
+  flex: 1 1 190px;
+  min-width: 170px;
+  max-width: 260px;
+}
+.req-more-filters {
+  flex-shrink: 0;
+}
+/* The count is the whole reason the button is legible at a glance: it states
+   how much of the list is being hidden by filters the operator cannot see. */
+.req-more-filters-count,
+.req-reset-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--surface);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.req-reset-count {
+  background: color-mix(in srgb, var(--muted) 30%, transparent);
+  color: var(--fg);
+}
+.req-facets-note {
+  color: var(--muted);
+  font-size: 11px;
 }
 .request-advanced {
   padding: 12px;
@@ -83,13 +128,25 @@
 .request-toolbar-bottom .ant-select {
   min-width: 140px;
 }
-.req-auto-refresh-wrapper {
-  display: flex;
+/* The toggle is a labelled control rather than a bare switch: "Auto Refresh" on
+   its own does not say what interval it will poll at, and the cadence is the
+   only number that makes the setting decidable. */
+.req-auto-refresh-control {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
+  padding: 0 4px;
+  cursor: pointer;
+  user-select: none;
 }
-.req-auto-refresh-select {
-  min-width: 125px;
+.req-auto-refresh-label {
+  font-size: 12px;
+  color: var(--fg-2);
+}
+.req-auto-refresh-cadence {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 .req-live-pulse-dot {
   width: 7px;
@@ -135,27 +192,33 @@
   font-size: 11px;
   line-height: 1.3;
 }
-.req-filter-chip-close {
+.req-filter-chip-remove {
   background: transparent;
   border: 0;
   padding: 0 0 0 2px;
   color: var(--muted);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 10px;
   line-height: 1;
   display: inline-flex;
   align-items: center;
 }
-.req-filter-chip-close:hover {
+.req-filter-chip-remove:hover {
   color: var(--danger);
 }
-.req-clear-all-chips-btn {
+.req-active-chips-count {
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.req-clear-all-chips {
   font-size: 11px;
   padding: 0 4px;
   height: auto;
   color: var(--muted);
 }
-.req-clear-all-chips-btn:hover {
+.req-clear-all-chips:hover {
   color: var(--accent);
 }
 

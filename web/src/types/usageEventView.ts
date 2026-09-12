@@ -1,4 +1,29 @@
-import type { UsageEvent, UsageEventQuery, UsageResultFilter } from './usageEvents';
+import type {
+  RangeBound,
+  UsageCostFilter,
+  UsageEvent,
+  UsageEventQuery,
+  UsageFacetValue,
+  UsageResultFilter,
+  UsageMultiFilterKey,
+  UsageRangeFilterKey,
+  UsageTextFilterKey,
+} from './usageEvents';
+import {
+  USAGE_MULTI_FILTER_KEYS,
+  USAGE_RANGE_FILTER_KEYS,
+  USAGE_RANGE_MAX,
+  USAGE_TEXT_FILTER_KEYS,
+  compareCostBounds,
+  formatUsageRangeBound,
+  isCostRange,
+  parseUsageRangeBound,
+  usageRangeParamKey,
+} from './usageEvents';
+
+/** Re-exported for the filter panel, which is the only consumer of all three. */
+export { USAGE_RANGE_MAX, parseUsageRangeBound };
+export type { RangeBound };
 
 export const EVENT_PRESETS: Record<string, number> = {
   '15m': 15 * 60_000,
@@ -9,40 +34,53 @@ export const EVENT_PRESETS: Record<string, number> = {
   '30d': 30 * 24 * 60 * 60_000,
   '90d': 90 * 24 * 60 * 60_000,
 };
+
+/**
+ * The auto-refresh cadence is fixed, not configurable. The console used to offer
+ * 5/10/30-second intervals, which is a setting nobody can evaluate without
+ * watching the clock, and the operator only ever wants one of two answers: "keep
+ * this current" or "stop moving".
+ */
+export const EVENT_AUTO_REFRESH_MS = 10_000;
+
+/**
+ * EVENT_FILTER_KEYS is every parameter the request console's filter panel owns,
+ * in the order the panel presents them. Anything outside this list is left
+ * alone by reset, so a drill-down's unrelated parameters survive.
+ */
 export const EVENT_FILTER_KEYS = [
-  'model',
-  'provider',
-  'auth_index',
-  'source',
-  'api_key',
-  'executor',
-  'auth_type',
-  'model_alias',
-  'request_id',
+  ...USAGE_MULTI_FILTER_KEYS,
+  ...USAGE_TEXT_FILTER_KEYS,
+  ...USAGE_RANGE_FILTER_KEYS.flatMap((range) => [
+    usageRangeParamKey(range, 'min'),
+    usageRangeParamKey(range, 'max'),
+  ]),
+  'cost',
 ] as const;
+export type EventFilterKey = (typeof EVENT_FILTER_KEYS)[number];
 
 export const USAGE_EVENTS_VIEW_PREFERENCE = 'usage_events_view';
 
 export const EVENT_GROUPING_VALUES = ['time', 'provider', 'credential'] as const;
 export type EventGrouping = (typeof EVENT_GROUPING_VALUES)[number];
 
+/**
+ * The persisted view excludes the reader's layout preferences and the time
+ * window **only where it is a preset**; `filterValues` holds the committed
+ * filters by their wire key so a cleared dimension is absent rather than stale.
+ */
 export interface UsageEventsViewPreference {
   preset?: string;
   from?: number;
   to?: number;
   result?: UsageResultFilter;
+  cost?: UsageCostFilter;
   limit?: number;
-  model?: string;
-  provider?: string;
-  auth_index?: string;
-  source?: string;
-  api_key?: string;
-  executor?: string;
-  auth_type?: string;
-  model_alias?: string;
-  request_id?: string;
+  /** Committed filter values, keyed by wire parameter. Multi-value dimensions
+   *  hold every selected value; a key with no values is omitted entirely. */
+  filterValues?: Partial<Record<EventFilterKey, string[]>>;
   grouping?: EventGrouping;
-  advanced?: boolean;
+  autoRefresh?: boolean;
 }
 
 export const DEFAULT_USAGE_EVENTS_VIEW: UsageEventsViewPreference = {
@@ -50,13 +88,17 @@ export const DEFAULT_USAGE_EVENTS_VIEW: UsageEventsViewPreference = {
   result: 'all',
   limit: 100,
   grouping: 'time',
-  advanced: false,
+  autoRefresh: false,
 };
 
 /**
  * parseUsageEventsView validates a stored view preference document.
- * Unwhitelisted fields, out-of-range limits, invalid presets or malformed
- * timestamps are sanitized or dropped so stale storage cannot crash the UI.
+ *
+ * It also migrates the older flat shape, where each single-value filter was a
+ * top-level string property (`{ model: 'gpt-5' }`). Those documents are still on
+ * disk, and dropping them would silently reset a returning operator's filters to
+ * the default window — the exact opposite of what persistence is for. A legacy
+ * scalar becomes a one-element list, because that is what it always meant.
  */
 export function parseUsageEventsView(raw: unknown): UsageEventsViewPreference | undefined {
   if (typeof raw !== 'object' || raw === null) return undefined;
@@ -66,11 +108,13 @@ export function parseUsageEventsView(raw: unknown): UsageEventsViewPreference | 
     ? (String(val.grouping) as EventGrouping)
     : 'time';
 
-  const advanced = typeof val.advanced === 'boolean' ? val.advanced : false;
+  const autoRefresh = val.autoRefresh === true;
 
   const resultVal = String(val.result ?? '');
   const result: UsageResultFilter = resultVal === 'success' || resultVal === 'failed' ? resultVal : 'all';
 
+  const costVal = String(val.cost ?? '');
+  const cost: UsageCostFilter = costVal === 'priced' || costVal === 'unpriced' ? costVal : 'all';
   const limitNum = Number(val.limit);
   const limit = Number.isInteger(limitNum) && limitNum > 0 ? Math.min(Math.max(limitNum, 1), 500) : 100;
 
@@ -78,7 +122,7 @@ export function parseUsageEventsView(raw: unknown): UsageEventsViewPreference | 
     result,
     limit,
     grouping,
-    advanced,
+    autoRefresh,
   };
 
   const from = Number(val.from);
@@ -93,12 +137,47 @@ export function parseUsageEventsView(raw: unknown): UsageEventsViewPreference | 
     pref.preset = Object.prototype.hasOwnProperty.call(EVENT_PRESETS, presetStr) ? presetStr : '1h';
   }
 
-  for (const key of EVENT_FILTER_KEYS) {
-    const str = typeof val[key] === 'string' ? (val[key] as string).trim() : '';
-    if (str) {
-      pref[key] = str;
+  const stored = val.filterValues;
+  const storedRecord =
+    typeof stored === 'object' && stored !== null ? (stored as Record<string, unknown>) : undefined;
+
+  /** Reads one dimension out of the new shape, falling back to the legacy flat
+   *  property of the same name. */
+  const storedValues = (key: EventFilterKey): string[] => {
+    const source = storedRecord ? storedRecord[key] : val[key];
+    const values: string[] = [];
+    for (const candidate of Array.isArray(source) ? source : [source]) {
+      if (typeof candidate !== 'string') continue;
+      const trimmed = candidate.trim();
+      if (trimmed && !values.includes(trimmed)) values.push(trimmed);
     }
+    return values;
+  };
+
+  // Cost is normalised here, once. It is persisted as its own field, and a document
+  // may carry it in any of three shapes: the current top-level field, a nested copy
+  // written by an earlier revision, or the legacy flat property. A valid top-level
+  // value wins. Failing that, a nested **singleton** is adopted: two contradictory
+  // values mean the document cannot be trusted, and guessing one would apply a
+  // filter the operator may never have chosen.
+  let resolvedCost = cost;
+  if (resolvedCost === 'all') {
+    const nested = [...new Set(storedValues('cost'))].filter(
+      (candidate) => candidate === 'priced' || candidate === 'unpriced',
+    );
+    if (nested.length === 1) resolvedCost = nested[0] as UsageCostFilter;
   }
+  if (resolvedCost !== 'all') pref.cost = resolvedCost;
+
+  const filterValues: Partial<Record<EventFilterKey, string[]>> = {};
+  for (const key of EVENT_FILTER_KEYS) {
+    // Cost never appears inside the map: it has exactly one representation, which
+    // is the top-level field settled above.
+    if (key === 'cost') continue;
+    const values = storedValues(key);
+    if (values.length) filterValues[key] = values;
+  }
+  if (Object.keys(filterValues).length) pref.filterValues = filterValues;
 
   return pref;
 }
@@ -114,16 +193,24 @@ export function hasExplicitEventQuery(params: URLSearchParams): boolean {
   return false;
 }
 
-/** URL is the single source of truth, including dashboard drill-downs and Back. */
+/**
+ * readEventQuery normalises the URL into the query the endpoint understands.
+ * The URL is the single source of truth, including dashboard drill-downs and
+ * Back, so an out-of-range or malformed parameter is dropped rather than
+ * rendered as a filter that silently matches nothing.
+ */
 export function readEventQuery(params: URLSearchParams): UsageEventQuery {
   const preset = params.get('preset') || '1h';
   const result = params.get('result');
+  const cost = params.get('cost');
   const limit = Number(params.get('limit') || 100);
   const query: UsageEventQuery = {
     preset: Object.prototype.hasOwnProperty.call(EVENT_PRESETS, preset) ? preset : '1h',
     result: (result === 'success' || result === 'failed' ? result : 'all') as UsageResultFilter,
     limit: Number.isInteger(limit) && limit > 0 ? Math.min(limit, 500) : 100,
   };
+  if (cost === 'priced' || cost === 'unpriced') query.cost = cost;
+
   const from = Number(params.get('from'));
   const to = Number(params.get('to'));
   if (params.has('from') && Number.isSafeInteger(from) && from >= 0) {
@@ -133,14 +220,200 @@ export function readEventQuery(params: URLSearchParams): UsageEventQuery {
       query.to = to;
     }
   }
-  for (const key of EVENT_FILTER_KEYS) {
-    const value = params.get(key)?.trim();
-    if (value) query[key] = value;
+
+  const filters: Partial<Record<UsageMultiFilterKey, string[]>> = {};
+  for (const key of USAGE_MULTI_FILTER_KEYS) {
+    const values: string[] = [];
+    for (const raw of params.getAll(key)) {
+      const trimmed = raw.trim();
+      if (trimmed && !values.includes(trimmed)) values.push(trimmed);
+    }
+    if (values.length) filters[key] = values;
   }
+  if (Object.keys(filters).length) query.filters = filters;
+
+  const text: Partial<Record<UsageTextFilterKey, string>> = {};
+  for (const key of USAGE_TEXT_FILTER_KEYS) {
+    const trimmed = (params.get(key) ?? '').trim();
+    if (trimmed) text[key] = trimmed;
+  }
+  if (Object.keys(text).length) query.text = text;
+
+  const ranges: Partial<Record<UsageRangeFilterKey, { min?: RangeBound; max?: RangeBound }>> = {};
+  for (const range of USAGE_RANGE_FILTER_KEYS) {
+    const bounds: { min?: RangeBound; max?: RangeBound } = {};
+    for (const side of ['min', 'max'] as const) {
+      const parsed = parseUsageRangeBound(range, params.get(usageRangeParamKey(range, side)));
+      if (parsed !== undefined) bounds[side] = parsed;
+    }
+    // A reversed range cannot match any record, so it is dropped instead of
+    // being sent as a filter that renders a guaranteed-empty list. A cost pair is
+    // compared on its scaled digits, so two bounds differing in the ninth decimal
+    // are ordered correctly rather than through a double approximation.
+    if (bounds.min !== undefined && bounds.max !== undefined) {
+      const order = isCostRange(range)
+        ? compareCostBounds(String(bounds.min), String(bounds.max))
+        : Number(bounds.min) - Number(bounds.max);
+      if (order > 0) continue;
+    }
+    if (bounds.min !== undefined || bounds.max !== undefined) ranges[range] = bounds;
+  }
+  if (Object.keys(ranges).length) query.ranges = ranges;
+
   return query;
 }
 
-/** Freeze the window across cursor navigation to avoid moving boundaries. */
+/**
+ * queryToFilterParams flattens a normalised query back into the flat wire-keyed
+ * map the chips and the preference document are built from.
+ *
+ * Deriving both from the *complete* normalised query - rather than from a
+ * partial set of overrides merged into the previous state - is what keeps a
+ * removal and an addition in the same edit from resurrecting the removed value.
+ */
+export function queryToFilterParams(query: UsageEventQuery): Partial<Record<EventFilterKey, string[]>> {
+  const result: Partial<Record<EventFilterKey, string[]>> = {};
+  for (const key of USAGE_MULTI_FILTER_KEYS) {
+    const values = query.filters?.[key];
+    if (values?.length) result[key] = [...values];
+  }
+  for (const key of USAGE_TEXT_FILTER_KEYS) {
+    const value = query.text?.[key];
+    if (value) result[key] = [value];
+  }
+  for (const range of USAGE_RANGE_FILTER_KEYS) {
+    const bounds = query.ranges?.[range];
+    if (bounds?.min !== undefined)
+      result[usageRangeParamKey(range, 'min')] = [formatUsageRangeBound(bounds.min)];
+    if (bounds?.max !== undefined)
+      result[usageRangeParamKey(range, 'max')] = [formatUsageRangeBound(bounds.max)];
+  }
+  if (query.cost === 'priced' || query.cost === 'unpriced') result.cost = [query.cost];
+  return result;
+}
+
+/**
+ * filterParamsToUrl serialises the flat filter map into repeated search
+ * parameters. It is the inverse of queryToFilterParams and shares the
+ * single-value-per-text-key rule, so a round trip through either is stable.
+ */
+export function filterParamsToUrl(values: Partial<Record<EventFilterKey, string[]>>): URLSearchParams {
+  const params = new URLSearchParams();
+  for (const key of EVENT_FILTER_KEYS) {
+    for (const value of values[key] ?? []) {
+      if (value) params.append(key, value);
+    }
+  }
+  return params;
+}
+
+/**
+ * readFilterParams reads the flat filter map straight from the URL, which is
+ * what the chips and the preference document are built from. It goes through the
+ * same normalisation as readEventQuery so the chips can never show a filter the
+ * query did not actually apply.
+ */
+export function readFilterParams(params: URLSearchParams): Partial<Record<EventFilterKey, string[]>> {
+  return queryToFilterParams(readEventQuery(params));
+}
+
+/**
+ * rejectedEventParams names the query parameters present in the URL that
+ * normalisation refused to apply.
+ *
+ * Dropping a filter is not a neutral act: an operator who mistypes a bound would
+ * otherwise see a *wider* result set than they asked for while the panel still
+ * shows a narrowed view. The page runs the filters that are usable and reports the
+ * rest, so an ignored parameter can never be silent.
+ */
+export function rejectedEventParams(params: URLSearchParams): string[] {
+  const rejected: string[] = [];
+  for (const key of EVENT_FILTER_KEYS) {
+    const raw = params.get(key);
+    if (raw === null || raw.trim() === '') continue;
+    const range = USAGE_RANGE_FILTER_KEYS.find(
+      (candidate) =>
+        usageRangeParamKey(candidate, 'min') === key || usageRangeParamKey(candidate, 'max') === key,
+    );
+    if (range) {
+      if (parseUsageRangeBound(range, raw) === undefined) rejected.push(key);
+      continue;
+    }
+    if (key === 'cost') {
+      const value = raw.trim();
+      if (value !== 'priced' && value !== 'unpriced') rejected.push(key);
+      continue;
+    }
+    // Every other dimension is a literal string, so it is unusable only when it is
+    // longer than any stored value could be.
+    if (raw.trim().length > 256) rejected.push(key);
+  }
+
+  // A reversed pair is reported once, under the dimension rather than under both
+  // ends: the operator made one mistake, not two.
+  for (const range of USAGE_RANGE_FILTER_KEYS) {
+    const min = parseUsageRangeBound(range, params.get(usageRangeParamKey(range, 'min')));
+    const max = parseUsageRangeBound(range, params.get(usageRangeParamKey(range, 'max')));
+    if (min === undefined || max === undefined) continue;
+    const reversed = isCostRange(range)
+      ? compareCostBounds(String(min), String(max)) > 0
+      : Number(min) > Number(max);
+    if (reversed && !rejected.includes(range)) rejected.push(range);
+  }
+
+  const preset = params.get('preset');
+  if (preset !== null && !Object.prototype.hasOwnProperty.call(EVENT_PRESETS, preset)) {
+    rejected.push('preset');
+  }
+  const result = params.get('result');
+  if (result !== null && result !== 'all' && result !== 'success' && result !== 'failed') {
+    rejected.push('result');
+  }
+  return [...new Set(rejected)];
+}
+
+/**
+ * mergeFacetOptions guarantees a selected value still appears in a dropdown.
+ *
+ * Facets are capped at 200 values and are computed for a window, so a value that
+ * was selected earlier - or that arrived from a drill-down link - can be missing
+ * from the current response. Leaving it out renders a blank control and lets the
+ * operator believe the filter was dropped, while the query still applies it.
+ */
+export function mergeFacetOptions(
+  values: readonly UsageFacetValue[] | undefined,
+  selected: readonly string[],
+  label: (value: UsageFacetValue) => string,
+  describeSelected?: (value: string) => string,
+): Array<{ value: string; label: string }> {
+  const options = (values ?? []).map((entry) => ({ value: entry.value, label: label(entry) }));
+  const known = new Set(options.map((option) => option.value));
+  for (const value of selected) {
+    if (known.has(value)) continue;
+    known.add(value);
+    options.push({ value, label: describeSelected ? describeSelected(value) : value });
+  }
+  return options;
+}
+
+/**
+ * activeFilterCount counts the committed filter dimensions that are narrowing
+ * the list, so the panel can report how much is hidden behind it. A dimension
+ * counts once however many values it holds: "2 models" is one decision.
+ */
+export function activeFilterCount(filterValues: Partial<Record<EventFilterKey, string[]>>): number {
+  let count = 0;
+  for (const key of EVENT_FILTER_KEYS) {
+    if ((filterValues[key]?.length ?? 0) > 0) count += 1;
+  }
+  return count;
+}
+
+/**
+ * eventWindow freezes the window across cursor navigation so paging cannot walk
+ * across a boundary that is still moving. An open-ended custom range keeps
+ * following the clock, which is what makes it worth polling.
+ */
 export function eventWindow(query: UsageEventQuery, now: number) {
   return query.from !== undefined
     ? { from: query.from, to: Math.min(query.to ?? now, now) }

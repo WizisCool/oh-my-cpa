@@ -1,0 +1,37 @@
+/* The window picker reads as one control: a trigger plus a staged dialog. */
+.req-time-button {
+  max-width: 260px;
+  justify-content: flex-start;
+  font-variant-numeric: tabular-nums;
+}
+.req-time-button-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* An absolute window is a fixed fact, not a rolling one. Marking it keeps the
+   operator from reading a frozen range as a live one and waiting for it to
+   move. */
+.req-time-button.is-absolute {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.req-time-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.req-time-form-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.req-time-form-picker {
+  width: 100%;
+}
+.req-time-form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

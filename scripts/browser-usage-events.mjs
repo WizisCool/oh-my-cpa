@@ -429,9 +429,12 @@ try {
     '500 loaded records use fewer than 40 mounted rows',
     (await page.locator('.request-row').count()) < 40,
   );
+  // The page-scoped totals strip was deliberately removed: the request list
+  // reports the records it holds, not a verdict about the window. The footer
+  // states the page size instead, which is the fact a reader actually needs.
   check(
-    'page-scoped metrics are visible',
-    (await page.locator('.request-summary').innerText()).includes('500'),
+    'the footer reports the loaded page',
+    (await page.locator('.request-pagination span').first().innerText()).includes('500'),
   );
   check(
     'unbound auth indexes resolve to safe current file metadata',

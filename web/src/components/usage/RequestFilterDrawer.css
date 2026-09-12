@@ -1,0 +1,100 @@
+/* Advanced filter drawer: one field per row, grouped by what the field means. */
+.req-filter-drawer .ant-drawer-body {
+  padding: 16px 20px 8px;
+}
+.req-filter-group + .req-filter-group {
+  margin-top: 4px;
+}
+.req-filter-group-title {
+  margin: 0 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.req-filter-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 16px;
+}
+/* The label column is fixed so the controls line up down the panel; a ragged
+   left edge across eleven fields is what makes a filter panel hard to scan. */
+.req-filter-row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+}
+.req-filter-label {
+  padding-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.req-filter-control {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.req-filter-control > .ant-select,
+.req-filter-control > .ant-input-affix-wrapper,
+.req-filter-control > .ant-segmented {
+  width: 100%;
+}
+.req-filter-select .ant-select-selector {
+  align-items: flex-start;
+}
+.req-range-pair {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.req-range-input {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.req-range-sep {
+  color: var(--muted);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.req-range-unit {
+  color: var(--muted);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  flex-shrink: 0;
+  min-width: 42px;
+}
+.req-filter-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.req-filter-note {
+  margin: 0 0 14px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+/* Apply/Cancel stay pinned: the panel is long enough that a footer that scrolls
+   with it would leave the operator hunting for the commit button. */
+.req-filter-drawer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.req-filter-drawer-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

@@ -13,7 +13,7 @@
     "check-docs": "node scripts/check-docs.mjs",
     "check-css-modules": "node scripts/check-css-modules.mjs",
     "test:payload": "node --experimental-strip-types scripts/test-payload-rules.ts",
-    "test:usage-events": "node --experimental-strip-types scripts/test-usage-event-view.ts",
+    "test:usage-events": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs scripts/test-usage-event-view.ts",
     "verify:events": "node scripts/browser-usage-events.mjs",
     "test:visible-clock": "node --experimental-strip-types scripts/test-visible-clock.ts",
     "verify:performance": "node scripts/browser-performance.mjs",

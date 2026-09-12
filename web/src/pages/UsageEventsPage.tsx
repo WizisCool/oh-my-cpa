@@ -12,6 +12,7 @@ import {
   Segmented,
   Select,
   Skeleton,
+  Switch,
   Tooltip,
 } from 'antd';
 import {
@@ -33,26 +34,35 @@ import { usePreference } from '../hooks/usePreference';
 import { useT } from '../i18n';
 import {
   usageEventParams,
+  isUsageFacetsResponse,
   type UsageEvent,
   type UsageEventPage,
-  type UsageFacetValue,
+  type UsageFacets,
   type UsageResultFilter,
 } from '../types/usageEvents';
 import {
   indexCredentialFiles,
   resolveCredential,
+  EVENT_AUTO_REFRESH_MS,
   EVENT_FILTER_KEYS,
-  EVENT_PRESETS,
+  activeFilterCount,
   eventWindow,
+  filterParamsToUrl,
+  queryToFilterParams,
   readEventQuery,
+  readFilterParams,
+  rejectedEventParams,
   USAGE_EVENTS_VIEW_PREFERENCE,
   DEFAULT_USAGE_EVENTS_VIEW,
   parseUsageEventsView,
   hasExplicitEventQuery,
   usageFacetLabel,
+  mergeFacetOptions,
+  type EventFilterKey,
   type UsageEventsViewPreference,
   type EventGrouping,
 } from '../types/usageEventView';
+import type { UsageEventsView } from '../types/usageEventFilters';
 import {
   REQUEST_COLUMNS,
   COLUMN_MAP,
@@ -70,6 +80,9 @@ import {
 } from '../types/providerIcons';
 import { RequestRow } from '../components/usage/RequestRow';
 import { UsageEventDrawer } from '../components/usage/UsageEventDrawer';
+import { RequestFilterDrawer } from '../components/usage/RequestFilterDrawer';
+import { RequestFilterChips } from '../components/usage/RequestFilterChips';
+import { TimeRangeControl } from '../components/usage/TimeRangeControl';
 import './UsageEventsPage.css';
 
 interface IngestStatus {
@@ -85,22 +98,85 @@ interface IngestStatus {
   stats?: { pending?: number };
 }
 
-/** Text filters commit to the URL only after typing pauses: one keystroke
- *  must never fire one list request per character. Used by the request-id
- *  search and the advanced auth_type / model_alias inputs alike. */
-function useDebouncedTextFilter(
-  queryValue: string,
-  update: (values: Record<string, string | undefined>) => void,
-  key: 'request_id' | 'auth_type' | 'model_alias',
+/**
+ * Text filters commit to the URL only after typing pauses: one keystroke must
+ * never fire one list request per character. Only the free-text search box uses
+ * this - the drawer's fields are drafts applied on demand, which is what makes a
+ * range form usable at all.
+ *
+ * The committed value is the source of truth in every case except one: while the
+ * operator is typing. An external change (hydration from saved preferences,
+ * Back/Forward, a drill-down, a removed chip) has to win over local text that was
+ * typed against the old value, or the stale text would overwrite the navigation
+ * once the debounce fired. A clear-all is a second case, and it cannot be detected
+ * by watching the committed value at all: the search box is usually already empty
+ * when the clear runs, so nothing observable changes and a queued keystroke would
+ * land after it. That is what `resetToken` is for.
+ */
+function useDebouncedSearch(
+  committed: string,
+  commit: (value: string) => void,
+  resetToken: number,
 ) {
-  const [value, setValue] = React.useState(queryValue);
-  React.useEffect(() => setValue(queryValue), [queryValue]);
+  const [value, setValue] = React.useState(committed);
+  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The timer calls the *latest* commit rather than the one captured when it was
+  // scheduled. A commit builds its URL from the parameters of the render it was
+  // created in, so a filter changed during the debounce window would otherwise be
+  // erased when the queued keystroke fired against the older snapshot.
+  const commitRef = React.useRef(commit);
   React.useEffect(() => {
-    if (value.trim() === queryValue) return;
-    const timer = setTimeout(() => update({ [key]: value.trim() }), 350);
-    return () => clearTimeout(timer);
-  }, [value, queryValue, update, key]);
-  return [value, setValue] as const;
+    commitRef.current = commit;
+  });
+  // Read at fire time so a reset that landed while the timer was queued still
+  // invalidates it. Checking only when the reset is requested would leave the
+  // window between the request and its effect open.
+  const resetRef = React.useRef(resetToken);
+  React.useEffect(() => {
+    resetRef.current = resetToken;
+  });
+
+  const cancelPending = React.useCallback(() => {
+    if (timerRef.current !== null) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  // The committed value is the source of truth for every change that did not come
+  // from this box: hydration from saved preferences, Back/Forward, a drill-down,
+  // a removed chip.
+  React.useEffect(() => {
+    cancelPending();
+    setValue(committed);
+  }, [committed, cancelPending]);
+
+  // A clear runs while this box is usually already empty, so nothing observable
+  // changes and the committed value cannot signal that queued work must be
+  // dropped. That is what the token is for.
+  React.useEffect(() => {
+    cancelPending();
+    setValue(committed);
+  }, [resetToken]);
+
+  React.useEffect(() => cancelPending, [cancelPending]);
+
+  const change = React.useCallback(
+    (next: string) => {
+      setValue(next);
+      cancelPending();
+      if (next.trim() === committed) return;
+      const scheduledUnder = resetRef.current;
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
+        if (resetRef.current !== scheduledUnder) return;
+        commitRef.current(next.trim());
+      }, 350);
+    },
+    [cancelPending, committed],
+  );
+
+  return [value, change] as const;
 }
 
 /**
@@ -264,8 +340,26 @@ export const UsageEventsPage: React.FC = () => {
   const [hydrated, setHydrated] = React.useState(hasExplicit);
 
   const [refresh, setRefresh] = React.useState(0);
-  const [autoRefreshInterval, setAutoRefreshInterval] = React.useState<number>(0);
+  const [isAutoRefresh, setIsAutoRefresh] = React.useState(false);
   const activeWindow = React.useMemo(() => eventWindow(query, Date.now()), [query, refresh]);
+
+  /**
+   * Facets are read on their own window, not on the list's poll counter.
+   *
+   * `activeWindow` advances on every poll, so keying the facet query on it made
+   * each ten-second tick re-issue ten grouped scans - the most expensive query
+   * on the page - to answer a question whose answer barely moves. Facets describe
+   * which values exist in a window, so they only need re-reading when the window
+   * is *redefined* (a new preset or absolute range) or the operator asks for a
+   * refresh. `facetWindowRevision` is exactly those two events, and the resolved
+   * timestamps still live in the query key, so a genuinely new window is a
+   * genuinely new cache entry.
+   */
+  const [facetWindowRevision, setFacetWindowRevision] = React.useState(0);
+  const facetWindow = React.useMemo(
+    () => eventWindow(query, Date.now()),
+    [query, facetWindowRevision],
+  );
 
   // viewScope identifies the view the reader is looking at: the filters and
   // window they picked, plus which page of it. The auto-refresh counter is
@@ -281,8 +375,44 @@ export const UsageEventsPage: React.FC = () => {
   const cursors = pagination.scope === viewScope ? pagination.cursors : [];
   const cursor = cursors.at(-1);
   const [selected, setSelected] = React.useState<number | null>(null);
-  const [advanced, setAdvanced] = React.useState(false);
+  const [isFilterDrawerOpen, setIsFilterDrawerOpen] = React.useState(false);
+  // Bumped whenever filters are discarded on the operator's behalf, so a text
+  // filter with a queued keystroke cannot commit after the discard.
+  const [searchResetToken, setSearchResetToken] = React.useState(0);
   const [grouping, setGrouping] = React.useState<EventGrouping>('time');
+
+  // The flat committed filter map, derived from the URL through the same
+  // normalisation the request itself uses. Chips and persistence both read it,
+  // so a chip can never describe a filter the query did not apply.
+  const committedParams = React.useMemo(() => readFilterParams(params), [signature]);
+  const rejectedParams = React.useMemo(() => rejectedEventParams(params), [signature]);
+  const committedView = React.useMemo<UsageEventsView>(
+    () => ({ result: query.result ?? 'all', params: committedParams }),
+    [query.result, committedParams],
+  );
+  const filterCount = activeFilterCount(committedParams);
+
+  /**
+   * Every local URL write records its signature first, so the effect below can tell
+   * a change this page made from one that arrived from outside it. Without that
+   * distinction a keystroke queued behind the debounce would survive a Back or a
+   * drill-down and be written onto the view the operator navigated to.
+   */
+  const selfWrittenSignatureRef = React.useRef<string | null>(null);
+  const writeParams = React.useCallback(
+    (next: URLSearchParams) => {
+      selfWrittenSignatureRef.current = next.toString();
+      setParams(next, { replace: true });
+    },
+    [setParams],
+  );
+
+  React.useEffect(() => {
+    if (selfWrittenSignatureRef.current === signature) return;
+    // A URL this page did not write: history navigation, a drill-down link, or a
+    // pasted address. A pending keystroke belongs to the view that was just left.
+    setSearchResetToken((value) => value + 1);
+  }, [signature]);
 
   // Full-height scroll-down expansion & top-bounce expand mode & back-to-top
   const listRef = React.useRef<ListyRef>(null);
@@ -415,7 +545,7 @@ export const UsageEventsPage: React.FC = () => {
     if (!prefReady || hydrated) return;
     setHydrated(true);
     if (viewPref.grouping) setGrouping(viewPref.grouping);
-    if (typeof viewPref.advanced === 'boolean') setAdvanced(viewPref.advanced);
+    if (typeof viewPref.autoRefresh === 'boolean') setIsAutoRefresh(viewPref.autoRefresh);
 
     if (!hasExplicit) {
       const nextParams = new URLSearchParams();
@@ -431,93 +561,174 @@ export const UsageEventsPage: React.FC = () => {
       if (viewPref.limit && viewPref.limit !== 100) {
         nextParams.set('limit', String(viewPref.limit));
       }
-      for (const key of EVENT_FILTER_KEYS) {
-        if (viewPref[key]) nextParams.set(key, viewPref[key]!);
+      if (viewPref.cost && viewPref.cost !== 'all') {
+        nextParams.set('cost', viewPref.cost);
       }
+      // `cost` is a top-level query field, not a repeated filter dimension, so it
+      // travels as its own parameter. It must not also be replayed from the stored
+      // filter map, or the URL would carry it twice.
+      const storedFilters = filterParamsToUrl({
+        ...(viewPref.filterValues ?? {}),
+        cost: undefined,
+      });
+      storedFilters.forEach((value, key) => nextParams.append(key, value));
       if (nextParams.toString()) {
-        setParams(nextParams, { replace: true });
+        writeParams(nextParams);
       }
     }
-  }, [prefReady, hydrated, hasExplicit, viewPref, setParams]);
+  }, [prefReady, hydrated, hasExplicit, viewPref, writeParams]);
 
-  // Restore grouping/advanced layout preferences even when on a drill-down link
+  // Restore the layout preferences even when arriving on a drill-down link.
   React.useEffect(() => {
     if (!prefReady || !hasExplicit) return;
     if (viewPref.grouping) setGrouping(viewPref.grouping);
-    if (typeof viewPref.advanced === 'boolean') setAdvanced(viewPref.advanced);
-  }, [prefReady, hasExplicit, viewPref.grouping, viewPref.advanced]);
+    if (typeof viewPref.autoRefresh === 'boolean') setIsAutoRefresh(viewPref.autoRefresh);
+  }, [prefReady, hasExplicit, viewPref.grouping, viewPref.autoRefresh]);
 
+  /**
+   * persistView writes the saved view for the *complete* next state.
+   *
+   * It used to take partial overrides and fall back to the previous query for
+   * anything not mentioned. That is what made a cleared filter come back: the
+   * override said `{ model: undefined }`, the fallback then read the model out of
+   * the still-old `query`, and the removed value was written straight back into
+   * storage. Deriving every field from one normalised state removes the class of
+   * bug rather than the instance.
+   */
   const persistView = React.useCallback(
-    (overrides?: Partial<UsageEventsViewPreference>) => {
+    (nextParams: URLSearchParams, overrides?: { grouping?: EventGrouping; autoRefresh?: boolean }) => {
+      const nextQuery = readEventQuery(nextParams);
       const nextPref: UsageEventsViewPreference = {
-        result: query.result,
-        limit: query.limit,
-        grouping,
-        advanced,
-        ...overrides,
+        result: nextQuery.result,
+        limit: nextQuery.limit,
+        grouping: overrides?.grouping ?? grouping,
+        autoRefresh: overrides?.autoRefresh ?? isAutoRefresh,
       };
-      if (overrides?.from !== undefined || (query.from !== undefined && overrides?.preset === undefined)) {
-        nextPref.from = overrides?.from ?? query.from;
-        nextPref.to = overrides?.to ?? query.to;
-        delete nextPref.preset;
+      if (nextQuery.cost === 'priced' || nextQuery.cost === 'unpriced') nextPref.cost = nextQuery.cost;
+      if (nextQuery.from !== undefined) {
+        nextPref.from = nextQuery.from;
+        if (nextQuery.to !== undefined) nextPref.to = nextQuery.to;
       } else {
-        nextPref.preset = overrides?.preset ?? query.preset ?? '1h';
-        delete nextPref.from;
-        delete nextPref.to;
+        nextPref.preset = nextQuery.preset ?? '1h';
       }
-      for (const key of EVENT_FILTER_KEYS) {
-        const val = overrides?.[key] !== undefined ? overrides[key] : query[key];
-        if (val) nextPref[key] = val;
-      }
+      // The stored filter map excludes `cost` because it is persisted as its own
+      // field. Keeping both was a second source of truth that hydration wrote back
+      // into the URL a second time.
+      const filterValues = queryToFilterParams(nextQuery);
+      delete filterValues.cost;
+      if (Object.keys(filterValues).length) nextPref.filterValues = filterValues;
       setViewPref(nextPref);
     },
-    [query, grouping, advanced, setViewPref],
+    [grouping, isAutoRefresh, setViewPref],
   );
 
-  const update = React.useCallback(
-    (values: Record<string, string | undefined>) => {
-      setParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          for (const [key, value] of Object.entries(values)) {
-            if (!value) next.delete(key);
-            else next.set(key, value);
-          }
-          return next;
-        },
-        { replace: true },
-      );
-      const nextQuery: Partial<UsageEventsViewPreference> = {};
-      for (const [key, value] of Object.entries(values)) {
-        if (!value) {
-          (nextQuery as Record<string, unknown>)[key] = undefined;
-        } else if (key === 'limit') {
-          nextQuery.limit = Number(value);
-        } else if (key === 'result') {
-          nextQuery.result = value as UsageResultFilter;
-        } else if (key === 'from') {
-          nextQuery.from = Number(value);
-        } else if (key === 'to') {
-          nextQuery.to = Number(value);
-        } else {
-          (nextQuery as Record<string, unknown>)[key] = value;
-        }
+  /**
+   * commit applies a filter change. `values` is the complete next filter map, so
+   * a removal is expressed by the key being absent rather than by a sentinel.
+   * The change is written to the URL and to the saved view together, which is
+   * what keeps a reload equivalent to not having reloaded.
+   */
+  /**
+   * Every local URL write records its signature first, so the effect above can tell
+   * a change this page made from one that arrived from outside it.
+   */
+  const commit = React.useCallback(
+    (values: Partial<Record<EventFilterKey, string[]>>, options?: { result?: UsageResultFilter; keepWindow?: boolean }) => {
+      const nextParams = new URLSearchParams(params);
+      for (const key of EVENT_FILTER_KEYS) nextParams.delete(key);
+      filterParamsToUrl(values).forEach((value, key) => nextParams.append(key, value));
+      if (options?.result !== undefined) {
+        if (options.result === 'all') nextParams.delete('result');
+        else nextParams.set('result', options.result);
       }
-      persistView(nextQuery);
+      writeParams(nextParams);
+      persistView(nextParams, { grouping });
     },
-    [persistView, setParams],
+    [grouping, params, persistView, writeParams],
   );
-  const [search, setSearch] = useDebouncedTextFilter(query.request_id || '', update, 'request_id');
-  const [authType, setAuthType] = useDebouncedTextFilter(query.auth_type || '', update, 'auth_type');
-  const [modelAlias, setModelAlias] = useDebouncedTextFilter(query.model_alias || '', update, 'model_alias');
-  const isQueryEnabled = hasExplicit || prefReady;
-  const facetParams = usageEventParams(activeWindow);
+
+  /** setFilter replaces one dimension wholesale. An empty list clears it. */
+  const setFilter = React.useCallback(
+    (key: EventFilterKey, values: string[]) => {
+      const next = { ...committedParams };
+      if (values.length) next[key] = values;
+      else delete next[key];
+      commit(next);
+    },
+    [commit, committedParams],
+  );
+
+  const removeFilterValue = React.useCallback(
+    (key: EventFilterKey, value?: string) => {
+      const current = committedParams[key] ?? [];
+      // Removing the search chip removes the whole filter, so a keystroke still
+      // queued behind the debounce must be dropped with it.
+      if (key === 'q') setSearchResetToken((token) => token + 1);
+      setFilter(key, value === undefined ? [] : current.filter((entry) => entry !== value));
+    },
+    [committedParams, setFilter],
+  );
+
+  const clearFilters = React.useCallback(() => {
+    const windowOnly = new URLSearchParams(params);
+    for (const key of EVENT_FILTER_KEYS) windowOnly.delete(key);
+    windowOnly.delete('result');
+    writeParams(windowOnly);
+    // Cancels any queued keystroke. The search box's committed value is already
+    // empty during a clear, so nothing else would signal that its pending timer
+    // must not fire.
+    setSearchResetToken((value) => value + 1);
+    // Persisted from the URL that is actually being navigated to. Saving the
+    // defaults here instead is what reset the operator's window and page size in
+    // storage while the URL kept them, so a later reload silently moved them.
+    persistView(windowOnly, { grouping });
+  }, [grouping, params, persistView, writeParams]);
+
+  const setTimeWindow = React.useCallback(
+    (window: { preset?: string; from?: number; to?: number }) => {
+      const nextParams = new URLSearchParams(params);
+      nextParams.delete('preset');
+      nextParams.delete('from');
+      nextParams.delete('to');
+      if (window.from !== undefined) {
+        nextParams.set('from', String(window.from));
+        if (window.to !== undefined) nextParams.set('to', String(window.to));
+      } else if (window.preset) {
+        nextParams.set('preset', window.preset);
+      }
+      writeParams(nextParams);
+      persistView(nextParams, { grouping });
+    },
+    [grouping, params, persistView, writeParams],
+  );
+
+  const [search, setSearch] = useDebouncedSearch(
+    committedParams.q?.[0] ?? '',
+    (value) => {
+      setFilter('q', value ? [value] : []);
+    },
+    searchResetToken,
+  );  const isQueryEnabled = hasExplicit || prefReady;
+  const facetParams = usageEventParams(facetWindow);
   const facets = useQuery({
-    queryKey: ['usage-facets', facetParams, refresh],
-    queryFn: () => api.getUsageFacets(facetParams),
+    queryKey: ['usage-facets', facetParams],
+    queryFn: async () => {
+      const response = await api.getUsageFacets(facetParams);
+      // A response missing a facet is treated as a failed load, not as an empty
+      // window: an empty dropdown for a dimension that certainly has values is
+      // the one way this control can lie about the data.
+      if (!isUsageFacetsResponse(response)) {
+        throw new Error('usage facets response is incomplete');
+      }
+      return response;
+    },
     enabled: isQueryEnabled,
     placeholderData: keepPreviousData,
-    staleTime: 30_000,
+    // Facets are the expensive part of the page: one grouped scan per dimension,
+    // ten in all. They describe which values exist in a window, so they change
+    // only when the window moves - not on every poll - and the cache keeps the
+    // dropdowns populated while a poll is in flight.
+    staleTime: 5 * 60_000,
   });
   const ingest = useQuery({
     queryKey: ['usage-ingest-status'],
@@ -531,7 +742,7 @@ export const UsageEventsPage: React.FC = () => {
     queryFn: () => api.getUsageEvents(queryString),
     enabled: isQueryEnabled,
     placeholderData: keepPreviousData,
-    staleTime: 10_000,
+    staleTime: 5_000,
   });
 
   const handlePrevPage = React.useCallback(() => {
@@ -550,16 +761,34 @@ export const UsageEventsPage: React.FC = () => {
     schedulePageNavigationReset();
   }, [cursors, result.data, result.isFetching, result.isError, schedulePageNavigationReset, scrollListToTop, viewScope]);
 
+  // The poll reads the in-flight state through a ref rather than closing over it.
+  // Naming `result.isFetching` in the dependency list rebuilt the timer on every
+  // fetch, which reset the interval each time and turned a 10-second poll into
+  // "10 seconds after the last response finished" - the cadence the operator
+  // asked for is wall-clock, not round-trip dependent.
+  const isFetchingRef = React.useRef(false);
+  isFetchingRef.current = result.isFetching;
   React.useEffect(() => {
-    if (!autoRefreshInterval) return;
-    const intervalMs = autoRefreshInterval * 1000;
+    if (!isAutoRefresh) return;
     const timer = setInterval(() => {
-      if (document.visibilityState === 'visible' && !result.isFetching) {
-        setRefresh((v) => v + 1);
-      }
-    }, intervalMs);
+      // A hidden tab is a reader who is not watching, so the poll is skipped
+      // instead of spending the gateway's query budget on an unseen list.
+      if (document.visibilityState !== 'visible') return;
+      // Skipping rather than queueing means a slow query cannot stack up a
+      // backlog of polls that all fire the moment it resolves.
+      if (isFetchingRef.current) return;
+      setRefresh((value) => value + 1);
+    }, EVENT_AUTO_REFRESH_MS);
     return () => clearInterval(timer);
-  }, [autoRefreshInterval, result.isFetching]);
+  }, [isAutoRefresh]);
+
+  const toggleAutoRefresh = React.useCallback(
+    (next: boolean) => {
+      setIsAutoRefresh(next);
+      persistView(params, { grouping, autoRefresh: next });
+    },
+    [grouping, params, persistView],
+  );
 
   // keepPreviousData covers in-flight changes; retain the last successful page
   // after a failed query too, with an explicit stale-data label.
@@ -631,77 +860,68 @@ export const UsageEventsPage: React.FC = () => {
     staleTime: 60_000,
   });
   const configuredProviders = providersQuery.data?.providers;
-  const activeFilters = EVENT_FILTER_KEYS.filter((key) => query[key]);
-  const extraCount = activeFilters.filter((key) => !['model', 'provider', 'request_id'].includes(key)).length;
 
-  const activeChips = React.useMemo(() => {
-    const chips: Array<{ key: string; label: string; onRemove: () => void }> = [];
-    if (query.model) {
-      chips.push({
-        key: 'model',
-        label: t('events.filter_chip_model', { val: query.model }),
-        onRemove: () => update({ model: undefined }),
-      });
-    }
-    if (query.provider) {
-      chips.push({
-        key: 'provider',
-        label: t('events.filter_chip_provider', { val: query.provider }),
-        onRemove: () => update({ provider: undefined }),
-      });
-    }
-    if (query.source) {
-      chips.push({
-        key: 'source',
-        label: t('events.filter_chip_source', { val: query.source }),
-        onRemove: () => update({ source: undefined }),
-      });
-    }
-    if (query.auth_index) {
-      const credName = credentials.get(query.auth_index)?.name || query.auth_index;
-      chips.push({
-        key: 'auth_index',
-        label: t('events.filter_chip_credential', { val: credName }),
-        onRemove: () => update({ auth_index: undefined }),
-      });
-    }
-    if (query.api_key) {
-      chips.push({
-        key: 'api_key',
-        label: t('events.filter_chip_caller', { val: query.api_key }),
-        onRemove: () => update({ api_key: undefined }),
-      });
-    }
-    if (query.executor) {
-      chips.push({
-        key: 'executor',
-        label: t('events.filter_chip_executor', { val: query.executor }),
-        onRemove: () => update({ executor: undefined }),
-      });
-    }
-    if (search) {
-      chips.push({
-        key: 'search',
-        label: t('events.filter_chip_search', { val: search }),
-        onRemove: () => setSearch(''),
-      });
-    }
-    if (authType) {
-      chips.push({
-        key: 'auth_type',
-        label: t('events.filter_chip_auth_type', { val: authType }),
-        onRemove: () => setAuthType(''),
-      });
-    }
-    if (modelAlias) {
-      chips.push({
-        key: 'model_alias',
-        label: t('events.filter_chip_model_alias', { val: modelAlias }),
-        onRemove: () => setModelAlias(''),
-      });
-    }
-    return chips;
-  }, [query, search, authType, modelAlias, credentials, t, update, setSearch, setAuthType, setModelAlias]);
+  /**
+   * A chip names the dimension and the value it holds, in the operator's words.
+   * The credential dimension resolves to a file name and the caller dimension to
+   * its readable mask, because the stored value for both is a fingerprint that
+   * nobody recognises - but the chip must still remove the value it was given,
+   * not the label it displayed.
+   */
+  const chipLabels: Record<EventFilterKey, string> = {
+    model: 'events.filter_chip_model',
+    model_alias: 'events.filter_chip_model_alias',
+    provider: 'events.filter_chip_provider',
+    auth_index: 'events.filter_chip_credential',
+    auth_type: 'events.filter_chip_auth_type',
+    reasoning: 'events.filter_chip_reasoning',
+    service_tier: 'events.filter_chip_service_tier',
+    source: 'events.filter_chip_source',
+    api_key: 'events.filter_chip_caller',
+    executor: 'events.filter_chip_executor',
+    q: 'events.filter_chip_search',
+    ua: 'events.filter_chip_ua',
+    endpoint: 'events.filter_chip_endpoint',
+    request_id: 'events.filter_chip_request_id',
+    latency_min: 'events.filter_chip_latency_min',
+    latency_max: 'events.filter_chip_latency_max',
+    tokens_min: 'events.filter_chip_tokens_min',
+    tokens_max: 'events.filter_chip_tokens_max',
+    cost_min: 'events.filter_chip_cost_min',
+    cost_max: 'events.filter_chip_cost_max',
+    cost: 'events.filter_chip_cost_state',
+  };
+
+  const describeChip = React.useCallback(
+    (key: EventFilterKey, values: string[]): { label: string; display?: string } => {
+      const raw = values[0] ?? '';
+      let shown = raw;
+      if (key === 'auth_index') shown = credentials.get(raw)?.name || raw;
+      // The caller dimension is stored as a fingerprint, so the chip has to speak
+      // the readable mask the facet offered; showing the fingerprint would name
+      // the filter in a form the operator never chose and cannot recognise.
+      if (key === 'api_key') {
+        const facet = facets.data?.facets.api_group_keys.find((entry) => entry.value === raw);
+        shown = facet?.mask?.trim() || raw;
+      }
+      if (key === 'cost') {
+        shown = t(raw === 'priced' ? 'events.cost_priced' : 'events.cost_unpriced_short');
+      }
+      if (key.endsWith('_min') || key.endsWith('_max')) {
+        const range = key.replace(/_(min|max)$/, '') as 'latency' | 'tokens' | 'cost';
+        shown = range === 'cost' ? `$${raw}` : raw;
+      }
+      return { label: t(chipLabels[key], { val: shown }) };
+    },
+    [credentials, facets.data, t],
+  );
+
+  const activeFilters = EVENT_FILTER_KEYS.filter((key) => (committedParams[key]?.length ?? 0) > 0);
+  // The result verdict is a filter too, but it is not a URL parameter, so it has
+  // to be counted separately: a list narrowed to failures with the Reset button
+  // hidden would be a filter the operator can only clear by guessing.
+  const hasActiveFilter = activeFilters.length > 0 || query.result !== 'all';
+
   const listHost = React.useRef<HTMLDivElement>(null);
   const [height, setHeight] = React.useState(480);
   React.useLayoutEffect(() => {
@@ -713,32 +933,44 @@ export const UsageEventsPage: React.FC = () => {
     observer.observe(host);
     return () => observer.disconnect();
   }, []);
-  const options = (values: UsageFacetValue[] | undefined) =>
-    (values || []).map((v) => ({ value: v.value, label: usageFacetLabel(v) }));
-  const facet = (
-    key: 'model' | 'provider' | 'source' | 'auth_index' | 'api_key' | 'executor',
-    label: string,
-    values?: UsageFacetValue[],
-  ) => (
-    <Select
-      aria-label={label}
-      placeholder={label}
-      value={query[key]}
-      allowClear
-      showSearch={{ optionFilterProp: 'label' }}
-      onChange={(value) => update({ [key]: value })}
-      options={
-        key === 'auth_index'
-          ? options(values).map((option) => ({
-              ...option,
-              label: credentials.get(option.value)?.name
-                ? `${credentials.get(option.value)!.name} · ${option.value}`
-                : option.label,
-            }))
-          : options(values)
-      }
-    />
-  );
+
+  /**
+   * Facet options carry the window's request count; `expandProps` was dropped
+   * because the count in the label is what makes the option worth reading.
+   * A selected value missing from a capped response is re-added, so the control
+   * can never render blank while its filter is still applied.
+   */
+  const facetMulti = (
+    key: EventFilterKey,
+    labelKey: string,
+    values: UsageFacets[keyof UsageFacets] | undefined,
+  ) => {
+    const selected = committedParams[key] ?? [];
+    return (
+      <Select
+        className="req-facet-select"
+        mode="multiple"
+        aria-label={t(labelKey)}
+        placeholder={t(labelKey)}
+        value={selected}
+        allowClear
+        maxTagCount="responsive"
+        showSearch={{ optionFilterProp: 'label' }}
+        onChange={(next) => setFilter(key, next as string[])}
+        options={mergeFacetOptions(values, selected, usageFacetLabel, (value) =>
+          key === 'auth_index' ? `${credentials.get(value)?.name || value} · ${value}` : value,
+        )}
+        notFoundContent={facets.isError ? t('events.facets_error') : undefined}
+      />
+    );
+  };
+
+  /**
+   * Clear-all is offered in two places (the bar and the chip strip) and must
+   * mean the same thing in both: filters and result go, the time window and the
+   * layout choices stay. Resetting the window too would move the reader to a
+   * different hour without saying so.
+   */
   const group =
     grouping === 'time'
       ? undefined
@@ -792,23 +1024,25 @@ export const UsageEventsPage: React.FC = () => {
             </p>
           </div>
           <div className="request-actions">
-            <div className="req-auto-refresh-control">
-              {autoRefreshInterval > 0 && (
-                <span className="req-live-pulse-dot" title={t('events.auto_refreshing')} />
-              )}
-              <Select
-                className="req-auto-refresh-select"
+            <label className="req-auto-refresh-control" htmlFor="req-auto-refresh">
+              {/* The pulse only appears while the poll is actually running, so it
+                  means "this list is moving" rather than "this page has a
+                  setting". */}
+              {isAutoRefresh && <span className="req-live-pulse-dot" aria-hidden="true" />}
+              <span className="req-auto-refresh-label">{t('events.auto_refresh')}</span>
+              <Switch
+                id="req-auto-refresh"
+                size="small"
+                checked={isAutoRefresh}
+                onChange={toggleAutoRefresh}
                 aria-label={t('events.auto_refresh')}
-                value={autoRefreshInterval}
-                onChange={setAutoRefreshInterval}
-                options={[
-                  { value: 0, label: `${t('events.auto_refresh')}: ${t('events.auto_refresh_off')}` },
-                  { value: 5, label: `${t('events.auto_refresh')}: ${t('events.auto_refresh_sec', { s: 5 })}` },
-                  { value: 10, label: `${t('events.auto_refresh')}: ${t('events.auto_refresh_sec', { s: 10 })}` },
-                  { value: 30, label: `${t('events.auto_refresh')}: ${t('events.auto_refresh_sec', { s: 30 })}` },
-                ]}
               />
-            </div>
+              {isAutoRefresh && (
+                <span className="req-auto-refresh-cadence">
+                  {t('events.auto_refresh_sec', { s: EVENT_AUTO_REFRESH_MS / 1000 })}
+                </span>
+              )}
+            </label>
             <Popover
               trigger="click"
               title={t('events.ingest_status')}
@@ -871,6 +1105,10 @@ export const UsageEventsPage: React.FC = () => {
               disabled={result.isFetching}
               onClick={() => {
                 setRefresh((v) => v + 1);
+                // A manual refresh re-reads the facet window too: the operator
+                // asked to see current data, and stale dropdown counts are part of
+                // what is on screen.
+                setFacetWindowRevision((v) => v + 1);
                 void ingest.refetch();
               }}
             >
@@ -878,6 +1116,14 @@ export const UsageEventsPage: React.FC = () => {
             </Button>
           </div>
         </header>
+        {rejectedParams.length > 0 && (
+          <Alert
+            type="warning"
+            showIcon
+            title={t('events.rejected_filters', { n: rejectedParams.length })}
+            description={`${rejectedParams.join(', ')} — ${t('events.rejected_filters_hint')}`}
+          />
+        )}
         {result.isError && (
           <Alert
             type="error"
@@ -891,98 +1137,55 @@ export const UsageEventsPage: React.FC = () => {
           <div className="request-filters">
             <Input
               className="request-search"
-              aria-label={t('events.col_request_id')}
-              placeholder={t('events.search_hint')}
+              aria-label={t('events.search_hint')}
+              placeholder={t('events.search_placeholder')}
               prefix={<SearchOutlined />}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               allowClear
             />
-            <Select
-              aria-label={t('events.time_range')}
-              value={query.from !== undefined ? 'custom' : query.preset}
-              onChange={(value) => update({ preset: value, from: undefined, to: undefined })}
-              options={[
-                ...(query.from !== undefined ? [{ value: 'custom', label: t('events.custom_range') }] : []),
-                ...Object.keys(EVENT_PRESETS).map((value) => ({
-                  value,
-                  label: t('events.last_range', { range: value }),
-                })),
-              ]}
+            <TimeRangeControl
+              preset={query.preset}
+              from={query.from}
+              to={query.to}
+              onChange={setTimeWindow}
             />
-            {facet('model', t('events.col_model'), facets.data?.facets.models)}
-            {facet('provider', t('events.provider'), facets.data?.facets.providers)}
-            <Button
-              aria-label={t('events.more_filters')}
-              icon={<FilterOutlined />}
-              aria-expanded={advanced}
-              onClick={() => {
-                const next = !advanced;
-                setAdvanced(next);
-                persistView({ advanced: next });
-              }}
-            >
-              {t('events.more_filters')}
-              {extraCount > 0 ? ` (${extraCount})` : ''}
-            </Button>
-          </div>
-          {advanced && (
-            <div className="request-advanced">
-              {facet('source', t('events.source'), facets.data?.facets.sources)}
-              {facet('auth_index', t('events.credential_filter'), facets.data?.facets.auth_indexes)}
-              {facet('api_key', t('events.caller'), facets.data?.facets.api_group_keys)}
-              {facet('executor', t('events.executor'), facets.data?.facets.executors)}
-              <Input
-                aria-label={t('events.auth_type')}
-                placeholder={t('events.auth_type')}
-                value={authType}
-                allowClear
-                onChange={(e) => setAuthType(e.target.value)}
-              />
-              <Input
-                aria-label={t('events.model_alias')}
-                placeholder={t('events.model_alias')}
-                value={modelAlias}
-                allowClear
-                onChange={(e) => setModelAlias(e.target.value)}
-              />
-              {facets.isError && <span role="status">{t('events.facets_error')}</span>}
-            </div>
-          )}
-          <div className="request-toolbar-bottom">
             <Segmented
+              className="req-result-segmented"
               aria-label={t('events.col_result')}
               value={query.result}
-              onChange={(value) => update({ result: value === 'all' ? undefined : String(value) })}
+              onChange={(value) => {
+                const next = value as UsageResultFilter;
+                commit(committedParams, { result: next });
+              }}
               options={['all', 'success', 'failed'].map((value) => ({
                 value,
                 label: t(`events.filter_${value}`),
               }))}
             />
+            {facetMulti('model', 'events.col_model', facets.data?.facets.models)}
+            {facetMulti('provider', 'events.provider', facets.data?.facets.providers)}
+            <Button
+              className="req-more-filters"
+              aria-label={t('events.more_filters')}
+              icon={<FilterOutlined />}
+              onClick={() => setIsFilterDrawerOpen(true)}
+            >
+              {t('events.more_filters')}
+              {filterCount > 0 ? <span className="req-more-filters-count">{filterCount}</span> : null}
+            </Button>
+          </div>
+          <div className="request-toolbar-bottom">
+            {facets.isError && (
+              <span className="req-facets-note" role="status">
+                {t('events.facets_error')}
+              </span>
+            )}
             <div className="request-actions">
-              {(activeFilters.length > 0 ||
-                query.result !== 'all' ||
-                query.preset !== '1h' ||
-                query.from !== undefined ||
-                Boolean(search) ||
-                Boolean(authType) ||
-                Boolean(modelAlias)) && (
-                <Button
-                  type="text"
-                  onClick={() => {
-                    setSearch('');
-                    setAuthType('');
-                    setModelAlias('');
-                    setParams({}, { replace: true });
-                    setViewPref({
-                      ...DEFAULT_USAGE_EVENTS_VIEW,
-                      grouping,
-                      advanced,
-                    });
-                  }}
-                >
+              {hasActiveFilter && (
+                <Button type="text" className="req-reset-filters" onClick={clearFilters}>
                   {t('events.reset')}
-                  {activeFilters.length ? ` (${activeFilters.length})` : ''}
+                  <span className="req-reset-count">{activeFilters.length || 1}</span>
                 </Button>
               )}
               <Select
@@ -991,7 +1194,7 @@ export const UsageEventsPage: React.FC = () => {
                 onChange={(value) => {
                   const next = value as EventGrouping;
                   setGrouping(next);
-                  persistView({ grouping: next });
+                  persistView(params, { grouping: next });
                 }}
                 options={['time', 'provider', 'credential'].map((value) => ({
                   value,
@@ -1001,44 +1204,27 @@ export const UsageEventsPage: React.FC = () => {
             </div>
           </div>
         </section>
-        {activeChips.length > 0 && (
-          <div className="req-active-chips-bar" aria-label={t('events.active_filters')}>
-            <span className="req-active-chips-label">{t('events.active_filters')}:</span>
-            <div className="req-active-chips-list">
-              {activeChips.map((chip) => (
-                <span key={chip.key} className="req-filter-chip">
-                  <span className="req-filter-chip-text">{chip.label}</span>
-                  <button
-                    type="button"
-                    className="req-filter-chip-remove"
-                    onClick={chip.onRemove}
-                    aria-label={`${t('common.delete')}: ${chip.label}`}
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-              <Button
-                size="small"
-                type="link"
-                className="req-clear-all-chips"
-                onClick={() => {
-                  setSearch('');
-                  setAuthType('');
-                  setModelAlias('');
-                  setParams({}, { replace: true });
-                  setViewPref({
-                    ...DEFAULT_USAGE_EVENTS_VIEW,
-                    grouping,
-                    advanced,
-                  });
-                }}
-              >
-                {t('events.clear_all')}
-              </Button>
-            </div>
-          </div>
-        )}
+        <RequestFilterChips
+          committed={committedParams}
+          describe={describeChip}
+          onRemove={removeFilterValue}
+          onClearAll={clearFilters}
+        />
+        <RequestFilterDrawer
+          open={isFilterDrawerOpen}
+          onClose={() => setIsFilterDrawerOpen(false)}
+          committed={committedView}
+          facets={facets.data?.facets}
+          facetsFailed={facets.isError}
+          credentialName={(authIndex) => credentials.get(authIndex)?.name ?? authIndex}
+          onApply={(next) => {
+            // Apply replaces every filter dimension, so a keystroke queued in the
+            // search box must not land on top of the applied view.
+            setSearchResetToken((token) => token + 1);
+            commit(next.params, { result: next.result });
+            setIsFilterDrawerOpen(false);
+          }}
+        />
         {authFiles.isError && (
           <div className="request-detail-note" role="status">
             {t('events.credentials_unavailable')}
@@ -1117,9 +1303,7 @@ export const UsageEventsPage: React.FC = () => {
                     <strong>{t('events.empty_title')}</strong>
                     <p>
                       {t(
-                        activeFilters.length || query.result !== 'all'
-                          ? 'events.empty_filtered'
-                          : 'events.empty_hint',
+                        hasActiveFilter ? 'events.empty_filtered' : 'events.empty_hint',
                       )}
                     </p>
                   </>
@@ -1156,7 +1340,13 @@ export const UsageEventsPage: React.FC = () => {
             <Select
               aria-label={t('events.page_size')}
               value={query.limit}
-              onChange={(value) => update({ limit: String(value) })}
+              onChange={(value) => {
+                const nextParams = new URLSearchParams(params);
+                if (value === 100) nextParams.delete('limit');
+                else nextParams.set('limit', String(value));
+                writeParams(nextParams);
+                persistView(nextParams, { grouping });
+              }}
               options={Array.from(new Set([100, 250, 500, query.limit!]))
                 .sort((a, b) => a - b)
                 .map((value) => ({ value, label: t('events.per_page', { n: value }) }))}

@@ -275,6 +275,164 @@ try {
   check('no KPI summary strip remains', (await page.locator('.request-summary, .req-kpi-item').count()) === 0);
   check('the removed strip left no dead column of totals', (await page.locator('.req-kpi-val').count()) === 0);
 
+  // ---- the filter panel ----
+  // These assertions run before the live-tail section, which toggles
+  // auto-refresh on; a filter change here would redefine the view the poll
+  // compares against.
+  const filterSuffix = () => new URL(page.url()).search;
+  const initialFilterQuery = filterSuffix();
+
+  // Multi-select is the point of the rewrite: two values in one dimension mean
+  // "either of these", and both must survive into the URL as repeated keys.
+  const modelFacet = page.locator('.request-filters .req-facet-select').first();
+  const providerFacet = page.locator('.request-filters .req-facet-select').nth(1);
+  await modelFacet.click();
+  const firstModelOption = page.locator('.ant-select-dropdown:visible .ant-select-item-option').first();
+  const firstModel = (await firstModelOption.innerText()).replace(/\s*\(\d+\)\s*$/, '').trim();
+  await firstModelOption.click();
+  await page.keyboard.press('Escape');
+  await page.locator('.ant-select-dropdown:visible').waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(400);
+  check(
+    'selecting a facet writes the committed filter to the URL',
+    filterSuffix().includes(`model=${encodeURIComponent(firstModel)}`),
+    `url=${filterSuffix()}`,
+  );
+  check('a committed filter appears as a removable chip', (await page.locator('.req-filter-chip').count()) >= 1);
+
+  // Removing the chip must clear the filter. This is the regression guard for
+  // the persistence bug where a cleared filter was written straight back from
+  // the stale query and reappeared on the next navigation.
+  await page.locator('.req-filter-chip-remove').first().click();
+  await page.waitForTimeout(400);
+  check('removing the chip clears the filter from the URL', !filterSuffix().includes('model='), `url=${filterSuffix()}`);
+  check('removing the only filter hides the chip strip', (await page.locator('.req-filter-chip').count()) === 0);
+
+  // The advanced drawer is a draft: Apply commits once, Cancel discards.
+  await page.locator('.req-more-filters').click();
+  await page.locator('.req-filter-drawer').waitFor({ state: 'visible', timeout: 5000 });
+  const drawerGroups = await page.locator('.req-filter-group-title').allInnerTexts();
+  check('the advanced panel groups its fields', drawerGroups.length >= 4, `groups=${drawerGroups.join('|')}`);
+  const latencyMin = page.locator('#req-range-latency-min');
+  await latencyMin.fill('30000');
+  await page.waitForTimeout(300);
+  check('editing a draft field does not change the URL', !filterSuffix().includes('latency_min'), `url=${filterSuffix()}`);
+  const drawerFooterText = await page.locator('.req-filter-drawer-footer').innerText().catch(() => '<no footer>');
+  check(
+    'the drawer exposes reset, cancel and apply',
+    /重置筛选|Reset/.test(drawerFooterText) && /取\s*消|Cancel/.test(drawerFooterText) && /应用筛选|Apply/.test(drawerFooterText),
+    `footer=${JSON.stringify(drawerFooterText)}`,
+  );
+  // Addressed by test id, not by position: the footer carries three buttons and
+  // \"the first one\" is Reset, which deliberately leaves the panel open.
+  await page.locator('[data-testid="req-filter-cancel"]').click();
+  await page.locator('.req-filter-drawer').waitFor({ state: 'hidden', timeout: 15000 });
+  check('cancelling the drawer discards the draft', !filterSuffix().includes('latency_min'), `url=${filterSuffix()}`);
+
+  await page.locator('.req-more-filters').click();
+  await page.locator('.req-filter-drawer').waitFor({ state: 'visible', timeout: 5000 });
+  await page.locator('#req-range-latency-min').fill('30000');
+  await page.locator('[data-testid="req-filter-apply"]').click();
+  await page.locator('.req-filter-drawer').waitFor({ state: 'hidden', timeout: 15000 });
+  await page.waitForTimeout(400);
+  check('applying the drawer commits the range once', filterSuffix().includes('latency_min=30000'), `url=${filterSuffix()}`);
+  check(
+    'an applied range is reported as a chip',
+    (await page.locator('.req-filter-chip').allInnerTexts()).some((text) => /30000/.test(text)),
+  );
+
+  // A reversed range is a validation error, not a silently empty list.
+  await page.locator('.req-more-filters').click();
+  await page.locator('.req-filter-drawer').waitFor({ state: 'visible', timeout: 5000 });
+  await page.locator('#req-range-latency-min').fill('500');
+  await page.locator('#req-range-latency-max').fill('100');
+  await page.waitForTimeout(200);
+  check('a reversed range is explained inline', (await page.locator('.req-filter-error').count()) >= 1);
+  check(
+    'a reversed range blocks Apply',
+    await page.locator('[data-testid="req-filter-apply"]').isDisabled(),
+  );
+  await page.locator('[data-testid="req-filter-cancel"]').click();
+  await page.locator('.req-filter-drawer').waitFor({ state: 'hidden', timeout: 5000 });
+
+  // Clear-all returns the list to the bare window and leaves nothing behind.
+  await page.locator('.req-clear-all-chips').click();
+  await page.waitForTimeout(400);
+  check('clear-all removes every filter', new URL(page.url()).searchParams.toString().split('&').every((pair) => /^(preset|limit)=/.test(pair) || pair === ''), `url=${filterSuffix()}`);
+  check('clear-all hides the chip strip', (await page.locator('.req-filter-chip').count()) === 0);
+  check(
+    'the list is back to the unfiltered page',
+    /50/.test(await page.locator('.request-pagination span').first().innerText()),
+  );
+
+  // The result verdict is a filter with no URL parameter of its own, so the
+  // reset affordance must still appear when it is the only thing narrowing the
+  // list.
+  await page.locator('.request-filters .req-result-segmented .ant-segmented-item').filter({ hasText: /失败|Failed/ }).click();
+  await page.waitForTimeout(400);
+  check('the result verdict is committed to the URL', filterSuffix().includes('result=failed'), `url=${filterSuffix()}`);
+  check('a result-only filter still offers Reset', await page.locator('.req-reset-filters').isVisible());
+  // Clear-all must reset the filters without silently moving the reader to a
+  // different hour. The window is chosen explicitly here, because the default
+  // window is implicit in the URL and so cannot prove it was preserved.
+  await page.locator('.req-time-button').click();
+  await page
+    .locator('.ant-dropdown-menu-item')
+    .filter({ hasText: /24h/ })
+    .first()
+    .click();
+  await page.waitForTimeout(400);
+  check('the time menu sets an explicit window', filterSuffix().includes('preset=24h'), `url=${filterSuffix()}`);
+  await modelFacet.click();
+  await page.locator('.ant-select-dropdown:visible .ant-select-item-option').first().click();
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  check('a filter and a window coexist in the URL', filterSuffix().includes('preset=24h') && filterSuffix().includes('model='), `url=${filterSuffix()}`);
+  await page.locator('.req-clear-all-chips').click();
+  await page.waitForTimeout(400);
+  check('clear-all removes the filter', !filterSuffix().includes('model='), `url=${filterSuffix()}`);
+  check('clear-all keeps the chosen window', filterSuffix().includes('preset=24h'), `url=${filterSuffix()}`);
+
+  // A pending debounce must not resurrect a filter that was just cleared. A
+  // committed facet is seeded first: without one the chip strip is absent, so
+  // clicking "clear all" would have no target and the check could pass vacuously
+  // while the debounce wrote `q` back afterwards.
+  await modelFacet.click();
+  await page.locator('.ant-select-dropdown:visible .ant-select-item-option').first().click();
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  check('a facet is committed before the debounce race', filterSuffix().includes('model='), `url=${filterSuffix()}`);
+  await page.locator('.request-search input').type('gpt', { delay: 20 });
+  // Deliberately shorter than the debounce, so the timer is still pending when
+  // the clear lands.
+  await page.waitForTimeout(120);
+  await page.locator('.req-clear-all-chips').click();
+  await page.waitForTimeout(900);
+  check('a pending search debounce cannot revive a cleared filter', !filterSuffix().includes('q='), `url=${filterSuffix()}`);
+  check('the clear also removed the committed facet', !filterSuffix().includes('model='), `url=${filterSuffix()}`);
+  check('the search box is emptied by the clear', (await page.locator('.request-search input').inputValue()) === '');
+
+  // A filter change must drop the pagination position rather than reusing a
+  // cursor that was minted against a different result set.
+  await modelFacet.click();
+  await page.locator('.ant-select-dropdown:visible .ant-select-item-option').first().click();
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  check('a filter change drops the cursor', !filterSuffix().includes('cursor='), `url=${filterSuffix()}`);
+  await page.locator('.req-clear-all-chips').click();
+  await page.waitForTimeout(400);
+  // Return to the window the rest of the audit expects before it continues.
+  await page.locator('.req-time-button').click();
+  await page
+    .locator('.ant-dropdown-menu-item')
+    .filter({ hasText: /1h/ })
+    .first()
+    .click();
+  await page.waitForTimeout(400);
+  await page.goto(`${appURL}/usage/events`, { waitUntil: 'networkidle' });
+  await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 15000 });
+  check('the audit resumed on the default window', filterSuffix() === initialFilterQuery, `before=${initialFilterQuery} after=${filterSuffix()}`);
+
   // Ordering: the first row was recorded last but started earliest, so its
   // timestamp is older than the row below it. That is recording order, and it is
   // the only way a just-finished long request can reach the top.
@@ -287,19 +445,31 @@ try {
 
   // Live tail: scroll away from the top, let a poll land with a new record, and
   // require that nothing the reader is looking at moves.
-  const pickAutoRefresh = async (label) => {
-    await page.locator('.req-auto-refresh-select').click();
-    await page
-      .locator('.ant-select-dropdown:visible .ant-select-item-option')
-      .filter({ hasText: label })
-      .first()
-      .click();
-    await page.locator('.ant-select-dropdown:visible').waitFor({ state: 'hidden', timeout: 5000 });
-  };
-  await pickAutoRefresh(/5\s*秒|5s/);
+  //
+  // Auto-refresh is a plain on/off switch with a fixed 10-second cadence, so the
+  // test drives the switch rather than picking an interval out of a menu.
+  const autoRefreshSwitch = page.locator('#req-auto-refresh');
+  check('auto-refresh is an on/off switch, not an interval picker', (await page.locator('.req-auto-refresh-select').count()) === 0);
+  check('auto-refresh starts off', !(await autoRefreshSwitch.isChecked()));
+  await autoRefreshSwitch.click();
+  check('auto-refresh turns on', await autoRefreshSwitch.isChecked());
+  check(
+    'the enabled switch states its cadence',
+    /10\s*秒|every 10s/i.test(await page.locator('.req-auto-refresh-cadence').innerText()),
+  );
+
   const scroller = await listScroller();
   check('the request list has a scroll holder, so the scroll checks are meaningful', scroller !== null, await describeListTree());
   if (!scroller) throw new Error(`no scrollable element in the request list: ${await describeListTree()}`);
+
+  // Facets are nine grouped scans of the window, so they must follow the window -
+  // not the ten-second list tick. Counting the requests is the only way to prove
+  // the poll does not re-issue them.
+  const facetRequests = [];
+  const countFacet = (request) => {
+    if (request.url().includes('/usage/facets')) facetRequests.push(request.url());
+  };
+  page.on('request', countFacet);
   await scroller.evaluate((node) => {
     node.scrollTop = Math.round(node.scrollHeight / 2);
   });
@@ -310,7 +480,9 @@ try {
   const pageLabelBefore = await page.locator('.request-pagination span').first().innerText();
 
   seedScenario('append');
-  await page.locator('.req-back-to-top-btn.is-live').waitFor({ state: 'visible', timeout: 20000 });
+  // The cadence is 10s, so the wait has to clear one full interval plus the
+  // request itself. It was 20s against the old 5s option.
+  await page.locator('.req-back-to-top-btn.is-live').waitFor({ state: 'visible', timeout: 30000 });
 
   const scrollAfterPoll = await scroller.evaluate((node) => node.scrollTop);
   const rowsAfterPoll = await page.locator('.request-row').count();
@@ -320,6 +492,15 @@ try {
   check('a poll does not reset pagination or relabel the page', pageLabelAfter === pageLabelBefore, `before="${pageLabelBefore}" after="${pageLabelAfter}"`);
   const pillText = await page.locator('.req-back-to-top-btn.is-live').innerText();
   check('the pill reports the records that arrived', /1/.test(pillText), `pill="${pillText}"`);
+
+  // The evidence for the facet freshness policy: at least one poll landed above
+  // (the pill proves it), and none of them spent the facet budget.
+  page.off('request', countFacet);
+  check(
+    'a poll does not re-read the facets',
+    facetRequests.length === 0,
+    `facetRequests=${facetRequests.length}`,
+  );
 
   await page.locator('.req-back-to-top-btn.is-live').click();
   await page.waitForTimeout(600);
@@ -331,8 +512,251 @@ try {
     newestFirst.length > 0 && newestFirst[0] >= Math.max(...newestFirst),
     `first=${newestFirst.length ? new Date(newestFirst[0]).toISOString() : 'none'}`,
   );
+  // The window survives a reload. Facets and filters were reloaded repeatedly by
+  // the checks above, so this is the one place the saved view is exercised end to
+  // end: choose an explicit window, a page size and a cost filter, clear the
+  // filters, then reopen the bare route.
+  await page.locator('.req-time-button').click();
+  await page
+    .locator('.ant-dropdown-menu-item')
+    .filter({ hasText: /24h/ })
+    .first()
+    .click();
+  await page.waitForTimeout(300);
+  await page.locator('.request-pagination .ant-select').click();
+  await page
+    .locator('.ant-select-dropdown:visible .ant-select-item-option')
+    .filter({ hasText: /250/ })
+    .first()
+    .click();
+  await page.waitForTimeout(500);
+  check('the page size is committed', filterSuffix().includes('limit=250'), `url=${filterSuffix()}`);
+
+  // Every preset stays selectable exactly once, including whichever is selected,
+  // for a quick preset and a slow one. A menu that omits the current choice is how
+  // the operator loses the ability to see or return to the window they are on.
+  for (const selected of ['1h', '7d']) {
+    await page.goto(`${appURL}/usage/events?preset=${selected}`, { waitUntil: 'networkidle' });
+    await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 15000 });
+    await page.locator('.req-time-button').click();
+    const presetItems = await page.locator('.ant-dropdown-menu-item').allInnerTexts();
+    await page.keyboard.press('Escape');
+    await page
+      .locator('.ant-dropdown:visible')
+      .waitFor({ state: 'hidden', timeout: 5000 })
+      .catch(() => {});
+    for (const preset of ['15m', '1h', '6h', '24h', '7d', '30d', '90d']) {
+      const occurrences = presetItems.filter((text) => text.includes(preset)).length;
+      check(
+        `with ${selected} selected, ${preset} appears exactly once`,
+        occurrences === 1,
+        `items=${presetItems.join('|')}`,
+      );
+    }
+  }
+
+  // A cost filter is carried as exactly one parameter, and clearing filters must
+  // keep the window and page size - in the URL and in what is saved for next time.
+  await page.goto(`${appURL}/usage/events?preset=24h&limit=250&cost=unpriced&model=gpt-5-codex`, {
+    waitUntil: 'networkidle',
+  });
+  await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 15000 });
+  await page.waitForTimeout(500);
+  check(
+    'a cost filter travels as exactly one parameter',
+    (filterSuffix().match(/(^|[&?])cost=/g) ?? []).length === 1,
+    `url=${filterSuffix()}`,
+  );
+  check('the second dimension is present alongside it', filterSuffix().includes('model=gpt-5-codex'), `url=${filterSuffix()}`);
+  check(
+    'the cost state is reported as a chip',
+    (await page.locator('.req-filter-chip').allInnerTexts()).some((text) => /未定价|Unpriced/.test(text)),
+    `chips=${(await page.locator('.req-filter-chip').allInnerTexts()).join('|')}`,
+  );
+  await page.locator('.req-clear-all-chips').click();
+  await page.waitForTimeout(600);
+  check('clear-all drops the filters', !filterSuffix().includes('cost=') && !filterSuffix().includes('model='), `url=${filterSuffix()}`);
+  check(
+    'clear-all keeps the window and the page size',
+    filterSuffix().includes('preset=24h') && filterSuffix().includes('limit=250'),
+    `url=${filterSuffix()}`,
+  );
+  await page.goto(`${appURL}/usage/events`, { waitUntil: 'networkidle' });
+  await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 15000 });
+  await page.waitForTimeout(600);
+  check('the saved window is restored on the bare route', filterSuffix().includes('preset=24h'), `url=${filterSuffix()}`);
+  check('the saved page size is restored on the bare route', filterSuffix().includes('limit=250'), `url=${filterSuffix()}`);
+  check(
+    'the cleared filters stay cleared on the bare route',
+    !filterSuffix().includes('cost=') && !filterSuffix().includes('model='),
+    `url=${filterSuffix()}`,
+  );
+  check(
+    'no cost parameter is duplicated in the restored URL',
+    (filterSuffix().match(/(^|[&?])cost=/g) ?? []).length <= 1,
+    `url=${filterSuffix()}`,
+  );
+  await page.goto(`${appURL}/usage/events`, { waitUntil: 'networkidle' });
+  await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 15000 });
+
+  // The alias is an exact-match dimension with manual entry. It is the one filter
+  // whose control has to accept a value the window does not report - an operator
+  // looks up an alias precisely when it has stopped appearing - so it is exercised
+  // through the whole cycle: type, apply, reopen, remove.
+  await page.locator('.req-more-filters').click();
+  await page.locator('.req-filter-drawer').waitFor({ state: 'visible', timeout: 5000 });
+  const aliasInput = page.locator('#req-multi-model_alias');
+  await aliasInput.click();
+  // Typed key by key rather than filled: a tag is created by the Select's own
+  // keyboard handling, so setting the input value directly does not commit it.
+  await page.keyboard.type('retired-alias', { delay: 20 });
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  check(
+    'typing an alias the window does not report creates a tag',
+    (await page.locator('.req-filter-drawer').innerText()).includes('retired-alias'),
+  );
+  check(
+    'a typed alias marks the draft as changed',
+    !(await page.locator('[data-testid="req-filter-apply"]').isDisabled()),
+  );
+  await page.locator('[data-testid="req-filter-apply"]').click();
+  await page.locator('.req-filter-drawer').waitFor({ state: 'hidden', timeout: 15000 });
+  await page.waitForTimeout(400);
+  check(
+    'a typed alias reaches the URL',
+    filterSuffix().includes('model_alias=retired-alias'),
+    `url=${filterSuffix()}`,
+  );
+  check(
+    'the alias is reported as a chip',
+    (await page.locator('.req-filter-chip').allInnerTexts()).some((text) => text.includes('retired-alias')),
+  );
+  // Reopening must show the value it committed, not an empty control. The row is
+  // located by the select it contains, because antd renders the tag in a sibling
+  // node rather than inside the input's parent.
+  await page.locator('.req-more-filters').click();
+  await page.locator('.req-filter-drawer').waitFor({ state: 'visible', timeout: 5000 });
+  const aliasRowText = await page
+    .locator('.req-filter-row')
+    .filter({ has: page.locator('#req-multi-model_alias') })
+    .innerText();
+  check(
+    'the committed alias is shown when the drawer reopens',
+    aliasRowText.includes('retired-alias'),
+    `row=${JSON.stringify(aliasRowText)}`,
+  );
+  await page.locator('[data-testid="req-filter-cancel"]').click();
+  await page.locator('.req-filter-drawer').waitFor({ state: 'hidden', timeout: 15000 });
+  await page.locator('.req-clear-all-chips').click();
+  await page.waitForTimeout(400);
+  check('the alias filter can be cleared', !filterSuffix().includes('model_alias'), `url=${filterSuffix()}`);
+
+  // A filter changed while a keystroke is still queued must survive: the queued
+  // commit has to patch the newest URL rather than restore the snapshot captured
+  // when it was scheduled.
+  await modelFacet.click();
+  await page.locator('.ant-select-dropdown:visible .ant-select-item-option').first().click();
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  const committedModel = new URL(page.url()).searchParams.get('model');
+  await page.locator('.request-search input').type('gpt', { delay: 20 });
+  await page.waitForTimeout(80);
+  // Change an unrelated dimension inside the debounce window.
+  await providerFacet.click();
+  await page.locator('.ant-select-dropdown:visible .ant-select-item-option').first().click();
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(900);
+  const afterRace = new URL(page.url()).searchParams;
+  check('a queued search does not erase a filter chosen during the debounce', afterRace.get('model') === committedModel, `url=${filterSuffix()}`);
+  check('the queued search still lands', afterRace.get('q') === 'gpt', `url=${filterSuffix()}`);
+  check('the provider chosen during the debounce survives', afterRace.get('provider') !== null, `url=${filterSuffix()}`);
+  await page.locator('.req-clear-all-chips').click();
+  await page.waitForTimeout(500);
+  check('the race left the view clearable', (await page.locator('.req-filter-chip').count()) === 0, `url=${filterSuffix()}`);
+
+  // Search text must follow the URL when the operator navigates between two saved
+  // search views. A debounce that only listens for its own commits would let the
+  // loaded value be overwritten by the one it replaced.
+  for (const term of ['alpha-search', 'beta-search']) {
+    await page.goto(`${appURL}/usage/events?preset=24h&q=${term}`, { waitUntil: 'networkidle' });
+    await page.locator('.request-row, .ant-empty').first().waitFor({ state: 'visible', timeout: 15000 });
+    await page.waitForTimeout(200);
+    check(
+      `the search box shows the navigated term (${term})`,
+      (await page.locator('.request-search input').inputValue()) === term,
+      `input=${await page.locator('.request-search input').inputValue()}`,
+    );
+    // Past the debounce window: a stale timer would rewrite the URL here.
+    await page.waitForTimeout(600);
+    check(
+      `the navigated term survives the debounce window (${term})`,
+      filterSuffix().includes(`q=${term}`) &&
+        (await page.locator('.request-search input').inputValue()) === term,
+      `url=${filterSuffix()} input=${await page.locator('.request-search input').inputValue()}`,
+    );
+  }
+  await page.locator('.req-clear-all-chips').click();
+  await page.waitForTimeout(500);
+
+  // A malformed parameter must be reported, not silently dropped: dropping it would
+  // show a wider result set than the link asked for while the panel still looked
+  // narrowed, which is the failure mode this notice exists to prevent.
+  await page.goto(`${appURL}/usage/events?preset=24h&latency_min=abc&cost=maybe`, {
+    waitUntil: 'networkidle',
+  });
+  await page.locator('.usage-events-page .ant-alert').first().waitFor({ state: 'visible', timeout: 10000 });
+  const rejectedNotice = await page.locator('.usage-events-page .ant-alert').first().innerText();
+  check('an unusable filter parameter is reported', /latency_min/.test(rejectedNotice) && /cost/.test(rejectedNotice), `notice=${JSON.stringify(rejectedNotice)}`);
+  check('the list still runs on the usable filters', (await page.locator('.request-row').count()) > 0);
+  await page.goto(`${appURL}/usage/events?preset=24h`, { waitUntil: 'networkidle' });
+  await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 15000 });
+  check('a clean URL shows no notice', (await page.locator('.usage-events-page .ant-alert').count()) === 0);
+
+  // Same-component navigation with a pending keystroke. `page.goto` remounts the
+  // page, so it cannot exercise this: the two URLs below share a committed `q`, so
+  // only history navigation (not the committed value) distinguishes them.
+  await page.goto(`${appURL}/usage/events?preset=24h&q=keep-me&provider=openai`, { waitUntil: 'networkidle' });
+  await page.locator('.request-row, .ant-empty').first().waitFor({ state: 'visible', timeout: 15000 });
+  await page.waitForTimeout(300);
+  // Client-side navigation to the same view with a different unrelated dimension.
+  await page.evaluate(() => history.pushState({}, '', '/omc/usage/events?preset=24h&q=keep-me&provider=claude'));
+  await page.evaluate(() => window.dispatchEvent(new PopStateEvent('popstate')));
+  await page.locator('.request-search input').click();
+  await page.keyboard.type('stale-typing', { delay: 20 });
+  // Navigate again before the debounce commits.
+  await page.evaluate(() => history.pushState({}, '', '/omc/usage/events?preset=24h&q=keep-me&provider=gemini'));
+  await page.evaluate(() => window.dispatchEvent(new PopStateEvent('popstate')));
+  await page.waitForTimeout(900);
+  check(
+    'history navigation discards a pending keystroke',
+    !filterSuffix().includes('stale-typing'),
+    `url=${filterSuffix()}`,
+  );
+  check(
+    'the navigated view keeps its own committed search',
+    filterSuffix().includes('q=keep-me') && filterSuffix().includes('provider=gemini'),
+    `url=${filterSuffix()}`,
+  );
+  await page.goto(`${appURL}/usage/events?preset=24h`, { waitUntil: 'networkidle' });
+  await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 15000 });
+
   // Switching the poll off again keeps the rest of the audit deterministic.
-  await pickAutoRefresh(/关闭|Off/);
+  await autoRefreshSwitch.click();
+  check('auto-refresh turns off again', !(await autoRefreshSwitch.isChecked()));
+  check('the cadence label is hidden while the poll is off', (await page.locator('.req-auto-refresh-cadence').count()) === 0);
+
+  // A manual refresh is the other event that re-reads the facets: the operator
+  // asked for current data, and stale dropdown counts are on screen too.
+  const manualFacets = [];
+  const countManualFacet = (request) => {
+    if (request.url().includes('/usage/facets')) manualFacets.push(request.url());
+  };
+  page.on('request', countManualFacet);
+  await page.locator('.terminal-page-head .request-actions button').last().click();
+  await page.waitForTimeout(1200);
+  page.off('request', countManualFacet);
+  check('a manual refresh re-reads the facets', manualFacets.length >= 1, `requests=${manualFacets.length}`);
   await page.screenshot({ path: path.join(root, 'tmp', 'req-page-desktop.png') });
   for (const width of [768, 390]) {
     await page.setViewportSize({ width, height: 800 });
@@ -349,6 +773,64 @@ try {
       return Math.round(box.right - window.innerWidth);
     });
     check(`request records ${width}px header actions stay in view`, actionsFit <= 1, `rightOverhang=${actionsFit}`);
+
+    // The panel and the time dialog are the two surfaces that only exist while
+    // open, so the closed-page overflow check above cannot see them.
+    await page.locator('.req-more-filters').click();
+    await page.locator('.req-filter-drawer').waitFor({ state: 'visible', timeout: 5000 });
+    await page.waitForTimeout(250);
+    const drawerOverflow = await page.evaluate(() => {
+      const panel = document.querySelector('.req-filter-drawer .ant-drawer-body');
+      if (!panel) return -1;
+      // Content wider than the panel is the failure mode a narrow viewport exposes:
+      // a range pair whose inputs cannot shrink pushes the dialog off screen.
+      return Math.round(panel.scrollWidth - panel.clientWidth);
+    });
+    check(`filter drawer fits at ${width}px`, drawerOverflow <= 1, `drawerOverflow=${drawerOverflow}`);
+    const drawerOnScreen = await page.evaluate(() => {
+      const root = document.querySelector('.req-filter-drawer');
+      if (!root) return 'no root';
+      // The positioning element is not guaranteed to be a fixed class name in
+      // antd v6, so the check walks the drawer's own elements and requires that at
+      // least one sizing box sits inside the viewport.
+      const boxes = [root, ...root.querySelectorAll('*')]
+        .map((node) => ({ node, box: node.getBoundingClientRect() }))
+        .filter(({ box }) => box.width > 100 && box.height > 100);
+      if (boxes.length === 0) {
+        return `no sized element; classes=${root.className} inner=${root.innerHTML.slice(0, 200)}`;
+      }
+      const offender = boxes.find(({ box }) => box.left < -1 || box.right > window.innerWidth + 1);
+      if (offender) {
+        return `${offender.node.className} left=${Math.round(offender.box.left)} right=${Math.round(offender.box.right)} viewport=${window.innerWidth}`;
+      }
+      return true;
+    });
+    check(`filter drawer stays on screen at ${width}px`, drawerOnScreen === true, String(drawerOnScreen));
+    await page.locator('[data-testid="req-filter-cancel"]').click();
+    await page.locator('.req-filter-drawer').waitFor({ state: 'hidden', timeout: 15000 });
+
+    await page.locator('.req-time-button').click();
+    // The trigger opens the preset menu; the absolute dialog is a menu item, so a
+    // click on the trigger alone never opens it.
+    await page
+      .locator('.ant-dropdown-menu-item')
+      .filter({ hasText: /自定义时间|Custom range/ })
+      .first()
+      .click();
+    await page.locator('.req-time-modal').waitFor({ state: 'visible', timeout: 10000 });
+    await page.waitForTimeout(250);
+    const modalOnScreen = await page.evaluate(() => {
+      const dialog = document.querySelector('.req-time-modal');
+      if (!dialog) return 'no dialog';
+      const box = dialog.getBoundingClientRect();
+      if (box.left < -1 || box.right > window.innerWidth + 1) {
+        return `left=${Math.round(box.left)} right=${Math.round(box.right)} viewport=${window.innerWidth}`;
+      }
+      return true;
+    });
+    check(`custom time dialog stays on screen at ${width}px`, modalOnScreen === true, String(modalOnScreen));
+    await page.keyboard.press('Escape');
+    await page.locator('.req-time-modal').waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
   }
   await page.setViewportSize({ width: 1440, height: 900 });
   responseBodies.length = 0;
