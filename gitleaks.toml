@@ -2,3 +2,18 @@ title = "Oh My CPA secret scanning"
 
 [extend]
 useDefault = true
+
+# `generic-api-key` fires on a Go struct-field comparison in the quota tests:
+# `q3.Recommendation.Priority` reads to the entropy heuristic like a key
+# assignment. It is an assertion operand, not a credential, so the exact
+# expression is allowed by rule + path + value, rather than by disabling the
+# rule or excluding the whole test file from scanning.
+[[rules]]
+id = "generic-api-key"
+
+  [[rules.allowlists]]
+  description = "Go struct field comparison in quota recommendation tests"
+  condition = "AND"
+  paths = ['''internal/quota/service_test\.go''']
+  regexTarget = "secret"
+  regexes = ['''^q\w+\.Recommendation\.Priority$''']
