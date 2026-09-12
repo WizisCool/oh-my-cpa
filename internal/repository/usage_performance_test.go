@@ -103,3 +103,17 @@ func BenchmarkUsageEventWindow(b *testing.B) {
 		}
 	}
 }
+
+// BenchmarkUsageFacets exists because the filter panel's cost is the number of
+// grouped scans it performs, not the size of any single one: the panel opened
+// with six dimensions and now opens with nine. This keeps that trade visible
+// instead of discovering it in production.
+func BenchmarkUsageFacets(b *testing.B) {
+	repo := performanceRepository(b, 100000)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := repo.GetUsageFacets(context.Background(), "default", 1700000000000, 1700100000000); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

@@ -29,31 +29,87 @@ const (
 	MaxUsageEventLimit     = 500
 )
 
+// Cost availability vocabulary. It answers "does this record carry a locked
+// price" instead of exposing the storage-level pricing_status machine to the
+// console: a request whose price was unknown when it ran can never be repriced,
+// so unpriced is a permanent property of the record rather than a state it moves
+// out of. See internal/repository/usage_pricing.go for the four stored values.
+const (
+	CostStateAny      = ""
+	CostStatePriced   = "priced"
+	CostStateUnpriced = "unpriced"
+)
+
+// MaxUsageEventFilterValues bounds how many values one multi-select dimension
+// may carry. The filter panel never approaches it; the cap exists so a
+// hand-written URL cannot turn into a several-thousand-term IN list.
+const MaxUsageEventFilterValues = 64
+
+// ErrUsageFilterInvalid marks a filter the repository refuses to translate into
+// SQL: an unknown enum value, a negative bound, an oversized dimension. Callers
+// answer 400 for it, because the request is malformed rather than the server
+// being broken.
+var ErrUsageFilterInvalid = errors.New("invalid usage event filter")
+
 // UsageEventFilter narrows event reads.
 //
 // This is the shared vocabulary for the whole request-record feature set: the
 // dashboard drill-down, ranking, cost analysis and export all take this struct,
 // so a filter added once here becomes available everywhere at once.
+//
+// Dimensions combine as AND; values inside one dimension combine as OR. An empty
+// slice therefore means "do not narrow this dimension", which is the only
+// reading that keeps a cleared multi-select equivalent to never having set it.
 type UsageEventFilter struct {
 	InstanceID string
 	FromMS     int64
 	ToMS       int64
-	// Model matches the upstream model name exactly.
-	Model string
-	// ModelAlias matches the client-requested alias when CPA reported one.
-	ModelAlias string
-	// APIGroupKey is the resolved API target (client key, provider or endpoint).
-	APIGroupKey string
-	// AuthIndex selects one credential on the CPA instance.
-	AuthIndex string
-	Provider  string
-	// Source is CPA's client-facing API key label.
-	Source       string
-	AuthType     string
-	ExecutorType string
-	Result       string
-	// RequestID looks up one request by its CPA id.
+
+	// Search is one literal substring applied across the identity columns in
+	// usageEventSearchColumns. Wildcards a caller types are never honoured as
+	// wildcards.
+	Search string
+
+	// Models matches the upstream model name exactly.
+	Models []string
+	// ModelAliases matches the client-requested alias when CPA reported one.
+	ModelAliases []string
+	// Providers is the upstream provider family CPA reported.
+	Providers []string
+	// APIGroupKeys are resolved API targets (client key, provider or endpoint).
+	APIGroupKeys []string
+	// AuthIndexes select credentials on the CPA instance.
+	AuthIndexes []string
+	// Sources are CPA's client-facing API key labels.
+	Sources          []string
+	AuthTypes        []string
+	ExecutorTypes    []string
+	ReasoningEfforts []string
+	ServiceTiers     []string
+
+	// Endpoint and UserAgent are substring matches. Both are long,
+	// high-cardinality values that a console filters by typing rather than by
+	// picking from a list, so they get a text field instead of a facet.
+	Endpoint  string
+	UserAgent string
+
+	// RequestID looks up one request by its CPA id exactly.
 	RequestID string
+	Result    string
+
+	// Numeric bounds are inclusive and nil means "this side is not filtering".
+	// They are pointers because 0 is a meaningful bound: max_cost=0 selects the
+	// records priced at nothing, which is not the same as having no bound at all.
+	MinLatencyMS *int64
+	MaxLatencyMS *int64
+	MinTokens    *int64
+	MaxTokens    *int64
+	MinCostNanos *int64
+	MaxCostNanos *int64
+
+	// CostState narrows by price availability (CostStatePriced/Unpriced).
+	CostState string
+
 	// Cursor is an opaque recording-order position for keyset pagination. The
 	// client only ever echoes it back.
 	Cursor string
@@ -363,6 +419,18 @@ type UsageFacets struct {
 	AuthIndexes []UsageFacetValue `json:"auth_indexes"`
 	Sources     []UsageFacetValue `json:"sources"`
 	Executors   []UsageFacetValue `json:"executors"`
+	// AuthTypes, ReasoningEfforts and ServiceTiers are closed vocabularies CPA
+	// reports, which is exactly what a dropdown is for. ModelAliases is the same
+	// shape: a client-requested alias is a short label with few distinct values,
+	// and it is a filter dimension, so it needs a dropdown rather than a text box
+	// whose edits would have to guess at exact matching. Endpoint and UserAgent are
+	// deliberately absent: both are long free-form values where a typed substring
+	// beats a 200-row list, and the endpoint URL must never be handed to the
+	// browser (the list projection drops it for the same reason).
+	ModelAliases     []UsageFacetValue `json:"model_aliases"`
+	AuthTypes        []UsageFacetValue `json:"auth_types"`
+	ReasoningEfforts []UsageFacetValue `json:"reasoning_efforts"`
+	ServiceTiers     []UsageFacetValue `json:"service_tiers"`
 }
 
 // UsageFacetValue is one distinct value plus how often it occurred. Mask carries
@@ -377,16 +445,24 @@ type UsageFacetValue struct {
 // GetUsageFacets enumerates filter options within a time window.
 func (r *Repository) GetUsageFacets(ctx context.Context, instanceID string, fromMS, toMS int64) (UsageFacets, error) {
 	facets := UsageFacets{
-		Models:      []UsageFacetValue{},
-		Providers:   []UsageFacetValue{},
-		APIGroupKey: []UsageFacetValue{},
-		AuthIndexes: []UsageFacetValue{},
-		Sources:     []UsageFacetValue{},
-		Executors:   []UsageFacetValue{},
+		Models:           []UsageFacetValue{},
+		Providers:        []UsageFacetValue{},
+		APIGroupKey:      []UsageFacetValue{},
+		AuthIndexes:      []UsageFacetValue{},
+		Sources:          []UsageFacetValue{},
+		Executors:        []UsageFacetValue{},
+		ModelAliases:     []UsageFacetValue{},
+		AuthTypes:        []UsageFacetValue{},
+		ReasoningEfforts: []UsageFacetValue{},
+		ServiceTiers:     []UsageFacetValue{},
 	}
 	if r == nil || r.SQL() == nil {
 		return facets, errors.New("repository is not initialized")
 	}
+	// Each entry costs one grouped scan of the window. The set is kept to the
+	// dimensions a dropdown genuinely serves, because the count of these queries -
+	// not the size of any one of them - is what makes facets the expensive part of
+	// opening the page. BenchmarkUsageFacets pins the budget.
 	columns := []struct {
 		column     string
 		maskColumn string
@@ -401,6 +477,10 @@ func (r *Repository) GetUsageFacets(ctx context.Context, instanceID string, from
 		{column: "auth_index", target: &facets.AuthIndexes},
 		{column: "source", target: &facets.Sources},
 		{column: "executor_type", target: &facets.Executors},
+		{column: "model_alias", target: &facets.ModelAliases},
+		{column: "auth_type", target: &facets.AuthTypes},
+		{column: "reasoning_effort", target: &facets.ReasoningEfforts},
+		{column: "service_tier", target: &facets.ServiceTiers},
 	}
 	for _, entry := range columns {
 		if strings.TrimSpace(entry.column) == "" {
@@ -442,6 +522,86 @@ func (r *Repository) GetUsageFacets(ctx context.Context, instanceID string, from
 	return facets, nil
 }
 
+// usageEventSearchColumns is what the console's single search box covers. It is
+// deliberately the request's identity - who called, what they asked for and
+// which upstream served it. Client IP, X-Forwarded-For, the endpoint URL and the
+// raw caller key are all absent: the first three are private to the operator and
+// the last is never retained in readable form.
+var usageEventSearchColumns = []string{
+	"e.request_id",
+	"e.model",
+	"e.model_alias",
+	"e.provider",
+	"e.executor_type",
+	"e.source",
+	"e.api_group_key",
+	"e.api_key_mask",
+	"e.auth_index",
+	"e.user_agent",
+}
+
+// likeEscape is the explicit escape character for the substring filters. SQLite's
+// LIKE has none by default, so a caller's literal `%` or `_` would otherwise act
+// as a wildcard: searching for "50%" would match every row, and "gpt_5" would
+// also match "gpt-5".
+const likeEscape = `\`
+
+// escapeLikePattern neutralises the escape character and both LIKE wildcards.
+// The escape character is replaced first so the backslashes introduced for the
+// wildcards are not themselves escaped a second time.
+func escapeLikePattern(value string) string {
+	return strings.NewReplacer(
+		likeEscape, likeEscape+likeEscape,
+		"%", likeEscape+"%",
+		"_", likeEscape+"_",
+	).Replace(value)
+}
+
+// usageEventInClause renders one OR dimension. Blank entries are dropped rather
+// than matching the empty column, duplicates are collapsed so a repeated value
+// cannot inflate the statement, and an over-long list is refused instead of
+// truncated: dropping values would quietly widen the result set.
+func usageEventInClause(column string, values []string) (string, []any, error) {
+	cleaned := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, duplicate := seen[trimmed]; duplicate {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		cleaned = append(cleaned, trimmed)
+	}
+	switch {
+	case len(cleaned) == 0:
+		return "", nil, nil
+	case len(cleaned) > MaxUsageEventFilterValues:
+		return "", nil, fmt.Errorf("%w: %s carries %d values, at most %d are accepted",
+			ErrUsageFilterInvalid, column, len(cleaned), MaxUsageEventFilterValues)
+	}
+	args := make([]any, 0, len(cleaned))
+	for _, value := range cleaned {
+		args = append(args, value)
+	}
+	if len(cleaned) == 1 {
+		return column + " = ?", args, nil
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?, ", len(cleaned)), ", ")
+	return column + " IN (" + placeholders + ")", args, nil
+}
+
+// usageEventSubstringClause renders one literal contains-match.
+func usageEventSubstringClause(column, value string) (string, []any) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return "", nil
+	}
+	return column + ` LIKE ? ESCAPE '` + likeEscape + `'`, []any{"%" + escapeLikePattern(trimmed) + "%"}
+}
+
 func usageEventWhere(filter UsageEventFilter) ([]string, []any, error) {
 	where := []string{}
 	args := []any{}
@@ -451,36 +611,103 @@ func usageEventWhere(filter UsageEventFilter) ([]string, []any, error) {
 	}
 	if filter.FromMS > 0 && filter.ToMS > 0 {
 		if filter.ToMS <= filter.FromMS {
-			return nil, nil, errors.New("event window must be positive")
+			return nil, nil, fmt.Errorf("%w: event window must be positive", ErrUsageFilterInvalid)
 		}
 		where = append(where, `e.timestamp_ms BETWEEN ? AND ?`)
 		args = append(args, filter.FromMS, filter.ToMS)
 	}
-	exact := []struct {
+
+	dimensions := []struct {
+		column string
+		values []string
+	}{
+		{"e.model", filter.Models},
+		{"e.model_alias", filter.ModelAliases},
+		{"e.provider", filter.Providers},
+		{"e.api_group_key", filter.APIGroupKeys},
+		{"e.auth_index", filter.AuthIndexes},
+		{"e.source", filter.Sources},
+		{"e.auth_type", filter.AuthTypes},
+		{"e.executor_type", filter.ExecutorTypes},
+		{"e.reasoning_effort", filter.ReasoningEfforts},
+		{"e.service_tier", filter.ServiceTiers},
+	}
+	for _, dimension := range dimensions {
+		clause, clauseArgs, err := usageEventInClause(dimension.column, dimension.values)
+		if err != nil {
+			return nil, nil, err
+		}
+		if clause == "" {
+			continue
+		}
+		where = append(where, clause)
+		args = append(args, clauseArgs...)
+	}
+
+	if value := strings.TrimSpace(filter.RequestID); value != "" {
+		where = append(where, `e.request_id = ?`)
+		args = append(args, value)
+	}
+	for _, entry := range []struct {
 		column string
 		value  string
 	}{
-		{"e.model", filter.Model},
-		{"e.provider", filter.Provider},
-		{"e.api_group_key", filter.APIGroupKey},
-		{"e.auth_index", filter.AuthIndex},
-		{"e.source", filter.Source},
-		{"e.auth_type", filter.AuthType},
-		{"e.executor_type", filter.ExecutorType},
-		{"e.request_id", filter.RequestID},
-	}
-	for _, entry := range exact {
-		value := strings.TrimSpace(entry.value)
-		if value == "" {
+		{"e.endpoint", filter.Endpoint},
+		{"e.user_agent", filter.UserAgent},
+	} {
+		clause, clauseArgs := usageEventSubstringClause(entry.column, entry.value)
+		if clause == "" {
 			continue
 		}
-		where = append(where, entry.column+` = ?`)
-		args = append(args, value)
+		where = append(where, clause)
+		args = append(args, clauseArgs...)
 	}
-	if alias := strings.TrimSpace(filter.ModelAlias); alias != "" {
-		where = append(where, `e.model_alias = ?`)
-		args = append(args, alias)
+
+	if search := strings.TrimSpace(filter.Search); search != "" {
+		pattern := "%" + escapeLikePattern(search) + "%"
+		terms := make([]string, 0, len(usageEventSearchColumns))
+		for _, column := range usageEventSearchColumns {
+			terms = append(terms, column+` LIKE ? ESCAPE '`+likeEscape+`'`)
+			args = append(args, pattern)
+		}
+		// The disjunction must be parenthesised: loose ORs would bind more weakly
+		// than the ANDs built above and silently drop every other filter.
+		where = append(where, "("+strings.Join(terms, " OR ")+")")
 	}
+
+	bounds := []struct {
+		column   string
+		operator string
+		value    *int64
+	}{
+		{"e.latency_ms", ">=", filter.MinLatencyMS},
+		{"e.latency_ms", "<=", filter.MaxLatencyMS},
+		{"e.total_tokens", ">=", filter.MinTokens},
+		{"e.total_tokens", "<=", filter.MaxTokens},
+		{"e.cost_nanos", ">=", filter.MinCostNanos},
+		{"e.cost_nanos", "<=", filter.MaxCostNanos},
+	}
+	for _, bound := range bounds {
+		if bound.value == nil {
+			continue
+		}
+		if *bound.value < 0 {
+			return nil, nil, fmt.Errorf("%w: %s cannot be negative", ErrUsageFilterInvalid, bound.column)
+		}
+		where = append(where, bound.column+" "+bound.operator+" ?")
+		args = append(args, *bound.value)
+	}
+
+	switch strings.ToLower(strings.TrimSpace(filter.CostState)) {
+	case CostStateAny:
+	case CostStatePriced:
+		where = append(where, `e.cost_nanos IS NOT NULL`)
+	case CostStateUnpriced:
+		where = append(where, `e.cost_nanos IS NULL`)
+	default:
+		return nil, nil, fmt.Errorf("%w: unknown cost state %q", ErrUsageFilterInvalid, filter.CostState)
+	}
+
 	switch strings.ToLower(strings.TrimSpace(filter.Result)) {
 	case "", ResultAll:
 	case ResultSuccess:
@@ -488,7 +715,7 @@ func usageEventWhere(filter UsageEventFilter) ([]string, []any, error) {
 	case ResultFailed:
 		where = append(where, `e.failed = 1`)
 	default:
-		return nil, nil, fmt.Errorf("unknown result filter %q", filter.Result)
+		return nil, nil, fmt.Errorf("%w: unknown result filter %q", ErrUsageFilterInvalid, filter.Result)
 	}
 	return where, args, nil
 }

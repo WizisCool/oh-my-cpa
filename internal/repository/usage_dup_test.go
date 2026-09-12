@@ -52,8 +52,8 @@ func TestAmbiguousAuthIndexDoesNotDuplicateEvents(t *testing.T) {
 
 	// 1. ListUsageEvents must return exactly 1 item (no fanout duplication!)
 	page, err := repo.ListUsageEvents(ctx, UsageEventFilter{
-		InstanceID: "default",
-		AuthIndex:  "dup-auth-idx",
+		InstanceID:  "default",
+		AuthIndexes: []string{"dup-auth-idx"},
 	})
 	if err != nil {
 		t.Fatal(err)

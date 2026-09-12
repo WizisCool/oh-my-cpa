@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -128,6 +129,258 @@ func usageEventTokens(row repository.UsageEventRow) (tokens struct {
 	return tokens
 }
 
+// maxUsageFilterParamLength bounds one filter value. Every column the console
+// filters on is stored bounded (the widest is 256 characters), so a longer term
+// cannot match anything and is refused rather than silently returning nothing.
+const maxUsageFilterParamLength = 256
+
+// usageEventMultiParams reads one repeated query parameter into a bounded list.
+//
+// Repeated parameters are the multi-select wire format: `?model=a&model=b` means
+// "a or b", and a single occurrence keeps working so dashboard drill-down links
+// written before multi-select existed are unchanged. Values are never split on a
+// comma: a comma is a legal character in a model name, a source label and a
+// caller mask, so splitting would corrupt the very values being filtered on.
+func usageEventMultiParams(query url.Values, key string) ([]string, error) {
+	raw := query[key]
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	if len(raw) > repository.MaxUsageEventFilterValues {
+		return nil, fmt.Errorf("%s accepts at most %d values", key, repository.MaxUsageEventFilterValues)
+	}
+	values := make([]string, 0, len(raw))
+	seen := make(map[string]struct{}, len(raw))
+	for _, value := range raw {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if len(trimmed) > maxUsageFilterParamLength {
+			return nil, fmt.Errorf("%s values must be at most %d characters", key, maxUsageFilterParamLength)
+		}
+		if _, duplicate := seen[trimmed]; duplicate {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		values = append(values, trimmed)
+	}
+	return values, nil
+}
+
+// usageEventTextParam reads one optional substring filter.
+func usageEventTextParam(query url.Values, key string) (string, error) {
+	values, err := usageEventMultiParams(query, key)
+	if err != nil {
+		return "", err
+	}
+	if len(values) == 0 {
+		return "", nil
+	}
+	if len(values) > 1 {
+		return "", fmt.Errorf("%s accepts a single value", key)
+	}
+	return values[0], nil
+}
+
+// usageEventBoundParam reads one inclusive numeric bound. A present-but-empty
+// parameter (`?min_latency=`) clears the bound, which is what the console emits
+// when the operator empties a range field, so it is not an error.
+func usageEventBoundParam(query url.Values, key string) (*int64, error) {
+	raw, present := query[key]
+	if !present {
+		return nil, nil
+	}
+	trimmed := strings.TrimSpace(raw[len(raw)-1])
+	if trimmed == "" {
+		return nil, nil
+	}
+	parsed, err := strconv.ParseInt(trimmed, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("%s must be an integer", key)
+	}
+	if parsed < 0 {
+		return nil, fmt.Errorf("%s cannot be negative", key)
+	}
+	return &parsed, nil
+}
+
+// usageEventCostBoundParam converts a decimal USD bound into the nanos the cost
+// column is stored in. The digits are scaled in string form rather than through
+// float64 so the conversion is exact: a bound of 0.1 must not land one nano
+// below the value it was meant to include.
+func usageEventCostBoundParam(query url.Values, key string) (*int64, error) {
+	raw, present := query[key]
+	if !present {
+		return nil, nil
+	}
+	trimmed := strings.TrimSpace(raw[len(raw)-1])
+	if trimmed == "" {
+		return nil, nil
+	}
+	nanos, err := parseUSDAmountNanos(trimmed)
+	if err != nil {
+		return nil, fmt.Errorf("%s %s", key, err.Error())
+	}
+	return &nanos, nil
+}
+
+// parseUSDAmountNanos converts a non-negative decimal dollar amount of at most
+// nine fractional digits into integer nanos.
+//
+// Precision is refused rather than rounded. A bound of 0.0000001 USD is a real
+// constraint that this column cannot express, and rounding it to zero would turn
+// "cost at most a tenth of a nano-dollar" into "cost at most nothing" - a
+// silently wrong answer in place of a validation error.
+func parseUSDAmountNanos(value string) (int64, error) {
+	whole, fraction, hasPoint := strings.Cut(value, ".")
+	if whole == "" && !hasPoint {
+		return 0, errors.New("must be a non-negative decimal amount")
+	}
+	// At least one digit is required somewhere: "." and "" both parse as zero on
+	// their own, and neither is an amount the operator typed on purpose.
+	if strings.IndexFunc(whole+fraction, func(r rune) bool { return r >= '0' && r <= '9' }) < 0 {
+		return 0, errors.New("must be a non-negative decimal amount")
+	}
+	for _, digit := range whole + fraction {
+		if digit < '0' || digit > '9' {
+			return 0, errors.New("must be a non-negative decimal amount")
+		}
+	}
+	if len(fraction) > 9 {
+		return 0, errors.New("supports at most nine decimal places")
+	}
+	if whole == "" {
+		whole = "0"
+	}
+	// Leading zeros are dropped after scaling, where the only zeros in play are
+	// padding: trimming the whole part earlier would move the decimal point.
+	digits := strings.TrimLeft(whole+fraction+strings.Repeat("0", 9-len(fraction)), "0")
+	if digits == "" {
+		return 0, nil
+	}
+	nanos, err := strconv.ParseInt(digits, 10, 64)
+	if err != nil {
+		return 0, errors.New("is out of range")
+	}
+	return nanos, nil
+}
+
+// usageEventRangeValid rejects a range whose ends cross, which no record can
+// satisfy. Accepting it would present an empty list as a data problem.
+func usageEventRangeValid(key string, min, max *int64) error {
+	if min == nil || max == nil {
+		return nil
+	}
+	if *min > *max {
+		return fmt.Errorf("%s must not be greater than %s", key+"_min", key+"_max")
+	}
+	return nil
+}
+
+// usageEventFilterFromRequest translates the console's query string into the
+// shared filter vocabulary. Every failure is the caller's: an unparsable bound,
+// an unknown enum or a reversed range is a malformed request, not a server
+// fault, so the messages are written to be shown next to the field.
+func usageEventFilterFromRequest(request *http.Request, window dashboardWindow) (repository.UsageEventFilter, error) {
+	query := request.URL.Query()
+	filter := repository.UsageEventFilter{
+		InstanceID: defaultInstanceID(),
+		FromMS:     window.FromMS,
+		ToMS:       window.ToMS,
+		Result:     strings.ToLower(strings.TrimSpace(query.Get("result"))),
+		CostState:  strings.ToLower(strings.TrimSpace(query.Get("cost"))),
+		Cursor:     query.Get("cursor"),
+	}
+	multi := []struct {
+		key    string
+		target *[]string
+	}{
+		{"model", &filter.Models},
+		{"model_alias", &filter.ModelAliases},
+		{"provider", &filter.Providers},
+		{"api_key", &filter.APIGroupKeys},
+		{"auth_index", &filter.AuthIndexes},
+		{"source", &filter.Sources},
+		{"auth_type", &filter.AuthTypes},
+		{"executor", &filter.ExecutorTypes},
+		{"reasoning", &filter.ReasoningEfforts},
+		{"service_tier", &filter.ServiceTiers},
+	}
+	for _, dimension := range multi {
+		values, err := usageEventMultiParams(query, dimension.key)
+		if err != nil {
+			return filter, err
+		}
+		*dimension.target = values
+	}
+
+	text := []struct {
+		key    string
+		target *string
+	}{
+		{"q", &filter.Search},
+		{"endpoint", &filter.Endpoint},
+		{"ua", &filter.UserAgent},
+		{"request_id", &filter.RequestID},
+	}
+	for _, entry := range text {
+		value, err := usageEventTextParam(query, entry.key)
+		if err != nil {
+			return filter, err
+		}
+		*entry.target = value
+	}
+
+	numeric := []struct {
+		key    string
+		target **int64
+	}{
+		{"latency_min", &filter.MinLatencyMS},
+		{"latency_max", &filter.MaxLatencyMS},
+		{"tokens_min", &filter.MinTokens},
+		{"tokens_max", &filter.MaxTokens},
+	}
+	for _, entry := range numeric {
+		value, err := usageEventBoundParam(query, entry.key)
+		if err != nil {
+			return filter, err
+		}
+		*entry.target = value
+	}
+	for _, entry := range []struct {
+		key    string
+		target **int64
+	}{
+		{"cost_min", &filter.MinCostNanos},
+		{"cost_max", &filter.MaxCostNanos},
+	} {
+		value, err := usageEventCostBoundParam(query, entry.key)
+		if err != nil {
+			return filter, err
+		}
+		*entry.target = value
+	}
+
+	if err := usageEventRangeValid("latency", filter.MinLatencyMS, filter.MaxLatencyMS); err != nil {
+		return filter, err
+	}
+	if err := usageEventRangeValid("tokens", filter.MinTokens, filter.MaxTokens); err != nil {
+		return filter, err
+	}
+	if err := usageEventRangeValid("cost", filter.MinCostNanos, filter.MaxCostNanos); err != nil {
+		return filter, err
+	}
+	if rawLimit := strings.TrimSpace(query.Get("limit")); rawLimit != "" {
+		parsed, err := strconv.Atoi(rawLimit)
+		if err != nil || parsed <= 0 {
+			return filter, errors.New("limit must be a positive integer")
+		}
+		filter.Limit = parsed
+	}
+	return filter, nil
+}
+
 // listUsageEvents serves the shared request-record query used by the detail
 // table, drill-downs and (later) ranking and export.
 func (h *Handler) listUsageEvents(writer http.ResponseWriter, request *http.Request) {
@@ -141,35 +394,17 @@ func (h *Handler) listUsageEvents(writer http.ResponseWriter, request *http.Requ
 		writeError(writer, http.StatusBadRequest, windowErr)
 		return
 	}
-	query := request.URL.Query()
-	filter := repository.UsageEventFilter{
-		InstanceID:   defaultInstanceID(),
-		FromMS:       window.FromMS,
-		ToMS:         window.ToMS,
-		Model:        query.Get("model"),
-		ModelAlias:   query.Get("model_alias"),
-		APIGroupKey:  query.Get("api_key"),
-		AuthIndex:    query.Get("auth_index"),
-		Provider:     query.Get("provider"),
-		Source:       query.Get("source"),
-		AuthType:     query.Get("auth_type"),
-		ExecutorType: query.Get("executor"),
-		Result:       strings.ToLower(strings.TrimSpace(query.Get("result"))),
-		RequestID:    query.Get("request_id"),
-		Cursor:       query.Get("cursor"),
-		Limit:        0,
+	filter, filterErr := usageEventFilterFromRequest(request, window)
+	if filterErr != nil {
+		writeError(writer, http.StatusBadRequest, filterErr.Error())
+		return
 	}
-	if rawLimit := strings.TrimSpace(query.Get("limit")); rawLimit != "" {
-		parsed, err := strconv.Atoi(rawLimit)
-		if err != nil || parsed <= 0 {
-			writeError(writer, http.StatusBadRequest, "limit must be a positive integer")
-			return
-		}
-		filter.Limit = parsed
-	}
-
 	if !validEventResult(filter.Result) {
 		writeError(writer, http.StatusBadRequest, "result must be one of all, success or failed")
+		return
+	}
+	if !validCostState(filter.CostState) {
+		writeError(writer, http.StatusBadRequest, "cost must be one of priced or unpriced")
 		return
 	}
 	if err := repository.ValidUsageCursor(filter.Cursor); err != nil {
@@ -178,6 +413,12 @@ func (h *Handler) listUsageEvents(writer http.ResponseWriter, request *http.Requ
 	}
 	page, err := h.repo.ListUsageEvents(request.Context(), filter)
 	if err != nil {
+		// A filter the repository refuses is still a malformed request. Its own
+		// message names internal columns, so the response stays generic.
+		if errors.Is(err, repository.ErrUsageFilterInvalid) {
+			writeError(writer, http.StatusBadRequest, "invalid usage event filter")
+			return
+		}
 		h.writeUsageQueryError(writer, err)
 		return
 	}
@@ -341,6 +582,16 @@ func (h *Handler) listUsageFacets(writer http.ResponseWriter, request *http.Requ
 func validEventResult(value string) bool {
 	switch value {
 	case "", repository.ResultAll, repository.ResultSuccess, repository.ResultFailed:
+		return true
+	default:
+		return false
+	}
+}
+
+// validCostState mirrors the repository's accepted cost-availability vocabulary.
+func validCostState(value string) bool {
+	switch value {
+	case repository.CostStateAny, repository.CostStatePriced, repository.CostStateUnpriced:
 		return true
 	default:
 		return false
