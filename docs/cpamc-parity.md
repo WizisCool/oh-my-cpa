@@ -68,7 +68,7 @@
 
 | 能力 | 入口 | 说明 |
 | --- | --- | --- |
-| 用量请求浏览器 | `/usage/events`、`/usage/events/{id}`、`/usage/events/{id}/request-log` | 过滤、分面、列布局持久化、单请求详情与原始日志下载 |
+| 用量请求浏览器 | `/usage/events`、`/usage/events/{id}`、`/usage/events/{id}/request-log`、`/usage/facets` | 多选分面（同维度取并集、跨维度取交集）、全局搜索、区间筛选、列布局与视图持久化、单请求详情与原始日志下载 |
 | 请求时价格快照与模型目录 | `/pricing`、`/pricing/models`、`/pricing/sync`、`/management/dashboard` | 见 `docs/adr/0003-request-time-price-snapshots.md` 与 `docs/plans/model-prices.md` |
 | 配额总览与凭据详情 | `/management/quota`、`/management/quota/{authIndex}` | 归一化快照 + 冷却、重置、Codex 重置积分 |
 | 审计日志 | `/management/audit/events`、`/management/audit/export` | 追加写入；敏感导出写失败时 fail-closed |

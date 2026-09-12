@@ -184,8 +184,78 @@ alias it also serves the cursor seek.
 Request *time* remains the windowing key (`timestamp_ms >= from AND <= to`) and
 the axis of every rollup and chart. Users compare rows against the timestamps
 printed on them, so the two orderings are allowed to disagree — which is why the
-page states the order next to the window instead of silently re-sorting rows the
+page states the order next to the window instead of silently re-ordering rows the
 reader can see are out of time order.
+
+### 6.1 The request-record filter vocabulary
+
+`UsageEventFilter` in `internal/repository/usage_events.go` is the single filter
+vocabulary for the whole request-record feature set. Dimensions combine as AND;
+values inside one dimension combine as OR, so an empty list means "do not narrow
+this dimension" and a cleared multi-select is indistinguishable from one that was
+never set.
+
+The console sends a multi-select as a **repeated query parameter**
+(`?model=a&model=b`), never as a delimited list. A comma is a legal character in
+a model name, a source label and a caller mask, so splitting on one would corrupt
+the exact values being filtered on. A single occurrence still parses, which keeps
+drill-down links written before multi-select existed working unchanged.
+
+| Dimension | Wire parameter | Match |
+| --- | --- | --- |
+| Model / alias / provider / caller key / auth index / source / auth type / executor / reasoning effort / service tier | same name, repeatable | exact, OR within the dimension |
+| Identity search | `q` | literal substring across the columns in `usageEventSearchColumns` |
+| Endpoint, user agent | `endpoint`, `ua` | literal substring |
+| Request id | `request_id` | exact |
+| Latency / tokens | `latency_min`…`tokens_max` | inclusive integer bounds |
+| Cost | `cost_min`, `cost_max` | inclusive bounds in decimal USD, at most nine fractional digits |
+| Price availability | `cost` | `priced` (`cost_nanos IS NOT NULL`) or `unpriced` |
+| Result | `result` | `all`, `success`, `failed` |
+
+Three properties are load-bearing rather than incidental:
+
+- **The search is literal.** `%` and `_` are escaped with an explicit
+  `ESCAPE '\'`, because SQLite's `LIKE` has no default escape character:
+  untreated, searching for `50%` would match every row and `gpt_5` would also
+  match `gpt-5`. The disjunction across columns is parenthesised, or its loose
+  `OR`s would bind more weakly than the surrounding `AND`s and silently drop
+  every other filter.
+- **Bounds are pointers.** `0` is a meaningful bound (`max_cost=0` selects the
+  records priced at nothing), so it cannot double as "unset". `cost_nanos` is
+  compared directly, which means an unpriced row satisfies neither a lower nor an
+  upper bound — it is reachable only by asking for `cost=unpriced`. Cost bounds
+  arrive as decimal USD and are scaled to integer nanos in string form, so a
+  bound of `0.1` cannot land below the value it was meant to include. Precision
+  is **refused rather than rounded**: a bound of `0.0000000001` exceeds what the
+  column stores, and rounding it to zero would answer a real constraint with "no
+  cost at all". The console therefore carries cost bounds as decimal strings end
+  to end — field, URL and preference document — because a nano-dollar amount does
+  not survive a round trip through a double.
+- **Private values are filtered, never projected.** `endpoint` narrows the list
+  without the endpoint ever appearing in a list payload, and the shared search box
+  deliberately excludes `client_ip`, `x_forwarded_for` and `endpoint`. `source`
+  and `api_group_key` are fingerprinted at the persistence boundary, so a filter
+  matches the stored fingerprint the facet offered, never the plaintext.
+
+### 6.2 Facets
+
+`GetUsageFacets` enumerates the values actually present in a window so a dropdown
+never offers a choice that returns nothing. Each dimension costs one grouped scan
+of the window, and it is the *count* of those scans — not the size of any one —
+that makes facets the expensive part of opening the page; `BenchmarkUsageFacets`
+pins the budget. Endpoint and user agent are deliberately **not** facets: both are
+long, high-cardinality values where a typed substring beats a capped 200-row list,
+and the endpoint must never be handed to the browser at all.
+
+Facets are read on their own window revision rather than on the list's poll
+counter, and are cached with a five-minute `staleTime`. They describe which values
+exist in a window, so they change only when the window is redefined (a new preset
+or absolute range) or the operator refreshes explicitly — not on each list poll.
+`scripts/browser-acceptance.mjs` asserts this directly by counting requests: a
+poll issues zero facet reads, a manual refresh issues one. Because the response is
+capped at 200 values per dimension, a value that is selected but absent from it is
+merged back into the options, so a filter that is still applied never renders as a
+blank control.
 
 ## 7. Pricing flow
 
