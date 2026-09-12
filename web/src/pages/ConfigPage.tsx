@@ -367,38 +367,65 @@ export const ConfigPage: React.FC = () => {
 
   const hasConfigErrors = hasYamlErrors || payloadIssues.length > 0;
 
-  const handleSaveChanges = React.useCallback(() => {
-    if (isDirty && !saveMutation.isPending && !hasConfigErrors && !configQuery.isError) {
-      saveMutation.mutate({ yamlToSave: rawYaml, revision: serverRevision });
-    }
-  }, [isDirty, hasConfigErrors, configQuery.isError, rawYaml, serverRevision, saveMutation]);
-
-  const requestSaveConfirmation = React.useCallback(() => {
+  /**
+   * saveConfig is the single save path for the whole page.
+   *
+   * Every entry point - the toolbar button, the bottom dirty bar and the keyboard
+   * shortcut - ends here, so validation, the mutation, the conflict handling and
+   * the baseline reset exist once. It reports validation problems itself rather
+   * than returning silently, which is what lets a caller that owns its own
+   * confirmation (a Popconfirm on the button) skip the extra global modal: the
+   * operator already confirmed, so a second prompt would be asking the same
+   * question twice.
+   */
+  const saveConfig = React.useCallback(() => {
     if (!isDirty || saveMutation.isPending) return;
-
     if (hasYamlErrors) {
       setShowErrorFeedback(true);
       message.error(t('cfg.dirty_bar_yaml_error'));
       return;
     }
-
     if (payloadIssues.length > 0) {
       setValidateTrigger((v) => v + 1);
       setShowErrorFeedback(true);
       message.warning(t('cfg.dirty_bar_payload_issues', { n: payloadIssues.length }));
       return;
     }
+    if (configQuery.isError) return;
+    saveMutation.mutate({ yamlToSave: rawYaml, revision: serverRevision });
+  }, [
+    isDirty,
+    saveMutation,
+    hasYamlErrors,
+    payloadIssues.length,
+    configQuery.isError,
+    rawYaml,
+    serverRevision,
+    message,
+    t,
+  ]);
 
+  /**
+   * requestSaveConfirmation is for entry points that have no confirmation UI of
+   * their own - Ctrl+S and the editor's own save hook. It asks once and then
+   * calls the same saveConfig, so the keyboard cannot drift from the buttons.
+   */
+  const requestSaveConfirmation = React.useCallback(() => {
+    if (!isDirty || saveMutation.isPending) return;
+    if (hasYamlErrors || payloadIssues.length > 0 || configQuery.isError) {
+      saveConfig();
+      return;
+    }
     modal.confirm({
       title: t('cfg.source_save_confirm'),
       content: t('cfg.source_save_confirm_desc'),
       okText: t('common.confirm'),
       cancelText: t('common.cancel'),
       onOk: () => {
-        handleSaveChanges();
+        saveConfig();
       },
     });
-  }, [isDirty, saveMutation.isPending, hasYamlErrors, payloadIssues.length, handleSaveChanges, modal, message, t]);
+  }, [configQuery.isError, hasYamlErrors, isDirty, modal, payloadIssues.length, saveMutation.isPending, saveConfig, t]);
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -927,8 +954,12 @@ export const ConfigPage: React.FC = () => {
             </Button>
           )}
 
-          {/* Save: blocking validation errors expand the error feedback instead of
-              confirming; a valid form goes through the popconfirm below. */}
+          {/* Save. Blocking validation errors are reported by saveConfig itself,
+              so that branch does not confirm first: there is nothing to confirm
+              when the save cannot proceed. A valid document goes through the
+              popconfirm and then straight to saveConfig - the bottom bar owns
+              that confirmation, so it must not ask a second time through the
+              global modal the keyboard path uses. */}
           {hasConfigErrors ? (
             <Button
               size="small"
@@ -936,7 +967,7 @@ export const ConfigPage: React.FC = () => {
               icon={<SaveOutlined />}
               loading={saveMutation.isPending}
               disabled={!isDirty}
-              onClick={requestSaveConfirmation}
+              onClick={saveConfig}
             >
               {t('cfg.source_save')}
             </Button>
@@ -944,7 +975,7 @@ export const ConfigPage: React.FC = () => {
             <Popconfirm
               title={t('cfg.source_save_confirm')}
               description={t('cfg.source_save_confirm_desc')}
-              onConfirm={handleSaveChanges}
+              onConfirm={saveConfig}
               okText={t('common.confirm')}
               cancelText={t('common.cancel')}
               disabled={!isDirty || saveMutation.isPending}
@@ -1176,14 +1207,17 @@ export const ConfigPage: React.FC = () => {
         </div>
       </Modal>
 
-      {/* Floating Bottom Dirty Action Bar */}
+      {/* Floating Bottom Dirty Action Bar.
+          It owns its own confirmation, so it is handed the save itself rather
+          than the confirming entry point: chaining the two produced a popconfirm
+          followed by a second global modal asking the same question. */}
       <ConfigDirtyBar
         isDirty={isDirty}
         isSaving={saveMutation.isPending}
         yamlError={hasYamlErrors}
         payloadIssuesCount={payloadIssues.length}
         showErrorFeedback={showErrorFeedback}
-        onSave={requestSaveConfirmation}
+        onSave={saveConfig}
         onDiscard={handleDiscardChanges}
       />
 
