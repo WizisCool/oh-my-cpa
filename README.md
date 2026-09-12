@@ -11,7 +11,7 @@ Oh My CPA 是面向 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 
 当前版本是一个与 CPA 同栈部署的完整控制面，后端为 Go 模块化单体，前端为 React + TypeScript + Ant Design 单页应用，产物内嵌进 Go 二进制。
 
 - **运行与观测**：用量仪表盘（15m / 1h / 6h / 24h / 7d / 30d / 90d 相对窗口与绝对自定义区间）、请求浏览器（过滤、分面、单请求详情与单请求日志下载）、实时日志尾随与错误日志下载、系统自检与脱敏诊断包导出；
-- **网关管理**：AI 提供商（含模型拉取与真实启停）、认证文件（上传 / 下载 / 删除 / 状态与字段编辑 / 模型列表）、OAuth 授权全流程、代理客户端 API Keys；
+- **网关管理**：AI 提供商（含模型拉取与真实启停）、OAuth 管理（上传 / 下载 / 删除 / 状态与字段编辑 / 模型列表）、OAuth 授权全流程、代理客户端 API Keys；
 - **配额与计费**：按凭据的配额观察与重置、冷却清除、Codex 重置积分兑换；models.dev 价格自动同步与手工行级覆盖、请求时价格快照；
 - **配置与扩展**：可视化标量编辑与 YAML 源码编辑（保留注释与未知字段）、插件与插件商店管理；
 - **平台能力**：`/omc` 子路径原生支持、管理员会话、追加写入的审计日志、服务端 console 偏好、zh/en 双语界面；
@@ -19,7 +19,7 @@ Oh My CPA 是面向 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 
 
 CPA 管理密钥经 AES-GCM 加密后保存，浏览器不会接触该密钥。
 
-早期版本的「未认领资源分拣」页面已随导航对齐网关形态而下线；发现与绑定模型仍在后端运行，改由 Providers / Auth Files 页面呈现。`/api/v1/resources` 与 `/instances/default/discover` 端点保留，当前没有前端调用方。
+早期版本的「未认领资源分拣」页面已随导航对齐网关形态而下线；发现与绑定模型仍在后端运行，改由 Providers / OAuth 管理页面呈现。`/api/v1/resources` 与 `/instances/default/discover` 端点保留，当前没有前端调用方。
 
 ## 本地开发
 

@@ -39,7 +39,7 @@ web
 ## Capabilities and Constraints
 
 - **核心功能**：
-  - CPA 资源自动发现与稳定绑定：`auth-files`、`codex-api-key`、`openai-compatibility` 等族按 ADR 0002 的五级身份层级解析出稳定 Resource Key 与 Binding Fingerprint（Claimed / Ignored / Missing 生命周期）；发现与绑定模型仍由后端维护，控制台当前通过 Providers 与 Auth Files 页面呈现，不再单设待整理队列页面；
+  - CPA 资源自动发现与稳定绑定：`auth-files`、`codex-api-key`、`openai-compatibility` 等族按 ADR 0002 的五级身份层级解析出稳定 Resource Key 与 Binding Fingerprint（Claimed / Ignored / Missing 生命周期）；发现与绑定模型仍由后端维护，控制台当前通过 Providers 与 OAuth 管理页面呈现，不再单设待整理队列页面；
   - 资源业务属性覆盖：自定义 DisplayName、Color、内置 PresetIcon / LobeIcon、Notes（后端 `PATCH /resources/{id}/override` 与 `resource_overrides` 仍在，当前无前端调用方）；
   - 凭据生命周期与真实阻断：支持 OAuth 凭据文件管理（列表 / 上传 / 下载 / 删除 / 启停 / priority-weight-note 字段编辑 / 模型列表）；Provider 级别停用真实下发至 CPA 协议层（通过 `excluded-models: ['*']` 实现有效阻断）。后端 auth-file 字段白名单还接受 `prefix` / `proxy_url` / `disable_cooling` / `excluded_models` / `expired`，但当前抽屉表单只暴露 priority、weight、note 三项；
   - 监控看板与用量流：基于 CPA RESP 协议采集流式用量事件；支持 15m 实时滑动窗口、多预设周期与开闭自定义时间范围；

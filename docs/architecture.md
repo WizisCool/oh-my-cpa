@@ -83,7 +83,7 @@ small; the shell (`AppLayout`, `AuthGate`) is loaded eagerly because every
 route needs it. `components/resources/` and `components/icons/PresetIcon.tsx`
 are retained from the retired triage console and are currently unreferenced; the
 backend discovery/binding model they rendered is still live behind Providers and
-Auth Files.
+OAuth management.
 
 CSS class names are kebab-case everywhere, including `*.module.css` exports,
 which are consumed as `styles['kebab-case']`. That is not cosmetic: `tsc` types a
@@ -118,7 +118,7 @@ POST /api/v1/instances/default/discover
     openai-compatibility entries
   → cpa/discovery derives a stable resource key and binding fingerprint
   → repository upserts discovered_resources + cpa_bindings
-  → Providers / Auth Files pages read the projected rows
+  → Providers / OAuth management pages read the projected rows
 ```
 
 The resource key resolution order and the ban on array position are fixed by

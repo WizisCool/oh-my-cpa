@@ -52,7 +52,7 @@
 
 ## 当前状态与后续顺序
 
-已落地：Dashboard、Quick Start、AI Providers、Auth Files、OAuth、Quota、Logs、Usage Events、Pricing、Config、Plugins、Plugin Store、System 共 13 个真实路由页面（外加一个重定向兜底），没有任何页面仍靠能力探测占位。
+已落地：Dashboard、Quick Start、AI Providers、OAuth 管理、OAuth 登录、OAuth 配额、Logs、Usage Events、Pricing、Config、Plugins、Plugin Store、System 共 13 个真实路由页面（外加一个重定向兜底），没有任何页面仍靠能力探测占位。
 
 仍依赖能力探测的部分：`GET /api/v1/management/capabilities/{key}` 保留为旧 CPA 版本的只读兼容性探测，用于区分「接口可用/缺失」与「页面待接线」，不得用于冒充功能完成。
 
