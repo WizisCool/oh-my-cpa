@@ -140,6 +140,56 @@ export interface UsageFacetsResponse {
   facets: UsageFacets;
 }
 
+/**
+ * UsageIngestRefresh is what one manual "pull CPA now" request achieved.
+ *
+ * `synced` is the only field that means "stored data is current". Everything
+ * else exists so the page can say what actually happened instead of reporting a
+ * re-read of unchanged rows as a successful refresh.
+ */
+export interface UsageIngestRefresh {
+  /** False when this deployment runs no collector, so nothing can be pulled. */
+  enabled: boolean;
+  /** True only when the queue was drained and every captured record was decoded. */
+  synced: boolean;
+  mode?: string;
+  captured?: number;
+  decoded?: number;
+  pending?: number;
+  decode_incomplete?: boolean;
+  error?: string;
+  auth_rejected?: boolean;
+}
+
+/**
+ * parseUsageIngestRefresh reads the refresh response defensively.
+ *
+ * An unrecognized body must never read as a confirmed sync: that would turn a
+ * broken response into the exact lie the refresh button exists to avoid. For the
+ * same reason an absent `enabled` flag is not treated as "ingestion disabled" -
+ * only the server actually saying so is.
+ */
+export function parseUsageIngestRefresh(value: unknown): UsageIngestRefresh {
+  if (typeof value !== 'object' || value === null) {
+    return { enabled: true, synced: false, error: 'unrecognized refresh response' };
+  }
+  const record = value as Record<string, unknown>;
+  if (typeof record.enabled !== 'boolean' || typeof record.synced !== 'boolean') {
+    return { enabled: true, synced: false, error: 'unrecognized refresh response' };
+  }
+  return {
+    enabled: record.enabled,
+    synced: record.synced,
+    auth_rejected: record.auth_rejected === true,
+    decode_incomplete: record.decode_incomplete === true,
+    mode: typeof record.mode === 'string' ? record.mode : undefined,
+    captured: typeof record.captured === 'number' ? record.captured : undefined,
+    decoded: typeof record.decoded === 'number' ? record.decoded : undefined,
+    pending: typeof record.pending === 'number' ? record.pending : undefined,
+    error: typeof record.error === 'string' ? record.error : undefined,
+  };
+}
+
 export type UsageResultFilter = 'all' | 'success' | 'failed';
 
 /** Whether a record carries a locked request price. Deliberately a two-value

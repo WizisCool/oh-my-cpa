@@ -43,13 +43,15 @@ pnpm dev
 浏览器 → Vite :5173 → Go API :8080 → CLIProxyAPI :8317
 ```
 
+图中的端口是默认拓扑：Go 的监听地址取自 `.env` 的 `OMCPA_LISTEN_ADDR`（默认 `127.0.0.1:8080`），Vite 的 `/omc/api` 代理目标会跟随同一个值，因此本机 8080 被别的服务占用时只需改 `.env`；后端不在本地时用 `OMCPA_API_TARGET` 覆盖代理目标。
+
 Vite 负责前端 HMR，并把 `/omc/api/*` 单向代理到 Go；Go 由 Air 监听 `.go`/`.sql` 文件并自动重建。CLIProxyAPI 是可选的外部依赖，未启动时 Oh My CPA 仍可运行并显示降级状态。
 
 | 命令 | 用途 |
 | --- | --- |
 | `pnpm dev` | 启动 Air + Vite，默认开发方式 |
 | `pnpm dev:api` | 仅启动 Go/Air，供 API 调试 |
-| `pnpm dev:web` | 仅启动 Vite，连接已有的 `:8080` 后端 |
+| `pnpm dev:web` | 仅启动 Vite，连接 `.env` 中 `OMCPA_LISTEN_ADDR` 指定的后端（默认 `:8080`） |
 | `pnpm cpa:start` | 从 `cpa/` 启动本地 CLIProxyAPI |
 | `pnpm build` | 构建前端并同步到 `internal/web/dist` |
 | `pnpm type-check` | 检查前端 TypeScript |
@@ -122,7 +124,11 @@ pnpm cpa:start
 pnpm dev
 ```
 
-`.env` 由 Go 进程启动时读取，已存在的真实环境变量优先。登录密码就是 `OMCPA_CPA_MANAGEMENT_KEY`，即 CPA `remote-management.secret-key` 的明文。
+已在 Docker（或别的进程）里跑着 CPA 时不需要 `pnpm cpa:start`：`OMCPA_CPA_BASE_URL` 用带 scheme 的 `http://127.0.0.1:8317`，`OMCPA_CPA_USAGE_ADDR` 用裸 `host:port` 的 `127.0.0.1:8317`。两者都必须是 Oh My CPA 进程能直连的地址。
+
+**同一个 CPA 实例的用量队列只能有一个采集器。** 订阅模式下的回填、以及 `auto` 探测失败后的降级路径都会做消耗式读取，与另一个采集器长期共存会丢数；要把采集权交给 Oh My CPA，就先停掉其它采集器，或者把本实例设为 `OMCPA_USAGE_INGEST_MODE=off`。
+
+`.env` 由 Go 进程启动时读取，已存在的真实环境变量优先。登录密码就是 `OMCPA_CPA_MANAGEMENT_KEY`，即 CPA `remote-management.secret-key` 的明文。注意 CPA 自己的 `config.yaml` 里只存该密钥的 bcrypt 哈希，直接抄过来会在管理接口上得到 `401 invalid management key`。
 
 浏览器验收默认检查 `http://127.0.0.1:8080/omc/` 的嵌入式生产构建，因此需先运行 `pnpm build` 并启动 Go 服务；也可用 `OMCPA_URL=http://127.0.0.1:5173/omc/` 检查当前 Vite 开发入口：
 

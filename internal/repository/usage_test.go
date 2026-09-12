@@ -92,6 +92,45 @@ func TestUsageInboxRoundTrip(t *testing.T) {
 	}
 }
 
+// TestUsageInboxWatermarkScopesPendingCount pins the barrier a manual sync waits
+// on: rows above the mark were captured afterwards and must not extend the wait.
+func TestUsageInboxWatermarkScopesPendingCount(t *testing.T) {
+	repo := usageTestRepository(t)
+	ctx := context.Background()
+	if _, err := repo.AppendUsageInbox(ctx, "default", "http_pull",
+		[]string{`{"request_id":"a"}`, `{"request_id":"b"}`}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	watermark, err := repo.LatestUsageInboxID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if watermark <= 0 {
+		t.Fatalf("watermark = %d, want the newest inbox row", watermark)
+	}
+	if pending, err := repo.CountPendingUsageInboxBefore(ctx, watermark); err != nil || pending != 2 {
+		t.Fatalf("pending before watermark = %d (err %v), want 2", pending, err)
+	}
+
+	if _, err := repo.AppendUsageInbox(ctx, "default", "http_pull", []string{`{"request_id":"c"}`}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if pending, _ := repo.CountPendingUsageInboxBefore(ctx, watermark); pending != 2 {
+		t.Fatalf("a later record was counted against an older watermark: %d", pending)
+	}
+	if pending, _ := repo.CountPendingUsageInboxBefore(ctx, 0); pending != 0 {
+		t.Fatalf("an unset watermark must select nothing, got %d", pending)
+	}
+
+	latest, err := repo.LatestUsageInboxID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if latest <= watermark {
+		t.Fatalf("latest id did not advance: %d then %d", watermark, latest)
+	}
+}
+
 func TestUsageInboxDiscardsPoisonAfterRetries(t *testing.T) {
 	repo := usageTestRepository(t)
 	ctx := context.Background()

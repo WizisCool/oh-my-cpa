@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   Alert,
+  App as AntdApp,
   Badge,
   Button,
   Descriptions,
@@ -26,10 +27,10 @@ import {
   SearchOutlined,
   VerticalAlignTopOutlined,
 } from '@ant-design/icons';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
-import { api } from '../api/client';
+import { api, ApiError } from '../api/client';
 import { usePreference } from '../hooks/usePreference';
 import { useT } from '../i18n';
 import {
@@ -45,6 +46,7 @@ import {
   resolveCredential,
   EVENT_AUTO_REFRESH_MS,
   EVENT_SEARCH_DEBOUNCE_MS,
+  EVENT_SYNC_NOTICE_MS,
   EVENT_FILTER_KEYS,
   activeFilterCount,
   eventWindow,
@@ -195,6 +197,7 @@ const HOLD_FROM_PX = 60;
 
 export const UsageEventsPage: React.FC = () => {
   const t = useT();
+  const { message } = AntdApp.useApp();
   const [params, setParams] = useSearchParams();
   const signature = params.toString();
   const query = React.useMemo(() => readEventQuery(new URLSearchParams(signature)), [signature]);
@@ -361,6 +364,12 @@ export const UsageEventsPage: React.FC = () => {
     () => eventWindow(query, Date.now()),
     [query, facetWindowRevision],
   );
+  // The revision is part of the key, not only of the params it computes. An
+  // absolute range resolves to the same two timestamps on every render, so a
+  // revision that only moved the memo would leave the facet entry inside its
+  // five-minute staleTime and the dropdowns would keep the counts the operator
+  // just asked to have recomputed.
+  const facetRevision = facetWindowRevision;
 
   // viewScope identifies the view the reader is looking at: the filters and
   // window they picked, plus which page of it. The auto-refresh counter is
@@ -712,7 +721,7 @@ export const UsageEventsPage: React.FC = () => {
   );  const isQueryEnabled = hasExplicit || prefReady;
   const facetParams = usageEventParams(facetWindow);
   const facets = useQuery({
-    queryKey: ['usage-facets', facetParams],
+    queryKey: ['usage-facets', facetParams, facetRevision],
     queryFn: async () => {
       const response = await api.getUsageFacets(facetParams);
       // A response missing a facet is treated as a failed load, not as an empty
@@ -737,6 +746,27 @@ export const UsageEventsPage: React.FC = () => {
     refetchInterval: 15_000,
   });
   const status = ingest.data as IngestStatus | undefined;
+
+  /**
+   * A manual refresh asks the gateway for its newest records first, then re-reads
+   * what was stored.
+   *
+   * The two steps are one action on purpose: refreshing only the reads would
+   * redraw exactly the same rows, while the records the operator is looking for
+   * are still sitting in CPA's queue. Everything on screen is refreshed after the
+   * pull - list, facets and pipeline status - so the page never mixes pre- and
+   * post-sync data. The turn finishes either way: when the gateway could not be
+   * drained, the stored data is still re-read and the failure is reported on top
+   * of it.
+   */
+  const syncMutation = useMutation({
+    mutationFn: () => api.refreshUsageIngest(),
+    onSettled: () => {
+      setRefresh((value) => value + 1);
+      setFacetWindowRevision((value) => value + 1);
+      void ingest.refetch();
+    },
+  });
   const queryString = usageEventParams({ ...query, ...activeWindow, cursor });
   const result = useQuery({
     queryKey: ['usage-events', queryString, refresh],
@@ -745,6 +775,22 @@ export const UsageEventsPage: React.FC = () => {
     placeholderData: keepPreviousData,
     staleTime: 5_000,
   });
+
+  // A manual sync is in flight. The poll is held during it so the list cannot be
+  // refreshed from data the sync is about to replace, which would show the old
+  // page right after the operator asked for the new one.
+  const isSyncing = syncMutation.isPending;
+  // A sync that is still running after a visible delay has stopped looking like
+  // "working on it": say so, so the page never looks frozen.
+  const [isSyncStuck, setIsSyncStuck] = React.useState(false);
+  React.useEffect(() => {
+    if (!isSyncing) {
+      setIsSyncStuck(false);
+      return;
+    }
+    const timer = setTimeout(() => setIsSyncStuck(true), EVENT_SYNC_NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [isSyncing]);
 
   const handlePrevPage = React.useCallback(() => {
     if (!cursors.length || result.isFetching) return;
@@ -769,6 +815,8 @@ export const UsageEventsPage: React.FC = () => {
   // asked for is wall-clock, not round-trip dependent.
   const isFetchingRef = React.useRef(false);
   isFetchingRef.current = result.isFetching;
+  const isSyncingRef = React.useRef(false);
+  isSyncingRef.current = isSyncing;
   React.useEffect(() => {
     if (!isAutoRefresh) return;
     const timer = setInterval(() => {
@@ -778,6 +826,9 @@ export const UsageEventsPage: React.FC = () => {
       // Skipping rather than queueing means a slow query cannot stack up a
       // backlog of polls that all fire the moment it resolves.
       if (isFetchingRef.current) return;
+      // A sync already owns the next refresh; a poll landing on top of it would
+      // only add a read of the data it is replacing.
+      if (isSyncingRef.current) return;
       setRefresh((value) => value + 1);
     }, EVENT_AUTO_REFRESH_MS);
     return () => clearInterval(timer);
@@ -1011,6 +1062,44 @@ export const UsageEventsPage: React.FC = () => {
           ? 'events.ingest_healthy'
           : 'events.ingest_attention';
 
+  const { mutate: requestSync, isPending: isSyncPending } = syncMutation;
+  React.useEffect(() => {
+    if (!isSyncPending) return;
+    if (isSyncStuck) {
+      void message.warning(t('events.sync_still_running'), 6);
+    }
+  }, [isSyncPending, isSyncStuck, message, t]);
+
+  const handleManualRefresh = React.useCallback(() => {
+    requestSync(undefined, {
+      onSuccess: (outcome) => {
+        if (!outcome.enabled) {
+          // Not a failure: the deployment captures nothing, and saying so is the
+          // only honest answer for a refresh that has nothing to pull.
+          message.info(t('events.sync_disabled'));
+          return;
+        }
+        if (outcome.synced) {
+          if ((outcome.captured ?? 0) > 0) {
+            message.success(t('events.sync_success', { n: outcome.captured ?? 0 }));
+          } else {
+            message.success(t('events.sync_confirmed'));
+          }
+          return;
+        }
+        message.warning(
+          outcome.auth_rejected
+            ? t('events.sync_auth_rejected')
+            : t('events.sync_incomplete', { msg: outcome.error || t('events.sync_unknown_reason') }),
+        );
+      },
+      onError: (error: unknown) => {
+        const msg = error instanceof ApiError ? error.message : String(error);
+        message.error(t('events.sync_failed', { msg }));
+      },
+    });
+  }, [message, requestSync, t]);
+
   return (
     <div className="terminal-page usage-events-page request-events-page">
       <div className={`request-collapsible-header ${isCollapsed ? 'is-collapsed' : ''}`}>
@@ -1102,16 +1191,9 @@ export const UsageEventsPage: React.FC = () => {
             </Tooltip>
             <Button
               aria-label={t('common.refresh')}
-              icon={<ReloadOutlined spin={result.isFetching} />}
-              disabled={result.isFetching}
-              onClick={() => {
-                setRefresh((v) => v + 1);
-                // A manual refresh re-reads the facet window too: the operator
-                // asked to see current data, and stale dropdown counts are part of
-                // what is on screen.
-                setFacetWindowRevision((v) => v + 1);
-                void ingest.refetch();
-              }}
+              icon={<ReloadOutlined spin={isSyncing || result.isFetching} />}
+              disabled={isSyncing}
+              onClick={handleManualRefresh}
             >
               {t('common.refresh')}
             </Button>

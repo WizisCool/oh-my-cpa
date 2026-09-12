@@ -147,6 +147,54 @@ func (r *Repository) ClaimUsageInboxBatch(ctx context.Context, limit int) ([]Usa
 	return items, nil
 }
 
+// LatestUsageInboxID reports the highest inbox row written so far.
+//
+// It is the barrier a manual sync waits on: rows at or below the value observed
+// right after a capture pass are exactly the rows that pass could have produced,
+// so waiting for them to leave `pending` is a bounded wait even while CPA keeps
+// delivering new records.
+func (r *Repository) LatestUsageInboxID(ctx context.Context) (int64, error) {
+	if r == nil || r.SQL() == nil {
+		return 0, errors.New("repository is not initialized")
+	}
+	var latest sql.NullInt64
+	if err := r.SQL().QueryRowContext(ctx, `SELECT MAX(id) FROM usage_inboxes`).Scan(&latest); err != nil {
+		return 0, fmt.Errorf("read latest usage inbox id: %w", err)
+	}
+	return latest.Int64, nil
+}
+
+// CountPendingUsageInboxBefore counts inbox rows at or below watermark that still
+// await decoding. Rows above the watermark are deliberately excluded: they were
+// captured after the pass being waited on, so they belong to the next refresh.
+func (r *Repository) CountPendingUsageInboxBefore(ctx context.Context, watermark int64) (int64, error) {
+	return r.countUsageInboxBefore(ctx, InboxPending, watermark)
+}
+
+// CountUndecodableUsageInboxBefore counts inbox rows at or below watermark whose
+// payload could not be decoded. They are terminal: no event will ever appear for
+// them, so a wait that only watched `pending` would call the barrier satisfied
+// while silently dropping records.
+func (r *Repository) CountUndecodableUsageInboxBefore(ctx context.Context, watermark int64) (int64, error) {
+	return r.countUsageInboxBefore(ctx, InboxDiscarded, watermark)
+}
+
+func (r *Repository) countUsageInboxBefore(ctx context.Context, status string, watermark int64) (int64, error) {
+	if r == nil || r.SQL() == nil {
+		return 0, errors.New("repository is not initialized")
+	}
+	if watermark <= 0 {
+		return 0, nil
+	}
+	var count int64
+	if err := r.SQL().QueryRowContext(ctx, `
+		SELECT COUNT(1) FROM usage_inboxes
+		WHERE status = ? AND id <= ?`, status, watermark).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count %s usage inbox rows: %w", status, err)
+	}
+	return count, nil
+}
+
 // UsageDecoded pairs an inbox row with the event decoded from it.
 type UsageDecoded struct {
 	InboxID int64

@@ -68,6 +68,48 @@ type fakeUpstream struct {
 	httpBatches [][]string
 	httpErr     error
 	httpCalls   int
+
+	// hold gates every pop until releasePops supplies the batches to serve. It
+	// exists so a test can insert records *after* the collector's first pass and
+	// prove a manual sync is what fetched them; waiting on the reported mode
+	// alone would race the initial poll.
+	hold chan struct{}
+}
+
+// holdPops bars pops until releasePops is called.
+func (f *fakeUpstream) holdPops() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.hold = make(chan struct{})
+}
+
+// releasePops unblocks pops with the given backlog.
+func (f *fakeUpstream) releasePops(batches [][]string) {
+	f.mu.Lock()
+	f.httpBatches = append(f.httpBatches, batches...)
+	hold := f.hold
+	f.hold = nil
+	f.mu.Unlock()
+	if hold != nil {
+		close(hold)
+	}
+}
+
+// awaitHold blocks a pop while the barrier is installed.
+func (f *fakeUpstream) awaitHold() {
+	f.mu.Lock()
+	hold := f.hold
+	f.mu.Unlock()
+	if hold != nil {
+		<-hold
+	}
+}
+
+// callCount counts every upstream pop attempt, whichever transport served it.
+func (f *fakeUpstream) callCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.popCalls + f.httpCalls
 }
 
 func newFakeUpstream() *fakeUpstream {
@@ -96,6 +138,7 @@ func (f *fakeUpstream) OpenUsageStream(_ context.Context, channel string) (Strea
 }
 
 func (f *fakeUpstream) PopUsageQueue(context.Context, int) ([]string, error) {
+	f.awaitHold()
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.popCalls++
@@ -111,6 +154,7 @@ func (f *fakeUpstream) PopUsageQueue(context.Context, int) ([]string, error) {
 }
 
 func (f *fakeUpstream) UsageQueueJSON(context.Context, int) ([]string, error) {
+	f.awaitHold()
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.httpCalls++

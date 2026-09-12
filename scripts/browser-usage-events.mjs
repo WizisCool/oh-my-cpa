@@ -64,9 +64,12 @@ const records = Array.from({ length: 1100 }, (_, index) => ({
   has_request_log: true,
 }));
 const calls = [];
+const facetCalls = [];
 const errors = [];
+const syncRequests = [];
 let failList = false;
 let failMetadata = false;
+let failSync = false;
 let partial = false;
 let downloadCount = 0;
 const check = (name, condition) => {
@@ -329,7 +332,23 @@ try {
         collector: { mode: 'plugin', captured: 1100, coverage_gaps: 0 },
         stats: { pending: 0 },
       });
+    // A manual refresh pulls from CPA before re-reading the list. The fixture
+    // answers the pull explicitly so a page that only re-read stored data cannot
+    // pass: the sync is recorded and asserted on.
+    if (url.pathname.endsWith('/usage/ingest/refresh')) {
+      syncRequests.push(route.request().method());
+      const synced = !failSync;
+      return fulfill({
+        enabled: true,
+        synced,
+        mode: 'subscribe',
+        captured: synced ? 2 : 0,
+        decoded: synced ? 2 : 0,
+        error: synced ? undefined : 'connection refused',
+      });
+    }
     if (url.pathname.endsWith('/usage/facets')) {
+      facetCalls.push(url);
       const facet = (key) =>
         [...new Set(records.map((r) => r[key]))].filter(Boolean).map((value) => ({ value, requests: 100 }));
       // The caller-key facet carries the display mask, exactly like the real
@@ -1142,12 +1161,38 @@ try {
       calls.at(-1).searchParams.get('auth_index') === 'credential-1',
   );
   const customCalls = calls.length;
+  const syncsBefore = syncRequests.length;
+  const facetsBefore = facetCalls.length;
   await page.getByRole('button', { name: 'Refresh', exact: true }).click();
-  await wait(350);
+  await wait(500);
+  // The pull is what makes the re-read meaningful: a page that only re-read
+  // stored data would pass the list assertion below and still be useless.
+  check(
+    'manual refresh pulls from CPA before re-reading',
+    syncRequests.length === syncsBefore + 1 && syncRequests.at(-1) === 'POST',
+  );
   check(
     'manual refresh refetches a fixed custom window',
     calls.length > customCalls && calls.at(-1).searchParams.get('from') === String(customFrom),
   );
+  // A fixed range resolves to the same two timestamps on every render, so the
+  // facet query must be invalidated by the sync rather than by the window text.
+  check(
+    'manual refresh re-reads a fixed-window facet query',
+    facetCalls.length > facetsBefore,
+  );
+  check(
+    'a completed sync is reported to the operator',
+    (await page.locator('.ant-message').innerText()).match(/Fetched and stored|are current/i) !== null,
+  );
+  // A sync that could not drain CPA must say so instead of looking identical to
+  // a successful one.
+  failSync = true;
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await page.locator('.ant-message').getByText(/Sync incomplete/i).waitFor({ timeout: 5000 });
+  check('a failed pull is reported as incomplete, not as success', true);
+  failSync = false;
+  await wait(200);
   await page.locator('.request-row').first().focus();
   await page.keyboard.press('Enter');
   await page.locator('.request-source-chain').waitFor();

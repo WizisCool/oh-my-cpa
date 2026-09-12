@@ -34,7 +34,7 @@ export interface LogsStatus {
   logging_to_file: boolean;
   request_log: boolean;
 }
-import { UsageEventPage, UsageEventDetail, UsageFacetsResponse } from '../types/usageEvents';
+import { UsageEventPage, UsageEventDetail, UsageFacetsResponse, parseUsageIngestRefresh, type UsageIngestRefresh } from '../types/usageEvents';
 
 export class ApiError extends Error {
   status: number;
@@ -373,6 +373,18 @@ export const api = {
 
   async getUsageIngestStatus(): Promise<unknown> {
     return request<unknown>('/usage/ingest-status', { method: 'GET' });
+  },
+
+  /**
+   * refreshUsageIngest asks the server to drain CPA's usage queue now and waits
+   * until the captured records are queryable.
+   *
+   * The page's own GETs can only report what is already stored, so without this
+   * a "refresh" could never show a request CPA accepted a moment ago.
+   */
+  async refreshUsageIngest(): Promise<UsageIngestRefresh> {
+    const body = await request<unknown>('/usage/ingest/refresh', { method: 'POST' });
+    return parseUsageIngestRefresh(body);
   },
 
   /** requestLogFileUrl points at the server-side CPA request-log proxy. */

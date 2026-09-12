@@ -144,10 +144,11 @@ type dashboardLive struct {
 // client seeing a hole it has to refetch around.
 const dashboardTailBuckets = 4
 
-// usagePipeline lets the handler report the background collector state. Wired by
-// app.New; nil when ingestion is disabled.
+// usagePipeline lets the handler report the background collector state and ask
+// it to drain CPA's queue. Wired by app.New; nil when ingestion is disabled.
 type usagePipeline interface {
 	Status(ctx context.Context) (ingest.PipelineStatus, error)
+	RefreshNow(ctx context.Context) (ingest.RefreshNowResult, error)
 }
 
 // SetUsagePipeline attaches the collector for the status endpoint.
@@ -434,6 +435,62 @@ func (h *Handler) dashboardIngestStatus(writer http.ResponseWriter, request *htt
 		return
 	}
 	writeJSON(writer, http.StatusOK, status)
+}
+
+// refreshUsageIngest drains CPA's usage queue now instead of waiting for the
+// collector's next tick, then waits for the captured records to become
+// queryable events.
+//
+// The page's own reads can only ever report what is already stored, so without
+// this the refresh button is a re-read that cannot show a request CPA accepted
+// one second ago. The drain stays server-side: CPA's queue is destructive, so
+// the browser must never pop it itself.
+func (h *Handler) refreshUsageIngest(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	if h.usage == nil {
+		// An explicit "disabled" beats an error: the deployment is healthy, it
+		// simply captures nothing, and the page can say exactly that.
+		writeJSON(writer, http.StatusOK, ingest.RefreshNowResult{Enabled: false})
+		return
+	}
+	// A sync pops CPA's queue and then decodes what it captured, so it needs more
+	// room than a read, but the answer must still arrive before the server's own
+	// write timeout closes the connection out from under it.
+	ctx, cancel := context.WithTimeout(request.Context(), h.refreshTimeout())
+	defer cancel()
+
+	result, err := h.usage.RefreshNow(ctx)
+	switch {
+	case errors.Is(err, ingest.ErrRefreshBusy):
+		writeError(writer, http.StatusConflict, err.Error())
+		return
+	case err != nil:
+		// The failure is reported to the caller as a result body as well: the
+		// page re-reads stored data either way and needs to say why it may not be
+		// current, which a bare status code cannot carry.
+		if result.Enabled {
+			writeJSON(writer, http.StatusOK, result)
+			return
+		}
+		writeInternalError(writer, fmt.Errorf("refresh usage ingest: %w", err))
+		return
+	}
+	writeJSON(writer, http.StatusOK, result)
+}
+
+// usageRefreshGrace covers the decode barrier that runs after the collector's
+// last upstream call, on top of the configured request timeout.
+const usageRefreshGrace = 10 * time.Second
+
+// usageRefreshCeiling stays under the server's 30s write timeout. A configured
+// request timeout larger than this would otherwise let the handler keep working
+// on a connection the server had already given up on, and the page would report
+// a network failure for a sync that actually succeeded.
+const usageRefreshCeiling = 25 * time.Second
+
+func (h *Handler) refreshTimeout() time.Duration {
+	budget := h.queryTimeout() + usageRefreshGrace
+	return min(budget, usageRefreshCeiling)
 }
 
 func dashboardWindowFromRequest(request *http.Request, now time.Time) (dashboardWindow, string) {

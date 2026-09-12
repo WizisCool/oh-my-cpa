@@ -125,6 +125,7 @@ func (s *Service) FetchConfig(ctx context.Context) (Config, error) {
 | `pnpm build` | 构建前端并同步到 `internal/web/dist` |
 | `pnpm verify:static` | 静态门禁（Go 测试 + vet + 前端类型/单测/i18n/lint） |
 | `pnpm verify:e2e` | 构建后跑确定性浏览器验收（假 CPA 夹具） |
+| `pnpm verify:refresh` | 只验证请求记录页“刷新按钮真实拉取”的浏览器探针（含顺序断言） |
 | `pnpm verify:secrets` | 工作区密钥扫描 |
 | `pnpm check-i18n` | 找出代码里使用了但字典中缺失的 key |
 | `pnpm check-docs` | 校验上下文文档的路径引用、淘汰产物引用与绝对行号（`pnpm test:docs` 自测） |

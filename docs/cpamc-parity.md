@@ -37,7 +37,7 @@
 | Vertex JSON / iFlow Cookie 导入 | OAuth/认证文件 | `POST /vertex/import` 及 provider 专用流程 | 计划 | 以官方版本能力探测为准 |
 | 配额观察 | `quota_management`、凭据详情 | `auth-files` 返回的 quota/model_quotas 观察数据 | 已覆盖 | 凭据详情/抽屉展示、字段级安全过滤 |
 | 配额重置 | 配额行操作 | `POST /reset-quota {auth_index}` | 已覆盖 | 只接受稳定 `auth_index`，二次确认、审计与前端重置闭环 |
-| 用量队列 | 仪表盘/观测 | `GET /usage-queue?count=N`（RESP 订阅同等） | 已覆盖（服务端采集，无控制台读取动作） | `internal/usage/ingest` 在后台排空队列；控制台不提供“读取并确认”，因为该接口是破坏性消费，暴露给浏览器会与采集器争抢记录 |
+| 用量队列 | 仪表盘/观测 | `GET /usage-queue?count=N`（RESP 订阅同等） | 已覆盖（服务端采集，无控制台读取动作） | `internal/usage/ingest` 在后台排空队列；控制台不提供“读取并确认”，因为该接口是破坏性消费，暴露给浏览器会与采集器争抢记录。请求记录页的“刷新”通过 `POST /usage/ingest/refresh` 让服务端立刻排空一次（命令交由采集器 goroutine 执行）并等待入库可见，前端不直接碰队列 |
 | API Key 用量桶 | 仪表盘/提供商 | `GET /api-key-usage` | 进行中 | 端点已接入 `/management/overview`，仪表盘次级区渲染 provider 级统计；overview 返回的 20 个 10 分钟全局 `traffic` 桶尚未渲染 |
 | 实时日志与增量拉取 | `logs` | `GET /logs?after=&cursor=&limit=` | 已覆盖（真实 CPA 7.2.146 验证） | cursor 优先、`after` 回退并回退一秒；`cursor-reset` 重建缓冲；5s 轮询可暂停 |
 | 清理日志 | `logs` | `DELETE /logs` | 已覆盖 | 二次确认、清空后重建缓冲 |
@@ -68,7 +68,7 @@
 
 | 能力 | 入口 | 说明 |
 | --- | --- | --- |
-| 用量请求浏览器 | `/usage/events`、`/usage/events/{id}`、`/usage/events/{id}/request-log`、`/usage/facets` | 多选分面（同维度取并集、跨维度取交集）、全局搜索、区间筛选、列布局与视图持久化、单请求详情与原始日志下载 |
+| 用量请求浏览器 | `/usage/events`、`/usage/events/{id}`、`/usage/events/{id}/request-log`、`/usage/facets`、`/usage/ingest/refresh` | 多选分面（同维度取并集、跨维度取交集）、全局搜索、区间筛选、列布局与视图持久化、单请求详情与原始日志下载；刷新按钮先按需排空 CPA 队列并等到记录可查询，再重读列表与分面 |
 | 请求时价格快照与模型目录 | `/pricing`、`/pricing/models`、`/pricing/sync`、`/management/dashboard` | 见 `docs/adr/0003-request-time-price-snapshots.md` 与 `docs/plans/model-prices.md` |
 | 配额总览与凭据详情 | `/management/quota`、`/management/quota/{authIndex}` | 归一化快照 + 冷却、重置、Codex 重置积分 |
 | 审计日志 | `/management/audit/events`、`/management/audit/export` | 追加写入；敏感导出写失败时 fail-closed |

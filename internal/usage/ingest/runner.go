@@ -20,6 +20,27 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
 )
 
+// captureDrainRounds bounds one manual pass. A suppressed queue or an outage
+// backlog both drain to empty well inside this bound; it only bites when CPA
+// produces faster than we can pop, and stopping there is reported as an
+// incomplete pass rather than as an empty queue.
+const captureDrainRounds = 20
+
+// captureStreamDrain caps how many already-received subscription messages one
+// pass moves into the batch. It matches the reader's own buffer, so one pass
+// empties what has arrived without letting a firehose stream run forever.
+const captureStreamDrain = 256
+
+// Errors a manual sync reports instead of a silent zero-record success. Each one
+// describes something the caller cannot fix by refreshing again.
+var (
+	// ErrCollectorNotRunning means the collector goroutine is not serving
+	// requests, so nothing would pop CPA's queue.
+	ErrCollectorNotRunning = errors.New("usage collector is not running")
+	// ErrCollectorDisabled means this deployment runs no collector at all.
+	ErrCollectorDisabled = errors.New("usage collection is disabled")
+)
+
 // Mode selects which CPA collection path is used.
 type Mode string
 
@@ -173,9 +194,73 @@ type Runner struct {
 	// onRefresh is invoked when CPA signals that its configuration changed.
 	onRefresh func()
 
+	// syncRequests carries manual sync requests to the collector goroutine, which
+	// is the only consumer allowed to touch CPA's destructive queue. The buffer is
+	// one deep: a caller blocks only while an earlier request is still queued, and
+	// the pass serving that one also covers what a second would have asked for.
+	syncRequests chan *CaptureRequest
+
 	mu                sync.RWMutex
 	status            Status
 	subscribeFailures int
+}
+
+// CaptureRequest is one manual "drain CPA now" request. It is served by the
+// collector goroutine rather than by the caller: a second concurrent consumer
+// would divert records from a live subscription or race the poll loop for the
+// same destructive queue entries.
+type CaptureRequest struct {
+	// ctx is the caller's work context. It bounds how long the pass may keep
+	// asking CPA for more, but never the act of persisting what a pop already
+	// returned: those payloads are gone from CPA's queue the moment they arrive.
+	ctx context.Context
+	// result takes exactly one outcome for the caller. The collector also reads
+	// the pass error from it, so a manual failure follows the same backoff and
+	// authentication-cooldown policy as a background cycle.
+	result chan CaptureOutcome
+}
+
+// CaptureOutcome reports what one requested pass achieved.
+type CaptureOutcome struct {
+	// Mode is the transport that served the pass.
+	Mode Mode
+	// Captured counts the records this pass persisted to the inbox.
+	Captured int
+	// Drained is false when the pass stopped at its bound with records still
+	// arriving, so the caller must not present the result as a complete sync.
+	Drained bool
+	// Err is the transport failure that ended the pass. A pass can only end
+	// early with an error; "nothing new arrived" is Drained with an empty Err.
+	Err error
+}
+
+func (r *CaptureRequest) complete(outcome CaptureOutcome) {
+	select {
+	case r.result <- outcome:
+	default:
+	}
+}
+
+// outcome reads the answer without consuming the chance to answer again: the
+// collector both reports it to the caller and uses it for its own retry policy.
+func (r *CaptureRequest) outcome() CaptureOutcome {
+	select {
+	case outcome := <-r.result:
+		r.result <- outcome
+		return outcome
+	default:
+		return CaptureOutcome{}
+	}
+}
+
+// hasOutcome reports whether the pass already answered this request.
+func (r *CaptureRequest) hasOutcome() bool {
+	select {
+	case <-r.result:
+		return true
+	default:
+		return false
+	}
 }
 
 // maxSubscribeFailures bounds repeated subscription attempts before auto mode
@@ -198,13 +283,116 @@ func NewRunner(instanceID string, upstream Upstream, sink Sink, errorSink ErrorS
 		logger = slog.Default()
 	}
 	return &Runner{
-		instanceID: instanceID,
-		upstream:   upstream,
-		sink:       sink,
-		errorSink:  errorSink,
-		logger:     logger,
-		config:     config.withDefaults(),
+		instanceID:   instanceID,
+		upstream:     upstream,
+		sink:         sink,
+		errorSink:    errorSink,
+		logger:       logger,
+		config:       config.withDefaults(),
+		syncRequests: make(chan *CaptureRequest, 1),
 	}, nil
+}
+
+// captureReadinessGrace is how long a request waits for a collector that has not
+// started yet. The HTTP server and the pipeline start in parallel, so a refresh
+// arriving in that window is legitimate; a collector still absent after this long
+// is a stopped one, and the caller deserves an answer rather than a timeout.
+const captureReadinessGrace = 2 * time.Second
+
+// CaptureNow asks the collector to drain CPA immediately and waits for the pass
+// to finish.
+//
+// A zero-record outcome is a real answer (CPA had nothing queued); every reason
+// the request could not be served is an error instead, so a caller can never
+// present "the collector is parked" as "nothing new happened".
+func (r *Runner) CaptureNow(ctx context.Context) (CaptureOutcome, error) {
+	var outcome CaptureOutcome
+	if ctx.Err() != nil {
+		return outcome, ctx.Err()
+	}
+	if r.config.Mode == ModeOff {
+		return outcome, ErrCollectorDisabled
+	}
+
+	request := &CaptureRequest{ctx: ctx, result: make(chan CaptureOutcome, 1)}
+	select {
+	case r.syncRequests <- request:
+	case <-ctx.Done():
+		return outcome, ctx.Err()
+	}
+
+	// A missing collector is reported rather than waited out, but only after the
+	// start-up window has passed: the request stays queued meanwhile, so a
+	// pipeline that is still coming up serves it on its first pass.
+	readiness := time.NewTimer(captureReadinessGrace)
+	defer readiness.Stop()
+	for {
+		select {
+		case outcome = <-request.result:
+			return outcome, outcome.Err
+		case <-ctx.Done():
+			// The collector still finishes the pass and persists what it popped -
+			// payloads already taken from CPA cannot be recovered, so they are written
+			// under the collector's own context. Only this caller stops waiting.
+			return CaptureOutcome{Mode: r.Status().Mode, Drained: false, Err: ctx.Err()}, ctx.Err()
+		case <-readiness.C:
+			if !r.Status().Running {
+				return CaptureOutcome{}, ErrCollectorNotRunning
+			}
+			readiness.Reset(captureReadinessGrace)
+		}
+	}
+}
+
+// takeCaptureRequest returns a queued request without waiting, or nil.
+func (r *Runner) takeCaptureRequest() *CaptureRequest {
+	select {
+	case request := <-r.syncRequests:
+		return r.normalizeCapture(request)
+	default:
+		return nil
+	}
+}
+
+// normalizeCapture drops a request whose caller has already given up, so no pass
+// starts for an answer nobody is waiting for.
+func (r *Runner) normalizeCapture(request *CaptureRequest) *CaptureRequest {
+	if request == nil {
+		return nil
+	}
+	if request.ctx.Err() != nil {
+		request.complete(CaptureOutcome{Err: request.ctx.Err()})
+		return nil
+	}
+	return request
+}
+
+// completeCapture answers a manual request, if there is one.
+//
+// No successful-sync timestamp is recorded here. Capture is only half of what a
+// manual refresh promises: the captured rows still have to decode into events,
+// and the pipeline's decode barrier is the only place that knows whether they
+// did.
+func (r *Runner) completeCapture(request *CaptureRequest, outcome CaptureOutcome) {
+	if request == nil {
+		return
+	}
+	request.complete(outcome)
+}
+
+func (r *Runner) capturedCount() int64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.status.Captured
+}
+
+// capturedSince reports how many records were persisted since a snapshot.
+func (r *Runner) capturedSince(before int64) int {
+	delta := r.capturedCount() - before
+	if delta <= 0 {
+		return 0
+	}
+	return int(delta)
 }
 
 // SetRefreshHandler installs the CPA configuration-change callback.
@@ -416,8 +604,84 @@ func (r *Runner) runSubscribe(ctx context.Context) error {
 			if err := r.flush(ctx, ModeSubscribe, &batch); err != nil {
 				return err
 			}
+		case request := <-r.syncRequests:
+			if request = r.normalizeCapture(request); request != nil {
+				outcome := r.syncSubscribe(ctx, request.ctx, stream.Messages(), &batch, captureErrors)
+				r.completeCapture(request, outcome)
+				// A manual pass that failed is a collector failure like any other, so
+				// the retry and authentication-cooldown policy stays in Run's hands
+				// rather than being bypassed by the operator path.
+				if outcome.Err != nil {
+					return outcome.Err
+				}
+			}
 		}
 	}
+}
+
+// syncSubscribe serves one manual pass. A live subscription suppresses CPA's
+// enqueue, so a pop alone would find an empty queue while freshly pushed records
+// sat in the subscription buffer: the pass moves what has already arrived into
+// the batch, flushes it, and only then drains the queue's reconnect-gap residue
+// through the same bounded multi-batch drain the poll path uses - a single batch
+// would report a clean sync while older records were still queued.
+//
+// work bounds how long CPA is asked for more; collect bounds the writes. Already
+// popped payloads are persisted under the collector's context because CPA's queue
+// is destructive and a caller that stopped waiting must not abort the write.
+//
+// The subscription buffer is deliberately not drained to empty beyond the same
+// bound: a steady push stream must not turn one refresh into an unbounded loop.
+func (r *Runner) syncSubscribe(collect, work context.Context, messages <-chan string, batch *[]string, captureErrors func() error) CaptureOutcome {
+	outcome := CaptureOutcome{Mode: ModeSubscribe, Drained: true}
+	before := r.capturedCount()
+
+	bufferDrained := false
+	for buffered := 0; buffered < captureStreamDrain; buffered++ {
+		select {
+		case payload, ok := <-messages:
+			if !ok {
+				outcome.Drained = false
+				outcome.Err = errors.New("usage subscription closed by CPA")
+				return r.finishCapture(outcome, before)
+			}
+			if err := r.capture(collect, ModeSubscribe, payload, batch); err != nil {
+				outcome.Drained = false
+				outcome.Err = err
+				return r.finishCapture(outcome, before)
+			}
+		default:
+			bufferDrained = true
+			buffered = captureStreamDrain
+		}
+	}
+	// Hitting the cap without ever seeing the buffer empty means records are
+	// still arriving, so this pass cannot claim it drained them.
+	if !bufferDrained {
+		outcome.Drained = false
+	}
+
+	if err := r.flush(collect, ModeSubscribe, batch); err != nil {
+		outcome.Drained = false
+		outcome.Err = err
+		return r.finishCapture(outcome, before)
+	}
+	if err := captureErrors(); err != nil {
+		outcome.Drained = false
+		outcome.Err = err
+		return r.finishCapture(outcome, before)
+	}
+
+	queued := r.syncPull(collect, work, ModeRESPPull, batch)
+	outcome.Drained = outcome.Drained && queued.Drained
+	outcome.Err = queued.Err
+	return r.finishCapture(outcome, before)
+}
+
+// finishCapture fills in the persisted-record delta for a pass.
+func (r *Runner) finishCapture(outcome CaptureOutcome, before int64) CaptureOutcome {
+	outcome.Captured = r.capturedSince(before)
+	return outcome
 }
 
 // runPull batches pops until the path fails.
@@ -431,6 +695,18 @@ func (r *Runner) runPull(ctx context.Context, mode Mode) error {
 		if ctx.Err() != nil {
 			return nil
 		}
+		if request := r.takeCaptureRequest(); request != nil {
+			outcome := r.syncPull(ctx, request.ctx, mode, &batch)
+			r.completeCapture(request, outcome)
+			if outcome.Err != nil {
+				return outcome.Err
+			}
+			idle.reset()
+			continue
+		}
+		// The pop comes before the wait, as it always has: a collector that spent
+		// its first idle interval waiting would never read CPA at all when the
+		// configured interval is long.
 		items, err := r.pop(ctx, mode, r.config.BatchSize)
 		if err != nil {
 			return err
@@ -443,12 +719,80 @@ func (r *Runner) runPull(ctx context.Context, mode Mode) error {
 		if errFlush := r.flush(ctx, mode, &batch); errFlush != nil {
 			return errFlush
 		}
-		if delay := idle.nextDelay(len(items), r.config.BatchSize); delay > 0 {
-			if !sleepContext(ctx, delay) {
-				return nil
+		delay := idle.nextDelay(len(items), r.config.BatchSize)
+		if delay <= 0 {
+			continue
+		}
+		// The wait is interruptible, so a manual request never has to outlast the
+		// pacer's delay to be served.
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil
+		case request := <-r.syncRequests:
+			timer.Stop()
+			if request = r.normalizeCapture(request); request != nil {
+				outcome := r.syncPull(ctx, request.ctx, mode, &batch)
+				r.completeCapture(request, outcome)
+				// A manual pass that failed is a collector failure like any other, so
+				// Run keeps owning the backoff and the authentication cooldown instead
+				// of the operator path bypassing them and hammering a rejecting CPA.
+				if outcome.Err != nil {
+					return outcome.Err
+				}
 			}
+			idle.reset()
+		case <-timer.C:
 		}
 	}
+}
+
+// syncPull serves one manual pass by draining full batches back to back with no
+// pacer delay. A backlog is therefore actually cleared instead of being answered
+// with a single batch while older records wait for the next idle tick.
+//
+// work bounds the asking: once the caller's request is gone there is no point
+// popping more. Persistence uses the collector's context instead, because a
+// payload that has already left CPA's destructive queue must be written down
+// even if the operator closed the tab.
+func (r *Runner) syncPull(collect, work context.Context, mode Mode, batch *[]string) CaptureOutcome {
+	outcome := CaptureOutcome{Mode: mode, Drained: true, Err: work.Err()}
+	before := r.capturedCount()
+	for round := 0; round < captureDrainRounds; round++ {
+		if err := work.Err(); err != nil {
+			outcome.Drained = false
+			outcome.Err = err
+			return r.finishCapture(outcome, before)
+		}
+		items, err := r.pop(work, mode, r.config.BatchSize)
+		if err != nil {
+			outcome.Drained = false
+			outcome.Err = err
+			return r.finishCapture(outcome, before)
+		}
+		for _, payload := range items {
+			if errCapture := r.capture(collect, mode, payload, batch); errCapture != nil {
+				outcome.Drained = false
+				outcome.Err = errCapture
+				return r.finishCapture(outcome, before)
+			}
+		}
+		if errFlush := r.flush(collect, mode, batch); errFlush != nil {
+			outcome.Drained = false
+			outcome.Err = errFlush
+			return r.finishCapture(outcome, before)
+		}
+		if len(items) < r.config.BatchSize {
+			break
+		}
+		if round == captureDrainRounds-1 {
+			// Still full at the last round: CPA is producing at least as fast as we
+			// pop, so the queue was not observed empty.
+			outcome.Drained = false
+		}
+	}
+	return r.finishCapture(outcome, before)
 }
 
 // capture buffers one payload, filtering CPA control frames so they never
@@ -567,9 +911,6 @@ func isAuthRejection(err error) bool {
 }
 
 func sleepContext(ctx context.Context, delay time.Duration) bool {
-	if delay <= 0 {
-		return ctx.Err() == nil
-	}
 	timer := time.NewTimer(delay)
 	defer timer.Stop()
 	select {
@@ -580,11 +921,27 @@ func sleepContext(ctx context.Context, delay time.Duration) bool {
 	}
 }
 
+// parseMode reads the transport name the collect pass returned back as a Mode.
+// An empty name means nothing answered the probe, and the configured mode is
+// then the honest label because nothing else was used.
+func parseMode(name string, fallback Mode) Mode {
+	if name == "" {
+		return fallback
+	}
+	return Mode(name)
+}
+
 // pullPacer saves empty-queue work without throttling backlog drainage. A full
 // batch is drained immediately; any activity resets the next idle wait. The
 // cap must stay comfortably below the upstream's queue retention horizon.
 type pullPacer struct {
 	base, maximum, current time.Duration
+}
+
+// reset starts the backoff over: after a recorded failure or a manual pass the
+// next empty pull should wait the base interval, not the grown one.
+func (p *pullPacer) reset() {
+	p.current = p.base
 }
 
 func (p *pullPacer) nextDelay(count, batchSize int) time.Duration {

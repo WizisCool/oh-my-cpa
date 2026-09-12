@@ -137,7 +137,7 @@ removal marks a binding missing without cascading into history.
 CPA queue / subscription
   → ingest.Runner        pop or receive, persist immediately
   → usage_inboxes        raw payload, status pending, durable before decoding
-  → ingest.Processor     decode via internal/usage, dedupe on event_key
+  → ingest.Processor     decode via internal/usage, one event per inbox row
   → usage_events         typed row + request-time price snapshot (one tx)
   → ingest.Maintenance   incremental rollup into hourly/daily stats,
                          retention purge
@@ -150,6 +150,15 @@ local write records an `ingest_gaps` row so coverage loss is visible instead of
 silent, and `usage_inboxes.status` (`pending → processed | failed | discarded`)
 makes a decode failure retryable without losing telemetry.
 
+`usage_inboxes` is the only place a payload can be replayed from, so the decode
+step is serialised: `ClaimUsageInboxBatch` merely selects pending rows and
+`usage_events.event_key` is intentionally not unique (CPA reports retries under
+one `request_id`), so two concurrent decoders would each commit their own copy of
+the same payload. `ingest.Processor.drain` is that gate, which is why both the
+background loop and a manual sync go through it; it is a channel rather than a
+mutex so a manual sync waiting for the background loop still returns on its own
+deadline.
+
 `internal/usage/ingest.Runner` picks its transport in `auto` mode by probing
 `AUTH` only — never by popping, because a probe that consumed a record would
 destroy it. Subscription is preferred; repeated `SUBSCRIBE` failures degrade to
@@ -158,6 +167,44 @@ RESP `LPOP`, and an unreachable RESP endpoint degrades to HTTP
 4s → 8s → 10s, then capped) while a full batch drains with no delay. A wrong
 management key triggers a long cooldown instead of retrying, because CPA bans a
 client IP after repeated failures.
+
+### Manual sync versus background collection
+
+The request list reads Oh My CPA's own database, so a manual refresh that only
+re-read it could never show a request CPA accepted a moment ago. `POST
+/usage/ingest/refresh` therefore drains CPA first: `ingest.Pipeline.RefreshNow`
+hands a request to the collector goroutine (a second consumer would divert
+records from a live subscription and race the poll loop on the same destructive
+queue), waits for the pass, then runs a decode barrier until the inbox rows that
+pass could have produced are no longer `pending`.
+
+Five properties are deliberate:
+
+- The manual pass is served by the collector's goroutine, never by the HTTP
+  handler, and it persists under the collector's context while only *asking* CPA
+  under the caller's: payloads already popped cannot be put back, so a caller that
+  stops waiting must not abort the write, but a caller that stopped waiting also
+  stops asking for more.
+- A manual failure is returned to `Run` rather than swallowed, so the backoff and
+  the wrong-key cooldown still govern it. An operator who clicks refresh five
+  times must not spend CPA's five-strike ban budget.
+- In `subscribe` mode the pass moves whatever the reader has already buffered
+  into the batch, then drains the reconnect-gap residue through the same bounded
+  multi-batch loop the poll path uses. A live subscription suppresses CPA's
+  enqueue, so a pop alone would report "nothing new" while freshly pushed records
+  waited for the next flush tick; and a single pop would report a clean sync with
+  an older backlog still queued.
+- The decode barrier is scoped by a watermark (`MAX(usage_inboxes.id)` taken after
+  the pass). Waiting for `pending == 0` instead would only finish during a lull,
+  because records keep arriving while the refresh runs.
+- `synced` requires that nothing captured at or below the watermark was parked as
+  undecodable. A poison payload leaves no event, so a barrier that ignored
+  discards would promise records the list can never show.
+
+The endpoint answers with `synced` plus the reason it could not sync, and an
+already-running sync gets a 409 rather than queueing a second identical drain.
+Its deadline is capped below the server's write timeout, so a slow sync cannot
+outlive the connection carrying its answer.
 
 Timestamps in the usage tables are epoch **milliseconds**; the older identity
 tables use `unixepoch()` seconds. Rollups are gated by
@@ -251,8 +298,14 @@ Facets are read on their own window revision rather than on the list's poll
 counter, and are cached with a five-minute `staleTime`. They describe which values
 exist in a window, so they change only when the window is redefined (a new preset
 or absolute range) or the operator refreshes explicitly — not on each list poll.
-`scripts/browser-acceptance.mjs` asserts this directly by counting requests: a
-poll issues zero facet reads, a manual refresh issues one. Because the response is
+That manual refresh is the same sync described in §6: the page waits for the pull
+and the decode barrier, then re-reads the list, the facets and the pipeline status.
+The revision is part of the facet query key, not only of the window it computes,
+because an absolute range resolves to the same two timestamps on every render and
+a naive revision would leave the cached entry inside its `staleTime`.
+`scripts/browser-usage-events.mjs` asserts this directly: a manual refresh issues
+a `POST` to `/usage/ingest/refresh` before the list and facet reads, and the
+fixed-window case re-reads facets too. Because the response is
 capped at 200 values per dimension, a value that is selected but absent from it is
 merged back into the options, so a filter that is still applied never renders as a
 blank control.
