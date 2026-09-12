@@ -66,6 +66,11 @@ jobs:
           pnpm verify:secrets:history
 
       - name: Run deterministic browser acceptance
+        # vite's production build of this app peaks above Node's default
+        # old-space limit and dies with "JavaScript heap out of memory" (exit
+        # 134) on a 7 GB runner, so the heap is raised for the build.
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: pnpm verify:e2e
 
       - name: Verify clean generated state
