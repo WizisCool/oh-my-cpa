@@ -139,9 +139,14 @@ export function classifyPath(span) {
 }
 
 function isExpectedAbsent(relativePath) {
-  return EXPECTED_ABSENT_PATHS.some(
-    (entry) => relativePath === entry.path.replace(/\/$/, '') || relativePath.startsWith(entry.path),
-  );
+  return EXPECTED_ABSENT_PATHS.some((entry) => {
+    // Only a directory entry covers a subtree. A file entry has to match
+    // exactly: a prefix rule would let a missing .env.example hide behind the
+    // .env exception, which is exactly the kind of reference this check exists
+    // to catch.
+    if (!entry.path.endsWith('/')) return relativePath === entry.path;
+    return relativePath === entry.path.slice(0, -1) || relativePath.startsWith(entry.path);
+  });
 }
 
 function backtickedSpans(content) {

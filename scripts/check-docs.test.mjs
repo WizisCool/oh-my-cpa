@@ -64,6 +64,16 @@ test('allows gitignored runtime paths but keeps the reason on file', (t) => {
   assert.deepEqual(checkDocument({ file: 'checked.md' }, { projectRoot }), []);
 });
 
+test('an absent-file exception does not cover sibling paths', (t) => {
+  // .env is legitimately missing from a fresh clone, but .env.example is
+  // committed - a rule that exempts it would silently retire a real reference.
+  const dotenv = fixture(t, 'Copy `.env` before starting the server.');
+  assert.deepEqual(checkDocument({ file: 'checked.md' }, { projectRoot: dotenv }), []);
+
+  const example = fixture(t, 'Copy `.env.example` before starting the server.');
+  assert.deepEqual(kinds(checkDocument({ file: 'checked.md' }, { projectRoot: example })), ['missing-path']);
+});
+
 test('reports references to artifacts that were deliberately retired', (t) => {
   const projectRoot = fixture(t, 'Configure `docs/DESIGN.md`.');
   const findings = checkDocument({ file: 'checked.md' }, { projectRoot });
