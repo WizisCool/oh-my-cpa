@@ -22,10 +22,37 @@ function binaryPath() {
   return path.join(root, '.tools', 'gitleaks', version, platformKey(), process.platform === 'win32' ? 'gitleaks.exe' : 'gitleaks');
 }
 
-async function download(url) {
-  const response = await fetch(url, { redirect: 'follow' });
-  if (!response.ok) throw new Error(`gitleaks download failed: ${response.status} ${response.statusText}`);
-  return Buffer.from(await response.arrayBuffer());
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * GitHub release assets are fetched on every run: .tools/ is gitignored, so CI
+ * never has gitleaks pre-installed and each gate run pulls the pinned archive.
+ * A single reset connection used to fail the entire job, so transport failures
+ * are retried here. A checksum mismatch is deliberately NOT retried - that is a
+ * supply-chain signal and belongs in the caller, which fails loudly on it.
+ */
+async function download(url, attempts = 4) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const response = await fetch(url, { redirect: 'follow' });
+      if (response.ok) return Buffer.from(await response.arrayBuffer());
+      // A non-transient status means the pinned URL or the release itself is
+      // wrong; retrying cannot change that.
+      if (response.status < 500 && response.status !== 429) {
+        throw Object.assign(
+          new Error(`gitleaks download failed: ${response.status} ${response.statusText}`),
+          { isNonRetryable: true },
+        );
+      }
+      lastError = new Error(`gitleaks download failed: ${response.status} ${response.statusText}`);
+    } catch (error) {
+      if (error?.isNonRetryable) throw error;
+      lastError = error;
+    }
+    if (attempt < attempts) await sleep(500 * 2 ** (attempt - 1));
+  }
+  throw lastError;
 }
 
 async function ensureGitleaks() {
