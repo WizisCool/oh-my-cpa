@@ -79,7 +79,7 @@ const ROOT_FILES = new Set([
   'AGENTS.md', 'CONTEXT.md', 'DESIGN.md', 'PRODUCT.md', 'README.md',
   'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'go.mod', 'go.sum',
   'Dockerfile', '.env', '.env.example', '.air.toml', '.editorconfig', '.gitattributes',
-  '.gitignore', '.dockerignore', '.node-version', '.nvmrc', 'gitleaks.toml',
+  '.gitignore', '.dockerignore', '.node-version', '.nvmrc', 'gitleaks.toml', 'LICENSE',
 ]);
 
 const REPO_DIRS = [

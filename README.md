@@ -168,3 +168,7 @@ Login sends the CPA management key (`{"password":"<management-key>"}` at `POST /
 ## 文档维护
 
 上下文文档（本文、`CONTEXT.md`、`docs/architecture.md`、`docs/design.md`、`PRODUCT.md`、`docs/adr/`、`docs/cpamc-parity.md` 等）与代码同属交付物。**改动触发哪份文档、必须同步改哪里**，以及完成前的文档检查清单，见 [`AGENTS.md`](AGENTS.md) —— 这是给人类维护者和 Agent 共同的契约：文档漂移在当次改动内修掉，不靠定期专项整理。
+
+## 许可证
+
+本项目采用 [MIT 许可证](LICENSE)。
