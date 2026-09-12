@@ -32,13 +32,11 @@ export const DOCUMENTS = [
   { file: 'README.md' },
   { file: 'PRODUCT.md' },
   { file: 'DESIGN.md' },
-  { file: 'goal.md', archival: true },
   { file: 'docs/architecture.md' },
   { file: 'docs/design.md' },
   { file: 'docs/cpamc-parity.md' },
   { file: 'docs/ops/sqlite-operations.md' },
   { file: 'docs/plans/model-prices.md' },
-  { file: 'docs/performance-usage-audit.md', archival: true },
   { file: 'docs/adr/0001-go-react-sqlite-modular-monolith.md', archival: true },
   { file: 'docs/adr/0002-cpa-binding-and-identity-hierarchy.md', archival: true },
   { file: 'docs/adr/0003-request-time-price-snapshots.md', archival: true },
@@ -53,6 +51,8 @@ export const RETIRED_REFERENCES = [
   { pattern: /InstanceStatusPage/, reason: 'the instance status page was removed with the triage console' },
   { pattern: /ResourceEditDrawer/, reason: 'the resource edit drawer was removed with the triage console' },
   { pattern: /web\/src\/pages\/TriagePage\.tsx/, reason: 'the triage page was removed when navigation aligned with gateway surfaces' },
+  { pattern: /goal\.md/, reason: 'the overhaul plan was retired once every stage shipped; AGENTS.md holds the Agent contract' },
+  { pattern: /docs\/performance-usage-audit\.md/, reason: 'the one-off performance audit was retired; its numbers described a single local machine' },
 ];
 
 /**
@@ -76,7 +76,7 @@ export const EXPECTED_ABSENT_PATHS = [
 ];
 
 const ROOT_FILES = new Set([
-  'AGENTS.md', 'CONTEXT.md', 'DESIGN.md', 'PRODUCT.md', 'README.md', 'goal.md',
+  'AGENTS.md', 'CONTEXT.md', 'DESIGN.md', 'PRODUCT.md', 'README.md',
   'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'go.mod', 'go.sum',
   'Dockerfile', '.env', '.env.example', '.air.toml', '.editorconfig', '.gitattributes',
   '.gitignore', '.dockerignore', '.node-version', '.nvmrc', 'gitleaks.toml',

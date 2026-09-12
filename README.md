@@ -88,7 +88,7 @@ HTTP/RESP 拉取连续为空时，默认等待 `1s → 2s → 4s → 8s → 10s`
 
 其余服务变量（`OMCPA_LISTEN_ADDR`、`OMCPA_BASE_PATH`、`OMCPA_DATA_DIR`、`OMCPA_MASTER_KEY`、`OMCPA_CPA_BASE_URL`、`OMCPA_CPA_USAGE_ADDR`、`OMCPA_CPA_MANAGEMENT_KEY`、`OMCPA_PUBLIC_URL`、`OMCPA_REQUEST_TIMEOUT`、`OMCPA_CPA_TLS_SKIP_VERIFY`、`OMCPA_VERSION`）见 [`.env.example`](.env.example)。
 
-`/v0/management/usage-queue` 是消耗式读取；多个采集器不能共享同一实例的历史队列。不要通过关闭采集来解决日志噪声，也不要用真实队列反复试跑性能测试。基准与修复记录见 [用量与界面性能审计](docs/performance-usage-audit.md)。
+`/v0/management/usage-queue` 是消耗式读取；多个采集器不能共享同一实例的历史队列。不要通过关闭采集来解决日志噪声，也不要用真实队列反复试跑性能测试。
 
 ## Docker Compose
 

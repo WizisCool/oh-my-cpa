@@ -66,7 +66,6 @@ web
 
 - **核心领域术语与规则**：`CONTEXT.md`；
 - **模块地图、数据流与不变量**：`docs/architecture.md`；
-- **历史执行计划与阶段验收记录（已完结归档）**：`goal.md`；本仓库后续的 Agent 契约改为 `AGENTS.md`；
 - **系统架构决策记录**：`docs/adr/`；
 - **视觉与 Token 权威源**：`docs/design.md`，代码映射见 `web/src/theme/themeConfig.ts` 与 `web/src/index.css`（根目录 `DESIGN.md` 是同一套 token 的 design-tool 摘要，两者必须一致）；
 - 自动化测试用例：`internal/api/*_test.go`，覆盖凭据防护、看板统计、配额限流与 DTO 严格白名单机制。
