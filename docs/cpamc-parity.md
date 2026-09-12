@@ -22,7 +22,7 @@
 | 配置读取 | `config_management` | `GET /config`、`GET /config.yaml` | 已覆盖（已对真实 CPA 7.2.146 验证） | 读取并显示真实 JSON/YAML |
 | 配置可视化标量编辑 | `config_management` | `/debug`、`/proxy-url`、`/request-log`、`/logging-to-file`、`/usage-statistics-enabled`、`/request-retry`、`/max-retry-*`、`/ws-auth`、`/force-model-prefix`、`/routing/strategy` | 已覆盖（已对真实 CPA 7.2.146 验证） | 每个白名单端点的 GET/PUT 合约测试与乐观交互 |
 | 配置源码编辑与保存 | `config_management` | `PUT /config.yaml` | 已覆盖（已对真实 CPA 7.2.146 验证） | YAML 错误 400、配置错误 422、脏状态保护、Ctrl+S 快捷保存 |
-| 代理客户端 API Keys | 配置、快速开始 | `GET/PUT/PATCH/DELETE /api-keys` | 已覆盖 | 独立端点增删、单次明文呈现与脱敏列表 |
+| 代理客户端 API Keys | `key_management`（网关分组独立页） | 配置文档的 `api-keys` 字段（经 `PUT /config.yaml` 保存） | 已覆盖 | 独立页面 `#/api-keys`；增删改经可视化配置草稿与版本校验落盘，与配置面板共用同一保存事务，不再在配置面板重复入口 |
 | Gemini/Interactions/Codex/Claude/xAI/Vertex Key | `ai_providers` | 各 provider 的 `GET/PUT/PATCH/DELETE /{provider}-api-key` | 已覆盖 | 统一提供商列表、脱敏展示与状态切换 |
 | OpenAI 兼容提供商 | `ai_providers` | `GET/PUT/PATCH/DELETE /openai-compatibility` | 已覆盖 | 多 key、端点去敏、模型列表与启停开关 |
 | 模型发现 | 提供商操作、快速开始 | 不经 CPA：直连提供商 `Base URL` 的 `/models`（失败时回退 `/v1/models`）；认证文件模型走 `GET /auth-files/models` | 已覆盖 | `POST /management/providers/pull-models` 由服务端发起并受审计；提供商 URL 与密钥只存在于 Go 侧 |
@@ -52,7 +52,7 @@
 
 ## 当前状态与后续顺序
 
-已落地：Dashboard、Quick Start、AI Providers、OAuth 管理、OAuth 登录、OAuth 配额、Logs、Usage Events、Pricing、Config、Plugins、Plugin Store、System 共 13 个真实路由页面（外加一个重定向兜底），没有任何页面仍靠能力探测占位。
+已落地：Dashboard、Quick Start、AI Providers、Key management、OAuth 管理、OAuth 登录、OAuth 配额、Logs、Usage Events、Pricing、Config、Plugins、Plugin Store、System 共 14 个真实路由页面（外加一个重定向兜底），没有任何页面仍靠能力探测占位。
 
 仍依赖能力探测的部分：`GET /api/v1/management/capabilities/{key}` 保留为旧 CPA 版本的只读兼容性探测，用于区分「接口可用/缺失」与「页面待接线」，不得用于冒充功能完成。
 

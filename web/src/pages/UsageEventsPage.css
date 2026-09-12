@@ -573,15 +573,17 @@
 }
 
 /* Body cells take their horizontal alignment from the same column definition as
-   the header, so a numeric column's header and values always agree. Vertical
-   alignment and gaps stay with the per-column rules below, which carry
-   column-specific layout.
+   the header, so a numeric column's header and values always agree.
 
-   `:where()` again: `align-items` means "horizontal" in a column-direction flex
-   and "vertical" in a row-direction one, and the provider cell is row-direction.
-   Zero specificity lets those per-column rules win. */
+   `:where()` keeps these at zero specificity so the per-column rules below win,
+   and the left case deliberately sets no `align-items` at all. In a
+   column-direction flex, `align-items: stretch` is what gives a nowrap cell the
+   container's width, which is the precondition for `text-overflow: ellipsis`; a
+   `flex-start` would size the cell to its own content and a long provider or model
+   name would overflow the column instead of being truncated. The columns that do
+   need a non-default cross alignment (the result pill, the key and UA labels) set
+   it in their own rules below. */
 .req-col:where(.is-align-left) {
-  align-items: flex-start;
   text-align: left;
 }
 
@@ -644,6 +646,7 @@
 
 /* Column 2: Result (success/failed pill) */
 .req-col-result {
+  align-items: flex-start;
   justify-content: center;
 }
 .req-result-pill {
@@ -934,6 +937,7 @@
 
 /* Column 9: Key (caller key / group label) */
 .req-col-key {
+  align-items: flex-start;
   gap: 3px;
 }
 .req-key-val {
@@ -949,7 +953,7 @@
 
 /* Column 10: UA (ingestion-minimized client product label) */
 .req-col-ua {
-  gap: 2px;
+  align-items: flex-start;
 }
 .req-ua-val {
   font-size: 11px;

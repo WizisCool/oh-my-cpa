@@ -16,6 +16,7 @@ import { AuthGate } from './components/common/AuthGate';
 const UsageEventsPage = React.lazy(() => import('./pages/UsageEventsPage').then(m => ({ default: m.UsageEventsPage })));
 const PricingPage = React.lazy(() => import('./pages/pricing/PricingPage').then(m => ({ default: m.PricingPage })));
 const ProvidersPage = React.lazy(() => import('./pages/ProvidersPage').then(m => ({ default: m.ProvidersPage })));
+const ApiKeysPage = React.lazy(() => import('./pages/ApiKeysPage').then(m => ({ default: m.ApiKeysPage })));
 const DashboardPage = React.lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
 const QuickStartPage = React.lazy(() => import('./pages/QuickStartPage').then(m => ({ default: m.QuickStartPage })));
 const LogsPage = React.lazy(() => import('./pages/LogsPage').then(m => ({ default: m.LogsPage })));
@@ -102,6 +103,7 @@ const AppRoutes: React.FC = () => {
         { path: 'dashboard', element: <DashboardPage /> },
         { path: 'quick-start', element: <QuickStartPage /> },
         { path: 'ai-providers', element: <ProvidersPage /> },
+        { path: 'api-keys', element: <ApiKeysPage /> },
         { path: 'auth-files', element: <AuthFilesPage /> },
         { path: 'oauth', element: <OAuthPage /> },
         { path: 'quota', element: <QuotaPage /> },

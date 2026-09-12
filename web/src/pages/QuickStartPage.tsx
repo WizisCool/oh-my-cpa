@@ -156,7 +156,7 @@ main();`;
         <Button
           type="primary"
           icon={<KeyOutlined />}
-          onClick={() => navigate('/ai-providers')}
+          onClick={() => navigate('/api-keys')}
         >
           {t('qs.step3_btn')}
         </Button>

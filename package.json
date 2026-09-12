@@ -19,6 +19,7 @@
     "verify:refresh": "node scripts/browser-refresh-sync.mjs",
     "verify:icon-picker": "node scripts/browser-icon-picker.mjs",
     "verify:dashboard-charts": "node scripts/browser-dashboard-charts.mjs",
+    "verify:column-alignment": "node scripts/browser-column-alignment.mjs",
     "test:visible-clock": "node --experimental-strip-types scripts/test-visible-clock.ts",
     "verify:performance": "node scripts/browser-performance.mjs",
     "test:config-states": "node --experimental-strip-types scripts/test-config-states.ts",

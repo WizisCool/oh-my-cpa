@@ -13,26 +13,19 @@ import {
   Skeleton,
   Space,
   Switch,
-  Table,
   Tag,
-  Tooltip,
   Typography,
 } from 'antd';
 import {
   AppstoreOutlined,
   CodeOutlined,
   CopyOutlined,
-  DeleteOutlined,
-  EditOutlined,
   ExperimentOutlined,
-  EyeInvisibleOutlined,
-  EyeOutlined,
   FieldTimeOutlined,
   FormatPainterOutlined,
   GlobalOutlined,
   KeyOutlined,
   NodeIndexOutlined,
-  PlusOutlined,
   ProfileOutlined,
   ReloadOutlined,
   SaveOutlined,
@@ -47,7 +40,6 @@ import { useThemeMode } from '../theme/ThemeContext';
 import { ConfigDirtyBar } from '../components/config/ConfigDirtyBar';
 import { PayloadRulesEditor, type PayloadValidationIssue } from '../components/config/PayloadRulesEditor';
 import { updateFieldWithBaseline, isConfigSemanticallyEqual } from '../components/config/configDirty';
-import { maskKeyText } from '../utils/maskKey';
 import type { YamlSourceEditorRef } from '../components/config/YamlSourceEditor';
 
 const YamlSourceEditor = React.lazy(() => import('../components/config/YamlSourceEditor'));
@@ -63,155 +55,6 @@ import {
 import type { ConfigScalarsResponse } from '../types/configManagement';
 
 const { Text } = Typography;
-
-interface ApiKeyRecord {
-  id: string;
-  index: number;
-  key: string;
-}
-
-interface ApiKeysCardProps {
-  apiKeys: string[];
-  onAdd: () => void;
-  onEdit: (index: number, key: string) => void;
-  onDelete: (index: number) => void;
-}
-
-const ConfigApiKeysCard: React.FC<ApiKeysCardProps> = ({
-  apiKeys,
-  onAdd,
-  onEdit,
-  onDelete,
-}) => {
-  const t = useT();
-  const { message } = AntdApp.useApp();
-  const [revealedKeys, setRevealedKeys] = React.useState<Record<number, boolean>>({});
-
-  const dataSource: ApiKeyRecord[] = apiKeys.map((key, index) => ({
-    id: `${index}-${key}`,
-    index,
-    key,
-  }));
-
-  return (
-    <div className="settings-group">
-      <div className="settings-group-head">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <KeyOutlined />
-          <h3 className="settings-group-title">{t('cfg.api_keys_list')}</h3>
-          <Tag style={{ margin: 0 }}>{t('cfg.api_keys_count', { n: apiKeys.length })}</Tag>
-        </div>
-        <Button
-          size="small"
-          icon={<PlusOutlined />}
-          onClick={onAdd}
-          className="config-add-key-btn"
-        >
-          {t('cfg.api_keys_add')}
-        </Button>
-      </div>
-      <Table<ApiKeyRecord>
-        className="config-api-keys-table"
-        size="small"
-        rowKey="id"
-        showHeader={false}
-        dataSource={dataSource}
-        pagination={false}
-        locale={{ emptyText: t('cfg.api_keys_empty') }}
-        columns={[
-          {
-            dataIndex: 'index',
-            key: 'index',
-            width: 70,
-            render: (idx: number) => (
-              <Text strong className="mono-num">
-                #{idx + 1}
-              </Text>
-            ),
-          },
-          {
-            dataIndex: 'key',
-            key: 'key',
-            render: (rawKey: string, record: ApiKeyRecord) => (
-              <div className="config-key-box">
-                <span className="config-key-text">
-                  {revealedKeys[record.index] ? rawKey : maskKeyText(rawKey)}
-                </span>
-              </div>
-            ),
-          },
-          {
-            key: 'actions',
-            width: 176,
-            align: 'right' as const,
-            render: (_: unknown, record: ApiKeyRecord) => (
-              <Space size={6}>
-                <Tooltip title={revealedKeys[record.index] ? t('common.hide_secret') : t('common.reveal_secret')}>
-                  <button
-                    type="button"
-                    className="config-key-action"
-                    onClick={() =>
-                      setRevealedKeys((prev) => ({
-                        ...prev,
-                        [record.index]: !prev[record.index],
-                      }))
-                    }
-                    aria-label={revealedKeys[record.index] ? t('common.hide_secret') : t('common.reveal_secret')}
-                  >
-                    {revealedKeys[record.index] ? <EyeInvisibleOutlined /> : <EyeOutlined />}
-                  </button>
-                </Tooltip>
-                <Tooltip title={t('cfg.api_keys_copy')}>
-                  <button
-                    type="button"
-                    className="config-key-action"
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(record.key);
-                        message.success(t('cfg.source_copy_success'));
-                      } catch {
-                        message.error(t('cfg.copy_failed'));
-                      }
-                    }}
-                    aria-label={t('cfg.api_keys_copy')}
-                  >
-                    <CopyOutlined />
-                  </button>
-                </Tooltip>
-                <Tooltip title={t('cfg.api_keys_edit')}>
-                  <button
-                    type="button"
-                    className="config-key-action"
-                    onClick={() => onEdit(record.index, record.key)}
-                    aria-label={t('cfg.api_keys_edit')}
-                  >
-                    <EditOutlined />
-                  </button>
-                </Tooltip>
-                <Popconfirm
-                  title={t('cfg.api_keys_delete_confirm')}
-                  onConfirm={() => onDelete(record.index)}
-                  okText={t('common.confirm')}
-                  cancelText={t('common.cancel')}
-                >
-                  <Tooltip title={t('cfg.api_keys_delete')}>
-                    <button
-                      type="button"
-                      className="config-key-action is-danger"
-                      aria-label={t('cfg.api_keys_delete')}
-                    >
-                      <DeleteOutlined />
-                    </button>
-                  </Tooltip>
-                </Popconfirm>
-              </Space>
-            ),
-          },
-        ]}
-      />
-    </div>
-  );
-};
 
 export const ConfigPage: React.FC = () => {
   const t = useT();
@@ -238,21 +81,42 @@ export const ConfigPage: React.FC = () => {
 
   const docRef = React.useRef<Document | null>(null);
   const serverDocRef = React.useRef<Document | null>(null);
+  const rawYamlRef = React.useRef('');
+  const serverYamlRef = React.useRef('');
+  /** Guards against a second save starting before isPending propagates. */
+  const saveInFlightRef = React.useRef(false);
 
   React.useEffect(() => {
-    if (viewMode === 'visual' && configQuery.data?.safe_yaml !== undefined) {
-      const safe = configQuery.data.safe_yaml;
-      setRawYaml(safe);
-      setServerYaml(safe);
-      setServerRevision(configQuery.data.revision || '');
-      try {
-        docRef.current = parseDocument(safe);
-        serverDocRef.current = parseDocument(safe);
-      } catch {
-        // A malformed document is expected here: the previous baseline stays in place.
-      }
+    if (viewMode !== 'visual' || configQuery.data?.safe_yaml === undefined) return;
+    const safe = configQuery.data.safe_yaml;
+    const revision = configQuery.data.revision || '';
+    // A refetch or an invalidation must never overwrite a draft the operator is
+    // still writing. Saving snapshot A while they have already begun draft B has
+    // to advance the saved baseline to A and leave B alone, so the baseline is
+    // always adopted here and rawYaml is only replaced when there is no draft to
+    // lose. Applying the server copy unconditionally was the bug: the save's own
+    // invalidation would come back and silently discard the newer edits.
+    const hasLocalEdits = rawYamlRef.current !== serverYamlRef.current;
+    setServerYaml(safe);
+    setServerRevision(revision);
+    try {
+      serverDocRef.current = parseDocument(safe);
+    } catch {
+      // A malformed document is expected here: the previous baseline stays in place.
+    }
+    if (hasLocalEdits) return;
+    setRawYaml(safe);
+    try {
+      docRef.current = parseDocument(safe);
+    } catch {
+      // A malformed document is expected here: the previous baseline stays in place.
     }
   }, [configQuery.data?.safe_yaml, configQuery.data?.revision, viewMode]);
+
+  // Mirrored into refs so the hydration effect and saveConfig can read the current
+  // values without being re-created on every keystroke.
+  rawYamlRef.current = rawYaml;
+  serverYamlRef.current = serverYaml;
 
   const isDirty = rawYaml !== serverYaml;
 
@@ -379,20 +243,32 @@ export const ConfigPage: React.FC = () => {
    * question twice.
    */
   const saveConfig = React.useCallback(() => {
-    if (!isDirty || saveMutation.isPending) return;
+    if (!isDirty || configQuery.isError) return Promise.resolve();
+    // isPending lags a render, so a second activation in the same tick (a double
+    // click, or Ctrl+S bubbling out of the editor) would start a second mutation
+    // against the same revision and race the first one to the conflict check.
+    if (saveInFlightRef.current || saveMutation.isPending) return Promise.resolve();
     if (hasYamlErrors) {
       setShowErrorFeedback(true);
       message.error(t('cfg.dirty_bar_yaml_error'));
-      return;
+      return Promise.resolve();
     }
     if (payloadIssues.length > 0) {
       setValidateTrigger((v) => v + 1);
       setShowErrorFeedback(true);
       message.warning(t('cfg.dirty_bar_payload_issues', { n: payloadIssues.length }));
-      return;
+      return Promise.resolve();
     }
-    if (configQuery.isError) return;
-    saveMutation.mutate({ yamlToSave: rawYaml, revision: serverRevision });
+    saveInFlightRef.current = true;
+    // The promise is returned so a Popconfirm can hold its own loading state, and
+    // it is settled here rather than left to the caller: a keyboard handler has
+    // nobody to catch a rejection, and the mutation's onError already reports it.
+    return saveMutation
+      .mutateAsync({ yamlToSave: rawYaml, revision: serverRevision })
+      .catch(() => undefined)
+      .finally(() => {
+        saveInFlightRef.current = false;
+      });
   }, [
     isDirty,
     saveMutation,
@@ -422,7 +298,9 @@ export const ConfigPage: React.FC = () => {
       okText: t('common.confirm'),
       cancelText: t('common.cancel'),
       onOk: () => {
-        saveConfig();
+        // Returning the promise keeps the confirm dialog open until the save
+        // settles, so a failure cannot look like it already succeeded.
+        return saveConfig();
       },
     });
   }, [configQuery.isError, hasYamlErrors, isDirty, modal, payloadIssues.length, saveMutation.isPending, saveConfig, t]);
@@ -438,16 +316,41 @@ export const ConfigPage: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [requestSaveConfirmation]);
 
+  /**
+   * confirmDiscardDraft asks before a mode switch throws away unsaved edits.
+   *
+   * It resolves to whether the switch may proceed, so the caller can also use it
+   * to decide when to *start* loading the other view: the source read must not
+   * begin before the operator has accepted that its result replaces their draft.
+   */
+  const confirmDiscardDraft = React.useCallback(
+    () =>
+      new Promise<boolean>((resolve) => {
+        if (!(rawYamlRef.current !== serverYamlRef.current)) {
+          resolve(true);
+          return;
+        }
+        modal.confirm({
+          title: t('cfg.source_switch_discard'),
+          okText: t('common.confirm'),
+          cancelText: t('common.cancel'),
+          onOk: () => resolve(true),
+          onCancel: () => resolve(false),
+        });
+      }),
+    [modal, t],
+  );
+
   const handleViewModeChange = async (targetMode: 'visual' | 'source') => {
+    // Disposition comes first: loading the other view and only then asking would
+    // either discard silently or apply a stale response over a newer draft.
+    if (!(await confirmDiscardDraft())) return;
     if (targetMode === 'source') {
       // Reading the raw source no longer demands the management key again: this
       // page is already behind the authenticated session, and the backend keeps
       // the audit and no-store boundary. A failure here is a real read failure.
       try {
         const src = await api.getConfigSource();
-        // Entering the source view replaces the draft with what is on disk, so
-        // unsaved edits must be confirmed away rather than silently discarded.
-        if (isDirty && !window.confirm(t('cfg.source_switch_discard'))) return;
         setRawYaml(src.yaml);
         setServerYaml(src.yaml);
         setServerRevision(src.revision);
@@ -464,56 +367,17 @@ export const ConfigPage: React.FC = () => {
         message.error(t('cfg.source_load_failed', { msg }));
       }
     } else {
-      if (isDirty && !window.confirm(t('cfg.source_switch_discard'))) return;
       setViewMode('visual');
       queryClient.removeQueries({ queryKey: ['management-config-source'] });
       void configQuery.refetch();
     }
   };
 
-  // ── API Keys Management ──────────────────────────────────────────────────
-  const [apiKeyModalOpen, setApiKeyModalOpen] = React.useState(false);
-  const [editingKeyIndex, setEditingKeyIndex] = React.useState<number | null>(null);
-  const [apiKeyInput, setApiKeyInput] = React.useState('');
-
-  const currentApiKeys: string[] = React.useMemo(() => {
-    const raw = getFieldValue(ALL_CONFIG_FIELDS.find((f) => f.id === 'apiKeys')!);
-    if (Array.isArray(raw)) return raw.map(String);
-    if (typeof raw === 'string' && raw) return [raw];
-    return [];
-  }, [getFieldValue]);
-
-  const handleSaveApiKey = () => {
-    const trimmed = apiKeyInput.trim();
-    if (!trimmed) {
-      message.warning(t('cfg.api_key_empty_warning'));
-      return;
-    }
-    const next = [...currentApiKeys];
-    if (editingKeyIndex !== null && editingKeyIndex >= 0) {
-      next[editingKeyIndex] = trimmed;
-    } else {
-      next.push(trimmed);
-    }
-    const apiKeysField = ALL_CONFIG_FIELDS.find((f) => f.id === 'apiKeys')!;
-    updateFieldInDoc(apiKeysField, next);
-    setApiKeyModalOpen(false);
-    setApiKeyInput('');
-    setEditingKeyIndex(null);
-  };
-
-  const handleDeleteApiKey = (index: number) => {
-    const next = currentApiKeys.filter((_, i) => i !== index);
-    const apiKeysField = ALL_CONFIG_FIELDS.find((f) => f.id === 'apiKeys')!;
-    updateFieldInDoc(apiKeysField, next);
-  };
-
-  const handleGenerateKey = () => {
-    const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(16)))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-    setApiKeyInput(`sk-cpa-${randomHex}`);
-  };
+  // ── API Keys ────────────────────────────────────────────
+  // The key list is edited on its own page (/api-keys) so the console keeps one
+  // entry point into that field. The `apiKeys` schema field itself stays: the
+  // source view still renders the whole document, and semantic comparison of that
+  // document still has to account for `api-keys`.
 
   // Section icons helper
   const sectionIcon = (id: ConfigSectionId) => {
@@ -733,24 +597,14 @@ export const ConfigPage: React.FC = () => {
     if (groupFields.length === 0) return null;
 
     // Entity List variant (e.g. API Keys)
+    //
+    // The key list is no longer rendered here. It lives on /api-keys, which is a
+    // first-class gateway surface, so the configuration workbench does not carry
+    // a second editor that could disagree with it. The field itself stays in the
+    // schema: the YAML source view still shows the whole document, and semantic
+    // comparison of the document still has to know about `api-keys`.
     if (grp.variant === 'entity-list') {
-      return (
-        <ConfigApiKeysCard
-          key={grp.id}
-          apiKeys={currentApiKeys}
-          onAdd={() => {
-            setEditingKeyIndex(null);
-            setApiKeyInput('');
-            setApiKeyModalOpen(true);
-          }}
-          onEdit={(idx, k) => {
-            setEditingKeyIndex(idx);
-            setApiKeyInput(k);
-            setApiKeyModalOpen(true);
-          }}
-          onDelete={handleDeleteApiKey}
-        />
-      );
+      return null;
     }
 
     // Payload Builder variant (structured JSON rules for models and parameters)
@@ -1176,36 +1030,6 @@ export const ConfigPage: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* API Key Modal */}
-      <Modal
-        title={editingKeyIndex !== null ? t('cfg.api_keys_edit') : t('cfg.api_keys_add')}
-        open={apiKeyModalOpen}
-        onOk={handleSaveApiKey}
-        onCancel={() => {
-          setApiKeyModalOpen(false);
-          setApiKeyInput('');
-          setEditingKeyIndex(null);
-        }}
-        okText={t('common.confirm')}
-        cancelText={t('common.cancel')}
-        destroyOnClose
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
-          <Input.Password
-            placeholder="sk-..."
-            value={apiKeyInput}
-            onChange={(e) => setApiKeyInput(e.target.value)}
-            className="config-mono-input"
-            autoFocus
-          />
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Button size="small" type="dashed" onClick={handleGenerateKey}>
-              {t('cfg.api_keys_generate')}
-            </Button>
-          </div>
-        </div>
-      </Modal>
 
       {/* Floating Bottom Dirty Action Bar.
           It owns its own confirmation, so it is handed the save itself rather

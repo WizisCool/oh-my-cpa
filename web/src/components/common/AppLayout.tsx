@@ -10,6 +10,7 @@ import {
   FileProtectOutlined,
   HistoryOutlined,
   InfoCircleOutlined,
+  KeyOutlined,
   LoginOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -58,6 +59,7 @@ const navGroups: NavGroup[] = [
     labelKey: 'nav.group.gateway',
     items: [
       { key: '/ai-providers', labelKey: 'nav.providers', icon: <CloudServerOutlined /> },
+      { key: '/api-keys', labelKey: 'nav.api_keys', icon: <KeyOutlined /> },
       // The three OAuth surfaces read as one flow: authenticate, then manage the
       // credentials it produced, then watch what they are allowed to consume.
       { key: '/oauth', labelKey: 'nav.oauth', icon: <LoginOutlined /> },
