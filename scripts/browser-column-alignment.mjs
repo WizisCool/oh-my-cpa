@@ -286,6 +286,36 @@ try {
   });
   check('header and row column tracks line up', tracksAligned.ok, JSON.stringify(tracksAligned.drift));
 
+  // 6. The responsive breakpoints must still win. The base rules are written with
+  //    `:where()` at zero specificity on purpose, so the mobile numeric overrides
+  //    (which restore left alignment when the layout stacks) have to beat them -
+  //    a specificity slip here would silently re-right-align the stacked cards.
+  await page.setViewportSize({ width: 600, height: 1000 });
+  await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 10_000 });
+  await wait(400);
+  const stacked = await page.evaluate(() => {
+    const measure = (selector) => {
+      const node = document.querySelector(selector);
+      if (!node) return null;
+      const style = window.getComputedStyle(node);
+      return { align: style.alignItems, textAlign: style.textAlign, direction: style.flexDirection };
+    };
+    return {
+      latency: measure('.req-col-latency'),
+      tokens: measure('.req-col-tokens'),
+      cache: measure('.req-col-cache'),
+    };
+  });
+  const stackedEntries = Object.entries(stacked).filter(([, value]) => value !== null);
+  check(
+    'the stacked layout restores left alignment for numeric columns',
+    stackedEntries.length === 3 &&
+      stackedEntries.every(([, value]) => value.align === 'flex-start' && value.textAlign === 'left'),
+    JSON.stringify(stacked),
+  );
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await wait(300);
+
   check('no page errors on the request log', pageErrors.length === 0, pageErrors.join(' | '));
 } catch (error) {
   console.error(`FAIL ${error?.message ?? error}`);
