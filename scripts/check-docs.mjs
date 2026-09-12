@@ -61,6 +61,7 @@ export const RETIRED_REFERENCES = [
  * allowlist cannot quietly absorb a genuine stale reference.
  */
 export const EXPECTED_ABSENT_PATHS = [
+  { path: '.env', reason: "the operator's dotenv file is created from .env.example and gitignored, so it never exists in a fresh clone" },
   { path: 'cpa/', reason: 'the CLIProxyAPI directory is user-supplied and gitignored' },
   { path: 'cpa/cli-proxy-api', reason: 'the CLIProxyAPI binary is user-supplied and gitignored' },
   { path: 'cpa/cli-proxy-api.exe', reason: 'the CLIProxyAPI binary is user-supplied and gitignored' },
