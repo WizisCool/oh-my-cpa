@@ -17,11 +17,7 @@ import {
   type CredentialIndex,
   type ProviderLookupEntry,
 } from '../../types/usageEventView';
-import { requestColumnAlignClass, type RequestColumnId } from './requestColumns';
-
-// The alignment class comes from the shared column definition, so every cell here
-// is aligned by the same rule the header uses rather than by a parallel list.
-const alignClass = (id: RequestColumnId) => requestColumnAlignClass(id);
+import { requestColumnAlignClass } from './requestColumns';
 
 export interface RequestRowProps {
   event: UsageEvent;
@@ -94,7 +90,7 @@ export const RequestRow = React.memo<RequestRowProps>(
         aria-label={`${t('common.details')}: ${event.model}, ${event.request_id || event.id}`}
       >
         {/* Column 1: timestamp */}
-        <div className={`req-col req-col-time ${alignClass('time')}`}>
+        <div className={`req-col req-col-time ${requestColumnAlignClass('time')}`}>
           <Tooltip title={fullTime}>
             <time dateTime={new Date(event.timestamp_ms).toISOString()} className="req-time-text">
               {formattedTime}
@@ -121,7 +117,7 @@ export const RequestRow = React.memo<RequestRowProps>(
         </div>
 
         {/* Column 2: outcome (success/failure pill) */}
-        <div className={`req-col req-col-result ${alignClass('result')}`}>
+        <div className={`req-col req-col-result ${requestColumnAlignClass('result')}`}>
           <span className="req-mobile-label">{t('events.col_result')}</span>
           <span
             className={`req-result-pill ${event.failed ? 'is-failed' : 'is-success'}`}
@@ -133,7 +129,7 @@ export const RequestRow = React.memo<RequestRowProps>(
         </div>
 
         {/* Column 3: provider (credential that answered) */}
-        <div className={`req-col req-col-provider ${alignClass('provider')}`}>
+        <div className={`req-col req-col-provider ${requestColumnAlignClass('provider')}`}>
           <div className="req-provider-icon-wrapper">
             <LobeIcon iconId={providerInfo.iconId} size={20} />
           </div>
@@ -157,7 +153,7 @@ export const RequestRow = React.memo<RequestRowProps>(
         </div>
 
         {/* Column 4: model, with reasoning effort underneath */}
-        <div className={`req-col req-col-model ${alignClass('model')}`}>
+        <div className={`req-col req-col-model ${requestColumnAlignClass('model')}`}>
           <div className="req-model-primary">
             <strong
               className="req-model-name"
@@ -192,7 +188,7 @@ export const RequestRow = React.memo<RequestRowProps>(
         </div>
 
         {/* Column 5: total latency */}
-        <div className={`req-col req-col-latency ${alignClass('latency')}`}>
+        <div className={`req-col req-col-latency ${requestColumnAlignClass('latency')}`}>
           <span className="req-mobile-label">{t('events.col_latency')}</span>
           <strong className="req-latency-val">
             {formatEventDuration(event.latency_ms)}
@@ -203,7 +199,7 @@ export const RequestRow = React.memo<RequestRowProps>(
         </div>
 
         {/* Column 6: generation speed in tokens per second */}
-        <div className={`req-col req-col-tps ${alignClass('tps')}`}>
+        <div className={`req-col req-col-tps ${requestColumnAlignClass('tps')}`}>
           <span className="req-mobile-label">{t('events.col_tps')}</span>
           {tpsInfo.tps !== null ? (
             <Tooltip
@@ -221,7 +217,7 @@ export const RequestRow = React.memo<RequestRowProps>(
         </div>
 
         {/* Column 7: tokens (total, input, output, reasoning) */}
-        <div className={`req-col req-col-tokens ${alignClass('tokens')}`}>
+        <div className={`req-col req-col-tokens ${requestColumnAlignClass('tokens')}`}>
           <span className="req-mobile-label">{t('events.col_tokens')}</span>
           <div className="req-tokens-total">
             <strong>{event.tokens.total.toLocaleString()}</strong>
@@ -248,7 +244,7 @@ export const RequestRow = React.memo<RequestRowProps>(
 
         {/* Column 8: cost, locked at request time; unpriced stays an em dash
             rather than a fabricated 0 */}
-        <div className={`req-col req-col-cost ${alignClass('cost')}`}>
+        <div className={`req-col req-col-cost ${requestColumnAlignClass('cost')}`}>
           <span className="req-mobile-label">{t('events.col_cost')}</span>
           {event.cost_usd != null ? (
             <strong className="req-cost-val">${event.cost_usd.toFixed(4)}</strong>
@@ -259,7 +255,7 @@ export const RequestRow = React.memo<RequestRowProps>(
           )}
         </div>
         {/* Column 9: cache hit rate */}
-        <div className={`req-col req-col-cache ${alignClass('cache')}`}>
+        <div className={`req-col req-col-cache ${requestColumnAlignClass('cache')}`}>
           <span className="req-mobile-label">{t('events.col_cache_rate')}</span>
           <Tooltip
             title={
@@ -293,7 +289,7 @@ export const RequestRow = React.memo<RequestRowProps>(
 
         {/* Column 10: caller key, masked, and only for api_key callers;
             every other auth type falls back to the source fingerprint */}
-        <div className={`req-col req-col-key ${alignClass('key')}`}>
+        <div className={`req-col req-col-key ${requestColumnAlignClass('key')}`}>
           <span className="req-mobile-label">{t('events.col_key')}</span>
           <span className="req-key-val" title={keyLabel}>
             {keyLabel}
@@ -302,7 +298,7 @@ export const RequestRow = React.memo<RequestRowProps>(
 
         {/* Column 11: user agent, already reduced to a client product label
             at ingestion */}
-        <div className={`req-col req-col-ua ${alignClass('ua')}`}>
+        <div className={`req-col req-col-ua ${requestColumnAlignClass('ua')}`}>
           <span className="req-mobile-label">{t('events.col_ua')}</span>
           <span className="req-ua-val" title={uaLabel}>
             {uaLabel}

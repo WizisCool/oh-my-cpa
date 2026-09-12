@@ -56,22 +56,32 @@
 .request-filters > .req-result-segmented {
   flex-shrink: 0;
 }
-/* The status marker in the result filter. It borrows the Result column's pill and
-   bullet so "success" and "failed" are read the same way in the filter as in the
-   rows it filters; the dot is sized down because the segment is small. */
+/* The compact status marker used by the result filter controls. It shares the
+   Result column's square-bullet vocabulary and its success/danger tokens, so an
+   outcome is legible the same way in the filter and in the rows it filters.
+   'all' shows both bullets: the filter is displaying both outcomes, not a third. */
+.req-result-marker {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.req-result-marker i {
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: currentColor;
+}
+.req-result-marker i.is-success {
+  color: var(--success);
+}
+.req-result-marker i.is-failed {
+  color: var(--danger);
+}
 .req-result-option {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-}
-.req-result-option .req-result-pill {
-  padding: 0;
-  background: none;
-  gap: 0;
-}
-.req-result-option .req-result-bullet {
-  width: 6px;
-  height: 6px;
 }
 .request-filters > .req-time-button {
   flex: 1 1 190px;
@@ -483,23 +493,29 @@
 
 /* Alignment is driven by the shared column definitions (requestColumns.ts), not
    by a selector list restated per column: the header and the body cell carry the
-   same is-align-* class, so they cannot disagree. */
-.req-th.is-align-left {
+   same is-align-* class, so they cannot disagree.
+
+   `:where()` keeps these rules at zero specificity on purpose. They are the
+   default, and the per-column rules below (and the responsive overrides further
+   down) must be able to beat them without a specificity arms race: the provider
+   cell is a row-direction flex that centres its contents, and a plain
+   `.req-col.is-align-left` would have outranked it and broken that centring. */
+.req-th:where(.is-align-left) {
   justify-content: flex-start;
   text-align: left;
 }
 
-.req-th.is-align-right {
+.req-th:where(.is-align-right) {
   justify-content: flex-end;
   text-align: right;
 }
 
-.req-th.is-align-right .req-th-label {
+.req-th:where(.is-align-right) .req-th-label {
   text-align: right;
   width: 100%;
 }
 
-.req-th.is-align-center {
+.req-th:where(.is-align-center) {
   justify-content: center;
   text-align: center;
 }
@@ -559,18 +575,22 @@
 /* Body cells take their horizontal alignment from the same column definition as
    the header, so a numeric column's header and values always agree. Vertical
    alignment and gaps stay with the per-column rules below, which carry
-   column-specific layout. */
-.req-col.is-align-left {
+   column-specific layout.
+
+   `:where()` again: `align-items` means "horizontal" in a column-direction flex
+   and "vertical" in a row-direction one, and the provider cell is row-direction.
+   Zero specificity lets those per-column rules win. */
+.req-col:where(.is-align-left) {
   align-items: flex-start;
   text-align: left;
 }
 
-.req-col.is-align-right {
+.req-col:where(.is-align-right) {
   align-items: flex-end;
   text-align: right;
 }
 
-.req-col.is-align-center {
+.req-col:where(.is-align-center) {
   align-items: center;
   text-align: center;
 }

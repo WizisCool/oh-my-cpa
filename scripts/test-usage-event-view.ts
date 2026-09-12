@@ -839,50 +839,53 @@ console.log('PASS provider info resolution: OAuth account identity, configured p
 //
 // The reported value is CPA's stored provider key, so the label has to come from
 // the operator's configuration. Guessing it from the key (stripping a prefix,
-// capitalising) would print a name the operator never chose and would disagree
-// with the providers page for the same line.
+// capitalising, or matching a substring) would print a name the operator never
+// chose and would disagree with the providers page for the same line.
 const nameResolver = createProviderNameResolver([
-  { id: 'openai-compat-0', name: 'CommandCode GOAT', family: 'openai-compatibility', auth_index: 'shared-index' },
-  { id: 'custom-deepseek', name: 'DeepSeek 专线', family: 'openai-compatibility' },
+  { id: 'openai-compat-0', name: 'CommandCode GOAT', upstream_name: 'commandcode goat', family: 'openai-compatibility' },
+  { id: 'custom-deepseek', name: 'DeepSeek 专线', upstream_name: 'deepseek', family: 'openai-compatibility' },
   { id: 'claude-1', name: 'Claude relay', family: 'claude' },
 ]);
-// Exact id match wins even though the key itself carries an operator-style name.
+// The key CPA stores is the prefix plus the upstream name, so the lookup is exact.
+assert.equal(nameResolver('openai-compatible-commandcode goat'), 'CommandCode GOAT');
+assert.equal(nameResolver('openai-compatible-deepseek'), 'DeepSeek 专线');
+// The local provider id resolves too, for a key that carries one.
 assert.equal(nameResolver('openai-compat-0'), 'CommandCode GOAT');
 assert.equal(nameResolver('custom-deepseek'), 'DeepSeek 专线');
 assert.equal(nameResolver('claude-1'), 'Claude relay');
-// The key CPA stores for a configured OpenAI-compatible line is its display name
-// behind a prefix, which resolves once the prefix is stripped.
-assert.equal(nameResolver('openai-compatible-commandcode goat'), 'CommandCode GOAT');
-assert.equal(nameResolver('openai-compatible-deepseek 专线'), 'DeepSeek 专线');
 // Case never decides identity, and surrounding whitespace is not a difference.
-assert.equal(nameResolver('OPENAI-COMPAT-0'), 'CommandCode GOAT');
-assert.equal(nameResolver('  openai-compat-0  '), 'CommandCode GOAT');
+assert.equal(nameResolver('OPENAI-COMPATIBLE-COMMANDCODE GOAT'), 'CommandCode GOAT');
+assert.equal(nameResolver('  openai-compatible-commandcode goat  '), 'CommandCode GOAT');
+// The custom name is not an identity: a key that merely resembles part of it
+// proves nothing, and must not be matched.
+assert.equal(nameResolver('openai-compatible-commandcode'), 'openai-compatible-commandcode');
+assert.equal(nameResolver('openai-compatible-goat'), 'openai-compatible-goat');
 // A deleted or renamed provider keeps the raw key: still true, never fabricated.
 assert.equal(nameResolver('openai-compatible-vanished-line'), 'openai-compatible-vanished-line');
 assert.equal(nameResolver('codex'), 'codex');
 assert.equal(nameResolver(''), '');
 assert.equal(nameResolver(null), '');
 assert.equal(nameResolver(undefined), '');
-// An ambiguous key is reported raw rather than resolved to an arbitrary provider.
-// An exact name still wins outright: the stripped remainder equals one
-// provider's name, and the other name is not contained in it.
-const nearMiss = createProviderNameResolver([
-  { id: 'a', name: 'Relay' },
-  { id: 'b', name: 'Relay Two' },
+// An identity two providers both claim stays unresolved rather than being handed
+// to whichever happened to be listed first.
+const duplicateUpstream = createProviderNameResolver([
+  { id: 'a', name: 'Relay One', upstream_name: 'relay' },
+  { id: 'b', name: 'Relay Two', upstream_name: 'relay' },
 ]);
-assert.equal(nearMiss('openai-compatible-relay'), 'Relay');
-// A key two providers could both answer to stays raw rather than picking one:
-// neither name equals the remainder, and both are contained in it.
-const ambiguousResolver = createProviderNameResolver([
-  { id: 'a', name: 'Relay' },
-  { id: 'b', name: 'One' },
+assert.equal(duplicateUpstream('openai-compatible-relay'), 'openai-compatible-relay');
+// A custom name differing from the upstream name still resolves through the
+// upstream identity, which is the whole point of recording it separately.
+const customName = createProviderNameResolver([
+  { id: 'openai-compat-3', name: '我的专线', upstream_name: 'vendor-x' },
 ]);
-assert.equal(ambiguousResolver('openai-compatible-relay one'), 'openai-compatible-relay one');
+assert.equal(customName('openai-compatible-vendor-x'), '我的专线');
+// The custom name alone must not resolve, because it is not what CPA stores.
+assert.equal(customName('openai-compatible-我的专线'), 'openai-compatible-我的专线');
 // An empty configuration resolves nothing and never throws.
 const emptyResolver = createProviderNameResolver([]);
 assert.equal(emptyResolver('openai-compatible-anything'), 'openai-compatible-anything');
 assert.equal(providerFacetLabel('CommandCode GOAT', 42), 'CommandCode GOAT (42)');
-console.log('PASS provider name resolution: configured name, prefix strip, exact id, raw-key fallback, ambiguity');
+console.log('PASS provider name resolution: exact upstream identity, custom name, duplicate ambiguity, raw-key fallback');
 
 // Tokens Per Second (TPS) tests
 assert.equal(eventTokensPerSecond(undefined).formatted, '—');

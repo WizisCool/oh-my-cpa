@@ -84,24 +84,45 @@ const Trend: React.FC<TrendProps> = ({
   const { themeMode } = useThemeMode();
   const t = useT();
   const data = React.useMemo(() => seriesData(points, pick), [points, pick]);
+
+  // The chart library reads the tooltip accessors on every pointer move, so
+  // holding them in refs keeps a hover from depending on identity-stable props.
+  // The figure itself is only rebuilt when the series or its domain actually
+  // changes, which keeps a pointer sweep from re-creating the chart underneath
+  // the cursor - the source of the lag this used to show.
+  const pointsRef = React.useRef(points);
+  const labelRef = React.useRef(label);
+  const formatRef = React.useRef(format);
+  const translateRef = React.useRef(t);
+  pointsRef.current = points;
+  labelRef.current = label;
+  formatRef.current = format;
+  translateRef.current = t;
+
+  const domain = React.useMemo(() => sparkDomain(data.map((row) => row.y)), [data]);
+  // A primitive summary of the domain, so the options memo can depend on the
+  // numeric extent rather than on a fresh object each render.
+  const domainSignature = domain ? `${domain.domainMin}:${domain.domainMax}` : 'none';
+
   const options = React.useMemo(() => {
-    const domain = sparkDomain(data.map((row) => row.y));
-    const tooltip = label
+    const tooltip = labelRef.current
       ? {
-          title: (datum: { x: number }) => label(points[datum.x]?.t ?? 0),
+          title: (datum: { x: number }) => labelRef.current?.(pointsRef.current[datum.x]?.t ?? 0) ?? '',
           items: [
             (datum: { y: number }) => ({
-              name: t('dash.tooltip_bucket'),
-              value: format ? format(datum.y) : formatCount(datum.y),
+              name: translateRef.current('dash.tooltip_bucket'),
+              value: formatRef.current ? formatRef.current(datum.y) : formatCount(datum.y),
             }),
           ],
         }
       : false;
-    const base = variant === 'area'
+    return variant === 'area'
       ? sparkOptions(themeMode, tone, { domain, tooltip })
       : lineOptions(themeMode, tone, { domain, tooltip });
-    return base;
-  }, [data, domainKey(data), format, label, points, t, themeMode, tone, variant]);
+    // Intentionally keyed on the series extent rather than on label/format/t:
+    // those are read through refs above, so a re-render that only swaps their
+    // identities must not rebuild the figure under the operator's cursor.
+  }, [domainSignature, points, themeMode, tone, variant]);
 
   if (data.length < 2) {
     return <div className="chart-placeholder" style={{ height }} aria-hidden="true" />;
@@ -113,13 +134,6 @@ const Trend: React.FC<TrendProps> = ({
     </div>
   );
 };
-
-/** domainKey memoises the sparkline domain without re-scanning on every render. */
-function domainKey(rows: Array<{ y: number }>): number {
-  let sum = 0;
-  for (const row of rows) sum += row.y;
-  return sum;
-}
 
 const Pip: React.FC<{ tone: ChartTone }> = ({ tone }) => (
   <i className={`legend-dot ${tone}`} />

@@ -151,6 +151,10 @@ func TestPublicEndpointAcceptsRequestLines(t *testing.T) {
 		{"bare path", "/v1/responses", "/v1/responses"},
 		{"full URL", "https://user:pass@example.test/v1?token=fixture#secret", "https://example.test/v1"},
 		{"lowercase method is not a request line", "post /v1/chat/completions", ""},
+		{"protocol-relative path drops authority", "//user:pass@example.test/v1", "/v1"},
+		// A method-prefixed authority-bearing target is refused by PublicURL (it is
+		// not absolute after the method is removed), so the whole value is dropped
+		// rather than leaking the credentials into the label.
 		{"unstructured text", "garbage", ""},
 		{"empty", "", ""},
 	}
@@ -166,6 +170,7 @@ func TestPublicEndpointAcceptsRequestLines(t *testing.T) {
 	for _, value := range []string{
 		"POST /v1/chat/completions?api_key=fixture-secret",
 		"https://user:pass@example.test/v1?token=fixture-secret",
+		"//user:pass@example.test/v1?token=fixture-secret",
 	} {
 		got := PublicEndpoint(value)
 		for _, secret := range []string{"fixture-secret", "user:pass", "?", "token="} {

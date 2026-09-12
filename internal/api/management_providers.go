@@ -43,9 +43,20 @@ type ProviderModelDTO struct {
 }
 
 type ProviderItemDTO struct {
-	ID              string                `json:"id"`
-	Family          string                `json:"family"`
-	Name            string                `json:"name"`
+	ID     string `json:"id"`
+	Family string `json:"family"`
+	Name   string `json:"name"`
+	// UpstreamName is the name the provider carries in CPA's own configuration,
+	// recorded before a local custom name replaces it.
+	//
+	// It is not a secret - it is a label the operator wrote in config.yaml - and it
+	// is the only sound way to join a stored request record back to the provider
+	// that served it: CPA labels the usage queue with "openai-compatible-<name>",
+	// so once Name has been overridden by a custom name the original is
+	// unrecoverable and the join could only be guessed. Only the
+	// openai-compatibility family names its entries upstream, so this stays empty
+	// for the positional families, which CPA labels by family instead.
+	UpstreamName    string                `json:"upstream_name,omitempty"`
 	Protocol        string                `json:"protocol"`
 	BaseURL         string                `json:"base_url,omitempty"`
 	Prefix          string                `json:"prefix,omitempty"`
@@ -375,6 +386,7 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 				ID:              id,
 				Family:          "openai-compatibility",
 				Name:            name,
+				UpstreamName:    entry.Name,
 				Protocol:        "OpenAI Chat Completions",
 				BaseURL:         entry.BaseURL,
 				Prefix:          entry.Prefix,

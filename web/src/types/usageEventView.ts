@@ -676,73 +676,81 @@ export function eventTokensPerSecond(
 export interface ProviderLookupEntry {
   id: string;
   name: string;
+  /** The provider's name as CPA records it, before a local custom name replaced
+   *  it. This is the identity a stored provider key is built from. */
+  upstream_name?: string;
   family?: string;
   auth_index?: string;
   base_url?: string;
 }
 
 /**
- * PROVIDER_KEY_PREFIX is the namespace CPA puts in front of a provider that was
- * configured as OpenAI-compatible. Stripping it reveals the operator's own name
- * for the line, which is what a filter label has to say.
+ * PROVIDER_KEY_PREFIX is the namespace CPA puts in front of an OpenAI-compatible
+ * provider's upstream name when it labels a request record.
  */
 export const PROVIDER_KEY_PREFIX = 'openai-compatible-';
 
 /**
- * createProviderNameResolver maps one stored provider key to the name the
- * operator gave that provider.
+ * createProviderNameResolver maps one stored provider key to the name the operator
+ * gave that provider.
  *
- * The stored value is CPA's own key ("openai-compatible-commandcode goat"), so it
- * has to be resolved against the provider list rather than prettified: guessing a
- * display name from the key would invent a label the operator never wrote, and
- * would disagree with the provider page for the same line.
+ * CPA's usage records carry its own provider key, typically
+ * "openai-compatible-<upstream name>". Resolving that to the configured name is a
+ * lookup, never a prettification: guessing a name from the key would print
+ * something the operator never wrote and would disagree with the providers page
+ * for the same line.
  *
- * Matching is deliberately conservative. An exact id or name wins; failing that,
- * the OpenAI-compatible prefix is stripped and the remainder is matched the same
- * way; failing that, a single configured provider whose name appears inside the
- * key wins. Anything unresolved - a deleted provider, a renamed one, a key two
- * providers could answer to - falls back to the raw key, which is still the true
- * identity of the record and never a fabrication.
+ * The match is exact and is tried against the fields that actually carry
+ * identity, in order of how much they prove:
  *
- * auth_index is intentionally not consulted even though both sides carry it: a
- * group of keys can share one auth index, so it cannot name a single provider.
+ *   1. the recorded upstream name (`upstream_name`), which is exactly the text
+ *      CPA embeds in the key, and survives a local custom name;
+ *   2. the key with the openai-compatible- prefix removed, against the same field;
+ *   3. the local provider id.
+ *
+ * No substring or containment matching: a name that merely appears inside the key
+ * is not proof the key denotes that provider. An identity two providers both claim
+ * is treated as unresolved rather than silently assigned to whichever was listed
+ * first - the custom name is what differs between them, so a name that matches two
+ * entries cannot be the identity of either. Anything unresolved falls back to the
+ * raw key, which is still the record's true identity and never an invention.
+ *
+ * auth_index is not consulted: a provider facet does not carry one.
  */
 export function createProviderNameResolver(
   configured: readonly ProviderLookupEntry[] = [],
 ): (providerKey: string | null | undefined) => string {
-  const byID = new Map<string, string>();
-  const byName = new Map<string, string>();
-  const entries: Array<{ needle: string; name: string }> = [];
+  // Identity -> display name, or null once a second claimant makes the identity
+  // ambiguous. Storing null rather than overwriting is the point: a duplicate
+  // cannot be resolved by list order.
+  const claimants = new Map<string, string | null>();
+  const claim = (identity: string | undefined, name: string) => {
+    const key = identity?.trim().toLowerCase();
+    if (!key) return;
+    if (!claimants.has(key)) claimants.set(key, name);
+    else if (claimants.get(key) !== name) claimants.set(key, null);
+  };
   for (const provider of configured) {
-    const id = provider.id?.trim().toLowerCase();
     const name = provider.name?.trim();
     if (!name) continue;
-    if (id && !byID.has(id)) byID.set(id, name);
-    const loweredName = name.toLowerCase();
-    if (!byName.has(loweredName)) byName.set(loweredName, name);
-    entries.push({ needle: loweredName, name });
+    claim(provider.upstream_name, name);
+    claim(provider.id, name);
   }
 
-  const match = (candidate: string): string | undefined => {
-    const lowered = candidate.toLowerCase();
-    const exact = byID.get(lowered) ?? byName.get(lowered);
-    if (exact) return exact;
-    if (lowered.startsWith(PROVIDER_KEY_PREFIX)) {
-      const remainder = lowered.slice(PROVIDER_KEY_PREFIX.length);
-      const stripped = byID.get(remainder) ?? byName.get(remainder);
-      if (stripped) return stripped;
-      const contained = entries.filter((entry) => remainder.includes(entry.needle));
-      // Two candidates mean the key does not identify one line, so the raw key is
-      // reported rather than an arbitrary pick.
-      if (contained.length === 1) return contained[0].name;
-    }
-    return undefined;
+  const lookup = (identity: string | undefined): string | undefined => {
+    const key = identity?.trim().toLowerCase();
+    if (!key) return undefined;
+    return claimants.get(key) ?? undefined;
   };
 
   return (providerKey) => {
     const raw = providerKey?.trim();
     if (!raw) return '';
-    return match(raw) ?? raw;
+    const lowered = raw.toLowerCase();
+    const stripped = lowered.startsWith(PROVIDER_KEY_PREFIX)
+      ? lowered.slice(PROVIDER_KEY_PREFIX.length)
+      : lowered;
+    return lookup(stripped) ?? lookup(lowered) ?? raw;
   };
 }
 

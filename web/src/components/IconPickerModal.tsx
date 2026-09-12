@@ -1,9 +1,25 @@
 import React, { useState, useMemo } from 'react';
-import { Modal, Input, Tag, Empty } from 'antd';
+import { Modal, Input, Tag, Empty, theme } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import { toc, type IconToc } from '@lobehub/icons';
 import { LobeIcon } from './LobeIcon';
 import { useT } from '../i18n';
+
+/**
+ * ANTD_CONTAINER_ZINDEX_STEP mirrors the 100-level step antd reserves per
+ * container (Drawer, Modal, Popover) above `zIndexPopupBase`.
+ *
+ * The picker is opened from inside the provider Drawer, but it is rendered as a
+ * sibling of that Drawer rather than a child of it, so it cannot inherit the
+ * Drawer's stacking context and the two end up competing for the same base
+ * level. Relying on antd's implicit per-mount ordering made the picker an
+ * overlay that could land behind the Drawer; this states the intended order.
+ *
+ * Two steps is not arbitrary: the picker must clear one container (the Drawer)
+ * and its mask, and one more step above the base guarantees that for any step
+ * antd chooses rather than tracking the exact value.
+ */
+const ANTD_CONTAINER_ZINDEX_STEP = 100;
 
 interface IconPickerModalProps {
   open: boolean;
@@ -19,6 +35,10 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
   onClose,
 }) => {
   const t = useT();
+  const { token } = theme.useToken();
+  // Derived from the live theme token, so a themed z-index base is respected
+  // rather than pinned to today's default of 1000.
+  const zIndex = token.zIndexPopupBase + ANTD_CONTAINER_ZINDEX_STEP * 2;
   const [search, setSearch] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<'all' | 'provider' | 'model' | 'application'>('all');
 
@@ -57,6 +77,7 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
       onCancel={onClose}
       footer={null}
       width={720}
+      zIndex={zIndex}
     >
       <div style={{ marginBottom: 16 }}>
         <Input

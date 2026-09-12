@@ -135,9 +135,6 @@ export const REQUEST_COLUMNS: readonly RequestColumnDefinition[] = [
   },
 ] as const;
 
-/** ChevronTrack is the fixed trailing action track, outside the data columns. */
-export const CHEVRON_COLUMN_ID = 'chevron' as const;
-
 export const CHEVRON_TRACK_WIDTH = 14;
 
 export const USAGE_EVENTS_COLUMNS_PREFERENCE = 'usage_events_columns';

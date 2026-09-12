@@ -76,10 +76,25 @@ func PublicURL(value string) string {
 	return strings.TrimRight(parsed.String(), "/")
 }
 
-// publicPathEndpoint strips query and fragment from an absolute API path, which
-// is how CPA labels requests it serves directly rather than forwarding upstream.
+// publicPathEndpoint strips query, fragment and any authority from an absolute
+// API path, which is how CPA labels requests it serves directly.
+//
+// A path may still carry an authority ("//user:pass@host/path"): browsers resolve
+// that as protocol-relative, so credentials there are real and must not survive.
 func publicPathEndpoint(value string) string {
 	if !strings.HasPrefix(value, "/") {
+		return ""
+	}
+	// Resolve a protocol-relative form through PublicURL, which already drops
+	// userinfo, query and fragment, then keep only the resulting path.
+	if strings.HasPrefix(value, "//") {
+		if safe := PublicURL("https:" + value); safe != "" {
+			parsed, err := url.Parse(safe)
+			if err != nil {
+				return ""
+			}
+			return parsed.Path
+		}
 		return ""
 	}
 	parsed, err := url.Parse(value)

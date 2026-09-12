@@ -2,6 +2,7 @@ import React from 'react';
 import { Button, Drawer, Input, InputNumber, Segmented, Select, Tooltip } from 'antd';
 import type { UsageCostFilter, UsageFacetValue, UsageFacets, UsageResultFilter } from '../../types/usageEvents';
 import { providerFacetLabel, usageFacetLabel } from '../../types/usageEventView';
+import { ResultMarker } from './ResultMarker';
 import type { EventFilterKey } from '../../types/usageEventView';
 import { parseUsageRangeBound } from '../../types/usageEvents';
 import type { RangeFieldKey, RangeBound } from '../../types/usageEventFilters';
@@ -377,9 +378,33 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
               value={draft.result}
               onChange={(value) => setDraft((prev) => ({ ...prev, result: value as UsageResultFilter }))}
               options={[
-                { value: 'all', label: t('events.filter_all') },
-                { value: 'success', label: t('events.filter_success') },
-                { value: 'failed', label: t('events.filter_failed') },
+                {
+                  value: 'all',
+                  label: (
+                    <span className="req-result-option">
+                      <ResultMarker kind="all" />
+                      {t('events.filter_all')}
+                    </span>
+                  ),
+                },
+                {
+                  value: 'success',
+                  label: (
+                    <span className="req-result-option">
+                      <ResultMarker kind="success" />
+                      {t('events.filter_success')}
+                    </span>
+                  ),
+                },
+                {
+                  value: 'failed',
+                  label: (
+                    <span className="req-result-option">
+                      <ResultMarker kind="failed" />
+                      {t('events.filter_failed')}
+                    </span>
+                  ),
+                },
               ]}
             />,
           )}

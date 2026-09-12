@@ -110,6 +110,13 @@ interface SparkOverrides {
  * sparkOptions configures a compact trend: hairline stroke, flat low-opacity
  * fill (0.13, enough to read the trend without competing with the numbers),
  * no axes, no legend, no entrance animation.
+ *
+ * The fill and the stroke are deliberately split across two marks. TinyArea is a
+ * view whose only child is an `area` mark, and an area mark's shape is a *closed*
+ * polygon: stroking it draws the baseline along the bottom of the plot as well as
+ * the trend, which reads as a stray horizontal rule under the curve. The area
+ * therefore gets fill only, and the trend line is drawn by its own line mark on
+ * top. See `sparkOptions`'s callers in DashboardPage for the two chart kinds.
  */
 export function sparkOptions(mode: ThemeMode, tone: ChartTone = 'accent', overrides: SparkOverrides = {}) {
   const colors = chartColors(mode);
@@ -150,9 +157,16 @@ export function sparkOptions(mode: ThemeMode, tone: ChartTone = 'accent', overri
     style: {
       fill: color,
       fillOpacity: 0.1,
-      stroke: color,
-      lineWidth: 1.5,
+      // No stroke here: on a closed area polygon a stroke also draws the
+      // baseline, which is the stray line this used to leave under the curve.
+      lineWidth: 0,
       fontFamily: colors.fontFamily,
+    },
+    // The trend line is its own mark, so it can be stroked without the area's
+    // baseline being stroked with it.
+    line: {
+      shapeField: 'smooth',
+      style: { stroke: color, lineWidth: 1.5 },
     },
   } as const;
 }
@@ -163,15 +177,13 @@ export function sparkOptions(mode: ThemeMode, tone: ChartTone = 'accent', overri
  */
 export function lineOptions(mode: ThemeMode, tone: ChartTone = 'accent', overrides: SparkOverrides = {}) {
   const base = sparkOptions(mode, tone, overrides);
-  const colors = chartColors(mode);
+  const color = toneColor(chartColors(mode), tone);
+  const { line: _areaTrendLine, ...withoutAreaLine } = base;
   return {
-    ...base,
-    shapeField: 'smooth',
-    style: {
-      stroke: toneColor(colors, tone),
-      lineWidth: 1.5,
-      fontFamily: colors.fontFamily,
-    },
+    ...withoutAreaLine,
+    // A line chart's own top-level mark is the trend, so it keeps the stroke that
+    // the area variant had to move onto a separate `line` child.
+    style: { stroke: color, lineWidth: 1.5 },
   } as const;
 }
 

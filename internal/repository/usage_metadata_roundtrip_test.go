@@ -9,9 +9,11 @@ import (
 )
 
 // rawCommandCodePayload is one CPA usage record as the queue published it, kept
-// in the shape the gateway actually emits: an endpoint that is a request line,
-// a client address, a forwarded chain, and both service tiers.
-const rawCommandCodePayload = `{"accounting_version":2,"alias":"fixture-model",` +
+// in the shape the gateway actually emits: an endpoint that is a request line, a
+// client address, a forwarded chain, and both service tiers. Every value is
+// deliberately synthetic - documentation-range addresses (RFC 5737) and made-up
+// identifiers - so the test never carries a real capture's addresses or indexes.
+const rawCommandCodePayload = `{"accounting_version":2,"alias":"fixture-alias",` +
 	`"api_key":"sk-fixture-caller-key","auth_index":"fixture-auth-index","auth_type":"apikey",` +
 	`"client_ip":"192.0.2.10","endpoint":"POST /v1/chat/completions",` +
 	`"executor_type":"OpenAICompatExecutor","failed":false,"generate":true,"latency_ms":3614,` +
@@ -92,10 +94,6 @@ func TestRequestMetadataSurvivesIngestAndPersistence(t *testing.T) {
 // boundary.
 func TestCommitUsageDecodedKeepsRequestMetadata(t *testing.T) {
 	repo := usageTestRepository(t)
-	event, err := usage.DecodeEvent(rawCommandCodePayload, "default", time.Now())
-	if err != nil {
-		t.Fatalf("decode usage payload: %v", err)
-	}
 	written, err := repo.AppendUsageInbox(context.Background(), "default", "http_pull",
 		[]string{rawCommandCodePayload}, time.Now())
 	if err != nil {
@@ -110,6 +108,14 @@ func TestCommitUsageDecodedKeepsRequestMetadata(t *testing.T) {
 	}
 	if len(pending) != 1 {
 		t.Fatalf("claimed %d inbox rows, want 1", len(pending))
+	}
+	// Decode from what the inbox actually stored, not from the literal. Storage
+	// projects the payload through RedactPayload, so decoding the original string
+	// would skip the transformation the real collector always performs.
+	event, err := usage.DecodeEventWithFingerprinter(pending[0].RawMessage, "default",
+		time.UnixMilli(pending[0].PoppedAtMS), nil)
+	if err != nil {
+		t.Fatalf("decode stored payload: %v", err)
 	}
 	committed, err := repo.CommitUsageDecoded(context.Background(), []UsageDecoded{{InboxID: pending[0].ID, Event: event}})
 	if err != nil {

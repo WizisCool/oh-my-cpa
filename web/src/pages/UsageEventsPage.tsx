@@ -87,6 +87,7 @@ import { RequestRow } from '../components/usage/RequestRow';
 import { UsageEventDrawer } from '../components/usage/UsageEventDrawer';
 import { RequestFilterDrawer } from '../components/usage/RequestFilterDrawer';
 import { RequestFilterChips } from '../components/usage/RequestFilterChips';
+import { ResultMarker } from '../components/usage/ResultMarker';
 import { TimeRangeControl } from '../components/usage/TimeRangeControl';
 import './UsageEventsPage.css';
 
@@ -1258,20 +1259,13 @@ export const UsageEventsPage: React.FC = () => {
               }}
               options={(['all', 'success', 'failed'] as const).map((value) => ({
                 value,
-                // The marker reuses the Result column's own pill vocabulary, so
+                // The marker reuses the Result column's own vocabulary, so
                 // "success" and "failed" mean the same thing in the filter and
-                // in the list it filters. 'all' is deliberately neutral: it is
-                // the absence of a verdict, not a third verdict.
+                // in the list it filters. 'all' is deliberately the combined
+                // marker: it is the absence of a verdict, not a third verdict.
                 label: (
                   <span className="req-result-option">
-                    {value !== 'all' && (
-                      <span
-                        className={`req-result-pill ${value === 'failed' ? 'is-failed' : 'is-success'}`}
-                        aria-hidden="true"
-                      >
-                        <i className="req-result-bullet" />
-                      </span>
-                    )}
+                    <ResultMarker kind={value} />
                     {t(`events.filter_${value}`)}
                   </span>
                 ),

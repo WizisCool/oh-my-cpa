@@ -27,6 +27,11 @@ export interface ProviderItem {
   id: string;
   family: string;
   name: string;
+  /** The name this provider carries in CPA's own configuration, before any local
+   *  custom name replaced it. CPA labels the usage queue with
+   *  "openai-compatible-<upstream name>", so a stored request record joins on this
+   *  rather than on the custom name. Absent for the families CPA labels by family. */
+  upstream_name?: string;
   protocol: string;
   base_url?: string;
   prefix?: string;
