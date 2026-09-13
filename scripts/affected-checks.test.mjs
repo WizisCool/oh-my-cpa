@@ -21,9 +21,24 @@ const BROWSER_OR_BUILD_CHECKS = ['browser', 'browser-smoke', 'build', 'e2e', 'fa
 
 test('every selected id is a check the runner knows how to execute', () => {
   // A plan that names an id with no command would fail as a crash rather than as a
-  // missing check, which is a worse failure mode than an over-broad plan.
-  for (const id of planChecks(['web/src/App.tsx', 'internal/api/handler.go', 'README.md'])) {
-    assert.ok(CHECK_IDS.includes(id), `${id} is a known check`);
+  // missing check, which is a worse failure mode than an over-broad plan. The
+  // runner's command table is the authority, so the plan is checked against it for
+  // every rule rather than for one example.
+  const corpus = [
+    'web/src/App.tsx',
+    'web/src/App.css',
+    'internal/api/handler.go',
+    'README.md',
+    '.github/workflows/ci.yml',
+    'package.json',
+    'scripts/sync-web-dist.mjs',
+    'scripts/test-usage-event-view.ts',
+    'newmod/src/thing.rs',
+  ];
+  for (const file of corpus) {
+    for (const id of planChecks([file])) {
+      assert.ok(CHECK_IDS.includes(id), `${file} selected unknown check ${id}`);
+    }
   }
 });
 
@@ -89,6 +104,27 @@ test('editing the planner itself runs the logic suites that assert its behaviour
   assert.ok(planChecks(['scripts/verify-fast.mjs']).includes('logic'));
 });
 
+test('any other tooling change runs the repository self-tests', () => {
+  // The hole this closes: a `scripts/` change that was not a `.ts` suite and not one
+  // of the named harness files counted as "placed", so the broad fallback did not
+  // fire while no rule selected anything. The family of change that can silently
+  // break every gate was the one family nothing checked.
+  for (const file of ['scripts/sync-web-dist.mjs', 'scripts/check-docs.mjs', 'scripts/secret-scan.mjs']) {
+    assert.deepEqual(planChecks([file]), ['self-tests'], `${file} selects the self-tests`);
+  }
+});
+
+test('a tooling change still never reaches the browser', () => {
+  // The self-test selection is deliberately cheap. A change that cannot be run
+  // cheaply is a reason to run the cheap gates that cover the tooling, not a reason
+  // for the fast path to start paying for Chromium.
+  const plan = planChecks(['scripts/sync-web-dist.mjs']);
+  assert.equal(plan.includes('browser'), false);
+  for (const id of plan) {
+    assert.equal(BROWSER_OR_BUILD_CHECKS.includes(id), false, `${id} must not be selected`);
+  }
+});
+
 test('changing the dependency manifest selects the pinned toolchain check', () => {
   assert.ok(planChecks(['package.json']).includes('toolchain'));
   assert.ok(planChecks(['pnpm-lock.yaml']).includes('toolchain'));
@@ -127,7 +163,10 @@ test('no planned check for any representative path reaches the browser or a buil
     'scripts/test-usage-event-view.ts',
     'scripts/ts-resolve.mjs',
     'scripts/verify-fast.mjs',
+    'scripts/sync-web-dist.mjs',
+    'scripts/check-docs.mjs',
     'scripts/browser-acceptance.mjs',
+    'scripts/browser-probes.mjs',
     'docs/architecture.md',
     'README.md',
     '.github/workflows/ci.yml',

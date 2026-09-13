@@ -46,6 +46,7 @@ const COMMANDS = {
   docs: { label: 'documentation references', command: 'pnpm', args: ['check-docs'] },
   workflow: { label: 'GitHub workflow syntax', command: 'pnpm', args: ['verify:workflow'] },
   toolchain: { label: 'pinned toolchain', command: 'pnpm', args: ['verify:toolchain'] },
+  'self-tests': { label: 'repository self-tests', command: 'pnpm', args: ['test:self'] },
 };
 
 function run(command, args, label) {

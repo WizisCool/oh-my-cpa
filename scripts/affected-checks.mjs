@@ -29,6 +29,7 @@ export const CHECK_IDS = [
   'docs',
   'workflow',
   'toolchain',
+  'self-tests',
 ];
 
 const WEB_TEST_INFRASTRUCTURE = [
@@ -67,6 +68,17 @@ export function planChecks(files) {
     checks.add('workflow');
   }
 
+  // Any other tooling change runs the mechanical self-tests, which is where the
+  // scripts that build, sync, scan and validate are themselves covered. Without
+  // this a change to `scripts/` matched no rule at all: it was "placed" (so the
+  // fallback below did not fire) while selecting nothing, and the one family of
+  // change that can silently break every gate was the one family nothing checked.
+  //
+  // It deliberately does not select the browser gates. A test that cannot be run
+  // cheaply is still a reason to run the cheap gates that cover the tooling, not a
+  // reason for the fast path to start paying for Chromium.
+  if (hasScript) checks.add('self-tests');
+
   // The Go gates read the embedded SPA from `internal/web/dist`, so a regenerated
   // bundle is a Go-relevant change even though the diff is one HTML file.
   if (has((file) => file.startsWith('internal/web/'))) checks.add('go');
@@ -101,6 +113,5 @@ export function planChecks(files) {
   if (has((file) => ['package.json', 'pnpm-lock.yaml', 'scripts/tools-versions.json'].includes(file))) {
     checks.add('toolchain');
   }
-
   return CHECK_IDS.filter((id) => checks.has(id));
 }
