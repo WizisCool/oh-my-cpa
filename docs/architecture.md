@@ -86,7 +86,9 @@ route needs it. Brand/provider marks are copied from the pinned
 as SVG URLs. The small catalog used for lookup and grouping is vendored in
 `web/src/generated/lobeIconCatalog.json`; the React icon package is not a
 dependency, because importing it would pull hundreds of components into the
-eager bundle. `components/resources/` and `components/icons/PresetIcon.tsx`
+eager bundle. Dashboard sparklines are app-owned SVG paths in `web/src/charts/chartTheme.ts`;
+they intentionally do not ship a chart runtime for two compact trends.
+`components/resources/` and `components/icons/PresetIcon.tsx`
 are retained from the retired triage console and are currently unreferenced; the
 backend discovery/binding model they rendered is still live behind Providers and
 OAuth management.
