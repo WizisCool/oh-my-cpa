@@ -1097,10 +1097,7 @@ const DICT: Record<string, [string, string]> = {
   'events.delivery_semantics_hint': ['CPA 采用破坏性出队机制，在网络边界为 At-most-once 语义；写入故障均记录在 Ingest Gaps 中。', 'CPA uses destructive pops with at-most-once network semantics; commit failures are durably tracked in Ingest Gaps.'],
   'events.auto_refresh': ['自动刷新', 'Auto Refresh'],
   'events.sync_success': ['已从 CPA 获取并入库 {n} 条新记录', 'Fetched and stored {n} new record(s) from CPA'],
-  'events.sync_confirmed': [
-    '已向 CPA 确认最新状态，请求记录已是最新',
-    'CPA was asked and the request records are current',
-  ],
+  'events.sync_confirmed': ['刷新成功', 'Refreshed'],
   'events.sync_incomplete': ['同步未完成：{msg}', 'Sync incomplete: {msg}'],
   'events.sync_failed': ['同步失败：{msg}', 'Sync failed: {msg}'],
   'events.sync_auth_rejected': [

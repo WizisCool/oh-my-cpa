@@ -288,23 +288,32 @@
   gap: 6px;
   height: 28px;
   padding: 0 10px;
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  /* Opaque, and deliberately without `backdrop-filter` or `box-shadow`.
+     Both were here, and both are paid for on every frame the pill is on screen
+     - which is exactly while the reader is scrolling. A backdrop blur makes the
+     compositor re-read the pixels behind the element as those pixels change, and
+     Windows/Chrome frequently falls back to software compositing for it, which
+     is the reported platform split: smooth on macOS, heavy on Windows. The blur
+     was also not earning its cost: it separated the pill from rows that scroll
+     underneath it, so it was imitating the elevated-card look the rest of this
+     console rejects. An opaque surface reads the same against a busy list, and
+     the 1px border keeps the edge. */
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);  color: var(--fg);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--fg);
   font-size: 11px;
   font-family: var(--font-mono, monospace);
   font-weight: 500;
   line-height: 1;
   cursor: pointer;
   outline: none;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28), 0 1px 3px rgba(0, 0, 0, 0.15);
+  /* Compositor-only: the entry is a fade and a short rise, which the engine can
+     run without laying anything out. */
   animation: reqBackTopEnter 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
   transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
               background-color 150ms ease,
               border-color 150ms ease,
-              box-shadow 150ms ease,
               color 150ms ease;
 }
 
@@ -324,12 +333,11 @@
   border-color: var(--accent);
   color: var(--accent);
   transform: translateY(-2px);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--accent);
 }
 
-/* The pill is carrying a backlog of records the reader has not seen yet, so it
-   takes the accent the same way a selected row does: it is offering an action,
-   not reporting a state. */
+/* The live state is carried by the border and text colour, never by elevation:
+   the console has no shadow language, and a shadow here would also reintroduce
+   per-frame paint on the one element that is on screen during a scroll. */
 .req-back-to-top-btn.is-live {
   border-color: var(--accent);
   color: var(--accent);
@@ -341,7 +349,6 @@
 
 .req-back-to-top-btn:active {
   transform: translateY(0);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .req-back-to-top-btn .anticon {

@@ -531,6 +531,24 @@ reader interrupts it and it never does). Without that, the early frames — whic
 still carry a large `scrollTop` — would re-collapse the header on the first frame
 of the very gesture that was expanding it.
 
+### Nothing expensive rides along with the scroll
+
+Scrolling this list is the interaction the page is used through, and the cost of a
+frame is paid on every frame. Two things are therefore not allowed on any element
+that is on screen while the list scrolls:
+
+| Not allowed | Why |
+| --- | --- |
+| `backdrop-filter` | The compositor must re-read the pixels behind the element as those pixels change underneath it — the worst possible case for a blur, because a scroll changes them every frame. Chrome on Windows commonly resolves this in software rather than on the GPU, which is why the same build scrolls smoothly on macOS and heavily on Windows. |
+| `box-shadow` | Paint cost grows with the blur radius and the area covered, and it repaints when the element moves. The console has no shadow language anyway (§1). |
+
+The floating back-to-top pill is the case that matters: it appears *precisely* when
+the reader is scrolling. It is an opaque `--surface` with a 1px border, which reads
+against a busy list without either effect.
+
+The same rule governs the entry animation: a scroll-adjacent element animates only
+`opacity` and `transform`, never a property that forces layout or a repaint.
+
 ## 8. Checklist for new UI
 - [ ] Colors only via `palette` / CSS vars; semantic colors carry meaning
 - [ ] A continuous scale (cache rate) reads from its own tokens, never a
