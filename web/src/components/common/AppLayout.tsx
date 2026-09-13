@@ -25,6 +25,7 @@ import { DataProgress } from './DataProgress';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { useThemeMode } from '../../theme/ThemeContext';
+import { BrandArtwork } from './BrandArtwork';
 import { useT, type TFunc } from '../../i18n';
 
 const { Sider, Content } = Layout;
@@ -193,11 +194,10 @@ export const AppLayout: React.FC = () => {
       tabIndex={0}
       aria-label="Dashboard"
     >
-      <div className="app-brand-mark">›_</div>
-      <div className="app-brand-copy">
-        <strong>oh-my-cpa</strong>
-        <span>{t('app.sub')}</span>
-      </div>
+      {/* The wordmark spells the product name, so the text that used to sit beside the
+          mark is gone: it would say the same thing twice. 20px keeps its cap height in
+          step with the navigation text rather than dominating it. */}
+      <BrandArtwork shape="wordmark" height={20} className="app-brand-logo" />
     </div>
   );
 
@@ -235,7 +235,9 @@ export const AppLayout: React.FC = () => {
               tabIndex={0}
               aria-label="Expand Sider"
             >
-              <div className="app-brand-mark">OM</div>
+              {/* 58px cannot hold the wordmark at a legible size, so the collapsed rail
+                  shows the same artwork's leading O. */}
+              <BrandArtwork shape="o" height={20} />
             </div>
           ) : brand}
           <div className="app-sider-scroll">{menu}</div>

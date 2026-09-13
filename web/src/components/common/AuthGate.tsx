@@ -5,6 +5,7 @@ import { api, ApiError, setUnauthorizedHandler } from '../../api/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useI18n, useT } from '../../i18n';
 import { useThemeMode } from '../../theme/ThemeContext';
+import { BrandArtwork } from './BrandArtwork';
 
 export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const t = useT();
@@ -56,11 +57,9 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const header = (
     <header className="auth-header">
       <div className="auth-brand">
-        <div className="app-brand-mark">›_</div>
-        <div className="app-brand-copy">
-          <strong>oh-my-cpa</strong>
-          <span>{t('app.sub')}</span>
-        </div>
+        {/* No text sits beside the wordmark here, so it is the page's own product name
+            and carries it for screen readers rather than being decorative. */}
+        <BrandArtwork shape="wordmark" height={22} className="app-brand-logo" label="Oh My CPA" />
       </div>
       <div className="auth-header-actions">
         <Tooltip title={t('header.theme')}>

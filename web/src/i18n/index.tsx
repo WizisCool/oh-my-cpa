@@ -9,7 +9,6 @@ export type Lang = 'zh' | 'en';
 const DICT: Record<string, [string, string]> = {
   // ── app / shell ──────────────────────────────────────────────────────────
   'app.name': ['oh-my-cpa', 'oh-my-cpa'],
-  'app.sub': ['CLI Proxy API 网关控制台', 'CLI Proxy API gateway console'],
   'common.management': ['管理中心', 'Management center'],
   'common.retry': ['重试', 'Retry'],
   'common.refresh': ['刷新', 'Refresh'],

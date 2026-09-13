@@ -197,11 +197,14 @@ a { color: inherit; }
    never reached brand / nav / foot. The nav box stayed content-sized and the
    footer floated just below it, leaving dead space at the bottom edge. */
 .app-sider .ant-layout-sider-children { display: flex; flex-direction: column; height: 100%; }
-.app-brand { display: flex; align-items: center; gap: 12px; min-height: 56px; height: 56px; padding: 0 14px; cursor: pointer; border-bottom: 1px solid var(--border); }
-.app-brand-mark, .auth-mark { display: grid; place-items: center; width: 28px; height: 28px; flex: none; border: 1px solid var(--border); border-radius: 4px; color: var(--fg); font-size: 10px; font-weight: 700; letter-spacing: .04em; }
-.app-brand-copy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
-.app-brand-copy strong { color: var(--fg); font-size: 13px; font-weight: 700; line-height: 1; }
-.app-brand-copy span { color: var(--muted); font-size: 10px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The wordmark is left-aligned with the navigation's own text axis rather than centred.
+   Every other row in this rail starts on that axis, so a centred mark is the only element
+   off it and reads as detached from the list below it. 20px puts the artwork's ink (which
+   has ~8 units of its own leading margin) on the same axis as the group titles. */
+.app-brand { display: flex; align-items: center; min-height: 56px; height: 56px; padding: 0 20px; cursor: pointer; border-bottom: 1px solid var(--border); }
+/* Sized by height: the wordmark is about 5.9:1 and the O about 1:1, so both take their own
+   width and neither is letterboxed by a fixed box. */
+.app-brand-logo { display: block; flex: none; width: auto; }
 .app-sider-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 6px 8px; }
 .app-menu { background: transparent !important; border-inline-end: 0 !important; }
 .app-menu .ant-menu-item-group-title { color: var(--meta) !important; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; padding: 14px 12px 6px; }
@@ -236,7 +239,8 @@ a { color: inherit; }
    layout; the row's own `title` and antd's tooltip still carry the name. */
 .ant-layout-sider-collapsed .app-menu .ant-menu-title-content { display: none; }
 .app-sider-foot-row { display: flex; justify-content: space-between; gap: 8px; }
-.app-brand-collapsed { justify-content: center; border-bottom: 1px solid var(--border); }
+/* Collapsed there is no room for a wordmark, so the row centres the O instead. */
+.app-brand-collapsed { justify-content: center; padding: 0; border-bottom: 1px solid var(--border); }
 .app-header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 56px; padding: 0 24px 0 12px; background: var(--bg) !important; border-bottom: 1px solid var(--border); }
 .app-header-left, .app-header-actions, .app-breadcrumb { display: flex; align-items: center; }
 .app-header-left { min-width: 0; gap: 8px; }
@@ -275,7 +279,6 @@ a { color: inherit; }
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 12px;
 }
 .auth-header-actions {
   flex: none;
