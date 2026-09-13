@@ -61,7 +61,7 @@ CPA 负责协议适配、凭据执行与代理请求；Oh My CPA 在其上提供
 - 本次改动触发的全部上下文文档已按 §2 更新；
 - 没有残留的过时注释、死引用或未本地化的用户可见文案。
 
-CI（`.github/workflows/ci.yml`）并行运行静态门禁与浏览器门禁：PR 使用 `verify:browser:smoke` 快速反馈，`master` push 使用完整 `verify:browser`，两者都保留严格工具链、密钥扫描和干净工作区断言；同一 ref 的新运行会取消尚未完成的旧运行。浏览器失败时会把截图、HTML 和应用日志作为短期 artifact 上传。
+CI（`.github/workflows/ci.yml`）并行运行静态门禁与浏览器门禁：PR 使用 `verify:browser:smoke` 快速反馈，`master` push 使用完整 `verify:browser` 加 `verify:probes`，两者都保留严格工具链、密钥扫描和干净工作区断言；同一 ref 的新运行会取消尚未完成的旧运行。浏览器失败时会把截图、HTML 和应用日志作为短期 artifact 上传（`tmp/browser-acceptance-failure/`、`tmp/probe-failure/`）。
 
 ---
 
