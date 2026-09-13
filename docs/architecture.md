@@ -20,8 +20,10 @@ Go process ──▶ CPA RESP usage channel
 
 One process, one SQLite file, one Oh My CPA replica. The Go process owns the
 base path contract: the SPA is served at `<base>/`, the API at `<base>/api/v1`,
-media at `<base>/media`. The proxy must preserve the prefix rather than strip
-it (ADR 0001).
+media at `<base>/media`. The embedded bundle's hashed assets are served from
+`<base>/assets/` and provider SVGs from `<base>/lobe-icons/`; unknown non-API
+paths fall back to the SPA shell. The proxy must preserve the prefix rather than
+strip it (ADR 0001).
 
 The React bundle is built into `internal/web/dist` and embedded with
 `go:embed`, so a deployment has no CDN or static-file dependency. Everything the

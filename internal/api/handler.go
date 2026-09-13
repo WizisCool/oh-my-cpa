@@ -162,8 +162,13 @@ func (h *Handler) Router() http.Handler {
 			mediaRouter.NotFound(h.notFound)
 			mediaRouter.MethodNotAllowed(h.methodNotAllowed)
 		})
+		// Brand SVGs are public build assets. Without explicit static routes,
+		// the SPA fallback returns index.html and every <img>/mask URL fails to
+		// decode even though the generated file exists in the embedded dist.
 		r.Get("/assets/*", h.asset)
 		r.Head("/assets/*", h.asset)
+		r.Get("/lobe-icons/*", h.asset)
+		r.Head("/lobe-icons/*", h.asset)
 		r.Get("/favicon.svg", h.asset)
 		r.Head("/favicon.svg", h.asset)
 		r.Get("/*", h.spa)

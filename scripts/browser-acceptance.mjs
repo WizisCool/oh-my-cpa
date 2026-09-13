@@ -109,6 +109,19 @@ async function lobeIconSignature(locator) {
   });
 }
 
+async function lobeIconImageState(locator) {
+  return locator.evaluate((root) => {
+    const image = root.querySelector('img[src*="/lobe-icons/"]');
+    if (!image) return null;
+    return {
+      src: image.getAttribute('src') ?? '',
+      complete: image.complete,
+      naturalWidth: image.naturalWidth,
+      naturalHeight: image.naturalHeight,
+    };
+  });
+}
+
 /**
  * Reads a brand drawing's resolved source and its rendered ink.
  *
@@ -1454,6 +1467,17 @@ try {
   const antigravityTab = page.locator('.auth-files-page .ant-tabs-tab').filter({ hasText: /Antigravity/i }).first();
   const antigravityIcon = await lobeIconSignature(antigravityTab);
   check('Antigravity tab icon is not OpenAI', /antigravity/i.test(antigravityIcon) && !/openai/i.test(antigravityIcon), antigravityIcon);
+  await checkEventually(
+    'Antigravity tab icon loads from the embedded static asset',
+    async () => {
+      const state = await lobeIconImageState(antigravityTab);
+      return state?.complete === true
+        && state.naturalWidth > 0
+        && state.naturalHeight > 0
+        && /antigravity-color\.svg$/i.test(state.src);
+    },
+    { detail: async () => JSON.stringify(await lobeIconImageState(antigravityTab)) },
+  );
 
   const xaiTab = page.locator('.auth-files-page .ant-tabs-tab').filter({ hasText: /xAI|Xai/i }).first();
   const xaiIcon = await lobeIconSignature(xaiTab);

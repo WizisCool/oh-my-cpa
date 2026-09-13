@@ -188,6 +188,21 @@ func TestRouterSeparatesSPAFromAPIAndRedirectsBasePath(t *testing.T) {
 	}
 	response.Body.Close()
 
+	// A missing icon must stop at the static handler. If it falls through to
+	// the SPA fallback, the browser receives index.html with a 200 response and
+	// reports a broken provider icon instead of a missing asset.
+	response, err = http.Get(server.URL + "/omc/lobe-icons/does-not-exist.svg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("missing lobe icon status = %d, want 404", response.StatusCode)
+	}
+	if contentType := response.Header.Get("Content-Type"); strings.HasPrefix(contentType, "text/html") {
+		t.Fatalf("missing lobe icon content type = %q, want non-HTML", contentType)
+	}
+	response.Body.Close()
+
 	headResponse, err := http.Head(server.URL + "/omc/")
 	if err != nil {
 		t.Fatal(err)
