@@ -71,6 +71,13 @@ type ProviderItemDTO struct {
 	KeyEntries      []ProviderKeyEntryDTO `json:"key_entries,omitempty"`
 	Headers         map[string]string     `json:"headers,omitempty"`
 	ProxyConfigured bool                  `json:"proxy_configured"`
+
+	// Website is the provider's own homepage. It is Oh My CPA management metadata
+	// rather than a CPA configuration field - CPA has nowhere to put it - so it is
+	// stored beside the display name and joined on the same positional id. Only an
+	// absolute http/https URL is ever reported, because the list renders it as a
+	// link.
+	Website string `json:"website,omitempty"`
 }
 
 func (h *Handler) listClientAPIKeys(writer http.ResponseWriter, request *http.Request) {
@@ -248,6 +255,67 @@ func (h *Handler) removeProviderName(ctx context.Context, id string) {
 	}
 }
 
+// loadProviderWebsites reads the per-provider homepage map. It is keyed by the
+// same positional provider id as provider_names, so the two move together when a
+// provider is deleted and neither can be joined to the wrong entry.
+func (h *Handler) loadProviderWebsites(ctx context.Context) map[string]string {
+	if h.repo == nil {
+		return nil
+	}
+	raw, found, err := h.repo.GetPreference(ctx, repository.PreferenceProviderWebsites)
+	if err != nil || !found || raw == "" {
+		return nil
+	}
+	var res map[string]string
+	if err := json.Unmarshal([]byte(raw), &res); err != nil {
+		return nil
+	}
+	return res
+}
+
+// saveProviderWebsite writes one provider's homepage. An empty url removes the
+// entry rather than storing an empty string, so "no website" has exactly one
+// representation in storage.
+func (h *Handler) saveProviderWebsite(ctx context.Context, id, website string) {
+	if h.repo == nil || id == "" {
+		return
+	}
+	websites := h.loadProviderWebsites(ctx)
+	if websites == nil {
+		websites = make(map[string]string)
+	}
+	if website == "" {
+		if _, present := websites[id]; !present {
+			return
+		}
+		delete(websites, id)
+	} else {
+		websites[id] = website
+	}
+	encoded, err := json.Marshal(websites)
+	if err == nil {
+		_ = h.repo.PutPreference(ctx, repository.PreferenceProviderWebsites, string(encoded))
+	}
+}
+
+// applyProviderWebsite stores a website only when the save request actually
+// carried the field.
+//
+// The distinction is load-bearing rather than defensive: a client that predates
+// the field sends no website at all, and reading that as "clear it" would wipe
+// operator metadata on every rename performed from such a client. An explicitly
+// present empty string is what clears it.
+func (h *Handler) applyProviderWebsite(ctx context.Context, id, website string, isProvided bool) {
+	if !isProvided {
+		return
+	}
+	h.saveProviderWebsite(ctx, id, website)
+}
+
+func (h *Handler) removeProviderWebsite(ctx context.Context, id string) {
+	h.saveProviderWebsite(ctx, id, "")
+}
+
 func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
@@ -263,6 +331,7 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 	ctx := request.Context()
 	items := make([]ProviderItemDTO, 0)
 	customNames := h.loadProviderNames(ctx)
+	customWebsites := h.loadProviderWebsites(ctx)
 
 	if codexResp, err := client.CodexAPIKeys(ctx); err == nil {
 		for i, entry := range codexResp.Entries {
@@ -542,6 +611,16 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 		}
 	}
 
+	// Websites are management metadata keyed by the same positional id the names
+	// use, so they are attached once here rather than in each family branch.
+	if len(customWebsites) > 0 {
+		for index := range items {
+			if website := customWebsites[items[index].ID]; website != "" {
+				items[index].Website = website
+			}
+		}
+	}
+
 	if !includeKeys {
 		// The sanitized projection keeps the configured/absent signal but
 		// strips plaintext key material and its per-entry detail.
@@ -697,7 +776,59 @@ type SaveProviderRequest struct {
 	ModelEntries   []SaveProviderModelEntry `json:"model_entries,omitempty"`
 	Headers        map[string]string        `json:"headers,omitempty"`
 	Disabled       bool                     `json:"disabled"`
+	// Website is operator metadata, not a CPA field. nil means "leave the stored
+	// value alone"; a present empty string clears it. That distinction is what
+	// lets a rename save from a client that never carried a website field avoid
+	// erasing one.
+	Website *string `json:"website,omitempty"`
 }
+
+// normalizeProviderWebsite accepts only a URL this console may render as a link.
+//
+// The value ends up in an href, so the scheme is the security boundary: a
+// javascript: or data: URL would be script execution with the session's
+// authority, and a scheme-relative or relative value would silently point at
+// this console instead of the provider. Anything that is not an absolute
+// http/https URL with a host is refused rather than repaired.
+func normalizeProviderWebsite(raw string) (string, bool) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", true
+	}
+	if len(trimmed) > maxProviderWebsiteLength {
+		return "", false
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return "", false
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", false
+	}
+	if parsed.Host == "" {
+		return "", false
+	}
+	return parsed.String(), true
+}
+
+// resolveProviderWebsite validates the optional website field of a save request,
+// reporting separately whether the field was present and whether it is usable.
+// The two questions are independent: an absent field is valid input that leaves
+// the stored value alone, while a present but unusable one is an error.
+func resolveProviderWebsite(raw *string) (website string, isProvided bool, isValid bool) {
+	if raw == nil {
+		return "", false, true
+	}
+	normalized, ok := normalizeProviderWebsite(*raw)
+	if !ok {
+		return "", true, false
+	}
+	return normalized, true, true
+}
+
+// maxProviderWebsiteLength bounds the stored value well below the preference
+// document limit, so one absurd entry cannot consume the whole map's budget.
+const maxProviderWebsiteLength = 512
 
 func parseProviderID(id string) (string, int, error) {
 	id = strings.TrimSpace(id)
@@ -740,6 +871,14 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 	}
 	baseURL := strings.TrimSpace(req.BaseURL)
 	apiKey := strings.TrimSpace(req.APIKey)
+
+	// Validated before any CPA write: refusing a bad scheme after the gateway had
+	// already been changed would leave the console and CPA disagreeing.
+	website, websiteProvided, isWebsiteValid := resolveProviderWebsite(req.Website)
+	if !isWebsiteValid {
+		writeError(writer, http.StatusBadRequest, "website must be an absolute http or https URL")
+		return
+	}
 
 	client, ok := h.managementClientOrError(writer, request)
 	if !ok {
@@ -837,6 +976,7 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 		}
 		targetID := fmt.Sprintf("openai-compat-%d", len(resp.Entries)-1)
 		h.saveProviderName(ctx, targetID, name)
+		h.applyProviderWebsite(ctx, targetID, website, websiteProvided)
 
 	case "codex":
 		resp, err := client.CodexAPIKeys(ctx)
@@ -863,6 +1003,7 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 		}
 		targetID := fmt.Sprintf("codex-%d", len(resp.Entries)-1)
 		h.saveProviderName(ctx, targetID, name)
+		h.applyProviderWebsite(ctx, targetID, website, websiteProvided)
 
 	case "claude":
 		entries, err := client.ClaudeAPIKeys(ctx)
@@ -889,6 +1030,7 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 		}
 		targetID := fmt.Sprintf("claude-%d", len(entries)-1)
 		h.saveProviderName(ctx, targetID, name)
+		h.applyProviderWebsite(ctx, targetID, website, websiteProvided)
 
 	case "gemini":
 		entries, err := client.GeminiAPIKeys(ctx)
@@ -915,6 +1057,7 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 		}
 		targetID := fmt.Sprintf("gemini-%d", len(entries)-1)
 		h.saveProviderName(ctx, targetID, name)
+		h.applyProviderWebsite(ctx, targetID, website, websiteProvided)
 
 	default:
 		writeError(writer, http.StatusBadRequest, "unsupported provider family: "+family)
@@ -956,6 +1099,14 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 	name := strings.TrimSpace(req.Name)
 	baseURL := strings.TrimSpace(req.BaseURL)
 	apiKey := strings.TrimSpace(req.APIKey)
+
+	// Validated before any CPA write: refusing a bad scheme after the gateway had
+	// already changed would leave the console and CPA disagreeing.
+	website, websiteProvided, isWebsiteValid := resolveProviderWebsite(req.Website)
+	if !isWebsiteValid {
+		writeError(writer, http.StatusBadRequest, "website must be an absolute http or https URL")
+		return
+	}
 
 	models := make([]management.ModelAlias, 0)
 	if len(req.ModelEntries) > 0 {
@@ -1066,6 +1217,7 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 			writeCPAFacadeError(writer, err)
 			return
 		}
+		h.applyProviderWebsite(ctx, id, website, websiteProvided)
 	case "codex":
 		resp, err := client.CodexAPIKeys(ctx)
 		if err != nil {
@@ -1093,6 +1245,7 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 			writeCPAFacadeError(writer, err)
 			return
 		}
+		h.applyProviderWebsite(ctx, id, website, websiteProvided)
 	case "claude":
 		entries, err := client.ClaudeAPIKeys(ctx)
 		if err != nil {
@@ -1120,6 +1273,7 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 			writeCPAFacadeError(writer, err)
 			return
 		}
+		h.applyProviderWebsite(ctx, id, website, websiteProvided)
 	case "gemini":
 		entries, err := client.GeminiAPIKeys(ctx)
 		if err != nil {
@@ -1147,6 +1301,7 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 			writeCPAFacadeError(writer, err)
 			return
 		}
+		h.applyProviderWebsite(ctx, id, website, websiteProvided)
 	default:
 		writeError(writer, http.StatusBadRequest, "unsupported provider family")
 		return
@@ -1275,6 +1430,7 @@ func (h *Handler) deleteManagementProvider(writer http.ResponseWriter, request *
 	}
 
 	h.removeProviderName(ctx, id)
+	h.removeProviderWebsite(ctx, id)
 	_ = h.recordAudit(request, "provider.delete", "provider", id, "success", nil)
 
 	if h.pricing != nil {

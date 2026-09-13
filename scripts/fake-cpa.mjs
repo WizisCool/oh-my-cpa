@@ -48,6 +48,17 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
   ];
   let authFiles = JSON.parse(JSON.stringify(initialAuthFiles));
 
+  // The codex API-key list is stateful for the same reason authFiles is: the
+  // provider enable/disable flow writes it and then re-reads it, so a fixture
+  // that acknowledged the write without storing it could not tell a working
+  // toggle from a lost one. Both the standalone endpoint and the copy embedded in
+  // `/config` read this one value, so the two views of the same list cannot
+  // drift apart.
+  const initialCodexProviders = [
+    { 'api-key': FAKE_PROVIDER_SECRET, 'auth-index': 'codex-e2e', 'base-url': 'https://provider.example.test', models: [{ name: 'gpt-e2e', alias: 'gpt-e2e' }] },
+  ];
+  let codexProviders = JSON.parse(JSON.stringify(initialCodexProviders));
+
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url, 'http://fake-cpa.local');
     const chunks = [];
@@ -136,7 +147,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
         'max-retry-interval': 30, 'max-retry-credentials': 2, 'ws-auth': true,
         'force-model-prefix': false, 'logs-max-total-size-mb': 100, 'error-logs-max-files': 5,
         routing: { strategy: 'least-load' }, 'api-keys': ['fixture-client-key'],
-        'codex-api-key': [{ 'api-key': FAKE_PROVIDER_SECRET, 'auth-index': 'codex-e2e', 'base-url': 'https://provider.example.test', models: [{ name: 'gpt-e2e', alias: 'gpt-e2e' }] }],
+        'codex-api-key': codexProviders,
         'openai-compatibility': [],
       });
       return;
@@ -147,7 +158,19 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       return;
     }
     if (request.method === 'GET' && path === '/codex-api-key') {
-      json(response, 200, { 'codex-api-key': [{ 'api-key': FAKE_PROVIDER_SECRET, 'auth-index': 'codex-e2e', 'base-url': 'https://provider.example.test', models: [{ name: 'gpt-e2e', alias: 'gpt-e2e' }] }] });
+      json(response, 200, { 'codex-api-key': codexProviders });
+      return;
+    }
+    // The real CPA replaces the whole list on a write, which is why a toggle sends
+    // back every entry with one of them changed rather than a partial patch. The
+    // `excluded-models` marker the backend uses to disable an entry is stored and
+    // returned verbatim: deciding what it means is the backend's job.
+    if (request.method === 'PUT' && path === '/codex-api-key') {
+      try {
+        const parsed = JSON.parse(chunks.length ? Buffer.concat(chunks).toString('utf8') : '[]');
+        codexProviders = Array.isArray(parsed) ? parsed : parsed['codex-api-key'] ?? codexProviders;
+      } catch { /* keep the previous list on an unreadable body */ }
+      json(response, 200, { status: 'ok' });
       return;
     }
     if (request.method === 'GET' && path === '/openai-compatibility') {

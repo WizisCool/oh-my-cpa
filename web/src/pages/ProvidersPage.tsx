@@ -34,9 +34,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
 import { usePreference } from '../hooks/usePreference';
+import { useLastIntentQueue } from '../hooks/useLastIntentQueue';
 import { LobeIcon, getProviderDefaultIcon } from '../components/LobeIcon';
 import { IconPickerModal } from '../components/IconPickerModal';
 import { maskKeyText } from '../utils/maskKey';
+import { isSafeExternalURL, safeExternalURL } from '../utils/externalUrl';
+import { modelOptionsFor } from '../utils/modelOptions';
+import { providerStatusPayload } from '../types/providerId';
 import type {
   ProviderItem,
   SaveProviderPayload,
@@ -86,6 +90,8 @@ interface ProtocolMeta {
   color: string;
   iconId: string;
 }
+
+
 
 const PROTOCOL_META: Record<string, ProtocolMeta> = {
   'openai-compatibility': {
@@ -141,6 +147,12 @@ export const ProvidersPage: React.FC = () => {
   const [formFamily, setFormFamily] = useState<string>('openai-compatibility');
   const [formName, setFormName] = useState<string>('');
   const [formBaseURL, setFormBaseURL] = useState<string>('');
+  /**
+   * The provider homepage, which is console metadata rather than a CPA field.
+   * Empty means "no website", which the save path sends as an explicit empty
+   * string so clearing one is a real instruction and not an omission.
+   */
+  const [formWebsite, setFormWebsite] = useState<string>('');
   const [formPrefix, setFormPrefix] = useState<string>('');
   const [formPriority, setFormPriority] = useState<number | null>(null);
   const [formDisabled, setFormDisabled] = useState<boolean>(false);
@@ -381,16 +393,55 @@ export const ProvidersPage: React.FC = () => {
     setProviderDrawerOpen(false);
   };
 
-  const statusMutation = useMutation({
-    mutationFn: ({ family, index, disabled }: { family: string; index: number; disabled: boolean }) =>
-      api.patchManagementProviderStatus(family, index, disabled),
-    onSuccess: () => {
-      message.success(t('pro.status_updated'));
+  /**
+   * Inline feedback for the website field.
+   *
+   * The server refuses any scheme it cannot render as a link, so the field says
+   * so before the save rather than turning the refusal into a failed request. An
+   * empty field is valid: it means the provider has no website.
+   */
+  const websiteInputState = React.useMemo(() => {
+    const trimmed = formWebsite.trim();
+    if (!trimmed || isSafeExternalURL(trimmed)) return { status: undefined, help: undefined };
+    return {
+      status: 'error' as const,
+      help: t('pro.field_website_invalid'),
+    };
+  }, [formWebsite, t]);
+
+  /**
+   * The enable/disable toggle runs through a per-provider last-intent queue.
+   *
+   * Clicking a switch twice in quick succession used to lose the second click:
+   * the write and the list re-read are separated by a round trip, so the second
+   * click either raced the first request or was ignored while it was pending,
+   * and the row could settle showing the opposite of what was last asked for.
+   * Serialising per provider keeps the fast path fast - one provider's update
+   * never blocks another - while guaranteeing the gateway ends up on the value
+   * of the last click.
+   */
+  const statusQueue = useLastIntentQueue<boolean>({
+    // The queued value is the enabled state the switch shows, not the field the
+    // endpoint takes. Inverting it once here, through the named helper, is what
+    // keeps the two from being confused for each other; the confusion inverts
+    // every toggle, so switching a provider off would ask for it on.
+    apply: async (id, isEnabled) => {
+      const payload = providerStatusPayload(id, isEnabled);
+      if (!payload) throw new Error(`unaddressable provider id: ${id}`);
+      await api.patchManagementProviderStatus(payload.family, payload.index, payload.disabled);
+    },
+    onError: (_id, err) => {
+      const msg = err instanceof ApiError ? err.message : String(err);
+      message.error(t('pro.status_update_failed', { msg }));
+      // The list is re-read so the switch falls back to what the gateway holds
+      // rather than to the value that failed.
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
     },
-    onError: (err: unknown) => {
-      const msg = err instanceof ApiError ? err.message : String(err);
-      message.error(msg);
+    onSettled: () => {
+      // Read once per drained queue rather than once per write, so two
+      // overlapping refetches of the same query cannot race each other and let a
+      // stale response win.
+      void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
     },
   });
 
@@ -438,6 +489,7 @@ export const ProvidersPage: React.FC = () => {
     setFormFamily('openai-compatibility');
     setFormName('');
     setFormBaseURL('');
+    setFormWebsite('');
     setFormPrefix('');
     setFormPriority(null);
     setFormDisabled(false);
@@ -465,6 +517,7 @@ export const ProvidersPage: React.FC = () => {
     setFormFamily(provider.family);
     setFormName(provider.name);
     setFormBaseURL(provider.base_url || '');
+    setFormWebsite(provider.website || '');
     setFormPrefix(provider.prefix || '');
     setFormPriority(provider.priority != null ? provider.priority : null);
     setFormDisabled(provider.disabled);
@@ -584,6 +637,7 @@ export const ProvidersPage: React.FC = () => {
       family: formFamily,
       name: formName.trim() || 'Custom Provider',
       base_url: formBaseURL.trim(),
+      website: formWebsite.trim(),
       prefix: formPrefix.trim(),
       priority: formPriority != null ? formPriority : undefined,
       disable_cooling: formDisableCooling,
@@ -610,6 +664,18 @@ export const ProvidersPage: React.FC = () => {
   };
 
   // ── 2. Shared helpers ─────────────────────────────────────────────────────
+  /**
+   * resolveEnabled is the row's single answer to "is this provider on?".
+   *
+   * The status label and the switch both render it, so a burst can never leave
+   * one saying on and the other off: the intent wins while the queue is working,
+   * and the gateway's own value is the answer at rest.
+   */
+  const resolveEnabled = (record: ProviderItem): boolean => {
+    const target = statusQueue.targetFor(record.id);
+    return target === undefined ? !record.disabled : target;
+  };
+
   const familyDisplayNames: Record<string, string> = {
     'openai-compatibility': t(PROTOCOL_META['openai-compatibility'].labelKey),
     'codex': t(PROTOCOL_META['codex'].labelKey),
@@ -655,7 +721,22 @@ export const ProvidersPage: React.FC = () => {
             </div>
             <div>
               <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--fg)' }}>
-                {record.name}
+                {safeExternalURL(record.website) ? (
+                  // The name is the link when a website is known: the operator's
+                  // own label is what they look for on the row, so making it the
+                  // target avoids a column for one URL. rel/target keep the
+                  // destination from reaching back through window.opener.
+                  <a
+                    href={safeExternalURL(record.website)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: 'var(--accent)' }}
+                  >
+                    {record.name}
+                  </a>
+                ) : (
+                  record.name
+                )}
               </div>
               {record.api_key && (
                 <div
@@ -829,18 +910,24 @@ export const ProvidersPage: React.FC = () => {
       title: t('pro.col_status'),
       key: 'status',
       width: 100,
-      render: (_, record) =>
-        record.disabled ? (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-            <span style={{ width: 7, height: 7, borderRadius: 2, background: 'var(--warn)', flexShrink: 0 }} />
-            <span style={{ color: 'var(--text-muted)' }}>{t('pro.status_disabled')}</span>
-          </span>
-        ) : (
+      render: (_, record) => {
+        // Read through the same resolution the switch uses. During a burst the
+        // row shows the operator's newest intent in both places, so the label
+        // and the control can never contradict each other on the same line while
+        // the gateway catches up.
+        const isEnabled = resolveEnabled(record);
+        return isEnabled ? (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
             <span style={{ width: 7, height: 7, borderRadius: 2, background: 'var(--success)', flexShrink: 0 }} />
             <span style={{ color: 'var(--text)' }}>{t('pro.status_active')}</span>
           </span>
-        ),
+        ) : (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+            <span style={{ width: 7, height: 7, borderRadius: 2, background: 'var(--warn)', flexShrink: 0 }} />
+            <span style={{ color: 'var(--text-muted)' }}>{t('pro.status_disabled')}</span>
+          </span>
+        );
+      },
     },
 
     // 7. enable switch
@@ -848,17 +935,19 @@ export const ProvidersPage: React.FC = () => {
       title: t('pro.col_switch'),
       key: 'switch',
       width: 70,
-      render: (_, record) => (
-        <Switch
-          size="small"
-          checked={!record.disabled}
-          disabled={statusMutation.isPending}
-          onChange={(checked) => {
-            const idx = parseInt(record.id.split('-').pop() || '0', 10);
-            statusMutation.mutate({ family: record.family, index: idx, disabled: !checked });
-          }}
-        />
-      ),
+      render: (_, record) => {
+        // The switch shows the operator's newest intent while a toggle is in
+        // flight, so a second click is visible immediately instead of the row
+        // flicking back to the state the server has not updated yet.
+        return (
+          <Switch
+            size="small"
+            checked={resolveEnabled(record)}
+            loading={statusQueue.isBusy(record.id)}
+            onChange={(checked) => statusQueue.request(record.id, checked)}
+          />
+        );
+      },
     },
 
     // 8. row actions
@@ -1155,6 +1244,28 @@ export const ProvidersPage: React.FC = () => {
                 }
               }}
               placeholder={t('pro.field_base_url_ph')}
+            />
+          </Form.Item>
+
+          {/* Website: console metadata, deliberately not a CPA field. */}
+          <Form.Item
+            label={
+              <span>
+                {t('pro.field_website')}{' '}
+                <span style={{ fontSize: 12, color: 'var(--meta)', fontWeight: 400 }}>
+                  · {t('pro.field_website_desc')}
+                </span>
+              </span>
+            }
+            validateStatus={websiteInputState.status}
+            help={websiteInputState.help}
+          >
+            <Input
+              value={formWebsite}
+              onChange={(e) => setFormWebsite(e.target.value)}
+              placeholder="https://example.com"
+              className="config-mono-input"
+              allowClear
             />
           </Form.Item>
 
@@ -1661,9 +1772,17 @@ export const ProvidersPage: React.FC = () => {
                           .filter((item) => item.id !== m.id && item.name.trim() !== '')
                           .map((item) => item.name)
                       );
-                      const modelOptions = endpointModels
-                        .filter((name) => !otherSelected.has(name) || name === m.name)
-                        .map((name) => ({ label: name, value: name }));
+                      // Filtered as the operator types, with models already
+                      // configured on this provider suppressed. The list is
+                      // pre-filtered rather than left to AutoComplete's own
+                      // `filterOption`, whose combobox default is "do not
+                      // filter" - the dropdown used to show the whole catalog
+                      // no matter what was typed.
+                      const modelOptions = modelOptionsFor(
+                        endpointModels,
+                        m.name,
+                        otherSelected,
+                      ).map((name) => ({ label: name, value: name }));
 
                       return (
                         <div
@@ -1690,6 +1809,13 @@ export const ProvidersPage: React.FC = () => {
                             <AutoComplete
                               value={m.name}
                               options={modelOptions}
+                              // The options are already narrowed by the typed
+                              // text above, so the popup must not apply a second,
+                              // differently-scoped filter on top of them. Stated
+                              // explicitly rather than left to the combobox
+                              // default, which is what silently made this
+                              // dropdown unfiltered in the first place.
+                              showSearch={{ filterOption: false }}
                               onSelect={(val) => {
                                 setFormModels((prev) =>
                                   prev.map((item) =>

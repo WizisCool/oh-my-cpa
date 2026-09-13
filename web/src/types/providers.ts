@@ -34,6 +34,10 @@ export interface ProviderItem {
   upstream_name?: string;
   protocol: string;
   base_url?: string;
+  /** The provider's own homepage. Oh My CPA management metadata rather than a CPA
+   *  field, so it is stored beside the display name and always an absolute
+   *  http/https URL or absent. */
+  website?: string;
   prefix?: string;
   priority?: number;
   disable_cooling?: boolean;
@@ -74,4 +78,6 @@ export interface SaveProviderPayload {
   model_entries?: SaveProviderModelItem[];
   headers?: Record<string, string>;
   disabled?: boolean;
+  /** Absent leaves the stored website alone; an empty string clears it. */
+  website?: string;
 }
