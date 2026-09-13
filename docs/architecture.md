@@ -703,6 +703,35 @@ After the fixes, the suite passes eight consecutive trials under the strictest
 configuration available here (2 CPUs, with the probes running concurrently), which
 is the configuration the baseline failed.
 
+### 11.4 The CI critical path is Chromium's OS dependencies
+
+Measured from the workflow's own step timings rather than inferred, the `browser`
+job's preparation step is about 99s and it is bound by `playwright-core install
+--with-deps chromium`, not by the build. The SPA build is 29.5s and the Go binaries
+about 1.3s, both running concurrently with the apt work, so together they are
+entirely hidden behind it. Counting 18 apt package operations in that window is
+what identifies it as the bottleneck.
+
+That is why the preparation step is shaped the way it is, and why the remaining
+ideas do not help:
+
+- **The apt work cannot be cached away.** `--with-deps` installs the shared libraries
+  Chromium links against, and a cache hit on `~/.cache/ms-playwright` proves the
+  browser *files* are present, never that those libraries are. Preinstalling them in
+  the runner image would remove the cost, at the price of trading a pinned-toolchain
+  guarantee for an image dependency.
+- **Overlapping more work with it does not shorten the step.** The build is already
+  hidden; the only thing left to hide is the test run, which needs the binary this
+  step produces.
+- **The application binary must be compiled after the SPA build**, because it embeds
+  `internal/web/dist`. Building it alongside `pnpm build` can embed a half-written
+  bundle, so the sequencing inside the preparation step is a correctness constraint
+  rather than a preference. Only the seeder, which embeds nothing, runs in parallel.
+
+So the CI number that matters is the run total. It moved from 3m09s to 3m25s while
+*gaining* a gate that previously ran nowhere, with the browser job's test phase at
+70s concurrent (80s sequential).
+
 ## 12. Where to look next
 
 - Domain wording: `CONTEXT.md`
