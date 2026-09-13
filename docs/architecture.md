@@ -725,6 +725,15 @@ success while the binary cannot start is precisely the state `--with-deps` exist
 repair, so trusting the exit status would reintroduce the bug the flag prevents.
 `scripts/install-chromium.test.mjs` asserts both halves.
 
+Removing the apt cost then exposed what it had been hiding: the Go build is now the
+floor of that step, about 60s locally with a cold build cache against 92s on the
+runner. Two ideas for it were measured and rejected rather than left looking open:
+warming the non-embedding packages concurrently with the SPA build is *slower*
+(48s against 46s), because the warm-up competes for the same cores the build is
+using; and starting the seeder beside the SPA build is also slower (34s for two
+concurrent `go build` calls against 23s plus about 5s serially), because both share
+one module and build cache and contend on its lock.
+
 Two constraints keep the preparation step's shape:
 
 - **The application binary must be compiled after the SPA build**, because it embeds
