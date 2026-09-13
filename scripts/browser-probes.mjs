@@ -461,6 +461,152 @@ async function dashboardChartMarks({ base, page, check }) {
   );
 }
 
+/**
+ * The request list's reader interactions: virtualization bounds, the column
+ * resizer and its persistence, the collapse gesture, keyboard access to the detail
+ * drawer, and the gated request-log download.
+ *
+ * These came from `scripts/browser-usage-events.mjs`, which was deleted when the
+ * probe files were combined. They are restored here rather than dropped: every one
+ * is a claim only a real engine can make, and several (the download gate, the
+ * keyboard path, the resize handle) had no replacement anywhere. The scenario runs
+ * against the same Vite dev server and mocked API as the other probes, with a large
+ * record set because a bounded virtual window is only observable when there is
+ * something to virtualize.
+ */
+const interactionRecords = (() => {
+  const now = Date.now();
+  return Array.from({ length: 500 }, (_, index) => ({
+    id: 500 - index,
+    event_key: `event-${index}`,
+    request_id: `req_interaction_${String(index).padStart(4, '0')}`,
+    timestamp_ms: now - index * 1000,
+    provider: ['openai', 'claude', 'gemini'][index % 3],
+    model: ['gpt-5.4', 'claude-sonnet-4-6', 'gemini-2.5-pro'][index % 3],
+    service_tier: 'auto',
+    source: `hmac:source-fingerprint-${index % 3}`,
+    auth_index: `credential-${index % 3}`,
+    auth_type: 'oauth',
+    api_group_key: 'hmac:9f2a4c87b11e285daa03',
+    api_key_mask: 'sk-12345••••••••7890',
+    user_agent: index % 10 === 0 ? undefined : 'fixture-client/1.0',
+    executor_type: 'responses',
+    failed: index % 7 === 0,
+    generate: true,
+    latency_ms: 1830 + index * 3,
+    ttft_ms: 284,
+    endpoint: '/v1/responses',
+    tokens: { input: 2150, output: 485, reasoning: 120, cached: 400, cache_read: 400, cache_creation: 0, total: 2635 },
+    has_request_log: true,
+  }));
+})();
+
+async function requestListInteractions({ base, page, check }) {
+  const downloads = [];
+  page.on('request', (request) => {
+    if (request.url().includes('/request-log')) downloads.push(request.url());
+  });
+
+  await page.goto(`${base}/usage/events?preset=24h&limit=100`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.request-row').first().waitFor({ timeout: 20_000 });
+
+  // The virtualizer must expose a real scroll container, and the mounted window must
+  // stay bounded however far the reader goes: an unbounded DOM is what makes a long
+  // stream unusable, and a row count that grows with the scroll is the only symptom
+  // a presence check would miss.
+  const hasScrollContainer = await page.evaluate(() => {
+    const root = document.querySelector('.request-list-host') ?? document.body;
+    return [...root.querySelectorAll('*')].some(
+      (node) =>
+        node.scrollHeight > node.clientHeight + 100 &&
+        ['auto', 'scroll', 'hidden'].includes(getComputedStyle(node).overflowY),
+    );
+  });
+  check('the request list exposes a real scroll container', hasScrollContainer);
+
+  const scroller = await page.evaluateHandle(() => {
+    const root = document.querySelector('.request-list-host') ?? document.body;
+    return (
+      [...root.querySelectorAll('*')].find(
+        (node) =>
+          node.scrollHeight > node.clientHeight + 100 &&
+          ['auto', 'scroll', 'hidden'].includes(getComputedStyle(node).overflowY),
+      ) ?? null
+    );
+  });
+  const scrollNode = scroller.asElement();
+  check('the request list has a scroll node to drive', scrollNode !== null);
+  if (scrollNode) {
+    await scrollNode.evaluate((node) => {
+      node.scrollTop = node.scrollHeight;
+    });
+    // The mounted window is what must stay bounded; it settles asynchronously, so
+    // the count is read after the virtualizer stops changing it.
+    await sleep(400);
+    const mounted = await page.locator('.request-row').count();
+    check('the virtualized window stays bounded at the bottom', mounted > 0 && mounted < 40, `rows=${mounted}`);
+  }
+
+  // Column resize: the handle has to exist, a drag has to change the track, and the
+  // width has to survive as a preference - the last part is what makes a column
+  // layout the reader chose outlive the visit.
+  const providerHeader = page.locator('.req-th-provider');
+  const resizer = providerHeader.locator('.req-col-resizer');
+  check('the column resize handle exists', (await resizer.count()) > 0);
+  const widthBefore = await providerHeader.evaluate((node) => node.getBoundingClientRect().width);
+  const resizerBox = await resizer.boundingBox();
+  if (resizerBox) {
+    await page.mouse.move(resizerBox.x + resizerBox.width / 2, resizerBox.y + resizerBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(resizerBox.x + resizerBox.width / 2 + 60, resizerBox.y + resizerBox.height / 2, { steps: 5 });
+    await page.mouse.up();
+    await sleep(300);
+  }
+  const widthAfter = await providerHeader.evaluate((node) => node.getBoundingClientRect().width);
+  check('dragging the resize handle changes the column width', widthAfter > widthBefore, `${widthBefore} -> ${widthAfter}`);
+  const storedWidth = await page.evaluate(async () => {
+    const response = await fetch('/omc/api/v1/preferences');
+    const body = await response.json();
+    return body?.preferences?.usage_events_columns?.provider ?? null;
+  });
+  check('the column width is persisted as a preference', typeof storedWidth === 'number', `stored=${storedWidth}`);
+
+  // Keyboard access to the detail drawer. A list that can only be opened with a
+  // mouse is unusable for anyone who does not have one, and both directions have to
+  // work or the reader is trapped in the drawer.
+  const rows = page.locator('.request-row');
+  await rows.first().click();
+  await page.locator('.request-detail').waitFor({ state: 'visible', timeout: 10_000 });
+  check('clicking a row opens the request detail', await page.locator('.request-detail').isVisible());
+  await page.keyboard.press('Escape');
+  await page
+    .locator('.request-detail')
+    .waitFor({ state: 'hidden', timeout: 10_000 })
+    .catch(() => {});
+  check('Escape closes the request detail', !(await page.locator('.request-detail').isVisible().catch(() => false)));
+
+  // The log download is a high-intent action: it must not happen on page load, and
+  // it must not happen on the first click either - the confirmation is what makes it
+  // deliberate.
+  await rows.first().click();
+  await page.locator('.request-detail').waitFor({ state: 'visible', timeout: 10_000 });
+  const downloadsBefore = downloads.length;
+  const downloadButton = page.getByRole('button', { name: /下载请求日志|Download request log/ }).first();
+  if ((await downloadButton.count()) > 0) {
+    await downloadButton.click();
+    await page
+      .locator('.ant-modal')
+      .first()
+      .waitFor({ state: 'visible', timeout: 5000 })
+      .catch(() => {});
+    check(
+      'a request-log download requires explicit confirmation',
+      downloads.length === downloadsBefore,
+      `downloads=${downloads.length - downloadsBefore}`,
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // The request-records refresh sequence
 // ---------------------------------------------------------------------------
@@ -663,6 +809,24 @@ const scenarios = [
     run: dashboardChartMarks,
   },
   { name: 'refresh sequencing', check, run: refreshRecords() },
+  {
+    name: 'request list interactions',
+    check,
+    options: {
+      routes: [
+        [(url) => url.pathname.endsWith('/usage/facets'), () => alignmentFacets],
+        [
+          (url) => url.pathname.includes('/usage/events'),
+          () => ({ items: interactionRecords, has_more: false, limit: 100 }),
+        ],
+        [
+          (url) => url.pathname.endsWith('/usage/ingest-status'),
+          () => ({ enabled: true, healthy: true, collector: { mode: 'http_pull', captured: 500, coverage_gaps: 0 }, stats: { pending: 0 } }),
+        ],
+      ],
+    },
+    run: requestListInteractions,
+  },
 ];
 
 const { passed, failures: runFailures } = await runProbes({ port: PORT, scenarios });

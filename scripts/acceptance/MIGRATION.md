@@ -5,6 +5,47 @@ assertion that leaves the browser names the test that replaced it. The point of
 the ledger is that no claim is dropped without a replacement: an assertion may
 move, but it may not disappear.
 
+## The probe files that were removed
+
+Beyond the acceptance suite, six standalone probe entry points were deleted:
+`browser-usage-events.mjs`, `browser-refresh-sync.mjs`, `browser-icon-picker.mjs`,
+`browser-dashboard-charts.mjs`, `browser-column-alignment.mjs` and
+`browser-performance.mjs`. Every claim worth keeping now lives in
+`scripts/browser-probes.mjs`, which runs them as scenarios against one shared dev
+server and one browser:
+
+| Former file | Where its claims live now |
+| --- | --- |
+| `browser-column-alignment.mjs` | the `column alignment` scenario, unchanged in strength |
+| `browser-icon-picker.mjs` | the `icon picker stacking` scenario, unchanged in strength |
+| `browser-dashboard-charts.mjs` | the `dashboard chart marks` scenario, unchanged in strength |
+| `browser-refresh-sync.mjs` | the `refresh sequencing` scenario, including the held-response ordering proof |
+| `browser-usage-events.mjs` | the `request list interactions` scenario for the virtualization bound, the column resize and its persistence, keyboard access to the detail drawer, and the request-log download gate |
+| `browser-performance.mjs` | nothing - see below |
+
+Claims that are deliberately not restored, listed so the loss is a decision rather
+than an oversight:
+
+- **The collapse gesture choreography** (`first wheel down collapses the header`,
+  `row 1 remains visible after entering full-screen mode`, the wheel-up bounce, and
+  the scroll-to-last-record tour) from `browser-usage-events.mjs`. The probe keeps
+  the bounded-window claim, which is the part that makes a long list usable. The
+  scroll *schedule* is unit-tested in `scripts/test-scroll-intent.ts`; what no test
+  now catches is the header failing to collapse on a wheel gesture.
+- **The forced-minimum-width token measurement** (`token column reached its 130px
+  minimum`, `token cell holds the largest real numbers at its minimum width`).
+  `column alignment` covers track geometry, truncation and the responsive override;
+  this was a second measurement of the same layout at one specific width.
+- **The 320px interactive sweep.** Redundant with the 390px and 768px overflow and
+  drawer checks in the acceptance suite; 320px is also below the narrowest viewport
+  the project targets.
+- **`browser-performance.mjs` in full.** It asserted page-load timings against a dev
+  server, which measures the mock and the machine rather than the product. It ran in
+  no gate and its numbers were never a budget. The one timing claim that is a real
+  budget - the pricing page opening under 3s - lives in the acceptance suite.
+
+## Classes
+
 | Class | Meaning |
 | --- | --- |
 | `PURE` | A decision about the operator's own input. Provable by calling the module the page calls. |

@@ -116,11 +116,35 @@ export function dashboardBody(series = [], { bucketMS = 60_000, preset = '1h' } 
  *
  * Probes compose this with their own responses rather than restating the session,
  * preference and health endpoints each time.
+ *
+ * The preferences document is stateful rather than always empty, because a probe that
+ * asserts a setting survives a write needs the mock to remember it. A store per
+ * `installRoutes` call keeps the state inside one scenario's context, which is where
+ * the isolation lives: a write in one scenario cannot be read by another.
  */
 export function defaultRoutes() {
+  const preferences = {};
   return [
     [(url) => url.pathname.endsWith('/api/auth/session'), () => ({ authenticated: true })],
-    [(url, method) => url.pathname.endsWith('/preferences') && method === 'GET', () => ({ preferences: {} })],
+    [
+      (url, method) => url.pathname.endsWith('/preferences') && method === 'GET',
+      () => ({ preferences: { ...preferences } }),
+    ],
+    [
+      (url, method) => url.pathname.includes('/preferences/') && method !== 'GET',
+      (url, _method, request) => {
+        // The key is the last path segment; the body is the document to store. The
+        // shape mirrors the real endpoint closely enough for a probe that reads it
+        // back through the same API.
+        const key = url.pathname.split('/').pop();
+        try {
+          preferences[key] = JSON.parse(request.postData() ?? 'null');
+        } catch {
+          preferences[key] = null;
+        }
+        return { ok: true };
+      },
+    ],
     [(url) => url.pathname.includes('/preferences/'), () => ({ ok: true })],
     [(url) => url.pathname.endsWith('/management/auth-files'), () => ({ files: [], total: 0 })],
     [(url) => url.pathname.endsWith('/management/providers'), () => ({ providers: [], total: 0 })],
