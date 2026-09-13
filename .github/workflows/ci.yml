@@ -120,13 +120,20 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
 
-      # Chromium and the SPA build touch separate resources, so they run concurrently.
-      # The Go binaries are built *after* `pnpm build` completes and never beside it:
-      # the application binary embeds `internal/web/dist`, so compiling it while the
-      # SPA build is rewriting that directory can embed a half-written bundle.
+      # The SPA build and Chromium's install touch separate resources, so they run
+      # concurrently, and the Go binaries are built *after* `pnpm build` completes.
       #
-      # The seeder does not embed the SPA and is started as soon as the SPA build
-      # finishes, in parallel with the application build.
+      # The application binary must come after, because it embeds
+      # `internal/web/dist`: compiling it while the SPA build rewrites that directory
+      # can embed a half-written bundle. That is a correctness constraint.
+      #
+      # The seeder does not embed the SPA and could start earlier, but it is left in
+      # the same post-build group on purpose. Two `go build` calls sharing one module
+      # and build cache contend on the same lock, and measured with a cold cache they
+      # cost 34s together against 23s for the application binary alone plus about 5s
+      # for the seeder serially - running them "in parallel" is slower. Chromium's
+      # install is the genuinely independent third resource, and it is already
+      # overlapped.
       - name: Prepare Chromium and build embedded SPA
         env:
           NODE_OPTIONS: --max-old-space-size=4096
