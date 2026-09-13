@@ -171,12 +171,12 @@ Query for server state.
 | --- | --- |
 | `App.tsx` | Router, lazily loaded pages, theme and locale providers |
 | `api/client.ts` | The one typed HTTP client; every endpoint is declared here |
-| `types/` | Wire types, including `usageEventView.ts` (row projection and filters) |
+| `types/` | Wire types, including `usageEventView.ts` (row projection and filters) and `usageEventViewActions.ts` (the view's URL and persistence rewrites) |
 | `hooks/` | `usePreference`, `useLastIntentQueue` (React binding) over `lastIntentQueue` (the framework-free controller) and `disposableSlot` (effect-scoped resource lifetime), `useLogTail`, `useVisibleNow` |
 | `i18n/index.tsx` | The `[zh, en]` dictionary and the `t()` context |
 | `theme/` | `themeConfig.ts` (antd tokens), `cacheScale.ts` (OKLCH cache ramp) |
 | `utils/` | `maskKey.ts`, `externalUrl.ts` (the http/https link rule), `modelOptions.ts` (model-input filtering), `smoothScroll.ts` (the gesture/correction scroll schedule) |
-| `components/`, `pages/` | Feature UI; one page per route, no page owns another |
+| `components/`, `pages/` | Feature UI; one page per route, no page owns another. `components/usage/` also carries that page's framework-free policies: `searchDebounce.ts`, `pollingPolicy.ts`, `timeRangePolicy.ts`, `syncPresentation.ts` and `chipDisplay.ts` |
 
 All page routes are `React.lazy` import boundaries so the entry chunk stays
 small; the shell (`AppLayout`, `AuthGate`) is loaded eagerly because every
@@ -484,12 +484,14 @@ and the decode barrier, then re-reads the list, the facets and the pipeline stat
 The revision is part of the facet query key, not only of the window it computes,
 because an absolute range resolves to the same two timestamps on every render and
 a naive revision would leave the cached entry inside its `staleTime`.
-`scripts/browser-usage-events.mjs` asserts this directly: a manual refresh issues
-a `POST` to `/usage/ingest/refresh` before the list and facet reads, and the
-fixed-window case re-reads facets too. Because the response is
-capped at 200 values per dimension, a value that is selected but absent from it is
-merged back into the options, so a filter that is still applied never renders as a
-blank control.
+`scripts/browser-probes.mjs` asserts this directly: a manual refresh issues
+a `POST` to `/usage/ingest/refresh` *and the list and facet reads wait for it*.
+Request counts alone cannot establish that ordering — a page that fired all three
+in parallel would still issue all three — so the probe holds the pull's response
+open and requires that no list or facet read happens while it is held. Because the
+response is capped at 200 values per dimension, a value that is selected but absent
+from it is merged back into the options, so a filter that is still applied never
+renders as a blank control.
 
 ### 6.3 Grouping the request list
 
@@ -582,7 +584,56 @@ fix a defect with a new migration, never by editing `schema_migrations`
 | Pricing sync | `app.Run` → `pricing.Service` | Best effort; prices go stale, capture continues |
 | Rollup + retention | `ingest.Maintenance` inside the pipeline | Retried on its own interval; errors surface in ingest status |
 
-## 11. Where to look next
+## 11. Test layering
+
+The suite is split by what each layer can actually prove, not by which runner is
+fashionable. The rule is **Browser Everything → Browser Only Where Browser
+Matters**: an assertion moves down a layer when a lower layer can make the same
+claim, and it stays in Chromium only when the claim is about the engine.
+
+| Layer | Command | What it proves |
+| --- | --- | --- |
+| Pure logic | `pnpm test:logic` | Decisions about the operator's own input: URL rewrites, saved-view derivation, debounce invalidation, the poll decision, range validation, chip display mapping, refresh presentation. Runs under Node with no bundler, no HTTP server, no Go binary and no browser. |
+| Mechanical repository gates | `pnpm test:docs`, `pnpm test:i18n`, `pnpm test:css-modules`, `pnpm test:dev-target`, `pnpm test:affected-checks` | Path references, translation keys, CSS class references, the dev proxy target and the fast-path planner. |
+| Cross-stack smoke | `pnpm verify:browser:smoke` | The thin path a pull request needs: `/omc` redirect, sign-in rejection and success, the dashboard and request list rendering their seeded rows, no console or page error. |
+| Cross-stack acceptance | `pnpm verify:browser` | The whole stack against the fake CPA: auth, every route's render and secret boundary, key aliases, provider enable/disable and its concurrent path, live-tail polling, quota, OAuth. |
+| Browser-only probes | `pnpm verify:probes` | The claims only a real engine can make: drawer/modal stacking and hit-testing, column geometry and truncation, the responsive alignment override, sparkline paint, and refresh sequencing under a held response. |
+
+Two properties of this split are load bearing.
+
+**A browser assertion is never removed without a replacement.**
+`scripts/acceptance/MIGRATION.md` classifies every assertion in
+`scripts/browser-acceptance.mjs` once - `PURE`, `COMPONENT`, `BROWSER` or
+`CROSS-STACK` - and every assertion that left the browser names the test that
+replaced it. An assertion may move; it may not disappear silently.
+
+**`pnpm test:fast` never pays for the browser.** No ordinary change may build the
+SPA, build a Go binary, start Vite, start Chromium or start the fake CPA. The
+selection lives in `scripts/affected-checks.mjs` so it can be asserted directly,
+including that negative property, and a file the rules cannot place selects the
+broad gates rather than nothing.
+
+### 11.1 Why some claims live where they do
+
+- **Request ordering belongs to Go.** `TestListUsageEventsOrdersByRequestTime` in
+  `internal/repository` inserts a request that was recorded last but started
+  earliest, so a regression to recording order inverts the assertion. A JavaScript
+  re-check would read whatever the server already ordered and could not fail for
+  the reason its name gives.
+- **Pagination and scroll stay in the browser.** A virtualized list holding a
+  bounded DOM, a poll leaving the reader's scroll offset and row identity untouched,
+  and a back-to-top gesture landing exactly on the top are rendering behaviours.
+  The scroll *schedule* is a pure function and is tested as one
+  (`scripts/test-scroll-intent.ts`); its effect on a real list is not.
+- **The debounce is split rather than moved.** `createSearchDebounce` carries the
+  policy and is tested directly. The one claim that stays in the browser is that a
+  real pending timer survives a real clear-all, because it depends on a React state
+  update and a URL write happening between the two.
+- **Refresh sequencing cannot be replaced by a poll-decision test.** A
+  `shouldPoll()` unit test says nothing about whether the page serialises the pull
+  before the reads, so the probe holds the response and observes the ordering.
+
+## 12. Where to look next
 
 - Domain wording: `CONTEXT.md`
 - Deployment and its trade-offs: `docs/adr/0001-go-react-sqlite-modular-monolith.md`

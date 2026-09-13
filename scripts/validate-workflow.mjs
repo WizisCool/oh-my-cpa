@@ -37,12 +37,31 @@ if (document.errors.length > 0) {
   if (!browserSteps.some((step) => step.if === "github.event_name != 'pull_request'" && step.run === 'pnpm verify:browser')) {
     throw new Error('CI workflow has no full browser acceptance step');
   }
+  // The focused probes reached master for the first time here: they used to sit
+  // outside every gate, so a regression in overlay stacking or column geometry was
+  // only caught if someone remembered the command.
+  if (!browserSteps.some((step) => step.if === "github.event_name != 'pull_request'" && step.run === 'pnpm verify:probes')) {
+    throw new Error('CI workflow does not run the focused browser probes on master');
+  }
   const browserPreparation = browserSteps.find((step) => step.name === 'Prepare Chromium and build embedded SPA');
   if (!browserPreparation?.run?.includes('playwright-core install') || !browserPreparation.run.includes('pnpm build')) {
     throw new Error('CI workflow does not prepare Chromium and build the SPA in one step');
   }
   if (!browserPreparation.run.includes('tmp/oh-my-cpa-browser')) {
     throw new Error('CI workflow does not prepare a reusable browser binary');
+  }
+  // The application binary embeds `internal/web/dist`, so it must be compiled after
+  // `pnpm build` finishes. A concurrent build could embed a half-written bundle, and
+  // the ordering is what the preparation step's own sequencing comment claims.
+  const applicationBuildIndex = browserPreparation.run.indexOf('go build -trimpath -o tmp/oh-my-cpa-browser');
+  const spaBuildIndex = browserPreparation.run.indexOf('pnpm build');
+  if (applicationBuildIndex < 0 || spaBuildIndex < 0 || applicationBuildIndex < spaBuildIndex) {
+    throw new Error('CI workflow must build the embedded SPA before the application binary that embeds it');
+  }
+  // Chromium's shared libraries are not part of the browser cache, so the OS
+  // dependency installation cannot be skipped on a cache hit.
+  if (!browserPreparation.run.includes('--with-deps')) {
+    throw new Error('CI workflow does not install Chromium OS dependencies unconditionally');
   }
   for (const name of ['Run deterministic browser smoke', 'Run deterministic browser acceptance']) {
     const step = browserSteps.find((candidate) => candidate.name === name);

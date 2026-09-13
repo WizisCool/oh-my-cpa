@@ -118,6 +118,10 @@ func (s *Service) FetchConfig(ctx context.Context) (Config, error) {
 
 ## 6. 常用命令
 
+测试分层与“什么该进浏览器”的判据见 [`docs/architecture.md`](docs/architecture.md) 的 §11：
+**只在真正需要浏览器的时候，才支付浏览器测试成本**。`pnpm test:fast` 永不构建、永不启动
+Vite / Chromium / 假 CPA；选择逻辑在 `scripts/affected-checks.mjs`，其测试断言了这条性质。
+
 | 命令 | 用途 |
 | --- | --- |
 | `pnpm dev` | Air + Vite 开发入口（`http://127.0.0.1:5173/omc/`） |
@@ -130,8 +134,8 @@ func (s *Service) FetchConfig(ctx context.Context) (Config, error) {
 | `pnpm verify:full:serial` | 串行最终门禁，仅用于诊断并行编排差异 |
 | `pnpm verify:browser` | 对已构建的 SPA 跑确定性浏览器验收（假 CPA 夹具） |
 | `pnpm verify:browser:smoke` | 只跑登录、仪表盘和请求列表核心链路的浏览器 smoke |
-| `pnpm verify:e2e` | 先构建，再跑完整确定性浏览器验收 |
-| `pnpm verify:refresh` | 只验证请求记录页“刷新按钮真实拉取”的浏览器探针（含顺序断言） |
+| `pnpm verify:probes` | 只跑需要真实 Chromium 的几何、层叠、像素与刷新时序探针 |
+| `pnpm verify:e2e` | 先构建，再跑浏览器验收与浏览器探针 |
 | `pnpm verify:secrets` | 工作区密钥扫描 |
 | `pnpm check-i18n` | 找出代码里使用了但字典中缺失的 key |
 | `pnpm check-docs` | 校验上下文文档的路径引用、淘汰产物引用与绝对行号（`pnpm test:docs` 自测） |

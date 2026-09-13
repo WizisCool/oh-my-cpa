@@ -62,6 +62,7 @@ Vite 负责前端 HMR，并把 `/omc/api/*` 单向代理到 Go；Go 由 Air 监�
 | `pnpm verify:full:serial` | 串行最终门禁，仅用于诊断并行编排差异 |
 | `pnpm verify:browser` | 对已构建的 SPA 执行确定性浏览器验收 |
 | `pnpm verify:browser:smoke` | 执行核心路径浏览器 smoke |
+| `pnpm verify:probes` | 执行几何、层叠、像素与刷新时序的浏览器探针 |
 
 `pnpm cpa:start` 默认寻找 `cpa/cli-proxy-api`（Windows 下也支持 `.exe`）和 `cpa/config.yaml`；可分别用 `CPA_BIN`、`CPA_CONFIG` 覆盖。Air 可通过 `AIR_BIN` 指定，脚本也会从 `PATH`、`GOBIN` 和 `GOPATH/bin` 查找。
 
@@ -142,8 +143,11 @@ pnpm dev
 pnpm build
 pnpm verify:browser
 pnpm verify:browser:smoke
+pnpm verify:probes
 pnpm verify:e2e
 ```
+
+测试分层模型：不依赖浏览器的判断（URL 改写、已保存视图的推导、防抖失效、轮询决策、范围校验、展示映射）运行在 `pnpm test:logic`（Node，无 Vite / 无 Go / 无 Chromium）；`pnpm verify:probes` 只保留必须由真实 Chromium 证明的性质（Drawer/Modal 层叠与命中测试、列几何与截断、响应式对齐覆盖、sparkline 绘制、拉取与重读的先后顺序）。判据与每条断言的去向见 [`docs/architecture.md`](docs/architecture.md) 的 §11 与 [`scripts/acceptance/MIGRATION.md`](scripts/acceptance/MIGRATION.md)。
 
 需要检查真实 CPA 或正在运行的 Vite 开发入口时使用独立的 live smoke；`OMCPA_WRITE_TEST=1` 才会执行上传、开关、删除等写操作：
 
