@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Input, Tag, Empty, theme } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import { LOBE_ICON_CATALOG, type LobeIconCatalogEntry } from '../types/lobeIconCatalog';
@@ -42,6 +42,8 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
   const zIndex = token.zIndexPopupBase + ANTD_CONTAINER_ZINDEX_STEP * 2;
   const [search, setSearch] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<'all' | 'provider' | 'model' | 'application'>('all');
+  const [visibleIconIds, setVisibleIconIds] = useState<Set<string>>(new Set());
+  const iconGridRef = useRef<HTMLDivElement | null>(null);
 
   const filteredIcons = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -58,6 +60,28 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
       );
     });
   }, [search, selectedGroup]);
+
+  useEffect(() => {
+    if (!open) {
+      setVisibleIconIds(new Set());
+      return;
+    }
+    const root = iconGridRef.current;
+    if (!root) return;
+    const observer = new IntersectionObserver((items) => {
+      setVisibleIconIds((previous) => {
+        const next = new Set(previous);
+        for (const item of items) {
+          if (!item.isIntersecting) continue;
+          const iconId = (item.target as HTMLElement).dataset.iconId;
+          if (iconId) next.add(iconId);
+        }
+        return next;
+      });
+    }, { root, rootMargin: '240px 0px' });
+    for (const node of root.querySelectorAll('[data-icon-id]')) observer.observe(node);
+    return () => observer.disconnect();
+  }, [filteredIcons, open]);
 
   const groupCounts = useMemo(() => {
     let provider = 0;
@@ -120,6 +144,7 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
       </div>
 
       <div
+        ref={iconGridRef}
         style={{
           maxHeight: 420,
           overflowY: 'auto',
@@ -139,6 +164,7 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
             return (
               <div
                 key={item.id}
+                data-icon-id={item.id}
                 onClick={() => {
                   onSelect(item.id);
                   onClose();
@@ -159,7 +185,9 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
                 }}
                 title={`${item.fullTitle} (${item.id})`}
               >
-                <LobeIcon iconId={item.id} size={28} />
+                {visibleIconIds.has(item.id)
+                  ? <LobeIcon iconId={item.id} size={28} loading="lazy" />
+                  : <div aria-hidden="true" style={{ width: 28, height: 28 }} />}
                 <div
                   style={{
                     fontSize: 11,

@@ -70,7 +70,12 @@ try {
   });
   const page = await context.newPage();
   const pageErrors = [];
+  const requestedIconAssets = new Set();
   page.on('pageerror', (error) => pageErrors.push(error.message));
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.includes('/lobe-icons/')) requestedIconAssets.add(url.pathname);
+  });
 
   await page.route('**/omc/api/**', async (route) => {
     const url = new URL(route.request().url());
@@ -111,6 +116,11 @@ try {
   await picker.waitFor({ state: 'visible', timeout: 10_000 });
   await wait(400);
   check('the icon picker opens from inside the drawer', await picker.isVisible());
+  check(
+    'the icon picker loads only nearby assets',
+    requestedIconAssets.size > 0 && requestedIconAssets.size < 120,
+    `loaded=${requestedIconAssets.size}`,
+  );
 
   const readZ = (selector) =>
     page.evaluate((sel) => {

@@ -9,6 +9,7 @@ interface LobeIconProps {
   className?: string;
   style?: React.CSSProperties;
   variant?: 'color' | 'mono';
+  loading?: 'eager' | 'lazy';
 }
 
 // Kimi's Color variant draws a fixed white glyph, which is invisible on light
@@ -23,6 +24,7 @@ export const LobeIcon: React.FC<LobeIconProps> = memo(({
   className,
   style,
   variant = 'color',
+  loading = 'eager',
 }) => {
   const metadata = iconId ? TOC_BY_ID.get(iconId) : undefined;
   if (!iconId || !metadata) {
@@ -44,6 +46,8 @@ export const LobeIcon: React.FC<LobeIconProps> = memo(({
         height={size}
         className={className}
         style={{ display: 'block', objectFit: 'contain', ...style }}
+        loading={loading}
+        decoding="async"
         alt=""
       />
     );
