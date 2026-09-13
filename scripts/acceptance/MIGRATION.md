@@ -44,6 +44,26 @@ move, but it may not disappear.
 | A caller chip shows the alias rather than the fingerprint | `PURE` | *a caller chip prefers the alias, then the mask, then the raw fingerprint* |
 | A credential chip shows the file name | `PURE` | *a credential chip shows the file name rather than the stored fingerprint* |
 | Row ordering is by request time, newest first | — | Already a Go regression: `TestListUsageEventsOrdersByRequestTime` in `internal/repository`. The browser copy cannot fail for the reason its name gives. |
+## Renamed or merged
+
+These claims still exist under a name that no longer matches the original, because a
+loop became a single case or two checks about one transition were merged. They are
+listed so a reader diffing the two revisions can account for every line rather than
+trusting that a name change was a deletion.
+
+| Before | After |
+| --- | --- |
+| the list is ordered by request time, newest first | the rendered time column is monotonic, newest first |
+| the saved window is restored on the bare route, the saved page size is restored on the bare route | the saved window survives a reload |
+| the cleared filters stay cleared on the bare route | the cleared filters stay cleared after a reload |
+| clear-all keeps the window and the page size | folded into the two reload checks above |
+| a typed alias reaches the URL, the alias is reported as a chip | a typed alias reaches the URL and is reported as a chip |
+| the search box shows the navigated term (alpha-search, beta-search) | the search box shows the navigated term |
+| the navigated term survives the debounce window (alpha-search, beta-search) | the navigated term survives the debounce window |
+| with {selected} selected, {preset} appears exactly once - 14 checks over two loop iterations | the window menu lists every preset and not just the unselected ones, the preset menu is rendered from the same policy the tests assert |
+| the single fixture provider renders exactly one enable switch | every provider in the fixture renders exactly one enable switch |
+| clear-all removes the filter | clear-all removes every filter |
+| a cost filter travels as exactly one parameter | no cost parameter is duplicated in the restored URL; the serializer half is pure |
 
 ## Retained in the browser
 

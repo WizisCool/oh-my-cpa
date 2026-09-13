@@ -581,6 +581,14 @@ try {
     { detail: () => `url=${filterSuffix()}` },
   );
   check('clear-all hides the chip strip', (await page.locator('.req-filter-chip').count()) === 0);
+  // Clear-all returns the list to the unfiltered page, not merely to a filterless
+  // URL: the footer reports the page size the bare window would load. It is asserted
+  // here rather than covered by the URL check above because a URL with no filter
+  // parameters and a request that had not been re-issued yet are different states.
+  check(
+    'the list is back to the unfiltered page',
+    /50/.test(await page.locator('.request-pagination span').first().innerText()),
+  );
 
   // The result verdict is a filter with no URL parameter of its own, so the
   // reset affordance must still appear when it is the only thing narrowing the
@@ -661,6 +669,16 @@ try {
     'the rendered time column is monotonic, newest first',
     ordered.length >= 2 && strictlyDescending,
     `order=${ordered.slice(0, 4).map((value) => new Date(value).toISOString()).join(' > ')}`,
+  );
+  // The monotonicity above could pass on a fixture where nothing disagrees, so it is
+  // anchored to the row that distinguishes the two orderings: the fixture records its
+  // slow agent request last but gives it the oldest start time, so recording order
+  // would put it first and invert the column. This keeps the browser check honest
+  // about what it observed; the ordering guarantee itself is the Go regression.
+  check(
+    'the last-recorded but earliest-starting request is not the first row',
+    ordered.length >= 2 && ordered[0] > ordered[ordered.length - 1],
+    `first=${new Date(ordered[0]).toISOString()} last=${new Date(ordered[ordered.length - 1]).toISOString()}`,
   );
 
   // Live tail: scroll away from the top, let a poll land with a new record, and
@@ -868,6 +886,15 @@ try {
   check(
     'the cleared filters stay cleared after a reload',
     !filterSuffix().includes('cost=') && !filterSuffix().includes('model='),
+    `url=${filterSuffix()}`,
+  );
+  // The duplicate-`cost` bug is a serializer property and is pinned directly in the
+  // policy suite, but it is asserted once more on the restored URL because that is
+  // the path where it actually bit: hydration reading `cost` from both the top-level
+  // field and the filter map writes the parameter twice.
+  check(
+    'no cost parameter is duplicated in the restored URL',
+    (filterSuffix().match(/(^|[&?])cost=/g) ?? []).length <= 1,
     `url=${filterSuffix()}`,
   );
   await page.goto(`${appURL}/usage/events`, { waitUntil: 'domcontentloaded' });
