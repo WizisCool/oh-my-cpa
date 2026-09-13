@@ -122,9 +122,9 @@ jobs:
           go_status=0
           if [ "${build_status}" -eq 0 ]; then
             mkdir -p tmp
-            go build -trimpath -o tmp/oh-my-cpa-browser ./cmd/oh-my-cpa &
+            CGO_ENABLED=0 go build -trimpath -o tmp/oh-my-cpa-browser ./cmd/oh-my-cpa &
             app_build_pid=$!
-            go build -trimpath -o tmp/seed-usage-browser ./scripts/fixture/seed-usage &
+            CGO_ENABLED=0 go build -trimpath -o tmp/seed-usage-browser ./scripts/fixture/seed-usage &
             seed_build_pid=$!
             wait "${app_build_pid}" || go_status=$?
             wait "${seed_build_pid}" || go_status=$?
