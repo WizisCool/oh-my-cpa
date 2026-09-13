@@ -48,7 +48,7 @@
     "verify:static": "pnpm verify:workflow && go test ./... && go vet ./... && pnpm type-check && pnpm test:i18n && pnpm check-i18n && pnpm test:docs && pnpm check-docs && pnpm test:css-modules && pnpm check-css-modules && pnpm test:dev-target && pnpm test:logic && pnpm lint:antd",
     "verify:e2e": "pnpm build && pnpm verify:browser",
     "verify:build": "pnpm type-check && pnpm build && node scripts/check-bundle-budget.mjs",
-    "verify": "pnpm verify:toolchain && pnpm verify:static && pnpm verify:secrets:worktree && pnpm build && node scripts/check-bundle-budget.mjs",
+    "verify": "pnpm verify:toolchain && pnpm verify:static && pnpm verify:secrets:worktree",
     "verify:full": "pnpm verify:toolchain:strict && pnpm verify:static && pnpm verify:secrets:worktree && pnpm verify:secrets:history && pnpm build && node scripts/check-bundle-budget.mjs && pnpm verify:browser",
     "verify:live": "node scripts/browser-live-smoke.mjs",
     "verify:workflow": "node scripts/validate-workflow.mjs"

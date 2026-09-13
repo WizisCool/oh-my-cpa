@@ -53,9 +53,14 @@ Vite 负责前端 HMR，并把 `/omc/api/*` 单向代理到 Go；Go 由 Air 监�
 | `pnpm dev:api` | 仅启动 Go/Air，供 API 调试 |
 | `pnpm dev:web` | 仅启动 Vite，连接 `.env` 中 `OMCPA_LISTEN_ADDR` 指定的后端（默认 `:8080`） |
 | `pnpm cpa:start` | 从 `cpa/` 启动本地 CLIProxyAPI |
-| `pnpm build` | 构建前端并同步到 `internal/web/dist` |
+| `pnpm build` | 构建前端并同步到 `internal/web/dist`；类型检查由独立门禁负责 |
 | `pnpm type-check` | 检查前端 TypeScript |
-| `pnpm verify:browser` | 对运行中的嵌入式生产构建执行浏览器验收 |
+| `pnpm test:fast` | 按工作树改动执行最小相关检查 |
+| `pnpm verify` | 严格工具链 + 全量静态门禁 + worktree 密钥扫描 |
+| `pnpm verify:build` | 类型检查、生产构建与入口 bundle 预算 |
+| `pnpm verify:full` | 完整最终门禁，包含生产构建与浏览器验收 |
+| `pnpm verify:browser` | 对已构建的 SPA 执行确定性浏览器验收 |
+| `pnpm verify:browser:smoke` | 执行核心路径浏览器 smoke |
 
 `pnpm cpa:start` 默认寻找 `cpa/cli-proxy-api`（Windows 下也支持 `.exe`）和 `cpa/config.yaml`；可分别用 `CPA_BIN`、`CPA_CONFIG` 覆盖。Air 可通过 `AIR_BIN` 指定，脚本也会从 `PATH`、`GOBIN` 和 `GOPATH/bin` 查找。
 
@@ -130,13 +135,21 @@ pnpm dev
 
 `.env` 由 Go 进程启动时读取，已存在的真实环境变量优先。登录密码就是 `OMCPA_CPA_MANAGEMENT_KEY`，即 CPA `remote-management.secret-key` 的明文。注意 CPA 自己的 `config.yaml` 里只存该密钥的 bcrypt 哈希，直接抄过来会在管理接口上得到 `401 invalid management key`。
 
-浏览器验收默认检查 `http://127.0.0.1:8080/omc/` 的嵌入式生产构建，因此需先运行 `pnpm build` 并启动 Go 服务；也可用 `OMCPA_URL=http://127.0.0.1:5173/omc/` 检查当前 Vite 开发入口：
+确定性浏览器验收会启动自己的假 CPA、临时 SQLite 和 Go 服务，但读取已经构建到 `internal/web/dist` 的 SPA，因此需先运行 `pnpm build`：
 
 ```bash
+pnpm build
 pnpm verify:browser
-OMCPA_URL=http://127.0.0.1:5173/omc/ pnpm verify:browser
-# 可选：验证上传、开关、删除等会修改真实 CPA 的路径
-OMCPA_WRITE_TEST=1 pnpm verify:browser
+pnpm verify:browser:smoke
+pnpm verify:e2e
+```
+
+需要检查真实 CPA 或正在运行的 Vite 开发入口时使用独立的 live smoke；`OMCPA_WRITE_TEST=1` 才会执行上传、开关、删除等写操作：
+
+```bash
+pnpm verify:live
+OMCPA_URL=http://127.0.0.1:5173/omc/ pnpm verify:live
+OMCPA_WRITE_TEST=1 pnpm verify:live
 ```
 
 界面语言选择持久化于 `localStorage('omc-lang')`；品牌样式与主题 Token 的权威定义见 [`docs/design.md`](docs/design.md)。Air 监听规则见 [`.air.toml`](.air.toml)。请勿提交 `cpa/`、`.env` 或真实凭据。
