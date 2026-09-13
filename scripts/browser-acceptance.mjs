@@ -1032,6 +1032,250 @@ try {
   await page.locator('.ant-modal .ant-form').first().waitFor({ state: 'hidden', timeout: 5000 });
   check('price editor closes cleanly', true);
   await auditPage(page, responseBodies, '/ai-providers', '.providers-page');
+
+  // The provider homepage is console metadata, so the row's own name is the link
+  // when one is stored, and it must open safely. Both states are exercised:
+  // with a stored website the name becomes a safe external link, and with none
+  // it stays plain text rather than becoming a dead link or a link to nowhere.
+  const setProviderWebsite = async (value) => {
+    const status = await page.evaluate(async (body) => {
+      const response = await fetch('/omc/api/v1/preferences/provider_websites', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+      return response.status;
+    }, JSON.stringify(value));
+    check('provider website preference is writable through the API', status === 200, `status=${status}`);
+  };
+  const openProvidersPage = async () => {
+    await page.goto(`${appURL}/ai-providers`, { waitUntil: 'domcontentloaded' });
+    await page.locator('.providers-page tbody tr').first().waitFor({ state: 'visible', timeout: 15000 });
+  };
+
+  await openProvidersPage();
+  check(
+    'a provider with no website keeps its name as plain text',
+    (await page.locator('.providers-page tbody a').count()) === 0,
+    `links=${await page.locator('.providers-page tbody a').count()}`,
+  );
+
+  // The fake CPA's only configured provider is the codex entry, which the
+  // console addresses as `codex-0`.
+  await setProviderWebsite({ 'codex-0': 'https://provider.example.test' });
+  await openProvidersPage();
+  const websiteLink = page.locator('.providers-page tbody a').first();
+  check('a provider with a website renders its name as a link', await websiteLink.isVisible());
+  const websiteHref = (await websiteLink.getAttribute('href')) ?? '';
+  const websiteRel = (await websiteLink.getAttribute('rel')) ?? '';
+  const websiteTarget = (await websiteLink.getAttribute('target')) ?? '';
+  check(
+    'the provider link points at the stored website',
+    websiteHref === 'https://provider.example.test',
+    `href=${websiteHref}`,
+  );
+  check(
+    'the provider link opens in a new tab without handing over window.opener',
+    websiteTarget === '_blank' && websiteRel.includes('noopener') && websiteRel.includes('noreferrer'),
+    `target=${websiteTarget} rel=${websiteRel}`,
+  );
+
+  // Clearing it returns the row to plain text, so the link is a property of the
+  // record rather than of the page having been visited.
+  await setProviderWebsite({});
+  await openProvidersPage();
+  check(
+    'clearing the website returns the name to plain text',
+    (await page.locator('.providers-page tbody a').count()) === 0,
+  );
+
+  // ---- Provider enable/disable: consecutive-operation reliability ----
+  //
+  // The requirement is that a second click is never lost and that the row never
+  // settles on a value the gateway does not hold. The fake CPA now keeps the codex
+  // API-key list in memory and replaces it on a write, which is what makes the
+  // round trip observable: the toggle disables an entry, re-reads the list, and
+  // the entry really is disabled the second time.
+  const providerSwitch = page.locator('.providers-page tbody .ant-switch').first();
+  await providerSwitch.waitFor({ state: 'visible', timeout: 15000 });
+
+  /** Reads the gateway's own answer for one provider, rather than trusting the page. */
+  const providerEnabledFromApi = async (id) => {
+    const body = await page.evaluate(() => fetch('/omc/api/v1/management/providers').then((r) => r.json()));
+    const row = (body.providers ?? []).find((provider) => provider.id === id);
+    return row === undefined ? undefined : !row.disabled;
+  };
+
+  const toggleWrites = [];
+  const recordToggleWrite = (request) => {
+    if (request.method() !== 'PATCH' || !request.url().includes('/management/providers/status')) return;
+    try {
+      toggleWrites.push(JSON.parse(request.postData() ?? '{}'));
+    } catch {
+      toggleWrites.push({ unparsable: request.postData() });
+    }
+  };
+  page.on('request', recordToggleWrite);
+
+  const initialEnabled = await providerEnabledFromApi('codex-0');
+  check(
+    'the provider row starts enabled, so the toggle has somewhere to go',
+    initialEnabled === true,
+    `enabled=${initialEnabled}`,
+  );
+  check(
+    'the single fixture provider renders exactly one enable switch',
+    (await page.locator('.providers-page tbody .ant-switch').count()) === 1,
+    `switches=${await page.locator('.providers-page tbody .ant-switch').count()}`,
+  );
+
+  // One deliberate click first, to pin the whole round trip before measuring a
+  // burst: the click asks for disabled, the write says disabled, the control
+  // reports disabled, and the gateway agrees.
+  await providerSwitch.click();
+  await checkEventually(
+    'a click on the switch reports the value that click asked for',
+    async () => (await providerSwitch.getAttribute('aria-checked')) === 'false',
+    { detail: async () => `aria-checked=${await providerSwitch.getAttribute('aria-checked')}` },
+  );
+  check(
+    'the toggle writes to the codex family at index 0 rather than the row id',
+    toggleWrites.length === 1 &&
+      toggleWrites[0].family === 'codex' &&
+      toggleWrites[0].index === 0 &&
+      toggleWrites[0].disabled === true,
+    JSON.stringify(toggleWrites),
+  );
+  await checkEventually(
+    'the gateway itself holds the value the click asked for',
+    async () => (await providerEnabledFromApi('codex-0')) === false,
+    { detail: async () => `api=${await providerEnabledFromApi('codex-0')}` },
+  );
+  const settledEnabled = await providerEnabledFromApi('codex-0');
+  check(
+    'the rendered switch agrees with a fresh read of the providers API',
+    (await providerSwitch.getAttribute('aria-checked')) === String(settledEnabled),
+    `aria-checked=${await providerSwitch.getAttribute('aria-checked')} api=${settledEnabled}`,
+  );
+
+  // The rapid burst: several clicks with no waiting in between, which is the
+  // gesture that used to lose an operation. They are dispatched from inside one
+  // page script rather than one Playwright call at a time, so an unawaited
+  // `click()` cannot serialise the burst behind its own actionability checks and
+  // hide the very window being probed. Every click's requested value is recorded
+  // in order, so the last entry is exactly "what the operator last asked for".
+  const burst = await page.evaluate(() => {
+    const node = document.querySelector('.providers-page tbody .ant-switch');
+    if (!node) return { clicks: 0, intents: [], accepted: [] };
+    const intents = [];
+    const accepted = [];
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const before = node.getAttribute('aria-checked') === 'true';
+      const wanted = !before;
+      intents.push(wanted);
+      accepted.push(!node.disabled);
+      node.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    }
+    return { clicks: intents.length, intents, accepted };
+  });
+  check(
+    'the rapid burst dispatched every click it intended to',
+    burst.clicks === 5,
+    `clicks=${burst.clicks}`,
+  );
+
+  const lastIntent = burst.intents[burst.intents.length - 1];
+  // The burst is over when the queue has drained, which is observable as "the
+  // switch no longer reports a write in flight". Waiting for that first is what
+  // keeps the two checks below from passing on a transient: mid-burst the row
+  // already shows the newest intent, so an assertion taken then would be green
+  // for the wrong reason.
+  await checkEventually(
+    'the burst stops reporting a write in flight',
+    async () => !(await providerSwitch.getAttribute('class'))?.includes('ant-switch-loading'),
+    { timeoutMs: 15000, detail: async () => `class=${await providerSwitch.getAttribute('class')}` },
+  );
+
+  // The requirement, stated directly: once the queue drains, what the row shows is
+  // what the last click asked for, and a fresh read of the gateway agrees with it.
+  await checkEventually(
+    'a rapid burst settles on the value of the last click',
+    async () => (await providerSwitch.getAttribute('aria-checked')) === String(lastIntent),
+    {
+      timeoutMs: 15000,
+      detail: async () =>
+        `aria-checked=${await providerSwitch.getAttribute('aria-checked')} lastIntent=${lastIntent} writes=${toggleWrites.length} clicks=${burst.clicks}`,
+    },
+  );
+  const burstApiEnabled = await providerEnabledFromApi('codex-0');
+  check(
+    'after a rapid burst the switch still agrees with the gateway',
+    (await providerSwitch.getAttribute('aria-checked')) === String(burstApiEnabled),
+    `aria-checked=${await providerSwitch.getAttribute('aria-checked')} api=${burstApiEnabled} writes=${toggleWrites.length}`,
+  );
+  check(
+    'a rapid burst never costs more writes than it had clicks',
+    toggleWrites.length > 0 && toggleWrites.length <= burst.clicks,
+    `writes=${toggleWrites.length} clicks=${burst.clicks} accepted=${burst.accepted.filter(Boolean).length}`,
+  );
+  // The coalescing property that makes this a root-cause fix rather than a lock:
+  // the clicks arrive in one synchronous script, so no network round trip can
+  // resolve between them and the queue has no chance to send each one. The burst
+  // therefore costs strictly fewer writes than it had clicks - while still ending
+  // on the last click's value, which the checks around this one pin. A queue that
+  // fired one request per click (or that dropped the later ones) cannot satisfy
+  // both at once.
+  check(
+    'a rapid burst coalesces instead of writing once per click',
+    toggleWrites.length < burst.clicks,
+    `writes=${toggleWrites.length} clicks=${burst.clicks}`,
+  );
+  check(
+    'every burst write names the codex family at index 0',
+    toggleWrites.every((write) => write.family === 'codex' && write.index === 0),
+    JSON.stringify(toggleWrites),
+  );
+  // The last write the gateway received must be the last click's intent. A queue
+  // that dropped the final click, or let an older response win, fails here even
+  // when the write count looks healthy.
+  const lastWrite = toggleWrites[toggleWrites.length - 1];
+  check(
+    'the last write the gateway received is the last click intent',
+    lastWrite !== undefined && lastWrite.disabled === !lastIntent,
+    `lastWrite=${JSON.stringify(lastWrite)} lastIntentEnabled=${lastIntent}`,
+  );
+
+  // The status label and the switch are two statements about the same fact on
+  // one row, and both read the row's single `resolveEnabled`. A burst is exactly
+  // when they could drift apart, so the agreement is asserted rather than assumed.
+  const statusCellText = await page.locator('.providers-page tbody tr').first().innerText();
+  const switchEnabled = (await providerSwitch.getAttribute('aria-checked')) === 'true';
+  check(
+    'the status label and the switch agree on the same row',
+    switchEnabled ? /Active|正常/.test(statusCellText) : /Disabled|已停用/.test(statusCellText),
+    `switch=${switchEnabled} row="${statusCellText.replace(/\s+/g, ' ').trim()}"`,
+  );
+
+  page.off('request', recordToggleWrite);
+
+  // The suite reuses this app and fake CPA, so the fixture is put back where the
+  // rest of the run expects to find it and then confirmed, rather than assumed.
+  if ((await providerEnabledFromApi('codex-0')) !== initialEnabled) {
+    await providerSwitch.click();
+  }
+  await checkEventually(
+    'the provider row is left enabled for the rest of the run',
+    async () => (await providerEnabledFromApi('codex-0')) === initialEnabled,
+    { detail: async () => `api=${await providerEnabledFromApi('codex-0')}` },
+  );
+
+  // The providers list is read with `include_keys=true`, so its response body
+  // carries provider key material. auditPage scans whatever is still buffered in
+  // `responseBodies`, and the next audit is for a page whose contract excludes
+  // those secrets - so the buffer is cleared here, at the end of the block, where
+  // the convention in this file puts it.
+  responseBodies.length = 0;
+
   await auditPage(page, responseBodies, '/auth-files', '.auth-files-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
 
   // Auth Files Page Flow & Behavioral Checks
@@ -1261,6 +1505,34 @@ try {
   await page.setViewportSize({ width: 1440, height: 900 });
   await auditPage(page, responseBodies, '/logs', '.logs-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
   await auditPage(page, responseBodies, '/config', '.config-page');
+
+  // Payload section: one heading entry, not the section header followed by a
+  // group head restating it. The panel is reached through the section nav.
+  await page.goto(`${appURL}/config`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.config-page').first().waitFor({ state: 'visible', timeout: 15000 });
+  const payloadNav = page.locator('.config-nav-btn').filter({ hasText: /Payload/ });
+  if ((await payloadNav.count()) > 0) {
+    await payloadNav.first().click();
+    await page.locator('.payload-rules-container').first().waitFor({ state: 'visible', timeout: 10000 });
+    const payloadHeadingCount = await page.locator('.payload-builder-group .settings-group-title').count();
+    check(
+      'the Payload panel prints no second heading under the section header',
+      payloadHeadingCount === 0,
+      `duplicateHeadings=${payloadHeadingCount}`,
+    );
+    // Losing the head must not lose the capability: the rule builder is the whole
+    // point of the panel, and its five sections must still carry their own
+    // titles and explanations.
+    const payloadPanels = await page.locator('.payload-collapse .ant-collapse-item').count();
+    check('the Payload rule builder still renders its rule panels', payloadPanels >= 5, `panels=${payloadPanels}`);
+    const payloadTitles = await page.locator('.payload-panel-title').count();
+    const payloadDescs = await page.locator('.payload-panel-desc').count();
+    check(
+      'the Payload sections keep their own titles and descriptions',
+      payloadTitles >= 5 && payloadDescs >= 5,
+      `titles=${payloadTitles} descs=${payloadDescs}`,
+    );
+  }
 
   // Config Page: Source tab switch requires reauthentication modal
   await page.goto(`${appURL}/config`, { waitUntil: 'domcontentloaded' });
