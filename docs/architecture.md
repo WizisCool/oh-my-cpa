@@ -67,17 +67,14 @@ Two rules keep the boundary meaningful:
 
 ### Known coverage gaps
 
-- The browser suite has a history of timing-sensitive flakes in the usage-events
+- The browser suite had a history of timing-sensitive flakes in the usage-events
   filter section, unrelated to the provider write path: `the list is back to the
   unfiltered page` and `the queued search still lands` each failed once in repeated
-  runs before the request-view policies were lifted out of the page. Both were
-  reproduced on the unmodified baseline commit with that work stashed, so they were
-  not regressions from the provider changes. The debounce is now a tested unit
-  (`web/src/components/usage/searchDebounce.ts`) with the pending-timer cancellation
-  pinned directly, and three consecutive full acceptance runs after the refactor
-  were clean - but the flakes were intermittent before, so absence of a recurrence
-  is not proof they are gone. Treat a failure in this section as suspect before
-  treating it as a regression.
+  runs before the request-view policies were lifted out of the page. They were fixed
+  rather than tolerated - see §11.3 - and the diagnosis was confirmed by reproducing
+  them on the unmodified baseline commit, two runs in three, under a 2-CPU
+  constraint. The suite now passes eight consecutive trials in the configuration the
+  baseline failed, including with the probes running concurrently.
 - The lost-update regression is the Go test, not the browser check. The interleaving
   that loses a write depends on two requests overlapping at CPA, and a browser run
   cannot force that: removing the gate still produced a green browser run, because
@@ -657,13 +654,54 @@ the useful levers were structural rather than subtractive:
 | --- | --- |
 | Fold four standalone Chromium probes into one shared server and browser, each scenario in its own context | Four dev servers and four browsers become one each |
 | Move the focused probes into `verify:full` | They were in no gate at all; a guarded invariant nobody runs is not guarded |
-| Run the two browser phases concurrently | About 12s on a 2-CPU runner, about 14s on four cores |
+| Fix the suite's CPU-sensitive reads, then run the two browser phases concurrently | About 12s on a 2-CPU runner, about 14s on four cores |
 | Remove the deletion window from the embedded-distribution sync | Not a speed fix: it removes a race between `pnpm build` and the Go gates, which is what made overlapping them safe to keep |
 
-Two levers were measured and rejected. `tsc --incremental` needs a cache that stays
-correct across a changing `include` set, which is the fragile dependency graph
-`test:fast` exists to avoid. Clock-driven polling breaks the scroll schedule above.
-Both are recorded so the next reader does not re-derive them.
+Two levers were measured and rejected.
+
+**Clock-driven polling.** `page.clock` does make the ten-second interval fire early
+(11s of app time in about 900ms), but the same mock covers `requestAnimationFrame`
+and `performance.now`, which is what `smoothScroll`'s gesture schedule is built
+from: with the clock installed the back-to-top gesture landed at 37px instead of
+the top, with no page error, breaking the assertion the block exists for. Isolating
+the interval from the frame clock is not expressible through that API, so the wait
+stays.
+
+**`tsc --incremental`.** It needs a cache that stays correct across a changing
+`include` set, which is the fragile dependency graph `test:fast` exists to avoid.
+
+### 11.3 The flakes were real, and they were in the assertions
+
+The suite carried a recorded history of intermittent failures in the filter
+section. Running the same suite under a 2-CPU constraint on the **unmodified
+baseline commit** reproduced them two runs in three, which settled the question of
+whether they were caused by the refactor: they were not.
+
+The shared shape is a read taken immediately after a state change, with no wait for
+the event that makes the read meaningful:
+
+- **A footer read racing the refetch.** `the list is back to the unfiltered page`
+  read the pagination footer immediately after a URL write. A filterless URL and a
+  list that has re-issued its request are different states, and the read could see
+  the previous filter's page size.
+- **A poll wait with three intervals of headroom.** The live-tail block waited 30s
+  for a 10s cadence. That is not three intervals of margin under contention; it is
+  three intervals before giving up, and it expired on a page that was merely slow.
+  It is now derived from `EVENT_AUTO_REFRESH_MS` with six intervals, and a longer
+  bound costs nothing on a healthy machine because the wait returns as soon as the
+  pill appears.
+- **A row count read before the rows could arrive.** `the list still runs on the
+  usable filters` read the row count one render after the notice.
+
+A negative claim still cannot be waited on: `a clean URL shows no notice` stays a
+plain `check`, because waiting for the absence of a notice would pass on the first
+poll whether or not the page had rendered. What makes it meaningful is the await
+before it - the rows being visible is the evidence that the page rendered, and it
+rendered without a notice.
+
+After the fixes, the suite passes eight consecutive trials under the strictest
+configuration available here (2 CPUs, with the probes running concurrently), which
+is the configuration the baseline failed.
 
 ## 12. Where to look next
 
