@@ -41,7 +41,7 @@
     "verify:secrets": "pnpm verify:secrets:worktree",
     "verify:static:go": "go test ./... && go vet ./...",
     "verify:static:frontend": "pnpm type-check && pnpm test:logic && pnpm lint:antd",
-    "verify:static:repository": "pnpm verify:workflow && pnpm test:i18n && pnpm check-i18n && pnpm test:docs && pnpm check-docs && pnpm test:css-modules && pnpm check-css-modules && pnpm test:dev-target && pnpm test:affected-checks",
+    "verify:static:repository": "pnpm verify:workflow && pnpm check-i18n && pnpm check-docs && pnpm check-css-modules && pnpm test:self",
     "verify:static": "node scripts/verify-static.mjs",
     "verify:e2e": "pnpm build && pnpm verify:browser && pnpm verify:probes",
     "verify:build": "pnpm type-check && pnpm build && node scripts/check-bundle-budget.mjs",
@@ -52,7 +52,9 @@
     "verify:workflow": "node scripts/validate-workflow.mjs",
     "test:view-policy": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs scripts/test-usage-events-view-policy.ts",
     "test:affected-checks": "node --test scripts/affected-checks.test.mjs",
-    "verify:probes": "node scripts/browser-probes.mjs"
+    "verify:probes": "node scripts/browser-probes.mjs",
+    "test:sync-web-dist": "node --test scripts/sync-web-dist.test.mjs",
+    "test:self": "pnpm test:i18n && pnpm test:docs && pnpm test:css-modules && pnpm test:dev-target && pnpm test:affected-checks && pnpm test:sync-web-dist"
   },
   "devDependencies": {
     "@ant-design/cli": "6.6.2",
