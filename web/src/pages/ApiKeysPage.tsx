@@ -18,7 +18,7 @@ import type { Document } from 'yaml';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
 import { ApiKeysEditor } from '../components/config/ApiKeysEditor';
-import { updateFieldWithBaseline, isConfigSemanticallyEqual } from '../components/config/configDirty';
+import { updateFieldWithBaseline, isConfigSemanticallyEqual, getFieldSemanticValue } from '../components/config/configDirty';
 import { ALL_CONFIG_FIELDS } from '../types/configSchema';
 import type { ConfigScalarsResponse } from '../types/configManagement';
 
@@ -104,7 +104,11 @@ export const ApiKeysPage: React.FC = () => {
         return [];
       }
     }
-    const value = docRef.current.getIn(apiKeysField.yamlPath);
+    // getFieldSemanticValue unwraps the YAML AST node. Collection getters on a
+    // Document return collection nodes (`YAMLSeq` here), not plain arrays, so
+    // reading the node directly would report an empty list for a populated
+    // `api-keys`.
+    const value = getFieldSemanticValue(docRef.current, apiKeysField);
     if (Array.isArray(value)) return value.map(String);
     if (typeof value === 'string' && value) return [value];
     return [];

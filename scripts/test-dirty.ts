@@ -5,6 +5,7 @@ import {
   updateFieldWithBaseline,
   isConfigSemanticallyEqual,
   areValuesSemanticallyEqual,
+  getFieldSemanticValue,
 } from '../web/src/components/config/configDirty.ts';
 
 const testFields = [
@@ -76,4 +77,39 @@ test('Modifying field A and field B, then reverting field A preserves field B', 
   updateFieldWithBaseline(currentDoc, serverDoc, testFields[0], '127.0.0.1');
   assert.equal(currentDoc.get('port'), 9000);
   assert.equal(isConfigSemanticallyEqual(currentDoc, serverDoc, testFields), false);
+});
+
+const apiKeysField = {
+  id: 'apiKeys',
+  yamlPath: ['api-keys'],
+  type: 'api_keys',
+  defaultValue: [],
+};
+
+// A YAML sequence reaches the AST as a node whose items only appear through
+// toJSON(). Reading the node directly yields an object, so a populated list is
+// indistinguishable from an empty one and a populated config renders as "0 keys".
+test('A populated sequence reads back as its items, not as an opaque node', () => {
+  const doc = parseDocument(`api-keys:\n  - sk-one\n  - sk-two\n`);
+  const value = getFieldSemanticValue(doc, apiKeysField);
+  assert.equal(Array.isArray(value), true, `expected an array, got ${typeof value}`);
+  assert.deepEqual(value, ['sk-one', 'sk-two']);
+});
+
+test('An absent sequence field falls back to the schema default', () => {
+  const doc = parseDocument(`host: "127.0.0.1"\n`);
+  assert.deepEqual(getFieldSemanticValue(doc, apiKeysField), []);
+});
+
+test('Editing the key list round-trips through the document unchanged', () => {
+  const originalYaml = `host: "127.0.0.1"\napi-keys:\n  - sk-existing\n`;
+  const serverDoc = parseDocument(originalYaml);
+  const currentDoc = parseDocument(originalYaml);
+
+  updateFieldWithBaseline(currentDoc, serverDoc, apiKeysField, ['sk-existing', 'sk-added']);
+  assert.deepEqual(getFieldSemanticValue(currentDoc, apiKeysField), ['sk-existing', 'sk-added']);
+
+  // Reverting to the server's list must restore the document byte for byte.
+  updateFieldWithBaseline(currentDoc, serverDoc, apiKeysField, ['sk-existing']);
+  assert.equal(currentDoc.toString().trim(), originalYaml.trim());
 });
