@@ -1,3 +1,8 @@
+import {
+  PROVIDER_ICON_IDS,
+  NEUTRAL_PROVIDER_ICON_ID,
+  providerIconId,
+} from './providerIconIds';
 import type {
   RangeBound,
   UsageCostFilter,
@@ -82,8 +87,156 @@ export type EventFilterKey = (typeof EVENT_FILTER_KEYS)[number];
 
 export const USAGE_EVENTS_VIEW_PREFERENCE = 'usage_events_view';
 
-export const EVENT_GROUPING_VALUES = ['time', 'provider', 'credential'] as const;
+/**
+ * The groupings the console offers.
+ *
+ * `source` merges what used to be two modes, "by provider" and "by auth
+ * source". They were not really alternatives - a provider whose records arrive
+ * through three credentials has three source lines, and a provider with one
+ * credential has no credential worth naming - so one mode keeps the provider
+ * context and separates the credential underneath it. `ua` is the client the
+ * request came from, which answers "which tool is doing this" and is orthogonal
+ * to both.
+ */
+export const EVENT_GROUPING_VALUES = ['time', 'source', 'ua'] as const;
 export type EventGrouping = (typeof EVENT_GROUPING_VALUES)[number];
+
+/**
+ * Groupings written by an earlier revision.
+ *
+ * `provider` and `credential` both described the provider-and-credential pair
+ * `source` now means, so a saved view keeps its shape instead of silently
+ * reverting to chronological order - which a returning operator would read as
+ * their preference having been forgotten. Keyed by stored string rather than by
+ * type because the values it names are no longer in the union.
+ */
+const LEGACY_EVENT_GROUPINGS: Record<string, EventGrouping> = {
+  provider: 'source',
+  credential: 'source',
+};
+
+/**
+ * parseEventGrouping reads a stored grouping, migrating the retired modes.
+ *
+ * Anything unrecognised becomes `time` rather than being rejected: recording
+ * order is the mode that never hides records, so an unreadable preference always
+ * falls back to something honest.
+ */
+export function parseEventGrouping(raw: unknown): EventGrouping {
+  const value = String(raw ?? '');
+  if ((EVENT_GROUPING_VALUES as readonly string[]).includes(value)) return value as EventGrouping;
+  return LEGACY_EVENT_GROUPINGS[value] ?? 'time';
+}
+
+/**
+ * The bucket a record lands in when the dimension it is grouped by is absent.
+ *
+ * A record with no source or no user agent still belongs in the list, and
+ * "unknown" is a fact about it worth being able to see, so it gets a bucket of
+ * its own rather than being dropped or folded into a named one.
+ */
+export const UNKNOWN_EVENT_GROUP = 'unknown';
+
+export interface EventSourceIdentity {
+  /** The half used to bucket records. Lower-cased so two spellings of one name
+   *  are one source, and never empty. */
+  key: string;
+  /** The half the header prints. */
+  label: string;
+}
+
+/**
+ * eventProviderIdentity is the provider half of a record's source identity.
+ *
+ * The name comes from the provider-name resolver, so the header names the line
+ * the way the providers page does. A provider that cannot be resolved keeps
+ * CPA's own key, which is still the record's true identity and never an
+ * invention.
+ */
+export function eventProviderIdentity(
+  event: Pick<UsageEvent, 'provider'>,
+  resolveProviderName: (providerKey: string | null | undefined) => string,
+  unknownLabel: string,
+): EventSourceIdentity {
+  const label = resolveProviderName(event.provider)?.trim() || '';
+  if (!label) return { key: UNKNOWN_EVENT_GROUP, label: unknownLabel };
+  return { key: label.toLowerCase(), label };
+}
+
+/**
+ * eventCredentialIdentity is the auth-source half.
+ *
+ * An ambiguous credential is never resolved to a guessed file name: two
+ * credentials of one provider must not merge into one header, because the header
+ * is the only thing telling them apart. It still names the stored index, which is
+ * a real identity and keeps the two buckets distinct.
+ */
+export function eventCredentialIdentity(
+  event: UsageEvent,
+  credentials: CredentialIndex,
+  unknownLabel: string,
+): EventSourceIdentity {
+  const label = resolveCredential(event, credentials).name?.trim() || '';
+  if (!label) return { key: UNKNOWN_EVENT_GROUP, label: unknownLabel };
+  return { key: label.toLowerCase(), label };
+}
+
+/**
+ * providersWithMultipleAuthSources names the providers this page served through
+ * more than one credential.
+ *
+ * It is what makes "distinguish the auth source when needed" a decision rather
+ * than a decoration: a provider whose records all arrived through one credential
+ * gains nothing from repeating that credential on every header, while a provider
+ * split across two must say which is which or the two buckets look identical.
+ * The answer is computed from the whole page because "only one credential" is a
+ * property of the provider, not of whichever bucket is being rendered.
+ */
+export function providersWithMultipleAuthSources(
+  events: readonly UsageEvent[],
+  credentials: CredentialIndex,
+  resolveProviderName: (providerKey: string | null | undefined) => string,
+  unknownLabel: string,
+): Set<string> {
+  const sourcesByProvider = new Map<string, Set<string>>();
+  for (const event of events) {
+    const provider = eventProviderIdentity(event, resolveProviderName, unknownLabel).key;
+    const credential = eventCredentialIdentity(event, credentials, unknownLabel).key;
+    const sources = sourcesByProvider.get(provider) ?? new Set<string>();
+    sources.add(credential);
+    sourcesByProvider.set(provider, sources);
+  }
+  const multiple = new Set<string>();
+  for (const [provider, sources] of sourcesByProvider) {
+    if (sources.size > 1) multiple.add(provider);
+  }
+  return multiple;
+}
+
+/**
+ * formatEventSourceGroupTitle renders one source header.
+ *
+ * The separator is only worth printing when there are two things to separate, so
+ * a single-credential provider reads as the provider alone.
+ */
+export function formatEventSourceGroupTitle(
+  providerLabel: string,
+  credentialLabel: string,
+  hasMultipleAuthSources: boolean,
+): string {
+  return hasMultipleAuthSources ? `${providerLabel} / ${credentialLabel}` : providerLabel;
+}
+
+/**
+ * eventUserAgentGroupKey buckets records by the client they came from.
+ *
+ * The stored value is already the short product label the persistence path
+ * reduced the raw header to, so it is used verbatim; nothing here re-parses a
+ * header or expands what was deliberately minimised.
+ */
+export function eventUserAgentGroupKey(event: Pick<UsageEvent, 'user_agent'>): string {
+  return event.user_agent?.trim().toLowerCase() || UNKNOWN_EVENT_GROUP;
+}
 
 /**
  * The persisted view excludes the reader's layout preferences and the time
@@ -125,9 +278,7 @@ export function parseUsageEventsView(raw: unknown): UsageEventsViewPreference | 
   if (typeof raw !== 'object' || raw === null) return undefined;
   const val = raw as Record<string, unknown>;
 
-  const grouping = (EVENT_GROUPING_VALUES as readonly string[]).includes(String(val.grouping))
-    ? (String(val.grouping) as EventGrouping)
-    : 'time';
+  const grouping = parseEventGrouping(val.grouping);
 
   const autoRefresh = val.autoRefresh === true;
 
@@ -554,28 +705,12 @@ export function resolveCredential(event: UsageEvent, files: CredentialIndex): Cr
   return { kind: 'unknown' };
 }
 
-export const KNOWN_PROVIDER_ICONS: Record<string, string> = {
-  claude: 'Claude',
-  anthropic: 'Claude',
-  antigravity: 'Antigravity',
-  codex: 'Codex',
-  xai: 'XAI',
-  grok: 'XAI',
-  kimi: 'Kimi',
-  moonshot: 'Kimi',
-  openai: 'OpenAI',
-  gemini: 'Gemini',
-  google: 'Gemini',
-  vertex: 'Google',
-  qwen: 'Qwen',
-  deepseek: 'DeepSeek',
-  minimax: 'Minimax',
-  stepfun: 'Stepfun',
-  baichuan: 'Baichuan',
-  zhipu: 'Zhipu',
-  doubao: 'Doubao',
-  spark: 'Spark',
-};
+/**
+ * Re-exported so a consumer that already imports this module has one import for
+ * the request-list vocabulary. The table itself lives in `providerIconIds`, which
+ * is the single source `LobeIcon` reads too.
+ */
+export { PROVIDER_ICON_IDS as KNOWN_PROVIDER_ICONS };
 
 export interface EventCacheRateResult {
   rate: number;
@@ -784,8 +919,7 @@ export function resolveProviderInfo(
 
   const resolveIcon = (family: string, name?: string, url?: string): string => {
     if (fallbackIconResolver) return fallbackIconResolver(family, name, url);
-    const key = (family || '').toLowerCase().trim();
-    return KNOWN_PROVIDER_ICONS[key] || 'CloudServerOutlined';
+    return providerIconId(family) || NEUTRAL_PROVIDER_ICON_ID;
   };
 
   if (isOAuth) {

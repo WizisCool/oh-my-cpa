@@ -42,7 +42,6 @@ import {
 } from '../types/usageEvents';
 import {
   indexCredentialFiles,
-  resolveCredential,
   EVENT_AUTO_REFRESH_MS,
   EVENT_SEARCH_DEBOUNCE_MS,
   EVENT_SYNC_NOTICE_MS,
@@ -62,10 +61,18 @@ import {
   providerFacetLabel,
   createProviderNameResolver,
   mergeFacetOptions,
+  eventProviderIdentity,
+  eventCredentialIdentity,
+  eventUserAgentGroupKey,
+  formatEventSourceGroupTitle,
+  providersWithMultipleAuthSources,
+  EVENT_GROUPING_VALUES,
+  UNKNOWN_EVENT_GROUP,
   type EventFilterKey,
   type UsageEventsViewPreference,
   type EventGrouping,
 } from '../types/usageEventView';
+import { animateScrollToTop, type ScrollAnimationHandle } from '../utils/smoothScroll';
 import type { UsageEventsView } from '../types/usageEventFilters';
 import {
   REQUEST_COLUMNS,
@@ -197,6 +204,14 @@ const FOLLOW_TOP_PX = 4;
  * trackpad coasts to a stop near the top.
  */
 const HOLD_FROM_PX = 60;
+
+/**
+ * Upper bound on how long an animated return to the top may hold the collapse
+ * state. A smooth scroll to the top is a few hundred milliseconds; this is long
+ * enough not to cut a legitimate animation short and short enough that a reader
+ * who scrolls back down mid-flight regains full list behaviour promptly.
+ */
+const BACK_TO_TOP_GUARD_MS = 1_200;
 
 export const UsageEventsPage: React.FC = () => {
   const t = useT();
@@ -431,10 +446,31 @@ export const UsageEventsPage: React.FC = () => {
   const listRef = React.useRef<ListyRef>(null);
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   const [isScrolledDown, setIsScrolledDown] = React.useState(false);
+  /**
+   * The reader's scroll position, captured from the list's own scroll events.
+   *
+   * A gesture animates from here, and the value has to come from the element that
+   * actually scrolls: the virtualizer nests the rows in an inner holder, so the
+   * host node's own `scrollTop` is always zero and animating from it would move
+   * nothing.
+   */
   const lastScrollTopRef = React.useRef(0);
+  /** The in-flight return-to-top animation, so a second gesture replaces it. */
+  const scrollAnimationRef = React.useRef<ScrollAnimationHandle | null>(null);
   const isNavigatingPageRef = React.useRef(false);
   const justCollapsedFromTopRef = React.useRef(false);
   const pageNavigationTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * Set while an animated return to the top is in flight.
+   *
+   * A smooth scroll emits scroll events the whole way up, and the early ones
+   * still carry a large `scrollTop` - so without this guard the collapse rule
+   * below would re-collapse the header on the first frame of the very gesture
+   * that was expanding it. The guard is cleared on reaching the top, or by its
+   * own deadline if the reader interrupts the animation and it never arrives.
+   */
+  const isReturningToTopRef = React.useRef(false);
+  const returnToTopTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const schedulePageNavigationReset = React.useCallback(() => {
     if (pageNavigationTimerRef.current) clearTimeout(pageNavigationTimerRef.current);
@@ -449,9 +485,19 @@ export const UsageEventsPage: React.FC = () => {
   React.useEffect(
     () => () => {
       if (pageNavigationTimerRef.current) clearTimeout(pageNavigationTimerRef.current);
+      if (returnToTopTimerRef.current) clearTimeout(returnToTopTimerRef.current);
+      scrollAnimationRef.current?.cancel();
     },
     [],
   );
+
+  const endReturnToTop = React.useCallback(() => {
+    isReturningToTopRef.current = false;
+    if (returnToTopTimerRef.current) {
+      clearTimeout(returnToTopTimerRef.current);
+      returnToTopTimerRef.current = null;
+    }
+  }, []);
 
   const handleScroll = React.useCallback(
     (e: React.UIEvent<HTMLElement>) => {
@@ -466,8 +512,15 @@ export const UsageEventsPage: React.FC = () => {
       // screen so the reader keeps their place.
       if (scrollTop <= FOLLOW_TOP_PX) {
         if (heldItemsRef.current) setHeldItems(null);
+        if (isReturningToTopRef.current) endReturnToTop();
       } else if (scrollTop > HOLD_FROM_PX && !heldItemsRef.current && latestItemsRef.current.length > 0) {
         setHeldItems(latestItemsRef.current);
+      }
+
+      // An in-flight return to the top owns the collapse state until it lands;
+      // see isReturningToTopRef for why this cannot be left to the scroll event.
+      if (isReturningToTopRef.current) {
+        return;
       }
 
       // Programmatic scroll-to-top during page change must not cancel collapse
@@ -485,13 +538,12 @@ export const UsageEventsPage: React.FC = () => {
         }
         return;
       }
-
       // Scrolling down collapses header into full-screen mode
       if (scrollTop > 50) {
         if (!isCollapsed) setIsCollapsed(true);
       }
     },
-    [isCollapsed],
+    [endReturnToTop, isCollapsed],
   );
 
   // Wheel handling:
@@ -527,20 +579,38 @@ export const UsageEventsPage: React.FC = () => {
    * rows then makes it re-measure, and it re-applies the offset it was holding,
    * which leaves a residual scroll of roughly one row's top margin. The second
    * pass lands after that commit.
+   *
+   * This is a correction, so it is never animated: its callers (page navigation,
+   * collapsing into full-screen mode) need row one on screen before their next
+   * statement runs. Any gesture still in flight is stopped first, so a correction
+   * cannot be dragged back by an animation that outlived its click.
    */
   const scrollListToTop = React.useCallback(() => {
+    scrollAnimationRef.current?.cancel();
+    scrollAnimationRef.current = null;
     listRef.current?.scrollTo({ top: 0 });
     requestAnimationFrame(() => listRef.current?.scrollTo({ top: 0 }));
   }, []);
 
   const handleBackToTop = React.useCallback(() => {
-    scrollListToTop();
+    // The one scroll the reader directly asked for, so it is the one that moves.
+    // The animation is driven through Listy's own `scrollTo` rather than through
+    // CSS on the holder: the virtualizer keeps writing `scrollTop` itself, so a
+    // holder-level `scroll-behavior` fights it and, measured on the real list, the
+    // holder never moves at all.
+    isReturningToTopRef.current = true;
+    if (returnToTopTimerRef.current) clearTimeout(returnToTopTimerRef.current);
+    returnToTopTimerRef.current = setTimeout(endReturnToTop, BACK_TO_TOP_GUARD_MS);
+    // Resuming is explicit here: the scroll events that follow will also clear it,
+    // but the reader clicked "apply", so do not depend on event timing.
+    setHeldItems(null);
+    scrollAnimationRef.current?.cancel();
+    scrollAnimationRef.current = animateScrollToTop(lastScrollTopRef.current, (top) => {
+      listRef.current?.scrollTo({ top });
+    });
     setIsScrolledDown(false);
     setIsCollapsed(false);
-    // Resuming is explicit here: the scroll event that follows will also clear
-    // it, but the reader clicked "apply", so do not depend on event timing.
-    setHeldItems(null);
-  }, [scrollListToTop]);
+  }, [endReturnToTop]);
 
   const handleToggleExpand = React.useCallback(() => {
     setIsCollapsed((prev) => !prev);
@@ -1047,27 +1117,60 @@ export const UsageEventsPage: React.FC = () => {
    * layout choices stay. Resetting the window too would move the reader to a
    * different hour without saying so.
    */
+  /**
+   * One source grouping replaces what used to be two.
+   *
+   * "By provider" and "by auth source" were the same axis read at two zoom
+   * levels, so the merged mode buckets on provider plus credential and then
+   * decides per provider whether the credential half is worth printing: a line
+   * that served every request through one credential gains nothing from
+   * repeating it, while a line split across two must name them or both buckets
+   * read as the same source.
+   */
+  const unknownProviderLabel = t('events.unknown_provider');
+  const unknownCredentialLabel = t('events.unknown_credential');
+  const multipleAuthSources = React.useMemo(
+    () => providersWithMultipleAuthSources(events, credentials, providerName, unknownProviderLabel),
+    [credentials, events, providerName, unknownProviderLabel],
+  );
+
   const group =
     grouping === 'time'
       ? undefined
       : {
-          key: (event: UsageEvent) =>
-            grouping === 'provider'
-              ? event.provider || t('events.unknown_provider')
-              : JSON.stringify([
-                  event.provider,
-                  event.auth_index || event.source || event.resource_id || 'unknown',
-                ]),
-          title: (key: React.Key, items: UsageEvent[]) => (
-            <div className="request-group-title">
-              <strong>
-                {grouping === 'provider'
-                  ? String(key)
-                  : `${items[0].provider || t('events.unknown_provider')} / ${resolveCredential(items[0], credentials).name || t('events.unknown_credential')}`}
-              </strong>
-              <span>{t('events.record_count', { n: items.length })}</span>
-            </div>
-          ),
+          key: (event: UsageEvent) => {
+            if (grouping === 'ua') return eventUserAgentGroupKey(event);
+            const provider = eventProviderIdentity(event, providerName, unknownProviderLabel).key;
+            const credential = eventCredentialIdentity(event, credentials, unknownCredentialLabel).key;
+            return JSON.stringify([provider, credential]);
+          },
+          title: (_key: React.Key, items: UsageEvent[]) => {
+            if (grouping === 'ua') {
+              const label = eventUserAgentGroupKey(items[0]);
+              return (
+                <div className="request-group-title">
+                  <strong>
+                    {label === UNKNOWN_EVENT_GROUP ? t('events.unknown_ua') : items[0].user_agent?.trim()}
+                  </strong>
+                  <span>{t('events.record_count', { n: items.length })}</span>
+                </div>
+              );
+            }
+            const provider = eventProviderIdentity(items[0], providerName, unknownProviderLabel);
+            const credential = eventCredentialIdentity(items[0], credentials, unknownCredentialLabel);
+            return (
+              <div className="request-group-title">
+                <strong>
+                  {formatEventSourceGroupTitle(
+                    provider.label,
+                    credential.label,
+                    multipleAuthSources.has(provider.key),
+                  )}
+                </strong>
+                <span>{t('events.record_count', { n: items.length })}</span>
+              </div>
+            );
+          },
         };
   const ingestTone =
     !status || ingest.isError
@@ -1304,7 +1407,7 @@ export const UsageEventsPage: React.FC = () => {
                   setGrouping(next);
                   persistView(params, { grouping: next });
                 }}
-                options={['time', 'provider', 'credential'].map((value) => ({
+                options={EVENT_GROUPING_VALUES.map((value) => ({
                   value,
                   label: t(`events.group_${value}`),
                 }))}

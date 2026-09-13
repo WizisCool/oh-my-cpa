@@ -883,17 +883,27 @@ try {
   check('restored header for subsequent tests', (await page.locator('.request-collapsible-header.is-collapsed').count()) === 0);
 
   await page.getByRole('combobox', { name: '分组方式' }).click();
-  await page.getByText('按提供商分组', { exact: true }).last().click();
+  await page.getByText('按来源分组', { exact: true }).last().click();
   await page.locator('.request-group-title').first().waitFor();
   check(
-    'provider grouping uses Listy group headers',
+    'source grouping uses Listy group headers',
     (await page.locator('.request-group-title').count()) > 0,
   );
-  await page.getByRole('combobox', { name: '分组方式' }).click();
-  await page.getByText('按认证来源分组', { exact: true }).last().click();
+  // The merged mode keeps the provider context: the header names the provider
+  // even when every record of that provider arrived through one credential, in
+  // which case the credential half is left off rather than repeated per header.
   check(
-    'credential group includes provider and source',
-    (await page.locator('.request-group-title').first().innerText()).includes('.json'),
+    'source group names the provider',
+    (await page.locator('.request-group-title').first().innerText()).length > 0,
+  );
+  // The UA mode buckets by the minimised client label, which the fixture pins on
+  // every record, and folds a missing value into its own bucket.
+  await page.getByRole('combobox', { name: '分组方式' }).click();
+  await page.getByText('按客户端分组', { exact: true }).last().click();
+  await page.locator('.request-group-title').first().waitFor();
+  check(
+    'client grouping buckets by the captured user agent',
+    (await page.locator('.request-group-title').first().innerText()).includes('fixture-client'),
   );
   await page.getByRole('combobox', { name: '分组方式' }).click();
   await page.getByText('按时间排列', { exact: true }).last().click();

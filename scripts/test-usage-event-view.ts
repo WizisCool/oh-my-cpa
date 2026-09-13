@@ -33,6 +33,14 @@ import {
   createProviderNameResolver,
   providerFacetLabel,
   eventTokensPerSecond,
+  parseEventGrouping,
+  eventProviderIdentity,
+  eventCredentialIdentity,
+  eventUserAgentGroupKey,
+  formatEventSourceGroupTitle,
+  providersWithMultipleAuthSources,
+  EVENT_GROUPING_VALUES,
+  UNKNOWN_EVENT_GROUP,
 } from '../web/src/types/usageEventView.ts';
 import {
   EMPTY_FILTER_DRAFT,
@@ -440,7 +448,10 @@ assert.deepEqual(parsedFull, {
   result: 'failed',
   cost: 'unpriced',
   limit: 250,
-  grouping: 'provider',
+  // The document stores the retired `provider` grouping, so this assertion also
+  // pins the migration: a saved view keeps its shape instead of reverting to
+  // chronological order.
+  grouping: 'source',
   autoRefresh: true,
   filterValues: {
     model: ['gpt-4o', 'o3'],
@@ -488,7 +499,9 @@ assert.deepEqual(legacy?.filterValues, {
 });
 assert.equal(legacy?.preset, '7d');
 assert.equal(legacy?.result, 'failed');
-assert.equal(legacy?.grouping, 'credential');
+// The flat document carries the retired `credential` grouping, which migrates to
+// the merged source mode this console now offers.
+assert.equal(legacy?.grouping, 'source');
 
 // The new shape wins when both are present, so a current document is never
 // reinterpreted through the legacy branch.
@@ -561,7 +574,9 @@ assert.equal(parseUsageEventsView({ limit: 9999 })?.limit, 500);
 assert.equal(parseUsageEventsView({ limit: 50 })?.limit, 50);
 
 // Grouping sanitization
-assert.equal(parseUsageEventsView({ grouping: 'credential' })?.grouping, 'credential');
+assert.equal(parseUsageEventsView({ grouping: 'source' })?.grouping, 'source');
+assert.equal(parseUsageEventsView({ grouping: 'ua' })?.grouping, 'ua');
+assert.equal(parseUsageEventsView({ grouping: 'time' })?.grouping, 'time');
 assert.equal(parseUsageEventsView({ grouping: 'malformed' })?.grouping, 'time');
 
 // hasExplicitEventQuery detection
@@ -577,6 +592,162 @@ assert.equal(hasExplicitEventQuery(new URLSearchParams('cost=unpriced')), true);
 assert.equal(hasExplicitEventQuery(new URLSearchParams('q=needle')), true);
 
 console.log('PASS usage event view preference: parsing, validation, field whitelisting, URL precedence helpers');
+
+// ---- grouping: the merged source mode, the UA mode, and legacy migration ----
+
+// The retired modes both described the provider-and-credential pair the merged
+// mode now means, so a saved view keeps its shape rather than reverting to
+// chronological order - which a returning operator reads as "my preference was
+// forgotten".
+assert.equal(parseEventGrouping('provider'), 'source', 'a stored provider grouping migrates');
+assert.equal(parseEventGrouping('credential'), 'source', 'a stored credential grouping migrates');
+assert.equal(parseUsageEventsView({ grouping: 'provider' })?.grouping, 'source');
+assert.equal(parseUsageEventsView({ grouping: 'credential' })?.grouping, 'source');
+
+// The current modes round trip, and anything unreadable falls back to the order
+// that never hides a record.
+for (const value of EVENT_GROUPING_VALUES) {
+  assert.equal(parseEventGrouping(value), value);
+}
+for (const value of [undefined, null, '', 'nonsense', 'PROVIDER', 'Source']) {
+  assert.equal(parseEventGrouping(value), 'time', `${String(value)} must fall back to chronological`);
+}
+assert.equal(EVENT_GROUPING_VALUES.length, 3, 'the console offers exactly time, source and client');
+
+// `provider` and `credential` are gone as values, so no consumer can be handed
+// one by the parser any more.
+assert.equal((EVENT_GROUPING_VALUES as readonly string[]).includes('provider'), false);
+assert.equal((EVENT_GROUPING_VALUES as readonly string[]).includes('credential'), false);
+
+console.log('PASS event grouping: legacy provider/credential views migrate to source, unknown falls back to time');
+
+// ---- source grouping keeps provider context and splits the auth source ----
+
+const sourceEvents = [
+  {
+    id: 1,
+    provider: 'openai-compatible-relay-station',
+    auth_index: 'cred-a',
+    source: 'team.json',
+    user_agent: 'Claude-Code/1.2',
+  },
+  {
+    id: 2,
+    provider: 'openai-compatible-relay-station',
+    auth_index: 'cred-b',
+    source: 'personal.json',
+    user_agent: 'codex-cli/0.9',
+  },
+  { id: 3, provider: 'openai-compatible-relay-station', auth_index: 'cred-b', source: 'personal.json' },
+  { id: 4, provider: '', auth_index: '', source: '', resource_name: '' },
+] as unknown as UsageEvent[];
+
+const credentialFiles = indexCredentialFiles([
+  // The stored provider field is CPA's own key for the line, and the resolver
+  // refuses to attach a file whose provider disagrees with the record - so the
+  // fixture has to carry the real key or the test would be asserting the
+  // fallback rather than the lookup.
+  { name: 'team.json', auth_index: 'cred-a', provider: 'openai-compatible-relay-station' },
+  { name: 'personal.json', auth_index: 'cred-b', provider: 'openai-compatible-relay-station' },
+]);
+const resolveName = createProviderNameResolver([
+  {
+    id: 'openai-compat-0',
+    name: 'Relay Station',
+    upstream_name: 'relay-station',
+    family: 'openai-compatibility',
+  },
+]);
+
+// The provider half resolves to the operator's own name for the line, so the
+// header agrees with the providers page instead of printing CPA's raw key.
+const resolvedProvider = eventProviderIdentity(sourceEvents[0], resolveName, 'Provider not recorded');
+assert.equal(resolvedProvider.label, 'Relay Station');
+assert.equal(resolvedProvider.key, 'relay station', 'bucketing is case-insensitive');
+
+// A missing provider or credential is its own bucket rather than a dropped row.
+const unknownProvider = eventProviderIdentity(sourceEvents[3], resolveName, 'Provider not recorded');
+assert.equal(unknownProvider.key, UNKNOWN_EVENT_GROUP);
+assert.equal(unknownProvider.label, 'Provider not recorded');
+const unknownCredential = eventCredentialIdentity(sourceEvents[3], credentialFiles, 'Credential not recorded');
+assert.equal(unknownCredential.key, UNKNOWN_EVENT_GROUP);
+assert.equal(unknownCredential.label, 'Credential not recorded');
+
+// The credential half is the readable file name, not the stored auth index.
+assert.equal(
+  eventCredentialIdentity(sourceEvents[0], credentialFiles, 'Credential not recorded').label,
+  'team.json',
+);
+
+// Two credentials for one provider are named; a provider served by one
+// credential is not repeated on every header.
+const multiple = providersWithMultipleAuthSources(sourceEvents, credentialFiles, resolveName, 'Provider not recorded');
+assert.equal(multiple.has('relay station'), true, 'two credentials make this provider split');
+assert.equal(multiple.size, 1, 'the unknown provider is not split');
+assert.equal(
+  formatEventSourceGroupTitle('Relay Station', 'team.json', true),
+  'Relay Station / team.json',
+);
+assert.equal(
+  formatEventSourceGroupTitle('Relay Station', 'team.json', false),
+  'Relay Station',
+  'a single-credential provider reads as the provider alone',
+);
+
+// The single-credential case is what the merged mode buys over the old
+// credential grouping: the same header no longer prints a credential nobody
+// needs to distinguish.
+const single = providersWithMultipleAuthSources(
+  [sourceEvents[0]],
+  credentialFiles,
+  resolveName,
+  'Provider not recorded',
+);
+assert.equal(single.has('relay station'), false);
+
+// An ambiguous auth index must not be resolved to a guessed file name, but it
+// still names something real - the index - so it stays a distinct bucket rather
+// than collapsing into `unknown`. Folding it into `unknown` would merge two
+// different credentials of one provider into a single header, which is exactly
+// what the merged grouping must not do.
+const ambiguousFiles = indexCredentialFiles([
+  { name: 'team.json', auth_index: 'cred-a', provider: 'openai-compatible-relay-station' },
+  { name: 'other.json', auth_index: 'cred-a', provider: 'openai-compatible-relay-station' },
+]);
+const ambiguousIdentity = eventCredentialIdentity(sourceEvents[0], ambiguousFiles, 'Credential not recorded');
+assert.equal(ambiguousIdentity.label, 'cred-a', 'an ambiguous index is not given a guessed file name');
+assert.notEqual(ambiguousIdentity.key, UNKNOWN_EVENT_GROUP, 'a real index is not the unknown bucket');
+assert.notEqual(
+  ambiguousIdentity.key,
+  eventCredentialIdentity(sourceEvents[1], credentialFiles, 'Credential not recorded').key,
+  'two different credentials of one provider stay distinct',
+);
+
+// And a record with no credential at all lands in the unknown bucket.
+assert.equal(
+  eventCredentialIdentity(sourceEvents[3], credentialFiles, 'Credential not recorded').key,
+  UNKNOWN_EVENT_GROUP,
+);
+
+console.log(
+  'PASS source grouping: provider context kept, auth source split only when ambiguous, unknown handled',
+);
+
+// ---- UA grouping ----
+
+// The stored value is already the minimised product label, so it is used
+// verbatim; bucketing lower-cases so two spellings of one client are one bucket.
+assert.equal(eventUserAgentGroupKey(sourceEvents[0]), 'claude-code/1.2');
+assert.equal(eventUserAgentGroupKey({ user_agent: 'Codex-CLI/0.9' }), 'codex-cli/0.9');
+assert.equal(eventUserAgentGroupKey({ user_agent: '  spaced/1.0  ' }), 'spaced/1.0');
+
+// A record captured without a client is its own bucket, never dropped and never
+// folded into a named client.
+for (const absent of [undefined, null, '', '   ']) {
+  assert.equal(eventUserAgentGroupKey({ user_agent: absent }), UNKNOWN_EVENT_GROUP);
+}
+
+console.log('PASS UA grouping: minimised client label used verbatim, unknown is its own bucket');
 
 // ---- filter draft: the drawer's working copy ----
 const emptyView = { result: 'all' as const, params: {} };
