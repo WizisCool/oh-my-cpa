@@ -86,6 +86,52 @@ async function browserStorage(page) {
   });
 }
 
+/**
+ * Reads a brand drawing's resolved source and its rendered ink.
+ *
+ * The pixel count is the part that matters: the light and dark drawings are separate files
+ * with the same geometry, so a wrong or missing fill still loads, still reports a positive
+ * naturalWidth, and still differs by filename. Only counting the drawn ink shows whether the
+ * mark is actually visible against the surface it sits on.
+ */
+async function brandMarkState(page, selector = '.app-brand-logo') {
+  return page.evaluate(async (sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return { src: '', naturalWidth: 0, darkPixels: 0, lightPixels: 0, hasDarkInk: false, hasLightInk: false };
+    const image = new Image();
+    image.src = el.currentSrc || el.src;
+    await image.decode().catch(() => {});
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth || 1;
+    canvas.height = image.naturalHeight || 1;
+    const context = canvas.getContext('2d');
+    context.drawImage(image, 0, 0);
+    const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    let darkPixels = 0;
+    let lightPixels = 0;
+    for (let index = 0; index < data.length; index += 4) {
+      const [red, green, blue, alpha] = [data[index], data[index + 1], data[index + 2], data[index + 3]];
+      if (alpha < 128) continue;
+      const luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+      if (luminance < 90) darkPixels += 1;
+      else if (luminance > 200) lightPixels += 1;
+    }
+    return {
+      src: image.src,
+      naturalWidth: image.naturalWidth,
+      darkPixels,
+      lightPixels,
+      hasDarkInk: darkPixels > 50,
+      hasLightInk: lightPixels > 50,
+    };
+  }, selector);
+}
+
+function shorten(value, max = 64) {
+  if (typeof value !== 'string') return String(value);
+  return value.length <= max ? value : `${value.slice(0, max)}…`;
+}
+
 async function auditPage(page, responseBodies, route, selector, { pageSecrets = [] } = {}) {
   await page.goto(`${appURL}${route}`, { waitUntil: 'domcontentloaded' });
   await page.locator(selector).first().waitFor({ state: 'visible', timeout: 15000 });
@@ -1645,7 +1691,12 @@ try {
     .filter({ hasText: CLIENT_KEY_ALIAS })
     .first();
   await aliasOption.waitFor({ state: 'visible', timeout: 10000 });
-  check('the caller filter offers the assigned name', await aliasOption.isVisible());
+  // Asserted by acting on it rather than by a separate visibility probe: antd re-renders
+  // the virtualised dropdown as the search settles, so an isVisible() read taken right
+  // after waitFor can sample a detached node and report false for an option that is there.
+  // Clicking it is both the check and the next step.
+  const aliasOptionText = await aliasOption.innerText();
+  check('the caller filter offers the assigned name', aliasOptionText.includes(CLIENT_KEY_ALIAS), `option="${aliasOptionText}"`);
   await aliasOption.click();
   await page.keyboard.press('Escape');
   await page.locator('[data-testid="req-filter-apply"]').click();
@@ -1760,6 +1811,73 @@ try {
   );
   check('390px light view has no document overflow', mobileOverflow <= 1, `overflow=${mobileOverflow}`);
   check('light theme is active', await page.evaluate(() => document.documentElement.dataset.theme === 'light'));
+
+  // ---- the brand mark follows the console's own theme ----
+  // Checking the resolved source rather than the theme attribute: the two drawings are
+  // separate files, so a wrong pick is invisible to every other assertion in this file.
+  // It has to be the console's theme, not the OS scheme, because that setting can
+  // contradict the operating system.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`${appURL}/dashboard`, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => localStorage.setItem('omc-theme', 'light'));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await until(() => page.evaluate(() => document.documentElement.dataset.theme === 'light'), {
+    label: 'the light theme before reading the brand mark',
+  });
+  const lightMark = await brandMarkState(page);
+  check('the brand mark loads in the light theme', lightMark.naturalWidth > 0, `naturalWidth=${lightMark.naturalWidth}`);
+  check('the light theme uses the light wordmark', /omc-wordmark-light|data:image/.test(lightMark.src), `src=${shorten(lightMark.src)}`);
+  check('the light wordmark renders near-black ink', lightMark.hasDarkInk, `darkPixels=${lightMark.darkPixels} lightPixels=${lightMark.lightPixels}`);
+
+  await page.evaluate(() => localStorage.setItem('omc-theme', 'dark'));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await until(() => page.evaluate(() => document.documentElement.dataset.theme === 'dark'), {
+    label: 'the dark theme before reading the brand mark',
+  });
+  const darkMark = await brandMarkState(page);
+  check('the brand mark loads in the dark theme', darkMark.naturalWidth > 0, `naturalWidth=${darkMark.naturalWidth}`);
+  check('the dark theme uses the dark wordmark', /omc-wordmark-dark|data:image/.test(darkMark.src), `src=${shorten(darkMark.src)}`);
+  check('the dark wordmark renders near-white ink', darkMark.hasLightInk, `darkPixels=${darkMark.darkPixels} lightPixels=${darkMark.lightPixels}`);
+  check('the two themes do not resolve the same drawing', lightMark.src !== darkMark.src, `both=${shorten(lightMark.src)}`);
+
+  // The wordmark is left-aligned on the rail's own text axis, not centred, so it lines up
+  // with the navigation below it.
+  const markBox = await page.locator('.app-brand-logo').first().boundingBox();
+  const navBox = await page.locator('.app-menu .ant-menu-item').first().boundingBox();
+  check('the brand mark sits on the navigation column', markBox !== null && navBox !== null && Math.abs(markBox.x - navBox.x) <= 6, `mark.x=${markBox?.x} nav.x=${navBox?.x}`);
+  check('the brand mark does not fill the rail', markBox !== null && markBox.width < 200, `width=${markBox?.width}`);
+
+  // Collapsed, the rail cannot hold the wordmark, so it shows the O. That drawing has its
+  // own colour pair, which is what the earlier per-file check could not catch.
+  // The viewport was widened above, and `isMobile` is recomputed from a resize event, so the
+  // click has to wait for that reflow: before it lands the rail is still 0px wide and the
+  // toggle is not the control this step means to press.
+  await settleLayout(page);
+  const collapseToggle = page.getByRole('button', { name: /收起侧栏|Collapse sidebar/ });
+  await collapseToggle.waitFor({ state: 'visible', timeout: 10000 });
+  await collapseToggle.click();
+  await until(async () => (await page.locator('.app-brand-collapsed').count()) > 0, {
+    label: 'the collapsed rail to appear',
+  });
+  // The rail's width is animated, so the class appearing is the start of the transition,
+  // not its end: measuring then reads a 236px rail and reports a mark that is really
+  // centred as off-centre. Wait for the width itself to settle.
+  await measureStable(
+    () => page.evaluate(() => document.querySelector('.app-sider')?.getBoundingClientRect().width ?? 0),
+    { page, label: 'the collapsed rail width' },
+  );
+  const collapsedMark = await brandMarkState(page, '.app-brand-collapsed img');
+  check('the collapsed rail shows a loadable mark', collapsedMark.naturalWidth > 0, `naturalWidth=${collapsedMark.naturalWidth}`);
+  check('the collapsed mark renders visible ink on the rail', collapsedMark.hasLightInk, `lightPixels=${collapsedMark.lightPixels} darkPixels=${collapsedMark.darkPixels}`);
+  const collapsedBox = await page.locator('.app-brand-collapsed img').boundingBox();
+  const railBox = await page.locator('.app-sider').boundingBox();
+  check(
+    'the collapsed mark is centred in the rail',
+    collapsedBox !== null && railBox !== null && Math.abs((collapsedBox.x + collapsedBox.width / 2) - (railBox.x + railBox.width / 2)) <= 2,
+    `markCentre=${collapsedBox ? collapsedBox.x + collapsedBox.width / 2 : null} railCentre=${railBox ? railBox.x + railBox.width / 2 : null}`,
+  );
+  await page.locator('.app-brand-collapsed').click();
+  await page.evaluate(() => localStorage.setItem('omc-theme', 'dark'));
 
   // OAuth end-to-end against the deterministic fake: start a flow, confirm
   // the card polls `waiting`, submit a callback whose session already
