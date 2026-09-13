@@ -1593,8 +1593,11 @@ try {
   await page.locator('.quota-page').first().waitFor({ state: 'visible', timeout: 15000 });
 
   // Verify card grid renders one card per credential
-  const cardCount = await page.locator('article[class*="quota-card"]').count();
-  check('quota page renders credential cards', cardCount > 0, `quotaCards=${cardCount}`);
+  await checkEventually(
+    'quota page renders credential cards',
+    async () => (await page.locator('article[class*="quota-card"]').count()) > 0,
+    { detail: async () => `quotaCards=${await page.locator('article[class*="quota-card"]').count()}` },
+  );
 
   // Verify quota tab brand icons are not OpenAI
   const quotaAntigravityIcon = await lobeIconSignature(page.locator('.quota-page .ant-tabs-tab').filter({ hasText: /Antigravity/i }));
