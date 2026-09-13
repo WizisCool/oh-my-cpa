@@ -279,7 +279,7 @@ The geometric form language is compact, rectangular, and tightly controlled:
 - **Active State**: 2px chalk white inset tick (`box-shadow: inset 2px 0 0 #fdfcfc`), bold white text (`#fdfcfc`), transparent background.
 
 ### Status Pips & Badges
-- **Status Pip**: 7×7px square, 2px radius, paired with explicit status text (e.g. `[●] 运行中`). Green = healthy, Amber = degraded/warning, Red = error, Gray = offline. A pip reports whether a window needs attention, never how far a number sits from its ideal: success rate stays gray for ≤ 5% failures, amber above that, red above 20%, and a window under 20 requests with under 3 failures carries no verdict at all.
+- **Status Pip**: 7×7px square, 2px radius, paired with explicit status text (e.g. `[●] 运行中`). Green = healthy, Amber = degraded/warning, Red = error, Gray = offline. A pip reports whether a window needs attention, never how far a number sits from its ideal: success rate stays gray for ≤ 5% failures, amber above that, red above 20%, and a window under 20 requests with under 3 failures carries no verdict at all. Only a verdict gets a pip: the request console's 成功 / 失败 filter segments carry one each, while 全部 carries none.
 - **Latency**: never tinted by an absolute threshold. Agent requests legitimately run for minutes, so a time-based amber rule would flag healthy traffic; the detail drawer compares TTFT against total duration instead.
 - **Cache-Rate Badge**: Pill-shaped badge featuring continuous OKLCH gradient tint fill with ≥ 4.5:1 text contrast. Displays values up to `99.9%` with one decimal place. The scale is never red: a cache miss is the shape of a novel prompt, not a failed execution.
 

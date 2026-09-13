@@ -381,10 +381,7 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
                 {
                   value: 'all',
                   label: (
-                    <span className="req-result-option">
-                      <ResultMarker kind="all" />
-                      {t('events.filter_all')}
-                    </span>
+                    <span className="req-result-option">{t('events.filter_all')}</span>
                   ),
                 },
                 {

@@ -56,26 +56,22 @@
 .request-filters > .req-result-segmented {
   flex-shrink: 0;
 }
-/* The compact status marker used by the result filter controls. It shares the
+/* The compact status marker used by the verdict filter controls. It shares the
    Result column's square-bullet vocabulary and its success/danger tokens, so an
    outcome is legible the same way in the filter and in the rows it filters.
-   'all' shows both bullets: the filter is displaying both outcomes, not a third. */
+   Only the verdicts carry one; the all-requests segment is labelled in words. */
 .req-result-marker {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
-}
-.req-result-marker i {
+  display: inline-block;
   width: 6px;
   height: 6px;
   border-radius: 2px;
   background: currentColor;
+  flex-shrink: 0;
 }
-.req-result-marker i.is-success {
+.req-result-marker.is-success {
   color: var(--success);
 }
-.req-result-marker i.is-failed {
+.req-result-marker.is-failed {
   color: var(--danger);
 }
 .req-result-option {
