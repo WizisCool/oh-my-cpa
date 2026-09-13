@@ -585,7 +585,19 @@ export const ConfigPage: React.FC = () => {
   };
 
   // Render a cohesive Setting Group Panel
-  const renderGroupPanel = (grp: ConfigGroupDefinition, visibleFieldIds?: string[]) => {
+  //
+  // `context` says which heading the caller is already showing above this group,
+  // because the Payload panel is the one variant whose group head restates its
+  // section header. Under the section header the group head is therefore dropped:
+  // the reader was shown the section's own title and description and then the
+  // same panel named a second time underneath it. Under search results the header
+  // names the search rather than the section, so the group head is the only
+  // heading the panel has and must stay.
+  const renderGroupPanel = (
+    grp: ConfigGroupDefinition,
+    visibleFieldIds?: string[],
+    context: 'section' | 'search' = 'section',
+  ) => {
     const rawFields = grp.fieldIds
       .map((fid) => ALL_CONFIG_FIELDS.find((f) => f.id === fid))
       .filter((f): f is ConfigFieldDefinition => Boolean(f));
@@ -611,12 +623,14 @@ export const ConfigPage: React.FC = () => {
     if (grp.variant === 'payload-builder') {
       return (
         <div key={grp.id} className="settings-group payload-builder-group">
-          <div className="settings-group-head">
-            <div>
-              <h3 className="settings-group-title">{t(grp.labelKey)}</h3>
-              {grp.descKey && <p className="settings-group-desc">{t(grp.descKey)}</p>}
+          {context === 'search' && (
+            <div className="settings-group-head">
+              <div>
+                <h3 className="settings-group-title">{t(grp.labelKey)}</h3>
+                {grp.descKey && <p className="settings-group-desc">{t(grp.descKey)}</p>}
+              </div>
             </div>
-          </div>
+          )}
           <div className="settings-group-body">
             <PayloadRulesEditor
               doc={docRef.current}
@@ -927,7 +941,7 @@ export const ConfigPage: React.FC = () => {
             {searchQuery ? (
               /* Search Results: Grouped by semantic Setting Group Panels */
               <div className="settings-stack">
-                {searchMatchedGroups.map((sg) => renderGroupPanel(sg.group, sg.matchedFieldIds))}
+                {searchMatchedGroups.map((sg) => renderGroupPanel(sg.group, sg.matchedFieldIds, 'search'))}
               </div>
             ) : (
               /* Standard Section Group Panels */

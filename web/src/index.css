@@ -1466,6 +1466,11 @@ a { color: inherit; }
 }
 
 /* ── Payload rules builder (rule builder) ───────────────────── */
+/* The section header above the panel already names it and carries the
+   description, so the group shell contributes no head of its own: it is a bare
+   container for the accordion, not a card. The `.settings-group-head` rule below
+   only applies when the panel is rendered under search results, where the header
+   names the search rather than the section. */
 .payload-builder-group {
   padding: 0 !important;
   background: transparent !important;
