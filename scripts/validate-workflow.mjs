@@ -12,6 +12,18 @@ if (document.errors.length > 0) {
   process.exitCode = 1;
 } else {
   const value = document.toJS();
-  if (!value.jobs?.verify?.steps?.length) throw new Error('CI workflow has no verify steps');
-  console.log(`CI workflow parsed with ${value.jobs.verify.steps.length} verify steps.`);
+  for (const jobName of ['static', 'browser']) {
+    if (!value.jobs?.[jobName]?.steps?.length) throw new Error(`CI workflow has no ${jobName} steps`);
+  }
+  if (value.concurrency?.['cancel-in-progress'] !== true) {
+    throw new Error('CI workflow does not cancel superseded runs');
+  }
+  const browserSteps = value.jobs.browser.steps;
+  if (!browserSteps.some((step) => step.if === "github.event_name == 'pull_request'" && step.run === 'pnpm verify:browser:smoke')) {
+    throw new Error('CI workflow has no pull-request browser smoke step');
+  }
+  if (!browserSteps.some((step) => step.if === "github.event_name != 'pull_request'" && step.run === 'pnpm verify:browser')) {
+    throw new Error('CI workflow has no full browser acceptance step');
+  }
+  console.log(`CI workflow parsed with ${value.jobs.static.steps.length} static and ${browserSteps.length} browser steps.`);
 }

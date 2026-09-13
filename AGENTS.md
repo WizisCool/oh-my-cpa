@@ -55,12 +55,13 @@ CPA 负责协议适配、凭据执行与代理请求；Oh My CPA 在其上提供
 
 任何改动在被声明完成前必须同时满足：
 
-- `pnpm verify:static` 通过（`go test ./...`、`go vet ./...`、`pnpm type-check`、i18n 检查、文档引用检查、CSS Module 引用检查、前端逻辑单测、`pnpm lint:antd`）；
-- 涉及前端构建产物或依赖时额外跑 `pnpm build`；涉及安全边界时跑 `pnpm verify:secrets:worktree`；
+- 开发循环优先跑 `pnpm test:fast`，它只执行与当前工作树改动相关的检查；
+- 一个逻辑功能完成后跑 `pnpm verify`（严格工具链 + 全量静态门禁 + worktree 密钥扫描）；
+- 声明任务完成前跑 `pnpm verify:full`（额外包含历史密钥扫描、生产构建、bundle 预算与完整确定性浏览器验收）；
 - 本次改动触发的全部上下文文档已按 §2 更新；
 - 没有残留的过时注释、死引用或未本地化的用户可见文案。
 
-CI（`.github/workflows/ci.yml`）会跑完整门禁：`verify:toolchain:strict` → `verify:static` → 密钥扫描 → `verify:e2e`，并断言工作区干净。
+CI（`.github/workflows/ci.yml`）并行运行静态门禁与浏览器门禁：PR 使用 `verify:browser:smoke` 快速反馈，`master` push 使用完整 `verify:browser`，两者都保留严格工具链、密钥扫描和干净工作区断言；同一 ref 的新运行会取消尚未完成的旧运行。
 
 ---
 
@@ -122,9 +123,13 @@ func (s *Service) FetchConfig(ctx context.Context) (Config, error) {
 | `pnpm dev` | Air + Vite 开发入口（`http://127.0.0.1:5173/omc/`） |
 | `pnpm dev:api` / `pnpm dev:web` | 只跑 Go/Air 或只跑 Vite |
 | `pnpm cpa:start` | 从 `cpa/` 启动本地 CLIProxyAPI |
-| `pnpm build` | 构建前端并同步到 `internal/web/dist` |
-| `pnpm verify:static` | 静态门禁（Go 测试 + vet + 前端类型/单测/i18n/lint） |
-| `pnpm verify:e2e` | 构建后跑确定性浏览器验收（假 CPA 夹具） |
+| `pnpm build` | 构建前端并同步到 `internal/web/dist`；类型检查已由独立门禁负责 |
+| `pnpm test:fast` | 按工作树改动执行最小相关检查 |
+| `pnpm verify` | 严格工具链 + 全量静态门禁 + worktree 密钥扫描 |
+| `pnpm verify:full` | 最终完整门禁：历史密钥扫描 + 生产构建 + 浏览器验收 |
+| `pnpm verify:browser` | 对已构建的 SPA 跑确定性浏览器验收（假 CPA 夹具） |
+| `pnpm verify:browser:smoke` | 只跑登录、仪表盘和请求列表核心链路的浏览器 smoke |
+| `pnpm verify:e2e` | 先构建，再跑完整确定性浏览器验收 |
 | `pnpm verify:refresh` | 只验证请求记录页“刷新按钮真实拉取”的浏览器探针（含顺序断言） |
 | `pnpm verify:secrets` | 工作区密钥扫描 |
 | `pnpm check-i18n` | 找出代码里使用了但字典中缺失的 key |
