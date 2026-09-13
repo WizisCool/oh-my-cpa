@@ -170,11 +170,18 @@ jobs:
       # the built binary, the fake CPA and a seeded SQLite - so neither can observe
       # the other.
       #
-      # Measured under a 2-CPU constraint, which is what a runner provides: the
-      # concurrent form is about 12 seconds shorter than the sequential one, with no
-      # failure in any run. This uses the same background-and-collect pattern as the
-      # preparation step above, so a failure in either phase still fails the step
-      # with its own output captured to its own file.
+      # Concurrency was rejected once, because the acceptance suite failed under the
+      # contention and the first instinct was to serialise. The failures turned out to
+      # be the suite's long-standing CPU-sensitive reads - a footer read racing a
+      # refetch, and a poll wait with only three intervals of headroom - and they
+      # reproduce on the unmodified baseline commit too. Fixing those was the real
+      # work; eight consecutive trials on a 2-CPU constraint now pass concurrently,
+      # where the baseline failed two in three.
+      #
+      # Both phases are backgrounded and each status collected with its own `wait`, so
+      # a failure in either still fails the step. Running the second in the foreground
+      # would swallow the first's exit code and report a green build for a failed run.
+      # The workflow validator asserts both statuses are collected.
       - name: Run browser acceptance and probes
         if: github.event_name != 'pull_request'
         env:

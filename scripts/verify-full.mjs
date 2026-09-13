@@ -30,11 +30,14 @@ if (!await runChecks([
 // drives Vite and mocked routes; the acceptance run drives the built binary, the
 // fake CPA and a seeded SQLite), so neither can observe the other.
 //
-// Measured under a 2-CPU constraint, which is what a GitHub runner provides:
-// sequential 81.4s / 81.6s, concurrent 69.5s / 71.7s - about 12 seconds, with no
-// failure in any run. A 4-core machine shows the same direction (74s sequential,
-// 60s concurrent). The contention is real but smaller than the tail of the longer
-// phase, which is why the parallel form wins even on the smaller machine.
+// Concurrency was rejected once because the acceptance suite failed under the
+// contention. The failures were the suite's own CPU-sensitive reads - a footer read
+// racing a refetch, and a poll wait with three intervals of headroom - and they
+// reproduce on the unmodified baseline. Those are fixed; eight consecutive trials on
+// a 2-CPU constraint now pass concurrently, where the baseline failed two in three.
+//
+// Measured under that same 2-CPU constraint: sequential 81.4s / 81.6s, concurrent
+// 69.5s / 71.7s - about 12 seconds, and the gap is larger on more cores.
 if (!await runChecks([
   { label: 'browser', command: 'pnpm', args: ['verify:browser'] },
   { label: 'probes', command: 'pnpm', args: ['verify:probes'] },

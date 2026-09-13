@@ -49,6 +49,12 @@ if (document.errors.length > 0) {
       throw new Error(`the master browser step does not collect both phase statuses (missing ${marker})`);
     }
   }
+  // The probes reach master for the first time here: they used to sit outside every
+  // gate, so a regression in overlay stacking or column geometry was only caught if
+  // someone remembered the command.
+  if (!masterBrowser.run.includes('pnpm verify:probes')) {
+    throw new Error('CI workflow does not run the focused browser probes on master');
+  }
   const browserPreparation = browserSteps.find((step) => step.name === 'Prepare Chromium and build embedded SPA');
   if (!browserPreparation?.run?.includes('playwright-core install') || !browserPreparation.run.includes('pnpm build')) {
     throw new Error('CI workflow does not prepare Chromium and build the SPA in one step');
@@ -77,12 +83,6 @@ if (document.errors.length > 0) {
   }
   if (masterBrowser.env?.OMCPA_BROWSER_BINARY !== 'tmp/oh-my-cpa-browser') {
     throw new Error('the master browser step does not reuse the prepared browser binary');
-  }
-  // The probes reach master for the first time here: they used to sit outside every
-  // gate, so a regression in overlay stacking or column geometry was only caught if
-  // someone remembered the command.
-  if (!masterBrowser.run.includes('pnpm verify:probes')) {
-    throw new Error('CI workflow does not run the focused browser probes on master');
   }
   console.log(`CI workflow parsed with ${value.jobs.static.steps.length} static and ${browserSteps.length} browser steps.`);
 }
