@@ -3,6 +3,11 @@ import { parse as parseYaml } from 'yaml';
 
 export const FAKE_CPA_MANAGEMENT_KEY = 'omc-e2e-management-key';
 export const FAKE_PROVIDER_SECRET = 'omc-e2e-provider-secret';
+// FAKE_SECOND_PROVIDER_SECRET belongs to the second codex entry. Providers are
+// addressed positionally and a toggle writes the family's whole list, so a
+// fixture with one entry cannot express a concurrent toggle of two rows - which
+// is the case where one write can discard another.
+export const FAKE_SECOND_PROVIDER_SECRET = 'omc-e2e-provider-secret-second';
 export const FAKE_ACCOUNT_SECRET = 'omc-e2e-account-secret';
 export const FAKE_CLIENT_SECRET = 'omc-e2e-client-secret';
 
@@ -58,6 +63,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
   // drift apart.
   const initialCodexProviders = [
     { 'api-key': FAKE_PROVIDER_SECRET, 'auth-index': 'codex-e2e', 'base-url': 'https://provider.example.test', models: [{ name: 'gpt-e2e', alias: 'gpt-e2e' }] },
+    { 'api-key': FAKE_SECOND_PROVIDER_SECRET, 'auth-index': 'codex-e2e-second', 'base-url': 'https://provider-second.example.test', models: [{ name: 'gpt-e2e-second', alias: 'gpt-e2e-second' }] },
   ];
   let codexProviders = JSON.parse(JSON.stringify(initialCodexProviders));
 

@@ -14,6 +14,7 @@ import {
   FAKE_CLIENT_SECRET,
   FAKE_CPA_MANAGEMENT_KEY,
   FAKE_PROVIDER_SECRET,
+  FAKE_SECOND_PROVIDER_SECRET,
 } from './fake-cpa.mjs';
 // The cadences every wait below is expressed against, imported from the modules
 // the app itself uses rather than copied. A local copy of the debounce is how a
@@ -29,6 +30,16 @@ import {
 } from './acceptance/harness.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+/**
+ * providerSecrets is every provider key material the fixture configures.
+ *
+ * It is one list rather than a literal repeated at each audit because the fixture
+ * now configures two providers: an audit that names one secret verifies that one,
+ * so a new fixture provider would silently be excluded from the leak checks that
+ * are supposed to cover exactly this material.
+ */
+const providerSecrets = [FAKE_PROVIDER_SECRET, FAKE_SECOND_PROVIDER_SECRET];
 const smokeOnly = process.argv.includes('--smoke');
 
 class SmokeComplete extends Error {}
@@ -311,7 +322,7 @@ try {
   await page.locator('.app-shell').waitFor({ state: 'visible', timeout: 15000 });
   check('valid sign-in creates an administrator session', await page.locator('.app-shell').isVisible());
 
-  await auditPage(page, responseBodies, '/dashboard', '.dashboard-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
+  await auditPage(page, responseBodies, '/dashboard', '.dashboard-page', { pageSecrets: providerSecrets });
 
   // Success-rate verdict: the seeded window carries 1 failure in 50 (2%), which
   // is routine upstream noise. The pip must not paint it as a warning — the
@@ -324,7 +335,7 @@ try {
     /neutral/.test(verdictClasses) && !/warn|danger/.test(verdictClasses),
     `class="${verdictClasses}"`,
   );
-  await auditPage(page, responseBodies, '/usage/events', '.usage-events-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
+  await auditPage(page, responseBodies, '/usage/events', '.usage-events-page', { pageSecrets: providerSecrets });
 
   // ---- request list: verdict colours, ordering, and the live tail ----
   // These four behaviours were each reported as a bug, so each gets a browser
@@ -1151,7 +1162,7 @@ try {
   }
   await page.setViewportSize({ width: 1440, height: 900 });
   responseBodies.length = 0;
-  await auditPage(page, responseBodies, '/pricing', '[data-testid="pricing-page"]', { pageSecrets: [FAKE_PROVIDER_SECRET] });
+  await auditPage(page, responseBodies, '/pricing', '[data-testid="pricing-page"]', { pageSecrets: providerSecrets });
 
   // The pricing page must open fast: a full table render is the budget, not a
   // spinner wait. This is the regression guard for the old 5s page freeze.
@@ -1202,8 +1213,9 @@ try {
     `links=${await page.locator('.providers-page tbody a').count()}`,
   );
 
-  // The fake CPA's only configured provider is the codex entry, which the
-  // console addresses as `codex-0`.
+  // The codex family's first entry is addressed by the console as `codex-0`; the
+  // fixture also configures a second codex entry, so this is a position within a
+  // family rather than the deployment's whole provider list.
   await setProviderWebsite({ 'codex-0': 'https://provider.example.test' });
   await openProvidersPage();
   const websiteLink = page.locator('.providers-page tbody a').first();
@@ -1251,6 +1263,53 @@ try {
     return row === undefined ? undefined : !row.disabled;
   };
 
+  /**
+   * toggleStatesFromApi reads every codex provider's enabled state keyed by its
+   * provider id.
+   *
+   * Keyed rather than positional on purpose: a provider is addressed by position
+   * and that is exactly what shifts when one is deleted, so comparing two
+   * position-ordered lists would let a misalignment look like agreement.
+   */
+  const toggleStatesFromApi = async () => {
+    const body = await page.evaluate(() => fetch('/omc/api/v1/management/providers').then((r) => r.json()));
+    const states = {};
+    for (const provider of body.providers ?? []) {
+      if (provider.family === 'codex') states[provider.id] = !provider.disabled;
+    }
+    return states;
+  };
+
+  /**
+   * renderedToggleStates reads the switches keyed by the same provider ids, taken
+   * from each row's `data-row-key` (the table's `rowKey` is the provider id). Every
+   * switch is read through its own row, so a row that reports a state its provider
+   * does not hold cannot be hidden by another row's agreement.
+   */
+  const renderedToggleStates = async () =>
+    page.evaluate(() => {
+      const states = {};
+      for (const row of Array.from(document.querySelectorAll('.providers-page tbody tr'))) {
+        const id = row.getAttribute('data-row-key');
+        const node = row.querySelector('.ant-switch');
+        if (id && node) states[id] = node.getAttribute('aria-checked') === 'true';
+      }
+      return states;
+    });
+
+  /** The provider ids every toggle check in this block is about. */
+  const expectEveryProvider = async (states, expected, label) => {
+    const ids = Object.keys(expected);
+    const mismatched = ids.filter((id) => states[id] !== expected[id]);
+    check(
+      label,
+      ids.length > 0 && mismatched.length === 0,
+      mismatched.length === 0
+        ? `states=${JSON.stringify(states)}`
+        : `mismatched=${JSON.stringify(mismatched.map((id) => ({ id, expected: expected[id], actual: states[id] })))}`,
+    );
+  };
+
   const toggleWrites = [];
   const recordToggleWrite = (request) => {
     if (request.method() !== 'PATCH' || !request.url().includes('/management/providers/status')) return;
@@ -1269,8 +1328,8 @@ try {
     `enabled=${initialEnabled}`,
   );
   check(
-    'the single fixture provider renders exactly one enable switch',
-    (await page.locator('.providers-page tbody .ant-switch').count()) === 1,
+    'every provider in the fixture renders exactly one enable switch',
+    (await page.locator('.providers-page tbody .ant-switch').count()) === 2,
     `switches=${await page.locator('.providers-page tbody .ant-switch').count()}`,
   );
 
@@ -1290,6 +1349,15 @@ try {
       toggleWrites[0].index === 0 &&
       toggleWrites[0].disabled === true,
     JSON.stringify(toggleWrites),
+  );
+  // A toggle is addressed by position, so the row's own identity travels with the
+  // request. It is what stops a retry from landing on a different provider once a
+  // deletion has shifted the positions, and a client that stopped sending it would
+  // silently lose that protection.
+  check(
+    'the toggle carries the identity of the provider it addresses',
+    toggleWrites[0].expected_auth_index === 'codex-e2e',
+    JSON.stringify(toggleWrites[0]),
   );
   await checkEventually(
     'the gateway itself holds the value the click asked for',
@@ -1406,6 +1474,109 @@ try {
     `switch=${switchEnabled} row="${statusCellText.replace(/\s+/g, ' ').trim()}"`,
   );
 
+  // ---- Two different providers toggled at once ----
+  //
+  // The defect this exercises: CPA has no per-entry write, so a toggle reads the
+  // family's whole list and PUTs it back. Two toggles on *different* rows that
+  // both read before either wrote submit the same baseline, and the later PUT
+  // discards the earlier one - one switch is silently reverted while both
+  // requests report success. The per-provider queue cannot help, because it runs
+  // different providers concurrently by design.
+  //
+  // What this check is and is not allowed to claim. The browser cannot force the
+  // interleaving: it depends on the two requests overlapping at CPA, and a run
+  // where the first write lands before the second reads passes regardless of the
+  // gate - verified by removing the gate, which still produced a green run here.
+  // So this asserts the outcome the operator cares about (both toggles survive and
+  // both rows agree with the gateway) and does not pretend to be the regression
+  // for the lost update. That regression is
+  // `TestConcurrentProviderTogglesDoNotLoseAWrite` in `internal/api`, which
+  // controls the ordering at the fake gateway and fails when the gate is removed.
+  const switchCount = await page.locator('.providers-page tbody .ant-switch').count();
+  check(
+    'the fixture provides two toggles to race',
+    switchCount === 2,
+    `switches=${switchCount}`,
+  );
+
+  // Each switch is clicked to the opposite of the state its *own row* currently
+  // shows, and the intent is recorded per provider id, so the assertion below
+  // compares like with like even if the rows are ever reordered or a provider is
+  // added.
+  const beforeConcurrent = await toggleStatesFromApi();
+  const concurrentIntents = await page.evaluate(() => {
+    const intents = {};
+    for (const row of Array.from(document.querySelectorAll('.providers-page tbody tr'))) {
+      const id = row.getAttribute('data-row-key');
+      const node = row.querySelector('.ant-switch');
+      if (!id || !node) continue;
+      intents[id] = node.getAttribute('aria-checked') !== 'true';
+    }
+    // Dispatched only after every intent is recorded, so the whole burst is one
+    // synchronous pass and no round trip can resolve in between.
+    for (const row of Array.from(document.querySelectorAll('.providers-page tbody tr'))) {
+      row.querySelector('.ant-switch')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    }
+    return intents;
+  });
+
+  check(
+    'the concurrent race has two providers to observe',
+    Object.keys(concurrentIntents).length === 2,
+    `intents=${JSON.stringify(concurrentIntents)}`,
+  );
+
+  // The result is asserted against a fresh read of the gateway rather than the
+  // rendered switches, so a row that agrees with itself but not with CPA fails.
+  await checkEventually(
+    'an overlapping toggle of two providers leaves both changes on the gateway',
+    async () => {
+      const states = await toggleStatesFromApi();
+      return Object.entries(concurrentIntents).every(([id, wanted]) => states[id] === wanted);
+    },
+    {
+      timeoutMs: 20000,
+      detail: async () =>
+        `intents=${JSON.stringify(concurrentIntents)} stored=${JSON.stringify(await toggleStatesFromApi())} before=${JSON.stringify(beforeConcurrent)}`,
+    },
+  );
+
+  // A reverted write is exactly "the gateway kept one of the two". Stated
+  // separately from the check above so the failure names the defect rather than
+  // reporting a generic mismatch.
+  const afterConcurrent = await toggleStatesFromApi();
+  await expectEveryProvider(
+    afterConcurrent,
+    concurrentIntents,
+    'neither of the two concurrent toggles was reverted',
+  );
+
+  // And the rendered switches must agree with what the gateway holds, so a row
+  // cannot end up displaying the value its own request asked for while the
+  // gateway holds the other.
+  const renderedStates = await renderedToggleStates();
+  await expectEveryProvider(
+    renderedStates,
+    afterConcurrent,
+    'both rendered switches agree with the gateway after the race',
+  );
+
+  // Restore the fixture for the rest of the run, and confirm it took effect rather
+  // than assuming it: everything after this point expects both rows enabled.
+  await page.evaluate(() => {
+    for (const row of Array.from(document.querySelectorAll('.providers-page tbody tr'))) {
+      const node = row.querySelector('.ant-switch');
+      if (node && node.getAttribute('aria-checked') !== 'true') {
+        node.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      }
+    }
+  });
+  await checkEventually(
+    'the concurrent race leaves both fixture providers enabled',
+    async () => Object.values(await toggleStatesFromApi()).every(Boolean),
+    { timeoutMs: 20000, detail: async () => `stored=${JSON.stringify(await toggleStatesFromApi())}` },
+  );
+
   page.off('request', recordToggleWrite);
 
   // The suite reuses this app and fake CPA, so the fixture is put back where the
@@ -1426,7 +1597,7 @@ try {
   // the convention in this file puts it.
   responseBodies.length = 0;
 
-  await auditPage(page, responseBodies, '/auth-files', '.auth-files-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
+  await auditPage(page, responseBodies, '/auth-files', '.auth-files-page', { pageSecrets: providerSecrets });
 
   // Auth Files Page Flow & Behavioral Checks
   await page.goto(`${appURL}/auth-files`, { waitUntil: 'domcontentloaded' });
@@ -1614,8 +1785,8 @@ try {
   }
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  await auditPage(page, responseBodies, '/oauth', '.oauth-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
-  await auditPage(page, responseBodies, '/quota', '.quota-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
+  await auditPage(page, responseBodies, '/oauth', '.oauth-page', { pageSecrets: providerSecrets });
+  await auditPage(page, responseBodies, '/quota', '.quota-page', { pageSecrets: providerSecrets });
 
   // Quota Cards Flow & Screenshots (cards-only page)
   await page.goto(`${appURL}/quota`, { waitUntil: 'domcontentloaded' });
@@ -1667,7 +1838,7 @@ try {
   // Restore viewport and dark theme
   await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
   await page.setViewportSize({ width: 1440, height: 900 });
-  await auditPage(page, responseBodies, '/logs', '.logs-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
+  await auditPage(page, responseBodies, '/logs', '.logs-page', { pageSecrets: providerSecrets });
   await auditPage(page, responseBodies, '/config', '.config-page');
 
   // ---- key management: the list is rendered from the config document ----
@@ -1873,10 +2044,10 @@ try {
       await page.locator('.config-workbench').waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
     }
   }
-  await auditPage(page, responseBodies, '/plugins', '.plugins-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
-  await auditPage(page, responseBodies, '/plugin-store', '.plugin-store-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
-  await auditPage(page, responseBodies, '/system', '.system-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
-  await auditPage(page, responseBodies, '/quick-start', '.quick-start-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
+  await auditPage(page, responseBodies, '/plugins', '.plugins-page', { pageSecrets: providerSecrets });
+  await auditPage(page, responseBodies, '/plugin-store', '.plugin-store-page', { pageSecrets: providerSecrets });
+  await auditPage(page, responseBodies, '/system', '.system-page', { pageSecrets: providerSecrets });
+  await auditPage(page, responseBodies, '/quick-start', '.quick-start-page', { pageSecrets: providerSecrets });
 
   await page.goto(`${appURL}/dashboard`, { waitUntil: 'domcontentloaded' });
   await page.evaluate(() => localStorage.setItem('omc-theme', 'light'));
