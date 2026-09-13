@@ -34,7 +34,7 @@ import {
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseDocument, type Document } from 'yaml';
-import { api, ApiError } from '../api/client';
+import { api, ApiError, apiErrorCode } from '../api/client';
 import { useT } from '../i18n';
 import { useThemeMode } from '../theme/ThemeContext';
 import { ConfigDirtyBar } from '../components/config/ConfigDirtyBar';
@@ -195,7 +195,15 @@ export const ConfigPage: React.FC = () => {
         setConflictState({ currentRevision: currentRev });
         return;
       }
-      const msg = err instanceof ApiError ? err.message : String(err);
+      // A configuration save shares the provider write gate, so it can now be
+      // refused while a provider change is being written. The server's message for
+      // that is English prose; the banner comes from the dictionary instead, like
+      // every other user-visible string.
+      const msg = apiErrorCode(err) === 'write_busy'
+        ? t('cfg.save_busy')
+        : err instanceof ApiError
+          ? err.message
+          : String(err);
       setSaveError(msg);
       message.error(msg);
     },

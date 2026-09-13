@@ -31,10 +31,10 @@ import {
   DownOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, ApiError } from '../api/client';
+import { api, ApiError, apiErrorCode, isRetryableWriteFailure } from '../api/client';
 import { useT } from '../i18n';
 import { usePreference } from '../hooks/usePreference';
-import { useLastIntentQueue } from '../hooks/useLastIntentQueue';
+import { useLastIntentQueue, LastIntentTimeoutError } from '../hooks/useLastIntentQueue';
 import { LobeIcon, getProviderDefaultIcon } from '../components/LobeIcon';
 import { IconPickerModal } from '../components/IconPickerModal';
 import { maskKeyText } from '../utils/maskKey';
@@ -59,6 +59,15 @@ const THINKING_LEVEL_OPTIONS = [
   { value: 'max', labelKey: 'pro.level_max' },
   { value: 'auto', labelKey: 'pro.level_auto' },
 ];
+
+/**
+ * ManagementProvidersData is the cached shape of the providers list. It is named
+ * because the toggle's confirmation writes into this cache directly.
+ */
+interface ManagementProvidersData {
+  providers: ProviderItem[];
+  total: number;
+}
 
 
 interface FormKeyItem {
@@ -380,11 +389,64 @@ export const ProvidersPage: React.FC = () => {
     queryKey: ['management-providers'],
     // The providers page owns key management, so it is the one consumer that
     // opts back into plaintext key material (display is masked client-side).
-    queryFn: () => api.getManagementProviders(true),
+    queryFn: async () => {
+      const generation = providersListReadsRef.current;
+      const data = await api.getManagementProviders(true);
+      // A confirmation that landed while this read was in flight has already
+      // written the newer state into the cache. Publishing this read's older data
+      // would undo that confirmation, so the cache is returned as it stands. It is
+      // returned rather than thrown so the read does not put the page into an
+      // error state over data that is merely superseded.
+      if (generation !== providersListReadsRef.current) {
+        return queryClient.getQueryData<ManagementProvidersData>(['management-providers']) ?? data;
+      }
+      return data;
+    },
     staleTime: 30000,
   });
 
   const providers = providersData?.providers || [];
+
+  /**
+   * providersListReads is the revision of the provider list's confirmed state.
+   *
+   * A read records this before it starts and compares it afterwards. It advances
+   * when a write confirms a new state, so a read that began before that
+   * confirmation can tell that the data it just received describes a state which
+   * has since been replaced. Without it, such a read would resolve afterwards and
+   * put the pre-write value back on screen.
+   */
+  const providersListReadsRef = useRef(0);
+
+  /**
+   * settleProviderRow writes one confirmed provider state into the cached list.
+   *
+   * The read generation is advanced first: any list read already in flight was
+   * issued before this confirmation, so its data describes a state that has since
+   * been superseded. Re-reading on every toggle was the other way a stale
+   * response could win, so it is avoided rather than reconciled.
+   */
+  const settleProviderRow = React.useCallback(
+    (id: string, isEnabled: boolean) => {
+      providersListReadsRef.current += 1;
+      queryClient.setQueryData<ManagementProvidersData>(
+        ['management-providers'],
+        (previous) => {
+          if (!previous) return previous;
+          let didChange = false;
+          const providers = previous.providers.map((provider) => {
+            if (provider.id !== id || provider.disabled === !isEnabled) return provider;
+            didChange = true;
+            return { ...provider, disabled: !isEnabled };
+          });
+          // A new object only when a row really changed: an identical list would
+          // still re-render every row while a burst is in flight.
+          return didChange ? { ...previous, providers } : previous;
+        },
+      );
+    },
+    [queryClient],
+  );
 
   const handleCloseProviderDrawer = () => {
     modelFetchSeqRef.current += 1;
@@ -419,28 +481,64 @@ export const ProvidersPage: React.FC = () => {
    * Serialising per provider keeps the fast path fast - one provider's update
    * never blocks another - while guaranteeing the gateway ends up on the value
    * of the last click.
+   *
+   * A confirmed write is settled from the write's own response rather than by
+   * re-reading the list. The response already names the provider and its new
+   * state, so re-reading spends a second round trip to learn what the first one
+   * said, and that second read can resolve after a newer write and put the older
+   * value back on screen. The list is still re-read when a write fails, because
+   * then the console does need to know what the gateway actually holds.
    */
   const statusQueue = useLastIntentQueue<boolean>({
     // The queued value is the enabled state the switch shows, not the field the
     // endpoint takes. Inverting it once here, through the named helper, is what
     // keeps the two from being confused for each other; the confusion inverts
     // every toggle, so switching a provider off would ask for it on.
-    apply: async (id, isEnabled) => {
+    apply: async (id, isEnabled, signal) => {
       const payload = providerStatusPayload(id, isEnabled);
       if (!payload) throw new Error(`unaddressable provider id: ${id}`);
-      await api.patchManagementProviderStatus(payload.family, payload.index, payload.disabled);
+      // The row's identity is read from the cache at write time rather than from a
+      // captured render: a retry runs after the first attempt and must describe
+      // the row as it is now, or its identity precondition would be checked
+      // against values the console has already replaced.
+      const row = queryClient
+        .getQueryData<ManagementProvidersData>(['management-providers'])
+        ?.providers.find((provider) => provider.id === id);
+      await api.patchManagementProviderStatus(payload.family, payload.index, payload.disabled, {
+        signal,
+        expectedAuthIndex: row?.auth_index,
+        expectedName: row?.upstream_name || row?.name,
+      });
+    },
+    // Only failures the operator cannot fix by waiting are worth repeating. The
+    // classification lives beside the HTTP client, which is where the facade's
+    // error codes are known.
+    isRetryable: isRetryableWriteFailure,
+    onConfirmed: (id, isEnabled) => {
+      // The confirmed intent is exactly what the gateway now holds: the write is
+      // only reported as confirmed once CPA accepted it, and the value sent is
+      // the one the switch displays. Settled here, before the key is released, so
+      // the row never renders a released key against a pre-write server value.
+      settleProviderRow(id, isEnabled);
     },
     onError: (_id, err) => {
-      const msg = err instanceof ApiError ? err.message : String(err);
+      // A timeout is reported differently from a refusal on purpose: abandoning a
+      // request proves only that this console stopped waiting, not that the
+      // gateway did not commit, so claiming the update failed would be as
+      // misleading as claiming it succeeded. The busy refusal is named too: its
+      // message arrives from the server in English, and a user-visible string must
+      // come from the dictionary like every other one.
+      const msg = err instanceof LastIntentTimeoutError
+        ? t('pro.status_update_timeout')
+        : apiErrorCode(err) === 'write_busy'
+          ? t('pro.status_update_busy')
+          : err instanceof ApiError
+            ? err.message
+            : String(err);
       message.error(t('pro.status_update_failed', { msg }));
-      // The list is re-read so the switch falls back to what the gateway holds
-      // rather than to the value that failed.
-      void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
-    },
-    onSettled: () => {
-      // Read once per drained queue rather than once per write, so two
-      // overlapping refetches of the same query cannot race each other and let a
-      // stale response win.
+      // The write did not confirm, so the row's displayed state is unknown rather
+      // than merely stale: the list is re-read so the switch shows what the
+      // gateway actually holds instead of the value that was attempted.
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
     },
   });

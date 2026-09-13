@@ -100,6 +100,48 @@ export function apiErrorCode(err: unknown): string {
   return '';
 }
 
+/**
+ * isAbortError distinguishes a request this console cancelled from a request that
+ * failed. An aborted fetch rejects like a transport failure, so without this the
+ * two are indistinguishable and a deliberate cancellation would be retried.
+ */
+export function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === 'AbortError';
+}
+
+/**
+ * isRetryableWriteFailure decides whether repeating a write could plausibly
+ * succeed, which is a different question from whether its HTTP status looks
+ * temporary.
+ *
+ * The facade maps several permanent CPA refusals onto 502 - a rejected body, a
+ * failed management authentication, an endpoint CPA does not implement - so
+ * status alone would classify them as transient. Those codes are named here
+ * explicitly: retrying a refused write only repeats the refusal after making the
+ * operator wait, and for a write with side effects that wait is the whole cost.
+ */
+export function isRetryableWriteFailure(err: unknown): boolean {
+  if (isAbortError(err)) return false;
+  if (!(err instanceof ApiError)) return false;
+  switch (apiErrorCode(err)) {
+    // The console is busy with another write and wrote nothing, so repeating the
+    // request is the documented remedy rather than a gamble.
+    case 'write_busy':
+      return true;
+    // Permanent refusals and missing capabilities, whatever status carried them.
+    case 'cpa_rejected_request':
+    case 'cpa_authentication_failed':
+    case 'capability_missing':
+      return false;
+    default:
+      break;
+  }
+  // Transport failures carry status 0. 502 without a named code is an upstream
+  // failure whose cause the facade could not classify; the remaining statuses are
+  // the standard temporary ones.
+  return err.status === 0 || err.status === 502 || err.status === 503 || err.status === 504;
+}
+
 async function downloadBlob(url: string): Promise<Blob> {
   let response: Response;
   try {
@@ -139,6 +181,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   try {
     response = await fetch(url, { ...options, credentials: 'same-origin', headers });
   } catch (err: unknown) {
+    // A deliberate cancellation is rethrown as itself: wrapping it in the
+    // transport-failure message would hide why the request ended.
+    if (isAbortError(err)) throw err;
     const errorMsg = err instanceof Error ? err.message : String(err);
     throw new ApiError(`Network request failed (${errorMsg}); check that the backend is running`, 0);
   }
@@ -337,10 +382,28 @@ export const api = {
     });
   },
 
-  async patchManagementProviderStatus(family: string, index: number, disabled: boolean): Promise<{ status: string; disabled: boolean }> {
+  async patchManagementProviderStatus(
+    family: string,
+    index: number,
+    disabled: boolean,
+    options: { signal?: AbortSignal; expectedAuthIndex?: string; expectedName?: string } = {},
+  ): Promise<{ status: string; disabled: boolean }> {
     return request<{ status: string; disabled: boolean }>('/management/providers/status', {
       method: 'PATCH',
-      body: JSON.stringify({ family, index, disabled }),
+      body: JSON.stringify({
+        family,
+        index,
+        disabled,
+        // Sent so a retry cannot toggle a different provider if the position
+        // shifted underneath it. Omitted when the row carries neither, which the
+        // server treats as "no precondition" rather than as a mismatch.
+        ...(options.expectedAuthIndex ? { expected_auth_index: options.expectedAuthIndex } : {}),
+        ...(options.expectedName ? { expected_name: options.expectedName } : {}),
+      }),
+      // The console abandons a toggle write when its deadline expires; without a
+      // signal the request would keep running and settle against a value the
+      // operator has already replaced.
+      signal: options.signal,
     });
   },
 
