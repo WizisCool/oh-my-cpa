@@ -153,6 +153,8 @@ OMCPA_URL=http://127.0.0.1:5173/omc/ pnpm verify:live
 OMCPA_WRITE_TEST=1 pnpm verify:live
 ```
 
+确定性验收失败时，本地会在 `tmp/browser-acceptance-failure/` 保留截图、HTML 和应用日志；GitHub Actions 会将其作为短期失败 artifact 上传。
+
 界面语言选择持久化于 `localStorage('omc-lang')`；品牌样式与主题 Token 的权威定义见 [`docs/design.md`](docs/design.md)。Air 监听规则见 [`.air.toml`](.air.toml)。请勿提交 `cpa/`、`.env` 或真实凭据。
 
 ## API

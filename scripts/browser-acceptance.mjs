@@ -52,6 +52,7 @@ let appProcess;
 let browser;
 let fakeCpa;
 let appURL;
+let page;
 
 async function freePort() {
   return await new Promise((resolve, reject) => {
@@ -180,6 +181,15 @@ async function auditPage(page, responseBodies, route, selector, { pageSecrets = 
   responseBodies.length = 0;
 }
 
+async function captureFailureDiagnostics(failedPage) {
+  const output = path.join(root, 'tmp', 'browser-acceptance-failure');
+  fs.mkdirSync(output, { recursive: true });
+  await failedPage.screenshot({ path: path.join(output, 'failure.png'), fullPage: true }).catch(() => {});
+  const html = await failedPage.content().catch(() => '');
+  fs.writeFileSync(path.join(output, 'failure.html'), html);
+  fs.writeFileSync(path.join(output, 'app.log'), appLog.join(''));
+}
+
 try {
   fakeCpa = createFakeCpaServer();
   await new Promise((resolve, reject) => {
@@ -243,7 +253,7 @@ try {
 
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-  const page = await context.newPage();
+  page = await context.newPage();
   const responseBodies = [];
   const consoleErrors = [];
   const pageErrors = [];
@@ -1975,6 +1985,7 @@ try {
     failures.push(error.message);
   }
 } finally {
+  if (failures.length > 0 && page) await captureFailureDiagnostics(page);
   if (browser) await browser.close().catch(() => {});
   if (appProcess && appProcess.exitCode === null) {
     appProcess.kill();

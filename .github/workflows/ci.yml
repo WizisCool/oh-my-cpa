@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout full history
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -30,7 +30,7 @@ jobs:
           test "$(git cat-file -t handoff/20260904-plan)" = tag
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: 1.24.13
           cache: true
@@ -39,10 +39,10 @@ jobs:
       # store by executing `pnpm store path`, and the runner image ships npm and
       # Yarn but no pnpm.
       - name: Activate pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22.23.2
           cache: pnpm
@@ -55,6 +55,12 @@ jobs:
 
       - name: Verify static gates
         run: pnpm verify:static
+
+      - name: Cache gitleaks
+        uses: actions/cache@v6
+        with:
+          path: .tools/gitleaks
+          key: gitleaks-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
 
       - name: Scan worktree and history
         run: |
@@ -71,19 +77,19 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: 1.24.13
           cache: true
 
       - name: Activate pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22.23.2
           cache: pnpm
@@ -95,20 +101,31 @@ jobs:
         run: pnpm verify:toolchain:strict
 
       - name: Cache Playwright Chromium
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
 
-      - name: Install Chromium
-        run: pnpm exec playwright-core install --with-deps chromium
-
-      - name: Build embedded SPA
-        # The production build peaks above Node's default old-space limit on a
-        # 7 GB runner, so the heap is raised for this step only.
+      # Chromium's OS dependencies and the SPA build touch separate resources.
+      # Running them concurrently keeps the browser job's critical path shorter
+      # without weakening either step.
+      - name: Prepare Chromium and build embedded SPA
         env:
           NODE_OPTIONS: --max-old-space-size=4096
-        run: pnpm build
+        run: |
+          set -o pipefail
+          install_log="$(mktemp)"
+          pnpm exec playwright-core install --with-deps chromium >"${install_log}" 2>&1 &
+          install_pid=$!
+          build_status=0
+          pnpm build || build_status=$?
+          install_status=0
+          wait "${install_pid}" || install_status=$?
+          cat "${install_log}"
+          if [ "${build_status}" -ne 0 ]; then
+            exit "${build_status}"
+          fi
+          exit "${install_status}"
 
       - name: Run deterministic browser smoke
         if: github.event_name == 'pull_request'
@@ -117,6 +134,15 @@ jobs:
       - name: Run deterministic browser acceptance
         if: github.event_name != 'pull_request'
         run: pnpm verify:browser
+
+      - name: Upload browser failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-acceptance-failure
+          path: tmp/browser-acceptance-failure/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Verify clean generated state
         run: |

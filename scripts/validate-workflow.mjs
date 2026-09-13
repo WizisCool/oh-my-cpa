@@ -19,6 +19,18 @@ if (document.errors.length > 0) {
     throw new Error('CI workflow does not cancel superseded runs');
   }
   const browserSteps = value.jobs.browser.steps;
+  const requiredActions = [
+    ['static', 'actions/checkout@v7'],
+    ['static', 'actions/setup-go@v7'],
+    ['static', 'actions/setup-node@v7'],
+    ['static', 'actions/cache@v6'],
+    ['browser', 'actions/upload-artifact@v7'],
+  ];
+  for (const [jobName, action] of requiredActions) {
+    if (!value.jobs[jobName].steps.some((step) => step.uses === action)) {
+      throw new Error(`CI workflow has no ${action} step in ${jobName}`);
+    }
+  }
   if (!browserSteps.some((step) => step.if === "github.event_name == 'pull_request'" && step.run === 'pnpm verify:browser:smoke')) {
     throw new Error('CI workflow has no pull-request browser smoke step');
   }
