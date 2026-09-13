@@ -36,13 +36,38 @@ preference only used to repaint the UI while fallback kept routing into the
 
 Because a toggle is a gateway write followed by a re-read, the operator's second
 click lands in that gap. The console serialises toggles **per provider** through a
-last-intent queue (`web/src/hooks/useLastIntentQueue.ts`): one write in flight per
-provider, a click during that window replaces the remembered value instead of
-racing it or being dropped, and the switch renders the remembered intent until the
-gateway confirms it. The queue re-reads the list once per drained queue, so two
-overlapping refetches of the list cannot let a stale response win. A failure drops
-the intent and re-reads, so the switch shows what the gateway holds rather than
-what was attempted.
+last-intent queue (`web/src/hooks/useLastIntentQueue.ts`, policy in
+`web/src/hooks/lastIntentQueue.ts`): one write in flight per provider, a click
+during that window replaces the remembered value instead of racing it or being
+dropped, and the switch renders the remembered intent until the gateway confirms
+it.
+
+That per-provider queue is not sufficient on its own, and the difference is the
+reason the gateway side is also serialised. CPA has no per-entry write, so a
+toggle reads the family's whole list and writes the whole list back. Two toggles
+of **different** providers in one family run concurrently by design, and if both
+read before either writes, they submit the same baseline and the later write
+discards the earlier one — a switch silently reverts while both requests report
+success. Whole-list provider writes are therefore serialised console-side, and
+**last-intent** is a property of the per-provider queue, not of that
+serialisation: the gateway writer orders writes but does not merge them.
+
+A confirmed write settles from its own response rather than a second list read,
+and a list read that a confirmation overtook is discarded instead of published,
+so a confirmed value is never replaced by an older one. A transient failure is
+retried a bounded number of times, re-reading the newest intent before each
+attempt; the whole burst carries one deadline measured from its first click,
+which neither a retry nor a later click extends. Passing that deadline abandons
+the burst, and because an aborted request does not prove the gateway did not
+commit, the row is reconciled against a fresh read and reports an unknown outcome
+rather than the value it asked for.
+
+Retrying is safe because a toggle names the provider it meant, not only its
+position: the write carries the identity the operator saw, and the gateway-side
+handler refuses it when that position now holds a different provider. Without
+that check the retry itself would be a defect — a deletion during the retry delay
+shifts the positions, and repeating the old position would toggle a provider the
+operator never clicked.
 
 ## Auth model
 

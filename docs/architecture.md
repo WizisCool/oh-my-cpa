@@ -65,6 +65,103 @@ Two rules keep the boundary meaningful:
 - `internal/api` owns the allowlist. A new response field is a deliberate DTO
   change; the allowlist tests fail otherwise.
 
+### Known coverage gaps
+
+- The browser suite has pre-existing flakes in the usage-events filter section,
+  unrelated to the provider write path: `the list is back to the unfiltered page`
+  and `the queued search still lands` each failed once in repeated runs. Both were
+  reproduced on the unmodified baseline commit with this work stashed, so they are
+  timing-sensitive checks around the filter debounce rather than regressions from
+  the provider changes. They are recorded here rather than fixed, because changing
+  another page's acceptance check is a separate change with its own evidence.
+- The lost-update regression is the Go test, not the browser check. The interleaving
+  that loses a write depends on two requests overlapping at CPA, and a browser run
+  cannot force that: removing the gate still produced a green browser run, because
+  the first write happened to land before the second read. The browser check
+  therefore asserts only the operator-visible outcome, and
+  `TestConcurrentProviderTogglesDoNotLoseAWrite` (which controls the ordering at
+  the fake gateway) is the check that fails when the gate is removed.
+- The stale-list-read guard (a read issued before a confirmation is discarded
+  rather than published over it) is reasoned and implemented but has no automated
+  check: the console's list read and a toggle's internal read are the same CPA
+  endpoint, so a fixture cannot delay one without delaying the other, and the
+  ordering cannot be produced deterministically yet. The browser suite therefore
+  covers the concurrent-toggle and rapid-burst paths, not this one.
+- The `503 write_busy` refusal is covered where it is decided (the gate test in
+  `internal/api`, and the retry-classification test for the controller), but not
+  end to end: producing it in the browser needs the gate held open from outside
+  the page, which the fixture cannot express. Its user-visible message is checked
+  by `pnpm check-i18n` and type-checking only.
+- `isRetryableWriteFailure` in `web/src/api/client.ts` is the classifier the
+  toggle's retries depend on, and it is not directly unit-tested: the module
+  imports the application's whole type graph (one of its type-only imports is
+  unresolvable under the test runner's loader), so the harness cannot import it.
+  Its behaviour is exercised only through the controller tests' own predicate,
+  which mirrors it. Moving it to a module with no application imports would make
+  it testable.
+
+### Effect-scoped resources must survive a StrictMode remount
+
+React runs mount, unmount, and mount again for every component under `React.StrictMode`
+in a **development** build. `web/src/main.tsx` enables StrictMode, so any resource a
+hook owns has to be created where the effect that owns it is created, and its
+cleanup has to release the resource rather than leave a disposed one installed.
+
+A resource created during render and disposed in an effect cleanup is disposed by
+the simulated unmount and then reinstated by the remount, so consumers hold a dead
+object. That failure is silent and one-sided: operations on it become no-ops, so a
+control still animates while nothing is sent, and every production-bundle check
+passes because StrictMode's checks do not run in a production build. It reached a
+user as "the provider switch no longer toggles" on the development server while the
+deterministic browser suite was green.
+
+`web/src/hooks/disposableSlot.ts` implements the rule (setup builds and installs,
+teardown disposes and releases, a replacing setup disposes what it replaces) and
+`scripts/test-provider-toggle-queue.ts` exercises the mount/unmount/remount sequence
+directly. When adding a hook that owns a disposable resource, use the slot rather
+than a ref that is disposed in place.
+
+### Provider configuration write gate
+
+`internal/api` serialises every whole-list provider configuration write through
+one process-wide gate (`management_provider_writes.go`): the status toggle, the
+provider create/update/delete paths, and the configuration-source writer, which
+replaces the same document.
+
+This is a correctness invariant rather than a performance choice. CPA exposes no
+per-entry write for a provider family, so a change means reading that family's
+list, editing it, and writing the whole list back. Two such writes that overlap
+read the same baseline and the later one discards the earlier, which loses a
+change that both requests reported as successful. The per-provider last-intent
+queue in the browser cannot close that window: it deliberately runs writes for
+different providers concurrently, and those are exactly the writes that collide
+over one family's list. The revision check on the configuration-source path
+detects a change that already landed but not one landing between its read and its
+write, which is why that path takes the same gate.
+
+Properties to preserve when changing this code:
+
+- The read happens inside the gate, together with the write. Acquiring only
+  around the write keeps a stale snapshot and reproduces the lost update.
+- The permit is a single slot, so the helper that performs the read-modify-write
+  must not be called while already holding it; re-entry deadlocks against the
+  caller's own acquisition and surfaces as a busy refusal.
+- Acquisition is bounded and cancellable. A caller that cannot enter is answered
+  `503` with `code: write_busy` and no gateway write has started, which is what
+  makes the refusal safe for the client to repeat.
+- The permit is released on every exit path, including a panic in the callbacks.
+- The gate is process-local. It orders this console's own writes; it cannot order
+  writes made to CPA by another client, and it does not make click order
+  authoritative across clients.
+- A provider is addressed by its position in the family, so a write carries the
+  identity the operator saw (`expected_auth_index`, or `expected_name` for the
+  family without an auth index) and the handler refuses the write when the entry
+  at that position is no longer it. A retry repeats the position, and positions
+  shift when a provider is deleted; without this check a retry would toggle a
+  different provider and report success. The precondition is optional, so a
+  caller with no identity to send still works, and a mismatch answers `409`
+  rather than writing.
+
 ## 3. Frontend shape
 
 `web/src` is a single-page app on React + TypeScript + Ant Design, with TanStack
@@ -75,7 +172,7 @@ Query for server state.
 | `App.tsx` | Router, lazily loaded pages, theme and locale providers |
 | `api/client.ts` | The one typed HTTP client; every endpoint is declared here |
 | `types/` | Wire types, including `usageEventView.ts` (row projection and filters) |
-| `hooks/` | `usePreference`, `useLastIntentQueue` (per-key last-intent serialisation), `useLogTail`, `useVisibleNow` |
+| `hooks/` | `usePreference`, `useLastIntentQueue` (React binding) over `lastIntentQueue` (the framework-free controller) and `disposableSlot` (effect-scoped resource lifetime), `useLogTail`, `useVisibleNow` |
 | `i18n/index.tsx` | The `[zh, en]` dictionary and the `t()` context |
 | `theme/` | `themeConfig.ts` (antd tokens), `cacheScale.ts` (OKLCH cache ramp) |
 | `utils/` | `maskKey.ts`, `externalUrl.ts` (the http/https link rule), `modelOptions.ts` (model-input filtering), `smoothScroll.ts` (the gesture/correction scroll schedule) |
