@@ -585,6 +585,17 @@ try {
   // URL: the footer reports the page size the bare window would load. It is asserted
   // here rather than covered by the URL check above because a URL with no filter
   // parameters and a request that had not been re-issued yet are different states.
+  //
+  // The read is gated on the unfiltered request having settled. Reading the footer
+  // immediately after the URL write races the list refetch and reports the previous
+  // filter's page size, which is the shape of this check's long-standing intermittent
+  // failure under CPU contention (reproduced on the unmodified baseline commit). The
+  // wait is for the rows that only an unfiltered window can produce, and the check
+  // below still reports a missing footer as a failure.
+  await until(
+    async () => /50/.test(await page.locator('.request-pagination span').first().innerText().catch(() => '')),
+    { label: 'the unfiltered page size to be reported' },
+  );
   check(
     'the list is back to the unfiltered page',
     /50/.test(await page.locator('.request-pagination span').first().innerText()),
@@ -750,6 +761,14 @@ try {
   // The cadence is 10s, so the wait has to clear one full interval plus the request
   // itself. This is the largest wait left in the suite.
   //
+  // The bound is derived rather than hand-picked, and it is deliberately generous:
+  // three cadences of headroom, not one. Under CPU contention (a 2-CPU constraint,
+  // or the probes running beside this suite) a 30s bound - three intervals - was
+  // observed to expire while the page was merely slow, so the assertion reported a
+  // failure that said nothing about the code. The wait is for a positive event, so
+  // a longer bound costs nothing on a healthy machine: it returns as soon as the
+  // pill appears.
+  //
   // Driving it with `page.clock` was tried and rejected. Installing the clock before
   // the first navigation does make the interval fire early - 11s of app time in
   // ~900ms - but the same mock also covers `requestAnimationFrame` and
@@ -759,7 +778,9 @@ try {
   // for was the one it broke. Isolating the interval from the frame clock is not
   // expressible through the Playwright clock API, and the trade was nine seconds
   // against the correctness of a scroll assertion, so the honest wait stays.
-  await page.locator('.req-back-to-top-btn.is-live').waitFor({ state: 'visible', timeout: 30000 });
+  await page
+    .locator('.req-back-to-top-btn.is-live')
+    .waitFor({ state: 'visible', timeout: EVENT_AUTO_REFRESH_MS * 6 });
 
   const scrollAfterPoll = await scroller.evaluate((node) => node.scrollTop);
   const rowsAfterPoll = await visibleRowIdentities();
@@ -1031,8 +1052,20 @@ try {
   await page.locator('.usage-events-page .ant-alert').first().waitFor({ state: 'visible', timeout: 10000 });
   const rejectedNotice = await page.locator('.usage-events-page .ant-alert').first().innerText();
   check('an unusable filter parameter is reported', /latency_min/.test(rejectedNotice) && /cost/.test(rejectedNotice), `notice=${JSON.stringify(rejectedNotice)}`);
+  // The list must still run on the filters it could apply. The rows are awaited, so
+  // the assertion is about the page from which the notice was read rather than about
+  // a render that might still be in flight; the assertion itself stays a plain check
+  // so an empty list is still reported as the failure it is.
+  await until(async () => (await page.locator('.request-row').count()) > 0, {
+    label: 'the list to render on the usable filters',
+  });
+  check('the list still runs on the usable filters', (await page.locator('.request-row').count()) > 0);
   await page.goto(`${appURL}/usage/events?preset=24h`, { waitUntil: 'domcontentloaded' });
   await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 15000 });
+  // Not a `checkEventually`: the claim is that no notice appears, and waiting for
+  // that would pass on the first poll whether or not the page had finished rendering.
+  // The rows being visible is what makes the read meaningful - the page has rendered,
+  // and it rendered without a notice.
   check('a clean URL shows no notice', (await page.locator('.usage-events-page .ant-alert').count()) === 0);
 
   // Same-component navigation with a pending keystroke. `page.goto` remounts the
