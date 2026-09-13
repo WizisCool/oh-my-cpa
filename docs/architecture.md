@@ -67,13 +67,17 @@ Two rules keep the boundary meaningful:
 
 ### Known coverage gaps
 
-- The browser suite has pre-existing flakes in the usage-events filter section,
-  unrelated to the provider write path: `the list is back to the unfiltered page`
-  and `the queued search still lands` each failed once in repeated runs. Both were
-  reproduced on the unmodified baseline commit with this work stashed, so they are
-  timing-sensitive checks around the filter debounce rather than regressions from
-  the provider changes. They are recorded here rather than fixed, because changing
-  another page's acceptance check is a separate change with its own evidence.
+- The browser suite has a history of timing-sensitive flakes in the usage-events
+  filter section, unrelated to the provider write path: `the list is back to the
+  unfiltered page` and `the queued search still lands` each failed once in repeated
+  runs before the request-view policies were lifted out of the page. Both were
+  reproduced on the unmodified baseline commit with that work stashed, so they were
+  not regressions from the provider changes. The debounce is now a tested unit
+  (`web/src/components/usage/searchDebounce.ts`) with the pending-timer cancellation
+  pinned directly, and three consecutive full acceptance runs after the refactor
+  were clean - but the flakes were intermittent before, so absence of a recurrence
+  is not proof they are gone. Treat a failure in this section as suspect before
+  treating it as a regression.
 - The lost-update regression is the Go test, not the browser check. The interleaving
   that loses a write depends on two requests overlapping at CPA, and a browser run
   cannot force that: removing the gate still produced a green browser run, because
@@ -625,6 +629,15 @@ broad gates rather than nothing.
   and a back-to-top gesture landing exactly on the top are rendering behaviours.
   The scroll *schedule* is a pure function and is tested as one
   (`scripts/test-scroll-intent.ts`); its effect on a real list is not.
+- **Some browser waits are irreducible, and one was investigated rather than
+  assumed.** The live-tail block waits out the app's ten-second auto-refresh
+  cadence. Driving it with `page.clock` works - the interval fires early, 11s of app
+  time in about 900ms - but the same mock covers `requestAnimationFrame` and
+  `performance.now`, which is what `smoothScroll`'s gesture schedule is built from:
+  with the clock installed the back-to-top gesture landed at 37px instead of the
+  top, with no page error, breaking the assertion the block exists for. Isolating
+  the interval from the frame clock is not expressible through that API, so the
+  wait stays and the rationale is recorded at the call site.
 - **The debounce is split rather than moved.** `createSearchDebounce` carries the
   policy and is tested directly. The one claim that stays in the browser is that a
   real pending timer survives a real clear-all, because it depends on a React state
@@ -632,6 +645,25 @@ broad gates rather than nothing.
 - **Refresh sequencing cannot be replaced by a poll-decision test.** A
   `shouldPoll()` unit test says nothing about whether the page serialises the pull
   before the reads, so the probe holds the response and observes the ordering.
+
+### 11.2 Where the wall clock actually goes
+
+Assertion count was not the cost, and reducing it did not by itself make the
+browser suite faster. Measured per line, the acceptance run's time sits in
+navigations, `waitFor` round trips and one ten-second cadence wait - which is why
+the useful levers were structural rather than subtractive:
+
+| Lever | Effect |
+| --- | --- |
+| Fold four standalone Chromium probes into one shared server and browser, each scenario in its own context | Four dev servers and four browsers become one each |
+| Move the focused probes into `verify:full` | They were in no gate at all; a guarded invariant nobody runs is not guarded |
+| Run the two browser phases concurrently | About 12s on a 2-CPU runner, about 14s on four cores |
+| Remove the deletion window from the embedded-distribution sync | Not a speed fix: it removes a race between `pnpm build` and the Go gates, which is what made overlapping them safe to keep |
+
+Two levers were measured and rejected. `tsc --incremental` needs a cache that stays
+correct across a changing `include` set, which is the fragile dependency graph
+`test:fast` exists to avoid. Clock-driven polling breaks the scroll schedule above.
+Both are recorded so the next reader does not re-derive them.
 
 ## 12. Where to look next
 
