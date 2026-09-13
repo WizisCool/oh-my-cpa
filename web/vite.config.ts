@@ -2,12 +2,22 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { resolveApiTarget } from '../scripts/api-target.mjs';
+import { syncLobeIcons } from '../scripts/sync-lobe-icons.mjs';
 
 const repoRoot = path.resolve(__dirname, '..');
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => ({
-  plugins: [react()],
+  plugins: [
+    {
+      name: 'sync-lobe-icons',
+      enforce: 'pre',
+      buildStart() {
+        syncLobeIcons({ quiet: true });
+      },
+    },
+    react(),
+  ],
   // Development has one browser entry at /omc/; Vite proxies only API calls
   // to Go. Production output stays relative so Go can embed it at any subpath.
   base: command === 'serve' ? '/omc/' : './',

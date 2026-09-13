@@ -83,9 +83,10 @@ All page routes are `React.lazy` import boundaries so the entry chunk stays
 small; the shell (`AppLayout`, `AuthGate`) is loaded eagerly because every
 route needs it. Brand/provider marks are copied from the pinned
 `@lobehub/icons-static-svg` package into `web/public/lobe-icons` and referenced
-as SVG URLs; the React icon package is imported only for its small catalog,
-because a namespace import would pull hundreds of components into the eager
-bundle. `components/resources/` and `components/icons/PresetIcon.tsx`
+as SVG URLs. The small catalog used for lookup and grouping is vendored in
+`web/src/generated/lobeIconCatalog.json`; the React icon package is not a
+dependency, because importing it would pull hundreds of components into the
+eager bundle. `components/resources/` and `components/icons/PresetIcon.tsx`
 are retained from the retired triage console and are currently unreferenced; the
 backend discovery/binding model they rendered is still live behind Providers and
 OAuth management.

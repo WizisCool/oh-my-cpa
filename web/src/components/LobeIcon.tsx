@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { toc } from '@lobehub/icons/es/toc';
+import { LOBE_ICON_CATALOG, lobeIconSlug } from '../types/lobeIconCatalog';
 import { CloudServerOutlined } from '@ant-design/icons';
 import { PROVIDER_ICON_IDS, DEFAULT_PROVIDER_ICON_ID } from '../types/providerIconIds';
 
@@ -15,11 +15,7 @@ interface LobeIconProps {
 // surfaces. Use its monochrome mark so the icon inherits the theme foreground.
 const WHITE_GLYPH_COLOR_ICONS = new Set(['Kimi']);
 
-const TOC_BY_ID = new Map(toc.map((item) => [item.id, item]));
-
-function iconSlug(iconId: string): string {
-  return iconId.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-}
+const TOC_BY_ID = new Map(LOBE_ICON_CATALOG.map((item) => [item.id, item]));
 
 export const LobeIcon: React.FC<LobeIconProps> = memo(({
   iconId,
@@ -33,11 +29,11 @@ export const LobeIcon: React.FC<LobeIconProps> = memo(({
     return <CloudServerOutlined style={{ fontSize: size, ...style }} className={className} />;
   }
 
-  const slug = iconSlug(iconId);
+  const slug = lobeIconSlug(iconId);
   const colorUrl = `${import.meta.env.BASE_URL}lobe-icons/${slug}-color.svg`;
   const monoUrl = `${import.meta.env.BASE_URL}lobe-icons/${slug}.svg`;
   const useColor = variant !== 'mono'
-    && metadata.param.hasColor
+    && metadata.hasColor
     && !WHITE_GLYPH_COLOR_ICONS.has(iconId);
 
   if (useColor) {
@@ -79,8 +75,8 @@ interface TocCandidate {
   priority: number;
 }
 
-// Flatten @lobehub/icons' toc catalog into one prioritised lookup list at
-// module load, so a model-name lookup never walks the icon namespace.
+// Flatten the vendored icon catalog into one prioritised lookup list at module
+// load, so a model-name lookup never walks the icon namespace.
 const TOC_CANDIDATES: TocCandidate[] = (() => {
   const list: TocCandidate[] = [];
   const seen = new Set<string>();
@@ -94,7 +90,7 @@ const TOC_CANDIDATES: TocCandidate[] = (() => {
     list.push({ kw: clean, iconId, len: clean.length, priority });
   };
 
-  for (const item of toc) {
+  for (const item of LOBE_ICON_CATALOG) {
     // 1. Exact ID (e.g. Minimax, OpenCode, DeepSeek) has highest priority
     add(item.id, item.id, 2);
     // 2. Title, docsUrl, and parenthesized Chinese/alias names from fullTitle

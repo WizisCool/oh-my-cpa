@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Modal, Input, Tag, Empty, theme } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
-import { toc, type IconToc } from '@lobehub/icons/es/toc';
+import { LOBE_ICON_CATALOG, type LobeIconCatalogEntry } from '../types/lobeIconCatalog';
 import { LobeIcon } from './LobeIcon';
 import { useT } from '../i18n';
 
@@ -45,7 +45,7 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
 
   const filteredIcons = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return toc.filter((item: IconToc) => {
+    return LOBE_ICON_CATALOG.filter((item: LobeIconCatalogEntry) => {
       if (selectedGroup !== 'all' && item.group !== selectedGroup) {
         return false;
       }
@@ -63,12 +63,12 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
     let provider = 0;
     let model = 0;
     let application = 0;
-    for (const item of toc) {
+    for (const item of LOBE_ICON_CATALOG) {
       if (item.group === 'provider') provider++;
       else if (item.group === 'model') model++;
       else if (item.group === 'application') application++;
     }
-    return { all: toc.length, provider, model, application };
+    return { all: LOBE_ICON_CATALOG.length, provider, model, application };
   }, []);
 
   return (

@@ -1,0 +1,2891 @@
+[
+  {
+    "id": "Ace",
+    "title": "ace",
+    "fullTitle": "ACE",
+    "docsUrl": "ace",
+    "desc": "https://github.com/ace-step/ACE-Step",
+    "group": "model",
+    "hasColor": false
+  },
+  {
+    "id": "Adobe",
+    "title": "Adobe",
+    "fullTitle": "Adobe",
+    "docsUrl": "adobe",
+    "desc": "https://adobe.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "AdobeFirefly",
+    "title": "AdobeFirefly",
+    "fullTitle": "Firefly (Adobe)",
+    "docsUrl": "adobe-firefly",
+    "desc": "https://firefly.adobe.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "AgentVoice",
+    "title": "AgentVoice",
+    "fullTitle": "AgentVoice",
+    "docsUrl": "agent-voice",
+    "desc": "https://agentvoice.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "AgnesAI",
+    "title": "Agnes AI",
+    "fullTitle": "Agnes AI",
+    "docsUrl": "agnes-ai",
+    "desc": "https://agnes-ai.com",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Agui",
+    "title": "AG-UI",
+    "fullTitle": "AG-UI",
+    "docsUrl": "agui",
+    "desc": "https://ag-ui.com",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Ai2",
+    "title": "Ai2",
+    "fullTitle": "Ai2",
+    "docsUrl": "ai2",
+    "desc": "https://allenai.org/",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Ai21",
+    "title": "AI21",
+    "fullTitle": "Ai21Labs (Jamba)",
+    "docsUrl": "ai21",
+    "desc": "https://huggingface.co/ai21labs",
+    "group": "model",
+    "hasColor": false
+  },
+  {
+    "id": "Ai302",
+    "title": "302.AI",
+    "fullTitle": "302.AI",
+    "docsUrl": "ai302",
+    "desc": "https://302.ai/",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Ai360",
+    "title": "AI360",
+    "fullTitle": "Ai360 (360智脑)",
+    "docsUrl": "ai360",
+    "desc": "https://ai.360.com/",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "AiHubMix",
+    "title": "AiHubMix",
+    "fullTitle": "AiHubMix (推理时代)",
+    "docsUrl": "ai-hub-mix",
+    "desc": "https://aihubmix.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "AiMass",
+    "title": "AiMass",
+    "fullTitle": "AiMass (紫东太初)",
+    "docsUrl": "ai-mass",
+    "desc": "https://ai-maas.wair.ac.cn",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "AionLabs",
+    "title": "AionLabs",
+    "fullTitle": "AionLabs",
+    "docsUrl": "aion-labs",
+    "desc": "https://aionlabs.ai",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "AirJelly",
+    "title": "AirJelly",
+    "fullTitle": "AirJelly",
+    "docsUrl": "air-jelly",
+    "desc": "https://airjelly.ai",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "AiStudio",
+    "title": "Google AI Studio",
+    "fullTitle": "AI Studio (Google)",
+    "docsUrl": "ai-studio",
+    "desc": "https://aistudio.google.com",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "AkashChat",
+    "title": "AkashChat",
+    "fullTitle": "AkashChat",
+    "docsUrl": "akash-chat",
+    "desc": "https://chatapi.akash.network",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "AlephAlpha",
+    "title": "AlephAlpha",
+    "fullTitle": "AlephAlpha",
+    "docsUrl": "aleph-alpha",
+    "desc": "https://aleph-alpha.com",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "Alibaba",
+    "title": "Alibaba",
+    "fullTitle": "Alibaba",
+    "docsUrl": "alibaba",
+    "desc": "https://alibaba.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "AlibabaCloud",
+    "title": "AlibabaCloud",
+    "fullTitle": "AlibabaCloud (阿里云)",
+    "docsUrl": "alibaba-cloud",
+    "desc": "https://aliyun.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Amp",
+    "title": "Amp",
+    "fullTitle": "Amp",
+    "docsUrl": "amp",
+    "desc": "https://ampcode.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Anspire",
+    "title": "Anspire",
+    "fullTitle": "Anspire",
+    "docsUrl": "anspire",
+    "desc": "https://anspire.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "AntGroup",
+    "title": "AntGroup",
+    "fullTitle": "AntGroup",
+    "docsUrl": "ant-group",
+    "desc": "https://antgroup.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Anthropic",
+    "title": "Anthropic",
+    "fullTitle": "Anthropic",
+    "docsUrl": "anthropic",
+    "desc": "https://anthropic.com",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "Antigravity",
+    "title": "Antigravity",
+    "fullTitle": "Antigravity (Google)",
+    "docsUrl": "antigravity",
+    "desc": "https://antigravity.google",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Anyscale",
+    "title": "Anyscale",
+    "fullTitle": "Anyscale",
+    "docsUrl": "anyscale",
+    "desc": "https://anyscale.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Apertis",
+    "title": "Apertis",
+    "fullTitle": "Apertis",
+    "docsUrl": "apertis",
+    "desc": "https://apertis.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Apple",
+    "title": "Apple",
+    "fullTitle": "Apple",
+    "docsUrl": "apple",
+    "desc": "https://apple.com",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "Arcee",
+    "title": "Arcee",
+    "fullTitle": "Arcee",
+    "docsUrl": "arcee",
+    "desc": "https://arcee.ai/",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "AskVerdict",
+    "title": "AskVerdict",
+    "fullTitle": "AskVerdict",
+    "docsUrl": "ask-verdict",
+    "desc": "https://askverdict.ai",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "AssemblyAI",
+    "title": "AssemblyAI",
+    "fullTitle": "AssemblyAI",
+    "docsUrl": "assembly-ai",
+    "desc": "https://assemblyai.com",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "AtlasCloud",
+    "title": "Atlas Cloud",
+    "fullTitle": "AtlasCloud",
+    "docsUrl": "atlas-cloud",
+    "desc": "https://atlascloud.ai",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "Automatic",
+    "title": "Automatic",
+    "fullTitle": "Automatic1111 (SD Webui)",
+    "docsUrl": "automatic",
+    "desc": "https://github.com/AUTOMATIC1111/stable-diffusion-webui",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Aws",
+    "title": "AWS",
+    "fullTitle": "AWS",
+    "docsUrl": "aws",
+    "desc": "https://aws.amazon.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Aya",
+    "title": "Aya",
+    "fullTitle": "Aya (Cohere)",
+    "docsUrl": "aya",
+    "desc": "https://cohere.com/research/aya",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Azure",
+    "title": "Azure",
+    "fullTitle": "Microsoft Azure",
+    "docsUrl": "azure",
+    "desc": "https://azure.microsoft.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "AzureAI",
+    "title": "AzureAI",
+    "fullTitle": "AzureAI",
+    "docsUrl": "azure-ai",
+    "desc": "https://ai.azure.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "BAAI",
+    "title": "BAAI",
+    "fullTitle": "BAAI (智源研究院)",
+    "docsUrl": "baai",
+    "desc": "https://baai.ac.cn",
+    "group": "model",
+    "hasColor": false
+  },
+  {
+    "id": "Baichuan",
+    "title": "Baichuan",
+    "fullTitle": "Baichuan (百川)",
+    "docsUrl": "baichuan",
+    "desc": "https://baichuan-ai.com",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Baidu",
+    "title": "Baidu",
+    "fullTitle": "Baidu",
+    "docsUrl": "baidu",
+    "desc": "https://baidu.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "BaiduCloud",
+    "title": "BaiduCloud",
+    "fullTitle": "BaiduCloud (百度智能云)",
+    "docsUrl": "baidu-cloud",
+    "desc": "https://cloud.baidu.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Bailian",
+    "title": "BaiLian",
+    "fullTitle": "Bailian (阿里云百炼)",
+    "docsUrl": "bailian",
+    "desc": "https://bailian.console.aliyun.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Baseten",
+    "title": "Baseten",
+    "fullTitle": "Baseten",
+    "docsUrl": "baseten",
+    "desc": "https://baseten.co",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "Bedrock",
+    "title": "Bedrock",
+    "fullTitle": "Bedrock (AWS)",
+    "docsUrl": "bedrock",
+    "desc": "https://aws.amazon.com/bedrock",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Bfl",
+    "title": "Black Forest Labs",
+    "fullTitle": "Black Forest Labs (bfl)",
+    "docsUrl": "bfl",
+    "desc": "https://bfl.ai",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "Bilibili",
+    "title": "bilibili",
+    "fullTitle": "Bilibili (哔哩哔哩)",
+    "docsUrl": "bilibili",
+    "desc": "https://github.com/bilibili",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "BilibiliIndex",
+    "title": "bilibili index",
+    "fullTitle": "Bilibili Index (Index Team)",
+    "docsUrl": "bilibili-index",
+    "desc": "https://huggingface.co/IndexTeam",
+    "group": "model",
+    "hasColor": false
+  },
+  {
+    "id": "Bing",
+    "title": "Bing",
+    "fullTitle": "Microsoft Bing",
+    "docsUrl": "bing",
+    "desc": "https://bing.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Bocha",
+    "title": "Bocha",
+    "fullTitle": "Bocha (博查)",
+    "docsUrl": "bocha",
+    "desc": "https://open.bochaai.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Brave",
+    "title": "Brave",
+    "fullTitle": "Brave",
+    "docsUrl": "brave",
+    "desc": "https://brave.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "BriaAI",
+    "title": "BRIA AI",
+    "fullTitle": "BRIA AI",
+    "docsUrl": "bria-ai",
+    "desc": "https://bria.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Browserless",
+    "title": "Browserless",
+    "fullTitle": "Browserless",
+    "docsUrl": "browserless",
+    "desc": "https://browserless.js.org",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "BurnCloud",
+    "title": "BurnCloud",
+    "fullTitle": "BurnCloud",
+    "docsUrl": "burn-cloud",
+    "desc": "https://ai.burncloud.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "ByteDance",
+    "title": "ByteDance",
+    "fullTitle": "ByteDance",
+    "docsUrl": "byte-dance",
+    "desc": "https://bytedance.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "CapCut",
+    "title": "CapCut",
+    "fullTitle": "CapCut",
+    "docsUrl": "cap-cut",
+    "desc": "https://capcut.com",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "CelestoAI",
+    "title": "CelestoAI",
+    "fullTitle": "CelestoAI",
+    "docsUrl": "celesto-ai",
+    "desc": "https://celesto.ai",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "CentML",
+    "title": "CentML",
+    "fullTitle": "CentML",
+    "docsUrl": "cent-ml",
+    "desc": "https://centml.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Cerebras",
+    "title": "Cerebras",
+    "fullTitle": "Cerebras",
+    "docsUrl": "cerebras",
+    "desc": "https://cerebras.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "ChatGLM",
+    "title": "ChatGLM",
+    "fullTitle": "ChatGLM (智谱)",
+    "docsUrl": "chat-glm",
+    "desc": "https://github.com/THUDM/ChatGLM-6B",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "CherryStudio",
+    "title": "CherryStudio",
+    "fullTitle": "Cherry Studio",
+    "docsUrl": "cherry-studio",
+    "desc": "https://cherry-ai.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Civitai",
+    "title": "Civitai",
+    "fullTitle": "Civitai",
+    "docsUrl": "civitai",
+    "desc": "https://civitai.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Claude",
+    "title": "Claude",
+    "fullTitle": "Claude",
+    "docsUrl": "claude",
+    "desc": "https://claude.ai",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "ClaudeCode",
+    "title": "Claude Code",
+    "fullTitle": "Claude Code",
+    "docsUrl": "claude-code",
+    "desc": "https://code.claude.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Cline",
+    "title": "Cline",
+    "fullTitle": "Cline",
+    "docsUrl": "cline",
+    "desc": "https://cline.bot",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Clipdrop",
+    "title": "Clipdrop",
+    "fullTitle": "Clipdrop",
+    "docsUrl": "clipdrop",
+    "desc": "https://clipdrop.co",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Cloudflare",
+    "title": "Cloudflare",
+    "fullTitle": "Cloudflare",
+    "docsUrl": "cloudflare",
+    "desc": "https://cloudflare.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "CodeBuddy",
+    "title": "CodeBuddy",
+    "fullTitle": "CodeBuddy",
+    "docsUrl": "code-buddy",
+    "desc": "https://codebuddy.ai",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "CodeFlicker",
+    "title": "CodeFlicker",
+    "fullTitle": "CodeFlicker",
+    "docsUrl": "code-flicker",
+    "desc": "https://codeflicker.ai",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "CodeGeeX",
+    "title": "CodeGeeX",
+    "fullTitle": "CodeGeeX",
+    "docsUrl": "code-gee-x",
+    "desc": "https://codegeex.cn/",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Codex",
+    "title": "Codex",
+    "fullTitle": "Codex (OpenAI)",
+    "docsUrl": "codex",
+    "desc": "https://openai.com/codex",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "CogVideo",
+    "title": "CogVideo",
+    "fullTitle": "CogVideo",
+    "docsUrl": "cog-video",
+    "desc": "https://github.com/THUDM/CogVideo",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "CogView",
+    "title": "CogView",
+    "fullTitle": "CogView",
+    "docsUrl": "cog-view",
+    "desc": "https://github.com/THUDM/CogView3",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Cohere",
+    "title": "Cohere",
+    "fullTitle": "Cohere",
+    "docsUrl": "cohere",
+    "desc": "https://cohere.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Colab",
+    "title": "Colab",
+    "fullTitle": "Colab (Google)",
+    "docsUrl": "colab",
+    "desc": "https://colab.research.google.com/",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "CometAPI",
+    "title": "CometAPI",
+    "fullTitle": "Comet API",
+    "docsUrl": "comet-api",
+    "desc": "https://cometapi.com/",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "ComfyUI",
+    "title": "ComfyUI",
+    "fullTitle": "ComfyUI",
+    "docsUrl": "comfy-ui",
+    "desc": "https://comfy.org",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "CommandA",
+    "title": "CommandA",
+    "fullTitle": "CommandA (Cohere)",
+    "docsUrl": "command-a",
+    "desc": "https://cohere.com/blog/command",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Copilot",
+    "title": "Copilot",
+    "fullTitle": "Microsoft Copilot",
+    "docsUrl": "copilot",
+    "desc": "https://copilot.microsoft.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "CopilotKit",
+    "title": "CopilotKit",
+    "fullTitle": "CopilotKit",
+    "docsUrl": "copilot-kit",
+    "desc": "https://copilotkit.ai",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Coqui",
+    "title": "Coqui",
+    "fullTitle": "Coqui",
+    "docsUrl": "coqui",
+    "desc": "https://github.com/coqui-ai/TTS",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Coze",
+    "title": "Coze",
+    "fullTitle": "Coze",
+    "docsUrl": "coze",
+    "desc": "https://coze.com",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "CrewAI",
+    "title": "CrewAI",
+    "fullTitle": "CrewAI",
+    "docsUrl": "crew-ai",
+    "desc": "https://crewai.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Crusoe",
+    "title": "Crusoe",
+    "fullTitle": "Crusoe",
+    "docsUrl": "crusoe",
+    "desc": "https://crusoe.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Cursor",
+    "title": "Cursor",
+    "fullTitle": "Cursor",
+    "docsUrl": "cursor",
+    "desc": "https://cursor.com",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "CyberCut",
+    "title": "CyberCut",
+    "fullTitle": "CyberCut",
+    "docsUrl": "cyber-cut",
+    "desc": "https://cybercut.ai",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Dalle",
+    "title": "DALL-E",
+    "fullTitle": "DALL·E (OpenAI)",
+    "docsUrl": "dalle",
+    "desc": "https://openai.com/dall-e-3",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Dbrx",
+    "title": "DBRX",
+    "fullTitle": "DBRX (Databricks)",
+    "docsUrl": "dbrx",
+    "desc": "https://databricks.com",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "DeepAI",
+    "title": "DeepAI",
+    "fullTitle": "DeepAI",
+    "docsUrl": "deep-ai",
+    "desc": "hhttps://deepai.org",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "DeepCogito",
+    "title": "Deep Cogito",
+    "fullTitle": "Deep Cogito",
+    "docsUrl": "deep-cogito",
+    "desc": "https://deepcogito.com",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "DeepInfra",
+    "title": "DeepInfra",
+    "fullTitle": "DeepInfra",
+    "docsUrl": "deep-infra",
+    "desc": "https://deepinfra.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "DeepL",
+    "title": "DeepL",
+    "fullTitle": "DeepL",
+    "docsUrl": "deep-l",
+    "desc": "https://deepl.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "DeepMind",
+    "title": "DeepMind",
+    "fullTitle": "DeepMind (Google)",
+    "docsUrl": "deep-mind",
+    "desc": "https://deepmind.google",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "DeepSeek",
+    "title": "DeepSeek",
+    "fullTitle": "DeepSeek",
+    "docsUrl": "deep-seek",
+    "desc": "https://deepseek.com",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Devin",
+    "title": "Devin",
+    "fullTitle": "Devin",
+    "docsUrl": "devin",
+    "desc": "https://devin.ai",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Dify",
+    "title": "Dify",
+    "fullTitle": "Dify",
+    "docsUrl": "dify",
+    "desc": "https://dify.ai",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Doc2X",
+    "title": "Doc2X",
+    "fullTitle": "Doc2X",
+    "docsUrl": "doc2-x",
+    "desc": "https://doc2x.noedgeai.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "DocSearch",
+    "title": "DocSearch",
+    "fullTitle": "DocSearch",
+    "docsUrl": "doc-search",
+    "desc": "https://docsearch.algolia.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Dolphin",
+    "title": "Dolphin",
+    "fullTitle": "Dolphin (dphnAI)",
+    "docsUrl": "dolphin",
+    "desc": "https://dphn.ai",
+    "group": "model",
+    "hasColor": false
+  },
+  {
+    "id": "Doubao",
+    "title": "Doubao",
+    "fullTitle": "Doubao (豆包)",
+    "docsUrl": "doubao",
+    "desc": "https://team.doubao.com",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "DreamMachine",
+    "title": "DreamMachine",
+    "fullTitle": "DreamMachine (Luma)",
+    "docsUrl": "dream-machine",
+    "desc": "https://lumalabs.ai/dream-machine",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "ElevenLabs",
+    "title": "ElevenLabs",
+    "fullTitle": "ElevenLabs",
+    "docsUrl": "eleven-labs",
+    "desc": "https://elevenlabs.io",
+    "group": "model",
+    "hasColor": false
+  },
+  {
+    "id": "ElevenX",
+    "title": "11x",
+    "fullTitle": "11x",
+    "docsUrl": "eleven-x",
+    "desc": "https://11x.ai",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "EssentialAI",
+    "title": "Essential AI",
+    "fullTitle": "Essential AI",
+    "docsUrl": "essential-ai",
+    "desc": "https://essential.ai",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Exa",
+    "title": "Exa",
+    "fullTitle": "Exa",
+    "docsUrl": "exa",
+    "desc": "https://exa.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Fal",
+    "title": "Fal",
+    "fullTitle": "Fal",
+    "docsUrl": "fal",
+    "desc": "https://fal.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "FastGPT",
+    "title": "FastGPT",
+    "fullTitle": "FastGPT",
+    "docsUrl": "fast-gpt",
+    "desc": "https://tryfastgpt.ai",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Featherless",
+    "title": "featherless.ai",
+    "fullTitle": "Featherless.ai",
+    "docsUrl": "featherless",
+    "desc": "https://featherless.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Figma",
+    "title": "Figma",
+    "fullTitle": "Figma",
+    "docsUrl": "figma",
+    "desc": "https://figma.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Firecrawl",
+    "title": "Firecrawl",
+    "fullTitle": "Firecrawl",
+    "docsUrl": "firecrawl",
+    "desc": "https://firecrawl.dev",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Fireworks",
+    "title": "Fireworks",
+    "fullTitle": "Fireworks",
+    "docsUrl": "fireworks",
+    "desc": "https://fireworks.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "FishAudio",
+    "title": "FishAudio",
+    "fullTitle": "FishAudio (Bert)",
+    "docsUrl": "fish-audio",
+    "desc": "https://github.com/fishaudio",
+    "group": "model",
+    "hasColor": false
+  },
+  {
+    "id": "Flora",
+    "title": "Flora",
+    "fullTitle": "Flora",
+    "docsUrl": "flora",
+    "desc": "https://florafauna.ai",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Flowith",
+    "title": "Flowith",
+    "fullTitle": "Flowith",
+    "docsUrl": "flowith",
+    "desc": "https://flowith.io",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Flux",
+    "title": "Flux",
+    "fullTitle": "Flux (black forest labs)",
+    "docsUrl": "flux",
+    "desc": "https://blackforestlabs.ai",
+    "group": "model",
+    "hasColor": false
+  },
+  {
+    "id": "Friendli",
+    "title": "Friendli",
+    "fullTitle": "Friendli",
+    "docsUrl": "friendli",
+    "desc": "https://friendli.ai",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "Gemini",
+    "title": "Gemini",
+    "fullTitle": "Gemini (Google)",
+    "docsUrl": "gemini",
+    "desc": "https://deepmind.google/technologies/gemini",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "GeminiCLI",
+    "title": "Gemini CLI",
+    "fullTitle": "Gemini CLI",
+    "docsUrl": "gemini-cli",
+    "desc": "https://geminicli.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Gemma",
+    "title": "Gemma",
+    "fullTitle": "Gemma (Google)",
+    "docsUrl": "gemma",
+    "desc": "https://ai.google.dev/gemma",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "GiteeAI",
+    "title": "GiteeAI",
+    "fullTitle": "GiteeAI",
+    "docsUrl": "gitee-ai",
+    "desc": "https://ai-assets.gitee.com/",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "Github",
+    "title": "Github",
+    "fullTitle": "Github",
+    "docsUrl": "github",
+    "desc": "https://github.com",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "GithubCopilot",
+    "title": "GithubCopilot",
+    "fullTitle": "Github Copilot",
+    "docsUrl": "github-copilot",
+    "desc": "https://github.com/features/copilot",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Glama",
+    "title": "Glama",
+    "fullTitle": "Glama",
+    "docsUrl": "glama",
+    "desc": "https://glama.ai",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Glif",
+    "title": "Glif",
+    "fullTitle": "Glif",
+    "docsUrl": "glif",
+    "desc": "https://glif.app",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "GLMV",
+    "title": "GLM-V",
+    "fullTitle": "GLM-V",
+    "docsUrl": "glmv",
+    "desc": "https://huggingface.co/zai-org/GLM-4.1V-9B-Thinking",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Google",
+    "title": "Google",
+    "fullTitle": "Google",
+    "docsUrl": "google",
+    "desc": "https://google.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "GoogleCloud",
+    "title": "GoogleCloud",
+    "fullTitle": "GoogleCloud",
+    "docsUrl": "google-cloud",
+    "desc": "https://cloud.google.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Goose",
+    "title": "Goose",
+    "fullTitle": "Goose (codename)",
+    "docsUrl": "goose",
+    "desc": "https://block.github.io/goose",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Gradio",
+    "title": "Gradio",
+    "fullTitle": "Gradio",
+    "docsUrl": "gradio",
+    "desc": "https://gradio.app",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Greptile",
+    "title": "Greptile",
+    "fullTitle": "Greptile",
+    "docsUrl": "greptile",
+    "desc": "https://greptile.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Grok",
+    "title": "Grok",
+    "fullTitle": "Grok (xAI)",
+    "docsUrl": "grok",
+    "desc": "https://grok.x.ai",
+    "group": "model",
+    "hasColor": false
+  },
+  {
+    "id": "Groq",
+    "title": "Groq",
+    "fullTitle": "Groq",
+    "docsUrl": "groq",
+    "desc": "https://wow.groq.com",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "Hailuo",
+    "title": "Hailuo",
+    "fullTitle": "Hailuo (海螺)",
+    "docsUrl": "hailuo",
+    "desc": "https://hailuoai.video",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Haiper",
+    "title": "Haiper",
+    "fullTitle": "Haiper",
+    "docsUrl": "haiper",
+    "desc": "https://haiper.ai",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "HappyHorse",
+    "title": "Hedra",
+    "fullTitle": "HappyHorse",
+    "docsUrl": "happy-horse",
+    "desc": "https://happyhorse.com",
+    "group": "model",
+    "hasColor": false
+  },
+  {
+    "id": "Hedra",
+    "title": "Hedra",
+    "fullTitle": "Hedra",
+    "docsUrl": "hedra",
+    "desc": "https://hedra.com",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "HermesAgent",
+    "title": "Hermes Agent",
+    "fullTitle": "Hermes Agent",
+    "docsUrl": "hermes-agent",
+    "desc": "https://hermes-agent.nousresearch.com",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Higress",
+    "title": "Higress",
+    "fullTitle": "Higress",
+    "docsUrl": "higress",
+    "desc": "https://higress.cn/",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Huawei",
+    "title": "Huawei",
+    "fullTitle": "Huawei",
+    "docsUrl": "huawei",
+    "desc": "https://huawei.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "HuaweiCloud",
+    "title": "HuaweiCloud",
+    "fullTitle": "HuaweiCloud (华为云)",
+    "docsUrl": "huawei-cloud",
+    "desc": "https://huaweicloud.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "HuggingFace",
+    "title": "HuggingFace",
+    "fullTitle": "HuggingFace",
+    "docsUrl": "hugging-face",
+    "desc": "https://huggingface.co",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Hunyuan",
+    "title": "Hunyuan",
+    "fullTitle": "Hunyuan (腾讯混元)",
+    "docsUrl": "hunyuan",
+    "desc": "https://hunyuan.tencent.com",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Hyperbolic",
+    "title": "Hyperbolic",
+    "fullTitle": "Hyperbolic",
+    "docsUrl": "hyperbolic",
+    "desc": "https://hyperbolic.xyz",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "IBM",
+    "title": "IBM",
+    "fullTitle": "IBM (Granite)",
+    "docsUrl": "ibm",
+    "desc": "https://huggingface.co/ibm-granite",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "Ideogram",
+    "title": "Ideogram",
+    "fullTitle": "Ideogram",
+    "docsUrl": "ideogram",
+    "desc": "https://ideogram.ai",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "IFlyTekCloud",
+    "title": "iFlyTekCloud",
+    "fullTitle": "IFlyTekCloud (讯飞开放平台)",
+    "docsUrl": "i-fly-tek-cloud",
+    "desc": "https://xfyun.cn",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Inception",
+    "title": "Inception",
+    "fullTitle": "Inception Labs",
+    "docsUrl": "inception",
+    "desc": "https://inceptionlabs.ai",
+    "group": "model",
+    "hasColor": false
+  },
+  {
+    "id": "Inference",
+    "title": "Inference",
+    "fullTitle": "Inference",
+    "docsUrl": "inference",
+    "desc": "https://inference.net",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "Infermatic",
+    "title": "Infermatic",
+    "fullTitle": "Infermatic",
+    "docsUrl": "infermatic",
+    "desc": "https://infermatic.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Infinigence",
+    "title": "Infinigence",
+    "fullTitle": "Infinigence (无问芯穹)",
+    "docsUrl": "infinigence",
+    "desc": "https://cloud.infini-ai.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Inflection",
+    "title": "Inflection",
+    "fullTitle": "Inflection",
+    "docsUrl": "inflection",
+    "desc": "https://inflection.ai",
+    "group": "model",
+    "hasColor": false
+  },
+  {
+    "id": "InternLM",
+    "title": "InternLM",
+    "fullTitle": "InternLM",
+    "docsUrl": "intern-lm",
+    "desc": "https://internlm.intern-ai.org.cn",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Jimeng",
+    "title": "Jimeng",
+    "fullTitle": "Jimeng (即梦)",
+    "docsUrl": "jimeng",
+    "desc": "https://jimeng.jianying.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Jina",
+    "title": "Jina",
+    "fullTitle": "Jina AI",
+    "docsUrl": "jina",
+    "desc": "https://jina.ai",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "Junie",
+    "title": "Junie",
+    "fullTitle": "Junie",
+    "docsUrl": "junie",
+    "desc": "https://jetbrains.com/junie",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Kagi",
+    "title": "Kagi",
+    "fullTitle": "Kagi",
+    "docsUrl": "kagi",
+    "desc": "https://kagi.com",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "KiloCode",
+    "title": "Kilo Code",
+    "fullTitle": "Kilo Code",
+    "docsUrl": "kilo-code",
+    "desc": "https://kilo.ai",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Kimi",
+    "title": "Kimi",
+    "fullTitle": "Kimi",
+    "docsUrl": "kimi",
+    "desc": "https://kimi.moonshot.cn",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Kiro",
+    "title": "Kiro",
+    "fullTitle": "Kiro",
+    "docsUrl": "kiro",
+    "desc": "https://kiro.dev",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Kling",
+    "title": "Kling",
+    "fullTitle": "Kling (可灵)",
+    "docsUrl": "kling",
+    "desc": "https://klingai.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Kluster",
+    "title": "Kluster",
+    "fullTitle": "Kluster",
+    "docsUrl": "kluster",
+    "desc": "https://kluster.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Kolors",
+    "title": "Kolors",
+    "fullTitle": "Kolors (快手可图)",
+    "docsUrl": "kolors",
+    "desc": "https://kolors.kuaishou.com",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Krea",
+    "title": "Krea",
+    "fullTitle": "Krea",
+    "docsUrl": "krea",
+    "desc": "https://krea.ai",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "KwaiKAT",
+    "title": "KwaiKAT",
+    "fullTitle": "KwaiKAT (KAT-Coder)",
+    "docsUrl": "kwai-kat",
+    "desc": "https://streamlake.ai/product/kat-coder",
+    "group": "model",
+    "hasColor": false
+  },
+  {
+    "id": "Kwaipilot",
+    "title": "Kwaipilot",
+    "fullTitle": "Kwaipilot",
+    "docsUrl": "kwaipilot",
+    "desc": "https://kwaipilot.ai",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Lambda",
+    "title": "Lambda",
+    "fullTitle": "Lambda",
+    "docsUrl": "lambda",
+    "desc": "https://lambdalabs.com",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "LangChain",
+    "title": "LangChain",
+    "fullTitle": "LangChain",
+    "docsUrl": "lang-chain",
+    "desc": "https://langchain.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Langfuse",
+    "title": "Langfuse",
+    "fullTitle": "Langfuse",
+    "docsUrl": "langfuse",
+    "desc": "https://langfuse.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "LangGraph",
+    "title": "LangGraph",
+    "fullTitle": "LangGraph (LangChain)",
+    "docsUrl": "lang-graph",
+    "desc": "https://langchain.com/LangGraph",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "LangSmith",
+    "title": "LangSmith",
+    "fullTitle": "LangSmith (LangChain)",
+    "docsUrl": "lang-smith",
+    "desc": "https://langchain.com/langsmith",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "LeptonAI",
+    "title": "LeptonAI",
+    "fullTitle": "LeptonAI",
+    "docsUrl": "lepton-ai",
+    "desc": "https://lepton.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "LG",
+    "title": "LG AI",
+    "fullTitle": "LG AI (KMMLU/EXAONE)",
+    "docsUrl": "lg",
+    "desc": "https://lgresearch.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Lightricks",
+    "title": "Lightricks",
+    "fullTitle": "Lightricks",
+    "docsUrl": "lightricks",
+    "desc": "https://lightricks.com",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Liquid",
+    "title": "Liquid",
+    "fullTitle": "Liquid",
+    "docsUrl": "liquid",
+    "desc": "https://liquid.ai",
+    "group": "model",
+    "hasColor": false
+  },
+  {
+    "id": "LiveKit",
+    "title": "LiveKit",
+    "fullTitle": "LiveKit",
+    "docsUrl": "live-kit",
+    "desc": "https://livekit.io",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "LlamaIndex",
+    "title": "LlamaIndex",
+    "fullTitle": "LlamaIndex",
+    "docsUrl": "llama-index",
+    "desc": "https://llamaindex.ai",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "LLaVA",
+    "title": "LLaVA",
+    "fullTitle": "LLaVA",
+    "docsUrl": "l-la-va",
+    "desc": "https://github.com/haotian-liu/LLaVA",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "LlmApi",
+    "title": "LLM API",
+    "fullTitle": "LLM API",
+    "docsUrl": "llm-api",
+    "desc": "https://llmapi.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "LmStudio",
+    "title": "LM Studio",
+    "fullTitle": "LM Studio",
+    "docsUrl": "lm-studio",
+    "desc": "https://lmstudio.ai",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "LobeHub",
+    "title": "LobeHub",
+    "fullTitle": "LobeHub",
+    "docsUrl": "lobe-hub",
+    "desc": "https://lobehub.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "LongCat",
+    "title": "LongCat",
+    "fullTitle": "LongCat",
+    "docsUrl": "long-cat",
+    "desc": "https://longcat.chat/",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Lovable",
+    "title": "Lovable",
+    "fullTitle": "Lovable",
+    "docsUrl": "lovable",
+    "desc": "https://lovable.dev",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Lovart",
+    "title": "Lovart",
+    "fullTitle": "Lovart",
+    "docsUrl": "lovart",
+    "desc": "https://lovart.ai",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Luma",
+    "title": "Luma",
+    "fullTitle": "Luma",
+    "docsUrl": "luma",
+    "desc": "https://lumalabs.ai",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Magic",
+    "title": "Magic",
+    "fullTitle": "Magic",
+    "docsUrl": "magic",
+    "desc": "https://magic.dev",
+    "group": "model",
+    "hasColor": false
+  },
+  {
+    "id": "Make",
+    "title": "Make",
+    "fullTitle": "Make",
+    "docsUrl": "make",
+    "desc": "https://make.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Manus",
+    "title": "Manus",
+    "fullTitle": "Manus",
+    "docsUrl": "manus",
+    "desc": "https://manus.im",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Mastra",
+    "title": "Mastra",
+    "fullTitle": "Mastra",
+    "docsUrl": "mastra",
+    "desc": "https://mastra.ai",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "MCP",
+    "title": "ModelContextProtocol",
+    "fullTitle": "MCP (Model Context Protocol)",
+    "docsUrl": "mcp",
+    "desc": "https://modelcontextprotocol.io",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "McpSo",
+    "title": "MCP.so",
+    "fullTitle": "MCP.so",
+    "docsUrl": "mcp-so",
+    "desc": "https://mcp.so",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Menlo",
+    "title": "MENLO",
+    "fullTitle": "MENLO (Lucy/Jan-nano)",
+    "docsUrl": "menlo",
+    "desc": "https://menlo.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Meshy",
+    "title": "Meshy",
+    "fullTitle": "Meshy",
+    "docsUrl": "meshy",
+    "desc": "https://meshy.ai",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Meta",
+    "title": "Meta",
+    "fullTitle": "Meta",
+    "docsUrl": "meta",
+    "desc": "https://llama.meta.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "MetaAI",
+    "title": "MetaAI",
+    "fullTitle": "MetaAI",
+    "docsUrl": "meta-ai",
+    "desc": "https://meta.ai",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "MetaGPT",
+    "title": "MetaGPT",
+    "fullTitle": "MetaGPT",
+    "docsUrl": "meta-gpt",
+    "desc": "https://github.com/FoundationAgents/MetaGPT",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Microsoft",
+    "title": "Azure",
+    "fullTitle": "Microsoft",
+    "docsUrl": "microsoft",
+    "desc": "https://microsoft.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Midjourney",
+    "title": "Midjourney",
+    "fullTitle": "Midjourney",
+    "docsUrl": "midjourney",
+    "desc": "https://midjourney.com",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Minimax",
+    "title": "Minimax",
+    "fullTitle": "Minimax",
+    "docsUrl": "minimax",
+    "desc": "https://api.minimax.chat",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Mistral",
+    "title": "Mistral",
+    "fullTitle": "Mistral",
+    "docsUrl": "mistral",
+    "desc": "https://mistral.ai",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "ModelScope",
+    "title": "ModelScope",
+    "fullTitle": "ModelScope (魔搭)",
+    "docsUrl": "model-scope",
+    "desc": "https://modelscope.cn",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Monica",
+    "title": "Monica",
+    "fullTitle": "Monica",
+    "docsUrl": "monica",
+    "desc": "https://monica.im",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Moonshot",
+    "title": "MoonshotAI",
+    "fullTitle": "Moonshot (月之暗面)",
+    "docsUrl": "moonshot",
+    "desc": "https://moonshot.cn",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "Morph",
+    "title": "Morph",
+    "fullTitle": "Morph",
+    "docsUrl": "morph",
+    "desc": "https://morphllm.com",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Moxt",
+    "title": "Moxt",
+    "fullTitle": "Moxt",
+    "docsUrl": "moxt",
+    "desc": "https://moxt.ai",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "MyShell",
+    "title": "MyShell",
+    "fullTitle": "MyShell",
+    "docsUrl": "my-shell",
+    "desc": "https://myshell.ai",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "N8n",
+    "title": "n8n",
+    "fullTitle": "n8n",
+    "docsUrl": "n-8-n",
+    "desc": "https://n8n.io",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "NanoBanana",
+    "title": "NanoBanana",
+    "fullTitle": "Nano Banana (Google)",
+    "docsUrl": "nano-banana",
+    "desc": "https://gemini.google/overview/image-generation",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Nebius",
+    "title": "Nebius",
+    "fullTitle": "Nebius",
+    "docsUrl": "nebius",
+    "desc": "https://nebius.com",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "NewAPI",
+    "title": "New API",
+    "fullTitle": "New API",
+    "docsUrl": "new-api",
+    "desc": "https://newapi.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "NotebookLM",
+    "title": "NotebookLM",
+    "fullTitle": "NotebookLM",
+    "docsUrl": "notebook-lm",
+    "desc": "https://notebooklm.google",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Notion",
+    "title": "Notion",
+    "fullTitle": "Notion",
+    "docsUrl": "notion",
+    "desc": "https://notion.com",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "NousResearch",
+    "title": "NousResearch",
+    "fullTitle": "NousResearch (Hermes)",
+    "docsUrl": "nous-research",
+    "desc": "https://nousresearch.com",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "Nova",
+    "title": "Nova",
+    "fullTitle": "Nova (AWS)",
+    "docsUrl": "nova",
+    "desc": "https://nova.amazon.com/",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "NovelAI",
+    "title": "NovelAI",
+    "fullTitle": "NovelAI",
+    "docsUrl": "novel-ai",
+    "desc": "https://novelai.net",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Novita",
+    "title": "Novita AI",
+    "fullTitle": "Novita",
+    "docsUrl": "novita",
+    "desc": "https://novita.ai/",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "NPLCloud",
+    "title": "NPLCloud",
+    "fullTitle": "NPLCloud",
+    "docsUrl": "npl-cloud",
+    "desc": "https://nlpcloud.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Nvidia",
+    "title": "Nvidia",
+    "fullTitle": "Nvidia (Nemotron)",
+    "docsUrl": "nvidia",
+    "desc": "https://nvidia.com/en-us/ai-on-rtx/chat-with-rtx-generative-ai/",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Obsidian",
+    "title": "Obsidian",
+    "fullTitle": "Obsidian",
+    "docsUrl": "obsidian",
+    "desc": "https://obsidian.md",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Ollama",
+    "title": "Ollama",
+    "fullTitle": "Ollama",
+    "docsUrl": "ollama",
+    "desc": "https://ollama.ai",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "OpenAI",
+    "title": "OpenAI",
+    "fullTitle": "OpenAI (ChatGPT)",
+    "docsUrl": "open-ai",
+    "desc": "https://openai.com",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "OpenChat",
+    "title": "OpenChat",
+    "fullTitle": "OpenChat",
+    "docsUrl": "open-chat",
+    "desc": "https://huggingface.co/openchat",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "OpenClaw",
+    "title": "OpenClaw",
+    "fullTitle": "OpenClaw (MoltBot/ClawdBot)",
+    "docsUrl": "open-claw",
+    "desc": "https://openclaw.dev",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "OpenCode",
+    "title": "opencode",
+    "fullTitle": "opencode",
+    "docsUrl": "open-code",
+    "desc": "https://opencode.ai",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "OpenHands",
+    "title": "OpenHands",
+    "fullTitle": "OpenHands",
+    "docsUrl": "open-hands",
+    "desc": "https://openhands.dev",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "OpenHuman",
+    "title": "OpenHuman",
+    "fullTitle": "OpenHuman",
+    "docsUrl": "open-human",
+    "desc": "https://tinyhumans.ai/openhuman",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "OpenRouter",
+    "title": "OpenRouter",
+    "fullTitle": "OpenRouter",
+    "docsUrl": "open-router",
+    "desc": "https://openrouter.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "OpenWebUI",
+    "title": "OpenWebUI",
+    "fullTitle": "OpenWebUI",
+    "docsUrl": "open-web-ui",
+    "desc": "https://openwebui.com",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "PaLM",
+    "title": "PaLM",
+    "fullTitle": "PaLM (Google)",
+    "docsUrl": "pa-lm",
+    "desc": "https://ai.google/discover/palm2",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Parasail",
+    "title": "Parasail",
+    "fullTitle": "Parasail",
+    "docsUrl": "parasail",
+    "desc": "https://parasail.io/",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "Perplexity",
+    "title": "Perplexity",
+    "fullTitle": "Perplexity",
+    "docsUrl": "perplexity",
+    "desc": "https://perplexity.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Phidata",
+    "title": "Phidata",
+    "fullTitle": "Phidata",
+    "docsUrl": "phidata",
+    "desc": "https://phidata.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Phind",
+    "title": "phind",
+    "fullTitle": "Phind",
+    "docsUrl": "phind",
+    "desc": "https://phind.com",
+    "group": "model",
+    "hasColor": false
+  },
+  {
+    "id": "Pi",
+    "title": "Pi",
+    "fullTitle": "Pi Agent",
+    "docsUrl": "pi",
+    "desc": "https://pi.dev",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "Pika",
+    "title": "Pika",
+    "fullTitle": "Pika",
+    "docsUrl": "pika",
+    "desc": "https://pika.art",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "PixVerse",
+    "title": "PixVerse",
+    "fullTitle": "PixVerse",
+    "docsUrl": "pix-verse",
+    "desc": "https://app.pixverse.ai",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Player2",
+    "title": "Player2",
+    "fullTitle": "Player2",
+    "docsUrl": "player2",
+    "desc": "https://player2.game",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Poe",
+    "title": "Poe",
+    "fullTitle": "Poe",
+    "docsUrl": "poe",
+    "desc": "https://poe.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Pollinations",
+    "title": "Pollinations",
+    "fullTitle": "Pollinations",
+    "docsUrl": "pollinations",
+    "desc": "https://pollinations.ai",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Poolside",
+    "title": "Poolside",
+    "fullTitle": "Poolside",
+    "docsUrl": "poolside",
+    "desc": "https://poolside.ai",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "PPIO",
+    "title": "PPIO",
+    "fullTitle": "PPIO",
+    "docsUrl": "ppio",
+    "desc": "https://ppinfra.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "PrunaAI",
+    "title": "PrunaAI",
+    "fullTitle": "Pruna AI",
+    "docsUrl": "pruna-ai",
+    "desc": "https://pruna.ai",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "PydanticAI",
+    "title": "PydanticAI",
+    "fullTitle": "PydanticAI",
+    "docsUrl": "pydantic-ai",
+    "desc": "https://ai.pydantic.dev",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Qingyan",
+    "title": "Qingyan",
+    "fullTitle": "Qingyan (智谱清言)",
+    "docsUrl": "qingyan",
+    "desc": "https://chatglm.cn",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Qiniu",
+    "title": "Qiniu",
+    "fullTitle": "Qiniu (七牛云)",
+    "docsUrl": "qiniu",
+    "desc": "https://qiniu.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Qoder",
+    "title": "Qoder",
+    "fullTitle": "Qoder",
+    "docsUrl": "qoder",
+    "desc": "https://qoder.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Qwen",
+    "title": "Qwen",
+    "fullTitle": "Qwen (千问)",
+    "docsUrl": "qwen",
+    "desc": "https://huggingface.co/Qwen",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Railway",
+    "title": "Railway",
+    "fullTitle": "Railway",
+    "docsUrl": "railway",
+    "desc": "https://railway.com",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Recraft",
+    "title": "Recraft",
+    "fullTitle": "Recraft",
+    "docsUrl": "recraft",
+    "desc": "https://recraft.ai",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Relace",
+    "title": "Relace",
+    "fullTitle": "Relace",
+    "docsUrl": "relace",
+    "desc": "https://relace.ai",
+    "group": "model",
+    "hasColor": false
+  },
+  {
+    "id": "Replicate",
+    "title": "Replicate",
+    "fullTitle": "Replicate",
+    "docsUrl": "replicate",
+    "desc": "https://replicate.com",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "Replit",
+    "title": "Replit",
+    "fullTitle": "Replit",
+    "docsUrl": "replit",
+    "desc": "https://replit.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Reve",
+    "title": "Reve",
+    "fullTitle": "Reve",
+    "docsUrl": "reve",
+    "desc": "https://app.reve.com",
+    "group": "model",
+    "hasColor": false
+  },
+  {
+    "id": "RooCode",
+    "title": "RooCode",
+    "fullTitle": "RooCode",
+    "docsUrl": "roo-code",
+    "desc": "https://roocode.com",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "RSSHub",
+    "title": "RSSHub",
+    "fullTitle": "RSSHub",
+    "docsUrl": "rss-hub",
+    "desc": "https://rsshub.app",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Runway",
+    "title": "Runway",
+    "fullTitle": "Runway",
+    "docsUrl": "runway",
+    "desc": "https://runwayml.com",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Rwkv",
+    "title": "RWKV",
+    "fullTitle": "RWKV",
+    "docsUrl": "rwkv",
+    "desc": "https://github.com/RWKV",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "SambaNova",
+    "title": "SambaNova",
+    "fullTitle": "SambaNova",
+    "docsUrl": "samba-nova",
+    "desc": "https://sambanova.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Search1API",
+    "title": "Search1API",
+    "fullTitle": "Search1API",
+    "docsUrl": "search1-api",
+    "desc": "https://search1api.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "SearchApi",
+    "title": "SearchApi",
+    "fullTitle": "SearchApi",
+    "docsUrl": "search-api",
+    "desc": "https://searchapi.io",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "SearXNG",
+    "title": "SearXNG",
+    "fullTitle": "SearXNG",
+    "docsUrl": "sear-xng",
+    "desc": "https://searxng.org",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "SenseNova",
+    "title": "SenseNova",
+    "fullTitle": "SenseNova (商汤)",
+    "docsUrl": "sense-nova",
+    "desc": "https://platform.sensenova.cn",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "SiliconCloud",
+    "title": "SiliconCloud",
+    "fullTitle": "SiliconCloud (SiliconFlow)",
+    "docsUrl": "silicon-cloud",
+    "desc": "https://siliconflow.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "SillyTavern",
+    "title": "SillyTavern",
+    "fullTitle": "SillyTavern",
+    "docsUrl": "silly-tavern",
+    "desc": "https://github.com/SillyTavern",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Skywork",
+    "title": "Skywork",
+    "fullTitle": "Skywork (天工)",
+    "docsUrl": "skywork",
+    "desc": "https://skywork.ai",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Slock",
+    "title": "Slock",
+    "fullTitle": "Slock",
+    "docsUrl": "slock",
+    "desc": "https://slock.ai",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Smithery",
+    "title": "Smithery",
+    "fullTitle": "Smithery",
+    "docsUrl": "smithery",
+    "desc": "https://smithery.ai",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Snowflake",
+    "title": "Snowflake",
+    "fullTitle": "Snowflake",
+    "docsUrl": "snowflake",
+    "desc": "https://snowflake.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "SophNet",
+    "title": "SophNet",
+    "fullTitle": "SophNet",
+    "docsUrl": "soph-net",
+    "desc": "https://sophnet.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Sora",
+    "title": "Sora",
+    "fullTitle": "Sora (OpenAI)",
+    "docsUrl": "sora",
+    "desc": "https://platform.openai.com/docs/models/sora-2",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Spark",
+    "title": "Spark",
+    "fullTitle": "Spark (讯飞星火)",
+    "docsUrl": "spark",
+    "desc": "https://xinghuo.xfyun.cn",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "SpeedAI",
+    "title": "SpeedAI",
+    "fullTitle": "SpeedAI",
+    "docsUrl": "speed-ai",
+    "desc": "https://speedai.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Stability",
+    "title": "Stability",
+    "fullTitle": "Stability (StableDiffusion)",
+    "docsUrl": "stability",
+    "desc": "https://deepmind.google/technologies/gemini",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "StateCloud",
+    "title": "StateCloud",
+    "fullTitle": "StateCloud (天翼云)",
+    "docsUrl": "state-cloud",
+    "desc": "https://ctyun.cn/act/xirang/deepseek",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Stepfun",
+    "title": "StepFun",
+    "fullTitle": "Stepfun (阶跃星辰)",
+    "docsUrl": "stepfun",
+    "desc": "https://stepfun.com",
+    "group": "model",
+    "hasColor": false
+  },
+  {
+    "id": "Straico",
+    "title": "Straico",
+    "fullTitle": "Straico",
+    "docsUrl": "straico",
+    "desc": "https://straico.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "StreamLake",
+    "title": "StreamLake",
+    "fullTitle": "StreamLake",
+    "docsUrl": "stream-lake",
+    "desc": "https://streamlake.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "SubModel",
+    "title": "SubModel",
+    "fullTitle": "SubModel",
+    "docsUrl": "sub-model",
+    "desc": "https://submodel.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Suno",
+    "title": "Suno",
+    "fullTitle": "Suno",
+    "docsUrl": "suno",
+    "desc": "https://app.suno.ai",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Sync",
+    "title": "Sync",
+    "fullTitle": "Sync",
+    "docsUrl": "sync",
+    "desc": "https://sync.so",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Targon",
+    "title": "Targon",
+    "fullTitle": "Targon",
+    "docsUrl": "targon",
+    "desc": "https://targon.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Tavily",
+    "title": "Tavily",
+    "fullTitle": "Tavily",
+    "docsUrl": "tavily",
+    "desc": "https://tavily.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Tencent",
+    "title": "Tencent",
+    "fullTitle": "Tencent",
+    "docsUrl": "tencent",
+    "desc": "https://tencent.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "TencentCloud",
+    "title": "TencentCloud",
+    "fullTitle": "TencentCloud (腾讯云)",
+    "docsUrl": "tencent-cloud",
+    "desc": "https://cloud.tencent.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Tiangong",
+    "title": "Tiangong",
+    "fullTitle": "Tiangong (天工)",
+    "docsUrl": "tiangong",
+    "desc": "https://tiangong.cn",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "TII",
+    "title": "Technology Innovation Institute",
+    "fullTitle": "Technology Innovation Institute (Falcon)",
+    "docsUrl": "tii",
+    "desc": "https://tii.ae",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Together",
+    "title": "together.ai",
+    "fullTitle": "together.ai",
+    "docsUrl": "together",
+    "desc": "https://together.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "TopazLabs",
+    "title": "TopazLabs",
+    "fullTitle": "TopazLabs",
+    "docsUrl": "topaz-labs",
+    "desc": "https://topazlabs.com",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Trae",
+    "title": "TRAE",
+    "fullTitle": "TRAE",
+    "docsUrl": "trae",
+    "desc": "https://trae.ai",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Tripo",
+    "title": "Tripo",
+    "fullTitle": "Tripo",
+    "docsUrl": "tripo",
+    "desc": "https://tripo3d.ai",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "TuriX",
+    "title": "TuriX",
+    "fullTitle": "TuriX",
+    "docsUrl": "turi-x",
+    "desc": "https://turix.ai",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Udio",
+    "title": "Udio",
+    "fullTitle": "Udio",
+    "docsUrl": "udio",
+    "desc": "https://udio.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Unstructured",
+    "title": "Unstructured",
+    "fullTitle": "Unstructured",
+    "docsUrl": "unstructured",
+    "desc": "https://unstructured.io",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Upstage",
+    "title": "Upsate",
+    "fullTitle": "Upstage",
+    "docsUrl": "upstage",
+    "desc": "https://upstage.ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "V0",
+    "title": "V0",
+    "fullTitle": "V0 (Vercel)",
+    "docsUrl": "v-0",
+    "desc": "https://v0.dev",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "VectorizerAI",
+    "title": "Vectorizer.AI",
+    "fullTitle": "Vectorizer.AI",
+    "docsUrl": "vectorizer-ai",
+    "desc": "https://vectorizer.ai",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Venice",
+    "title": "Venice",
+    "fullTitle": "Venice",
+    "docsUrl": "venice",
+    "desc": "https://venice.ai",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Vercel",
+    "title": "Vercel",
+    "fullTitle": "Vercel",
+    "docsUrl": "vercel",
+    "desc": "https://sdk.vercel.ai",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "VertexAI",
+    "title": "VertexAI",
+    "fullTitle": "VertexAI (Google)",
+    "docsUrl": "vertex-ai",
+    "desc": "https://cloud.google.com/generative-ai-studio",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Vidu",
+    "title": "Vidu",
+    "fullTitle": "Vidu",
+    "docsUrl": "vidu",
+    "desc": "https://vidu.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Viggle",
+    "title": "Viggle",
+    "fullTitle": "Viggle",
+    "docsUrl": "viggle",
+    "desc": "https://viggle.ai",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Vllm",
+    "title": "vLLM",
+    "fullTitle": "vLLM",
+    "docsUrl": "vllm",
+    "desc": "https://github.com/vllm-project",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Volcengine",
+    "title": "Volcengine",
+    "fullTitle": "Volcengine (火山引擎)",
+    "docsUrl": "volcengine",
+    "desc": "https://volcengine.com",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Voyage",
+    "title": "Voyage",
+    "fullTitle": "Voyage",
+    "docsUrl": "voyage",
+    "desc": "https://voyageai.com",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Wenxin",
+    "title": "Wenxin",
+    "fullTitle": "Wenxin (文心)",
+    "docsUrl": "wenxin",
+    "desc": "https://yiyan.baidu.com",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Windsurf",
+    "title": "Windsurf",
+    "fullTitle": "Windsurf",
+    "docsUrl": "windsurf",
+    "desc": "https://windsurf.com",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "WorkersAI",
+    "title": "WorkersAI",
+    "fullTitle": "WorkersAI (Cloudflare)",
+    "docsUrl": "workers-ai",
+    "desc": "https://developers.cloudflare.com/workers-ai",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "WorldRouter",
+    "title": "WorldRouter",
+    "fullTitle": "WorldRouter",
+    "docsUrl": "world-router",
+    "desc": "https://worldrouter.ai",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "XAI",
+    "title": "Grok",
+    "fullTitle": "xAI",
+    "docsUrl": "xai",
+    "desc": "https://x.ai",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "XiaomiMiMo",
+    "title": "XiaomiMiMo",
+    "fullTitle": "Xiaomi MiMo",
+    "docsUrl": "xiaomi-mi-mo",
+    "desc": "https://platform.xiaomimimo.com",
+    "group": "model",
+    "hasColor": false
+  },
+  {
+    "id": "Xinference",
+    "title": "Xinference",
+    "fullTitle": "Xinference",
+    "docsUrl": "xinference",
+    "desc": "https://github.com/xorbitsai/inference",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Xpay",
+    "title": "xpay",
+    "fullTitle": "Xpay",
+    "docsUrl": "xpay",
+    "desc": "https://xpay.sh",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Xuanyuan",
+    "title": "轩辕",
+    "fullTitle": "Xuanyuan (度小满轩辕)",
+    "docsUrl": "xuanyuan",
+    "desc": "https://github.com/Duxiaoman-DI/XuanYuan",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "Yandex",
+    "title": "Yandex",
+    "fullTitle": "Yandex",
+    "docsUrl": "yandex",
+    "desc": "https://ai.yandex.com",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "Yi",
+    "title": "Yi",
+    "fullTitle": "Yi (零一万物)",
+    "docsUrl": "yi",
+    "desc": "https://github.com/01-ai/Yi",
+    "group": "model",
+    "hasColor": true
+  },
+  {
+    "id": "YouMind",
+    "title": "YouMind",
+    "fullTitle": "YouMind",
+    "docsUrl": "you-mind",
+    "desc": "https://youmind.ai",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Yuanbao",
+    "title": "Yuanbao",
+    "fullTitle": "Yuanbao (腾讯元宝)",
+    "docsUrl": "yuanbao",
+    "desc": "https://yuanbao.tencent.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "ZAI",
+    "title": "Z.ai",
+    "fullTitle": "Z.ai",
+    "docsUrl": "zai",
+    "desc": "https://z.ai",
+    "group": "application",
+    "hasColor": false
+  },
+  {
+    "id": "Zapier",
+    "title": "Zapier",
+    "fullTitle": "Zapier",
+    "docsUrl": "zapier",
+    "desc": "https://zapier.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Zeabur",
+    "title": "Zeabur",
+    "fullTitle": "Zeabur",
+    "docsUrl": "zeabur",
+    "desc": "https://zeabur.com",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "Zencoder",
+    "title": "Zencoder",
+    "fullTitle": "Zencoder",
+    "docsUrl": "zencoder",
+    "desc": "https://zencoder.ai",
+    "group": "application",
+    "hasColor": true
+  },
+  {
+    "id": "ZenMux",
+    "title": "ZenMux",
+    "fullTitle": "ZenMux",
+    "docsUrl": "zen-mux",
+    "desc": "https://zenmux.ai",
+    "group": "provider",
+    "hasColor": false
+  },
+  {
+    "id": "ZeroOne",
+    "title": "01.AI",
+    "fullTitle": "01.AI (零一万物)",
+    "docsUrl": "zero-one",
+    "desc": "https://lingyiwanwu.com/",
+    "group": "provider",
+    "hasColor": true
+  },
+  {
+    "id": "Zhipu",
+    "title": "Zhipu",
+    "fullTitle": "Zhipu (智谱)",
+    "docsUrl": "zhipu",
+    "desc": "https://zhipuai.cn",
+    "group": "provider",
+    "hasColor": true
+  }
+]

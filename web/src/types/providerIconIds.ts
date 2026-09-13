@@ -6,7 +6,7 @@
  * `types/usageEventView.ts` resolves one for a request row. Keeping two copies
  * meant a new provider added to one silently disagreed with the other, and
  * pointing the request-list module at `LobeIcon.tsx` would have dragged the
- * whole `@lobehub/icons` namespace into a module the logic test harness loads.
+ * whole icon renderer into a module the logic test harness loads.
  */
 export const PROVIDER_ICON_IDS: Record<string, string> = {
   claude: 'Claude',

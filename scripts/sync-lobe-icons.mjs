@@ -17,7 +17,7 @@ export function syncLobeIcons({ quiet = false } = {}) {
   const packageRoot = path.dirname(require.resolve('@lobehub/icons-static-svg/package.json'));
   const source = path.join(packageRoot, 'icons');
   const target = path.join(root, 'web', 'public', 'lobe-icons');
-  const toc = JSON.parse(fs.readFileSync(require.resolve('@lobehub/icons/es/toc.json'), 'utf8'));
+  const catalog = JSON.parse(fs.readFileSync(path.join(root, 'web', 'src', 'generated', 'lobeIconCatalog.json'), 'utf8'));
   const slug = (iconId) => iconId.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
   if (!fs.existsSync(source)) {
@@ -28,9 +28,9 @@ export function syncLobeIcons({ quiet = false } = {}) {
   fs.rmSync(staging, { recursive: true, force: true });
   fs.mkdirSync(staging, { recursive: true });
   let count = 0;
-  for (const item of toc) {
+  for (const item of catalog) {
     const names = [`${slug(item.id)}.svg`];
-    if (item.param?.hasColor) names.push(`${slug(item.id)}-color.svg`);
+    if (item.hasColor) names.push(`${slug(item.id)}-color.svg`);
     for (const name of names) {
       const sourceFile = path.join(source, name);
       if (!fs.existsSync(sourceFile)) throw new Error(`missing static Lobe icon: ${name}`);

@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "node ../scripts/sync-lobe-icons.mjs && vite",
-    "build": "node ../scripts/sync-lobe-icons.mjs && vite build",
+    "dev": "vite",
+    "build": "vite build",
     "preview": "vite preview",
     "type-check": "tsc --noEmit"
   },
@@ -25,7 +25,6 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@lobehub/icons": "5.16.0",
     "@lobehub/icons-static-svg": "1.95.0",
     "@types/node": "^22.13.4",
     "@types/react": "^18.3.18",
