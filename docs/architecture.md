@@ -705,32 +705,35 @@ is the configuration the baseline failed.
 
 ### 11.4 The CI critical path is Chromium's OS dependencies
 
-Measured from the workflow's own step timings rather than inferred, the `browser`
-job's preparation step is about 99s and it is bound by `playwright-core install
---with-deps chromium`, not by the build. The SPA build is 29.5s and the Go binaries
-about 1.3s, both running concurrently with the apt work, so together they are
-entirely hidden behind it. Counting 18 apt package operations in that window is
-what identifies it as the bottleneck.
+The `browser` job's preparation step was about 99s, bound by
+`playwright-core install --with-deps chromium`: almost all of it apt installing the
+shared libraries Chromium links against. The SPA build (29.5s) and the Go binaries
+(1.3s) run concurrently with that work and are entirely hidden behind it, which is
+why overlapping more with the step cannot shorten it.
 
-That is why the preparation step is shaped the way it is, and why the remaining
-ideas do not help:
+The apt cost is real but it is not always necessary. `scripts/install-chromium.mjs`
+downloads the browser without `--with-deps`, probes a real launch, and installs the
+dependencies only when that launch fails. A runner image that already carries the
+libraries therefore skips the ~100s, and one that does not gets exactly the command
+the workflow used to run unconditionally, so the worst case is the previous cost
+rather than a new failure mode. A second launch failure is reported instead of
+ignored, because the alternative is a browser job with no browser, which surfaces
+as a test failure rather than an environment one.
 
-- **The apt work cannot be cached away.** `--with-deps` installs the shared libraries
-  Chromium links against, and a cache hit on `~/.cache/ms-playwright` proves the
-  browser *files* are present, never that those libraries are. Preinstalling them in
-  the runner image would remove the cost, at the price of trading a pinned-toolchain
-  guarantee for an image dependency.
-- **Overlapping more work with it does not shorten the step.** The build is already
-  hidden; the only thing left to hide is the test run, which needs the binary this
-  step produces.
+The probe, not the download's exit status, is what decides. A download that reports
+success while the binary cannot start is precisely the state `--with-deps` exists to
+repair, so trusting the exit status would reintroduce the bug the flag prevents.
+`scripts/install-chromium.test.mjs` asserts both halves.
+
+Two constraints keep the preparation step's shape:
+
 - **The application binary must be compiled after the SPA build**, because it embeds
   `internal/web/dist`. Building it alongside `pnpm build` can embed a half-written
-  bundle, so the sequencing inside the preparation step is a correctness constraint
-  rather than a preference. Only the seeder, which embeds nothing, runs in parallel.
-
-So the CI number that matters is the run total. It moved from 3m09s to 3m25s while
-*gaining* a gate that previously ran nowhere, with the browser job's test phase at
-70s concurrent (80s sequential).
+  bundle, so the sequencing is a correctness requirement rather than a preference.
+  Only the seeder, which embeds nothing, runs in parallel.
+- **A cache hit on `~/.cache/ms-playwright` proves the browser files are present and
+  says nothing about the shared libraries.** That is why the OS dependencies are
+  still guaranteed on every run, just by probe rather than unconditionally.
 
 ## 12. Where to look next
 

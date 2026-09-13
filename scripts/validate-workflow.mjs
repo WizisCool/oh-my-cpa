@@ -56,7 +56,7 @@ if (document.errors.length > 0) {
     throw new Error('CI workflow does not run the focused browser probes on master');
   }
   const browserPreparation = browserSteps.find((step) => step.name === 'Prepare Chromium and build embedded SPA');
-  if (!browserPreparation?.run?.includes('playwright-core install') || !browserPreparation.run.includes('pnpm build')) {
+  if (!browserPreparation?.run?.includes('install-chromium.mjs') || !browserPreparation.run.includes('pnpm build')) {
     throw new Error('CI workflow does not prepare Chromium and build the SPA in one step');
   }
   if (!browserPreparation.run.includes('tmp/oh-my-cpa-browser')) {
@@ -70,10 +70,12 @@ if (document.errors.length > 0) {
   if (applicationBuildIndex < 0 || spaBuildIndex < 0 || applicationBuildIndex < spaBuildIndex) {
     throw new Error('CI workflow must build the embedded SPA before the application binary that embeds it');
   }
-  // Chromium's shared libraries are not part of the browser cache, so the OS
-  // dependency installation cannot be skipped on a cache hit.
-  if (!browserPreparation.run.includes('--with-deps')) {
-    throw new Error('CI workflow does not install Chromium OS dependencies unconditionally');
+  // Chromium's shared libraries are not part of the browser cache. The installer
+  // probes a real launch and installs them only when it fails, so the guarantee is
+  // kept without paying the apt cost on a runner that already has them. Asserting
+  // the script is used is what keeps that guarantee from being optimised away again.
+  if (!browserPreparation.run.includes('install-chromium.mjs')) {
+    throw new Error('CI workflow does not install Chromium through the probe-and-fallback script');
   }
   for (const name of ['Run deterministic browser smoke']) {
     const step = browserSteps.find((candidate) => candidate.name === name);

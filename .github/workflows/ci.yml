@@ -106,20 +106,24 @@ jobs:
         run: pnpm verify:toolchain:strict
 
       # A cache hit proves the browser *files* are present, never that the runner
-      # has the shared libraries Chromium links against. `--with-deps` is therefore
-      # unconditional and its result is checked, while the download itself is what
-      # the cache saves.
+      # has the shared libraries Chromium links against, so the OS dependencies are
+      # still guaranteed - but by a launch probe rather than unconditionally. On a
+      # runner image that already carries them, `--with-deps` was about 100 seconds of
+      # apt work that proved nothing; `scripts/install-chromium.mjs` downloads the
+      # browser, tries a real launch, and installs the dependencies only when that
+      # launch fails. The fallback is the previous command, so the worst case is the
+      # old cost rather than a new failure mode, and a second launch failure is
+      # reported instead of ignored.
       - name: Cache Playwright Chromium
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
 
-      # Chromium's OS dependencies and the SPA build touch separate resources, so
-      # they run concurrently. The Go binaries are built *after* `pnpm build`
-      # completes and never beside it: the application binary embeds
-      # `internal/web/dist`, so compiling it while the SPA build is rewriting that
-      # directory can embed a half-written bundle.
+      # Chromium and the SPA build touch separate resources, so they run concurrently.
+      # The Go binaries are built *after* `pnpm build` completes and never beside it:
+      # the application binary embeds `internal/web/dist`, so compiling it while the
+      # SPA build is rewriting that directory can embed a half-written bundle.
       #
       # The seeder does not embed the SPA and is started as soon as the SPA build
       # finishes, in parallel with the application build.
@@ -129,7 +133,7 @@ jobs:
         run: |
           set -o pipefail
           install_log="$(mktemp)"
-          pnpm exec playwright-core install --with-deps chromium >"${install_log}" 2>&1 &
+          node scripts/install-chromium.mjs >"${install_log}" 2>&1 &
           install_pid=$!
           build_status=0
           pnpm build || build_status=$?
