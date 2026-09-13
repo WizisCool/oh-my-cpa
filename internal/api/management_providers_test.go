@@ -27,9 +27,81 @@ type providerFakeServerState struct {
 	codexProviders  []map[string]any
 	claudeProviders []map[string]any
 	geminiProviders []map[string]any
+	// putCount counts the whole-list writes CPA actually received, so a test can
+	// assert that a refused write never reached the gateway.
+	putCount int
+	// hooksMu guards the hooks below, which a test installs before issuing any
+	// request and the serving goroutines read per request.
+	hooksMu sync.Mutex
+	// beforeCodexRead runs on the serving goroutine before the codex list is
+	// read, which lets a test slow a read down so a second toggle really races it.
+	beforeCodexRead func()
+	// openCodexSections counts how many codex read-modify-write windows are open
+	// at once, and peakCodexSections is the high-water mark. One flight at a time
+	// is the property that stops a whole-list write from discarding another; a
+	// value above 1 means two toggles read the same baseline.
+	openCodexSections int
+	peakCodexSections int
+}
+
+func (s *providerFakeServerState) setBeforeCodexRead(hook func()) {
+	s.hooksMu.Lock()
+	defer s.hooksMu.Unlock()
+	s.beforeCodexRead = hook
+}
+
+func (s *providerFakeServerState) runBeforeCodexRead() {
+	s.hooksMu.Lock()
+	hook := s.beforeCodexRead
+	s.hooksMu.Unlock()
+	if hook != nil {
+		hook()
+	}
+}
+
+// beginCodexSection and endCodexSection bracket one whole-list read-modify-write
+// as CPA observes it. They take the state lock themselves, so a test can call
+// them around a deliberately slow read without holding the fixture's mutex.
+func (s *providerFakeServerState) beginCodexSection() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.openCodexSections++
+	if s.openCodexSections > s.peakCodexSections {
+		s.peakCodexSections = s.openCodexSections
+	}
+}
+
+func (s *providerFakeServerState) endCodexSection() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.openCodexSections > 0 {
+		s.openCodexSections--
+	}
+}
+
+func (s *providerFakeServerState) codexSectionPeak() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.peakCodexSections
+}
+
+// providerTestFixture is the assembled console plus the fake CPA it talks to.
+// Tests that need the Handler itself read the gate; the common case uses
+// startProviderTestServer, which exposes only the client and the fixture state.
+type providerTestFixture struct {
+	client  *http.Client
+	baseURL string
+	state   *providerFakeServerState
+	handler *Handler
 }
 
 func startProviderTestServer(t *testing.T) (*http.Client, string, *providerFakeServerState) {
+	t.Helper()
+	fixture := newProviderTestFixture(t)
+	return fixture.client, fixture.baseURL, fixture.state
+}
+
+func newProviderTestFixture(t *testing.T) providerTestFixture {
 	t.Helper()
 	state := &providerFakeServerState{
 		clientKeys: []string{"sk-original-key-1", "sk-original-key-2"},
@@ -66,6 +138,18 @@ func startProviderTestServer(t *testing.T) (*http.Client, string, *providerFakeS
 	}
 
 	cpaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		// A codex read followed later by a codex write is one read-modify-write
+		// window. Bracketing both here is what lets a test assert that two windows
+		// never overlap, which is the invariant that prevents a lost update.
+		if request.URL.Path == "/v0/management/codex-api-key" && (request.Method == http.MethodGet || request.Method == http.MethodPut) {
+			state.beginCodexSection()
+			defer state.endCodexSection()
+		}
+		// The read hook runs before the state lock is taken, so a test can slow a
+		// read without also blocking the write it is meant to race.
+		if request.Method == http.MethodGet && request.URL.Path == "/v0/management/codex-api-key" {
+			state.runBeforeCodexRead()
+		}
 		state.mu.Lock()
 		defer state.mu.Unlock()
 		writer.Header().Set("Content-Type", "application/json")
@@ -90,6 +174,7 @@ func startProviderTestServer(t *testing.T) (*http.Client, string, *providerFakeS
 			var arr []map[string]any
 			_ = json.NewDecoder(request.Body).Decode(&arr)
 			state.codexProviders = arr
+			state.putCount++
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 		case path == "/v0/management/openai-compatibility" && request.Method == http.MethodGet:
 			_ = json.NewEncoder(writer).Encode(map[string]any{"openai-compatibility": state.oaiProviders})
@@ -176,7 +261,7 @@ func startProviderTestServer(t *testing.T) (*http.Client, string, *providerFakeS
 		t.Fatalf("login failed: %v", err)
 	}
 
-	return client, appServer.URL, state
+	return providerTestFixture{client: client, baseURL: appServer.URL, state: state, handler: handler}
 }
 
 func TestManagementClientAPIKeysEndpoints(t *testing.T) {

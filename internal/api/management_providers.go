@@ -672,12 +672,66 @@ type patchProviderStatusRequest struct {
 	Family   string `json:"family"`
 	Index    int    `json:"index"`
 	Disabled bool   `json:"disabled"`
+	// ExpectedAuthIndex and ExpectedName are optional preconditions. Providers
+	// are addressed positionally, and the client now retries a transient failure,
+	// so between two attempts another session could delete a provider and shift
+	// every later index. Without a precondition that retry would toggle a
+	// different provider than the operator clicked, silently. When either is
+	// supplied it must still match the entry at that index, or the write is
+	// refused with a conflict instead of touching the wrong row.
+	//
+	// They are optional rather than required so an older client keeps working;
+	// the browser always sends whichever of the two its row carries.
+	ExpectedAuthIndex string `json:"expected_auth_index,omitempty"`
+	ExpectedName      string `json:"expected_name,omitempty"`
+}
+
+// verifyAuthIndex refuses the write when the caller named the provider it meant
+// and the entry at that position is not it.
+//
+// The client retries a transient failure, and positions shift when a provider is
+// deleted; comparing the identity the operator actually saw turns a retry that
+// would have toggled a different provider into an explicit conflict.
+func (req patchProviderStatusRequest) verifyAuthIndex(actual string) error {
+	expected := strings.TrimSpace(req.ExpectedAuthIndex)
+	if expected == "" {
+		return nil
+	}
+	if strings.TrimSpace(actual) != expected {
+		return newProviderWriteError(
+			http.StatusConflict,
+			"the provider at this position changed since it was read; refresh and try again",
+		)
+	}
+	return nil
+}
+
+// verifyName is the same precondition for the family that has no auth index:
+// openai-compatibility entries are identified by their configured name.
+func (req patchProviderStatusRequest) verifyName(actual string) error {
+	expected := strings.TrimSpace(req.ExpectedName)
+	if expected == "" {
+		return nil
+	}
+	if strings.TrimSpace(actual) != expected {
+		return newProviderWriteError(
+			http.StatusConflict,
+			"the provider at this position changed since it was read; refresh and try again",
+		)
+	}
+	return nil
 }
 
 func (h *Handler) patchManagementProviderStatus(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	var req patchProviderStatusRequest
 	if err := decodeManagementJSON(writer, request, 8*1024, &req); err != nil {
+		return
+	}
+	// A negative index is rejected here rather than by the bounds check below,
+	// which compares against a length and would accept it.
+	if req.Index < 0 {
+		writeError(writer, http.StatusBadRequest, "provider index must not be negative")
 		return
 	}
 
@@ -694,82 +748,9 @@ func (h *Handler) patchManagementProviderStatus(writer http.ResponseWriter, requ
 		return
 	}
 
-	switch req.Family {
-	case "openai-compatibility":
-		resp, err := client.OpenAICompatibility(ctx)
-		if err != nil {
-			writeCPAFacadeError(writer, err)
-			return
-		}
-		if req.Index >= len(resp.Entries) {
-			writeError(writer, http.StatusNotFound, "provider index out of bounds")
-			return
-		}
-		resp.Entries[req.Index].Disabled = req.Disabled
-		if err := client.UpdateOpenAICompatibility(ctx, resp.Entries); err != nil {
-			_ = h.recordAudit(request, "provider.toggle_status", "provider", targetID, "failure", map[string]any{"error": err.Error()})
-			writeCPAFacadeError(writer, err)
-			return
-		}
-	case "claude", "codex", "gemini":
-		// Config API-key entries have no disabled field in CPA's schema, so the
-		// gateway cannot see a local preference. CPA's own disable mechanism is
-		// the excluded-all marker in excluded-models; anything else only repaints
-		// the UI while the gateway keeps routing — that is exactly the fallback
-		// leak this used to cause.
-		switch req.Family {
-		case "claude":
-			entries, fetchErr := client.ClaudeAPIKeys(ctx)
-			if fetchErr != nil {
-				writeCPAFacadeError(writer, fetchErr)
-				return
-			}
-			if req.Index >= len(entries) {
-				writeError(writer, http.StatusNotFound, "provider index out of bounds")
-				return
-			}
-			entries[req.Index].ExcludedModels = management.SetExcludedAll(entries[req.Index].ExcludedModels, req.Disabled)
-			if updateErr := client.UpdateClaudeAPIKeys(ctx, entries); updateErr != nil {
-				_ = h.recordAudit(request, "provider.toggle_status", "provider", targetID, "failure", map[string]any{"error": updateErr.Error()})
-				writeCPAFacadeError(writer, updateErr)
-				return
-			}
-		case "codex":
-			response, fetchErr := client.CodexAPIKeys(ctx)
-			if fetchErr != nil {
-				writeCPAFacadeError(writer, fetchErr)
-				return
-			}
-			entries := response.Entries
-			if req.Index >= len(entries) {
-				writeError(writer, http.StatusNotFound, "provider index out of bounds")
-				return
-			}
-			entries[req.Index].ExcludedModels = management.SetExcludedAll(entries[req.Index].ExcludedModels, req.Disabled)
-			if updateErr := client.UpdateCodexAPIKeys(ctx, entries); updateErr != nil {
-				_ = h.recordAudit(request, "provider.toggle_status", "provider", targetID, "failure", map[string]any{"error": updateErr.Error()})
-				writeCPAFacadeError(writer, updateErr)
-				return
-			}
-		case "gemini":
-			entries, fetchErr := client.GeminiAPIKeys(ctx)
-			if fetchErr != nil {
-				writeCPAFacadeError(writer, fetchErr)
-				return
-			}
-			if req.Index >= len(entries) {
-				writeError(writer, http.StatusNotFound, "provider index out of bounds")
-				return
-			}
-			entries[req.Index].ExcludedModels = management.SetExcludedAll(entries[req.Index].ExcludedModels, req.Disabled)
-			if updateErr := client.UpdateGeminiAPIKeys(ctx, entries); updateErr != nil {
-				_ = h.recordAudit(request, "provider.toggle_status", "provider", targetID, "failure", map[string]any{"error": updateErr.Error()})
-				writeCPAFacadeError(writer, updateErr)
-				return
-			}
-		}
-	default:
-		writeError(writer, http.StatusBadRequest, "provider family does not support status toggle")
+	if err := h.writeProviderStatus(ctx, client, req); err != nil {
+		_ = h.recordAudit(request, "provider.toggle_status", "provider", targetID, "failure", map[string]any{"error": err.Error()})
+		writeProviderWriteError(writer, err)
 		return
 	}
 
@@ -781,6 +762,95 @@ func (h *Handler) patchManagementProviderStatus(writer http.ResponseWriter, requ
 		"index":    req.Index,
 		"disabled": req.Disabled,
 	})
+}
+
+// writeProviderStatus is the whole-list read-modify-write behind one toggle. It
+// reports the outcome instead of replying, because the caller records the audit
+// result and composes the response only after the write window is released.
+func (h *Handler) writeProviderStatus(ctx context.Context, client *management.Client, req patchProviderStatusRequest) error {
+	switch req.Family {
+	case "openai-compatibility":
+		return gatedProviderListWrite(h, ctx,
+			func(ctx context.Context) (management.OpenAICompatibilityResponse, error) {
+				return client.OpenAICompatibility(ctx)
+			},
+			func(ctx context.Context, list management.OpenAICompatibilityResponse) error {
+				return client.UpdateOpenAICompatibility(ctx, list.Entries)
+			},
+			func(list *management.OpenAICompatibilityResponse) error {
+				if req.Index >= len(list.Entries) {
+					return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
+				}
+				if err := req.verifyName(list.Entries[req.Index].Name); err != nil {
+					return err
+				}
+				list.Entries[req.Index].Disabled = req.Disabled
+				return nil
+			})
+	case "claude", "codex", "gemini":
+		// Config API-key entries have no disabled field in CPA's schema, so the
+		// gateway cannot see a local preference. CPA's own disable mechanism is
+		// the excluded-all marker in excluded-models; anything else only repaints
+		// the UI while the gateway keeps routing — that is exactly the fallback
+		// leak this used to cause.
+		applyExcludedAll := func(entries []string) []string {
+			return management.SetExcludedAll(entries, req.Disabled)
+		}
+		switch req.Family {
+		case "claude":
+			return gatedProviderListWrite(h, ctx,
+				func(ctx context.Context) ([]management.ClaudeAPIKey, error) { return client.ClaudeAPIKeys(ctx) },
+				func(ctx context.Context, list []management.ClaudeAPIKey) error {
+					return client.UpdateClaudeAPIKeys(ctx, list)
+				},
+				func(list *[]management.ClaudeAPIKey) error {
+					if req.Index >= len(*list) {
+						return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
+					}
+					if err := req.verifyAuthIndex((*list)[req.Index].AuthIndex); err != nil {
+						return err
+					}
+					(*list)[req.Index].ExcludedModels = applyExcludedAll((*list)[req.Index].ExcludedModels)
+					return nil
+				})
+		case "codex":
+			return gatedProviderListWrite(h, ctx,
+				func(ctx context.Context) (management.CodexAPIKeysResponse, error) {
+					return client.CodexAPIKeys(ctx)
+				},
+				func(ctx context.Context, list management.CodexAPIKeysResponse) error {
+					return client.UpdateCodexAPIKeys(ctx, list.Entries)
+				},
+				func(list *management.CodexAPIKeysResponse) error {
+					if req.Index >= len(list.Entries) {
+						return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
+					}
+					if err := req.verifyAuthIndex(list.Entries[req.Index].AuthIndex); err != nil {
+						return err
+					}
+					list.Entries[req.Index].ExcludedModels = applyExcludedAll(list.Entries[req.Index].ExcludedModels)
+					return nil
+				})
+		default:
+			return gatedProviderListWrite(h, ctx,
+				func(ctx context.Context) ([]management.GeminiAPIKey, error) { return client.GeminiAPIKeys(ctx) },
+				func(ctx context.Context, list []management.GeminiAPIKey) error {
+					return client.UpdateGeminiAPIKeys(ctx, list)
+				},
+				func(list *[]management.GeminiAPIKey) error {
+					if req.Index >= len(*list) {
+						return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
+					}
+					if err := req.verifyAuthIndex((*list)[req.Index].AuthIndex); err != nil {
+						return err
+					}
+					(*list)[req.Index].ExcludedModels = applyExcludedAll((*list)[req.Index].ExcludedModels)
+					return nil
+				})
+		}
+	default:
+		return newProviderWriteError(http.StatusBadRequest, "provider family does not support status toggle")
+	}
 }
 
 type SaveProviderKeyEntry struct {
@@ -887,6 +957,144 @@ func parseProviderID(id string) (string, int, error) {
 	}
 }
 
+// updateOpenAICompatibilityGated is the whole-list write behind create/update/
+// delete. Reads happen inside the write window: a list fetched before entering
+// it is a snapshot another writer may already have replaced.
+func (h *Handler) updateOpenAICompatibilityGated(ctx context.Context, client *management.Client, entries []management.OpenAICompatibility) error {
+	return gatedProviderListWrite(h, ctx,
+		func(ctx context.Context) ([]management.OpenAICompatibility, error) {
+			resp, err := client.OpenAICompatibility(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return resp.Entries, nil
+		},
+		func(ctx context.Context, list []management.OpenAICompatibility) error {
+			return client.UpdateOpenAICompatibility(ctx, list)
+		},
+		func(list *[]management.OpenAICompatibility) error {
+			*list = entries
+			return nil
+		})
+}
+
+func (h *Handler) updateCodexAPIKeysGated(ctx context.Context, client *management.Client, entries []management.CodexAPIKey) error {
+	return gatedProviderListWrite(h, ctx,
+		func(ctx context.Context) ([]management.CodexAPIKey, error) {
+			resp, err := client.CodexAPIKeys(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return resp.Entries, nil
+		},
+		func(ctx context.Context, list []management.CodexAPIKey) error {
+			return client.UpdateCodexAPIKeys(ctx, list)
+		},
+		func(list *[]management.CodexAPIKey) error {
+			*list = entries
+			return nil
+		})
+}
+
+func (h *Handler) updateClaudeAPIKeysGated(ctx context.Context, client *management.Client, entries []management.ClaudeAPIKey) error {
+	return gatedProviderListWrite(h, ctx,
+		func(ctx context.Context) ([]management.ClaudeAPIKey, error) { return client.ClaudeAPIKeys(ctx) },
+		func(ctx context.Context, list []management.ClaudeAPIKey) error {
+			return client.UpdateClaudeAPIKeys(ctx, list)
+		},
+		func(list *[]management.ClaudeAPIKey) error {
+			*list = entries
+			return nil
+		})
+}
+
+func (h *Handler) updateGeminiAPIKeysGated(ctx context.Context, client *management.Client, entries []management.GeminiAPIKey) error {
+	return gatedProviderListWrite(h, ctx,
+		func(ctx context.Context) ([]management.GeminiAPIKey, error) { return client.GeminiAPIKeys(ctx) },
+		func(ctx context.Context, list []management.GeminiAPIKey) error {
+			return client.UpdateGeminiAPIKeys(ctx, list)
+		},
+		func(list *[]management.GeminiAPIKey) error {
+			*list = entries
+			return nil
+		})
+}
+
+// The append helpers below build the new entry against the list as it exists
+// inside the write window, so an append cannot be based on a stale length.
+
+func (h *Handler) appendOpenAICompatibilityGated(ctx context.Context, client *management.Client, entry management.OpenAICompatibility) ([]management.OpenAICompatibility, error) {
+	var updated []management.OpenAICompatibility
+	err := gatedProviderListWrite(h, ctx,
+		func(ctx context.Context) ([]management.OpenAICompatibility, error) {
+			resp, err := client.OpenAICompatibility(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return resp.Entries, nil
+		},
+		func(ctx context.Context, list []management.OpenAICompatibility) error {
+			return client.UpdateOpenAICompatibility(ctx, list)
+		},
+		func(list *[]management.OpenAICompatibility) error {
+			updated = append(append([]management.OpenAICompatibility{}, *list...), entry)
+			*list = updated
+			return nil
+		})
+	return updated, err
+}
+
+func (h *Handler) appendCodexAPIKeyGated(ctx context.Context, client *management.Client, entry management.CodexAPIKey) ([]management.CodexAPIKey, error) {
+	var updated []management.CodexAPIKey
+	err := gatedProviderListWrite(h, ctx,
+		func(ctx context.Context) ([]management.CodexAPIKey, error) {
+			resp, err := client.CodexAPIKeys(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return resp.Entries, nil
+		},
+		func(ctx context.Context, list []management.CodexAPIKey) error {
+			return client.UpdateCodexAPIKeys(ctx, list)
+		},
+		func(list *[]management.CodexAPIKey) error {
+			updated = append(append([]management.CodexAPIKey{}, *list...), entry)
+			*list = updated
+			return nil
+		})
+	return updated, err
+}
+
+func (h *Handler) appendClaudeAPIKeyGated(ctx context.Context, client *management.Client, entry management.ClaudeAPIKey) ([]management.ClaudeAPIKey, error) {
+	var updated []management.ClaudeAPIKey
+	err := gatedProviderListWrite(h, ctx,
+		func(ctx context.Context) ([]management.ClaudeAPIKey, error) { return client.ClaudeAPIKeys(ctx) },
+		func(ctx context.Context, list []management.ClaudeAPIKey) error {
+			return client.UpdateClaudeAPIKeys(ctx, list)
+		},
+		func(list *[]management.ClaudeAPIKey) error {
+			updated = append(append([]management.ClaudeAPIKey{}, *list...), entry)
+			*list = updated
+			return nil
+		})
+	return updated, err
+}
+
+func (h *Handler) appendGeminiAPIKeyGated(ctx context.Context, client *management.Client, entry management.GeminiAPIKey) ([]management.GeminiAPIKey, error) {
+	var updated []management.GeminiAPIKey
+	err := gatedProviderListWrite(h, ctx,
+		func(ctx context.Context) ([]management.GeminiAPIKey, error) { return client.GeminiAPIKeys(ctx) },
+		func(ctx context.Context, list []management.GeminiAPIKey) error {
+			return client.UpdateGeminiAPIKeys(ctx, list)
+		},
+		func(list *[]management.GeminiAPIKey) error {
+			updated = append(append([]management.GeminiAPIKey{}, *list...), entry)
+			*list = updated
+			return nil
+		})
+	return updated, err
+}
+
 func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	var req SaveProviderRequest
@@ -973,11 +1181,6 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 
 	switch family {
 	case "openai-compatibility":
-		resp, err := client.OpenAICompatibility(ctx)
-		if err != nil {
-			writeCPAFacadeError(writer, err)
-			return
-		}
 		newEntry := management.OpenAICompatibility{
 			Name:           name,
 			BaseURL:        baseURL,
@@ -1001,22 +1204,17 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 		} else if apiKey != "" {
 			newEntry.APIKeyEntries = []management.APIKeyEntry{{APIKey: apiKey}}
 		}
-		resp.Entries = append(resp.Entries, newEntry)
-		if err := client.UpdateOpenAICompatibility(ctx, resp.Entries); err != nil {
+		entries, err := h.appendOpenAICompatibilityGated(ctx, client, newEntry)
+		if err != nil {
 			_ = h.recordAudit(request, "provider.create", "provider", family, "failure", map[string]any{"error": err.Error()})
-			writeCPAFacadeError(writer, err)
+			writeProviderWriteError(writer, err)
 			return
 		}
-		targetID := fmt.Sprintf("openai-compat-%d", len(resp.Entries)-1)
+		targetID := fmt.Sprintf("openai-compat-%d", len(entries)-1)
 		h.saveProviderName(ctx, targetID, name)
 		h.applyProviderWebsite(ctx, targetID, website, websiteProvided)
 
 	case "codex":
-		resp, err := client.CodexAPIKeys(ctx)
-		if err != nil {
-			writeCPAFacadeError(writer, err)
-			return
-		}
 		newEntry := management.CodexAPIKey{
 			APIKey:         firstKey,
 			BaseURL:        baseURL,
@@ -1028,22 +1226,17 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 			Models:         models,
 			DisableCooling: disableCoolingPtr,
 		}
-		resp.Entries = append(resp.Entries, newEntry)
-		if err := client.UpdateCodexAPIKeys(ctx, resp.Entries); err != nil {
+		entries, err := h.appendCodexAPIKeyGated(ctx, client, newEntry)
+		if err != nil {
 			_ = h.recordAudit(request, "provider.create", "provider", family, "failure", map[string]any{"error": err.Error()})
-			writeCPAFacadeError(writer, err)
+			writeProviderWriteError(writer, err)
 			return
 		}
-		targetID := fmt.Sprintf("codex-%d", len(resp.Entries)-1)
+		targetID := fmt.Sprintf("codex-%d", len(entries)-1)
 		h.saveProviderName(ctx, targetID, name)
 		h.applyProviderWebsite(ctx, targetID, website, websiteProvided)
 
 	case "claude":
-		entries, err := client.ClaudeAPIKeys(ctx)
-		if err != nil {
-			writeCPAFacadeError(writer, err)
-			return
-		}
 		newEntry := management.ClaudeAPIKey{
 			APIKey:         firstKey,
 			BaseURL:        baseURL,
@@ -1055,10 +1248,10 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 			Models:         models,
 			DisableCooling: disableCoolingPtr,
 		}
-		entries = append(entries, newEntry)
-		if err := client.UpdateClaudeAPIKeys(ctx, entries); err != nil {
+		entries, err := h.appendClaudeAPIKeyGated(ctx, client, newEntry)
+		if err != nil {
 			_ = h.recordAudit(request, "provider.create", "provider", family, "failure", map[string]any{"error": err.Error()})
-			writeCPAFacadeError(writer, err)
+			writeProviderWriteError(writer, err)
 			return
 		}
 		targetID := fmt.Sprintf("claude-%d", len(entries)-1)
@@ -1066,11 +1259,6 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 		h.applyProviderWebsite(ctx, targetID, website, websiteProvided)
 
 	case "gemini":
-		entries, err := client.GeminiAPIKeys(ctx)
-		if err != nil {
-			writeCPAFacadeError(writer, err)
-			return
-		}
 		newEntry := management.GeminiAPIKey{
 			APIKey:         firstKey,
 			BaseURL:        baseURL,
@@ -1082,10 +1270,10 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 			Models:         models,
 			DisableCooling: disableCoolingPtr,
 		}
-		entries = append(entries, newEntry)
-		if err := client.UpdateGeminiAPIKeys(ctx, entries); err != nil {
+		entries, err := h.appendGeminiAPIKeyGated(ctx, client, newEntry)
+		if err != nil {
 			_ = h.recordAudit(request, "provider.create", "provider", family, "failure", map[string]any{"error": err.Error()})
-			writeCPAFacadeError(writer, err)
+			writeProviderWriteError(writer, err)
 			return
 		}
 		targetID := fmt.Sprintf("gemini-%d", len(entries)-1)
@@ -1199,139 +1387,155 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 
 	switch family {
 	case "openai-compatibility":
-		resp, err := client.OpenAICompatibility(ctx)
-		if err != nil {
-			writeCPAFacadeError(writer, err)
-			return
-		}
-		if index >= len(resp.Entries) {
-			writeError(writer, http.StatusNotFound, "provider index out of bounds")
-			return
-		}
-		entry := &resp.Entries[index]
-		if name != "" {
-			entry.Name = name
-		}
-		entry.BaseURL = baseURL
-		entry.Prefix = strings.TrimSpace(req.Prefix)
-		entry.Priority = req.Priority
-		entry.DisableCooling = req.DisableCooling
-		entry.Disabled = req.Disabled
-		entry.Models = models
-		entry.Headers = req.Headers
+		if err := gatedProviderListWrite(h, ctx,
+			func(ctx context.Context) ([]management.OpenAICompatibility, error) {
+				resp, err := client.OpenAICompatibility(ctx)
+				if err != nil {
+					return nil, err
+				}
+				return resp.Entries, nil
+			},
+			func(ctx context.Context, list []management.OpenAICompatibility) error {
+				return client.UpdateOpenAICompatibility(ctx, list)
+			},
+			func(list *[]management.OpenAICompatibility) error {
+				if index >= len(*list) {
+					return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
+				}
+				entry := &(*list)[index]
+				if name != "" {
+					entry.Name = name
+				}
+				entry.BaseURL = baseURL
+				entry.Prefix = strings.TrimSpace(req.Prefix)
+				entry.Priority = req.Priority
+				entry.DisableCooling = req.DisableCooling
+				entry.Disabled = req.Disabled
+				entry.Models = models
+				entry.Headers = req.Headers
 
-		if len(req.Keys) > 0 {
-			updatedKeys := make([]management.APIKeyEntry, 0, len(req.Keys))
-			for ki, k := range req.Keys {
-				kVal := strings.TrimSpace(k.APIKey)
-				if kVal == "" {
-					if ki < len(entry.APIKeyEntries) {
-						kVal = entry.APIKeyEntries[ki].APIKey
-					} else if ki < len(entry.LegacyAPIKeys) {
-						kVal = entry.LegacyAPIKeys[ki]
+				if len(req.Keys) > 0 {
+					updatedKeys := make([]management.APIKeyEntry, 0, len(req.Keys))
+					for ki, k := range req.Keys {
+						kVal := strings.TrimSpace(k.APIKey)
+						if kVal == "" {
+							if ki < len(entry.APIKeyEntries) {
+								kVal = entry.APIKeyEntries[ki].APIKey
+							} else if ki < len(entry.LegacyAPIKeys) {
+								kVal = entry.LegacyAPIKeys[ki]
+							}
+						}
+						if kVal != "" {
+							updatedKeys = append(updatedKeys, management.APIKeyEntry{
+								APIKey:   kVal,
+								ProxyURL: strings.TrimSpace(k.ProxyURL),
+								Weight:   k.Weight,
+							})
+						}
 					}
+					entry.APIKeyEntries = updatedKeys
+					entry.LegacyAPIKeys = nil
+				} else if apiKey != "" {
+					entry.APIKeyEntries = []management.APIKeyEntry{{APIKey: apiKey}}
+					entry.LegacyAPIKeys = nil
 				}
-				if kVal != "" {
-					updatedKeys = append(updatedKeys, management.APIKeyEntry{
-						APIKey:   kVal,
-						ProxyURL: strings.TrimSpace(k.ProxyURL),
-						Weight:   k.Weight,
-					})
-				}
-			}
-			entry.APIKeyEntries = updatedKeys
-			entry.LegacyAPIKeys = nil
-		} else if apiKey != "" {
-			entry.APIKeyEntries = []management.APIKeyEntry{{APIKey: apiKey}}
-			entry.LegacyAPIKeys = nil
-		}
-		if err := client.UpdateOpenAICompatibility(ctx, resp.Entries); err != nil {
+				return nil
+			}); err != nil {
 			_ = h.recordAudit(request, "provider.update", "provider", id, "failure", map[string]any{"error": err.Error()})
-			writeCPAFacadeError(writer, err)
+			writeProviderWriteError(writer, err)
 			return
 		}
 		h.applyProviderWebsite(ctx, id, website, websiteProvided)
 	case "codex":
-		resp, err := client.CodexAPIKeys(ctx)
-		if err != nil {
-			writeCPAFacadeError(writer, err)
-			return
-		}
-		if index >= len(resp.Entries) {
-			writeError(writer, http.StatusNotFound, "provider index out of bounds")
-			return
-		}
-		entry := &resp.Entries[index]
-		entry.BaseURL = baseURL
-		if firstKey != "" {
-			entry.APIKey = firstKey
-		}
-		entry.ProxyURL = firstProxy
-		entry.Prefix = strings.TrimSpace(req.Prefix)
-		entry.Priority = req.Priority
-		entry.Weight = firstWeight
-		entry.Models = models
-		entry.Headers = req.Headers
-		entry.DisableCooling = disableCoolingPtr
-		if err := client.UpdateCodexAPIKeys(ctx, resp.Entries); err != nil {
+		if err := gatedProviderListWrite(h, ctx,
+			func(ctx context.Context) ([]management.CodexAPIKey, error) {
+				resp, err := client.CodexAPIKeys(ctx)
+				if err != nil {
+					return nil, err
+				}
+				return resp.Entries, nil
+			},
+			func(ctx context.Context, list []management.CodexAPIKey) error {
+				return client.UpdateCodexAPIKeys(ctx, list)
+			},
+			func(list *[]management.CodexAPIKey) error {
+				if index >= len(*list) {
+					return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
+				}
+				entry := &(*list)[index]
+				entry.BaseURL = baseURL
+				if firstKey != "" {
+					entry.APIKey = firstKey
+				}
+				entry.ProxyURL = firstProxy
+				entry.Prefix = strings.TrimSpace(req.Prefix)
+				entry.Priority = req.Priority
+				entry.Weight = firstWeight
+				entry.Models = models
+				entry.Headers = req.Headers
+				entry.DisableCooling = disableCoolingPtr
+				return nil
+			}); err != nil {
 			_ = h.recordAudit(request, "provider.update", "provider", id, "failure", map[string]any{"error": err.Error()})
-			writeCPAFacadeError(writer, err)
+			writeProviderWriteError(writer, err)
 			return
 		}
 		h.applyProviderWebsite(ctx, id, website, websiteProvided)
 	case "claude":
-		entries, err := client.ClaudeAPIKeys(ctx)
-		if err != nil {
-			writeCPAFacadeError(writer, err)
-			return
-		}
-		if index >= len(entries) {
-			writeError(writer, http.StatusNotFound, "provider index out of bounds")
-			return
-		}
-		entry := &entries[index]
-		entry.BaseURL = baseURL
-		if firstKey != "" {
-			entry.APIKey = firstKey
-		}
-		entry.ProxyURL = firstProxy
-		entry.Prefix = strings.TrimSpace(req.Prefix)
-		entry.Priority = req.Priority
-		entry.Weight = firstWeight
-		entry.Models = models
-		entry.Headers = req.Headers
-		entry.DisableCooling = disableCoolingPtr
-		if err := client.UpdateClaudeAPIKeys(ctx, entries); err != nil {
+		if err := gatedProviderListWrite(h, ctx,
+			func(ctx context.Context) ([]management.ClaudeAPIKey, error) { return client.ClaudeAPIKeys(ctx) },
+			func(ctx context.Context, list []management.ClaudeAPIKey) error {
+				return client.UpdateClaudeAPIKeys(ctx, list)
+			},
+			func(list *[]management.ClaudeAPIKey) error {
+				if index >= len(*list) {
+					return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
+				}
+				entry := &(*list)[index]
+				entry.BaseURL = baseURL
+				if firstKey != "" {
+					entry.APIKey = firstKey
+				}
+				entry.ProxyURL = firstProxy
+				entry.Prefix = strings.TrimSpace(req.Prefix)
+				entry.Priority = req.Priority
+				entry.Weight = firstWeight
+				entry.Models = models
+				entry.Headers = req.Headers
+				entry.DisableCooling = disableCoolingPtr
+				return nil
+			}); err != nil {
 			_ = h.recordAudit(request, "provider.update", "provider", id, "failure", map[string]any{"error": err.Error()})
-			writeCPAFacadeError(writer, err)
+			writeProviderWriteError(writer, err)
 			return
 		}
 		h.applyProviderWebsite(ctx, id, website, websiteProvided)
 	case "gemini":
-		entries, err := client.GeminiAPIKeys(ctx)
-		if err != nil {
-			writeCPAFacadeError(writer, err)
-			return
-		}
-		if index >= len(entries) {
-			writeError(writer, http.StatusNotFound, "provider index out of bounds")
-			return
-		}
-		entry := &entries[index]
-		entry.BaseURL = baseURL
-		if firstKey != "" {
-			entry.APIKey = firstKey
-		}
-		entry.ProxyURL = firstProxy
-		entry.Prefix = strings.TrimSpace(req.Prefix)
-		entry.Priority = req.Priority
-		entry.Weight = firstWeight
-		entry.Models = models
-		entry.Headers = req.Headers
-		entry.DisableCooling = disableCoolingPtr
-		if err := client.UpdateGeminiAPIKeys(ctx, entries); err != nil {
+		if err := gatedProviderListWrite(h, ctx,
+			func(ctx context.Context) ([]management.GeminiAPIKey, error) { return client.GeminiAPIKeys(ctx) },
+			func(ctx context.Context, list []management.GeminiAPIKey) error {
+				return client.UpdateGeminiAPIKeys(ctx, list)
+			},
+			func(list *[]management.GeminiAPIKey) error {
+				if index >= len(*list) {
+					return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
+				}
+				entry := &(*list)[index]
+				entry.BaseURL = baseURL
+				if firstKey != "" {
+					entry.APIKey = firstKey
+				}
+				entry.ProxyURL = firstProxy
+				entry.Prefix = strings.TrimSpace(req.Prefix)
+				entry.Priority = req.Priority
+				entry.Weight = firstWeight
+				entry.Models = models
+				entry.Headers = req.Headers
+				entry.DisableCooling = disableCoolingPtr
+				return nil
+			}); err != nil {
 			_ = h.recordAudit(request, "provider.update", "provider", id, "failure", map[string]any{"error": err.Error()})
-			writeCPAFacadeError(writer, err)
+			writeProviderWriteError(writer, err)
 			return
 		}
 		h.applyProviderWebsite(ctx, id, website, websiteProvided)
@@ -1374,87 +1578,83 @@ func (h *Handler) deleteManagementProvider(writer http.ResponseWriter, request *
 
 	switch family {
 	case "openai-compatibility":
-		resp, err := client.OpenAICompatibility(ctx)
-		if err != nil {
-			writeCPAFacadeError(writer, err)
-			return
-		}
-		if index >= len(resp.Entries) {
-			writeError(writer, http.StatusNotFound, "provider index out of bounds")
-			return
-		}
-		updated := make([]management.OpenAICompatibility, 0, len(resp.Entries)-1)
-		for i, e := range resp.Entries {
-			if i != index {
-				updated = append(updated, e)
-			}
-		}
-		if err := client.UpdateOpenAICompatibility(ctx, updated); err != nil {
+		if err := gatedProviderListWrite(h, ctx,
+			func(ctx context.Context) ([]management.OpenAICompatibility, error) {
+				resp, err := client.OpenAICompatibility(ctx)
+				if err != nil {
+					return nil, err
+				}
+				return resp.Entries, nil
+			},
+			func(ctx context.Context, list []management.OpenAICompatibility) error {
+				return client.UpdateOpenAICompatibility(ctx, list)
+			},
+			func(list *[]management.OpenAICompatibility) error {
+				if index >= len(*list) {
+					return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
+				}
+				*list = append(append([]management.OpenAICompatibility{}, (*list)[:index]...), (*list)[index+1:]...)
+				return nil
+			}); err != nil {
 			_ = h.recordAudit(request, "provider.delete", "provider", id, "failure", map[string]any{"error": err.Error()})
-			writeCPAFacadeError(writer, err)
+			writeProviderWriteError(writer, err)
 			return
 		}
 	case "codex":
-		resp, err := client.CodexAPIKeys(ctx)
-		if err != nil {
-			writeCPAFacadeError(writer, err)
-			return
-		}
-		if index >= len(resp.Entries) {
-			writeError(writer, http.StatusNotFound, "provider index out of bounds")
-			return
-		}
-		updated := make([]management.CodexAPIKey, 0, len(resp.Entries)-1)
-		for i, e := range resp.Entries {
-			if i != index {
-				updated = append(updated, e)
-			}
-		}
-		if err := client.UpdateCodexAPIKeys(ctx, updated); err != nil {
+		if err := gatedProviderListWrite(h, ctx,
+			func(ctx context.Context) ([]management.CodexAPIKey, error) {
+				resp, err := client.CodexAPIKeys(ctx)
+				if err != nil {
+					return nil, err
+				}
+				return resp.Entries, nil
+			},
+			func(ctx context.Context, list []management.CodexAPIKey) error {
+				return client.UpdateCodexAPIKeys(ctx, list)
+			},
+			func(list *[]management.CodexAPIKey) error {
+				if index >= len(*list) {
+					return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
+				}
+				*list = append(append([]management.CodexAPIKey{}, (*list)[:index]...), (*list)[index+1:]...)
+				return nil
+			}); err != nil {
 			_ = h.recordAudit(request, "provider.delete", "provider", id, "failure", map[string]any{"error": err.Error()})
-			writeCPAFacadeError(writer, err)
+			writeProviderWriteError(writer, err)
 			return
 		}
 	case "claude":
-		entries, err := client.ClaudeAPIKeys(ctx)
-		if err != nil {
-			writeCPAFacadeError(writer, err)
-			return
-		}
-		if index >= len(entries) {
-			writeError(writer, http.StatusNotFound, "provider index out of bounds")
-			return
-		}
-		updated := make([]management.ClaudeAPIKey, 0, len(entries)-1)
-		for i, e := range entries {
-			if i != index {
-				updated = append(updated, e)
-			}
-		}
-		if err := client.UpdateClaudeAPIKeys(ctx, updated); err != nil {
+		if err := gatedProviderListWrite(h, ctx,
+			func(ctx context.Context) ([]management.ClaudeAPIKey, error) { return client.ClaudeAPIKeys(ctx) },
+			func(ctx context.Context, list []management.ClaudeAPIKey) error {
+				return client.UpdateClaudeAPIKeys(ctx, list)
+			},
+			func(list *[]management.ClaudeAPIKey) error {
+				if index >= len(*list) {
+					return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
+				}
+				*list = append(append([]management.ClaudeAPIKey{}, (*list)[:index]...), (*list)[index+1:]...)
+				return nil
+			}); err != nil {
 			_ = h.recordAudit(request, "provider.delete", "provider", id, "failure", map[string]any{"error": err.Error()})
-			writeCPAFacadeError(writer, err)
+			writeProviderWriteError(writer, err)
 			return
 		}
 	case "gemini":
-		entries, err := client.GeminiAPIKeys(ctx)
-		if err != nil {
-			writeCPAFacadeError(writer, err)
-			return
-		}
-		if index >= len(entries) {
-			writeError(writer, http.StatusNotFound, "provider index out of bounds")
-			return
-		}
-		updated := make([]management.GeminiAPIKey, 0, len(entries)-1)
-		for i, e := range entries {
-			if i != index {
-				updated = append(updated, e)
-			}
-		}
-		if err := client.UpdateGeminiAPIKeys(ctx, updated); err != nil {
+		if err := gatedProviderListWrite(h, ctx,
+			func(ctx context.Context) ([]management.GeminiAPIKey, error) { return client.GeminiAPIKeys(ctx) },
+			func(ctx context.Context, list []management.GeminiAPIKey) error {
+				return client.UpdateGeminiAPIKeys(ctx, list)
+			},
+			func(list *[]management.GeminiAPIKey) error {
+				if index >= len(*list) {
+					return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
+				}
+				*list = append(append([]management.GeminiAPIKey{}, (*list)[:index]...), (*list)[index+1:]...)
+				return nil
+			}); err != nil {
 			_ = h.recordAudit(request, "provider.delete", "provider", id, "failure", map[string]any{"error": err.Error()})
-			writeCPAFacadeError(writer, err)
+			writeProviderWriteError(writer, err)
 			return
 		}
 	default:

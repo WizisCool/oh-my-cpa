@@ -45,18 +45,22 @@ type Handler struct {
 	configMu  sync.Mutex
 	startTime time.Time
 	limiter   *loginLimiter
+	// providerWrites serialises whole-list provider configuration writes; see
+	// management_provider_writes.go for why one global permit is required.
+	providerWrites providerWriteGate
 }
 
 func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypto.Cipher, logger *slog.Logger, authManager *auth.Manager) *Handler {
 	return &Handler{
-		cfg:          cfg,
-		repo:         repo,
-		cipher:       cipher,
-		discoverer:   discovery.NewDiscoverer(cipher),
-		logger:       logger,
-		auth:         authManager,
-		startTime:    time.Now(),
-		limiter:      newLoginLimiter(),
+		cfg:            cfg,
+		repo:           repo,
+		cipher:         cipher,
+		discoverer:     discovery.NewDiscoverer(cipher),
+		logger:         logger,
+		auth:           authManager,
+		startTime:      time.Now(),
+		limiter:        newLoginLimiter(),
+		providerWrites: newProviderWriteGate(),
 	}
 }
 

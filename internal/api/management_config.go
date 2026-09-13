@@ -249,13 +249,26 @@ func (h *Handler) managementConfigSourcePut(writer http.ResponseWriter, request 
 		return
 	}
 
-	h.configMu.Lock()
-	defer h.configMu.Unlock()
-
 	client, ok := h.managementClientOrError(writer, request)
 	if !ok {
 		return
 	}
+
+	// The provider write gate covers this whole read-check-write as well. The
+	// revision check below detects a change that already landed, but it cannot
+	// detect one landing between the read and the PUT; a provider handler writing
+	// the same configuration document in that gap would be silently overwritten
+	// even though the revision check passed. Acquired before configMu so that
+	// mutex, which serialises config saves against each other, is not held while
+	// waiting for a provider write to finish.
+	if err := h.providerWrites.acquire(request.Context()); err != nil {
+		writeProviderWriteError(writer, err)
+		return
+	}
+	defer h.providerWrites.release()
+
+	h.configMu.Lock()
+	defer h.configMu.Unlock()
 
 	currentYAML, err := client.ConfigYAML(request.Context())
 	if err != nil {
