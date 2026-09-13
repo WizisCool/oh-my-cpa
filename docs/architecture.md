@@ -73,9 +73,10 @@ Query for server state.
 | `App.tsx` | Router, lazily loaded pages, theme and locale providers |
 | `api/client.ts` | The one typed HTTP client; every endpoint is declared here |
 | `types/` | Wire types, including `usageEventView.ts` (row projection and filters) |
-| `hooks/` | `usePreference`, `useLogTail`, `useVisibleNow` |
+| `hooks/` | `usePreference`, `useLastIntentQueue` (per-key last-intent serialisation), `useLogTail`, `useVisibleNow` |
 | `i18n/index.tsx` | The `[zh, en]` dictionary and the `t()` context |
 | `theme/` | `themeConfig.ts` (antd tokens), `cacheScale.ts` (OKLCH cache ramp) |
+| `utils/` | `maskKey.ts`, `externalUrl.ts` (the http/https link rule), `modelOptions.ts` (model-input filtering), `smoothScroll.ts` (the gesture/correction scroll schedule) |
 | `components/`, `pages/` | Feature UI; one page per route, no page owns another |
 
 All page routes are `React.lazy` import boundaries so the entry chunk stays
@@ -328,6 +329,34 @@ fixed-window case re-reads facets too. Because the response is
 capped at 200 values per dimension, a value that is selected but absent from it is
 merged back into the options, so a filter that is still applied never renders as a
 blank control.
+
+### 6.3 Grouping the request list
+
+The list offers three modes: chronological (`time`, the default), `source`, and
+`ua`. `source` merges what used to be two separate modes, "by provider" and "by
+credential": they were the same axis at two zoom levels, so one mode buckets on
+provider-plus-credential and decides per provider whether the credential half is
+worth printing. That decision is a property of the *page*, not of one bucket —
+`providersWithMultipleAuthSources` answers it for every provider in the loaded
+window — so a line served by a single credential reads as the provider alone
+while a line split across two names both.
+
+Grouping keys and labels are computed in `web/src/types/usageEventView.ts`, which
+is what the logic test harness loads, and are pinned there rather than by reading
+the DOM. Two properties matter beyond the labels:
+
+- **The stored preference migrates.** `parseUsageEventsView` maps the retired
+  `provider` and `credential` values onto `source`, so an operator returning to a
+  saved view keeps it instead of being silently moved to chronological order. An
+  unreadable value falls back to `time`, which is the mode that never hides a
+  record.
+- **Unknown is a bucket, not a drop.** A record with no provider, no credential or
+  no user agent is grouped under `unknown` and keeps its own header, because
+  "nothing was recorded" is a fact about the record worth seeing.
+
+The UA mode uses the stored `user_agent` verbatim: the value was already reduced
+to a short product label on the persistence path, so grouping must not re-parse a
+raw header or widen what was deliberately minimised.
 
 ## 7. Pricing flow
 

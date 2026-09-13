@@ -33,6 +33,16 @@ have none, so OMC applies CPA's own mechanism instead: the excluded-all marker
 preference only used to repaint the UI while fallback kept routing into the
 "disabled" credential.
 
+Because a toggle is a gateway write followed by a re-read, the operator's second
+click lands in that gap. The console serialises toggles **per provider** through a
+last-intent queue (`web/src/hooks/useLastIntentQueue.ts`): one write in flight per
+provider, a click during that window replaces the remembered value instead of
+racing it or being dropped, and the switch renders the remembered intent until the
+gateway confirms it. The queue re-reads the list once per drained queue, so two
+overlapping refetches of the list cannot let a stale response win. A failure drops
+the intent and re-reads, so the switch shows what the gateway holds rather than
+what was attempted.
+
 ## Auth model
 
 There is exactly one credential in the whole system: the CPA management key
@@ -90,8 +100,20 @@ palette in code; never hardcode colors in components.
   (`repository.Preference*`); the API rejects any key not on that list, so the
   preference endpoint cannot become a general blob store reachable through the
   session. The keys in use are the dashboard window, the log page's filters,
-  the provider icon and display-name overrides, and the usage-event view and
-  column layout.
+  the provider icon, display-name and website overrides, and the usage-event
+  view and column layout.
+- **Source Grouping**: One mode of the request-record list that groups by the
+  source a record came from — the provider plus the credential underneath it — so
+  the provider context and the auth source are the same axis read at one zoom
+  level. The credential half is printed only for a provider the page served
+  through more than one credential; a line served by a single credential would
+  otherwise repeat the same file name on every header. Records with no provider
+  or no credential land in an `unknown` bucket rather than being dropped or
+  folded into a named source.
+- **Provider Website**: A provider's own homepage, stored as Oh My CPA management
+  metadata. CPA has no field for it, so it is never written into CPA's config;
+  only an absolute http/https URL is accepted, because the provider list renders
+  the provider's name as a link to it.
 - **Bucket**: One point of the sparkline. Width is chosen per window so the
   series stays near 48 points on a human step. The newest bucket is always
   partial, and the grid is aligned to bucket multiples so a sliding window does

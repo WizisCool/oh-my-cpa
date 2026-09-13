@@ -488,6 +488,40 @@ Two supporting rules keep the follow honest:
    the collector wrote last is the first row. See `docs/architecture.md` for why
    that needs its own index and what it costs.
 
+### Scroll: a gesture moves, a correction lands
+
+The list itself scrolls, so its scrolls carry two different intentions and they
+must not share a behaviour:
+
+| Intent | Scrolls | Behaviour |
+| --- | --- | --- |
+| Gesture | Back to top, applying the `N 条新记录` backlog | Animated, unless `prefers-reduced-motion` |
+| Correction | Pinning row one after the header collapses, resetting on page change | Instant |
+
+A correction is not a weaker gesture, it is a different job. Collapsing the header
+and paging both need row one on screen *before* the next statement runs, and the
+list re-measures after committing new rows — so a correction that is still gliding
+is a correction that has not landed, and the reader sees a position nobody asked
+for in between. `web/src/utils/smoothScroll.ts` names the two intents and owns the
+schedule.
+
+**The animation is driven in JavaScript, not by CSS.** Setting `scroll-behavior:
+smooth` on the list holder looks like the natural implementation and does not
+work: the list is virtualized, so the virtualizer owns that element, keeps writing
+`scrollTop` on its own schedule, and wins. Measured against the real list the
+holder never moved at all. So `animateScrollToTop` interpolates frame by frame and
+pushes every frame through Listy's own `scrollTo`, which leaves exactly one
+authority over the offset and no fight to lose. The schedule is a pure function of
+elapsed time rather than an accumulator, so a dropped or late frame cannot make the
+gesture drift or overshoot, and the last frame writes `0` explicitly — a
+return-to-top that arrives *approximately* at the top has not returned to the top.
+
+An animated return to the top emits scroll events the whole way up, so the page
+holds the collapse state until it arrives (bounded by a deadline, in case the
+reader interrupts it and it never does). Without that, the early frames — which
+still carry a large `scrollTop` — would re-collapse the header on the first frame
+of the very gesture that was expanding it.
+
 ## 8. Checklist for new UI
 - [ ] Colors only via `palette` / CSS vars; semantic colors carry meaning
 - [ ] A continuous scale (cache rate) reads from its own tokens, never a
