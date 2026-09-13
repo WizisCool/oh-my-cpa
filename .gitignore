@@ -2,6 +2,9 @@
 node_modules/
 .pnpm-store/
 
+# Generated from @lobehub/icons-static-svg by scripts/sync-lobe-icons.mjs
+web/public/lobe-icons/
+
 # Production builds
 web/dist/
 dist/

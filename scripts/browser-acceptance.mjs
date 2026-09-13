@@ -86,6 +86,21 @@ async function browserStorage(page) {
   });
 }
 
+async function lobeIconSignature(locator) {
+  return locator.evaluate((root) => {
+    const image = root.querySelector('img[src*="/lobe-icons/"]');
+    if (image) return image.getAttribute('src') ?? '';
+    const masked = [...root.querySelectorAll('span')].find((node) => {
+      const style = getComputedStyle(node);
+      return (style.maskImage && style.maskImage !== 'none')
+        || (style.webkitMaskImage && style.webkitMaskImage !== 'none');
+    });
+    if (!masked) return '';
+    const style = getComputedStyle(masked);
+    return style.maskImage !== 'none' ? style.maskImage : style.webkitMaskImage;
+  });
+}
+
 /**
  * Reads a brand drawing's resolved source and its rendered ink.
  *
@@ -1146,7 +1161,10 @@ try {
   await setProviderWebsite({ 'codex-0': 'https://provider.example.test' });
   await openProvidersPage();
   const websiteLink = page.locator('.providers-page tbody a').first();
-  check('a provider with a website renders its name as a link', await websiteLink.isVisible());
+  await checkEventually(
+    'a provider with a website renders its name as a link',
+    () => websiteLink.isVisible(),
+  );
   const websiteHref = (await websiteLink.getAttribute('href')) ?? '';
   const websiteRel = (await websiteLink.getAttribute('rel')) ?? '';
   const websiteTarget = (await websiteLink.getAttribute('target')) ?? '';
@@ -1401,16 +1419,16 @@ try {
 
   // Verify brand icons on tabs are NOT OpenAI
   const antigravityTab = page.locator('.auth-files-page .ant-tabs-tab').filter({ hasText: /Antigravity/i }).first();
-  const antigravitySvgHtml = await antigravityTab.locator('svg').innerHTML();
-  check('Antigravity tab icon is not OpenAI', !antigravitySvgHtml.includes('OpenAI'));
+  const antigravityIcon = await lobeIconSignature(antigravityTab);
+  check('Antigravity tab icon is not OpenAI', /antigravity/i.test(antigravityIcon) && !/openai/i.test(antigravityIcon), antigravityIcon);
 
   const xaiTab = page.locator('.auth-files-page .ant-tabs-tab').filter({ hasText: /xAI|Xai/i }).first();
-  const xaiSvgHtml = await xaiTab.locator('svg').innerHTML();
-  check('xAI tab icon is not OpenAI', !xaiSvgHtml.includes('OpenAI'));
+  const xaiIcon = await lobeIconSignature(xaiTab);
+  check('xAI tab icon is not OpenAI', /xai/i.test(xaiIcon) && !/openai/i.test(xaiIcon), xaiIcon);
 
   const kimiTab = page.locator('.auth-files-page .ant-tabs-tab').filter({ hasText: /Kimi/i }).first();
-  const kimiSvgHtml = await kimiTab.locator('svg').innerHTML();
-  check('Kimi tab icon is not OpenAI', !kimiSvgHtml.includes('OpenAI'));
+  const kimiIcon = await lobeIconSignature(kimiTab);
+  check('Kimi tab icon is not OpenAI', /kimi/i.test(kimiIcon) && !/openai/i.test(kimiIcon), kimiIcon);
 
   // Verify tab hover stability
   await codexTab.hover();
@@ -1546,8 +1564,8 @@ try {
   check('quota page renders credential cards', cardCount > 0, `quotaCards=${cardCount}`);
 
   // Verify quota tab brand icons are not OpenAI
-  const quotaAntigravitySvg = await page.locator('.quota-page .ant-tabs-tab').filter({ hasText: /Antigravity/i }).locator('svg').innerHTML();
-  check('quota page Antigravity tab icon is not OpenAI', !quotaAntigravitySvg.includes('OpenAI'));
+  const quotaAntigravityIcon = await lobeIconSignature(page.locator('.quota-page .ant-tabs-tab').filter({ hasText: /Antigravity/i }));
+  check('quota page Antigravity tab icon is not OpenAI', /antigravity/i.test(quotaAntigravityIcon) && !/openai/i.test(quotaAntigravityIcon), quotaAntigravityIcon);
 
   // Click header refresh to trigger live quota refresh (cards have their own refresh buttons)
   const refreshAllBtn = page.locator('.terminal-page-head').getByRole('button', { name: /刷新|Refresh/i });

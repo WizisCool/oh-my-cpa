@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
-import * as allIcons from '@lobehub/icons';
-import { toc } from '@lobehub/icons';
+import { toc } from '@lobehub/icons/es/toc';
 import { CloudServerOutlined } from '@ant-design/icons';
+import { PROVIDER_ICON_IDS, DEFAULT_PROVIDER_ICON_ID } from '../types/providerIconIds';
 
 interface LobeIconProps {
   iconId?: string;
@@ -11,11 +11,15 @@ interface LobeIconProps {
   variant?: 'color' | 'mono';
 }
 
-// Kimi's Color variant draws a fixed white glyph — invisible on light
-// surfaces. Fall back to the mono (currentColor) variant so the mark adapts
-// to the theme instead. (Codex's Color variant is a white tile with a
-// gradient glyph and reads fine on both themes, so it stays Color.)
+// Kimi's Color variant draws a fixed white glyph, which is invisible on light
+// surfaces. Use its monochrome mark so the icon inherits the theme foreground.
 const WHITE_GLYPH_COLOR_ICONS = new Set(['Kimi']);
+
+const TOC_BY_ID = new Map(toc.map((item) => [item.id, item]));
+
+function iconSlug(iconId: string): string {
+  return iconId.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
 
 export const LobeIcon: React.FC<LobeIconProps> = memo(({
   iconId,
@@ -24,23 +28,48 @@ export const LobeIcon: React.FC<LobeIconProps> = memo(({
   style,
   variant = 'color',
 }) => {
-  if (!iconId) {
+  const metadata = iconId ? TOC_BY_ID.get(iconId) : undefined;
+  if (!iconId || !metadata) {
     return <CloudServerOutlined style={{ fontSize: size, ...style }} className={className} />;
   }
 
-  const IconComp = (allIcons as Record<string, any>)[iconId];
-  if (!IconComp) {
-    return <CloudServerOutlined style={{ fontSize: size, ...style }} className={className} />;
+  const slug = iconSlug(iconId);
+  const colorUrl = `${import.meta.env.BASE_URL}lobe-icons/${slug}-color.svg`;
+  const monoUrl = `${import.meta.env.BASE_URL}lobe-icons/${slug}.svg`;
+  const useColor = variant !== 'mono'
+    && metadata.param.hasColor
+    && !WHITE_GLYPH_COLOR_ICONS.has(iconId);
+
+  if (useColor) {
+    return (
+      <img
+        src={colorUrl}
+        width={size}
+        height={size}
+        className={className}
+        style={{ display: 'block', objectFit: 'contain', ...style }}
+        alt=""
+      />
+    );
   }
 
-  if (variant !== 'mono' && IconComp.Color && !WHITE_GLYPH_COLOR_ICONS.has(iconId)) {
-    return <IconComp.Color size={size} style={style} className={className} />;
-  }
-
-  // Mono glyphs draw with currentColor; pin it to --fg so the mark follows the
-  // data-theme CSS variables instead of an inherited antd token color, which
-  // can disagree with the visual theme.
-  return <IconComp size={size} style={{ color: 'var(--fg)', ...style }} className={className} />;
+  const { color, ...restStyle } = style ?? {};
+  return (
+    <span
+      aria-hidden="true"
+      className={className}
+      style={{
+        display: 'inline-block',
+        width: size,
+        height: size,
+        flex: 'none',
+        backgroundColor: color ?? 'var(--fg)',
+        mask: `url("${monoUrl}") center / contain no-repeat`,
+        WebkitMask: `url("${monoUrl}") center / contain no-repeat`,
+        ...restStyle,
+      }}
+    />
+  );
 });
 
 interface TocCandidate {
@@ -123,8 +152,6 @@ const COMMON_ALIASES: Record<string, string> = {
   'codex': 'Codex',
   'vertex': 'Google',
 };
-
-import { PROVIDER_ICON_IDS, DEFAULT_PROVIDER_ICON_ID } from '../types/providerIconIds';
 
 const KNOWN_PROVIDER_ICONS = PROVIDER_ICON_IDS;
 

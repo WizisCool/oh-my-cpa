@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Modal, Input, Tag, Empty, theme } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
-import { toc, type IconToc } from '@lobehub/icons';
+import { toc, type IconToc } from '@lobehub/icons/es/toc';
 import { LobeIcon } from './LobeIcon';
 import { useT } from '../i18n';
 

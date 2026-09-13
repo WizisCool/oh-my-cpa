@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveApiTarget, resolveListenAddr } from './api-target.mjs';
+import { syncLobeIcons } from './sync-lobe-icons.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const apiOnly = process.argv.includes('--api-only');
@@ -177,6 +178,7 @@ try {
   }
   console.log('[dev] CPA is external; start it separately with `pnpm cpa:start` when needed.\n');
 
+  if (!apiOnly) syncLobeIcons({ quiet: true });
   start('Go API', air, []);
   if (!apiOnly) start('Vite', process.execPath, [resolveVite()], { cwd: path.join(root, 'web') });
 } catch (error) {
