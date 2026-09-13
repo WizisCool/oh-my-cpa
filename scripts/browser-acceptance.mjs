@@ -729,15 +729,18 @@ try {
   const pageLabelBefore = await page.locator('.request-pagination span').first().innerText();
 
   seedScenario('append');
-  // The cadence is 10s, so the wait has to clear one full interval plus the
-  // request itself. It was 20s against the old 5s option.
+  // The cadence is 10s, so the wait has to clear one full interval plus the request
+  // itself. This is the largest wait left in the suite.
   //
-  // This is the largest wait left in the suite and it is irreducible from the
-  // test side: the interval was scheduled by the page when auto-refresh was
-  // switched on, so only a fake clock installed before that navigation could
-  // fire it early - and a fake clock would also freeze the search debounce this
-  // same block asserts on. Buying back ten seconds there would cost the coverage
-  // that made the block worth writing.
+  // Driving it with `page.clock` was tried and rejected. Installing the clock before
+  // the first navigation does make the interval fire early - 11s of app time in
+  // ~900ms - but the same mock also covers `requestAnimationFrame` and
+  // `performance.now`, which is exactly what `smoothScroll`'s gesture schedule is
+  // built from. With the clock installed the back-to-top gesture landed at 37px
+  // instead of the top, with no page error, so the one assertion this block exists
+  // for was the one it broke. Isolating the interval from the frame clock is not
+  // expressible through the Playwright clock API, and the trade was nine seconds
+  // against the correctness of a scroll assertion, so the honest wait stays.
   await page.locator('.req-back-to-top-btn.is-live').waitFor({ state: 'visible', timeout: 30000 });
 
   const scrollAfterPoll = await scroller.evaluate((node) => node.scrollTop);
