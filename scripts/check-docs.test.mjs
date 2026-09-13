@@ -64,6 +64,11 @@ test('allows gitignored runtime paths but keeps the reason on file', (t) => {
   assert.deepEqual(checkDocument({ file: 'checked.md' }, { projectRoot }), []);
 });
 
+test('allows generated icon assets absent from a fresh clone', (t) => {
+  const projectRoot = fixture(t, 'Assets are written to `web/public/lobe-icons/`.');
+  assert.deepEqual(checkDocument({ file: 'checked.md' }, { projectRoot }), []);
+});
+
 test('an absent-file exception does not cover sibling paths', (t) => {
   // .env is legitimately missing from a fresh clone, but .env.example is
   // committed - a rule that exempts it would silently retire a real reference.

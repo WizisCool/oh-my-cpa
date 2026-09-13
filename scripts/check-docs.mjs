@@ -71,6 +71,7 @@ export const EXPECTED_ABSENT_PATHS = [
   { path: 'oh-my-cpa-data/', reason: 'runtime data directory, gitignored' },
   { path: 'internal/web/dist/index.html', reason: 'committed build stub; the rest of dist/ is gitignored' },
   { path: 'web/dist/', reason: 'build output, gitignored' },
+  { path: 'web/public/lobe-icons/', reason: 'generated SVG assets, gitignored and recreated by scripts/sync-lobe-icons.mjs' },
   { path: 'bin/', reason: 'build output, gitignored' },
   { path: 'node_modules/', reason: 'installed dependencies, gitignored' },
   { path: '.pi/', reason: 'local agent artifacts, gitignored' },
