@@ -73,6 +73,12 @@ components carry state by their own colour instead: a failure count is `danger`
 when it is above zero and `meta` when it is not, because "0 failures" is not a
 success worth painting green.
 
+**Only a verdict gets a pip.** The request console's result filter segments
+(成功 / 失败) reuse the Result column's square bullet in its success/danger
+token, but the 全部 segment carries none: it is the absence of a verdict, and
+both bullets side by side would read as a third, combined outcome. Same rule as
+the success-rate bands — the state of "everything" is not a state.
+
 **Success rate is a verdict, not a distance from 100%.** A gateway that fans out
 to several upstreams always carries some noise — provider 429s, a timeout the
 next retry absorbs, a request the caller cancelled — and a pip that turns amber
@@ -484,9 +490,12 @@ Two supporting rules keep the follow honest:
 1. **Pagination survives a poll.** The view scope is the filters plus the page
    the reader chose; the auto-refresh counter is deliberately outside it. It used
    to be inside, which silently reset every reader to page one.
-2. **The list is ordered by recording order**, not by request time, so whatever
-   the collector wrote last is the first row. See `docs/architecture.md` for why
-   that needs its own index and what it costs.
+2. **The list is ordered by request time, newest first**, so the column the
+   reader sorts by eye is the column the list is sorted on. See
+   `docs/architecture.md` for the keyset cursor and index this order needs.
+   "Arrived" is a separate question and is answered separately: the pill counts
+   records *recorded* since the reader stopped following, because a request that
+   ran for an hour is new while sorting far below the first page.
 
 ### Scroll: a gesture moves, a correction lands
 
@@ -535,6 +544,8 @@ of the very gesture that was expanding it.
 - [ ] Switches use `--success` when active (green = enabled)
 - [ ] Status shown with pip + text, never color alone
 - [ ] Numbers tabular; empty states say what's missing (no fake data or invented workspace/account placeholders)
+- [ ] A name is a label, not an identity: renaming never changes what a filter selects, and an unnamed value falls back to something recognisable rather than a hash
+- [ ] Any count states its window and source; a missing observation is never rendered as a fabricated zero or date
 - [ ] "Nothing to show" distinguishes its reasons: blocked (cannot serve it),
       loading (no answer yet), empty (a live source with nothing in it). One
       shared message makes a working page look broken.

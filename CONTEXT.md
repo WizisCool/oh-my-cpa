@@ -20,6 +20,7 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
 - **Filter Dimension**: One axis of the request-record filter, such as model, provider or credential. Dimensions combine with AND and the values inside one dimension combine with OR, so adding a value widens a dimension while adding a dimension narrows the result. An absent dimension does not narrow at all — a cleared filter must be indistinguishable from one that was never set, which is why absence rather than an empty value is how "not filtering" is expressed everywhere the filter is stored or serialized.
 - **Auto Refresh**: A boolean on the request-record view, not an interval. The cadence is fixed at 10 seconds, because the operator only ever wants one of two answers — keep this list current, or stop moving it. Polling is a wall-clock cadence and skips a tick rather than queueing one, so a slow query cannot build a backlog that fires the moment it resolves.
 
+
 ## Naming rule
 
 User-facing names, icons, colors, ownership, and subscription metadata belong to Oh My CPA. CPA driver names, auth indexes, base URLs, and raw provider fields remain technical details and are shown secondarily.
@@ -125,6 +126,8 @@ palette in code; never hardcode colors in components.
   collector, not the window.
 
 A future per-request live feed should follow the same convention — cheap
-repeated poll, server-issued cursor, client-side splice — but key on the
+repeated poll, server-issued cursor, client-side splice — and key on the
 `usage_events` row `id`, which is monotonic, rather than on a timestamp, which
-a sliding window keeps invalidating.
+a sliding window keeps invalidating. The request list itself already does this:
+it is ordered and paged by request time (`timestamp_ms`), while "what has
+arrived since" is a separate count anchored on the row `id`.

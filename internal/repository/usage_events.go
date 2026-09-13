@@ -51,6 +51,14 @@ const MaxUsageEventFilterValues = 64
 // being broken.
 var ErrUsageFilterInvalid = errors.New("invalid usage event filter")
 
+// ErrUsageCursorStale marks a cursor whose position can no longer be resolved.
+//
+// This is the one case a legacy (id-only) cursor cannot be honoured: the list is
+// ordered by request time, and recovering that timestamp needs the row itself.
+// The handler answers 409 so the console can start over from the first page
+// rather than silently serving a page from the wrong place in the list.
+var ErrUsageCursorStale = errors.New("usage event cursor is stale")
+
 // UsageEventFilter narrows event reads.
 //
 // This is the shared vocabulary for the whole request-record feature set: the
@@ -110,8 +118,20 @@ type UsageEventFilter struct {
 	// CostState narrows by price availability (CostStatePriced/Unpriced).
 	CostState string
 
-	// Cursor is an opaque recording-order position for keyset pagination. The
-	// client only ever echoes it back.
+	// SinceID asks for a count of matching records ingested after this row id,
+	// reported as ArrivedCount. It does not change which rows are returned.
+	// Zero means "not requested".
+	//
+	// The anchor is an ingestion id on purpose, not a request time. "New records"
+	// means newly recorded, and those are different questions once the list is
+	// ordered by request time: a request that started earlier but finished later
+	// arrives with an old timestamp, so it is genuinely new yet sorts far below
+	// the top. Counting it as arrived is correct, and it also means the count does
+	// not have to move when the visible sort order does.
+	SinceID int64
+
+	// Cursor is an opaque position in the list's own order. The client only ever
+	// echoes it back, so its encoding is free to change with the ordering.
 	Cursor string
 	Limit  int
 }
@@ -170,21 +190,54 @@ type UsageEventPage struct {
 	HasMore    bool            `json:"has_more"`
 	// Limit is echoed so clients can detect server-side clamping.
 	Limit int `json:"limit"`
+	// ArrivedCount is how many matching records were ingested after `SinceID`, in
+	// the same filtered window. Only populated when the caller asked for it.
+	//
+	// The live pill cannot be derived from the page's own rows. The list is sorted
+	// by request time, so the records that arrived most recently are not the ones
+	// at the top: a request that ran for an hour is ingested long after it began
+	// and lands well below the first page. Diffing loaded rows would report
+	// "nothing new" while records were in fact flowing in.
+	ArrivedCount int64 `json:"arrived_count,omitempty"`
 }
 
-// ListUsageEvents returns records newest recorded first.
+// countUsageEventsIngestedAfter reports how many matching records were recorded
+// after the given row id. It reuses the list's own WHERE clause, so the count can
+// never describe a different set of records than the list it accompanies.
+func (r *Repository) countUsageEventsIngestedAfter(ctx context.Context, filter UsageEventFilter, sinceID int64) (int64, error) {
+	where, args, err := usageEventWhere(filter)
+	if err != nil {
+		return 0, err
+	}
+	where = append(where, `e.id > ?`)
+	args = append(args, sinceID)
+	query := `SELECT COUNT(1) FROM usage_events e WHERE ` + strings.Join(where, " AND ")
+	var count int64
+	if err := r.SQL().QueryRowContext(ctx, query, args...).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count usage events ingested since id: %w", err)
+	}
+	return count, nil
+}
+
+// ListUsageEvents returns records with the newest request time first.
 //
-// The order is the row id, not the request timestamp. CPA reports the time a
-// request *started*, and an agent request can run for minutes, so a record
-// written just now can carry a timestamp older than requests that started after
-// it; ordering by timestamp buries that record in the middle of the list and
-// makes the live view look stuck. Ordering by id puts whatever the collector
-// wrote last at the top, which is what a request log is read for.
+// The order is the request's own start time, which is the column the list shows.
+// Sorting by anything else makes the visible time column non-monotonic: the
+// reader sees 14:53:34, then 14:52:57, then 14:53:36, and concludes the sort is
+// broken. That is what happened while this list was ordered by row id - a just
+// finished long-running request carries a start time older than requests that
+// began after it, so it landed above them and inverted the column the reader is
+// reading. Against a real instance roughly a quarter of adjacent rows were out of
+// order.
 //
-// Keyset pagination on the id is used instead of OFFSET: records are append-only
-// and high volume, and OFFSET would degrade linearly as the user pages deeper.
-// Migration 021 adds the (instance_id, id) index that keeps this order a plain
-// index scan instead of a sort of every matching row.
+// `id` is the tiebreaker, and it is not optional. Several records can share a
+// start time (a client fanning out, or a second-granularity source), and without
+// a total order the keyset boundary would skip or repeat rows as the reader pages.
+//
+// Keyset pagination is used instead of OFFSET: records are append-only and high
+// volume, so OFFSET would degrade linearly as the user pages deeper. Migration 018
+// already provides the (instance_id, timestamp_ms DESC, id DESC) index that makes
+// this a plain index scan.
 func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilter) (UsageEventPage, error) {
 	page := UsageEventPage{Items: []UsageEventRow{}, Limit: normalizeEventLimit(filter.Limit)}
 	if r == nil || r.SQL() == nil {
@@ -195,15 +248,23 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 	if err != nil {
 		return page, err
 	}
-	cursorID, err := decodeEventCursor(filter.Cursor)
+	cursor, err := decodeEventCursor(filter.Cursor)
 	if err != nil {
 		return page, err
 	}
-	if cursorID > 0 {
+	cursor, err = r.resolveEventCursor(ctx, filter.InstanceID, cursor)
+	if err != nil {
+		return page, err
+	}
+	if cursor != nil {
 		// The columns must be qualified: the query joins discovered_resources,
 		// which also has an id, and an unqualified name is ambiguous to SQLite.
-		where = append(where, `e.id < ?`)
-		args = append(args, cursorID)
+		//
+		// The row comparison is what makes the tiebreaker correct: comparing the
+		// timestamp alone would skip every row sharing the boundary timestamp,
+		// and comparing them as two independent predicates would repeat rows.
+		where = append(where, `(e.timestamp_ms, e.id) < (?, ?)`)
+		args = append(args, cursor.TimestampMS, cursor.ID)
 	}
 
 	query := `
@@ -228,7 +289,7 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
-	query += " ORDER BY e.id DESC LIMIT ?"
+	query += " ORDER BY e.timestamp_ms DESC, e.id DESC LIMIT ?"
 	args = append(args, page.Limit+1)
 
 	rows, err := r.SQL().QueryContext(ctx, query, args...)
@@ -277,7 +338,14 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 		page.Items = page.Items[:page.Limit]
 		page.HasMore = true
 		last := page.Items[len(page.Items)-1]
-		page.NextCursor = encodeEventCursor(last.ID)
+		page.NextCursor = encodeEventCursor(last.TimestampMS, last.ID)
+	}
+	if filter.SinceID > 0 {
+		arrived, countErr := r.countUsageEventsIngestedAfter(ctx, filter, filter.SinceID)
+		if countErr != nil {
+			return page, countErr
+		}
+		page.ArrivedCount = arrived
 	}
 	return page, nil
 }
@@ -738,27 +806,84 @@ func ValidUsageCursor(cursor string) error {
 	return err
 }
 
-// encodeEventCursor builds an opaque keyset position. It is intentionally not
-// user-parsable: the client treats it as a token, which lets the ordering change
-// later without breaking callers.
-func encodeEventCursor(id int64) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(strconv.FormatInt(id, 10)))
+// eventCursor is one keyset position in the list's (timestamp, id) order.
+//
+// Legacy marks a position written before the list was ordered by request time.
+// Those cursors carry only an id, which cannot be turned into a timestamp
+// without reading the row, so they are resolved against the database before use.
+// The distinction exists so an old cursor is converted rather than fed to a
+// predicate that means something different under the new order.
+type eventCursor struct {
+	TimestampMS int64
+	ID          int64
+	Legacy      bool
 }
 
-func decodeEventCursor(cursor string) (int64, error) {
+// encodeEventCursor builds an opaque keyset position. It is intentionally not
+// user-parsable: the client treats it as a token, which lets the ordering change
+// without breaking callers.
+func encodeEventCursor(timestampMS, id int64) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(strconv.FormatInt(timestampMS, 10) + ":" + strconv.FormatInt(id, 10)))
+}
+
+// decodeEventCursor parses a cursor into a position, or nil for "first page".
+//
+// Two encodings are accepted. The current form is "<timestamp>:<id>". A
+// bare "<id>" is the pre-existing recording-order cursor; it is returned marked
+// as legacy so the caller resolves its timestamp instead of applying it as-is.
+func decodeEventCursor(cursor string) (*eventCursor, error) {
 	trimmed := strings.TrimSpace(cursor)
 	if trimmed == "" {
-		return 0, nil
+		return nil, nil
 	}
 	decoded, err := base64.RawURLEncoding.DecodeString(trimmed)
 	if err != nil {
-		return 0, errors.New("cursor is not valid")
+		return nil, errors.New("cursor is not valid")
 	}
-	id, err := strconv.ParseInt(string(decoded), 10, 64)
+	text := string(decoded)
+
+	timestampPart, idPart, hasPair := strings.Cut(text, ":")
+	if !hasPair {
+		id, err := strconv.ParseInt(text, 10, 64)
+		if err != nil || id <= 0 {
+			return nil, errors.New("cursor is malformed")
+		}
+		return &eventCursor{ID: id, Legacy: true}, nil
+	}
+
+	timestampMS, err := strconv.ParseInt(timestampPart, 10, 64)
+	if err != nil || timestampMS < 0 {
+		return nil, errors.New("cursor is malformed")
+	}
+	id, err := strconv.ParseInt(idPart, 10, 64)
 	if err != nil || id <= 0 {
-		return 0, errors.New("cursor is malformed")
+		return nil, errors.New("cursor is malformed")
 	}
-	return id, nil
+	return &eventCursor{TimestampMS: timestampMS, ID: id}, nil
+}
+
+// resolveEventCursor converts a legacy id-only cursor into its keyset position.
+//
+// A legacy cursor named a row, and that row's timestamp is what the new order
+// needs. When the row is gone — aged out of the retention window, or belonging to
+// another instance — the position cannot be reconstructed, and guessing would
+// silently show the reader a page from somewhere else in the list. The caller is
+// told to restart instead.
+func (r *Repository) resolveEventCursor(ctx context.Context, instanceID string, cursor *eventCursor) (*eventCursor, error) {
+	if cursor == nil || !cursor.Legacy {
+		return cursor, nil
+	}
+	var timestampMS int64
+	err := r.SQL().QueryRowContext(ctx,
+		`SELECT timestamp_ms FROM usage_events WHERE instance_id = ? AND id = ?`,
+		instanceID, cursor.ID).Scan(&timestampMS)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrUsageCursorStale
+	}
+	if err != nil {
+		return nil, fmt.Errorf("resolve legacy usage cursor: %w", err)
+	}
+	return &eventCursor{TimestampMS: timestampMS, ID: cursor.ID}, nil
 }
 
 // UsageEventSpan returns the earliest and latest stored event times, which the

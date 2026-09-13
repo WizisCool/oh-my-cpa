@@ -409,6 +409,16 @@ export const UsageEventsPage: React.FC = () => {
   const [searchResetToken, setSearchResetToken] = React.useState(0);
   const [grouping, setGrouping] = React.useState<EventGrouping>('time');
 
+  /**
+   * The rows the reader is holding while scrolled away, or null when following.
+   *
+   * Declared here rather than beside the live-tail logic below because the list
+   * query depends on it: while holding, the request carries the newest visible
+   * request time so the server can report how much has arrived since. See the
+   * live-tail section for what holding means.
+   */
+  const [heldItems, setHeldItems] = React.useState<UsageEvent[] | null>(null);
+
   // The flat committed filter map, derived from the URL through the same
   // normalisation the request itself uses. Chips and persistence both read it,
   // so a chip can never describe a filter the query did not apply.
@@ -840,7 +850,20 @@ export const UsageEventsPage: React.FC = () => {
       void ingest.refetch();
     },
   });
-  const queryString = usageEventParams({ ...query, ...activeWindow, cursor });
+  // While the reader is holding rows, ask the server how much has been recorded
+  // since the newest row id they are holding. The anchor is an id rather than a
+  // timestamp because the list is sorted by request time: the records ingested
+  // most recently are not the ones at the top, so "new" has to be asked as
+  // "recorded after what I can see". The count is scoped to the same filters and
+  // window as the list, and only adds `arrived_count` to the response - it never
+  // changes which rows come back, so the reader's place is untouched.
+  //
+  // A held page always contains the rows the reader was looking at, so the
+  // boundary is derivable on any page, not just the first.
+  const heldBoundaryID = heldItems && heldItems.length > 0
+    ? heldItems.reduce((highest, event) => Math.max(highest, event.id), 0)
+    : undefined;
+  const queryString = usageEventParams({ ...query, ...activeWindow, cursor, since: heldBoundaryID });
   const result = useQuery({
     queryKey: ['usage-events', queryString, refresh],
     queryFn: () => api.getUsageEvents(queryString),
@@ -944,7 +967,6 @@ export const UsageEventsPage: React.FC = () => {
   // have arrived since, the way log viewers do it: applying the update would
   // move text out from under the cursor, and jumping to the top is the worst
   // version of that. Scrolling back to the top resumes and applies the backlog.
-  const [heldItems, setHeldItems] = React.useState<UsageEvent[] | null>(null);
   const latestItemsRef = React.useRef<UsageEvent[]>([]);
   latestItemsRef.current = latestItems ?? [];
   const heldItemsRef = React.useRef<UsageEvent[] | null>(null);
@@ -956,11 +978,12 @@ export const UsageEventsPage: React.FC = () => {
   }, [viewScope, cursor]);
 
   const events = heldItems ?? latestItems ?? [];
-  const pendingCount = React.useMemo(() => {
-    if (!heldItems || !latestItems) return 0;
-    const shown = new Set(heldItems.map((event) => event.id));
-    return latestItems.reduce((count, event) => (shown.has(event.id) ? count : count + 1), 0);
-  }, [heldItems, latestItems]);
+  // How much has been recorded since the reader stopped following, counted by
+  // the server against the boundary the request carried. Diffing the loaded rows
+  // would under-report: the list is sorted by request time, so a request that
+  // started earlier and finished later arrives below the first page rather than
+  // at the top of it.
+  const pendingCount = heldItems ? result.data?.arrived_count ?? 0 : 0;
 
   // Safe file metadata only: never download credential contents for the stream.
   const authFiles = useQuery({
@@ -1029,8 +1052,9 @@ export const UsageEventsPage: React.FC = () => {
       let shown = raw;
       if (key === 'auth_index') shown = credentials.get(raw)?.name || raw;
       // The caller dimension is stored as a fingerprint, so the chip has to speak
-      // the readable mask the facet offered; showing the fingerprint would name
-      // the filter in a form the operator never chose and cannot recognise.
+      // the readable label the facet offered; showing the fingerprint would name
+      // the filter in a form the operator never chose and cannot recognise. The
+      // alias wins over the mask, matching the rows and the dropdown.
       if (key === 'api_key') {
         const facet = facets.data?.facets.api_group_keys.find((entry) => entry.value === raw);
         shown = facet?.mask?.trim() || raw;
@@ -1364,11 +1388,11 @@ export const UsageEventsPage: React.FC = () => {
                 value,
                 // The marker reuses the Result column's own vocabulary, so
                 // "success" and "failed" mean the same thing in the filter and
-                // in the list it filters. 'all' is deliberately the combined
-                // marker: it is the absence of a verdict, not a third verdict.
+                // in the list it filters. 'all' gets none: it is the absence of
+                // a verdict, and two bullets would read as a third outcome.
                 label: (
                   <span className="req-result-option">
-                    <ResultMarker kind={value} />
+                    {value !== 'all' && <ResultMarker kind={value} />}
                     {t(`events.filter_${value}`)}
                   </span>
                 ),

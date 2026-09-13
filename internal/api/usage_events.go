@@ -36,6 +36,7 @@ type usageEventResponse struct {
 	AuthIndex     string `json:"auth_index,omitempty"`
 	APIGroupKey   string `json:"api_group_key,omitempty"`
 	APIGroupLabel string `json:"api_group_label,omitempty"`
+APIKeyAlias string `json:"api_key_alias,omitempty"`
 	// APIKeyMask is the display-only label for the caller key. The request
 	// record keeps only a fingerprint, so records ingested before the mask
 	// column existed omit it.
@@ -411,12 +412,35 @@ func (h *Handler) listUsageEvents(writer http.ResponseWriter, request *http.Requ
 		writeError(writer, http.StatusBadRequest, err.Error())
 		return
 	}
+	// `since` asks only for a count of what has been recorded past the reader's
+	// own boundary (a row id, not a timestamp). It is optional, and an
+	// unparseable value is refused rather than ignored: silently dropping it would
+	// report "nothing new" forever.
+	if rawSince := strings.TrimSpace(request.URL.Query().Get("since")); rawSince != "" {
+		since, parseErr := strconv.ParseInt(rawSince, 10, 64)
+		if parseErr != nil || since < 0 {
+			writeError(writer, http.StatusBadRequest, "since must be a non-negative record id")
+			return
+		}
+		filter.SinceID = since
+	}
 	page, err := h.repo.ListUsageEvents(request.Context(), filter)
 	if err != nil {
 		// A filter the repository refuses is still a malformed request. Its own
 		// message names internal columns, so the response stays generic.
 		if errors.Is(err, repository.ErrUsageFilterInvalid) {
 			writeError(writer, http.StatusBadRequest, "invalid usage event filter")
+			return
+		}
+		// A cursor from before the list was ordered by request time can name a row
+		// that no longer exists, and its timestamp is unrecoverable. Conflict tells
+		// the console to drop its cursor and reload the first page; serving a page
+		// from an unknown position would be worse than an error.
+		if errors.Is(err, repository.ErrUsageCursorStale) {
+			writeJSON(writer, http.StatusConflict, map[string]any{
+				"error": "the pagination cursor is no longer valid; reload the first page",
+				"code":  "cursor_stale",
+			})
 			return
 		}
 		h.writeUsageQueryError(writer, err)
@@ -428,11 +452,12 @@ func (h *Handler) listUsageEvents(writer http.ResponseWriter, request *http.Requ
 		items = append(items, projectUsageEvent(row))
 	}
 	writeJSON(writer, http.StatusOK, map[string]any{
-		"window":      window,
-		"items":       items,
-		"next_cursor": page.NextCursor,
-		"has_more":    page.HasMore,
-		"limit":       page.Limit,
+		"window":        window,
+		"items":         items,
+		"next_cursor":   page.NextCursor,
+		"has_more":      page.HasMore,
+		"limit":         page.Limit,
+		"arrived_count": page.ArrivedCount,
 	})
 }
 

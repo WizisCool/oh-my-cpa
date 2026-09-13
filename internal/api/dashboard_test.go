@@ -52,16 +52,20 @@ func startDashboardTestServer(t *testing.T, handler func(http.ResponseWriter, *h
 	}))
 	t.Cleanup(cpaServer.Close)
 
-	db, err := repository.Open(context.Background(), dashboardMemoryDSN("dashboard"))
+	// The cipher is created first so the repository can be opened with it. Caller
+	// key identity is a keyed fingerprint, so a repository without the cipher
+	// degrades every identity to the shared redaction marker and key aliases cannot
+	// be exercised at all.
+	cipher, err := crypto.New("01234567890123456789012345678901")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := repository.Open(context.Background(), dashboardMemoryDSN("dashboard"), repository.WithCipher(cipher))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	repo := repository.New(db)
-	cipher, err := crypto.New("01234567890123456789012345678901")
-	if err != nil {
-		t.Fatal(err)
-	}
 	ciphertext, nonce, err := cipher.Encrypt([]byte("management-secret-value"))
 	if err != nil {
 		t.Fatal(err)
@@ -747,6 +751,57 @@ func TestUsageEventsListFilterAndCursor(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(string(payload)), "cursor") {
 		t.Fatalf("bad cursor message = %s", payload)
+	}
+}
+
+// The console's "N records arrived" pill asks the server to count what has been
+// recorded since the reader stopped following. It is a request-time-ordered list
+// whose arrivals can sort anywhere, so the count cannot be derived from the page.
+func TestUsageEventsArrivalCount(t *testing.T) {
+	client, baseURL, repo := startDashboardTestServer(t, nil)
+	now := time.Now().UTC()
+	seedEvents(t, repo, now, []repository.UsageDecoded{
+		{Event: eventFor("older", now.Add(-5*time.Minute), usage.TokenStats{TotalTokens: 5}, false)},
+	})
+	listURL := baseURL + "/omc/api/v1/usage/events?preset=24h"
+
+	var page struct {
+		Items        []usageEventResponse `json:"items"`
+		ArrivedCount int64                `json:"arrived_count"`
+	}
+	_, payload := getJSON(t, client, listURL)
+	if err := json.Unmarshal(payload, &page); err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 1 {
+		t.Fatalf("items = %d, want 1", len(page.Items))
+	}
+	if page.ArrivedCount != 0 {
+		t.Fatalf("arrived_count = %d without asking for it, want 0", page.ArrivedCount)
+	}
+	boundary := page.Items[0].ID
+
+	// One record with a newer request time and one that ran long and only just
+	// finished: both were recorded after the boundary, so both must be counted
+	// even though only one of them is newer in request time.
+	seedEvents(t, repo, now, []repository.UsageDecoded{
+		{Event: eventFor("newer", now.Add(-time.Minute), usage.TokenStats{TotalTokens: 5}, false)},
+		{Event: eventFor("slow-arrival", now.Add(-40*time.Minute), usage.TokenStats{TotalTokens: 5}, false)},
+	})
+
+	_, payload = getJSON(t, client, listURL+"&since="+strconv.FormatInt(boundary, 10))
+	if err := json.Unmarshal(payload, &page); err != nil {
+		t.Fatal(err)
+	}
+	if page.ArrivedCount != 2 {
+		t.Fatalf("arrived_count = %d, want both records recorded after the boundary", page.ArrivedCount)
+	}
+
+	// A malformed boundary is refused rather than ignored: dropping it silently
+	// would report "nothing new" forever.
+	response, payload := getJSON(t, client, listURL+"&since=not-a-number")
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("bad since status = %d body %s", response.StatusCode, payload)
 	}
 }
 

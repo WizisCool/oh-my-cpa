@@ -68,7 +68,7 @@
 
 | 能力 | 入口 | 说明 |
 | --- | --- | --- |
-| 用量请求浏览器 | `/usage/events`、`/usage/events/{id}`、`/usage/events/{id}/request-log`、`/usage/facets`、`/usage/ingest/refresh` | 多选分面（同维度取并集、跨维度取交集）、全局搜索、区间筛选、列布局与视图持久化、单请求详情与原始日志下载；刷新按钮先按需排空 CPA 队列并等到记录可查询，再重读列表与分面 |
+| 用量请求浏览器 | `/usage/events`、`/usage/events/{id}`、`/usage/events/{id}/request-log`、`/usage/facets`、`/usage/ingest/refresh` | 多选分面（同维度取并集、跨维度取交集）、全局搜索、区间筛选、列布局与视图持久化、单请求详情与原始日志下载；刷新按钮先按需排空 CPA 队列并等到记录可查询，再重读列表与分面。列表按请求时间倒序分页（`timestamp_ms` + `id` 复合游标），与首列显示的时间一致；"新记录"计数按入库 `id` 单独统计，因为长耗时请求可能以较旧时间排在首页之下 |
 | 请求时价格快照与模型目录 | `/pricing`、`/pricing/models`、`/pricing/sync`、`/management/dashboard` | 见 `docs/adr/0003-request-time-price-snapshots.md` 与 `docs/plans/model-prices.md` |
 | 配额总览与凭据详情 | `/management/quota`、`/management/quota/{authIndex}` | 归一化快照 + 冷却、重置、Codex 重置积分 |
 | 审计日志 | `/management/audit/events`、`/management/audit/export` | 追加写入；敏感导出写失败时 fail-closed |

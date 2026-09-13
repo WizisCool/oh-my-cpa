@@ -59,6 +59,16 @@ export interface UsageEventPage {
   next_cursor?: string;
   has_more: boolean;
   limit: number;
+  /**
+   * How many matching records were ingested after the `since` the request
+   * carried. Only present when `since` was sent.
+   *
+   * Anchored on an ingestion id, not a request time: the list is sorted by
+   * request time, so a request that started earlier and finished later arrives
+   * below the first page. It is still genuinely new, and counting the loaded rows
+   * would report "nothing new" while records were flowing in.
+   */
+  arrived_count?: number;
 }
 
 export interface UsageEventRelatedError {
@@ -379,6 +389,11 @@ export interface UsageEventQuery {
   ranges?: Partial<Record<UsageRangeFilterKey, { min?: RangeBound; max?: RangeBound }>>;
   cursor?: string;
   limit?: number;
+  /**
+   * Asks the server to report how many matching records were ingested after this
+   * row id, as `arrived_count`. It does not change which rows come back.
+   */
+  since?: number;
 }
 
 /**
@@ -422,6 +437,7 @@ export function usageEventParams(query: UsageEventQuery): string {
   assign('cost', query.cost);
   assign('cursor', query.cursor);
   assign('limit', query.limit);
+  assign('since', query.since);
   return search.toString();
 }
 
