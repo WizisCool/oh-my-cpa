@@ -29,6 +29,9 @@ import {
 } from './acceptance/harness.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const smokeOnly = process.argv.includes('--smoke');
+
+class SmokeComplete extends Error {}
 if (process.env.OMCPA_LIVE_CPA === '1') {
   await import('./browser-live-smoke.mjs');
   process.exit();
@@ -338,6 +341,12 @@ try {
   const footerText = await page.locator('.request-pagination span').first().innerText();
   check('request list renders seeded records', visibleRows >= 2, `visibleRows=${visibleRows}`);
   check('the whole seeded page is loaded', /50/.test(footerText), `footer="${footerText}"`);
+
+  if (smokeOnly) {
+    check('browser console has no errors in the smoke path', consoleErrors.length === 0, consoleErrors.join(' | '));
+    check('browser has no page errors in the smoke path', pageErrors.length === 0, pageErrors.join(' | '));
+    throw new SmokeComplete();
+  }
 
   // Latency carries no verdict colour. The fixture's slowest row is a nine-minute
   // agent request, and an absolute threshold used to paint it amber. It is located
@@ -1961,8 +1970,10 @@ try {
   );
   check('fake CPA received authenticated management calls', fakeCpa.requests.some((request) => request.path === '/v0/management/auth-files'));
 } catch (error) {
-  console.error(error.stack || error.message);
-  failures.push(error.message);
+  if (!(error instanceof SmokeComplete)) {
+    console.error(error.stack || error.message);
+    failures.push(error.message);
+  }
 } finally {
   if (browser) await browser.close().catch(() => {});
   if (appProcess && appProcess.exitCode === null) {
@@ -1981,7 +1992,7 @@ if (failures.length > 0) {
   if (appLog.length > 0) console.error(appLog.join('').slice(-8000));
   process.exitCode = 1;
 } else {
-  console.log(`\n${checks.length} deterministic browser checks passed.`);
+  console.log(`\n${checks.length} deterministic browser checks passed${smokeOnly ? ' (smoke)' : ''}.`);
 }
 
 

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node ../scripts/sync-lobe-icons.mjs && vite",
-    "build": "node ../scripts/sync-lobe-icons.mjs && tsc -b && vite build",
+    "build": "node ../scripts/sync-lobe-icons.mjs && vite build",
     "preview": "vite preview",
     "type-check": "tsc --noEmit"
   },
