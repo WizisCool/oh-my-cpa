@@ -34,14 +34,20 @@ if (document.errors.length > 0) {
   if (!browserSteps.some((step) => step.if === "github.event_name == 'pull_request'" && step.run === 'pnpm verify:browser:smoke')) {
     throw new Error('CI workflow has no pull-request browser smoke step');
   }
-  if (!browserSteps.some((step) => step.if === "github.event_name != 'pull_request'" && step.run === 'pnpm verify:browser')) {
-    throw new Error('CI workflow has no full browser acceptance step');
+  // The two browser phases run concurrently on master, and the step must fail when
+  // either does: a concurrent step whose status is not collected reports a green
+  // build for a failed run, which is worse than running them sequentially.
+  const masterBrowser = browserSteps.find((step) => step.name === 'Run browser acceptance and probes');
+  if (!masterBrowser) {
+    throw new Error('CI workflow does not run the browser phases together on master');
   }
-  // The focused probes reached master for the first time here: they used to sit
-  // outside every gate, so a regression in overlay stacking or column geometry was
-  // only caught if someone remembered the command.
-  if (!browserSteps.some((step) => step.if === "github.event_name != 'pull_request'" && step.run === 'pnpm verify:probes')) {
-    throw new Error('CI workflow does not run the focused browser probes on master');
+  if (masterBrowser.run.includes('verify:browser:smoke')) {
+    throw new Error('the master browser step must not run the pull-request smoke path');
+  }
+  for (const marker of ['wait "${acceptance_pid}"', 'wait "${probes_pid}"', 'acceptance_status', 'probes_status']) {
+    if (!masterBrowser.run.includes(marker)) {
+      throw new Error(`the master browser step does not collect both phase statuses (missing ${marker})`);
+    }
   }
   const browserPreparation = browserSteps.find((step) => step.name === 'Prepare Chromium and build embedded SPA');
   if (!browserPreparation?.run?.includes('playwright-core install') || !browserPreparation.run.includes('pnpm build')) {
@@ -63,11 +69,20 @@ if (document.errors.length > 0) {
   if (!browserPreparation.run.includes('--with-deps')) {
     throw new Error('CI workflow does not install Chromium OS dependencies unconditionally');
   }
-  for (const name of ['Run deterministic browser smoke', 'Run deterministic browser acceptance']) {
+  for (const name of ['Run deterministic browser smoke']) {
     const step = browserSteps.find((candidate) => candidate.name === name);
     if (step?.env?.OMCPA_BROWSER_BINARY !== 'tmp/oh-my-cpa-browser') {
       throw new Error(`${name} does not reuse the prepared browser binary`);
     }
+  }
+  if (masterBrowser.env?.OMCPA_BROWSER_BINARY !== 'tmp/oh-my-cpa-browser') {
+    throw new Error('the master browser step does not reuse the prepared browser binary');
+  }
+  // The probes reach master for the first time here: they used to sit outside every
+  // gate, so a regression in overlay stacking or column geometry was only caught if
+  // someone remembered the command.
+  if (!masterBrowser.run.includes('pnpm verify:probes')) {
+    throw new Error('CI workflow does not run the focused browser probes on master');
   }
   console.log(`CI workflow parsed with ${value.jobs.static.steps.length} static and ${browserSteps.length} browser steps.`);
 }

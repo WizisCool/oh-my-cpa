@@ -25,12 +25,16 @@ if (!await runChecks([
   { label: 'bundle-budget', command: 'node', args: ['scripts/check-bundle-budget.mjs'] },
 ])) process.exit(1);
 
-// The browser work is one group, not two jobs: both phases launch their own
-// Chromium and their own dev server or Go binary, so running them concurrently on a
-// small machine trades a shorter critical path for two browsers competing for the
-// same cores. `verify:browser` already runs everything that needs the fake CPA;
-// `verify:probes` adds the geometry, stacking and sequencing probes that used to be
-// reachable only by remembering a command.
+// The two browser phases are one group and run concurrently. They are independent
+// processes with their own Chromium and their own service under test (the probe run
+// drives Vite and mocked routes; the acceptance run drives the built binary, the
+// fake CPA and a seeded SQLite), so neither can observe the other.
+//
+// Measured under a 2-CPU constraint, which is what a GitHub runner provides:
+// sequential 81.4s / 81.6s, concurrent 69.5s / 71.7s - about 12 seconds, with no
+// failure in any run. A 4-core machine shows the same direction (74s sequential,
+// 60s concurrent). The contention is real but smaller than the tail of the longer
+// phase, which is why the parallel form wins even on the smaller machine.
 if (!await runChecks([
   { label: 'browser', command: 'pnpm', args: ['verify:browser'] },
   { label: 'probes', command: 'pnpm', args: ['verify:probes'] },

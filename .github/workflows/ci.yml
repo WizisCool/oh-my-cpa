@@ -164,19 +164,42 @@ jobs:
           OMCPA_SEED_USAGE_BINARY: tmp/seed-usage-browser
         run: pnpm verify:browser:smoke
 
-      # Master keeps both browser phases. The acceptance run drives the whole stack
-      # against the fake CPA; the probe run adds the geometry, stacking, paint and
-      # refresh-sequencing assertions that no pure test can make.
-      - name: Run deterministic browser acceptance
+      # Master keeps both browser phases, and runs them concurrently. They are
+      # independent processes with their own Chromium and their own service under
+      # test - the probes drive Vite with mocked routes, the acceptance run drives
+      # the built binary, the fake CPA and a seeded SQLite - so neither can observe
+      # the other.
+      #
+      # Measured under a 2-CPU constraint, which is what a runner provides: the
+      # concurrent form is about 12 seconds shorter than the sequential one, with no
+      # failure in any run. This uses the same background-and-collect pattern as the
+      # preparation step above, so a failure in either phase still fails the step
+      # with its own output captured to its own file.
+      - name: Run browser acceptance and probes
         if: github.event_name != 'pull_request'
         env:
           OMCPA_BROWSER_BINARY: tmp/oh-my-cpa-browser
           OMCPA_SEED_USAGE_BINARY: tmp/seed-usage-browser
-        run: pnpm verify:browser
-
-      - name: Run focused browser probes
-        if: github.event_name != 'pull_request'
-        run: pnpm verify:probes
+        run: |
+          set -o pipefail
+          pnpm verify:browser >tmp/acceptance.log 2>&1 &
+          acceptance_pid=$!
+          pnpm verify:probes >tmp/probes.log 2>&1 &
+          probes_pid=$!
+          acceptance_status=0
+          wait "${acceptance_pid}" || acceptance_status=$?
+          probes_status=0
+          wait "${probes_pid}" || probes_status=$?
+          echo '::group::browser acceptance log'
+          cat tmp/acceptance.log
+          echo '::endgroup::'
+          echo '::group::browser probes log'
+          cat tmp/probes.log
+          echo '::endgroup::'
+          if [ "${acceptance_status}" -ne 0 ]; then
+            exit "${acceptance_status}"
+          fi
+          exit "${probes_status}"
 
       - name: Upload browser failure diagnostics
         if: failure()
@@ -186,6 +209,8 @@ jobs:
           path: |
             tmp/browser-acceptance-failure/
             tmp/probe-failure/
+            tmp/acceptance.log
+            tmp/probes.log
           if-no-files-found: ignore
           retention-days: 7
 
