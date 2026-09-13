@@ -2,8 +2,13 @@ import React from 'react';
 import { Button, DatePicker, Dropdown, Modal } from 'antd';
 import { ClockCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { EVENT_PRESETS } from '../../types/usageEventView';
 import { useT } from '../../i18n';
+import {
+  rangeErrorKey,
+  selectedPresetKeys,
+  splitPresets,
+  validateAbsoluteRange,
+} from './timeRangePolicy';
 import './TimeRangeControl.css';
 
 export interface TimeRangeValue {
@@ -18,9 +23,6 @@ export interface TimeRangeControlProps {
   to?: number;
   onChange: (value: TimeRangeValue) => void;
 }
-
-/** Presets offered inline; the rest of EVENT_PRESETS follows under a divider. */
-const QUICK_PRESETS: readonly string[] = ['15m', '1h', '6h', '24h'];
 
 /**
  * TimeRangeControl is the request list's window picker: relative presets for the
@@ -44,8 +46,9 @@ export const TimeRangeControl: React.FC<TimeRangeControlProps> = ({ preset, from
   // selected value out of its own group removed the current choice from the menu,
   // so the operator could not see which preset they were on and could not return
   // to it after switching away. Selection is a highlight, not a filter.
-  const quick = QUICK_PRESETS.filter((value) => value in EVENT_PRESETS);
-  const slow = Object.keys(EVENT_PRESETS).filter((value) => !QUICK_PRESETS.includes(value));
+  // The partition is `splitPresets`, so a preset added to `EVENT_PRESETS` cannot be
+  // silently missing from the menu.
+  const { quick, slow } = splitPresets();
   const items = [
     ...quick.map((value) => ({ key: `preset:${value}`, label: t('events.last_range', { range: value }) })),
     { type: 'divider' as const },
@@ -61,7 +64,7 @@ export const TimeRangeControl: React.FC<TimeRangeControlProps> = ({ preset, from
         menu={{
           items,
           selectable: true,
-          selectedKeys: isAbsolute ? ['absolute'] : [`preset:${preset}`],
+          selectedKeys: selectedPresetKeys(isAbsolute, preset),
           onClick: ({ key }) => {
             if (key === 'absolute') {
               setIsPickerOpen(true);
@@ -129,17 +132,15 @@ const AbsoluteRangeForm: React.FC<AbsoluteRangeFormProps> = ({ from, to, onCance
   ]);
 
   const [start, end] = range;
-  // The server requires a positive window, so equal ends are refused here rather
-  // than sent as a request that is rejected as malformed. An end after the current
-  // time is also refused: the console bounds every window at "now", so the part
-  // beyond it could not be shown as chosen.
-  const now = dayjs();
-  const isIncomplete = start === null || end === null;
-  const isReversed = !isIncomplete && !start.isBefore(end);
-  const isFuture = !isIncomplete && (start.isAfter(now) || end.isAfter(now));
-  const isValid = !isIncomplete && !isReversed && !isFuture;
-
-  const errorKey = isReversed ? 'events.range_reversed' : isFuture ? 'events.range_in_future' : undefined;
+  // The server requires a positive window bounded at now. The rule that decides
+  // whether this range can be applied lives in `timeRangePolicy` and is tested
+  // there, because a half-chosen or transposed range has to be refused for reasons
+  // no browser assertion can state.
+  const validation = validateAbsoluteRange(
+    [start ? start.valueOf() : null, end ? end.valueOf() : null],
+    Date.now(),
+  );
+  const errorKey = rangeErrorKey(validation.errorKey);
 
   return (
     <div className="req-time-form">
@@ -156,7 +157,7 @@ const AbsoluteRangeForm: React.FC<AbsoluteRangeFormProps> = ({ from, to, onCance
       {errorKey && <p className="req-filter-error">{t(errorKey)}</p>}
       <div className="req-time-form-footer">
         <Button onClick={onCancel}>{t('common.cancel')}</Button>
-        <Button type="primary" disabled={!isValid} onClick={() => onApply(start!.valueOf(), end!.valueOf())}>
+        <Button type="primary" disabled={!validation.isValid} onClick={() => onApply(start!.valueOf(), end!.valueOf())}>
           {t('events.apply_filters')}
         </Button>
       </div>

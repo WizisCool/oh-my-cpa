@@ -49,7 +49,6 @@ import {
   activeFilterCount,
   eventWindow,
   filterParamsToUrl,
-  queryToFilterParams,
   readEventQuery,
   readFilterParams,
   rejectedEventParams,
@@ -74,6 +73,17 @@ import {
 } from '../types/usageEventView';
 import { animateScrollToTop, type ScrollAnimationHandle } from '../utils/smoothScroll';
 import type { UsageEventsView } from '../types/usageEventFilters';
+import {
+  applyTimeWindow,
+  clearAllFilters,
+  mergeFilters,
+  replaceFilters,
+  viewPreferenceFromUrl,
+} from '../types/usageEventViewActions';
+import { createSearchDebounce } from '../components/usage/searchDebounce';
+import { isListStale, isViewChange, pendingArrivalCount, shouldPoll } from '../components/usage/pollingPolicy';
+import { syncOutcomeMessage, syncShortfallReason, shouldAnnounceStuckSync } from '../components/usage/syncPresentation';
+import { chipDisplayValue } from '../components/usage/chipDisplay';
 import {
   REQUEST_COLUMNS,
   COLUMN_MAP,
@@ -112,19 +122,17 @@ interface IngestStatus {
 }
 
 /**
- * Text filters commit to the URL only after typing pauses: one keystroke must
- * never fire one list request per character. Only the free-text search box uses
- * this - the drawer's fields are drafts applied on demand, which is what makes a
- * range form usable at all.
+ * The search box's debounce.
  *
- * The committed value is the source of truth in every case except one: while the
- * operator is typing. An external change (hydration from saved preferences,
- * Back/Forward, a drill-down, a removed chip) has to win over local text that was
- * typed against the old value, or the stale text would overwrite the navigation
- * once the debounce fired. A clear-all is a second case, and it cannot be detected
- * by watching the committed value at all: the search box is usually already empty
- * when the clear runs, so nothing observable changes and a queued keystroke would
- * land after it. That is what `resetToken` is for.
+ * The policy - what invalidates a queued keystroke, and why the commit is read at
+ * fire time - lives in `searchDebounce.ts` and is tested there. This hook owns only
+ * what needs a component: the box's rendered value, the controller's lifetime, and
+ * reading the latest commit so a filter changed during the debounce window is not
+ * erased.
+ *
+ * `resetToken` is the signal the committed value cannot provide: a clear-all runs
+ * while this box is usually already empty, so nothing observable changes and a
+ * queued keystroke would land after it.
  */
 function useDebouncedSearch(
   committed: string,
@@ -132,61 +140,49 @@ function useDebouncedSearch(
   resetToken: number,
 ) {
   const [value, setValue] = React.useState(committed);
-  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  // The timer calls the *latest* commit rather than the one captured when it was
-  // scheduled. A commit builds its URL from the parameters of the render it was
-  // created in, so a filter changed during the debounce window would otherwise be
-  // erased when the queued keystroke fired against the older snapshot.
+  const controllerRef = React.useRef<ReturnType<typeof createSearchDebounce> | null>(null);
+  if (controllerRef.current === null) {
+    controllerRef.current = createSearchDebounce({ delayMs: EVENT_SEARCH_DEBOUNCE_MS });
+  }
+  const controller = controllerRef.current;
+
+  // Read at call time so the timer invokes the current render's commit rather than
+  // the one captured when it was scheduled.
   const commitRef = React.useRef(commit);
   React.useEffect(() => {
     commitRef.current = commit;
   });
-  // Read at fire time so a reset that landed while the timer was queued still
-  // invalidates it. Checking only when the reset is requested would leave the
-  // window between the request and its effect open.
-  const resetRef = React.useRef(resetToken);
-  React.useEffect(() => {
-    resetRef.current = resetToken;
-  });
-
-  const cancelPending = React.useCallback(() => {
-    if (timerRef.current !== null) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  }, []);
 
   // The committed value is the source of truth for every change that did not come
-  // from this box: hydration from saved preferences, Back/Forward, a drill-down,
-  // a removed chip.
+  // from this box: hydration from saved preferences, Back/Forward, a drill-down, a
+  // removed chip. Adopting it also cancels whatever this box had queued against the
+  // value it replaces.
   React.useEffect(() => {
-    cancelPending();
+    controller.sync(committed);
     setValue(committed);
-  }, [committed, cancelPending]);
+  }, [committed, controller]);
 
   // A clear runs while this box is usually already empty, so nothing observable
-  // changes and the committed value cannot signal that queued work must be
-  // dropped. That is what the token is for.
+  // changes and the committed value cannot signal that queued work must be dropped.
+  // That is what the token is for.
+  //
+  // The rendered value is reset here as well as the queue being invalidated. The two
+  // are separate needs that share one event: clearing must drop queued work (the
+  // token's job) *and* empty the box, because a keystroke typed before the clear is
+  // still on screen even though the URL it was typed against is gone.
   React.useEffect(() => {
-    cancelPending();
+    controller.invalidate();
     setValue(committed);
   }, [resetToken]);
 
-  React.useEffect(() => cancelPending, [cancelPending]);
+  React.useEffect(() => () => controller.dispose(), [controller]);
 
   const change = React.useCallback(
     (next: string) => {
       setValue(next);
-      cancelPending();
-      if (next.trim() === committed) return;
-      const scheduledUnder = resetRef.current;
-      timerRef.current = setTimeout(() => {
-        timerRef.current = null;
-        if (resetRef.current !== scheduledUnder) return;
-        commitRef.current(next.trim());
-      }, EVENT_SEARCH_DEBOUNCE_MS);
+      controller.change(next, (value_) => commitRef.current(value_));
     },
-    [cancelPending, committed],
+    [controller],
   );
 
   return [value, change] as const;
@@ -225,7 +221,6 @@ export const UsageEventsPage: React.FC = () => {
     DEFAULT_USAGE_EVENTS_VIEW,
     parseUsageEventsView,
   );
-
   const {
     value: columnWidthsPref,
     ready: columnWidthsReady,
@@ -690,27 +685,17 @@ export const UsageEventsPage: React.FC = () => {
    */
   const persistView = React.useCallback(
     (nextParams: URLSearchParams, overrides?: { grouping?: EventGrouping; autoRefresh?: boolean }) => {
-      const nextQuery = readEventQuery(nextParams);
-      const nextPref: UsageEventsViewPreference = {
-        result: nextQuery.result,
-        limit: nextQuery.limit,
-        grouping: overrides?.grouping ?? grouping,
-        autoRefresh: overrides?.autoRefresh ?? isAutoRefresh,
-      };
-      if (nextQuery.cost === 'priced' || nextQuery.cost === 'unpriced') nextPref.cost = nextQuery.cost;
-      if (nextQuery.from !== undefined) {
-        nextPref.from = nextQuery.from;
-        if (nextQuery.to !== undefined) nextPref.to = nextQuery.to;
-      } else {
-        nextPref.preset = nextQuery.preset ?? '1h';
-      }
-      // The stored filter map excludes `cost` because it is persisted as its own
-      // field. Keeping both was a second source of truth that hydration wrote back
-      // into the URL a second time.
-      const filterValues = queryToFilterParams(nextQuery);
-      delete filterValues.cost;
-      if (Object.keys(filterValues).length) nextPref.filterValues = filterValues;
-      setViewPref(nextPref);
+      // The saved view is derived from the URL that is actually being navigated to.
+      // Deriving every field from one normalised state - rather than merging the
+      // changed fields into the previous query - is what stops a cleared filter from
+      // being read back out of the query it was removed from and reappearing on the
+      // next visit. See `viewPreferenceFromUrl`.
+      setViewPref(
+        viewPreferenceFromUrl(nextParams, {
+          grouping: overrides?.grouping ?? grouping,
+          autoRefresh: overrides?.autoRefresh ?? isAutoRefresh,
+        }),
+      );
     },
     [grouping, isAutoRefresh, setViewPref],
   );
@@ -727,13 +712,10 @@ export const UsageEventsPage: React.FC = () => {
    */
   const commit = React.useCallback(
     (values: Partial<Record<EventFilterKey, string[]>>, options?: { result?: UsageResultFilter; keepWindow?: boolean }) => {
-      const nextParams = new URLSearchParams(params);
-      for (const key of EVENT_FILTER_KEYS) nextParams.delete(key);
-      filterParamsToUrl(values).forEach((value, key) => nextParams.append(key, value));
-      if (options?.result !== undefined) {
-        if (options.result === 'all') nextParams.delete('result');
-        else nextParams.set('result', options.result);
-      }
+      // The rewrite is defined in `usageEventViewActions`: every filter dimension is
+      // replaced wholesale so a removal is expressible, while the window, page size
+      // and cursor are left alone.
+      const nextParams = replaceFilters(params, values, { result: options?.result });
       writeParams(nextParams);
       persistView(nextParams, { grouping });
     },
@@ -743,10 +725,7 @@ export const UsageEventsPage: React.FC = () => {
   /** setFilter replaces one dimension wholesale. An empty list clears it. */
   const setFilter = React.useCallback(
     (key: EventFilterKey, values: string[]) => {
-      const next = { ...committedParams };
-      if (values.length) next[key] = values;
-      else delete next[key];
-      commit(next);
+      commit(mergeFilters(committedParams, key, values));
     },
     [commit, committedParams],
   );
@@ -763,9 +742,9 @@ export const UsageEventsPage: React.FC = () => {
   );
 
   const clearFilters = React.useCallback(() => {
-    const windowOnly = new URLSearchParams(params);
-    for (const key of EVENT_FILTER_KEYS) windowOnly.delete(key);
-    windowOnly.delete('result');
+    // Filters and the verdict go; the window, page size and cursor stay. Reset the
+    // window too and the reader is silently moved to a different hour.
+    const windowOnly = clearAllFilters(params);
     writeParams(windowOnly);
     // Cancels any queued keystroke. The search box's committed value is already
     // empty during a clear, so nothing else would signal that its pending timer
@@ -779,16 +758,7 @@ export const UsageEventsPage: React.FC = () => {
 
   const setTimeWindow = React.useCallback(
     (window: { preset?: string; from?: number; to?: number }) => {
-      const nextParams = new URLSearchParams(params);
-      nextParams.delete('preset');
-      nextParams.delete('from');
-      nextParams.delete('to');
-      if (window.from !== undefined) {
-        nextParams.set('from', String(window.from));
-        if (window.to !== undefined) nextParams.set('to', String(window.to));
-      } else if (window.preset) {
-        nextParams.set('preset', window.preset);
-      }
+      const nextParams = applyTimeWindow(params, window);
       writeParams(nextParams);
       persistView(nextParams, { grouping });
     },
@@ -916,15 +886,18 @@ export const UsageEventsPage: React.FC = () => {
   React.useEffect(() => {
     if (!isAutoRefresh) return;
     const timer = setInterval(() => {
-      // A hidden tab is a reader who is not watching, so the poll is skipped
-      // instead of spending the gateway's query budget on an unseen list.
-      if (document.visibilityState !== 'visible') return;
-      // Skipping rather than queueing means a slow query cannot stack up a
-      // backlog of polls that all fire the moment it resolves.
-      if (isFetchingRef.current) return;
-      // A sync already owns the next refresh; a poll landing on top of it would
-      // only add a read of the data it is replacing.
-      if (isSyncingRef.current) return;
+      // The three reasons to skip a tick live in `pollingPolicy.shouldPoll`: the tab
+      // is hidden, a read is already in flight, or a manual sync owns the next
+      // refresh. Skipping rather than queueing is what keeps the cadence wall-clock
+      // - a queued tick would fire the moment a slow query resolved.
+      if (!shouldPoll({
+        isAutoRefresh,
+        isVisible: document.visibilityState === 'visible',
+        isFetching: isFetchingRef.current,
+        isSyncing: isSyncingRef.current,
+      })) {
+        return;
+      }
       setRefresh((value) => value + 1);
     }, EVENT_AUTO_REFRESH_MS);
     return () => clearInterval(timer);
@@ -956,8 +929,11 @@ export const UsageEventsPage: React.FC = () => {
   React.useEffect(() => {
     if (result.data && !result.isPlaceholderData) setFetchedIdentity(queryIdentity);
   }, [result.data, result.isPlaceholderData, queryIdentity]);
-  const isViewChange = fetchedIdentity !== queryIdentity;
-  const stale = isViewChange || (result.isError && !!lastPage);
+  const stale = isListStale({
+    isViewChange: isViewChange(fetchedIdentity, queryIdentity),
+    isError: result.isError,
+    hasLastPage: !!lastPage,
+  });
 
   const latestItems = displayedPage?.items;
 
@@ -982,8 +958,9 @@ export const UsageEventsPage: React.FC = () => {
   // the server against the boundary the request carried. Diffing the loaded rows
   // would under-report: the list is sorted by request time, so a request that
   // started earlier and finished later arrives below the first page rather than
-  // at the top of it.
-  const pendingCount = heldItems ? result.data?.arrived_count ?? 0 : 0;
+  // at the top of it. Zero while the reader is at the live edge, where arriving
+  // records are simply part of the list.
+  const pendingCount = pendingArrivalCount(heldItems?.length ?? 0, result.data?.arrived_count);
 
   // Safe file metadata only: never download credential contents for the stream.
   const authFiles = useQuery({
@@ -1048,27 +1025,23 @@ export const UsageEventsPage: React.FC = () => {
 
   const describeChip = React.useCallback(
     (key: EventFilterKey, values: string[]): { label: string; display?: string } => {
-      const raw = values[0] ?? '';
-      let shown = raw;
-      if (key === 'auth_index') shown = credentials.get(raw)?.name || raw;
-      // The caller dimension is stored as a fingerprint, so the chip has to speak
-      // the readable label the facet offered; showing the fingerprint would name
-      // the filter in a form the operator never chose and cannot recognise. The
-      // alias wins over the mask, matching the rows and the dropdown.
-      if (key === 'api_key') {
-        const facet = facets.data?.facets.api_group_keys.find((entry) => entry.value === raw);
-        shown = facet?.alias?.trim() || facet?.mask?.trim() || raw;
-      }
-      if (key === 'provider') {
-        shown = providerName(raw);
-      }
-      if (key === 'cost') {
-        shown = t(raw === 'priced' ? 'events.cost_priced' : 'events.cost_unpriced_short');
-      }
-      if (key.endsWith('_min') || key.endsWith('_max')) {
-        const range = key.replace(/_(min|max)$/, '') as 'latency' | 'tokens' | 'cost';
-        shown = range === 'cost' ? `$${raw}` : raw;
-      }
+      // Which value to show is decided in `chipDisplay`: the stored value is a
+      // fingerprint for the credential and caller dimensions and a provider key for
+      // the provider dimension, and each resolves to the form the operator
+      // recognises. The sentence around it stays in the dictionary.
+      const shown = chipDisplayValue({
+        key,
+        value: values[0] ?? '',
+        credentialNames: new Map(
+          [...credentials].map(([index, file]) => [index, file?.name] as const),
+        ),
+        callerFacets: facets.data?.facets.api_group_keys,
+        resolveProviderName: providerName,
+        costLabels: {
+          priced: t('events.cost_priced'),
+          unpriced: t('events.cost_unpriced_short'),
+        },
+      });
       return { label: t(chipLabels[key], { val: shown }) };
     },
     [credentials, facets.data, t, providerName],
@@ -1215,34 +1188,29 @@ export const UsageEventsPage: React.FC = () => {
 
   const { mutate: requestSync, isPending: isSyncPending } = syncMutation;
   React.useEffect(() => {
-    if (!isSyncPending) return;
-    if (isSyncStuck) {
+    // A sync still running after a visible delay has stopped looking like "working
+    // on it" and started looking like a frozen page.
+    if (shouldAnnounceStuckSync(isSyncPending, isSyncStuck)) {
       void message.warning(t('events.sync_still_running'), 6);
     }
   }, [isSyncPending, isSyncStuck, message, t]);
-
   const handleManualRefresh = React.useCallback(() => {
     requestSync(undefined, {
       onSuccess: (outcome) => {
-        if (!outcome.enabled) {
-          // Not a failure: the deployment captures nothing, and saying so is the
-          // only honest answer for a refresh that has nothing to pull.
-          message.info(t('events.sync_disabled'));
-          return;
-        }
-        if (outcome.synced) {
-          if ((outcome.captured ?? 0) > 0) {
-            message.success(t('events.sync_success', { n: outcome.captured ?? 0 }));
-          } else {
-            message.success(t('events.sync_confirmed'));
-          }
-          return;
-        }
-        message.warning(
-          outcome.auth_rejected
-            ? t('events.sync_auth_rejected')
-            : t('events.sync_incomplete', { msg: outcome.error || t('events.sync_unknown_reason') }),
-        );
+        // Which of the three outcomes this was - and how loudly to say it - is
+        // decided in `syncPresentation`. The reported bug lived here: a pull that
+        // could not drain CPA was shown as a success because "the request
+        // completed" was read as "the records were fetched".
+        const outcomeMessage = syncOutcomeMessage({
+          ...outcome,
+          error: outcome.synced
+            ? outcome.error
+            : syncShortfallReason(outcome, t('events.sync_unknown_reason')),
+        });
+        const text = t(outcomeMessage.key, outcomeMessage.vars);
+        if (outcomeMessage.tone === 'info') message.info(text);
+        else if (outcomeMessage.tone === 'success') message.success(text);
+        else message.warning(text, 6);
       },
       onError: (error: unknown) => {
         const msg = error instanceof ApiError ? error.message : String(error);
