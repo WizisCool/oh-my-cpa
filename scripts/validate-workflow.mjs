@@ -37,5 +37,9 @@ if (document.errors.length > 0) {
   if (!browserSteps.some((step) => step.if === "github.event_name != 'pull_request'" && step.run === 'pnpm verify:browser')) {
     throw new Error('CI workflow has no full browser acceptance step');
   }
+  const browserPreparation = browserSteps.find((step) => step.name === 'Prepare Chromium and build embedded SPA');
+  if (!browserPreparation?.run?.includes('playwright-core install') || !browserPreparation.run.includes('pnpm build')) {
+    throw new Error('CI workflow does not prepare Chromium and build the SPA in one step');
+  }
   console.log(`CI workflow parsed with ${value.jobs.static.steps.length} static and ${browserSteps.length} browser steps.`);
 }
