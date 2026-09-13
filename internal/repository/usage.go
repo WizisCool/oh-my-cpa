@@ -729,6 +729,47 @@ func (r *Repository) persistedFingerprint(purpose, value string) string {
 	return security.FingerprintOrRedacted(r.db.Cipher(), purpose, value)
 }
 
+// UsageClientKeyPurpose is the HMAC purpose behind `usage_events.api_group_key`.
+//
+// It is exported because a client key has to be fingerprinted with exactly this
+// purpose for anything to be joinable to the usage records: the HMAC key and
+// purpose together define the output, so the same key under a different purpose
+// is an unrelated value. The key-management page used to fingerprint its list
+// under "client-key", which produced an identity that matched no request record.
+const UsageClientKeyPurpose = "usage-api-key"
+
+// UsageClientKeyFingerprint derives the identity a client key has in the usage
+// records, so a name can be attached to the requests that key actually served.
+//
+// Returning an error rather than a fallback is deliberate. `persistedFingerprint`
+// substitutes the fixed `[redacted]` marker when the cipher is unavailable, and
+// that value is shared by every key whose fingerprint failed - an alias written
+// under it would show one key's name on another key's requests. Callers that
+// attach a name must refuse the write instead.
+func (r *Repository) UsageClientKeyFingerprint(value string) (string, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return "", fmt.Errorf("%w: client key is empty", ErrClientKeyAliasInvalid)
+	}
+	// An already-fingerprinted value is passed through, which is what makes the
+	// repository's own persisted rows idempotent and lets a caller verify a value
+	// it took from storage without re-hashing it.
+	if strings.HasPrefix(trimmed, "hmac:") {
+		return trimmed, nil
+	}
+	if r == nil || r.SQL() == nil {
+		return "", errors.New("repository is not initialized")
+	}
+	fingerprint, err := security.Fingerprint(r.db.Cipher(), UsageClientKeyPurpose, trimmed)
+	if err != nil {
+		return "", fmt.Errorf("fingerprint client key: %w", err)
+	}
+	if fingerprint == "" || fingerprint == security.RedactedValue {
+		return "", fmt.Errorf("%w: client key fingerprint is unavailable", ErrClientKeyAliasInvalid)
+	}
+	return fingerprint, nil
+}
+
 // boundedMask accepts a value already shaped like a display mask, normalizing
 // the legacy filler so reinserted or imported rows keep working. Anything else
 // (a raw key, a fingerprint, empty) is dropped rather than stored, so a caller

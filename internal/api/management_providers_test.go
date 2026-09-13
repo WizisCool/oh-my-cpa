@@ -124,16 +124,22 @@ func startProviderTestServer(t *testing.T) (*http.Client, string, *providerFakeS
 	}))
 	t.Cleanup(cpaServer.Close)
 
-	db, err := repository.Open(context.Background(), fmt.Sprintf("file:mem_providers_%d?mode=memory&cache=shared", time.Now().UnixNano()))
+	// The cipher is created first so the repository can be opened with it. Caller
+	// key identity is a keyed fingerprint, so a repository without the cipher
+	// degrades every identity to the shared redaction marker and key aliases
+	// cannot be exercised at all.
+	cipher, err := crypto.New("01234567890123456789012345678901")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := repository.Open(context.Background(),
+		fmt.Sprintf("file:mem_providers_%d?mode=memory&cache=shared", time.Now().UnixNano()),
+		repository.WithCipher(cipher))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	repo := repository.New(db)
-	cipher, err := crypto.New("01234567890123456789012345678901")
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	ciphertext, nonce, err := cipher.Encrypt([]byte("cpa-management-key"))
 	if err != nil {

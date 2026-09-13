@@ -221,28 +221,83 @@ tables use `unixepoch()` seconds. Rollups are gated by
 `usage_aggregation_checkpoints` so aggregation is incremental rather than a
 full rescan.
 
-### Why the request list is ordered by `id`, not `timestamp_ms`
+### Why the request list is ordered by `timestamp_ms`
 
-`timestamp_ms` is when the request *started*. An agent request can run for
-minutes, so a row written to `usage_events` just now can carry a timestamp older
-than requests that started after it. Ordering the request list by timestamp
-therefore buries the newest row in the middle of the list, and a live view looks
-frozen while records are arriving. `ListUsageEvents` orders by `id` — recording
-order — so the collector's latest write is always the first row, and the keyset
-cursor is a single `id < ?` predicate.
+The list's order is the column the reader sorts by eye, so the two must agree.
+`ListUsageEvents` orders by `timestamp_ms DESC, id DESC`: the newest request time
+first, with the row id as a tiebreaker.
 
-That order needs its own index. Without `idx_usage_events_instance_id`
-(migration 021) SQLite satisfies the instance/time filter from
-`idx_usage_events_instance_time` and then sorts every matching row in a temp
-B-tree: measured against 200k rows, `LIMIT 101` cost **22 ms** instead of
-**0.1 ms**. The index is `(instance_id, id DESC)`, and because `id` is the rowid
-alias it also serves the cursor seek.
+`timestamp_ms` is when the request *started*, which is what the time column
+prints, and that is exactly why the visible column has to be the sort key. An
+agent request can run for minutes, so ordering by anything else puts a
+long-running request above requests that began after it: the reader sees
+`14:53:34`, then `14:52:57`, then `14:53:36` and concludes the sort is broken.
+Measured against a real instance, ordering by row id inverted **1329 of 5464**
+adjacent rows — about a quarter of the list.
 
-Request *time* remains the windowing key (`timestamp_ms >= from AND <= to`) and
-the axis of every rollup and chart. Users compare rows against the timestamps
-printed on them, so the two orderings are allowed to disagree — which is why the
-page states the order next to the window instead of silently re-ordering rows the
-reader can see are out of time order.
+The `id` tiebreaker is not optional. Several records can share a start time (a
+client fanning out, or a second-granularity source), and without a total order the
+keyset boundary would skip or repeat rows as the reader pages. The cursor is
+therefore a composite `(timestamp_ms, id)` position applied as the row comparison
+`(e.timestamp_ms, e.id) < (?, ?)`, not a single-column predicate. Cursors written
+before this order existed carry only an `id`; `resolveEventCursor` looks the row's
+timestamp up to convert them, and a cursor naming a row that no longer exists is
+rejected with `ErrUsageCursorStale` (HTTP 409) so the console restarts at page one
+instead of silently serving a page from the wrong place.
+
+This order is served by `idx_usage_events_instance_time` (migration 018),
+`(instance_id, timestamp_ms DESC, id DESC)`: the keyset predicate and the
+instance/time window both read from it, and the plan is a covering index seek with
+no temp B-tree. Migration 021's `idx_usage_events_instance_id` no longer serves the
+list order; it remains the index for `id`-keyed lookups such as the ingestion
+watermark behind the console's "N records arrived" pill.
+
+That pill is the one place the two orderings still have to be told apart, because
+"new records" means newly *recorded*, not newest request time. A request that
+started an hour ago and finished just now is genuinely new while sorting far below
+the first page, so the console counts arrivals against an ingestion id
+(`?since=<row id>`) rather than diffing the rows it has loaded — which would report
+"nothing new" while records were flowing in. On a real instance **5415 of 5515**
+records sort below page one, so that distinction is the normal case, not an edge
+case.
+
+Request *time* is also the windowing key (`timestamp_ms >= from AND <= to`) and the
+axis of every rollup and chart, so the list, the window and the charts all agree on
+what the numbers mean.
+
+### Client key aliases: one identity, two purposes
+
+Operator-assigned names for gateway client keys live in `client_key_aliases`
+(migration 022), keyed by `(instance_id, key_fingerprint)`.
+
+The fingerprint is `usage_events.api_group_key`, which is `security.Fingerprint`
+under the purpose **`usage-api-key`** (`repository.UsageClientKeyPurpose`). The
+purpose is part of the HMAC input, so the same key hashed under a different
+purpose is an unrelated value - and that is exactly what the key list used to do:
+it fingerprinted under `client-key`, producing an identity that matched **no**
+request record. An alias written against that value could never label anything.
+`ClientAPIKeyItemDTO` therefore carries both: `fingerprint` (the legacy page value,
+kept for compatibility) and `usage_fingerprint` (the joinable identity).
+
+Three consequences shape the implementation:
+
+- **Identity is the fingerprint, never an array index or a mask.** Reordering CPA's
+  `api-keys` list moves an index, and a mask keeps only a short head and tail, so
+  two keys can share one. Either would put one key's name on another key's records.
+- **Aliases are never pruned.** Requests keep their `api_group_key` forever, so a
+  deleted key's history still needs its name; an alias belongs to the identity, not
+  to the current configuration. Renaming is read-time resolution, so it changes how
+  historical rows read without rewriting a single usage record.
+- **Alias writes never touch CPA's configuration.** Naming a key is Oh My CPA
+  metadata with its own endpoint, because routing it through `PUT /config.yaml`
+  would rotate the revision for every other editor and rewrite a secret the
+  operator did not touch.
+
+Resolution is a single batched `IN` lookup per page (deduplicated, chunked at 500
+parameters), not one query per row, and it is best-effort: a failure leaves
+`api_key_alias` empty and the console falls back to the mask rather than failing
+the list. The fingerprint remains the filter identity, so a rename cannot change
+what a saved filter or a drill-down link selects.
 
 ### 6.1 The request-record filter vocabulary
 

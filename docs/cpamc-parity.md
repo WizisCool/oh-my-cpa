@@ -22,7 +22,7 @@
 | 配置读取 | `config_management` | `GET /config`、`GET /config.yaml` | 已覆盖（已对真实 CPA 7.2.146 验证） | 读取并显示真实 JSON/YAML |
 | 配置可视化标量编辑 | `config_management` | `/debug`、`/proxy-url`、`/request-log`、`/logging-to-file`、`/usage-statistics-enabled`、`/request-retry`、`/max-retry-*`、`/ws-auth`、`/force-model-prefix`、`/routing/strategy` | 已覆盖（已对真实 CPA 7.2.146 验证） | 每个白名单端点的 GET/PUT 合约测试与乐观交互 |
 | 配置源码编辑与保存 | `config_management` | `PUT /config.yaml` | 已覆盖（已对真实 CPA 7.2.146 验证） | YAML 错误 400、配置错误 422、脏状态保护、Ctrl+S 快捷保存 |
-| 代理客户端 API Keys | `key_management`（网关分组独立页） | 配置文档的 `api-keys` 字段（经 `PUT /config.yaml` 保存） | 已覆盖 | 独立页面 `#/api-keys`；增删改经可视化配置草稿与版本校验落盘，与配置面板共用同一保存事务，不再在配置面板重复入口 |
+| 代理客户端 API Keys | `key_management`（网关分组独立页） | 配置文档的 `api-keys` 字段（经 `PUT /config.yaml` 保存）；别名走 OMC 自有的 `/management/client-key-aliases` | 已覆盖 | 独立页面 `#/api-keys`；增删改经可视化配置草稿与版本校验落盘，与配置面板共用同一保存事务。别名按 `(instance_id, usage 指纹)` 存储于 `client_key_aliases`，是 OMC 元数据而非 CPA 配置，因此改名不会重写 CPA 文档；指纹以 `usage-api-key` 用途计算，与 `usage_events.api_group_key` 同源，请求列表/详情/分面/chip 均据此显示别名并回退到掩码；浏览器验收断言列表真实渲染、计数一致、默认遮罩与揭示值 |
 | Gemini/Interactions/Codex/Claude/xAI/Vertex Key | `ai_providers` | 各 provider 的 `GET/PUT/PATCH/DELETE /{provider}-api-key` | 已覆盖 | 统一提供商列表、脱敏展示与状态切换；启停按单个提供商串行化，快速连击以最后一次意图为准；官网为 OMC 管理元数据（仅 http/https） |
 | OpenAI 兼容提供商 | `ai_providers` | `GET/PUT/PATCH/DELETE /openai-compatibility` | 已覆盖 | 多 key、端点去敏、模型列表与启停开关；官网链接与模型输入框即时筛选 |
 | 模型发现 | 提供商操作、快速开始 | 不经 CPA：直连提供商 `Base URL` 的 `/models`（失败时回退 `/v1/models`）；认证文件模型走 `GET /auth-files/models` | 已覆盖 | `POST /management/providers/pull-models` 由服务端发起并受审计；提供商 URL 与密钥只存在于 Go 侧 |

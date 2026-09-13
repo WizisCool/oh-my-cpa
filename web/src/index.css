@@ -1224,6 +1224,28 @@ a { color: inherit; }
   background: rgba(255, 59, 48, 0.1) !important;
 }
 
+/* A key the console has no usage identity for cannot be filtered to, so the
+   action is disabled rather than hidden: the missing identity is worth seeing. */
+.config-key-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.config-key-action:disabled:hover {
+  color: var(--muted) !important;
+  border-color: var(--border) !important;
+  background: var(--surface) !important;
+}
+
+/* States what the per-key counts measure. They describe this console's stored
+   records in one window, not the key's whole life, and saying so prevents
+   "12 requests" from reading as a lifetime total. */
+.config-keys-scope-note {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 @media (max-width: 1719px) {
   .config-workbench {
     grid-template-columns: 216px minmax(0, 920px);

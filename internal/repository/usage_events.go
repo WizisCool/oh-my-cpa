@@ -508,6 +508,69 @@ type UsageFacetValue struct {
 	Value    string `json:"value"`
 	Requests int64  `json:"requests"`
 	Mask     string `json:"mask,omitempty"`
+	// Alias is the operator-assigned name for a key-shaped facet, filled in by the
+	// API layer from the same fingerprint as Value. It is not read from a column,
+	// because a name is stored once per key rather than once per record.
+	Alias string `json:"alias,omitempty"`
+}
+
+// ClientKeyUsage is the observed traffic for one caller key in a window.
+//
+// Every number is derived from Oh My CPA's own retained usage events, so it says
+// what this console has actually seen rather than what CPA might report. A key
+// with no matching records is simply absent from the result; the console renders
+// that as "no requests observed", never as a fabricated creation date.
+type ClientKeyUsage struct {
+	KeyFingerprint string `json:"key_fingerprint"`
+	Requests       int64  `json:"requests"`
+	Failed         int64  `json:"failed"`
+	TotalTokens    int64  `json:"total_tokens"`
+	// LastUsedMS is the newest request time observed in the window, which is the
+	// same clock the request list prints.
+	LastUsedMS int64 `json:"last_used_ms"`
+}
+
+// ClientKeyUsage aggregates the window by caller key identity.
+//
+// The grouping key is `api_group_key` restricted to the api_key category, which
+// is exactly the fingerprint a stored alias is keyed by. Records whose caller was
+// not a client key (a provider or endpoint fallback) are excluded: attributing
+// them here would show traffic against a key that never served it.
+func (r *Repository) ClientKeyUsage(ctx context.Context, instanceID string, fromMS, toMS int64) ([]ClientKeyUsage, error) {
+	result := []ClientKeyUsage{}
+	if r == nil || r.SQL() == nil {
+		return result, errors.New("repository is not initialized")
+	}
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" {
+		return result, nil
+	}
+	rows, err := r.SQL().QueryContext(ctx, `
+		SELECT api_group_key,
+		       COUNT(1),
+		       COALESCE(SUM(failed), 0),
+		       COALESCE(SUM(total_tokens), 0),
+		       COALESCE(MAX(timestamp_ms), 0)
+		FROM usage_events
+		WHERE instance_id = ? AND timestamp_ms BETWEEN ? AND ?
+		  AND api_group_key <> '' AND api_group_label = 'api_key'
+		GROUP BY api_group_key`, instanceID, fromMS, toMS)
+	if err != nil {
+		return nil, fmt.Errorf("read client key usage: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var entry ClientKeyUsage
+		if errScan := rows.Scan(&entry.KeyFingerprint, &entry.Requests, &entry.Failed, &entry.TotalTokens, &entry.LastUsedMS); errScan != nil {
+			return nil, fmt.Errorf("scan client key usage: %w", errScan)
+		}
+		result = append(result, entry)
+	}
+	if errRows := rows.Err(); errRows != nil {
+		return nil, fmt.Errorf("iterate client key usage: %w", errRows)
+	}
+	return result, nil
 }
 
 // GetUsageFacets enumerates filter options within a time window.

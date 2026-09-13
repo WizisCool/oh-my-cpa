@@ -1,8 +1,10 @@
 import http from 'node:http';
+import { parse as parseYaml } from 'yaml';
 
 export const FAKE_CPA_MANAGEMENT_KEY = 'omc-e2e-management-key';
 export const FAKE_PROVIDER_SECRET = 'omc-e2e-provider-secret';
 export const FAKE_ACCOUNT_SECRET = 'omc-e2e-account-secret';
+export const FAKE_CLIENT_SECRET = 'omc-e2e-client-secret';
 
 function json(response, status, body, headers = {}) {
   response.writeHead(status, { 'Content-Type': 'application/json', 'X-CPA-Version': '7.2.146-e2e', ...headers });
@@ -58,6 +60,18 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
     { 'api-key': FAKE_PROVIDER_SECRET, 'auth-index': 'codex-e2e', 'base-url': 'https://provider.example.test', models: [{ name: 'gpt-e2e', alias: 'gpt-e2e' }] },
   ];
   let codexProviders = JSON.parse(JSON.stringify(initialCodexProviders));
+
+  // The gateway client keys are stateful for the same reason authFiles is: the
+  // key-management page renders its list from `/config.yaml` but rewrites it
+  // through `PUT /config.yaml`, so a fixture that served a fixed document while
+  // acknowledging writes would let a lost or mis-rendered list pass unnoticed.
+  let clientKeys = [FAKE_CLIENT_SECRET];
+  let configYaml = null;
+  const renderConfigYaml = () => {
+    if (configYaml !== null) return configYaml;
+    const keys = clientKeys.map((key) => `  - ${key}`).join('\n');
+    return `host: 127.0.0.1\nport: 8317\ndebug: false\nlogging-to-file: true\nrequest-log: true\napi-keys:\n${keys}\n`;
+  };
 
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url, 'http://fake-cpa.local');
@@ -146,7 +160,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
         'logging-to-file': true, 'usage-statistics-enabled': true, 'request-retry': 3,
         'max-retry-interval': 30, 'max-retry-credentials': 2, 'ws-auth': true,
         'force-model-prefix': false, 'logs-max-total-size-mb': 100, 'error-logs-max-files': 5,
-        routing: { strategy: 'least-load' }, 'api-keys': ['fixture-client-key'],
+        routing: { strategy: 'least-load' }, 'api-keys': [...clientKeys],
         'codex-api-key': codexProviders,
         'openai-compatibility': [],
       });
@@ -154,7 +168,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
     }
     if (request.method === 'GET' && path === '/config.yaml') {
       response.writeHead(200, { 'Content-Type': 'application/yaml', 'X-CPA-Version': '7.2.146-e2e' });
-      response.end('host: 127.0.0.1\nport: 8317\ndebug: false\nlogging-to-file: true\nrequest-log: true\n');
+      response.end(renderConfigYaml());
       return;
     }
     if (request.method === 'GET' && path === '/codex-api-key') {
@@ -388,11 +402,41 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       json(response, 200, { status: 'ok' });
       return;
     }
-    if (request.method === 'GET' && ['/api-keys', '/claude-api-key', '/gemini-api-key', '/oauth-excluded-models'].includes(path)) {
+    if (request.method === 'GET' && path === '/api-keys') {
+      json(response, 200, { 'api-keys': [...clientKeys] });
+      return;
+    }
+    if (request.method === 'GET' && ['/claude-api-key', '/gemini-api-key', '/oauth-excluded-models'].includes(path)) {
       json(response, 200, {});
       return;
     }
-    if (request.method === 'PUT' && (path === '/config.yaml' || path.startsWith('/'))) {
+    // A config write replaces the whole document, so the fixture stores it and
+    // serves it back verbatim. Keeping the round trip makes a save that silently
+    // dropped the key list observable on the next read. The list is read back
+    // with the real YAML parser rather than a pattern match, so quoted, flow-style
+    // and empty `api-keys` forms are all handled the way CPA would handle them.
+    if (request.method === 'PUT' && path === '/config.yaml') {
+      const body = chunks.length ? Buffer.concat(chunks).toString('utf8') : '';
+      if (body.trim() !== '') {
+        configYaml = body;
+        try {
+          const parsedDoc = parseYaml(body);
+          const keys = parsedDoc?.['api-keys'];
+          if (Array.isArray(keys)) {
+            clientKeys = keys.map((key) => String(key).trim()).filter(Boolean);
+          } else if (keys === undefined || keys === null) {
+            clientKeys = [];
+          } else {
+            clientKeys = [String(keys).trim()].filter(Boolean);
+          }
+        } catch {
+          // An unparseable document leaves the previous list in place.
+        }
+      }
+      json(response, 200, { status: 'ok' });
+      return;
+    }
+    if (request.method === 'PUT' && path.startsWith('/')) {
       json(response, 200, { status: 'ok' });
       return;
     }

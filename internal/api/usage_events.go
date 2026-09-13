@@ -36,7 +36,12 @@ type usageEventResponse struct {
 	AuthIndex     string `json:"auth_index,omitempty"`
 	APIGroupKey   string `json:"api_group_key,omitempty"`
 	APIGroupLabel string `json:"api_group_label,omitempty"`
-APIKeyAlias string `json:"api_key_alias,omitempty"`
+	// APIKeyAlias is the operator-assigned name for the caller key, resolved
+	// server-side from the fingerprint in APIGroupKey. It is a display label
+	// only: APIGroupKey stays the filter identity, so renaming a key never
+	// changes what a saved filter or a drill-down link selects. Empty when the
+	// key has not been named.
+	APIKeyAlias string `json:"api_key_alias,omitempty"`
 	// APIKeyMask is the display-only label for the caller key. The request
 	// record keeps only a fingerprint, so records ingested before the mask
 	// column existed omit it.
@@ -451,6 +456,7 @@ func (h *Handler) listUsageEvents(writer http.ResponseWriter, request *http.Requ
 	for _, row := range page.Items {
 		items = append(items, projectUsageEvent(row))
 	}
+	h.attachClientKeyAliases(request, items)
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"window":        window,
 		"items":         items,
@@ -459,6 +465,47 @@ func (h *Handler) listUsageEvents(writer http.ResponseWriter, request *http.Requ
 		"limit":         page.Limit,
 		"arrived_count": page.ArrivedCount,
 	})
+}
+
+// attachClientKeyAliases fills in the operator-assigned name for every caller key
+// on the page, in one batched lookup.
+//
+// One query per record would add a round trip per row for what is only a label,
+// so the distinct fingerprints of the page are resolved together. The lookup is
+// best effort: a failure leaves `api_key_alias` empty and the console falls back
+// to the mask, because losing a cosmetic name must not fail the request list
+// itself. Aliases are Oh My CPA metadata and never carry key material, so nothing
+// sensitive is read or returned here.
+func (h *Handler) attachClientKeyAliases(request *http.Request, items []usageEventResponse) {
+	if h.repo == nil || len(items) == 0 {
+		return
+	}
+	fingerprints := make([]string, 0, len(items))
+	for _, item := range items {
+		// Only client-key callers can have an alias. A provider or endpoint
+		// fallback identity is not a key, so looking it up would be meaningless.
+		if item.APIGroupLabel == "api_key" && item.APIGroupKey != "" {
+			fingerprints = append(fingerprints, item.APIGroupKey)
+		}
+	}
+	if len(fingerprints) == 0 {
+		return
+	}
+	aliases, err := h.repo.ClientKeyAliasesFor(request.Context(), defaultInstanceID(), fingerprints)
+	if err != nil {
+		if h.logger != nil {
+			h.logger.Warn("client key alias resolution failed", "error", err.Error())
+		}
+		return
+	}
+	for index := range items {
+		if items[index].APIGroupLabel != "api_key" {
+			continue
+		}
+		if alias, ok := aliases[items[index].APIGroupKey]; ok {
+			items[index].APIKeyAlias = alias
+		}
+	}
 }
 
 // getUsageEvent returns one record plus the credential errors that happened
@@ -598,7 +645,38 @@ func (h *Handler) listUsageFacets(writer http.ResponseWriter, request *http.Requ
 		h.writeUsageQueryError(writer, err)
 		return
 	}
+	h.attachFacetAliases(request, &facets)
 	writeJSON(writer, http.StatusOK, map[string]any{"window": window, "facets": facets})
+}
+
+// attachFacetAliases labels the caller-key facet options with their names.
+//
+// The facet's `value` is a fingerprint, so without this the dropdown would offer
+// identities the operator never chose while the rows they filter now show names.
+// One batched lookup covers every option, and the label is best effort: a failure
+// leaves the mask in place rather than failing the dropdown.
+func (h *Handler) attachFacetAliases(request *http.Request, facets *repository.UsageFacets) {
+	if h.repo == nil || facets == nil || len(facets.APIGroupKey) == 0 {
+		return
+	}
+	fingerprints := make([]string, 0, len(facets.APIGroupKey))
+	for _, option := range facets.APIGroupKey {
+		if option.Value != "" {
+			fingerprints = append(fingerprints, option.Value)
+		}
+	}
+	aliases, err := h.repo.ClientKeyAliasesFor(request.Context(), defaultInstanceID(), fingerprints)
+	if err != nil {
+		if h.logger != nil {
+			h.logger.Warn("client key alias resolution for facets failed", "error", err.Error())
+		}
+		return
+	}
+	for index := range facets.APIGroupKey {
+		if alias, ok := aliases[facets.APIGroupKey[index].Value]; ok {
+			facets.APIGroupKey[index].Alias = alias
+		}
+	}
 }
 
 // writeUsageQueryError turns a missing-schema state into something the UI can

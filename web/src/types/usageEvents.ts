@@ -30,6 +30,11 @@ export interface UsageEvent {
    *  ingested before the mask column existed: those rows keep only the
    *  fingerprint, which cannot be turned back into a readable mask. */
   api_key_mask?: string;
+  /** Operator-assigned name for the caller key, resolved server-side from
+   *  `api_group_key`. Display only: the fingerprint stays the filter identity, so
+   *  a rename never changes what a saved filter selects. Absent when the key has
+   *  not been named, and the mask is shown instead. */
+  api_key_alias?: string;
   /** Client product label, redacted and shortened on the persistence path. */
   user_agent?: string | null;
   source?: string;
@@ -98,6 +103,10 @@ export interface UsageFacetValue {
   /** Display label for key-shaped facets (api_group_keys): the stored value is
    *  a fingerprint, the mask is what a human recognises. */
   mask?: string;
+  /** Operator-assigned name for a key-shaped facet, preferred over the mask when
+   *  the key has been named. Resolved from the same fingerprint as `value`, so
+   *  the option label and the identity it filters by cannot diverge. */
+  alias?: string;
 }
 
 export interface UsageFacets {

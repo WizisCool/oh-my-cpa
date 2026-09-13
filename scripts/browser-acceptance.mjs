@@ -11,6 +11,7 @@ import { chromium } from 'playwright-core';
 import {
   createFakeCpaServer,
   FAKE_ACCOUNT_SECRET,
+  FAKE_CLIENT_SECRET,
   FAKE_CPA_MANAGEMENT_KEY,
   FAKE_PROVIDER_SECRET,
 } from './fake-cpa.mjs';
@@ -34,6 +35,13 @@ if (process.env.OMCPA_LIVE_CPA === '1') {
 }
 
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'omc-e2e-'));
+// One master key for the whole run: the app, the seeder and the fingerprint
+// assertions must all derive caller-key identities with the same key.
+const MASTER_KEY = ['fixture', 'master', 'key', 'for', 'browser', 'acceptance', 'only'].join('-');
+// The name the alias checks assign through the UI. It is deliberately not the
+// key's own value: the assertions below prove the list shows this name while the
+// filter keeps using the stored fingerprint.
+const CLIENT_KEY_ALIAS = '验收专用密钥';
 const executable = path.join(temporary, process.platform === 'win32' ? 'oh-my-cpa.exe' : 'oh-my-cpa');
 const appLog = [];
 const { check, checkEventually, checkHoldsFor, checks, failures } = createChecker();
@@ -126,10 +134,20 @@ try {
   const seeder = path.join(temporary, process.platform === 'win32' ? 'seed-usage.exe' : 'seed-usage');
   execFileSync('go', ['build', '-trimpath', '-o', seeder, './scripts/fixture/seed-usage'], { cwd: root, stdio: 'inherit' });
   const seedScenario = (name) => {
-    const output = execFileSync(seeder, ['-db', path.join(temporary, 'data', 'oh-my-cpa.db'), '-scenario', name], {
-      cwd: root,
-      encoding: 'utf8',
-    });
+    const output = execFileSync(
+      seeder,
+      [
+        '-db',
+        path.join(temporary, 'data', 'oh-my-cpa.db'),
+        '-scenario',
+        name,
+        // The seeder must fingerprint with the same master key the app runs with,
+        // or a caller-key identity it writes would not be one the app can derive.
+        '-master-key',
+        MASTER_KEY,
+      ],
+      { cwd: root, encoding: 'utf8' },
+    );
     if (!output.includes('SEED_USAGE_OK')) throw new Error(`seed ${name} failed: ${output}`);
   };
   seedScenario('list');
@@ -140,7 +158,7 @@ try {
       OMCPA_LISTEN_ADDR: `127.0.0.1:${appPort}`,
       OMCPA_BASE_PATH: '/omc',
       OMCPA_DATA_DIR: path.join(temporary, 'data'),
-      OMCPA_MASTER_KEY: ['fixture', 'master', 'key', 'for', 'browser', 'acceptance', 'only'].join('-'),
+      OMCPA_MASTER_KEY: MASTER_KEY,
       OMCPA_CPA_BASE_URL: `http://127.0.0.1:${cpaPort}`,
       OMCPA_CPA_MANAGEMENT_KEY: FAKE_CPA_MANAGEMENT_KEY,
       OMCPA_CPA_USAGE_ADDR: '',
@@ -260,8 +278,10 @@ try {
   check('request list renders seeded records', visibleRows >= 2, `visibleRows=${visibleRows}`);
   check('the whole seeded page is loaded', /50/.test(footerText), `footer="${footerText}"`);
 
-  // Latency carries no verdict colour: the fixture's first row is a nine-minute
-  // agent request, and an absolute threshold used to paint it amber.
+  // Latency carries no verdict colour. The fixture's slowest row is a nine-minute
+  // agent request, and an absolute threshold used to paint it amber. It is located
+  // by its own latency rather than by position: the list is ordered by request
+  // time, so the slowest request is not the first row.
   const latencyColours = await page
     .locator('.request-row .req-latency-val')
     .evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).color));
@@ -273,14 +293,19 @@ try {
     probe.remove();
     return value;
   });
-  const slowRowText = await page.locator('.request-row').first().locator('.req-latency-val').innerText();
-  check('long agent latency is rendered without a warning colour', !latencyColours.includes(warnColour), `slow=${slowRowText}`);
+  const latencyTexts = await page.locator('.request-row .req-latency-val').allInnerTexts();
+  const slowestLatency = latencyTexts.reduce((worst, text) => {
+    const seconds = /m /.test(text)
+      ? Number.parseFloat(text) * 60
+      : Number.parseFloat(text) || 0;
+    return Math.max(worst, seconds);
+  }, 0);
+  check('long agent latency is rendered without a warning colour', !latencyColours.includes(warnColour), `colours=${latencyColours.length}`);
   // Anchored so the assertion above cannot pass vacuously on an empty list.
-  check('the slow request really is long', /9\.00 s|m /.test(slowRowText) || Number.parseFloat(slowRowText) > 60, `slow=${slowRowText}`);
+  check('a long agent request really is on screen', slowestLatency > 60, `slowest=${slowestLatency}s`);
 
-  // The list order is still "newest recorded first"; the label that used to state
-  // it next to the window was removed as low-value chrome, so the absence is what
-  // is pinned now.
+  // The window states no ordering label: the list's order now matches the time
+  // column it displays, so there is nothing to explain. The absence is pinned.
   check('the window states no ordering label', (await page.locator('.request-order-hint').count()) === 0);
   // The summary strip is gone, so the request page states no verdict of its own.
   check('no KPI summary strip remains', (await page.locator('.request-summary, .req-kpi-item').count()) === 0);
@@ -500,14 +525,24 @@ try {
   await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 15000 });
   check('the audit resumed on the default window', filterSuffix() === initialFilterQuery, `before=${initialFilterQuery} after=${filterSuffix()}`);
 
-  // Ordering: the first row was recorded last but started earliest, so its
-  // timestamp is older than the row below it. That is recording order, and it is
-  // the only way a just-finished long request can reach the top.
+  // Ordering: the visible time column must be monotonic. The fixture writes its
+  // slow agent request last but gives it the oldest start time, so a regression
+  // back to recording order would put it first and invert the column.
   const ordered = await rowTimestamps();
+  const strictlyDescending = ordered.every((value, index) => index === 0 || ordered[index - 1] >= value);
   check(
-    'the list is ordered by recording order, not request time',
-    ordered.length >= 2 && ordered[0] < ordered[1],
-    `first=${new Date(ordered[0]).toISOString()} second=${new Date(ordered[1]).toISOString()}`,
+    'the list is ordered by request time, newest first',
+    ordered.length >= 2 && strictlyDescending,
+    `order=${ordered.slice(0, 4).map((value) => new Date(value).toISOString()).join(' > ')}`,
+  );
+  // The slow request is recorded last yet starts earliest, so request-time order
+  // must place it below the top: this is the row that distinguishes the two
+  // orderings, and asserting only monotonicity above could pass on a fixture
+  // where nothing disagrees.
+  check(
+    'the last-recorded but earliest-starting request is not the first row',
+    ordered.length >= 2 && ordered[0] > ordered[ordered.length - 1],
+    `first=${new Date(ordered[0]).toISOString()} last=${new Date(ordered[ordered.length - 1]).toISOString()}`,
   );
 
   // Live tail: scroll away from the top, let a poll land with a new record, and
@@ -1505,6 +1540,145 @@ try {
   await page.setViewportSize({ width: 1440, height: 900 });
   await auditPage(page, responseBodies, '/logs', '.logs-page', { pageSecrets: [FAKE_PROVIDER_SECRET] });
   await auditPage(page, responseBodies, '/config', '.config-page');
+
+  // ---- key management: the list is rendered from the config document ----
+  // The page reads `api-keys` out of the parsed config YAML rather than calling
+  // the immediate `/management/api-keys` facade, so a sequence node read without
+  // unwrapping renders as an empty list no matter how many keys CPA holds. The
+  // fixture keeps the config round trip stateful so this reads the real path.
+  await page.goto(`${appURL}/api-keys`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.keys-page').first().waitFor({ state: 'visible', timeout: 15000 });
+  await page.locator('.config-api-keys-table .ant-table-row').first().waitFor({ state: 'visible', timeout: 15000 });
+  const keyRows = await page.locator('.config-api-keys-table .ant-table-row').count();
+  check('key management lists the client keys CPA reports', keyRows === 1, `rows=${keyRows}`);
+  const keySummary = await page.locator('.settings-group-head .ant-tag').first().innerText();
+  check('key management counts the listed keys', /(^|\D)1(\D|$)/.test(keySummary), `summary="${keySummary}"`);
+  // Masked by default: the row shows a preview, never the stored secret.
+  const keyText = await page.locator('.config-api-keys-table .config-key-text').first().innerText();
+  check(
+    'key management masks the stored secret',
+    keyText.includes('•') && keyText !== FAKE_CLIENT_SECRET,
+    `text="${keyText}"`,
+  );
+  // Reveal is the operator's explicit action, and then the full value is shown.
+  // Located by its accessible name rather than by position: the row now carries
+  // several actions, so "the first button" is no longer the reveal control.
+  await page.getByRole('button', { name: /显示密钥|Reveal secret/ }).first().click();
+  const revealedKey = await page.locator('.config-api-keys-table .config-key-text').first().innerText();
+  check('revealing a key shows its full value', revealedKey.trim() === FAKE_CLIENT_SECRET, `text="${revealedKey}"`);
+  responseBodies.length = 0;
+
+  // ---- key aliases: name a key, then see that name on its request records ----
+  // This is the whole feature end to end: the name is written through the UI,
+  // resolved server-side against the fingerprint the usage records carry, and
+  // rendered in the request list in place of the mask. The filter identity must
+  // stay the fingerprint, so the assertion also pins that the visible name and
+  // the value being filtered on are not the same thing.
+  const aliasRow = page.locator('.config-api-keys-table .ant-table-row').first();
+  check(
+    'an unnamed key states that it is unnamed rather than showing a blank',
+    (await aliasRow.locator('td').first().innerText()).trim().length > 0,
+    `name="${await aliasRow.locator('td').first().innerText()}"`,
+  );
+  await aliasRow.getByRole('button', { name: /重命名|Rename/ }).click();
+  const renameInput = page.locator('.ant-modal input').first();
+  await renameInput.waitFor({ state: 'visible', timeout: 10000 });
+  await renameInput.fill(CLIENT_KEY_ALIAS);
+  await page.locator('.ant-modal .ant-btn-primary').click();
+  await checkEventually(
+    'the new name is saved and shown in the key table',
+    async () => (await aliasRow.locator('td').first().innerText()).includes(CLIENT_KEY_ALIAS),
+    { detail: async () => `name="${await aliasRow.locator('td').first().innerText()}"` },
+  );
+  // The masked secret is still what the key column shows by default: naming a key
+  // must not turn the table into a secret display. The reveal toggled earlier in
+  // this same run is still on, so it is switched back off first - otherwise this
+  // check would assert against a state the previous check deliberately created.
+  await page.getByRole('button', { name: /隐藏密钥|Hide secret/ }).first().click();
+  const namedKeyText = await page.locator('.config-api-keys-table .config-key-text').first().innerText();
+  check(
+    'naming a key does not reveal the secret',
+    namedKeyText.includes('•') && !namedKeyText.includes(FAKE_CLIENT_SECRET),
+    `text="${namedKeyText}"`,
+  );
+  responseBodies.length = 0;
+
+  // ---- the request list shows the name instead of the mask ----
+  await page.goto(`${appURL}/usage/events?preset=24h`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 15000 });
+  // The row is located by its own request id rather than by position. The
+  // key-attributed fixture record is not the newest one in the window, and a
+  // position-based read would silently assert against whichever row happened to
+  // sort first.
+  const callerRow = page.locator('.request-row').filter({ hasText: 'fixture-key-caller' }).first();
+  await callerRow.waitFor({ state: 'visible', timeout: 15000 });
+  const keyColumnText = await callerRow.locator('.req-key-val').innerText();
+  check(
+    'the request list labels the caller with its assigned name',
+    keyColumnText.includes(CLIENT_KEY_ALIAS),
+    `key column="${keyColumnText}"`,
+  );
+  check(
+    'the request list no longer prints the raw mask for a named key',
+    !keyColumnText.includes('••'),
+    `key column="${keyColumnText}"`,
+  );
+  // A different, unnamed caller still reads as a mask (or an em dash), so the
+  // alias has not replaced the fallback for every row.
+  const otherKeyText = await page.locator('.request-row .req-key-val').first().innerText();
+  check(
+    'an unnamed row keeps its non-alias label',
+    !otherKeyText.includes(CLIENT_KEY_ALIAS),
+    `first row key column="${otherKeyText}"`,
+  );
+
+  // The filter value must remain the fingerprint: the visible name is a label,
+  // and a filter that meant something different from what it displays is exactly
+  // the ambiguity aliases exist to remove. The caller facet lives in the filter
+  // drawer, which is the surface an operator actually reaches it through; the row
+  // is addressed by its stable control id rather than by label text.
+  await page.locator('.req-more-filters').click();
+  await page.locator('.req-filter-drawer').waitFor({ state: 'visible', timeout: 5000 });
+  await page.locator('#req-multi-api_key').click();
+  const aliasOption = page
+    .locator('.ant-select-dropdown:visible .ant-select-item-option')
+    .filter({ hasText: CLIENT_KEY_ALIAS })
+    .first();
+  await aliasOption.waitFor({ state: 'visible', timeout: 10000 });
+  check('the caller filter offers the assigned name', await aliasOption.isVisible());
+  await aliasOption.click();
+  await page.keyboard.press('Escape');
+  await page.locator('[data-testid="req-filter-apply"]').click();
+  await checkEventually(
+    'applying the named caller commits an api_key filter',
+    async () => new URL(page.url()).searchParams.get('api_key') !== null,
+    { detail: () => `url=${new URL(page.url()).search}` },
+  );
+  const filteredUrl = new URL(page.url()).search;
+  check(
+    'the filter value is the stored fingerprint rather than the displayed name',
+    !filteredUrl.includes(encodeURIComponent(CLIENT_KEY_ALIAS)),
+    `url=${filteredUrl}`,
+  );
+  // The chip names the key the way the list does, so the applied filter is
+  // readable without decoding a fingerprint by hand.
+  await checkEventually(
+    'the applied filter chip shows the assigned name',
+    async () => (await page.locator('.req-filter-chip').first().innerText()).includes(CLIENT_KEY_ALIAS),
+    { detail: async () => `chip="${await page.locator('.req-filter-chip').first().innerText()}"` },
+  );
+  // After the filter is applied the list holds only that key's traffic, so every
+  // visible key cell must carry the name. Reading all of them also catches a
+  // partial resolution, where only some rows were labelled.
+  await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 15000 });
+  const filteredKeyTexts = await page.locator('.request-row .req-key-val').allInnerTexts();
+  check(
+    'every filtered row carries the assigned name',
+    filteredKeyTexts.length > 0 && filteredKeyTexts.every((text) => text.includes(CLIENT_KEY_ALIAS)),
+    `key cells=${JSON.stringify(filteredKeyTexts)}`,
+  );
+  await page.locator('.req-clear-all-chips').click();
+  responseBodies.length = 0;
 
   // Payload section: one heading entry, not the section header followed by a
   // group head restating it. The panel is reached through the section nav.

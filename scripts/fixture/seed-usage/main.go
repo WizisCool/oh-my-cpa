@@ -27,8 +27,10 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
 )
 
@@ -41,21 +43,32 @@ const (
 	failingRecords = 1
 	shortLatencyMS = 900
 	// An agent request that thinks for minutes. The list has to render it in the
-	// same colour as a fast one, and it is written last so its position at the
-	// top of the list can only come from recording order, never from request
-	// time: its start time is deliberately older than the record below it.
+	// same colour as a fast one. It is written LAST and carries an older start
+	// time than the fast records, which is the real agent case: it started early,
+	// ran for minutes, and only now became a record. Under the list's request-time
+	// order it therefore sorts into the middle, not to the top - which is what
+	// makes it the fixture that catches a regression back to recording order.
 	longLatencyMS = 9 * 60 * 1000
 	// Minutes ago the slow agent request started, and the band the fast records
-	// occupy. The gap between them is what makes "the first row is older than the
-	// second" visible in the browser.
+	// occupy. It starts before every fast record, so request-time order puts it
+	// last while recording order would have put it first.
 	slowRequestStartedMinutesAgo = 58
 	fastRequestNewestMinutesAgo  = 3
 	fastRequestOldestMinutesAgo  = 51
 )
 
+// fixtureClientKey is the gateway client key the acceptance run also configures in
+// CPA. The alias scenario attributes a request to it so the request list can be
+// asserted to show the operator-assigned name rather than the mask.
+const fixtureClientKey = "omc-e2e-client-secret"
+
 func main() {
 	databasePath := flag.String("db", "", "path to the Oh My CPA SQLite database")
 	scenario := flag.String("scenario", "list", "list | append")
+	// The cipher has to match the one the app runs with, because a caller-key
+	// identity is a keyed fingerprint: seeding under a different key would store an
+	// identity the running application can never produce.
+	masterKey := flag.String("master-key", "", "master key the application will run with")
 	flag.Parse()
 	if *databasePath == "" {
 		fail(errors.New("-db is required"))
@@ -67,7 +80,15 @@ func main() {
 	}
 
 	ctx := context.Background()
-	db, err := repository.Open(ctx, *databasePath)
+	openOptions := []repository.OpenOption{}
+	if *masterKey != "" {
+		cipher, cipherErr := crypto.New(*masterKey)
+		if cipherErr != nil {
+			fail(fmt.Errorf("create fixture cipher: %w", cipherErr))
+		}
+		openOptions = append(openOptions, repository.WithCipher(cipher))
+	}
+	db, err := repository.Open(ctx, *databasePath, openOptions...)
 	if err != nil {
 		fail(fmt.Errorf("open fixture database: %w", err))
 	}
@@ -118,13 +139,14 @@ func ensureInstance(ctx context.Context, repo *repository.Repository) error {
 // (routine noise, never amber) followed by one slow agent request.
 //
 // Every record lands inside the default one-hour window. The slow request is
-// written LAST and carries an older start time than the fast record before it,
-// which is the real agent case: it started early, ran for minutes, and only now
-// became a record. So the first row of the list is older than the second row,
-// and that is the point — it is what recording order looks like.
+// written LAST and carries the oldest start time of them all, which is the real
+// agent case: it started early, ran for minutes, and only now became a record. It
+// therefore belongs at the END of a request-time-ordered list even though it was
+// recorded last - and an assertion that it is not the first row is exactly what
+// catches a regression back to recording order.
 func seedList(ctx context.Context, repo *repository.Repository) error {
 	now := time.Now().UTC()
-	fastRecords := totalRecords - 1
+	fastRecords := totalRecords - 2
 	span := fastRequestOldestMinutesAgo - fastRequestNewestMinutesAgo
 	events := make([]usage.Event, 0, totalRecords)
 	for index := 0; index < fastRecords; index++ {
@@ -145,6 +167,23 @@ func seedList(ctx context.Context, repo *repository.Repository) error {
 		longLatencyMS,
 		false,
 	))
+	// One request attributed to the fixture gateway key, so the alias checks have a
+	// record to label. It is seeded unnamed on purpose: the browser test performs
+	// the rename through the UI, which makes the later assertion evidence that the
+	// write path works rather than that a fixture was pre-named. Keeping it inside
+	// this scenario rather than adding a second seed keeps the record count the rest
+	// of the audit asserts on unchanged.
+	callerKey := fixtureEvent("fixture-key-caller", now.Add(-4*time.Minute), shortLatencyMS+25, false)
+	fingerprint, err := repo.UsageClientKeyFingerprint(fixtureClientKey)
+	if err != nil {
+		return fmt.Errorf("derive caller key identity: %w", err)
+	}
+	callerKey.APIGroupKey = fingerprint
+	callerKey.APIGroupLabel = "api_key"
+	callerKey.APIKeyMask = security.MaskSecret(fixtureClientKey)
+	callerKey.Source = "fixture-caller"
+	events = append(events, callerKey)
+
 	if _, err := repo.InsertUsageEvents(ctx, events); err != nil {
 		return fmt.Errorf("seed list scenario: %w", err)
 	}

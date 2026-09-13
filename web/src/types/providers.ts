@@ -1,8 +1,29 @@
 export interface ClientAPIKeyItem {
   index: number;
   key: string;
+  /** Legacy keys-page identity, computed under the "client-key" purpose. It does
+   *  not match any usage record. */
   fingerprint: string;
+  /** The identity this key has in the usage records (`api_group_key`), derived
+   *  under the "usage-api-key" purpose. Only this value joins to a request, so it
+   *  is what an alias is stored against and what "view requests" filters by.
+   *  Absent when the fingerprint could not be computed. */
+  usage_fingerprint?: string;
   length: number;
+  /** Operator-assigned name; absent when the key is unnamed. */
+  alias?: string;
+  /** Version a rename must cite; 0 when no alias exists. */
+  alias_version: number;
+}
+
+/** One key's observed traffic within the queried window. */
+export interface ClientKeyUsageItem {
+  key_fingerprint: string;
+  requests: number;
+  failed: number;
+  total_tokens: number;
+  /** 0 when the window holds no matching record. */
+  last_used_ms: number;
 }
 
 export interface ProviderKeyEntry {

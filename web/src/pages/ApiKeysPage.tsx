@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Alert,
   App as AntdApp,
@@ -15,12 +16,14 @@ import { ReloadOutlined, SaveOutlined, UndoOutlined, WarningOutlined } from '@an
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseDocument } from 'yaml';
 import type { Document } from 'yaml';
+import dayjs from 'dayjs';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
-import { ApiKeysEditor } from '../components/config/ApiKeysEditor';
+import { ApiKeysEditor, type ApiKeyRecord } from '../components/config/ApiKeysEditor';
 import { updateFieldWithBaseline, isConfigSemanticallyEqual, getFieldSemanticValue } from '../components/config/configDirty';
 import { ALL_CONFIG_FIELDS } from '../types/configSchema';
 import type { ConfigScalarsResponse } from '../types/configManagement';
+import type { ClientKeyUsageItem } from '../types/providers';
 
 const { Text } = Typography;
 
@@ -40,10 +43,34 @@ export const ApiKeysPage: React.FC = () => {
   const t = useT();
   const { message } = AntdApp.useApp();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const configQuery = useQuery<ConfigScalarsResponse>({
     queryKey: ['management-config'],
     queryFn: () => api.getConfigScalars(),
+    staleTime: 60_000,
+  });
+
+  /**
+   * The key list with its aliases and usage identities, read from the immediate
+   * management endpoint rather than the configuration draft.
+   *
+   * This is what makes a name attachable at all: the draft carries only the raw
+   * strings, while this response carries the usage fingerprint each alias is
+   * keyed by. It is read separately from the configuration so renaming a key
+   * never has to write CPA's document.
+   */
+  const keysQuery = useQuery({
+    queryKey: ['management-client-keys'],
+    queryFn: () => api.getClientAPIKeys(),
+    staleTime: 30_000,
+  });
+
+  // Usage covers the request console's default window so the two surfaces cannot
+  // report different numbers for the same key.
+  const usageQuery = useQuery({
+    queryKey: ['management-client-key-usage'],
+    queryFn: () => api.getClientKeyUsage('preset=24h'),
     staleTime: 60_000,
   });
 
@@ -219,6 +246,89 @@ export const ApiKeysPage: React.FC = () => {
     setKeyInput(`sk-cpa-${randomHex}`);
   };
 
+  /**
+   * Saves one key's name.
+   *
+   * The name is Oh My CPA metadata, so this is its own request against its own
+   * endpoint and never touches CPA's configuration document. The version the row
+   * was rendered with is sent along, so a rename prepared against a stale read is
+   * refused with 409 instead of overwriting another session's change.
+   */
+  const renameKey = React.useCallback(
+    async (record: ApiKeyRecord, alias: string) => {
+      if (!record.usageFingerprint) {
+        message.error(t('keys.not_linked'));
+        throw new Error('key has no usage identity');
+      }
+      if (alias.length > 64) {
+        message.error(t('keys.rename_too_long', { n: 64 }));
+        throw new Error('alias too long');
+      }
+      try {
+        await api.setClientKeyAlias(record.usageFingerprint, alias, record.aliasVersion);
+        message.success(alias ? t('keys.renamed') : t('keys.rename_cleared'));
+        await queryClient.invalidateQueries({ queryKey: ['management-client-keys'] });
+        // The alias is resolved into request rows server-side, so every surface
+        // that prints a caller key has to re-read. The reader's position is
+        // untouched: this invalidates cached data, it does not navigate.
+        await queryClient.invalidateQueries({ queryKey: ['usage-events'] });
+        await queryClient.invalidateQueries({ queryKey: ['usage-facets'] });
+        await queryClient.invalidateQueries({ queryKey: ['usage-event'] });
+      } catch (error) {
+        if (
+          error instanceof ApiError &&
+          (error.status === 409 || (error.data as Record<string, unknown>)?.code === 'alias_version_conflict')
+        ) {
+          message.warning(t('keys.rename_conflict'));
+          // Reload so the next attempt cites the version that actually exists.
+          await queryClient.invalidateQueries({ queryKey: ['management-client-keys'] });
+          throw error;
+        }
+        const detail = error instanceof ApiError ? error.message : String(error);
+        // A server-side validation message is more specific than the generic one,
+        // so it is surfaced rather than replaced.
+        message.error(detail || t('keys.rename_control'));
+        throw error;
+      }
+    },
+    [message, queryClient, t],
+  );
+
+  /**
+   * Opens the request console filtered to one key's traffic.
+   *
+   * The filter value is the usage fingerprint, which is the identity the request
+   * list already filters by. Navigating to an alias would need the list to
+   * resolve a name back into an identity, and a filter that means something
+   * different from what it displays is the kind of ambiguity this page exists to
+   * remove.
+   */
+  const viewRequestsFor = React.useCallback(
+    (record: ApiKeyRecord) => {
+      if (!record.usageFingerprint) return;
+      const search = new URLSearchParams();
+      search.set('preset', '24h');
+      search.append('api_key', record.usageFingerprint);
+      navigate(`/usage/events?${search.toString()}`);
+    },
+    [navigate],
+  );
+
+  // Joined by fingerprint so the table can print a request count per key in one
+  // pass instead of scanning the usage array per row.
+  const usageByFingerprint = React.useMemo(() => {
+    const indexed: Record<string, ClientKeyUsageItem> = {};
+    for (const entry of usageQuery.data?.usage ?? []) {
+      indexed[entry.key_fingerprint] = entry;
+    }
+    return indexed;
+  }, [usageQuery.data]);
+
+  const formatUsageTime = React.useCallback(
+    (ms: number) => dayjs(ms).format('MM-DD HH:mm:ss'),
+    [],
+  );
+
   const handleReloadServerVersion = () => {
     setConflictRevision(null);
     setRawYaml(serverYaml);
@@ -324,7 +434,13 @@ export const ApiKeysPage: React.FC = () => {
           <Card size="small" className="config-card">
             <ApiKeysEditor
               apiKeys={currentApiKeys}
+              metadata={keysQuery.data?.keys}
+              usage={usageByFingerprint}
+              formatTime={formatUsageTime}
+              usageRangeLabel={t('keys.usage_range')}
               onChange={writeKeys}
+              onRename={renameKey}
+              onViewRequests={viewRequestsFor}
               onAdd={() => {
                 setEditingIndex(null);
                 setKeyInput('');

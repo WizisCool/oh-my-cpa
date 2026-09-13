@@ -549,6 +549,33 @@ against a busy list without either effect.
 The same rule governs the entry animation: a scroll-adjacent element animates only
 `opacity` and `transform`, never a property that forces layout or a repaint.
 
+### Naming is a first-class action, not a hidden setting
+
+Gateway keys are identified by masks (`sk-5Yalm••••••••odar`). A mask is
+unreadable and, because it keeps only a short head and tail, ambiguous: two keys
+can share one. So a key's **name** is the primary identifier and the mask is the
+identifier of last resort.
+
+The key-management table therefore reads name → key → use → actions. The name comes
+first because it is what the operator recognises and what every other surface will
+show. Where a key is unnamed the cell says so rather than sitting blank, because a
+blank cell reads as missing data instead of a name nobody has set yet.
+
+Three rules keep the two identifiers from being confused:
+
+| Rule | Why |
+| --- | --- |
+| A name is a **label**, never an identity | The stored fingerprint stays the filter value. A filter that means something different from what it displays is the ambiguity the name exists to remove. Renaming must not change what a saved filter or a drill-down link selects, and duplicate names are allowed because a label need not be unique. |
+| Every surface that prints a caller prints the name | List, detail, facet options and applied chips resolve it from the same key, so the dropdown and the rows it filters cannot name a key differently. |
+| Unnamed falls back to the mask, never to a fingerprint | The fingerprint is a hashed identity; printing it would name a filter in a form the operator never chose. |
+
+**Counts must state their scope.** Per-key request counts and last-used times come
+from Oh My CPA's own stored events in one window, not from CPA and not from the
+key's whole life. The table says so next to them: a count that reads as a lifetime
+total would be a fact the system does not have. A key with no matching records
+shows "not linked" rather than a fabricated `0` or an invented creation date — CPA
+publishes no creation date, so any such column would be a guess rendered as data.
+
 ## 8. Checklist for new UI
 - [ ] Colors only via `palette` / CSS vars; semantic colors carry meaning
 - [ ] A continuous scale (cache rate) reads from its own tokens, never a

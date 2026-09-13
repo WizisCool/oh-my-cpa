@@ -11,7 +11,7 @@ import { DashboardResponse, DashboardTailResponse } from '../types/dashboard';
 import { ErrorLogFile } from '../types/logs';
 import { CapabilityProbeReport } from '../types/capability';
 import { ConfigScalarsResponse, ConfigSourceResponse } from '../types/configManagement';
-import { ClientAPIKeyItem, ProviderItem, SaveProviderPayload } from '../types/providers';
+import { ClientAPIKeyItem, ClientKeyUsageItem, ProviderItem, SaveProviderPayload } from '../types/providers';
 import { OAuthProviderItem, StartOAuthResponse, OAuthStatusResponse, OAuthCallbackResponse } from '../types/oauth';
 import { QuotaOverviewResponse, CredentialQuotaDetailResponse, QuotaItem } from '../types/quota';
 import { SystemInfoResponse } from '../types/system';
@@ -281,6 +281,33 @@ export const api = {
 
   async deleteClientAPIKey(index: number): Promise<{ status: string; deleted: number }> {
     return request<{ status: string; deleted: number }>(`/management/api-keys/${index}`, { method: 'DELETE' });
+  },
+
+  /**
+   * Names or clears one key's operator-facing alias.
+   *
+   * Separate from the configuration write path on purpose: an alias is Oh My CPA
+   * metadata, so renaming must not rewrite CPA's `api-keys` list and rotate the
+   * configuration revision for every other editor.
+   */
+  async setClientKeyAlias(
+    keyFingerprint: string,
+    alias: string,
+    version: number,
+  ): Promise<{ status: string; alias?: { alias: string; version: number } }> {
+    return request<{ status: string; alias?: { alias: string; version: number } }>(
+      '/management/client-key-aliases',
+      { method: 'PUT', body: JSON.stringify({ key_fingerprint: keyFingerprint, alias, version }) },
+    );
+  },
+
+  async getClientKeyUsage(
+    query: string,
+  ): Promise<{ window: { from: number; to: number }; usage: ClientKeyUsageItem[] }> {
+    return request<{ window: { from: number; to: number }; usage: ClientKeyUsageItem[] }>(
+      `/management/client-key-usage${query ? `?${query}` : ''}`,
+      { method: 'GET' },
+    );
   },
 
   async getManagementProviders(includeKeys = false): Promise<{ providers: ProviderItem[]; total: number }> {

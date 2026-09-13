@@ -1057,7 +1057,7 @@ export const UsageEventsPage: React.FC = () => {
       // alias wins over the mask, matching the rows and the dropdown.
       if (key === 'api_key') {
         const facet = facets.data?.facets.api_group_keys.find((entry) => entry.value === raw);
-        shown = facet?.mask?.trim() || raw;
+        shown = facet?.alias?.trim() || facet?.mask?.trim() || raw;
       }
       if (key === 'provider') {
         shown = providerName(raw);
