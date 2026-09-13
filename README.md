@@ -58,7 +58,8 @@ Vite 负责前端 HMR，并把 `/omc/api/*` 单向代理到 Go；Go 由 Air 监�
 | `pnpm test:fast` | 按工作树改动执行最小相关检查 |
 | `pnpm verify` | 严格工具链 + 全量静态门禁 + worktree 密钥扫描 |
 | `pnpm verify:build` | 类型检查、生产构建与入口 bundle 预算 |
-| `pnpm verify:full` | 完整最终门禁，包含生产构建与浏览器验收 |
+| `pnpm verify:full` | 并行编排的完整最终门禁 |
+| `pnpm verify:full:serial` | 串行最终门禁，仅用于诊断并行编排差异 |
 | `pnpm verify:browser` | 对已构建的 SPA 执行确定性浏览器验收 |
 | `pnpm verify:browser:smoke` | 执行核心路径浏览器 smoke |
 

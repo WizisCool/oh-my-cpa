@@ -126,7 +126,8 @@ func (s *Service) FetchConfig(ctx context.Context) (Config, error) {
 | `pnpm build` | 构建前端并同步到 `internal/web/dist`；类型检查已由独立门禁负责 |
 | `pnpm test:fast` | 按工作树改动执行最小相关检查 |
 | `pnpm verify` | 严格工具链 + 全量静态门禁 + worktree 密钥扫描 |
-| `pnpm verify:full` | 最终完整门禁：历史密钥扫描 + 生产构建 + 浏览器验收 |
+| `pnpm verify:full` | 并行编排的最终完整门禁 |
+| `pnpm verify:full:serial` | 串行最终门禁，仅用于诊断并行编排差异 |
 | `pnpm verify:browser` | 对已构建的 SPA 跑确定性浏览器验收（假 CPA 夹具） |
 | `pnpm verify:browser:smoke` | 只跑登录、仪表盘和请求列表核心链路的浏览器 smoke |
 | `pnpm verify:e2e` | 先构建，再跑完整确定性浏览器验收 |
