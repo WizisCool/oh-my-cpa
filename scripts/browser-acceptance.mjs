@@ -1328,6 +1328,11 @@ try {
     burst.clicks === 5,
     `clicks=${burst.clicks}`,
   );
+  check(
+    'every rapid click remains accepted while the status queue is busy',
+    burst.accepted.length === burst.clicks && burst.accepted.every(Boolean),
+    `accepted=${burst.accepted.filter(Boolean).length}/${burst.clicks}`,
+  );
 
   const lastIntent = burst.intents[burst.intents.length - 1];
   // The burst is over when the queue has drained, which is observable as "the
@@ -1337,8 +1342,8 @@ try {
   // for the wrong reason.
   await checkEventually(
     'the burst stops reporting a write in flight',
-    async () => !(await providerSwitch.getAttribute('class'))?.includes('ant-switch-loading'),
-    { timeoutMs: 15000, detail: async () => `class=${await providerSwitch.getAttribute('class')}` },
+    async () => (await providerSwitch.getAttribute('aria-busy')) !== 'true',
+    { timeoutMs: 15000, detail: async () => `aria-busy=${await providerSwitch.getAttribute('aria-busy')}` },
   );
 
   // The requirement, stated directly: once the queue drains, what the row shows is

@@ -938,12 +938,15 @@ export const ProvidersPage: React.FC = () => {
       render: (_, record) => {
         // The switch shows the operator's newest intent while a toggle is in
         // flight, so a second click is visible immediately instead of the row
-        // flicking back to the state the server has not updated yet.
+        // flicking back to the state the server has not updated yet. Do not use
+        // antd's loading prop here: it forces the switch disabled and swallows
+        // the rapid reversal the queue exists to preserve. Keep the pending
+        // state available to assistive tech without blocking input.
         return (
           <Switch
             size="small"
             checked={resolveEnabled(record)}
-            loading={statusQueue.isBusy(record.id)}
+            aria-busy={statusQueue.isBusy(record.id)}
             onChange={(checked) => statusQueue.request(record.id, checked)}
           />
         );
