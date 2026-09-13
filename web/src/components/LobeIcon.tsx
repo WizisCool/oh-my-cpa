@@ -124,28 +124,9 @@ const COMMON_ALIASES: Record<string, string> = {
   'vertex': 'Google',
 };
 
-const KNOWN_PROVIDER_ICONS: Record<string, string> = {
-  claude: 'Claude',
-  anthropic: 'Claude',
-  antigravity: 'Antigravity',
-  codex: 'Codex',
-  xai: 'XAI',
-  grok: 'XAI',
-  kimi: 'Kimi',
-  moonshot: 'Kimi',
-  openai: 'OpenAI',
-  gemini: 'Gemini',
-  google: 'Gemini',
-  vertex: 'Google',
-  qwen: 'Qwen',
-  deepseek: 'DeepSeek',
-  minimax: 'Minimax',
-  stepfun: 'Stepfun',
-  baichuan: 'Baichuan',
-  zhipu: 'Zhipu',
-  doubao: 'Doubao',
-  spark: 'Spark',
-};
+import { PROVIDER_ICON_IDS, DEFAULT_PROVIDER_ICON_ID } from '../types/providerIconIds';
+
+const KNOWN_PROVIDER_ICONS = PROVIDER_ICON_IDS;
 
 export function getProviderDefaultIcon(family: string, name?: string, baseURL?: string): string {
   const f = (family || '').toLowerCase().trim();
@@ -193,5 +174,5 @@ export function getProviderDefaultIcon(family: string, name?: string, baseURL?: 
   if (f.includes('kimi') || f.includes('moonshot')) return 'Kimi';
   if (f.includes('qwen')) return 'Qwen';
   if (f.includes('deepseek')) return 'DeepSeek';
-  return 'OpenAI';
+  return DEFAULT_PROVIDER_ICON_ID;
 }
