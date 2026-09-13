@@ -39,7 +39,7 @@
     "test:docs": "node --test scripts/check-docs.test.mjs",
     "test:css-modules": "node --test scripts/check-css-modules.test.mjs",
     "test:dev-target": "node --test scripts/api-target.test.mjs",
-    "test:logic": "pnpm test:payload && node --experimental-strip-types scripts/test-dirty.ts && node --experimental-strip-types scripts/test-config-states.ts && node --experimental-strip-types scripts/test-auth-file-logic.ts && pnpm test:usage-events && pnpm test:provider-console && pnpm test:provider-toggle && pnpm test:scroll-intent && pnpm test:visible-clock && pnpm test:chart-marks",
+    "test:logic": "node scripts/test-logic.mjs",
     "lint:antd": "node scripts/lint-antd.mjs",
     "verify:secrets:staged": "node scripts/secret-scan.mjs --staged",
     "verify:secrets:worktree": "node scripts/secret-scan.mjs --worktree",
@@ -47,7 +47,7 @@
     "verify:secrets": "pnpm verify:secrets:worktree",
     "verify:static:go": "go test ./... && go vet ./...",
     "verify:static:frontend": "pnpm type-check && pnpm test:logic && pnpm lint:antd",
-    "verify:static:repository": "pnpm verify:workflow && pnpm test:i18n && pnpm check-i18n && pnpm test:docs && pnpm check-docs && pnpm test:css-modules && pnpm check-css-modules && pnpm test:dev-target",
+    "verify:static:repository": "pnpm verify:workflow && pnpm test:i18n && pnpm check-i18n && pnpm test:docs && pnpm check-docs && pnpm test:css-modules && pnpm check-css-modules && pnpm test:dev-target && pnpm test:affected-checks",
     "verify:static": "node scripts/verify-static.mjs",
     "verify:e2e": "pnpm build && pnpm verify:browser",
     "verify:build": "pnpm type-check && pnpm build && node scripts/check-bundle-budget.mjs",
@@ -55,7 +55,9 @@
     "verify:full": "node scripts/verify-full.mjs",
     "verify:full:serial": "pnpm verify:toolchain:strict && pnpm verify:static:go && pnpm verify:static:frontend && pnpm verify:static:repository && pnpm verify:secrets:worktree && pnpm verify:secrets:history && pnpm build && node scripts/check-bundle-budget.mjs && pnpm verify:browser",
     "verify:live": "node scripts/browser-live-smoke.mjs",
-    "verify:workflow": "node scripts/validate-workflow.mjs"
+    "verify:workflow": "node scripts/validate-workflow.mjs",
+    "test:view-policy": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs scripts/test-usage-events-view-policy.ts",
+    "test:affected-checks": "node --test scripts/affected-checks.test.mjs"
   },
   "devDependencies": {
     "@ant-design/cli": "6.6.2",
