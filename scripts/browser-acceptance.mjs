@@ -45,7 +45,11 @@ const MASTER_KEY = ['fixture', 'master', 'key', 'for', 'browser', 'acceptance', 
 // key's own value: the assertions below prove the list shows this name while the
 // filter keeps using the stored fingerprint.
 const CLIENT_KEY_ALIAS = '验收专用密钥';
-const executable = path.join(temporary, process.platform === 'win32' ? 'oh-my-cpa.exe' : 'oh-my-cpa');
+const configuredExecutable = process.env.OMCPA_BROWSER_BINARY?.trim();
+const executable = configuredExecutable
+  ? path.resolve(root, configuredExecutable)
+  : path.join(temporary, process.platform === 'win32' ? 'oh-my-cpa.exe' : 'oh-my-cpa');
+const configuredSeeder = process.env.OMCPA_SEED_USAGE_BINARY?.trim();
 const appLog = [];
 const { check, checkEventually, checkHoldsFor, checks, failures } = createChecker();
 let appProcess;
@@ -200,13 +204,23 @@ try {
   const appPort = await freePort();
   appURL = `http://127.0.0.1:${appPort}/omc`;
 
-  execFileSync('go', ['build', '-trimpath', '-o', executable, './cmd/oh-my-cpa'], { cwd: root, stdio: 'inherit' });
+  if (configuredExecutable) {
+    if (!fs.existsSync(executable)) throw new Error(`OMCPA_BROWSER_BINARY does not exist: ${executable}`);
+  } else {
+    execFileSync('go', ['build', '-trimpath', '-o', executable, './cmd/oh-my-cpa'], { cwd: root, stdio: 'inherit' });
+  }
   // Acceptance runs with ingestion disabled, so the request list would be empty
   // and every list behaviour untestable. Seed a deterministic window through the
   // repository itself (see the fixture's own doc comment) before the app opens
   // the database.
-  const seeder = path.join(temporary, process.platform === 'win32' ? 'seed-usage.exe' : 'seed-usage');
-  execFileSync('go', ['build', '-trimpath', '-o', seeder, './scripts/fixture/seed-usage'], { cwd: root, stdio: 'inherit' });
+  const seeder = configuredSeeder
+    ? path.resolve(root, configuredSeeder)
+    : path.join(temporary, process.platform === 'win32' ? 'seed-usage.exe' : 'seed-usage');
+  if (configuredSeeder) {
+    if (!fs.existsSync(seeder)) throw new Error(`OMCPA_SEED_USAGE_BINARY does not exist: ${seeder}`);
+  } else {
+    execFileSync('go', ['build', '-trimpath', '-o', seeder, './scripts/fixture/seed-usage'], { cwd: root, stdio: 'inherit' });
+  }
   const seedScenario = (name) => {
     const output = execFileSync(
       seeder,

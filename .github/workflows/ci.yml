@@ -119,20 +119,39 @@ jobs:
           install_pid=$!
           build_status=0
           pnpm build || build_status=$?
+          go_status=0
+          if [ "${build_status}" -eq 0 ]; then
+            mkdir -p tmp
+            go build -trimpath -o tmp/oh-my-cpa-browser ./cmd/oh-my-cpa &
+            app_build_pid=$!
+            go build -trimpath -o tmp/seed-usage-browser ./scripts/fixture/seed-usage &
+            seed_build_pid=$!
+            wait "${app_build_pid}" || go_status=$?
+            wait "${seed_build_pid}" || go_status=$?
+          fi
           install_status=0
           wait "${install_pid}" || install_status=$?
           cat "${install_log}"
           if [ "${build_status}" -ne 0 ]; then
             exit "${build_status}"
           fi
+          if [ "${go_status}" -ne 0 ]; then
+            exit "${go_status}"
+          fi
           exit "${install_status}"
 
       - name: Run deterministic browser smoke
         if: github.event_name == 'pull_request'
+        env:
+          OMCPA_BROWSER_BINARY: tmp/oh-my-cpa-browser
+          OMCPA_SEED_USAGE_BINARY: tmp/seed-usage-browser
         run: pnpm verify:browser:smoke
 
       - name: Run deterministic browser acceptance
         if: github.event_name != 'pull_request'
+        env:
+          OMCPA_BROWSER_BINARY: tmp/oh-my-cpa-browser
+          OMCPA_SEED_USAGE_BINARY: tmp/seed-usage-browser
         run: pnpm verify:browser
 
       - name: Upload browser failure diagnostics

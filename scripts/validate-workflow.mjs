@@ -41,5 +41,14 @@ if (document.errors.length > 0) {
   if (!browserPreparation?.run?.includes('playwright-core install') || !browserPreparation.run.includes('pnpm build')) {
     throw new Error('CI workflow does not prepare Chromium and build the SPA in one step');
   }
+  if (!browserPreparation.run.includes('tmp/oh-my-cpa-browser')) {
+    throw new Error('CI workflow does not prepare a reusable browser binary');
+  }
+  for (const name of ['Run deterministic browser smoke', 'Run deterministic browser acceptance']) {
+    const step = browserSteps.find((candidate) => candidate.name === name);
+    if (step?.env?.OMCPA_BROWSER_BINARY !== 'tmp/oh-my-cpa-browser') {
+      throw new Error(`${name} does not reuse the prepared browser binary`);
+    }
+  }
   console.log(`CI workflow parsed with ${value.jobs.static.steps.length} static and ${browserSteps.length} browser steps.`);
 }
