@@ -145,7 +145,7 @@ try {
     console.error(`page text: ${(await page.locator('body').innerText().catch(() => '')).slice(0, 600)}`);
     throw new Error(`${error?.message ?? error}${banner ? ` banner=${banner}` : ''}`);
   }
-  await wait(1200);
+  await wait(100);
 
   const slots = await page.locator('.chart-slot').count();
   check('the dashboard rendered its sparkline slots', slots >= 2, `slots=${slots}`);
@@ -155,12 +155,32 @@ try {
   // commit probe below, not by canvas identity (a replaced canvas at the same
   // size proves nothing either way).
   const firstSlot = page.locator('.chart-slot').first();
+  const markSplit = await firstSlot.evaluate((slot) => {
+    const area = slot.querySelector('.chart-area');
+    const line = slot.querySelector('.chart-line');
+    return {
+      areaPresent: Boolean(area),
+      areaStroke: area ? getComputedStyle(area).stroke : '',
+      linePresent: Boolean(line),
+      lineStroke: line ? getComputedStyle(line).stroke : '',
+    };
+  });
+  check(
+    'the area mark is fill-only and the trend is a separate stroke',
+    markSplit.areaPresent
+      && (markSplit.areaStroke === 'none' || markSplit.areaStroke === '')
+      && markSplit.linePresent
+      && markSplit.lineStroke !== 'none'
+      && markSplit.lineStroke !== '',
+    JSON.stringify(markSplit),
+  );
+
   const box = await firstSlot.boundingBox();
   if (!box) throw new Error('no bounding box for the first sparkline');
   await page.mouse.move(box.x + box.width * 0.5, box.y + box.height / 2);
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(50);
   const tooltipText = await page
-    .locator('.g2-tooltip')
+    .locator('.chart-tooltip')
     .first()
     .innerText()
     .catch(() => '');
@@ -177,11 +197,11 @@ try {
   // their data (a rebuild that dropped the series would show here).
   for (let step = 0; step <= 20; step += 1) {
     await page.mouse.move(box.x + (box.width * step) / 20, box.y + box.height / 2);
-    await page.waitForTimeout(16);
+    await page.waitForTimeout(8);
   }
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(50);
   const tooltipAfterSweep = await page
-    .locator('.g2-tooltip')
+    .locator('.chart-tooltip')
     .first()
     .innerText()
     .catch(() => '');
@@ -192,7 +212,7 @@ try {
   );
 
   const overlay = await page.evaluate(() => {
-    const node = document.querySelector('.g2-tooltip');
+    const node = document.querySelector('.chart-tooltip');
     if (!node) return { present: false };
     const style = window.getComputedStyle(node);
     return { present: true, transition: style.transitionDuration, position: style.position };

@@ -39,7 +39,6 @@ const budgets = [
   { label: 'main entry', pattern: /^index-.*\.js$/, maxKB: 180, required: true },
   { label: 'Lobe icon JS', pattern: /^LobeIcon-.*\.js$/, maxKB: 96, required: true },
   { label: 'vendor antd', pattern: /^vendor-antd-.*\.js$/, maxKB: 1250, required: true },
-  { label: 'vendor charts', pattern: /^vendor-charts-.*\.js$/, maxKB: 1600, required: true },
   { label: 'YAML source editor', pattern: /^YamlSourceEditor-.*\.js$/, maxKB: 3200, required: true },
 ];
 
@@ -59,9 +58,9 @@ for (const budget of budgets) {
 }
 
 const aggregateBudgets = [
-  { label: 'total JavaScript', bytes: totalJSBytes, maxKB: 7800 },
+  { label: 'total JavaScript', bytes: totalJSBytes, maxKB: 6300 },
   { label: 'generated Lobe SVG assets', bytes: iconBytes, maxKB: 1200 },
-  { label: 'total web/dist', bytes: totalDistBytes, maxKB: 10000 },
+  { label: 'total web/dist', bytes: totalDistBytes, maxKB: 7800 },
 ];
 for (const budget of aggregateBudgets) {
   const sizeKB = budget.bytes / 1024;

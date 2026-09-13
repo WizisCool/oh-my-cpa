@@ -63,9 +63,6 @@ export default defineConfig(({ command }) => ({
           if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router-dom')) {
             return 'vendor-react';
           }
-          if (id.includes('node_modules/@ant-design/charts') || id.includes('node_modules/@antv')) {
-            return 'vendor-charts';
-          }
           if (id.includes('node_modules/@ant-design/icons') || id.includes('node_modules/antd')) {
             return 'vendor-antd';
           }

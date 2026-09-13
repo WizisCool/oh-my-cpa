@@ -396,13 +396,11 @@ Non-obvious decisions, keep these when editing:
 - All shadow tokens set to `'none'`; every motion token pinned to ≤ 0.1s (§7).
 - Components pinned: Button 32/28px, Input active ring `accent22`,
   Select optionSelectedBg = surface, Tag defaultBg = bg.
-- Chart tooltips are not antd. G2 renders them as `.g2-tooltip` HTML outside the
-  canvas and styles that panel from `interaction.tooltip.css`, so
-  `chartTheme.tooltipStyle` supplies it — every declaration reads a CSS variable
-  first (`var(--surface, …)`) and keeps the palette as fallback, which is what
-  lets an already-open tooltip repaint when the theme flips. The hover rule is
-  canvas-drawn and cannot read variables, so it takes `palette.border` for the
-  active mode.
+- Dashboard sparklines are small app-owned SVG paths, not a charting runtime.
+  The area path is fill-only and the trend is a separate stroked path, so a
+  stroke cannot paint the area's closing baseline. The hover crosshair and
+  `.chart-tooltip` panel are HTML/SVG styled exclusively from CSS variables, so
+  they follow the active theme without a chart-library theme bridge.
 
 ## 7. Motion
 
@@ -437,9 +435,9 @@ Hard rules:
 4. **Suppress spinner flash.** A request that resolves quickly must never paint a
    loading indicator at all (`DataProgress` waits 200ms before showing).
    Background auto-refresh should be invisible.
-5. **Charts do not animate.** `animate: false` everywhere: G2 canvas
-   re-renders are the most expensive thing on the dashboard, and a line snapping
-   to new data reads as honest, not janky.
+5. **Charts do not animate.** Sparkline geometry swaps on the data revision
+   with no transition or entrance animation; a line snapping to new data reads
+   as honest, not janky.
 6. **Feedback must be immediate.** Optimistic affordances (button `loading`,
    the progress bar) appear on the interaction itself, not after a transition.
 7. **Hover is not an animation.** A hover is the interface acknowledging the

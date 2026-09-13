@@ -2,14 +2,13 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Alert, Button, Card, Empty, Skeleton, Space, Tooltip, Typography } from 'antd';
 import { HistoryOutlined, QuestionCircleOutlined, ReloadOutlined, RightOutlined } from '@ant-design/icons';
-import { Tiny } from '@ant-design/charts';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
 import { useThemeMode } from '../theme/ThemeContext';
 import { usePreference } from '../hooks/usePreference';
-import { lineOptions, sparkDomain, sparkOptions, type ChartTone } from '../charts/chartTheme';
+import { buildSparkGeometry, sparkColor, sparkDomain, type ChartTone } from '../charts/chartTheme';
 import { formatCacheRate } from '../theme/cacheScale';
 import { successRateVerdict } from '../types/usageEventView';
 import { TimeRangeControl } from '../components/dashboard/TimeRangeControl';
@@ -66,11 +65,10 @@ interface TrendProps {
 }
 
 /**
- * Trend renders one sparkline with Ant Design Charts' Tiny.Area.
+ * Trend renders one app-owned SVG sparkline.
  *
- * It is a thin data adapter over the library component, not a chart of our own:
- * every visual decision comes from chartTheme so the line follows the active
- * palette.
+ * Geometry and colour selection live in chartTheme so both variants follow the
+ * active palette without a chart runtime.
  */
 const Trend: React.FC<TrendProps> = ({
   points,
@@ -83,54 +81,70 @@ const Trend: React.FC<TrendProps> = ({
 }) => {
   const { themeMode } = useThemeMode();
   const t = useT();
+  const [activeIndex, setActiveIndex] = React.useState<number | null>(null);
   const data = React.useMemo(() => seriesData(points, pick), [points, pick]);
-
-  // The chart library reads the tooltip accessors on every pointer move, so
-  // holding them in refs keeps a hover from depending on identity-stable props.
-  // The figure itself is only rebuilt when the series or its domain actually
-  // changes, which keeps a pointer sweep from re-creating the chart underneath
-  // the cursor - the source of the lag this used to show.
-  const pointsRef = React.useRef(points);
-  const labelRef = React.useRef(label);
-  const formatRef = React.useRef(format);
-  const translateRef = React.useRef(t);
-  pointsRef.current = points;
-  labelRef.current = label;
-  formatRef.current = format;
-  translateRef.current = t;
-
-  const domain = React.useMemo(() => sparkDomain(data.map((row) => row.y)), [data]);
-  // A primitive summary of the domain, so the options memo can depend on the
-  // numeric extent rather than on a fresh object each render.
-  const domainSignature = domain ? `${domain.domainMin}:${domain.domainMax}` : 'none';
-
-  const options = React.useMemo(() => {
-    const tooltip = labelRef.current
-      ? {
-          title: (datum: { x: number }) => labelRef.current?.(pointsRef.current[datum.x]?.t ?? 0) ?? '',
-          items: [
-            (datum: { y: number }) => ({
-              name: translateRef.current('dash.tooltip_bucket'),
-              value: formatRef.current ? formatRef.current(datum.y) : formatCount(datum.y),
-            }),
-          ],
-        }
-      : false;
-    return variant === 'area'
-      ? sparkOptions(themeMode, tone, { domain, tooltip })
-      : lineOptions(themeMode, tone, { domain, tooltip });
-    // Intentionally keyed on the series extent rather than on label/format/t:
-    // those are read through refs above, so a re-render that only swaps their
-    // identities must not rebuild the figure under the operator's cursor.
-  }, [domainSignature, points, themeMode, tone, variant]);
+  const domain = React.useMemo(() => sparkDomain(data.map((row) => row.y)) ?? { domainMin: 0, domainMax: 1 }, [data]);
+  const geometry = React.useMemo(
+    () => buildSparkGeometry(data.map((row) => row.y), domain, height),
+    [data, domain, height],
+  );
+  const color = sparkColor(themeMode, tone);
 
   if (data.length < 2) {
     return <div className="chart-placeholder" style={{ height }} aria-hidden="true" />;
   }
-  const Chart = variant === 'area' ? Tiny.Area : Tiny.Line;
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (bounds.width <= 0) return;
+    const ratio = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
+    setActiveIndex(Math.round(ratio * (data.length - 1)));
+  };
+
+  const activePoint = activeIndex === null ? null : geometry.points[activeIndex];
+  const activeValue = activeIndex === null ? null : data[activeIndex]?.y;
+  const activeTime = activeIndex === null ? 0 : points[activeIndex]?.t ?? 0;
+
   return (
-    <div className="chart-slot" style={{ height }}>
-      <Chart data={data} xField="x" yField="y" height={height} {...options} />
+    <div
+      className="chart-slot"
+      style={{ height }}
+      onPointerMove={handlePointerMove}
+      onPointerLeave={() => setActiveIndex(null)}
+    >
+      <svg
+        viewBox={`0 0 1000 ${height}`}
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={t('dash.tooltip_bucket')}
+      >
+        {variant === 'area' && (
+          <path className="chart-area" d={geometry.areaPath} style={{ fill: color, fillOpacity: 0.1, stroke: 'none' }} />
+        )}
+        <path
+          className="chart-line"
+          d={geometry.linePath}
+          vectorEffect="non-scaling-stroke"
+          style={{ fill: 'none', stroke: color, strokeWidth: 1.5 }}
+        />
+        {activePoint && (
+          <line
+            className="chart-crosshair"
+            x1={activePoint.x}
+            x2={activePoint.x}
+            y1={0}
+            y2={height}
+            vectorEffect="non-scaling-stroke"
+            style={{ stroke: 'var(--border)' }}
+          />
+        )}
+      </svg>
+      {activePoint && activeValue !== null && label && (
+        <div className="chart-tooltip" style={{ left: `${(activePoint.x / 1000) * 100}%` }}>
+          <div className="chart-tooltip-time">{label(activeTime)}</div>
+          <div className="chart-tooltip-value">{format ? format(activeValue) : formatCount(activeValue)}</div>
+        </div>
+      )}
     </div>
   );
 };
