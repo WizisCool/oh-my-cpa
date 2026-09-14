@@ -38,8 +38,12 @@
   --meta: #6e6e73;
   --border: #464343;
   --border-soft: #302c2c;
-  --accent: #007aff;
-  --accent-hover: #0056b3;
+  /* Accent ladder, hue 201. The link step is the bright one because it sits on the dark
+     background (6.03:1); the two deeper steps are what white label text can sit on (4.85:1 and
+     7.09:1). Measured ratios are in docs/design.md §2. */
+  --accent: #00a2fb;
+  --accent-hover: #0077b8;
+  --accent-active: #005d8f;
   --success: #30d158;
   --warn: #ff9f0a;
   --danger: #ff3b30;
@@ -53,6 +57,33 @@
   --cache-rate-green: #30d158;
   --cache-rate-tint: 12%;
   --cache-rate-edge: 32%;
+  /* The heatmap's continuous ramp: the quiet stop is the cell's own empty fill, so a day with no
+     traffic and the lightest measured shade cannot be confused, and the busy stop is the theme
+     accent. Everything between them is mixed in OKLCH by the browser, from a square root of the
+     day's volume - see web/src/theme/heatmapRamp.ts for why that curve and not a linear one. */
+  --heatmap-quiet: #3a3636;
+  --heatmap-busy: #00a2fb;
+  /* The grid's floor, the space between cells, and the weekday gutter. The cell size itself
+     is not a token: it is whatever divides the panel evenly. */
+  --heatmap-min-cell: 9px;
+  --heatmap-gap: 4px;
+  --heatmap-label: 22px;
+  --heatmap-label-gap: 8px;
+  /* The loading skeleton's row height. Fixed because there is no grid yet to measure against. */
+  --heatmap-skeleton-cell: 12px;
+  /* The two zero states, as one ordered scale measured against the card rather than against the
+     page. The panel sits at `--surface` (#302c2c), and both steps are a shade *lighter* than it,
+     which is the direction GitHub's own graph uses on dark: the 4px gaps then read as the darker
+     card showing through instead of as a bright mesh drawn around every cell.
+     The order is the meaning. An unrecorded day carries no information, so it is the closest to the
+     card; a recorded-but-empty day is a measurement of zero, so it takes a step further; a measured
+     day is the only thing clearly louder than the card. Contrast against the card is 1.07, 1.15 and
+     1.23 respectively, so the two zero states stay quiet and never compete with the ramp. */
+  --heatmap-zero-unrecorded: #343030;
+  --heatmap-zero-recorded: #3a3636;
+  /* The link step of the accent ladder. The tooltip sits on the card's surface rather than the page,
+     where the bright accent reads 4.97:1 - clear of AA, so the ladder's own link step is used. */
+  --heatmap-tip-link: #00a2fb;
   --radius-sm: 4px;
   /* The inset step for a control that sits on an elevated panel. "One step
      down from the popover" is --bg in dark and --surface in light, so the two
@@ -72,6 +103,12 @@
   --fg-2: #424245;
   --muted: #6e6e73;
   --meta: #9a9898;
+  /* The same hue a step darker, because the bright accent cannot be legible on a light page: it
+     reads 2.71:1 there, while this reads 6.92:1 as a link and 7.09:1 under white text. The dark
+     theme's link step is therefore this theme's filled-control step. */
+  --accent: #005d8f;
+  --accent-hover: #004770;
+  --accent-active: #00344f;
   --border: rgba(15, 0, 0, 0.12);
   --border-soft: rgba(15, 0, 0, 0.07);
   --hover-inset: var(--surface);
@@ -81,6 +118,18 @@
   --cache-rate-green: #00662a;
   --cache-rate-tint: 22%;
   --cache-rate-edge: 34%;
+  /* The same ramp read on a light page: the quiet stop is this theme's empty fill and the busy stop
+     is the accent step that stays legible on it. */
+  --heatmap-quiet: #e2dede;
+  --heatmap-busy: #005d8f;
+  /* On a light page the card sits at #f1eeee and the ramp runs the other way: both zero steps are a
+     shade *darker* than it, which is GitHub's light-theme direction. Same order, same meaning -
+     unrecorded 1.08, empty 1.16, measured 1.25 against the card. */
+  --heatmap-zero-unrecorded: #eae6e6;
+  --heatmap-zero-recorded: #e2dede;
+  /* The link step of the accent ladder for this theme; the tooltip is on the card's surface rather
+     than the page, and this is the step that clears 4.5:1 there. */
+  --heatmap-tip-link: #005d8f;
 }
 
 * { box-sizing: border-box; }
@@ -593,6 +642,262 @@ a { color: inherit; }
   .dashboard-tile .ant-card-body { padding: 16px; }
 }
 
+/* ── token heatmap: a DOM grid, not a chart mark ────────────────────────────
+   A contribution graph: seven weekday rows by a year of week columns, sized to fill its
+   panel at any width. The cells are sized by the grid rather than by JavaScript -
+   `minmax(--heatmap-min-cell, 1fr)` divides whatever width the panel has into fifty-three
+   equal tracks, which is what makes the field reach its edges exactly; an integer cell size
+   computed in JS cannot divide an arbitrary width evenly and leaves a visible gutter, which
+   is what made the fixed-size version look like an unfinished widget.
+
+   On a desktop width the grid never scrolls: the tracks divide whatever the panel has, so the
+   field reaches both edges and the year is always whole. Below the cell floor - a phone - it
+   swipes instead, keeping the floor and letting the row extend past the panel. Shrinking the cells
+   to fit was the alternative and it makes the field unreadable well before it fits, and clipping
+   silently hides two thirds of the year. */
+.heatmap-panel { margin-bottom: 32px; grid-column: 1 / -1; }
+.heatmap-inner { min-width: 0; }
+.heatmap-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+/* The field fills its panel on any width a desktop produces. A phone is the one case where a
+   year of weeks cannot fit at a legible cell size, so the container is swipeable there - with
+   the scrollbar itself hidden, because a bar inside a dashboard card is visual noise and touch
+   has no scrollbar anyway. Clipping instead would be worse than either: the point of the field
+   is the whole year, and hiding two thirds of it silently is not a layout choice.
+   `overflow-y: hidden` alongside is what stops the pair from computing to `auto` on both axes,
+   which is the gotcha that drew a stray vertical scrollbar on a field with room to spare. */
+.heatmap-scroll {
+  margin-top: 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  position: relative;
+  overscroll-behavior-x: contain;
+  /* `!important` because a global `* { scrollbar-width: thin }` further down the sheet would
+     otherwise win this declaration, and the bar is exactly what must not appear here. */
+  scrollbar-width: none !important;
+}
+.heatmap-scroll::-webkit-scrollbar { display: none !important; }
+/* The month axis carries the gutter as padding rather than as a track, so both it and the grid
+   divide the same remaining width into the same number of columns. With a track, the axis would
+   have one extra gap and every label would sit a gap-width left of the column it names. */
+.heatmap-months {
+  display: grid;
+  /* The same tracks the grid below uses, so a label's column is the column it names. Sizing the
+     axis from its own content instead let each label drift right as earlier labels accumulated
+     width - every month pointed at a column it did not name, by more the further along it sat. */
+  grid-template-columns: repeat(var(--heatmap-columns), minmax(var(--heatmap-min-cell), 1fr));
+  gap: var(--heatmap-gap);
+  margin-bottom: 5px;
+  padding-left: calc(var(--heatmap-label) + var(--heatmap-label-gap));
+  height: 10px;
+  align-items: start;
+}
+.heatmap-month { color: var(--muted); font-size: 10px; line-height: 1; white-space: nowrap; }
+/* The final column's label would run off the panel's edge, so it is anchored to its own
+   column's right side - the same left-edge anchoring the others get, mirrored. */
+.heatmap-month.is-last { justify-self: end; }
+.heatmap-body { display: flex; gap: var(--heatmap-label-gap); align-items: stretch; }
+/* The gutter's rows mirror the grid's: it stretches to the grid's height and divides it into
+   seven equal rows, so each label lines up with its weekday without either side knowing the
+   cell size. */
+.heatmap-weekdays {
+  display: grid;
+  grid-template-rows: repeat(7, minmax(0, 1fr));
+  gap: var(--heatmap-gap);
+  flex: 0 0 var(--heatmap-label);
+}
+.heatmap-weekday { display: flex; align-items: center; color: var(--muted); font-size: 10px; line-height: 1; }
+.heatmap-grid {
+  display: grid;
+  /* One explicit track per week, each taking an equal share of what the gutter leaves. `flex-basis:
+     0` is what makes the grid take exactly that share; with `width: max-content` it claimed the
+     whole container and pushed the gutter into overflow.
+     Explicit rather than `auto-fit`: auto-fit makes as many tracks as fit at the cell floor and
+     leaves the rest of the cells in *implicit* tracks, which are sized to their content. On a phone
+     that gave 24 tracks at 9px and 29 at 10px - so the field was not the uniform grid the month axis
+     assumed, and no axis could line up with it. It also meant the declared track count was a
+     coincidence of the panel width rather than the number of weeks being drawn. */
+  flex: 1 1 0;
+  min-width: 0;
+  gap: var(--heatmap-gap);
+  grid-template-columns: repeat(var(--heatmap-columns), minmax(var(--heatmap-min-cell), 1fr));
+}
+/* The ARIA rows exist for assistive technology only. `display: contents` keeps them out of the box
+   tree, so each cell is still placed directly by its own `gridColumn`/`gridRow` and the layout is
+   unchanged; the rows supply the ownership a `gridcell` requires without becoming layout boxes. */
+.heatmap-row { display: contents; }
+.heatmap-cell {
+  /* Square by aspect ratio rather than by a height: the width comes from the fractional
+     tracks, so a fixed height would be wrong at every panel width. */
+  aspect-ratio: 1;
+  width: 100%;
+  border: 0;
+  border-radius: 2px;
+  /* One step down from the panel it sits on, not a step up. The panel's own background is
+     `--surface`, and in the dark theme the obvious choice for an empty cell (`--border-soft`)
+     *is* `--surface`: every empty day would blend into the panel and the grid would read as a
+     scatter of isolated marks. `--bg` is the inset step in both themes, which is the same
+     token the hover states use for the same reason. */
+  background: var(--heatmap-zero-recorded);
+  padding: 0;
+}
+.heatmap-cell.is-unrecorded { background: var(--heatmap-zero-unrecorded); box-shadow: none; }
+/* A measured cell's fill, mixed by the browser between the two ramp stops. The custom properties
+   are set per cell by the component from a square root of the day's volume, so the ramp is
+   continuous rather than four fixed steps - which is what lets two days of different volume read as
+   different. `--heatmap-quiet-share` is the weight of the quiet stop: 100% is no traffic, 0% is the
+   busiest day in the window. */
+.heatmap-cell.is-measured {
+  background: color-mix(
+    in oklch,
+    var(--heatmap-quiet) var(--heatmap-quiet-share, 0%),
+    var(--heatmap-busy)
+  );
+}
+/* Every cell is interactive, so every cell advertises the pointer. A day with nothing recorded has
+   no drill-down to offer, but it still answers the question the reader is asking - its tooltip says
+   that nothing is stored - so refusing the cursor would hide an interaction that does happen. */
+.heatmap-cell.is-interactive { cursor: pointer; }
+/* Hover acknowledges the pointer on the frame it arrives, and the motion is a `transform` scale
+   rather than a fade: design.md §7 rule 1 allows compositor-only properties and rule 7 forbids a
+   *colour* transition on hover, which is what would smear behind a fast sweep. A transform is
+   handed to the compositor, so the lift costs no layout and no paint of the grid around it.
+   The transition is on the transform only, and `position: relative` + `z-index` let the enlarged
+   square sit above its neighbours instead of being tucked under them. */
+/* The cell is the layout box and the tooltip's anchor, so it never moves: the hover scale is
+   applied to the inner mark instead. Scaling the cell itself moved antd's positioning target under
+   the popper, which stranded an open tooltip ~100px from its cell. */
+.heatmap-cell-mark {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: inherit;
+  /* The hover target is the cell, not this square: the mark is decoration over a stationary
+     anchor. */
+  pointer-events: none;
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+.heatmap-cell.is-interactive:hover .heatmap-cell-mark {
+  box-shadow: inset 0 0 0 1px var(--fg-2);
+  transform: scale(1.35);
+  z-index: 1;
+}
+/* The cell needs a positioning context for the mark, and the mark has to be able to sit above its
+   neighbours without the cell itself being transformed. */
+.heatmap-cell { position: relative; }
+/* The colour lives on the mark so the cell's own background stays the layout-neutral empty fill;
+   the state and level classes above set it on the cell, and this carries it onto the square. */
+.heatmap-cell > .heatmap-cell-mark { background: inherit; }
+.heatmap-cell:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent); }
+/* The cell whose tooltip is open keeps the ring, so the tooltip is visibly attached to it while
+   the pointer moves off to the link inside. */
+.heatmap-cell.ant-tooltip-open { box-shadow: inset 0 0 0 1px var(--fg-2); }
+/* The heatmap tooltip's content. antd owns the popper, the placement, the arrow and the motion,
+   so what is styled here is only the inside - which is what keeps this tooltip's chrome from
+   diverging from the app's other forty-odd tooltips.
+   The rows are a definition list with the values right-aligned: the pairing is the point, since
+   "Requests 6" and "Tokens 6,000" only mean something read against each other. */
+/* The panel's own class on antd's popper, rather than a selector reaching into `.ant-tooltip`: the
+   tooltip is click-triggered and contains a link, so the popper's box, placement and arrow stay
+   antd's business. What this owns is only the box's fit - `max-width: none` is what lets the value
+   column sit beside its label instead of wrapping under it. */
+.heatmap-tip-popper {
+  max-width: none;
+  /* The panel's tooltip paints its own text from the palette's text tokens, because its rows are a
+     definition list rather than a sentence. That makes the global spotlight wrong for it: antd's
+     spotlight is near-black in the light theme to suit its white text, which put near-black text on
+     a near-black box - a measured 1.0:1. Overriding the fill and the arrow here keeps the fix
+     inside this popper, where the reason applies, instead of moving a token every other tooltip
+     in the console also reads. */
+  --ant-tooltip-arrow-background-color: var(--surface);
+}
+.heatmap-tip-popper .ant-tooltip-container {
+  /* The columns need room; below this the value wraps away from the label it belongs to. */
+  min-width: 176px;
+  background: var(--surface);
+}
+/* The rows lay out two-column, so the box has to be at least as wide as the widest label plus the
+   longest value; below that the value column would wrap away from its label. antd's container
+   supplies the inset, which is why nothing here sets padding. */
+.heatmap-tip {
+  margin: 0;
+  min-width: 176px;
+  font-size: 11px;
+  line-height: 1.6;
+  /* The popper's fill is `--surface`, but antd colours a popup's text with `colorTextLightSolid`
+     - white - which is meant for its own dark spotlight. Every row below sets its own colour, so
+     the panel's text was legible while this inherited value went unnoticed; the empty state has
+     no rows to set one, and rendered white on a near-white box at 1.15:1. Setting it on the box
+     rather than on `.heatmap-tip-empty` covers any future child that forgets, which is the class
+     of bug this was. */
+  color: var(--fg);
+}
+.heatmap-tip-day {
+  color: var(--fg);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+/* The label uses the secondary text token rather than `--muted`: muted is calibrated for the page
+   background, and against the popper's surface it lands at 4.4:1 - just under the WCAG AA floor
+   design.md requires. `--fg-2` clears it in both themes. */
+.heatmap-tip-row dt { color: var(--fg-2); }
+.heatmap-tip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.heatmap-tip-row dt { font-weight: 400; }
+.heatmap-tip-row dd {
+  margin: 0;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+/* The drill-down is a real anchor, so it reads as a link and opens in a new tab if asked. */
+.heatmap-tip-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-soft);
+  width: 100%;
+  /* A dedicated step, because neither accent clears 4.5:1 on the popper's surface in both themes:
+     the bright accent reads 3.4:1 on the dark surface, and `--accent-hover` (the deeper step, meant
+     for filled buttons) reads 1.96:1 there while being the only legible one on the light surface.
+     So the light theme uses the deeper step and the dark theme lightens the accent until it clears
+     the floor - the same "lighten a semantic hue until its text is legible" rule the cache scale
+     follows in design.md §2. */
+  color: var(--heatmap-tip-link);
+  font-size: 11px;
+}
+.heatmap-tip-link:hover { color: var(--accent); text-decoration: underline; }
+.heatmap-tip-link-icon { font-size: 9px; }
+/* Static skeleton, never a shimmer (design.md §7 rule 3). */
+.heatmap-skeleton {
+  margin-top: 14px;
+  height: calc(var(--heatmap-skeleton-cell) * 7 + var(--heatmap-gap) * 6);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+}
+.heatmap-alert { margin-top: 12px; }
+/* A 2px indeterminate bar for a background re-read, matching the app's own `.data-progress`
+   treatment: one composited layer, no layout, no shimmer. */
+.heatmap-progress { display: block; height: 2px; margin-top: 10px; background: var(--border-soft); overflow: hidden; }
+.heatmap-progress::after { content: ''; display: block; width: 30%; height: 100%; background: var(--accent); animation: heatmap-progress 1.2s linear infinite; }
+@keyframes heatmap-progress { from { transform: translateX(-100%); } to { transform: translateX(433%); } }
+/* A phone keeps the cell floor and lets the field clip rather than scroll. The tap target grows
+   **vertically only**: growing it horizontally is what the obvious implementation does and it is
+   wrong, because the pitch between cells is only cell+gap, so any real horizontal expansion lets
+   the next day's target cover this day's own square - a tap in the middle of a day opens its
+   neighbour. Vertical expansion is capped to the gap for the same reason, which leaves the
+   target at cell+2px. It stays below the 44px touch guideline, a deliberate trade: no cell size
+   meeting it can fit a year of weeks on a phone, so the tooltip and the keyboard path are what
+   make every day readable regardless. */
+@media (max-width: 640px) {
+  .heatmap-cell { position: relative; }
+  .heatmap-cell::after { content: ''; position: absolute; inset: -1px; }
+  .heatmap-head { align-items: flex-start; }
+}
+
 /* ── transitions: a view never hard-swaps ───────────────────────────────────
    Motion here exists only to remove the jump between two painted states. It
    stays on compositor-only properties (opacity, transform), never animates
@@ -632,6 +937,10 @@ a { color: inherit; }
   .route-transition { animation: none; }
   /* Keep the in-flight signal, drop the movement. */
   .data-progress::after { animation: none; opacity: 0.6; }
+  .heatmap-progress::after { animation: none; width: 100%; opacity: 0.6; }
+  /* Keep the acknowledgement, drop the movement: the ring still marks the cell under the pointer. */
+  .heatmap-cell-mark { transition: none; }
+  .heatmap-cell.is-interactive:hover .heatmap-cell-mark { transform: none; }
 }
 
 /* ── logs: a tail, not a table ────────────────────────────────────────────── */

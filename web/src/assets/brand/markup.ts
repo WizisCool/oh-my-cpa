@@ -1,0 +1,75 @@
+/**
+ * The brand artwork, as markup rather than as files.
+ *
+ * Inline rather than `<img src>` because the two colours in it are theme tokens. An `<img>`-loaded
+ * SVG is its own document: it cannot see the page's custom properties, so its blue would be frozen
+ * in the file and would silently diverge the moment the accent changed - which is exactly what had
+ * happened, with a hand-picked `#00A3FD` sitting next to an accent of `#007AFF`.
+ *
+ * One drawing per shape, not one per shape per theme. The light and dark files were byte-identical
+ * apart from their two fill values, so keeping four of them duplicated the path data to express two
+ * colours. The colours arrive as arguments and are substituted at render, so there is one copy of
+ * each drawing and the theme is the only thing that varies.
+ *
+ * The favicon still ships as a file: the browser requests it outside the app, so it cannot read the
+ * console's theme setting and selects on `prefers-color-scheme` instead.
+ */
+export type BrandShape = 'wordmark' | 'o';
+
+/** The two groups a drawing is made of: the letterforms, and the accent marks inside them. */
+export interface BrandColors {
+  ink: string;
+  accent: string;
+}
+
+/**
+ * The substitution placeholders. Deliberately not `${...}`: the drawings live in template literals
+ * below, where that syntax is interpolation rather than text.
+ */
+const INK = '__INK__';
+const ACCENT = '__ACCENT__';
+
+interface BrandDrawing {
+  viewBox: string;
+  width: number;
+  height: number;
+  body: string;
+}
+
+const DRAWINGS: Record<BrandShape, BrandDrawing> = {
+  wordmark: {
+    viewBox: '74 131 875 148',
+    width: 875,
+    height: 148,
+    body: `<g id="main-text" fill="__INK__" fill-rule="evenodd"> <path id="letter-O" d="M 189.65 224.00 C 189.17 234.05 180.11 242.33 170.00 242.00 L 100.00 241.91 C 90.57 240.34 82.85 234.12 82.46 225.00 L 82.39 157.00 C 82.76 147.33 91.51 139.97 100.00 139.56 L 171.00 139.55 C 180.95 139.74 188.93 147.07 189.68 156.00 L 189.74 223.00 Z M 162.43 215.00 C 162.44 214.00 162.44 213.00 162.44 212.00 L 162.43 169.00 C 162.43 164.65 162.44 164.23 159.00 164.18 L 115.00 164.13 C 111.05 164.20 109.75 163.87 109.69 167.00 L 109.69 212.00 C 109.86 216.04 111.10 215.88 114.00 215.90 L 162.00 215.86 Z"/> <path id="letter-h" d="M 284.54 236.00 C 284.52 239.66 283.01 242.06 279.00 242.11 L 265.00 241.93 C 259.51 241.90 257.53 240.49 257.50 236.00 L 257.51 197.00 C 257.55 192.61 257.33 192.54 254.00 192.51 L 233.00 192.50 C 228.73 192.50 228.56 192.74 228.55 196.00 L 228.60 235.00 C 228.56 239.80 227.12 241.92 223.00 241.95 L 208.00 241.90 C 202.88 241.85 201.37 239.95 201.35 236.00 L 201.35 146.00 C 201.34 140.58 204.02 139.53 208.00 139.52 L 221.00 139.53 C 224.15 139.54 225.82 139.43 227.45 141.00 C 228.59 142.62 228.63 144.01 228.65 146.00 L 228.62 163.00 C 228.66 166.77 229.22 166.83 232.00 166.81 L 267.00 166.80 C 276.80 168.09 284.49 174.60 284.53 184.00 L 284.54 235.00 Z"/> <path id="letter-M" d="M 478.33 236.00 C 478.29 240.05 476.04 242.15 472.00 242.10 L 457.00 241.98 C 451.91 241.76 450.50 239.83 450.49 236.00 L 450.50 183.00 C 450.33 179.34 450.22 179.07 448.41 181.00 L 428.84 202.00 C 426.22 204.82 424.58 205.90 422.00 206.13 L 417.00 206.13 C 410.32 206.12 408.64 202.47 405.00 198.81 L 400.00 193.34 C 397.85 190.84 396.01 188.79 394.00 186.78 L 389.57 182.00 C 387.15 179.45 386.69 179.04 386.67 182.00 L 386.60 235.00 C 386.55 240.48 384.58 242.05 380.00 241.98 L 366.00 241.96 C 360.87 241.95 358.83 240.19 358.83 236.00 L 358.83 150.00 C 358.97 143.36 362.34 139.52 368.00 139.52 L 382.00 139.53 C 386.11 139.54 387.90 140.26 390.00 142.63 C 391.40 144.11 392.57 145.79 394.00 147.23 L 413.43 168.00 C 415.44 170.22 416.85 173.75 419.00 171.59 C 420.61 169.78 422.03 167.85 423.60 166.00 L 444.00 142.41 C 446.09 140.16 447.51 139.52 450.00 139.52 L 468.00 139.54 C 474.59 139.56 478.28 143.37 478.37 149.00 L 478.36 235.00 Z"/> <path id="letter-y" d="M 569.55 261.00 C 566.88 265.78 561.58 269.94 556.00 270.42 L 500.00 270.51 C 496.83 270.53 495.25 270.58 493.65 269.00 C 492.57 267.24 492.55 266.07 492.55 264.00 L 492.55 252.00 C 492.46 246.64 495.00 245.36 499.00 245.27 L 541.00 245.20 C 545.11 244.85 545.19 244.04 545.22 241.00 C 545.17 237.32 544.75 237.31 541.00 237.28 L 508.00 237.26 C 497.58 236.52 490.56 229.03 489.32 220.00 L 489.30 177.00 C 489.37 172.23 491.11 170.21 495.00 170.11 L 510.00 170.04 C 515.20 170.00 516.60 171.96 516.64 176.00 L 516.64 208.00 C 516.63 211.78 517.25 211.63 520.00 211.68 L 540.00 211.72 C 543.84 211.68 545.10 212.00 545.21 209.00 L 545.22 177.00 C 545.22 171.71 546.63 170.02 551.00 170.02 L 566.00 170.04 C 570.74 170.35 572.32 172.24 572.34 176.00 L 570.00 260.36 Z"/> </g> <g id="accent-text" fill="__ACCENT__" fill-rule="evenodd"> <path id="hyphen-1" d="M 342.41 198.00 C 342.41 202.57 340.00 206.34 335.00 206.37 L 309.00 206.35 C 303.26 206.39 300.40 203.65 300.34 199.00 L 300.32 188.00 C 300.35 182.28 303.37 180.00 308.00 179.91 L 334.00 179.94 C 339.99 180.20 342.37 183.05 342.43 188.00 L 342.43 197.00 Z"/> <path id="hyphen-2" d="M 626.96 198.00 C 626.88 203.18 624.36 206.31 619.00 206.37 L 596.00 206.35 C 590.35 206.32 587.50 203.56 587.45 199.00 L 587.47 189.00 C 587.39 182.92 589.88 180.32 595.00 180.00 L 618.00 179.95 C 624.39 180.17 626.83 182.71 626.94 188.00 L 626.92 197.00 Z"/> <path id="letter-C" d="M 726.00 242.00 L 661.00 242.07 C 650.46 241.96 640.76 233.81 640.42 224.00 L 640.41 158.00 C 640.73 147.86 649.23 140.23 658.00 139.30 L 726.00 139.20 C 731.24 139.33 732.48 140.95 732.50 145.00 L 732.51 158.00 C 732.48 162.86 730.82 164.63 727.00 164.64 L 671.00 164.64 C 668.03 164.75 667.68 165.01 667.68 167.00 L 667.74 212.00 C 667.80 215.78 668.21 216.19 671.00 216.12 L 725.00 216.17 C 730.39 216.06 732.41 217.67 732.49 222.00 L 732.52 235.00 C 732.51 240.07 730.80 241.96 726.50 242.00 Z"/> <path id="letter-P" d="M 771.45 236.00 C 771.42 239.54 770.01 242.11 766.00 242.11 L 750.00 242.11 C 745.18 241.89 743.87 239.55 743.74 236.00 L 743.70 146.00 C 743.67 140.70 745.85 139.24 750.00 139.20 L 816.00 139.22 C 826.20 140.39 834.81 148.41 835.32 158.00 L 835.33 192.00 C 834.44 202.29 826.27 210.66 817.00 211.70 L 775.00 211.74 C 771.29 211.75 771.45 212.26 771.44 215.00 L 771.45 235.00 Z M 807.53 185.00 C 807.55 184.00 807.56 183.00 807.57 182.00 L 807.58 169.00 C 807.53 165.27 807.69 164.79 805.00 164.68 L 775.00 164.62 C 771.23 164.65 771.46 165.27 771.45 168.00 L 771.45 181.00 C 771.46 185.51 771.54 185.66 775.00 185.68 L 807.00 185.68 Z"/> <path id="letter-A" d="M 940.60 236.00 C 940.56 239.98 939.32 242.06 935.00 242.06 L 919.00 242.06 C 914.07 241.76 913.13 239.68 913.13 236.00 L 913.20 216.00 C 913.06 212.37 912.55 211.89 910.00 211.83 L 877.00 211.73 C 873.33 211.82 873.45 212.25 873.44 215.00 L 873.43 235.00 C 873.43 239.71 871.91 241.80 868.00 242.01 L 852.00 242.02 C 847.21 241.94 845.91 239.41 845.87 236.00 L 845.80 161.00 C 846.20 156.77 847.80 153.95 850.00 151.65 L 858.00 143.43 C 860.95 140.63 863.60 139.59 867.00 139.29 L 921.00 139.21 C 926.08 139.75 929.51 141.26 932.62 144.00 L 939.50 153.00 C 940.72 155.02 940.53 156.81 940.59 158.00 L 940.62 235.00 Z M 909.00 185.69 C 911.79 185.63 913.15 186.03 913.22 183.00 L 913.17 168.00 C 913.07 164.64 912.25 164.65 910.00 164.65 L 877.00 164.63 C 873.23 164.66 873.43 165.26 873.43 168.00 L 873.44 181.00 C 873.44 185.51 873.54 185.66 877.00 185.67 L 908.00 185.70 Z"/> </g>`,
+  },
+  o: {
+    viewBox: '82.4 139.6 107.3 102.7',
+    width: 107,
+    height: 103,
+    body: `<path fill="__INK__" fill-rule="evenodd" id="letter-O" d="M 189.65 224.00 C 189.17 234.05 180.11 242.33 170.00 242.00 L 100.00 241.91 C 90.57 240.34 82.85 234.12 82.46 225.00 L 82.39 157.00 C 82.76 147.33 91.51 139.97 100.00 139.56 L 171.00 139.55 C 180.95 139.74 188.93 147.07 189.68 156.00 L 189.74 223.00 Z M 162.43 215.00 C 162.44 214.00 162.44 213.00 162.44 212.00 L 162.43 169.00 C 162.43 164.65 162.44 164.23 159.00 164.18 L 115.00 164.13 C 111.05 164.20 109.75 163.87 109.69 167.00 L 109.69 212.00 C 109.86 216.04 111.10 215.88 114.00 215.90 L 162.00 215.86 Z"/>`,
+  },
+};
+
+/** The drawing's own geometry, so a caller can reserve its space before it renders. */
+export function brandDrawing(shape: BrandShape): Omit<BrandDrawing, 'body'> {
+  const { viewBox, width, height } = DRAWINGS[shape];
+  return { viewBox, width, height };
+}
+
+/**
+ * Renders a drawing's inner markup with its colours substituted.
+ *
+ * A function rather than JSX so the same markup can go into an inline `<svg>` and into a data URI,
+ * and so the substitution can be asserted without a browser.
+ */
+export function brandMarkup(shape: BrandShape, colors: BrandColors): string {
+  return DRAWINGS[shape].body.split(INK).join(colors.ink).split(ACCENT).join(colors.accent);
+}
+
+/** The same drawing as a data URI, for a caller that needs an image source. */
+export function brandDataUri(shape: BrandShape, colors: BrandColors): string {
+  const { viewBox, width, height } = brandDrawing(shape);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" width="${width}" height="${height}">${brandMarkup(shape, colors)}</svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}

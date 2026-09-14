@@ -2,9 +2,9 @@
 name: Oh My CPA
 description: Terminal-flat developer console for AI resource identity & organization
 colors:
-  primary: "#0056b3"
-  primary-accent: "#007aff"
-  primary-active: "#004085"
+  primary: "#0077b8"          # dark theme; light theme uses #004770
+  primary-accent: "#00a2fb"   # dark theme; light theme uses #005d8f
+  primary-active: "#005d8f"   # dark theme; light theme uses #00344f
   neutral-bg: "#201d1d"
   neutral-surface: "#302c2c"
   neutral-border: "#464343"
@@ -153,9 +153,9 @@ Depth is achieved purely through 1px hairline borders and subtle tonal shifts be
 The palette is anchored on warm charcoal darks with pure semantic status pigments and an OKLCH-interpolated continuous cache scale.
 
 ### Primary
-- **Deep Accent Blue** (`#0056b3`): Used for filled primary action buttons and confirm controls. It provides a decisive focus point without overwhelming the dark theme.
-- **Terminal Cyan Accent** (`#007aff`): Used for interactive links, breadcrumb highlights, active progress bars, and `:focus-visible` focus rings.
-- **Pressed Blue** (`#004085`): Used for button active/down states.
+- **Deep Accent Blue** (`#0077b8` dark / `#004770` light): Used for filled primary action buttons and confirm controls. It provides a decisive focus point without overwhelming the dark theme.
+- **Accent Ladder** (hue 201, per theme): `#00a2fb` / `#005d8f` are the link steps for the dark and light themes, `#0077b8` / `#004770` the filled-control steps. The accent is deliberately *not* mode-invariant: the bright step reads 6.03:1 on the dark background but only 2.71:1 on the light one, so each theme uses the step that is legible there. Used for interactive links, breadcrumb highlights, active progress bars, `:focus-visible` focus rings, the brand wordmark, and the token heatmap's ramp. Measured ratios are in `docs/design.md` §2.
+- **Pressed Blue** (`#005d8f` dark / `#00344f` light): Used for button active/down states.
 
 ### Neutral
 - **Console Background (`--bg`)** (`#201d1d`): Base canvas, table row backgrounds, input wells, and overall page substrate.
@@ -257,7 +257,7 @@ The geometric form language is compact, rectangular, and tightly controlled:
 ### Buttons
 - **Shape**: 4px radius (`--radius-sm`).
 - **Sizes**: Standard 32px height (padding 0 15px); Small 28px height (antd `controlHeightSM`); Square 32×32px for row-level action icon buttons.
-- **Primary**: Deep accent fill (`#0056b3`), white text, no shadow. Hover shifts to `#004085` with zero transition lag.
+- **Primary**: Deep accent fill (`#0077b8` dark, `#004770` light), white text, no shadow. Hover shifts one step deeper (`#005d8f` dark, `#00344f` light) with zero transition lag.
 - **Secondary / Default**: Surface fill (`#302c2c`), 1px border (`#464343`), chalk white text.
 - **Ghost**: Transparent background, borderless, text color `#fdfcfc`, hover reveals `#302c2c`.
 
@@ -269,7 +269,7 @@ The geometric form language is compact, rectangular, and tightly controlled:
 
 ### Inputs & Selects
 - **Style**: Dark background (`#201d1d`), 1px border (`#464343`), 4px radius, 32px height (enhanced to 38–40px on dense configuration workbenches).
-- **Focus**: Distinct cyan outline (`0 0 0 2px #007aff`), zero glow blur.
+- **Focus**: Distinct cyan outline (`0 0 0 2px` of the theme's `--accent`), zero glow blur.
 - **Numeric Fields**: Left-aligned with 34px right padding to ensure stepper controls never overlap number values.
 
 ### Navigation Items
@@ -282,6 +282,7 @@ The geometric form language is compact, rectangular, and tightly controlled:
 - **Status Pip**: 7×7px square, 2px radius, paired with explicit status text (e.g. `[●] Running`). Green = healthy, Amber = degraded/warning, Red = error, Gray = offline. A pip reports whether a window needs attention, never how far a number sits from its ideal: success rate stays gray for ≤ 5% failures, amber above that, red above 20%, and a window under 20 requests with under 3 failures carries no verdict at all. Only a verdict gets a pip: the request console's Success / Failed filter segments carry one each, while All carries none.
 - **Latency**: never tinted by an absolute threshold. Agent requests legitimately run for minutes, so a time-based amber rule would flag healthy traffic; the detail drawer compares TTFT against total duration instead.
 - **Cache-Rate Badge**: Pill-shaped badge featuring continuous OKLCH gradient tint fill with ≥ 4.5:1 text contrast. Displays values up to `99.9%` with one decimal place. The scale is never red: a cache miss is the shape of a novel prompt, not a failed execution.
+- **Token Activity Heatmap**: The dashboard's token grid is the one sequential *quantity* encoding, so it uses a **continuous** ramp of the theme accent rather than four fixed steps or any status hue — "lots of tokens" and "credential healthy" must not be the same colour, and a stepped scale paints every day between two steps identically. Brightness is the square root of the day's volume against the window's busiest day, which keeps day-to-day differences visible across the several orders of magnitude a window spans. The shape is a contribution-graph field (one row per weekday, one column per week, a year of weeks) that fills its panel via fractional CSS tracks, so it never scrolls horizontally at desktop widths and never leaves a gutter. The current week is a complete column: the days after today are drawn as normal unrecorded cells, because a day that has not happened is a day nothing is stored for. Every cell is interactive and lifts on hover with a compositor-only `transform` scale; clicking one opens its tooltip, so a day with nothing recorded says so rather than refusing the question. The day's drill-down is a link inside the tooltip rather than the cell itself. The two zero states (recorded-but-empty, and nothing-stored) are solid fills ordered against the card at roughly 1.06:1 and 1.16:1, never outlines — an outline over a year-long grid whose cells mostly predate the retention horizon renders as a wire mesh. The ramp is relative to the window rather than absolute, so the same shade means different volumes on two installs - which is why every cell carries its date and counts in text, and the shade is never the only encoding. DOM, not a chart mark.
 
 ### Floating Action Bar (Dirty Bar)
 - **Position**: Floating fixed bar anchored 24px above the viewport bottom, centered dynamically within the content column.

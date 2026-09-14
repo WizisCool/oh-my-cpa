@@ -89,6 +89,7 @@ func (h *Handler) Router() http.Handler {
 				v1.Get("/management/overview", h.managementOverview)
 				v1.Get("/management/dashboard", h.dashboard)
 				v1.Get("/management/dashboard/tail", h.dashboardTail)
+				v1.Get("/management/dashboard/token-heatmap", h.dashboardTokenHeatmap)
 				v1.Get("/management/logs", h.managementLogs)
 				v1.Delete("/management/logs", h.clearManagementLogs)
 				v1.Get("/management/logs/status", h.managementLogsStatus)

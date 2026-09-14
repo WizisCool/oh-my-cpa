@@ -148,6 +148,51 @@ palette in code; never hardcode colors in components.
   metadata. CPA has no field for it, so it is never written into CPA's config;
   only an absolute http/https URL is accepted, because the provider list renders
   the provider's name as a link to it.
+- **Token Activity Grid (Heatmap)**: The dashboard's day-by-day token field below the six
+  KPI tiles — a contribution-graph shape of seven weekday rows (Monday first) by one column
+  per week, fifty-three whole weeks ending today. Its span is fixed rather than derived from
+  the Range Preset: it answers "how has this year gone" where the tiles answer "how is this
+  window going". It carries no caption and no readout saying so - the panel's title names it and
+  the cells' tooltips carry the numbers - which is why the two ranges are told apart by the shape
+  of the field rather than by a sentence. Seven rows are what make a weekly rhythm a row and a
+  trend a direction, which is why the grid is not a single-row timeline. Each day is the **viewer's** local calendar day,
+  resolved server-side from the IANA zone the browser sends; a day is 23, 24 or 25 hours as
+  the zone requires, and the exact interval a cell aggregated is the same interval its click
+  opens in the request list.
+- **Heatmap Cell State**: One of `measured` (carried traffic), `empty` (stored, no traffic), or
+  `unrecorded` (nothing stored for that day — whether the records were pruned or the day is later
+  this week than today). There is no separate `pending` state: the panel distinguishes "there is
+  stored data" from "there is not", and a reader comparing days cannot act on the difference between
+  a day that has not happened and one whose records were pruned. The days after today in the final
+  column are drawn as ordinary unrecorded cells so the current week stays a complete column.
+  `empty` and `unrecorded` are **solid fills ordered against the card**, not outlines: the window is
+  a rolling year and the default retention horizon is 400 days, so the two agree — but the window
+  still ends on today, and outlining the zero cells turned the field into a wire mesh regardless of
+  how many there were. Their order carries the meaning — unrecorded is closest to the card (no
+  information), empty is a step further (a measured zero), and only a measured day is clearly louder.
+  **Every cell is interactive**, including one with nothing stored: its tooltip says so rather than
+  refusing the question, and omits the two counts instead of printing zeros that would assert a
+  measurement the panel cannot make. That is also why the panel carries no caption and no readout —
+  the counts live in the cells' own tooltips and accessible names.
+- **Heatmap Tooltip**: The panel's only readout, opened by **clicking** any cell — not by
+  hovering, because on a field this dense a hover tooltip fires continuously and competes with
+  the hover ring. It shows the date, the request count and the token volume, and carries the
+  drill-down to that day's request records as an anchor inside it, opening the exact interval the
+  cell aggregated. The cell itself never navigates: the day's list is a place, so it is a link that
+  can be opened in a new tab and copied, and a stray click cannot throw the operator out of the
+  dashboard.
+- **Recorded Cell**: A cell whose day has a stored record at or after the first stored request. A
+  day before that marker is drawn *unrecorded* — a solid fill one step quieter than an empty day, not
+  a hairline — and the copy says "nothing stored" rather than claiming the gateway was idle.
+- **Ramp Position**: A cell's place on the Token Activity Grid's **continuous** colour ramp, from the
+  cell's own empty fill (no traffic) to the accent (the window's busiest day). A continuous scale
+  rather than fixed steps, because a stepped one paints every day between two steps identically —
+  which is the day-to-day difference the panel exists to show. The mapping is the square root of the
+  day's volume against the window's busiest day: volume spans several orders of magnitude in one
+  window, so a linear ramp collapses the middle of the range into one invisible shade and a logarithm
+  over-amplifies the bottom. The scale is relative to the window, so the same shape of traffic paints
+  the same field whatever the absolute volume.
+
 - **Bucket**: One point of the sparkline. Width is chosen per window so the
   series stays near 48 points on a human step. The newest bucket is always
   partial, and the grid is aligned to bucket multiples so a sliding window does

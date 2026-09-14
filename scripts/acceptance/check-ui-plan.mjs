@@ -35,6 +35,21 @@ const SHELL_PATHS = [
 ];
 
 /**
+ * Everything the dashboard page renders, which is what a change to it can move.
+ *
+ * Named once rather than repeated per rule: the page hosts all of these panels, and a
+ * rule that listed only some of them would let a change pass with the panel it broke
+ * unverified.
+ */
+const DASHBOARD_SCENARIOS = [
+  'dashboard-charts',
+  'dashboard-heatmap',
+  'dashboard-heatmap-mobile',
+  'dashboard-heatmap-pruned',
+  'dashboard-heatmap-error',
+];
+
+/**
  * A source path maps to the scenarios it can affect.
  *
  * The order matters: the first entry whose prefix matches wins, so a more specific
@@ -77,18 +92,26 @@ const SCENARIO_PATHS = [
     prefix: 'web/src/pages/ProvidersPage',
     scenarios: ['icon-picker-stacking'],
   },
-  // The dashboard and the sparkline geometry it draws.
+  // The dashboard: the sparkline marks its tiles draw and the daily-token calendar
+  // beneath them. Both live on this page, and the page is what the scenarios load,
+  // so a page change can move either one.
   {
     prefix: 'web/src/pages/DashboardPage',
-    scenarios: ['dashboard-charts'],
+    scenarios: DASHBOARD_SCENARIOS,
   },
   {
     prefix: 'web/src/charts/',
     scenarios: ['dashboard-charts'],
   },
+  // The dashboard's own panels. Both scenarios read the page, so a panel change
+  // reaches both: the heatmap is a sibling of the tiles, not a child of a chart.
   {
     prefix: 'web/src/components/dashboard/',
-    scenarios: ['dashboard-charts'],
+    scenarios: DASHBOARD_SCENARIOS,
+  },
+  {
+    prefix: 'web/src/types/tokenHeatmap',
+    scenarios: ['dashboard-heatmap', 'dashboard-heatmap-mobile', 'dashboard-heatmap-pruned', 'dashboard-heatmap-error'],
   },
 ];
 

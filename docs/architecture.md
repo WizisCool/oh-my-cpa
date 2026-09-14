@@ -259,7 +259,8 @@ CPA queue / subscription
   → usage_events         typed row + request-time price snapshot (one tx)
   → ingest.Maintenance   incremental rollup into hourly/daily stats,
                          retention purge
-  → /management/dashboard, /management/dashboard/tail, /usage/events
+  → /management/dashboard, /management/dashboard/tail,
+    /management/dashboard/token-heatmap, /usage/events
 ```
 
 The pipeline exists because CPA's queue is destructive and short-lived: the only
@@ -340,6 +341,45 @@ shows one spike per hour and nothing where the traffic actually was. `QueryUsage
 therefore reads the detail rows whenever `bucketMS < grainMS`, and keeps the rollup
 for hourly and coarser grids, where slicing is honest and the rollup earns its keep.
 The detail path is bounded by the retention window, so it cannot grow without limit.
+
+### Why the daily token grid folds its own days
+
+The dashboard's windowed read and the year-long token grid look like the same question at
+two zoom levels, and they are not - which is why
+`/management/dashboard/token-heatmap` is a separate endpoint with its own query.
+
+Three properties of the windowed read make it the wrong tool for a calendar. Its window
+slides, so the same series is a different span every time it is asked. Its grid is a
+*bucket* grid (`dashboardBucketWidth`), chosen so a sparkline stays near 48 points, and
+`QueryUsageAnalytics` reads its hourly or daily rollup whenever the requested bucket is
+*at least as coarse as* that rollup's grain, and falls back to the detail rows when the grid
+is finer - a rollup row cannot be split across a finer grid, so re-aligning one would report
+the whole hour in its first bucket and the rest of it as zero. And the rollup is keyed on a UTC bucket start.
+
+A day is not a bucket. Grouping hourly rows by an offset-shifted key cannot split a UTC
+hour that straddles a local midnight at a fractional offset: India is `+05:30`, so local
+midnight falls at 18:30 UTC - inside the 18:00 row. The same arithmetic is wrong for
+every day on the far side of a daylight-saving transition, not merely the two transition
+days, because a single offset cannot describe a span that crosses one.
+
+`Repository.QueryDailyTokenTotals` therefore takes the days as exact instant ranges,
+built by the handler from the viewer's IANA zone with `time.Date`/`AddDate`, and reads the
+detail table only. It does not reuse the rollup-plus-tail split either: that split is
+correct for a bucket grid because the two halves partition by *time* against the same
+grid, but a day boundary and an hour checkpoint do not line up, and CPA event times can
+arrive out of order - a request timestamped inside an already-folded hour lands on the
+detail side of the boundary while its own hour is already in the rollup, so a hybrid read
+counts it twice. One source has no boundary to get wrong.
+
+The cost is a scan of the detail table over the span, aggregated inside SQLite so at most one row
+per day crosses into Go. The window is a rolling year of weeks, and the default retention horizon
+(`OMCPA_USAGE_RETENTION_DAYS`) is 400 days so the whole window stays readable — the two are one
+decision, since a shorter horizon would show the window's own beginning as carrying nothing. A day
+with no stored record (pruned, or later this week than today) is reported as carrying nothing and
+drawn as *unrecorded*, rather than as a measured zero that would claim the gateway was idle.
+The panel calls it on a five-minute interval and on an explicit page refresh, not on the tail
+poll's cadence. The final day's window stops at the read instant rather than at the following
+midnight, so a record timestamped in the future cannot inflate today's total.
 
 ### Why the request list is ordered by `timestamp_ms`
 

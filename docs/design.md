@@ -40,9 +40,9 @@ Mono as fallbacks), 4px radii, dense but breathable spacing.
 | `--meta` | `#6e6e73` | `colorTextQuaternary` | Group labels, footnotes |
 | `--border` | `#464343` | `colorBorder` | Primary 1px borders |
 | `--border-soft` | `#302c2c` | `colorBorderSecondary`, `colorSplit` | Row dividers, inner borders |
-| `--accent` | `#007aff` | `colorInfo`, `colorLink` | Links, info, active bars, selection |
-| `--accent-hover` | `#0056b3` | `colorPrimary` | Filled primary buttons |
-| `--accent-active` | `#004085` | `colorPrimaryHover/Active` | Pressed state |
+| `--accent` | `#00a2fb` | `colorInfo`, `colorLink` | Links, info, active bars, selection |
+| `--accent-hover` | `#0077b8` | `colorPrimary` | Filled primary buttons |
+| `--accent-active` | `#005d8f` | `colorPrimaryHover/Active` | Pressed state |
 | `--success` | `#30d158` | `colorSuccess` | Enabled / healthy / ok pip |
 | `--warn` | `#ff9f0a` | `colorWarning` | Degraded / quota warning |
 | `--danger` | `#ff3b30` | `colorError` | Failed / disabled / delete |
@@ -60,7 +60,27 @@ Mono as fallbacks), 4px radii, dense but breathable spacing.
 | `--border` | `rgba(15, 0, 0, 0.12)` |
 | `--border-soft` | `rgba(15, 0, 0, 0.07)` |
 
-Accent/success/warn/danger are identical in both modes.
+### Accent ladder
+
+The accent is **not** mode-invariant. It is one hue (201) at three lightness steps, and each theme
+uses a different assignment because the same blue cannot be both legible as text on a light page and
+legible as text on a dark one:
+
+| Step | Dark | Light | Measured use |
+| --- | --- | --- | --- |
+| `--accent` | `#00a2fb` | `#005d8f` | link text: **6.03:1** on the dark background, **6.92:1** on the light one |
+| `--accent-hover` | `#0077b8` | `#004770` | white label on a filled control: **4.85:1** and **9.83:1** |
+| `--accent-active` | `#005d8f` | `#00344f` | pressed state |
+
+The dark theme's link step is the light theme's *filled-control* step, which is the same value doing
+two jobs in two themes. That is deliberate: it is the only step of this hue that clears 4.5:1 as text
+on a light page, and white-on-it also clears it. The bright `#00a2fb` reads **2.71:1** on a light
+page and **2.78:1** under white text, so it can only ever be the dark theme's text colour.
+
+Brand artwork follows the same tokens: the wordmark's accent marks and its letterforms are drawn from
+`palette[mode]`, so a change here moves the logo with it — see `web/src/assets/brand/markup.ts`.
+
+Success/warn/danger are identical in both modes.
 
 ### Status pip semantics
 
@@ -186,6 +206,130 @@ Fixing it means persisting the breakdown (or per-convention token columns in the
 rollup) before any arithmetic change. Until then the ratio is a bounded estimate
 for cache-writing providers, and the request list is exact only for providers
 whose input already includes the cached prefix.
+
+### Token activity heatmap
+
+The dashboard's token grid is the app's only sequential *quantity* encoding, and it is deliberately
+not built from the semantic status hues.
+
+**Shape.** A contribution-graph field: one row per weekday (Monday first), one column per week,
+fifty-three whole weeks ending on the week containing today. Seven weekday rows are the whole point —
+they make a weekly rhythm a *row* and a trend a *direction*, which a single-row strip cannot show.
+The span and the shape are one decision: at seven rows a quarter's worth of days would be thirteen
+columns, which reads as a small block rather than a field.
+
+**The ramp is continuous, not stepped.** One hue at continuously varying lightness, from the cell's
+own empty fill up to the accent. It replaced four fixed shades, which painted every day between two
+of them identically — the day-to-day difference the panel exists to show was quantised away. The
+mapping is the **square root** of the day's volume against the window's own busiest day
+(`web/src/theme/heatmapRamp.ts`): token volume spans several orders of magnitude in one window, so a
+linear ramp collapses the whole middle of the range into one invisible shade, while a logarithm
+over-amplifies the bottom until a day with almost no traffic looks mid-scale. The square root keeps
+day-to-day differences visible at the quiet end without flattening the busy end.
+
+**The window rolls.** A trailing year, not a calendar one. A calendar grid spends every January
+almost entirely empty and says nothing about last December, which is exactly the comparison a reader
+wants at that moment; a rolling window always holds a year of history and always ends on today. It
+is also GitHub's shape. The consequence is that there are no days still to come in the window,
+except the tail of the current week — and those carry no traffic, so they are drawn exactly like
+any other day with no stored record. They are still clickable: their tooltip states that nothing
+is stored, which is the same answer a pruned day gives, and only the drill-down link is absent
+because there would be nothing to open. The panel distinguishes "there is stored
+data" from "there is not"; it does not ask the reader to hold "hasn't happened yet" apart from
+"records were pruned", because those are the same fact to anyone comparing days.
+
+**It fills its panel.** The tracks are `repeat(columns, minmax(--heatmap-min-cell, 1fr))`, so a year
+of weeks divides whatever width the card has and reaches both edges. That is why the sizing is CSS
+rather than JavaScript: an integer cell size cannot divide an arbitrary width evenly, and the
+remainder is a visible gutter at the field's edge — which is what made the fixed-size version look
+like an unfinished widget. There is no horizontal scrollbar at any desktop width; below the cell
+floor the field swipes instead (see rule 9).
+
+**The current week is a complete column.** Its later days have not happened, so nothing is stored for
+them — the same fact as a day whose records were pruned, and they are drawn and treated identically
+rather than given a state of their own. Leaving them blank was the alternative and it reads as a
+rendering hole: the shape promises a full week.
+
+| Token | Dark | Light | Role |
+| --- | --- | --- | --- |
+| `--heatmap-quiet` | `#3a3636` | `#e2dede` | the ramp's floor: a cell with no traffic |
+| `--heatmap-busy` | `#00a2fb` | `#005d8f` | the ramp's ceiling: the window's busiest day |
+| `--heatmap-zero-recorded` | `#3a3636` | `#e2dede` | recorded, no traffic |
+| `--heatmap-zero-unrecorded` | `#343030` | `#eae6e6` | nothing stored for that day |
+
+A measured cell mixes these two stops in **OKLCH** at a weight its own `--heatmap-quiet-share`
+carries, so the whole ramp is one declaration and the endpoint it reaches is the accent token above.
+`--heatmap-quiet` and `--heatmap-zero-recorded` are the same value on purpose: a measured day at the
+bottom of the scale and a recorded day with no traffic have to be adjacent or the ramp does not start
+where the field's floor is.
+
+The two zero states are a **solid fill, never an outline**, and they form an ordered scale
+against the card rather than against the page. Both are required properties, not styling
+preferences:
+
+- **Solid, because a grid is mostly zeros.** A quiet deployment has far more empty cells than
+  measured ones, and drawn as 1px outlines they turned the field into a wire mesh. A stroke also
+  draws attention to the *absence* of data, which is the loudest thing in a panel whose subject is
+  the handful of coloured cells. GitHub's empty state is a wall of quiet blocks, and that is what
+  this is.
+- **Ordered against the card.** The panel sits at `--surface`, and both steps are a shade lighter
+  than it on dark (darker on light), so the 4px gaps read as the card showing through. The order
+  carries the meaning: unrecorded (no information) is closest to the card at ~1.06:1, empty (a
+  measurement of zero) at ~1.16:1, and a measured day is the only thing clearly louder at ~1.23:1.
+  Anchoring these to `--bg` was the defect: `--bg` is a step *up* from the card on dark, so
+  "empty" rendered brighter than the panel and the ramp's floor rendered quieter than empty.
+
+Rules:
+
+1. **The accent hue, because the reading a status colour would imply is wrong.** The ramp continues
+   the interface's own accent rather than introducing a second colour family, and it is deliberately
+   *not* a semantic one: "a lot of tokens" and "this credential is healthy" must not be the same
+   colour, or the grid implies a verdict it has no basis for. The probe asserts no measured cell's
+   fill equals `--success`, `--warn` or `--danger`.
+2. **Continuous, not stepped.** Four fixed shades painted every day between two of them identically,
+   which quantised away the day-to-day difference the panel exists to show. The ramp is mixed in
+   OKLCH rather than by interpolating in sRGB, where the midpoint of a light and a dark blue dips
+   through a desaturated grey.
+3. **Brightness is the square root of the day's share of the window's busiest day**, not the share
+   itself. See the ramp note above for why a linear mapping collapses the middle of the range and a
+   logarithmic one over-amplifies the bottom.
+4. **The ramp is relative to the window, not absolute.** A self-hosted deployment's daily volume
+   spans several orders of magnitude, so a fixed ladder would paint every cell of a busy install at
+   the ceiling and every quiet one at the floor. The cost is that the same shade means different
+   absolute volumes on two installs, which is why every cell states its counts in text.
+5. **Colour is redundant, and there is no legend.** Every cell carries its date and both counts in
+   its accessible name and in its tooltip, so the shade is never the only encoding — and a key exists
+   to explain what a *stepped* scale's bands mean, which a continuous ramp does not have. The shade is
+   relative to the window, so a swatch ladder would describe the field's own range rather than any
+   fixed quantity. The numbers are one click away, which is where a reader who wants them goes.
+6. **The tooltip opens on click, not hover.** On a field this dense a hover tooltip fires
+   continuously as the pointer crosses it and competes with the hover ring for the same gesture.
+   A click is deliberate, and it leaves the tooltip open to be read and followed. The drill-down is
+   **a link inside the tooltip**, not the cell itself: the day's request list is a place, so it can
+   be opened in a new tab and copied, and a stray click on a square cannot throw the operator out
+   of the dashboard.
+7. **Every cell is interactive.** Clicking one opens its tooltip, and a day with nothing recorded
+   says so — "no requests on this date" is the answer to the question a reader is asking, not a
+   reason to refuse it. The tooltip omits the two counts in that case rather than printing zeros:
+   nothing stored is not the same claim as a measured zero, and `Requests 0 / Tokens 0` would assert
+   a measurement the panel cannot make. A day with no traffic also has no drill-down link, because
+   there would be nothing to open.
+8. **Hover lifts the cell.** A `transform: scale()` — compositor-only, per §7 rule 1 — with the
+   ring, and `z-index` so the enlarged square is not clipped by its neighbours. Deliberately no
+   colour transition: §7 rule 7 forbids one, and a fade behind a fast sweep reads as lag. The
+   `prefers-reduced-motion` override drops the movement and keeps the ring and the cursor.
+9. **Every line of the tooltip clears WCAG AA on the popper's own surface** (measured, and
+   asserted from painted pixels in both themes). Two things this pins down, because both shipped
+   broken: the tooltip's fill is the palette surface in *both* themes - antd's `colorBgSpotlight`
+   was set to `--fg` for light, which put near-black text on a near-black box at a contrast ratio
+   of 1.0 - and the link uses its own step (`--heatmap-tip-link`) rather than either accent,
+   because the bright accent reads 3.4:1 on the dark surface and the deeper hover step reads
+   1.96:1 there while being the only legible one on the light surface.
+10. **The field swipes only when it must.** Below the cell floor (a phone) the container scrolls with
+   the scrollbar hidden — a bar inside a dashboard card is noise and touch shows none — and it opens
+   on today's column. Clipping instead would hide two thirds of the year silently, which is worse
+   than either alternative. The probe asserts no scrollbar is rendered at desktop widths.
+11. **The grid is DOM, not a chart mark** — see `docs/adr/0005-token-heatmap-as-a-dom-grid.md`.
 
 ### Caller-key display mask
 

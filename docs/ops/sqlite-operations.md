@@ -183,7 +183,7 @@ When upgrading Oh My CPA, the application automatically inspects and applies une
 ## 6. Data Retention & Periodic Maintenance
 
 1. **Historical Event Retention**:
-   - Configured via `OMCPA_USAGE_RETENTION_DAYS` (default 90 days, `0` for indefinite retention) to control raw usage payloads and event details;
+   - Configured via `OMCPA_USAGE_RETENTION_DAYS` (default 400 days, `0` for indefinite retention) to control raw usage payloads and event details. The default follows the dashboard's token heatmap, which covers a rolling year: a shorter horizon would leave the window's own beginning unreadable, and 400 rather than 365 leaves slack so neither a leap year nor an offset boundary can push the oldest day out;
    - Pruning runs once per hour inside `ingest.Maintenance`, while rollups advance every `OMCPA_USAGE_AGGREGATE_INTERVAL` (default 15 seconds);
    - Pruning boundaries are gated by aggregation checkpoints, guaranteeing that detailed records are never removed before rollups have processed them.
 2. **Space Reclamation & Compaction**:
