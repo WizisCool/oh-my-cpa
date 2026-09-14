@@ -74,8 +74,8 @@ when it is above zero and `meta` when it is not, because "0 failures" is not a
 success worth painting green.
 
 **Only a verdict gets a pip.** The request console's result filter segments
-(成功 / 失败) reuse the Result column's square bullet in its success/danger
-token, but the 全部 segment carries none: it is the absence of a verdict, and
+(Success / Failed) reuse the Result column's square bullet in its success/danger
+token, but the All segment carries none: it is the absence of a verdict, and
 both bullets side by side would read as a third, combined outcome. Same rule as
 the success-rate bands — the state of "everything" is not a state.
 
@@ -214,7 +214,7 @@ length, so the mask never reveals the secret's length.
 Font stack   "Sarasa Mono SC", "Sarasa UI SC", "Sarasa Term SC", "更纱黑体 SC",
              "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular,
              Menlo, Monaco, Consolas, "Liberation Mono", monospace
-Subset font  Build-time subsetted woff2 (< 100KB per weight, Regular & Bold)
+Subset font  Build-time subsetted woff2 (~105KB per weight, Regular & Bold)
              embedded in assets; local Sarasa Mono SC takes zero-latency priority.
 Base size    14px (antd token fontSize)
 Line height  1.5
@@ -233,12 +233,12 @@ Tabular      font-variant-numeric: tabular-nums on all numeric data
 
 **Hierarchy rules:**
 
-1. One page title per page — the dashboard title is the *verdict* (运行稳定。),
+1. One page title per page — the dashboard title is the *verdict* (e.g. `Healthy.`),
    other pages use the nav label. No duplicated subtitles restating it.
 2. No decorative subtitles. A subtitle exists only when it carries live data
-   (e.g. `Default CPA · 已连接`, `3 个认证条目`), never static marketing copy.
-   The same rule covers warning text: a state label (`CPA 未开启文件日志`) plus
-   an action (`重试`) is the whole message. Sentences explaining *why* the switch
+   (e.g. `Default CPA · Connected`, `3 auth files`), never static marketing copy.
+   The same rule covers warning text: a state label (`CPA file logging disabled`) plus
+   an action (`Retry`) is the whole message. Sentences explaining *why* the switch
    exists, or promising what another screen will do, are documentation pasted
    into the UI — an operator who needs them is looking at the wrong product.
 3. No stacked language pairs: a Chinese UI never shows English captions for the
@@ -266,7 +266,7 @@ Elevation: **zero shadows** on layout, card, drawer, modal, popover, dropdown.
 
 ```text
 ┌──────────┬──────────────────────────────────────────┐
-│ brand ›_ │ breadcrumb (分组 / 页面)   actions  中|EN │ 56px, border-bottom
+│ brand ›_ │ breadcrumb (Group / Page)  actions  ZH|EN│ 56px, border-bottom
 │──────────┼──────────────────────────────────────────┤
 │ nav      │                                          │
 │ (groups) │ page content        ← scrolls alone      │
@@ -279,90 +279,87 @@ Elevation: **zero shadows** on layout, card, drawer, modal, popover, dropdown.
 
 - `body { overflow: hidden }` — the shell is `100dvh`; sidebar and content
   scroll independently (`overscroll-behavior: contain`).
-- Nav groups: 运行 / 网关 / 观测 / 控制 (+ Oh My CPA). Group labels 10px
+- Nav groups: Operate / Gateway / Observe / Control. Group labels 10px
   uppercase `--meta`. Items: icon + label only, no subtitles. Selected item =
   2px `--fg` inset rule (`box-shadow: inset 2px 0 0 var(--fg)`) + `--fg` bold text,
   never a filled background block. Hover uses `--surface` for immediate feedback.
 - Sider foot shows live CPA connection + version in `--meta`.
 
-### OpenCode-inspired patterns (OpenCode 设计哲学吸收)
+### OpenCode-inspired patterns
 
-Oh My CPA 吸收了 OpenCode 控制台纯粹、高效、工程师优先的设计理念，同时保持 Oh My CPA 自有的暖墨色调、安全边界与技术架构：
+Oh My CPA draws from OpenCode's minimalist, high-density, engineer-first console philosophy while preserving Oh My CPA's warm charcoal palette, security boundaries, and technical architecture:
 
-1. **开放式行列表 (Open List Pattern)**
-   - 模型、凭据、配置项等列表优先采用无外层 Card 包装的开放式行列表。
-   - 依靠极细的底边分割线 (`border-bottom: 1px solid var(--border-soft)`) 分隔行。
-   - 结构清晰：左侧实体名与标识、中间技术元数据/Provider、右侧直接交互操作（如 Switch 开关、操作按钮）。
-2. **按任务分配界面密度 (Task-dependent Density)**
-   - 监控与高频数据（Dashboard、实时日志、资源整理）：高密度、紧凑、Tabular 等宽对齐。
-   - 配置与系统管理（Config、计费、系统设置）：留白更加舒展，采用 32–48px 分节间距与全宽 1px 分割线。
-3. **严格的卡片边界 (Honest Card Boundaries)**
-   - 卡片仅用于：核心 KPI、关键实体摘要、同类对象横向比较。
-   - 严禁将单个输入框或单个开关单独装入独立 Card 中制造“卡片拼贴”感。
-4. **同级对比面板 (Peer Comparison Panel)**
-   - 吸收多列横向对比卡片模式：外层整洁栅格 + 1px 细线边框 + 内部分隔线（上部主要对比值，下部次级关联源与底部品牌徽标）。
-5. **上下文引导文案 (Contextual Next Actions)**
-   - 允许一行简明、说明当前操作对象或下一步行为的引导句（如带下划线链接的 `了解更多.` / `联系我们`）。
-   - 依然禁止空洞的营销副标或长篇大论的文档说明。
-6. **顶部上下文槽位 (Top Context Slot)**
-   - 左侧保留 `›_` 品牌标识，未来支持多 CPA 实例时可复用类似工作区下拉的“实例上下文选择器”；
-   - 右侧承载真实会话状态、主题与中英切换。未接入真实能力前绝不伪造头像、余额或工作区假入口。
-7. **表单与配置工作台规范 (Form Workbench & Setting Group Panels)**
-   - **全宽顶栏与视觉平衡 (Full-width Toolbar & Viewport Anchoring)**：顶部操作栏（Toolbar）与 1px 底边线 100% 贯穿全屏，右侧操作区（搜索/刷新/保存）推至最右侧（与全局 Header 右侧操作严格垂直呼应），彻底消除顶栏在半路截断导致的“右侧空旷黑洞”；下方表单工作台则保持 216px 粘性分区导航 + 920px 阅读宽度 + 216px 右侧配重槽的三轨栅格（第三轨只负责居中配平，不放内容），形成“通栏置顶立格局，主体聚焦易输入”的专业层次。
-   - **模块化设置面板 (Setting Group Panels)**：严禁所有字段全部生硬平铺在一条无尽的横向流水账中，也不得每个字段单独套卡片。而是将相关配置收敛为 **Setting Group Panel**（具备统一的 1px 细线外框、`--surface` 底色与 4px 终端圆角），内部依据配置性质采用三种专业结构：
-     1. **Form Grid（表单网格）**：文本、数字、下拉框采用“标签与说明在上、控件在下”的局部工整网格；强相关短字段（如 Host 与 Port、重试次数与间隔）并列同行，短数字框限制为 120px，下拉框限制为 260px，输入焦点清晰聚焦；
-     2. **Settings List（策略开关行）**：特性开关与运行标志行采用“左侧标题说明 + 右侧 Switch”的卡片内行列表，最大行宽收敛在卡片容器内，右侧具有坚实的边框边界，彻底杜绝孤立悬空；
-     3. **Entity List（实体凭据列表）**：API Keys 列表保留独立的 32×32px 方形功能按键与 Tooltip，强化操作安全感与防误触；
-     4. **TLS 渐进折叠 (Progressive Disclosure Panel)**：组头承载启用开关，关闭时只呈现状态说明，启用后平滑展开证书路径与私钥路径网格，折叠时保留已有 YAML 数据并禁用不可见控件。
-   - **顶部紧凑粘性工具条 (Sticky Action Toolbar)**：页面标题、同步胶囊、模式切换（`可视化 / 源码`）与右侧操作区（搜索、刷新、保存）收敛为单行置顶工具栏，保存按钮固定于最右端，告别空置模式行与跨屏折返跑。
-   - **独立触控目标 (Target Ergonomics)**：高频行内操作采用独立方形按键（32×32px，1px 边框与微弱底色），提供充足点击热区与 Tooltip 反馈，而非易误触的裸图标。
-   - **表单控件规格**：复杂表单控件高度统一提升至 38px~40px / 14px 字号，强化输入舒适度与可读性；数字输入框采用左对齐并预留 34px 右侧内边距，彻底杜绝 AntD 步进加减按钮对数值的重叠与遮挡。
-   - **IDE 级源码编辑器 (Monaco YAML Source Editor)**：
-     - **离线与零 CDN 约束**：显式注入本地打包的 `monaco-editor` 核心与 `editor.worker`、`yaml.worker`，严禁通过 CDN 加载远程静态资源；禁止远程 Schema 请求（`enableSchemaRequest: false`）；
-     - **轻量化按需拆包**：通过 `React.lazy` 实现动态加载，不增加首页和可视化模式的首屏体积；通过 Vite 别名按需收敛，剥离无关语言（TypeScript/CSS/HTML 等 workers），仅保留核心 `editor.worker` (274 KB) 与 `yaml.worker` (1017 KB)；
-     - **终端扁平主题匹配**：针对暗色与浅色注册专属主题（`omc-dark`、`omc-light`），统一采用更纱黑体（Sarasa Mono SC）等宽字体栈与 1px 细线外框，消除 VS Code 默认蓝黑主题的跳脱感；
-     - **全功能 IDE 交互**：支持 YAML 语法高亮、括号匹配、缩进参考线、代码折叠、`Ctrl+F` 查找与替换、`Ctrl+S` 原生保存拦截、以及显式触发的 YAML 格式化与语法校验提示。
-   - **吸底浮动操作栏 (Floating Dirty Action Bar) 与确认语义**：
-     - **触发时机**：仅在存在未保存修改（`isDirty === true`）时浮现，平时完全隐藏；右上角操作栏同步呈现【放弃更改】按钮；
-     - **视口居中与非侵入**：依托主布局暴露的 `--app-sider-width` 动态居中于内容区，无论用户在“可视化”还是“源码”模式、滚动到页面任何深度，都能随时一键点击保存或放弃修改；外层采用 `pointer-events: none` 穿透，绝不遮挡下层页面交互；
-     - **纯粹黑客风质感**：严格遵守终端无大阴影、无入口编舞约束，采用 1px 细线边框、`--surface` 纯色底色与纯粹的琥珀色 dirty 提示点；
-     - **操作二次确认准则**：
-       - **保存操作（写操作）**：无论是右上角顶栏还是底部浮动栏，点击“保存配置/保存更改”均触发气泡二次确认（Popconfirm），快捷键（`Ctrl+S` / `Cmd+S`）同步触发确认模态框，确保关键系统配置不被意外触碰；
-       - **放弃更改（回退操作）**：右上角与底部浮动栏点击“放弃更改”均**无需二次确认**，一键直接无损回滚至服务端配置，Dirty 状态与浮动栏即刻干净退场；
-       - **状态保护**：源码存在语法错误或 Payload 规则未填完整时禁用保存并精准悬浮提示原因。
-   - **模块化 Payload 规则构建器 (Payload Rules Builder)**：
-     - **摆脱通用 TextArea 泥潭**：弃用低效的两行原始 JSON 文本框，依照 CPAMC 官方设计体系打造结构化折叠面板（默认规则、默认 Raw 规则、覆盖规则、覆盖 Raw 规则、过滤规则）；
-     - **双向无损 AST 映射**：直接挂接 YAML Document AST，模型、协议、类型化参数（字符串/数字/布尔/null/复杂JSON）、Raw 文本片段与过滤路径独立控件编辑；严格保留 Payload 节点之外的所有配置项、字段顺序与注释，编辑过的 Payload 子树按标准格式回写并保留未知字段（`_extra`）；
-     - **表单输入校验时机 (Pristine → Touched → Submitted)**：严禁在用户刚打开页面或点击“添加规则”时就大面积飘红报错；必填项初始保持纯净中性状态，只有在用户失焦离开字段（`onBlur`）或主动尝试提交保存时，才精准展示错误提示，输入有效后错误即刻实时自动消散；
-     - **高级匹配条件弹窗**：支持扩展配置来源协议（`from-protocol`）、请求头匹配（`headers`）、路径相等匹配（`match` 单键对象数组）、路径不相等匹配（`not-match`）与路径必须存在/不存在检查规则。
-   - **架构评估：为何不引入 @ant-design/pro-layout / pro-components？**：
-     - 需求中的浮动操作栏与列表表单在 ProComponents 中为 `FooterToolbar` 和 `ProFormList`，但它们绑定了庞大的 `rc-field-form` 和臃肿的大厂中后台设计范式；
-     - 引入将增加数兆体积，与“单一 Go 二进制内嵌零 CDN 离线运行”相悖，且其默认白色大阴影与我们追求的 1px 极细边框黑客风完全冲突；
-     - 自研纯原生组件无缝结合 YAML AST 状态流，体积精简 100%、响应灵敏且自由度极高。
+1. **Open List Pattern**
+   - Lists of models, credentials, configuration items, etc., favor open rows over nested outer Card wrappers.
+   - Rows are separated by subtle 1px hairline dividers (`border-bottom: 1px solid var(--border-soft)`).
+   - Clear structure: entity name and identifier on the left, technical metadata / provider in the middle, and direct interactive controls on the right (e.g. switch toggles, action buttons).
+2. **Task-Dependent Density**
+   - Monitoring and high-frequency telemetry (Dashboard, Live Logs, Request Records): High density, compact, tabular monospace alignment.
+   - Configuration and system operations (Config, Pricing, System Settings): More generous whitespace, 32–48px section spacing, and full-width 1px dividers.
+3. **Honest Card Boundaries**
+   - Cards are reserved for: core KPIs, key entity summaries, and peer comparisons.
+   - Never wrap a single isolated input or switch into an individual card box to avoid visual clutter.
+4. **Peer Comparison Panel**
+   - Multi-column horizontal comparison card pattern: clean outer grid + 1px hairline borders + inner dividers (primary comparison metrics on top, secondary sources and provider logos below).
+5. **Contextual Next Actions**
+   - Allow a single concise line describing the current target or guiding the next step (e.g. underlined links like `Learn more.` or `Documentation`).
+   - Avoid marketing boilerplate or lengthy guides inside UI cards.
+6. **Top Context Slot**
+   - The left side hosts the signature `›_` prompt logo, expandable to an instance context selector when multi-instance support lands;
+   - The right side houses live session status, theme toggling, and language switching. Never display fabricated avatars, dummy balances, or mock workspace selectors before real capabilities exist.
+7. **Form Workbench & Setting Group Panels**
+   - **Full-width Toolbar & Viewport Anchoring**: The top action toolbar and its 1px bottom border span 100% of the viewport, with right-side actions (search / refresh / save) pinned to the far right (vertically aligned with the global header actions) to eliminate awkward empty gaps. The form workbench below maintains a three-track grid: 216px sticky section navigation + 920px reading width + 216px balancing gutter (used solely to center content on wide viewports), establishing an anchored layout that keeps forms focused and legible.
+   - **Setting Group Panels**: Related settings converge into **Setting Group Panels** (uniform 1px hairline border, `--surface` background, and 4px terminal radius) rather than an endless flat list of inputs or fragmented cards. Three specialized structures are used:
+     1. **Form Grid**: Labels and descriptions on top, controls below; related short fields (such as Host and Port, retry counts and delays) sit side by side; short number inputs are bounded to 120px and selects to 260px;
+     2. **Settings List**: Toggles and flags use in-card row lists with "title and description on left + Switch on right", bounded by the panel container;
+     3. **Entity List**: Proxy client API keys use dedicated 32×32px square buttons with tooltips for deliberate, safe interaction;
+     4. **Progressive Disclosure Panel**: TLS sections host an enable switch in the group header; when disabled, only explanatory text is shown; when enabled, certificate and private key path fields expand smoothly, while preserving YAML data and disabling hidden controls when collapsed.
+   - **Sticky Action Toolbar**: Title, sync pill, mode switch (`Visual / Source`), and actions (search, refresh, save) converge into a single sticky bar. The Save button stays anchored to the far right.
+   - **Target Ergonomics**: High-frequency inline actions use discrete 32×32px square buttons (1px border and subtle background), providing ample click targets and tooltip feedback rather than bare icons.
+   - **Form Control Sizing**: Controls are sized to 38–40px height with 14px font size for comfortable editing; numeric inputs are left-aligned with 34px right padding to prevent steppers from obscuring values.
+   - **Monaco YAML Source Editor**:
+     - **Offline & Zero-CDN Constraint**: Injects locally bundled `monaco-editor` core with `editor.worker` and `yaml.worker`; never loads assets via CDN; disables remote schema requests (`enableSchemaRequest: false`);
+     - **On-demand Lazy Loading**: Dynamic import via `React.lazy` prevents bloat on initial page loads; Vite aliases prune unused language workers, bundling only `editor.worker` (274 KB) and `yaml.worker` (1017 KB);
+     - **Terminal-Flat Theme Integration**: Dedicated `omc-dark` and `omc-light` themes match the Sarasa Mono SC font stack and 1px hairline borders, eliminating the jarring contrast of VS Code default themes;
+     - **Full IDE Capabilities**: YAML syntax highlighting, bracket matching, indentation guides, folding, `Ctrl+F` search/replace, native `Ctrl+S` interception, and explicit format/validation hints.
+   - **Floating Dirty Action Bar & Confirmation Semantics**:
+     - **Trigger**: Appears only when unsaved edits exist (`isDirty === true`), fully hidden otherwise; the top toolbar concurrently shows a Discard button;
+     - **Viewport Centered & Non-intrusive**: Centered dynamically within the content column based on `--app-sider-width`; outer container uses `pointer-events: none` to avoid blocking lower page interactions;
+     - **Terminal-Flat Tone**: 1px border, solid `--surface` background, and amber dirty indicator pip;
+     - **Confirmation Rules**: Save actions trigger a Popconfirm (and `Ctrl+S`/`Cmd+S` triggers a confirmation modal); Discard actions revert immediately without confirmation, cleanly dismissing the dirty bar; Save is disabled with tooltip explanations when YAML has syntax errors or required fields are incomplete.
+   - **Modular Payload Rules Builder**:
+     - **Structured Collapsible Panels**: Replaces generic raw textareas with structured panels (Default rules, Default Raw rules, Override rules, Override Raw rules, Filter rules);
+     - **Bi-directional Lossless AST Mapping**: Directly manipulates the YAML Document AST; models, protocols, typed parameters, raw fragments, and filter paths use dedicated controls; preserves non-payload configurations, ordering, and comments, round-tripping unknown fields (`_extra`);
+     - **Validation Timing (Pristine → Touched → Submitted)**: Avoids premature errors on initial open or rule addition; required fields remain neutral until blur (`onBlur`) or submit; errors clear immediately upon valid input;
+     - **Advanced Match Modal**: Supports protocol filtering (`from-protocol`), header matching (`headers`), path equality matching (`match`), path inequality matching (`not-match`), and path existence checks.
+   - **Architectural Rationale: Why Avoid @ant-design/pro-components**:
+     - ProComponents (`FooterToolbar`, `ProFormList`) bundle massive dependencies (`rc-field-form`) and heavy enterprise patterns;
+     - Adding them would introduce megabytes of bundle weight, conflicting with the single-binary zero-CDN offline mandate and introducing incompatible drop shadows;
+     - Dedicated native components integrate seamlessly with the YAML AST state stream, resulting in minimal bundle size, instant responsiveness, and high customization.
 
 ### Time range control
 
-One button names the window (`近 1 小时`, or `08-11 – 至今`); the rest lives
-in its popover. **最近** lists the quick windows and nothing else — no secondary
-column repeating the span each one resolves to. **自定义** is antd's own range
+One button names the window (`Last 1 hour`, or `08-11 – open-ended`); the rest lives
+in its popover. **Presets** lists the quick windows and nothing else — no secondary
+column repeating the span each one resolves to. **Custom** is antd's own range
 picker: its panel, its two-month calendar, nothing wrapped around it. Wrapping a
 date picker in a draft state and a second Apply control means two opinions about
 when a date is "chosen", and users feel the disagreement.
 
 The picker stays day-granular on purpose. `showTime` collapses antd's range panel
 to one calendar plus time columns — the least legible thing in the component —
-and it keeps 确定 disabled until the end field has a value, which makes an empty
+and it keeps OK disabled until the end field has a value, which makes an empty
 end impossible. Without it, `allowEmpty` works the way the antd docs advertise:
-**leave the end empty and the range runs 至今**. A picked end means *through*
+**leave the end empty and the range runs open-ended**. A picked end means *through*
 that day, so `08-09 → 08-21` really includes the 21st.
 
 Three kinds of window, and only the first two move:
 
 | Chosen | Behaviour |
 | --- | --- |
-| 实时 / 最近 N (preset) | Sliding: re-resolved against `now` on every poll, so the newest bucket keeps appearing. |
-| 自定义, end left empty | Growing (至今): fixed start, end tracks `now`. Polled like a preset. |
-| 自定义, closed range | Frozen: shown exactly as picked, never polled. |
+| Preset (Last N) | Sliding: re-resolved against `now` on every poll, so the newest bucket keeps appearing. |
+| Custom, end left empty | Growing (open-ended): fixed start, end tracks `now`. Polled like a preset. |
+| Custom, closed range | Frozen: shown exactly as picked, never polled. |
 
 The choice is stored on the server, not in the browser: a reload, a service
 restart and a container rebuild must all bring back the window the operator was
@@ -417,7 +414,7 @@ No bounces, no scale-ins. Content appears; it does not "fly".
 ### Motion is restraint, not decoration
 
 The interface is deliberately raw and terminal-like. Motion exists only to make
-state changes feel continuous and **hand-following** (跟手) — never to impress.
+state changes feel continuous and **hand-following** (responsive direct manipulation) — never to impress.
 When fluidity and flourish compete, keep fluidity; when flourish and
 performance compete, drop the flourish.
 
@@ -474,7 +471,7 @@ the reader want to be carried along, or are they reading?
   immediately; the newest is always the first row.
 - **Scrolled away** the reader is reading. The rows on screen are held exactly as
   they are, the poll keeps running in the background, and a pill above the footer
-  reports `N 条新记录` — clicking it applies the backlog and returns to the top.
+  reports `N new records` — clicking it applies the backlog and returns to the top.
   Scrolling back to the top by hand resumes the follow, so the pill is never the
   only way out.
 
@@ -502,7 +499,7 @@ must not share a behaviour:
 
 | Intent | Scrolls | Behaviour |
 | --- | --- | --- |
-| Gesture | Back to top, applying the `N 条新记录` backlog | Animated, unless `prefers-reduced-motion` |
+| Gesture | Back to top, applying the `N new records` backlog | Animated, unless `prefers-reduced-motion` |
 | Correction | Pinning row one after the header collapses, resetting on page change | Instant |
 
 A correction is not a weaker gesture, it is a different job. Collapsing the header

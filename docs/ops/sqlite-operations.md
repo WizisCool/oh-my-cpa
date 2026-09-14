@@ -1,131 +1,194 @@
-# SQLite 运维与灾备恢复手册 (SQLite Operations & Runbook)
+# SQLite Operations & Runbook
 
-本文档面向 Oh My CPA 生产部署环境的系统管理员与运维人员，详细阐述单副本 SQLite 在 WAL 模式下的日常备份、演练恢复、加密密钥治理、迁移安全门禁以及容量维护策略。
-
----
-
-## 1. 核心架构约束与单副本限制
-
-1. **单实例排他写入原则**：
-   - Oh My CPA 的持久化层采用嵌入式 SQLite（启用 WAL 模式与 `busy_timeout=5000`）；
-   - 严禁通过 NFS、SMB/CIFS 等网络分布式文件系统共享 `/data` 目录以启动多个 Oh My CPA 副本；
-   - 在高可用编排（如 K8s 或 Docker Swarm）中，必须配置 `Replicas: 1` 与 `Recreate` 更新策略，确保同一时刻仅存在一个容器挂载并打开数据库。
-
-2. **WAL 模式三件套完整性**：
-   - 数据目录下包含：`oh-my-cpa.db`（主库）、`oh-my-cpa.db-wal`（写前日志）及 `oh-my-cpa.db-shm`（共享内存索引）；
-   - 严禁在服务运行状态下仅复制单个 `.db` 文件作为备份，否则必然导致数据不一致或损坏。
-
-3. **单连接设计**：
-   - 连接池固定为 `MaxOpenConns(1)` / `MaxIdleConns(1)`，并启用 `busy_timeout=5000`、`foreign_keys=1`、`journal_mode=WAL`、`synchronous=NORMAL`；
-   - 这是「单副本」在代码层的体现：并发写入靠应用内串行化，而不是靠 SQLite 的锁重试。
+This runbook is intended for system administrators and operators running Oh My CPA in production environments. It covers daily backups, disaster recovery drills, encryption key governance, migration safety gates, and storage maintenance for a single-replica SQLite database operating in WAL mode.
 
 ---
 
-## 2. 在线安全备份策略
+## 1. Core Architecture Constraints & Single-Replica Invariants
 
-### 2.1 推荐方案：在线 VACUUM INTO
+1. **Exclusive Single-Writer Principle**:
+   - Oh My CPA's persistence layer uses embedded SQLite with Write-Ahead Logging (`journal_mode=WAL`) and `busy_timeout=5000`;
+   - Sharing the `/data` directory across multiple Oh My CPA replicas via network filesystems (NFS, SMB/CIFS, GlusterFS) is strictly prohibited;
+   - In container orchestrators (such as Kubernetes or Docker Swarm/Compose), ensure that at most one replica is scheduled at any time (e.g. using `strategy: { type: Recreate }` in Kubernetes deployments).
 
-在服务持续处理读写请求期间，可通过 SQLite 官方安全的 `VACUUM INTO` 命令生成原子一致性快照：
+2. **WAL Triad Integrity**:
+   - The data directory contains three tightly-coupled files: `oh-my-cpa.db` (primary database), `oh-my-cpa.db-wal` (write-ahead log), and `oh-my-cpa.db-shm` (shared-memory index);
+   - Copying `oh-my-cpa.db` alone while the service is actively running can omit transactions that exist only in the `-wal` file, producing an incomplete or inconsistent snapshot.
+
+3. **Single-Connection Design**:
+   - The Go connection pool is fixed to `MaxOpenConns(1)` and `MaxIdleConns(1)`, with `busy_timeout=5000`, `foreign_keys=1`, `journal_mode=WAL`, and `synchronous=NORMAL`;
+   - Concurrent writes are serialized inside the application process rather than relying on SQLite lock retries.
+
+---
+
+## 2. Safe Online & Cold Backup Strategies
+
+### 2.1 Online Backups via SQLite `VACUUM INTO`
+
+While the service continues processing read and write requests, a consistent snapshot can be generated using SQLite's `VACUUM INTO` command. Note that the minimal production Alpine container (`FROM alpine:3.21`) does not include the `sqlite3` CLI; run this command on the host targeting the volume mount directory, or from an administrative sidecar container:
 
 ```bash
-# 进入运行容器或本地数据目录执行
-sqlite3 /data/oh-my-cpa.db "VACUUM INTO '/data/backups/oh-my-cpa-backup-$(date +%Y%m%d_%H%M%S).db';"
+# Executed on the host targeting the volume mount directory:
+BACKUP_DIR="/path/to/backups"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+mkdir -p "${BACKUP_DIR}" && chmod 700 "${BACKUP_DIR}"
+
+sqlite3 /path/to/data/oh-my-cpa.db "VACUUM INTO '${BACKUP_DIR}/oh-my-cpa-backup-${TIMESTAMP}.db';"
+chmod 600 "${BACKUP_DIR}/oh-my-cpa-backup-${TIMESTAMP}.db"
 ```
 
-该机制会完整汇聚主库与未提交 WAL 页面，输出一份独立、已完成 Checkpoint 且处于原子一致状态的全新单个 SQLite 数据库文件。
+**Semantics**: `VACUUM INTO` reads committed pages from the main database and WAL, producing a single, self-contained, transactionally consistent snapshot file once the operation finishes successfully. It does not include uncommitted transactions, nor does it checkpoint or truncate the active source `-wal` file.
 
-### 2.2 停机冷备份流程
+### 2.2 Cold Backup Procedure (Scheduled Maintenance)
 
-若需在停机窗口维护，按以下步骤安全归档：
+When performing scheduled maintenance during an offline window:
 
-1. 优雅停止 Oh My CPA 服务进程：
+1. Gracefully stop the Oh My CPA service container:
    ```bash
    docker compose -f deploy/compose.full.yml stop oh-my-cpa
    ```
-2. 等待进程彻底刷盘并退出（Go 服务在 `SIGTERM` 后停止 HTTP 服务并关闭最后一个数据库连接，由 SQLite 在最后连接关闭时完成 WAL checkpoint 并移除 `-wal`/`-shm`）；
-3. 将整个 `/data` 目录整体打包归档并计算 SHA-256 校验和：
+2. Wait for the process to exit completely. On `SIGTERM`, the Go process stops accepting HTTP traffic and closes the database connection; SQLite checkpoints pending WAL pages and cleans up `-wal` and `-shm` files upon closing the final handle.
+3. Archive the entire data directory to a destination outside the source data directory:
    ```bash
-   tar -czf "omc-data-$(date +%Y%m%d_%H%M%S).tar.gz" -C /data .
-   sha256sum "omc-data-$(date +%Y%m%d_%H%M%S).tar.gz" > checksum.sha256
+   BACKUP_DIR="/path/to/backups"
+   TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+   mkdir -p "${BACKUP_DIR}" && chmod 700 "${BACKUP_DIR}"
+
+   tar -czf "${BACKUP_DIR}/omc-data-${TIMESTAMP}.tar.gz" -C /path/to/data .
+   sha256sum "${BACKUP_DIR}/omc-data-${TIMESTAMP}.tar.gz" > "${BACKUP_DIR}/omc-data-${TIMESTAMP}.sha256"
+   chmod 600 "${BACKUP_DIR}/omc-data-${TIMESTAMP}.tar.gz" "${BACKUP_DIR}/omc-data-${TIMESTAMP}.sha256"
    ```
 
 ---
 
-## 3. 灾难恢复演练流程 (Restore Runbook)
+## 3. Disaster Recovery Drill (Restore Runbook)
 
-当遭遇主机故障或数据异常时，执行以下经过验证的恢复步骤：
+When recovering from host failures or database corruption, choose the procedure matching your backup artifact:
 
-1. **停止运行容器**：
+### 3.1 Restoring from a `VACUUM INTO` Snapshot (`.db`)
+
+1. **Stop the service container**:
    ```bash
    docker compose -f deploy/compose.full.yml stop oh-my-cpa
    ```
 
-2. **验证备份完整性**：
+2. **Verify snapshot integrity on the host**:
    ```bash
-   sha256sum -c checksum.sha256
-   # 对备份文件执行完整性自检
-   sqlite3 backup.db "PRAGMA integrity_check;"
-   # 输出必须为 "ok"
+   sqlite3 /path/to/backups/oh-my-cpa-backup-YYYYMMDD_HHMMSS.db "PRAGMA integrity_check;"
+   # Expected output must be: "ok"
    ```
 
-3. **恢复数据库与权限配置**：
-   - 清理损坏的旧数据目录；
-   - 将验证通过的 `backup.db` 复制为 `/data/oh-my-cpa.db`；
-   - 修正目录归属为非 root 用户（UID/GID 10001:10001）：
+3. **Replace the data directory safely**:
+   - Move the damaged data directory aside to ensure no stale `-wal` or `-shm` files attach to the restored database:
      ```bash
-     chown -R 10001:10001 /data
-     chmod 700 /data
-     chmod 600 /data/oh-my-cpa.db
+     mv /path/to/data "/path/to/data_damaged_$(date +%Y%m%d_%H%M%S)"
+     mkdir -p /path/to/data
+     ```
+   - Copy the verified snapshot as `oh-my-cpa.db`:
+     ```bash
+     cp /path/to/backups/oh-my-cpa-backup-YYYYMMDD_HHMMSS.db /path/to/data/oh-my-cpa.db
+     ```
+   - Set ownership to the container user (`10001:10001` per Dockerfile) and restrict permissions:
+     ```bash
+     chown -R 10001:10001 /path/to/data
+     chmod 700 /path/to/data
+     chmod 600 /path/to/data/oh-my-cpa.db
      ```
 
-4. **启动服务并执行就绪探活**：
+### 3.2 Restoring from a Cold Tarball (`.tar.gz`)
+
+1. **Stop the service container**:
    ```bash
-   docker compose -f deploy/compose.full.yml start oh-my-cpa
-   curl -sf http://127.0.0.1:8080/omc/api/healthz | jq .
+   docker compose -f deploy/compose.full.yml stop oh-my-cpa
    ```
-   验证响应返回 `"database_status": "ok"` 且服务就绪。
 
----
+2. **Verify archive checksum**:
+   ```bash
+   cd /path/to/backups
+   sha256sum -c omc-data-YYYYMMDD_HHMMSS.sha256
+   ```
 
-## 4. `OMCPA_MASTER_KEY` 治理与灾难预防
-
-- **主密钥作用**：
-  `OMCPA_MASTER_KEY` 是 32 字节的高熵随机密钥，用于 AES-GCM 加密存储 CPA Management Key 以及敏感的用量 inbox 消息。
-- **丢失后果**：
-  若主密钥丢失或损坏，数据库中所有已保存的加密字段将**永久不可解密**，系统启动将抛出致命错误并拒绝上线。
-- **治理要求**：
-  1. 绝不将明文写在代码仓库或 Dockerfile 中；
-  2. 采用环境变量或加密机注入；
-  3. 离线双人复核备份至企业级密码库（如 1Password、Vault 或安全离线信封）。
-
----
-
-## 5. 迁移前安全门禁与 Forward Rollback
-
-Oh My CPA 在升级启动时会自动检测并执行尚未运行的不可变 SQL 迁移脚本：
-
-1. **自动前置检查**：
-   - 检查可用磁盘空间：默认要求可用空间不少于「当前数据库大小 + 4 KiB」（`BackupConfig.MinFreeBytes` 未设置时的下限；显式配置可按部署策略提高，包括提高到数据库大小的 3 倍）；
-   - 对既有数据库（`schema_migrations` 已有记录）在执行任何待应用迁移前，先 `PRAGMA wal_checkpoint(TRUNCATE)`，再生成带时间戳的 AES-GCM 加密备份与 `.sha256` 校验和，解密还原为临时库并验证 schema 可读后才继续；
-   - 备份写入 `OMCPA_DATA_DIR/backups`（权限 0700/0600），按修改时间保留最近 5 份，可通过 `repository.WithMigrationBackup` 的 retention 参数调整；
-   - 校验和或还原 smoke 失败则 `ErrBackupRestoreFailed` 直接中止迁移，不留下“声称已治理”的半成品；
-2. **Expand / Contract 兼容迁移**：
-   - 数据库结构变更严格遵循“扩展字段优先”原则，不直接破坏旧版本查询结构；
-3. **纠错式向前迁移（Forward Rollback）**：
-   - 生产环境严禁通过手工修改 `schema_migrations` 或倒退版本文件进行暴力回滚；
-   - 若发现迁移缺陷，应发布修复补丁（如 `008_fix_xxx.sql`）继续向前推进修复。
-
----
-
-## 6. 数据 Retention 与定期 VACUUM 维护
-
-1. **历史事件保留期**：
-   - 通过配置 `OMCPA_USAGE_RETENTION_DAYS`（默认 90 天，`0` 表示永久保留）控制用量明细与原始记录的保留时长；
-   - 保留期清理由 `ingest.Maintenance` 每小时尝试一次，聚合汇总由同一个循环按 `OMCPA_USAGE_AGGREGATE_INTERVAL`（默认 15 秒）推进；
-   - 清理截止点由聚合 checkpoint 把关，不会出现汇总尚未覆盖就删明细的空洞。
-2. **空间回收与碎片整理**：
-   - 大规模清理历史数据后，SQLite 内部可能残留空闲页面；
-   - 建议每月或低峰期安排一次全量整理：
+3. **Unpack to a clean directory**:
+   - Move the damaged directory aside:
      ```bash
-     sqlite3 /data/oh-my-cpa.db "VACUUM;"
+     mv /path/to/data "/path/to/data_damaged_$(date +%Y%m%d_%H%M%S)"
+     mkdir -p /path/to/data
+     ```
+   - Extract the verified tarball:
+     ```bash
+     tar -xzf /path/to/backups/omc-data-YYYYMMDD_HHMMSS.tar.gz -C /path/to/data
+     chown -R 10001:10001 /path/to/data
+     chmod 700 /path/to/data
+     ```
+
+### 3.3 Understanding Encrypted Migration Backups (`backups/*.db`)
+
+Files under `OMCPA_DATA_DIR/backups/` generated by Oh My CPA before migrations are AES-GCM encrypted backups accompanied by `.sha256` checksums. They are managed internally by the application; they cannot be inspected directly by `sqlite3` without decryption using the configured `OMCPA_MASTER_KEY`.
+
+### 3.4 Verify Service Readiness After Restoration
+
+Start the container and inspect the health endpoint:
+
+```bash
+docker compose -f deploy/compose.full.yml start oh-my-cpa
+```
+
+- When accessing via the public reverse proxy (such as Caddy):
+  ```bash
+  curl -sf https://${DOMAIN}/omc/api/healthz | jq .
+  ```
+- When accessing directly on the host (with published ports, e.g. `deploy/compose.omc.yml`):
+  ```bash
+  curl -sf http://127.0.0.1:8080/omc/api/healthz | jq .
+  ```
+- Or via container exec:
+  ```bash
+  docker compose -f deploy/compose.full.yml exec cpa wget -q -O - http://oh-my-cpa:8080/omc/api/healthz | jq .
+  ```
+
+Confirm the JSON response reports `"database_status": "ok"` and `"status": "ok"` (or `"degraded"` if CPA is temporarily offline).
+
+---
+
+## 4. `OMCPA_MASTER_KEY` Governance & Disaster Prevention
+
+- **Role of the Master Key**:
+  `OMCPA_MASTER_KEY` is a 32-byte high-entropy key (e.g. 64 hexadecimal characters), used to encrypt the CPA Management Key and raw usage inbox payloads at rest via AES-GCM.
+- **Consequences of Loss**:
+  If the master key is lost or corrupted, all encrypted fields in the database become **permanently unrecoverable**. The server will fail to decrypt existing credentials and payloads.
+- **Operational Requirements**:
+  1. Never commit plaintext keys to code repositories or Dockerfiles;
+  2. Inject keys via secure environment variables, secret managers, or orchestration vaults;
+  3. Keep an offline, dual-custody backup in a password vault (such as 1Password, HashiCorp Vault, or a secure physical envelope).
+
+---
+
+## 5. Pre-Migration Safety Gates & Forward Rollbacks
+
+When upgrading Oh My CPA, the application automatically inspects and applies unexecuted immutable SQL migration scripts at startup:
+
+1. **Automated Safety Gates**:
+   - **Disk Space Verification**: Checks available disk space before starting; requires at least `database_size + 4 KiB` free space by default (or configured via `BackupConfig.MinFreeBytes`);
+   - **Pre-Migration Encrypted Backup**: For existing databases with recorded migrations in `schema_migrations`, the application executes `PRAGMA wal_checkpoint(TRUNCATE)` and writes an AES-GCM encrypted backup with a `.sha256` checksum to `OMCPA_DATA_DIR/backups` (permissions `0700/0600`);
+   - **Restore Smoke Test**: Decrypts the backup into a temporary database and verifies that schema tables are readable before proceeding; if verification fails, migration aborts with `ErrBackupRestoreFailed`;
+   - **Retention**: Keeps the 5 most recent migration backups by default (configurable via `repository.WithMigrationBackup`).
+2. **Expand / Contract Schema Evolution**:
+   - Schema modifications strictly adhere to expand-first principles, avoiding breaking older query shapes.
+3. **Forward-Only Rollbacks**:
+   - In production, rolling back by manually editing `schema_migrations` or rewinding schema files is strictly prohibited;
+   - If a defect is discovered in a migration, deploy a forward-fixing migration (e.g. `008_fix_xxx.sql`) to correct the schema.
+
+---
+
+## 6. Data Retention & Periodic Maintenance
+
+1. **Historical Event Retention**:
+   - Configured via `OMCPA_USAGE_RETENTION_DAYS` (default 90 days, `0` for indefinite retention) to control raw usage payloads and event details;
+   - Pruning runs once per hour inside `ingest.Maintenance`, while rollups advance every `OMCPA_USAGE_AGGREGATE_INTERVAL` (default 15 seconds);
+   - Pruning boundaries are gated by aggregation checkpoints, guaranteeing that detailed records are never removed before rollups have processed them.
+2. **Space Reclamation & Compaction**:
+   - Large-scale historical data deletion leaves free pages inside SQLite;
+   - Run periodic compaction during low-traffic maintenance windows on the host:
+     ```bash
+     sqlite3 /path/to/data/oh-my-cpa.db "VACUUM;"
      ```

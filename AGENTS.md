@@ -1,106 +1,106 @@
-# AGENTS.md — Oh My CPA 项目级 Agent 契约
+# AGENTS.md — Oh My CPA Project-Level Agent Contract
 
-> 本文件由 Pi / Claude Code 等 Agent 在会话启动时自动加载（同级 `AGENTS.override.md` 会取代它）。
+> This file is automatically loaded by coding agents (such as Pi, Claude Code, etc.) at the start of a session (a local `AGENTS.override.md` supersedes it).
 >
-> **第一原则：上下文文档与代码同步。** 不要等"下一次专门整理文档的任务"——文档漂移是当次改动的缺陷，必须在当次改动内修掉。
+> **First Principle: Keep context documentation synchronized with code.** Do not defer documentation updates to "the next cleanup task"—documentation drift is a defect in the current change and must be resolved within the same change.
 
 ---
 
-## 1. 项目一句话
+## 1. One-Sentence Project Summary
 
-CPA 负责协议适配、凭据执行与代理请求；Oh My CPA 在其上提供**用户拥有的身份、命名、整理、管理门面与用量观测**。二者同栈部署，Oh My CPA 是单副本 Go 模块化单体 + 内嵌 React SPA + SQLite WAL，零 CDN 离线运行。
+CLIProxyAPI (CPA) handles protocol adaptation, credential execution, and proxying requests; Oh My CPA provides **user-owned identity, naming, organization, a management facade, and usage observability** above it. Both are co-deployed in the same stack. Oh My CPA is a single-replica Go modular monolith + embedded React SPA + SQLite WAL, operating completely offline with zero CDN dependencies.
 
-先读这三份再动手：
+Read these three documents before doing substantive work:
 
-1. `CONTEXT.md` — 领域术语与规则（时间窗口、i18n、认证模型、价格语义）。
-2. `docs/architecture.md` — 模块地图、数据流、不变量。
-3. `docs/design.md` — 视觉系统事实源。
+1. `CONTEXT.md` — Domain vocabulary and rules (time windows, i18n, authentication model, price semantics).
+2. `docs/architecture.md` — Module map, data flows, and architectural invariants.
+3. `docs/design.md` — Source of truth for the visual system and design tokens.
 
 ---
 
-## 2. 上下文文档地图：改什么，就必须同步改哪里
+## 2. Context Documentation Map: What Changes, and Where to Update Synchronously
 
-把下表当成硬约束。改动落在"触发条件"里，就必须在同一次改动中更新对应文档，并在提交信息或回复中说明更新了哪一份。
+Treat the table below as a hard constraint. Whenever a change touches a "Trigger condition", you must update the corresponding document in the same change and state in your commit message or response which document was updated.
 
-| 文档 | 作用 | 必须更新的触发条件 |
+| Document | Purpose | Trigger Condition Requiring an Update |
 | --- | --- | --- |
-| `CONTEXT.md` | 领域术语、领域规则 | 新增/重命名/废弃领域概念；时间窗口、i18n、认证、价格、供应商停用等规则变化；发现术语描述与实现不符 |
-| `docs/architecture.md` | 模块地图、数据流、不变量、表结构、后台循环 | 新增或删除 `internal/*` 包；路由/中间件变化；数据流阶段变化；新增后台循环；数据库表或迁移门禁变化 |
-| `docs/design.md` | 视觉系统与 antd token 事实源 | 调色板、排版、间距、动效、token 映射变化（同时改 `web/src/theme/themeConfig.ts` 与 `web/src/index.css`） |
-| `DESIGN.md` | 品牌设计系统摘要（供 design 工具读取） | 同 `docs/design.md`；两者必须一致 |
-| `PRODUCT.md` | 产品定位、能力清单、约束 | 能力增删、约束变化、目标用户或定位变化 |
-| `README.md` | 用户与运维入口 | 命令、环境变量、默认值、端点、部署方式、安全边界变化 |
-| `docs/adr/NNNN-*.md` | 重要且难逆的架构决策 | 出现有真实取舍的决策时**新增**一篇；不要改写已 Accepted 的 ADR，用新 ADR 取代 |
-| `docs/cpamc-parity.md` | 与 CPAMC 的功能对位矩阵 | 某项从"计划/进行中"落地为"已覆盖"；接口能力或页面接线变化；发现新的缺口 |
-| `docs/ops/sqlite-operations.md` | 备份、恢复、主密钥治理、迁移门禁 | 迁移/备份策略、保留期、保留条数、相关环境变量默认值变化 |
-| `docs/plans/model-prices.md` | 定价设计、匹配规则、已知限制 | 定价匹配链、同步规则、价格表结构变化 |
+| `CONTEXT.md` | Domain terminology, domain rules | Adding, renaming, or deprecating domain concepts; changes to time windows, i18n, auth, pricing, provider disablement; discovering terminology discrepancies with the implementation |
+| `docs/architecture.md` | Module map, data flows, invariants, schema, background loops | Adding or removing `internal/*` packages; router or middleware changes; data flow stage adjustments; new background loops; database schema or migration gate changes |
+| `docs/design.md` | Source of truth for visual system and antd tokens | Changes to palettes, typography, spacing, motion, or token mappings (must synchronously update `web/src/theme/themeConfig.ts` and `web/src/index.css`) |
+| `DESIGN.md` | Brand design system summary (for design tooling) | Same as `docs/design.md`; both must stay strictly synchronized |
+| `PRODUCT.md` | Product positioning, capability matrix, constraints | Capability additions or removals, constraint shifts, target audience or positioning adjustments |
+| `README.md` | User and operator landing page | Command, environment variable, default value, endpoint, deployment topology, or security boundary changes |
+| `docs/adr/NNNN-*.md` | Important and irreversible architectural decisions | When a decision involves real trade-offs, **add a new** ADR; do not rewrite accepted ADRs (supersede them with a new ADR) |
+| `docs/cpamc-parity.md` | Parity matrix against CPAMC | Changing an item from "planned/in-progress" to "covered"; interface capability or page wiring changes; newly identified gaps |
+| `docs/ops/sqlite-operations.md` | Backup, restore, master key governance, migration gates | Migration or backup strategy, retention period, backup count, related environment variable default changes |
+| `docs/plans/model-prices.md` | Pricing design, matching rules, known limitations | Pricing match chain, sync rules, pricing schema changes |
 
-### 文档维护检查清单（声明完成前逐项执行）
+### Documentation Maintenance Checklist (Execute Before Declaring Complete)
 
-1. **跑机械检查**：`pnpm check-docs` 验证全部上下文文档中被反引号引用的仓库路径都能解析、没有指向已淘汰产物、且非档案文档没有写绝对行号。
-2. **找**：用本次改动涉及的标识符、端点、环境变量、表名、页面名去 grep 全部 `*.md`，列出所有相关陈述。
-3. **对**：逐条与当前代码/运行结果对照，不靠记忆。
-4. **改**：纠错（与实现不一致）→ 更新（已废弃的接口/配置/依赖）→ 补全（缺失的模块、数据流、决策）。
-5. **验**：文档中出现的路径、端点、环境变量名、默认值、表名是否真实存在且取值一致。
-6. **扫残留**：搜 `prototype`、已删除文件、已下线页面/端点、已更名的标识符——这类引用是本仓库历史上最高频的文档缺陷。
-7. **写清语言**：技术参考文档用英文；面向用户/运维的说明沿用该文件既有语言，**同一文件内不要中英混杂**（代码注释一律英文，见 §4）。
+1. **Run mechanical validation**: `pnpm check-docs` verifies that all backticked repository paths resolve, no retired artifacts are referenced, and non-archival documents contain no absolute line numbers.
+2. **Search**: Grep all `*.md` files for identifiers, endpoints, environment variables, table names, and page names affected by the current change.
+3. **Verify**: Cross-check statements line by line against the current code and runtime behavior; never rely on memory.
+4. **Update**: Correct inaccuracies (divergence from implementation) → update deprecations (obsolete APIs/configs/dependencies) → supplement omissions (new modules, data flows, decisions).
+5. **Check facts**: Ensure paths, endpoints, environment variables, default values, and table names mentioned in the documentation actually exist and match reality.
+6. **Scan for residue**: Search for `prototype`, deleted files, removed pages/endpoints, and renamed identifiers—these references are historically the most frequent documentation defects in this repository.
+7. **Language rule**: All context and technical documentation must be written in English. Keep code comments strictly in English (see §4).
 
-`pnpm check-docs` 只能证明路径存在，证明不了句子是否属实；第 2–5 步仍然要人（或 Agent）读完再改。新增一条“已淘汰产物”规则时，在 `scripts/check-docs.mjs` 的 `RETIRED_REFERENCES` 里加上原因，并跑 `pnpm test:docs`。
+`pnpm check-docs` only proves that paths exist; it cannot verify whether the surrounding prose is factually accurate. Steps 2–5 still require careful human (or agent) review. When adding a retired artifact rule, add the entry and reason to `RETIRED_REFERENCES` in `scripts/check-docs.mjs`, and run `pnpm test:docs`.
 
-**不要写易腐的绝对行号。** 引用 `internal/api/handler.go` 而不是 `handler.go:53-128`；引用符号名而不是行位置。行号只在 ADR/审计这类冻结的历史档案里允许出现，且必须标注当时的基线提交。
+**Do not write fragile absolute line numbers.** Reference `internal/api/handler.go` rather than `handler.go:53-128`; reference symbol names instead of line offsets. Line numbers are only permitted in frozen archival records (such as ADRs or historical audits) and must state their baseline commit.
 
 ---
 
-## 3. 完成定义（Definition of Done）
+## 3. Definition of Done (DoD)
 
-任何改动在被声明完成前必须同时满足：
+Before declaring any change complete, all of the following requirements must be satisfied:
 
-- 开发循环优先跑 `pnpm test:fast`，它只执行与当前工作树改动相关的检查；
-- 一个逻辑功能完成后跑 `pnpm verify`（严格工具链 + 全量静态门禁 + worktree 密钥扫描）；
-- 声明任务完成前跑 `pnpm verify:full`（额外包含历史密钥扫描、生产构建、bundle 预算与完整确定性浏览器验收）；
-- 本次改动触发的全部上下文文档已按 §2 更新；
-- 没有残留的过时注释、死引用或未本地化的用户可见文案。
+- The development loop prioritizes `pnpm test:fast`, which runs only the checks affected by the current worktree changes;
+- When a logical feature is complete, run `pnpm verify` (toolchain check with version divergence warnings, full static gates, and worktree secret scan);
+- Before declaring a task complete or pushing, run `pnpm verify:full` (adds git history secret scan, production build, bundle budget, and deterministic browser acceptance + probes);
+- All context documents triggered by the change per §2 have been updated;
+- No obsolete comments, dead references, or unlocalized user-visible strings remain.
 
-### 三个验证时机（不是每一轮都跑全套）
+### Three Verification Moments (Do Not Run the Full Suite Every Turn)
 
-开发者在开发过程中真正付出的是**等待**，所以验证按三个不同的时机组织。把完整门禁塞进每一次修改，代价是一条命令几分钟——那会让开发循环绕过验证，而绕过验证的门禁等于没有门禁。
+The real cost developers pay during development is **waiting**. Verification is structured across three distinct moments. Cramming the full test gate into every single iteration adds minutes to each turn—causing developers to bypass checks altogether, and a bypassed gate is no gate at all.
 
-| 时机 | 跑什么 | 大致成本 |
+| Moment | What to Run | Approximate Cost |
 | --- | --- | --- |
-| **开发迭代中**（每次改完想确认没弄坏东西） | `pnpm test:fast`；改动涉及界面交互、布局或浏览器生命周期时再加 `pnpm check:ui` | 1–13 秒 / 3–19 秒 |
-| **一个逻辑功能完成**（可独立验收的阶段末） | `pnpm verify` | ~22 秒 |
-| **声明任务完成前 / 推送前** | `pnpm verify:full` | ~95 秒 |
+| **Development iteration** (after editing files to confirm nothing broke) | `pnpm test:fast`; add `pnpm check:ui` if the change touches UI interactions, layout, or browser lifecycle | 1–13s / 3–19s |
+| **Logical feature complete** (end of an independently verifiable milestone) | `pnpm verify` | ~22s |
+| **Before declaring done / pushing** | `pnpm verify:full` | ~95s |
 
-规则：
+Rules:
 
-- **不要每回答一次或每改一个文件就跑 `verify` 或 `verify:full`。** "一个逻辑功能完成"指一个可以独立验收的功能或修复，不是一次回复、一个文件。
-- **界面改动用 `pnpm check:ui` 做快速反馈。** 它不需要 `pnpm build`、不需要 Go 二进制、不需要假 CPA（dev server + 假接口），并按改动只跑相关的界面场景；`--list` / `--plan` 可以只查看范围和理由，不启动浏览器。它跑在 **dev server** 上，因此是唯一能观察到 `React.StrictMode` 双调用所暴露问题的地方。
-- **`check:ui` 不能代替打产物的验收。** 它看的是 dev server 与 mock 接口，看不到只有真实打包产物才会出现的路径、压缩和 chunk 边界问题。所以阶段末与推送前仍然必须跑一次 `verify:full`。
-- **刚跑过就不重复跑。** 如果阶段末的 `verify:full` 已经覆盖了同一份未变化的代码与产物，推送前直接复用那次结果，不要再跑一遍。
-- **失败时先重跑失败的那一项**，不要每修一处就重跑全套。
-- 选择逻辑在 `scripts/affected-checks.mjs`（检查）与 `scripts/acceptance/check-ui-plan.mjs`（界面场景）；两者都有测试钉住"永不静默什么都不选"这条性质。
+- **Do not run `verify` or `verify:full` after every individual response or single file edit.** "Logical feature complete" refers to an independently verifiable feature or fix, not a single reply or file edit.
+- **Use `pnpm check:ui` for rapid UI feedback.** It requires no `pnpm build`, no Go binary, and no fake CPA (it runs against Vite dev server + mocked endpoints), running only scenarios affected by the changes; `--list` / `--plan` can inspect the scope and rationale without launching a browser. Because it runs on the **dev server**, it is the only place capable of catching issues exposed by `React.StrictMode` double-invocation.
+- **`check:ui` does not replace built-artifact acceptance.** It tests against the dev server with mock endpoints, so it cannot observe path resolution, minification, or chunk boundary defects that only appear in production artifacts. Therefore, the end of a milestone and pre-push still require `verify:full`.
+- **Do not rerun immediately if already run.** If `verify:full` at the end of a milestone already covered the identical, unchanged code and build artifacts, reuse that result rather than rerunning it immediately before pushing.
+- **When a check fails, rerun only the failed check first**, rather than rerunning the entire suite after each fix.
+- Selection logic resides in `scripts/affected-checks.mjs` (for checks) and `scripts/acceptance/check-ui-plan.mjs` (for UI scenarios); both are pinned by tests asserting they never silently select nothing.
 
-CI（`.github/workflows/ci.yml`）并行运行静态门禁与浏览器门禁：PR 使用 `verify:browser:smoke` 快速反馈，`master` push 使用完整 `verify:browser` 与 `verify:probes`（并发执行、分别收集退出码），两者都保留严格工具链、密钥扫描和干净工作区断言；同一 ref 的新运行会取消尚未完成的旧运行。浏览器失败时会把截图、HTML 和应用日志作为短期 artifact 上传（`tmp/browser-acceptance-failure/`、`tmp/probe-failure/`）。
+CI (`.github/workflows/ci.yml`) runs static gates and browser gates in parallel: PRs use `verify:browser:smoke` for fast feedback, while `master` branch pushes use full `verify:browser` and `verify:probes` (executed concurrently, collecting exit codes independently). Both retain strict toolchain checks, secret scanning, and clean worktree assertions; a new run on the same ref cancels pending older runs. On browser test failures, screenshots, HTML snapshots, and application logs are uploaded as short-lived artifacts (`tmp/browser-acceptance-failure/`, `tmp/probe-failure/`).
 
 ---
 
-## 4. 代码注释规范
+## 4. Code Comments Convention
 
-**核心：解释 Why，不解释 What。** 代码已经说清"做了什么"，注释只负责"为什么这样做"——设计意图、决策背景、取舍、边界条件、非显然的约束。
+**Core principle: Explain Why, not What.** The code already states what is happening; comments explain why it was designed that way—design intent, decision context, trade-offs, boundary conditions, and non-obvious constraints.
 
-- **语言**：注释一律**英文**，禁止中英混用。即使是引用中文 UI 文案，也要用英文概念表述（`实时` → `Live`，`至今` → `open-ended`）。
-- **精简**：只在核心逻辑、潜在边界条件、复杂算法处标注。不要复述函数名或代码本身（`// increment counter`、`// loop over items` 一律删除）。
-- **同步**：逻辑变更必须同步更新注释。残留的失效或误导性注释等同缺陷。
-- **禁止历史残留**：不要引用已被删除的文件、已下线的页面、已更名的标识符或已废弃的外部契约。
+- **Language**: Comments must be written in **English** only. Mixing languages is forbidden. When referencing UI concepts or states, use standard English terminology (such as "Live" or "open-ended").
+- **Conciseness**: Annotate only core logic, potential edge cases, and complex algorithms. Do not restate function names or the obvious code flow (delete redundant comments like `// increment counter` or `// loop over items`).
+- **Synchronization**: Logic changes must update corresponding comments. Outdated or misleading comments are treated as defects.
+- **No historical residue**: Do not reference deleted files, retired pages, renamed identifiers, or deprecated external contracts.
 
-正例（来自 `internal/usage/ingest/runner.go`）：
+Good example (from `internal/usage/ingest/runner.go`):
 
 ```go
 // Auto. Availability is probed with AUTH, never by popping: CPA's queue is
 // destructive, so a probe that consumed a record would silently lose it.
 ```
 
-反例：
+Counter-example:
 
 ```go
 // Get the config.
@@ -109,82 +109,81 @@ func (s *Service) FetchConfig(ctx context.Context) (Config, error) {
 
 ---
 
-## 5. 命名规范
+## 5. Naming Conventions
 
-| 风格 | 适用 |
+| Style | Applies To |
 | --- | --- |
-| `lowerCamelCase` | Go/TS 局部变量、函数与方法、类/结构体属性、参数 |
-| `UpperCamelCase` | 类、接口、结构体、React 组件、导出类型 |
-| `SCREAMING_SNAKE_CASE` | 模块级常量（`MAX_LOG_BUFFER_LINES`、`RENDER_CHUNK`），以及全局静态只读配置 |
-| `snake_case` | 数据库表名与字段名、SQL 列、JSON wire 字段 |
-| `kebab-case` | URL 路径、CSS 类名（含 `*.module.css`）、Git 分支 |
+| `lowerCamelCase` | Go/TS local variables, functions and methods, class/struct properties, parameters |
+| `UpperCamelCase` | Classes, interfaces, structs, React components, exported types |
+| `SCREAMING_SNAKE_CASE` | Module-level constants (`MAX_LOG_BUFFER_LINES`, `RENDER_CHUNK`), global static read-only configurations |
+| `snake_case` | Database table and column names, SQL columns, JSON wire fields |
+| `kebab-case` | URL paths, CSS class names (including `*.module.css`), Git branches |
 
-语义要求：
+Semantic requirements:
 
-- 禁止无意义缩写（`temp`、`tmp`、`a`、`b`、`obj`、`el`、`val`、`res`、`idx`）；仅纯循环计数器允许 `i`、`j`。注意 `idx` 尤其危险：在配额/凭据循环里它往往是 string Auth Index，而不是数字下标。
-- 布尔值必须带状态前缀：`isActive`、`hasPermission`、`canEdit`、`shouldRetry`。React 的 `useState` 布尔值同样适用（`isVisible`、`isSubmitting`）。
-- 函数/方法用动宾结构：`calculateTotal()`、`validateInput()`、`nextDelay()`、`formatRequestTick()`。
-- 用户可见文案不得硬编码在后端响应或前端组件里；新增文案必须同时进 `web/src/i18n/index.tsx` 的 `[zh, en]` 对。
+- Meaningless abbreviations are prohibited (`temp`, `tmp`, `a`, `b`, `obj`, `el`, `val`, `res`, `idx`); only pure loop counters may use `i`, `j`. Note that `idx` is particularly dangerous: in quota/credential loops it often represents a string Auth Index, not a numeric index.
+- Booleans must carry a state prefix: `isActive`, `hasPermission`, `canEdit`, `shouldRetry`. React `useState` booleans follow the same rule (`isVisible`, `isSubmitting`).
+- Functions/methods must use verb-noun phrases: `calculateTotal()`, `validateInput()`, `nextDelay()`, `formatRequestTick()`.
+- User-visible copy must not be hardcoded in backend responses or frontend components; new copy must be added to `web/src/i18n/index.tsx` as `[zh, en]` pairs.
 
-**边界（不要为了风格去改这些）**：
+**Boundaries (Do not alter these purely for style)**:
 
-- **Wire 契约名保持外部拼写**。`json:"disabled"` 对应的 Go 字段、CPA 原生字段、DB 列名、查询参数都属于外部契约，改 Go/TS 标识符不会改善可读性却会扩大 diff；命名规则适用于我们自己发明的标识符。
-- **第三方组件的 prop 名同理**。`<Sider collapsed={isCollapsed}>`、`<Modal open={isOpen}>` 左侧是 antd 的接口，右侧才是我们的状态名；批量重命名时不要把 prop 名一起换掉。同理，`className="..."` 里的字符串是 CSS 类名（kebab-case），不要被标识符重命名误伤。
-- Go 中 `Valid()` 这类返回 bool 的方法是标准库习惯（`sql.NullString.Valid`），不强制改成 `IsValid`。
-- **CSS Modules 的类名是 kebab-case，通过 `styles['kebab-case']` 访问**。不要写 `styles.camelCase`。这条无法靠 `tsc` 拦住（`vite/client` 把 `*.module.css` 类型成 `Record<string, string>`，拼错不报错），所以由 `pnpm check-css-modules` 把关；新增/重命名类后必须同时跑它。
+- **Wire contract names preserve external casing**. `json:"disabled"` corresponding Go fields, CPA native fields, DB column names, and query parameters belong to external contracts; renaming Go/TS identifiers would widen diffs without improving readability. Naming conventions apply to our own identifiers.
+- **Third-party component prop names follow the library API**. In `<Sider collapsed={isCollapsed}>` or `<Modal open={isOpen}>`, the left side is antd's interface and only the right side is our state variable. Similarly, `className="..."` strings are CSS classes (kebab-case) and must not be inadvertently mangled during identifier renames.
+- Standard library structs in Go with exported boolean fields (such as `sql.NullString.Valid`) follow Go conventions and are not forced into `IsValid`. Exported Go identifiers use `UpperCamelCase`, while package-internal variables and unexported fields use `lowerCamelCase`.
+- **CSS Modules class names are kebab-case and accessed via `styles['kebab-case']`**. Never use `styles.camelCase`. Because `tsc` cannot catch this (`vite/client` types `*.module.css` as `Record<string, string>`), `pnpm check-css-modules` enforces this check; run it after adding or renaming classes.
 
 ---
 
-## 6. 常用命令
+## 6. Common Commands
 
-测试分层与“什么该进浏览器”的判据见 [`docs/architecture.md`](docs/architecture.md) 的 §11：
-**只在真正需要浏览器的时候，才支付浏览器测试成本**。`pnpm test:fast` 永不构建、永不启动
-Vite / Chromium / 假 CPA；选择逻辑在 `scripts/affected-checks.mjs`，其测试断言了这条性质。
+Test layering criteria and "what belongs in the browser" are detailed in [`docs/architecture.md`](docs/architecture.md) §11:
+**Pay the browser testing cost only when Chromium is genuinely needed.** `pnpm test:fast` never builds, never launches Vite / Chromium / fake CPA; selection logic lives in `scripts/affected-checks.mjs` and its tests assert this property.
 
-| 命令 | 用途 |
+| Command | Purpose |
 | --- | --- |
-| `pnpm dev` | Air + Vite 开发入口（`http://127.0.0.1:5173/omc/`） |
-| `pnpm dev:api` / `pnpm dev:web` | 只跑 Go/Air 或只跑 Vite |
-| `pnpm cpa:start` | 从 `cpa/` 启动本地 CLIProxyAPI |
-| `pnpm build` | 构建前端并同步到 `internal/web/dist`；类型检查已由独立门禁负责 |
-| `pnpm test:fast` | 按工作树改动并发执行最小相关检查（开发迭代中默认跑这个） |
-| `pnpm check:ui` | 界面快通道：dev server + 假接口，按改动只跑相关场景；`--list` / `--plan` 不启动浏览器 |
-| `pnpm verify` | 严格工具链 + 全量静态门禁 + worktree 密钥扫描 |
-| `pnpm verify:full` | 并行编排的最终完整门禁 |
-| `pnpm verify:full:serial` | 串行最终门禁，仅用于诊断并行编排差异 |
-| `pnpm verify:browser` | 对已构建的 SPA 跑确定性浏览器验收（假 CPA 夹具） |
-| `pnpm verify:browser:smoke` | 只跑登录、仪表盘和请求列表核心链路的浏览器 smoke |
-| `pnpm verify:probes` | 只跑需要真实 Chromium 的几何、层叠、像素与刷新时序探针 |
-| `pnpm verify:e2e` | 先构建，再跑浏览器验收与浏览器探针 |
-| `pnpm verify:secrets` | 工作区密钥扫描 |
-| `pnpm check-i18n` | 找出代码里使用了但字典中缺失的 key |
-| `pnpm check-docs` | 校验上下文文档的路径引用、淘汰产物引用与绝对行号（`pnpm test:docs` 自测） |
-| `pnpm check-css-modules` | 校验每个 `styles[...]` 引用都能在对应 `*.module.css` 中找到（`pnpm test:css-modules` 自测） |
-| `pnpm lint:antd` | antd 用法与可访问性规则 |
+| `pnpm dev` | Air + Vite dev entrypoint (`http://127.0.0.1:5173/omc/`) |
+| `pnpm dev:api` / `pnpm dev:web` | Run Go/Air only, or Vite only |
+| `pnpm cpa:start` | Start local CLIProxyAPI from `cpa/` |
+| `pnpm build` | Build frontend and sync to `internal/web/dist`; type checking is handled by independent gates |
+| `pnpm test:fast` | Concurrently run minimum affected checks based on worktree changes (default for development iterations) |
+| `pnpm check:ui` | UI fast lane: dev server + mock API, running only affected scenarios; `--list` / `--plan` inspects without launching a browser |
+| `pnpm verify` | Toolchain check (warns on version divergence) + full static gates + worktree secret scan |
+| `pnpm verify:full` | Parallel orchestrated full final gate |
+| `pnpm verify:full:serial` | Serial final gate, used only for diagnosing parallel orchestration discrepancies |
+| `pnpm verify:browser` | Run deterministic browser acceptance against built SPA (with fake CPA fixture) |
+| `pnpm verify:browser:smoke` | Run browser smoke tests covering core auth, dashboard, and request list paths |
+| `pnpm verify:probes` | Run browser probes requiring real Chromium for geometry, stacking, pixels, and refresh sequencing |
+| `pnpm verify:e2e` | Build first, then run browser acceptance and browser probes |
+| `pnpm verify:secrets` | Scan worktree for secrets |
+| `pnpm check-i18n` | Find translation keys referenced in code but missing from the dictionary |
+| `pnpm check-docs` | Validate context document path references, retired references, and absolute line numbers (`pnpm test:docs` self-test) |
+| `pnpm check-css-modules` | Validate every `styles[...]` reference matches a defined class in `*.module.css` (`pnpm test:css-modules` self-test) |
+| `pnpm lint:antd` | Check antd usage and accessibility rules |
 
 ---
 
-## 7. 交付面收尾：只描述被采用的状态
+## 7. Delivery Surface Cleanup: Describe Only Adopted State
 
-会话里的否决方案、中间尝试和措辞纠正都是**控制信息**，不是最终产物的身份。写交付面时假设读者没看过本次会话。
+Rejected options, intermediate attempts, and phrasing corrections in a session are **control information**, not the identity of the final artifact. When writing delivery materials, assume the reader has not seen the session.
 
-每个交付面都要单独判断：标题、文件名、正文、注释、标签、commit 信息、PR 描述、交付说明。
+Evaluate every delivery surface independently: titles, filenames, body prose, comments, labels, commit messages, PR descriptions, and handoff notes.
 
-- **从正向目标生成，不要逐词修改被否文案。** 高显著度的标题、开篇、标签、文件名若来自被丢弃的方案，重写它，而不是替换同义词、委婉语或加括号说明。
-- **省略的判据**：不知道本次会话的读者需要这条信息吗？省略会不会让产物不安全、不准确、误导、不兼容或不合规？它是不是任务开始时已提交（或用户已确认）状态中的真实变化，而当前交付面需要解释它？都不是，就整条删掉。
-- **「不要提 X」不等于可以写「无 X」。** 不必要的对比要整体移除，不要留一句合规声明。
-- **必须保留**：真实的基线变化、已执行的外部操作，以及必要的技术名称、诊断、测试、快照和审计事实。不要为了回避某个词而抹掉真实删除、API 名或安全事实。任务开始前已有的用户改动不算被否内容，也不要写进本次 commit 或 PR 叙述。
-- **对照 diff 和回读状态写**，不要把无关改动吸收进叙事。产物变更后重新通读全部用户可见内容及其包装（含文件名与元数据），不要另加「已清理」「无残留」类声明。
+- **Generate from the positive goal, do not edit rejected text word by word.** If prominent titles, openings, tags, or filenames came from discarded alternatives, rewrite them rather than substituting synonyms or adding explanatory parentheticals.
+- **Criteria for omission**: Does a reader who was not in this session need this information? Would omitting it make the product unsafe, inaccurate, misleading, incompatible, or non-compliant? Is it a genuine change from the baseline state that the current delivery surface must explain? If none of these apply, omit it completely.
+- **"Do not mention X" does not mean writing "No X".** Remove unnecessary contrasts entirely instead of leaving a compliance disclaimer.
+- **Must retain**: Genuine baseline changes, executed external actions, and necessary technical names, diagnostics, tests, snapshots, and audit facts. Do not erase real deletions, API names, or security facts just to avoid a particular word. Pre-existing user modifications from before the task started do not count as rejected content; do not absorb them into the current commit or PR narrative.
+- **Write against diffs and re-read state**, avoiding absorbing unrelated changes into the narrative. After modifying artifacts, read through all user-visible content and packaging (including filenames and metadata); do not add disclaimers such as "cleaned up" or "no residue".
 
 ---
 
-## 8. 不要做的事
+## 8. Things NOT to Do
 
-- 不要绕过 `internal/api` 的 DTO allowlist 直接透传 CPA 响应；不要新增"任意 URL / 任意 CPA 端点"代理。
-- 不要把 CPA 管理密钥或任何上游 secret 写入普通响应、日志、偏好、前端持久化或文档。
-- 不要在没有新迁移的情况下改动历史数据库结构；回滚只能是向前的（新迁移修复），不要手改 `schema_migrations`。
-- 不要引入需要 CDN 的前端资源；前端必须能嵌入单个 Go 二进制离线运行。
-- 不要写死根路径；`/omc` 子路径必须继续原生工作。
-- 不要写 `path.go:123-456` 这种绝对行号引用（`pnpm check-docs` 会在非档案文档上直接失败）；引用文件名或符号名。
-- 不要用"页面能探测到端点"冒充功能完成；占位页必须显式标注为占位。
-- 不要改写已 Accepted 的 ADR；出现新取舍时新增一篇取代它。
+- Do not bypass `internal/api` DTO allowlists to proxy raw CPA responses; do not introduce "arbitrary URL / arbitrary CPA endpoint" proxies.
+- Do not write CPA management keys or any upstream secrets into ordinary responses, logs, preferences, frontend storage, or documentation.
+- Do not modify historical database schema without a new migration; rollbacks must be forward-only (new migration fixes), never manually edit `schema_migrations`.
+- Do not introduce frontend resources requiring a CDN; the frontend must be embeddable into a single Go binary for offline operation.
+- Do not hardcode the root path; the `/omc` sub-path must continue to work natively.
+- Do not write fragile absolute line references such as `path.go:123-456` (`pnpm check-docs` fails immediately on non-archival documents); reference filenames or symbol names.
+- Do not fake feature completion simply because an endpoint can be probed; placeholder pages must be explicitly marked as placeholders.
+- Do not rewrite accepted ADRs; when new trade-offs emerge, author a new ADR to supersede the previous one.

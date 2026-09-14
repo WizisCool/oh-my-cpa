@@ -1,85 +1,85 @@
 # CPAMC parity matrix
 
-本文档把官方 [Cli-Proxy-API-Management-Center](https://github.com/router-for-me/Cli-Proxy-API-Management-Center) 的功能清单与 Oh My CPA 的实现边界绑定起来。
+This document links the feature inventory of the official [Cli-Proxy-API-Management-Center](https://github.com/router-for-me/Cli-Proxy-API-Management-Center) (CPAMC) to the implementation boundary of Oh My CPA.
 
-## 目标与兼容基线
+## Goals and Compatibility Baseline
 
-- **目标上游**：`router-for-me/CLIProxyAPI` 的 `/v0/management` API。
-- **官方 UI 基线**：CPAMC README 声明 CLIProxyAPI `>= 7.1.0`，推荐使用最新版本。
-- **Oh My CPA 原则**：CPA 仍负责代理执行与协议适配；Oh My CPA 负责管理体验、真实 CPA 数据的安全门面，以及资源的用户身份层。
-- **密钥边界**：CPA Management Key 只在 Go 进程中解密和使用，浏览器只持有 Oh My CPA 的 HttpOnly 管理员 session。CPA 返回的凭据内容仅通过管理员 session 的受保护管理页面按需展示，UI 默认遮罩。
-- **兼容策略**：接口按白名单转发，不提供任意 URL 通用代理；上游不存在的接口以明确的“不支持/需要升级”状态呈现。
+- **Target Upstream**: `router-for-me/CLIProxyAPI` `/v0/management` API.
+- **Official UI Baseline**: CPAMC README targets CLIProxyAPI `>= 7.1.0` and recommends using the latest release.
+- **Oh My CPA Principle**: CPA remains responsible for execution and protocol adaptation; Oh My CPA provides the management user experience, security boundaries around real CPA data, and a user-owned resource identity layer.
+- **Credential Boundary**: The CPA Management Key is decrypted and used exclusively inside the Go process; the browser holds only an `HttpOnly` administrator session cookie. Credentials returned by CPA are displayed on-demand under protected administrative pages with masks by default.
+- **Compatibility Strategy**: Endpoints are proxied through an explicit allowlist; arbitrary URL pass-through proxying is forbidden. Missing upstream capabilities surface with explicit "unsupported / upgrade required" statuses.
 
-## 功能矩阵
+## Feature Matrix
 
-状态含义：`已覆盖` = 已有真实接口和页面；`进行中` = 已有基础契约，仍需补齐交互或专项适配；`计划` = 已确认需求，尚未实现。
+Status definitions: `Covered` = Fully implemented with live endpoints and UI; `In progress` = Core contract in place, interaction or dedicated adaptation ongoing; `Planned` = Confirmed requirement, not yet implemented.
 
-| 官方功能 | 原型入口 | CPA Management API | Oh My CPA 状态 | 验证方式 |
+| Official Feature | CPAMC Entrypoint | CPA Management API | Oh My CPA Status | Verification Method |
 | --- | --- | --- | --- | --- |
-| 管理员登录与连接状态 | 登录、顶部连接胶囊 | 本地 session；服务端调用 `/auth-files` 探活 | 已覆盖 | 登录/登出、无效 session、CPA 断连手工验证 |
-| 仪表盘连接、版本、数量、模型概览 | `dashboard` | `/config`、`/auth-files`、`/api-key-usage`、`/latest-version` | 已覆盖 | `GET /management/overview` 聚合三个只读端点，仪表盘次级区与系统页消费；部分失败以 `partial_errors` 降级而非整页报错 |
-| 快速开始与请求示例 | `quick_start` | `/config`、`/api-keys`、固定代理端点 | 已覆盖 | 四步式向导、多客户端配置、端点及 cURL/Python/Node.js 代码示例复制 |
-| 配置读取 | `config_management` | `GET /config`、`GET /config.yaml` | 已覆盖（已对真实 CPA 7.2.146 验证） | 读取并显示真实 JSON/YAML |
-| 配置可视化标量编辑 | `config_management` | `/debug`、`/proxy-url`、`/request-log`、`/logging-to-file`、`/usage-statistics-enabled`、`/request-retry`、`/max-retry-*`、`/ws-auth`、`/force-model-prefix`、`/routing/strategy` | 已覆盖（已对真实 CPA 7.2.146 验证） | 每个白名单端点的 GET/PUT 合约测试与乐观交互 |
-| 配置源码编辑与保存 | `config_management` | `PUT /config.yaml` | 已覆盖（已对真实 CPA 7.2.146 验证） | YAML 错误 400、配置错误 422、脏状态保护、Ctrl+S 快捷保存 |
-| 代理客户端 API Keys | `key_management`（网关分组独立页） | 配置文档的 `api-keys` 字段（经 `PUT /config.yaml` 保存）；别名走 OMC 自有的 `/management/client-key-aliases` | 已覆盖 | 独立页面 `#/api-keys`；增删改经可视化配置草稿与版本校验落盘，与配置面板共用同一保存事务。别名按 `(instance_id, usage 指纹)` 存储于 `client_key_aliases`，是 OMC 元数据而非 CPA 配置，因此改名不会重写 CPA 文档；指纹以 `usage-api-key` 用途计算，与 `usage_events.api_group_key` 同源，请求列表/详情/分面/chip 均据此显示别名并回退到掩码；浏览器验收断言列表真实渲染、计数一致、默认遮罩与揭示值 |
-| Gemini/Interactions/Codex/Claude/xAI/Vertex Key | `ai_providers` | 各 provider 的 `GET/PUT/PATCH/DELETE /{provider}-api-key` | 已覆盖 | 统一提供商列表、脱敏展示与状态切换；启停按单个提供商串行化，快速连击以最后一次意图为准；官网为 OMC 管理元数据（仅 http/https） |
-| OpenAI 兼容提供商 | `ai_providers` | `GET/PUT/PATCH/DELETE /openai-compatibility` | 已覆盖 | 多 key、端点去敏、模型列表与启停开关；官网链接与模型输入框即时筛选 |
-| 模型发现 | 提供商操作、快速开始 | 不经 CPA：直连提供商 `Base URL` 的 `/models`（失败时回退 `/v1/models`）；认证文件模型走 `GET /auth-files/models` | 已覆盖 | `POST /management/providers/pull-models` 由服务端发起并受审计；提供商 URL 与密钥只存在于 Go 侧 |
-| 认证文件列表/筛选 | `auth_files` | `GET /auth-files` | 已覆盖（已对真实 CPA 7.2.146 验证） | 真实字段归一化、runtime-only/disabled 空态 |
-| 认证文件上传 | `auth_files` | `POST /auth-files` multipart | 已覆盖（已对真实 CPA 7.2.146 验证） | JSON 文件上传、错误文件反馈 |
-| 认证文件下载/删除 | 详情/批量操作 | `GET /auth-files/download`、`DELETE /auth-files` | 已覆盖（已对真实 CPA 7.2.146 验证） | 安全文件名、下载内容、批量删除 |
-| 认证文件启用/禁用与字段 | 详情/批量操作 | `PATCH /auth-files/status`、`PATCH /auth-files/fields` | 已覆盖（已对真实 CPA 7.2.146 验证） | 状态、priority/weight/note/proxy 等字段 |
-| 认证文件模型列表 | 详情 | `GET /auth-files/models` | 已覆盖（真实 CPA 7.2.146 返回 200；旧版本 404 时返回 501 capability_missing） | 旧 CPA 404 时显示能力提示 |
-| OAuth 排除模型 | `auth_files` 子页面 | `/oauth-excluded-models`（OMC 侧走 `PATCH /auth-files/fields` 的 `excluded_models`） | 部分：接口已支持，控制台未暴露 | 后端字段白名单已接受 `excluded_models`，抽屉表单只暴露 priority/weight/note；补 UI 后需补通配符与审计测试 |
-| OAuth 模型别名 | `auth_files` 子页面 | `/oauth-model-alias` | 计划 | provider key 归一化和通配符专项测试 |
-| OAuth 登录 | `oauth` | `GET /{provider}-auth-url`、`GET /get-auth-status`、`DELETE /oauth-session`、`POST /oauth-callback` | 已覆盖 | provider/state 轮询、取消、回调输入；不模拟 token |
-| Vertex JSON / iFlow Cookie 导入 | OAuth/认证文件 | `POST /vertex/import` 及 provider 专用流程 | 计划 | 以官方版本能力探测为准 |
-| 配额观察 | `quota_management`、凭据详情 | `auth-files` 返回的 quota/model_quotas 观察数据 | 已覆盖 | 凭据详情/抽屉展示、字段级安全过滤 |
-| 配额重置 | 配额行操作 | `POST /reset-quota {auth_index}` | 已覆盖 | 只接受稳定 `auth_index`，二次确认、审计与前端重置闭环 |
-| 用量队列 | 仪表盘/观测 | `GET /usage-queue?count=N`（RESP 订阅同等） | 已覆盖（服务端采集，无控制台读取动作） | `internal/usage/ingest` 在后台排空队列；控制台不提供“读取并确认”，因为该接口是破坏性消费，暴露给浏览器会与采集器争抢记录。请求记录页的“刷新”通过 `POST /usage/ingest/refresh` 让服务端立刻排空一次（命令交由采集器 goroutine 执行）并等待入库可见，前端不直接碰队列 |
-| API Key 用量桶 | 仪表盘/提供商 | `GET /api-key-usage` | 进行中 | 端点已接入 `/management/overview`，仪表盘次级区渲染 provider 级统计；overview 返回的 20 个 10 分钟全局 `traffic` 桶尚未渲染 |
-| 实时日志与增量拉取 | `logs` | `GET /logs?after=&cursor=&limit=` | 已覆盖（真实 CPA 7.2.146 验证） | cursor 优先、`after` 回退并回退一秒；`cursor-reset` 重建缓冲；5s 轮询可暂停 |
-| 清理日志 | `logs` | `DELETE /logs` | 已覆盖 | 二次确认、清空后重建缓冲 |
-| 错误日志文件 | `logs` | `/request-error-logs`、`/request-error-logs/:name` | 已覆盖（真实文件列表 + 下载验证） | 文件名在 Go 侧拒绝穿越，不转发到 CPA |
-| 单请求日志下载 | 日志详情 | `GET /request-log-by-id/:id` | 已覆盖（`/usage/events/{id}/request-log`） | 404 视为能力缺失，不渲染成空文件 |
-| 插件列表/开关/删除/配置 | `plugins` | `/plugins` 及 `/plugins/:id/*` | 已覆盖 | 启停开关、JSON 配置模态编辑、卸载二次确认与强审计 |
-| 插件商店安装 | `plugin_store` | `/plugin-store`、`POST /plugin-store/:id/install` | 已覆盖 | 商店列表、权限审查、安装确认与强审计 |
-| 系统版本/更新检查 | `system_info` | `/latest-version`、CPA response headers | 已覆盖 | 真实版本比对、更新提示、不把“检查”误报为“升级完成” |
-| 运行自检/诊断 | `system_info` | CPA 探活、管理端点能力探测、脱敏诊断导出 | 已覆盖 | 组件健康拓扑、脱敏诊断包下载、强审计保护 |
-| 任意上游 API Call | provider/调试操作 | CPA `POST /api-call` | 部分（仅服务端配额观测） | 面向浏览器的通用 `/api-call` 保持关闭；`internal/quota` 用该端点观测官方配额，目标受 `AllowedURLPrefixes` 编译期白名单限制，不接受用户提供的 URL |
-| 多 CPA 实例 | 顶部连接/系统信息 | Oh My CPA 自有实例模型 | 计划 | 增加实例 CRUD、密钥轮换、实例级权限后实现 |
+| Admin login & connection status | Login, top connection pill | Local session; server-side `/auth-files` health probe | Covered | Login, logout, invalid session, and disconnected CPA test coverage |
+| Dashboard connection, version, counts, model overview | `dashboard` | `/config`, `/auth-files`, `/api-key-usage`, `/latest-version` | Covered | `GET /management/overview` aggregates three read-only endpoints, consumed by secondary dashboard sections and system pages; partial failures degrade via `partial_errors` rather than breaking the page |
+| Quick start & request examples | `quick_start` | `/config`, `/api-keys`, fixed proxy endpoints | Covered | Four-step wizard, multi-client configurations, endpoints, and cURL / Python / Node.js code sample copy actions |
+| Configuration read | `config_management` | `GET /config`, `GET /config.yaml` | Covered (verified against real CPA 7.2.146) | Reads and displays real JSON / YAML |
+| Config visual scalar editing | `config_management` | `/debug`, `/proxy-url`, `/request-log`, `/logging-to-file`, `/usage-statistics-enabled`, `/request-retry`, `/max-retry-*`, `/ws-auth`, `/force-model-prefix`, `/routing/strategy` | Covered (verified against real CPA 7.2.146) | GET / PUT contract tests and optimistic UI interactions for each allowlisted endpoint |
+| Config YAML editing & saving | `config_management` | `PUT /config.yaml` | Covered (verified against real CPA 7.2.146) | YAML error 400, config error 422, dirty state protection, Ctrl+S quick save |
+| Proxy client API Keys | `key_management` (dedicated gateway page) | Config document `api-keys` field (saved via `PUT /config.yaml`); aliases via OMC's `/management/client-key-aliases` | Covered | Dedicated page `/api-keys` (under `/omc/api-keys`); additions/edits/deletions commit through visual config drafts and revision checks, sharing save transactions with the config panel. Aliases are stored in `client_key_aliases` keyed by `(instance_id, usage fingerprint)` as OMC metadata without rewriting CPA's config document; fingerprints use `usage-api-key` purpose matching `usage_events.api_group_key`; request list, drawer, facets, and chips show aliases and fall back to masks; browser acceptance asserts rendering, counts, masking, and reveal values |
+| Gemini / Interactions / Codex / Claude / xAI / Vertex Keys | `ai_providers` | `GET/PUT/PATCH/DELETE /{provider}-api-key` | Covered | Unified provider list, sanitized display, and status toggling; provider toggles are serialized per provider with last-intent resolution; provider website is OMC management metadata (http/https only) |
+| OpenAI-compatible providers | `ai_providers` | `GET/PUT/PATCH/DELETE /openai-compatibility` | Covered | Multi-key, endpoint sanitization, model list, and enable switches; website links and instant model filtering |
+| Model pulling | Provider actions, Quick Start | Bypasses CPA: connects directly to provider `Base URL` `/models` (falls back to `/v1/models`); auth-file models use `GET /auth-files/models` | Covered | `POST /management/providers/pull-models` is initiated server-side and audited; provider URLs and secrets remain in Go |
+| Auth file list / filter | `auth_files` | `GET /auth-files` | Covered (verified against real CPA 7.2.146) | Field normalization, runtime-only / disabled empty states |
+| Auth file upload | `auth_files` | `POST /auth-files` multipart | Covered (verified against real CPA 7.2.146) | JSON file upload and invalid file feedback |
+| Auth file download / delete | Detail / batch actions | `GET /auth-files/download`, `DELETE /auth-files` | Covered (verified against real CPA 7.2.146) | Safe filenames, download payload, and batch deletion |
+| Auth file enable / disable & fields | Detail / batch actions | `PATCH /auth-files/status`, `PATCH /auth-files/fields` | Covered (verified against real CPA 7.2.146) | Status toggles, priority / weight / note / proxy fields |
+| Auth file model list | Detail | `GET /auth-files/models` | Covered (real CPA 7.2.146 returns 200; older versions returning 404 map to 501 capability_missing) | Displays capability notice on older CPA versions |
+| OAuth excluded models | `auth_files` sub-page | `/oauth-excluded-models` (in OMC handled via `excluded_models` in `PATCH /auth-files/fields`) | Partial: API supported, not exposed in UI | Backend field allowlist accepts `excluded_models`; drawer currently exposes priority / weight / note; UI additions will need wildcard and audit tests |
+| OAuth model aliases | `auth_files` sub-page | `/oauth-model-alias` | Planned | Provider key normalization and wildcard testing |
+| OAuth login | `oauth` | `GET /{provider}-auth-url`, `GET /get-auth-status`, `DELETE /oauth-session`, `POST /oauth-callback` | Covered | Provider / state polling, cancellation, callback input; no token emulation |
+| Vertex JSON / iFlow Cookie import | OAuth / auth-files | `POST /vertex/import` and provider-specific flows | Planned | Dependent on upstream version capability probes |
+| Quota observation | `quota_management`, credential detail | Quota and `model_quotas` telemetry from `auth-files` | Covered | Credential detail drawer display with field-level sanitization |
+| Quota reset | Quota row action | `POST /reset-quota {auth_index}` | Covered | Accepts stable `auth_index`, secondary confirmation, audit logging, and frontend reset loop |
+| Usage queue | Dashboard / observation | `GET /usage-queue?count=N` (equivalent to RESP subscription) | Covered (server-side collection, no direct console read) | `internal/usage/ingest` drains queue in the background; the console exposes no "read and acknowledge" action because reading is destructive and would race the collector. The request list "refresh" triggers `POST /usage/ingest/refresh` so the server drains CPA once via its collector goroutine and waits for visibility |
+| API Key usage buckets | Dashboard / providers | `GET /api-key-usage` | In progress | Endpoint integrated into `/management/overview`; provider-level statistics render in dashboard; 20 10-minute global `traffic` buckets not yet rendered |
+| Live logs & incremental fetch | `logs` | `GET /logs?after=&cursor=&limit=` | Covered (verified against real CPA 7.2.146) | Cursor prioritized with `after` fallback; `cursor-reset` buffer reconstruction; pausable 5s polling |
+| Clear logs | `logs` | `DELETE /logs` | Covered | Secondary confirmation; buffer rebuilds after clearing |
+| Error log files | `logs` | `/request-error-logs`, `/request-error-logs/:name` | Covered (real file list + download verification) | Filename path traversal rejected in Go, not forwarded to CPA |
+| Single request log download | Log detail | `GET /request-log-by-id/:id` | Covered (`/usage/events/{id}/request-log`) | 404 treated as missing capability rather than empty file |
+| Plugin list / toggle / delete / config | `plugins` | `/plugins` and `/plugins/:id/*` | Covered | Enable switch, JSON config modal editing, uninstall confirmation, and audit logging |
+| Plugin store installation | `plugin_store` | `/plugin-store`, `POST /plugin-store/:id/install` | Covered | Store catalog, permission review, install confirmation, and audit logging |
+| System version / update check | `system_info` | `/latest-version`, CPA response headers | Covered | Version comparison, upgrade prompts; avoids misrepresenting "check" as "upgrade complete" |
+| Runtime self-check & diagnostics | `system_info` | CPA ping, management capability probes, sanitized diagnostics export | Covered | Component health topology, sanitized diagnostic package download, fail-closed audit |
+| Arbitrary upstream API Call | Provider / debug actions | CPA `POST /api-call` | Partial (server-side quota observation only) | General `/api-call` remains closed to browsers; `internal/quota` uses the endpoint to observe official quotas, restricted to the compile-time `AllowedURLPrefixes` allowlist |
+| Multi-CPA instances | Top connection / system info | Oh My CPA instance model | Planned | Requires instance CRUD, key rotation, and instance-scoped permissions |
 
-## 当前状态与后续顺序
+## Current State and Roadmap
 
-已落地：Dashboard、Quick Start、AI Providers、Key management、OAuth 管理、OAuth 登录、OAuth 配额、Logs、Usage Events、Pricing、Config、Plugins、Plugin Store、System 共 14 个真实路由页面（外加一个重定向兜底），没有任何页面仍靠能力探测占位。
+Implemented surfaces: Dashboard, Quick Start, AI Providers, Key Management, Auth Files, OAuth, Quota, Logs, Usage Events, Pricing, Config, Plugins, Plugin Store, and System—totalling 14 live routed pages (plus a redirect fallback). No pages remain as placeholder capability mocks.
 
-仍依赖能力探测的部分：`GET /api/v1/management/capabilities/{key}` 保留为旧 CPA 版本的只读兼容性探测，用于区分「接口可用/缺失」与「页面待接线」，不得用于冒充功能完成。
+Capability probes (`GET /api/v1/management/capabilities/{key}`) are retained strictly for backwards compatibility checks with older CPA releases to distinguish "API available/missing" from "unwired UI", and are never used to fake feature completion.
 
-后续顺序：
+Subsequent milestones:
 
-1. **旧版本兼容收口**：为已知会在旧 CPA 上缺失的端点（已确认的有 `/auth-files/models`）统一“能力缺失”文案，并逐步补全其余端点的最低版本矩阵与降级表现。
-2. **能力补齐**：OAuth 模型别名、auth-file 字段表单（prefix / proxy_url / disable_cooling / excluded_models / expired）的 UI 接线。
-3. **多实例**：实例 CRUD、密钥轮换、实例级权限，需要先写 ADR（当前 `cpa_bindings.instance_id` 已按多实例建模，`/instances/default/*` 仍是单实例硬编码）。
+1. **Legacy Version Compatibility**: Standardize "capability missing" notices for endpoints absent on older CPA releases (such as `/auth-files/models`), documenting minimum version requirements and graceful degradation.
+2. **Capability Additions**: OAuth model aliases and remaining auth-file field bindings (`prefix`, `proxy_url`, `disable_cooling`, `excluded_models`, `expired`) in UI forms.
+3. **Multi-Instance Support**: Instance CRUD, key rotation, and instance-level permissions backed by an ADR (the database schema already models `cpa_bindings.instance_id`, while `/instances/default/*` remains single-instance).
 
-## Oh My CPA 自有能力（CPAMC 无对位）
+## Oh My CPA Distinct Capabilities (No CPAMC Counterpart)
 
-下列能力不属于 CPAMC 功能清单，但属于本产品的交付面，列在这里避免后续 Agent 把它们当成“超出范围”：
+The following capabilities are unique to Oh My CPA and have no counterpart in CPAMC, but are part of this product's deliverables:
 
-| 能力 | 入口 | 说明 |
+| Capability | Entrypoint | Description |
 | --- | --- | --- |
-| 用量请求浏览器 | `/usage/events`、`/usage/events/{id}`、`/usage/events/{id}/request-log`、`/usage/facets`、`/usage/ingest/refresh` | 多选分面（同维度取并集、跨维度取交集）、全局搜索、区间筛选、列布局与视图持久化、单请求详情与原始日志下载；刷新按钮先按需排空 CPA 队列并等到记录可查询，再重读列表与分面。列表按请求时间倒序分页（`timestamp_ms` + `id` 复合游标），与首列显示的时间一致；"新记录"计数按入库 `id` 单独统计，因为长耗时请求可能以较旧时间排在首页之下 |
-| 请求时价格快照与模型目录 | `/pricing`、`/pricing/models`、`/pricing/sync`、`/management/dashboard` | 见 `docs/adr/0003-request-time-price-snapshots.md` 与 `docs/plans/model-prices.md` |
-| 配额总览与凭据详情 | `/management/quota`、`/management/quota/{authIndex}` | 归一化快照 + 冷却、重置、Codex 重置积分 |
-| 审计日志 | `/management/audit/events`、`/management/audit/export` | 追加写入；敏感导出写失败时 fail-closed |
-| 服务端控制器偏好 | `/preferences` | 闭集 key，服务重启不丢失 |
-| 能力探测门面 | `/management/capabilities/{key}` | 仅只读、编译期白名单 |
+| Usage Request Browser | `/usage/events`, `/usage/events/{id}`, `/usage/events/{id}/request-log`, `/usage/facets`, `/usage/ingest/refresh` | Multi-select facets (union within dimensions, intersection across dimensions), global search, range filtering, column layout and view persistence, single request detail, and raw request log downloads. The refresh action drains CPA's queue on demand until records are queryable before re-reading lists and facets. Lists are sorted by request time descending (`timestamp_ms` + `id` composite cursor), matching the displayed time column; new record counts are tracked independently against ingestion `id` |
+| Request-Time Price Snapshots & Catalog | `/pricing`, `/pricing/models`, `/pricing/sync`, `/management/dashboard` | See `docs/adr/0003-request-time-price-snapshots.md` and `docs/plans/model-prices.md` |
+| Quota Overview & Credential Details | `/management/quota`, `/management/quota/{authIndex}` | Normalized snapshots + cooldowns, resets, and Codex reset credits |
+| Audit Logging | `/management/audit/events`, `/management/audit/export` | Append-only logging; fail-closed on sensitive exports |
+| Server-Side Console Preferences | `/preferences` | Closed set of keys, surviving service and container restarts |
+| Capability Probing Facade | `/management/capabilities/{key}` | Read-only, compile-time allowlist |
 
-## 已知限制
+## Known Limitations
 
-- CPA Management API 是持续演进的版本化外部契约，页面必须把 404/405 视为能力缺失而不是空数据。
-- **CPA 会把 `/v0/management/*` 调用本身写进日志文件。** 控制台每 5 秒轮询一次，日志里就会出现自己的噪音，因此「隐藏管理流量」必须默认开启；CPAMC 靠隐藏整个日志入口来规避同一问题。
-- 文件日志关闭时 CPA 对 `GET /logs` 返回 **400 `logging to file disabled`**。门面把它翻译成 409 `file_logging_disabled`，页面据此解释原因并给出开关位置，而不是报“请求失败”。
-- `/usage-queue` 会消费队列记录，不能在普通自动刷新中调用；控制台不暴露它，后台采集器是唯一消费者。
-- `POST /api-call` 支持由 CPA 代替凭据发起任意上游请求，具有 SSRF 和数据外泄风险。面向浏览器的通用调用保持关闭；服务端仅在 `internal/quota` 中使用，且目标 URL 必须命中 `AllowedURLPrefixes` 的官方 HTTPS 前缀。
-- 完全替代 CPAMC 不等于复制其浏览器 localStorage 密钥存储；Oh My CPA 保持服务端密钥边界。
+- The CPA Management API is an evolving, versioned external contract; the console must treat 404 and 405 as missing capabilities rather than empty data.
+- **CPA logs `/v0/management/*` calls into its log file.** If the console polls every 5 seconds, it will pollute the log with its own management traffic; "Hide management traffic" is therefore enabled by default (CPAMC hid the entire log page to work around this).
+- When file logging is disabled, CPA returns **400 `logging to file disabled`** for `GET /logs`. Oh My CPA translates this into 409 `file_logging_disabled`, allowing the UI to explain the cause and direct users to the toggle, rather than reporting an unexpected failure.
+- `/usage-queue` destructively consumes queue records and must never be invoked during ordinary UI polling; the console does not expose this endpoint, leaving the background collector as the sole consumer.
+- `POST /api-call` allows CPA to make arbitrary upstream requests on behalf of credentials, introducing SSRF and exfiltration risks. General browser access remains disabled; the server uses it exclusively in `internal/quota`, restricted to verified HTTPS endpoints in `AllowedURLPrefixes`.
+- Replacing CPAMC does not mean copying its browser `localStorage` secret storage; Oh My CPA maintains strict server-side secret boundaries.

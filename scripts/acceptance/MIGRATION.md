@@ -55,6 +55,12 @@ than an oversight:
 
 ## Migrated out of the browser
 
+Granular policy logic and state permutations below had their primary, exhaustive
+verification migrated from timing-sensitive browser steps into deterministic
+Node-based logic tests (such as `scripts/test-usage-events-view-policy.ts`). High-level
+end-to-end user workflows that integrate these capabilities in live browser sessions
+continue to be exercised by `scripts/browser-acceptance.mjs`.
+
 | Original claim | Class | Replacement |
 | --- | --- | --- |
 | A filter edit commits the dimension it names to the URL | `PURE` | `scripts/test-usage-events-view-policy.ts` — *a filter edit replaces the dimension it names and leaves the window alone* |

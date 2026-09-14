@@ -188,14 +188,14 @@ The palette is anchored on warm charcoal darks with pure semantic status pigment
 
 ### Hierarchy
 - **Display** (700, 42px, line-height 1.1, letter-spacing -0.04em): The single prominent dashboard KPI (e.g. Total Requests, Estimated Cost).
-- **Headline** (700, 22px, line-height 1.2): Main page verdict title (e.g. `运行稳定。` or section navigation name).
+- **Headline** (700, 22px, line-height 1.2): Main page verdict title (e.g. `Healthy.` or section navigation name).
 - **Title** (600, 16px, line-height 1.3): Card section headers, drawer titles, and table group banners.
 - **Body** (400, 14px, line-height 1.5): Standard body copy, form labels, input values, and status explanations.
 - **Data / Mono** (400, 12–13px, line-height 1.4): Table cells, log lines, route paths, JSON/YAML values, and latency metrics.
 - **Label / Eyebrow** (500, 10px, line-height 1.2, letter-spacing 0.16em, uppercase): Small metadata headers above KPI cards and navigation category headers.
 
 ### Named Rules
-**The One Verdict Rule.** Exactly one top-level title is permitted per page. Subtitles exist strictly to carry live dynamic data (e.g. `Default CPA · 已连接`), never static marketing boilerplate or repetitive English translations.
+**The One Verdict Rule.** Exactly one top-level title is permitted per page. Subtitles exist strictly to carry live dynamic data (e.g. `Default CPA · Connected`), never static marketing boilerplate or repetitive translations.
 
 **The Tabular Numerals Rule.** All numbers, financial values, latency figures, and timestamps must inherit `font-variant-numeric: tabular-nums` to ensure perfectly steady columns during real-time streaming updates.
 
@@ -205,7 +205,7 @@ The application viewport uses a fixed shell architecture (`100dvh`, `body { over
 
 ```text
 ┌──────────┬──────────────────────────────────────────┐
-│ brand ›_ │ breadcrumb (分组 / 页面)   actions  中|EN │ 56px, border-bottom 1px
+│ brand ›_ │ breadcrumb (Group / Page)  actions  ZH|EN│ 56px, border-bottom 1px
 │──────────┼──────────────────────────────────────────┤
 │ nav      │                                          │
 │ (236px)  │ page content        ← scrolls alone      │
@@ -215,8 +215,8 @@ The application viewport uses a fixed shell architecture (`100dvh`, `body { over
 └──────────┴──────────────────────────────────────────┘
 ```
 
-- **Top Header**: Fixed 56px height, full-width with 1px bottom border (`#464343`). Contains the `›_` terminal prompt logo, breadcrumb hierarchy, global search, and language/theme triggers.
-- **Navigation Sidebar**: Fixed 236px width (58px collapsed), 1px right border. Houses grouped navigation categories: `运行` (Runtime), `网关` (Gateway), `观测` (Observability), `控制` (Control).
+- **Top Header**: Fixed 56px height, full-width with 1px bottom border (`#464343`). Contains the `›_` terminal prompt logo, breadcrumb hierarchy, connection status pill, discovery refresh, theme toggle, language switch, and logout triggers.
+- **Navigation Sidebar**: Fixed 236px width (58px collapsed), 1px right border. Houses grouped navigation categories: `Operate`, `Gateway`, `Observe`, `Control`.
 - **Content Area**: Single-scroll container with responsive padding (32px desktop / 24px tablet / 16px mobile).
 - **Settings Workbench Layout**: A three-track grid — 216px sticky section nav + 920px reading column + 216px balancing gutter — accompanied by a full-width sticky action bar, so the form never drifts to one side on wide screens.
 
@@ -257,7 +257,7 @@ The geometric form language is compact, rectangular, and tightly controlled:
 ### Buttons
 - **Shape**: 4px radius (`--radius-sm`).
 - **Sizes**: Standard 32px height (padding 0 15px); Small 28px height (antd `controlHeightSM`); Square 32×32px for row-level action icon buttons.
-- **Primary**: Deep accent fill (`#0056b3`), white text, no shadow. Hover shifts to `#007aff` with zero transition lag.
+- **Primary**: Deep accent fill (`#0056b3`), white text, no shadow. Hover shifts to `#004085` with zero transition lag.
 - **Secondary / Default**: Surface fill (`#302c2c`), 1px border (`#464343`), chalk white text.
 - **Ghost**: Transparent background, borderless, text color `#fdfcfc`, hover reveals `#302c2c`.
 
@@ -279,7 +279,7 @@ The geometric form language is compact, rectangular, and tightly controlled:
 - **Active State**: 2px chalk white inset tick (`box-shadow: inset 2px 0 0 #fdfcfc`), bold white text (`#fdfcfc`), transparent background.
 
 ### Status Pips & Badges
-- **Status Pip**: 7×7px square, 2px radius, paired with explicit status text (e.g. `[●] 运行中`). Green = healthy, Amber = degraded/warning, Red = error, Gray = offline. A pip reports whether a window needs attention, never how far a number sits from its ideal: success rate stays gray for ≤ 5% failures, amber above that, red above 20%, and a window under 20 requests with under 3 failures carries no verdict at all. Only a verdict gets a pip: the request console's 成功 / 失败 filter segments carry one each, while 全部 carries none.
+- **Status Pip**: 7×7px square, 2px radius, paired with explicit status text (e.g. `[●] Running`). Green = healthy, Amber = degraded/warning, Red = error, Gray = offline. A pip reports whether a window needs attention, never how far a number sits from its ideal: success rate stays gray for ≤ 5% failures, amber above that, red above 20%, and a window under 20 requests with under 3 failures carries no verdict at all. Only a verdict gets a pip: the request console's Success / Failed filter segments carry one each, while All carries none.
 - **Latency**: never tinted by an absolute threshold. Agent requests legitimately run for minutes, so a time-based amber rule would flag healthy traffic; the detail drawer compares TTFT against total duration instead.
 - **Cache-Rate Badge**: Pill-shaped badge featuring continuous OKLCH gradient tint fill with ≥ 4.5:1 text contrast. Displays values up to `99.9%` with one decimal place. The scale is never red: a cache miss is the shape of a novel prompt, not a failed execution.
 

@@ -12,7 +12,7 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
 - **Connection**: A user-facing usable line formed from a Source, optional Subscription and Account, Credential, Endpoint, and Protocol Driver. It is the primary resource users organize and name.
 - **Protocol Driver**: The technical protocol adapter used by CPA, such as Codex/Responses, OpenAI-compatible Chat Completions, Anthropic Messages, or Gemini. It is implementation metadata, not the user-facing Source.
 - **CPA Binding**: The link between a Connection and a concrete resource on one CPA instance, including the CPA resource type and runtime auth index.
-- **Unclaimed Resource**: A CPA resource discovered by Oh My CPA that has no confirmed local user identity or override yet. Discovery, the claim status column, and `PATCH /resources/{id}/override` all still exist, but the console no longer routes a triage page: since the navigation was aligned with the gateway surfaces, CPA resources are reached through Providers and OAuth management instead. The discovered/claimed model is what those pages render from, so the term stays load-bearing even without a dedicated queue screen.
+- **Unclaimed Resource**: A CPA resource discovered by Oh My CPA that has no confirmed local user identity or override yet. Discovery, the claim status column, and `PATCH /resources/{id}/override` all still exist, but the console no longer routes a triage page: since navigation aligned with gateway surfaces, CPA runtime resources are managed directly through Providers and OAuth management pages instead. The discovery engine persists rows into `discovered_resources` and `cpa_bindings` (queried via `/resources`), so the domain model remains load-bearing even without a dedicated triage screen.
 - **Model Price**: The current CPA model catalog is the maintenance scope. Each catalog identity has one current price projection (four per-1M-token rates plus a multiplier); models.dev syncs automatically and manual rows win over sync.
 - **Price Version**: An immutable, time-effective price snapshot. A price change creates a new version; deleting a current price creates a tombstone so future requests stay unpriced while existing snapshots remain valid.
 - **Request Cost Snapshot**: The price version and USD nanos amount selected in the same transaction as a usage event, using the request timestamp. It is never recalculated from the current price projection.
@@ -71,13 +71,20 @@ operator never clicked.
 
 ## Auth model
 
-There is exactly one credential in the whole system: the CPA management key
-(`remote-management.secret-key`). Oh My CPA has no separate admin password —
-the login form takes the management key, verifies it server-side, and derives
-the session signature from it (HMAC-SHA256 over a fixed label). Rotating the
-CPA key invalidates every existing session. The key never reaches the browser;
-sessions are HttpOnly SameSite=Strict cookies. No key configured means the app
-boots but sign-in answers 503 until `OMCPA_CPA_MANAGEMENT_KEY` is set.
+There is exactly one administrator login credential in the whole system: the
+CPA management key (`remote-management.secret-key`), passed as
+`OMCPA_CPA_MANAGEMENT_KEY`. This is distinct from `OMCPA_MASTER_KEY` (which is a
+system encryption secret used for AES-GCM at rest). Oh My CPA has no separate
+admin password: the login form takes the management key, submits it to the
+server, and derives the session signature from it (HMAC-SHA256 over a fixed
+label). The key is never persisted in browser storage and is omitted from normal
+API responses; sessions are HttpOnly SameSite=Strict cookies. Rotating the CPA
+key invalidates existing sessions once Oh My CPA reloads the new key (e.g. upon
+restart or configuration reload). No key configured means the app boots but
+sign-in answers 503 until `OMCPA_CPA_MANAGEMENT_KEY` is set. Authenticated
+secret-management surfaces (such as raw YAML source viewing or client-key
+reveals) explicitly return credentials to authorized administrators and log
+audits.
 
 ## i18n
 
@@ -106,23 +113,24 @@ palette in code; never hardcode colors in components.
 
 ## Time windows
 
-- **Range Preset**: A relative window — 实时 (last 15m), 1h, 6h, 24h, 7d, 30d,
+- **Range Preset**: A relative window — Live (last 15m), 1h, 6h, 24h, 7d, 30d,
   90d. It slides with the current time, so its totals move on every poll even
   when no request arrived: the left edge keeps dropping old events. That is why
   a relative window cannot answer "nothing changed".
-- **实时 (Live)**: The shortest preset, fifteen minutes at one bucket per minute.
+- **Live (15m)**: The shortest preset, fifteen minutes at one bucket per minute.
   It is a preset, not a mode: it slides and is polled like the rest, at the
   cadence its own bucket width implies (five seconds). Five minutes was too
   narrow to read as a trend and an hour too coarse to feel live.
 - **Custom Range**: An absolute window picked from the calendar, at day
   granularity. It comes in two kinds. A **closed range** is frozen — the console
   shows exactly what was asked for and stops polling, and a picked end means
-  through that day. An **open-ended range** ("至今", expressed by leaving the end
-  empty) keeps its start fixed while its end tracks the current time, so it is
-  polled like a preset and grows as it runs.
+  through that day. An **open-ended range** (expressed by leaving the end empty)
+  keeps its start fixed while its end tracks the current time, so it is polled
+  like a preset and grows as it runs.
 - **Preference**: Console state stored server-side rather than in the browser,
-  because a reload, a service restart and a container rebuild all drop browser
-  storage. Values are JSON documents under a closed set of named keys
+  so it follows the deployment across devices, browsers, incognito windows, and
+  cleared browser storage rather than binding to a single client instance.
+  Values are JSON documents under a closed set of named keys
   (`repository.Preference*`); the API rejects any key not on that list, so the
   preference endpoint cannot become a general blob store reachable through the
   session. The keys in use are the dashboard window, the log page's filters,

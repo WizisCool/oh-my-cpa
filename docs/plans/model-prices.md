@@ -1,4 +1,4 @@
-# Model prices (费用与定价)
+# Model prices
 
 Design chosen after studying `cpa-usage-keeper` and `CPA-Manager-Plus` and
 replacing the earlier heavier valuation prototype (removed before this work).
@@ -7,14 +7,16 @@ replacing the earlier heavier valuation prototype (removed before this work).
 
 1. Zero-config by default. The pricing service syncs from models.dev at startup
    and then on a server-side interval that defaults to daily; the operator can
-   change it (off / 1h / 6h / 12h / 24h) without a restart. Unique strong model
-   matches become price rows automatically.
+   change it (off / 1h / 6h / 12h / 24h) without a restart. Deterministic
+   candidate ranking selects winning price rows automatically per the ranking chain.
 2. Pricing follows the current CPA catalog. A complete catalog snapshot is
    persisted separately from usage history; removed models leave the maintenance
    list while their immutable request snapshots remain queryable.
 3. One source. `https://models.dev/api.json` is the only pricing source.
 4. Manual wins. Operator edits are saved with source `manual` and are never
-   overwritten by sync; deleting a row returns the model to automatic pricing.
+   overwritten by sync; deleting a row creates a retired tombstone version so
+   future requests stay unpriced until the catalog re-syncs or a manual price is
+   re-added.
 5. Unpriced is not zero. Events without a price row report `cost_usd` absent,
    and the dashboard marks the window `partial` instead of fabricating money.
 6. Request costs are locked once. The insertion transaction selects the price

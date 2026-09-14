@@ -234,8 +234,7 @@ POST /api/v1/instances/default/discover
   → internal/cpa/management reads auth-files, codex/claude/gemini API keys,
     openai-compatibility entries
   → cpa/discovery derives a stable resource key and binding fingerprint
-  → repository upserts discovered_resources + cpa_bindings
-  → Providers / OAuth management pages read the projected rows
+  → repository upserts discovered_resources + cpa_bindings (served via /api/v1/resources)
 ```
 
 The resource key resolution order and the ban on array position are fixed by
@@ -243,7 +242,9 @@ ADR 0002: immutable upstream id, then family-scoped `auth_index`, then a
 versioned keyed HMAC of the credential material, then a fingerprint of
 non-sensitive metadata, and finally an explicit `identity_collision` marker
 rather than a silent merge. Secrets never enter a key, a fingerprint input that
-is stored, or a response DTO.
+is stored, or a response DTO. (The Providers and OAuth management pages inspect
+and manage CPA runtime entries directly through `/api/v1/management/providers`
+and `/api/v1/management/auth-files`, layering local preference metadata on read.)
 
 `cpa_bindings` carries `missing_at_ms` and `ON DELETE SET NULL` so upstream
 removal marks a binding missing without cascading into history.

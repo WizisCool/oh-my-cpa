@@ -2,107 +2,107 @@
 
 > Make CPA yours.
 
-Oh My CPA 是面向 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 的 AI 资源身份与整理中心。
+Oh My CPA is an AI resource identity and organization console for [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) (CPA).
 
-当多个 GPT Plus、OpenCode Go、Command Code GOAT 和中转站被 CPA 统一归入 `Codex` 等技术驱动时，Oh My CPA 在其之上保存用户自己的名称、图标、来源和整理状态。CPA 负责协议适配和请求执行，Oh My CPA 负责业务身份与管理。
+When multiple accounts across OpenAI, Codex, Claude, Gemini, DeepSeek, or relay providers are pooled under CPA's technical drivers, Oh My CPA adds user-defined names, icons, sources, and organizational state above them. CPA handles protocol adaptation and request execution; Oh My CPA provides business identity and operations management.
 
-## 当前状态
+## Current State
 
-当前版本是一个与 CPA 同栈部署的完整控制面，后端为 Go 模块化单体，前端为 React + TypeScript + Ant Design 单页应用，产物内嵌进 Go 二进制。
+Oh My CPA is a complete control plane co-deployed with CPA. The backend is a Go modular monolith, and the frontend is a React + TypeScript + Ant Design single-page application embedded directly into the Go binary.
 
-- **运行与观测**：用量仪表盘（15m / 1h / 6h / 24h / 7d / 30d / 90d 相对窗口与绝对自定义区间）、请求浏览器（过滤、分面、单请求详情与单请求日志下载）、实时日志尾随与错误日志下载、系统自检与脱敏诊断包导出；
-- **网关管理**：AI 提供商（含模型拉取与真实启停）、密钥管理（独立页面的代理客户端 API Keys 增删改，与配置共用同一版本校验保存流程；支持为 Key 设置别名，别名会显示在请求记录中，改名不触碰 CPA 配置文档）、OAuth 管理（上传 / 下载 / 删除 / 状态与字段编辑 / 模型列表）、OAuth 授权全流程；
-- **配额与计费**：按凭据的配额观察与重置、冷却清除、Codex 重置积分兑换；models.dev 价格自动同步与手工行级覆盖、请求时价格快照；
-- **配置与扩展**：可视化标量编辑与 YAML 源码编辑（保留注释与未知字段）、插件与插件商店管理；
-- **平台能力**：`/omc` 子路径原生支持、管理员会话、追加写入的审计日志、服务端 console 偏好、zh/en 双语界面；
-- **部署**：Caddy/Nginx 与 CPA 同栈部署模板，SQLite WAL 单副本持久化，零 CDN 离线运行。
+- **Operations & Observability**: Usage dashboard (15m, 1h, 6h, 24h, 7d, 30d, 90d sliding presets and custom absolute date ranges), request browser (filtering, multi-select facets, detail drawer, and individual request log downloads), live tailing with error log downloads, system health checks, and sanitized diagnostics export.
+- **Gateway Management**: AI providers (catalog model pull and active enable/disable toggles), key management (dedicated `/api-keys` route for proxy client API Keys CRUD, sharing draft and revision guards with the configuration panel; supports operator aliases indexed by `(instance_id, usage fingerprint)` without modifying CPA's configuration document), OAuth management (upload, download, delete, status and field editing, and model lists), and complete OAuth authorization flows.
+- **Quota & Billing**: Per-credential quota inspection and resets, cooldown clearance, Codex credit redemption; automated pricing synchronization from models.dev with manual row overrides, and immutable request-time price snapshots.
+- **Configuration & Extensions**: Visual scalar editor and YAML source editor (preserving comments and unknown fields), plugin and plugin store management.
+- **Platform Capabilities**: Native `/omc` sub-path support, administrator session management, append-only audit logging, server-side console preferences, and a complete zh/en bilingual UI.
+- **Deployment**: Caddy and Nginx co-deployment templates alongside CPA via Docker Compose, single-replica SQLite WAL persistence, and zero-CDN offline execution.
 
-CPA 管理密钥经 AES-GCM 加密后保存，浏览器不会接触该密钥。密钥别名只保存名称与 `(instance_id, usage 指纹)` 的对应关系，不落任何密钥原文；改名仅写 Oh My CPA 自有元数据，不会重写 CPA 配置文档。
+The CPA management key is encrypted with AES-GCM at rest using `OMCPA_MASTER_KEY`. It is never returned in ordinary API responses or stored in browser storage. Client key aliases only map names to `(instance_id, usage fingerprint)` pairs without persisting plaintext keys; renaming a key modifies Oh My CPA's metadata and never touches CPA's configuration document.
 
-早期版本的「未认领资源分拣」页面已随导航对齐网关形态而下线；发现与绑定模型仍在后端运行，改由 Providers / OAuth 管理页面呈现。`/api/v1/resources` 与 `/instances/default/discover` 端点保留，当前没有前端调用方。
+The early "unclaimed resources triage" screen was retired as navigation aligned with gateway surfaces; the discovery and binding models still run in the backend, while CPA resources are presented through the Providers and OAuth management pages. The `/api/v1/resources` and `/instances/default/discover` endpoints remain available for discovery operations.
 
-## 本地开发
+## Local Development
 
-环境要求：Go 1.24+、Node.js 22+、pnpm 11。Go 热重载还需安装 [Air](https://github.com/air-verse/air)：
+Prerequisites: Go 1.24+ (module baseline `1.24.0`; reproducible pinned CI toolchain uses Go **1.24.13**, Node.js **22.23.2**, and pnpm **11.19.0** per `scripts/tools-versions.json`). For Go live reloading, install [Air](https://github.com/air-verse/air):
 
 ```bash
 go install github.com/air-verse/air@latest
 pnpm install --frozen-lockfile
 ```
 
-复制环境变量模板并填写主密钥和 CPA Management Key：
+Copy the environment template and set your master key and CPA management key:
 
 ```bash
 cp .env.example .env
 pnpm dev
 ```
 
-日常开发只使用一个浏览器入口：**`http://127.0.0.1:5173/omc/`**（在 Tailscale 或局域网环境中也可通过 **`http://<Tailscale-IP>:5173/omc/`** 访问，后端与 CPA 保持绑定在 `127.0.0.1` 本地回环，由 Vite 代理请求）。
+Daily development uses a single browser entrypoint: **`http://127.0.0.1:5173/omc/`** (or **`http://<Tailscale-IP>:5173/omc/`** in a LAN or Tailscale setup; the backend and CPA remain bound to `127.0.0.1` loopback and Vite proxies requests).
 
 ```text
-浏览器 → Vite :5173 → Go API :8080 → CLIProxyAPI :8317
+Browser → Vite :5173 → Go API :8080 → CLIProxyAPI :8317
 ```
 
-图中的端口是默认拓扑：Go 的监听地址取自 `.env` 的 `OMCPA_LISTEN_ADDR`（默认 `127.0.0.1:8080`），Vite 的 `/omc/api` 代理目标会跟随同一个值，因此本机 8080 被别的服务占用时只需改 `.env`；后端不在本地时用 `OMCPA_API_TARGET` 覆盖代理目标。
+The ports shown above reflect the default development topology: Go's listen address defaults to `127.0.0.1:8080` in `.env.example` (and falls back to `:8080` in `config.Load()` if unset). Vite proxies `/omc/api` to that address, so if port 8080 is occupied, change `OMCPA_LISTEN_ADDR` in `.env`. When the backend runs on a different host, override Vite's proxy target with `OMCPA_API_TARGET`.
 
-Vite 负责前端 HMR，并把 `/omc/api/*` 单向代理到 Go；Go 由 Air 监听 `.go`/`.sql` 文件并自动重建。CLIProxyAPI 是可选的外部依赖，未启动时 Oh My CPA 仍可运行并显示降级状态。
+Vite handles frontend HMR and proxies `/omc/api/*` to Go; Go is monitored by Air on `.go` and `.sql` file changes for automatic rebuilds. CLIProxyAPI is an external dependency; when it is not running, Oh My CPA boots and displays a degraded health status.
 
-| 命令 | 用途 |
+| Command | Purpose |
 | --- | --- |
-| `pnpm dev` | 启动 Air + Vite，默认开发方式 |
-| `pnpm dev:api` | 仅启动 Go/Air，供 API 调试 |
-| `pnpm dev:web` | 仅启动 Vite，连接 `.env` 中 `OMCPA_LISTEN_ADDR` 指定的后端（默认 `:8080`） |
-| `pnpm cpa:start` | 从 `cpa/` 启动本地 CLIProxyAPI |
-| `pnpm build` | 构建前端并同步到 `internal/web/dist`；类型检查由独立门禁负责 |
-| `pnpm type-check` | 检查前端 TypeScript |
-| `pnpm test:fast` | 按工作树改动并发执行最小相关检查（开发迭代中默认跑这个） |
-| `pnpm check:ui` | 界面快通道：dev server + 假接口，按改动只跑相关场景；`--list` / `--plan` 不启动浏览器 |
-| `pnpm verify` | 严格工具链 + 全量静态门禁 + worktree 密钥扫描 |
-| `pnpm verify:build` | 类型检查、生产构建与入口 bundle 预算 |
-| `pnpm verify:full` | 并行编排的完整最终门禁 |
-| `pnpm verify:full:serial` | 串行最终门禁，仅用于诊断并行编排差异 |
-| `pnpm verify:browser` | 对已构建的 SPA 执行确定性浏览器验收 |
-| `pnpm verify:browser:smoke` | 执行核心路径浏览器 smoke |
-| `pnpm verify:probes` | 执行几何、层叠、像素与刷新时序的浏览器探针 |
+| `pnpm dev` | Start Air + Vite (default development workflow) |
+| `pnpm dev:api` | Start Go/Air only for API debugging |
+| `pnpm dev:web` | Start Vite only, connecting to the backend configured by `OMCPA_LISTEN_ADDR` (default `:8080`) |
+| `pnpm cpa:start` | Start local CLIProxyAPI from `cpa/` |
+| `pnpm build` | Build the frontend and synchronize to `internal/web/dist`; type checking is run by independent gates |
+| `pnpm type-check` | Check frontend TypeScript |
+| `pnpm test:fast` | Run affected checks based on worktree changes (default during development iterations) |
+| `pnpm check:ui` | UI fast path: dev server + mock API, running only affected scenarios; `--list` / `--plan` inspects without launching a browser |
+| `pnpm verify` | Toolchain check (warns on version divergence) + full static gates + worktree secret scan |
+| `pnpm verify:build` | Type checking, production build, and entry bundle budget check |
+| `pnpm verify:full` | Parallel orchestrated full final verification gate |
+| `pnpm verify:full:serial` | Serial final gate, used to diagnose parallel orchestration discrepancies |
+| `pnpm verify:browser` | Run deterministic browser acceptance against the built SPA |
+| `pnpm verify:browser:smoke` | Run browser smoke tests for core login, dashboard, and request list paths |
+| `pnpm verify:probes` | Run browser probes for geometry, stacking, pixels, and refresh sequencing |
 
-`pnpm cpa:start` 默认寻找 `cpa/cli-proxy-api`（Windows 下也支持 `.exe`）和 `cpa/config.yaml`；可分别用 `CPA_BIN`、`CPA_CONFIG` 覆盖。Air 可通过 `AIR_BIN` 指定，脚本也会从 `PATH`、`GOBIN` 和 `GOPATH/bin` 查找。
+`pnpm cpa:start` looks for `cpa/cli-proxy-api` (or `.exe` on Windows) and `cpa/config.yaml` by default; override them with `CPA_BIN` and `CPA_CONFIG`. Air can be specified via `AIR_BIN`, or discovered from `PATH`, `GOBIN`, and `GOPATH/bin`.
 
-生产式本地运行需要先构建嵌入资源：
+To run the production binary locally, build the embedded assets first:
 
 ```bash
 pnpm build
 go run ./cmd/oh-my-cpa
-# 打开 http://127.0.0.1:8080/omc/
+# Open http://127.0.0.1:8080/omc/
 ```
 
-如只需同步已经生成的前端产物，可运行 `pnpm sync-web-dist`。
+To synchronize existing frontend build artifacts into the Go embed directory, run `pnpm sync-web-dist`.
 
-## 用量采集与空闲开销
+## Usage Ingestion and Idle Overhead
 
-用量采集器随 **Oh My CPA 后端** 启动，不依赖浏览器是否打开。默认 `auto` 通过 RESP `AUTH` 握手探测，优先长连接订阅；不会要求 CPA 支持通用 Redis `PING`，也不会用消耗队列的请求来探测。HTTPS/HTTP 反向代理不支持 RESP 时才回退到 HTTP 拉取。
+The usage collector starts with the **Oh My CPA backend process** and operates continuously without an open browser. In the default `auto` mode, it probes availability via RESP `AUTH` handshakes and prefers persistent subscriptions; it does not require CPA to support general Redis `PING` commands, nor does it probe by popping messages (which would destroy queue records). If the reverse proxy does not support RESP, it degrades to HTTP pull.
 
-HTTP/RESP 拉取连续为空时，默认等待 `1s → 2s → 4s → 8s → 10s`，之后保持 10 秒。有数据就恢复 1 秒等待；满批次立即继续排空，不降低积压队列的吞吐。
+When HTTP or RESP pulls encounter consecutive empty queues, the poller backs off: `1s → 2s → 4s → 8s → 10s`, capping at 10 seconds. When records arrive, the poller resets to 1 second; full batches drain immediately without delay to prevent queue backlog.
 
-| 环境变量 | 默认值 | 说明 |
+| Environment Variable | Default | Description |
 | --- | --- | --- |
-| `OMCPA_USAGE_INGEST_ENABLED` | `true` | 设为 `false` 时完全关闭后台采集（仪表盘仍服务已存数据） |
-| `OMCPA_USAGE_INGEST_MODE` | `auto` | `auto` / `subscribe` / `resp_pull` / `http_pull` / `off` |
-| `OMCPA_USAGE_IDLE_INTERVAL` | `1s` | 有数据但未满批时的等待、订阅落盘周期与解码器空闲周期 |
-| `OMCPA_USAGE_MAX_IDLE_INTERVAL` | `10s`（不低于基础间隔） | 连续空队列的最长等待；显式设置时不能小于基础间隔 |
-| `OMCPA_USAGE_BATCH_SIZE` | `1000` | 单次最多拉取条数（上限 10000），不代表每次都有 1000 条记录 |
-| `OMCPA_USAGE_AGGREGATE_INTERVAL` | `15s` | 小时/每日汇总的检查周期（保留期清理另有固定 1 小时周期） |
-| `OMCPA_USAGE_RETENTION_DAYS` | `90` | 明细与汇总的保留天数，`0` 表示永久保留 |
-| `OMCPA_USAGE_COLLECT_ERRORS` | `true` | 是否同时订阅 CPA 的推送式错误通道 |
+| `OMCPA_USAGE_INGEST_ENABLED` | `true` | When `false`, completely disables background ingestion (the dashboard still serves existing data) |
+| `OMCPA_USAGE_INGEST_MODE` | `auto` | `auto`, `subscribe`, `resp_pull`, `http_pull`, or `off` |
+| `OMCPA_USAGE_IDLE_INTERVAL` | `1s` | Delay when data is present but under a full batch, subscription flush interval, and decoder idle tick |
+| `OMCPA_USAGE_MAX_IDLE_INTERVAL` | `10s` (≥ idle interval) | Maximum backoff delay for consecutive empty queues; cannot be less than the base interval |
+| `OMCPA_USAGE_BATCH_SIZE` | `1000` | Maximum records fetched per pull (capped at 10000) |
+| `OMCPA_USAGE_AGGREGATE_INTERVAL` | `15s` | Check interval for hourly and daily rollups (retention pruning runs on an independent 1-hour cycle) |
+| `OMCPA_USAGE_RETENTION_DAYS` | `90` | Retention window in days for detail and rollup rows (`0` preserves indefinitely) |
+| `OMCPA_USAGE_COLLECT_ERRORS` | `true` | Whether to subscribe to CPA's push error stream |
 
-两种空闲间隔设为相同值可恢复固定频率。**最长等待加请求耗时必须明显小于 CPA 的队列保留时间**，否则有过期丢数风险。默认退避下，空闲后首批数据可能等待约 10 秒再被拉取；实时性要求更高时可降低上限，支持 RESP 时优先使用订阅。修改后需重启 Oh My CPA 后端。
+Setting both idle intervals to the same value restores a fixed polling cadence. **The maximum idle delay plus request duration must remain significantly lower than CPA's queue retention window**, or expired records will be lost. Under default backoff, the first batch after an idle period may wait up to ~10 seconds to be pulled; lower the upper bound if higher immediacy is required, or use RESP subscription. Changing these settings requires restarting the Oh My CPA backend.
 
-其余服务变量（`OMCPA_LISTEN_ADDR`、`OMCPA_BASE_PATH`、`OMCPA_DATA_DIR`、`OMCPA_MASTER_KEY`、`OMCPA_CPA_BASE_URL`、`OMCPA_CPA_USAGE_ADDR`、`OMCPA_CPA_MANAGEMENT_KEY`、`OMCPA_PUBLIC_URL`、`OMCPA_REQUEST_TIMEOUT`、`OMCPA_CPA_TLS_SKIP_VERIFY`、`OMCPA_VERSION`）见 [`.env.example`](.env.example)。
+Additional service variables (`OMCPA_LISTEN_ADDR`, `OMCPA_BASE_PATH`, `OMCPA_DATA_DIR`, `OMCPA_MASTER_KEY`, `OMCPA_CPA_BASE_URL`, `OMCPA_CPA_USAGE_ADDR`, `OMCPA_CPA_MANAGEMENT_KEY`, `OMCPA_REQUEST_TIMEOUT`, `OMCPA_CPA_TLS_SKIP_VERIFY`, `OMCPA_VERSION`) are documented in [`.env.example`](.env.example). Deployment-level variables such as `OMCPA_PUBLIC_URL` (used for HTTPS cookie flags and reverse proxy routing) can be supplied via environment variables or Compose.
 
-`/v0/management/usage-queue` 是消耗式读取；多个采集器不能共享同一实例的历史队列。不要通过关闭采集来解决日志噪声，也不要用真实队列反复试跑性能测试。
+`/v0/management/usage-queue` is a destructive read; multiple collectors cannot share an instance's queue. Do not disable ingestion to suppress log noise, and avoid repeatedly executing performance tests against a live queue.
 
 ## Docker Compose
 
-完整部署模板位于 [`deploy/compose.full.yml`](deploy/compose.full.yml)，包含 CPA、Oh My CPA 和 Caddy：
+The complete deployment template is located at [`deploy/compose.full.yml`](deploy/compose.full.yml), containing CPA, Oh My CPA, and Caddy:
 
 ```powershell
 $env:CPA_MANAGEMENT_KEY = 'your-cpa-management-key'
@@ -112,33 +112,33 @@ $env:DOMAIN = 'xxxx.com'
 docker compose -f deploy/compose.full.yml up -d --build
 ```
 
-路由约定：
+Routing conventions:
 
 ```text
 https://xxxx.com/       → CPA
 https://xxxx.com/omc/   → Oh My CPA
 ```
 
-Caddy 配置会保留 `/omc` 前缀，不使用 `handle_path`。Oh My CPA 通过 Compose 内部网络直接访问 `http://cpa:8317`；RESP 用量采集也应直接使用 `cpa:8317`，不经过公网反向代理。
+Caddy retains the `/omc` prefix rather than stripping it (`handle_path` is not used). Oh My CPA connects directly to `http://cpa:8317` within the Compose network; RESP usage collection also targets `cpa:8317` directly without traversing the public reverse proxy.
 
-已有 CPA 时使用 [`deploy/compose.omc.yml`](deploy/compose.omc.yml)，并通过外部反向代理将 `/omc/*` 转发到 Oh My CPA 容器。
+When connecting to an existing CPA instance, use [`deploy/compose.omc.yml`](deploy/compose.omc.yml) and forward `/omc/*` to the Oh My CPA container through an external reverse proxy.
 
-## 本地联调（真实 CLIProxyAPI）
+## Local Integration with Real CLIProxyAPI
 
-仓库不提交 CPA 二进制、配置或凭据。将 CLIProxyAPI 解压到已忽略的 `cpa/` 目录，保留自己的 `config.yaml`、认证目录和 API Keys，然后分别启动依赖和应用：
+The repository does not track CPA binaries, configuration files, or credentials. Extract CLIProxyAPI into the gitignored `cpa/` directory, configure your `config.yaml`, auth files, and API keys, then launch the services:
 
 ```bash
 pnpm cpa:start
 pnpm dev
 ```
 
-已在 Docker（或别的进程）里跑着 CPA 时不需要 `pnpm cpa:start`：`OMCPA_CPA_BASE_URL` 用带 scheme 的 `http://127.0.0.1:8317`，`OMCPA_CPA_USAGE_ADDR` 用裸 `host:port` 的 `127.0.0.1:8317`。两者都必须是 Oh My CPA 进程能直连的地址。
+If CPA is already running in Docker (or another local process), `pnpm cpa:start` is not needed: point `OMCPA_CPA_BASE_URL` to `http://127.0.0.1:8317` and `OMCPA_CPA_USAGE_ADDR` to `127.0.0.1:8317`. Both addresses must be directly reachable from the Oh My CPA process.
 
-**同一个 CPA 实例的用量队列只能有一个采集器。** 订阅模式下的回填、以及 `auto` 探测失败后的降级路径都会做消耗式读取，与另一个采集器长期共存会丢数；要把采集权交给 Oh My CPA，就先停掉其它采集器，或者把本实例设为 `OMCPA_USAGE_INGEST_MODE=off`。
+**A single CPA instance must have only one collector.** In subscription mode, backfill routines and fallback paths perform destructive queue reads; running two collectors concurrently results in data loss. To delegate collection to Oh My CPA, stop other collectors or set `OMCPA_USAGE_INGEST_MODE=off`.
 
-`.env` 由 Go 进程启动时读取，已存在的真实环境变量优先。登录密码就是 `OMCPA_CPA_MANAGEMENT_KEY`，即 CPA `remote-management.secret-key` 的明文。注意 CPA 自己的 `config.yaml` 里只存该密钥的 bcrypt 哈希，直接抄过来会在管理接口上得到 `401 invalid management key`。
+`.env` is loaded when the Go process starts; existing environment variables take precedence. The administrator login password is the plaintext CPA Management Key (`OMCPA_CPA_MANAGEMENT_KEY`), matching `remote-management.secret-key` in CPA. Note that CPA stores only the bcrypt hash of this key in its `config.yaml`; copying that hash directly results in `401 invalid management key`.
 
-确定性浏览器验收会启动自己的假 CPA、临时 SQLite 和 Go 服务，但读取已经构建到 `internal/web/dist` 的 SPA，因此需先运行 `pnpm build`：
+Deterministic browser acceptance starts its own fake CPA, temporary SQLite, and Go service, but loads the SPA built in `internal/web/dist`, so run `pnpm build` first:
 
 ```bash
 pnpm build
@@ -148,11 +148,11 @@ pnpm verify:probes
 pnpm verify:e2e
 ```
 
-测试分层模型：不依赖浏览器的判断（URL 改写、已保存视图的推导、防抖失效、轮询决策、范围校验、展示映射）运行在 `pnpm test:logic`（Node，无 Vite / 无 Go / 无 Chromium）；`pnpm verify:probes` 只保留必须由真实 Chromium 证明的性质（Drawer/Modal 层叠与命中测试、列几何与截断、响应式对齐覆盖、sparkline 绘制、拉取与重读的先后顺序）。判据与每条断言的去向见 [`docs/architecture.md`](docs/architecture.md) 的 §11 与 [`scripts/acceptance/MIGRATION.md`](scripts/acceptance/MIGRATION.md)。
+Testing architecture: logic tests independent of the browser (URL rewriting, saved-view derivation, debounce cancellation, polling decisions, range validation, display mappings) run under `pnpm test:logic` (Node, no Vite / no Go / no Chromium); `pnpm verify:probes` is reserved strictly for properties requiring real Chromium (drawer/modal stacking and hit testing, column geometry and truncation, responsive alignment overrides, sparkline rendering, and request sequencing). The testing philosophy and assertion classifications are documented in [`docs/architecture.md`](docs/architecture.md) §11 and [`scripts/acceptance/MIGRATION.md`](scripts/acceptance/MIGRATION.md).
 
-**开发过程中不要每轮都跑全套**：日常用 `pnpm test:fast`（1–13 秒）和 `pnpm check:ui`（3–19 秒，不需要 `pnpm build`）做快速反馈；`pnpm verify` 留到一个逻辑功能完成；`pnpm verify:full` 留给声明完成前与推送前。`check:ui` 跑在 dev server 与 mock 接口上，因此不能代替打产物的验收——两者都要，时间点不同。完整的三个时机定义见 [`AGENTS.md`](AGENTS.md) §3。
+**Do not run the full test suite on every iteration**: use `pnpm test:fast` (1–13s) and `pnpm check:ui` (3–19s, no `pnpm build` required) for fast feedback; save `pnpm verify` for the end of a logical feature, and `pnpm verify:full` before declaring done or pushing. Because `check:ui` runs on the dev server with mock APIs, it does not replace testing built production artifacts—both are required at different stages. Full definitions of the three verification moments are in [`AGENTS.md`](AGENTS.md) §3.
 
-需要检查真实 CPA 或正在运行的 Vite 开发入口时使用独立的 live smoke；`OMCPA_WRITE_TEST=1` 才会执行上传、开关、删除等写操作：
+To check against a real CPA or a running Vite development server, use the live smoke suite; setting `OMCPA_WRITE_TEST=1` enables mutating operations such as uploads, toggles, and deletions:
 
 ```bash
 pnpm verify:live
@@ -160,44 +160,47 @@ OMCPA_URL=http://127.0.0.1:5173/omc/ pnpm verify:live
 OMCPA_WRITE_TEST=1 pnpm verify:live
 ```
 
-确定性验收失败时，本地会在 `tmp/browser-acceptance-failure/` 保留截图、HTML 和应用日志；GitHub Actions 会将其作为短期失败 artifact 上传。
+On deterministic acceptance failures, screenshots, HTML snapshots, and application logs are saved locally in `tmp/browser-acceptance-failure/`; GitHub Actions uploads these as short-lived failure artifacts.
 
-界面语言选择持久化于 `localStorage('omc-lang')`；品牌样式与主题 Token 的权威定义见 [`docs/design.md`](docs/design.md)。Air 监听规则见 [`.air.toml`](.air.toml)。请勿提交 `cpa/`、`.env` 或真实凭据。
+UI language preferences persist in `localStorage('omc-lang')`. Visual styling and theme tokens are authoritatively defined in [`docs/design.md`](docs/design.md). Air watcher rules are defined in [`.air.toml`](.air.toml). Never commit `cpa/`, `.env`, or real credentials.
 
 ## API
 
-`/omc/api/v1/*` requires an administrator session cookie. The login/session endpoints are:
+All endpoints under `/omc/api/v1/*` require an administrator session cookie. Representative endpoints include:
 
 ```text
-GET  /omc/api/healthz
-POST /omc/api/auth/login     {"password":"..."}
-GET  /omc/api/auth/session
-POST /omc/api/auth/logout
-POST /omc/api/v1/instances/default/discover
-GET  /omc/api/v1/resources?status=unclaimed
-PATCH /omc/api/v1/resources/{id}/override
+GET    /omc/api/healthz
+POST   /omc/api/auth/login     {"password":"..."}
+GET    /omc/api/auth/session
+POST   /omc/api/auth/logout
+POST   /omc/api/v1/instances/default/discover
+GET    /omc/api/v1/resources?status=unclaimed
+PATCH  /omc/api/v1/resources/{id}/override
 ```
 
-Login sends the CPA management key (`{"password":"<management-key>"}` at `POST /omc/api/auth/login`); there is no separate Oh My CPA admin password. The session cookie is HttpOnly, SameSite=Strict, expires after 12 hours, and is marked Secure when `OMCPA_PUBLIC_URL` uses HTTPS. The cookie signing secret is derived from the management key, so rotating the key invalidates all sessions.
+For the complete route map and DTO definitions, see `Handler.Router` in `internal/api/handler.go`.
 
-## 安全边界
+Login sends the CPA management key (`{"password":"<management-key>"}` to `POST /omc/api/auth/login`); there is no separate Oh My CPA administrator password. The session cookie is `HttpOnly`, `SameSite=Strict`, expires after 12 hours, and is marked `Secure` when `OMCPA_PUBLIC_URL` uses HTTPS. The cookie signing secret is derived from the management key, so rotating the key invalidates all existing sessions once Oh My CPA adopts the new key.
 
-- 登录凭据就是 CPA Management Key，不存在第二个管理密码；密钥仅在 Go 后端校验并派生会话签名，浏览器仅持有短期 SameSite=Strict 的 HttpOnly 会话 cookie；
-- CPA Management Key 与原始 usage inbox 消息在 SQLite 中采用 AES-GCM 加密存储，主密钥由 `OMCPA_MASTER_KEY` 提供；
-- 日常与普通 API 响应（`/resources`、`/management/auth-files`、`/management/config`、`/usage/events`、`/management/dashboard`、`/healthz`）采用严格 DTO allowlist 与字段脱敏，不暴露 API Key、OAuth Token、Account、原始 Auth File 内容或带凭据的 URL；
-- 原始 Auth File 下载、原始配置 YAML 查看与编辑、request-log 下载属于显式高意图管理员受限操作，必须具备有效会话与同源校验，响应头标记 `Cache-Control: no-store`，并写入追加写入的 `audit_events` 审计日志；审计写失败时系统 fail-closed，阻止敏感数据导出与破坏性变更；
-- 数据库升级至 004 时执行不可逆脱敏与历史数据清理，迁移前自动执行可用磁盘空间检查、AES-GCM 加密备份、SHA-256 校验和及还原 smoke 验证，并按策略保留最近备份；
-- 当前版本的任意上游 `POST /api-call` 具有 SSRF 风险默认保持关闭，所有管理写操作均通过强类型白名单端点执行；
-- SQLite 部署必须保持单 Oh My CPA 副本；
-- 不应把 CPA Management API 直接暴露到公网；
-- `OMCPA_MASTER_KEY` 丢失后无法解密已保存的密文。
+## Security Boundaries
 
-术语和领域模型见 [`CONTEXT.md`](CONTEXT.md)，模块与数据流见 [`docs/architecture.md`](docs/architecture.md)，架构决策见 [`docs/adr/0001-go-react-sqlite-modular-monolith.md`](docs/adr/0001-go-react-sqlite-modular-monolith.md)。
+- The administrator login credential is the CPA Management Key (`OMCPA_CPA_MANAGEMENT_KEY`), distinct from the storage encryption key (`OMCPA_MASTER_KEY`). There is no secondary administrative password. The key is entered by the operator at login and submitted to the Go backend, which verifies it and derives the session signature. The key is never persisted in browser storage and is omitted from normal API responses; the browser holds only an expiring `SameSite=Strict` `HttpOnly` session cookie. Authenticated secret-management actions (such as viewing raw config YAML or revealing client API keys) explicitly deliver secrets to authorized administrators.
+- Rotating the CPA Management Key invalidates Oh My CPA sessions once Oh My CPA reloads the changed key (such as upon service restart or config update).
+- The CPA Management Key and raw usage inbox payloads are encrypted at rest in SQLite using AES-GCM, with the master key provided by `OMCPA_MASTER_KEY`.
+- Regular API responses (`/resources`, `/management/auth-files`, `/management/config`, `/usage/events`, `/management/dashboard`, `/healthz`) enforce strict DTO allowlists and field redaction; they never expose API keys, OAuth tokens, account secrets, raw auth file contents, or URLs with embedded credentials.
+- Exporting raw auth files, viewing or editing raw configuration YAML, and downloading request logs are explicit high-intent administrator actions requiring valid sessions and same-origin validation, served with `Cache-Control: no-store`, and logged to the append-only `audit_events` table; audit write failures fail closed, preventing sensitive data export and destructive modifications.
+- Upgrading to database migration 004 performs irreversible redaction and historical data sanitization. Before applying pending migrations, the system checks available disk space, creates an AES-GCM encrypted backup with a SHA-256 checksum, verifies restore smoke into a temporary database, and retains recent backups according to policy.
+- Generic upstream `POST /api-call` forwarding carries SSRF risks and remains disabled for browser traffic. All console administrative writes use strongly-typed allowlisted endpoints.
+- SQLite deployments must remain a single Oh My CPA replica.
+- The CPA Management API must not be exposed directly to the public internet.
+- If `OMCPA_MASTER_KEY` is lost, previously encrypted ciphertext cannot be decrypted.
 
-## 文档维护
+Domain concepts and terms are in [`CONTEXT.md`](CONTEXT.md), module maps and data flows are in [`docs/architecture.md`](docs/architecture.md), and architectural decisions are in [`docs/adr/0001-go-react-sqlite-modular-monolith.md`](docs/adr/0001-go-react-sqlite-modular-monolith.md).
 
-上下文文档（本文、`CONTEXT.md`、`docs/architecture.md`、`docs/design.md`、`PRODUCT.md`、`docs/adr/`、`docs/cpamc-parity.md` 等）与代码同属交付物。**改动触发哪份文档、必须同步改哪里**，以及完成前的文档检查清单，见 [`AGENTS.md`](AGENTS.md) —— 这是给人类维护者和 Agent 共同的契约：文档漂移在当次改动内修掉，不靠定期专项整理。
+## Documentation Maintenance
 
-## 许可证
+Context documentation (this file, `CONTEXT.md`, `docs/architecture.md`, `docs/design.md`, `PRODUCT.md`, `docs/adr/`, `docs/cpamc-parity.md`, etc.) and code are co-deliverables. **Which changes trigger which document, what must be updated synchronously**, and the pre-completion checklist are established in [`AGENTS.md`](AGENTS.md)—a shared contract for human maintainers and AI agents ensuring documentation drift is resolved within the same change.
 
-本项目采用 [MIT 许可证](LICENSE)。
+## License
+
+This project is licensed under the [MIT License](LICENSE).
