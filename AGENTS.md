@@ -29,7 +29,7 @@ Treat the table below as a hard constraint. Whenever a change touches a "Trigger
 | `docs/design.md` | Source of truth for visual system and antd tokens | Changes to palettes, typography, spacing, motion, or token mappings (must synchronously update `web/src/theme/themeConfig.ts` and `web/src/index.css`) |
 | `DESIGN.md` | Brand design system summary (for design tooling) | Same as `docs/design.md`; both must stay strictly synchronized |
 | `PRODUCT.md` | Product positioning, capability matrix, constraints | Capability additions or removals, constraint shifts, target audience or positioning adjustments |
-| `README.md` | User and operator landing page | Command, environment variable, default value, endpoint, deployment topology, or security boundary changes |
+| `README.md` / `README.zh-CN.md` | User and operator landing page (English and Simplified Chinese) | Command, environment variable, default value, endpoint, deployment topology, or security boundary changes |
 | `docs/adr/NNNN-*.md` | Important and irreversible architectural decisions | When a decision involves real trade-offs, **add a new** ADR; do not rewrite accepted ADRs (supersede them with a new ADR) |
 | `docs/cpamc-parity.md` | Parity matrix against CPAMC | Changing an item from "planned/in-progress" to "covered"; interface capability or page wiring changes; newly identified gaps |
 | `docs/ops/sqlite-operations.md` | Backup, restore, master key governance, migration gates | Migration or backup strategy, retention period, backup count, related environment variable default changes |
@@ -43,7 +43,7 @@ Treat the table below as a hard constraint. Whenever a change touches a "Trigger
 4. **Update**: Correct inaccuracies (divergence from implementation) → update deprecations (obsolete APIs/configs/dependencies) → supplement omissions (new modules, data flows, decisions).
 5. **Check facts**: Ensure paths, endpoints, environment variables, default values, and table names mentioned in the documentation actually exist and match reality.
 6. **Scan for residue**: Search for `prototype`, deleted files, removed pages/endpoints, and renamed identifiers—these references are historically the most frequent documentation defects in this repository.
-7. **Language rule**: All context and technical documentation must be written in English. Keep code comments strictly in English (see §4).
+7. **Language rule**: All context and technical documentation must be written in English (the user-facing `README.zh-CN.md` provides a localized Chinese entrypoint alongside `README.md`). Keep code comments strictly in English (see §4).
 
 `pnpm check-docs` only proves that paths exist; it cannot verify whether the surrounding prose is factually accurate. Steps 2–5 still require careful human (or agent) review. When adding a retired artifact rule, add the entry and reason to `RETIRED_REFERENCES` in `scripts/check-docs.mjs`, and run `pnpm test:docs`.
 
