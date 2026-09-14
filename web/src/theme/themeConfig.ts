@@ -132,6 +132,10 @@ export function createThemeConfig(mode: ThemeMode = 'dark'): ThemeConfig {
       colorBgLayout: t.bg,
       colorFillTertiary: t.surface,
       colorFillQuaternary: t.surface,
+      // antd paints a popup's text as `colorTextLightSolid` - white - so the spotlight stays dark
+      // in both themes. It is deliberately NOT `t.surface` in light: that is near-white, and white
+      // text on it measures 1.15:1. A panel whose own content sets its text colours overrides this
+      // for its own popper instead of moving the global token, which every other tooltip shares.
       colorBgSpotlight: dark ? t.surface : t.fg,
 
       borderRadius: 4,
@@ -241,6 +245,7 @@ export function createThemeConfig(mode: ThemeMode = 'dark'): ThemeConfig {
       Popover: { ...noShadow, colorBgElevated: t.surface },
       Dropdown: { ...noShadow, colorBgElevated: t.surface },
       Select: { optionSelectedBg: t.surface, optionSelectedColor: t.fg, colorBgElevated: t.surface },
+      // Matches the global spotlight token above.
       Tooltip: { colorBgSpotlight: dark ? t.surface : t.fg },
       Switch: { colorPrimary: t.success, colorPrimaryHover: t.success },
       Tag: { borderRadiusSM: 4, defaultBg: t.bg },

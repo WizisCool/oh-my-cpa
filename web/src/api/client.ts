@@ -8,6 +8,7 @@ import {
 import { ManagementOverview } from '../types/management';
 import { ManagementAuthFilesResponse, ManagementAuthFileMutationResponse, ManagementAuthFileModel } from '../types/managementAuthFile';
 import { DashboardResponse, DashboardTailResponse } from '../types/dashboard';
+import { DashboardTokenHeatmap } from '../types/tokenHeatmap';
 import { ErrorLogFile } from '../types/logs';
 import { CapabilityProbeReport } from '../types/capability';
 import { ConfigScalarsResponse, ConfigSourceResponse } from '../types/configManagement';
@@ -247,6 +248,21 @@ export const api = {
    */
   async getDashboardTail(query: string): Promise<DashboardTailResponse> {
     return request<DashboardTailResponse>(`/management/dashboard/tail${query ? `?${query}` : ''}`, { method: 'GET' });
+  },
+
+  /**
+   * getTokenHeatmap reads the daily token strip.
+   *
+   * It is a separate call from getDashboard because its span is a fixed fifty-three
+   * whole weeks while the dashboard's window is not: folding it into the KPI response
+   * would aggregate a year of history on every live tail poll. `timezone` is the viewer's
+   * IANA zone, which decides where each local day begins - the server cannot derive it,
+   * and a UTC offset would be wrong for every day on the far side of a daylight-saving
+   * transition rather than only on the two transition days.
+   */
+  async getTokenHeatmap(timezone: string): Promise<DashboardTokenHeatmap> {
+    const query = new URLSearchParams({ tz: timezone });
+    return request<DashboardTokenHeatmap>(`/management/dashboard/token-heatmap?${query.toString()}`, { method: 'GET' });
   },
 
   /**

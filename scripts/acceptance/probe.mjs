@@ -192,6 +192,13 @@ export async function installRoutes(context, extra = []) {
     for (const [matches, respond] of table) {
       if (!matches(url, method)) continue;
       const body = await respond(url, method, request);
+      // A scenario that needs to prove something about a failing request returns a
+      // `{ status, json }` envelope; everything else is a successful body. Without an
+      // error path a scenario could only assert the happy state, which is how a panel
+      // that hangs on a first-load failure goes unnoticed.
+      if (body && typeof body === 'object' && typeof body.status === 'number' && 'json' in body) {
+        return route.fulfill({ status: body.status, json: body.json });
+      }
       return route.fulfill({ status: 200, json: body });
     }
     return route.fulfill({ status: 200, json: {} });

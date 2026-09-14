@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Alert, Button, Card, Empty, Skeleton, Space, Tooltip, Typography } from 'antd';
 import { HistoryOutlined, QuestionCircleOutlined, ReloadOutlined, RightOutlined } from '@ant-design/icons';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
@@ -12,6 +12,7 @@ import { type DashboardTrendChartProps } from '../charts/DashboardTrendChart';
 import { formatCacheRate } from '../theme/cacheScale';
 import { successRateVerdict } from '../types/usageEventView';
 import { TimeRangeControl } from '../components/dashboard/TimeRangeControl';
+import { TokenHeatmap, TOKEN_HEATMAP_QUERY_KEY } from '../components/dashboard/TokenHeatmap';
 import type { ManagementOverview, ManagementOverviewProvider } from '../types/management';
 import {
   applyTail,
@@ -134,6 +135,17 @@ export const DashboardPage: React.FC = () => {
     const ms = data?.window.bucket_ms ?? 0;
     return ms > 0 ? ms / 60_000 : 1;
   }, [data?.window.bucket_ms]);
+  // Refresh reaches the strip below as well as the tiles. The strip owns its own query
+  // - its span is a fixed fifty-three weeks rather than this window - so invalidating it by
+  // key prefix is what keeps one button meaning "re-read this page". Today's total in
+  // particular keeps growing, so a refresh that left the one panel tracking the current
+  // day stale would be lying about what it did.
+  const queryClient = useQueryClient();
+  const refreshAll = React.useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: [TOKEN_HEATMAP_QUERY_KEY] });
+    void refetch();
+  }, [queryClient, refetch]);
+
   const healRef = React.useRef(0);
   React.useEffect(() => {
     if (!merged?.broken) return;
@@ -208,7 +220,7 @@ export const DashboardPage: React.FC = () => {
             {t('nav.usage_events')}
           </Button>
           <Tooltip title={t('header.refresh_all')}>
-            <Button size="small" icon={<ReloadOutlined />} loading={isFetching} onClick={() => refetch()} />
+            <Button size="small" icon={<ReloadOutlined />} loading={isFetching} onClick={refreshAll} />
           </Tooltip>
         </Space>
       </div>
@@ -375,6 +387,13 @@ export const DashboardPage: React.FC = () => {
           />
         </Card>
       </div>
+
+      {/* Under the six tiles, and outside the time-range control's reach: the strip has
+          its own fixed fifty-three-week span, so it keeps its own query and its own failure -
+          an unavailable read leaves the tiles above it readable. It is still reached by
+          the page's refresh button, through a key-prefix invalidation rather than a
+          prop. */}
+      <TokenHeatmap />
 
       <OverviewSecondary />
 

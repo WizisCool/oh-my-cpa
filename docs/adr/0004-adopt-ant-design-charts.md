@@ -28,7 +28,7 @@ Adopt `@ant-design/charts` (version 2, powered by `@antv/g2`) as the standard ch
 
 ### Positive
 
-- Provides a robust, declarative visualization runtime capable of scaling to future requirements (heatmaps, gantt waterfalls, multi-axis series) without accreting bespoke math and rendering code.
+- Provides a robust, declarative visualization runtime capable of scaling to future requirements (gantt waterfalls, multi-axis series) without accreting bespoke math and rendering code. (The dashboard's token heatmap is a DOM grid rather than a runtime mark; see ADR 0005.)
 - Operates fully offline with zero CDN dependencies, embedding cleanly into the single Go application binary.
 - Clean architectural boundary: `vendor-charts` is isolated and only loaded on demand.
 
