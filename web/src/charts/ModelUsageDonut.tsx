@@ -16,6 +16,7 @@ export interface ModelUsageDonutProps {
   /** The window's own token total, which is what the ring's centre reports. */
   totalTokens: number;
   foldedLabel: string;
+  tokenUnitLabel: string;
   height?: number;
 }
 
@@ -39,6 +40,7 @@ export const ModelUsageDonut: React.FC<ModelUsageDonutProps> = ({
   groups,
   totalTokens,
   foldedLabel,
+  tokenUnitLabel,
   height = 240,
 }) => {
   const { themeMode } = useThemeMode();
@@ -63,7 +65,7 @@ export const ModelUsageDonut: React.FC<ModelUsageDonutProps> = ({
   // The ring is a canvas, so the accessible reading of it is text rather than a mark: one label naming
   // what the ring shows and the total it sums to. The per-group numbers are in the ranked list beside
   // it, which is real DOM.
-  const centerLabel = `${totalTokens} tokens`;
+  const centerLabel = `${formatModelTokens(totalTokens)} ${tokenUnitLabel}`;
 
   // The centre reports the response's own window total. Dropping the zero-valued slices above cannot
   // change a sum, so there is nothing to recompute and no second number that could disagree.
@@ -114,7 +116,7 @@ export const ModelUsageDonut: React.FC<ModelUsageDonutProps> = ({
                 // is resolved from the key rather than the library's decorated one.
                 const name = labelOf(item.name ?? '');
                 const shape = `<span class="omc-tip-swatch" style="background:${item.color ?? 'transparent'}"></span>`;
-                return `<div class="omc-tip"><div class="omc-tip-row">${shape}<span class="omc-tip-name">${escapeTooltipText(name)}</span><span class="omc-tip-value">${fullTokens(item.value ?? 0)} tokens</span></div></div>`;
+                return `<div class="omc-tip"><div class="omc-tip-row">${shape}<span class="omc-tip-name">${escapeTooltipText(name)}</span><span class="omc-tip-value">${fullTokens(item.value ?? 0)} ${tokenUnitLabel}</span></div></div>`;
               },
             },
           }}
@@ -128,7 +130,7 @@ export const ModelUsageDonut: React.FC<ModelUsageDonutProps> = ({
         <span className="model-ring-total">{formatModelTokens(totalTokens)}</span>
         {/* The unit is decorative punctuation beside the number; the wrapper carries the accessible
             text, so a screen reader hears "N tokens" rather than a bare figure. */}
-        <span className="model-ring-unit" aria-hidden="true">tokens</span>
+        <span className="model-ring-unit" aria-hidden="true">{tokenUnitLabel}</span>
       </div>
       {data.length === 0 && <span className="model-ring-track" style={{ borderColor: seriesTrackColor(themeMode) }} aria-hidden="true" />}
     </div>

@@ -71,10 +71,13 @@ the rule.**
    colour-vision deficiency. Validating that needs a validated simulation and, better, human review,
    neither of which this repository has, so no such claim is made here.
 
-4. **Identity is keyed, never positional.** `seriesDomainKey` maps a group to `model:<name>` or the
-   folded discriminator, and the mark's colour domain/range are passed explicitly in that order.
-   Binding colour to the array position — the natural default — would move a model's hue whenever the
-   ranking changed between polls, while the numbers beside it stayed the same.
+4. **Colour is assigned from one shared ranking, not per panel.** The domain is a *key* per group —
+   `model:<name>` or the folded discriminator — rather than the display label, so a real model whose
+   name equals the remainder's translated label cannot take the remainder's colour. The range is then
+   generated in rank order, which means a group's colour follows its rank: it is stable for as long as
+   the ranking is, and it can change when the ranking does. What the shared ranking buys is that the
+   trend's line and the ring's slice for one group are never two different hues — they are two views
+   of one response — and the legend beside each panel always states which colour belongs to which model.
 
 5. **The exception is scoped to categorical charts.** The token heatmap's continuous ramp, the
    cache-rate scale, the status pips and every interactive colour are unchanged and remain semantic.

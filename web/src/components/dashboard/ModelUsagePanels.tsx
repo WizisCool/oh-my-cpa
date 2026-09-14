@@ -120,32 +120,45 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
             message={error instanceof ApiError ? error.message : t('dash.error_desc')}
             onRetry={() => void refetch()}
           />
-        ) : groups.length === 0 ? (
-          <p className="empty-copy model-empty">{t('dash.models.empty')}</p>
         ) : (
-          <div className="model-usage-body">
-            <React.Suspense fallback={chartFallback}>
-              <LazyModelUsageDonut groups={groups} totalTokens={total} foldedLabel={foldedLabel} height={220} />
-            </React.Suspense>
-            {/*
-              The ranked list is the ring's legend, its label column and its values in one. A separate
-              library legend would print the same ranking a second time with no numbers, and a reader
-              comparing two models needs the numbers - a slice's angle is a poor way to compare 5.9%
-              against 4.6%.
-            */}
-            <ol className="model-usage-list">
-              {groups.map((group, index) => (
-                <li className="model-usage-row" key={seriesDomainKey(group)}>
-                  <span className="model-usage-swatch" style={{ background: seriesColor(themeMode, index) }} aria-hidden="true" />
-                  <span className="model-usage-name" title={groupLabel(group, foldedLabel, unnamedLabel)}>
-                    {groupLabel(group, foldedLabel, unnamedLabel)}
-                  </span>
-                  <span className="model-usage-tokens">{formatModelTokens(group.tokens)}</span>
-                  <span className="model-usage-share">{formatModelShare(group.tokens, total)}</span>
-                </li>
-              ))}
-            </ol>
-          </div>
+          <>
+            {isError && (
+              <Alert
+                className="model-stale-alert"
+                type="warning"
+                showIcon
+                description={t('dash.models.stale')}
+                action={<Button size="small" icon={<ReloadOutlined />} onClick={() => void refetch()}>{t('common.retry')}</Button>}
+              />
+            )}
+            {groups.length === 0 ? (
+              <p className="empty-copy model-empty">{t('dash.models.empty')}</p>
+            ) : (
+              <div className="model-usage-body">
+                <React.Suspense fallback={chartFallback}>
+                  <LazyModelUsageDonut groups={groups} totalTokens={total} foldedLabel={foldedLabel} tokenUnitLabel={t('dash.unit_tokens')} height={220} />
+                </React.Suspense>
+                {/*
+                  The ranked list is the ring's legend, its label column and its values in one. A separate
+                  library legend would print the same ranking a second time with no numbers, and a reader
+                  comparing two models needs the numbers - a slice's angle is a poor way to compare 5.9%
+                  against 4.6%.
+                */}
+                <ol className="model-usage-list">
+                  {groups.map((group, index) => (
+                    <li className="model-usage-row" key={seriesDomainKey(group)}>
+                      <span className="model-usage-swatch" style={{ background: seriesColor(themeMode, index) }} aria-hidden="true" />
+                      <span className="model-usage-name" title={groupLabel(group, foldedLabel, unnamedLabel)}>
+                        {groupLabel(group, foldedLabel, unnamedLabel)}
+                      </span>
+                      <span className="model-usage-tokens">{formatModelTokens(group.tokens)}</span>
+                      <span className="model-usage-share">{formatModelShare(group.tokens, total)}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+          </>
         )}
       </Card>
     </div>

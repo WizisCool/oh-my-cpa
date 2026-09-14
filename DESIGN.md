@@ -175,8 +175,8 @@ family in the app, and the only exception to the semantic-only rule above; see
   `#06b6d4` / `#0891b2` (dark / light). Matches AntV, Tremor, and ZCode/CodeX data visualization standards.
 - **Track** (`--series-track`, `#2a2a30` dark / `#e5e5ea` light): the trend's plot floor and the usage
   ring's unfilled track.
-- Every slot clears 3:1 against the card, adjacent legend entries are at least ΔE 12 apart in CIE Lab,
-  and no slot comes within ΔE 25 of success/warn/danger. All three bounds are asserted by
+- Every slot clears 3:1 against the card, adjacent legend entries are at least ΔE 25 apart in CIE Lab,
+  and the stylesheet tokens match `themeConfig.ts` character for character. All bounds are asserted by
   `scripts/test-chart-marks.ts` from the palette itself.
 
 ### Neutral
@@ -254,7 +254,7 @@ The application viewport uses a fixed shell architecture (`100dvh`, `body { over
 Oh My CPA is an uncompromisingly flat design system. Drop shadows (`box-shadow`) are globally suppressed across all components, panels, modals, dropdowns, and cards (`box-shadow: none`).
 
 Depth and hierarchy are conveyed exclusively through:
-1. **1px Border Contrasts**: Separating surfaces via `#2c2c30` (`--border`) and `#1c1c1f` (`--border-soft`).
+1. **1px Border Contrasts**: Separating surfaces via `#2c2c30` (`--border`) and `#222226` (`--border-soft`).
 2. **Background Luminance Shifts**: Stacking elements using `#121214` (substrate) and `#1c1c1f` (elevated panels).
 3. **Selection Insets**: Highlighting selected items with a crisp 2px left border or inset rule (`box-shadow: inset 2px 0 0 var(--fg)`).
 

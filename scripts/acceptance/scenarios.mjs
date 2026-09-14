@@ -1803,10 +1803,11 @@ export async function dashboardModelPanels({ base, page, check }) {
     const steps = 360;
     for (let step = 0; step < steps; step += 1) {
       const angle = (step / steps) * Math.PI * 2;
-      // Sample the middle of the ring's thickness, which is where a slice is solid.
+      // Sample on a circular path scaled to the smaller dimension, matching the pie's geometry.
+      const span = Math.min(probe.width, probe.height);
       for (const radius of [0.36, 0.40, 0.44]) {
-        const x = Math.round(cx + Math.cos(angle) * probe.width * radius);
-        const y = Math.round(cy + Math.sin(angle) * probe.height * radius);
+        const x = Math.round(cx + Math.cos(angle) * span * radius);
+        const y = Math.round(cy + Math.sin(angle) * span * radius);
         if (x < 0 || y < 0 || x >= probe.width || y >= probe.height) continue;
         const offset = (y * probe.width + x) * 4;
         if (data[offset + 3] < 200) continue;
@@ -2486,8 +2487,7 @@ export const SCENARIOS = [
         [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
         [(url) => url.pathname.endsWith('/dashboard/tail'), () => chartDashboard],
         [(url) => url.pathname.endsWith('/dashboard/token-heatmap'), () => chartTokenHeatmap],
-        // The second preset answers with its own window, so the panel that re-reads can be told apart
-        // from one that kept painting the first response.
+        // The window picker sends preset=7d when the 7-day range is selected.
         [(url) => url.search.includes('preset=7d') && url.pathname.endsWith('/dashboard/models'), () => chartDashboardModelsWeek],
         [(url) => url.pathname.endsWith('/dashboard/models'), () => chartDashboardModels],
       ],

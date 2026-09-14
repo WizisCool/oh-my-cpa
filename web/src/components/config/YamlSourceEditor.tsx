@@ -35,6 +35,8 @@ loader.config({ monaco });
 
 let monacoYamlInstance: MonacoYaml | null = null;
 
+const withAlpha = (hex: string, alpha: string) => `${hex}${alpha}`;
+
 function ensureMonacoConfigured() {
   // Explicitly register YAML language & Monarch tokenizer
   const registeredLanguages = monaco.languages.getLanguages();
@@ -89,8 +91,8 @@ function ensureMonacoConfigured() {
       'editor.foreground': palette.dark.fg,
       'editorLineNumber.foreground': palette.dark.meta,
       'editorLineNumber.activeForeground': palette.dark.fg,
-      'editor.lineHighlightBackground': '#18181b',
-      'editor.selectionBackground': '#27272a80',
+      'editor.lineHighlightBackground': palette.dark.surface,
+      'editor.selectionBackground': withAlpha(palette.dark.border, '80'),
       'editorCursor.foreground': palette.dark.fg,
       'editorWhitespace.foreground': palette.dark.border,
       'editorIndentGuide.background': palette.dark.borderSoft,
@@ -102,12 +104,12 @@ function ensureMonacoConfigured() {
       'input.border': palette.dark.border,
       'input.foreground': palette.dark.fg,
       'minimap.background': palette.dark.bg,
-      'minimapSlider.background': '#52525b40',
-      'minimapSlider.hoverBackground': '#71717a60',
-      'minimapSlider.activeBackground': '#a1a1aa80',
-      'scrollbarSlider.background': '#52525b40',
-      'scrollbarSlider.hoverBackground': '#71717a60',
-      'scrollbarSlider.activeBackground': '#a1a1aa80',
+      'minimapSlider.background': withAlpha(palette.dark.meta, '40'),
+      'minimapSlider.hoverBackground': withAlpha(palette.dark.muted, '60'),
+      'minimapSlider.activeBackground': withAlpha(palette.dark.fg2, '80'),
+      'scrollbarSlider.background': withAlpha(palette.dark.meta, '40'),
+      'scrollbarSlider.hoverBackground': withAlpha(palette.dark.muted, '60'),
+      'scrollbarSlider.activeBackground': withAlpha(palette.dark.fg2, '80'),
       'editorOverviewRuler.border': '#00000000',
     },
   });
@@ -141,7 +143,7 @@ function ensureMonacoConfigured() {
       'editorLineNumber.foreground': palette.light.meta,
       'editorLineNumber.activeForeground': palette.light.fg,
       'editor.lineHighlightBackground': palette.light.bg,
-      'editor.selectionBackground': '#e5e5ea80',
+      'editor.selectionBackground': withAlpha(palette.light.border, '80'),
       'editorCursor.foreground': palette.light.fg,
       'editorWhitespace.foreground': palette.light.border,
       'editorIndentGuide.background': palette.light.borderSoft,
@@ -153,12 +155,12 @@ function ensureMonacoConfigured() {
       'input.border': palette.light.border,
       'input.foreground': palette.light.fg,
       'minimap.background': palette.light.surface,
-      'minimapSlider.background': '#9ca3af40',
-      'minimapSlider.hoverBackground': '#6b728060',
-      'minimapSlider.activeBackground': '#4b556380',
-      'scrollbarSlider.background': '#9ca3af40',
-      'scrollbarSlider.hoverBackground': '#6b728060',
-      'scrollbarSlider.activeBackground': '#4b556380',
+      'minimapSlider.background': withAlpha(palette.light.meta, '40'),
+      'minimapSlider.hoverBackground': withAlpha(palette.light.muted, '60'),
+      'minimapSlider.activeBackground': withAlpha(palette.light.fg2, '80'),
+      'scrollbarSlider.background': withAlpha(palette.light.meta, '40'),
+      'scrollbarSlider.hoverBackground': withAlpha(palette.light.muted, '60'),
+      'scrollbarSlider.activeBackground': withAlpha(palette.light.fg2, '80'),
       'editorOverviewRuler.border': '#00000000',
     },
   });
