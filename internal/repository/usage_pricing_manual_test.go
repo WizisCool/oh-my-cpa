@@ -231,13 +231,22 @@ func TestManualPriceUpdateTimeIsServerAuthoritative(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, row := range rows {
-				if row.Model != model {
-					continue
+			// The row must exist for the window to mean anything: this loop used to
+			// skip non-matching rows without recording that it saw one, so a write
+			// that stored nothing passed the subtest vacuously.
+			var stamped *int64
+			for index := range rows {
+				if rows[index].Model == model {
+					value := rows[index].UpdatedAtMS
+					stamped = &value
+					break
 				}
-				if row.UpdatedAtMS < before || row.UpdatedAtMS > after {
-					t.Fatalf("updated_at_ms %d outside the server window [%d, %d]", row.UpdatedAtMS, before, after)
-				}
+			}
+			if stamped == nil {
+				t.Fatalf("no price row was stored for %q", model)
+			}
+			if *stamped < before || *stamped > after {
+				t.Fatalf("updated_at_ms %d outside the server window [%d, %d]", *stamped, before, after)
 			}
 		})
 	}
