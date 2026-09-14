@@ -595,10 +595,45 @@ claim, and it stays in Chromium only when the claim is about the engine.
 | Layer | Command | What it proves |
 | --- | --- | --- |
 | Pure logic | `pnpm test:logic` | Decisions about the operator's own input: URL rewrites, saved-view derivation, debounce invalidation, the poll decision, range validation, chip display mapping, refresh presentation. Runs under Node with no bundler, no HTTP server, no Go binary and no browser. |
-| Mechanical repository gates | `pnpm test:docs`, `pnpm test:i18n`, `pnpm test:css-modules`, `pnpm test:dev-target`, `pnpm test:affected-checks` | Path references, translation keys, CSS class references, the dev proxy target and the fast-path planner. |
+| Mechanical repository gates | `pnpm test:docs`, `pnpm test:i18n`, `pnpm test:css-modules`, `pnpm test:dev-target`, `pnpm test:affected-checks`, `pnpm test:sync-web-dist`, `pnpm test:install-chromium`, `pnpm test:check-ui-plan` | Path references, translation keys, CSS class references, the dev proxy target, the embedded-distribution sync, the Chromium installer's decision, the fast-path planner and the UI scenario planner. |
+| **UI fast path** (development only) | `pnpm check:ui` | The subset of browser claims a change can affect, against the **dev server** with mocked routes. No `pnpm build`, no Go binary, no fake CPA. This is the only layer where `React.StrictMode`'s double-invoke happens, so it is the only place a hook that disposes what it should re-create can be observed. |
 | Cross-stack smoke | `pnpm verify:browser:smoke` | The thin path a pull request needs: `/omc` redirect, sign-in rejection and success, the dashboard and request list rendering their seeded rows, no console or page error. |
 | Cross-stack acceptance | `pnpm verify:browser` | The whole stack against the fake CPA: auth, every route's render and secret boundary, key aliases, provider enable/disable and its concurrent path, live-tail polling, quota, OAuth. |
-| Browser-only probes | `pnpm verify:probes` | The claims only a real engine can make: drawer/modal stacking and hit-testing, column geometry and truncation, the responsive alignment override, sparkline paint, and refresh sequencing under a held response. |
+| Browser-only probes | `pnpm verify:probes` | The same claims as the UI fast path, but against the built SPA for release. Drawer/modal stacking and hit-testing, column geometry and truncation, the responsive alignment override, sparkline paint, refresh sequencing under a held response. |
+
+### 11.0 The fast path is not a cheaper gate
+
+`check:ui` and `verify:probes` run the **same scenarios** from
+`scripts/acceptance/scenarios.mjs`; the difference is what they run them against, and
+that difference is not a cost trade - it is a coverage difference in both directions.
+
+`check:ui` cannot replace `verify:probes`, because the dev server and a mocked API
+cannot show path resolution, minification or chunk boundaries, which is exactly the
+class of bug a release artefact exposes. `verify:probes` cannot replace `check:ui`,
+because a production build does not double-invoke effects, so a hook that creates a
+disposable resource during render and disposes it in the first cleanup looks correct
+there and is broken in development. The `search-dev-server` scenario exists because
+that is not hypothetical: the debounce controller was refactored into exactly that
+shape, the whole production-bundle suite stayed green, and the search box silently
+stopped committing on the dev server. It was found by running the scenario against
+the dev server, and it is guarded there now.
+
+### 11.0.1 Three verification moments
+
+Verification is organised by *when it runs*, because what a developer pays is
+waiting, and a gate that costs minutes gets routed around:
+
+| Moment | Runs | Cost |
+| --- | --- | --- |
+| Development iteration | `pnpm test:fast`, plus `pnpm check:ui` when the change touches interaction, layout or a browser lifecycle | 1-13s, plus 3-19s |
+| One logical feature complete | `pnpm verify` | ~22s |
+| Before declaring done or pushing | `pnpm verify:full`; skipped when the stage's own run already covered unchanged code and artefact | ~95s |
+
+The rule that keeps this honest is that a *narrow* plan must never be **silent**.
+`scripts/affected-checks.mjs` and `scripts/acceptance/check-ui-plan.mjs` both widen
+rather than guess: the shared layer selects everything, an unrecognised frontend path
+selects everything, and a change to either planner's own framework selects
+everything. Both are pinned by tests that were checked against negative controls.
 
 Two properties of this split are load bearing.
 

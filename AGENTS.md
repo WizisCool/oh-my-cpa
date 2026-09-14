@@ -61,7 +61,26 @@ CPA 负责协议适配、凭据执行与代理请求；Oh My CPA 在其上提供
 - 本次改动触发的全部上下文文档已按 §2 更新；
 - 没有残留的过时注释、死引用或未本地化的用户可见文案。
 
-CI（`.github/workflows/ci.yml`）并行运行静态门禁与浏览器门禁：PR 使用 `verify:browser:smoke` 快速反馈，`master` push 使用完整 `verify:browser` 加 `verify:probes`，两者都保留严格工具链、密钥扫描和干净工作区断言；同一 ref 的新运行会取消尚未完成的旧运行。浏览器失败时会把截图、HTML 和应用日志作为短期 artifact 上传（`tmp/browser-acceptance-failure/`、`tmp/probe-failure/`）。
+### 三个验证时机（不是每一轮都跑全套）
+
+开发者在开发过程中真正付出的是**等待**，所以验证按三个不同的时机组织。把完整门禁塞进每一次修改，代价是一条命令几分钟——那会让开发循环绕过验证，而绕过验证的门禁等于没有门禁。
+
+| 时机 | 跑什么 | 大致成本 |
+| --- | --- | --- |
+| **开发迭代中**（每次改完想确认没弄坏东西） | `pnpm test:fast`；改动涉及界面交互、布局或浏览器生命周期时再加 `pnpm check:ui` | 1–13 秒 / 3–19 秒 |
+| **一个逻辑功能完成**（可独立验收的阶段末） | `pnpm verify` | ~22 秒 |
+| **声明任务完成前 / 推送前** | `pnpm verify:full` | ~95 秒 |
+
+规则：
+
+- **不要每回答一次或每改一个文件就跑 `verify` 或 `verify:full`。** "一个逻辑功能完成"指一个可以独立验收的功能或修复，不是一次回复、一个文件。
+- **界面改动用 `pnpm check:ui` 做快速反馈。** 它不需要 `pnpm build`、不需要 Go 二进制、不需要假 CPA（dev server + 假接口），并按改动只跑相关的界面场景；`--list` / `--plan` 可以只查看范围和理由，不启动浏览器。它跑在 **dev server** 上，因此是唯一能观察到 `React.StrictMode` 双调用所暴露问题的地方。
+- **`check:ui` 不能代替打产物的验收。** 它看的是 dev server 与 mock 接口，看不到只有真实打包产物才会出现的路径、压缩和 chunk 边界问题。所以阶段末与推送前仍然必须跑一次 `verify:full`。
+- **刚跑过就不重复跑。** 如果阶段末的 `verify:full` 已经覆盖了同一份未变化的代码与产物，推送前直接复用那次结果，不要再跑一遍。
+- **失败时先重跑失败的那一项**，不要每修一处就重跑全套。
+- 选择逻辑在 `scripts/affected-checks.mjs`（检查）与 `scripts/acceptance/check-ui-plan.mjs`（界面场景）；两者都有测试钉住"永不静默什么都不选"这条性质。
+
+CI（`.github/workflows/ci.yml`）并行运行静态门禁与浏览器门禁：PR 使用 `verify:browser:smoke` 快速反馈，`master` push 使用完整 `verify:browser` 与 `verify:probes`（并发执行、分别收集退出码），两者都保留严格工具链、密钥扫描和干净工作区断言；同一 ref 的新运行会取消尚未完成的旧运行。浏览器失败时会把截图、HTML 和应用日志作为短期 artifact 上传（`tmp/browser-acceptance-failure/`、`tmp/probe-failure/`）。
 
 ---
 
@@ -128,7 +147,8 @@ Vite / Chromium / 假 CPA；选择逻辑在 `scripts/affected-checks.mjs`，其�
 | `pnpm dev:api` / `pnpm dev:web` | 只跑 Go/Air 或只跑 Vite |
 | `pnpm cpa:start` | 从 `cpa/` 启动本地 CLIProxyAPI |
 | `pnpm build` | 构建前端并同步到 `internal/web/dist`；类型检查已由独立门禁负责 |
-| `pnpm test:fast` | 按工作树改动执行最小相关检查 |
+| `pnpm test:fast` | 按工作树改动并发执行最小相关检查（开发迭代中默认跑这个） |
+| `pnpm check:ui` | 界面快通道：dev server + 假接口，按改动只跑相关场景；`--list` / `--plan` 不启动浏览器 |
 | `pnpm verify` | 严格工具链 + 全量静态门禁 + worktree 密钥扫描 |
 | `pnpm verify:full` | 并行编排的最终完整门禁 |
 | `pnpm verify:full:serial` | 串行最终门禁，仅用于诊断并行编排差异 |

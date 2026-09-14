@@ -55,7 +55,8 @@ Vite 负责前端 HMR，并把 `/omc/api/*` 单向代理到 Go；Go 由 Air 监�
 | `pnpm cpa:start` | 从 `cpa/` 启动本地 CLIProxyAPI |
 | `pnpm build` | 构建前端并同步到 `internal/web/dist`；类型检查由独立门禁负责 |
 | `pnpm type-check` | 检查前端 TypeScript |
-| `pnpm test:fast` | 按工作树改动执行最小相关检查 |
+| `pnpm test:fast` | 按工作树改动并发执行最小相关检查（开发迭代中默认跑这个） |
+| `pnpm check:ui` | 界面快通道：dev server + 假接口，按改动只跑相关场景；`--list` / `--plan` 不启动浏览器 |
 | `pnpm verify` | 严格工具链 + 全量静态门禁 + worktree 密钥扫描 |
 | `pnpm verify:build` | 类型检查、生产构建与入口 bundle 预算 |
 | `pnpm verify:full` | 并行编排的完整最终门禁 |
@@ -148,6 +149,8 @@ pnpm verify:e2e
 ```
 
 测试分层模型：不依赖浏览器的判断（URL 改写、已保存视图的推导、防抖失效、轮询决策、范围校验、展示映射）运行在 `pnpm test:logic`（Node，无 Vite / 无 Go / 无 Chromium）；`pnpm verify:probes` 只保留必须由真实 Chromium 证明的性质（Drawer/Modal 层叠与命中测试、列几何与截断、响应式对齐覆盖、sparkline 绘制、拉取与重读的先后顺序）。判据与每条断言的去向见 [`docs/architecture.md`](docs/architecture.md) 的 §11 与 [`scripts/acceptance/MIGRATION.md`](scripts/acceptance/MIGRATION.md)。
+
+**开发过程中不要每轮都跑全套**：日常用 `pnpm test:fast`（1–13 秒）和 `pnpm check:ui`（3–19 秒，不需要 `pnpm build`）做快速反馈；`pnpm verify` 留到一个逻辑功能完成；`pnpm verify:full` 留给声明完成前与推送前。`check:ui` 跑在 dev server 与 mock 接口上，因此不能代替打产物的验收——两者都要，时间点不同。完整的三个时机定义见 [`AGENTS.md`](AGENTS.md) §3。
 
 需要检查真实 CPA 或正在运行的 Vite 开发入口时使用独立的 live smoke；`OMCPA_WRITE_TEST=1` 才会执行上传、开关、删除等写操作：
 
