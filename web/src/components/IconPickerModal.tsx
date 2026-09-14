@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal, Input, Tag, Empty, theme } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import { LOBE_ICON_CATALOG, type LobeIconCatalogEntry } from '../types/lobeIconCatalog';
@@ -43,7 +43,13 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
   const [search, setSearch] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<'all' | 'provider' | 'model' | 'application'>('all');
   const [visibleIconIds, setVisibleIconIds] = useState<Set<string>>(new Set());
-  const iconGridRef = useRef<HTMLDivElement | null>(null);
+  // The grid node is state rather than a ref, because antd mounts the dialog panel
+  // asynchronously and on the very first open the effect below runs while the node
+  // does not exist yet. A ref would read `null` that one time and never re-run -
+  // the dependency list does not change when the node finally appears - so nothing
+  // was ever observed and the first open rendered every tile as an empty box.
+  const [iconGridNode, setIconGridNode] = useState<HTMLDivElement | null>(null);
+  const attachIconGrid = useCallback((node: HTMLDivElement | null) => setIconGridNode(node), []);
 
   const filteredIcons = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -66,8 +72,7 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
       setVisibleIconIds(new Set());
       return;
     }
-    const root = iconGridRef.current;
-    if (!root) return;
+    if (!iconGridNode) return;
     const observer = new IntersectionObserver((items) => {
       setVisibleIconIds((previous) => {
         const next = new Set(previous);
@@ -78,10 +83,10 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
         }
         return next;
       });
-    }, { root, rootMargin: '240px 0px' });
-    for (const node of root.querySelectorAll('[data-icon-id]')) observer.observe(node);
+    }, { root: iconGridNode, rootMargin: '240px 0px' });
+    for (const node of iconGridNode.querySelectorAll('[data-icon-id]')) observer.observe(node);
     return () => observer.disconnect();
-  }, [filteredIcons, open]);
+  }, [filteredIcons, open, iconGridNode]);
 
   const groupCounts = useMemo(() => {
     let provider = 0;
@@ -144,7 +149,7 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
       </div>
 
       <div
-        ref={iconGridRef}
+        ref={attachIconGrid}
         style={{
           maxHeight: 420,
           overflowY: 'auto',
