@@ -329,6 +329,18 @@ tables use `unixepoch()` seconds. Rollups are gated by
 `usage_aggregation_checkpoints` so aggregation is incremental rather than a
 full rescan.
 
+**A window may only be served from a rollup whose grain is no finer than the
+requested bucket.** The rollups are hourly and daily; the dashboard's short presets
+ask for buckets well under an hour (15m and 1h resolve to one and two minutes, 6h to
+ten, 24h to thirty). An hourly row cannot be split across that grid: every rollup
+timestamp is already a multiple of any bucket dividing an hour, so re-aligning maps
+the whole hour onto its first bucket and reports the rest as zero. That failure is
+quiet — the window total stays correct, so sum-based assertions pass while the chart
+shows one spike per hour and nothing where the traffic actually was. `QueryUsageAnalytics`
+therefore reads the detail rows whenever `bucketMS < grainMS`, and keeps the rollup
+for hourly and coarser grids, where slicing is honest and the rollup earns its keep.
+The detail path is bounded by the retention window, so it cannot grow without limit.
+
 ### Why the request list is ordered by `timestamp_ms`
 
 The list's order is the column the reader sorts by eye, so the two must agree.

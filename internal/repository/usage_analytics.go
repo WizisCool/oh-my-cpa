@@ -238,15 +238,34 @@ func (r *Repository) QueryUsageAnalytics(ctx context.Context, instanceID string,
 	}
 
 	if rollupFrom < rollupEnd {
-		table, errTable := rollupTable(grain)
-		if errTable != nil {
-			return UsageAnalytics{}, errTable
+		// An hourly (or daily) rollup row cannot be split across a finer grid. Every
+		// rollup timestamp is already a multiple of any bucket that divides its
+		// grain, so re-aligning collapses the whole hour onto its first bucket and
+		// reports the rest of it as zero: the window total stays right while the
+		// distribution is wrong, which is how a chart shows one spike per hour and
+		// an empty window immediately after a request.
+		//
+		// The detail rows are still there for the whole retention window, so when the
+		// requested grid is finer than the grain, read them instead. That costs more
+		// rows, but it is the only way to bucket below the aggregation grain; the
+		// rollup stays the cheap path for hourly and coarser requests.
+		if bucketMS < grainMS {
+			totals, buckets, errQuery := r.readEventWindow(ctx, instanceID, rollupFrom, rollupEnd-1, bucketMS)
+			if errQuery != nil {
+				return UsageAnalytics{}, errQuery
+			}
+			appendWindow(totals, buckets, false)
+		} else {
+			table, errTable := rollupTable(grain)
+			if errTable != nil {
+				return UsageAnalytics{}, errTable
+			}
+			totals, buckets, errQuery := r.readRollupWindow(ctx, table, instanceID, rollupFrom, rollupEnd, bucketMS)
+			if errQuery != nil {
+				return UsageAnalytics{}, errQuery
+			}
+			appendWindow(totals, buckets, true)
 		}
-		totals, buckets, errQuery := r.readRollupWindow(ctx, table, instanceID, rollupFrom, rollupEnd, bucketMS)
-		if errQuery != nil {
-			return UsageAnalytics{}, errQuery
-		}
-		appendWindow(totals, buckets, true)
 	}
 
 	// Everything at or after the aggregation watermark. The tail cannot start
