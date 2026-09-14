@@ -283,11 +283,51 @@ func TestDashboardUsesRollupOnceAggregated(t *testing.T) {
 	if body.Requests.Total != 2 {
 		t.Fatalf("rollup path lost rows: %+v", body.Requests)
 	}
-	if body.Coverage.FromRollup == 0 {
-		t.Fatalf("aggregated window should be served from rollup: %+v", body.Coverage)
-	}
 	if body.Coverage.FromRollup+body.Coverage.FromDetails != body.Requests.Total {
 		t.Fatalf("coverage must partition the total: %+v", body.Coverage)
+	}
+	// The rollup serves a window only where it can be sliced honestly. This
+	// preset's grid is finer than the hourly grain, so the answer must come from
+	// the detail rows: an hourly row cannot be split across ten-minute buckets, and
+	// re-aligning it would collapse the hour onto its first bucket (see
+	// TestUsageAnalyticsFinerBucketThanRollupKeepsDistribution).
+	if body.Window.BucketMS < repository.HourBucketMS && body.Coverage.FromRollup != 0 {
+		t.Fatalf("a finer-than-grain grid must not be served from the hourly rollup: %+v", body.Coverage)
+	}
+}
+
+// TestDashboardUsesRollupForCoarseGrids is the other half of the rule above: the
+// rollup still carries the long presets, which is the reason it exists. A daily
+// grid is coarser than the hourly grain, so slicing it is honest and the answer
+// must not fall back to scanning every detail row.
+func TestDashboardUsesRollupForCoarseGrids(t *testing.T) {
+	client, baseURL, repo := startDashboardTestServer(t, nil)
+	// Well inside the 30d window: a base exactly at the boundary would fall
+	// before `from` and be invisible to the query.
+	base := time.Now().UTC().Add(-20 * 24 * time.Hour).Truncate(time.Hour)
+	seedEvents(t, repo, base, []repository.UsageDecoded{
+		{Event: eventFor("coarse-a", base.Add(time.Minute), usage.TokenStats{TotalTokens: 10}, false)},
+		{Event: eventFor("coarse-b", base.Add(2*time.Minute), usage.TokenStats{TotalTokens: 20}, false)},
+	})
+	if _, err := repo.AggregateUsageGrain(context.Background(), repository.CheckpointDaily, repository.DayBucketMS, 100); err != nil {
+		t.Fatal(err)
+	}
+	response, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/dashboard?preset=30d")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d body %s", response.StatusCode, payload)
+	}
+	var body dashboardResponse
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Requests.Total != 2 {
+		t.Fatalf("coarse window lost rows: %+v", body.Requests)
+	}
+	if body.Window.BucketMS < repository.HourBucketMS {
+		t.Fatalf("expected a coarse grid for the 30d preset, got %d", body.Window.BucketMS)
+	}
+	if body.Coverage.FromRollup == 0 {
+		t.Fatalf("a coarse grid must still be served from the rollup: %+v", body.Coverage)
 	}
 }
 

@@ -512,3 +512,62 @@ func TestUsageAnalyticsValidatesWindow(t *testing.T) {
 		t.Fatal("expected an empty detail table for this fixture")
 	}
 }
+
+// TestUsageAnalyticsFinerBucketThanRollupKeepsDistribution pins the bug that made
+// the dashboard chart look empty after a request: the rollups are hourly, but a
+// short window asks for ten-minute buckets, and those hourly rows were re-aligned
+// onto the finer grid.
+//
+// Re-aligning is lossy in a way that hides itself. Every hourly timestamp already
+// satisfies `timestamp % bucketMS == 0` for any bucket that divides an hour, so
+// `(t / bucketMS) * bucketMS == t` — the whole hour lands on its first ten-minute
+// bucket and the other five are reported as zero. The window total stays correct,
+// so every sum-based assertion passes while the chart shows one spike per hour and
+// nothing where the traffic actually was.
+func TestUsageAnalyticsFinerBucketThanRollupKeepsDistribution(t *testing.T) {
+	repo := usageTestRepository(t)
+	ctx := context.Background()
+	base := time.Date(2026, 9, 14, 10, 0, 0, 0, time.UTC)
+	const tenMinutes = 10 * 60 * 1000
+
+	// One event in each ten-minute bucket of a single hour, then aggregate it, so
+	// the whole hour exists only as one hourly rollup row.
+	var events []usage.Event
+	for index := 0; index < 6; index++ {
+		events = append(events, usageEventAt(
+			"default",
+			fmt.Sprintf("spread-%d", index),
+			base.Add(time.Duration(index)*10*time.Minute),
+			usage.TokenStats{InputTokens: 10, TotalTokens: 10},
+			false,
+		))
+	}
+	if _, err := repo.InsertUsageEvents(ctx, events); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.AggregateUsageGrain(ctx, CheckpointHourly, HourBucketMS, 100); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := repo.QueryUsageAnalytics(ctx, "default",
+		base.UnixMilli(), base.Add(time.Hour).UnixMilli(), tenMinutes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Totals.Requests != 6 {
+		t.Fatalf("expected 6 requests, got %d", result.Totals.Requests)
+	}
+	// More than one bucket must carry data. Collapsing to a single bucket is the
+	// regression: the total still sums to 6, which is why only a distribution
+	// assertion catches it.
+	populated := 0
+	for _, bucket := range result.Buckets {
+		if bucket.Requests > 0 {
+			populated++
+		}
+	}
+	if populated < 2 {
+		t.Fatalf("hourly rollup collapsed onto %d ten-minute bucket(s); the chart would "+
+			"show one spike and five gaps: %#v", populated, result.Buckets)
+	}
+}
