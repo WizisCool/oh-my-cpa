@@ -234,16 +234,56 @@ type UsageCostStats struct {
 	CostUSD        float64
 	PricedEvents   int64
 	UnpricedEvents int64
+	// Buckets carries the same cost, aligned to the dashboard's bucket grid.
+	Buckets []UsageCostBucket
+}
+
+// UsageCostBucket is one bucket of locked request costs.
+type UsageCostBucket struct {
+	StartMS   int64
+	CostNanos int64
 }
 
 // QueryUsageCost sums locked request costs, never the mutable price catalog.
 func (r *Repository) QueryUsageCost(ctx context.Context, instanceID string, fromMS, toMS int64) (UsageCostStats, error) {
+	return r.QueryUsageCostWindow(ctx, instanceID, fromMS, toMS, 0)
+}
+
+// QueryUsageCostWindow sums locked request costs and, when bucketMS is positive,
+// also groups them onto the dashboard grid.
+//
+// Costs live only on the detail rows: the aggregation rollups carry token and
+// request counters but no cost column, because a price snapshot is per request
+// and a rollup cannot preserve which version each row was priced at. So this
+// reads usage_events regardless of which table served the token series.
+func (r *Repository) QueryUsageCostWindow(ctx context.Context, instanceID string, fromMS, toMS, bucketMS int64) (UsageCostStats, error) {
 	query := `SELECT COALESCE(TOTAL(cost_nanos), 0) / 1000000000.0,
  COALESCE(SUM(pricing_status = 'priced'), 0), COALESCE(SUM(pricing_status <> 'priced'), 0)
  FROM usage_events WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms <= ?`
 	var stats UsageCostStats
 	if err := r.SQL().QueryRowContext(ctx, query, instanceID, fromMS, toMS).Scan(&stats.CostUSD, &stats.PricedEvents, &stats.UnpricedEvents); err != nil {
 		return UsageCostStats{}, fmt.Errorf("query usage cost: %w", err)
+	}
+	if bucketMS <= 0 {
+		return stats, nil
+	}
+	// Aligned the same way the series grid is, so the two agree on bucket edges.
+	rows, err := r.SQL().QueryContext(ctx, `SELECT (timestamp_ms / ?) * ? AS aligned, COALESCE(TOTAL(cost_nanos), 0)
+ FROM usage_events WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms <= ?
+ GROUP BY aligned ORDER BY aligned ASC`, bucketMS, bucketMS, instanceID, fromMS, toMS)
+	if err != nil {
+		return UsageCostStats{}, fmt.Errorf("query usage cost buckets: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var bucket UsageCostBucket
+		if err := rows.Scan(&bucket.StartMS, &bucket.CostNanos); err != nil {
+			return UsageCostStats{}, fmt.Errorf("scan usage cost bucket: %w", err)
+		}
+		stats.Buckets = append(stats.Buckets, bucket)
+	}
+	if err := rows.Err(); err != nil {
+		return UsageCostStats{}, fmt.Errorf("iterate usage cost buckets: %w", err)
 	}
 	return stats, nil
 }

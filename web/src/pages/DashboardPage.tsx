@@ -128,6 +128,12 @@ export const DashboardPage: React.FC = () => {
 
   const merged = React.useMemo(() => (full ? applyTail(full, tail) : undefined), [full, tail]);
   const data = merged?.data;
+  // Bucket width in minutes. Rates are per minute, so this is what turns a
+  // bucket's volume into the rate its tile names.
+  const bucketMinutes = React.useMemo(() => {
+    const ms = data?.window.bucket_ms ?? 0;
+    return ms > 0 ? ms / 60_000 : 1;
+  }, [data?.window.bucket_ms]);
   const healRef = React.useRef(0);
   React.useEffect(() => {
     if (!merged?.broken) return;
@@ -275,13 +281,15 @@ export const DashboardPage: React.FC = () => {
           <div className="tile-caption">
             <span>{t('dash.total_requests')} <b>{formatCount(data.requests.total)}</b></span>
           </div>
+          {/* Per-minute rate, so the readout under an RPM label is an RPM and not
+              a raw bucket count. The tile's own value is a rate too. */}
           <DashboardTrendChart
             points={data.requests.series}
-            pick={(point) => point.v ?? 0}
+            pick={(point) => (point.v ?? 0) / bucketMinutes}
             tone="success"
             height={44}
             label={(timeMs) => dayjs(timeMs).format('MM-DD HH:mm')}
-            format={(value) => `${formatCount(value)} ${t('dash.unit_requests')}`}
+            format={(value) => `${value.toFixed(2)} ${t('dash.unit_requests_per_min')}`}
           />
         </Card>
 
@@ -291,13 +299,16 @@ export const DashboardPage: React.FC = () => {
           <div className="tile-caption">
             <span>{t('dash.total_tokens')} <b>{formatCompact(data.tokens.total)}</b></span>
           </div>
+          {/* TPM is a rate, not the token volume the tile above already plots:
+              dividing by the bucket's minutes is what makes this tile a distinct
+              reading rather than a restatement of Token total. */}
           <DashboardTrendChart
             points={data.tokens.series}
-            pick={(point) => point.tokens ?? 0}
+            pick={(point) => (point.tokens ?? 0) / bucketMinutes}
             tone="warn"
             height={44}
             label={(timeMs) => dayjs(timeMs).format('MM-DD HH:mm')}
-            format={(value) => `${formatCompact(value)} ${t('dash.unit_tokens')}`}
+            format={(value) => `${formatCompact(value)} ${t('dash.unit_tokens_per_min')}`}
           />
         </Card>
 
@@ -319,9 +330,13 @@ export const DashboardPage: React.FC = () => {
               the shape of a novel prompt, not a failed execution, and the
               danger hue belongs to failed requests. The rate itself is read
               from the badge above, which owns the cache scale. */}
+          {/* The mark shows the cache reads behind the rate. A rate needs both
+              its terms, and this series carries only the numerator, so plotting
+              the ratio itself would invent a denominator from total tokens -
+              which would overstate the rate whenever output tokens were large. */}
           <DashboardTrendChart
             points={data.tokens.series}
-            pick={(point) => point.tokens ?? 0}
+            pick={(point) => point.cache_read ?? 0}
             tone="neutral"
             height={44}
             label={(timeMs) => dayjs(timeMs).format('MM-DD HH:mm')}
@@ -347,13 +362,16 @@ export const DashboardPage: React.FC = () => {
                 : t('dash.cost_placeholder_note')}
             </span>
           </div>
+          {/* Priced spend per bucket. Unpriced requests contribute nothing, which
+              is why the tile keeps its cost_source note rather than implying the
+              spend curve is complete. */}
           <DashboardTrendChart
             points={data.tokens.series}
-            pick={(point) => point.tokens ?? 0}
+            pick={(point) => (point.cost_nanos ?? 0) / 1_000_000_000}
             tone="neutral"
             height={44}
             label={(timeMs) => dayjs(timeMs).format('MM-DD HH:mm')}
-            format={(value) => `${formatCompact(value)} ${t('dash.unit_tokens')}`}
+            format={(value) => `$${value.toFixed(2)}`}
           />
         </Card>
       </div>

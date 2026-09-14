@@ -415,6 +415,19 @@ Non-obvious decisions, keep these when editing:
   `.chart-slot`, so the slot's child sizing rule must exclude it
   (`.chart-slot > div:not(.chart-tooltip)`); sizing every direct `div` stretches a
   two-line label across the whole tile.
+  **Each tile plots its own metric**, and the six marks must stay visually distinct:
+  Requests plots request counts, RPM those counts per minute, Tokens plots token
+  volume, TPM that volume per minute, Cache rate plots the cache reads behind the
+  rate, and Total cost plots priced spend per bucket. The cache-rate tile plots the
+  *numerator* rather than the ratio on purpose: a rate needs both its terms and the
+  series carries only cache reads, so plotting the ratio would invent a denominator
+  from total tokens and overstate the rate whenever output tokens were large.
+  Rates are per minute because the bucket width is not one minute at every range
+  (`dashboardBucketWidth` snaps it to a friendly step), so dividing by the bucket's
+  own minutes is what makes an RPM readout an RPM.
+  The `dashboard-charts` probe asserts the six tiles paint six *distinct* pixel
+  patterns; without that check a tile wired back to another tile's series passes
+  every per-tile assertion.
 
 ## 7. Motion
 

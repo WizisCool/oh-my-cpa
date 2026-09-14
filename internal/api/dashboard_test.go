@@ -648,17 +648,23 @@ func TestFillDashboardBucketsFoldsEdgeBuckets(t *testing.T) {
 	from := bucket*10 + 500 // unaligned start
 	to := bucket * 14
 	buckets := []repository.UsageBucket{
-		{StartMS: bucket * 9, UsageTotals: repository.UsageTotals{Requests: 3, TotalTokens: 30}},
-		{StartMS: bucket * 12, UsageTotals: repository.UsageTotals{Requests: 5, TotalTokens: 50}},
+		{StartMS: bucket * 9, UsageTotals: repository.UsageTotals{Requests: 3, TotalTokens: 30, CacheReadTokens: 7}},
+		{StartMS: bucket * 12, UsageTotals: repository.UsageTotals{Requests: 5, TotalTokens: 50, CacheReadTokens: 11}},
 	}
-	points := fillDashboardBuckets(from, to, bucket, buckets)
+	costs := []repository.UsageCostBucket{
+		{StartMS: bucket * 9, CostNanos: 2_000_000_000},
+		{StartMS: bucket * 12, CostNanos: 3_000_000_000},
+	}
+	points := fillDashboardBuckets(from, to, bucket, buckets, costs)
 	if len(points) < 2 {
 		t.Fatalf("expected a filled grid, got %d points", len(points))
 	}
-	var requests, tokens int64
+	var requests, tokens, cacheRead, costNanos int64
 	for _, point := range points {
 		requests += point.Requests
 		tokens += point.Tokens
+		cacheRead += point.CacheReadTokens
+		costNanos += point.CostNanos
 		if point.TimeMS%bucket != 0 {
 			t.Fatalf("bucket start %d is not grid aligned", point.TimeMS)
 		}
@@ -666,6 +672,51 @@ func TestFillDashboardBucketsFoldsEdgeBuckets(t *testing.T) {
 	// The pre-window bucket must be folded into the first point rather than lost.
 	if requests != 8 || tokens != 80 {
 		t.Fatalf("edge buckets lost: requests=%d tokens=%d", requests, tokens)
+	}
+	// Cache and cost ride the same folding, so the tiles cannot disagree about
+	// which bucket an edge event belongs to.
+	if cacheRead != 18 {
+		t.Fatalf("cache reads lost on fold: got %d, want 18", cacheRead)
+	}
+	if costNanos != 5_000_000_000 {
+		t.Fatalf("cost lost on fold: got %d, want 5000000000", costNanos)
+	}
+}
+
+// TestDashboardSeriesCarriesPerBucketCacheAndCost pins the properties the four
+// right-hand tiles depend on: each bucket must state its own cache reads and its
+// own cost, so the cache-rate and cost tiles stop plotting token volume.
+func TestDashboardSeriesCarriesPerBucketCacheAndCost(t *testing.T) {
+	const bucket = int64(60_000)
+	from := bucket * 10
+	to := bucket * 13
+	buckets := []repository.UsageBucket{
+		{StartMS: bucket * 11, UsageTotals: repository.UsageTotals{
+			Requests: 4, InputTokens: 100, CacheReadTokens: 60, TotalTokens: 160,
+		}},
+	}
+	costs := []repository.UsageCostBucket{{StartMS: bucket * 11, CostNanos: 1_500_000_000}}
+	points := fillDashboardBuckets(from, to, bucket, buckets, costs)
+
+	byTime := make(map[int64]dashboardSeriesPoint, len(points))
+	for _, point := range points {
+		byTime[point.TimeMS] = point
+	}
+	populated, ok := byTime[bucket*11]
+	if !ok {
+		t.Fatalf("expected a point at %d, got %d points", bucket*11, len(points))
+	}
+	if populated.CacheReadTokens != 60 {
+		t.Fatalf("cache reads not carried per bucket: got %d, want 60", populated.CacheReadTokens)
+	}
+	if populated.CostNanos != 1_500_000_000 {
+		t.Fatalf("cost not carried per bucket: got %d, want 1500000000", populated.CostNanos)
+	}
+	// A bucket with no priced event must not borrow its neighbour's cost: a
+	// fabricated cost would overstate spend in exactly the window it must not.
+	empty := byTime[bucket*12]
+	if empty.CostNanos != 0 || empty.CacheReadTokens != 0 {
+		t.Fatalf("empty bucket fabricated data: cost=%d cacheRead=%d", empty.CostNanos, empty.CacheReadTokens)
 	}
 }
 

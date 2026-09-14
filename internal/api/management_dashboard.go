@@ -89,6 +89,11 @@ type dashboardSeriesPoint struct {
 	Requests int64 `json:"v"`
 	Failures int64 `json:"f"`
 	Tokens   int64 `json:"tokens"`
+	// CacheReadTokens and CostNanos are per-bucket, so the cache-rate and cost
+	// tiles can plot their own series instead of repeating the token volume.
+	// Nanos rather than a float keeps the wire value exact; the browser scales it.
+	CacheReadTokens int64 `json:"cache_read"`
+	CostNanos       int64 `json:"cost_nanos"`
 }
 
 type dashboardMetrics struct {
@@ -385,7 +390,7 @@ func (h *Handler) queryDashboard(ctx context.Context, window dashboardWindow) (d
 	}
 	// Cost comes from immutable request-time snapshots; unpriced and legacy rows
 	// keep the window honest via CostSource instead of a fabricated zero.
-	costStats, err := h.repo.QueryUsageCost(ctx, defaultInstanceID(), window.FromMS, window.ToMS)
+	costStats, err := h.repo.QueryUsageCostWindow(ctx, defaultInstanceID(), window.FromMS, window.ToMS, window.BucketMS)
 	if err != nil {
 		return facts, err
 	}
@@ -406,11 +411,14 @@ func (h *Handler) queryDashboard(ctx context.Context, window dashboardWindow) (d
 	// only the buckets that have rows, and because the window slides with
 	// "now", a refresh can silently merge two populated buckets into one and
 	// collapse the sparkline. A fixed grid keeps the series stable.
-	series := fillDashboardBuckets(window.FromMS, window.ToMS, window.BucketMS, analytics.Buckets)
+	series := fillDashboardBuckets(window.FromMS, window.ToMS, window.BucketMS, analytics.Buckets, costStats.Buckets)
 	for _, point := range series {
 		facts.requests.Series = append(facts.requests.Series, point)
 		facts.tokens.Series = append(facts.tokens.Series, dashboardSeriesPoint{
-			TimeMS: point.TimeMS, Tokens: point.Tokens,
+			TimeMS:          point.TimeMS,
+			Tokens:          point.Tokens,
+			CacheReadTokens: point.CacheReadTokens,
+			CostNanos:       point.CostNanos,
 		})
 	}
 
@@ -608,7 +616,7 @@ func cacheRateParts(totals repository.UsageTotals) (int64, int64) {
 
 // fillDashboardBuckets lays aggregated buckets onto a fixed grid spanning the
 // whole window, emitting zero-valued points where nothing was recorded.
-func fillDashboardBuckets(fromMS, toMS, bucketMS int64, buckets []repository.UsageBucket) []dashboardSeriesPoint {
+func fillDashboardBuckets(fromMS, toMS, bucketMS int64, buckets []repository.UsageBucket, costs []repository.UsageCostBucket) []dashboardSeriesPoint {
 	if bucketMS <= 0 {
 		return nil
 	}
@@ -647,6 +655,25 @@ func fillDashboardBuckets(fromMS, toMS, bucketMS int64, buckets []repository.Usa
 		points[position].Requests += bucket.Requests
 		points[position].Failures += bucket.Failures
 		points[position].Tokens += bucket.TotalTokens
+		points[position].CacheReadTokens += bucket.CacheReadTokens
+	}
+	// Request costs are immutable per-event snapshots, so they are summed from a
+	// separate query and laid onto the same grid. A bucket with no priced event
+	// stays at zero rather than borrowing its neighbours' cost.
+	for _, bucket := range costs {
+		started := bucket.StartMS - (bucket.StartMS % bucketMS)
+		if bucket.StartMS%bucketMS != 0 {
+			started += bucketMS
+		}
+		position, exists := index[started]
+		if !exists {
+			if started < points[0].TimeMS {
+				position = 0
+			} else {
+				position = len(points) - 1
+			}
+		}
+		points[position].CostNanos += bucket.CostNanos
 	}
 	return points
 }

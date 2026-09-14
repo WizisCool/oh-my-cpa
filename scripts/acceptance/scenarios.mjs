@@ -382,6 +382,11 @@ const chartSeries = Array.from({ length: chartBuckets }, (_, index) => ({
   // baseline stroke became visible.
   v: index % 7 === 0 ? 0 : 40 + (index % 5) * 12,
   tokens: index % 7 === 0 ? 0 : 900 + (index % 4) * 250,
+  // Each metric gets its own shape. If these all tracked `tokens`, four tiles
+  // would paint identical marks and this scenario could not tell that the cache
+  // and cost tiles had stopped plotting their own data.
+  cache_read: index % 4 === 0 ? 0 : 300 + (index % 6) * 90,
+  cost_nanos: index % 6 === 0 ? 0 : 120_000_000 + (index % 5) * 60_000_000,
 }));
 
 export const chartDashboard = {
@@ -487,6 +492,33 @@ export async function dashboardChartMarks({ base, page, check }) {
     'the mark spans the plot rather than collapsing to one edge',
     spread > 0.6,
     `spread=${spread.toFixed(2)} first=${paint.firstInked} last=${paint.lastInked} of ${paint.width}`,
+  );
+
+  // Every tile must plot its own metric. This was the defect this probe missed
+  // once already: RPM and Requests both plotted request volume, and the cache-rate
+  // and cost tiles both plotted token volume, so four of six tiles drew the same
+  // shape under different labels. Comparing the painted tiles catches a tile that
+  // was wired back to somebody else's series, which no per-tile assertion can.
+  const digests = await page.evaluate(() =>
+    [...document.querySelectorAll('.chart-slot canvas')].map((el) => {
+      const probe = document.createElement('canvas');
+      probe.width = el.width;
+      probe.height = el.height;
+      probe.getContext('2d').drawImage(el, 0, 0);
+      const { data } = probe.getContext('2d').getImageData(0, 0, probe.width, probe.height);
+      let hash = 2166136261;
+      for (let i = 0; i < data.length; i += 7) {
+        hash ^= data[i];
+        hash = Math.imul(hash, 16777619);
+      }
+      return (hash >>> 0).toString(16);
+    }),
+  );
+  const uniqueDigests = new Set(digests);
+  check(
+    'each tile plots its own series rather than repeating another tile',
+    digests.length === 6 && uniqueDigests.size === digests.length,
+    `distinct=${uniqueDigests.size} of ${digests.length} (${digests.join(',')})`,
   );
 
   const firstSlot = page.locator('.chart-slot').first();
