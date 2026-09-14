@@ -97,9 +97,9 @@ func (r *Repository) UpsertModelPrices(ctx context.Context, rows []ModelPrice) e
 		if err := row.Validate(); err != nil {
 			return fmt.Errorf("model price %q: %w", row.Model, err)
 		}
-		if row.UpdatedAtMS <= 0 {
-			row.UpdatedAtMS = now
-		}
+		// Bookkeeping is server-authoritative. UpdatedAtMS is shown as when the rate
+		// last changed, so a browser clock must not be able to misdate it; the value
+		// is stamped here rather than trusted from the request payload.
 		if _, err := tx.ExecContext(ctx, `INSERT INTO model_prices (
 			model, prompt_price_per_1m, completion_price_per_1m, cache_read_price_per_1m,
 			cache_write_price_per_1m, price_multiplier, source, synced_at_ms, updated_at_ms
@@ -115,7 +115,7 @@ func (r *Repository) UpsertModelPrices(ctx context.Context, rows []ModelPrice) e
 			updated_at_ms = excluded.updated_at_ms
         WHERE excluded.source = 'manual' OR model_prices.source <> 'manual'`,
 			row.Model, row.PromptPricePer1M, row.CompletionPer1M, row.CacheReadPer1M,
-			row.CacheWritePer1M, row.PriceMultiplier, row.Source, row.SyncedAtMS, row.UpdatedAtMS); err != nil {
+			row.CacheWritePer1M, row.PriceMultiplier, row.Source, row.SyncedAtMS, now); err != nil {
 			return fmt.Errorf("upsert model price %q: %w", row.Model, err)
 		}
 	}
