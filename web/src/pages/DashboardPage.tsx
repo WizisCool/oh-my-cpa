@@ -6,9 +6,9 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
-import { useThemeMode } from '../theme/ThemeContext';
 import { usePreference } from '../hooks/usePreference';
-import { buildSparkGeometry, sparkColor, sparkDomain, type ChartTone } from '../charts/chartTheme';
+import { type ChartTone } from '../charts/chartTheme';
+import { type DashboardBarChartProps } from '../charts/DashboardBarChart';
 import { formatCacheRate } from '../theme/cacheScale';
 import { successRateVerdict } from '../types/usageEventView';
 import { TimeRangeControl } from '../components/dashboard/TimeRangeControl';
@@ -23,7 +23,6 @@ import {
   parseDashboardRange,
   type DashboardRange,
   type DashboardResponse,
-  type DashboardSeriesPoint,
 } from '../types/dashboard';
 
 const { Text, Title } = Typography;
@@ -46,108 +45,17 @@ function formatRate(value: number | null | undefined): string {
   return `${value.toFixed(2)}%`;
 }
 
-/** Sparkline data: an index channel keeps buckets evenly spaced on the axis. */
-function seriesData(points: DashboardSeriesPoint[], pick: (point: DashboardSeriesPoint) => number) {
-  return points.map((point, index) => ({ x: index, y: pick(point) }));
-}
+const LazyDashboardBarChart = React.lazy(() =>
+  import('../charts/DashboardBarChart').then((m) => ({ default: m.DashboardBarChart }))
+);
 
-interface TrendProps {
-  points: DashboardSeriesPoint[];
-  pick: (point: DashboardSeriesPoint) => number;
-  tone?: ChartTone;
-  height?: number;
-  /** area keeps a flat tint under the line; line is a bare hairline. */
-  variant?: 'area' | 'line';
-  /** Formats the bucket start for the tooltip title. */
-  label?: (timeMs: number) => string;
-  /** Formats the value shown in the tooltip. */
-  format?: (value: number) => string;
-}
-
-/**
- * Trend renders one app-owned SVG sparkline.
- *
- * Geometry and colour selection live in chartTheme so both variants follow the
- * active palette without a chart runtime.
- */
-const Trend: React.FC<TrendProps> = ({
-  points,
-  pick,
-  tone = 'accent',
-  height = 46,
-  variant = 'area',
-  label,
-  format,
-}) => {
-  const { themeMode } = useThemeMode();
-  const t = useT();
-  const [activeIndex, setActiveIndex] = React.useState<number | null>(null);
-  const data = React.useMemo(() => seriesData(points, pick), [points, pick]);
-  const domain = React.useMemo(() => sparkDomain(data.map((row) => row.y)) ?? { domainMin: 0, domainMax: 1 }, [data]);
-  const geometry = React.useMemo(
-    () => buildSparkGeometry(data.map((row) => row.y), domain, height),
-    [data, domain, height],
-  );
-  const color = sparkColor(themeMode, tone);
-
-  if (data.length < 2) {
-    return <div className="chart-placeholder" style={{ height }} aria-hidden="true" />;
-  }
-
-  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const bounds = event.currentTarget.getBoundingClientRect();
-    if (bounds.width <= 0) return;
-    const ratio = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
-    setActiveIndex(Math.round(ratio * (data.length - 1)));
-  };
-
-  const activePoint = activeIndex === null ? null : geometry.points[activeIndex];
-  const activeValue = activeIndex === null ? null : data[activeIndex]?.y;
-  const activeTime = activeIndex === null ? 0 : points[activeIndex]?.t ?? 0;
-
-  return (
-    <div
-      className="chart-slot"
-      style={{ height }}
-      onPointerMove={handlePointerMove}
-      onPointerLeave={() => setActiveIndex(null)}
-    >
-      <svg
-        viewBox={`0 0 1000 ${height}`}
-        preserveAspectRatio="none"
-        role="img"
-        aria-label={t('dash.tooltip_bucket')}
-      >
-        {variant === 'area' && (
-          <path className="chart-area" d={geometry.areaPath} style={{ fill: color, fillOpacity: 0.1, stroke: 'none' }} />
-        )}
-        <path
-          className="chart-line"
-          d={geometry.linePath}
-          vectorEffect="non-scaling-stroke"
-          style={{ fill: 'none', stroke: color, strokeWidth: 1.5 }}
-        />
-        {activePoint && (
-          <line
-            className="chart-crosshair"
-            x1={activePoint.x}
-            x2={activePoint.x}
-            y1={0}
-            y2={height}
-            vectorEffect="non-scaling-stroke"
-            style={{ stroke: 'var(--border)' }}
-          />
-        )}
-      </svg>
-      {activePoint && activeValue !== null && label && (
-        <div className="chart-tooltip" style={{ left: `${(activePoint.x / 1000) * 100}%` }}>
-          <div className="chart-tooltip-time">{label(activeTime)}</div>
-          <div className="chart-tooltip-value">{format ? format(activeValue) : formatCount(activeValue)}</div>
-        </div>
-      )}
-    </div>
-  );
-};
+const DashboardBarChart: React.FC<DashboardBarChartProps> = (props) => (
+  <React.Suspense
+    fallback={<div className="chart-placeholder" style={{ height: props.height ?? 46 }} aria-hidden="true" />}
+  >
+    <LazyDashboardBarChart {...props} />
+  </React.Suspense>
+);
 
 const Pip: React.FC<{ tone: ChartTone }> = ({ tone }) => (
   <i className={`legend-dot ${tone}`} />
@@ -330,7 +238,7 @@ export const DashboardPage: React.FC = () => {
               </span>
             </span>
           </div>
-          <Trend
+          <DashboardBarChart
             points={data.requests.series}
             pick={(point) => point.v ?? 0}
             tone="accent"
@@ -351,7 +259,7 @@ export const DashboardPage: React.FC = () => {
               <span>{t('dash.tokens_reasoning')} <b>{formatCompact(data.tokens.reasoning)}</b></span>
             )}
           </div>
-          <Trend
+          <DashboardBarChart
             points={data.tokens.series}
             pick={(point) => point.tokens ?? 0}
             tone="accent"
@@ -367,7 +275,14 @@ export const DashboardPage: React.FC = () => {
           <div className="tile-caption">
             <span>{t('dash.total_requests')} <b>{formatCount(data.requests.total)}</b></span>
           </div>
-          <Trend points={data.requests.series} pick={(point) => point.v ?? 0} tone="success" height={44} variant="line" />
+          <DashboardBarChart
+            points={data.requests.series}
+            pick={(point) => point.v ?? 0}
+            tone="success"
+            height={44}
+            label={(timeMs) => dayjs(timeMs).format('MM-DD HH:mm')}
+            format={(value) => `${formatCount(value)} ${t('dash.unit_requests')}`}
+          />
         </Card>
 
         <Card className="dashboard-tile" styles={{ body: { padding: 20 } }}>
@@ -376,7 +291,14 @@ export const DashboardPage: React.FC = () => {
           <div className="tile-caption">
             <span>{t('dash.total_tokens')} <b>{formatCompact(data.tokens.total)}</b></span>
           </div>
-          <Trend points={data.tokens.series} pick={(point) => point.tokens ?? 0} tone="warn" height={44} variant="line" />
+          <DashboardBarChart
+            points={data.tokens.series}
+            pick={(point) => point.tokens ?? 0}
+            tone="warn"
+            height={44}
+            label={(timeMs) => dayjs(timeMs).format('MM-DD HH:mm')}
+            format={(value) => `${formatCompact(value)} ${t('dash.unit_tokens')}`}
+          />
         </Card>
 
         <Card className="dashboard-tile" styles={{ body: { padding: 20 } }}>
@@ -391,18 +313,19 @@ export const DashboardPage: React.FC = () => {
             <span>{t('dash.tokens_cache_read')} <b>{formatCompact(data.tokens.cache_read)}</b></span>
             <span>{t('dash.tokens_input')} <b>{formatCompact(data.tokens.input)}</b></span>
           </div>
-          {/* The sparkline is the token volume behind the rate, and its hue is
+          {/* The bar chart is the token volume behind the rate, and its hue is
               the tile's identity colour. It used to turn danger red when the
               hit rate fell under 50%, which design.md forbids: a cache miss is
               the shape of a novel prompt, not a failed execution, and the
               danger hue belongs to failed requests. The rate itself is read
               from the badge above, which owns the cache scale. */}
-          <Trend
+          <DashboardBarChart
             points={data.tokens.series}
             pick={(point) => point.tokens ?? 0}
             tone="neutral"
             height={44}
-            variant="line"
+            label={(timeMs) => dayjs(timeMs).format('MM-DD HH:mm')}
+            format={(value) => `${formatCompact(value)} ${t('dash.unit_tokens')}`}
           />
         </Card>
 
@@ -424,7 +347,14 @@ export const DashboardPage: React.FC = () => {
                 : t('dash.cost_placeholder_note')}
             </span>
           </div>
-          <Trend points={data.tokens.series} pick={(point) => point.tokens ?? 0} tone="neutral" height={44} variant="line" />
+          <DashboardBarChart
+            points={data.tokens.series}
+            pick={(point) => point.tokens ?? 0}
+            tone="neutral"
+            height={44}
+            label={(timeMs) => dayjs(timeMs).format('MM-DD HH:mm')}
+            format={(value) => `${formatCompact(value)} ${t('dash.unit_tokens')}`}
+          />
         </Card>
       </div>
 

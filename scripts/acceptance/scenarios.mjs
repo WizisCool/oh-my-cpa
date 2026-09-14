@@ -417,41 +417,37 @@ export const chartDashboard = {
 };
 
 /**
- * The area mark's shape is a closed polygon - the top curve plus the two side edges
- * and the bottom edge - so styling it with a stroke draws a horizontal rule along
- * the plot floor. That is a paint fact, so it is asserted against the marks the
- * library emits rather than against the option object.
+ * The horizontal bar strip marks rendered by @ant-design/charts into each card's
+ * .chart-slot. Asserts all six tiles painted a mark into canvas, the hover readout
+ * reports a real bucket time and value, pointer sweep retains the series, and the
+ * hover overlay appears immediately without animation.
  */
 export async function dashboardChartMarks({ base, page, check }) {
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
   await page.locator('.chart-slot canvas, .chart-slot svg').first().waitFor({ timeout: 20_000 });
 
   const slots = await page.locator('.chart-slot').count();
-  check('the dashboard rendered its sparkline slots', slots >= 2, `slots=${slots}`);
+  check('all six tiles rendered chart slots', slots === 6, `slots=${slots}`);
 
-  const firstSlot = page.locator('.chart-slot').first();
-  const markSplit = await firstSlot.evaluate((slot) => {
-    const area = slot.querySelector('.chart-area');
-    const line = slot.querySelector('.chart-line');
-    return {
-      areaPresent: Boolean(area),
-      areaStroke: area ? getComputedStyle(area).stroke : '',
-      linePresent: Boolean(line),
-      lineStroke: line ? getComputedStyle(line).stroke : '',
-    };
-  });
+  const canvases = await page.locator('.chart-slot canvas').count();
+  check('all six tiles painted canvas marks', canvases === 6, `canvases=${canvases}`);
+
+  const firstCanvas = page.locator('.chart-slot canvas').first();
+  const canvasDimensions = await firstCanvas.evaluate((el) => ({
+    width: el.width,
+    height: el.height,
+    clientWidth: el.clientWidth,
+    clientHeight: el.clientHeight,
+  }));
   check(
-    'the area mark is fill-only and the trend is a separate stroke',
-    markSplit.areaPresent
-      && (markSplit.areaStroke === 'none' || markSplit.areaStroke === '')
-      && markSplit.linePresent
-      && markSplit.lineStroke !== 'none'
-      && markSplit.lineStroke !== '',
-    JSON.stringify(markSplit),
+    'the first bar strip tile painted a non-empty canvas',
+    canvasDimensions.width > 0 && canvasDimensions.height > 0,
+    JSON.stringify(canvasDimensions),
   );
 
+  const firstSlot = page.locator('.chart-slot').first();
   const box = await firstSlot.boundingBox();
-  if (!box) throw new Error('no bounding box for the first sparkline');
+  if (!box) throw new Error('no bounding box for the first bar chart tile');
   await page.mouse.move(box.x + box.width * 0.5, box.y + box.height / 2);
   const tooltip = page.locator('.chart-tooltip').first();
   await tooltip.waitFor({ state: 'visible', timeout: 5000 });
@@ -467,7 +463,8 @@ export async function dashboardChartMarks({ base, page, check }) {
   // Sweep the pointer across the tile, then confirm the chart still reports its
   // data: a rebuild that dropped the series would show here.
   for (let step = 0; step <= 20; step += 1) {
-    await page.mouse.move(box.x + (box.width * step) / 20, box.y + box.height / 2);
+    const x = box.x + Math.min(box.width - 1, (box.width * step) / 20);
+    await page.mouse.move(x, box.y + box.height / 2);
   }
   check(
     'the tooltip still reports a bucket after a pointer sweep',

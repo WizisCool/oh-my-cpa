@@ -2,15 +2,23 @@ import { palette, type ThemeMode } from '../theme/themeConfig';
 
 export type ChartTone = 'accent' | 'success' | 'warn' | 'danger' | 'neutral';
 
-export interface SparkDomain {
-  domainMin: number;
-  domainMax: number;
+export interface BarMark {
+  index: number;
+  value: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  length: number;
+  isZero: boolean;
 }
 
-export interface SparkGeometry {
-  linePath: string;
-  areaPath: string;
-  points: Array<{ x: number; y: number }>;
+export interface BarStripGeometry {
+  bars: BarMark[];
+  domainMin: number;
+  domainMax: number;
+  height: number;
+  width: number;
 }
 
 export function sparkColor(mode: ThemeMode, tone: ChartTone): string {
@@ -31,66 +39,51 @@ export function sparkColor(mode: ThemeMode, tone: ChartTone): string {
 }
 
 /**
- * sparkDomain keeps a near-flat series from filling the whole box.
+ * buildBarGeometry computes the mark geometry for a horizontal bar strip.
  *
- * The area fill reaches the plot floor, so a constant series would render as a
- * solid block. Adding headroom keeps the band readable.
+ * One bar is generated per time bucket, laid out across the width of the card.
+ * Bar length encodes the bucket's value monotonically.
+ * Zero-value buckets remain representable with a distinct non-zero baseline mark
+ * and an explicit isZero flag so they never silently vanish or crash the visual strip.
+ * Empty and single-bucket series are supported safely without throwing.
  */
-export function sparkDomain(values: number[]): SparkDomain | undefined {
-  const finite = values.filter((value) => Number.isFinite(value));
-  if (finite.length === 0) return undefined;
-  const min = Math.min(...finite);
-  const max = Math.max(...finite);
-  const spread = max - min;
-  if (spread > 0) {
-    return { domainMin: Math.max(0, min - spread * 0.25), domainMax: max + spread * 0.2 };
-  }
-  const ceiling = max > 0 ? max * 3 : 1;
-  return { domainMin: 0, domainMax: ceiling };
-}
-
-function smoothPath(points: Array<{ x: number; y: number }>): string {
-  if (points.length === 0) return '';
-  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
-  const commands = [`M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`];
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const previous = points[index - 1] ?? points[index];
-    const current = points[index];
-    const next = points[index + 1];
-    const afterNext = points[index + 2] ?? next;
-    const control1X = current.x + (next.x - previous.x) / 6;
-    const control1Y = current.y + (next.y - previous.y) / 6;
-    const control2X = next.x - (afterNext.x - current.x) / 6;
-    const control2Y = next.y - (afterNext.y - current.y) / 6;
-    commands.push(
-      `C ${control1X.toFixed(2)} ${control1Y.toFixed(2)}, ${control2X.toFixed(2)} ${control2Y.toFixed(2)}, ${next.x.toFixed(2)} ${next.y.toFixed(2)}`,
-    );
-  }
-  return commands.join(' ');
-}
-
-/**
- * buildSparkGeometry converts a series into two deliberately separate marks.
- * The area path is fill-only; the line path carries the stroke. Keeping them
- * separate prevents a stroke from drawing the area's closing baseline.
- */
-export function buildSparkGeometry(
+export function buildBarGeometry(
   values: number[],
-  domain: SparkDomain,
   height: number,
   width = 1000,
-): SparkGeometry {
-  const finite = values.map((value) => (Number.isFinite(value) ? value : 0));
-  const spread = domain.domainMax - domain.domainMin || 1;
-  const top = 2;
-  const bottom = Math.max(top + 1, height - 2);
-  const points = finite.map((value, index) => ({
-    x: finite.length === 1 ? width / 2 : (index / (finite.length - 1)) * width,
-    y: bottom - ((value - domain.domainMin) / spread) * (bottom - top),
-  }));
-  const linePath = smoothPath(points);
-  const areaPath = points.length > 1
-    ? `${linePath} L ${points[points.length - 1].x.toFixed(2)} ${height} L ${points[0].x.toFixed(2)} ${height} Z`
-    : '';
-  return { linePath, areaPath, points };
+): BarStripGeometry {
+  if (values.length === 0) {
+    return { bars: [], domainMin: 0, domainMax: 0, height, width };
+  }
+
+  const finite = values.map((val) => (Number.isFinite(val) && val >= 0 ? val : 0));
+  const max = Math.max(...finite);
+  const domainMin = 0;
+  const domainMax = max > 0 ? max : 1;
+
+  const count = finite.length;
+  const slotWidth = width / count;
+  const barWidth = Math.max(1, slotWidth * 0.7);
+  const minBarLength = 2; // representable zero-value bucket mark
+
+  const bars: BarMark[] = finite.map((value, index) => {
+    const isZero = value === 0;
+    const normalized = max > 0 ? value / max : 0;
+    const length = isZero ? minBarLength : minBarLength + normalized * Math.max(0, height - minBarLength);
+    const x = index * slotWidth + (slotWidth - barWidth) / 2;
+    const y = height - length;
+
+    return {
+      index,
+      value,
+      x,
+      y,
+      width: barWidth,
+      height: length,
+      length,
+      isZero,
+    };
+  });
+
+  return { bars, domainMin, domainMax, height, width };
 }

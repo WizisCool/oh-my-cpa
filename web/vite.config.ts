@@ -60,6 +60,22 @@ export default defineConfig(({ command }) => ({
     rollupOptions: {
       output: {
         manualChunks: (id) => {
+          // Vite's shared preload helper is called by every `React.lazy` route, so
+          // wherever it lands becomes an eager dependency of the entry. Left to
+          // Rollup it was merged into vendor-charts, which dragged the whole chart
+          // runtime into the entry graph and modulepreloaded it on every route -
+          // exactly the eager load the lazy import below is meant to avoid. Pinning
+          // it to its own tiny chunk keeps the entry's static graph free of charts.
+          if (id.includes('vite/preload-helper')) {
+            return 'vendor-preload';
+          }
+          if (
+            id.includes('node_modules/@antv/') ||
+            id.includes('node_modules/@ant-design/charts') ||
+            id.includes('node_modules/@ant-design/plots')
+          ) {
+            return 'vendor-charts';
+          }
           if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router-dom')) {
             return 'vendor-react';
           }

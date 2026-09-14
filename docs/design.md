@@ -393,11 +393,17 @@ Non-obvious decisions, keep these when editing:
 - All shadow tokens set to `'none'`; every motion token pinned to ≤ 0.1s (§7).
 - Components pinned: Button 32/28px, Input active ring `accent22`,
   Select optionSelectedBg = surface, Tag defaultBg = bg.
-- Dashboard sparklines are small app-owned SVG paths, not a charting runtime.
-  The area path is fill-only and the trend is a separate stroked path, so a
-  stroke cannot paint the area's closing baseline. The hover crosshair and
-  `.chart-tooltip` panel are HTML/SVG styled exclusively from CSS variables, so
-  they follow the active theme without a chart-library theme bridge.
+- Dashboard KPI cards use `@ant-design/charts` (`Column`) to render dense bar strips across time
+  buckets. **The mark is vertical**, and that is a forced choice, not a preference: the backend
+  serves up to 48 buckets (`dashboardTargetBuckets` in `internal/api/management_dashboard.go`),
+  and a card's plot box is only ~44-64px tall, so a horizontal strip would give each bar under a
+  pixel of height and the marks would smear into one block. Vertical columns spend the card's
+  ~520px width instead, about 10.8px per bucket. The charting runtime is isolated in a separate
+  `vendor-charts` chunk and loaded lazily (`React.lazy` dynamic `import()`) so only the dashboard
+  route pays for it, keeping the initial login shell compact. Theme tokens (`palette[mode]`) are
+  bridged into the chart config (`fill: sparkColor(mode, tone)`), default library animations are
+  explicitly disabled (`animate: false`, per §7 rule 5), and the hover readout uses an app-owned
+  HTML `.chart-tooltip` styled from CSS custom properties.
 
 ## 7. Motion
 
