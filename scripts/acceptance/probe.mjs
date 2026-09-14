@@ -218,12 +218,17 @@ export async function createProbePage(browser, { viewport = { width: 1440, heigh
 }
 
 /** Collects results the way `acceptance/harness.mjs` does, for probes that assert. */
-export function createProbeChecker() {
+export function createProbeChecker({ quiet = false } = {}) {
   const failures = [];
   let count = 0;
   const check = (name, condition, detail = '') => {
     count += 1;
-    console.log(`${condition ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
+    // A focused run prints only failures: the fast path exists to answer "is it
+    // broken", and forty PASS lines push the answer off the screen. The release gate
+    // keeps the full transcript, because there the list of what ran is the evidence.
+    if (!quiet || !condition) {
+      console.log(`${condition ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
+    }
     if (!condition) failures.push(name);
     return condition;
   };
