@@ -650,10 +650,11 @@ a { color: inherit; }
    computed in JS cannot divide an arbitrary width evenly and leaves a visible gutter, which
    is what made the fixed-size version look like an unfinished widget.
 
-   The grid never scrolls. A panel too narrow for the cell floor is handled by letting the
-   floor win and the columns overflow a `hidden` container, because a horizontal scrollbar in
-   a dashboard card is worse than a slightly clipped field - and the alternative, shrinking
-   the cells, makes the field unreadable well before it fits. */
+   On a desktop width the grid never scrolls: the tracks divide whatever the panel has, so the
+   field reaches both edges and the year is always whole. Below the cell floor - a phone - it
+   swipes instead, keeping the floor and letting the row extend past the panel. Shrinking the cells
+   to fit was the alternative and it makes the field unreadable well before it fits, and clipping
+   silently hides two thirds of the year. */
 .heatmap-panel { margin-bottom: 32px; grid-column: 1 / -1; }
 .heatmap-inner { min-width: 0; }
 .heatmap-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -680,6 +681,10 @@ a { color: inherit; }
    have one extra gap and every label would sit a gap-width left of the column it names. */
 .heatmap-months {
   display: grid;
+  /* The same tracks the grid below uses, so a label's column is the column it names. Sizing the
+     axis from its own content instead let each label drift right as earlier labels accumulated
+     width - every month pointed at a column it did not name, by more the further along it sat. */
+  grid-template-columns: repeat(var(--heatmap-columns), minmax(var(--heatmap-min-cell), 1fr));
   gap: var(--heatmap-gap);
   margin-bottom: 5px;
   padding-left: calc(var(--heatmap-label) + var(--heatmap-label-gap));
@@ -703,14 +708,23 @@ a { color: inherit; }
 .heatmap-weekday { display: flex; align-items: center; color: var(--muted); font-size: 10px; line-height: 1; }
 .heatmap-grid {
   display: grid;
-  /* One track per week, each taking an equal share of what the gutter leaves. `flex-basis: 0`
-     is what makes the grid take exactly that share; with `width: max-content` it claimed the
-     whole container and pushed the gutter into overflow. */
+  /* One explicit track per week, each taking an equal share of what the gutter leaves. `flex-basis:
+     0` is what makes the grid take exactly that share; with `width: max-content` it claimed the
+     whole container and pushed the gutter into overflow.
+     Explicit rather than `auto-fit`: auto-fit makes as many tracks as fit at the cell floor and
+     leaves the rest of the cells in *implicit* tracks, which are sized to their content. On a phone
+     that gave 24 tracks at 9px and 29 at 10px - so the field was not the uniform grid the month axis
+     assumed, and no axis could line up with it. It also meant the declared track count was a
+     coincidence of the panel width rather than the number of weeks being drawn. */
   flex: 1 1 0;
   min-width: 0;
   gap: var(--heatmap-gap);
-  grid-template-columns: repeat(auto-fit, minmax(var(--heatmap-min-cell), 1fr));
+  grid-template-columns: repeat(var(--heatmap-columns), minmax(var(--heatmap-min-cell), 1fr));
 }
+/* The ARIA rows exist for assistive technology only. `display: contents` keeps them out of the box
+   tree, so each cell is still placed directly by its own `gridColumn`/`gridRow` and the layout is
+   unchanged; the rows supply the ownership a `gridcell` requires without becoming layout boxes. */
+.heatmap-row { display: contents; }
 .heatmap-cell {
   /* Square by aspect ratio rather than by a height: the width comes from the fractional
      tracks, so a fixed height would be wrong at every panel width. */
@@ -809,6 +823,13 @@ a { color: inherit; }
   min-width: 176px;
   font-size: 11px;
   line-height: 1.6;
+  /* The popper's fill is `--surface`, but antd colours a popup's text with `colorTextLightSolid`
+     - white - which is meant for its own dark spotlight. Every row below sets its own colour, so
+     the panel's text was legible while this inherited value went unnoticed; the empty state has
+     no rows to set one, and rendered white on a near-white box at 1.15:1. Setting it on the box
+     rather than on `.heatmap-tip-empty` covers any future child that forgets, which is the class
+     of bug this was. */
+  color: var(--fg);
 }
 .heatmap-tip-day {
   color: var(--fg);

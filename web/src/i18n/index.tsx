@@ -191,6 +191,7 @@ const DICT: Record<string, [string, string]> = {
     '{day}：{requests} 次请求，{tokens} tokens',
     '{day}: {requests} requests, {tokens} tokens',
   ],
+  'dash.heatmap.cell_label_empty': ['{day}：该日期无请求', '{day}: no requests on this date'],
   'dash.heatmap.tip_requests': ['请求次数', 'Requests'],
   'dash.heatmap.tip_tokens': ['Token 用量', 'Tokens'],
   'dash.heatmap.open_requests': ['查看请求记录', 'View requests'],

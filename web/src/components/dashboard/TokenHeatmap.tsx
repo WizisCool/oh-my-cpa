@@ -170,11 +170,13 @@ export const TOKEN_HEATMAP_QUERY_KEY = 'dashboard-token-heatmap';
  * text, focus and hit areas, so a canvas mark would need a parallel DOM layer for all three. See
  * docs/design.md §2 and ADR 0005.
  *
- * **Its span is one calendar year**, January to December. Fixed rather than derived from the window
- * picker: a field whose width is its own data's age is not a calendar, and at the 24h default it
- * would be a single column. A rolling window was the alternative and it cannot answer "how did
- * January compare with March" once January has slid off the left edge. The window picker still
- * governs the tiles above.
+ * **Its span is a rolling fifty-three whole weeks**, ending on the week containing today. Fixed
+ * rather than derived from the window picker: a field whose width is its own data's age is not a
+ * calendar, and at the 24h default it would be a single column. A calendar year was the alternative
+ * and it spends every January almost entirely empty while saying nothing about the December that
+ * just ended - which is exactly the comparison a reader wants at that moment. The span is a whole
+ * number of weeks so the current week is drawn complete, and the window picker still governs the
+ * tiles above.
  *
  * **The days are the viewer's local days, built by the server in the viewer's zone.** A day is not
  * 24 hours in every zone on every date, and a single fixed offset is wrong for every day on the
@@ -312,6 +314,21 @@ export const TokenHeatmap: React.FC = () => {
   };
 
   /**
+   * The cells grouped into their weekday rows.
+   *
+   * WAI-ARIA requires every `gridcell` to be owned by a `row`, and every `row` by the grid; a bare
+   * grid of `gridcell`s is a violation even though it renders correctly, because assistive
+   * technology has no row to announce positions against. The rows carry `display: contents`, so they
+   * add the ownership the tree needs without becoming boxes: each cell keeps its own `gridColumn`
+   * and `gridRow`, and the layout is exactly what it was.
+   */
+  const cellsByRow = React.useMemo(() => {
+    const rows: HeatmapCell[][] = Array.from({ length: WEEKDAY_KEYS.length }, () => []);
+    for (const cell of cells) rows[cell.row]?.push(cell);
+    return rows;
+  }, [cells]);
+
+  /**
    * The cell elements, memoized so the panel's own re-renders do not rebuild them.
    *
    * There are ~370 of them and their only per-cell inputs are the day's totals, its ramp weight and
@@ -320,10 +337,21 @@ export const TokenHeatmap: React.FC = () => {
    * reconciling the whole grid. The focused day is a dependency rather than a re-render input,
    * because moving the tab stop genuinely does change one cell.
    */
-  const cellNodes = React.useMemo(
-    () => cells.map((cell: HeatmapCell) => {
+  const renderCell = React.useCallback((cell: HeatmapCell) => {
       const entry = entries.get(cell.day);
       const state = heatmapCellState(entry, data?.first_stored_ms ?? null, data?.as_of_ms ?? null);
+      // The name follows the cell's *state*, not the response's shape. The server emits a
+      // zero-valued entry for every day in the window, so keying on the entry's presence announced
+      // "0 requests, 0 tokens" for a day nothing is stored for - asserting a measurement that does
+      // not exist, and disagreeing with the cell's own tooltip and colour. A measured day reports
+      // its counts; every other day says nothing is stored, in the words the tooltip uses.
+      const label = entry
+        ? t(state === 'measured' ? 'dash.heatmap.cell_label' : 'dash.heatmap.cell_label_empty', {
+          day: formatDay(entry.day, lang, { year: 'numeric', month: 'short', day: 'numeric' }),
+          requests: full(entry.requests),
+          tokens: full(entry.tokens),
+        })
+        : undefined;
       // The continuous ramp: the weight of the quiet stop, as a percentage. A measured cell carries
       // it as a custom property and CSS mixes the two stops; every other state is drawn by its class
       // and gets no ramp at all, so "no traffic" can never be confused with a light measured shade.
@@ -352,13 +380,7 @@ export const TokenHeatmap: React.FC = () => {
           // put ~370 stops in the tab order, and one where a dead cell were focusable would make
           // the keyboard promise an interaction that cannot happen.
           tabIndex={cell.day === resolvedFocus ? 0 : -1}
-          aria-label={entry
-            ? t('dash.heatmap.cell_label', {
-              day: formatDay(entry.day, lang, { year: 'numeric', month: 'short', day: 'numeric' }),
-              requests: full(entry.requests),
-              tokens: full(entry.tokens),
-            })
-            : undefined}
+          aria-label={label}
           onFocus={() => handleCellFocus(cell.day)}
         >
           <span className="heatmap-cell-mark" aria-hidden="true" />
@@ -395,8 +417,15 @@ export const TokenHeatmap: React.FC = () => {
           {node}
         </Tooltip>
       );
-    }),
-    [cells, entries, rampMax, t, lang, resolvedFocus, data, handleCellFocus],
+  }, [entries, rampMax, t, lang, resolvedFocus, data, handleCellFocus]);
+
+  const cellRows = React.useMemo(
+    () => cellsByRow.map((row, index) => (
+      <div key={index} className="heatmap-row" role="row">
+        {row.map(renderCell)}
+      </div>
+    )),
+    [cellsByRow, renderCell],
   );
 
   // The zone is read from the browser and cannot be inferred, so a runtime without it gets
@@ -457,13 +486,18 @@ export const TokenHeatmap: React.FC = () => {
             />
           )}
 
-          <div className="heatmap-scroll" ref={scrollRef}>
+          {/* The week count travels as a custom property on the scroll container, so the grid, the
+              weekday gutter and the month axis all build the same tracks from one value. Each of them
+              deriving its own was how the axis came to size itself from its label text and drift off
+              the columns it named. */}
+          <div
+            className="heatmap-scroll"
+            ref={scrollRef}
+            style={{ '--heatmap-columns': columns } as React.CSSProperties}
+          >
             {/* The month axis is a grid of its own, with the weekday gutter as padding, so a
                 label sits under the column it names. */}
-            <div
-              className="heatmap-months"
-              aria-hidden="true"
-            >
+            <div className="heatmap-months" aria-hidden="true">
               {monthLabels.map((entry) => (
                 <span
                   key={entry.column}
@@ -493,7 +527,7 @@ export const TokenHeatmap: React.FC = () => {
                 aria-readonly="true"
                 onKeyDown={handleKeyDown}
               >
-                {cellNodes}
+                {cellRows}
               </div>
             </div>
           </div>

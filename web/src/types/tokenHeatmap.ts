@@ -165,8 +165,11 @@ export function buildHeatmapGrid(days: DashboardTokenHeatmapDay[]): HeatmapCell[
  * The grid's sizing contract, mirrored from the stylesheet.
  *
  * The *implementation* is CSS: the grid's tracks are
- * `repeat(columns, minmax(var(--heatmap-min-cell), 1fr))`, which makes a year of weeks span
- * its panel exactly at any width. That is deliberate rather than incidental - an integer
+ * `repeat(var(--heatmap-columns), minmax(var(--heatmap-min-cell), 1fr))`, where the column count is
+ * the week count the component passes down, which makes a year of weeks span its panel exactly at
+ * any width. It is an explicit count rather than `auto-fit`, so the tracks are uniform and the month
+ * axis above can build the identical grid - `auto-fit` left the overflow cells in implicit tracks
+ * sized to their content, which no axis can align with. That is deliberate rather than incidental - an integer
  * cell size computed in JavaScript cannot divide an arbitrary panel width evenly, and the
  * remainder shows up as a gutter at the field's edge, which is what made the panel look like
  * an unfinished widget.

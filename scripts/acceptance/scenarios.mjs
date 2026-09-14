@@ -598,6 +598,19 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
       horizontalOverflow: scroll.scrollWidth - scroll.clientWidth,
       verticalOverflow: scroll.scrollHeight - scroll.clientHeight,
       monthsOverflow: months.scrollWidth - months.clientWidth,
+      // Each label against the column it names. Comparing widths cannot see this: the axis was 30px
+      // wider than the grid for as long as it drifted, and an overflow check passes on a misaligned
+      // axis because both are still inside the scroll container. Measured per label, the drift
+      // reached 17px on a desktop and 27px on a phone.
+      monthDrift: (() => {
+        const cells = [...grid.querySelectorAll('.heatmap-cell')];
+        const columnOf = (el) => Number(getComputedStyle(el).gridColumn.split('/')[0].trim());
+        return [...months.querySelectorAll('.heatmap-month')].map((label) => {
+          const cell = cells.find((c) => columnOf(c) === columnOf(label));
+          if (!cell) return 0;
+          return Math.round(label.getBoundingClientRect().left - cell.getBoundingClientRect().left);
+        });
+      })(),
       cell: Number(getComputedStyle(grid.querySelector('.heatmap-cell')).width.replace('px', '')),
       cellRatio: (() => {
         const box = grid.querySelector('.heatmap-cell').getBoundingClientRect();
@@ -612,9 +625,13 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
   );
   check('the field never scrolls horizontally', fit.horizontalOverflow <= 0, `horizontalOverflow=${fit.horizontalOverflow}`);
   check('the field never scrolls vertically', fit.verticalOverflow <= 0, `verticalOverflow=${fit.verticalOverflow}`);
-  // The axis is aligned with the columns it names, which is what the padding-instead-of-track
-  // trick buys; a misaligned axis is the failure it prevents.
-  check('the month axis lines up with the grid', fit.monthsOverflow <= 0, `monthsOverflow=${fit.monthsOverflow}`);
+  // The axis is aligned with the columns it names. Measured per label rather than by comparing
+  // widths, which passes on a drifting axis.
+  check(
+    'the month axis lines up with the columns it names',
+    fit.monthsOverflow <= 0 && fit.monthDrift.length > 0 && fit.monthDrift.every((drift) => Math.abs(drift) <= 1),
+    `monthsOverflow=${fit.monthsOverflow} maxDrift=${Math.max(...fit.monthDrift.map(Math.abs))}`,
+  );
   check('the cells are square', Math.abs(fit.cellRatio - 1) < 0.02, `height/width=${fit.cellRatio.toFixed(3)}`);
   check('the cells are large enough to read', fit.cell >= 12, `cell=${fit.cell}px`);
 
@@ -883,6 +900,51 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
     'the trafficless tooltip offers no drill-down link',
     (await quietTip.locator('a.heatmap-tip-link').count()) === 0,
     `links=${await quietTip.locator('a.heatmap-tip-link').count()}`,
+  );
+  // The accessible name follows the cell's state, not the response's shape. The server emits a
+  // zero-valued entry for every day in the window, so a name built from the entry's presence
+  // announced "0 requests, 0 tokens" for days nothing is stored for - telling a screen reader a
+  // measurement exists where the colour and the tooltip both say none does.
+  const quietName = await quietCell.getAttribute('aria-label');
+  check(
+    'a trafficless cell is named as carrying no measurement, not as a measured zero',
+    Boolean(quietName) && /no requests/i.test(quietName) && !/(^|\D)0(\D|$)/.test(quietName.replace(/\d{4}/g, '')),
+    `name=${JSON.stringify(quietName)}`,
+  );
+  const measuredName = await page.locator('.heatmap-cell.is-measured').first().getAttribute('aria-label');
+  check(
+    'a measured cell is still named with its own counts',
+    Boolean(measuredName) && /\d/.test(measuredName) && !/no requests/i.test(measuredName),
+    `name=${JSON.stringify(measuredName)}`,
+  );
+  // Legible against the popper it sits on, measured rather than assumed. This is the assertion that
+  // was missing: the empty state's text had no colour rule of its own, so it inherited antd's white
+  // - meant for antd's own dark spotlight - while this popper's fill is the light theme's surface.
+  // The text assertions above all passed on an invisible tooltip, because `innerText` reads text
+  // that is painted, not text a reader can see.
+  const quietContrast = await quietTip.evaluate((node) => {
+    const parse = (value) => (String(value).match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+    const linear = (channel) => {
+      const c = channel / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    const luminance = (rgb) => 0.2126 * linear(rgb[0]) + 0.7152 * linear(rgb[1]) + 0.0722 * linear(rgb[2]);
+    // Walk up for the painted fill: the tooltip's own background is transparent.
+    let box = node;
+    let background = 'rgba(0, 0, 0, 0)';
+    while (box && background === 'rgba(0, 0, 0, 0)') {
+      background = getComputedStyle(box).backgroundColor;
+      box = box.parentElement;
+    }
+    const empty = node.querySelector('.heatmap-tip-empty') ?? node;
+    const fg = luminance(parse(getComputedStyle(empty).color));
+    const bg = luminance(parse(background));
+    return { ratio: (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05), background };
+  });
+  check(
+    'the trafficless tooltip text is legible against its own background',
+    quietContrast.ratio >= 4.5,
+    `ratio=${quietContrast.ratio.toFixed(2)} on ${quietContrast.background}`,
   );
   // Close it again so the following assertions start from a known state.
   await quietCell.click();

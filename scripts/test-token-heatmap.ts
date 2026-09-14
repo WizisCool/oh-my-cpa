@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   heatmapRampMax,
   heatmapRampMix,
@@ -129,12 +130,33 @@ for (const width of [320, 390, 560, 640, MIN_PANEL_WIDTH! - 1]) {
   );
 }
 
-// The floor and gap are mirrored from the stylesheet, so a change to one without the other
-// fails here rather than silently making the caption lie about scrolling.
-assert.equal(HEATMAP_GRID.minCell, 9, 'the cell floor matches --heatmap-min-cell');
-assert.equal(HEATMAP_GRID.gap, 4, 'the gap matches --heatmap-gap');
-assert.equal(HEATMAP_GRID.label, 22, 'the gutter matches --heatmap-label');
-assert.equal(HEATMAP_GRID.labelGap, 8, 'the gutter gap matches --heatmap-label-gap');
+// Read the tokens out of the stylesheet rather than restating them here. Comparing a constant
+// against itself proves nothing: the values below were literals that matched by construction, so a
+// change to `--heatmap-min-cell` would have left this passing while the scrolling arithmetic above
+// silently disagreed with the CSS. Parsing the sheet is what makes the file the source of truth.
+const sheet = readFileSync(new URL('../web/src/index.css', import.meta.url), 'utf8');
+function tokenValue(name: string): number {
+  const match = new RegExp(`--${name}:\\s*(\\d+)px`).exec(sheet);
+  assert.ok(match, `web/src/index.css defines --${name}`);
+  return Number(match![1]);
+}
+assert.equal(HEATMAP_GRID.minCell, tokenValue('heatmap-min-cell'), 'the cell floor matches --heatmap-min-cell');
+assert.equal(HEATMAP_GRID.gap, tokenValue('heatmap-gap'), 'the gap matches --heatmap-gap');
+assert.equal(HEATMAP_GRID.label, tokenValue('heatmap-label'), 'the gutter matches --heatmap-label');
+assert.equal(HEATMAP_GRID.labelGap, tokenValue('heatmap-label-gap'), 'the gutter gap matches --heatmap-label-gap');
+// The grid and the month axis must build the same tracks, or every label points at the wrong column.
+// Both read one custom property for that reason, and neither may hardcode `auto-fit` again: implicit
+// tracks are sized to their content, which is what let the axis drift ahead of its own columns.
+assert.match(
+  sheet,
+  /\.heatmap-grid\s*\{[^}]*grid-template-columns:\s*repeat\(var\(--heatmap-columns\)/,
+  'the grid builds an explicit track per week',
+);
+assert.match(
+  sheet,
+  /\.heatmap-months\s*\{[^}]*grid-template-columns:\s*repeat\(var\(--heatmap-columns\)/,
+  'the month axis builds the identical track list',
+);
 
 // A grid with no columns has no width requirement, so nothing is claimed.
 assert.equal(heatmapMinPanelWidth(0), null, 'no columns means no minimum width');
