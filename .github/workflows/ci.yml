@@ -30,9 +30,9 @@ jobs:
 
       - name: Verify repository anchors
         run: |
-          git show-ref --verify --quiet refs/tags/pre-overhaul-base-20260904
-          git show-ref --verify --quiet refs/tags/handoff/20260904-plan
-          test "$(git cat-file -t handoff/20260904-plan)" = tag
+          # Assert foundational beta baseline and overhaul roadmap commits remain ancestors of HEAD.
+          git merge-base --is-ancestor 1d0fd8d85ddee1f2ae5e803453904b23128d6c7d HEAD
+          git merge-base --is-ancestor 095b84ab44543ffbeb6c31d900c7e5bc98c16275 HEAD
 
       - name: Set up Go
         uses: actions/setup-go@v7
