@@ -146,6 +146,11 @@ pnpm dev
 | `pnpm verify` | 静态门禁：工具链检查、静态代码分析与密钥扫描 |
 | `pnpm verify:full` | 全量发布门禁：构建、Bundle 预算、浏览器端到端验收与几何探针 |
 
+## 贡献与安全
+
+- **参与贡献**：请参阅 [`CONTRIBUTING.md`](CONTRIBUTING.md) 了解本地开发环境搭建、分层验证门禁与代码规范。
+- **安全政策**：关于安全漏洞披露流程与系统安全边界，请参阅 [`SECURITY.md`](SECURITY.md)。
+
 ## 文档索引
 
 - [`CONTEXT.md`](CONTEXT.md) — 核心领域术语、时间窗口与价格快照规则

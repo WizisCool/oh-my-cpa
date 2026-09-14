@@ -146,6 +146,11 @@ Open **`http://127.0.0.1:5173/omc/`**. Vite serves the UI with HMR and proxies `
 | `pnpm verify` | Static gate: toolchain check, static analysis, and secret scan |
 | `pnpm verify:full` | Full gate: build, bundle budgets, browser acceptance & probes |
 
+## Contributing & Security
+
+- **Contributing**: Please review [`CONTRIBUTING.md`](CONTRIBUTING.md) for development setup, verification workflows, and coding standards.
+- **Security**: For vulnerability reporting and security boundaries, please refer to [`SECURITY.md`](SECURITY.md).
+
 ## Documentation
 
 - [`CONTEXT.md`](CONTEXT.md) — Domain model, time windows, and price snapshot rules

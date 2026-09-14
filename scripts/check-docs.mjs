@@ -31,6 +31,8 @@ export const DOCUMENTS = [
   { file: 'CONTEXT.md' },
   { file: 'README.md' },
   { file: 'README.zh-CN.md' },
+  { file: 'CONTRIBUTING.md' },
+  { file: 'SECURITY.md' },
   { file: 'PRODUCT.md' },
   { file: 'DESIGN.md' },
   { file: 'docs/architecture.md' },
@@ -80,6 +82,7 @@ export const EXPECTED_ABSENT_PATHS = [
 
 const ROOT_FILES = new Set([
   'AGENTS.md', 'CONTEXT.md', 'DESIGN.md', 'PRODUCT.md', 'README.md', 'README.zh-CN.md',
+  'CONTRIBUTING.md', 'SECURITY.md',
   'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'go.mod', 'go.sum',
   'Dockerfile', '.env', '.env.example', '.air.toml', '.editorconfig', '.gitattributes',
   '.gitignore', '.dockerignore', '.node-version', '.nvmrc', 'gitleaks.toml', 'LICENSE',
