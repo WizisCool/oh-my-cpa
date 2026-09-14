@@ -41,7 +41,7 @@ Oh My CPA is a self-hosted control plane for [CLIProxyAPI](https://github.com/ro
 - **OAuth Credentials**: Upload, download, delete, and inspect OAuth auth files. Edit priority and weight settings, view supported models, and clear rate-limit cooldowns.
 
 ### Observability & Telemetry
-- **Usage Dashboard**: Track request volume, token throughput, cache hit rates, and estimated costs across presets (15m, 1h, 6h, 24h, 7d, 30d, 90d) and custom date ranges, with a year-long contribution-style token heatmap of daily token volume whose cells open a day's request list.
+- **Usage Dashboard**: Track request volume, token throughput, cache hit rates, and estimated costs across presets (15m, 1h, 6h, 24h, 7d, 30d, 90d) and custom date ranges, with a year-long contribution-style token heatmap of daily token volume, where each cell opens a tooltip linking to that day's request list.
 - **Faceted Request Browser**: Filter requests by model, provider, client key alias, status, cost, and latency using multi-select facets and full-text search.
 - **Request Detail & Waterfall**: Inspect duration, time-to-first-token (TTFT), token breakdowns, and download raw per-request logs.
 - **Streaming & Pull Ingestion**: Collects usage events via background RESP stream or polling, with automatic backoff during idle periods.

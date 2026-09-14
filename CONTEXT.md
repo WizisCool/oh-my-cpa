@@ -177,9 +177,10 @@ palette in code; never hardcode colors in components.
 - **Heatmap Tooltip**: The panel's only readout, opened by **clicking** any cell — not by
   hovering, because on a field this dense a hover tooltip fires continuously and competes with
   the hover ring. It shows the date, the request count and the token volume, and carries the
-  drill-down to that day's request records as an anchor inside it. The cell itself never
-  navigates: the day's list is a place, so it is a link that can be opened in a new tab and
-  copied, and a stray click cannot throw the operator out of the dashboard.
+  drill-down to that day's request records as an anchor inside it, opening the exact interval the
+  cell aggregated. The cell itself never navigates: the day's list is a place, so it is a link that
+  can be opened in a new tab and copied, and a stray click cannot throw the operator out of the
+  dashboard.
 - **Recorded Cell**: A cell whose day has a stored record at or after the first stored request. A
   day before that marker is drawn *unrecorded* — a solid fill one step quieter than an empty day, not
   a hairline — and the copy says "nothing stored" rather than claiming the gateway was idle.
