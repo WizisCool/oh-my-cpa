@@ -120,12 +120,14 @@ assert.equal(cancelledPositions.length, 0, 'a cancelled animation applies nothin
 
 // A gesture that begins at the top resolves immediately rather than scheduling a
 // frame it does not need.
+let completedImmediate = false;
 const immediate: number[] = [];
 handle.cancel();
 frames = [];
-animateScrollToTop(0, (top) => immediate.push(top));
+animateScrollToTop(0, (top) => immediate.push(top), { onComplete: () => { completedImmediate = true; } });
 assert.deepEqual(immediate, [0], 'starting at the top applies the top once');
 assert.equal(frames.length, 0, 'starting at the top schedules no animation');
+assert.equal(completedImmediate, true, 'starting at the top invokes onComplete');
 
 performance.now = originalNow;
 globalThis.requestAnimationFrame = originalRaf;

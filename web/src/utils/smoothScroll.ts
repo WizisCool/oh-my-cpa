@@ -100,10 +100,17 @@ export interface ScrollAnimationHandle {
 export function animateScrollToTop(
   from: number,
   applyTop: (top: number) => void,
-  { durationMs = scrollDurationFor('smooth') }: { durationMs?: number } = {},
+  {
+    durationMs = scrollDurationFor('smooth'),
+    onComplete,
+  }: {
+    durationMs?: number;
+    onComplete?: () => void;
+  } = {},
 ): ScrollAnimationHandle {
   if (durationMs <= 0 || from <= 0) {
     applyTop(0);
+    onComplete?.();
     return { cancel: () => undefined };
   }
 
@@ -118,6 +125,12 @@ export function animateScrollToTop(
     if (elapsed >= durationMs) {
       // The final write, so the gesture lands on row one exactly.
       applyTop(0);
+      requestAnimationFrame(() => {
+        if (!cancelled) {
+          applyTop(0);
+        }
+      });
+      onComplete?.();
       return;
     }
     frame = requestAnimationFrame(step);

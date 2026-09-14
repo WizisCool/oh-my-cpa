@@ -631,9 +631,18 @@ export const UsageEventsPage: React.FC = () => {
     // but the reader clicked "apply", so do not depend on event timing.
     setHeldItems(null);
     scrollAnimationRef.current?.cancel();
-    scrollAnimationRef.current = animateScrollToTop(lastScrollTopRef.current, (top) => {
-      listRef.current?.scrollTo({ top });
-    });
+    scrollAnimationRef.current = animateScrollToTop(
+      lastScrollTopRef.current,
+      (top) => {
+        listRef.current?.scrollTo({ top });
+      },
+      {
+        onComplete: () => {
+          listRef.current?.scrollTo({ top: 0 });
+          requestAnimationFrame(() => listRef.current?.scrollTo({ top: 0 }));
+        },
+      },
+    );
     setIsScrolledDown(false);
     setIsCollapsed(false);
   }, [endReturnToTop]);
