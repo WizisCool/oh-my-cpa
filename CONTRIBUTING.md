@@ -88,5 +88,6 @@ User-facing strings must never be hardcoded in backend responses or React compon
    pnpm verify
    ```
 4. Push your branch to your fork and open a Pull Request against `master`.
-5. Clearly describe the problem, the solution, and any documentation updated in your PR description.
-6. When your Pull Request is squashed and merged, GitHub will automatically append `(#<PR_NUMBER>)` to the commit title (e.g. `feat: add client key alias (#12)`), maintaining an auditable, linear history matching the project standard.
+5. Pull requests are reviewed against [`.coderabbit.yaml`](.coderabbit.yaml), which points the reviewer at the invariants in [`AGENTS.md`](AGENTS.md).
+6. Clearly describe the problem, the solution, and any documentation updated in your PR description.
+7. When your Pull Request is squashed and merged, GitHub will automatically append `(#<PR_NUMBER>)` to the commit title (e.g. `feat: add client key alias (#12)`), maintaining an auditable, linear history matching the project standard.

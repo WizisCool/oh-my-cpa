@@ -1,0 +1,220 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit review contract for Oh My CPA.
+#
+# AGENTS.md holds the general rules; this file only tells the reviewer where to
+# apply them and where a CodeRabbit default does not fit this repository. Each
+# entry states a project invariant that a diff cannot show: the DTO allowlist
+# boundary, localized copy as `[zh, en]` pairs, and documentation as a
+# co-deliverable of the change that triggers it.
+language: en-US
+tone_instructions: >-
+  This repository's invariants are in AGENTS.md. Prefer substantive findings:
+  correctness, security boundaries, and documentation the change makes stale.
+  Do not restate the diff, and do not propose edits to files the PR did not touch.
+reviews:
+  # This repository's blocking signals are its own gates (`pnpm verify`,
+  # `pnpm verify:full`) and a human. A review bot that can request changes would
+  # duplicate CI with a weaker, non-reproducible verdict.
+  request_changes_workflow: false
+  # A fortune message carries no information, and `review_details` does: it shows
+  # what the review actually considered (ignored files, suppressed comments),
+  # which is what a maintainer needs when judging a finding.
+  in_progress_fortune: false
+  review_details: true
+  high_level_summary_instructions: >-
+    Summarize what changed and which invariant or document it affects. Group the
+    walkthrough by layer (Go packages, SPA, scripts, migrations, context docs)
+    and skip the restated diff.
+  # `internal/web/dist` is build output and `pnpm-lock.yaml` is a resolved-version
+  # dump; dependency bumps are judged by CI and by the upstream changelog, so a
+  # review of the lockfile diff only spends tokens.
+  path_filters:
+    - '!internal/web/dist/**'
+    - '!pnpm-lock.yaml'
+  auto_review:
+    # The review loop this repository wants is push -> findings -> fix -> push;
+    # the default pause after five reviewed commits is what interrupts it.
+    auto_pause_after_reviewed_commits: 15
+  finishing_touches:
+    # A generated docstring would fake documentation for an API that is meant to
+    # stay small and handwritten, against the "explain why, not what" rule.
+    docstrings:
+      enabled: false
+    # Unit-test generation is left on. The recipe below is the finishing touch
+    # this repository actually needs: its first principle is that context
+    # documents ship with the change that triggers them.
+    custom:
+      - name: sync context documents
+        instructions: >-
+          Read the documentation map in AGENTS.md and update exactly the
+          documents this change triggers, in the same change: domain terms,
+          module map, data flow, background loops, schema, visual tokens,
+          commands, endpoints, environment variables, and defaults must match
+          the code on this branch rather than the intent of the change. Ignore
+          rejected alternatives. Do not invent line numbers, do not reference
+          files that no longer exist, and keep technical prose in English
+          except README.zh-CN.md.
+  pre_merge_checks:
+    # This codebase documents design intent, not API surfaces, so a coverage
+    # number is not a meaningful target and generated docstrings would work
+    # against the comment rule.
+    docstrings:
+      mode: off
+    title:
+      mode: warning
+      requirements: >-
+        Conventional-commit style as used here: type(scope): summary, where type
+        is one of feat, fix, docs, test, refactor, perf, build, chore. Keep it
+        under 72 characters and describe the change, not the process.
+  path_instructions:
+    - path: '**/*.go'
+      instructions: >-
+        Go backend. Enforce the project invariants that a diff cannot show:
+        `internal/api` returns only handwritten DTO allowlists, so flag any raw
+        CPA payload, arbitrary URL, or newly unlisted field passed through to a
+        response. Sensitive values never appear in ordinary responses, logs,
+        preferences, or frontend storage: caller keys stay as display masks plus
+        keyed-HMAC fingerprints, and the CPA management key and TLS private keys
+        stay masked. A sensitive operation whose audit record cannot be written
+        must not proceed. Schema changes need a new forward-only migration under
+        `migrations/`. Errors are wrapped with `%w` and classified with
+        `errors.Is`; handlers return explicit status codes with JSON `error` and
+        `message` fields. Comments explain why in English and never restate the
+        code; identifiers are lowerCamelCase and booleans carry an
+        `is`/`has`/`can`/`should` prefix. Finally, check the change against the
+        documentation map in AGENTS.md and flag a missing update in this same
+        change.
+    - path: 'internal/api/**'
+      instructions: >-
+        Console endpoints. Every response field must be explicitly allowlisted,
+        and a new field needs the matching frontend type in `web/src/api/` plus
+        an i18n key rather than a hardcoded string. New routes, middleware, or
+        data-flow stages belong in `docs/architecture.md`; new capability codes
+        or refused-write outcomes are part of that contract. Behavior changes
+        need Go tests in the same package that fail when the behavior regresses,
+        asserting the wire representation (status code, JSON fields, exact
+        totals) rather than an internal approximation.
+    - path: 'internal/repository/**'
+      instructions: >-
+        SQLite repository layer: one connection, WAL, one replica per data
+        directory. Migrations are embedded and forward-only, so editing an
+        applied migration or `schema_migrations` is a defect. Two orderings are
+        load-bearing and must not be conflated: request time windows and
+        aggregates, `id` orders collector writes, and keyset cursors must return
+        every row exactly once. A rollup and its detail rows are chosen by
+        whether the requested bucket is at least as coarse as the rollup grain;
+        do not accept a weakening of a test that would let a coarse rollup
+        answer a finer request. Pricing versions and audit events are append-only.
+    - path: 'internal/usage/**'
+      instructions: >-
+        Usage capture pipeline. Inbox outcomes are
+        `pending -> processed | failed | discarded`, and a pop-then-write failure
+        must stay visible as a durable gap rather than being silently dropped.
+        Reading CPA's usage queue is destructive: availability is probed, never
+        popped, and a manual refresh drains through the existing collector
+        goroutine instead of starting a second decoder. Checkpoint read,
+        high-water selection, additive rollup, and checkpoint advancement stay in
+        one serialized transaction.
+    - path: 'web/src/**/*.{ts,tsx}'
+      instructions: >-
+        React console. User-visible copy is never hardcoded: new strings are
+        `[zh, en]` pairs in `web/src/i18n/index.tsx`. Requests go through the
+        single typed client in `web/src/api/client.ts`; a page calling `fetch`
+        directly is a defect. Colors come from the tokens in
+        `web/src/theme/themeConfig.ts` or the CSS variables in `docs/design.md`,
+        so a literal hex value is a defect; the visual system is terminal-flat
+        with no box shadows, and green/amber/red stay reserved for system health.
+        CSS-module classes are kebab-case and read as `styles['kebab-case']`.
+        Nothing may depend on a CDN or a resource the single Go binary cannot
+        embed. State must not be communicated by color alone: keep keyboard
+        operability, visible focus, WCAG AA contrast, and
+        `prefers-reduced-motion`. Disposable resources must survive React
+        StrictMode's mount-unmount-mount, which only the dev-server path
+        exercises.
+    - path: 'web/src/**/*.css'
+      instructions: >-
+        Styles consume the palette through CSS variables; a hardcoded color, a
+        box shadow, or a class name that does not match its CSS-module
+        definition (checked by `pnpm check-css-modules`) is a defect. Prefer an
+        existing token over a new one, and keep motion optional under
+        `prefers-reduced-motion`.
+    - path: '**/*.md'
+      instructions: >-
+        Context documents are co-deliverables of the change that triggers them.
+        Flag any statement the change invalidates: an endpoint, environment
+        variable, default value, table name, page name, command, or file path
+        that moved while the prose did not. Verify each flagship claim against
+        the implementation rather than against the intent of the change, and
+        prefer a symbol or file reference over an absolute line number. Flag
+        references to retired pages, prototypes, or removed files, and flag
+        non-English technical prose or a `DESIGN.md`/`docs/design.md`
+        pair that has drifted apart.
+    - path: 'docs/adr/**'
+      instructions: >-
+        Accepted ADRs are frozen records: a new decision that reverses an
+        accepted one is a new ADR that supersedes it, never an edit. Flag an ADR
+        edit that rewrites an accepted decision, and flag a decision with real
+        trade-offs that the change makes without recording one.
+    - path: 'migrations/**'
+      instructions: >-
+        Forward-only migrations, applied in filename order and one transaction
+        each. Never edit an applied migration; add the next number. A new table
+        or column needs the repository reader or writer, the storage section of
+        `docs/architecture.md`, and `docs/ops/sqlite-operations.md` when the
+        migration gate or the backup story changes. Preserve append-only
+        guarantees (pricing versions, audit events) and the triggers that
+        enforce them; a rollback is a new migration rather than a manual edit.
+    - path: 'scripts/**'
+      instructions: >-
+        The verification harness. Two properties are pinned by tests and by
+        `docs/architecture.md`: the affected-check planner and the UI scenario
+        planner must never silently select nothing, and `pnpm test:fast` must
+        never build the SPA, start Vite, start Chromium, or start the fake CPA.
+        An assertion may move to a cheaper layer, but it must not disappear
+        without a replacement that makes the same claim. A change to a suite, a
+        harness module, or either planner must keep those negative properties
+        intact.
+    - path: '.github/workflows/**'
+      instructions: >-
+        `scripts/validate-workflow.mjs` asserts this workflow's shape: the static
+        and browser jobs, the concurrent master browser phases with both exit
+        statuses collected, and the pinned action versions. A workflow change
+        that alters that shape must update the validator in the same change, and
+        a concurrency step whose status is not collected would report a green
+        build for a failed run.
+    - path: '{Dockerfile,.env.example,deploy/**}'
+      instructions: >-
+        Deployment surface. The image is one CGO-free binary with the SPA
+        embedded, so flag a build-time secret, a CDN or network dependency at
+        runtime, or a change that stops `internal/web/dist` from being embedded.
+        Every environment variable needs a default, a description in
+        `.env.example`, and matching updates in `README.md`, `README.zh-CN.md`
+        and the document that describes it; placeholders only, never a real key,
+        token, or private path. Deployment templates must keep one replica per
+        data directory and must not share a data directory, because SQLite
+        access is serialized rather than retried.
+knowledge_base:
+  code_guidelines:
+    # Read as review criteria. AGENTS.md states the agent contract and the
+    # documentation map; the other three are the invariants the path
+    # instructions above refer to.
+    filePatterns:
+      - '**/AGENTS.md'
+      - 'CONTEXT.md'
+      - 'docs/architecture.md'
+      - 'docs/design.md'
+code_generation:
+  unit_tests:
+    path_instructions:
+      - path: 'internal/**/*.go'
+        instructions: >-
+          Go regression tests belong beside the package under test and should
+          fail when the behavior regresses. Assert the wire or stored
+          representation rather than an internal approximation.
+      - path: 'web/src/**/*.{ts,tsx}'
+        instructions: >-
+          A decision a framework-free helper can make (URL derivation, debounce,
+          validation, formatting, chip mapping) is tested where the helper
+          lives, not in the browser; only claims about rendering, geometry, or
+          the browser lifecycle belong in a browser test.
