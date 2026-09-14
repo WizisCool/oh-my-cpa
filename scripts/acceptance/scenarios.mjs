@@ -12,6 +12,7 @@
  * `--plan` must be able to answer without starting a browser, and a module that
  * spawned a server at import time could not support that.
  */
+import { until } from './harness.mjs';
 import { sleep } from './probe.mjs';
 
 export const LONG_PROVIDER = 'openai-compatible-commandcode-goat-super-long-relay-name';
@@ -258,6 +259,13 @@ export const pickerProvider = {
  * Portals are antd's, so only the engine can say which one is on top. A computed
  * `z-index` cannot prove it either: an ancestor stacking context can trap a high
  * value, which is why the assertion asks `elementFromPoint` what is really there.
+ *
+ * The first open also has to *render* the catalog. antd mounts the dialog panel
+ * asynchronously, so the effect that attaches the lazy-loading observer runs once
+ * against a panel node that does not exist yet and never re-runs. Nothing is then
+ * observed, every tile paints as an empty box, and the second open looks correct
+ * because the panel is already mounted by then. That makes the first open the only
+ * one that can catch it, and the assertion below has to run before the reopen loop.
  */
 export async function iconPickerStacking({ base, page, check }) {
   const requestedIconAssets = new Set();
@@ -281,6 +289,35 @@ export async function iconPickerStacking({ base, page, check }) {
   }
   const picker = page.locator('.ant-modal').filter({ hasText: /Select AI Provider Icon|选择 AI 提供商图标/i });
   await picker.waitFor({ state: 'visible', timeout: 10_000 });
+
+  /**
+   * Counts tiles that rendered an icon node rather than only their label: either an
+   * `<img>` the tile requested, or a masked `<span>`. A tile that shows its label
+   * with no icon node is exactly the reported failure, so reading the label back
+   * would not distinguish the two states.
+   */
+  const renderedIconCount = () =>
+    page.evaluate(() => {
+      const tiles = [...document.querySelectorAll('.ant-modal [data-icon-id]')];
+      return tiles.filter((tile) => {
+        if (tile.querySelector('img[src*="/lobe-icons/"]')) return true;
+        return [...tile.querySelectorAll('span')].some((node) => {
+          const style = getComputedStyle(node);
+          return (style.maskImage && style.maskImage !== 'none')
+            || (style.webkitMaskImage && style.webkitMaskImage !== 'none');
+        });
+      }).length;
+    });
+
+  // A zero rather than a thrown error, so the check reports the count it observed
+  // instead of the timeout that revealed it.
+  const firstOpenIcons = await until(renderedIconCount, { label: 'the first open to render icons' })
+    .catch(() => 0);
+  check(
+    'the first open renders the icon grid',
+    firstOpenIcons > 0,
+    `rendered=${firstOpenIcons}`,
+  );
 
   /** 120 is the whole catalog; anything at or above it means the lazy boundary is gone. */
   check(
