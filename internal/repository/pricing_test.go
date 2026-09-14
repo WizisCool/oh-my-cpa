@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -214,5 +215,67 @@ func TestMigrationRepairsCorruptPricingSyncState(t *testing.T) {
 	}
 	if _, err := repo.GetPricingSyncState(ctx, pricing.SourceModelsDev); err != nil {
 		t.Fatalf("repaired state must read cleanly: %v", err)
+	}
+}
+
+// TestQueryUsageCostWindowBuckets pins the per-bucket cost grouping the dashboard
+// cost tile reads.
+//
+// It also pins the type SQLite actually returns: `TOTAL()` is a float aggregate by
+// definition, so scanning it straight into an int64 fails at runtime with a type
+// error. That is not a hypothetical - it took the dashboard endpoint down with a
+// 500, against a populated database, while every unit test passed because they run
+// on an empty event table where the aggregate is NULL.
+func TestQueryUsageCostWindowBuckets(t *testing.T) {
+	r := usageTestRepository(t)
+	ctx := context.Background()
+	const bucket = int64(60_000)
+
+	// Two events in one bucket and one in the next, so grouping has to do work.
+	base := bucket * 100
+	for index, cost := range []int64{1_500_000_000, 2_500_000_000, 4_000_000_000} {
+		started := base
+		if index == 2 {
+			started = base + bucket
+		}
+		if _, err := r.SQL().ExecContext(ctx,
+			`INSERT INTO usage_events (instance_id, event_key, api_group_key, model, timestamp_ms, created_at_ms, cost_nanos, pricing_status)
+			 VALUES ('default', ?, 'group', 'model', ?, ?, ?, 'priced')`,
+			fmt.Sprintf("cost-bucket-%d", index), started, started, cost,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	stats, err := r.QueryUsageCostWindow(ctx, "default", base, base+bucket*2, bucket)
+	if err != nil {
+		t.Fatalf("QueryUsageCostWindow failed: %v", err)
+	}
+	if stats.CostUSD != 8 {
+		t.Fatalf("window cost = %v, want 8", stats.CostUSD)
+	}
+	if len(stats.Buckets) != 2 {
+		t.Fatalf("got %d cost buckets, want 2: %+v", len(stats.Buckets), stats.Buckets)
+	}
+	if stats.Buckets[0].CostNanos != 4_000_000_000 {
+		t.Fatalf("first bucket = %d, want 4000000000", stats.Buckets[0].CostNanos)
+	}
+	if stats.Buckets[1].CostNanos != 4_000_000_000 {
+		t.Fatalf("second bucket = %d, want 4000000000", stats.Buckets[1].CostNanos)
+	}
+	if stats.Buckets[0].StartMS != base || stats.Buckets[1].StartMS != base+bucket {
+		t.Fatalf("buckets are not grid aligned: %+v", stats.Buckets)
+	}
+
+	// bucketMS <= 0 must skip grouping rather than divide by zero.
+	windowOnly, err := r.QueryUsageCostWindow(ctx, "default", base, base+bucket*2, 0)
+	if err != nil {
+		t.Fatalf("QueryUsageCostWindow without buckets failed: %v", err)
+	}
+	if windowOnly.Buckets != nil {
+		t.Fatalf("expected no buckets when bucketMS <= 0, got %+v", windowOnly.Buckets)
+	}
+	if windowOnly.CostUSD != 8 {
+		t.Fatalf("window cost without grouping = %v, want 8", windowOnly.CostUSD)
 	}
 }

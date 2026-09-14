@@ -393,11 +393,41 @@ Non-obvious decisions, keep these when editing:
 - All shadow tokens set to `'none'`; every motion token pinned to ≤ 0.1s (§7).
 - Components pinned: Button 32/28px, Input active ring `accent22`,
   Select optionSelectedBg = surface, Tag defaultBg = bg.
-- Dashboard sparklines are small app-owned SVG paths, not a charting runtime.
-  The area path is fill-only and the trend is a separate stroked path, so a
-  stroke cannot paint the area's closing baseline. The hover crosshair and
-  `.chart-tooltip` panel are HTML/SVG styled exclusively from CSS variables, so
-  they follow the active theme without a chart-library theme bridge.
+- Dashboard KPI cards use `@ant-design/charts` (`Area`) to render one trend per tile.
+  **The mark is an area, and that is a data-shape decision, not a style one.** The
+  backend zero-fills a fixed bucket grid (`fillDashboardBuckets`), so a quiet window
+  is mostly *zero* buckets — six hours resolves to 36 buckets of ten minutes, and a
+  real window can carry traffic in under a fifth of them. A zero here is a measured
+  value, not a missing one, and a bar mark draws each of those zeros as an invisible
+  gap between floating marks, which reads as "no data" — the one thing it does not
+  mean. An area carries the series down to its baseline, so an empty stretch renders
+  as the axis and stays distinguishable from an unmeasured period.
+  The mark is two paths on purpose: the fill is fill-only and the trend is a separate
+  stroke, because a stroked area closes its path along the baseline and would paint a
+  horizontal rule across the plot floor. `y.nice` is disabled and `domainMin` pinned to
+  zero for the same reason — a lifted domain would float an empty window above its axis.
+  The charting runtime is isolated in a separate `vendor-charts` chunk and loaded lazily
+  (`React.lazy` dynamic `import()`) so only the dashboard route pays for it, keeping the
+  initial login shell compact. Theme tokens (`palette[mode]`) are bridged into the chart
+  config (`sparkColor(mode, tone)`), default library animations are explicitly disabled
+  (`animate: false`, per §7 rule 5), and the hover readout uses an app-owned HTML
+  `.chart-tooltip` styled from CSS custom properties. That readout is a direct child of
+  `.chart-slot`, so the slot's child sizing rule must exclude it
+  (`.chart-slot > div:not(.chart-tooltip)`); sizing every direct `div` stretches a
+  two-line label across the whole tile.
+  **Each tile plots its own metric**, and the six marks must stay visually distinct:
+  Requests plots request counts, RPM those counts per minute, Tokens plots token
+  volume, TPM that volume per minute, Cache rate plots the cache reads behind the
+  rate, and Total cost plots priced spend per bucket. The cache-rate tile plots the
+  *numerator* rather than the ratio on purpose: a rate needs both its terms and the
+  series carries only cache reads, so plotting the ratio would invent a denominator
+  from total tokens and overstate the rate whenever output tokens were large.
+  Rates are per minute because the bucket width is not one minute at every range
+  (`dashboardBucketWidth` snaps it to a friendly step), so dividing by the bucket's
+  own minutes is what makes an RPM readout an RPM.
+  The `dashboard-charts` probe asserts the six tiles paint six *distinct* pixel
+  patterns; without that check a tile wired back to another tile's series passes
+  every per-tile assertion.
 
 ## 7. Motion
 

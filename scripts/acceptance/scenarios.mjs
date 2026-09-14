@@ -382,6 +382,11 @@ const chartSeries = Array.from({ length: chartBuckets }, (_, index) => ({
   // baseline stroke became visible.
   v: index % 7 === 0 ? 0 : 40 + (index % 5) * 12,
   tokens: index % 7 === 0 ? 0 : 900 + (index % 4) * 250,
+  // Each metric gets its own shape. If these all tracked `tokens`, four tiles
+  // would paint identical marks and this scenario could not tell that the cache
+  // and cost tiles had stopped plotting their own data.
+  cache_read: index % 4 === 0 ? 0 : 300 + (index % 6) * 90,
+  cost_nanos: index % 6 === 0 ? 0 : 120_000_000 + (index % 5) * 60_000_000,
 }));
 
 export const chartDashboard = {
@@ -417,47 +422,123 @@ export const chartDashboard = {
 };
 
 /**
- * The area mark's shape is a closed polygon - the top curve plus the two side edges
- * and the bottom edge - so styling it with a stroke draws a horizontal rule along
- * the plot floor. That is a paint fact, so it is asserted against the marks the
- * library emits rather than against the option object.
+ * The area marks @ant-design/charts paints into each card's .chart-slot.
+ *
+ * Counting canvases proves almost nothing here: an empty canvas, a mark drawn in
+ * the wrong colour, and a mark collapsed onto the plot floor all satisfy it. So the
+ * assertions read the painted pixels instead - several distinct tones per tile, ink
+ * spanning the plot rather than a stub. That is the check an earlier revision of
+ * this probe lacked, which is why it passed on a mark the design never called for.
  */
 export async function dashboardChartMarks({ base, page, check }) {
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
   await page.locator('.chart-slot canvas, .chart-slot svg').first().waitFor({ timeout: 20_000 });
 
   const slots = await page.locator('.chart-slot').count();
-  check('the dashboard rendered its sparkline slots', slots >= 2, `slots=${slots}`);
+  check('all six tiles rendered chart slots', slots === 6, `slots=${slots}`);
 
-  const firstSlot = page.locator('.chart-slot').first();
-  const markSplit = await firstSlot.evaluate((slot) => {
-    const area = slot.querySelector('.chart-area');
-    const line = slot.querySelector('.chart-line');
-    return {
-      areaPresent: Boolean(area),
-      areaStroke: area ? getComputedStyle(area).stroke : '',
-      linePresent: Boolean(line),
-      lineStroke: line ? getComputedStyle(line).stroke : '',
-    };
+  const canvases = await page.locator('.chart-slot canvas').count();
+  check('all six tiles painted canvas marks', canvases === 6, `canvases=${canvases}`);
+
+  // Read the painted pixels of the first tile: a non-empty canvas is not evidence
+  // that a mark was drawn, let alone drawn correctly.
+  const firstCanvas = page.locator('.chart-slot canvas').first();
+  const paint = await firstCanvas.evaluate((el) => {
+    const probe = document.createElement('canvas');
+    probe.width = el.width;
+    probe.height = el.height;
+    const ctx = probe.getContext('2d');
+    ctx.drawImage(el, 0, 0);
+    const { data } = ctx.getImageData(0, 0, probe.width, probe.height);
+    const tones = new Set();
+    const colInk = new Array(probe.width).fill(0);
+    let ink = 0;
+    for (let y = 0; y < probe.height; y += 1) {
+      for (let x = 0; x < probe.width; x += 1) {
+        const offset = (y * probe.width + x) * 4;
+        if (data[offset + 3] > 20) {
+          ink += 1;
+          colInk[x] += 1;
+          // Quantise so antialiasing does not read as hundreds of tones, but keep
+          // alpha: the fill and the trend are the same hue at different opacities,
+          // so a key built from RGB alone cannot tell the two marks apart.
+          tones.add(
+            `${data[offset] >> 4},${data[offset + 1] >> 4},${data[offset + 2] >> 4},${data[offset + 3] >> 5}`,
+          );
+        }
+      }
+    }
+    const firstInked = colInk.findIndex((count) => count > 0);
+    const lastInked = colInk.length - 1 - [...colInk].reverse().findIndex((count) => count > 0);
+    return { width: el.width, height: el.height, ink, tones: tones.size, firstInked, lastInked };
   });
   check(
-    'the area mark is fill-only and the trend is a separate stroke',
-    markSplit.areaPresent
-      && (markSplit.areaStroke === 'none' || markSplit.areaStroke === '')
-      && markSplit.linePresent
-      && markSplit.lineStroke !== 'none'
-      && markSplit.lineStroke !== '',
-    JSON.stringify(markSplit),
+    'the first tile painted a mark',
+    paint.ink > 0,
+    `ink=${paint.ink}`,
+  );
+  // An area carries both a stroked trend and a translucent fill, so a tile that
+  // painted correctly shows more than one tone. A single tone means the fill was
+  // lost (or the mark collapsed), which a canvas count cannot detect.
+  check(
+    'the tile painted both a trend stroke and an area fill',
+    paint.tones >= 2,
+    `distinctTones=${paint.tones}`,
+  );
+  // The mark must span the plot: a series that failed to bind renders as a stub at
+  // one edge rather than across the bucket grid.
+  const spread = paint.width > 0 ? (paint.lastInked - paint.firstInked) / paint.width : 0;
+  check(
+    'the mark spans the plot rather than collapsing to one edge',
+    spread > 0.6,
+    `spread=${spread.toFixed(2)} first=${paint.firstInked} last=${paint.lastInked} of ${paint.width}`,
   );
 
+  // Every tile must plot its own metric. This was the defect this probe missed
+  // once already: RPM and Requests both plotted request volume, and the cache-rate
+  // and cost tiles both plotted token volume, so four of six tiles drew the same
+  // shape under different labels. Comparing the painted tiles catches a tile that
+  // was wired back to somebody else's series, which no per-tile assertion can.
+  const digests = await page.evaluate(() =>
+    [...document.querySelectorAll('.chart-slot canvas')].map((el) => {
+      const probe = document.createElement('canvas');
+      probe.width = el.width;
+      probe.height = el.height;
+      probe.getContext('2d').drawImage(el, 0, 0);
+      const { data } = probe.getContext('2d').getImageData(0, 0, probe.width, probe.height);
+      let hash = 2166136261;
+      for (let i = 0; i < data.length; i += 7) {
+        hash ^= data[i];
+        hash = Math.imul(hash, 16777619);
+      }
+      return (hash >>> 0).toString(16);
+    }),
+  );
+  const uniqueDigests = new Set(digests);
+  check(
+    'each tile plots its own series rather than repeating another tile',
+    digests.length === 6 && uniqueDigests.size === digests.length,
+    `distinct=${uniqueDigests.size} of ${digests.length} (${digests.join(',')})`,
+  );
+
+  const firstSlot = page.locator('.chart-slot').first();
   const box = await firstSlot.boundingBox();
-  if (!box) throw new Error('no bounding box for the first sparkline');
+  if (!box) throw new Error('no bounding box for the first trend tile');
   await page.mouse.move(box.x + box.width * 0.5, box.y + box.height / 2);
   const tooltip = page.locator('.chart-tooltip').first();
   await tooltip.waitFor({ state: 'visible', timeout: 5000 });
   const tooltipText = await tooltip.innerText();
   // The tooltip must name a real bucket: at 1h/1-minute resolution the label is
   // "MM-DD HH:mm", and the value is the request count for that minute.
+  // The readout must be a small overlay, not a box stretched across the tile. A
+  // broad CSS rule once sized every direct div child of the slot, which silently
+  // blew the readout up to the full tile.
+  const tooltipBox = await tooltip.boundingBox();
+  check(
+    'the readout hugs its text instead of spanning the tile',
+    Boolean(tooltipBox) && tooltipBox.width < box.width * 0.5,
+    `tooltipWidth=${tooltipBox ? Math.round(tooltipBox.width) : 'none'} slotWidth=${Math.round(box.width)}`,
+  );
   check(
     'the tooltip states a bucket time and a value',
     /\d{2}-\d{2} \d{2}:\d{2}/.test(tooltipText) && /\d/.test(tooltipText),
@@ -467,7 +548,8 @@ export async function dashboardChartMarks({ base, page, check }) {
   // Sweep the pointer across the tile, then confirm the chart still reports its
   // data: a rebuild that dropped the series would show here.
   for (let step = 0; step <= 20; step += 1) {
-    await page.mouse.move(box.x + (box.width * step) / 20, box.y + box.height / 2);
+    const x = box.x + Math.min(box.width - 1, (box.width * step) / 20);
+    await page.mouse.move(x, box.y + box.height / 2);
   }
   check(
     'the tooltip still reports a bucket after a pointer sweep',

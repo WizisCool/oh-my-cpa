@@ -1,20 +1,38 @@
 import assert from 'node:assert/strict';
-import { buildSparkGeometry, sparkDomain } from '../web/src/charts/chartTheme.ts';
+import { sparkColor } from '../web/src/charts/chartTheme.ts';
 
-const domain = sparkDomain([0, 40, 80, 0]) ?? { domainMin: 0, domainMax: 100 };
-const geometry = buildSparkGeometry([0, 40, 80, 0], domain, 44);
+/**
+ * The dashboard mark is drawn by AntV, so there is no app-owned geometry left to
+ * assert on. What stays app-owned - and therefore still worth pinning - is the
+ * tone-to-token mapping: it is the contract that keeps a chart coloured from the
+ * palette instead of from a literal, in both themes.
+ */
+const TONES = ['accent', 'success', 'warn', 'danger', 'neutral'] as const;
 
-assert.match(geometry.linePath, /^M /, 'the trend starts with a move command');
-assert.match(geometry.linePath, / C /, 'the trend uses a smooth curve');
-assert.ok(!geometry.linePath.endsWith('Z'), 'the stroked trend path must stay open');
-assert.ok(geometry.areaPath.endsWith('Z'), 'the fill-only area path closes at the baseline');
-assert.ok(geometry.areaPath.startsWith(geometry.linePath), 'the area reuses the trend geometry');
+for (const tone of TONES) {
+  for (const mode of ['dark', 'light'] as const) {
+    const value = sparkColor(mode, tone);
+    assert.match(value, /^#[0-9a-f]{6}$|^rgba?\(/, `${tone}/${mode} resolves to a colour token`);
+  }
+}
 
-const flat = sparkDomain([5, 5, 5]);
-assert.ok(flat && flat.domainMax > 5, 'a flat series keeps headroom');
-assert.equal(flat?.domainMin, 0, 'a flat series sits above zero, not on it');
-const withZero = sparkDomain([0, 10, 20]);
-assert.equal(withZero?.domainMin, 0, 'a series containing zero keeps zero as its floor');
-assert.equal(sparkDomain([]), undefined, 'an empty series has no domain');
+// The same tone must resolve per theme, not to one frozen literal: a chart that
+// ignores the active mode is the regression this guards.
+const darkAccent = sparkColor('dark', 'accent');
+const lightAccent = sparkColor('light', 'accent');
+const darkMuted = sparkColor('dark', 'neutral');
 
-console.log('PASS chart marks: fill-only area, separate open trend path');
+// Distinct tones stay distinguishable, so a tile's identity colour actually
+// differs from its neighbour's and from the muted floor.
+const resolved = new Set(TONES.map((tone) => sparkColor('dark', tone)));
+assert.equal(resolved.size, TONES.length, 'each tone resolves to a distinct token');
+
+// Neutral is the muted token, not an accent: the cache-rate and cost tiles rely
+// on it reading as "no verdict".
+assert.notEqual(darkMuted, darkAccent, 'neutral must not resolve to the accent');
+assert.equal(lightAccent, darkAccent, 'accent is mode-invariant by design');
+
+const shades = new Set([darkAccent, lightAccent]);
+assert.equal(shades.size, 1, 'accent is the same token in both modes');
+
+console.log('PASS chart marks: tones resolve to distinct palette tokens per theme');

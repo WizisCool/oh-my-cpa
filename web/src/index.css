@@ -518,6 +518,11 @@ a { color: inherit; }
 .tile-split .is-danger, .tile-split .is-danger b { color: var(--danger); }
 .tile-split .is-zero, .tile-split .is-zero b { color: var(--meta); }
 .chart-slot { position: relative; margin-top: 14px; min-width: 0; }
+/* Scoped to the chart container: the hover readout is also a direct `div` child,
+   and sizing it to the slot would stretch a two-line label across the whole tile
+   instead of letting it hug its text. */
+.chart-slot > div:not(.chart-tooltip) { width: 100%; height: 100%; pointer-events: none; }
+.chart-slot canvas { display: block; width: 100% !important; height: 100% !important; pointer-events: none; }
 .chart-slot svg { display: block; width: 100%; height: 100%; overflow: visible; }
 .chart-placeholder { margin-top: 14px; border-bottom: 1px solid var(--border-soft); }
 .chart-tooltip {
