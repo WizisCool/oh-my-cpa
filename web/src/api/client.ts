@@ -9,6 +9,7 @@ import { ManagementOverview } from '../types/management';
 import { ManagementAuthFilesResponse, ManagementAuthFileMutationResponse, ManagementAuthFileModel } from '../types/managementAuthFile';
 import { DashboardResponse, DashboardTailResponse } from '../types/dashboard';
 import { DashboardTokenHeatmap } from '../types/tokenHeatmap';
+import { DashboardModelsResponse } from '../types/dashboardModels';
 import { ErrorLogFile } from '../types/logs';
 import { CapabilityProbeReport } from '../types/capability';
 import { ConfigScalarsResponse, ConfigSourceResponse } from '../types/configManagement';
@@ -263,6 +264,18 @@ export const api = {
   async getTokenHeatmap(timezone: string): Promise<DashboardTokenHeatmap> {
     const query = new URLSearchParams({ tz: timezone });
     return request<DashboardTokenHeatmap>(`/management/dashboard/token-heatmap?${query.toString()}`, { method: 'GET' });
+  },
+
+  /**
+   * getDashboardModels reads the per-model breakdown behind the dashboard's token trend and
+   * model-usage ring.
+   *
+   * Its own call, for the reason the heatmap has one: it answers for the window the picker selected
+   * but on its own cadence, and it walks the detail rows rather than the aggregation rollup, so
+   * folding it into the KPI response would pay that cost on every live tail poll.
+   */
+  async getDashboardModels(query: string): Promise<DashboardModelsResponse> {
+    return request<DashboardModelsResponse>(`/management/dashboard/models${query ? `?${query}` : ''}`, { method: 'GET' });
   },
 
   /**

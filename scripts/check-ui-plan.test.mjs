@@ -45,7 +45,11 @@ test('the four request-records concerns select only their own scenarios', () => 
 
 test('a dashboard change selects every dashboard scenario', () => {
   // Registry order, which is the order the plan preserves and the order `--list` prints.
-  const all = ['dashboard-charts', 'dashboard-heatmap', 'dashboard-heatmap-pruned', 'dashboard-heatmap-mobile', 'dashboard-heatmap-error'];
+  const all = [
+    'dashboard-charts', 'dashboard-model-panels', 'dashboard-model-panels-states',
+    'dashboard-model-panels-failure', 'dashboard-model-panels-empty',
+    'dashboard-heatmap', 'dashboard-heatmap-pruned', 'dashboard-heatmap-mobile', 'dashboard-heatmap-error',
+  ];
   assert.deepEqual(planFor('web/src/pages/DashboardPage.tsx'), all);
   assert.deepEqual(planFor('web/src/components/dashboard/TokenHeatmap.tsx'), all);
   // The strip's own layout and ramp logic is only read by the heatmap scenarios, and
@@ -142,7 +146,11 @@ test('a mixed change unions the narrow plans without widening', () => {
   );
   // Two placed paths union; only an *unplaced* one widens. This is the distinction
   // that keeps a two-page change from running everything.
-  assert.deepEqual(plan.ids.sort(), ['dashboard-charts', 'dashboard-heatmap', 'dashboard-heatmap-error', 'dashboard-heatmap-mobile', 'dashboard-heatmap-pruned', 'icon-picker-stacking']);
+  assert.deepEqual(plan.ids.sort(), [
+    'dashboard-charts', 'dashboard-heatmap', 'dashboard-heatmap-error', 'dashboard-heatmap-mobile',
+    'dashboard-heatmap-pruned', 'dashboard-model-panels', 'dashboard-model-panels-empty',
+    'dashboard-model-panels-failure', 'dashboard-model-panels-states', 'icon-picker-stacking',
+  ]);
 });
 
 test('the reason names the file that caused a widening', () => {

@@ -1393,6 +1393,125 @@ const chartSeries = Array.from({ length: chartBuckets }, (_, index) => ({
   cost_nanos: index % 6 === 0 ? 0 : 120_000_000 + (index % 5) * 60_000_000,
 }));
 
+/**
+ * The per-model fixture for the dashboard's two model panels.
+ *
+ * Deliberately larger than the model set a default run would produce, so the panels have to fold a
+ * remainder rather than print every model: six named groups plus a folded one is what exercises the
+ * `folded` discriminator, the legend's width at its worst, and the donut's small-slice rendering.
+ *
+ * Each group peaks in its own band of the window, so the trend has seven visibly different shapes.
+ * That is what the paint assertions read: if every series carried the same curve, a mark wired to the
+ * wrong series - or to one series repeated - would still look plausible.
+ */
+const MODEL_BUCKETS = 30;
+const modelBucketMS = 60_000;
+const modelGroups = [
+  { model: 'gpt-5-codex', tokens: 480_000, peak: 2 },
+  { model: 'claude-sonnet-4-5-20250929', tokens: 210_000, peak: 7 },
+  { model: 'gemini-3-pro-preview', tokens: 96_000, peak: 13 },
+  { model: 'deepseek-v4-pro', tokens: 44_000, peak: 18 },
+  { model: 'qwen3-coder-plus', tokens: 18_000, peak: 23 },
+  { model: 'glm-5.3-flash', tokens: 7_000, peak: 26 },
+  { model: 'kimi-k2-thinking', tokens: 2_000, peak: 28 },
+  { model: 'hy4-preview', tokens: 600, peak: 29 },
+];
+const modelWindowFrom = Date.now() - MODEL_BUCKETS * modelBucketMS;
+
+/**
+ * One group's series: a single peak in its own band, zero elsewhere.
+ *
+ * The weights are a whole unit split two ways - the earlier bucket takes the larger share and the rest
+ * is the **integer remainder** - so the series always sums back to exactly `total`. An earlier revision
+ * used 1 and 0.4 as fractions of the total, which made every series sum to 140% of the number reported
+ * beside it: the fixture violated the one containment invariant the API guarantees, so a real
+ * regression in the fold would have had a wrong baseline to be measured against.
+ */
+function modelSeriesFor(peak, total) {
+  const head = Math.round(total * 0.7);
+  const tail = total - head;
+  // A peak in the final bucket has no next bucket to hold the remainder, so it takes the whole amount
+  // rather than dropping it. Silently losing it is what the conservation check below caught.
+  const hasTailBucket = peak + 1 < MODEL_BUCKETS;
+  return Array.from({ length: MODEL_BUCKETS }, (_, index) => ({
+    t: modelWindowFrom + index * modelBucketMS,
+    tokens: index === peak ? (hasTailBucket ? head : total) : hasTailBucket && index === peak + 1 ? tail : 0,
+  }));
+}
+
+/** The groups the response carries, named first and folded last, in the order the API promises. */
+function modelFixtureGroups() {
+  const named = modelGroups.slice(0, 5).map((group) => ({
+    model: group.model,
+    folded: false,
+    tokens: group.tokens,
+    requests: 10 + group.peak,
+    series: modelSeriesFor(group.peak, group.tokens),
+  }));
+  const remainder = modelGroups.slice(5);
+  const foldedTokens = remainder.reduce((sum, group) => sum + group.tokens, 0);
+  // The remainder's own shape is the sum of its members' shapes, so it is built rather than sampled:
+  // distributing it with a single peak would give it a shape none of its members has.
+  const foldedSeries = Array.from({ length: MODEL_BUCKETS }, (_, index) => ({ t: modelWindowFrom + index * modelBucketMS, tokens: 0 }));
+  for (const group of remainder) {
+    for (const point of modelSeriesFor(group.peak, group.tokens)) {
+      foldedSeries.find((entry) => entry.t === point.t).tokens += point.tokens;
+    }
+  }
+  return [...named, { model: '', folded: true, tokens: foldedTokens, requests: 9, series: foldedSeries }];
+}
+
+/**
+ * The fixture must satisfy the API's own containment invariant before a browser ever sees it: every
+ * group's series sums to that group's total, and the groups sum to the window total. Without this the
+ * probe's "the ring reports the window total" check would be comparing against a number the fixture
+ * itself contradicted.
+ */
+const modelFixture = modelFixtureGroups();
+const modelFixtureTotal = modelFixture.reduce((sum, group) => sum + group.tokens, 0);
+for (const group of modelFixture) {
+  const summed = group.series.reduce((sum, point) => sum + point.tokens, 0);
+  if (summed !== group.tokens) {
+    throw new Error(`model fixture group ${group.model || '(folded)'} sums to ${summed}, want ${group.tokens}`);
+  }
+}
+
+export const chartDashboardModels = {
+  window: {
+    preset: '1h',
+    from: modelWindowFrom,
+    to: Date.now(),
+    bucket_ms: modelBucketMS,
+    minutes: 30,
+    complete: true,
+    open_end: false,
+  },
+  total_tokens: modelFixtureTotal,
+  models: modelFixture,
+  partial_errors: [],
+};
+
+/** A window in which no model carried tokens, for the panels' empty state. */
+export const chartDashboardModelsEmpty = {
+  window: {
+    preset: '1h',
+    from: modelWindowFrom,
+    to: Date.now(),
+    bucket_ms: modelBucketMS,
+    minutes: 30,
+    complete: true,
+    open_end: false,
+  },
+  total_tokens: 0,
+  models: [],
+  partial_errors: [],
+};
+
+export const chartDashboardModelsWeek = {
+  ...chartDashboardModels,
+  window: { ...chartDashboardModels.window, preset: '7d' },
+};
+
 export const chartDashboard = {
   window: {
     preset: '1h',
@@ -1570,6 +1689,413 @@ export async function dashboardChartMarks({ base, page, check }) {
     'the hover tooltip does not animate into place',
     overlay.present && overlay.transition === '0s',
     JSON.stringify(overlay),
+  );
+}
+
+/**
+ * The dashboard's two model panels: the per-model token trend and the model-usage ring.
+ *
+ * Both are AntV marks, so the assertions read painted pixels rather than DOM - a canvas that exists
+ * proves nothing, and the failure this has to catch is a mark drawn with the wrong data or in one
+ * colour repeated. Four claims are made, and each is one a per-component test cannot reach:
+ *
+ *   - Each group's line is painted in its own colour. A `colorField` that failed to bind, or a domain
+ *     and range that were passed in an order the library did not honour, paints every series the same
+ *     and still renders a plausible chart.
+ *   - The ring draws as many distinct slice colours as the legend claims groups. A ring wired to the
+ *     first group repeated would look like a ring.
+ *   - The legend and the ranked list agree, group for group and colour for colour. They are two
+ *     renderings of one ranking, and the api's `folded` discriminator is the only thing keeping a real
+ *     model named like the remainder out of the remainder.
+ *   - Nothing overflows the card at its own width, which is the container this chart is drawn into.
+ */
+export async function dashboardModelPanels({ base, page, check }) {
+  await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.dashboard-models').waitFor({ timeout: 20_000 });
+  // The marks are behind a lazy import, so the first frame after the panel appears is the Suspense
+  // fallback rather than a canvas.
+  await page.locator('.model-trend canvas').first().waitFor({ timeout: 20_000 });
+  await page.locator('.model-ring canvas').first().waitFor({ timeout: 20_000 });
+
+  /**
+   * The distinct opaque colours a canvas paints, most frequent first.
+   *
+   * Quantised to 4 bits per channel so antialiasing along a curve does not read as hundreds of
+   * separate colours, and filtered by how much of the canvas each one covers: a 1.6px line
+   * antialiases into a halo of intermediate tones, and the halo colours are not what a reader
+   * perceives the line to be.
+   */
+  const paintedTones = async (selector, minimumShare) => page.evaluate(([sel, share]) => {
+    const canvas = document.querySelector(sel);
+    if (!canvas) return { error: `no canvas for ${sel}` };
+    const probe = document.createElement('canvas');
+    probe.width = canvas.width;
+    probe.height = canvas.height;
+    probe.getContext('2d').drawImage(canvas, 0, 0);
+    const { data } = probe.getContext('2d').getImageData(0, 0, probe.width, probe.height);
+    const counts = new Map();
+    let opaque = 0;
+    for (let offset = 0; offset < data.length; offset += 4) {
+      if (data[offset + 3] < 200) continue;
+      opaque += 1;
+      const key = `${data[offset] >> 4},${data[offset + 1] >> 4},${data[offset + 2] >> 4}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const floor = opaque * share;
+    return {
+      total: opaque,
+      tones: [...counts.entries()].filter(([, count]) => count >= floor).map(([key]) => key),
+      distinct: counts.size,
+    };
+  }, [selector, minimumShare]);
+
+  // ── the trend ──────────────────────────────────────────────────────────────
+  const trendTones = await paintedTones('.model-trend canvas', 0.002);
+  const legendColors = await page.evaluate(() =>
+    [...document.querySelectorAll('.model-legend-item')].map((item) => {
+      const swatch = getComputedStyle(item.querySelector('.model-legend-swatch')).backgroundColor;
+      const match = swatch.match(/\d+/g).map(Number);
+      return `${match[0] >> 4},${match[1] >> 4},${match[2] >> 4}`;
+    }),
+  );
+  check(
+    'the trend legend lists one entry per group',
+    legendColors.length === 6,
+    `entries=${legendColors.length}`,
+  );
+  check(
+    'the trend paints each group in its own colour',
+    trendTones.tones.length >= 5,
+    `tones=${trendTones.tones.length} (${trendTones.tones.join(' | ')}) distinct=${trendTones.distinct}`,
+  );
+  // Every legend colour must actually appear in the paint. A legend is generated from the same
+  // palette the chart is, so a chart that ignored its range would still have a correct-looking key
+  // above it - which is exactly the defect this catches.
+  const missingFromPaint = legendColors.filter((tone) => !trendTones.tones.includes(tone));
+  check(
+    'every colour the legend promises is painted in the plot',
+    missingFromPaint.length === 0,
+    `missing=${missingFromPaint.join(' | ')} painted=${trendTones.tones.join(' | ')}`,
+  );
+
+  // ── the ring ───────────────────────────────────────────────────────────────
+  //
+  // The ring's own paint is read the same way, but the assertion is stronger than "several colours are
+  // present": a ring wired to one group repeated, and a ring whose slices are drawn with thin borders
+  // between near-identical shades, would both satisfy a count. So the painted arcs are matched against
+  // the *expected* palette - the colours the legend above the trend promises - one group at a time.
+  const ringPainted = await paintedTones('.model-ring canvas', 0.002);
+  const ringArcColors = await page.evaluate(() => {
+    // Group the ring's opaque pixels by their quantised colour, then keep the colours that occupy a
+    // contiguous angular span: a slice is a wedge, whereas the 2px separator stroke and anti-aliased
+    // edges are thin and scattered. This is what separates "six slices" from "six colours, one of which
+    // is the border".
+    const canvas = document.querySelector('.model-ring canvas');
+    const probe = document.createElement('canvas');
+    probe.width = canvas.width;
+    probe.height = canvas.height;
+    const context = probe.getContext('2d');
+    context.drawImage(canvas, 0, 0);
+    const { data } = context.getImageData(0, 0, probe.width, probe.height);
+    const cx = probe.width / 2;
+    const cy = probe.height / 2;
+    const bands = new Map();
+    const steps = 360;
+    for (let step = 0; step < steps; step += 1) {
+      const angle = (step / steps) * Math.PI * 2;
+      // Sample the middle of the ring's thickness, which is where a slice is solid.
+      for (const radius of [0.36, 0.40, 0.44]) {
+        const x = Math.round(cx + Math.cos(angle) * probe.width * radius);
+        const y = Math.round(cy + Math.sin(angle) * probe.height * radius);
+        if (x < 0 || y < 0 || x >= probe.width || y >= probe.height) continue;
+        const offset = (y * probe.width + x) * 4;
+        if (data[offset + 3] < 200) continue;
+        const key = `${data[offset] >> 4},${data[offset + 1] >> 4},${data[offset + 2] >> 4}`;
+        bands.set(key, (bands.get(key) ?? 0) + 1);
+      }
+    }
+    // A slice spanning at least a few degrees of the ring at three sampled radii.
+    return [...bands.entries()].filter(([, hits]) => hits >= 6).map(([key]) => key);
+  });
+  check(
+    'the ring paints an arc colour per slice rather than one repeated colour',
+    ringArcColors.length >= 5,
+    `arcs=${ringArcColors.length} (${ringArcColors.join(' | ')}) of ${ringPainted.distinct} distinct tones`,
+  );
+  // The slices are drawn with a 2px separator in the card's own surface colour, so that two
+  // neighbouring hues do not touch. That stroke is chrome rather than a category, and this is the one
+  // exception allowed: every other colour the ring paints must be a palette colour the legend promises,
+  // which is what makes "the ring and the legend agree" a real assertion rather than a count.
+  const cardSurface = await page.evaluate(() => {
+    const fill = getComputedStyle(document.querySelector('.model-usage-card')).backgroundColor;
+    const channels = fill.match(/\d+/g).map(Number);
+    return `${channels[0] >> 4},${channels[1] >> 4},${channels[2] >> 4}`;
+  });
+  const strayArcs = ringArcColors.filter((tone) => !legendColors.includes(tone) && tone !== cardSurface);
+  check(
+    'every arc the ring paints is a palette colour the legend promises or the slice separator',
+    strayArcs.length === 0,
+    `stray=${strayArcs.join(' | ')} arcs=${ringArcColors.join(' | ')} legend=${legendColors.join(' | ')} separator=${cardSurface}`,
+  );
+
+  // ── the ranked list, which is the ring's real legend ───────────────────────
+  const list = await page.evaluate(() =>
+    [...document.querySelectorAll('.model-usage-row')].map((row) => ({
+      name: row.querySelector('.model-usage-name').textContent,
+      tokens: row.querySelector('.model-usage-tokens').textContent,
+      share: row.querySelector('.model-usage-share').textContent,
+      color: getComputedStyle(row.querySelector('.model-usage-swatch')).backgroundColor,
+    })),
+  );
+  check('the usage list ranks every group', list.length === 6, `rows=${list.length}`);
+  check(
+    'every row states a name, a volume and a share',
+    list.every((row) => row.name.length > 0 && /[\d.]/.test(row.tokens) && /%/.test(row.share)),
+    JSON.stringify(list.map((row) => `${row.name}=${row.tokens}/${row.share}`)),
+  );
+  // The remainder is labelled, never blank: the API sends an empty model name for it on purpose,
+  // because the label is the client's to translate.
+  check(
+    'the folded remainder carries a translated label rather than a blank name',
+    list.some((row) => /其他模型|Other models/.test(row.name)),
+    `names=${list.map((row) => row.name).join(' | ')}`,
+  );
+  // The list and the trend's legend are two renderings of one ranking, so a group's colour has to be
+  // the same in both. A panel that assigned colours from its own array order would drift here as soon
+  // as the two orderings differed.
+  const legendByLabel = new Map(await page.evaluate(() =>
+    [...document.querySelectorAll('.model-legend-item')].map((item) => [
+      item.querySelector('.model-legend-label').textContent,
+      getComputedStyle(item.querySelector('.model-legend-swatch')).backgroundColor,
+    ]),
+  ));
+  const mismatched = list.filter((row) => legendByLabel.has(row.name) && legendByLabel.get(row.name) !== row.color);
+  check(
+    'a group has the same colour in the legend and in the usage list',
+    mismatched.length === 0,
+    `mismatched=${mismatched.map((row) => row.name).join(' | ')}`,
+  );
+
+  // ── the ring's centre is the sum of its slices ────────────────────────────
+  const centre = await page.locator('.model-ring-center').innerText();
+  check(
+    'the ring reports the window total in its centre',
+    /[\d.]/.test(centre) && /tokens/.test(centre),
+    `centre=${JSON.stringify(centre)}`,
+  );
+
+  // ── no axis label is clipped by the canvas it is drawn in ──────────────────
+  //
+  // The trend's x labels are painted into the canvas, so a label that overhangs the edge is cut with
+  // no DOM to inspect - which is how it shipped once, with every tick label sliced in half. Ink in the
+  // outermost columns of the canvas is the observable: the plot is inset from both edges, so a painted
+  // column at the very edge is a label hanging out of the frame.
+  const edgeInk = await page.evaluate(() => {
+    const canvas = document.querySelector('.model-trend canvas');
+    const probe = document.createElement('canvas');
+    probe.width = canvas.width;
+    probe.height = canvas.height;
+    probe.getContext('2d').drawImage(canvas, 0, 0);
+    const { data } = probe.getContext('2d').getImageData(0, 0, probe.width, probe.height);
+    let left = 0;
+    let right = 0;
+    for (let y = 0; y < probe.height; y += 1) {
+      if (data[(y * probe.width) * 4 + 3] > 20) left += 1;
+      if (data[(y * probe.width + probe.width - 1) * 4 + 3] > 20) right += 1;
+    }
+    return { left, right, width: probe.width };
+  });
+  check(
+    'no trend label is clipped by the canvas edge',
+    edgeInk.left === 0 && edgeInk.right === 0,
+    `leftColumnInk=${edgeInk.left} rightColumnInk=${edgeInk.right} width=${edgeInk.width}`,
+  );
+
+  // ── the smoothed curve stays on its floor ──────────────────────────────────
+  //
+  // The trend draws with a monotone cubic so that a zero-filled series cannot be smoothed *below* its
+  // own baseline - a non-monotone spline through a run of zeros overshoots and paints a line where the
+  // data says zero. That is a claim about painted geometry, so it is read from the pixels: the axis rule
+  // is the widest horizontal run of ink, and anything painted below it in a series colour is an
+  // overshoot.
+  const undershoot = await page.evaluate(() => {
+    const canvas = document.querySelector('.model-trend canvas');
+    const probe = document.createElement('canvas');
+    probe.width = canvas.width;
+    probe.height = canvas.height;
+    probe.getContext('2d').drawImage(canvas, 0, 0);
+    const { data } = probe.getContext('2d').getImageData(0, 0, probe.width, probe.height);
+    const seriesColors = [...document.querySelectorAll('.model-legend-swatch')].map((el) => {
+      const channels = getComputedStyle(el).backgroundColor.match(/\d+/g).map(Number);
+      return [channels[0], channels[1], channels[2]];
+    });
+    const isSeries = (offset) => {
+      if (data[offset + 3] < 20) return false;
+      return seriesColors.some(([r, g, b]) =>
+        Math.abs(data[offset] - r) < 24 && Math.abs(data[offset + 1] - g) < 24 && Math.abs(data[offset + 2] - b) < 24);
+    };
+    // The axis rule: the row carrying the most ink across the width.
+    let axisRow = 0;
+    let axisInk = -1;
+    for (let y = 0; y < probe.height; y += 1) {
+      let ink = 0;
+      for (let x = 0; x < probe.width; x += 1) if (data[(y * probe.width + x) * 4 + 3] > 20) ink += 1;
+      if (ink > axisInk) { axisInk = ink; axisRow = y; }
+    }
+    // Below the rule, plus a one-pixel allowance for the stroke's own width: a 1.6px line centred on the
+    // axis legitimately covers a pixel under it.
+    let below = 0;
+    for (let y = axisRow + 2; y < probe.height; y += 1) {
+      for (let x = 0; x < probe.width; x += 1) {
+        if (isSeries((y * probe.width + x) * 4)) below += 1;
+      }
+    }
+    return { axisRow, axisInk, below, height: probe.height };
+  });
+  check(
+    'the smoothed curve never paints below the plot floor',
+    undershoot.below === 0,
+    `seriesInkBelowFloor=${undershoot.below} axisRow=${undershoot.axisRow} axisInk=${undershoot.axisInk}`,
+  );
+
+  // ── the two cards stay inside their own width ──────────────────────────────
+  const overflow = await page.evaluate(() =>
+    [...document.querySelectorAll('.dashboard-models .dashboard-tile')].map((card) => card.scrollWidth - card.clientWidth),
+  );
+  check(
+    'neither model card overflows its own width',
+    overflow.every((excess) => excess <= 1),
+    `overflow=${overflow.join(',')}`,
+  );
+}
+
+/**
+ * The model panels' state machine: the window picker, manual refresh, a first-load failure, a stale
+ * refresh, and a window with no model traffic at all.
+ *
+ * The paint scenario above proves the panels are drawn correctly for a healthy response. These are the
+ * paths a per-component test cannot reach: they are about what the panels do when the *response* is
+ * different, which is where a panel silently keeps a skeleton, blanks the page, or shows a stale ranking
+ * as if it were current.
+ */
+export async function dashboardModelPanelStates({ base, page, check, context }) {
+  const calls = [];
+  await page.route('**/omc/api/**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/dashboard/models')) calls.push(url.search);
+    return route.fallback();
+  });
+  await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.model-trend canvas').first().waitFor({ timeout: 20_000 });
+  const firstWindow = calls.length;
+  check('the panels read the window the picker selected', firstWindow >= 1, `reads=${firstWindow} calls=${calls.join(' ')}`);
+
+  // ── the window picker drives them ─────────────────────────────────────────
+  // A panel wired to a fixed span would keep painting the same series as the operator changes the
+  // window, which is invisible from a single-window assertion.
+  await page.locator('.range-trigger').click();
+  const option = page.locator('.range-option', { hasText: /Last 7 days|近 7 天/ });
+  await option.click();
+  await until(async () => calls.some((search) => search.includes('preset=7d')), {
+    label: 'the model panels to re-read for the new window',
+  }).catch(() => {});
+  check(
+    'changing the window re-reads the model panels with the new preset',
+    calls.some((search) => search.includes('preset=7d')),
+    `calls=${calls.join(' ')}`,
+  );
+
+  // ── manual refresh ────────────────────────────────────────────────────────
+  const beforeRefresh = calls.length;
+  await page.locator('.terminal-page-head button .anticon-reload').first().click();
+  // The predicate is awaited through `until`, which is the probe harness's own condition wait: it
+  // reports the label when it times out instead of throwing a bare locator error.
+  let refreshRead = false;
+  await until(async () => {
+    refreshRead = calls.length > beforeRefresh;
+    return refreshRead;
+  }, { label: 'the refresh button to re-read the model panels' }).catch(() => {});
+  check('the refresh button re-reads the model panels', refreshRead, `calls=${calls.length} before=${beforeRefresh}`);
+
+  // ── a stale refresh keeps the panels and says so ───────────────────────────
+  await page.unroute('**/omc/api/**');
+  await context.route('**/omc/api/**/dashboard/models**', async (route) => {
+    // A failure *after* data existed. The panels must keep what they have, because replacing a month of
+    // ranking with an error card because one poll timed out is worse than showing slightly old data.
+    return route.fulfill({ status: 503, json: { error: 'database is unavailable' } });
+  });
+  await page.locator('.terminal-page-head button .anticon-reload').first().click();
+  let staleReported = false;
+  await until(async () => {
+    staleReported = (await page.locator('.model-stale-alert').count()) > 0;
+    return staleReported;
+  }, { label: 'a failed refresh to report itself' }).catch(() => {});
+  check('a failed refresh reports itself instead of blanking the panels', staleReported);
+  check(
+    'the failed refresh keeps the panels that were on screen',
+    (await page.locator('.model-trend canvas').count()) > 0 && (await page.locator('.model-usage-row').count()) > 0,
+    `canvases=${await page.locator('.model-trend canvas').count()} rows=${await page.locator('.model-usage-row').count()}`,
+  );
+  check(
+    'the stale alert offers a retry',
+    (await page.locator('.model-stale-alert button').count()) > 0,
+  );
+}
+
+/**
+ * The panels' first-load failure and their empty state, each in its own context so neither can be
+ * masked by data the other left behind.
+ */
+export async function dashboardModelPanelFailures({ base, page, check }) {
+  // ── a first load that failed ──────────────────────────────────────────────
+  // Nothing was ever read, so there is no panel to keep: the card must say so and offer the retry rather
+  // than leaving a skeleton up forever.
+  await page.route('**/omc/api/**/dashboard/models**', async (route) => {
+    return route.fulfill({ status: 503, json: { error: 'database is unavailable' } });
+  });
+  await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.model-alert').first().waitFor({ timeout: 20_000 });
+  check(
+    'a first load that failed is reported rather than left loading',
+    /Failed to load model usage|无法读取模型用量/.test(await page.locator('.model-alert').first().innerText()),
+    `alert=${JSON.stringify(await page.locator('.model-alert').first().innerText())}`,
+  );
+  check(
+    'the failed panel offers a retry',
+    (await page.locator('.model-alert button').count()) > 0,
+  );
+  check(
+    'the failed panel does not draw a chart it never read',
+    (await page.locator('.model-trend canvas').count()) === 0,
+    `canvases=${await page.locator('.model-trend canvas').count()}`,
+  );
+  // The rest of the page is unaffected: the panels are a separate read with a separate failure.
+  check(
+    'the KPI tiles and the activity grid still render while the model panels are unavailable',
+    (await page.locator('.chart-slot canvas').count()) === 6 && (await page.locator('.heatmap-grid').count()) === 1,
+    `tiles=${await page.locator('.chart-slot canvas').count()} grids=${await page.locator('.heatmap-grid').count()}`,
+  );
+}
+
+/**
+ * A window in which no model carried tokens. The panels must say so rather than draw an empty plot or a
+ * zero-angle ring, and the ring must not divide by a zero total.
+ */
+export async function dashboardModelPanelsEmpty({ base, page, check }) {
+  await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.dashboard-models').waitFor({ timeout: 20_000 });
+  await until(async () => (await page.locator('.model-empty, .model-trend canvas').count()) > 0, {
+    label: 'the model panels to resolve',
+  }).catch(() => {});
+  check(
+    'a window with no model usage states that rather than drawing an empty chart',
+    (await page.locator('.model-empty').count()) >= 1,
+    `empty=${await page.locator('.model-empty').count()} canvases=${await page.locator('.model-trend canvas').count()}`,
+  );
+  check(
+    'an empty window draws no ring slices',
+    (await page.locator('.model-usage-row').count()) === 0 && (await page.locator('.model-ring canvas').count()) === 0,
+    `rows=${await page.locator('.model-usage-row').count()} rings=${await page.locator('.model-ring canvas').count()}`,
   );
 }
 
@@ -1912,6 +2438,7 @@ export const SCENARIOS = [
         [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
         [(url) => url.pathname.endsWith('/dashboard/tail'), () => chartDashboard],
         [(url) => url.pathname.endsWith('/dashboard/token-heatmap'), () => chartTokenHeatmap],
+        [(url) => url.pathname.endsWith('/dashboard/models'), () => chartDashboardModels],
         [
           (url) => url.pathname.endsWith('/management/overview'),
           () => ({
@@ -1928,6 +2455,72 @@ export const SCENARIOS = [
     run: dashboardChartMarks,
   },
   {
+    id: 'dashboard-model-panels',
+    name: 'dashboard model trend and usage ring',
+    options: {
+      routes: [
+        [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
+        [(url) => url.pathname.endsWith('/dashboard/tail'), () => chartDashboard],
+        [(url) => url.pathname.endsWith('/dashboard/token-heatmap'), () => chartTokenHeatmap],
+        [(url) => url.pathname.endsWith('/dashboard/models'), () => chartDashboardModels],
+        [
+          (url) => url.pathname.endsWith('/management/overview'),
+          () => ({
+            cpa: { connected: true, version: 'probe', latency_ms: 1 },
+            counts: { management_keys: 1, provider_keys: 0, credentials: 0, models: 0 },
+            providers: [],
+            credentials: { total: 0, active: 0, disabled: 0, unavailable: 0, by_type: [] },
+            traffic: { bucket_minutes: 10, window_minutes: 60, buckets: [], total_success: 0, total_failure: 0, total: 0, success_rate: null },
+            partial_errors: [],
+          }),
+        ],
+      ],
+    },
+    run: dashboardModelPanels,
+  },
+  {
+    id: 'dashboard-model-panels-states',
+    name: 'dashboard model panels: window, refresh and stale failure',
+    options: {
+      routes: [
+        [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
+        [(url) => url.pathname.endsWith('/dashboard/tail'), () => chartDashboard],
+        [(url) => url.pathname.endsWith('/dashboard/token-heatmap'), () => chartTokenHeatmap],
+        // The second preset answers with its own window, so the panel that re-reads can be told apart
+        // from one that kept painting the first response.
+        [(url) => url.search.includes('preset=7d') && url.pathname.endsWith('/dashboard/models'), () => chartDashboardModelsWeek],
+        [(url) => url.pathname.endsWith('/dashboard/models'), () => chartDashboardModels],
+      ],
+    },
+    run: dashboardModelPanelStates,
+  },
+  {
+    id: 'dashboard-model-panels-failure',
+    name: 'dashboard model panels: first-load failure',
+    options: {
+      routes: [
+        [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
+        [(url) => url.pathname.endsWith('/dashboard/tail'), () => chartDashboard],
+        [(url) => url.pathname.endsWith('/dashboard/token-heatmap'), () => chartTokenHeatmap],
+        [(url) => url.pathname.endsWith('/dashboard/models'), () => ({ status: 503, json: { error: 'database is unavailable' } })],
+      ],
+    },
+    run: dashboardModelPanelFailures,
+  },
+  {
+    id: 'dashboard-model-panels-empty',
+    name: 'dashboard model panels: a window with no model traffic',
+    options: {
+      routes: [
+        [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
+        [(url) => url.pathname.endsWith('/dashboard/tail'), () => chartDashboard],
+        [(url) => url.pathname.endsWith('/dashboard/token-heatmap'), () => chartTokenHeatmap],
+        [(url) => url.pathname.endsWith('/dashboard/models'), () => chartDashboardModelsEmpty],
+      ],
+    },
+    run: dashboardModelPanelsEmpty,
+  },
+  {
     id: 'dashboard-heatmap',
     name: 'dashboard token heatmap',
     options: {
@@ -1935,6 +2528,7 @@ export const SCENARIOS = [
         [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
         [(url) => url.pathname.endsWith('/dashboard/tail'), () => chartDashboard],
         [(url) => url.pathname.endsWith('/dashboard/token-heatmap'), () => chartTokenHeatmap],
+        [(url) => url.pathname.endsWith('/dashboard/models'), () => chartDashboardModels],
       ],
     },
     run: dashboardTokenHeatmap,
@@ -1947,6 +2541,10 @@ export const SCENARIOS = [
         [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
         [(url) => url.pathname.endsWith('/dashboard/tail'), () => chartDashboard],
         [(url) => url.pathname.endsWith('/dashboard/token-heatmap'), () => chartTokenHeatmapPruned],
+        // The model panels are not what this scenario asserts, but they share the page: without a
+        // response they would render their empty state and the probe would be reading a page one
+        // panel short of the real one.
+        [(url) => url.pathname.endsWith('/dashboard/models'), () => chartDashboardModels],
       ],
     },
     run: dashboardTokenHeatmapPruned,
@@ -1960,6 +2558,7 @@ export const SCENARIOS = [
         [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
         [(url) => url.pathname.endsWith('/dashboard/tail'), () => chartDashboard],
         [(url) => url.pathname.endsWith('/dashboard/token-heatmap'), () => chartTokenHeatmap],
+        [(url) => url.pathname.endsWith('/dashboard/models'), () => chartDashboardModels],
       ],
     },
     run: dashboardTokenHeatmapMobile,
@@ -1975,6 +2574,10 @@ export const SCENARIOS = [
           (url) => url.pathname.endsWith('/dashboard/token-heatmap'),
           () => ({ status: 503, json: { error: 'database is unavailable' } }),
         ],
+        // The model panels are a separate read with a separate failure mode, so this scenario leaves
+        // them healthy: the claim under test is that the *heatmap* can fail without blanking the page,
+        // and failing both would not distinguish "the panels survived" from "the page is wrong".
+        [(url) => url.pathname.endsWith('/dashboard/models'), () => chartDashboardModels],
       ],
     },
     run: dashboardTokenHeatmapFailure,

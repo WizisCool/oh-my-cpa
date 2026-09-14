@@ -19,6 +19,16 @@ const monoFont = [
 ].join(', ');
 
 /**
+ * The app's mono stack, exported for the chart runtime.
+ *
+ * A canvas cannot inherit a font: the axis and tooltip text a chart draws is measured and painted by
+ * the library, so it needs the family as a string rather than through the cascade. Sharing this constant
+ * is what keeps chart text in the same type scale as everything around it instead of falling back to
+ * the library's own sans-serif default.
+ */
+export const MONO_FONT_STACK = monoFont;
+
+/**
  * Design tokens for both mode palettes. `docs/design.md` is the source of
  * truth; this object and the `:root` variables in `web/src/index.css` are the
  * only two places that may name a colour, so the app never falls back to
@@ -47,6 +57,13 @@ export const palette = {
     /* Cache-rate scale (design.md §2): yellow → green, no red. */
     cacheRateYellow: '#ffd60a',
     cacheRateGreen: '#30d158',
+    /* Categorical series palette (design.md §2, ADR 0006): ZCode & CodeX inspired developer
+       console palette matching AntV and Tremor. Alternates vibrant primary hues
+       (Blue -> Emerald -> Purple -> Coral -> Amber -> Cyan) ensuring immediate visual hierarchy,
+       warm-cool harmony, and rich, lively telemetry. */
+    series: ['#3b82f6', '#10b981', '#8b5cf6', '#f43f5e', '#f59e0b', '#06b6d4'],
+    /* The trend's plot floor and the ring's unfilled track. */
+    seriesTrack: '#2a2a30',
   },
   light: {
     bg: '#fdfcfc',
@@ -72,6 +89,9 @@ export const palette = {
        4.5:1 there. */
     cacheRateYellow: '#6e5b00',
     cacheRateGreen: '#00662a',
+    /* Deep saturated counterparts for light card surfaces clearing >= 3.0 graphical contrast. */
+    series: ['#2563eb', '#059669', '#7c3aed', '#e11d48', '#b45309', '#0891b2'],
+    seriesTrack: '#e5e5ea',
   },
 } as const;
 

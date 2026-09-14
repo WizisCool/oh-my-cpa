@@ -182,6 +182,22 @@ const DICT: Record<string, [string, string]> = {
   'dash.tokens_reasoning': ['推理', 'Reasoning'],
   'dash.tokens_cache_read': ['缓存读', 'Cache read'],
   'dash.heatmap.title': ['Token 活动', 'Token activity'],
+  'dash.models.trend_title': ['Token 趋势', 'Token trend'],
+  'dash.models.usage_title': ['模型用量', 'Model usage'],
+  // The remainder group's label. It lives in the dictionary rather than in the response because it is
+  // user-visible copy, and the API marks the group with a `folded` flag instead of a reserved name
+  // precisely so this string is free to be translated - a deployment may serve a model whose name
+  // equals whatever this says.
+  'dash.models.folded': ['其他模型', 'Other models'],
+  // A group the API named with an empty string. It is a label only: the group keeps its identity, so
+  // nothing is renamed and no stored value changes.
+  'dash.models.unnamed': ['未命名模型', 'Unnamed model'],
+  'dash.models.empty': ['该时间窗口内没有模型用量', 'No model usage in this time window'],
+  'dash.models.error': ['无法读取模型用量', 'Failed to load model usage'],
+  'dash.models.stale': [
+    '模型用量刷新失败，当前显示的是上一次的数据',
+    'Refreshing model usage failed; showing the last successful reading',
+  ],
   'dash.heatmap.loading': ['读取中', 'Loading'],
   'dash.heatmap.grid_label': [
     '近一年每日 Token 用量；点击某天可查看当天请求',

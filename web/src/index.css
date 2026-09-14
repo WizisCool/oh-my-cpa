@@ -63,6 +63,18 @@
      day's volume - see web/src/theme/heatmapRamp.ts for why that curve and not a linear one. */
   --heatmap-quiet: #3a3636;
   --heatmap-busy: #00a2fb;
+  /* Categorical series palette (design.md §2, ADR 0006): alternates warm and cool families so a
+     warm hue reaches an ordinary two- or three-model window. Consumed only through `seriesColor`, and
+     asserted against `themeConfig.ts` by scripts/test-chart-marks.ts. */
+  --series-1: #3b82f6;
+  --series-2: #10b981;
+  --series-3: #8b5cf6;
+  --series-4: #f43f5e;
+  --series-5: #f59e0b;
+  --series-6: #06b6d4;
+  /* The trend's plot floor and the ring's unfilled track: a quiet step against the card, so an empty
+     stretch reads as the axis rather than as a gap in the data. */
+  --series-track: #2a2a30;
   /* The grid's floor, the space between cells, and the weekday gutter. The cell size itself
      is not a token: it is whatever divides the panel evenly. */
   --heatmap-min-cell: 9px;
@@ -130,6 +142,13 @@
   /* The link step of the accent ladder for this theme; the tooltip is on the card's surface rather
      than the page, and this is the step that clears 4.5:1 there. */
   --heatmap-tip-link: #005d8f;
+  --series-1: #2563eb;
+  --series-2: #059669;
+  --series-3: #7c3aed;
+  --series-4: #e11d48;
+  --series-5: #b45309;
+  --series-6: #0891b2;
+  --series-track: #e5e5ea;
 }
 
 * { box-sizing: border-box; }
@@ -640,6 +659,172 @@ a { color: inherit; }
   .dashboard-tile.is-wide { grid-column: span 1; }
   .tile-value { font-size: 28px; }
   .dashboard-tile .ant-card-body { padding: 16px; }
+}
+
+/* ── model panels: the window's token trend and usage ring ───────────────────
+   Two peer cards above the activity grid, each spanning half the grid on a wide viewport. They read
+   one response, so they are drawn from one ranking and a model's colour is the same in both - see
+   `ModelUsagePanels` for why that is a correctness requirement rather than an economy.
+
+   The blocks below are deliberately NOT `.chart-slot`. That class belongs to the six KPI sparklines,
+   and it disables pointer events on its canvas and pins the plot to the slot's height; the model
+   trend needs the library's own shared tooltip, which requires the pointer. The two chart surfaces
+   are therefore styled separately even though both hold an AntV mark. */
+.dashboard-models {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+.model-trend-card { grid-column: span 2; }
+.model-usage-card { grid-column: span 2; }
+
+/* The trend's key. It wraps rather than scrolls: a legend that scrolls hides the very series the
+   reader is looking for, and six entries in a two-column card is at most two rows. */
+.model-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 12px 0 4px;
+  padding: 0;
+  list-style: none;
+}
+.model-legend-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.model-legend-swatch { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.model-legend-label {
+  color: var(--fg-2);
+  font-size: 12px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* `min-width: 0` is load-bearing: these are grid children holding a canvas that sizes to its
+   container, and without it a long model name in the legend would push the card wider than its
+   track instead of truncating. */
+.model-trend { position: relative; min-width: 0; margin-top: 4px; }
+.model-usage-body { display: flex; align-items: center; gap: 24px; min-width: 0; }
+.model-ring { position: relative; flex: none; width: 220px; min-width: 0; }
+/* The centre of the ring. Positioned against the ring's own box rather than the card, so it stays
+   centred on the drawing at every card width. Tabular numerals keep the total from shifting as the
+   value changes between polls. */
+.model-ring-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.model-ring-total {
+  color: var(--fg);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+}
+.model-ring-unit { color: var(--muted); font-size: 11px; }
+/* The empty state's ring: a 1px track rather than a painted circle, so a window with no model
+   traffic reads as an empty scale instead of as a filled value. */
+.model-ring-track {
+  position: absolute;
+  inset: 14%;
+  border: 8px solid var(--series-track);
+  border-radius: 50%;
+}
+
+/* The ranked list is the ring's legend and its values in one. It takes the remaining width and
+   caps its own height, because a deployment can serve more models than a card can show and the
+   list must not push the card taller than its peer beside it. */
+.model-usage-list {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.model-usage-row {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-variant-numeric: tabular-nums;
+}
+.model-usage-row:last-child { border-bottom: none; }
+.model-usage-swatch { width: 8px; height: 8px; border-radius: 2px; }
+.model-usage-name {
+  color: var(--fg);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.model-usage-tokens { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.model-usage-share { color: var(--fg-2); font-size: 12px; white-space: nowrap; min-width: 42px; text-align: right; }
+
+.model-empty { margin: 16px 0 0; }
+.model-chart-skeleton { height: 220px; }
+/* No refresh indicator of its own. A bar that appears and disappears inside the card would add and
+   remove height on every poll, so background refresh would move the two cards and the activity grid
+   below them - which design.md §7 forbids twice over: a poll is not a view change, and nothing
+   expensive may ride along with a re-render. The page's own progress bar already reports the fetch
+   without occupying layout. */
+/* The chart runtime's own tooltip, painted by us rather than by the library.
+   G2's default is a near-opaque white box with a sans-serif face and a black text colour, which reads
+   as a foreign element on a warm charcoal console - and in the dark theme it was the brightest thing on
+   the page. These rules are scoped to the model panels' popper so nothing else inherits them, and they
+   take their surface and text colours from the palette like every other panel in the app. */
+.model-trend .g2-tooltip,
+.model-ring .g2-tooltip {
+  font-family: var(--font-mono) !important;
+  font-size: 11px !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 2px !important;
+  background: var(--surface) !important;
+  color: var(--fg) !important;
+  box-shadow: none !important;
+  padding: 6px 8px !important;
+}
+/* The library's own title/name/value rules each set their own colour, so each is overridden rather
+   than left to inherit - an inherited colour is what a later library rule would win against. */
+.model-trend .g2-tooltip .g2-tooltip-title,
+.model-ring .g2-tooltip .g2-tooltip-title,
+.model-trend .g2-tooltip .g2-tooltip-list-item-name-label,
+.model-ring .g2-tooltip .g2-tooltip-list-item-name-label,
+.model-trend .g2-tooltip .g2-tooltip-list-item-value,
+.model-ring .g2-tooltip .g2-tooltip-list-item-value {
+  color: var(--fg) !important;
+  font-family: var(--font-mono) !important;
+}
+
+/* The app-owned readout the model panels render through the tooltip's `render`. */
+.omc-tip { display: flex; flex-direction: column; gap: 2px; }
+.omc-tip-time { color: var(--muted); margin-bottom: 2px; }
+.omc-tip-row { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+.omc-tip-swatch { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.omc-tip-name { color: var(--fg); max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.omc-tip-value { color: var(--fg-2); margin-left: auto; }
+
+.model-alert, .model-stale-alert { margin-top: 12px; }
+
+@media (max-width: 1100px) {
+  .dashboard-models { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .model-trend-card, .model-usage-card { grid-column: span 2; }
+}
+@media (max-width: 640px) {
+  .dashboard-models { grid-template-columns: minmax(0, 1fr); }
+  .model-trend-card, .model-usage-card { grid-column: span 1; }
+  /* The ring and its list stack. Side by side at this width the ring takes most of the card and the
+     list is squeezed to the point where a model name truncates to two characters. */
+  .model-usage-body { flex-direction: column; align-items: stretch; gap: 12px; }
+  .model-ring { width: 100%; }
+  .model-usage-list { max-height: none; }
 }
 
 /* ── token heatmap: a DOM grid, not a chart mark ────────────────────────────

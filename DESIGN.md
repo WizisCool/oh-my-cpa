@@ -18,6 +18,12 @@ colors:
   status-danger: "#ff3b30"
   cache-yellow: "#ffd60a"
   cache-green: "#30d158"
+  series-1: "#3b82f6"
+  series-2: "#10b981"
+  series-3: "#8b5cf6"
+  series-4: "#f43f5e"
+  series-5: "#f59e0b"
+  series-6: "#06b6d4"
   brand-openai: "#10A37F"
   brand-codex: "#60A5FA"
   brand-claude: "#D97757"
@@ -156,6 +162,22 @@ The palette is anchored on warm charcoal darks with pure semantic status pigment
 - **Deep Accent Blue** (`#0077b8` dark / `#004770` light): Used for filled primary action buttons and confirm controls. It provides a decisive focus point without overwhelming the dark theme.
 - **Accent Ladder** (hue 201, per theme): `#00a2fb` / `#005d8f` are the link steps for the dark and light themes, `#0077b8` / `#004770` the filled-control steps. The accent is deliberately *not* mode-invariant: the bright step reads 6.03:1 on the dark background but only 2.71:1 on the light one, so each theme uses the step that is legible there. Used for interactive links, breadcrumb highlights, active progress bars, `:focus-visible` focus rings, the brand wordmark, and the token heatmap's ramp. Measured ratios are in `docs/design.md` §2.
 - **Pressed Blue** (`#005d8f` dark / `#00344f` light): Used for button active/down states.
+
+### Series (categorical)
+
+The dashboard's model panels colour a **category**, not a state: a model is whatever upstream name the
+deployment serves, so its hue carries identity and no verdict. These are the one decorative colour
+family in the app, and the only exception to the semantic-only rule above; see
+`docs/adr/0006-categorical-series-palette.md` and `docs/design.md` §2.
+
+- **Slots** (`--series-1` … `--series-6`): blue `#3b82f6` / `#2563eb`, emerald `#10b981` / `#059669`,
+  purple `#8b5cf6` / `#7c3aed`, coral `#f43f5e` / `#e11d48`, amber `#f59e0b` / `#b45309`, cyan
+  `#06b6d4` / `#0891b2` (dark / light). Matches AntV, Tremor, and ZCode/CodeX data visualization standards.
+- **Track** (`--series-track`, `#2a2a30` dark / `#e5e5ea` light): the trend's plot floor and the usage
+  ring's unfilled track.
+- Every slot clears 3:1 against the card, adjacent legend entries are at least ΔE 12 apart in CIE Lab,
+  and no slot comes within ΔE 25 of success/warn/danger. All three bounds are asserted by
+  `scripts/test-chart-marks.ts` from the palette itself.
 
 ### Neutral
 - **Console Background (`--bg`)** (`#201d1d`): Base canvas, table row backgrounds, input wells, and overall page substrate.

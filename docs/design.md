@@ -331,6 +331,121 @@ Rules:
    than either alternative. The probe asserts no scrollbar is rendered at desktop widths.
 11. **The grid is DOM, not a chart mark** — see `docs/adr/0005-token-heatmap-as-a-dom-grid.md`.
 
+### Categorical series palette
+
+The dashboard's model panels colour a **category**, not a state. A model is whatever upstream name the
+deployment happens to serve, so there is no good/bad axis for a hue to mean - which makes this the one
+place in the app where colour is decoration, and the reason §1's semantic-only rule carries an explicit
+exception rather than being quietly stretched. See `docs/adr/0006-categorical-series-palette.md`.
+
+The exception is scoped by **role**, not by hue: these six tokens belong to categorical marks. The
+status pips, the cache-rate scale, the token heatmap's ramp, the caller mask and every interactive
+colour are untouched and still mean exactly one thing.
+
+| Slot | Dark | Light | Family |
+| --- | --- | --- | --- |
+| `--series-1` | `#3b82f6` | `#2563eb` | blue |
+| `--series-2` | `#10b981` | `#059669` | emerald |
+| `--series-3` | `#8b5cf6` | `#7c3aed` | purple |
+| `--series-4` | `#f43f5e` | `#e11d48` | coral |
+| `--series-5` | `#f59e0b` | `#b45309` | amber |
+| `--series-6` | `#06b6d4` | `#0891b2` | cyan |
+| `--series-track` | `#2a2a30` | `#e5e5ea` | the trend's plot floor and the ring's unfilled track |
+
+**The slot is the identity; the family survives a theme switch.** `seriesColor(mode, 0)` is the blue
+family in both themes and only the step changes, because the bright steps are illegible on a light
+card - the accent's own bright step reads 2.78:1 there, the same measurement that produced the accent
+ladder. A model therefore keeps its colour when the operator changes theme.
+
+**Categorical colour and status colour are separate roles, not separate hues.** The constraint is not
+that a series hue avoids `success`/`warn`/`danger`; an amber line is not a warning when the legend
+beside it names a model. The constraint is that the two roles never rely on the same signal: the status
+tokens keep those hues exclusively, and both panels state their categories in text - the trend's legend
+names each group, and the ranked list prints each group's name, volume and share. Colour is never the
+only encoding.
+
+Rules, all measured and asserted by `scripts/test-chart-marks.ts`:
+
+1. **Every slot clears 3:1 against the card it is drawn on** (WCAG's bar for a graphical object, not
+the 4.5:1 body-text bar - these are 1.6px lines and 8px swatches). The tightest slot is the light
+theme's amber at 3.41:1 against `--surface`; the rest sit between 3.4:1 and 7.9:1.
+2. **Adjacent legend entries are at least ΔE 25 apart in CIE Lab**, so no two neighbours read as one
+swatch. The sequence exists for that bound: it alternates warm and cool families, which also puts a
+warm hue into an ordinary two- or three-model window instead of reserving it for a long tail.
+3. **The two copies of the tokens agree.** `themeConfig.ts` and `index.css` each name the six values,
+and the suite compares them character for character, so a token edited in one place and not the other
+fails rather than shipping a chart in a colour the legend does not show.
+4. **Colour is assigned from one shared ranking, not per panel.** The domain is a *key* per group -
+`model:<name>` or the folded discriminator - rather than the display label, so a real model whose name
+equals the remainder's translated label cannot take the remainder's colour. The range is then generated
+in rank order, which means a group's colour follows its rank: it is stable for as long as the ranking is,
+and it can change when the ranking does. What the shared ranking buys is that the trend's line and the
+ring's slice for one group are never two different hues - they are two views of one response - and the
+legend beside each panel always states which colour belongs to which model.
+5. **Six slots, and a seventh series would fold back to the first colour.** Nothing asks for more: the
+ranking keeps five named models plus one remainder. Colour is never the only encoding regardless - both
+panels print every group's name and the list prints every group's numbers.
+
+   The Lab and contrast bounds above are **limits rather than accessibility guarantees**: they rule out
+   identical or unreadable colours, and do not establish how the palette reads to a person with a
+   colour-vision deficiency. See ADR 0006 for why that claim is not made.
+
+### Dashboard model panels
+
+Two peer cards between the KPI tiles and the token activity grid, both driven by the window picker:
+
+```text
+┌─ Token trend ──────────────────┐ ┌─ Model usage ─────────────────────────┐
+│ ● gpt-5-codex ● claude-... ● … │ │   ╭───╮   ● gpt-5-codex  61.7K   73%    │
+│        ╱╲                      │ │  ╱ 84.8K╲  ● deepseek-…    14.3K   17%   │
+│   ╱╲__╱  ╲__╱╲___              │ │  ╲tokens╱  ● qwen3-…        6.7K   7.9%  │
+│ ──┴────┴────┴────┴──           │ │   ╰───╯   ● …                          │
+└────────────────────────────────┘ └────────────────────────────────────────┘
+```
+
+**The trend is a multi-series line, not an area.** The KPI tiles above use an area because their series
+is a fixed zero-filled grid where a quiet stretch is a *measured* zero and an area carries it down to
+the baseline. Here up to six groups share one plot, and six overlapping translucent fills compound into
+a mud that hides whichever model is underneath - which is the reading the panel exists to provide. Lines
+separate; fills compound.
+
+**The line is smoothed, and the curve is monotone.** `shapeField="smooth"` resolves to G2's `smooth`
+shape, which draws with `curveMonotoneX` - a monotone cubic, not a plain Catmull-Rom spline - and the
+KPI sparklines use the same shape. That distinction is the whole reason smoothing is safe here: these
+series are zero-filled, so most buckets sit exactly on the floor, and a non-monotone spline through them
+would overshoot *below* the axis between points, drawing a line where the data says zero. A monotone
+curve cannot leave the range spanned by its own neighbours, so the floor stays the floor. The probe
+asserts this from painted pixels: no series-coloured ink appears below the axis rule.
+
+**No y-axis.** The reading is the shape of each line against its own baseline - which models rose, and
+when - and the numbers are in the tooltip and in the usage list beside it. An axis would take the width
+the lines need to add a scale nothing on the card refers to. The plot floor and the x labels stay: the
+floor is what makes a quiet stretch read as zero rather than as absent data.
+
+**Four x ticks, chosen by position.** The bucket grid runs to ~48 points; a tick per bucket printed the
+same instant forty-eight times across a half-width card. The first and last bucket are always among the
+four, because those are the two a reader places the window with. The label format follows the span -
+`HH:mm` within a day, `MM-DD` beyond it - which is the only place the window's extent is stated, and
+keeps the outermost label narrow enough to sit inside the card's gutter.
+
+**The legend is app-owned DOM.** G2's legend is built from its own type scale, so it would be the one
+place in the console not set in the mono stack. It also has to be the same colour assignment the usage
+list uses, which is only guaranteed if one ranked list produces both.
+
+**The ring's centre is DOM**, and it is the window's own total rather than the KPI tile's. The two read
+on different cadences, so borrowing the tile's number would let the centre disagree with the slices
+drawn around it. Its percentages are derived from the same total, so the list, the ring and the centre
+cannot drift.
+
+**The ranked list is the ring's legend and its values in one.** A separate library legend would print
+the same ranking a second time with no numbers, and a reader comparing two models needs the numbers: a
+slice's angle is a poor way to compare 5.9% against 4.6%. A share that rounds to zero is reported as
+under the smallest step rather than as `0%`, which would claim a model carried nothing.
+
+**Both marks are native `@ant-design/charts` components** (`Line` and `Pie`) inside the existing lazily
+loaded `vendor-charts` chunk, and both disable animation per §7 rule 5. The ring is not a chart-runtime
+heatmap, so ADR 0005's DOM grid is untouched.
+
 ### Caller-key display mask
 
 The request list's Key column and the caller-key facet show a mask, never the
