@@ -34,9 +34,12 @@ export const palette = {
     meta: '#6e6e73',
     border: '#464343',
     borderSoft: '#302c2c',
-    accent: '#007aff',
-    accentHover: '#0056b3',
-    accentActive: '#004085',
+    /* Accent ladder, hue 201. The link step is the bright one because it sits on the dark
+       background (6.03:1); the two deeper steps are what white text can sit on (4.85:1 and
+       7.09:1). See docs/design.md §2 for the measured ratios. */
+    accent: '#00a2fb',
+    accentHover: '#0077b8',
+    accentActive: '#005d8f',
     accentOn: '#ffffff',
     success: '#30d158',
     warn: '#ff9f0a',
@@ -54,9 +57,12 @@ export const palette = {
     meta: '#9a9898',
     border: 'rgba(15, 0, 0, 0.12)',
     borderSoft: 'rgba(15, 0, 0, 0.07)',
-    accent: '#007aff',
-    accentHover: '#0056b3',
-    accentActive: '#004085',
+    /* The same hue one step darker, because the bright accent cannot be legible on a light page:
+       #00a2fb reads 2.71:1 there, while this reads 6.92:1 as a link and 7.09:1 under white text.
+       The dark theme's link step is therefore the light theme's filled-control step. */
+    accent: '#005d8f',
+    accentHover: '#004770',
+    accentActive: '#00344f',
     accentOn: '#ffffff',
     success: '#30d158',
     warn: '#ff9f0a',

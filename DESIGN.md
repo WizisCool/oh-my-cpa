@@ -3,7 +3,7 @@ name: Oh My CPA
 description: Terminal-flat developer console for AI resource identity & organization
 colors:
   primary: "#0056b3"
-  primary-accent: "#007aff"
+  primary-accent: "#00a2fb"   # dark theme; light theme uses #005d8f
   primary-active: "#004085"
   neutral-bg: "#201d1d"
   neutral-surface: "#302c2c"
@@ -154,7 +154,7 @@ The palette is anchored on warm charcoal darks with pure semantic status pigment
 
 ### Primary
 - **Deep Accent Blue** (`#0056b3`): Used for filled primary action buttons and confirm controls. It provides a decisive focus point without overwhelming the dark theme.
-- **Terminal Cyan Accent** (`#007aff`): Used for interactive links, breadcrumb highlights, active progress bars, and `:focus-visible` focus rings.
+- **Accent Ladder** (hue 201, per theme): `#00a2fb` / `#005d8f` are the link steps for the dark and light themes, `#0077b8` / `#004770` the filled-control steps. The accent is deliberately *not* mode-invariant: the bright step reads 6.03:1 on the dark background but only 2.71:1 on the light one, so each theme uses the step that is legible there. Used for interactive links, breadcrumb highlights, active progress bars, `:focus-visible` focus rings, the brand wordmark, and the token heatmap's ramp. Measured ratios are in `docs/design.md` §2.
 - **Pressed Blue** (`#004085`): Used for button active/down states.
 
 ### Neutral

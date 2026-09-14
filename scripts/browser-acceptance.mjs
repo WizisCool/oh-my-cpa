@@ -141,37 +141,87 @@ async function lobeIconImageState(locator) {
  * naturalWidth, and still differs by filename. Only counting the drawn ink shows whether the
  * mark is actually visible against the surface it sits on.
  */
+/**
+ * Reads the brand mark's rendered ink straight off the inline SVG.
+ *
+ * The artwork used to be an `<img>`, so this decoded it to a canvas and counted pixels. It is inline
+ * now - that is what lets its accent follow the theme token - so the fills are read from the
+ * rendered elements instead. That is strictly better evidence for the claim being made: the previous
+ * version proved *some* pixels were dark or light, while this reads the two colours the drawing
+ * actually paints and can therefore assert the accent is the theme's accent.
+ */
 async function brandMarkState(page, selector = '.app-brand-logo') {
-  return page.evaluate(async (sel) => {
-    const el = document.querySelector(sel);
-    if (!el) return { src: '', naturalWidth: 0, darkPixels: 0, lightPixels: 0, hasDarkInk: false, hasLightInk: false };
-    const image = new Image();
-    image.src = el.currentSrc || el.src;
-    await image.decode().catch(() => {});
-    const canvas = document.createElement('canvas');
-    canvas.width = image.naturalWidth || 1;
-    canvas.height = image.naturalHeight || 1;
-    const context = canvas.getContext('2d');
-    context.drawImage(image, 0, 0);
-    const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
-    let darkPixels = 0;
-    let lightPixels = 0;
-    for (let index = 0; index < data.length; index += 4) {
-      const [red, green, blue, alpha] = [data[index], data[index + 1], data[index + 2], data[index + 3]];
-      if (alpha < 128) continue;
-      const luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
-      if (luminance < 90) darkPixels += 1;
-      else if (luminance > 200) lightPixels += 1;
-    }
+  return page.evaluate((sel) => {
+    const root = document.querySelector(sel);
+    if (!root) return { src: '', naturalWidth: 0, darkPixels: 0, lightPixels: 0, hasDarkInk: false, hasLightInk: false, ink: '', accent: '' };
+    // The mark is an inline `<svg>`; resolve the tokens on it so the returned colours are what the
+    // browser painted rather than the `var()` reference.
+    const inkGroup = root.querySelector('#main-text, [fill]:not(#accent-text)');
+    const accentGroup = root.querySelector('#accent-text');
+    const resolve = (node, fallbackNode) => {
+      const target = node ?? fallbackNode;
+      if (!target) return '';
+      const colour = getComputedStyle(target).fill;
+      if (colour && colour !== 'none') return colour;
+      const fill = target.getAttribute('fill') ?? '';
+      if (!fill.startsWith('var(')) return fill;
+      // A `var()` reference resolves against an element's own computed style.
+      const probe = document.createElement('span');
+      probe.style.color = `var(${fill.slice(4, -1)})`;
+      document.body.appendChild(probe);
+      const value = getComputedStyle(probe).color;
+      probe.remove();
+      return value;
+    };
+    const luminance = (colour) => {
+      const parts = (colour.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+      if (parts.length < 3) return null;
+      const [r, g, b] = parts.map((value) => {
+        const channel = value / 255;
+        return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const ink = resolve(inkGroup, root);
+    const accent = resolve(accentGroup, null);
+    const inkLuminance = luminance(ink);
+    const box = root.getBoundingClientRect();
     return {
-      src: image.src,
-      naturalWidth: image.naturalWidth,
-      darkPixels,
-      lightPixels,
-      hasDarkInk: darkPixels > 50,
-      hasLightInk: lightPixels > 50,
+      src: root.tagName.toLowerCase(),
+      naturalWidth: Math.round(box.width),
+      darkPixels: inkLuminance !== null && inkLuminance < 0.4 ? 100 : 0,
+      lightPixels: inkLuminance !== null && inkLuminance > 0.6 ? 100 : 0,
+      hasDarkInk: inkLuminance !== null && inkLuminance < 0.4,
+      hasLightInk: inkLuminance !== null && inkLuminance > 0.6,
+      ink,
+      accent,
+      // The accent is only drawn by the wordmark; the standalone `o` has no accent marks.
+      hasAccent: accentGroup !== null,
     };
   }, selector);
+}
+
+/**
+ * Whether two CSS colours are the same, across the notations the two sides arrive in.
+ *
+ * The two are deliberately different: a computed style is always `rgb()`/`oklch()`, while a custom
+ * property read with `getPropertyValue` is whatever the stylesheet wrote - a hex literal, here. A
+ * matcher that only parsed one notation would compare `#005d8f` as the numbers 5 and 8 and report a
+ * mismatch on two values that are in fact identical, which is exactly what happened.
+ */
+function sameColour(left, right) {
+  const channels = (value) => {
+    const text = String(value).trim();
+    const hex = /^#([0-9a-f]{6})$/i.exec(text);
+    if (hex) {
+      const digits = hex[1];
+      return [0, 2, 4].map((offset) => parseInt(digits.slice(offset, offset + 2), 16));
+    }
+    return (text.match(/[\d.]+/g) ?? []).slice(0, 3).map((part) => Math.round(Number(part)));
+  };
+  const a = channels(left);
+  const b = channels(right);
+  return a.length === 3 && b.length === 3 && a.every((value, index) => value === b[index]);
 }
 
 function shorten(value, max = 64) {
@@ -2118,9 +2168,17 @@ try {
     label: 'the light theme before reading the brand mark',
   });
   const lightMark = await brandMarkState(page);
-  check('the brand mark loads in the light theme', lightMark.naturalWidth > 0, `naturalWidth=${lightMark.naturalWidth}`);
-  check('the light theme uses the light wordmark', /omc-wordmark-light|data:image/.test(lightMark.src), `src=${shorten(lightMark.src)}`);
-  check('the light wordmark renders near-black ink', lightMark.hasDarkInk, `darkPixels=${lightMark.darkPixels} lightPixels=${lightMark.lightPixels}`);
+  check('the brand mark renders in the light theme', lightMark.naturalWidth > 0, `width=${lightMark.naturalWidth}`);
+  check('the light wordmark renders near-black ink', lightMark.hasDarkInk, `ink=${lightMark.ink}`);
+  // The accent inside the wordmark is the theme's accent, not a colour frozen in a file. This is the
+  // assertion that would have caught the shipped mismatch: the artwork carried a hand-picked
+  // `#00A3FD` while the console's accent was `#007AFF`, and nothing compared the two.
+  const lightAccent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim());
+  check(
+    'the light wordmark draws its accent in the theme accent',
+    lightMark.hasAccent && sameColour(lightMark.accent, lightAccent),
+    `mark=${lightMark.accent} token=${lightAccent}`,
+  );
 
   await page.evaluate(() => localStorage.setItem('omc-theme', 'dark'));
   await page.reload({ waitUntil: 'domcontentloaded' });
@@ -2128,10 +2186,18 @@ try {
     label: 'the dark theme before reading the brand mark',
   });
   const darkMark = await brandMarkState(page);
-  check('the brand mark loads in the dark theme', darkMark.naturalWidth > 0, `naturalWidth=${darkMark.naturalWidth}`);
-  check('the dark theme uses the dark wordmark', /omc-wordmark-dark|data:image/.test(darkMark.src), `src=${shorten(darkMark.src)}`);
-  check('the dark wordmark renders near-white ink', darkMark.hasLightInk, `darkPixels=${darkMark.darkPixels} lightPixels=${darkMark.lightPixels}`);
-  check('the two themes do not resolve the same drawing', lightMark.src !== darkMark.src, `both=${shorten(lightMark.src)}`);
+  check('the brand mark renders in the dark theme', darkMark.naturalWidth > 0, `width=${darkMark.naturalWidth}`);
+  check('the dark wordmark renders near-white ink', darkMark.hasLightInk, `ink=${darkMark.ink}`);
+  const darkAccent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim());
+  check(
+    'the dark wordmark draws its accent in the theme accent',
+    darkMark.hasAccent && sameColour(darkMark.accent, darkAccent),
+    `mark=${darkMark.accent} token=${darkAccent}`,
+  );
+  // The two themes resolve different ink *and* different accents, so a mark that stopped following
+  // the theme would fail here rather than merely looking slightly off.
+  check('the two themes do not resolve the same ink', !sameColour(lightMark.ink, darkMark.ink), `light=${lightMark.ink} dark=${darkMark.ink}`);
+  check('the two themes do not resolve the same accent', !sameColour(lightMark.accent, darkMark.accent), `light=${lightMark.accent} dark=${darkMark.accent}`);
 
   // The wordmark is left-aligned on the rail's own text axis, not centred, so it lines up
   // with the navigation below it.
@@ -2159,10 +2225,10 @@ try {
     () => page.evaluate(() => document.querySelector('.app-sider')?.getBoundingClientRect().width ?? 0),
     { page, label: 'the collapsed rail width' },
   );
-  const collapsedMark = await brandMarkState(page, '.app-brand-collapsed img');
-  check('the collapsed rail shows a loadable mark', collapsedMark.naturalWidth > 0, `naturalWidth=${collapsedMark.naturalWidth}`);
-  check('the collapsed mark renders visible ink on the rail', collapsedMark.hasLightInk, `lightPixels=${collapsedMark.lightPixels} darkPixels=${collapsedMark.darkPixels}`);
-  const collapsedBox = await page.locator('.app-brand-collapsed img').boundingBox();
+  const collapsedMark = await brandMarkState(page, '.app-brand-collapsed svg');
+  check('the collapsed rail shows a mark', collapsedMark.naturalWidth > 0, `width=${collapsedMark.naturalWidth}`);
+  check('the collapsed mark renders visible ink on the rail', collapsedMark.hasLightInk, `ink=${collapsedMark.ink}`);
+  const collapsedBox = await page.locator('.app-brand-collapsed svg').boundingBox();
   const railBox = await page.locator('.app-sider').boundingBox();
   check(
     'the collapsed mark is centred in the rail',

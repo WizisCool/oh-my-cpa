@@ -38,8 +38,12 @@
   --meta: #6e6e73;
   --border: #464343;
   --border-soft: #302c2c;
-  --accent: #007aff;
-  --accent-hover: #0056b3;
+  /* Accent ladder, hue 201. The link step is the bright one because it sits on the dark
+     background (6.03:1); the two deeper steps are what white label text can sit on (4.85:1 and
+     7.09:1). Measured ratios are in docs/design.md §2. */
+  --accent: #00a2fb;
+  --accent-hover: #0077b8;
+  --accent-active: #005d8f;
   --success: #30d158;
   --warn: #ff9f0a;
   --danger: #ff3b30;
@@ -72,6 +76,12 @@
   --fg-2: #424245;
   --muted: #6e6e73;
   --meta: #9a9898;
+  /* The same hue a step darker, because the bright accent cannot be legible on a light page: it
+     reads 2.71:1 there, while this reads 6.92:1 as a link and 7.09:1 under white text. The dark
+     theme's link step is therefore this theme's filled-control step. */
+  --accent: #005d8f;
+  --accent-hover: #004770;
+  --accent-active: #00344f;
   --border: rgba(15, 0, 0, 0.12);
   --border-soft: rgba(15, 0, 0, 0.07);
   --hover-inset: var(--surface);

@@ -40,9 +40,9 @@ Mono as fallbacks), 4px radii, dense but breathable spacing.
 | `--meta` | `#6e6e73` | `colorTextQuaternary` | Group labels, footnotes |
 | `--border` | `#464343` | `colorBorder` | Primary 1px borders |
 | `--border-soft` | `#302c2c` | `colorBorderSecondary`, `colorSplit` | Row dividers, inner borders |
-| `--accent` | `#007aff` | `colorInfo`, `colorLink` | Links, info, active bars, selection |
-| `--accent-hover` | `#0056b3` | `colorPrimary` | Filled primary buttons |
-| `--accent-active` | `#004085` | `colorPrimaryHover/Active` | Pressed state |
+| `--accent` | `#00a2fb` | `colorInfo`, `colorLink` | Links, info, active bars, selection |
+| `--accent-hover` | `#0077b8` | `colorPrimary` | Filled primary buttons |
+| `--accent-active` | `#005d8f` | `colorPrimaryHover/Active` | Pressed state |
 | `--success` | `#30d158` | `colorSuccess` | Enabled / healthy / ok pip |
 | `--warn` | `#ff9f0a` | `colorWarning` | Degraded / quota warning |
 | `--danger` | `#ff3b30` | `colorError` | Failed / disabled / delete |
@@ -60,7 +60,27 @@ Mono as fallbacks), 4px radii, dense but breathable spacing.
 | `--border` | `rgba(15, 0, 0, 0.12)` |
 | `--border-soft` | `rgba(15, 0, 0, 0.07)` |
 
-Accent/success/warn/danger are identical in both modes.
+### Accent ladder
+
+The accent is **not** mode-invariant. It is one hue (201) at three lightness steps, and each theme
+uses a different assignment because the same blue cannot be both legible as text on a light page and
+legible as text on a dark one:
+
+| Step | Dark | Light | Measured use |
+| --- | --- | --- | --- |
+| `--accent` | `#00a2fb` | `#005d8f` | link text: **6.03:1** on the dark background, **6.92:1** on the light one |
+| `--accent-hover` | `#0077b8` | `#004770` | white label on a filled control: **4.85:1** and **9.83:1** |
+| `--accent-active` | `#005d8f` | `#00344f` | pressed state |
+
+The dark theme's link step is the light theme's *filled-control* step, which is the same value doing
+two jobs in two themes. That is deliberate: it is the only step of this hue that clears 4.5:1 as text
+on a light page, and white-on-it also clears it. The bright `#00a2fb` reads **2.71:1** on a light
+page and **2.78:1** under white text, so it can only ever be the dark theme's text colour.
+
+Brand artwork follows the same tokens: the wordmark's accent marks and its letterforms are drawn from
+`palette[mode]`, so a change here moves the logo with it — see `web/src/assets/brand/markup.ts`.
+
+Success/warn/danger are identical in both modes.
 
 ### Status pip semantics
 

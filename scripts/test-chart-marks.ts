@@ -30,9 +30,13 @@ assert.equal(resolved.size, TONES.length, 'each tone resolves to a distinct toke
 // Neutral is the muted token, not an accent: the cache-rate and cost tiles rely
 // on it reading as "no verdict".
 assert.notEqual(darkMuted, darkAccent, 'neutral must not resolve to the accent');
-assert.equal(lightAccent, darkAccent, 'accent is mode-invariant by design');
 
-const shades = new Set([darkAccent, lightAccent]);
-assert.equal(shades.size, 1, 'accent is the same token in both modes');
+// The accent is NOT mode-invariant: the two themes use different steps of one hue, because the
+// bright step is legible on the dark background and illegible on the light one (6.03:1 vs 2.71:1).
+// See docs/design.md §2 for the measured ladder. This assertion used to require the opposite, which
+// is what a single accent value forced.
+assert.notEqual(lightAccent, darkAccent, 'the accent resolves per theme');
+assert.equal(darkAccent, '#00a2fb', 'the dark theme uses the bright step');
+assert.equal(lightAccent, '#005d8f', 'the light theme uses the legible step');
 
 console.log('PASS chart marks: tones resolve to distinct palette tokens per theme');
