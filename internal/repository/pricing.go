@@ -268,7 +268,11 @@ func (r *Repository) QueryUsageCostWindow(ctx context.Context, instanceID string
 		return stats, nil
 	}
 	// Aligned the same way the series grid is, so the two agree on bucket edges.
-	rows, err := r.SQL().QueryContext(ctx, `SELECT (timestamp_ms / ?) * ? AS aligned, COALESCE(TOTAL(cost_nanos), 0)
+	// TOTAL() is a float aggregate by definition, so it cannot be scanned into an
+	// int64: SQLite hands back a float64 and the driver rejects the conversion. Sum
+	// the integer column instead, which is also exact - cost_nanos is integral and
+	// an accumulated float would lose precision over a long window.
+	rows, err := r.SQL().QueryContext(ctx, `SELECT (timestamp_ms / ?) * ? AS aligned, COALESCE(SUM(cost_nanos), 0)
  FROM usage_events WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms <= ?
  GROUP BY aligned ORDER BY aligned ASC`, bucketMS, bucketMS, instanceID, fromMS, toMS)
 	if err != nil {
