@@ -6,10 +6,6 @@
   <img src="web/src/assets/brand/omc-wordmark-dark.svg" alt="Oh-My-CPA Logo" width="360">
 </picture>
 
-<br /><br />
-
-<img src="web/public/favicon.svg" alt="Oh-My-CPA Favicon" width="48" />
-
 # Oh-My-CPA
 
 ### Web management console and usage observability for CLIProxyAPI.

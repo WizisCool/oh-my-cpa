@@ -1,5 +1,6 @@
 {
   "name": "oh-my-cpa",
+  "description": "Self-hosted control plane & usage observability console for CLIProxyAPI (CPA).",
   "private": true,
   "version": "0.1.0",
   "type": "module",
