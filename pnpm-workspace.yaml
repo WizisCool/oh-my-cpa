@@ -2,3 +2,5 @@ packages:
   - 'web'
 allowBuilds:
   esbuild: true
+overrides:
+  dompurify: ^3.4.15
