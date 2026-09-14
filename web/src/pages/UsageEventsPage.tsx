@@ -81,6 +81,7 @@ import {
   viewPreferenceFromUrl,
 } from '../types/usageEventViewActions';
 import { createSearchDebounce } from '../components/usage/searchDebounce';
+import { createDisposableSlot, type DisposableSlot } from '../hooks/disposableSlot';
 import { isListStale, isViewChange, pendingArrivalCount, shouldPoll } from '../components/usage/pollingPolicy';
 import { syncOutcomeMessage, syncShortfallReason, shouldAnnounceStuckSync } from '../components/usage/syncPresentation';
 import { chipDisplayValue } from '../components/usage/chipDisplay';
@@ -140,11 +141,22 @@ function useDebouncedSearch(
   resetToken: number,
 ) {
   const [value, setValue] = React.useState(committed);
-  const controllerRef = React.useRef<ReturnType<typeof createSearchDebounce> | null>(null);
-  if (controllerRef.current === null) {
-    controllerRef.current = createSearchDebounce({ delayMs: EVENT_SEARCH_DEBOUNCE_MS });
+  // The controller is built by the effect that owns it and released by its cleanup,
+  // so a StrictMode remount builds a fresh one. Creating it during render and
+  // disposing it in the cleanup is the failure this avoids: React runs mount ->
+  // unmount -> mount in development, the first cleanup would dispose the controller,
+  // and the remount would hand every consumer the *disposed* one - `change` returns
+  // early forever, so the search box stops committing while looking perfectly
+  // healthy. Production builds skip the double-invoke, so only the dev server ever
+  // showed it. `disposableSlot` owns that rule for the provider toggle too.
+  const slotRef = React.useRef<DisposableSlot<ReturnType<typeof createSearchDebounce>> | null>(null);
+  if (slotRef.current === null) {
+    slotRef.current = createDisposableSlot(() =>
+      createSearchDebounce({ delayMs: EVENT_SEARCH_DEBOUNCE_MS }),
+    );
   }
-  const controller = controllerRef.current;
+  const slot = slotRef.current;
+  const controller = slot.current();
 
   // Read at call time so the timer invokes the current render's commit rather than
   // the one captured when it was scheduled.
@@ -153,12 +165,20 @@ function useDebouncedSearch(
     commitRef.current = commit;
   });
 
+  // Installs the controller for this effect lifetime. A remount after the StrictMode
+  // unmount takes this path again and builds a live controller, which is what keeps
+  // the search box working on the development server.
+  React.useEffect(() => {
+    slot.setup();
+    return () => slot.teardown();
+  }, [slot]);
+
   // The committed value is the source of truth for every change that did not come
   // from this box: hydration from saved preferences, Back/Forward, a drill-down, a
   // removed chip. Adopting it also cancels whatever this box had queued against the
   // value it replaces.
   React.useEffect(() => {
-    controller.sync(committed);
+    controller?.sync(committed);
     setValue(committed);
   }, [committed, controller]);
 
@@ -171,18 +191,19 @@ function useDebouncedSearch(
   // token's job) *and* empty the box, because a keystroke typed before the clear is
   // still on screen even though the URL it was typed against is gone.
   React.useEffect(() => {
-    controller.invalidate();
+    controller?.invalidate();
     setValue(committed);
-  }, [resetToken]);
-
-  React.useEffect(() => () => controller.dispose(), [controller]);
+  }, [resetToken, committed, controller]);
 
   const change = React.useCallback(
     (next: string) => {
       setValue(next);
-      controller.change(next, (value_) => commitRef.current(value_));
+      // Read through the slot rather than closing over the controller: a StrictMode
+      // remount replaces the instance, and a handler captured against the old one
+      // would write into a controller nobody is draining.
+      slot.current()?.change(next, (value_) => commitRef.current(value_));
     },
-    [controller],
+    [slot],
   );
 
   return [value, change] as const;

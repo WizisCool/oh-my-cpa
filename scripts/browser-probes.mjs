@@ -809,6 +809,66 @@ const scenarios = [
     run: dashboardChartMarks,
   },
   { name: 'refresh sequencing', check, run: refreshRecords() },
+  /**
+   * The search box, exercised on the **development** server.
+   *
+   * This scenario exists because the production-bundle suite cannot see the failure
+   * it guards. `React.StrictMode` is enabled in `web/src/main.tsx`, and in a
+   * development build React runs mount -> unmount -> mount for every component. A
+   * hook that creates a disposable controller during render and disposes it in the
+   * first cleanup hands the remount a *dead* controller: `change()` returns early
+   * forever, so the search box silently stops committing while looking healthy, and
+   * every production-bundle check stays green because StrictMode's double-invoke
+   * does not run there.
+   *
+   * That is not hypothetical - it is exactly what happened when the debounce became
+   * a controller, and nothing in the suite caught it. So the assertion is made where
+   * the failure lives: type into the box, wait past the debounce, and require the
+   * committed value to reach the URL. A controller that was replaced by a remount
+   * cannot satisfy it, and neither can one that was never installed.
+   */
+  {
+    name: 'search commits on the dev server',
+    check,
+    options: {
+      routes: [
+        [(url) => url.pathname.endsWith('/usage/facets'), () => alignmentFacets],
+        [(url) => url.pathname.includes('/usage/events'), () => ({ items: alignmentRecords, has_more: false, limit: 50 })],
+        [
+          (url) => url.pathname.endsWith('/usage/ingest-status'),
+          () => ({ enabled: false, healthy: false, collector: {}, stats: {} }),
+        ],
+      ],
+    },
+    run: async ({ base, page, errors, check: assert }) => {
+      await page.goto(`${base}/usage/events?preset=24h`, { waitUntil: 'domcontentloaded' });
+      await page.locator('.request-row').first().waitFor({ timeout: 20_000 });
+
+      // The box has to be reachable first: a missing control would make the commit
+      // assertion below pass vacuously if it were written as a conditional.
+      const input = page.locator('.request-search input');
+      assert('the search box is present', (await input.count()) === 1, `inputs=${await input.count()}`);
+
+      const before = new URL(page.url()).search;
+      await input.click();
+      await page.keyboard.type('gpt', { delay: 20 });
+      // A condition wait rather than a flat sleep: it returns as soon as the commit
+      // lands and fails loudly - instead of expiring quietly - if it never does.
+      await page
+        .waitForFunction(() => new URL(location.href).search.includes('q=gpt'), null, { timeout: 5_000 })
+        .catch(() => {});
+      const after = new URL(page.url()).search;
+
+      assert(
+        'a keystroke commits to the URL after the debounce',
+        after.includes('q=gpt'),
+        `before=${JSON.stringify(before)} after=${JSON.stringify(after)}`,
+      );
+      // The failure mode is silent, so a page error is not expected; asserting its
+      // absence keeps the check honest about what it observed.
+      assert('the search box raises no page error', errors.length === 0, errors.join(' | '));
+    },
+  },
   {
     name: 'request list interactions',
     check,
