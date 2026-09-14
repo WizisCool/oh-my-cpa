@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -375,6 +376,160 @@ func scanTargets(totals *UsageTotals) []any {
 
 func scanBucketTargets(bucket *UsageBucket) []any {
 	return append([]any{&bucket.StartMS}, scanTargets(&bucket.UsageTotals)...)
+}
+
+// UsageDayWindow is one local calendar day, expressed as the exact instant range it
+// covers on the viewer's calendar.
+//
+// The window carries its own bounds rather than leaving the caller to recompute them
+// because the two must not be derived twice: the day a request is attributed to and
+// the day a drill-down opens are the same interval, and a second derivation is a
+// second chance to disagree.
+type UsageDayWindow struct {
+	Day string
+	// FromMS and ToMS are inclusive. ToMS of the final day is the read instant
+	// rather than the end of that day, so records timestamped in the future cannot
+	// contribute to today's total.
+	FromMS int64
+	ToMS   int64
+}
+
+// UsageDayTotals is one local day's token volume.
+//
+// It is deliberately not a `UsageBucket`: a day and a sparkline bucket are different
+// concepts that happen to share a shape, and one shared type would invite a daily
+// series into a trend line.
+type UsageDayTotals struct {
+	Day        string
+	FromMS     int64
+	ToMS       int64
+	Tokens     int64
+	Requests   int64
+	Failures   int64
+	Input      int64
+	Output     int64
+	Reasoning  int64
+	CacheRead  int64
+	CacheWrite int64
+}
+
+// QueryDailyTokenTotals aggregates one window of request records per local day.
+//
+// Days are supplied by the caller as exact instant ranges, which is what makes this
+// exact under a real timezone. The alternative - grouping the hourly rollup by an
+// offset-shifted bucket start - is wrong for any offset that is not a whole hour: a
+// UTC hour straddling a fractional-offset local midnight (India's :30, Nepal's :45)
+// belongs to two local days, and a rollup row cannot be split. The same fold is also
+// wrong across a daylight-saving transition, where the offset in force is not the
+// offset the rest of the span used.
+//
+// So this reads the detail table, which carries a per-request timestamp, and lets
+// SQLite bucket it: the whole aggregation stays inside the database and at most one
+// row per day crosses into Go, which is the reason the rollup existed. The scan is
+// bounded by the retention window (400 days by default) rather than by total history,
+// and the panel calls it once per visit on a five-minute cache, not on the dashboard's
+// poll cadence.
+//
+// Unlike `QueryUsageAnalytics` there is no rollup-plus-tail split here, and that is
+// deliberate: the split needs a boundary that is disjoint for both halves, and the
+// hourly checkpoint is not one. A request that arrives with an earlier timestamp
+// after its hour was folded - CPA event times can arrive slightly out of order - sits
+// on the detail side of the boundary while its own hour is already inside the rollup,
+// so a hybrid read counts it twice. One source has no boundary to get wrong.
+func (r *Repository) QueryDailyTokenTotals(ctx context.Context, instanceID string, days []UsageDayWindow) ([]UsageDayTotals, error) {
+	result := make([]UsageDayTotals, 0, len(days))
+	for _, window := range days {
+		result = append(result, UsageDayTotals{Day: window.Day, FromMS: window.FromMS, ToMS: window.ToMS})
+	}
+	if r == nil || r.SQL() == nil {
+		return nil, errors.New("repository is not initialized")
+	}
+	if len(days) == 0 {
+		return result, nil
+	}
+	for _, window := range days {
+		if window.ToMS < window.FromMS {
+			return nil, fmt.Errorf("day window %s is negative", window.Day)
+		}
+	}
+
+	// The days are contiguous, so the union of their ranges is a single range and
+	// every row inside it belongs to exactly one day. The final day's `to` doubles as
+	// the range's upper bound, so it is not bound again in the CASE ladder.
+	from := days[0].FromMS
+	to := days[len(days)-1].ToMS
+	args := make([]any, 0, len(days)+2)
+	args = append(args, instanceID, from, to)
+	var ladder strings.Builder
+	ladder.WriteString("CASE")
+	for index, window := range days[:len(days)-1] {
+		ladder.WriteString(fmt.Sprintf(" WHEN timestamp_ms <= ?%d THEN %d", len(args)+1, index))
+		args = append(args, window.ToMS)
+	}
+	ladder.WriteString(fmt.Sprintf(" ELSE %d END", len(days)-1))
+
+	query := `
+		SELECT ` + ladder.String() + ` AS day_index,
+		       COUNT(1), COALESCE(SUM(failed), 0),
+		       COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0),
+		       COALESCE(SUM(reasoning_tokens), 0), COALESCE(SUM(cache_read_tokens), 0),
+		       COALESCE(SUM(cache_creation_tokens), 0), COALESCE(SUM(total_tokens), 0)
+		FROM usage_events
+		WHERE instance_id = ?1 AND timestamp_ms >= ?2 AND timestamp_ms <= ?3
+		GROUP BY day_index
+		ORDER BY day_index ASC`
+
+	rows, err := r.SQL().QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("read daily token totals: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var index int
+		var day UsageDayTotals
+		if errScan := rows.Scan(&index, &day.Requests, &day.Failures, &day.Input, &day.Output,
+			&day.Reasoning, &day.CacheRead, &day.CacheWrite, &day.Tokens); errScan != nil {
+			return nil, fmt.Errorf("scan daily token totals: %w", errScan)
+		}
+		if index < 0 || index >= len(result) {
+			// Unreachable while the ladder and the range describe the same days, and
+			// reported rather than silently dropped: an out-of-range index would be a
+			// day's traffic vanishing from a total that still looks complete.
+			return nil, fmt.Errorf("daily token bucket %d is outside the requested %d days", index, len(days))
+		}
+		result[index].Requests = day.Requests
+		result[index].Failures = day.Failures
+		result[index].Input = day.Input
+		result[index].Output = day.Output
+		result[index].Reasoning = day.Reasoning
+		result[index].CacheRead = day.CacheRead
+		result[index].CacheWrite = day.CacheWrite
+		result[index].Tokens = day.Tokens
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate daily token totals: %w", err)
+	}
+	return result, nil
+}
+
+// FirstUsageEventMS reports the earliest request record for one instance, or nil when
+// none has been captured.
+//
+// It answers a question about the record, not about the collector: a request is only
+// in here once it has been captured and decoded, so a day before this instant has no
+// stored usage. Whether the collector was running, and whether it lost anything, is
+// not something this can see, and the panel's copy says only what is known.
+func (r *Repository) FirstUsageEventMS(ctx context.Context, instanceID string) (*int64, error) {
+	if r == nil || r.SQL() == nil {
+		return nil, errors.New("repository is not initialized")
+	}
+	var value *int64
+	err := r.SQL().QueryRowContext(ctx,
+		`SELECT MIN(timestamp_ms) FROM usage_events WHERE instance_id = ?`, instanceID).Scan(&value)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("read first usage event: %w", err)
+	}
+	return value, nil
 }
 
 func mergeBuckets(primary, extra []UsageBucket) []UsageBucket {

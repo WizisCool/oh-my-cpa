@@ -217,7 +217,11 @@ func loadUsageConfig() (UsageConfig, error) {
 		}
 		batchSize = parsed
 	}
-	retentionDays := 90
+	// 400 days, not 90: the dashboard's token grid is a calendar year, so a shorter horizon would
+	// leave the year's own beginning unreadable from October onward - the panel would spend the last
+	// quarter of every year showing that spring had no traffic. 400 rather than 365 leaves enough
+	// slack that neither a leap year nor an offset boundary can push January 1st out of the window.
+	retentionDays := 400
 	if raw := strings.TrimSpace(os.Getenv("OMCPA_USAGE_RETENTION_DAYS")); raw != "" {
 		parsed, parseErr := strconv.Atoi(raw)
 		if parseErr != nil || parsed < 0 {
