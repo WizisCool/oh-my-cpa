@@ -66,7 +66,10 @@ export const PricingPage: React.FC = () => {
   };
 
   const saveMutation = useMutation({
-    mutationFn: async (rows: ModelPrice[]) => {
+    // `updated_at_ms` is omitted rather than sent: the server stamps its own clock
+    // on every write, so a value from the browser would be ignored anyway and is
+    // better not transmitted at all.
+    mutationFn: async (rows: Array<Omit<ModelPrice, 'updated_at_ms'>>) => {
       await api.updatePricingModels({ models: rows });
     },
     onSuccess: () => {
@@ -161,7 +164,7 @@ export const PricingPage: React.FC = () => {
           const num = Number(val);
           return Number.isFinite(num) && num >= 0 ? num : 0;
         };
-        const row: ModelPrice = {
+        const row: Omit<ModelPrice, 'updated_at_ms'> = {
           model: values.model.trim(),
           prompt_price_per_1m: parseRate(values.prompt),
           completion_price_per_1m: parseRate(values.completion),
@@ -170,7 +173,6 @@ export const PricingPage: React.FC = () => {
           price_multiplier: parseRate(values.multiplier) || 1,
           source: 'manual',
           synced_at_ms: 0,
-          updated_at_ms: Date.now(),
         };
         saveMutation.mutate([row]);
       })

@@ -61,6 +61,21 @@ rates are never selected — a missing rate must not become zero. A model with
 no catalog identity at all stays unpriced for manual setup (the manual editor
 pre-fills nothing and never guesses).
 
+## Manual edit bookkeeping
+
+A manual price is written as a new immutable version whose `effective_from_ms`
+the database trigger stamps from the server clock. `updated_at_ms` on
+`model_prices` — the value the pricing table and editor render as "when this rate
+last changed" — is stamped by `UpsertModelPrices` from the same server clock and
+is never taken from the request payload. The browser used to send `Date.now()`,
+which let a skewed client clock misdate the change relative to the version that
+actually governed billing.
+
+Manual edits take effect immediately: `SaveManualPrices` writes the version in
+the same transaction, so subsequent requests are priced without a metadata sync.
+Requests stamped before the version's effective time stay `unpriced` even when
+they are ingested later, because selection uses the request timestamp.
+
 ## Sync-state write rule
 
 SQLite column types are advisory, so a mistyped value is stored happily and only
