@@ -135,7 +135,7 @@ func BenchmarkUsageModelBuckets(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				if _, err := repo.QueryUsageModelBuckets(context.Background(), "default",
-					1700000000000, 1700100000000, 60000); err != nil {
+					1700000000000, 1700100000000, 60000, UsageModelBucketOptions{}); err != nil {
 					b.Fatal(err)
 				}
 			}

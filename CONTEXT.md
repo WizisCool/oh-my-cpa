@@ -28,7 +28,9 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
   reserved, and a model whose name collides with it must not be merged into the remainder. Both panels
   read one response, so a model's colour in the trend cannot disagree with its colour in the ring - see
   `docs/design.md` §2 for the categorical palette this needs and ADR 0006 for why it is a scoped
-  exception to the semantic-colour rule.
+  exception to the semantic-colour rule. Both panels rank by one of two groupings, chosen per
+  **Call Point** or per upstream model and persisted as a Preference; the ranked list also carries each
+  group's priced spend at request-time prices, with the priced share shown when it is partial.
 - **Filter Dimension**: One axis of the request-record filter, such as model, provider or credential. Dimensions combine with AND and the values inside one dimension combine with OR, so adding a value widens a dimension while adding a dimension narrows the result. An absent dimension does not narrow at all — a cleared filter must be indistinguishable from one that was never set, which is why absence rather than an empty value is how "not filtering" is expressed everywhere the filter is stored or serialized.
 - **Auto Refresh**: A boolean on the request-record view, not an interval. The cadence is fixed at 10 seconds, because the operator only ever wants one of two answers — keep this list current, or stop moving it. Polling is a wall-clock cadence and skips a tick rather than queueing one, so a slow query cannot build a backlog that fires the moment it resolves.
 - **Client Key Alias**: The operator-assigned name for one gateway client key, stored in `client_key_aliases` and keyed by `(instance_id, usage fingerprint)`. It is Oh My CPA metadata, not CPA configuration: the secret stays in CPA's document and naming a key never writes that document. The identity is the keyed fingerprint that `usage_events.api_group_key` carries (HMAC purpose `usage-api-key`), never a configuration array index and never the display mask — an index moves when CPA reorders its `api-keys` list, and a mask is not unique because it preserves only a short head and tail. Aliases are deliberately never pruned: historical requests keep their fingerprint forever, so a deleted key's records still need their name, and a rename is read-time resolution rather than a rewrite of stored usage. Duplicate names are allowed, because a name is a label rather than an identity. Where no name exists, every surface falls back to the mask.
@@ -146,8 +148,26 @@ palette in code; never hardcode colors in components.
   (`repository.Preference*`); the API rejects any key not on that list, so the
   preference endpoint cannot become a general blob store reachable through the
   session. The keys in use are the dashboard window, the log page's filters,
-  the provider icon, display-name and website overrides, and the usage-event
-  view and column layout.
+  the provider icon, display-name and website overrides, the usage-event view
+  and column layout, and the console's own display settings — the token unit
+  style (`omc_token_style`) and the model panels' grouping view
+  (`omc_models_view`).
+- **Token Unit Style**: How the console abbreviates token counts — `en-compact`
+  (300K, 300M, 1.2B) or `zh` (30万, 300万, 12亿) — stored as the
+  `omc_token_style` preference and applied by one shared frontend layer
+  (`web/src/types/tokenDisplay.ts`) so every token readout on the dashboard,
+  the request records and the detail drawer changes together. Tooltips and
+  accessible names always carry the exact count, because a rounded value scanned
+  in a chart is fine while the same rounding in a tooltip would be a wrong
+  number presented as exact.
+- **Call Point**: The client-facing identity of a model request: the model alias
+  a client requested, or the upstream model name when no alias was set. It is a
+  *grouping key*, not a display rewrite — in the model panels' call view one
+  call point served by several upstream model variants (the gateway's routing
+  detail) reads as one line, because the split between them is not a difference
+  the caller chose. The model view keeps the upstream variants distinct, which
+  is what the gateway actually routed to. Call view is the default; the choice
+  is stored as the `omc_models_view` preference.
 - **Source Grouping**: One mode of the request-record list that groups by the
   source a record came from — the provider plus the credential underneath it — so
   the provider context and the auth source are the same axis read at one zoom

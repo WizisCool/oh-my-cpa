@@ -35,7 +35,7 @@ func TestQueryUsageModelBucketsGroupsByModelAndBucket(t *testing.T) {
 	insertModelEvent(t, repo, "m-4", "beta", base.Add(2*time.Minute), 7)
 
 	rows, err := repo.QueryUsageModelBuckets(context.Background(), "default",
-		base.UnixMilli(), base.Add(2*time.Minute).UnixMilli(), time.Minute.Milliseconds())
+		base.UnixMilli(), base.Add(2*time.Minute).UnixMilli(), time.Minute.Milliseconds(), UsageModelBucketOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func TestQueryUsageModelBucketsIgnoresTheRollup(t *testing.T) {
 
 	window := func() int64 {
 		rows, err := repo.QueryUsageModelBuckets(context.Background(), "default",
-			base.UnixMilli(), base.Add(time.Hour).UnixMilli(), time.Minute.Milliseconds())
+			base.UnixMilli(), base.Add(time.Hour).UnixMilli(), time.Minute.Milliseconds(), UsageModelBucketOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -145,7 +145,7 @@ func TestQueryUsageModelBucketsIsScopedToTheInstanceAndWindow(t *testing.T) {
 	insertModelEvent(t, repo, "s-4", "late", base.Add(2*time.Minute), 700)
 
 	rows, err := repo.QueryUsageModelBuckets(context.Background(), "default",
-		base.UnixMilli(), base.Add(time.Minute).UnixMilli(), time.Minute.Milliseconds())
+		base.UnixMilli(), base.Add(time.Minute).UnixMilli(), time.Minute.Milliseconds(), UsageModelBucketOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,10 +159,119 @@ func TestQueryUsageModelBucketsRejectsAnInvalidGrid(t *testing.T) {
 	base := time.Date(2026, 9, 14, 10, 0, 0, 0, time.UTC)
 	// A zero bucket width would divide by zero inside the query; a negative window has no
 	// meaning. Both are refused rather than answered with something plausible.
-	if _, err := repo.QueryUsageModelBuckets(context.Background(), "default", base.UnixMilli(), base.UnixMilli(), 0); err == nil {
+	if _, err := repo.QueryUsageModelBuckets(context.Background(), "default", base.UnixMilli(), base.UnixMilli(), 0, UsageModelBucketOptions{}); err == nil {
 		t.Fatal("a zero bucket width must be refused")
 	}
-	if _, err := repo.QueryUsageModelBuckets(context.Background(), "default", base.UnixMilli(), base.UnixMilli()-1, 60_000); err == nil {
+	if _, err := repo.QueryUsageModelBuckets(context.Background(), "default", base.UnixMilli(), base.UnixMilli()-1, 60_000, UsageModelBucketOptions{}); err == nil {
 		t.Fatal("a negative window must be refused")
+	}
+}
+
+// insertCallPointEvent writes one event with its own model and model alias, which is the pair the
+// call-point view partitions on: the alias is the call point a client requested, the model is what
+// the gateway actually routed to. A nil alias and the alias carrying the same value as the model are
+// two different shapes in the wire contract (pointer vs value), so both are exercised here.
+func insertCallPointEvent(t *testing.T, repo *Repository, id, model string, alias *string, at time.Time, totalTokens int64, costNanos *int64) {
+	t.Helper()
+	event := modelEventAt("default", id, model, at, totalTokens)
+	event.ModelAlias = alias
+	if _, err := repo.InsertUsageEvents(context.Background(), []usage.Event{event}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// insertPricedCallPointEvent writes a row whose pricing snapshot is present from birth. Pricing is
+// immutable by trigger, so a priced row cannot be produced by updating an unpriced one - the real
+// ingest path writes cost, status and tokens in one INSERT, and so does this fixture. A nil alias
+// groups the row under its own model name in both views.
+func insertPricedCallPointEvent(t *testing.T, repo *Repository, id, model string, at time.Time, totalTokens int64, costNanos int64) {
+	t.Helper()
+	if _, err := repo.SQL().ExecContext(context.Background(),
+		`INSERT INTO usage_events
+		 (instance_id, event_key, request_id, api_group_key, model, auth_index, timestamp_ms,
+		  created_at_ms, input_tokens, total_tokens, cost_nanos, pricing_status)
+		 VALUES ('default', ?, ?, 'group-' || ?, ?, 'auth-1', ?, ?, ?, ?, ?, 'priced')`,
+		id, id, id, model, at.UnixMilli(), at.UnixMilli(), totalTokens, totalTokens, costNanos); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestQueryUsageModelBucketsGroupsCallPointsAcrossUpstreamModels(t *testing.T) {
+	repo := usageTestRepository(t)
+	base := time.Date(2026, 9, 14, 10, 0, 0, 0, time.UTC)
+	// The user's example: one call point ("deepseek-v4.1-flash", set as the alias) served by two
+	// upstream model names. In the call view it is one group; in the model view it is two.
+	flash := "deepseek-v4.1-flash"
+	insertCallPointEvent(t, repo, "c-1", "deepseek-flash", &flash, base, 100, nil)
+	insertCallPointEvent(t, repo, "c-2", "deepseek-v4.1-flash", &flash, base.Add(time.Minute), 200, nil)
+	// A call with no alias groups under its own model name in both views.
+	insertCallPointEvent(t, repo, "c-3", "claude-sonnet-4-5", nil, base, 400, nil)
+	// An alias of only whitespace is no call point at all: it falls back to the model name rather
+	// than producing a blank group.
+	blank := "   "
+	insertCallPointEvent(t, repo, "c-4", "glm-5.3-flash", &blank, base, 50, nil)
+
+	callRows, err := repo.QueryUsageModelBuckets(context.Background(), "default",
+		base.UnixMilli(), base.Add(time.Minute).UnixMilli(), time.Minute.Milliseconds(), UsageModelBucketOptions{GroupByCallPoint: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	callTokens := map[string]int64{}
+	for _, row := range callRows {
+		callTokens[row.Model] += row.Tokens
+	}
+	if len(callTokens) != 3 {
+		t.Fatalf("call view produced %d groups, want 3: %#v", len(callTokens), callTokens)
+	}
+	if callTokens[flash] != 300 {
+		t.Fatalf("call point %q summed to %d, want 300 (both upstream variants merged)", flash, callTokens[flash])
+	}
+	if callTokens["claude-sonnet-4-5"] != 400 || callTokens["glm-5.3-flash"] != 50 {
+		t.Fatalf("call view misgrouped unaliased calls: %#v", callTokens)
+	}
+
+	modelRows, err := repo.QueryUsageModelBuckets(context.Background(), "default",
+		base.UnixMilli(), base.Add(time.Minute).UnixMilli(), time.Minute.Milliseconds(), UsageModelBucketOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	modelTokens := map[string]int64{}
+	for _, row := range modelRows {
+		modelTokens[row.Model] += row.Tokens
+	}
+	if len(modelTokens) != 4 {
+		t.Fatalf("model view produced %d groups, want 4 (the call point split back out): %#v", len(modelTokens), modelTokens)
+	}
+	if modelTokens["deepseek-flash"] != 100 || modelTokens["deepseek-v4.1-flash"] != 200 {
+		t.Fatalf("model view must keep the upstream variants distinct: %#v", modelTokens)
+	}
+}
+
+func TestQueryUsageModelBucketsCarriesPricedCostsOnly(t *testing.T) {
+	repo := usageTestRepository(t)
+	base := time.Date(2026, 9, 14, 10, 0, 0, 0, time.UTC)
+	// Two priced requests and one unpriced one: the cost sums only the priced pair, and the priced
+	// count says so, because a spend summed over part of the traffic is not the spend of the whole.
+	insertPricedCallPointEvent(t, repo, "p-1", "alpha", base, 10, 1_000_000_000)
+	insertPricedCallPointEvent(t, repo, "p-2", "alpha", base, 20, 2_500_000_000)
+	insertCallPointEvent(t, repo, "p-3", "alpha", nil, base, 30, nil)
+
+	rows, err := repo.QueryUsageModelBuckets(context.Background(), "default",
+		base.UnixMilli(), base.UnixMilli(), time.Minute.Milliseconds(), UsageModelBucketOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows, want 1", len(rows))
+	}
+	row := rows[0]
+	if row.CostNanos == nil || *row.CostNanos != 3_500_000_000 {
+		t.Fatalf("cost = %v, want 3500000000 (priced rows only)", row.CostNanos)
+	}
+	if row.PricedRequests == nil || *row.PricedRequests != 2 {
+		t.Fatalf("priced requests = %v, want 2", row.PricedRequests)
+	}
+	if row.Requests != 3 || row.Tokens != 60 {
+		t.Fatalf("requests/tokens = %d/%d, want 3/60 (unpriced still counts as usage)", row.Requests, row.Tokens)
 	}
 }

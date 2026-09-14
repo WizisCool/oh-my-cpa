@@ -319,3 +319,139 @@ func TestDashboardModelsIgnoresAggregatedRollups(t *testing.T) {
 		t.Fatalf("ranking changed after aggregation: %s", describeGroups(after.Models))
 	}
 }
+
+// TestDashboardModelsCallViewMergesCallPointsAcrossUpstreamModels pins the grouping contract: the
+// call view merges one call point's traffic across the upstream models the gateway routed it to, the
+// model view keeps them distinct, and the two views each answer for their own ranking.
+func TestDashboardModelsCallViewMergesCallPointsAcrossUpstreamModels(t *testing.T) {
+	client, baseURL, repo := startDashboardTestServer(t, nil)
+	now := time.Now().UTC()
+
+	flash := "deepseek-v4.1-flash"
+	events := []usage.Event{
+		func() usage.Event { e := modelEventFor("call-a", "deepseek-flash", now.Add(-time.Minute), 100); e.ModelAlias = &flash; return e }(),
+		func() usage.Event { e := modelEventFor("call-b", "deepseek-v4.1-flash", now.Add(-2*time.Minute), 200); e.ModelAlias = &flash; return e }(),
+		modelEventFor("call-c", "claude-sonnet-4-5", now.Add(-3*time.Minute), 400),
+	}
+	if _, err := repo.InsertUsageEvents(context.Background(), events); err != nil {
+		t.Fatal(err)
+	}
+
+	read := func(path string) dashboardModelsResponse {
+		response, payload := getJSON(t, client, baseURL+modelsPath+path)
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d body %s", response.StatusCode, payload)
+		}
+		var body dashboardModelsResponse
+		if err := json.Unmarshal(payload, &body); err != nil {
+			t.Fatal(err)
+		}
+		return body
+	}
+
+	call := read("?preset=24h&group_by=call")
+	if len(call.Models) != 2 {
+		t.Fatalf("call view groups = %s, want 2 (the call point merged, claude separate)", describeGroups(call.Models))
+	}
+	if call.Models[0].Model != "claude-sonnet-4-5" || call.Models[0].Tokens != 400 {
+		t.Fatalf("call view top = %#v, want claude at 400", call.Models[0])
+	}
+	if call.Models[1].Model != flash || call.Models[1].Tokens != 300 {
+		t.Fatalf("call view second = %#v, want %q at 300 (100+200 merged)", call.Models[1], flash)
+	}
+
+	model := read("?preset=24h")
+	if len(model.Models) != 3 {
+		t.Fatalf("model view groups = %s, want 3 (the call point split back out)", describeGroups(model.Models))
+	}
+	if model.Models[0].Model != "claude-sonnet-4-5" || model.Models[0].Tokens != 400 {
+		t.Fatalf("model view top = %#v, want claude at 400", model.Models[0])
+	}
+	if model.Models[1].Model != "deepseek-v4.1-flash" || model.Models[1].Tokens != 200 {
+		t.Fatalf("model view second = %#v, want the upstream model at 200", model.Models[1])
+	}
+	if model.Models[2].Model != "deepseek-flash" || model.Models[2].Tokens != 100 {
+		t.Fatalf("model view third = %#v, want the other upstream variant at 100", model.Models[2])
+	}
+}
+
+// TestDashboardModelsGroupByIsClosed pins the parameter's validation: an unrecognised grouping is a
+// bad request rather than a silent fall-back, because a typo that changed what the numbers mean would
+// be invisible in the panels.
+func TestDashboardModelsGroupByIsClosed(t *testing.T) {
+	client, baseURL, _ := startDashboardTestServer(t, nil)
+	for _, value := range []string{"calls", "models", "Call", "provider"} {
+		response, payload := getJSON(t, client, baseURL+modelsPath+"?group_by="+value)
+		if response.StatusCode != http.StatusBadRequest {
+			t.Fatalf("group_by=%q status = %d body %s, want 400", value, response.StatusCode, payload)
+		}
+	}
+}
+
+// TestDashboardModelsCarriesCostPins the cost contract: the spend is the priced rows' snapshot sum,
+// priced_requests counts only those rows, and a group with no priced request reports null rather than
+// a zero that would claim the calls were free.
+func TestDashboardModelsCarriesCost(t *testing.T) {
+	client, baseURL, repo := startDashboardTestServer(t, nil)
+	now := time.Now().UTC()
+
+	// Seed priced rows directly: pricing is immutable by trigger, so a priced row is born priced.
+	base := now.Add(-time.Hour).Truncate(time.Minute)
+	for id, cost := range map[string]int64{"cost-a": 1_000_000_000, "cost-b": 500_000_000} {
+		event := modelEventFor(id, "priced-model", base.Add(time.Duration(len(id))*time.Minute), 100)
+		if _, err := repo.InsertUsageEvents(context.Background(), []usage.Event{event}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := repo.SQL().ExecContext(context.Background(),
+			`INSERT INTO usage_events
+			 (instance_id, event_key, request_id, api_group_key, model, auth_index, timestamp_ms,
+			  created_at_ms, input_tokens, total_tokens, cost_nanos, pricing_status)
+			 SELECT instance_id, event_key || '-priced', request_id || '-priced', api_group_key, model, auth_index,
+			       timestamp_ms, created_at_ms, input_tokens, total_tokens, ?, 'priced'
+			 FROM usage_events WHERE event_key = ?`, cost, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// An unpriced model: the group carries tokens but no spend.
+	if _, err := repo.InsertUsageEvents(context.Background(), []usage.Event{
+		modelEventFor("cost-unpriced", "unpriced-model", base.Add(3*time.Minute), 300),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	response, payload := getJSON(t, client, baseURL+modelsPath+"?preset=24h")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d body %s", response.StatusCode, payload)
+	}
+	var body dashboardModelsResponse
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatal(err)
+	}
+
+	byModel := map[string]dashboardModelUsage{}
+	for _, group := range body.Models {
+		byModel[group.Model] = group
+	}
+	priced, exists := byModel["priced-model"]
+	if !exists {
+		t.Fatalf("priced-model missing from ranking: %s", describeGroups(body.Models))
+	}
+	if priced.CostUSD == nil || *priced.CostUSD != 1.5 {
+		t.Fatalf("priced-model cost = %v, want 1.5", priced.CostUSD)
+	}
+	// The group carries 4 requests: 2 priced snapshots plus the 2 originals they were seeded from,
+	// which stay unpriced. That mix is exactly the partial case the panel's note exists for.
+	if priced.PricedRequests != 2 || priced.Requests != 4 {
+		t.Fatalf("priced-model requests = %d/%d, want 2 priced of 4", priced.PricedRequests, priced.Requests)
+	}
+	unpriced, exists := byModel["unpriced-model"]
+	if !exists {
+		t.Fatalf("unpriced-model missing from ranking: %s", describeGroups(body.Models))
+	}
+	if unpriced.CostUSD != nil {
+		t.Fatalf("unpriced-model cost = %v, want null (a zero would claim the calls were free)", *unpriced.CostUSD)
+	}
+	if unpriced.Tokens != 300 {
+		t.Fatalf("unpriced-model tokens = %d, want 300 (usage without pricing still counts)", unpriced.Tokens)
+	}
+}

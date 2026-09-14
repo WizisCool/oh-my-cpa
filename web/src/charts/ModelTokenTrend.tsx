@@ -4,13 +4,17 @@ import dayjs from 'dayjs';
 import { useThemeMode } from '../theme/ThemeContext';
 import { seriesColorRange, seriesDomainKey } from './chartTheme';
 import { MONO_FONT_STACK, palette } from '../theme/themeConfig';
+import { formatTokens as formatTokensStyled } from '../types/tokenDisplay';
 import type { DashboardModelUsage } from '../types/dashboardModels';
+import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
 
 export interface ModelTokenTrendProps {
   /** Ranked groups, as the endpoint returned them. Order is the colour assignment. */
   groups: DashboardModelUsage[];
   /** The label for the folded remainder, already translated by the caller. */
   foldedLabel: string;
+  /** The unit word printed beside a tooltip's value, translated by the caller. */
+  tokenUnitLabel?: string;
   height?: number;
 }
 
@@ -32,8 +36,9 @@ export interface ModelTokenTrendProps {
  * Animation is off. A mark that eases between two revisions reads as a repaint rather than as new
  * data, and the geometry swaps whenever the window or the ranking changes.
  */
-export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, foldedLabel, height = 260 }) => {
+export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, foldedLabel, tokenUnitLabel = '', height = 260 }) => {
   const { themeMode } = useThemeMode();
+  const { style: tokenStyle } = useTokenDisplayStyle();
   // The chart's own colours come from the palette, never from a literal.
   const colors = palette[themeMode];
 
@@ -230,7 +235,9 @@ export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, folded
               const rows = items.map((item, index) => {
                 const name = groupLabels[index] ?? '';
                 const shape = `<span class="omc-tip-swatch" style="background:${item.color ?? 'transparent'}"></span>`;
-                return `<div class="omc-tip-row">${shape}<span class="omc-tip-name">${escapeHtml(name)}</span><span class="omc-tip-value">${full(item.value ?? 0)}</span></div>`;
+                // The shared token layer's compact form: a tooltip that scans like the legend it
+                // annotates, with the exact count in the accessible name below.
+                return `<div class="omc-tip-row">${shape}<span class="omc-tip-name">${escapeHtml(name)}</span><span class="omc-tip-value">${formatTokensStyled(item.value ?? 0, tokenStyle)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}</span></div>`;
               });
               return `<div class="omc-tip"><div class="omc-tip-time">${time}</div>${rows.join('')}</div>`;
             },
@@ -240,12 +247,6 @@ export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, folded
     </div>
   );
 };
-
-const FULL = new Intl.NumberFormat('en');
-
-function full(value: number): string {
-  return FULL.format(value);
-}
 
 /**
  * escapeHtml neutralizes a model name before it is interpolated into the tooltip's markup.

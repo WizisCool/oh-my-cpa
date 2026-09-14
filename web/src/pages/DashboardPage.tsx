@@ -10,6 +10,8 @@ import { usePreference } from '../hooks/usePreference';
 import { type ChartTone } from '../charts/chartTheme';
 import { type DashboardTrendChartProps } from '../charts/DashboardTrendChart';
 import { formatCacheRate } from '../theme/cacheScale';
+import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
+import { formatTokens as formatTokensStyled } from '../types/tokenDisplay';
 import { successRateVerdict } from '../types/usageEventView';
 import { TimeRangeControl } from '../components/dashboard/TimeRangeControl';
 import { TokenHeatmap, TOKEN_HEATMAP_QUERY_KEY } from '../components/dashboard/TokenHeatmap';
@@ -80,6 +82,9 @@ function rateTone(total: number, failed: number): ChartTone {
 export const DashboardPage: React.FC = () => {
   const t = useT();
   const navigate = useNavigate();
+  // The console's token unit style: one setting shared with the model panels and
+  // the request records, so every token readout on this page follows it.
+  const { style: tokenStyle } = useTokenDisplayStyle();
   // The chosen window is the operator's working context, so it lives in the
   // database: a reload, a service restart and a container rebuild all drop
   // browser storage, and none of them should reset what they are looking at.
@@ -273,13 +278,13 @@ export const DashboardPage: React.FC = () => {
 
         <Card className="dashboard-tile is-wide" styles={{ body: { padding: 20 } }}>
           <div className="tile-label">{t('dash.total_tokens')}</div>
-          <div className="tile-value">{formatCompact(data.tokens.total)}</div>
+          <div className="tile-value">{formatTokensStyled(data.tokens.total, tokenStyle)}</div>
           <div className="tile-caption">
-            <span>{t('dash.tokens_input')} <b>{formatCompact(data.tokens.input)}</b></span>
-            <span>{t('dash.tokens_output')} <b>{formatCompact(data.tokens.output)}</b></span>
-            <span>{t('dash.tokens_cache_read')} <b>{formatCompact(data.tokens.cache_read)}</b></span>
+            <span>{t('dash.tokens_input')} <b>{formatTokensStyled(data.tokens.input, tokenStyle)}</b></span>
+            <span>{t('dash.tokens_output')} <b>{formatTokensStyled(data.tokens.output, tokenStyle)}</b></span>
+            <span>{t('dash.tokens_cache_read')} <b>{formatTokensStyled(data.tokens.cache_read, tokenStyle)}</b></span>
             {data.tokens.reasoning > 0 && (
-              <span>{t('dash.tokens_reasoning')} <b>{formatCompact(data.tokens.reasoning)}</b></span>
+              <span>{t('dash.tokens_reasoning')} <b>{formatTokensStyled(data.tokens.reasoning, tokenStyle)}</b></span>
             )}
           </div>
           <DashboardTrendChart
@@ -288,7 +293,7 @@ export const DashboardPage: React.FC = () => {
             tone="accent"
             height={64}
             label={(timeMs) => dayjs(timeMs).format('MM-DD HH:mm')}
-            format={(value) => `${formatCompact(value)} ${t('dash.unit_tokens')}`}
+            format={(value) => `${formatTokensStyled(value, tokenStyle)} ${t('dash.unit_tokens')}`}
           />
         </Card>
 
@@ -314,7 +319,7 @@ export const DashboardPage: React.FC = () => {
           <div className="tile-label">{t('dash.tpm')}</div>
           <div className="tile-value is-small">{formatCompact(data.metrics.tpm ?? null)}</div>
           <div className="tile-caption">
-            <span>{t('dash.total_tokens')} <b>{formatCompact(data.tokens.total)}</b></span>
+            <span>{t('dash.total_tokens')} <b>{formatTokensStyled(data.tokens.total, tokenStyle)}</b></span>
           </div>
           {/* TPM is a rate, not the token volume the tile above already plots:
               dividing by the bucket's minutes is what makes this tile a distinct
@@ -338,8 +343,8 @@ export const DashboardPage: React.FC = () => {
           </div>
           <div className="tile-value is-small">{formatCacheRate(data.metrics.cache_rate)}</div>
           <div className="tile-caption">
-            <span>{t('dash.tokens_cache_read')} <b>{formatCompact(data.tokens.cache_read)}</b></span>
-            <span>{t('dash.tokens_input')} <b>{formatCompact(data.tokens.input)}</b></span>
+            <span>{t('dash.tokens_cache_read')} <b>{formatTokensStyled(data.tokens.cache_read, tokenStyle)}</b></span>
+            <span>{t('dash.tokens_input')} <b>{formatTokensStyled(data.tokens.input, tokenStyle)}</b></span>
           </div>
           {/* The bar chart is the token volume behind the rate, and its hue is
               the tile's identity colour. It used to turn danger red when the
@@ -357,7 +362,7 @@ export const DashboardPage: React.FC = () => {
             tone="neutral"
             height={44}
             label={(timeMs) => dayjs(timeMs).format('MM-DD HH:mm')}
-            format={(value) => `${formatCompact(value)} ${t('dash.unit_tokens')}`}
+            format={(value) => `${formatTokensStyled(value, tokenStyle)} ${t('dash.unit_tokens')}`}
           />
         </Card>
 

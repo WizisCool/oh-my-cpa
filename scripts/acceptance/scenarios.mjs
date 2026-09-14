@@ -1885,6 +1885,49 @@ export async function dashboardModelPanels({ base, page, check }) {
     `centre=${JSON.stringify(centre)}`,
   );
 
+  // ── the readout sits on the ring's painted centre ─────────────────────
+  //
+  // The centre readout is DOM and the ring is canvas paint, so "the number is inside the hole" is a
+  // claim about two different rendering stacks agreeing on one point. It shipped misaligned once: the
+  // readout centred on a box that could be taller than the drawing, so the total floated above the
+  // hole. The observable is geometric: the ink bounding box of the painted ring, and the readout's
+  // own box, must share a centre within a couple of device pixels.
+  const ringCentring = await page.evaluate(() => {
+    const canvas = document.querySelector('.model-ring canvas');
+    if (!canvas) return { error: 'no canvas' };
+    const probe = document.createElement('canvas');
+    probe.width = canvas.width;
+    probe.height = canvas.height;
+    const context = probe.getContext('2d');
+    context.drawImage(canvas, 0, 0);
+    const { data } = context.getImageData(0, 0, probe.width, probe.height);
+    let minX = Infinity; let maxX = -1; let minY = Infinity; let maxY = -1;
+    for (let y = 0; y < probe.height; y += 1) {
+      for (let x = 0; x < probe.width; x += 1) {
+        if (data[(y * probe.width + x) * 4 + 3] > 40) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX < 0) return { error: 'no ink' };
+    const ink = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+    const canvasRect = canvas.getBoundingClientRect();
+    const readoutRect = document.querySelector('.model-ring-center').getBoundingClientRect();
+    const readout = {
+      x: (readoutRect.left - canvasRect.left + readoutRect.width / 2) * (probe.width / canvasRect.width),
+      y: (readoutRect.top - canvasRect.top + readoutRect.height / 2) * (probe.height / canvasRect.height),
+    };
+    return { ink, readout, drift: { x: Math.abs(ink.x - readout.x), y: Math.abs(ink.y - readout.y) } };
+  });
+  check(
+    'the centre readout sits on the ring\'s painted centre',
+    !ringCentring.error && ringCentring.drift.x <= 2 && ringCentring.drift.y <= 2,
+    JSON.stringify(ringCentring),
+  );
+
   // ── no axis label is clipped by the canvas it is drawn in ──────────────────
   //
   // The trend's x labels are painted into the canvas, so a label that overhangs the edge is cut with
@@ -2017,6 +2060,32 @@ export async function dashboardModelPanelStates({ base, page, check, context }) 
     return refreshRead;
   }, { label: 'the refresh button to re-read the model panels' }).catch(() => {});
   check('the refresh button re-reads the model panels', refreshRead, `calls=${calls.length} before=${beforeRefresh}`);
+
+  // ── the grouping toggle re-reads with its own view ────────────────────────
+  // The two groupings are two different rankings; a toggle that only re-labelled the existing series
+  // would present upstream-model rows as call points. The request URL is the observable.
+  const beforeToggle = calls.length;
+  await page.locator('.model-usage-card .ant-segmented-item').filter({ hasText: /By upstream model|按上游模型/ }).first().click();
+  let modelViewRead = false;
+  await until(async () => {
+    modelViewRead = calls.slice(beforeToggle).some((search) => !search.includes('group_by=call'));
+    return modelViewRead;
+  }, { label: 'the model panels to re-read in the upstream-model grouping' }).catch(() => {});
+  check(
+    'switching the grouping re-reads the panels without the call parameter',
+    modelViewRead,
+    `calls=${calls.join(' ')}`,
+  );
+  // Switching back restores the call view, which is the persisted default.
+  await page.locator('.model-usage-card .ant-segmented-item').filter({ hasText: /By call point|按调用点/ }).first().click();
+  await until(async () => calls.filter((search) => search.includes('group_by=call')).length >= 2, {
+    label: 'the panels to re-read in the call-point grouping',
+  }).catch(() => {});
+  check(
+    'switching back restores the call-point grouping',
+    calls.filter((search) => search.includes('group_by=call')).length >= 2,
+    `calls=${calls.join(' ')}`,
+  );
 
   // ── a stale refresh keeps the panels and says so ───────────────────────────
   await page.unroute('**/omc/api/**');

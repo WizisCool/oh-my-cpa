@@ -7,6 +7,8 @@
  * colour of a model is assigned from that order.
  */
 
+import { formatTokens, formatTokensFull, type ModelChartView, type TokenNumberStyle } from './tokenDisplay';
+
 /** One bucket of one group's token volume. */
 export interface DashboardModelPoint {
   /** Bucket start in epoch milliseconds, on the same grid for every group. */
@@ -27,6 +29,15 @@ export interface DashboardModelUsage {
   folded: boolean;
   tokens: number;
   requests: number;
+  /**
+   * The group's priced spend in USD, at the prices locked when each request ran. Absent — not zero —
+   * when no request in the group carried a price: a zero would claim these calls were free, while an
+   * absent value only claims nothing was priced. Requests are unpriced for real reasons (no price
+   * version existed at request time), so the distinction is a fact about the window, not a hole.
+   */
+  cost_usd?: number;
+  /** How many of the group's requests carried a price, for the partial-spend note. */
+  priced_requests: number;
   /**
    * The group's own token volume across the window, zero-filled. Every group's series is the same
    * length and bucket i is the same instant in all of them: a model that went quiet halfway through
@@ -80,6 +91,19 @@ export const DASHBOARD_MODELS_QUERY_KEY = 'dashboard-models';
 export const DASHBOARD_MODELS_REFRESH_MS = 60_000;
 
 /**
+ * Appends the grouping view to a serialized dashboard query.
+ *
+ * `model` is what the endpoint answers without the parameter, so the original
+ * view keeps its URL shape and only the call view adds one. The view travels
+ * with the query rather than living beside it, because a ranking read in one
+ * grouping cannot be patched or compared against a ranking read in the other.
+ */
+export function withGroupBy(query: string, view: ModelChartView): string {
+  if (view === 'call') return query ? `${query}&group_by=call` : 'group_by=call';
+  return query;
+}
+
+/**
  * formatModelShare renders a group's share of the window as a percentage.
  *
  * The share is derived here rather than sent by the server so the ring's slices, its centre total and
@@ -102,14 +126,14 @@ export function formatModelShare(tokens: number, total: number): string {
 /**
  * formatModelTokens renders a group's volume compactly.
  *
- * Compact because the legend prints a token count beside a percentage for every entry, and a full
- * seven-digit number there would push the percentage out of the reading column. The tooltip's
- * accessible name carries the exact count, so nothing is lost - it is only rounded where it is
- * scanned rather than read.
+ * It forwards to the shared token-display layer rather than owning a private
+ * formatter, so the panel's numbers move when the console's unit style does,
+ * and the compact tooltip's rounding matches the list's. The style defaults to
+ * the international compact form for callers with no preference in hand -
+ * tests, and surfaces rendered before preferences load.
  */
-const MODEL_TOKEN_FORMAT = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
-
-export function formatModelTokens(tokens: number): string {
-  if (!Number.isFinite(tokens)) return '—';
-  return MODEL_TOKEN_FORMAT.format(tokens);
+export function formatModelTokens(tokens: number, style: TokenNumberStyle = 'en-compact'): string {
+  return formatTokens(tokens, style);
 }
+
+export { formatTokensFull };

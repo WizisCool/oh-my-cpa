@@ -375,6 +375,19 @@ when it was last fetched - which is why the page's refresh button reaches them.
 it readable, which is the same reasoning that put `partial_errors` on the overview and gave the heatmap
 its own endpoint.
 
+**The grouping is the request's, not the panel's.** The endpoint takes `group_by=call|model` (default
+`model`, and an unknown value is a 400 rather than a silent fall-back, so a typo cannot quietly change
+what the numbers mean). The call view partitions rows by call point - the model alias a client
+requested, falling back to the upstream model name when no alias was set - so one call point served by
+several upstream variants reads as one line, the way the deployment's own vocabulary names it; the
+model view partitions by the upstream model name exactly as CPA recorded it. The choice rides in the
+query because ranking and folding are the server's single answer for exactly one grouping - a
+client-side regroup of one ranking could not also re-rank, re-fold, and re-assign colours without
+duplicating the fold logic and letting it drift from the server's. The response also carries each
+group's priced spend (`cost_usd`, null when nothing in the group was priced) and `priced_requests`,
+summed only over rows priced at request time, so an unpriced-heavy window cannot present a partial
+spend as the whole.
+
 Two details of the fold are load-bearing. The remainder group carries a `folded` boolean rather than a
 reserved display name, because the label is the frontend's to translate and a deployment may
 legitimately serve a model whose name collides with whatever that label is; a name-based test would
