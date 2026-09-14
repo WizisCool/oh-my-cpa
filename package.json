@@ -55,7 +55,8 @@
     "verify:probes": "node scripts/browser-probes.mjs",
     "test:sync-web-dist": "node --test scripts/sync-web-dist.test.mjs",
     "test:self": "pnpm test:i18n && pnpm test:docs && pnpm test:css-modules && pnpm test:dev-target && pnpm test:affected-checks && pnpm test:sync-web-dist && pnpm test:install-chromium",
-    "test:install-chromium": "node --test scripts/install-chromium.test.mjs"
+    "test:install-chromium": "node --test scripts/install-chromium.test.mjs",
+    "check:ui": "node scripts/check-ui.mjs"
   },
   "devDependencies": {
     "@ant-design/cli": "6.6.2",
