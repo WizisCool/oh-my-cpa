@@ -231,8 +231,10 @@ day-to-day differences visible at the quiet end without flattening the busy end.
 almost entirely empty and says nothing about last December, which is exactly the comparison a reader
 wants at that moment; a rolling window always holds a year of history and always ends on today. It
 is also GitHub's shape. The consequence is that there are no days still to come in the window,
-except the tail of the current week — and those carry no traffic and offer no interaction, so they
-are drawn exactly like any other day with no stored record. The panel distinguishes "there is stored
+except the tail of the current week — and those carry no traffic, so they are drawn exactly like
+any other day with no stored record. They are still clickable: their tooltip states that nothing
+is stored, which is the same answer a pruned day gives, and only the drill-down link is absent
+because there would be nothing to open. The panel distinguishes "there is stored
 data" from "there is not"; it does not ask the reader to hold "hasn't happened yet" apart from
 "records were pruned", because those are the same fact to anyone comparing days.
 
@@ -327,7 +329,7 @@ Rules:
    the scrollbar hidden — a bar inside a dashboard card is noise and touch shows none — and it opens
    on today's column. Clipping instead would hide two thirds of the year silently, which is worse
    than either alternative. The probe asserts no scrollbar is rendered at desktop widths.
-10. **The grid is DOM, not a chart mark** — see `docs/adr/0005-token-heatmap-as-a-dom-grid.md`.
+11. **The grid is DOM, not a chart mark** — see `docs/adr/0005-token-heatmap-as-a-dom-grid.md`.
 
 ### Caller-key display mask
 

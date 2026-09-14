@@ -87,7 +87,10 @@ func TestTokenHeatmapDescribesARollingYearOfWeeks(t *testing.T) {
 	if to.Weekday() != time.Sunday {
 		t.Fatalf("grid ends on %s, want a Sunday so the final column is complete", to.Weekday())
 	}
-	today := time.Now().UTC().Format("2006-01-02")
+	// The read instant the response was resolved against, not a second reading of the client's clock:
+	// the two differ when the suite crosses UTC midnight between the request and this line, and the
+	// grid's own `as_of_ms` is by definition the instant its days were built from.
+	today := time.UnixMilli(body.AsOfMS).UTC().Format("2006-01-02")
 	// Every day but today tiles onto the next: the grid spans a continuous range with no gap, which
 	// is what lets the client divide it into weeks without checking anything. Today is the one
 	// exception by design - its range stops at the read instant, so the following day does not begin
@@ -246,26 +249,27 @@ func TestTokenHeatmapWindowsMatchTheRequestListWindowForTheSameDay(t *testing.T)
 	// including the one that sits on the last millisecond of the day, which is the
 	// bound an exclusive interval would drop.
 	client, baseURL, repo := startDashboardTestServer(t, nil)
-	now := time.Now().UTC()
-	// A moment earlier today, so it is inside today's window whatever the hour the
-	// suite runs at: today's window stops at the read instant, and a fixed noon would
-	// be in the future for any run before noon UTC.
-	earlier := now.Add(-30 * time.Minute)
-
 	body := getHeatmapJSON(t, client, heatmapURL(baseURL, "?tz=UTC"))
-	today := heatmapDay(t, body, dayFor(time.UTC, now))
+	// Today is the day the response was resolved against, and the mid-window instant comes from that
+	// day's own bounds. Two traps here, and both are why this does not read the client's clock: the
+	// grid ends on the *week's* Sunday, which is often a future day carrying zero bounds, and
+	// `now - 30m` falls on the previous day for any run in the first half hour after UTC midnight -
+	// silently dropping the middle record from the totals below.
+	todayKey := time.UnixMilli(body.AsOfMS).UTC().Format("2006-01-02")
+	today := heatmapDay(t, body, todayKey)
+	middle := today.FromMS + (today.ToMS-today.FromMS)/2
 
-	// One record just inside each edge of today's window.
+	// One record just inside each edge of today's window, and one in its middle.
 	if _, err := repo.InsertUsageEvents(t.Context(), []usage.Event{
 		eventFor("heat-window-start", time.UnixMilli(today.FromMS).UTC(), usage.TokenStats{InputTokens: 3, TotalTokens: 3}, false),
 		eventFor("heat-window-end", time.UnixMilli(today.ToMS).UTC(), usage.TokenStats{InputTokens: 5, TotalTokens: 5}, false),
-		eventFor("heat-window-middle", earlier, usage.TokenStats{InputTokens: 7, TotalTokens: 7}, false),
+		eventFor("heat-window-middle", time.UnixMilli(middle).UTC(), usage.TokenStats{InputTokens: 7, TotalTokens: 7}, false),
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	refreshed := getHeatmapJSON(t, client, heatmapURL(baseURL, "?tz=UTC"))
-	today = heatmapDay(t, refreshed, dayFor(time.UTC, now))
+	today = heatmapDay(t, refreshed, todayKey)
 	if today.Tokens != 15 || today.Requests != 3 {
 		t.Fatalf("cell = %d tokens over %d requests, want 15 over 3", today.Tokens, today.Requests)
 	}
@@ -300,15 +304,20 @@ func TestTokenHeatmapKeepsFutureTrafficOutOfToday(t *testing.T) {
 	// An upstream clock running ahead, or a request logged early, must not inflate
 	// today's total: the final window stops at the read instant.
 	client, baseURL, repo := startDashboardTestServer(t, nil)
-	now := time.Now().UTC()
+	// The record is placed relative to the *response's* read instant rather than the client's clock,
+	// and the cell is looked up by its day key. Reading the clock twice was the same midnight hazard
+	// as elsewhere in this file: within six hours of UTC midnight the offset record landed on the
+	// following day, where it is legitimately that day's traffic and the assertion failed.
+	body := getHeatmapJSON(t, client, heatmapURL(baseURL, "?tz=UTC"))
+	todayKey := time.UnixMilli(body.AsOfMS).UTC().Format("2006-01-02")
 	if _, err := repo.InsertUsageEvents(t.Context(), []usage.Event{
-		eventFor("heat-future", now.Add(6*time.Hour), usage.TokenStats{InputTokens: 999, TotalTokens: 999}, false),
+		eventFor("heat-future", time.UnixMilli(body.AsOfMS+6*int64(time.Hour/time.Millisecond)).UTC(), usage.TokenStats{InputTokens: 999, TotalTokens: 999}, false),
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	body := getHeatmapJSON(t, client, heatmapURL(baseURL, "?tz=UTC"))
-	if entry := heatmapDay(t, body, dayFor(time.UTC, now)); entry.Tokens != 0 {
+	refreshed := getHeatmapJSON(t, client, heatmapURL(baseURL, "?tz=UTC"))
+	if entry := heatmapDay(t, refreshed, todayKey); entry.Tokens != 0 {
 		t.Fatalf("today = %d tokens, want 0 (a future timestamp is not today's traffic)", entry.Tokens)
 	}
 }

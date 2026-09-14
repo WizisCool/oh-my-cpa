@@ -352,7 +352,9 @@ Three properties of the windowed read make it the wrong tool for a calendar. Its
 slides, so the same series is a different span every time it is asked. Its grid is a
 *bucket* grid (`dashboardBucketWidth`), chosen so a sparkline stays near 48 points, and
 `QueryUsageAnalytics` reads its hourly or daily rollup whenever the requested bucket is
-no coarser than that rollup's grain. And the rollup is keyed on a UTC bucket start.
+*at least as coarse as* that rollup's grain, and falls back to the detail rows when the grid
+is finer - a rollup row cannot be split across a finer grid, so re-aligning one would report
+the whole hour in its first bucket and the rest of it as zero. And the rollup is keyed on a UTC bucket start.
 
 A day is not a bucket. Grouping hourly rows by an offset-shifted key cannot split a UTC
 hour that straddles a local midnight at a fractional offset: India is `+05:30`, so local
