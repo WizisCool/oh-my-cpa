@@ -2,16 +2,15 @@
 #
 # CodeRabbit review contract for Oh My CPA.
 #
-# AGENTS.md holds the general rules; this file only tells the reviewer where to
-# apply them and where a CodeRabbit default does not fit this repository. Each
-# entry states a project invariant that a diff cannot show: the DTO allowlist
-# boundary, localized copy as `[zh, en]` pairs, and documentation as a
-# co-deliverable of the change that triggers it.
+# AGENTS.md holds the general rules, and the guide below reads it as review
+# criteria. This file only adds what AGENTS.md cannot say: which project
+# invariant applies to which path, and where a CodeRabbit default does not fit
+# this repository.
 language: en-US
 tone_instructions: >-
-  This repository's invariants are in AGENTS.md. Prefer substantive findings:
-  correctness, security boundaries, and documentation the change makes stale.
-  Do not restate the diff, and do not propose edits to files the PR did not touch.
+  Invariants live in AGENTS.md, CONTEXT.md and docs/architecture.md. Report
+  defects this change introduces, its security-boundary impact, and the
+  documentation it makes stale; suggest the smallest correct fix.
 reviews:
   # This repository's blocking signals are its own gates (`pnpm verify`,
   # `pnpm verify:full`) and a human. A review bot that can request changes would
@@ -26,24 +25,14 @@ reviews:
     Summarize what changed and which invariant or document it affects. Group the
     walkthrough by layer (Go packages, SPA, scripts, migrations, context docs)
     and skip the restated diff.
-  # `internal/web/dist` is build output and `pnpm-lock.yaml` is a resolved-version
-  # dump; dependency bumps are judged by CI and by the upstream changelog, so a
-  # review of the lockfile diff only spends tokens.
-  path_filters:
-    - '!internal/web/dist/**'
-    - '!pnpm-lock.yaml'
-  auto_review:
-    # The review loop this repository wants is push -> findings -> fix -> push;
-    # the default pause after five reviewed commits is what interrupts it.
-    auto_pause_after_reviewed_commits: 15
   finishing_touches:
-    # A generated docstring would fake documentation for an API that is meant to
-    # stay small and handwritten, against the "explain why, not what" rule.
+    # Code comments here explain design intent rather than API surfaces, so a
+    # generated docstring would add noise instead of documentation.
     docstrings:
       enabled: false
-    # Unit-test generation is left on. The recipe below is the finishing touch
-    # this repository actually needs: its first principle is that context
-    # documents ship with the change that triggers them.
+    # Unit-test generation stays on. The recipe below is the finishing touch this
+    # repository actually needs: its first principle is that context documents
+    # ship with the change that triggers them.
     custom:
       - name: sync context documents
         instructions: >-
@@ -52,13 +41,13 @@ reviews:
           module map, data flow, background loops, schema, visual tokens,
           commands, endpoints, environment variables, and defaults must match
           the code on this branch rather than the intent of the change. Ignore
-          rejected alternatives. Do not invent line numbers, do not reference
-          files that no longer exist, and keep technical prose in English
-          except README.zh-CN.md.
+          alternatives that were considered and rejected during the session.
+          Do not invent line numbers and do not reference files that no longer
+          exist. Technical prose stays in English, except README.zh-CN.md and
+          localized UI copy.
   pre_merge_checks:
-    # This codebase documents design intent, not API surfaces, so a coverage
-    # number is not a meaningful target and generated docstrings would work
-    # against the comment rule.
+    # A coverage percentage is not a meaningful target for a codebase whose
+    # comments are reserved for design intent.
     docstrings:
       mode: off
     title:
@@ -70,7 +59,7 @@ reviews:
   path_instructions:
     - path: '**/*.go'
       instructions: >-
-        Go backend. Enforce the project invariants that a diff cannot show:
+        Go backend. Enforce the project invariants a diff cannot show:
         `internal/api` returns only handwritten DTO allowlists, so flag any raw
         CPA payload, arbitrary URL, or newly unlisted field passed through to a
         response. Sensitive values never appear in ordinary responses, logs,
@@ -81,20 +70,24 @@ reviews:
         `migrations/`. Errors are wrapped with `%w` and classified with
         `errors.Is`; handlers return explicit status codes with JSON `error` and
         `message` fields. Comments explain why in English and never restate the
-        code; identifiers are lowerCamelCase and booleans carry an
+        code. Unexported identifiers are lowerCamelCase; exported identifiers
+        are UpperCamelCase; JSON tags, DB columns, CPA fields and other external
+        contract names keep their required spelling. Booleans carry an
         `is`/`has`/`can`/`should` prefix. Finally, check the change against the
         documentation map in AGENTS.md and flag a missing update in this same
         change.
     - path: 'internal/api/**'
       instructions: >-
         Console endpoints. Every response field must be explicitly allowlisted,
-        and a new field needs the matching frontend type in `web/src/api/` plus
-        an i18n key rather than a hardcoded string. New routes, middleware, or
-        data-flow stages belong in `docs/architecture.md`; new capability codes
-        or refused-write outcomes are part of that contract. Behavior changes
-        need Go tests in the same package that fail when the behavior regresses,
-        asserting the wire representation (status code, JSON fields, exact
-        totals) rather than an internal approximation.
+        so name any field that bypasses the allowlist. A new user-visible
+        string is an i18n key rather than hardcoded copy; a shared frontend
+        concept belongs in `web/src/types/` rather than in page-local helpers.
+        New routes, middleware, or data-flow stages belong in
+        `docs/architecture.md`, and stable machine-readable codes such as
+        capability denials and refused writes are part of that contract.
+        Behavior changes need Go tests in the same package that fail when the
+        behavior regresses, asserting the wire representation (status code, JSON
+        fields, exact totals) rather than an internal approximation.
     - path: 'internal/repository/**'
       instructions: >-
         SQLite repository layer: one connection, WAL, one replica per data
@@ -103,19 +96,19 @@ reviews:
         load-bearing and must not be conflated: request time windows and
         aggregates, `id` orders collector writes, and keyset cursors must return
         every row exactly once. A rollup and its detail rows are chosen by
-        whether the requested bucket is at least as coarse as the rollup grain;
-        do not accept a weakening of a test that would let a coarse rollup
-        answer a finer request. Pricing versions and audit events are append-only.
+        whether the requested bucket is at least as coarse as the rollup grain,
+        so do not accept a test weakened to let a coarse rollup answer a finer
+        request. Pricing versions and audit events are append-only.
     - path: 'internal/usage/**'
       instructions: >-
         Usage capture pipeline. Inbox outcomes are
-        `pending -> processed | failed | discarded`, and a pop-then-write failure
-        must stay visible as a durable gap rather than being silently dropped.
-        Reading CPA's usage queue is destructive: availability is probed, never
-        popped, and a manual refresh drains through the existing collector
-        goroutine instead of starting a second decoder. Checkpoint read,
-        high-water selection, additive rollup, and checkpoint advancement stay in
-        one serialized transaction.
+        `pending -> processed | failed | discarded`, and a pop-then-write
+        failure must stay visible as a durable gap rather than being silently
+        dropped. Reading CPA's usage queue is destructive: availability is
+        probed, never popped, and a manual refresh drains through the existing
+        collector goroutine instead of starting a second decoder. Checkpoint
+        read, high-water selection, additive rollup, and checkpoint advancement
+        stay in one serialized transaction.
     - path: 'web/src/**/*.{ts,tsx}'
       instructions: >-
         React console. User-visible copy is never hardcoded: new strings are
@@ -123,11 +116,12 @@ reviews:
         single typed client in `web/src/api/client.ts`; a page calling `fetch`
         directly is a defect. Colors come from the tokens in
         `web/src/theme/themeConfig.ts` or the CSS variables in `docs/design.md`,
-        so a literal hex value is a defect; the visual system is terminal-flat
-        with no box shadows, and green/amber/red stay reserved for system health.
-        CSS-module classes are kebab-case and read as `styles['kebab-case']`.
-        Nothing may depend on a CDN or a resource the single Go binary cannot
-        embed. State must not be communicated by color alone: keep keyboard
+        so a color literal outside those definitions is a defect; the visual
+        system is terminal-flat with no box shadows, and green/amber/red stay
+        reserved for system health. CSS-module classes are kebab-case and read
+        as `styles['kebab-case']`. The SPA must stay embeddable in the single Go
+        binary, so nothing may depend on a CDN or an externally hosted asset.
+        State must not be communicated by color alone: keep keyboard
         operability, visible focus, WCAG AA contrast, and
         `prefers-reduced-motion`. Disposable resources must survive React
         StrictMode's mount-unmount-mount, which only the dev-server path
@@ -147,15 +141,16 @@ reviews:
         that moved while the prose did not. Verify each flagship claim against
         the implementation rather than against the intent of the change, and
         prefer a symbol or file reference over an absolute line number. Flag
-        references to retired pages, prototypes, or removed files, and flag
-        non-English technical prose or a `DESIGN.md`/`docs/design.md`
-        pair that has drifted apart.
+        references to retired pages, prototypes, or removed files, and flag a
+        `DESIGN.md`/`docs/design.md` pair that has drifted apart. Technical
+        prose is English; `README.zh-CN.md` and localized UI copy are the
+        intended exceptions.
     - path: 'docs/adr/**'
       instructions: >-
-        Accepted ADRs are frozen records: a new decision that reverses an
-        accepted one is a new ADR that supersedes it, never an edit. Flag an ADR
-        edit that rewrites an accepted decision, and flag a decision with real
-        trade-offs that the change makes without recording one.
+        Accepted ADRs are frozen records: a decision that reverses an accepted
+        one is a new ADR that supersedes it, never an edit. Flag an edit that
+        rewrites an accepted decision, and flag a decision with real trade-offs
+        that the change makes without recording one.
     - path: 'migrations/**'
       instructions: >-
         Forward-only migrations, applied in filename order and one transaction
@@ -163,8 +158,8 @@ reviews:
         or column needs the repository reader or writer, the storage section of
         `docs/architecture.md`, and `docs/ops/sqlite-operations.md` when the
         migration gate or the backup story changes. Preserve append-only
-        guarantees (pricing versions, audit events) and the triggers that
-        enforce them; a rollback is a new migration rather than a manual edit.
+        guarantees (pricing versions, audit events) and the triggers enforcing
+        them; a rollback is a new migration rather than a manual edit.
     - path: 'scripts/**'
       instructions: >-
         The verification harness. Two properties are pinned by tests and by
@@ -177,27 +172,26 @@ reviews:
         intact.
     - path: '.github/workflows/**'
       instructions: >-
-        `scripts/validate-workflow.mjs` asserts this workflow's shape: the static
-        and browser jobs, the concurrent master browser phases with both exit
-        statuses collected, and the pinned action versions. A workflow change
-        that alters that shape must update the validator in the same change, and
-        a concurrency step whose status is not collected would report a green
+        `scripts/validate-workflow.mjs` asserts this workflow's shape: the
+        static and browser jobs, the concurrent master browser phases with both
+        exit statuses collected, and the pinned action versions. A change that
+        alters that shape must update the validator in the same change, since a
+        concurrency step whose status is not collected would report a green
         build for a failed run.
     - path: '{Dockerfile,.env.example,deploy/**}'
       instructions: >-
         Deployment surface. The image is one CGO-free binary with the SPA
-        embedded, so flag a build-time secret, a CDN or network dependency at
-        runtime, or a change that stops `internal/web/dist` from being embedded.
-        Every environment variable needs a default, a description in
-        `.env.example`, and matching updates in `README.md`, `README.zh-CN.md`
-        and the document that describes it; placeholders only, never a real key,
-        token, or private path. Deployment templates must keep one replica per
-        data directory and must not share a data directory, because SQLite
-        access is serialized rather than retried.
+        embedded, so flag a build-time secret, a CDN or externally hosted asset
+        dependency, or a change that stops `internal/web/dist` from being
+        embedded. Every environment variable needs a default and a matching
+        `.env.example` entry, and the operator documents need the same change;
+        placeholders only, never a real key, token, or private path. Deployment
+        templates must keep one replica per data directory and must not share a
+        data directory, because SQLite access is serialized rather than retried.
 knowledge_base:
   code_guidelines:
-    # Read as review criteria. AGENTS.md states the agent contract and the
-    # documentation map; the other three are the invariants the path
+    # Read as review criteria: AGENTS.md states the agent contract and the
+    # documentation map, and the other three hold the invariants that the path
     # instructions above refer to.
     filePatterns:
       - '**/AGENTS.md'
