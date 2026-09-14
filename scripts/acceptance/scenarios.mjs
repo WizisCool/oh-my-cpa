@@ -291,9 +291,10 @@ export async function iconPickerStacking({ base, page, check }) {
   await picker.waitFor({ state: 'visible', timeout: 10_000 });
 
   /**
-   * Counts tiles that actually painted a mark, whether it is an `<img>` or a
-   * masked `<span>`. A tile that rendered its label but no icon is exactly the
-   * reported failure, so the label cannot be what this reads.
+   * Counts tiles that rendered an icon node rather than only their label: either an
+   * `<img>` the tile requested, or a masked `<span>`. A tile that shows its label
+   * with no icon node is exactly the reported failure, so reading the label back
+   * would not distinguish the two states.
    */
   const renderedIconCount = () =>
     page.evaluate(() => {
