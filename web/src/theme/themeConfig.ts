@@ -36,27 +36,27 @@ export const MONO_FONT_STACK = monoFont;
  */
 export const palette = {
   dark: {
-    bg: '#201d1d',
-    surface: '#302c2c',
-    fg: '#fdfcfc',
-    fg2: '#c8c6c4',
-    muted: '#9a9898',
-    meta: '#6e6e73',
-    border: '#464343',
-    borderSoft: '#302c2c',
+    bg: '#121214',
+    surface: '#1c1c1f',
+    fg: '#f4f4f6',
+    fg2: '#a1a1aa',
+    muted: '#71717a',
+    meta: '#52525b',
+    border: '#2c2c30',
+    borderSoft: '#222226',
     /* Accent ladder, hue 201. The link step is the bright one because it sits on the dark
-       background (6.03:1); the two deeper steps are what white text can sit on (4.85:1 and
+       background (6.12:1); the two deeper steps are what white label text can sit on (4.85:1 and
        7.09:1). See docs/design.md §2 for the measured ratios. */
     accent: '#00a2fb',
     accentHover: '#0077b8',
     accentActive: '#005d8f',
     accentOn: '#ffffff',
-    success: '#30d158',
-    warn: '#ff9f0a',
-    danger: '#ff3b30',
+    success: '#10b981',
+    warn: '#f59e0b',
+    danger: '#ef4444',
     /* Cache-rate scale (design.md §2): yellow → green, no red. */
-    cacheRateYellow: '#ffd60a',
-    cacheRateGreen: '#30d158',
+    cacheRateYellow: '#f59e0b',
+    cacheRateGreen: '#10b981',
     /* Categorical series palette (design.md §2, ADR 0006): ZCode & CodeX inspired developer
        console palette matching AntV and Tremor. Alternates vibrant primary hues
        (Blue -> Emerald -> Purple -> Coral -> Amber -> Cyan) ensuring immediate visual hierarchy,
@@ -66,29 +66,29 @@ export const palette = {
     seriesTrack: '#2a2a30',
   },
   light: {
-    bg: '#fdfcfc',
-    surface: '#f1eeee',
-    fg: '#201d1d',
-    fg2: '#424245',
-    muted: '#6e6e73',
-    meta: '#9a9898',
-    border: 'rgba(15, 0, 0, 0.12)',
-    borderSoft: 'rgba(15, 0, 0, 0.07)',
+    bg: '#ffffff',
+    surface: '#f6f6f8',
+    fg: '#1c1c1e',
+    fg2: '#505055',
+    muted: '#787880',
+    meta: '#98989f',
+    border: '#e5e5ea',
+    borderSoft: '#ededf2',
     /* The same hue one step darker, because the bright accent cannot be legible on a light page:
-       #00a2fb reads 2.71:1 there, while this reads 6.92:1 as a link and 7.09:1 under white text.
+       #00a2fb reads 2.71:1 there, while this reads 6.57:1 as a link and 7.09:1 under white text.
        The dark theme's link step is therefore the light theme's filled-control step. */
     accent: '#005d8f',
     accentHover: '#004770',
     accentActive: '#00344f',
     accentOn: '#ffffff',
-    success: '#30d158',
-    warn: '#ff9f0a',
-    danger: '#ff3b30',
+    success: '#059669',
+    warn: '#b45309',
+    danger: '#dc2626',
     /* Darker steps of the same two hues so badge text stays legible on a light
        page; the low end is ochre because yellow cannot be both saturated and
        4.5:1 there. */
-    cacheRateYellow: '#6e5b00',
-    cacheRateGreen: '#00662a',
+    cacheRateYellow: '#b45309',
+    cacheRateGreen: '#047857',
     /* Deep saturated counterparts for light card surfaces clearing >= 3.0 graphical contrast. */
     series: ['#2563eb', '#059669', '#7c3aed', '#e11d48', '#b45309', '#0891b2'],
     seriesTrack: '#e5e5ea',
@@ -148,15 +148,15 @@ export function createThemeConfig(mode: ThemeMode = 'dark'): ThemeConfig {
       colorBorderSecondary: t.borderSoft,
       colorSplit: t.borderSoft,
       colorBgContainer: t.bg,
-      colorBgElevated: dark ? t.surface : t.bg,
+      colorBgElevated: dark ? '#222226' : '#ffffff',
       colorBgLayout: t.bg,
-      colorFillTertiary: t.surface,
-      colorFillQuaternary: t.surface,
+      colorFillTertiary: dark ? t.surface : '#ffffff',
+      colorFillQuaternary: dark ? t.surface : '#ffffff',
       // antd paints a popup's text as `colorTextLightSolid` - white - so the spotlight stays dark
       // in both themes. It is deliberately NOT `t.surface` in light: that is near-white, and white
       // text on it measures 1.15:1. A panel whose own content sets its text colours overrides this
       // for its own popper instead of moving the global token, which every other tooltip shares.
-      colorBgSpotlight: dark ? t.surface : t.fg,
+      colorBgSpotlight: dark ? '#222226' : t.fg,
 
       borderRadius: 4,
       borderRadiusLG: 6,
@@ -185,14 +185,14 @@ export function createThemeConfig(mode: ThemeMode = 'dark'): ThemeConfig {
         darkItemBg: t.bg,
         subMenuItemBg: t.bg,
         darkSubMenuItemBg: t.bg,
-        popupBg: t.surface,
+        popupBg: dark ? '#222226' : '#ffffff',
         itemHeight: 34,
         iconMarginInlineEnd: 10,
         itemBorderRadius: 4,
         itemColor: t.muted,
         darkItemColor: t.muted,
         itemHoverColor: t.fg,
-        darkItemHoverBg: t.surface,
+        darkItemHoverBg: '#242428',
         darkItemHoverColor: t.fg,
         itemSelectedBg: 'transparent',
         itemSelectedColor: t.fg,
@@ -209,7 +209,7 @@ export function createThemeConfig(mode: ThemeMode = 'dark'): ThemeConfig {
       Table: {
         headerBg: dark ? t.bg : t.surface,
         borderColor: t.borderSoft,
-        rowHoverBg: t.surface,
+        rowHoverBg: dark ? '#222226' : '#ececf0',
         headerColor: t.muted,
         cellPaddingBlockSM: 8,
         cellPaddingInlineSM: 12,
@@ -262,9 +262,9 @@ export function createThemeConfig(mode: ThemeMode = 'dark'): ThemeConfig {
       // default elevated colour is `bg`, which is the page colour itself: a
       // menu opened over the page had no fill difference at all, only the
       // border. Dark already uses surface, so this is a no-op there.
-      Popover: { ...noShadow, colorBgElevated: t.surface },
-      Dropdown: { ...noShadow, colorBgElevated: t.surface },
-      Select: { optionSelectedBg: t.surface, optionSelectedColor: t.fg, colorBgElevated: t.surface },
+      Popover: { ...noShadow, colorBgElevated: dark ? '#222226' : '#ffffff' },
+      Dropdown: { ...noShadow, colorBgElevated: dark ? '#222226' : '#ffffff' },
+      Select: { optionSelectedBg: dark ? '#242428' : '#ececf0', optionSelectedColor: t.fg, colorBgElevated: dark ? '#222226' : '#ffffff' },
       // Matches the global spotlight token above.
       Tooltip: { colorBgSpotlight: dark ? t.surface : t.fg },
       Switch: { colorPrimary: t.success, colorPrimaryHover: t.success },

@@ -32,33 +32,33 @@ Mono as fallbacks), 4px radii, dense but breathable spacing.
 
 | Token | Value | antd mapping | Usage |
 | --- | --- | --- | --- |
-| `--bg` | `#201d1d` | `colorBgBase`, `colorBgLayout`, `colorBgContainer` | App background, inputs, tables |
-| `--surface` | `#302c2c` | `colorBgElevated`, `colorFillTertiary` | Cards, panels, dropdowns, hover states |
-| `--fg` | `#fdfcfc` | `colorText`, `colorTextBase` | Primary text |
-| `--fg-2` | `#c8c6c4` | `colorTextSecondary` | Secondary text |
-| `--muted` | `#9a9898` | `colorTextTertiary` | Hints, legends, labels |
-| `--meta` | `#6e6e73` | `colorTextQuaternary` | Group labels, footnotes |
-| `--border` | `#464343` | `colorBorder` | Primary 1px borders |
-| `--border-soft` | `#302c2c` | `colorBorderSecondary`, `colorSplit` | Row dividers, inner borders |
+| `--bg` | `#121214` | `colorBgBase`, `colorBgLayout`, `colorBgContainer` | App background, inputs, tables |
+| `--surface` | `#1c1c1f` | `colorBgElevated`, `colorFillTertiary` | Cards, panels, dropdowns, hover states |
+| `--fg` | `#f4f4f6` | `colorText`, `colorTextBase` | Primary text |
+| `--fg-2` | `#a1a1aa` | `colorTextSecondary` | Secondary text |
+| `--muted` | `#71717a` | `colorTextTertiary` | Hints, legends, labels |
+| `--meta` | `#52525b` | `colorTextQuaternary` | Group labels, footnotes |
+| `--border` | `#2c2c30` | `colorBorder` | Primary 1px borders |
+| `--border-soft` | `#222226` | `colorBorderSecondary`, `colorSplit` | Row dividers, inner borders |
 | `--accent` | `#00a2fb` | `colorInfo`, `colorLink` | Links, info, active bars, selection |
 | `--accent-hover` | `#0077b8` | `colorPrimary` | Filled primary buttons |
 | `--accent-active` | `#005d8f` | `colorPrimaryHover/Active` | Pressed state |
-| `--success` | `#30d158` | `colorSuccess` | Enabled / healthy / ok pip |
-| `--warn` | `#ff9f0a` | `colorWarning` | Degraded / quota warning |
-| `--danger` | `#ff3b30` | `colorError` | Failed / disabled / delete |
+| `--success` | `#10b981` | `colorSuccess` | Enabled / healthy / ok pip |
+| `--warn` | `#f59e0b` | `colorWarning` | Degraded / quota warning |
+| `--danger` | `#ef4444` | `colorError` | Failed / disabled / delete |
 
 ### Light
 
 | Token | Value |
 | --- | --- |
-| `--bg` | `#fdfcfc` |
-| `--surface` | `#f1eeee` |
-| `--fg` | `#201d1d` |
-| `--fg-2` | `#424245` |
-| `--muted` | `#6e6e73` |
-| `--meta` | `#9a9898` |
-| `--border` | `rgba(15, 0, 0, 0.12)` |
-| `--border-soft` | `rgba(15, 0, 0, 0.07)` |
+| `--bg` | `#ffffff` |
+| `--surface` | `#f6f6f8` |
+| `--fg` | `#1c1c1e` |
+| `--fg-2` | `#505055` |
+| `--muted` | `#787880` |
+| `--meta` | `#98989f` |
+| `--border` | `#e5e5ea` |
+| `--border-soft` | `#ededf2` |
 
 ### Accent ladder
 
@@ -163,9 +163,9 @@ failed requests, so a weakly-cached request never reads as an error.
 
 | Token | Dark | Light | Role |
 | --- | --- | --- | --- |
-| `--cache-rate-yellow` | `#ffd60a` | `#6e5b00` | 0% stop |
-| `--cache-rate-green` | `#30d158` | `#00662a` | 100% stop |
-| `--cache-rate-tint` | `12%` | `22%` | badge fill = hue over `--bg` |
+| `--cache-rate-yellow` | `#f59e0b` | `#b45309` | 0% stop |
+| `--cache-rate-green` | `#10b981` | `#047857` | 100% stop |
+| `--cache-rate-tint` | `14%` | `20%` | badge fill = hue over `--bg` |
 | `--cache-rate-edge` | `32%` | `34%` | badge border = hue over `--bg` |
 
 Rules:
@@ -367,8 +367,8 @@ only encoding.
 Rules, all measured and asserted by `scripts/test-chart-marks.ts`:
 
 1. **Every slot clears 3:1 against the card it is drawn on** (WCAG's bar for a graphical object, not
-the 4.5:1 body-text bar - these are 1.6px lines and 8px swatches). The tightest slot is the light
-theme's amber at 3.41:1 against `--surface`; the rest sit between 3.4:1 and 7.9:1.
+the 4.5:1 body-text bar - these are 1.6px lines and 8px swatches). Measured across both themes the
+range is 4.01:1 to 7.92:1 on the dark card and 3.41:1 to 5.28:1 on the light one.
 2. **Adjacent legend entries are at least ΔE 25 apart in CIE Lab**, so no two neighbours read as one
 swatch. The sequence exists for that bound: it alternates warm and cool families, which also puts a
 warm hue into an ordinary two- or three-model window instead of reserving it for a long tail.
@@ -642,7 +642,7 @@ Non-obvious decisions, keep these when editing:
 - Menu: `itemSelectedBg = transparent`, `itemSelectedColor = fg`,
   `activeBarBorderWidth: 0` — kills the default blue selected block and avoids
   heavy filled blocks; active position uses the left 2px `--fg` inset rule.
-- Switch: `colorPrimary = success (#30d158)` — active toggle switch uses
+- Switch: `colorPrimary = success (#10b981)` — active toggle switch uses
   semantic success green (enabled/healthy), never decorative blue.
 - Modal & Drawer: `1px solid var(--border)`, zero shadow, 4px/6px radii. Simple
   single-task dialogs use a clean uninterrupted body ("Title → Field/Content →

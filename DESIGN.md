@@ -5,19 +5,19 @@ colors:
   primary: "#0077b8"          # dark theme; light theme uses #004770
   primary-accent: "#00a2fb"   # dark theme; light theme uses #005d8f
   primary-active: "#005d8f"   # dark theme; light theme uses #00344f
-  neutral-bg: "#201d1d"
-  neutral-surface: "#302c2c"
-  neutral-border: "#464343"
-  neutral-border-soft: "#302c2c"
-  neutral-fg: "#fdfcfc"
-  neutral-fg-subtle: "#c8c6c4"
-  neutral-muted: "#9a9898"
-  neutral-meta: "#6e6e73"
-  status-success: "#30d158"
-  status-warn: "#ff9f0a"
-  status-danger: "#ff3b30"
-  cache-yellow: "#ffd60a"
-  cache-green: "#30d158"
+  neutral-bg: "#121214"
+  neutral-surface: "#1c1c1f"
+  neutral-border: "#2c2c30"
+  neutral-border-soft: "#222226"
+  neutral-fg: "#f4f4f6"
+  neutral-fg-subtle: "#a1a1aa"
+  neutral-muted: "#71717a"
+  neutral-meta: "#52525b"
+  status-success: "#10b981"
+  status-warn: "#f59e0b"
+  status-danger: "#ef4444"
+  cache-yellow: "#f59e0b"
+  cache-green: "#10b981"
   series-1: "#3b82f6"
   series-2: "#10b981"
   series-3: "#8b5cf6"
@@ -146,7 +146,7 @@ components:
 
 Oh My CPA is a dedicated developer control plane for AI resources and proxy telemetry. Built upon an OpenCode-inspired minimalist console philosophy, the system delivers dense, honest, and high-frequency operational visibility without aesthetic clutter. It repudiates decorative gradients, glassmorphism, heavy shadows, and artificial entrance animations in favor of strict terminal discipline.
 
-Depth is achieved purely through 1px hairline borders and subtle tonal shifts between dark background tiers (`#201d1d` base and `#302c2c` elevated surface). Typography is universally monospaced across Latin, Cyrillic, and CJK characters, anchoring every token count, timestamp, and latency reading on stable tabular columns. The interface follows the doctrine of "Quiet chrome, loud data"—the surrounding scaffolding remains dark and muted, reserving saturated chromatic accents exclusively for genuine operational states.
+Depth is achieved purely through 1px hairline borders and subtle tonal shifts between dark background tiers (`#121214` base and `#1c1c1f` elevated surface). Typography is universally monospaced across Latin, Cyrillic, and CJK characters, anchoring every token count, timestamp, and latency reading on stable tabular columns. The interface follows the doctrine of "Quiet chrome, loud data"—the surrounding scaffolding remains dark and muted, reserving saturated chromatic accents exclusively for genuine operational states.
 
 **Key Characteristics:**
 - **Terminal-Flat Structure**: Zero drop shadows (`box-shadow: none`), no rounded bubble aesthetics, crisp 1px borders.
@@ -180,20 +180,20 @@ family in the app, and the only exception to the semantic-only rule above; see
   `scripts/test-chart-marks.ts` from the palette itself.
 
 ### Neutral
-- **Console Background (`--bg`)** (`#201d1d`): Base canvas, table row backgrounds, input wells, and overall page substrate.
-- **Graphite Surface (`--surface`)** (`#302c2c`): Elevated containers, cards, dropdown menus, modals, and row hover states.
-- **Hairline Border (`--border`)** (`#464343`): Primary 1px structural separator for cards, tables, sider borders, and toolbars.
-- **Soft Divider (`--border-soft`)** (`#302c2c`): Inner item dividers, table row borders, and subtle panel boundaries.
-- **Chalk White Text (`--fg`)** (`#fdfcfc`): Primary readable text, titles, numbers, and selected navigation items.
-- **Silver Secondary Text (`--fg-2`)** (`#c8c6c4`): Secondary descriptions, field hints, and subtitle text.
-- **Ash Muted (`--muted`)** (`#9a9898`): Table column headers, units, disabled text, and legend entries.
-- **Slate Metadata (`--meta`)** (`#6e6e73`): Navigation group headers, timestamps, masked keys, and footer build metadata.
+- **Console Background (`--bg`)** (`#121214`): Base canvas, table row backgrounds, input wells, and overall page substrate.
+- **Graphite Surface (`--surface`)** (`#1c1c1f`): Elevated containers, cards, dropdown menus, modals, and row hover states.
+- **Hairline Border (`--border`)** (`#2c2c30`): Primary 1px structural separator for cards, tables, sider borders, and toolbars.
+- **Soft Divider (`--border-soft`)** (`#222226`): Inner item dividers, table row borders, and subtle panel boundaries.
+- **Chalk White Text (`--fg`)** (`#f4f4f6`): Primary readable text, titles, numbers, and selected navigation items.
+- **Silver Secondary Text (`--fg-2`)** (`#a1a1aa`): Secondary descriptions, field hints, and subtitle text.
+- **Ash Muted (`--muted`)** (`#71717a`): Table column headers, units, disabled text, and legend entries.
+- **Slate Metadata (`--meta`)** (`#52525b`): Navigation group headers, timestamps, masked keys, and footer build metadata.
 
 ### Status & Functional
-- **Healthy Green (`--success`)** (`#30d158`): Active provider switches, healthy proxy instances, 100% success rate pips, and 200 OK badges.
-- **Degraded Amber (`--warn`)** (`#ff9f0a`): Quota thresholds, rate warnings, dirty configuration state flags, and degraded health pips.
-- **Danger Red (`--danger`)** (`#ff3b30`): Request failures, 4xx/5xx responses, delete confirmations, and disabled accounts.
-- **Cache-Rate Scale**: Sequential gradient interpolated in OKLCH from Ochre Yellow (`#ffd60a`) at 0% to Terminal Green (`#30d158`) at 100%.
+- **Healthy Green (`--success`)** (`#10b981`): Active provider switches, healthy proxy instances, 100% success rate pips, and 200 OK badges.
+- **Degraded Amber (`--warn`)** (`#f59e0b`): Quota thresholds, rate warnings, dirty configuration state flags, and degraded health pips.
+- **Danger Red (`--danger`)** (`#ef4444`): Request failures, 4xx/5xx responses, delete confirmations, and disabled accounts.
+- **Cache-Rate Scale**: Sequential gradient interpolated in OKLCH from Amber Gold (`#f59e0b`) at 0% to Emerald Green (`#10b981`) at 100%.
 
 ### Named Rules
 **The Semantic Color Rule.** Color is never applied as casual visual decoration. Green, amber, and red strictly communicate boolean health, degradation, or active errors. Scaffolding, icons, and containers remain neutral.
@@ -237,7 +237,7 @@ The application viewport uses a fixed shell architecture (`100dvh`, `body { over
 └──────────┴──────────────────────────────────────────┘
 ```
 
-- **Top Header**: Fixed 56px height, full-width with 1px bottom border (`#464343`). Contains the `›_` terminal prompt logo, breadcrumb hierarchy, connection status pill, discovery refresh, theme toggle, language switch, and logout triggers.
+- **Top Header**: Fixed 56px height, full-width with 1px bottom border (`#2c2c30`). Contains the `›_` terminal prompt logo, breadcrumb hierarchy, connection status pill, discovery refresh, theme toggle, language switch, and logout triggers.
 - **Navigation Sidebar**: Fixed 236px width (58px collapsed), 1px right border. Houses grouped navigation categories: `Operate`, `Gateway`, `Observe`, `Control`.
 - **Content Area**: Single-scroll container with responsive padding (32px desktop / 24px tablet / 16px mobile).
 - **Settings Workbench Layout**: A three-track grid — 216px sticky section nav + 920px reading column + 216px balancing gutter — accompanied by a full-width sticky action bar, so the form never drifts to one side on wide screens.
@@ -254,8 +254,8 @@ The application viewport uses a fixed shell architecture (`100dvh`, `body { over
 Oh My CPA is an uncompromisingly flat design system. Drop shadows (`box-shadow`) are globally suppressed across all components, panels, modals, dropdowns, and cards (`box-shadow: none`).
 
 Depth and hierarchy are conveyed exclusively through:
-1. **1px Border Contrasts**: Separating surfaces via `#464343` (`--border`) and `#302c2c` (`--border-soft`).
-2. **Background Luminance Shifts**: Stacking elements using `#201d1d` (substrate) and `#302c2c` (elevated panels).
+1. **1px Border Contrasts**: Separating surfaces via `#2c2c30` (`--border`) and `#1c1c1f` (`--border-soft`).
+2. **Background Luminance Shifts**: Stacking elements using `#121214` (substrate) and `#1c1c1f` (elevated panels).
 3. **Selection Insets**: Highlighting selected items with a crisp 2px left border or inset rule (`box-shadow: inset 2px 0 0 var(--fg)`).
 
 ### Named Rules
@@ -280,25 +280,25 @@ The geometric form language is compact, rectangular, and tightly controlled:
 - **Shape**: 4px radius (`--radius-sm`).
 - **Sizes**: Standard 32px height (padding 0 15px); Small 28px height (antd `controlHeightSM`); Square 32×32px for row-level action icon buttons.
 - **Primary**: Deep accent fill (`#0077b8` dark, `#004770` light), white text, no shadow. Hover shifts one step deeper (`#005d8f` dark, `#00344f` light) with zero transition lag.
-- **Secondary / Default**: Surface fill (`#302c2c`), 1px border (`#464343`), chalk white text.
-- **Ghost**: Transparent background, borderless, text color `#fdfcfc`, hover reveals `#302c2c`.
+- **Secondary / Default**: Surface fill (`#1c1c1f`), 1px border (`#2c2c30`), chalk white text.
+- **Ghost**: Transparent background, borderless, text color `#f4f4f6`, hover reveals `#1c1c1f`.
 
 ### Cards & Setting Group Panels
-- **Corner Style**: 4px radius, 1px solid border (`#464343`).
-- **Background**: `#302c2c` (`--surface`).
+- **Corner Style**: 4px radius, 1px solid border (`#2c2c30`).
+- **Background**: `#1c1c1f` (`--surface`).
 - **Internal Padding**: 20px (`space scale: 20px`).
 - **Usage**: Restricted to KPI stats, entity summary headers, and peer comparison panels.
 
 ### Inputs & Selects
-- **Style**: Dark background (`#201d1d`), 1px border (`#464343`), 4px radius, 32px height (enhanced to 38–40px on dense configuration workbenches).
+- **Style**: Dark background (`#121214`), 1px border (`#2c2c30`), 4px radius, 32px height (enhanced to 38–40px on dense configuration workbenches).
 - **Focus**: Distinct cyan outline (`0 0 0 2px` of the theme's `--accent`), zero glow blur.
 - **Numeric Fields**: Left-aligned with 34px right padding to ensure stepper controls never overlap number values.
 
 ### Navigation Items
 - **Dimensions**: Sider items 38px height, 12px horizontal padding.
-- **Normal State**: Transparent background, text `#c8c6c4`, monochrome icon.
-- **Hover State**: Immediate background paint to `#302c2c`.
-- **Active State**: 2px chalk white inset tick (`box-shadow: inset 2px 0 0 #fdfcfc`), bold white text (`#fdfcfc`), transparent background.
+- **Normal State**: Transparent background, text `#a1a1aa`, monochrome icon.
+- **Hover State**: Immediate background paint to `#1c1c1f`.
+- **Active State**: 2px chalk white inset tick (`box-shadow: inset 2px 0 0 #f4f4f6`), bold white text (`#f4f4f6`), transparent background.
 
 ### Status Pips & Badges
 - **Status Pip**: 7×7px square, 2px radius, paired with explicit status text (e.g. `[●] Running`). Green = healthy, Amber = degraded/warning, Red = error, Gray = offline. A pip reports whether a window needs attention, never how far a number sits from its ideal: success rate stays gray for ≤ 5% failures, amber above that, red above 20%, and a window under 20 requests with under 3 failures carries no verdict at all. Only a verdict gets a pip: the request console's Success / Failed filter segments carry one each, while All carries none.
@@ -308,7 +308,7 @@ The geometric form language is compact, rectangular, and tightly controlled:
 
 ### Floating Action Bar (Dirty Bar)
 - **Position**: Floating fixed bar anchored 24px above the viewport bottom, centered dynamically within the content column.
-- **Appearance**: 1px border (`#464343`), `#302c2c` solid background, amber dirty pip, Save and Discard action triggers.
+- **Appearance**: 1px border (`#2c2c30`), `#1c1c1f` solid background, amber dirty pip, Save and Discard action triggers.
 - **Behavior**: Appears only when `isDirty === true`; Save triggers popconfirm while Discard reverts immediately without prompt.
 
 ## Do's and Don'ts

@@ -26,55 +26,43 @@
   line-height: 1.5;
   font-weight: 400;
   color-scheme: dark;
-  background: #201d1d;
-  color: #fdfcfc;
-  --bg: #201d1d;
-  --surface: #302c2c;
-  --bg-surface: #302c2c;
+  background: var(--bg);
+  color: var(--fg);
+  --bg: #121214;
+  --surface: #1c1c1f;
+  --bg-surface: var(--surface);
   --font-mono: "Sarasa Mono SC", "Sarasa UI SC", "Sarasa Term SC", "更纱黑体 SC", "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  --fg: #fdfcfc;
-  --fg-2: #c8c6c4;
-  --muted: #9a9898;
-  --meta: #6e6e73;
-  --border: #464343;
-  --border-soft: #302c2c;
+  --fg: #f4f4f6;
+  --fg-2: #a1a1aa;
+  --muted: #71717a;
+  --meta: #52525b;
+  --border: #2c2c30;
+  --border-soft: #222226;
   /* Accent ladder, hue 201. The link step is the bright one because it sits on the dark
-     background (6.03:1); the two deeper steps are what white label text can sit on (4.85:1 and
+     background (6.12:1); the two deeper steps are what white label text can sit on (4.85:1 and
      7.09:1). Measured ratios are in docs/design.md §2. */
   --accent: #00a2fb;
   --accent-hover: #0077b8;
   --accent-active: #005d8f;
-  --success: #30d158;
-  --warn: #ff9f0a;
-  --danger: #ff3b30;
+  --success: #10b981;
+  --warn: #f59e0b;
+  --danger: #ef4444;
   /* Cache-rate sequential scale (design.md §2): 0% yellow → 100% green,
      interpolated in OKLCH so the hue sweep stays perceptually even. Red is
      deliberately absent — a low hit rate is not a failure, and the danger hue
      belongs to failed requests. These are steps of the semantic hues lightened
      until 11px badge text clears 4.5:1 against the badge's own tint over --bg;
      the tint/edge alphas belong to the badge, not to the hue. */
-  --cache-rate-yellow: #ffd60a;
-  --cache-rate-green: #30d158;
-  --cache-rate-tint: 12%;
+  --cache-rate-yellow: #f59e0b;
+  --cache-rate-green: #10b981;
+  --cache-rate-tint: 14%;
   --cache-rate-edge: 32%;
   /* The heatmap's continuous ramp: the quiet stop is the cell's own empty fill, so a day with no
      traffic and the lightest measured shade cannot be confused, and the busy stop is the theme
      accent. Everything between them is mixed in OKLCH by the browser, from a square root of the
      day's volume - see web/src/theme/heatmapRamp.ts for why that curve and not a linear one. */
-  --heatmap-quiet: #3a3636;
+  --heatmap-quiet: #222226;
   --heatmap-busy: #00a2fb;
-  /* Categorical series palette (design.md §2, ADR 0006): alternates warm and cool families so a
-     warm hue reaches an ordinary two- or three-model window. Consumed only through `seriesColor`, and
-     asserted against `themeConfig.ts` by scripts/test-chart-marks.ts. */
-  --series-1: #3b82f6;
-  --series-2: #10b981;
-  --series-3: #8b5cf6;
-  --series-4: #f43f5e;
-  --series-5: #f59e0b;
-  --series-6: #06b6d4;
-  /* The trend's plot floor and the ring's unfilled track: a quiet step against the card, so an empty
-     stretch reads as the axis rather than as a gap in the data. */
-  --series-track: #2a2a30;
   /* The grid's floor, the space between cells, and the weekday gutter. The cell size itself
      is not a token: it is whatever divides the panel evenly. */
   --heatmap-min-cell: 9px;
@@ -84,18 +72,30 @@
   /* The loading skeleton's row height. Fixed because there is no grid yet to measure against. */
   --heatmap-skeleton-cell: 12px;
   /* The two zero states, as one ordered scale measured against the card rather than against the
-     page. The panel sits at `--surface` (#302c2c), and both steps are a shade *lighter* than it,
+     page. The panel sits at `--surface` (#1c1c1f), and both steps are a shade *lighter* than it,
      which is the direction GitHub's own graph uses on dark: the 4px gaps then read as the darker
      card showing through instead of as a bright mesh drawn around every cell.
      The order is the meaning. An unrecorded day carries no information, so it is the closest to the
      card; a recorded-but-empty day is a measurement of zero, so it takes a step further; a measured
-     day is the only thing clearly louder than the card. Contrast against the card is 1.07, 1.15 and
-     1.23 respectively, so the two zero states stay quiet and never compete with the ramp. */
-  --heatmap-zero-unrecorded: #343030;
-  --heatmap-zero-recorded: #3a3636;
+     day is the only thing clearly louder than the card. Contrast against the card is 1.07, 1.19 and
+     6.12 respectively, so the two zero states stay quiet and never compete with the ramp. */
+  --heatmap-zero-unrecorded: #222226;
+  --heatmap-zero-recorded: #2a2a30;
   /* The link step of the accent ladder. The tooltip sits on the card's surface rather than the page,
-     where the bright accent reads 4.97:1 - clear of AA, so the ladder's own link step is used. */
+     where the bright accent reads 6.12:1 - clear of AA, so the ladder's own link step is used. */
   --heatmap-tip-link: #00a2fb;
+  /* Categorical series palette (design.md §2, ADR 0006): ZCode & CodeX inspired developer console
+     palette matching AntV and Tremor. Alternates vibrant primary hues (Blue -> Emerald -> Purple ->
+     Coral -> Amber -> Cyan) ensuring immediate visual hierarchy, warm-cool harmony, and rich telemetry. */
+  --series-1: #3b82f6;
+  --series-2: #10b981;
+  --series-3: #8b5cf6;
+  --series-4: #f43f5e;
+  --series-5: #f59e0b;
+  --series-6: #06b6d4;
+  /* The trend's plot floor and the ring's unfilled track: a quiet step against the card, so an empty
+     stretch reads as the axis rather than as a gap in the data. */
+  --series-track: #2a2a30;
   --radius-sm: 4px;
   /* The inset step for a control that sits on an elevated panel. "One step
      down from the popover" is --bg in dark and --surface in light, so the two
@@ -109,39 +109,45 @@
 
 :root[data-theme='light'] {
   color-scheme: light;
-  --bg: #fdfcfc;
-  --surface: #f1eeee;
-  --fg: #201d1d;
-  --fg-2: #424245;
-  --muted: #6e6e73;
-  --meta: #9a9898;
+  --bg: #ffffff;
+  --surface: #f6f6f8;
+  --fg: #1c1c1e;
+  --fg-2: #505055;
+  --muted: #787880;
+  --meta: #98989f;
   /* The same hue a step darker, because the bright accent cannot be legible on a light page: it
-     reads 2.71:1 there, while this reads 6.92:1 as a link and 7.09:1 under white text. The dark
+     reads 2.71:1 there, while this reads 6.57:1 as a link and 7.09:1 under white text. The dark
      theme's link step is therefore this theme's filled-control step. */
   --accent: #005d8f;
   --accent-hover: #004770;
   --accent-active: #00344f;
-  --border: rgba(15, 0, 0, 0.12);
-  --border-soft: rgba(15, 0, 0, 0.07);
-  --hover-inset: var(--surface);
+  --border: #e5e5ea;
+  --border-soft: #ededf2;
+  --hover-inset: #ededf2;
+  --success: #059669;
+  --warn: #b45309;
+  --danger: #dc2626;
   /* The same two hues read as their darker steps on a light page; a saturated
      yellow cannot also be legible there, so the low end is ochre. */
-  --cache-rate-yellow: #6e5b00;
-  --cache-rate-green: #00662a;
-  --cache-rate-tint: 22%;
+  --cache-rate-yellow: #b45309;
+  --cache-rate-green: #047857;
+  --cache-rate-tint: 20%;
   --cache-rate-edge: 34%;
   /* The same ramp read on a light page: the quiet stop is this theme's empty fill and the busy stop
      is the accent step that stays legible on it. */
-  --heatmap-quiet: #e2dede;
+  --heatmap-quiet: #ececf0;
   --heatmap-busy: #005d8f;
-  /* On a light page the card sits at #f1eeee and the ramp runs the other way: both zero steps are a
+  /* On a light page the card sits at #f6f6f8 and the ramp runs the other way: both zero steps are a
      shade *darker* than it, which is GitHub's light-theme direction. Same order, same meaning -
-     unrecorded 1.08, empty 1.16, measured 1.25 against the card. */
-  --heatmap-zero-unrecorded: #eae6e6;
-  --heatmap-zero-recorded: #e2dede;
+     unrecorded 1.09, empty 1.20, measured 6.57 against the card. */
+  --heatmap-zero-unrecorded: #ececf0;
+  --heatmap-zero-recorded: #e2e2e8;
   /* The link step of the accent ladder for this theme; the tooltip is on the card's surface rather
      than the page, and this is the step that clears 4.5:1 there. */
   --heatmap-tip-link: #005d8f;
+  /* Categorical series palette (light mode): Deep, rich, warm-neutral data visualization counterparts
+     for light card surfaces. Each slot maintains visual correspondence with its dark mode family while
+     clearing >= 3.0 graphical contrast. */
   --series-1: #2563eb;
   --series-2: #059669;
   --series-3: #7c3aed;
