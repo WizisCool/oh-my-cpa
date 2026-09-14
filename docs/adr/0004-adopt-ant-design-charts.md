@@ -13,7 +13,7 @@ Continuing to hand-roll custom SVG paths and canvas rendering creates compoundin
 
 Adopt `@ant-design/charts` (version 2, powered by `@antv/g2`) as the standard charting library for Oh My CPA:
 
-1. Replace the dashboard KPI tile sparklines on `web/src/pages/DashboardPage.tsx` with dense horizontal bar strips rendered via `@ant-design/charts`.
+1. Replace the hand-rolled dashboard KPI tile sparklines with `@ant-design/charts` area marks (`web/src/charts/DashboardTrendChart.tsx`). The mark is an area because the backend zero-fills a fixed bucket grid: a bar mark renders each empty bucket as an invisible gap that reads as missing data, while an area carries the series to its baseline. See `docs/design.md` §6 for the full reasoning.
 2. Supersede the earlier constraint in `docs/design.md` §6 that prohibited charting runtimes.
 3. Apply three mandatory mitigations to prevent bundle weight regressions from impacting the application shell:
    - **Dedicated manual chunk**: Route all `node_modules/@antv/`, `node_modules/@ant-design/charts`, and `node_modules/@ant-design/plots` modules into an isolated `vendor-charts` chunk in `web/vite.config.ts`.

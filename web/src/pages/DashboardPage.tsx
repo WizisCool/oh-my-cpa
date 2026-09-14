@@ -8,7 +8,7 @@ import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
 import { usePreference } from '../hooks/usePreference';
 import { type ChartTone } from '../charts/chartTheme';
-import { type DashboardBarChartProps } from '../charts/DashboardBarChart';
+import { type DashboardTrendChartProps } from '../charts/DashboardTrendChart';
 import { formatCacheRate } from '../theme/cacheScale';
 import { successRateVerdict } from '../types/usageEventView';
 import { TimeRangeControl } from '../components/dashboard/TimeRangeControl';
@@ -45,15 +45,15 @@ function formatRate(value: number | null | undefined): string {
   return `${value.toFixed(2)}%`;
 }
 
-const LazyDashboardBarChart = React.lazy(() =>
-  import('../charts/DashboardBarChart').then((m) => ({ default: m.DashboardBarChart }))
+const LazyDashboardTrendChart = React.lazy(() =>
+  import('../charts/DashboardTrendChart').then((m) => ({ default: m.DashboardTrendChart }))
 );
 
-const DashboardBarChart: React.FC<DashboardBarChartProps> = (props) => (
+const DashboardTrendChart: React.FC<DashboardTrendChartProps> = (props) => (
   <React.Suspense
     fallback={<div className="chart-placeholder" style={{ height: props.height ?? 46 }} aria-hidden="true" />}
   >
-    <LazyDashboardBarChart {...props} />
+    <LazyDashboardTrendChart {...props} />
   </React.Suspense>
 );
 
@@ -238,7 +238,7 @@ export const DashboardPage: React.FC = () => {
               </span>
             </span>
           </div>
-          <DashboardBarChart
+          <DashboardTrendChart
             points={data.requests.series}
             pick={(point) => point.v ?? 0}
             tone="accent"
@@ -259,7 +259,7 @@ export const DashboardPage: React.FC = () => {
               <span>{t('dash.tokens_reasoning')} <b>{formatCompact(data.tokens.reasoning)}</b></span>
             )}
           </div>
-          <DashboardBarChart
+          <DashboardTrendChart
             points={data.tokens.series}
             pick={(point) => point.tokens ?? 0}
             tone="accent"
@@ -275,7 +275,7 @@ export const DashboardPage: React.FC = () => {
           <div className="tile-caption">
             <span>{t('dash.total_requests')} <b>{formatCount(data.requests.total)}</b></span>
           </div>
-          <DashboardBarChart
+          <DashboardTrendChart
             points={data.requests.series}
             pick={(point) => point.v ?? 0}
             tone="success"
@@ -291,7 +291,7 @@ export const DashboardPage: React.FC = () => {
           <div className="tile-caption">
             <span>{t('dash.total_tokens')} <b>{formatCompact(data.tokens.total)}</b></span>
           </div>
-          <DashboardBarChart
+          <DashboardTrendChart
             points={data.tokens.series}
             pick={(point) => point.tokens ?? 0}
             tone="warn"
@@ -319,7 +319,7 @@ export const DashboardPage: React.FC = () => {
               the shape of a novel prompt, not a failed execution, and the
               danger hue belongs to failed requests. The rate itself is read
               from the badge above, which owns the cache scale. */}
-          <DashboardBarChart
+          <DashboardTrendChart
             points={data.tokens.series}
             pick={(point) => point.tokens ?? 0}
             tone="neutral"
@@ -347,7 +347,7 @@ export const DashboardPage: React.FC = () => {
                 : t('dash.cost_placeholder_note')}
             </span>
           </div>
-          <DashboardBarChart
+          <DashboardTrendChart
             points={data.tokens.series}
             pick={(point) => point.tokens ?? 0}
             tone="neutral"

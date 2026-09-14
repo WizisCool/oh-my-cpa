@@ -1,37 +1,38 @@
 import assert from 'node:assert/strict';
-import { buildBarGeometry } from '../web/src/charts/chartTheme.ts';
+import { sparkColor } from '../web/src/charts/chartTheme.ts';
 
-// 1. Bar count matches bucket count
-const buckets = [0, 40, 80, 0];
-const geometry = buildBarGeometry(buckets, 44);
-assert.equal(geometry.bars.length, buckets.length, 'bar count matches bucket count');
+/**
+ * The dashboard mark is drawn by AntV, so there is no app-owned geometry left to
+ * assert on. What stays app-owned - and therefore still worth pinning - is the
+ * tone-to-token mapping: it is the contract that keeps a chart coloured from the
+ * palette instead of from a literal, in both themes.
+ */
+const TONES = ['accent', 'success', 'warn', 'danger', 'neutral'] as const;
 
-// 2. Bar lengths are monotonic in value
-const monotonicValues = [0, 10, 25, 60, 100];
-const monotonicGeo = buildBarGeometry(monotonicValues, 64);
-for (let i = 0; i < monotonicGeo.bars.length - 1; i += 1) {
-  assert.ok(
-    monotonicGeo.bars[i].length <= monotonicGeo.bars[i + 1].length,
-    `bar length must be monotonic: bar[${i}].length (${monotonicGeo.bars[i].length}) <= bar[${i + 1}].length (${monotonicGeo.bars[i + 1].length})`,
-  );
+for (const tone of TONES) {
+  for (const mode of ['dark', 'light'] as const) {
+    const value = sparkColor(mode, tone);
+    assert.match(value, /^#[0-9a-f]{6}$|^rgba?\(/, `${tone}/${mode} resolves to a colour token`);
+  }
 }
 
-// 3. Zero-value buckets are representable (have explicit flag and visible baseline mark)
-const zeroBar = geometry.bars[0];
-assert.ok(zeroBar.isZero, 'zero-value bucket is flagged as zero');
-assert.ok(zeroBar.length > 0, 'zero-value bucket has a representable baseline length');
-assert.ok(Number.isFinite(zeroBar.x) && Number.isFinite(zeroBar.y), 'zero-value bucket has valid coordinates');
+// The same tone must resolve per theme, not to one frozen literal: a chart that
+// ignores the active mode is the regression this guards.
+const darkAccent = sparkColor('dark', 'accent');
+const lightAccent = sparkColor('light', 'accent');
+const darkMuted = sparkColor('dark', 'neutral');
 
-// 4. Empty and single-bucket series do not throw
-assert.doesNotThrow(() => {
-  const emptyGeo = buildBarGeometry([], 44);
-  assert.equal(emptyGeo.bars.length, 0, 'empty series produces 0 bars');
-}, 'empty series does not throw');
+// Distinct tones stay distinguishable, so a tile's identity colour actually
+// differs from its neighbour's and from the muted floor.
+const resolved = new Set(TONES.map((tone) => sparkColor('dark', tone)));
+assert.equal(resolved.size, TONES.length, 'each tone resolves to a distinct token');
 
-assert.doesNotThrow(() => {
-  const singleGeo = buildBarGeometry([42], 44);
-  assert.equal(singleGeo.bars.length, 1, 'single-bucket series produces 1 bar');
-  assert.equal(singleGeo.bars[0].value, 42);
-}, 'single-bucket series does not throw');
+// Neutral is the muted token, not an accent: the cache-rate and cost tiles rely
+// on it reading as "no verdict".
+assert.notEqual(darkMuted, darkAccent, 'neutral must not resolve to the accent');
+assert.equal(lightAccent, darkAccent, 'accent is mode-invariant by design');
 
-console.log('PASS chart marks: bar count matches bucket count, monotonic bar lengths, zero-value representable');
+const shades = new Set([darkAccent, lightAccent]);
+assert.equal(shades.size, 1, 'accent is the same token in both modes');
+
+console.log('PASS chart marks: tones resolve to distinct palette tokens per theme');

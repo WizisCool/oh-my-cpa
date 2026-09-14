@@ -393,17 +393,28 @@ Non-obvious decisions, keep these when editing:
 - All shadow tokens set to `'none'`; every motion token pinned to ≤ 0.1s (§7).
 - Components pinned: Button 32/28px, Input active ring `accent22`,
   Select optionSelectedBg = surface, Tag defaultBg = bg.
-- Dashboard KPI cards use `@ant-design/charts` (`Column`) to render dense bar strips across time
-  buckets. **The mark is vertical**, and that is a forced choice, not a preference: the backend
-  serves up to 48 buckets (`dashboardTargetBuckets` in `internal/api/management_dashboard.go`),
-  and a card's plot box is only ~44-64px tall, so a horizontal strip would give each bar under a
-  pixel of height and the marks would smear into one block. Vertical columns spend the card's
-  ~520px width instead, about 10.8px per bucket. The charting runtime is isolated in a separate
-  `vendor-charts` chunk and loaded lazily (`React.lazy` dynamic `import()`) so only the dashboard
-  route pays for it, keeping the initial login shell compact. Theme tokens (`palette[mode]`) are
-  bridged into the chart config (`fill: sparkColor(mode, tone)`), default library animations are
-  explicitly disabled (`animate: false`, per §7 rule 5), and the hover readout uses an app-owned
-  HTML `.chart-tooltip` styled from CSS custom properties.
+- Dashboard KPI cards use `@ant-design/charts` (`Area`) to render one trend per tile.
+  **The mark is an area, and that is a data-shape decision, not a style one.** The
+  backend zero-fills a fixed bucket grid (`fillDashboardBuckets`), so a quiet window
+  is mostly *zero* buckets — six hours resolves to 36 buckets of ten minutes, and a
+  real window can carry traffic in under a fifth of them. A zero here is a measured
+  value, not a missing one, and a bar mark draws each of those zeros as an invisible
+  gap between floating marks, which reads as "no data" — the one thing it does not
+  mean. An area carries the series down to its baseline, so an empty stretch renders
+  as the axis and stays distinguishable from an unmeasured period.
+  The mark is two paths on purpose: the fill is fill-only and the trend is a separate
+  stroke, because a stroked area closes its path along the baseline and would paint a
+  horizontal rule across the plot floor. `y.nice` is disabled and `domainMin` pinned to
+  zero for the same reason — a lifted domain would float an empty window above its axis.
+  The charting runtime is isolated in a separate `vendor-charts` chunk and loaded lazily
+  (`React.lazy` dynamic `import()`) so only the dashboard route pays for it, keeping the
+  initial login shell compact. Theme tokens (`palette[mode]`) are bridged into the chart
+  config (`sparkColor(mode, tone)`), default library animations are explicitly disabled
+  (`animate: false`, per §7 rule 5), and the hover readout uses an app-owned HTML
+  `.chart-tooltip` styled from CSS custom properties. That readout is a direct child of
+  `.chart-slot`, so the slot's child sizing rule must exclude it
+  (`.chart-slot > div:not(.chart-tooltip)`); sizing every direct `div` stretches a
+  two-line label across the whole tile.
 
 ## 7. Motion
 
