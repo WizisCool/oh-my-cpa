@@ -42,7 +42,7 @@
     "verify:secrets": "pnpm verify:secrets:worktree",
     "verify:static:go": "go test ./... && go vet ./...",
     "verify:static:frontend": "pnpm type-check && pnpm test:logic && pnpm lint:antd",
-    "verify:static:repository": "pnpm verify:workflow && pnpm check-i18n && pnpm check-docs && pnpm check-css-modules && pnpm test:self",
+    "verify:static:repository": "pnpm verify:workflow && pnpm check-i18n && pnpm check-docs && pnpm check-brand && pnpm check-css-modules && pnpm test:self",
     "verify:static": "node scripts/verify-static.mjs",
     "verify:e2e": "pnpm build && pnpm verify:browser && pnpm verify:probes",
     "verify:build": "pnpm type-check && pnpm build && node scripts/check-bundle-budget.mjs",

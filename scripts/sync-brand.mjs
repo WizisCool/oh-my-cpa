@@ -7,10 +7,14 @@
  *
  * Those two needs used to be met by keeping four hand-maintained SVGs, which is how the mark's blue
  * drifted from the console's accent - nothing connected the two, so nothing could notice. This
- * script derives the README files from the same source the app uses, which makes the drift
- * impossible rather than merely unlikely.
+ * script derives the README files from the same source the app uses.
  *
- * Run it with `pnpm sync-brand`; `pnpm check-docs` fails if the committed files are stale.
+ * "The same source" has to include the *colours*, not just the drawings: reading the paths from
+ * `markup.ts` while holding the accent as a literal here would have connected one half and left the
+ * other free to drift, and the staleness check would have passed while the two disagreed. The
+ * palette is read out of `web/src/theme/themeConfig.ts` for that reason.
+ *
+ * Run it with `pnpm sync-brand`; `pnpm check-brand` fails if the committed files are stale.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,17 +23,36 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
- * The colours the READMEs draw with.
+ * Reads one value out of a palette block in `web/src/theme/themeConfig.ts`.
  *
- * Read from the same palette the app's theme config mirrors, so a change to the accent moves the
- * READMEs too. The values are duplicated from `web/src/theme/themeConfig.ts` rather than imported:
- * that module is TypeScript with a React dependency chain, and this script runs under plain Node
- * before any bundler exists.
+ * Parsed rather than imported because that module is TypeScript with a React dependency chain, and
+ * this script runs under plain Node before any bundler exists. The block is delimited by the mode
+ * key and the closing brace that returns to the top level, and the value is asserted to look like a
+ * colour: a format change then fails here rather than silently producing artwork with no accent.
  */
-export const README_BRAND_COLORS = {
-  dark: { ink: '#FFFFFF', accent: '#00a2fb' },
-  light: { ink: '#181A1F', accent: '#005d8f' },
-};
+export function paletteValue(mode, key) {
+  const source = fs.readFileSync(path.join(root, 'web/src/theme/themeConfig.ts'), 'utf8');
+  const block = new RegExp(`\\b${mode}: \\{([\\s\\S]*?)\\n  \\},`).exec(source);
+  if (!block) throw new Error(`theme config has no ${mode} palette`);
+  const match = new RegExp(`\\b${key}: '(#[0-9a-fA-F]{3,8})'`).exec(block[1]);
+  if (!match) throw new Error(`the ${mode} palette has no ${key} colour`);
+  return match[1];
+}
+
+/**
+ * The colours the READMEs draw with, read from the app's own palette.
+ *
+ * The accent is the theme's link step, so the READMEs' wordmark follows it the way the console's
+ * does. The ink is the palette's foreground rather than the pure black or white those files used to
+ * hold: the artwork is the same drawing in both places, and GitHub's reader sees it next to the same
+ * brand the console shows.
+ */
+export function readmeBrandColors() {
+  return {
+    dark: { ink: paletteValue('dark', 'fg'), accent: paletteValue('dark', 'accent') },
+    light: { ink: paletteValue('light', 'fg'), accent: paletteValue('light', 'accent') },
+  };
+}
 
 function markupSource() {
   return fs.readFileSync(path.join(root, 'web/src/assets/brand/markup.ts'), 'utf8');
@@ -72,8 +95,8 @@ export function renderBrandSvg(shape, colors) {
 /** The files the READMEs reference, and what each should contain. */
 export function brandArtifacts() {
   return [
-    { file: 'web/src/assets/brand/omc-wordmark-dark.svg', shape: 'wordmark', colors: README_BRAND_COLORS.dark },
-    { file: 'web/src/assets/brand/omc-wordmark-light.svg', shape: 'wordmark', colors: README_BRAND_COLORS.light },
+    { file: 'web/src/assets/brand/omc-wordmark-dark.svg', shape: 'wordmark', colors: readmeBrandColors().dark },
+    { file: 'web/src/assets/brand/omc-wordmark-light.svg', shape: 'wordmark', colors: readmeBrandColors().light },
   ];
 }
 
