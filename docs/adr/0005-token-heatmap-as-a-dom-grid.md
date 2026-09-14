@@ -52,23 +52,32 @@ the far side of a daylight-saving transition rather than only on the two transit
    23, 24 or 25 hours as the zone requires, and the bounds a cell aggregated are the same
    bounds its drill-down opens.
 
-4. **Fold from one source: the detail table.** No rollup-plus-tail split, and no
+4. **Walk the span as civil dates, and resolve each day's bounds independently.** Chile
+   springs forward *at* midnight, so `2020-09-06` has no local `00:00` and Go normalizes that
+   civil date to `2020-09-05 23:00`. Walking the span with `AddDate` on a resolved instant
+   therefore emits `2020-09-05` twice and never emits `2020-09-06`: the grid reports its full
+   371 days while carrying 370 distinct ones, and every day after the transition shifts a
+   column. Each day's key comes from the arithmetic date, and its start from the first instant
+   whose local clock reads that date - which on a midnight transition is an hour later than
+   midnight, making that day 23 hours long rather than 24.
+
+5. **Fold from one source: the detail table.** No rollup-plus-tail split, and no
    rounding of the window to a bucket boundary.
 
-5. **Clamp the final day to the read instant** rather than to the following local
+6. **Clamp the final day to the read instant** rather than to the following local
    midnight, so a record timestamped in the future cannot inflate today's total.
 
-6. **Colour is a continuous ramp of the theme accent, not a semantic or stepped one.** Brightness is
+7. **Colour is a continuous ramp of the theme accent, not a semantic or stepped one.** Brightness is
    the square root of the day's volume against the window's own busiest day, mixed in OKLCH from the
    cell's empty fill up to the accent. Stepped cutoffs quantised away the day-to-day difference the
    panel exists to show; a status hue would imply a verdict the panel has no basis for.
 
-7. **One view.** The panel shades the day's own token volume and nothing else. Weekly and
+8. **One view.** The panel shades the day's own token volume and nothing else. Weekly and
    cumulative readings were built and then removed: they answer "how did that week go" and "how
    quickly did the span accumulate", which are different questions from the one the grid is asked,
    and a control that changes what the colours mean makes the field unreadable at a glance.
 
-8. **The tooltip opens on click and carries the drill-down as a link.** The cell itself does not
+9. **The tooltip opens on click and carries the drill-down as a link.** The cell itself does not
    navigate. Every cell is interactive, including one with nothing stored: its tooltip says so and
    carries no link, because there would be nothing to open.
 
@@ -109,10 +118,12 @@ the far side of a daylight-saving transition rather than only on the two transit
   span is the panel's meaning while the target is a convenience: every cell is reachable by
   arrow key and opens its own tooltip, so nothing is unreachable. See `docs/design.md` §2 for
   the measured rule and the horizontal-overlap trap.
-- **Most of the grid is older than the retention horizon**, so it reports no stored records.
-  Those cells are drawn as unrecorded with copy that says so. Shortening the grid to the
-  horizon was the alternative and it was rejected: a quarter of a year is thirteen columns,
-  which is not the shape the reading comes from.
+- **Any part of the grid older than the retention horizon reports no stored records.** At the
+  default 400-day horizon the grid's 371 days all fit inside it, so this only arises when
+  `OMCPA_USAGE_RETENTION_DAYS` is overridden shorter than the span. Those cells are drawn as
+  unrecorded with copy that says so. Shortening the grid to follow a shorter horizon was the
+  alternative and it was rejected: a quarter of a year is thirteen columns, which is not the shape
+  the reading comes from.
 - **The ramp is relative to the span.** Two deployments' strips are not comparable by shade
   alone; the counts in each cell's tooltip and accessible name are what make them comparable.
   A relative scale was chosen because an absolute one either saturates a busy deployment or

@@ -312,3 +312,55 @@ func TestTokenHeatmapKeepsFutureTrafficOutOfToday(t *testing.T) {
 		t.Fatalf("today = %d tokens, want 0 (a future timestamp is not today's traffic)", entry.Tokens)
 	}
 }
+
+func TestHeatmapDayWindowsSurviveAMidnightDaylightSavingStart(t *testing.T) {
+	// Chile springs forward at local midnight: 2020-09-06 has no 00:00, and Go resolves that civil
+	// date to 2020-09-05 23:00. An implementation that walked the span with AddDate therefore emitted
+	// 2020-09-05 a second time and never emitted 2020-09-06 - a grid that reports 371 days while
+	// carrying 370 distinct ones, with every day after the transition shifted by one column.
+	santiago, err := time.LoadLocation("America/Santiago")
+	if err != nil {
+		t.Skipf("zone database unavailable: %v", err)
+	}
+	// The read instant is inside the transition week, so the span covers it.
+	asOf := time.Date(2020, 9, 9, 12, 0, 0, 0, santiago)
+	windows := heatmapDayWindows(asOf, santiago)
+
+	if len(windows) != heatmapWeeks*7 {
+		t.Fatalf("span carries %d days, want %d", len(windows), heatmapWeeks*7)
+	}
+	seen := make(map[string]int, len(windows))
+	for _, window := range windows {
+		seen[window.Day]++
+	}
+	for day, count := range seen {
+		if count != 1 {
+			t.Errorf("day %s appears %d times in the span, want once", day, count)
+		}
+	}
+	if seen["2020-09-06"] != 1 {
+		t.Errorf("the day the zone transitions on is absent from the span (or duplicated): count=%d", seen["2020-09-06"])
+	}
+	// The days are consecutive civil dates with no repeat: each differs from the last by one day.
+	for index := 1; index < len(windows); index++ {
+		before, errBefore := time.Parse("2006-01-02", windows[index-1].Day)
+		after, errAfter := time.Parse("2006-01-02", windows[index].Day)
+		if errBefore != nil || errAfter != nil {
+			t.Fatalf("span carries a non-date key: %q, %q", windows[index-1].Day, windows[index].Day)
+		}
+		if delta := after.Sub(before).Hours() / 24; delta != 1 {
+			t.Fatalf("days %s and %s are %v days apart, want 1", windows[index-1].Day, windows[index].Day, delta)
+		}
+	}
+	// The transition day is 23 hours long, so its window must be too - that is the point of building
+	// the bounds from the civil date rather than assuming 86 400 000 ms.
+	for _, window := range windows {
+		if window.Day != "2020-09-06" {
+			continue
+		}
+		hours := float64(window.ToMS-window.FromMS+1) / 3_600_000
+		if hours < 22.99 || hours > 23.01 {
+			t.Errorf("the transition day spans %.2f hours, want 23", hours)
+		}
+	}
+}

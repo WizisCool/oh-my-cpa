@@ -237,31 +237,77 @@ func heatmapTimezone(request *http.Request) (*time.Location, string) {
 // with no stored record - which is exactly what they are.
 func heatmapDayWindows(asOf time.Time, zone *time.Location) []repository.UsageDayWindow {
 	local := asOf.In(zone)
-	today := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, zone)
-	// Go's Weekday is Sunday-first; this numbers the week from Monday, so 0 is Monday. Subtracting
-	// it walks back to this week's Monday, which is what the final column starts on.
+	// The span is walked as *civil dates*, not as instants. Daylight-saving arithmetic is the reason:
+	// a few zones transition at midnight, so an instant-based walk repeats one civil date and skips
+	// another, and the grid would then report a full span while carrying a duplicate and a gap. A UTC
+	// carrier has no transitions, so `AddDate` on it always advances exactly one calendar date.
+	year, month, day := local.Date()
 	weekdayOffset := (int(local.Weekday()) + 6) % 7
-	start := today.AddDate(0, 0, -weekdayOffset-(heatmapWeeks-1)*7)
+	origin := time.Date(year, month, day-weekdayOffset-(heatmapWeeks-1)*7, 0, 0, 0, 0, time.UTC)
+	todayKey := local.Format("2006-01-02")
+
 	total := heatmapWeeks * 7
 	windows := make([]repository.UsageDayWindow, 0, total)
 	for offset := 0; offset < total; offset++ {
-		day := start.AddDate(0, 0, offset)
-		if day.After(today) {
-			windows = append(windows, repository.UsageDayWindow{Day: day.Format("2006-01-02")})
+		civil := origin.AddDate(0, 0, offset)
+		key := civil.Format("2006-01-02")
+		if key > todayKey {
+			// Nothing to ask about a day that has not happened, and giving it a range would mean a
+			// window whose start is after its end. It is still emitted: the grid's shape is its span.
+			windows = append(windows, repository.UsageDayWindow{Day: key})
 			continue
 		}
-		toMS := day.AddDate(0, 0, 1).Add(-time.Millisecond).UnixMilli()
-		if day.Equal(today) {
+		civilYear, civilMonth, civilDay := civil.Date()
+		from := dayStart(civilYear, civilMonth, civilDay, zone)
+		// The next day's start, resolved independently rather than by adding 24 hours: the two are
+		// the same thing on every day except the two transition days a year, which is exactly where
+		// a fixed-width window would attribute an hour of one day's traffic to its neighbour.
+		nextCivil := origin.AddDate(0, 0, offset+1)
+		nextYear, nextMonth, nextDay := nextCivil.Date()
+		toMS := dayStart(nextYear, nextMonth, nextDay, zone).Add(-time.Millisecond).UnixMilli()
+		if key == todayKey {
+			// Today is the one day whose range is cut short, so its cell cannot count a record the
+			// request list it opens would not show.
 			toMS = asOf.UnixMilli()
 		}
 		windows = append(windows, repository.UsageDayWindow{
-			Day:    day.Format("2006-01-02"),
-			FromMS: day.UnixMilli(),
+			Day:    key,
+			FromMS: from.UnixMilli(),
 			ToMS:   toMS,
 		})
 	}
 	return windows
 }
+
+// dayStart returns the first instant whose local clock in `zone` reads the given civil date.
+//
+// It cannot be `time.Date(y, m, d, 0, 0, 0, 0, zone)` alone. Where a zone springs forward *at*
+// midnight the civil date has no 00:00 - Chile's `2020-09-06` begins at 01:00 -0300 - and Go
+// normalizes that request to `2020-09-05 23:00`, an instant on the previous day. Taking that as the
+// start put an hour of the previous day's traffic inside this day's window and made the transition
+// day 24 hours long instead of 23.
+//
+// The transition is bounded, so a short forward walk finds it: any gap at midnight is a
+// daylight-saving shift, and no zone shifts by more than a couple of hours.
+func dayStart(year int, month time.Month, day int, zone *time.Location) time.Time {
+	key := time.Date(year, month, day, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+	instant := time.Date(year, month, day, 0, 0, 0, 0, zone)
+	for elapsed := time.Duration(0); elapsed <= maxMidnightShift; elapsed += midnightShiftStep {
+		if instant.In(zone).Format("2006-01-02") == key {
+			return instant
+		}
+		instant = instant.Add(midnightShiftStep)
+	}
+	return instant
+}
+
+// The bound on the forward walk in dayStart. Four hours is comfortably past any real midnight
+// transition - the largest in the zone database is two hours - and keeping the search bounded means
+// malformed zone data cannot spin here.
+const (
+	maxMidnightShift  = 4 * time.Hour
+	midnightShiftStep = time.Minute
+)
 
 // localDay renders an instant as the `YYYY-MM-DD` the given zone's clock shows.
 //
