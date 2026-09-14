@@ -117,3 +117,28 @@ func BenchmarkUsageFacets(b *testing.B) {
 		}
 	}
 }
+
+// BenchmarkUsageModelBuckets exists because the model panels deliberately read the detail table
+// instead of the aggregation rollup - the query's own doc comment records why that rollup's window
+// split is not reusable for a per-model ranking. A choice to be more expensive than the cheap
+// alternative is only defensible with its cost measured, so "cheaper but sometimes wrong" has a number
+// to be weighed against the panels' refresh cadence.
+func BenchmarkUsageModelBuckets(b *testing.B) {
+	for _, n := range []int{1000, 100000} {
+		b.Run(fmt.Sprint(n), func(b *testing.B) {
+			repo := performanceRepository(b, n)
+			// The fixture writes one model for every event, so spread them over twenty to make
+			// the grouping and the ranking do real work rather than collapsing to one group.
+			if _, err := repo.SQL().Exec(`UPDATE usage_events SET model = 'model-' || (id % 20)`); err != nil {
+				b.Fatal(err)
+			}
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if _, err := repo.QueryUsageModelBuckets(context.Background(), "default",
+					1700000000000, 1700100000000, 60000); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}

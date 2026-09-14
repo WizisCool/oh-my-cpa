@@ -43,6 +43,10 @@ const SHELL_PATHS = [
  */
 const DASHBOARD_SCENARIOS = [
   'dashboard-charts',
+  'dashboard-model-panels',
+  'dashboard-model-panels-states',
+  'dashboard-model-panels-failure',
+  'dashboard-model-panels-empty',
   'dashboard-heatmap',
   'dashboard-heatmap-mobile',
   'dashboard-heatmap-pruned',

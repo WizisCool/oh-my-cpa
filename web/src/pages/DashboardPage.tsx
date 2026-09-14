@@ -13,6 +13,7 @@ import { formatCacheRate } from '../theme/cacheScale';
 import { successRateVerdict } from '../types/usageEventView';
 import { TimeRangeControl } from '../components/dashboard/TimeRangeControl';
 import { TokenHeatmap, TOKEN_HEATMAP_QUERY_KEY } from '../components/dashboard/TokenHeatmap';
+import { ModelUsagePanels, DASHBOARD_MODELS_QUERY_KEY } from '../components/dashboard/ModelUsagePanels';
 import type { ManagementOverview, ManagementOverviewProvider } from '../types/management';
 import {
   applyTail,
@@ -143,6 +144,10 @@ export const DashboardPage: React.FC = () => {
   const queryClient = useQueryClient();
   const refreshAll = React.useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: [TOKEN_HEATMAP_QUERY_KEY] });
+    // The model panels own a query of their own as well, and they are ordered by the same button's
+    // meaning - re-read this page. A refresh that left a ranking on screen from a minute ago would
+    // be answering a question nobody asked it.
+    void queryClient.invalidateQueries({ queryKey: [DASHBOARD_MODELS_QUERY_KEY] });
     void refetch();
   }, [queryClient, refetch]);
 
@@ -387,6 +392,12 @@ export const DashboardPage: React.FC = () => {
           />
         </Card>
       </div>
+
+      {/* Between the six KPI tiles and the activity grid: the same window the tiles describe, read at
+          model granularity. Inside the window picker's reach on purpose - unlike the grid below, which
+          owns a fixed year - and therefore above it in the reading order, since it answers "how is this
+          window going, and to which models" before the grid answers "how has the year gone". */}
+      <ModelUsagePanels query={query} range={range} enabled={rangeReady} />
 
       {/* Under the six tiles, and outside the time-range control's reach: the strip has
           its own fixed fifty-three-week span, so it keeps its own query and its own failure -
