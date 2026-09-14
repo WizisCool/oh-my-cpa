@@ -260,7 +260,8 @@ CPA queue / subscription
   → ingest.Maintenance   incremental rollup into hourly/daily stats,
                          retention purge
   → /management/dashboard, /management/dashboard/tail,
-    /management/dashboard/token-heatmap, /usage/events
+    /management/dashboard/token-heatmap, /management/dashboard/models,
+    /usage/events
 ```
 
 The pipeline exists because CPA's queue is destructive and short-lived: the only
@@ -341,6 +342,51 @@ shows one spike per hour and nothing where the traffic actually was. `QueryUsage
 therefore reads the detail rows whenever `bucketMS < grainMS`, and keeps the rollup
 for hourly and coarser grids, where slicing is honest and the rollup earns its keep.
 The detail path is bounded by the retention window, so it cannot grow without limit.
+
+### Why the model breakdown reads one source, not the rollup split
+
+The dashboard's two model panels - the per-model token trend and the model-usage ring - are served by
+their own endpoint, `GET /management/dashboard/models`, with its own query, its own refresh cadence and
+its own failure mode. Three properties make it the wrong thing to attach to the KPI response, and each
+is the same reasoning ADR 0005 recorded for the token grid.
+
+**It is the page's most expensive read.** `QueryUsageModelBuckets` aggregates the *detail* table by
+model and bucket. `QueryUsageAnalytics` deliberately splits its window at the aggregation checkpoint
+and reads the two halves from different tables - but that split is not reusable here, and reusing it
+would be wrong rather than merely slower. Its boundary is a *timestamp*, while the rollup's unit of read
+is a whole row whose start may precede that boundary: an event timestamped inside an already-folded
+hour that arrived late (CPA event times can arrive out of order) sits on the detail side of the boundary
+while its own hour is already inside the rollup, so both halves count it. In a windowed total that
+artefact is a quiet double count; in a per-model *ranking* it also reorders models, which is the kind of
+wrong that still looks plausible on screen. One source has no boundary to get wrong.
+
+**It moves on its own cadence.** The KPI tiles poll through `/management/dashboard/tail` as often as
+every five seconds; that poll recomputes the window's aggregates, and for grids at or above the rollup's
+grain it reads them from the rollup rather than from individual events. Attaching a detail-table scan to
+it would multiply the page's heaviest query by twelve to redraw a ranking that changes when a caller
+switches models, which is not a second-by-second event. The panels poll on a one-minute interval for a
+sliding window and not at all for a closed one.
+
+A closed range has fixed **bounds**, not immutable contents: records are still arriving, and retention
+can prune the far end. Its panels are simply not re-read on a timer, so they show what the range held
+when it was last fetched - which is why the page's refresh button reaches them.
+
+**It is allowed to fail alone.** An unavailable read leaves the six tiles and the activity grid beside
+it readable, which is the same reasoning that put `partial_errors` on the overview and gave the heatmap
+its own endpoint.
+
+Two details of the fold are load-bearing. The remainder group carries a `folded` boolean rather than a
+reserved display name, because the label is the frontend's to translate and a deployment may
+legitimately serve a model whose name collides with whatever that label is; a name-based test would
+merge real traffic into the remainder or split it in two. And the ranking is tie-broken by model name,
+because equal volumes are ordinary (two aliases of one model, or a window where one request hit each)
+and without a total order the order would come from map iteration, reshuffling the legend under the
+operator on every poll.
+
+`BenchmarkUsageModelBuckets` pins the cost: roughly 0.23 s over 100 000 in-window detail rows and 2.6 s
+over 1 000 000 on one development machine, against a 15-second handler deadline. Retention bounds a
+row's *age* rather than how many exist, so those are the numbers to re-measure if the horizon or the
+traffic profile changes.
 
 ### Why the daily token grid folds its own days
 
