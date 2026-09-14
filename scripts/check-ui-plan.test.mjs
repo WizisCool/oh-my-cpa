@@ -1,0 +1,153 @@
+/**
+ * Tests for the `check:ui` scenario planner.
+ *
+ * Two families of property matter here, and they pull in opposite directions.
+ *
+ * **Narrowing must be real.** If every change ran every scenario the fast path would
+ * cost the same as the release gate and there would be no point to it. So the common
+ * cases are asserted to select a specific, small set.
+ *
+ * **Narrowing must never be silent.** The dangerous failure is not a slow plan, it is
+ * a fast one that skipped the scenario which would have caught the bug. Every rule
+ * that widens - the shared layer, an unrecognised frontend path, the probe framework
+ * itself - is therefore asserted from the failing side: a plan that omitted those
+ * would be a green run that verified nothing.
+ */
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { planScenarios } from './acceptance/check-ui-plan.mjs';
+import { SCENARIOS } from './acceptance/scenarios.mjs';
+
+const ALL = SCENARIOS.map((scenario) => scenario.id);
+
+/** The selected scenario ids for one changed file. */
+const planFor = (file) => planScenarios([file], ALL).ids;
+
+test('every scenario has a stable id and a run function', () => {
+  // The ids are addressed by `--scenario` and by this planner, so a duplicate or an
+  // absent id would make a scenario unreachable rather than merely misnamed.
+  assert.equal(new Set(ALL).size, ALL.length, 'ids are unique');
+  for (const scenario of SCENARIOS) {
+    assert.ok(scenario.id, `${scenario.name} has an id`);
+    assert.ok(scenario.name, `${scenario.id} has a name`);
+    assert.equal(typeof scenario.run, 'function', `${scenario.id} is runnable`);
+  }
+});
+
+test('the four request-records concerns select only their own scenarios', () => {
+  // This is the page whose feedback cost the most in practice, so it is the one where
+  // narrowing has to actually pay off.
+  assert.deepEqual(
+    planFor('web/src/pages/UsageEventsPage.tsx').sort(),
+    ['column-alignment', 'refresh-sequencing', 'request-list-interactions', 'search-dev-server'],
+  );
+});
+
+test('a dashboard change selects only the chart scenario', () => {
+  assert.deepEqual(planFor('web/src/pages/DashboardPage.tsx'), ['dashboard-charts']);
+});
+
+test('a provider-console change selects only the icon-picker scenario', () => {
+  assert.deepEqual(planFor('web/src/pages/ProvidersPage.tsx'), ['icon-picker-stacking']);
+  assert.deepEqual(planFor('web/src/components/IconPickerModal.tsx'), ['icon-picker-stacking']);
+});
+
+test('the shared layer widens the plan to every scenario', () => {
+  // `App.tsx`, the layout, the theme and the API client are imported everywhere, so
+  // narrowing their blast radius would be a guess rather than a decision.
+  for (const file of [
+    'web/src/App.tsx',
+    'web/src/main.tsx',
+    'web/src/index.css',
+    'web/src/api/client.ts',
+    'web/src/i18n/index.tsx',
+    'web/src/components/common/AppLayout.tsx',
+    'web/src/theme/themeConfig.ts',
+  ]) {
+    assert.deepEqual(planFor(file), ALL, `${file} widens the plan`);
+  }
+});
+
+test('an unrecognised frontend path widens rather than selecting nothing', () => {
+  // The critical negative case. An unclassified file is not evidence of no impact,
+  // and reporting "nothing to check" here is how a fast path becomes a blind one.
+  const plan = planScenarios(['web/src/pages/SomeNewPage.tsx'], ALL);
+  assert.deepEqual(plan.ids, ALL, 'an unplaced frontend file widens the plan');
+  assert.match(plan.reason, /unrecognised frontend source/);
+});
+
+test('a change to the probe framework itself widens the plan', () => {
+  // These files decide whether the scenarios run, are listed, or are selected. If one
+  // of them is edited so that nothing is selected, the change that broke it must
+  // still be verified - the same self-selecting rule `verify:fast` needs.
+  for (const file of [
+    'scripts/acceptance/probe.mjs',
+    'scripts/acceptance/scenarios.mjs',
+    'scripts/acceptance/check-ui-plan.mjs',
+    'scripts/browser-probes.mjs',
+    'scripts/check-ui.mjs',
+  ]) {
+    const plan = planScenarios([file], ALL);
+    assert.deepEqual(plan.ids, ALL, `${file} widens the plan`);
+    assert.match(plan.reason, /probe framework/);
+  }
+});
+
+test('backend and documentation changes select nothing', () => {
+  // The one case where the empty plan is correct: the dev server serves the SPA
+  // against mocked routes, so a Go change cannot alter what the probes observe.
+  for (const file of [
+    'internal/api/handler.go',
+    'internal/repository/usage_events.go',
+    'go.mod',
+    'docs/architecture.md',
+    'README.md',
+    'migrations/004_x.sql',
+  ]) {
+    const plan = planScenarios([file], ALL);
+    assert.deepEqual(plan.ids, [], `${file} selects nothing`);
+    assert.match(plan.reason, /no frontend source changed/);
+  }
+});
+
+test('an empty change selects nothing', () => {
+  assert.deepEqual(planScenarios([], ALL).ids, []);
+});
+
+test('the plan preserves registry order and contains no duplicates', () => {
+  // A stable order keeps two runs on the same change comparable, and makes a focused
+  // run's scenario list readable against `--list`.
+  const plan = planScenarios(
+    ['web/src/pages/DashboardPage.tsx', 'web/src/pages/UsageEventsPage.tsx'],
+    ALL,
+  );
+  assert.deepEqual(plan.ids, [...new Set(plan.ids)], 'no duplicates');
+  assert.deepEqual(plan.ids, ALL.filter((id) => plan.ids.includes(id)), 'registry order');
+});
+
+test('a mixed change unions the narrow plans without widening', () => {
+  const plan = planScenarios(
+    ['web/src/pages/DashboardPage.tsx', 'web/src/pages/ProvidersPage.tsx'],
+    ALL,
+  );
+  // Two placed paths union; only an *unplaced* one widens. This is the distinction
+  // that keeps a two-page change from running everything.
+  assert.deepEqual(plan.ids.sort(), ['dashboard-charts', 'icon-picker-stacking']);
+});
+
+test('the reason names the file that caused a widening', () => {
+  // `check:ui --plan` prints this, and "the plan is wide" without "because of this
+  // file" leaves the reader unable to act on it.
+  const plan = planScenarios(['web/src/pages/Unclassified.tsx'], ALL);
+  assert.match(plan.reason, /Unclassified\.tsx/);
+});
+
+test('no scenario id is selected by a path that cannot affect it', () => {
+  // A cheap structural guard: the dashboards rule must not drag in the request list,
+  // and vice versa. If a rule is ever widened by accident, this notices.
+  const charts = new Set(planFor('web/src/charts/chartTheme.ts'));
+  assert.equal(charts.has('request-list-interactions'), false);
+  const rows = new Set(planFor('web/src/components/usage/RequestRow.tsx'));
+  assert.equal(rows.has('dashboard-charts'), false);
+  assert.equal(rows.has('icon-picker-stacking'), false);
+});
