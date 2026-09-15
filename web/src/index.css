@@ -840,9 +840,10 @@ a { color: inherit; }
   .dashboard-models { grid-template-columns: minmax(0, 1fr); }
   .model-trend-card, .model-usage-card { grid-column: span 1; }
   /* The ring and its list stack. Side by side at this width the ring takes most of the card and the
-     list is squeezed to the point where a model name truncates to two characters. */
+     list is squeezed to the point where a model name truncates to two characters. The ring keeps the
+     base rule's centring: it is alone on its row here, so hugging the left edge leaves the drawing
+     visibly off-centre against the full-width list under it. */
   .model-usage-body { flex-direction: column; align-items: stretch; gap: 12px; }
-  .model-ring { justify-content: flex-start; }
   .model-usage-list { max-height: none; }
 }
 
