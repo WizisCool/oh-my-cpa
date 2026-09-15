@@ -22,6 +22,7 @@ import {
 import type { MenuProps } from 'antd';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { HeaderNav } from './HeaderNav';
+import { NARROW_VIEWPORT_QUERY } from '../../hooks/useIsNarrowViewport';
 import { DataProgress } from './DataProgress';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
@@ -110,7 +111,7 @@ function buildMenuItems(t: TFunc, isCollapsed: boolean): NavItem[] {
 }
 
 function isNarrowViewport(): boolean {
-  return typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches;
+  return typeof window !== 'undefined' && window.matchMedia(NARROW_VIEWPORT_QUERY).matches;
 }
 
 export const AppLayout: React.FC = () => {

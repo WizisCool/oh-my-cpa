@@ -2721,9 +2721,73 @@ export async function omcSettings({ base, page, check, context }) {
     JSON.stringify(controlOverflow),
   );
 
+  // ── the control still fits, and is still legible, on a phone ──────────────
+  //
+  // Both of this page's layout defects were phone-only, and the desktop pass above cannot see
+  // either. The picker's track is the sum of its labels, and on a narrow card that sum exceeded the
+  // card: the third option was painted past its edge. Making the picker a vertical list is the fix,
+  // and it is asserted by geometry on every option rather than by the presence of the library's
+  // `block` class - the class was applied while the items were still clipped, because the root kept
+  // its content width until the stylesheet widened it.
+  const narrowOverflow = async () => page.evaluate(() => {
+    const card = document.querySelector('.omc-settings-page .settings-group').getBoundingClientRect();
+    return [...document.querySelectorAll('.omc-settings-page .ant-segmented-item')].map((item) => {
+      const rect = item.getBoundingClientRect();
+      const label = item.querySelector('.ant-segmented-item-label') ?? item;
+      return {
+        text: item.textContent,
+        pastCardEdge: Math.round(rect.right - card.right),
+        // Clipping is the other half of "it does not fit", and the half a narrow card reaches first:
+        // the row shrank its options until they fitted, which squeezed each label's box below the
+        // width its own text needs. The option then reads as an ellipsis rather than as a choice, so
+        // fitting is asserted as "inside the card *and* showing its whole label".
+        clippedBy: Math.max(0, Math.round(label.scrollWidth - label.getBoundingClientRect().width)),
+      };
+    });
+  });
+  const selectionLegibility = async () => page.evaluate(() => {
+    const selected = document.querySelector('.omc-settings-page .ant-segmented-item-selected');
+    const track = selected?.closest('.ant-segmented');
+    const card = document.querySelector('.omc-settings-page .settings-group');
+    const toRGB = (value) => (value.match(/\d+/g) ?? []).slice(0, 3).map(Number);
+    const distance = (left, right) => Math.max(...left.map((channel, index) => Math.abs(channel - right[index])));
+    const selectedFill = toRGB(getComputedStyle(selected).backgroundColor);
+    return {
+      vsTrack: distance(selectedFill, toRGB(getComputedStyle(track).backgroundColor)),
+      vsCard: distance(selectedFill, toRGB(getComputedStyle(card).backgroundColor)),
+    };
+  });
+
+  // 320px, not 390: this is the narrowest console the page is expected to serve, and it is where the
+  // picker's content width most exceeds the card. A wider phone hid the defect - the horizontal row
+  // fitted at 390px once the labels were shortened, so that width could not tell the two layouts
+  // apart, and the check passed against the broken one.
+  await page.setViewportSize({ width: 320, height: 900 });
+  await page.locator('.omc-settings-page .ant-segmented-item').first().waitFor({ state: 'visible', timeout: 10_000 });
+  const phoneOverflow = await narrowOverflow();
+  check(
+    'every settings option fits the card on a phone and shows its whole label',
+    phoneOverflow.every((entry) => entry.pastCardEdge <= 1 && entry.clippedBy <= 1),
+    JSON.stringify(phoneOverflow),
+  );
+  // The selected option has to be distinguishable from *both* surfaces it touches: the track it
+  // slides in, and the card behind that track. The light palette rendered it as the same white as
+  // both, so the control showed no selection at all there while the dark theme looked fine - which
+  // is why this is asserted as a contrast between fills rather than as a specific colour.
+  const legibility = await selectionLegibility();
+  check(
+    'the selected option is distinguishable from its track and its card',
+    legibility.vsTrack >= 8 && legibility.vsCard >= 8,
+    JSON.stringify(legibility),
+  );
+  // Back to the probe's default width: the checks that follow read the desktop console, and their
+  // geometry is what the assertions below compare against.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.locator('.omc-settings-page .ant-segmented-item').first().waitFor({ state: 'visible', timeout: 10_000 });
+
   // ── the Chinese scale is offered to Chinese consoles only ─────────────────
   const tokenRow = page.locator('.omc-settings-page .settings-toggle-row').filter({ hasText: /Token unit style|Token 计量单位/ });
-  const chineseOption = tokenRow.locator('.ant-segmented-item').filter({ hasText: /Chinese|中文单位/ });
+  const chineseOption = tokenRow.locator('.ant-segmented-item').filter({ hasText: /万\/亿/ });
   check(
     'the Chinese unit style is shown but disabled on an English console',
     (await chineseOption.count()) === 1 && (await chineseOption.locator('input').isDisabled()),
@@ -2825,7 +2889,7 @@ export async function omcSettings({ base, page, check, context }) {
   check('switching the language on this page re-renders the console', becameChinese);
   check(
     'the Chinese unit style becomes selectable once the console is Chinese',
-    !(await tokenRow.locator('.ant-segmented-item').filter({ hasText: /中文单位/ }).locator('input').isDisabled()),
+    !(await tokenRow.locator('.ant-segmented-item').filter({ hasText: /万\/亿/ }).locator('input').isDisabled()),
   );
 }
 

@@ -82,11 +82,14 @@ const DICT: Record<string, [string, string]> = {
   // States the guarantee rather than restating the control: the choice is how the
   // numbers read, not how precise they are.
   'omc.token_style_desc': ['仅改变阅读方式；悬停提示始终是精确值。', 'Reading only; tooltips always carry the exact value.'],
-  'omc.token_style_en': ['英文缩写（K/M/B）', 'English (K/M/B)'],
-  'omc.token_style_zh': ['中文单位（万/亿）', 'Chinese (万/亿)'],
-  // Language-neutral: grouped digits, no unit word. The label shows both consoles
-  // the same example because the value it produces is the same in both.
-  'omc.token_style_full': ['完整数字（300,000,000）', 'Full digits (300,000,000)'],
+  // Each label carries the example that makes the style concrete, without the full-width
+  // parentheses a three-option picker cannot afford: the parenthesised form measured 456px against
+  // the 288px a 320px-wide console leaves for it, so the third option was clipped rather than
+  // wrapping. The two abbreviating styles keep their example because their result is the
+  // non-obvious part; "full digits" states its own result.
+  'omc.token_style_en': ['缩写 K/M/B', 'Compact K/M/B'],
+  'omc.token_style_zh': ['中文 万/亿', 'Chinese 万/亿'],
+  'omc.token_style_full': ['完整数字', 'Full digits'],
   'omc.theme': ['界面主题', 'Theme'],
   'omc.theme_dark': ['深色', 'Dark'],
   'omc.theme_light': ['浅色', 'Light'],
