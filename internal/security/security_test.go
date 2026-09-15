@@ -137,6 +137,40 @@ func TestMaskForwardedForIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestNormalizeClientAddresses(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{"IPv4", "192.0.2.44", "192.0.2.44"},
+		{"IPv4 with port", "192.0.2.44:43120", "192.0.2.44"},
+		{"IPv6", "2001:db8::1234", "2001:db8::1234"},
+		{"IPv6 with port", "[2001:db8::1234]:443", "2001:db8::1234"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			got := NormalizeClientIP(test.value)
+			if got == nil || *got != test.want {
+				t.Fatalf("NormalizeClientIP(%q) = %v, want %q", test.value, got, test.want)
+			}
+		})
+	}
+	for _, value := range []string{"", "not-an-ip", "192.0.2.0/24", "192.0.2.44:bad"} {
+		if got := NormalizeClientIP(value); got != nil {
+			t.Fatalf("NormalizeClientIP(%q) = %v, want nil", value, got)
+		}
+	}
+
+	chain := NormalizeForwardedFor("192.0.2.44, [2001:db8::1234]:443, unknown")
+	if chain == nil || *chain != "192.0.2.44, 2001:db8::1234" {
+		t.Fatalf("NormalizeForwardedFor() = %v", chain)
+	}
+	if got := NormalizeForwardedFor("unknown, bad"); got != nil {
+		t.Fatalf("invalid forwarded chain = %v, want nil", got)
+	}
+}
+
 // TestPublicEndpointAcceptsRequestLines covers the label CPA actually
 // publishes. It is a method-prefixed request line, not a URL and not a bare
 // path, so an endpoint-only extractor dropped it and left the field blank.

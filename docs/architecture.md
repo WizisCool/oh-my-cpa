@@ -590,21 +590,22 @@ Three properties are load-bearing rather than incidental:
   cost at all". The console therefore carries cost bounds as decimal strings end
   to end — field, URL and preference document — because a nano-dollar amount does
   not survive a round trip through a double.
-- **Private values are filtered, never projected.** `endpoint` narrows the list
-  without the endpoint ever appearing in a list payload, and the shared search box
-  deliberately excludes `client_ip`, `x_forwarded_for` and `endpoint`. `source`
-  and `api_group_key` are fingerprinted at the persistence boundary, so a filter
-  matches the stored fingerprint the facet offered, never the plaintext.
-- **Anonymising projections are idempotent and shape-tolerant.** A record is
-  masked twice — once by `internal/usage`, again by the persistence boundary — so
-  `security.MaskIP`/`MaskForwardedFor` accept their own output (an IPv4 `/24` or
-  an IPv6 `/64`) and re-mask it, and a narrower prefix such as `/32` is reduced to
-  the coarse network rather than passed through as already anonymised. An
-  endpoint arrives as the request line CPA handled (`POST /v1/chat/completions`),
-  not as a bare path, so `PublicEndpoint` keeps the method while still stripping
-  query, fragment and authority credentials. Both are pinned by tests that run a
-  raw payload through decode *and* insert: a unit test on either half alone cannot
-  see a second pass that destroys the first one's output.
+- **Diagnostic values are protected, not list fields.** `client_ip` and
+  `x_forwarded_for` are preserved as the exact peer address and complete valid
+  proxy chain for the single-record detail view, while list payloads and the
+  shared search box omit both. `endpoint` is likewise available only on detail.
+  `source` and `api_group_key` are fingerprinted at the persistence boundary, so
+  a filter matches the stored fingerprint the facet offered, never the plaintext.
+  Historical rows written under the earlier `/24` and `/64` policy remain masked;
+  they are not guessed or backfilled.
+- **Address projection is shape-tolerant and explicit.** `NormalizeClientIP`
+  accepts IPv4, IPv6 and valid host:port forms and removes the transport port;
+  `NormalizeForwardedFor` keeps every valid hop in order. An endpoint arrives as
+  the request line CPA handled (`POST /v1/chat/completions`), not as a bare path,
+  so `PublicEndpoint` keeps the method while stripping query, fragment and
+  authority credentials. Round-trip tests run a raw payload through decode *and*
+  insert, proving the protected detail value survives both boundaries without
+  widening the list contract.
 
 ### 6.2 Facets
 

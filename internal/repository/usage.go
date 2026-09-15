@@ -650,10 +650,10 @@ func boolPtrInt(value *bool) any {
 	return 0
 }
 
-// sanitizeUsageEvent enforces the same projection at the persistence boundary
-// as the decoder does at the ingest boundary. This protects callers that build
-// usage.Event values directly and keeps a future decoder change from widening
-// the database contract accidentally.
+// sanitizeUsageEvent applies the persistence boundary's shape and privacy rules.
+// Client addresses are canonicalized diagnostic values, not anonymized list
+// fields: the list projection omits them, while the protected detail view can
+// show the exact peer and proxy chain.
 func (r *Repository) sanitizeUsageEvent(event usage.Event) usage.Event {
 	event.InstanceID = persistedText(event.InstanceID, 256)
 	event.EventKey = persistedText(event.EventKey, 256)
@@ -674,8 +674,8 @@ func (r *Repository) sanitizeUsageEvent(event usage.Event) usage.Event {
 	// persistedText/RedactText: those match the "sk-..." shape and would replace
 	// the label with the redaction marker.
 	event.APIKeyMask = boundedMask(event.APIKeyMask)
-	event.ClientIP = persistedPointerWith(event.ClientIP, security.MaskIP)
-	event.XForwardedFor = persistedPointerWith(event.XForwardedFor, security.MaskForwardedFor)
+	event.ClientIP = persistedPointerWith(event.ClientIP, security.NormalizeClientIP)
+	event.XForwardedFor = persistedPointerWith(event.XForwardedFor, security.NormalizeForwardedFor)
 	event.UserAgent = security.MinimizeUserAgent(pointerValue(event.UserAgent))
 	event.LatencyMS = nonNegative(event.LatencyMS)
 	event.TTFTMS = nonNegativePointer(event.TTFTMS)

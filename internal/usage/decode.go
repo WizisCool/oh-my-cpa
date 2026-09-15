@@ -210,8 +210,8 @@ func DecodeEventWithFingerprinter(raw string, instanceID string, observedAt time
 		Endpoint:            security.PublicEndpoint(payload.Endpoint),
 		AuthType:            normalizeAuthType(payload.AuthType),
 		RequestID:           requestID,
-		ClientIP:            maskPointer(payload.ClientIP, security.MaskIP),
-		XForwardedFor:       maskPointer(payload.XForwardedFor, security.MaskForwardedFor),
+		ClientIP:            normalizePointer(payload.ClientIP, security.NormalizeClientIP),
+		XForwardedFor:       normalizePointer(payload.XForwardedFor, security.NormalizeForwardedFor),
 		UserAgent:           security.MinimizeUserAgent(valueOf(payload.UserAgent)),
 		Model:               orUnknown(boundedSafe(payload.Model, 256)),
 		ModelAlias:          cleanBoundedString(payload.Alias, 256),
@@ -437,11 +437,11 @@ func cleanBoundedString(value *string, limit int) *string {
 	return &cleaned
 }
 
-func maskPointer(value *string, mask func(string) *string) *string {
+func normalizePointer(value *string, normalize func(string) *string) *string {
 	if value == nil {
 		return nil
 	}
-	return mask(*value)
+	return normalize(*value)
 }
 
 func nonNegative(value int64) int64 {

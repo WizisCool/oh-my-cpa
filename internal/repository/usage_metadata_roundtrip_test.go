@@ -26,10 +26,9 @@ const rawCommandCodePayload = `{"accounting_version":2,"alias":"fixture-alias",`
 // the real production path - decode, then insert - and reads it back through
 // both the list and the single-record projections.
 //
-// The metadata columns are masked at both boundaries, so this is the seam where
-// a second masking pass that cannot accept its own output silently erased the
-// client address. A unit test on the decoder or on the mapper alone cannot see
-// that: each half looks correct on its own.
+// The client address is a protected diagnostic value. It must survive decode and
+// persistence exactly, while the list projection still omits it; a unit test on
+// either half alone cannot prove that round trip.
 func TestRequestMetadataSurvivesIngestAndPersistence(t *testing.T) {
 	repo := usageTestRepository(t)
 	event, err := usage.DecodeEvent(rawCommandCodePayload, "default", time.Now())
@@ -52,13 +51,12 @@ func TestRequestMetadataSurvivesIngestAndPersistence(t *testing.T) {
 	}
 	row := page.Items[0]
 
-	// The client address must survive as the masked network, not as NULL and
-	// never as the raw address.
-	if row.ClientIP == nil || *row.ClientIP != "192.0.2.0/24" {
-		t.Fatalf("stored client IP = %v, want the masked network", derefString(row.ClientIP))
+	// The client address and the complete proxy chain must survive as received.
+	if row.ClientIP == nil || *row.ClientIP != "192.0.2.10" {
+		t.Fatalf("stored client IP = %v, want the original address", derefString(row.ClientIP))
 	}
-	if row.XForwardedFor == nil || *row.XForwardedFor != "198.51.100.0/24" {
-		t.Fatalf("stored forwarded-for = %v, want the first hop's network", derefString(row.XForwardedFor))
+	if row.XForwardedFor == nil || *row.XForwardedFor != "198.51.100.7, 203.0.113.9" {
+		t.Fatalf("stored forwarded-for = %v, want the complete chain", derefString(row.XForwardedFor))
 	}
 	if row.Endpoint != "POST /v1/chat/completions" {
 		t.Fatalf("stored endpoint = %q", row.Endpoint)
@@ -78,10 +76,10 @@ func TestRequestMetadataSurvivesIngestAndPersistence(t *testing.T) {
 	if detail.Endpoint != "POST /v1/chat/completions" {
 		t.Fatalf("detail endpoint = %q", detail.Endpoint)
 	}
-	if detail.ClientIP == nil || *detail.ClientIP != "192.0.2.0/24" {
+	if detail.ClientIP == nil || *detail.ClientIP != "192.0.2.10" {
 		t.Fatalf("detail client IP = %v", derefString(detail.ClientIP))
 	}
-	if detail.XForwardedFor == nil || *detail.XForwardedFor != "198.51.100.0/24" {
+	if detail.XForwardedFor == nil || *detail.XForwardedFor != "198.51.100.7, 203.0.113.9" {
 		t.Fatalf("detail forwarded-for = %v", derefString(detail.XForwardedFor))
 	}
 	if detail.ResponseServiceTier != "default" || detail.ServiceTier != "auto" {
@@ -133,11 +131,11 @@ func TestCommitUsageDecodedKeepsRequestMetadata(t *testing.T) {
 		t.Fatalf("stored %d rows, want 1", len(page.Items))
 	}
 	row := page.Items[0]
-	if row.ClientIP == nil || *row.ClientIP != "192.0.2.0/24" {
-		t.Fatalf("stored client IP = %v, want the masked network", derefString(row.ClientIP))
+	if row.ClientIP == nil || *row.ClientIP != "192.0.2.10" {
+		t.Fatalf("stored client IP = %v, want the original address", derefString(row.ClientIP))
 	}
-	if row.XForwardedFor == nil || *row.XForwardedFor != "198.51.100.0/24" {
-		t.Fatalf("stored forwarded-for = %v", derefString(row.XForwardedFor))
+	if row.XForwardedFor == nil || *row.XForwardedFor != "198.51.100.7, 203.0.113.9" {
+		t.Fatalf("stored forwarded-for = %v, want the complete chain", derefString(row.XForwardedFor))
 	}
 	if row.Endpoint != "POST /v1/chat/completions" {
 		t.Fatalf("stored endpoint = %q", row.Endpoint)

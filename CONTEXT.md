@@ -16,6 +16,12 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
 - **Model Price**: The current CPA model catalog is the maintenance scope. Each catalog identity has one current price projection (four per-1M-token rates plus a multiplier); models.dev syncs automatically and manual rows win over sync.
 - **Price Version**: An immutable, time-effective price snapshot. A price change creates a new version; deleting a current price creates a tombstone so future requests stay unpriced while existing snapshots remain valid.
 - **Request Cost Snapshot**: The price version and USD nanos amount selected in the same transaction as a usage event, using the request timestamp. It is never recalculated from the current price projection.
+- **Diagnostic Client Address**: The exact connection peer and the ordered
+  `X-Forwarded-For` chain associated with one request record. They are preserved
+  for the protected single-record detail, never exposed by the request list,
+  search, or authorization logic. Historical records written before this
+  contract may still contain the earlier `/24` or `/64` network mask; that data
+  cannot be recovered and is never synthetically expanded.
 - **Unpriced Usage**: A request for which no valid price version existed at request time. It remains usage-only, is excluded from cost totals, and is never backfilled when a price is added later. Historical rows without a stored snapshot are `legacy_unpriced`.
 - **Model Usage**: The dashboard's two model-level panels - a **Token Trend** and a **Model Usage**
   ring - between the six KPI tiles and the Token Activity Grid. Unlike the grid, whose span is
