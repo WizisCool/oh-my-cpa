@@ -113,6 +113,7 @@ type Payload struct {
 	XForwardedFor       *string         `json:"x_forwarded_for"`
 	UserAgent           *string         `json:"user_agent"`
 	Tokens              TokenStats      `json:"tokens"`
+	Stream              *bool           `json:"stream"`
 	Failed              bool            `json:"failed"`
 	Generate            *bool           `json:"generate"`
 	Provider            string          `json:"provider"`
@@ -158,6 +159,7 @@ type Event struct {
 	AuthIndex           string
 	Failed              bool
 	Generate            bool
+	Stream              *bool
 	LatencyMS           int64
 	TTFTMS              *int64
 	InputTokens         int64
@@ -224,6 +226,7 @@ func DecodeEventWithFingerprinter(raw string, instanceID string, observedAt time
 		// Older CPA builds have no generate flag. Only a successful websocket
 		// executor call with no tokens at all counts as a warm-up.
 		Generate:            generate(payload.Generate, payload.Failed, payload.ExecutorType, payload.Tokens),
+		Stream:              payload.Stream,
 		LatencyMS:           nonNegative(payload.LatencyMS),
 		TTFTMS:              nonNegativePointer(payload.TTFTMS),
 		InputTokens:         nonNegative(payload.Tokens.InputTokens),

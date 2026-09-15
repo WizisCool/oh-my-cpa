@@ -1,0 +1,12 @@
+-- Records whether the upstream request used streaming (SSE / chunked).
+--
+-- CPA usage payloads include a boolean "stream" field indicating whether the
+-- client requested a streaming response. Persisting it lets the console label
+-- explicit non-streaming calls and separates them from collapsed TTFT artifacts.
+-- Throughput still keys on the residual latency-ttft window rather than this flag
+-- alone: an upstream executor can emit genuine token timing even when the client
+-- requested a non-streamed response.
+--
+-- NULL represents historical records or records from older CPA versions where
+-- the streaming status was not explicitly captured.
+ALTER TABLE usage_events ADD COLUMN stream INTEGER CHECK(stream IS NULL OR stream IN (0, 1));

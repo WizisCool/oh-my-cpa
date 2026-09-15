@@ -33,6 +33,8 @@ import {
   createProviderNameResolver,
   providerFacetLabel,
   eventTokensPerSecond,
+  hasMeasurableTTFT,
+  isNonStreamingEvent,
   parseEventGrouping,
   eventProviderIdentity,
   eventCredentialIdentity,
@@ -1093,6 +1095,69 @@ const tpsInvalidTTFT = eventTokensPerSecond({
 });
 assert.equal(tpsInvalidTTFT.formatted, '50.00 t/s');
 assert.equal(tpsInvalidTTFT.hasTTFT, false);
+
+// Event 749a21af root-cause test:
+// output = 13066, latency = 61275, ttft = 61258 (non-streaming, collapsed 17ms window)
+// Must NOT yield 768588.24 t/s; must yield 213.24 t/s (13066 * 1000 / 61275)
+const tps749a21afExplicitNonStream = eventTokensPerSecond({
+  generate: true,
+  stream: false,
+  latency_ms: 61_275,
+  ttft_ms: 61_258,
+  tokens: { total: 63733, input: 50667, output: 13066, reasoning: 12928, cached: 50432, cache_read: 50432, cache_creation: 0 },
+});
+assert.equal(tps749a21afExplicitNonStream.formatted, '213.24 t/s');
+assert.equal(tps749a21afExplicitNonStream.hasTTFT, false);
+
+// Historical legacy record with stream=null / omitted and collapsed window (17ms < 50ms):
+const tps749a21afLegacy = eventTokensPerSecond({
+  generate: true,
+  latency_ms: 61_275,
+  ttft_ms: 61_258,
+  tokens: { total: 63733, input: 50667, output: 13066, reasoning: 12928, cached: 50432, cache_read: 50432, cache_creation: 0 },
+});
+assert.equal(tps749a21afLegacy.formatted, '213.24 t/s');
+assert.equal(tps749a21afLegacy.hasTTFT, false);
+
+// Explicit streaming with stream=true: uses generation-phase calculation
+const tpsStreamingExplicit = eventTokensPerSecond({
+  generate: true,
+  stream: true,
+  latency_ms: 10_000,
+  ttft_ms: 2_000,
+  tokens: { total: 1000, input: 200, output: 800, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 },
+});
+assert.equal(tpsStreamingExplicit.formatted, '100.00 t/s'); // 800 * 1000 / 8000
+assert.equal(tpsStreamingExplicit.hasTTFT, true);
+
+// Event b561ad87 (Codex OAuth):
+// Client sent stream=false, but upstream CodexExecutor captured genuine ttft_ms=4423,
+// latency=31251, with generation window 26828ms. TTFT IS measurable and generation rate is 52.18 t/s.
+const tpsB561ad87 = eventTokensPerSecond({
+  generate: true,
+  stream: false,
+  latency_ms: 31_251,
+  ttft_ms: 4_423,
+  tokens: { total: 13508, input: 12108, output: 1400, reasoning: 135, cached: 2816, cache_read: 2816, cache_creation: 0 },
+});
+assert.equal(tpsB561ad87.formatted, '52.18 t/s'); // 1400 * 1000 / 26828 = 52.18
+assert.equal(tpsB561ad87.hasTTFT, true);
+
+// hasMeasurableTTFT tests
+assert.equal(hasMeasurableTTFT(undefined), false);
+assert.equal(hasMeasurableTTFT({ latency_ms: 31251, ttft_ms: 4423 }), true); // 26828ms window
+assert.equal(hasMeasurableTTFT({ latency_ms: 61275, ttft_ms: 61258 }), false); // collapsed window (17ms < 50ms)
+assert.equal(hasMeasurableTTFT({ latency_ms: 10000, ttft_ms: 10000 }), false); // zero window
+assert.equal(hasMeasurableTTFT({ latency_ms: 10000, ttft_ms: 10500 }), false); // invalid
+
+// isNonStreamingEvent tests
+assert.equal(isNonStreamingEvent(undefined), false);
+assert.equal(isNonStreamingEvent({ stream: false }), true); // explicit non-stream with no captured TTFT
+assert.equal(isNonStreamingEvent({ stream: true }), false);
+assert.equal(isNonStreamingEvent({ stream: false, latency_ms: 31251, ttft_ms: 4423 }), false); // genuine upstream TTFT
+assert.equal(isNonStreamingEvent({ latency_ms: 61275, ttft_ms: 61258 }), true); // collapsed historical window
+assert.equal(isNonStreamingEvent({ latency_ms: 10000, ttft_ms: 2000 }), false); // normal historical stream window
+assert.equal(isNonStreamingEvent({ stream: true, latency_ms: 61275, ttft_ms: 61258 }), true); // observed collapse
 
 console.log('PASS tokens per second (TPS): TTFT-aware generation speed, fallback end-to-end average, edge boundaries');
 

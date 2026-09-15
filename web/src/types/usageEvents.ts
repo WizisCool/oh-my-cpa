@@ -45,6 +45,8 @@ export interface UsageEvent {
   response_service_tier?: string;
   failed: boolean;
   generate: boolean;
+  /** Whether the request was streamed (SSE/chunked). Null/absent for historical rows. */
+  stream?: boolean | null;
   latency_ms: number;
   ttft_ms?: number | null;
   tokens: UsageEventTokens;

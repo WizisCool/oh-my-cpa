@@ -964,6 +964,51 @@ func TestUsageEventListOmitsDiagnosticFields(t *testing.T) {
 	}
 }
 
+func TestUsageEventListPreservesExplicitNonStreamingFlag(t *testing.T) {
+	client, baseURL, repo := startDashboardTestServer(t, nil)
+	now := time.Now().UTC()
+	stream := false
+	nonStream := eventFor("explicit-non-stream", now.Add(-time.Minute), usage.TokenStats{TotalTokens: 4}, false)
+	nonStream.Stream = &stream
+	legacy := eventFor("legacy-stream-unknown", now.Add(-2*time.Minute), usage.TokenStats{TotalTokens: 5}, false)
+	seedEvents(t, repo, now, []repository.UsageDecoded{{Event: nonStream}, {Event: legacy}})
+
+	response, payload := getJSON(t, client, baseURL+"/omc/api/v1/usage/events?preset=24h")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d body %s", response.StatusCode, payload)
+	}
+	var list struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.Unmarshal(payload, &list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Items) != 2 {
+		t.Fatalf("expected two listed records, got %d", len(list.Items))
+	}
+	seen := make(map[string]bool, len(list.Items))
+	for _, item := range list.Items {
+		value, present := item["stream"]
+		requestID, _ := item["request_id"].(string)
+		seen[requestID] = true
+		switch requestID {
+		case "explicit-non-stream":
+			if !present || value != false {
+				t.Fatalf("explicit non-stream flag = %#v, present=%v", value, present)
+			}
+		case "legacy-stream-unknown":
+			if present {
+				t.Fatalf("legacy stream flag should be omitted, got %#v", value)
+			}
+		default:
+			t.Fatalf("unexpected request id in stream-flag list: %q", requestID)
+		}
+	}
+	if !seen["explicit-non-stream"] || !seen["legacy-stream-unknown"] {
+		t.Fatalf("stream-flag list omitted an expected record: %v", seen)
+	}
+}
+
 func TestUsageEventsRejectBadLimits(t *testing.T) {
 	client, baseURL, _ := startDashboardTestServer(t, nil)
 	for _, suffix := range []string{"limit=0", "limit=-5", "limit=abc", "result=maybe"} {

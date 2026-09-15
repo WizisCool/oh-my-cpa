@@ -179,3 +179,58 @@ func derefString(value *string) string {
 	}
 	return *value
 }
+
+func TestStreamFlagSurvivesPersistence(t *testing.T) {
+	repo := usageTestRepository(t)
+	rawStreaming := `{"request_id":"req-streaming","stream":true,"provider":"openai","model":"m","tokens":{"total_tokens":1}}`
+	rawNonStreaming := `{"request_id":"req-non-streaming","stream":false,"provider":"openai","model":"m","tokens":{"total_tokens":1}}`
+	rawOmitted := `{"request_id":"req-omitted","provider":"openai","model":"m","tokens":{"total_tokens":1}}`
+
+	evStream, err := usage.DecodeEvent(rawStreaming, "default", time.Now())
+	if err != nil {
+		t.Fatalf("decode streaming: %v", err)
+	}
+	evNonStream, err := usage.DecodeEvent(rawNonStreaming, "default", time.Now().Add(time.Millisecond))
+	if err != nil {
+		t.Fatalf("decode non-streaming: %v", err)
+	}
+	evOmitted, err := usage.DecodeEvent(rawOmitted, "default", time.Now().Add(2*time.Millisecond))
+	if err != nil {
+		t.Fatalf("decode omitted: %v", err)
+	}
+
+	if _, err := repo.InsertUsageEvents(context.Background(), []usage.Event{evStream, evNonStream, evOmitted}); err != nil {
+		t.Fatalf("insert usage events: %v", err)
+	}
+
+	page, err := repo.ListUsageEvents(context.Background(), UsageEventFilter{Limit: 10})
+	if err != nil {
+		t.Fatalf("list usage events: %v", err)
+	}
+	if len(page.Items) != 3 {
+		t.Fatalf("expected 3 items, got %d", len(page.Items))
+	}
+
+	lookup := make(map[string]*bool)
+	for _, item := range page.Items {
+		lookup[item.RequestID] = item.Stream
+		// Also verify GetUsageEvent reads it identically.
+		got, errGet := repo.GetUsageEvent(context.Background(), item.ID)
+		if errGet != nil {
+			t.Fatalf("get usage event %d: %v", item.ID, errGet)
+		}
+		if (got.Stream == nil) != (item.Stream == nil) || (got.Stream != nil && *got.Stream != *item.Stream) {
+			t.Fatalf("GetUsageEvent stream mismatch for %s: got %v, list had %v", item.RequestID, got.Stream, item.Stream)
+		}
+	}
+
+	if s := lookup["req-streaming"]; s == nil || *s != true {
+		t.Fatalf("req-streaming: want stream=true, got %v", s)
+	}
+	if s := lookup["req-non-streaming"]; s == nil || *s != false {
+		t.Fatalf("req-non-streaming: want stream=false, got %v", s)
+	}
+	if s := lookup["req-omitted"]; s != nil {
+		t.Fatalf("req-omitted: want stream=nil, got %v", *s)
+	}
+}

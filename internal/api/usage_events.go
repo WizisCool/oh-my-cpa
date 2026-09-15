@@ -55,6 +55,7 @@ type usageEventResponse struct {
 	ResponseServiceTier string `json:"response_service_tier,omitempty"`
 	Failed              bool   `json:"failed"`
 	Generate            bool   `json:"generate"`
+	Stream              *bool  `json:"stream,omitempty"`
 	LatencyMS           int64  `json:"latency_ms"`
 	TTFTMS              *int64 `json:"ttft_ms,omitempty"`
 	Tokens              struct {
@@ -99,6 +100,7 @@ func projectUsageEvent(row repository.UsageEventRow) usageEventResponse {
 	item.ResponseServiceTier = row.ResponseServiceTier
 	item.Failed = row.Failed
 	item.Generate = row.Generate
+	item.Stream = row.Stream
 	item.LatencyMS = row.LatencyMS
 	item.TTFTMS = row.TTFTMS
 	item.ResourceID = row.ResourceID
@@ -564,6 +566,7 @@ func projectUsageEventDetail(row repository.UsageEventRow) map[string]any {
 		"response_service_tier": item.ResponseServiceTier,
 		"failed":                item.Failed,
 		"generate":              item.Generate,
+		"stream":                item.Stream,
 		"latency_ms":            item.LatencyMS,
 		"ttft_ms":               item.TTFTMS,
 		"tokens":                item.Tokens,

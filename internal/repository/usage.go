@@ -226,8 +226,9 @@ func (r *Repository) CommitUsageDecoded(ctx context.Context, decoded []UsageDeco
 			service_tier, response_service_tier, executor_type, timestamp_ms, source, auth_index,
 			failed, generate, latency_ms, ttft_ms,
 			input_tokens, output_tokens, reasoning_tokens, cached_tokens,
-			cache_read_tokens, cache_creation_tokens, total_tokens, created_at_ms, cost_nanos, price_version_id, pricing_status
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+			cache_read_tokens, cache_creation_tokens, total_tokens, created_at_ms, cost_nanos, price_version_id, pricing_status,
+			stream
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, fmt.Errorf("prepare usage event insert: %w", err)
 	}
@@ -259,7 +260,7 @@ func (r *Repository) CommitUsageDecoded(ctx context.Context, decoded []UsageDeco
 			event.AuthIndex, boolInt(event.Failed), boolInt(event.Generate), event.LatencyMS,
 			event.TTFTMS, event.InputTokens, event.OutputTokens, event.ReasoningTokens,
 			event.CachedTokens, event.CacheReadTokens, event.CacheCreationTokens,
-			event.TotalTokens, createdMS, cost, version, status); errExec != nil {
+			event.TotalTokens, createdMS, cost, version, status, boolPtrInt(event.Stream)); errExec != nil {
 			return 0, fmt.Errorf("insert usage event %s: %w", event.EventKey, errExec)
 		}
 		if _, errExec := mark.ExecContext(ctx, event.EventKey, createdMS, item.InboxID); errExec != nil {
@@ -428,8 +429,9 @@ func (r *Repository) InsertUsageEvents(ctx context.Context, events []usage.Event
 			service_tier, response_service_tier, executor_type, timestamp_ms, source, auth_index,
 			failed, generate, latency_ms, ttft_ms,
 			input_tokens, output_tokens, reasoning_tokens, cached_tokens,
-			cache_read_tokens, cache_creation_tokens, total_tokens, created_at_ms, cost_nanos, price_version_id, pricing_status
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+			cache_read_tokens, cache_creation_tokens, total_tokens, created_at_ms, cost_nanos, price_version_id, pricing_status,
+			stream
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return 0, fmt.Errorf("prepare usage event insert: %w", err)
 	}
@@ -452,7 +454,7 @@ func (r *Repository) InsertUsageEvents(ctx context.Context, events []usage.Event
 			event.AuthIndex, boolInt(event.Failed), boolInt(event.Generate), event.LatencyMS,
 			event.TTFTMS, event.InputTokens, event.OutputTokens, event.ReasoningTokens,
 			event.CachedTokens, event.CacheReadTokens, event.CacheCreationTokens,
-			event.TotalTokens, createdMS, cost, version, status)
+			event.TotalTokens, createdMS, cost, version, status, boolPtrInt(event.Stream))
 		if errExec != nil {
 			return lastID, fmt.Errorf("insert usage event: %w", errExec)
 		}
@@ -633,6 +635,16 @@ func (r *Repository) PurgeUsageOlderThan(ctx context.Context, cutoffMS int64) (i
 
 func boolInt(value bool) int {
 	if value {
+		return 1
+	}
+	return 0
+}
+
+func boolPtrInt(value *bool) any {
+	if value == nil {
+		return nil
+	}
+	if *value {
 		return 1
 	}
 	return 0

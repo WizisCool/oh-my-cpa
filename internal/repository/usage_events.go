@@ -162,6 +162,7 @@ type UsageEventRow struct {
 	ResponseServiceTier string           `json:"response_service_tier,omitempty"`
 	Failed              bool             `json:"failed"`
 	Generate            bool             `json:"generate"`
+	Stream              *bool            `json:"stream,omitempty"`
 	LatencyMS           int64            `json:"latency_ms"`
 	TTFTMS              *int64           `json:"ttft_ms,omitempty"`
 	ClientIP            *string          `json:"client_ip,omitempty"`
@@ -271,7 +272,7 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 		SELECT e.id, e.instance_id, e.event_key, e.request_id, e.timestamp_ms,
 		       e.provider, e.endpoint, e.executor_type, e.auth_type, e.auth_index,
 		       e.api_group_key, e.api_group_label, e.api_key_mask, e.source, e.model, e.model_alias, e.reasoning_effort,
-		       e.service_tier, e.response_service_tier, e.failed, e.generate,
+		       e.service_tier, e.response_service_tier, e.failed, e.generate, e.stream,
 		       e.latency_ms, e.ttft_ms, e.client_ip, e.x_forwarded_for, e.user_agent,
 		       e.input_tokens, e.output_tokens, e.reasoning_tokens, e.cached_tokens,
 		       e.cache_read_tokens, e.cache_creation_tokens, e.total_tokens,
@@ -301,13 +302,14 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 	for rows.Next() {
 		var row UsageEventRow
 		var failed, generate int
+		var streamVal sql.NullInt64
 		var resourceID, resourceName sql.NullString
 		var costUSD sql.NullFloat64
 		if errScan := rows.Scan(
 			&row.ID, &row.InstanceID, &row.EventKey, &row.RequestID, &row.TimestampMS,
 			&row.Provider, &row.Endpoint, &row.ExecutorType, &row.AuthType, &row.AuthIndex,
 			&row.APIGroupKey, &row.APIGroupLabel, &row.APIKeyMask, &row.Source, &row.Model, &row.ModelAlias, &row.ReasoningEffort,
-			&row.ServiceTier, &row.ResponseServiceTier, &failed, &generate,
+			&row.ServiceTier, &row.ResponseServiceTier, &failed, &generate, &streamVal,
 			&row.LatencyMS, &row.TTFTMS, &row.ClientIP, &row.XForwardedFor, &row.UserAgent,
 			&row.Tokens.InputTokens, &row.Tokens.OutputTokens, &row.Tokens.ReasoningTokens,
 			&row.Tokens.CachedTokens, &row.Tokens.CacheReadTokens, &row.Tokens.CacheCreationTokens,
@@ -316,6 +318,10 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 		}
 		row.Failed = failed == 1
 		row.Generate = generate == 1
+		if streamVal.Valid {
+			isStream := streamVal.Int64 == 1
+			row.Stream = &isStream
+		}
 		if resourceID.Valid {
 			value := resourceID.String
 			row.ResourceID = &value
@@ -360,13 +366,14 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 		return row, errors.New("usage event id must be positive")
 	}
 	var failed, generate int
+	var streamVal sql.NullInt64
 	var resourceID, resourceName sql.NullString
 	var costUSD sql.NullFloat64
 	err := r.SQL().QueryRowContext(ctx, `
 		SELECT e.id, e.instance_id, e.event_key, e.request_id, e.timestamp_ms,
 		       e.provider, e.endpoint, e.executor_type, e.auth_type, e.auth_index,
 		       e.api_group_key, e.api_group_label, e.api_key_mask, e.source, e.model, e.model_alias, e.reasoning_effort,
-		       e.service_tier, e.response_service_tier, e.failed, e.generate,
+		       e.service_tier, e.response_service_tier, e.failed, e.generate, e.stream,
 		       e.latency_ms, e.ttft_ms, e.client_ip, e.x_forwarded_for, e.user_agent,
 		       e.input_tokens, e.output_tokens, e.reasoning_tokens, e.cached_tokens,
 		       e.cache_read_tokens, e.cache_creation_tokens, e.total_tokens,
@@ -385,7 +392,7 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 		&row.ID, &row.InstanceID, &row.EventKey, &row.RequestID, &row.TimestampMS,
 		&row.Provider, &row.Endpoint, &row.ExecutorType, &row.AuthType, &row.AuthIndex,
 		&row.APIGroupKey, &row.APIGroupLabel, &row.APIKeyMask, &row.Source, &row.Model, &row.ModelAlias, &row.ReasoningEffort,
-		&row.ServiceTier, &row.ResponseServiceTier, &failed, &generate,
+		&row.ServiceTier, &row.ResponseServiceTier, &failed, &generate, &streamVal,
 		&row.LatencyMS, &row.TTFTMS, &row.ClientIP, &row.XForwardedFor, &row.UserAgent,
 		&row.Tokens.InputTokens, &row.Tokens.OutputTokens, &row.Tokens.ReasoningTokens,
 		&row.Tokens.CachedTokens, &row.Tokens.CacheReadTokens, &row.Tokens.CacheCreationTokens,
@@ -398,6 +405,10 @@ func (r *Repository) GetUsageEvent(ctx context.Context, id int64) (UsageEventRow
 	}
 	row.Failed = failed == 1
 	row.Generate = generate == 1
+	if streamVal.Valid {
+		isStream := streamVal.Int64 == 1
+		row.Stream = &isStream
+	}
 	if resourceID.Valid {
 		value := resourceID.String
 		row.ResourceID = &value

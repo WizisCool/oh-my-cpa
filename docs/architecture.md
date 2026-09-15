@@ -518,6 +518,34 @@ parameters), not one query per row, and it is best-effort: a failure leaves
 the list. The fingerprint remains the filter identity, so a rename cannot change
 what a saved filter or a drill-down link selects.
 
+### Streaming status and throughput (TPS) derivation
+
+CPA usage payloads include a boolean `stream` field indicating whether the request
+was executed in streaming mode. Oh My CPA records this in `usage_events.stream`
+(migration 023) as a nullable integer: `1` for streaming, `0` for non-streaming,
+and `NULL` for historical rows where the flag was not captured.
+
+The flag is operational metadata, not a sufficient classifier for TTFT validity.
+An upstream executor can capture a real first-token event even when the client
+requested `stream: false`, while an apparently streaming request can still receive
+its whole payload in one chunk. Throughput therefore keys on the observed residual
+window rather than the recorded mode:
+
+- When `latency_ms - ttft_ms >= MIN_STREAMING_GENERATION_WINDOW_MS` (50 ms,
+  defined in `web/src/types/usageEventView.ts`), `ttft_ms` is treated as a genuine
+  generation boundary and TPS is `output_tokens * 1000 / (latency_ms - ttft_ms)`.
+- When TTFT is missing or the residual window is collapsed, the response was not
+  observed progressively enough to isolate generation. TPS falls back to
+  `output_tokens * 1000 / latency_ms`, and presentation omits TTFT and uses a
+  single total-duration bar in the drawer waterfall. This prevents timer artifacts
+  such as 768,588 t/s on a 13k-token response.
+
+The request list and detail drawer show a non-stream badge when an explicit
+`stream: false` record has no measurable TTFT or when the observed residual window
+collapsed. Historical records (`stream IS NULL`) use the same residual-window
+heuristic, preserving genuine legacy generation rates without inferring a
+first-token boundary from a completion-only measurement.
+
 ### 6.1 The request-record filter vocabulary
 
 `UsageEventFilter` in `internal/repository/usage_events.go` is the single filter

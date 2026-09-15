@@ -112,9 +112,45 @@ func TestDecodeEventMapsFieldsAndNormalizes(t *testing.T) {
 	if event.TTFTMS == nil || *event.TTFTMS != 87 {
 		t.Fatalf("ttft not mapped: %+v", event.TTFTMS)
 	}
+	if event.Stream != nil {
+		t.Fatalf("expected nil stream for payload without stream field, got %+v", event.Stream)
+	}
 	if !event.Generate || event.Failed {
 		t.Fatalf("flags wrong: %+v", event)
 	}
+}
+
+func TestDecodeEventMapsStreamFlag(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		jsonPart string
+		want     *bool
+	}{
+		{name: "omitted", jsonPart: "", want: nil},
+		{name: "true", jsonPart: `"stream":true,`, want: ptrBool(true)},
+		{name: "false", jsonPart: `"stream":false,`, want: ptrBool(false)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := `{"request_id":"req-stream",` + tc.jsonPart + `"provider":"openai","model":"gpt-4o"}`
+			event, err := DecodeEvent(raw, "default", time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.want == nil {
+				if event.Stream != nil {
+					t.Fatalf("expected nil stream, got %v", *event.Stream)
+				}
+			} else {
+				if event.Stream == nil || *event.Stream != *tc.want {
+					t.Fatalf("expected stream=%v, got %+v", *tc.want, event.Stream)
+				}
+			}
+		})
+	}
+}
+
+func ptrBool(b bool) *bool {
+	return &b
 }
 
 func TestDecodeEventRequiresRequestID(t *testing.T) {

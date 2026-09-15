@@ -1054,6 +1054,7 @@ const DICT: Record<string, [string, string]> = {
   'events.preflight': ['未生成', 'No generation'],
   'events.oauth_badge': ['OAuth 授权账号', 'OAuth account'],
   'events.preflight_hint': ['预检请求（非生成）', 'Preflight request (no generation)'],
+  'events.non_stream_hint': ['单次返回（无法测量首字延迟）', 'Single-payload response (TTFT not measurable)'],
   'events.filters': ['筛选请求', 'Filter requests'],
   'events.time_range': ['时间范围', 'Time range'],
   'events.time_range_hint': [
