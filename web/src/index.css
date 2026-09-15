@@ -1853,12 +1853,21 @@ a { color: inherit; }
     width: 100%;
   }
   .settings-toggle-row {
-    grid-template-columns: 1fr;
+    /* `minmax(0, 1fr)` rather than `1fr`: a bare `1fr` is `minmax(auto, 1fr)`, and `auto` is the
+       track's *min-content* width - which for a segmented control is the sum of its labels. A
+       three-item picker measured 456px inside a 358px card here, so the track stayed that wide and
+       the control spilled past the card's edge instead of shrinking with it. The zero minimum lets
+       the track take the width the card actually has. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
   }
   .settings-toggle-control {
     width: 100%;
     justify-content: flex-start;
+    /* A flex item's default `min-width: auto` refuses to shrink below its content, so the picker
+       kept its 456px and overhung the card even once the grid track fitted. The control has to be
+       allowed to be narrower than its content for the picker's own wrapping to apply. */
+    min-width: 0;
   }
   .settings-toggle-control.is-string,
   .settings-toggle-control.is-select,
@@ -2309,9 +2318,21 @@ a { color: inherit; }
    section lists over card wrappers for settings. All this adds is the spacing
    between the page's two groups. */
 .omc-settings-group { margin-bottom: 20px; }
+/* The picker becomes a vertical list once the row stacks (see the page), and antd's `block` variant
+   only sets `display: flex` - it does not stretch the root. Left as-is the list shrank to its widest
+   label and sat in a narrow column beside empty space, so it is given the row's whole width here:
+   the options are the row's content at this width, not a control beside a description. */
+@media (max-width: 900px) {
+  .omc-settings-group .settings-toggle-control .ant-segmented { width: 100%; }
+}
 /* The config panel's rows hand every control a fixed 380px column, which suits its own text inputs
    and switches. These are segmented pickers three or four items wide and measure 456px, so that
    column overflowed - and because it is right-aligned inside its grid cell, the excess spilled
    *left*, over the description beside it, which is what made the two read as a collision. Sizing the
-   column to its content keeps every picker inside the box that owns its fill. */
-.omc-settings-group .settings-toggle-control { width: auto; }
+   column to its content keeps every picker inside the box that owns its fill.
+   Scoped to wide viewports: once the row stacks, the control takes the full track and the picker is a
+   vertical list, and a `width: auto` there would shrink it back to a narrow column beside empty
+   space. */
+@media (min-width: 901px) {
+  .omc-settings-group .settings-toggle-control { width: auto; }
+}

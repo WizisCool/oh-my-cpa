@@ -247,6 +247,25 @@ export function createThemeConfig(mode: ThemeMode = 'dark'): ThemeConfig {
         controlHeight: 32,
         controlHeightSM: 28,
         fontSizeSM: 13,
+        // The picker's two surfaces have to differ from each other *and* from the card it sits on,
+        // and each palette needs its own pairing to get that. antd's defaults are `colorBgElevated`
+        // on `colorBgLayout`, which this palette maps to the same white in light - so the control
+        // drew its selection as nothing there, while the dark theme got away with it only because
+        // its track happened to be darker than its thumb.
+        //
+        // The pairing follows the heatmap ramp's ordered-against-the-card rule (docs/design.md
+        // "Token activity heatmap"): the track recedes below the card's surface and the thumb is
+        // raised above it. So the track is the
+        // deepest neutral each palette has (the page background on dark, the border step on light,
+        // where the page background is white and would vanish into the thumb) and the thumb is a step
+        // above the card. Naming them per theme rather than reusing `bg`/`surface` is what makes the
+        // selected option legible in both: on light, `surface` *is* the card's colour, so a thumb
+        // painted with it disappeared into the card while the track stood out in its place.
+        trackBg: dark ? t.bg : t.border,
+        itemSelectedBg: dark ? t.border : '#ffffff',
+        itemColor: t.fg2,
+        itemSelectedColor: t.fg,
+        itemHoverBg: 'transparent',
       },
       Tabs: {
         horizontalItemPadding: '8px 4px',

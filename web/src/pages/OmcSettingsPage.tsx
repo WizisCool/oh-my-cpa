@@ -1,6 +1,7 @@
 import React from 'react';
 import { Segmented, Typography } from 'antd';
 import { useT, useI18n } from '../i18n';
+import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport';
 import { useThemeMode } from '../theme/ThemeContext';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
 import type { TokenNumberStyle } from '../types/tokenDisplay';
@@ -39,6 +40,10 @@ export const OmcSettingsPage: React.FC = () => {
   const { lang, setLang } = useI18n();
   const { themeMode, toggleTheme } = useThemeMode();
   const { style, setStyle } = useTokenDisplayStyle();
+  // A three-option picker cannot fit a phone's card as a row: its track is the sum of its labels,
+  // and the items do not wrap, so the third option was painted past the card's edge. Below the
+  // console's narrow breakpoint it becomes a vertical list instead, which is the shape that fits.
+  const isNarrow = useIsNarrowViewport();
 
   // The Chinese scale is words - 万, 亿 - so it is offered only to a Chinese
   // console. The option stays visible and disabled rather than hidden: an
@@ -69,6 +74,8 @@ export const OmcSettingsPage: React.FC = () => {
               options={tokenStyleOptions}
               onChange={(next) => setStyle(next as TokenNumberStyle)}
               aria-label={t('omc.token_style')}
+              vertical={isNarrow}
+              block={isNarrow}
             />
           }
         />
