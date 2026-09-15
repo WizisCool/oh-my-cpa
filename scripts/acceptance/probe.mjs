@@ -18,6 +18,7 @@
  * shared defaults.
  */
 import { spawn } from 'node:child_process';
+import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,13 +34,58 @@ export const probeRoot = root;
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * Whether something is already listening on the port.
+ *
+ * A bare TCP connect, not an HTTP request: the point is to detect an occupant of *any* kind
+ * before spawning, so the check cannot be satisfied by a server that answers a different route
+ * or refuses the ones this suite uses. `127.0.0.1` matches the `--host` the dev server binds.
+ */
+function portIsOccupied(port) {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host: '127.0.0.1', port });
+    const settle = (occupied) => {
+      socket.destroy();
+      resolve(occupied);
+    };
+    socket.once('connect', () => settle(true));
+    socket.once('error', () => settle(false));
+    socket.setTimeout(1_000, () => settle(false));
+  });
+}
+
+/**
  * Waits for the dev server to answer.
  *
  * A port is passed in rather than chosen, so a caller can pin one; `strictPort`
  * on the Vite side means a collision fails loudly instead of silently binding
  * elsewhere, which is what makes a pinned port safe to reason about.
+ *
+ * That guarantee needs this function's help, because a readiness probe alone cannot
+ * provide it. Readiness is decided by fetching the base URL, and a fetch cannot tell
+ * whose server answered: if another run already holds the port - a second worktree's
+ * probe run, a stray `pnpm dev` - the fetch succeeds against *its* server, this
+ * function returns happily, and every scenario is then served a foreign worktree's
+ * sources. The failure is silent and looks like a genuine regression in whichever
+ * check happens to disagree with the other tree (observed once: another branch's i18n
+ * labels appearing in a failure dump while the scenarios here asserted this branch's).
+ * The spawned Vite does die of `EADDRINUSE`, but only after readiness already passed,
+ * so waiting on its exit code does not close the window either.
+ *
+ * So the port is checked before spawning, and the ready loop requires this run's own
+ * server to still be alive. Both make a collision loud, which is what the pinned port
+ * was for.
  */
 export async function startVite(port) {
+  if (await portIsOccupied(port)) {
+    throw new Error(
+      `probe dev server port ${port} is already in use.\n`
+      + 'Another probe/dev server is running - commonly a verify:full, verify:probes or check:ui in\n'
+      + 'a different worktree. Readiness is decided by fetching the base URL, which cannot tell whose\n'
+      + 'server answered, so continuing would run these scenarios against that worktree\'s sources.\n'
+      + 'Wait for it to finish, then re-run.',
+    );
+  }
+
   // `base` carries no trailing slash because scenarios append paths to it, while the
   // readiness probe needs one: the dev entry is `/omc/`, and the bare `/omc` is
   // answered 404 with Vite's base-prefix guard. Probing the bare path would report a
@@ -61,6 +107,8 @@ export async function startVite(port) {
     if (server.exitCode !== null) {
       throw new Error(`probe Vite server exited with ${server.exitCode}:\n${output}`);
     }
+    // `server.exitCode` is re-read on every iteration, so a Vite that lost the port
+    // race after this run's pre-check is reported as itself rather than as a timeout.
     if (await fetch(readyURL).then((response) => response.ok).catch(() => false)) return { server, base };
     await sleep(200);
   }
