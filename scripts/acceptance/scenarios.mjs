@@ -2978,6 +2978,43 @@ export async function omcSettings({ base, page, check, context }) {
       };
     });
   });
+  /**
+   * Waits until the unit-style picker has taken the shape the current viewport implies.
+   *
+   * That control changes shape in *React*, not in CSS: `vertical={isNarrow} block={isNarrow}` follows
+   * a `matchMedia` change listener, so after `setViewportSize` there is a window in which the new
+   * width is already in force while the old layout is still painted. Waiting for an option to be
+   * *visible* does not close that window - the options are visible in both shapes - which is exactly
+   * how this check flaked: it measured the horizontal row and read every option painted past the
+   * card (a rising ladder such as 85, 184, 283) while asserting the vertical list. The geometry *is*
+   * the assertion, so the wait has to be on the geometry: stacked, the options share one left edge;
+   * in a row, each has its own.
+   *
+   * Scoped to the unit-style picker by its own label rather than to every picker on the page. Only
+   * that one is given `vertical={isNarrow}` - the theme and language pickers are two options wide and
+   * stay horizontal at every width - so a page-wide "all options share an edge" condition would wait
+   * for a state the page never reaches, which is a hang rather than a fix. The label is the same
+   * bilingual pair this scenario's row locator uses, so a console in either reading language resolves
+   * it.
+   *
+   * Bounded by Playwright's own polling rather than a fixed sleep, because how long the listener
+   * takes to fire and React to re-render is exactly what differs between an idle workstation and a
+   * loaded CI runner.
+   */
+  const waitForPickerShape = async (expectVertical) => {
+    await page.waitForFunction((wantVertical) => {
+      const picker = [...document.querySelectorAll('.omc-settings-page .ant-segmented')]
+        .find((candidate) => /^(Token unit style|Token \u8ba1\u91cf\u5355\u4f4d)$/.test(candidate.getAttribute('aria-label') ?? ''));
+      const items = [...(picker?.querySelectorAll('.ant-segmented-item') ?? [])];
+      if (items.length === 0) return false;
+      // One shared left edge means a stacked list; one left edge each means a single row. Exact
+      // equality is right here because the two shapes differ by tens of pixels, far above the
+      // sub-pixel rounding the `Math.round` absorbs.
+      const allShareAnEdge = new Set(items.map((item) => Math.round(item.getBoundingClientRect().left))).size === 1;
+      return wantVertical ? allShareAnEdge : !allShareAnEdge;
+    }, expectVertical, { timeout: 10_000 });
+  };
+
   const selectionLegibility = async () => page.evaluate(() => {
     const selected = document.querySelector('.omc-settings-page .ant-segmented-item-selected');
     const track = selected?.closest('.ant-segmented');
@@ -2996,7 +3033,7 @@ export async function omcSettings({ base, page, check, context }) {
   // fitted at 390px once the labels were shortened, so that width could not tell the two layouts
   // apart, and the check passed against the broken one.
   await page.setViewportSize({ width: 320, height: 900 });
-  await page.locator('.omc-settings-page .ant-segmented-item').first().waitFor({ state: 'visible', timeout: 10_000 });
+  await waitForPickerShape(true);
   const phoneOverflow = await narrowOverflow();
   check(
     'every settings option fits the card on a phone and shows its whole label',
@@ -3014,9 +3051,11 @@ export async function omcSettings({ base, page, check, context }) {
     JSON.stringify(legibility),
   );
   // Back to the probe's default width: the checks that follow read the desktop console, and their
-  // geometry is what the assertions below compare against.
+  // geometry is what the assertions below compare against. The shape is awaited for the same reason
+  // it is at 320px - a stale vertical list would leave the picker laid out as the phone's, and the
+  // desktop pass that follows reads this control's own geometry.
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.locator('.omc-settings-page .ant-segmented-item').first().waitFor({ state: 'visible', timeout: 10_000 });
+  await waitForPickerShape(false);
 
   // ── the Chinese scale is offered to Chinese consoles only ─────────────────
   const tokenRow = page.locator('.omc-settings-page .settings-toggle-row').filter({ hasText: /Token unit style|Token 计量单位/ });
