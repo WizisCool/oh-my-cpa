@@ -111,6 +111,7 @@ func (h *Handler) Router() http.Handler {
 				v1.Get("/usage/events/{id}/request-log", h.downloadUsageEventRequestLog)
 				v1.Get("/usage/facets", h.listUsageFacets)
 				v1.Get("/management/auth-files", h.listManagementAuthFiles)
+				v1.Get("/management/auth-files/safe-fields", h.getManagementAuthFileSafeFields)
 				v1.Get("/management/auth-files/models", h.listManagementAuthFileModels)
 				v1.Post("/management/auth-files", h.uploadManagementAuthFiles)
 				v1.Patch("/management/auth-files/status", h.patchManagementAuthFileStatus)

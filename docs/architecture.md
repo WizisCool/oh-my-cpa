@@ -245,6 +245,12 @@ rather than a silent merge. Secrets never enter a key, a fingerprint input that
 is stored, or a response DTO. (The Providers and OAuth management pages inspect
 and manage CPA runtime entries directly through `/api/v1/management/providers`
 and `/api/v1/management/auth-files`, layering local preference metadata on read.)
+Auth-file edits use CPA's field patch but do not treat its `200` as proof:
+the facade reads the runtime entry and a server-side projection of the
+downloaded JSON back before returning success. The projection exposes only
+prefix, proxy URL, disable-cooling, WebSockets, using-API, note, priority,
+weight and excluded models; tokens and other credential material stay inside
+the Go process. These writes and safe reads are audit logged.
 
 `cpa_bindings` carries `missing_at_ms` and `ON DELETE SET NULL` so upstream
 removal marks a binding missing without cascading into history.

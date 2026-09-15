@@ -1799,7 +1799,7 @@ try {
     check('auth-files drawer opens', await drawer.isVisible());
 
     // Modify a field to dirty the form
-    const noteArea = drawer.locator('textarea').first();
+    const noteArea = drawer.locator('#note');
     await noteArea.fill('new dirty test note');
 
     // Attempt close while dirty -> triggers confirm modal
@@ -1853,7 +1853,7 @@ try {
   await xaiEditBtn.click();
   const saveDrawer = page.locator('.ant-drawer');
   await saveDrawer.waitFor({ state: 'visible', timeout: 5000 });
-  const noteInput = saveDrawer.locator('textarea').first();
+  const noteInput = saveDrawer.locator('#note');
   await noteInput.fill('persisted note by acceptance test');
   const saveBtn = saveDrawer.locator('button').filter({ hasText: /保存|Save/i }).first();
   await saveBtn.click();
@@ -1861,6 +1861,27 @@ try {
   const updatedNote = xaiCard.getByText('persisted note by acceptance test');
   await updatedNote.waitFor({ state: 'visible', timeout: 5000 });
   check('auth-files card displays updated note after save', await updatedNote.isVisible());
+
+  // Priority and weight must survive a write, a server-side readback and the
+  // list refresh. The fake CPA stores the patch, so this exercises the same
+  // draw-close-reopen path as a real credential rather than only the toast.
+  await xaiEditBtn.click();
+  await saveDrawer.waitFor({ state: 'visible', timeout: 5000 });
+  await saveDrawer.locator('#priority').fill('42');
+  await saveDrawer.locator('#weight').fill('7');
+  await saveDrawer.locator('button').filter({ hasText: /保存|Save/i }).first().click();
+  await page.locator('.ant-drawer-open').waitFor({ state: 'hidden', timeout: 5000 });
+  await checkEventually(
+    'auth-files priority and weight survive save and verified readback',
+    async () => (await xaiCard.getByText('P:42').count()) === 1 && (await xaiCard.getByText('W:7').count()) === 1,
+    { detail: async () => `priority=${await xaiCard.getByText(/^P:/).count()} weight=${await xaiCard.getByText(/^W:/).count()}` },
+  );
+  await xaiEditBtn.click();
+  await saveDrawer.waitFor({ state: 'visible', timeout: 5000 });
+  check('auth-files reopened drawer shows persisted priority', (await saveDrawer.locator('#priority').inputValue()) === '42');
+  check('auth-files reopened drawer shows persisted weight', (await saveDrawer.locator('#weight').inputValue()) === '7');
+  await saveDrawer.locator('.ant-drawer-close').click();
+  await page.locator('.ant-drawer-open').waitFor({ state: 'hidden', timeout: 5000 });
 
   // 10. Viewports at 390px and 320px for auth-files
   for (const width of [390, 320]) {
@@ -2327,5 +2348,3 @@ if (failures.length > 0) {
 } else {
   console.log(`\n${checks.length} deterministic browser checks passed${smokeOnly ? ' (smoke)' : ''}.`);
 }
-
-

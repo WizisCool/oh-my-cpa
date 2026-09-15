@@ -26,6 +26,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       id_token: { chatgpt_account_id: 'chatgpt-e2e-account', chatgpt_subscription_active_until: Math.floor((Date.now() + 24 * 86400000) / 1000), plan_type: 'pro' },
       success: 12, failed: 1, recent_requests: [{ time: '2026-09-01T12:00:00Z', success: 12, failed: 1 }],
       models: [{ id: 'gpt-e2e', display_name: 'GPT E2E' }], priority: 1, weight: 1, note: 'deterministic fixture',
+      prefix: 'team-a', proxy_url: '', disable_cooling: false, websockets: true, using_api: false, excluded_models: [],
     },
     {
       id: 'auth-e2e-2', auth_index: 'auth-index-e2e-2', name: 'claude-fixture.json', type: 'claude', provider: 'claude',
@@ -99,6 +100,26 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       json(response, 200, { models: [{ id: 'gpt-e2e', display_name: 'GPT E2E' }] });
       return;
     }
+    if (request.method === 'GET' && path === '/auth-files/download') {
+      const target = authFiles.find(f => f.name === url.searchParams.get('name'));
+      if (!target) {
+        json(response, 404, { error: 'auth file not found' });
+        return;
+      }
+      json(response, 200, {
+        type: target.type,
+        prefix: target.prefix ?? '',
+        proxy_url: target.proxy_url ?? '',
+        priority: target.priority ?? 0,
+        weight: target.weight ?? 1,
+        disable_cooling: target.disable_cooling ?? false,
+        websockets: target.websockets ?? false,
+        using_api: target.using_api ?? false,
+        note: target.note ?? '',
+        excluded_models: target.excluded_models ?? [],
+      });
+      return;
+    }
     if (request.method === 'PATCH' && path === '/auth-files/status') {
       const bodyText = Buffer.concat(chunks).toString('utf8');
       let payload = {};
@@ -120,6 +141,12 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
         if (payload.priority !== undefined) target.priority = payload.priority;
         if (payload.weight !== undefined) target.weight = payload.weight;
         if (payload.note !== undefined) target.note = payload.note;
+        if (payload.prefix !== undefined) target.prefix = payload.prefix;
+        if (payload.proxy_url !== undefined) target.proxy_url = payload.proxy_url;
+        if (payload.disable_cooling !== undefined) target.disable_cooling = payload.disable_cooling;
+        if (payload.websockets !== undefined) target.websockets = payload.websockets;
+        if (payload.using_api !== undefined) target.using_api = payload.using_api;
+        if (payload.excluded_models !== undefined) target.excluded_models = payload.excluded_models;
       }
       json(response, 200, { status: 'ok' });
       return;

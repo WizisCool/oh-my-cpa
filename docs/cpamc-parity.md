@@ -29,9 +29,9 @@ Status definitions: `Covered` = Fully implemented with live endpoints and UI; `I
 | Auth file list / filter | `auth_files` | `GET /auth-files` | Covered (verified against real CPA 7.2.146) | Field normalization, runtime-only / disabled empty states |
 | Auth file upload | `auth_files` | `POST /auth-files` multipart | Covered (verified against real CPA 7.2.146) | JSON file upload and invalid file feedback |
 | Auth file download / delete | Detail / batch actions | `GET /auth-files/download`, `DELETE /auth-files` | Covered (verified against real CPA 7.2.146) | Safe filenames, download payload, and batch deletion |
-| Auth file enable / disable & fields | Detail / batch actions | `PATCH /auth-files/status`, `PATCH /auth-files/fields` | Covered (verified against real CPA 7.2.146) | Status toggles, priority / weight / note / proxy fields |
+| Auth file enable / disable & fields | Detail / batch actions | `PATCH /auth-files/status`, `PATCH /auth-files/fields` | Covered (verified against real CPA 7.2.146) | Status toggles plus priority, weight, note, prefix, proxy URL, disable-cooling, WebSockets, using-API and excluded-model fields. Every update is read back through both `GET /auth-files` and a server-side safe projection of the downloaded JSON before the API returns success |
 | Auth file model list | Detail | `GET /auth-files/models` | Covered (real CPA 7.2.146 returns 200; older versions returning 404 map to 501 capability_missing) | Displays capability notice on older CPA versions |
-| OAuth excluded models | `auth_files` sub-page | `/oauth-excluded-models` (in OMC handled via `excluded_models` in `PATCH /auth-files/fields`) | Partial: API supported, not exposed in UI | Backend field allowlist accepts `excluded_models`; drawer currently exposes priority / weight / note; UI additions will need wildcard and audit tests |
+| OAuth excluded models | `auth_files` sub-page | `/oauth-excluded-models` (in OMC handled via `excluded_models` in `PATCH /auth-files/fields`) | Covered | The credential drawer edits excluded models, normalizes whitespace/duplicates, and verifies the persisted safe projection; the write is audit logged |
 | OAuth model aliases | `auth_files` sub-page | `/oauth-model-alias` | Planned | Provider key normalization and wildcard testing |
 | OAuth login | `oauth` | `GET /{provider}-auth-url`, `GET /get-auth-status`, `DELETE /oauth-session`, `POST /oauth-callback` | Covered | Provider / state polling, cancellation, callback input; no token emulation |
 | Vertex JSON / iFlow Cookie import | OAuth / auth-files | `POST /vertex/import` and provider-specific flows | Planned | Dependent on upstream version capability probes |
@@ -61,7 +61,7 @@ Capability probes (`GET /api/v1/management/capabilities/{key}`) are retained str
 Subsequent milestones:
 
 1. **Legacy Version Compatibility**: Standardize "capability missing" notices for endpoints absent on older CPA releases (such as `/auth-files/models`), documenting minimum version requirements and graceful degradation.
-2. **Capability Additions**: OAuth model aliases and remaining auth-file field bindings (`prefix`, `proxy_url`, `disable_cooling`, `excluded_models`, `expired`) in UI forms.
+2. **Capability Additions**: OAuth model aliases and the remaining `expired` auth-file field binding in UI forms.
 3. **Multi-Instance Support**: Instance CRUD, key rotation, and instance-level permissions backed by an ADR (the database schema already models `cpa_bindings.instance_id`, while `/instances/default/*` remains single-instance).
 
 ## Oh My CPA Distinct Capabilities (No CPAMC Counterpart)

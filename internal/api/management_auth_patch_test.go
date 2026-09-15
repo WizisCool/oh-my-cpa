@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,9 @@ import (
 
 func TestManagementAuthFilesPatchFieldsSuccess(t *testing.T) {
 	recorder := &cpaRecorder{}
+	runtimePriority := 0
+	runtimeWeight := int64(0)
+	runtimeNote := ""
 	cpaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		recorder.record(request)
 		writer.Header().Set("Content-Type", "application/json")
@@ -28,10 +32,22 @@ func TestManagementAuthFilesPatchFieldsSuccess(t *testing.T) {
 			return
 		}
 		if request.Method == http.MethodPatch && strings.HasSuffix(request.URL.Path, "/fields") {
+			var payload struct {
+				Priority int    `json:"priority"`
+				Weight   int64  `json:"weight"`
+				Note     string `json:"note"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode patch: %v", err)
+			}
+			runtimePriority = payload.Priority
+			runtimeWeight = payload.Weight
+			runtimeNote = payload.Note
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 			return
 		}
-		_, _ = writer.Write([]byte(`{"files":[]}`))
+		_, _ = writer.Write([]byte(`{"files":[{"id":"test.json","name":"test.json","auth_index":"idx-1","provider":"claude","priority":` +
+			strconv.Itoa(runtimePriority) + `,"weight":` + strconv.FormatInt(runtimeWeight, 10) + `,"note":"` + runtimeNote + `"}]}`))
 	}))
 	defer cpaServer.Close()
 
