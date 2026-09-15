@@ -153,13 +153,18 @@ palette in code; never hardcode colors in components.
   style (`omc_token_style`) and the model panels' grouping view
   (`omc_models_view`).
 - **Token Unit Style**: How the console abbreviates token counts — `en-compact`
-  (300K, 300M, 1.2B) or `zh` (30万, 300万, 12亿) — stored as the
-  `omc_token_style` preference and applied by one shared frontend layer
+  (300K, 300M, 1.2B), `zh` (30万, 300万, 12亿) or `full` (300,000,000) — stored as
+  the `omc_token_style` preference and applied by one shared frontend layer
   (`web/src/types/tokenDisplay.ts`) so every token readout on the dashboard,
   the request records and the detail drawer changes together. Tooltips and
   accessible names always carry the exact count, because a rounded value scanned
   in a chart is fine while the same rounding in a tooltip would be a wrong
-  number presented as exact.
+  number presented as exact. The Chinese scale is a *word*, not just a notation,
+  so it belongs only to a Chinese console: a stored `zh` resolves to
+  `en-compact` whenever the reading language is not Chinese, and the option is
+  shown disabled there. The stored value itself is never rewritten, so returning
+  the console to Chinese restores the operator's own choice. `full` is
+  language-neutral and reads the same in both.
 - **Call Point**: The client-facing identity of a model request: the model alias
   a client requested, or the upstream model name when no alias was set. It is a
   *grouping key*, not a display rewrite — in the model panels' call view one

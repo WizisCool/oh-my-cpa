@@ -2550,12 +2550,13 @@ export function refreshRecords() {
  * The OMC settings page: the console's own preferences, and the promise that changing one
  * actually governs the console.
  *
- * The page is the single place these settings live, so the assertions are about the two things a
- * per-component test cannot reach: that a change reaches the surfaces it claims to govern (the
- * dashboard's numbers, not just the control), and that it survives a reload - which is the whole
- * reason these preferences are server-stored rather than kept in the browser.
+ * The probe context is English (`omc-lang = 'en'`), which is the reading this page has to be
+ * correct in: the token unit style offers a Chinese scale, and offering it to an English console
+ * would print 亿 beside English copy. Three claims follow from that and none is reachable from a
+ * per-component test: the Chinese option is present but disabled, a stored Chinese choice cannot
+ * leak into an English reading, and the choice governs the dashboard rather than only the control.
  */
-export async function omcSettings({ base, page, check }) {
+export async function omcSettings({ base, page, check, context }) {
   const writes = [];
   await page.route('**/omc/api/**/preferences/*', async (route) => {
     if (route.request().method() === 'PUT') {
@@ -2567,75 +2568,138 @@ export async function omcSettings({ base, page, check }) {
   await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
   await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
 
-  // Every console preference is here, exactly once. A duplicated row would be two controls for one
-  // setting - the operator changes one and the other silently disagrees.
-  const rows = await page.locator('.omc-setting-row').count();
-  check('the settings page lists each console preference once', rows === 4, `rows=${rows}`);
-  const labels = await page.locator('.omc-setting-label').allInnerTexts();
+  // ── the page states itself once, without decorative copy ──────────────────
+  // docs/design.md §3: one page title, and a subtitle only when it carries live data. The titles
+  // and descriptions this page shipped with were static explanation, so their absence is the claim.
+  check('the settings page carries exactly one page title', (await page.locator('.omc-settings-page .terminal-title').count()) === 1);
   check(
-    'the settings page names its settings',
-    labels.every((label) => label.trim().length > 0)
-      && labels.some((label) => /Token|Token/.test(label))
-      && labels.some((label) => /主题|Theme/.test(label))
-      && labels.some((label) => /语言|Language/.test(label)),
+    'the settings page carries no static subtitle',
+    (await page.locator('.omc-settings-page .terminal-subtitle').count()) === 0
+      && (await page.locator('.omc-settings-page .settings-group-desc').count()) === 0,
+    `subtitle=${await page.locator('.omc-settings-page .terminal-subtitle').count()} groupDesc=${await page.locator('.omc-settings-page .settings-group-desc').count()}`,
+  );
+
+  // Every console setting this page owns, once. A duplicated row would be two controls for one
+  // setting - the operator changes one and the other silently disagrees.
+  const labels = await page.locator('.omc-settings-page .settings-toggle-title').allInnerTexts();
+  check(
+    'the settings page lists each console setting once',
+    labels.length === 3
+      && new Set(labels).size === labels.length
+      && labels.some((label) => /Token unit style|Token 计量单位/.test(label))
+      && labels.some((label) => /Theme|界面主题/.test(label))
+      && labels.some((label) => /Language|界面语言/.test(label)),
+    `labels=${labels.join(' | ')}`,
+  );
+  // The chart grouping belongs to the panels that plot it, not here: a second control on a settings
+  // page is a second place to look for one decision.
+  check(
+    'the chart grouping is not duplicated onto the settings page',
+    !labels.some((label) => /grouping|口径/.test(label)),
     `labels=${labels.join(' | ')}`,
   );
 
-  // ── the unit style governs the console, not just the control ───────────────
-  const tokenRow = page.locator('.omc-setting-row').filter({ hasText: /Token unit style|Token 计量单位/ });
-  await tokenRow.locator('.ant-segmented-item').filter({ hasText: /Chinese|中文单位/ }).click();
-  let persistedChinese = false;
+  // ── the Chinese scale is offered to Chinese consoles only ─────────────────
+  const tokenRow = page.locator('.omc-settings-page .settings-toggle-row').filter({ hasText: /Token unit style|Token 计量单位/ });
+  const chineseOption = tokenRow.locator('.ant-segmented-item').filter({ hasText: /Chinese|中文单位/ });
+  check(
+    'the Chinese unit style is shown but disabled on an English console',
+    (await chineseOption.count()) === 1 && (await chineseOption.locator('input').isDisabled()),
+    `count=${await chineseOption.count()} disabled=${await chineseOption.locator('input').isDisabled().catch(() => 'n/a')}`,
+  );
+
+  // ── the language-neutral style governs the dashboard ──────────────────────
+  // The claim the setting makes is about every token readout, and the dashboard tiles are the
+  // loudest one: a full-digit tile has separators and no unit suffix at all.
+  const fullOption = tokenRow.locator('.ant-segmented-item').filter({ hasText: /Full digits|完整数字/ });
+  await fullOption.click();
+  let persistedStyle = null;
   await until(async () => {
-    persistedChinese = writes.some((entry) => entry.key === 'omc_token_style' && entry.body === '"zh"');
-    return persistedChinese;
-  }, { label: 'the Chinese unit style to be persisted' }).catch(() => {});
+    persistedStyle = writes.find((entry) => entry.key === 'omc_token_style');
+    return Boolean(persistedStyle);
+  }, { label: 'the unit style to be persisted' }).catch(() => {});
   check(
     'choosing a unit style persists it under its own preference key',
-    persistedChinese,
+    persistedStyle?.body === '"full"',
     `writes=${JSON.stringify(writes)}`,
   );
 
-  // The claim the setting makes is about every token readout, and the dashboard tiles are the
-  // loudest one: a two-decimal compact tile becomes a 万/亿 reading.
+  /**
+   * The dashboard's Token tile value.
+   *
+   * Selected by its own label rather than by position: the first tile in the grid is the request
+   * count, which is a different number with a different format, so an index-based locator would
+   * assert the wrong readout and pass. Waited for through the condition primitive because the page
+   * paints skeletons first.
+   */
+  const tokenTileValue = () => page
+    .locator('.dashboard-tile')
+    .filter({ has: page.locator('.tile-label', { hasText: /^(Tokens|Token \u603b\u6570)$/ }) })
+    .first()
+    .locator('.tile-value');
+
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
-  // Waited for through the condition primitive rather than a one-shot read: the page paints its
-  // skeletons first, so the tile values appear a frame or two after the grid does.
-  const tileValues = await until(async () => {
-    const texts = await page.locator('.dashboard-grid .tile-value').allInnerTexts();
-    return texts.length > 0 ? texts : false;
-  }, { label: 'the dashboard tiles to render' }).catch(() => []);
+  const tokenTile = await until(async () => {
+    const tile = tokenTileValue();
+    return (await tile.count()) > 0 ? tile : false;
+  }, { label: 'the dashboard token tile to render' }).catch(() => null);
+  const tileText = tokenTile ? await tokenTile.innerText() : '';
   check(
-    'the dashboard token tile renders in the chosen unit style',
-    tileValues.some((value) => /[万亿]/.test(value)),
-    `tiles=${tileValues.join(' | ')}`,
+    'the dashboard token tile renders in the chosen full-digit style',
+    /^\d{1,3}(,\d{3})+$/.test(tileText),
+    `tile=${JSON.stringify(tileText)}`,
+  );
+  // The tile's accessible name is the same exact value, which is the guarantee the row's
+  // description states - and the reason an abbreviation is safe to show at all.
+  check(
+    'the abbreviated tile keeps its exact count in the accessible name',
+    (await tokenTile.getAttribute('title')) === tileText,
+    `title=${JSON.stringify(await tokenTile.getAttribute('title'))} text=${JSON.stringify(tileText)}`,
   );
 
-  // ── it survives a reload ──────────────────────────────────────────────────
-  // This is what server storage buys: a fresh page load, with no browser state carried over, comes
-  // back in the chosen style because the value was read from the deployment.
+  // ── a stored Chinese choice cannot leak into an English reading ───────────
+  // This is the defect the guard exists for, so it is asserted through the *stored* value rather
+  // than through the control: a console that remembers `zh` must still read its numbers in a form
+  // its copy can sit beside.
   await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
   await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
-  const selectedTokenStyle = await page
-    .locator('.omc-setting-row').filter({ hasText: /Token unit style|Token 计量单位/ })
-    .locator('.ant-segmented-item-selected')
-    .innerText();
+  await page.evaluate(async () => {
+    await fetch('/omc/api/v1/preferences/omc_token_style', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify('zh'),
+    });
+  });
+  await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
+  const storedChineseTile = await until(async () => {
+    const tile = tokenTileValue();
+    return (await tile.count()) > 0 ? tile : false;
+  }, { label: 'the dashboard token tile to render with a stored Chinese style' }).catch(() => null);
+  const storedChineseText = storedChineseTile ? await storedChineseTile.innerText() : '';
   check(
-    'the chosen unit style survives a reload',
-    /Chinese|中文单位/.test(selectedTokenStyle),
-    `selected=${JSON.stringify(selectedTokenStyle)}`,
+    'a stored Chinese unit style falls back to compact on an English console',
+    !/[万亿]/.test(storedChineseText),
+    `tile=${JSON.stringify(storedChineseText)}`,
   );
 
-  // ── the appearance shortcuts are the same settings ────────────────────────
-  // Theme and language stay in the browser, and the page's controls must therefore drive the live
-  // app rather than a copy: switching the language rewrites this page's own copy.
-  const languageRow = page.locator('.omc-setting-row').filter({ hasText: /Language|界面语言/ });
-  await languageRow.locator('.ant-segmented-item').filter({ hasText: /English/ }).click();
-  let becameEnglish = false;
+  // ── the appearance settings drive the live console ────────────────────────
+  // Theme and language stay in the browser, and the page's controls must therefore drive the app
+  // rather than a copy: switching the language re-renders this page's own copy, and it also makes
+  // the Chinese scale selectable.
+  await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
+  const languageRow = page.locator('.omc-settings-page .settings-toggle-row').filter({ hasText: /Language|界面语言/ });
+  await languageRow.locator('.ant-segmented-item').filter({ hasText: /Simplified Chinese|简体中文/ }).click();
+  let becameChinese = false;
   await until(async () => {
-    becameEnglish = /OMC Settings/.test(await page.locator('.terminal-title').innerText());
-    return becameEnglish;
+    becameChinese = /OMC 设置/.test(await page.locator('.omc-settings-page .terminal-title').innerText());
+    return becameChinese;
   }, { label: 'the page to re-render in the chosen language' }).catch(() => {});
-  check('switching the language on this page re-renders the console', becameEnglish);
+  check('switching the language on this page re-renders the console', becameChinese);
+  check(
+    'the Chinese unit style becomes selectable once the console is Chinese',
+    !(await tokenRow.locator('.ant-segmented-item').filter({ hasText: /中文单位/ }).locator('input').isDisabled()),
+  );
 }
 
 export const SCENARIOS = [
@@ -2646,6 +2710,7 @@ export const SCENARIOS = [
       routes: [
         [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
         [(url) => url.pathname.endsWith('/dashboard/tail'), () => chartDashboard],
+        [(url) => url.pathname.endsWith('/dashboard/token-heatmap'), () => chartTokenHeatmap],
       ],
     },
     run: omcSettings,

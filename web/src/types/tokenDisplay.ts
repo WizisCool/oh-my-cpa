@@ -19,8 +19,15 @@
  * as exact.
  */
 
-/** The stored preference values. `en-compact` is the default. */
-export const TOKEN_NUMBER_STYLES = ['en-compact', 'zh'] as const;
+/**
+ * The stored preference values. `en-compact` is the default.
+ *
+ * The Chinese scale is a *language*, not just a notation: 亿 and 万 are words, so
+ * it is meaningful only beside Chinese copy. `full` is language-neutral - grouped
+ * digits with no unit word - which is why it is the one style that reads the same
+ * in both consoles.
+ */
+export const TOKEN_NUMBER_STYLES = ['en-compact', 'zh', 'full'] as const;
 export type TokenNumberStyle = (typeof TOKEN_NUMBER_STYLES)[number];
 
 export const DEFAULT_TOKEN_NUMBER_STYLE: TokenNumberStyle = 'en-compact';
@@ -87,6 +94,27 @@ function formatZh(tokens: number): string {
   return String(Math.round(tokens));
 }
 
+const FULL = new Intl.NumberFormat('en');
+
+/**
+ * resolveTokenNumberStyle picks the style a surface actually renders in.
+ *
+ * A stored `zh` resolves back to the compact form whenever the reading language is
+ * not Chinese, because an English console printing `12亿` beside an English legend
+ * would mix two languages in one reading - the same defect `docs/design.md`
+ * forbids for copy, applied to the one number format that carries a language.
+ *
+ * The *stored* value is deliberately left alone: it is the operator's choice, and
+ * switching the console back to Chinese must restore it rather than silently
+ * rewriting what they picked. Only the reading changes.
+ *
+ * `full` is language-neutral, so it renders as itself in both consoles.
+ */
+export function resolveTokenNumberStyle(style: TokenNumberStyle, lang: 'zh' | 'en'): TokenNumberStyle {
+  if (style === 'zh' && lang !== 'zh') return DEFAULT_TOKEN_NUMBER_STYLE;
+  return style;
+}
+
 /**
  * formatTokens renders a token count in the chosen unit style.
  *
@@ -95,11 +123,10 @@ function formatZh(tokens: number): string {
  */
 export function formatTokens(tokens: number, style: TokenNumberStyle): string {
   if (!Number.isFinite(tokens)) return '—';
+  if (style === 'full') return FULL.format(tokens);
   if (style === 'zh') return formatZh(tokens);
   return COMPACT_EN.format(tokens);
 }
-
-const FULL = new Intl.NumberFormat('en');
 
 /**
  * formatTokensFull renders the exact count with digit separators, for tooltips
