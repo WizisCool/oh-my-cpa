@@ -166,7 +166,7 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
             ) : (
               <div className="model-usage-body">
                 <React.Suspense fallback={chartFallback}>
-                  <LazyModelUsageDonut groups={groups} totalTokens={total} foldedLabel={foldedLabel} tokenUnitLabel={t('dash.unit_tokens')} height={220} />
+                  <LazyModelUsageDonut groups={groups} totalTokens={total} foldedLabel={foldedLabel} tokenUnitLabel={t('dash.unit_tokens')} />
                 </React.Suspense>
                 {/*
                   The ranked list is the ring's legend, its label column and its values in one. A separate
@@ -176,11 +176,17 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
                 */}
                 <ol className="model-usage-list">
                   {groups.map((group, index) => (
+                    // Reading order is name, cost, volume, share - widest to narrowest claim: what
+                    // the group is, what it cost, how much it moved, and its slice of the window.
+                    // The cost sits beside the name rather than at the far edge because it is the
+                    // second thing an operator reads a spend table for, and the share stays last
+                    // where it continues the percentage column of the ring beside it.
                     <li className="model-usage-row" key={seriesDomainKey(group)}>
                       <span className="model-usage-swatch" style={{ background: seriesColor(themeMode, index) }} aria-hidden="true" />
                       <span className="model-usage-name" title={groupLabel(group, foldedLabel, unnamedLabel)}>
                         {groupLabel(group, foldedLabel, unnamedLabel)}
                       </span>
+                      <ModelCost group={group} />
                       <span
                         className="model-usage-tokens"
                         // The exact count lives in the accessible name: the compact cell is for scanning,
@@ -190,7 +196,6 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
                         {formatModelTokens(group.tokens, tokenStyle)}
                       </span>
                       <span className="model-usage-share">{formatModelShare(group.tokens, total)}</span>
-                      <ModelCost group={group} />
                     </li>
                   ))}
                 </ol>

@@ -3,7 +3,7 @@ import { Pie } from '@ant-design/charts';
 import { useThemeMode } from '../theme/ThemeContext';
 import { seriesColorRange, seriesDomainKey, seriesTrackColor } from './chartTheme';
 import { palette } from '../theme/themeConfig';
-import { formatModelTokens, type DashboardModelUsage } from '../types/dashboardModels';
+import { formatModelShare, formatModelTokens, type DashboardModelUsage } from '../types/dashboardModels';
 import { formatTokens, formatTokensFull } from '../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
 import { escapeTooltipText } from './ModelTokenTrend';
@@ -14,7 +14,6 @@ export interface ModelUsageDonutProps {
   totalTokens: number;
   foldedLabel: string;
   tokenUnitLabel: string;
-  height?: number;
 }
 
 /**
@@ -28,11 +27,11 @@ export interface ModelUsageDonutProps {
  * scale with tabular numerals, and it must read at the same weight as the KPI values above it. A
  * canvas text mark would be the only data text on the page not set in the mono stack.
  *
- * **The readout overlays the canvas, not the wrapper.** The canvas is the only thing whose geometry
- * G2 fully controls - it sizes the element itself from the container and keeps the ring inscribed in
- * its own box - while the wrapper's height follows the flex row it sits in and can legally end up
- * taller than the drawing. Anchoring `.model-ring-center` to the canvas via its own square box keeps
- * the total on the ring's true centre at every width, theme and pixel ratio.
+ * **The readout overlays the square frame, not the outer wrapper.** The drawing's box is the frame's,
+ * and the frame is kept square by CSS at whatever width the flex row leaves it, so the readout and
+ * the arcs are measured against the same box. Anchoring the readout to the outer wrapper instead
+ * would tie it to a box whose height is set by the row rather than by the drawing, which is how the
+ * total came to sit off the ring's centre once the frame could be narrower than that row was tall.
  *
  * **The library's legend is disabled.** Colour has to mean the same thing here and in the trend, and
  * the ranked list beside the ring carries the numbers anyway - a legend with no values and a list
@@ -44,7 +43,6 @@ export const ModelUsageDonut: React.FC<ModelUsageDonutProps> = ({
   totalTokens,
   foldedLabel,
   tokenUnitLabel,
-  height = 240,
 }) => {
   const { themeMode } = useThemeMode();
   const { style: tokenStyle } = useTokenDisplayStyle();
@@ -75,14 +73,16 @@ export const ModelUsageDonut: React.FC<ModelUsageDonutProps> = ({
   // change a sum, so there is nothing to recompute and no second number that could disagree.
 
   return (
+    // No inline height: the wrapper is only the layer the frame is placed in, and the frame's own
+    // square box decides the height. A height pinned here would outlive the frame being clamped
+    // narrower and leave the ring sitting in the top of a box taller than itself.
     <div
       className="model-ring"
-      style={{ height }}
       role="img"
       aria-label={centerLabel}
     >
       {/* The square frame is what the readout centres on; see the class note on the centre box. */}
-      <div className="model-ring-frame" style={{ width: height }}>
+      <div className="model-ring-frame">
         {data.length > 0 && (
           <Pie
             data={data}
@@ -90,16 +90,29 @@ export const ModelUsageDonut: React.FC<ModelUsageDonutProps> = ({
             colorField="series"
             innerRadius={0.68}
             radius={0.92}
-            height={height}
+            // No height prop: the drawing takes the box the CSS frame gives it. A fixed height here
+            // outranks `autoFit` and pins the canvas to 220px tall while the frame is clamped narrower,
+            // which draws an ellipse and drops the readout below the arcs' centre.
             autoFit
             animate={false}
             legend={false}
             label={false}
-            // The readout is rendered here for the same reasons as the trend's: the library's default item
-            // name is the raw domain value, and its box is a light sans-serif panel on a dark console. The
-            // share is not printed - it is in the ranked list beside the ring, derived from the same total
-            // the centre reports, so the two cannot disagree.
+            // The readout is rendered here for the same reasons as the trend's: the library's own panel is
+            // a light sans-serif box on a dark console. The share is printed beside the volume because a
+            // slice is read as a fraction of the ring, and it is derived from the same window total the
+            // centre reports, so the two readings cannot disagree.
             scale={{ color: { domain, range } }}
+            // The item's own name comes from the datum, not from the library's inference: the inferred
+            // item is built from the y channel, so every slice would be named after the field ("tokens")
+            // instead of after its group. A function item is the one form the library evaluates per data
+            // row, and it is also where the exact count is kept, so the tooltip's formatter never has to
+            // re-derive which group it is printing.
+            tooltip={{
+              items: [(datum: { series: string; tokens: number }) => ({
+                name: labelOf(datum.series),
+                value: datum.tokens,
+              })],
+            }}
             // A 2px stroke in the card's own colour separates adjacent slices. Without it two neighbouring
             // hues touch directly, which is where a boundary is hardest to find.
             style={{ stroke: colors.surface, lineWidth: 2, radius: 0.92, innerRadius: 0.68 }}
@@ -108,10 +121,9 @@ export const ModelUsageDonut: React.FC<ModelUsageDonutProps> = ({
             axis={false}
             theme={{ view: { viewFill: 'transparent' } }}
             padding={0}
-            // The readout is configured on the interaction - see the trend's note for why - and the
-            // library's default template would print the raw domain value as the slice's name. The value
-            // prints in the console's unit style, matching the list beside the ring; the exact count is
-            // in the accessible name on the wrapper.
+            // The readout is configured on the interaction - see the trend's note for why - because the
+            // library's own template is a light sans-serif panel that does not belong on this console.
+            // The value prints in the console's unit style, matching the list beside the ring.
             interaction={{
               tooltip: {
                 render: (
@@ -120,14 +132,17 @@ export const ModelUsageDonut: React.FC<ModelUsageDonutProps> = ({
                 ) => {
                   const item = context?.items?.[0];
                   if (!item) return '';
-                  // The slice's value is its token count and its name is the raw domain key, so the label
-                  // is resolved from the key rather than the library's decorated one.
-                  const name = labelOf(item.name ?? '');
+                  // The item is named from the datum by the mark's own tooltip spec above, so it already
+                  // carries the group's label; only the value needs the console's unit style.
+                  const name = item.name ?? '';
                   const shape = `<span class="omc-tip-swatch" style="background:${item.color ?? 'transparent'}"></span>`;
-                  // The slice's value prints compactly to match the ranked list beside the ring;
-                  // the exact count rides on the value's title.
-                  const exact = `${formatTokensFull(item.value ?? 0)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}`;
-                  return `<div class="omc-tip"><div class="omc-tip-row">${shape}<span class="omc-tip-name">${escapeTooltipText(name)}</span><span class="omc-tip-value" title="${escapeTooltipText(exact)}">${formatTokens(item.value ?? 0, tokenStyle)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}</span></div></div>`;
+                  // The readout states the three things a slice is being judged on, in the order the
+                  // ranked list beside the ring prints them: which group it is, how much it moved, and
+                  // what share of the window that is. The share is derived from the same total the
+                  // centre reports, so a slice's percentage and the ring's own reading cannot disagree.
+                  const value = item.value ?? 0;
+                  const exact = `${formatTokensFull(value)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}`;
+                  return `<div class="omc-tip"><div class="omc-tip-row">${shape}<span class="omc-tip-name">${escapeTooltipText(name)}</span><span class="omc-tip-value" title="${escapeTooltipText(exact)}">${formatTokens(value, tokenStyle)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}</span><span class="omc-tip-share">${formatModelShare(value, totalTokens)}</span></div></div>`;
                 },
               },
             }}

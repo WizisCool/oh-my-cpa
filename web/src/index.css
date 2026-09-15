@@ -710,14 +710,40 @@ a { color: inherit; }
    container, and without it a long model name in the legend would push the card wider than its
    track instead of truncating. */
 .model-trend { position: relative; min-width: 0; margin-top: 4px; }
+.model-usage-card .ant-card-body { container-type: inline-size; container-name: modelusage; }
+
 .model-usage-body { display: flex; align-items: center; gap: 24px; min-width: 0; }
-.model-ring { position: relative; flex: none; display: flex; justify-content: center; min-width: 0; }
+/* The ring yields width to the list down to a floor: the list's numeric columns cannot be abbreviated,
+   so the name column loses that race whenever the ring insists on its full size, and a model name
+   truncated to a few characters tells the reader nothing. `min-width` stops the yield at the point
+   where the drawing stops being worth the space it is taking - the query below stacks the panels
+   instead once even that is not enough. */
+.model-ring { position: relative; flex: 0 1 220px; min-width: 160px; display: flex; align-items: center; justify-content: center; }
 /* The square frame carries the drawing and the readout. G2 sizes the canvas from the container and
    keeps the ring inscribed in that element's own box, but the wrapper's height follows the flex row
    it sits in and can end up taller than the drawing — which is exactly how the total drifted off the
    ring's centre. Centring the readout on this square frame, the same box the canvas is sized from,
    keeps it on the ring's true centre at every card width and pixel ratio. */
-.model-ring-frame { position: relative; flex: none; width: 220px; max-width: 100%; }
+.model-ring-frame {
+  position: relative;
+  flex: none;
+  width: 220px;
+  max-width: 100%;
+  /* The frame stays square when the flex row shrinks it. The drawing's size comes from the box it is
+     given, so a frame that kept its 220px height while its width was clamped would leave the ring
+     inscribed in a taller box and the readout floating below the arcs' centre. */
+  aspect-ratio: 1 / 1;
+}
+/* The chart fills the frame instead of sizing it. The wrapper the chart library injects carries an
+   inline `position: relative` and an inline height, so this rule has to outrank an inline declaration
+   to make the wrapper a layer of the frame rather than a box the frame has to grow around - otherwise
+   the ring's height is decided by the canvas it is about to contain, which is the circular dependency
+   that left the drawing off-centre. */
+.model-ring-frame > [data-chart-source-type] {
+  position: absolute !important;
+  inset: 0;
+  height: 100% !important;
+}
 /* The centre of the ring. Tabular numerals keep the total from shifting as the value changes between
    polls. */
 .model-ring-center {
@@ -746,23 +772,53 @@ a { color: inherit; }
   border-radius: 50%;
 }
 
+/* The panels' two arrangements are chosen by the width the *card* has, not by the viewport: the card
+   is half the grid at some viewports and the full width at others, so a viewport breakpoint stacks
+   them at a width where the side-by-side row still fits. The threshold is the row's own minimum - a
+   160px ring, the gap, and the list's columns - so it stays true if any of those change. */
+@container modelusage (max-width: 500px) {
+  .model-usage-body { flex-direction: column; align-items: stretch; gap: 12px; }
+  .model-usage-list { max-height: none; min-width: 0; }
+}
+
 /* The ranked list is the ring's legend and its values in one. It takes the remaining width and
    caps its own height, because a deployment can serve more models than a card can show and the
-   list must not push the card taller than its peer beside it. */
+   list must not push the card taller than its peer beside it.
+
+   The columns live on the list, not on each row. Per-row tracks are resolved against that row's
+   own content, so a single row whose cost is a character wider - an amount with an extra digit,
+   or a plain figure where another row shows an em dash - pulls its volume and share cells to the
+   right and the two numeric columns stop lining up down the card. One grid for the whole list makes
+   every row resolve the same tracks, which is what the header's reading order promises. */
 .model-usage-list {
   flex: 1 1 auto;
-  min-width: 0;
   max-height: 220px;
   overflow-y: auto;
   margin: 0;
   padding: 0;
   list-style: none;
+  display: grid;
+  /* The track floor is what a model name needs in order to read as a name. */
+  grid-template-columns: 8px minmax(140px, 1fr) minmax(56px, max-content) max-content minmax(42px, max-content);
+  column-gap: 8px;
+  align-content: start;
+  /* The list refuses to shrink past its own columns, so the shrink lands on the ring rather than
+     pushing the share cell out of the card. `min-content` resolves to the tracks' own floors rather
+     than to the widest name, which is what keeps one long model name from bidding the ring down to
+     nothing. */
+  min-width: min-content;
 }
+/* The row is a subgrid, not `display: contents`. Its columns are the list's own tracks, so the
+   numeric columns still start on one edge down the whole card, but the row keeps its box - and with
+   it the gap that separates the swatch from the name and the one border under the whole row. The
+   `contents` form that shares tracks by dissolving the row also dissolves those: the row's own gap
+   stops applying, leaving the swatch against the name, and the separator withdraws into the column
+   gaps so it is drawn in fragments. */
 .model-usage-row {
   display: grid;
-  grid-template-columns: 8px minmax(0, 1fr) auto auto auto;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
   align-items: center;
-  gap: 8px;
   padding: 7px 0;
   border-bottom: 1px solid var(--border-soft);
   font-variant-numeric: tabular-nums;
@@ -777,11 +833,13 @@ a { color: inherit; }
   white-space: nowrap;
 }
 .model-usage-tokens { color: var(--muted); font-size: 12px; white-space: nowrap; }
-.model-usage-share { color: var(--fg-2); font-size: 12px; white-space: nowrap; min-width: 42px; text-align: right; }
-/* The cost cell shares the share column's right alignment so the two numeric columns read as one
-   scale; the partial/unpriced states are text-plus-tooltip rather than colour, per design.md's rule
-   that state may not ride on hue alone. */
-.model-usage-cost { color: var(--fg-2); font-size: 12px; white-space: nowrap; min-width: 56px; text-align: right; }
+.model-usage-share { color: var(--fg-2); font-size: 12px; white-space: nowrap; text-align: right; }
+/* The cost cell follows the name, so it is left-aligned against it rather than against the right
+   edge the two value columns share - a spend column flush right beside a name would read as a
+   second name. Its track is `max-content`, so the amount's own width sets the column and every row
+   starts it on the same edge; the partial and unpriced states are text-plus-tooltip rather than
+   colour, per design.md's rule that state may not ride on hue alone. */
+.model-usage-cost { color: var(--fg-2); font-size: 12px; white-space: nowrap; text-align: left; }
 .model-usage-cost.is-partial { color: var(--muted); }
 .model-usage-cost.is-unpriced { color: var(--muted); }
 /* The grouping toggle sits in the card's header row, opposite the title. */
@@ -829,6 +887,9 @@ a { color: inherit; }
 .omc-tip-swatch { width: 8px; height: 8px; border-radius: 2px; flex: none; }
 .omc-tip-name { color: var(--fg); max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .omc-tip-value { color: var(--fg-2); margin-left: auto; }
+/* The share closes the readout, in a column of its own so a value that grows or shrinks does not
+   move it: the ring's hover and the ranked list print the same two figures in the same order. */
+.omc-tip-share { color: var(--muted); min-width: 42px; text-align: right; }
 
 .model-alert, .model-stale-alert { margin-top: 12px; }
 
@@ -839,12 +900,6 @@ a { color: inherit; }
 @media (max-width: 640px) {
   .dashboard-models { grid-template-columns: minmax(0, 1fr); }
   .model-trend-card, .model-usage-card { grid-column: span 1; }
-  /* The ring and its list stack. Side by side at this width the ring takes most of the card and the
-     list is squeezed to the point where a model name truncates to two characters. The ring keeps the
-     base rule's centring: it is alone on its row here, so hugging the left edge leaves the drawing
-     visibly off-centre against the full-width list under it. */
-  .model-usage-body { flex-direction: column; align-items: stretch; gap: 12px; }
-  .model-usage-list { max-height: none; }
 }
 
 /* ── token heatmap: a DOM grid, not a chart mark ────────────────────────────
