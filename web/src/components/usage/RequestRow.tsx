@@ -225,7 +225,7 @@ export const RequestRow = React.memo<RequestRowProps>(
         <div className={`req-col req-col-tokens ${requestColumnAlignClass('tokens')}`}>
           <span className="req-mobile-label">{t('events.col_tokens')}</span>
           <div className="req-tokens-total">
-            <strong title={`${formatTokensFull(event.tokens.total)} tokens`}>{formatTokens(event.tokens.total, tokenStyle)}</strong>
+            <strong title={`${formatTokensFull(event.tokens.total)} ${t('dash.unit_tokens')}`}>{formatTokens(event.tokens.total, tokenStyle)}</strong>
             <small>tokens</small>
           </div>
           <div className="req-tokens-breakdown">

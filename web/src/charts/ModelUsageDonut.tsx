@@ -124,7 +124,10 @@ export const ModelUsageDonut: React.FC<ModelUsageDonutProps> = ({
                   // is resolved from the key rather than the library's decorated one.
                   const name = labelOf(item.name ?? '');
                   const shape = `<span class="omc-tip-swatch" style="background:${item.color ?? 'transparent'}"></span>`;
-                  return `<div class="omc-tip"><div class="omc-tip-row">${shape}<span class="omc-tip-name">${escapeTooltipText(name)}</span><span class="omc-tip-value">${formatTokens(item.value ?? 0, tokenStyle)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}</span></div></div>`;
+                  // The slice's value prints compactly to match the ranked list beside the ring;
+                  // the exact count rides on the value's title.
+                  const exact = `${formatTokensFull(item.value ?? 0)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}`;
+                  return `<div class="omc-tip"><div class="omc-tip-row">${shape}<span class="omc-tip-name">${escapeTooltipText(name)}</span><span class="omc-tip-value" title="${escapeTooltipText(exact)}">${formatTokens(item.value ?? 0, tokenStyle)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}</span></div></div>`;
                 },
               },
             }}

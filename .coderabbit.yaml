@@ -68,8 +68,10 @@ reviews:
         stay masked. A sensitive operation whose audit record cannot be written
         must not proceed. Schema changes need a new forward-only migration under
         `migrations/`. Errors are wrapped with `%w` and classified with
-        `errors.Is`; handlers return explicit status codes with JSON `error` and
-        `message` fields. Comments explain why in English and never restate the
+        `errors.Is`; handlers return explicit status codes with a JSON `error`
+        field (plus a stable machine-readable `code`, or `details`, where a
+        refusal must be distinguished programmatically). Comments explain why in
+        English and never restate the
         code. Unexported identifiers are lowerCamelCase; exported identifiers
         are UpperCamelCase; JSON tags, DB columns, CPA fields and other external
         contract names keep their required spelling. Booleans carry an

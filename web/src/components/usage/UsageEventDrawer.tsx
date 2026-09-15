@@ -231,7 +231,9 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
             </div>
             <div>
               <span>{t('events.col_tokens')}</span>
-              <strong>{formatTokens(event.tokens.total, tokenStyle)}</strong>
+              {/* The headline is compact to match every other token readout; the exact count is the
+                  accessible name, so the rounding never becomes the only number available. */}
+              <strong title={formatTokensFull(event.tokens.total)}>{formatTokens(event.tokens.total, tokenStyle)}</strong>
             </div>
             <div>
               <span>{t('events.col_cost')}</span>
@@ -388,25 +390,25 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                     <div className="req-token-cards-grid">
                       <div className="req-token-card">
                         <span>{t('events.total_tokens')}</span>
-                        <strong>{formatTokens(event.tokens.total, tokenStyle)}</strong>
+                        <strong title={formatTokensFull(event.tokens.total)}>{formatTokens(event.tokens.total, tokenStyle)}</strong>
                       </div>
                       <div className="req-token-card">
                         <span>{t('events.input_tokens')}</span>
-                        <strong>{formatTokens(event.tokens.input, tokenStyle)}</strong>
+                        <strong title={formatTokensFull(event.tokens.input)}>{formatTokens(event.tokens.input, tokenStyle)}</strong>
                       </div>
                       <div className="req-token-card">
                         <span>{t('events.output_tokens')}</span>
-                        <strong>{formatTokens(event.tokens.output, tokenStyle)}</strong>
+                        <strong title={formatTokensFull(event.tokens.output)}>{formatTokens(event.tokens.output, tokenStyle)}</strong>
                       </div>
                       {event.tokens.reasoning > 0 && (
                         <div className="req-token-card">
                           <span>{t('events.reasoning_tokens')}</span>
-                          <strong>{formatTokens(event.tokens.reasoning, tokenStyle)}</strong>
+                          <strong title={formatTokensFull(event.tokens.reasoning)}>{formatTokens(event.tokens.reasoning, tokenStyle)}</strong>
                         </div>
                       )}
                       <div className="req-token-card">
                         <span>{t('events.cached_tokens')}</span>
-                        <strong>{formatTokens(event.tokens.cached, tokenStyle)}</strong>
+                        <strong title={formatTokensFull(event.tokens.cached)}>{formatTokens(event.tokens.cached, tokenStyle)}</strong>
                       </div>
                     </div>
                     {section(

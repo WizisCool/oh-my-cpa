@@ -1844,11 +1844,21 @@ export async function dashboardModelPanels({ base, page, check }) {
     [...document.querySelectorAll('.model-usage-row')].map((row) => ({
       name: row.querySelector('.model-usage-name').textContent,
       tokens: row.querySelector('.model-usage-tokens').textContent,
+      tokensTitle: row.querySelector('.model-usage-tokens').getAttribute('title'),
       share: row.querySelector('.model-usage-share').textContent,
       color: getComputedStyle(row.querySelector('.model-usage-swatch')).backgroundColor,
     })),
   );
   check('the usage list ranks every group', list.length === 6, `rows=${list.length}`);
+  // The volume cell is abbreviated so the row scans; the exact count has to remain reachable, and
+  // the format is what proves the title is the full number rather than a repeat of the
+  // abbreviation: grouped digits with the unit word, never a `K`/`M` suffix. The pattern accepts a
+  // small value too, because a genuinely small group is exact without a separator.
+  check(
+    'every abbreviated volume keeps its exact count in the accessible name',
+    list.every((row) => typeof row.tokensTitle === 'string' && /^(\d{1,3}(,\d{3})+|\d{1,3}) tokens$/.test(row.tokensTitle)),
+    JSON.stringify(list.map((row) => `${row.tokens} => ${row.tokensTitle}`)),
+  );
   check(
     'every row states a name, a volume and a share',
     list.every((row) => row.name.length > 0 && /[\d.]/.test(row.tokens) && /%/.test(row.share)),
@@ -2024,9 +2034,22 @@ export async function dashboardModelPanels({ base, page, check }) {
  */
 export async function dashboardModelPanelStates({ base, page, check, context }) {
   const calls = [];
+  // Preference writes, so the toggle's persistence can be asserted rather than inferred from a
+  // read that a warm cache legitimately skips.
+  const preferenceWrites = [];
   await page.route('**/omc/api/**', async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/dashboard/models')) calls.push(url.search);
+    const preferenceMatch = url.pathname.match(/\/preferences\/([^/]+)$/);
+    if (preferenceMatch && route.request().method() === 'PUT') {
+      let value;
+      try {
+        value = JSON.parse(route.request().postData() ?? 'null');
+      } catch {
+        value = undefined;
+      }
+      preferenceWrites.push({ key: preferenceMatch[1], value });
+    }
     return route.fallback();
   });
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
@@ -2063,7 +2086,8 @@ export async function dashboardModelPanelStates({ base, page, check, context }) 
 
   // ── the grouping toggle re-reads with its own view ────────────────────────
   // The two groupings are two different rankings; a toggle that only re-labelled the existing series
-  // would present upstream-model rows as call points. The request URL is the observable.
+  // would present upstream-model rows as call points. The request URL is the observable, and so is
+  // the persisted write: the choice has to survive a reload like every other console preference.
   const beforeToggle = calls.length;
   await page.locator('.model-usage-card .ant-segmented-item').filter({ hasText: /By upstream model|按上游模型/ }).first().click();
   let modelViewRead = false;
@@ -2076,16 +2100,64 @@ export async function dashboardModelPanelStates({ base, page, check, context }) 
     modelViewRead,
     `calls=${calls.join(' ')}`,
   );
-  // Switching back restores the call view, which is the persisted default.
-  await page.locator('.model-usage-card .ant-segmented-item').filter({ hasText: /By call point|按调用点/ }).first().click();
-  await until(async () => calls.filter((search) => search.includes('group_by=call')).length >= 2, {
-    label: 'the panels to re-read in the call-point grouping',
-  }).catch(() => {});
   check(
-    'switching back restores the call-point grouping',
-    calls.filter((search) => search.includes('group_by=call')).length >= 2,
-    `calls=${calls.join(' ')}`,
+    'switching the grouping persists the upstream-model view',
+    preferenceWrites.some((entry) => entry.key === 'omc_models_view' && entry.value === 'model'),
+    `writes=${JSON.stringify(preferenceWrites)}`,
   );
+  // Switching back is a *view* change, not a re-read: react-query holds the call-grouped entry
+  // from moments ago, so the switch repaints from cache rather than issuing another window scan.
+  // The claims that matter are therefore the control's own state and the persisted write - a
+  // reader who reloads must land back in the call view.
+  await page.locator('.model-usage-card .ant-segmented-item').filter({ hasText: /By call point|按调用点/ }).first().click();
+  let callViewPersisted = false;
+  await until(async () => {
+    callViewPersisted = preferenceWrites.some((entry) => entry.key === 'omc_models_view' && entry.value === 'call');
+    return callViewPersisted;
+  }, { label: 'the call-point view to be persisted' }).catch(() => {});
+  check(
+    'switching back selects the call-point view and persists it',
+    (
+      (await page.locator('.model-usage-card .ant-segmented-item-selected').innerText()).trim().length > 0
+      && /By call point|按调用点/.test(await page.locator('.model-usage-card .ant-segmented-item-selected').innerText())
+      && callViewPersisted
+    ),
+    `selected=${JSON.stringify(await page.locator('.model-usage-card .ant-segmented-item-selected').innerText())} writes=${JSON.stringify(preferenceWrites)}`,
+  );
+
+  // ── a refused preference write puts the control back ──────────────────────
+  // The view toggle is optimistic: the panel switches on the click, then the write settles. When the
+  // write is refused the control must return to the value the server still holds - otherwise the
+  // console keeps showing a setting that was never saved, because these preferences never refetch on
+  // their own. This is the failure mode a toast alone cannot fix.
+  //
+  // The refusal is *delayed* on purpose. An immediate 500 rolls the control back inside the click
+  // handler, so the optimistic paint would either be missed by the poll or, worse, the whole check
+  // would pass on a control that never moved at all. Holding the write open makes the intermediate
+  // state a real, observable one - and then the rollback after the refusal is a change from it.
+  await context.route('**/omc/api/**/preferences/*', async (route) => {
+    if (route.request().method() !== 'PUT') return route.fallback();
+    await sleep(600);
+    return route.fulfill({ status: 500, json: { error: 'preference write refused' } });
+  });
+  await page.locator('.model-usage-card .ant-segmented-item').filter({ hasText: /By upstream model|按上游模型/ }).first().click();
+  let optimisticShown = false;
+  await until(async () => {
+    optimisticShown = /By upstream model|按上游模型/.test(await page.locator('.model-usage-card .ant-segmented-item-selected').innerText());
+    return optimisticShown;
+  }, { label: 'the optimistic switch to appear while the write is still in flight' }).catch(() => {});
+  check('a write still in flight shows the operator\'s choice immediately', optimisticShown);
+  let rolledBack = false;
+  await until(async () => {
+    rolledBack = /By call point|按调用点/.test(await page.locator('.model-usage-card .ant-segmented-item-selected').innerText());
+    return rolledBack;
+  }, { label: 'the control to fall back to the persisted view after the refusal' }).catch(() => {});
+  check(
+    'a refused preference write falls the control back to the persisted view',
+    rolledBack,
+    `selected=${JSON.stringify(await page.locator('.model-usage-card .ant-segmented-item-selected').innerText())}`,
+  );
+  await context.unroute('**/omc/api/**/preferences/*');
 
   // ── a stale refresh keeps the panels and says so ───────────────────────────
   await page.unroute('**/omc/api/**');
@@ -2474,7 +2546,110 @@ export function refreshRecords() {
  * serves the release gate (which runs all of them) and the development fast path
  * (which runs the relevant subset) without either owning the other's reporting.
  */
+/**
+ * The OMC settings page: the console's own preferences, and the promise that changing one
+ * actually governs the console.
+ *
+ * The page is the single place these settings live, so the assertions are about the two things a
+ * per-component test cannot reach: that a change reaches the surfaces it claims to govern (the
+ * dashboard's numbers, not just the control), and that it survives a reload - which is the whole
+ * reason these preferences are server-stored rather than kept in the browser.
+ */
+export async function omcSettings({ base, page, check }) {
+  const writes = [];
+  await page.route('**/omc/api/**/preferences/*', async (route) => {
+    if (route.request().method() === 'PUT') {
+      writes.push({ key: new URL(route.request().url()).pathname.split('/').pop(), body: route.request().postData() });
+    }
+    return route.fallback();
+  });
+
+  await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
+
+  // Every console preference is here, exactly once. A duplicated row would be two controls for one
+  // setting - the operator changes one and the other silently disagrees.
+  const rows = await page.locator('.omc-setting-row').count();
+  check('the settings page lists each console preference once', rows === 4, `rows=${rows}`);
+  const labels = await page.locator('.omc-setting-label').allInnerTexts();
+  check(
+    'the settings page names its settings',
+    labels.every((label) => label.trim().length > 0)
+      && labels.some((label) => /Token|Token/.test(label))
+      && labels.some((label) => /主题|Theme/.test(label))
+      && labels.some((label) => /语言|Language/.test(label)),
+    `labels=${labels.join(' | ')}`,
+  );
+
+  // ── the unit style governs the console, not just the control ───────────────
+  const tokenRow = page.locator('.omc-setting-row').filter({ hasText: /Token unit style|Token 计量单位/ });
+  await tokenRow.locator('.ant-segmented-item').filter({ hasText: /Chinese|中文单位/ }).click();
+  let persistedChinese = false;
+  await until(async () => {
+    persistedChinese = writes.some((entry) => entry.key === 'omc_token_style' && entry.body === '"zh"');
+    return persistedChinese;
+  }, { label: 'the Chinese unit style to be persisted' }).catch(() => {});
+  check(
+    'choosing a unit style persists it under its own preference key',
+    persistedChinese,
+    `writes=${JSON.stringify(writes)}`,
+  );
+
+  // The claim the setting makes is about every token readout, and the dashboard tiles are the
+  // loudest one: a two-decimal compact tile becomes a 万/亿 reading.
+  await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
+  // Waited for through the condition primitive rather than a one-shot read: the page paints its
+  // skeletons first, so the tile values appear a frame or two after the grid does.
+  const tileValues = await until(async () => {
+    const texts = await page.locator('.dashboard-grid .tile-value').allInnerTexts();
+    return texts.length > 0 ? texts : false;
+  }, { label: 'the dashboard tiles to render' }).catch(() => []);
+  check(
+    'the dashboard token tile renders in the chosen unit style',
+    tileValues.some((value) => /[万亿]/.test(value)),
+    `tiles=${tileValues.join(' | ')}`,
+  );
+
+  // ── it survives a reload ──────────────────────────────────────────────────
+  // This is what server storage buys: a fresh page load, with no browser state carried over, comes
+  // back in the chosen style because the value was read from the deployment.
+  await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
+  const selectedTokenStyle = await page
+    .locator('.omc-setting-row').filter({ hasText: /Token unit style|Token 计量单位/ })
+    .locator('.ant-segmented-item-selected')
+    .innerText();
+  check(
+    'the chosen unit style survives a reload',
+    /Chinese|中文单位/.test(selectedTokenStyle),
+    `selected=${JSON.stringify(selectedTokenStyle)}`,
+  );
+
+  // ── the appearance shortcuts are the same settings ────────────────────────
+  // Theme and language stay in the browser, and the page's controls must therefore drive the live
+  // app rather than a copy: switching the language rewrites this page's own copy.
+  const languageRow = page.locator('.omc-setting-row').filter({ hasText: /Language|界面语言/ });
+  await languageRow.locator('.ant-segmented-item').filter({ hasText: /English/ }).click();
+  let becameEnglish = false;
+  await until(async () => {
+    becameEnglish = /OMC Settings/.test(await page.locator('.terminal-title').innerText());
+    return becameEnglish;
+  }, { label: 'the page to re-render in the chosen language' }).catch(() => {});
+  check('switching the language on this page re-renders the console', becameEnglish);
+}
+
 export const SCENARIOS = [
+  {
+    id: 'omc-settings',
+    name: 'OMC settings and the unit style it governs',
+    options: {
+      routes: [
+        [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
+        [(url) => url.pathname.endsWith('/dashboard/tail'), () => chartDashboard],
+      ],
+    },
+    run: omcSettings,
+  },
   {
     id: 'column-alignment',
     name: 'column alignment',

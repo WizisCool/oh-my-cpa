@@ -212,7 +212,7 @@ func TestQueryUsageModelBucketsGroupsCallPointsAcrossUpstreamModels(t *testing.T
 	insertCallPointEvent(t, repo, "c-4", "glm-5.3-flash", &blank, base, 50, nil)
 
 	callRows, err := repo.QueryUsageModelBuckets(context.Background(), "default",
-		base.UnixMilli(), base.Add(time.Minute).UnixMilli(), time.Minute.Milliseconds(), UsageModelBucketOptions{GroupByCallPoint: true})
+		base.UnixMilli(), base.Add(time.Minute).UnixMilli(), time.Minute.Milliseconds(), UsageModelBucketOptions{IsGroupedByCallPoint: true})
 	if err != nil {
 		t.Fatal(err)
 	}

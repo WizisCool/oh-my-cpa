@@ -12,10 +12,10 @@ import (
 // - by provider, by credential - lands here as a field with a name, not as a
 // second positional bool nobody can read at the call site.
 type UsageModelBucketOptions struct {
-	// GroupByCallPoint partitions by call point instead of upstream model. A
+	// IsGroupedByCallPoint partitions by call point instead of upstream model. A
 	// call point is the client-facing identity: the model alias a client
 	// requested when there is one, the upstream model name otherwise.
-	GroupByCallPoint bool
+	IsGroupedByCallPoint bool
 }
 
 // UsageModelBucketRow is one model's traffic inside one bucket of the requested grid.
@@ -82,7 +82,7 @@ func (r *Repository) QueryUsageModelBuckets(ctx context.Context, instanceID stri
 	// upstream aliases still reads as the single line the operator called for.
 	// The alias is the identity, not a display rewrite: it partitions the rows.
 	groupExpression := "model"
-	if opts.GroupByCallPoint {
+	if opts.IsGroupedByCallPoint {
 		groupExpression = `COALESCE(NULLIF(TRIM(COALESCE(model_alias, '')), ''), model)`
 	}
 

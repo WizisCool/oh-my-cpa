@@ -4,7 +4,7 @@ import dayjs from 'dayjs';
 import { useThemeMode } from '../theme/ThemeContext';
 import { seriesColorRange, seriesDomainKey } from './chartTheme';
 import { MONO_FONT_STACK, palette } from '../theme/themeConfig';
-import { formatTokens as formatTokensStyled } from '../types/tokenDisplay';
+import { formatTokens as formatTokensStyled, formatTokensFull } from '../types/tokenDisplay';
 import type { DashboardModelUsage } from '../types/dashboardModels';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
 
@@ -237,7 +237,11 @@ export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, folded
                 const shape = `<span class="omc-tip-swatch" style="background:${item.color ?? 'transparent'}"></span>`;
                 // The shared token layer's compact form: a tooltip that scans like the legend it
                 // annotates, with the exact count in the accessible name below.
-                return `<div class="omc-tip-row">${shape}<span class="omc-tip-name">${escapeHtml(name)}</span><span class="omc-tip-value">${formatTokensStyled(item.value ?? 0, tokenStyle)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}</span></div>`;
+                // The visible value is abbreviated so the readout scans like the legend it
+                // annotates; the exact count is the value's own title, because an abbreviation is
+                // a rounded claim and must never be the only number on offer.
+                const exact = `${formatTokensFull(item.value ?? 0)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}`;
+                return `<div class="omc-tip-row">${shape}<span class="omc-tip-name">${escapeHtml(name)}</span><span class="omc-tip-value" title="${escapeHtml(exact)}">${formatTokensStyled(item.value ?? 0, tokenStyle)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}</span></div>`;
               });
               return `<div class="omc-tip"><div class="omc-tip-time">${time}</div>${rows.join('')}</div>`;
             },

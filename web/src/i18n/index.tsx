@@ -71,13 +71,13 @@ const DICT: Record<string, [string, string]> = {
   // configuration stays in the config panel; these describe how this console
   // reads and shows data, so they save immediately and follow the deployment.
   'omc.title': ['OMC 设置', 'OMC Settings'],
-  'omc.subtitle': ['Oh My CPA 自身的显示与命名偏好，保存后立即生效并跟随部署存储。', 'Oh My CPA\'s own display and naming preferences. They apply immediately and follow the deployment.'],
+  'omc.subtitle': ['Oh My CPA 自身的显示偏好，保存后立即生效。数据展示与图表口径随部署存储，主题与语言保存在本机浏览器。', 'Oh My CPA\'s own display preferences. They apply immediately; the data-display and chart settings follow the deployment, while theme and language stay in this browser.'],
   'omc.section_display': ['数据显示', 'Data display'],
   'omc.section_display_desc': ['用量数字在仪表盘、请求记录与详情抽屉中的呈现方式。', 'How usage numbers are presented on the dashboard, in request records and in the detail drawer.'],
   'omc.section_appearance': ['界面外观', 'Appearance'],
   'omc.section_appearance_desc': ['控制台的主题与语言。页头的快捷切换与这里是同一份设置。', 'Console theme and language. The header shortcuts change the same setting.'],
   'omc.section_charts': ['图表口径', 'Chart views'],
-  'omc.section_charts_desc': ['仪表盘两个模型面板的默认统计口径，也可在面板内临时切换。', 'The dashboard model panels\' default grouping; it can also be switched on the panel itself.'],
+  'omc.section_charts_desc': ['仪表盘两个模型面板的默认统计口径，也可在面板内直接切换（同一份设置）。', 'The dashboard model panels\' default grouping; the panel\'s own toggle changes the same setting.'],
   'omc.token_style': ['Token 计量单位', 'Token unit style'],
   'omc.token_style_desc': ['Token 数量的缩写方式，如 300M/1.2B 或 300万/1.2亿。悬停提示始终显示精确值。', 'How token counts are abbreviated, e.g. 300M/1.2B or 300万/1.2亿. Tooltips always show the exact value.'],
   'omc.token_style_en': ['英文缩写（K/M/B）', 'English (K/M/B)'],

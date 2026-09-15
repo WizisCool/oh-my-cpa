@@ -92,19 +92,6 @@ export const OmcSettingsPage: React.FC = () => {
             />
           }
         />
-        <SettingRow
-          label={t('omc.model_view')}
-          description={t('omc.model_view_desc')}
-          control={
-            <SegmentedControl
-              value={modelView}
-              options={modelViewOptions}
-              onChange={(next) => setModelView(next as ModelChartView)}
-              ariaLabel={t('omc.model_view')}
-            />
-          }
-        />
-        <p className="empty-copy omc-note">{t('omc.call_view_note')}</p>
       </Card>
 
       <Card className="omc-settings-card" styles={{ body: { padding: 20 } }}>
@@ -124,6 +111,7 @@ export const OmcSettingsPage: React.FC = () => {
             />
           }
         />
+        <p className="empty-copy omc-note">{t('omc.call_view_note')}</p>
       </Card>
 
       <Card className="omc-settings-card" styles={{ body: { padding: 20 } }}>
