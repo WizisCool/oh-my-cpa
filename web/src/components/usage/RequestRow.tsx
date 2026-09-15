@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tooltip } from 'antd';
-import { BulbOutlined, CopyOutlined, RightOutlined } from '@ant-design/icons';
+import { BlockOutlined, BulbOutlined, CopyOutlined, RightOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { LobeIcon, getProviderDefaultIcon } from '../LobeIcon';
 import { useT } from '../../i18n';
@@ -13,6 +13,8 @@ import {
   eventTokensPerSecond,
   eventUserAgentLabel,
   formatEventDuration,
+  hasMeasurableTTFT,
+  isNonStreamingEvent,
   resolveProviderInfo,
   type CredentialIndex,
   type ProviderLookupEntry,
@@ -170,6 +172,13 @@ export const RequestRow = React.memo<RequestRowProps>(
             >
               {event.model || t('events.not_captured')}
             </strong>
+            {isNonStreamingEvent(event) && (
+              <Tooltip title={t('events.non_stream_hint')}>
+                <span className="req-non-stream-icon" aria-label={t('events.non_stream_hint')}>
+                  <BlockOutlined />
+                </span>
+              </Tooltip>
+            )}
             {!event.generate && (
               <span className="req-preflight-badge" title={t('events.preflight_hint')}>
                 {t('events.preflight')}
@@ -198,9 +207,11 @@ export const RequestRow = React.memo<RequestRowProps>(
           <strong className="req-latency-val">
             {formatEventDuration(event.latency_ms)}
           </strong>
-          <span className="req-ttft-val">
-            TTFT {formatEventDuration(event.ttft_ms)}
-          </span>
+          {hasMeasurableTTFT(event) && (
+            <span className="req-ttft-val">
+              TTFT {formatEventDuration(event.ttft_ms)}
+            </span>
+          )}
         </div>
 
         {/* Column 6: generation speed in tokens per second */}

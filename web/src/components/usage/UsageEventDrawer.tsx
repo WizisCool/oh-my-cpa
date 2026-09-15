@@ -1,7 +1,8 @@
 import React from 'react';
-import { Alert, App as AntdApp, Button, Descriptions, Drawer, Empty, Modal, Skeleton, Tabs } from 'antd';
+import { Alert, App as AntdApp, Button, Descriptions, Drawer, Empty, Modal, Skeleton, Tabs, Tooltip } from 'antd';
 import {
   ArrowRightOutlined,
+  BlockOutlined,
   CopyOutlined,
   DownloadOutlined,
   DownOutlined,
@@ -18,6 +19,8 @@ import {
   resolveCredential,
   requestGroupName,
   formatEventDuration,
+  hasMeasurableTTFT,
+  isNonStreamingEvent,
   type CredentialIndex,
 } from '../../types/usageEventView';
 
@@ -172,7 +175,8 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   );
 
   const latency = event?.latency_ms ?? 0;
-  const ttft = event?.ttft_ms != null && event.ttft_ms > 0 && event.ttft_ms <= latency ? event.ttft_ms : 0;
+  const isMeasurable = hasMeasurableTTFT(event);
+  const ttft = isMeasurable && event?.ttft_ms != null ? event.ttft_ms : 0;
   const streamTime = Math.max(0, latency - ttft);
   const ttftPercent = latency > 0 && ttft > 0 ? Math.min(100, Math.max(2, (ttft / latency) * 100)) : 0;
   const streamPercent = latency > 0 && streamTime > 0 ? Math.min(100 - ttftPercent, Math.max(2, (streamTime / latency) * 100)) : 0;
@@ -200,7 +204,16 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
         <>
           <div className="request-detail-hero">
             <div className="request-detail-heading">
-              <h2>{event.model || t('events.not_captured')}</h2>
+              <div className="request-detail-model-row">
+                <h2>{event.model || t('events.not_captured')}</h2>
+                {isNonStreamingEvent(event) && (
+                  <Tooltip title={t('events.non_stream_hint')}>
+                    <span className="req-non-stream-icon" aria-label={t('events.non_stream_hint')}>
+                      <BlockOutlined />
+                    </span>
+                  </Tooltip>
+                )}
+              </div>
               <span className={`request-result ${event.failed ? 'is-failed' : ''}`}>
                 <i />
                 {t(event.failed ? 'events.filter_failed' : 'events.filter_success')}
@@ -225,10 +238,12 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
               <span>{t('events.duration')}</span>
               <strong>{formatEventDuration(event.latency_ms)}</strong>
             </div>
-            <div>
-              <span>{t('events.ttft')}</span>
-              <strong>{formatEventDuration(event.ttft_ms)}</strong>
-            </div>
+            {isMeasurable && (
+              <div>
+                <span>{t('events.ttft')}</span>
+                <strong>{formatEventDuration(event.ttft_ms)}</strong>
+              </div>
+            )}
             <div>
               <span>{t('events.col_tokens')}</span>
               {/* The headline is compact to match every other token readout; the exact count is the
@@ -353,7 +368,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                           <h4>{t('events.waterfall_title')}</h4>
                           <span className="req-waterfall-total">{formatEventDuration(latency)}</span>
                         </div>
-                        {ttft > 0 ? (
+                        {isMeasurable && ttft > 0 ? (
                           <>
                             <div className="req-waterfall-track">
                               <div
@@ -381,9 +396,22 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                             </div>
                           </>
                         ) : (
-                          <div className="req-waterfall-legend">
-                            <span>{formatEventDuration(latency)}</span>
-                          </div>
+                          <>
+                            <div className="req-waterfall-track">
+                              <div
+                                className="req-waterfall-seg-total"
+                                style={{ width: '100%' }}
+                                title={`${t('events.duration')}: ${formatEventDuration(latency)}`}
+                              />
+                            </div>
+                            <div className="req-waterfall-legend">
+                              <div className="req-waterfall-legend-item">
+                                <span className="req-waterfall-pip req-waterfall-pip-total" />
+                                <span>{t('events.duration')}</span>
+                                <strong>{formatEventDuration(latency)}</strong>
+                              </div>
+                            </div>
+                          </>
                         )}
                       </div>
                     )}
@@ -415,10 +443,9 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                       t('events.timing'),
                       fields([
                         [t('events.duration'), `${event.latency_ms.toLocaleString()} ms`],
-                        [
-                          t('events.ttft'),
-                          event.ttft_ms == null ? missing : `${event.ttft_ms.toLocaleString()} ms`,
-                        ],
+                        ...(isMeasurable && event.ttft_ms != null
+                          ? [[t('events.ttft'), `${event.ttft_ms.toLocaleString()} ms`] as [string, string]]
+                          : []),
                       ]),
                     )}
                     {section(
