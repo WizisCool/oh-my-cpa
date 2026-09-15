@@ -2302,26 +2302,15 @@ a { color: inherit; }
 }
 
 /* ── OMC settings page ─────────────────────────────────────────────────────
-   One page for Oh My CPA's own preferences. Rows are definition-style — name
-   and explanation on the left, the control on the right — because every
-   control here commits on interaction and there is no footer bar to park a
-   second column of state in. */
-.omc-settings-card { margin-bottom: 16px; }
-.omc-setting-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--border-soft);
-}
-.omc-setting-row:last-of-type { border-bottom: none; }
-.omc-setting-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.omc-setting-label { color: var(--fg); font-size: 13px; font-weight: 600; }
-.omc-setting-desc { font-size: 12px; }
-.omc-setting-control { flex: none; }
-.omc-note { font-size: 12px; margin-top: 4px; }
-@media (max-width: 680px) {
-  .omc-setting-row { flex-direction: column; align-items: stretch; gap: 8px; }
-  .omc-setting-control { align-self: flex-start; }
-}
+   The page reuses the config panel's own settings-group list rather than
+   inventing a second settings idiom: it is the same shape - a titled, bordered
+   group of label/control rows - and docs/design.md's checklist prefers open
+   section lists over card wrappers for settings. All this adds is the spacing
+   between the page's two groups. */
+.omc-settings-group { margin-bottom: 20px; }
+/* The config panel's rows hand every control a fixed 380px column, which suits its own text inputs
+   and switches. These are segmented pickers three or four items wide and measure 456px, so that
+   column overflowed - and because it is right-aligned inside its grid cell, the excess spilled
+   *left*, over the description beside it, which is what made the two read as a collision. Sizing the
+   column to its content keeps every picker inside the box that owns its fill. */
+.omc-settings-group .settings-toggle-control { width: auto; }

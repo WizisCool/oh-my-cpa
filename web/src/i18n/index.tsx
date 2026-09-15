@@ -67,34 +67,32 @@ const DICT: Record<string, [string, string]> = {
   'header.language': ['界面语言', 'Language'],
 
   // ── OMC settings page ───────────────────────────────────────────
-  // One page for Oh My CPA's own display and naming settings. CPA's gateway
-  // configuration stays in the config panel; these describe how this console
-  // reads and shows data, so they save immediately and follow the deployment.
+  // One page for Oh My CPA's own console settings. CPA's gateway configuration
+  // stays in the config panel; these describe how this console reads and shows
+  // data, so they save immediately and follow the deployment.
+  //
+  // The page carries a single title and no section descriptions: docs/design.md
+  // §3 allows a subtitle only when it carries live data, and a sentence
+  // explaining why a switch exists is documentation pasted into the interface.
+  // A row description survives only when it states something the label cannot.
   'omc.title': ['OMC 设置', 'OMC Settings'],
-  'omc.subtitle': ['Oh My CPA 自身的显示偏好，保存后立即生效。数据展示与图表口径随部署存储，主题与语言保存在本机浏览器。', 'Oh My CPA\'s own display preferences. They apply immediately; the data-display and chart settings follow the deployment, while theme and language stay in this browser.'],
   'omc.section_display': ['数据显示', 'Data display'],
-  'omc.section_display_desc': ['用量数字在仪表盘、请求记录与详情抽屉中的呈现方式。', 'How usage numbers are presented on the dashboard, in request records and in the detail drawer.'],
   'omc.section_appearance': ['界面外观', 'Appearance'],
-  'omc.section_appearance_desc': ['控制台的主题与语言。页头的快捷切换与这里是同一份设置。', 'Console theme and language. The header shortcuts change the same setting.'],
-  'omc.section_charts': ['图表口径', 'Chart views'],
-  'omc.section_charts_desc': ['仪表盘两个模型面板的默认统计口径，也可在面板内直接切换（同一份设置）。', 'The dashboard model panels\' default grouping; the panel\'s own toggle changes the same setting.'],
   'omc.token_style': ['Token 计量单位', 'Token unit style'],
-  'omc.token_style_desc': ['Token 数量的缩写方式，如 300M/1.2B 或 300万/1.2亿。悬停提示始终显示精确值。', 'How token counts are abbreviated, e.g. 300M/1.2B or 300万/1.2亿. Tooltips always show the exact value.'],
+  // States the guarantee rather than restating the control: the choice is how the
+  // numbers read, not how precise they are.
+  'omc.token_style_desc': ['仅改变阅读方式；悬停提示始终是精确值。', 'Reading only; tooltips always carry the exact value.'],
   'omc.token_style_en': ['英文缩写（K/M/B）', 'English (K/M/B)'],
   'omc.token_style_zh': ['中文单位（万/亿）', 'Chinese (万/亿)'],
-  'omc.model_view': ['模型面板默认视图', 'Default model-panel view'],
-  'omc.model_view_desc': ['“按调用点”把同一调用点经多个上游模型的请求合并为一组；“按上游模型”按网关实际路由到的模型拆分。', '“By call point” merges one call point\'s traffic across upstream models; “By upstream model” splits it as the gateway routed it.'],
-  'omc.model_view_call': ['按调用点', 'By call point'],
-  'omc.model_view_model': ['按上游模型', 'By upstream model'],
+  // Language-neutral: grouped digits, no unit word. The label shows both consoles
+  // the same example because the value it produces is the same in both.
+  'omc.token_style_full': ['完整数字（300,000,000）', 'Full digits (300,000,000)'],
   'omc.theme': ['界面主题', 'Theme'],
-  'omc.theme_desc': ['深色为默认主题。', 'Dark is the default.'],
   'omc.theme_dark': ['深色', 'Dark'],
   'omc.theme_light': ['浅色', 'Light'],
   'omc.language': ['界面语言', 'Language'],
-  'omc.language_desc': ['切换后立即生效。', 'Applies immediately.'],
   'omc.language_zh': ['简体中文', 'Simplified Chinese'],
   'omc.language_en': ['English', 'English'],
-  'omc.call_view_note': ['按调用点视图合并的是模型别名；未设置别名的调用按上游模型名归组。', 'The call-point view merges on the model alias; calls without an alias group under the upstream model name.'],
   'header.logout': ['退出', 'Sign out'],
   'shell.cpa': ['CPA', 'CPA'],
   'shell.connected': ['已连接', 'connected'],

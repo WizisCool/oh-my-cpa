@@ -9,6 +9,7 @@ import {
   formatTokensFull,
   parseModelChartView,
   parseTokenNumberStyle,
+  resolveTokenNumberStyle,
 } from '../web/src/types/tokenDisplay.ts';
 import {
   formatModelShare,
@@ -40,11 +41,33 @@ assert.equal(formatTokens(99_999_999, 'zh'), '10000万');
 assert.equal(formatTokens(NaN, 'en-compact'), '—');
 assert.equal(formatTokens(Infinity, 'zh'), '—');
 
+// The `full` style is the same reading as the exact form: grouped digits with no
+// unit word. It is the one style that means the same thing in both consoles, which
+// is why it is offered to an English reader as the alternative to an abbreviation.
+assert.equal(formatTokens(1234567, 'full'), '1,234,567');
+assert.equal(formatTokens(0, 'full'), '0');
+assert.equal(formatTokens(999, 'full'), '999');
+assert.equal(formatTokens(NaN, 'full'), '\u2014');
+assert.equal(formatTokens(1234567, 'full'), formatTokensFull(1234567));
+
 // The full form is exact with separators, in every style: it is what tooltips
 // and accessible names print, so rounding would present an approximation as fact.
 assert.equal(formatTokensFull(1234567), '1,234,567');
 assert.equal(formatTokensFull(0), '0');
 assert.equal(formatTokensFull(NaN), '—');
+
+// ── the language guard ────────────────────────────────────────────────────────
+
+// 万 and 亿 are words, so a Chinese scale in an English console would mix two
+// languages in one reading. A stored `zh` therefore resolves to the compact form
+// whenever the console is not Chinese...
+assert.equal(resolveTokenNumberStyle('zh', 'en'), 'en-compact');
+assert.equal(resolveTokenNumberStyle('zh', 'zh'), 'zh');
+// ...while the language-neutral styles pass through untouched, in both consoles.
+assert.equal(resolveTokenNumberStyle('en-compact', 'en'), 'en-compact');
+assert.equal(resolveTokenNumberStyle('en-compact', 'zh'), 'en-compact');
+assert.equal(resolveTokenNumberStyle('full', 'en'), 'full');
+assert.equal(resolveTokenNumberStyle('full', 'zh'), 'full');
 
 // ── parsing stored preferences ─────────────────────────────────────────────────
 
@@ -52,6 +75,10 @@ assert.equal(formatTokensFull(NaN), '—');
 // falls back rather than reaching a formatter with a style it does not implement.
 assert.equal(parseTokenNumberStyle('zh'), 'zh');
 assert.equal(parseTokenNumberStyle('en-compact'), 'en-compact');
+// A value stored before the third style existed still parses, and an invented one
+// still falls back rather than reaching a formatter it does not implement.
+assert.equal(parseTokenNumberStyle('full'), 'full');
+assert.equal(parseTokenNumberStyle('k/m/b'), undefined);
 assert.equal(parseTokenNumberStyle('bogus'), undefined);
 assert.equal(parseTokenNumberStyle(42), undefined);
 assert.equal(parseTokenNumberStyle(null), undefined);
@@ -61,7 +88,7 @@ assert.equal(parseModelChartView('model'), 'model');
 assert.equal(parseModelChartView('calls'), undefined);
 assert.equal(parseModelChartView(undefined), undefined);
 
-assert.deepEqual([...TOKEN_NUMBER_STYLES], ['en-compact', 'zh']);
+assert.deepEqual([...TOKEN_NUMBER_STYLES], ['en-compact', 'zh', 'full']);
 assert.deepEqual([...MODEL_CHART_VIEWS], ['call', 'model']);
 assert.equal(DEFAULT_TOKEN_NUMBER_STYLE, 'en-compact');
 assert.equal(DEFAULT_MODEL_CHART_VIEW, 'call');
