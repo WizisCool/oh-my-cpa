@@ -6,6 +6,8 @@ import { Link } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { heatmapRampMax, heatmapRampPosition } from '../../theme/heatmapRamp';
 import { useT, useI18n, type Lang } from '../../i18n';
+import { formatTokens, formatTokensFull } from '../../types/tokenDisplay';
+import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import {
   buildHeatmapGrid,
   heatmapCellState,
@@ -49,6 +51,15 @@ const WEEKDAY_KEYS = [
  */
 const HEATMAP_REFRESH_MS = 5 * 60_000;
 
+/**
+ * Grouped digits, deliberately outside the console's token unit style.
+ *
+ * Two readouts still need this. A request count is not a token volume, so the token unit
+ * style has nothing to say about it; and an accessible name always carries the exact count,
+ * because a screen reader given "100K" hears a rounded claim with no way to ask for the
+ * number it rounded. Every token volume that is *read* goes through the shared display layer
+ * instead - see the tooltip below.
+ */
 function full(value: number): string {
   return FULL_NUMBER_FORMAT.format(value);
 }
@@ -99,6 +110,12 @@ function formatDay(day: string, lang: Lang, options: Intl.DateTimeFormatOptions)
  * A `Link` resolves through the router, so the rendered `href` carries the prefix.
  *
  * The cell itself never navigates - see the cell's own comment for why.
+ *
+ * The token volume prints in the console's unit style, like every other token readout on the page.
+ * The panel used to print its own exact form here, which made this one number ignore `omc_token_style`
+ * while the KPI tiles directly above it obeyed it. The exact count is not lost: it is the value's own
+ * `title`, the same arrangement the model panels' tooltips use, because an abbreviation is only safe
+ * to print while the number it rounded stays reachable.
  */
 export const HeatmapTooltipContent: React.FC<{
   day: DashboardTokenHeatmapDay;
@@ -106,6 +123,7 @@ export const HeatmapTooltipContent: React.FC<{
   href: string;
 }> = ({ day, lang, href }) => {
   const t = useT();
+  const { style: tokenStyle } = useTokenDisplayStyle();
   const date = formatDay(day.day, lang, { year: 'numeric', month: 'long', day: 'numeric' });
   // A day with nothing recorded says so in place of the two counts. Reporting "Requests 0 / Tokens 0"
   // would be a measurement the panel cannot make - nothing is stored for that day, which is not the
@@ -123,7 +141,7 @@ export const HeatmapTooltipContent: React.FC<{
           </div>
           <div className="heatmap-tip-row">
             <dt>{t('dash.heatmap.tip_tokens')}</dt>
-            <dd>{full(day.tokens)}</dd>
+            <dd title={formatTokensFull(day.tokens)}>{formatTokens(day.tokens, tokenStyle)}</dd>
           </div>
           <Link className="heatmap-tip-link" to={href}>
             {t('dash.heatmap.open_requests')}

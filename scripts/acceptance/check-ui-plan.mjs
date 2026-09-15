@@ -127,7 +127,19 @@ const SCENARIO_PATHS = [
   },
   {
     prefix: 'web/src/types/tokenDisplay',
-    scenarios: ['omc-settings', 'dashboard-charts', 'dashboard-model-panels', 'dashboard-model-panels-states', 'dashboard-model-panels-failure', 'dashboard-model-panels-empty'],
+    // Every scenario that renders a surface reading this layer: the OMC page that owns the setting,
+    // the dashboard's KPI charts, both model panels, the token activity grid (across its four
+    // fixtures), and the request list with its detail drawer, whose row and breakdown both print
+    // token counts through it. The rule exists so a change to the unit style cannot land with a
+    // surface that renders it left unverified, and a half-listed rule is the silent omission this
+    // planner treats as a green run that proved nothing - so the grid and the request list belong
+    // here exactly as the panels do.
+    scenarios: [
+      'omc-settings', 'dashboard-charts', 'dashboard-model-panels', 'dashboard-model-panels-states',
+      'dashboard-model-panels-failure', 'dashboard-model-panels-empty',
+      'dashboard-heatmap', 'dashboard-heatmap-pruned', 'dashboard-heatmap-mobile', 'dashboard-heatmap-error',
+      'column-alignment', 'request-list-interactions',
+    ],
   },
   {
     prefix: 'web/src/hooks/usePreference',

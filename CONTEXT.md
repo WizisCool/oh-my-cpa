@@ -159,10 +159,12 @@ palette in code; never hardcode colors in components.
   (300K, 300M, 1.2B), `zh` (30万, 300万, 12亿) or `full` (300,000,000) — stored as
   the `omc_token_style` preference and applied by one shared frontend layer
   (`web/src/types/tokenDisplay.ts`) so every token readout on the dashboard,
-  the request records and the detail drawer changes together. Tooltips and
-  accessible names always carry the exact count, because a rounded value scanned
-  in a chart is fine while the same rounding in a tooltip would be a wrong
-  number presented as exact. The Chinese scale is a *word*, not just a notation,
+  the request records and the detail drawer changes together. The abbreviation is
+  a reading, never a loss: every surface that prints a rounded token number keeps
+  the exact count reachable beside it — as the value's own `title`, or in the
+  accessible name where the value is decorative — because a rounded value scanned
+  in a chart is fine while the same rounding presented as the only number on offer
+  is a wrong number. The Chinese scale is a *word*, not just a notation,
   so it belongs only to a Chinese console: a stored `zh` resolves to
   `en-compact` whenever the reading language is not Chinese, and the option is
   shown disabled there. The stored value itself is never rewritten, so returning
@@ -218,7 +220,10 @@ palette in code; never hardcode colors in components.
   hovering, because on a field this dense a hover tooltip fires continuously and competes with
   the hover ring. It shows the date, the request count and the token volume, and carries the
   drill-down to that day's request records as an anchor inside it, opening the exact interval the
-  cell aggregated. The cell itself never navigates: the day's list is a place, so it is a link that
+  cell aggregated. Its token volume prints in the console's **Token Unit Style** like every other token
+  readout, keeping the exact count on the value for the reason that style states; the request count is a
+  count rather than a token volume, so it keeps grouped digits whatever the token style is.
+  The cell itself never navigates: the day's list is a place, so it is a link that
   can be opened in a new tab and copied, and a stray click cannot throw the operator out of the
   dashboard.
 - **Recorded Cell**: A cell whose day has a stored record at or after the first stored request. A

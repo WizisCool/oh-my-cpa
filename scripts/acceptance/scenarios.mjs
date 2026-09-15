@@ -730,8 +730,39 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
   const tooltipText = await tooltip.innerText();
   check('the tooltip names the day', /\d{4}/.test(tooltipText), `tooltip=${JSON.stringify(tooltipText)}`);
   check('the tooltip reports the request count', tooltipText.includes(busiest.requests.toLocaleString('en')), `tooltip=${JSON.stringify(tooltipText)}`);
-  check('the tooltip reports the token volume', tooltipText.includes(busiest.tokens.toLocaleString('en')), `tooltip=${JSON.stringify(tooltipText)}`);
   check('the tooltip offers the drill-down as a link', tooltipText.toLowerCase().includes('view requests'), `tooltip=${JSON.stringify(tooltipText)}`);
+
+  // The token volume reads in the console's unit style, and the exact count stays reachable.
+  //
+  // This is the one token readout on the page that used to bypass the shared display layer and print
+  // its own exact form, so the KPI tiles directly above it obeyed `omc_token_style` while the tooltip
+  // did not - the defect this asserts against. One reader serves both this block and the stored-style
+  // check at the end of the scenario, and it finds the row by its own label rather than by position so
+  // an assertion names the quantity it is about.
+  const tooltipRows = () => tooltip.evaluate((node) => [...node.querySelectorAll('.heatmap-tip-row')].map((row) => ({
+    label: row.querySelector('dt')?.textContent?.trim() ?? '',
+    value: row.querySelector('dd')?.textContent?.trim() ?? '',
+    // The exact count an abbreviated value carries, or null when the row prints it directly.
+    exact: row.querySelector('dd')?.getAttribute('title'),
+  })));
+  const tokenRowOf = (rows) => rows.find((row) => /^(Tokens|Token \u7528\u91cf)$/.test(row.label));
+
+  const styledTokens = tokenRowOf(await tooltipRows());
+  // The default style is the compact one, so the fixture's busiest day (100,000) must read as a
+  // suffixed abbreviation. Asserted as a positive shape for the reason the OMC-settings scenario
+  // states: "not the grouped digits" would also pass on a value that never rendered at all.
+  check(
+    'the tooltip prints its token volume in the console\'s unit style',
+    styledTokens !== undefined && /^\d+(\.\d+)?[KMBT]$/.test(styledTokens.value),
+    `tokens=${JSON.stringify(styledTokens)}`,
+  );
+  // An abbreviation is a rounded claim, so the number it rounded must remain reachable - the same
+  // arrangement the model panels' tooltips use.
+  check(
+    'the abbreviated volume keeps its exact count',
+    styledTokens?.exact === busiest.tokens.toLocaleString('en'),
+    `exact=${JSON.stringify(styledTokens?.exact)} expected=${busiest.tokens.toLocaleString('en')}`,
+  );
 
   // The drill-down is a real anchor: it can be opened in a new tab and copied, and clicking the
   // cell itself must not navigate - that is what the link is for.
@@ -1102,6 +1133,35 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
     "the tooltip's link opens the request list on that day's own bounds",
     Number(query.from) === busiest.from_ms && Number(query.to) === busiest.to_ms,
     `day=${busiest.day} from=${query.from} to=${query.to} expected=${busiest.from_ms}-${busiest.to_ms}`,
+  );
+
+  // ── the stored unit style governs the tooltip ─────────────────────────────
+  //
+  // The assertion above fixes this readout's *default* form; this one proves the choice is what drives
+  // it. Both directions are needed, and they fail differently: a hardcoded compact form passes the
+  // default check and fails this one, while the panel-local exact form this fixes - which obeyed no
+  // setting at all - fails the default check. The scenario is re-entered rather than the live panel
+  // re-read because the preference is a server-stored document: writing it and refetching is what the
+  // console itself does.
+  //
+  // Run last because it writes a console-wide preference: every earlier check reads the default
+  // reading, and a setting stored mid-flow would silently re-point them.
+  await page.evaluate(async () => {
+    await fetch('/omc/api/v1/preferences/omc_token_style', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify('full'),
+    });
+  });
+  await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.heatmap-grid').waitFor({ timeout: 20_000 });
+  await busiestCell.click();
+  await tooltip.waitFor({ state: 'visible', timeout: 5000 });
+  const tokenRowUnderStoredStyle = tokenRowOf(await tooltipRows());
+  check(
+    'storing the explicit-digit style switches the tooltip\'s token volume to it',
+    tokenRowUnderStoredStyle?.value === busiest.tokens.toLocaleString('en'),
+    `tokens=${JSON.stringify(tokenRowUnderStoredStyle)}`,
   );
 }
 
