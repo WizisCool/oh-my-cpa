@@ -2710,9 +2710,14 @@ export async function omcSettings({ base, page, check, context }) {
     return (await tile.count()) > 0 ? tile : false;
   }, { label: 'the dashboard token tile to render with a stored Chinese style' }).catch(() => null);
   const storedChineseText = storedChineseTile ? await storedChineseTile.innerText() : '';
+  // Asserted as a *positive* format rather than as the absence of Chinese units: the console
+  // rendered `full` moments ago, so "no 万/亿" would also be satisfied by a `zh` write that never
+  // took effect, and the check would pass while proving nothing. The fixture's window is large
+  // enough that compact carries a suffix, which is what distinguishes the fallback from the
+  // style that was in force before it.
   check(
     'a stored Chinese unit style falls back to compact on an English console',
-    !/[万亿]/.test(storedChineseText),
+    /^[\d.]+[KMBT]$/.test(storedChineseText),
     `tile=${JSON.stringify(storedChineseText)}`,
   );
 
