@@ -2599,6 +2599,40 @@ export async function omcSettings({ base, page, check, context }) {
     `labels=${labels.join(' | ')}`,
   );
 
+  // ── each control fits the column it is given ──────────────────────────────
+  // The settings-list row hands its control a fixed-width column, and a segmented
+  // picker is often wider than the text inputs that column was sized for. An
+  // overflowing control paints its own fill past the row's edge and up against the
+  // label beside it, which reads as a layout collision even though the two boxes
+  // are adjacent rather than overlapping - so the observable is measured overflow,
+  // not how close the boxes look.
+  const controlOverflow = await page.evaluate(() =>
+    [...document.querySelectorAll('.omc-settings-page .settings-toggle-row')].map((row) => {
+      // The picker itself, not the box it is handed. A control wider than its column
+      // overflows a container whose own `scrollWidth` does not report it - the box stays
+      // its assigned size and the child simply paints past it - so the measurement has to
+      // be taken on the child against the row's own edge.
+      const picker = row.querySelector('.ant-segmented') ?? row.querySelector('.settings-toggle-control');
+      const box = row.querySelector('.settings-toggle-control');
+      const boxRect = box.getBoundingClientRect();
+      const pickerRect = picker.getBoundingClientRect();
+      return {
+        label: row.querySelector('.settings-toggle-title')?.textContent,
+        // Both edges. The control column is right-aligned in its grid cell, so a picker wider
+        // than the column spills to the *left* - towards the description beside it - which is
+        // the direction that reads as a collision, and the one a right-edge check alone misses.
+        pastBoxEdge: Math.max(
+          Math.round(pickerRect.right - boxRect.right),
+          Math.round(boxRect.left - pickerRect.left),
+        ),
+      };
+    }));
+  check(
+    'every settings control fits the column it is given',
+    controlOverflow.every((entry) => entry.pastBoxEdge <= 1),
+    JSON.stringify(controlOverflow),
+  );
+
   // ── the Chinese scale is offered to Chinese consoles only ─────────────────
   const tokenRow = page.locator('.omc-settings-page .settings-toggle-row').filter({ hasText: /Token unit style|Token 计量单位/ });
   const chineseOption = tokenRow.locator('.ant-segmented-item').filter({ hasText: /Chinese|中文单位/ });

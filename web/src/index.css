@@ -2308,3 +2308,8 @@ a { color: inherit; }
    section lists over card wrappers for settings. All this adds is the spacing
    between the page's two groups. */
 .omc-settings-group { margin-bottom: 20px; }
+/* The config panel's rows hand every control a fixed 380px column, which suits its own text inputs
+   and switches. These controls are segmented pickers three or four items wide: stretched to that
+   width their own fill reads as a block pressed against the description beside them. Sizing the
+   column to its content keeps the fill around the control it belongs to. */
+.omc-settings-group .settings-toggle-control { width: auto; }

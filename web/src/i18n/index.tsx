@@ -81,7 +81,7 @@ const DICT: Record<string, [string, string]> = {
   'omc.token_style': ['Token 计量单位', 'Token unit style'],
   // States the guarantee rather than restating the control: the choice is how the
   // numbers read, not how precise they are.
-  'omc.token_style_desc': ['缩写仅改变阅读方式，悬停提示与无障碍名称始终是精确值。', 'The abbreviation changes only how the number reads; tooltips and accessible names always carry the exact value.'],
+  'omc.token_style_desc': ['仅改变阅读方式；悬停提示始终是精确值。', 'Reading only; tooltips always carry the exact value.'],
   'omc.token_style_en': ['英文缩写（K/M/B）', 'English (K/M/B)'],
   'omc.token_style_zh': ['中文单位（万/亿）', 'Chinese (万/亿)'],
   // Language-neutral: grouped digits, no unit word. The label shows both consoles
