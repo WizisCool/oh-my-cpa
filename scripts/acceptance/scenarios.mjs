@@ -2021,6 +2021,94 @@ export async function dashboardModelPanels({ base, page, check }) {
     overflow.every((excess) => excess <= 1),
     `overflow=${overflow.join(',')}`,
   );
+
+  // ── both marks are centred in the card at every width ─────────────────────
+  //
+  // The rings and the trend occupy whatever width the card gives them, so each one's drawing has
+  // to sit on that width's centre. Two independent mechanisms put them off it, and this is the
+  // check that would have caught both of them:
+  //
+  //   - the ring is a fixed 220px frame inside a full-width box, and the box's own distribution of
+  //     that frame decides where it lands once the row stacks on a phone;
+  //   - the trend reserves its own left/right strips for the axis labels, and the library's array
+  //     form for that padding is silently ignored, so the plot fell back to insets computed around
+  //     a y-axis that is hidden - a strip nothing is painted in, which shifted the plot right by
+  //     about 22px at every width rather than only on a phone.
+  //
+  // Ink, not the element box, is what is measured: the canvas always spans the card, and it is the
+  // drawing inside it that was off-centre.
+  const centering = async (label) => {
+    const measured = await page.evaluate(() => {
+      const inkCentre = (selector) => {
+        const canvas = document.querySelector(selector);
+        if (!canvas) return null;
+        const probe = document.createElement('canvas');
+        probe.width = canvas.width;
+        probe.height = canvas.height;
+        const context = probe.getContext('2d');
+        context.drawImage(canvas, 0, 0);
+        const { data } = context.getImageData(0, 0, probe.width, probe.height);
+        let minX = Infinity;
+        let maxX = -1;
+        for (let y = 0; y < probe.height; y += 1) {
+          for (let x = 0; x < probe.width; x += 1) {
+            if (data[(y * probe.width + x) * 4 + 3] > 40) {
+              if (x < minX) minX = x;
+              if (x > maxX) maxX = x;
+            }
+          }
+        }
+        if (maxX < 0) return null;
+        const rect = canvas.getBoundingClientRect();
+        const scale = rect.width / probe.width;
+        return {
+          inkCentre: rect.left + ((minX + maxX) / 2) * scale,
+          canvasCentre: rect.left + rect.width / 2,
+          canvasWidth: rect.width,
+        };
+      };
+      const cardBody = document.querySelector('.model-usage-card .ant-card-body').getBoundingClientRect();
+      const ringFrame = document.querySelector('.model-ring-frame').getBoundingClientRect();
+      return {
+        ringInk: inkCentre('.model-ring canvas'),
+        trendInk: inkCentre('.model-trend canvas'),
+        ringFrameCentre: ringFrame.left + ringFrame.width / 2,
+        cardCentre: cardBody.left + cardBody.width / 2,
+        cardWidth: cardBody.width,
+      };
+    });
+    const drifts = {
+      ringInk: measured.ringInk ? Math.round(measured.ringInk.inkCentre - measured.ringInk.canvasCentre) : null,
+      trendInk: measured.trendInk ? Math.round(measured.trendInk.inkCentre - measured.trendInk.canvasCentre) : null,
+      ringFrame: Math.round(measured.ringFrameCentre - measured.cardCentre),
+    };
+    check(
+      `the ring's drawing is centred in its card (${label})`,
+      drifts.ringInk !== null && Math.abs(drifts.ringInk) <= 2,
+      `drift=${drifts.ringInk} cardWidth=${Math.round(measured.cardWidth)}`,
+    );
+    check(
+      `the trend's drawing is centred in its canvas (${label})`,
+      drifts.trendInk !== null && Math.abs(drifts.trendInk) <= 2,
+      `drift=${drifts.trendInk} cardWidth=${Math.round(measured.cardWidth)}`,
+    );
+    return drifts;
+  };
+
+  const desktopDrift = await centering('desktop');
+  // The phone width is where the row stacks, which is the arrangement that exposed the ring's
+  // frame being left-aligned rather than centred.
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.locator('.model-usage-row').first().waitFor({ state: 'visible', timeout: 10_000 });
+  const phoneDrift = await centering('phone');
+  // Only in the stacked layout: on a desktop width the ring is a peer of the list beside it, so its
+  // frame sits where that row puts it and *not* on the card's centre - asserting card-centring there
+  // would forbid the layout the panel is designed around.
+  check(
+    'the ring\'s frame is centred in the stacked layout',
+    Math.abs(phoneDrift.ringFrame) <= 2 && Math.abs(desktopDrift.ringFrame) > 2,
+    `phone=${phoneDrift.ringFrame} desktop=${desktopDrift.ringFrame}`,
+  );
 }
 
 /**

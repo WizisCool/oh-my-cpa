@@ -208,7 +208,10 @@ export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, folded
         // halves. The reserved strips are: 10px of headroom, 32px below the plot for a 10px label with
         // its tick and spacing, and 40px at each side so the outermost tick's label - which is centred
         // on the plot's very edge - stays inside the card instead of being cut by the gutter.
-        padding={[10, 40, 32, 40]}
+        paddingTop={10}
+        paddingBottom={32}
+        paddingLeft={40}
+        paddingRight={40}
         style={{ lineWidth: 1.6 }}
         state={{ active: { lineWidth: 2.4 } }}
         // The tooltip is configured on the *interaction*, not on the mark: G2 reads `render` from the
