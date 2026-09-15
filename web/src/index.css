@@ -711,10 +711,15 @@ a { color: inherit; }
    track instead of truncating. */
 .model-trend { position: relative; min-width: 0; margin-top: 4px; }
 .model-usage-body { display: flex; align-items: center; gap: 24px; min-width: 0; }
-.model-ring { position: relative; flex: none; width: 220px; min-width: 0; }
-/* The centre of the ring. Positioned against the ring's own box rather than the card, so it stays
-   centred on the drawing at every card width. Tabular numerals keep the total from shifting as the
-   value changes between polls. */
+.model-ring { position: relative; flex: none; display: flex; justify-content: center; min-width: 0; }
+/* The square frame carries the drawing and the readout. G2 sizes the canvas from the container and
+   keeps the ring inscribed in that element's own box, but the wrapper's height follows the flex row
+   it sits in and can end up taller than the drawing — which is exactly how the total drifted off the
+   ring's centre. Centring the readout on this square frame, the same box the canvas is sized from,
+   keeps it on the ring's true centre at every card width and pixel ratio. */
+.model-ring-frame { position: relative; flex: none; width: 220px; max-width: 100%; }
+/* The centre of the ring. Tabular numerals keep the total from shifting as the value changes between
+   polls. */
 .model-ring-center {
   position: absolute;
   inset: 0;
@@ -755,7 +760,7 @@ a { color: inherit; }
 }
 .model-usage-row {
   display: grid;
-  grid-template-columns: 8px minmax(0, 1fr) auto auto;
+  grid-template-columns: 8px minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 8px;
   padding: 7px 0;
@@ -773,6 +778,14 @@ a { color: inherit; }
 }
 .model-usage-tokens { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .model-usage-share { color: var(--fg-2); font-size: 12px; white-space: nowrap; min-width: 42px; text-align: right; }
+/* The cost cell shares the share column's right alignment so the two numeric columns read as one
+   scale; the partial/unpriced states are text-plus-tooltip rather than colour, per design.md's rule
+   that state may not ride on hue alone. */
+.model-usage-cost { color: var(--fg-2); font-size: 12px; white-space: nowrap; min-width: 56px; text-align: right; }
+.model-usage-cost.is-partial { color: var(--muted); }
+.model-usage-cost.is-unpriced { color: var(--muted); }
+/* The grouping toggle sits in the card's header row, opposite the title. */
+.model-view-toggle { flex: none; }
 
 .model-empty { margin: 16px 0 0; }
 .model-chart-skeleton { height: 220px; }
@@ -829,7 +842,7 @@ a { color: inherit; }
   /* The ring and its list stack. Side by side at this width the ring takes most of the card and the
      list is squeezed to the point where a model name truncates to two characters. */
   .model-usage-body { flex-direction: column; align-items: stretch; gap: 12px; }
-  .model-ring { width: 100%; }
+  .model-ring { justify-content: flex-start; }
   .model-usage-list { max-height: none; }
 }
 
@@ -2286,4 +2299,29 @@ a { color: inherit; }
     width: 90px !important;
     flex: 0 0 90px;
   }
+}
+
+/* ── OMC settings page ─────────────────────────────────────────────────────
+   One page for Oh My CPA's own preferences. Rows are definition-style — name
+   and explanation on the left, the control on the right — because every
+   control here commits on interaction and there is no footer bar to park a
+   second column of state in. */
+.omc-settings-card { margin-bottom: 16px; }
+.omc-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.omc-setting-row:last-of-type { border-bottom: none; }
+.omc-setting-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.omc-setting-label { color: var(--fg); font-size: 13px; font-weight: 600; }
+.omc-setting-desc { font-size: 12px; }
+.omc-setting-control { flex: none; }
+.omc-note { font-size: 12px; margin-top: 4px; }
+@media (max-width: 680px) {
+  .omc-setting-row { flex-direction: column; align-items: stretch; gap: 8px; }
+  .omc-setting-control { align-self: flex-start; }
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
@@ -37,7 +38,10 @@ type dashboardModelsResponse struct {
 }
 
 type dashboardModelUsage struct {
-	// Model is the upstream model name, meaningful only when Folded is false.
+	// Model is the group's key, meaningful only when Folded is false. In the
+	// model view it is the upstream model name; in the call view it is the call
+	// point: the client-requested alias, or the upstream model when no alias
+	// was requested.
 	Model string `json:"model"`
 	// Folded marks the aggregate group holding every model outside the top N. It is a
 	// separate discriminator rather than a reserved display name: a deployment may
@@ -47,6 +51,14 @@ type dashboardModelUsage struct {
 	Folded   bool  `json:"folded"`
 	Tokens   int64 `json:"tokens"`
 	Requests int64 `json:"requests"`
+	// CostUSD is the group's priced spend at request-time prices. It is null
+	// rather than zero when the group carried no priced request, so a client
+	// can tell "unpriced" from "free" the way the cost tile already does.
+	CostUSD *float64 `json:"cost_usd"`
+	// PricedRequests is how many of the group's requests carried a price. The
+	// panel surfaces it when it is lower than Requests, because a spend summed
+	// over part of the traffic is not the spend of the whole.
+	PricedRequests int64 `json:"priced_requests"`
 	// Series is the group's own token volume on the window's bucket grid, zero-filled so
 	// every group spans the whole window. Without that a model that went quiet halfway
 	// through would draw a line that stops, which reads as a gap in the data rather than
@@ -71,6 +83,13 @@ type dashboardModelPoint struct {
 //
 // The window is resolved by the same `dashboardWindowFromRequest` the tiles use, so the two
 // surfaces cannot disagree about what "last 24 hours" means.
+//
+// `group_by` selects the grouping: `model` (the upstream model name, the original view) or
+// `call` (the call point the client requested). The call view is what a deployment's own
+// vocabulary names: one call point served by several upstream variants is one group here,
+// because the split between them is the gateway's routing detail rather than a difference
+// the caller chose. An unrecognised value is a 400 rather than a silent fallback, so a
+// typo cannot quietly change what the numbers mean.
 func (h *Handler) dashboardModels(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 
@@ -86,8 +105,20 @@ func (h *Handler) dashboardModels(writer http.ResponseWriter, request *http.Requ
 	ctx, cancel := context.WithTimeout(request.Context(), h.queryTimeout())
 	defer cancel()
 
+	group := strings.TrimSpace(request.URL.Query().Get("group_by"))
+	if group == "" {
+		// Absent means the original model view, so a bookmarked URL or an older
+		// client keeps reading the grouping it always did.
+		group = "model"
+	}
+	if group != "model" && group != "call" {
+		writeError(writer, http.StatusBadRequest, "unsupported group_by value")
+		return
+	}
+
 	response := dashboardModelsResponse{Window: window, Models: []dashboardModelUsage{}, Errors: []string{}}
-	rows, err := h.repo.QueryUsageModelBuckets(ctx, defaultInstanceID(), window.FromMS, window.ToMS, window.BucketMS)
+	rows, err := h.repo.QueryUsageModelBuckets(ctx, defaultInstanceID(), window.FromMS, window.ToMS, window.BucketMS,
+		repository.UsageModelBucketOptions{IsGroupedByCallPoint: group == "call"})
 	if err != nil {
 		writeInternalError(writer, fmt.Errorf("query usage model buckets: %w", err))
 		return
@@ -105,7 +136,7 @@ type modelUsage struct {
 	groups []dashboardModelUsage
 }
 
-// buildModelUsage ranks the window's models and lays their buckets onto the response grid.
+// buildModelUsage ranks the window's groups and lays their buckets onto the response grid.
 //
 // It is a pure function of the rows and the window, which is what makes the parts that are
 // easy to get quietly wrong - the tie-break, the fold boundary, and the handling of a bucket
@@ -116,13 +147,15 @@ func buildModelUsage(window dashboardWindow, rows []repository.UsageModelBucketR
 	// then describe one grid rather than six independent ones.
 	grid, index := modelUsageGrid(window)
 
-	// One pass per model: the rows arrive grouped by model, so the totals and the series
-	// are accumulated together and cannot disagree with each other.
+	// One pass per group: the rows arrive grouped by the query's key, so the totals and
+	// the series are accumulated together and cannot disagree with each other.
 	type accumulator struct {
-		model    string
-		tokens   int64
-		requests int64
-		series   []dashboardModelPoint
+		model          string
+		tokens         int64
+		requests       int64
+		costNanos      int64
+		pricedRequests int64
+		series         []dashboardModelPoint
 	}
 	accumulators := []*accumulator{}
 	byModel := map[string]*accumulator{}
@@ -135,6 +168,12 @@ func buildModelUsage(window dashboardWindow, rows []repository.UsageModelBucketR
 		}
 		entry.tokens += row.Tokens
 		entry.requests += row.Requests
+		if row.CostNanos != nil {
+			entry.costNanos += *row.CostNanos
+		}
+		if row.PricedRequests != nil {
+			entry.pricedRequests += *row.PricedRequests
+		}
 		// A bucket outside the visible grid - a partial edge bucket, because the query truncates
 		// timestamps to the bucket width while a custom window's own bounds are arbitrary - is
 		// folded into the nearest point rather than dropped. Dropping it would make the series
@@ -164,15 +203,19 @@ func buildModelUsage(window dashboardWindow, rows []repository.UsageModelBucketR
 		result.total += entry.tokens
 		if position < dashboardModelTopN {
 			result.groups = append(result.groups, dashboardModelUsage{
-				Model:    entry.model,
-				Tokens:   entry.tokens,
-				Requests: entry.requests,
-				Series:   entry.series,
+				Model:          entry.model,
+				Tokens:         entry.tokens,
+				Requests:       entry.requests,
+				CostUSD:        nanosToUSDPointer(entry.costNanos, entry.pricedRequests),
+				PricedRequests: entry.pricedRequests,
+				Series:         entry.series,
 			})
 			continue
 		}
 		folded.tokens += entry.tokens
 		folded.requests += entry.requests
+		folded.costNanos += entry.costNanos
+		folded.pricedRequests += entry.pricedRequests
 		for bucket := range folded.series {
 			folded.series[bucket].Tokens += entry.series[bucket].Tokens
 		}
@@ -182,13 +225,26 @@ func buildModelUsage(window dashboardWindow, rows []repository.UsageModelBucketR
 	// is a category the window does not actually have.
 	if len(result.groups) < len(accumulators) {
 		result.groups = append(result.groups, dashboardModelUsage{
-			Folded:   true,
-			Tokens:   folded.tokens,
-			Requests: folded.requests,
-			Series:   folded.series,
+			Folded:         true,
+			Tokens:         folded.tokens,
+			Requests:       folded.requests,
+			CostUSD:        nanosToUSDPointer(folded.costNanos, folded.pricedRequests),
+			PricedRequests: folded.pricedRequests,
+			Series:         folded.series,
 		})
 	}
 	return result
+}
+
+// nanosToUSDPointer converts a summed nanos amount into the wire form. A nil
+// means no priced request contributed: the group's spend is unknown rather
+// than zero, and a zero would read as "these calls were free".
+func nanosToUSDPointer(costNanos int64, pricedRequests int64) *float64 {
+	if pricedRequests == 0 {
+		return nil
+	}
+	usd := float64(costNanos) / 1_000_000_000.0
+	return &usd
 }
 
 // modelUsageGrid builds the bucket grid and the position of each bucket in it.

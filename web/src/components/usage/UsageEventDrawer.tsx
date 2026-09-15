@@ -11,6 +11,8 @@ import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';
+import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
+import { formatTokens, formatTokensFull } from '../../types/tokenDisplay';
 import type { UsageEvent } from '../../types/usageEvents';
 import {
   resolveCredential,
@@ -35,6 +37,9 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   onSelectEvent,
 }) => {
   const t = useT();
+  // The drawer's token cards follow the console's unit style; the values are
+  // exact counts, so the full form is what this surface prints.
+  const { style: tokenStyle } = useTokenDisplayStyle();
   const { message } = AntdApp.useApp();
   const [downloadModalOpen, setDownloadModalOpen] = React.useState(false);
   const [downloading, setDownloading] = React.useState(false);
@@ -226,7 +231,9 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
             </div>
             <div>
               <span>{t('events.col_tokens')}</span>
-              <strong>{event.tokens.total.toLocaleString()}</strong>
+              {/* The headline is compact to match every other token readout; the exact count is the
+                  accessible name, so the rounding never becomes the only number available. */}
+              <strong title={formatTokensFull(event.tokens.total)}>{formatTokens(event.tokens.total, tokenStyle)}</strong>
             </div>
             <div>
               <span>{t('events.col_cost')}</span>
@@ -383,25 +390,25 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                     <div className="req-token-cards-grid">
                       <div className="req-token-card">
                         <span>{t('events.total_tokens')}</span>
-                        <strong>{event.tokens.total.toLocaleString()}</strong>
+                        <strong title={formatTokensFull(event.tokens.total)}>{formatTokens(event.tokens.total, tokenStyle)}</strong>
                       </div>
                       <div className="req-token-card">
                         <span>{t('events.input_tokens')}</span>
-                        <strong>{event.tokens.input.toLocaleString()}</strong>
+                        <strong title={formatTokensFull(event.tokens.input)}>{formatTokens(event.tokens.input, tokenStyle)}</strong>
                       </div>
                       <div className="req-token-card">
                         <span>{t('events.output_tokens')}</span>
-                        <strong>{event.tokens.output.toLocaleString()}</strong>
+                        <strong title={formatTokensFull(event.tokens.output)}>{formatTokens(event.tokens.output, tokenStyle)}</strong>
                       </div>
                       {event.tokens.reasoning > 0 && (
                         <div className="req-token-card">
                           <span>{t('events.reasoning_tokens')}</span>
-                          <strong>{event.tokens.reasoning.toLocaleString()}</strong>
+                          <strong title={formatTokensFull(event.tokens.reasoning)}>{formatTokens(event.tokens.reasoning, tokenStyle)}</strong>
                         </div>
                       )}
                       <div className="req-token-card">
                         <span>{t('events.cached_tokens')}</span>
-                        <strong>{event.tokens.cached.toLocaleString()}</strong>
+                        <strong title={formatTokensFull(event.tokens.cached)}>{formatTokens(event.tokens.cached, tokenStyle)}</strong>
                       </div>
                     </div>
                     {section(
@@ -417,13 +424,13 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                     {section(
                       t('events.token_breakdown'),
                       fields([
-                        [t('events.input_tokens'), event.tokens.input.toLocaleString()],
-                        [t('events.output_tokens'), event.tokens.output.toLocaleString()],
-                        [t('events.reasoning_tokens'), event.tokens.reasoning.toLocaleString()],
-                        [t('events.cached_tokens'), event.tokens.cached.toLocaleString()],
-                        [t('events.cache_read_tokens'), event.tokens.cache_read.toLocaleString()],
-                        [t('events.cache_creation_tokens'), event.tokens.cache_creation.toLocaleString()],
-                        [t('events.total_tokens'), event.tokens.total.toLocaleString()],
+                        [t('events.input_tokens'), formatTokensFull(event.tokens.input)],
+                        [t('events.output_tokens'), formatTokensFull(event.tokens.output)],
+                        [t('events.reasoning_tokens'), formatTokensFull(event.tokens.reasoning)],
+                        [t('events.cached_tokens'), formatTokensFull(event.tokens.cached)],
+                        [t('events.cache_read_tokens'), formatTokensFull(event.tokens.cache_read)],
+                        [t('events.cache_creation_tokens'), formatTokensFull(event.tokens.cache_creation)],
+                        [t('events.total_tokens'), formatTokensFull(event.tokens.total)],
                       ]),
                     )}
                     {section(

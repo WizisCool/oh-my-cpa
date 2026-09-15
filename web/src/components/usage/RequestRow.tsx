@@ -18,6 +18,8 @@ import {
   type ProviderLookupEntry,
 } from '../../types/usageEventView';
 import { requestColumnAlignClass } from './requestColumns';
+import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
+import { formatTokens, formatTokensFull } from '../../types/tokenDisplay';
 
 export interface RequestRowProps {
   event: UsageEvent;
@@ -38,6 +40,9 @@ export const RequestRow = React.memo<RequestRowProps>(
     isSelected = false,
   }) => {
     const t = useT();
+    // The console-wide token unit style: the list scans compactly while every
+    // accessible name keeps the exact count.
+    const { style: tokenStyle } = useTokenDisplayStyle();
 
     const providerInfo = resolveProviderInfo(
       event,
@@ -220,23 +225,23 @@ export const RequestRow = React.memo<RequestRowProps>(
         <div className={`req-col req-col-tokens ${requestColumnAlignClass('tokens')}`}>
           <span className="req-mobile-label">{t('events.col_tokens')}</span>
           <div className="req-tokens-total">
-            <strong>{event.tokens.total.toLocaleString()}</strong>
+            <strong title={`${formatTokensFull(event.tokens.total)} ${t('dash.unit_tokens')}`}>{formatTokens(event.tokens.total, tokenStyle)}</strong>
             <small>tokens</small>
           </div>
           <div className="req-tokens-breakdown">
-            <span title={`${t('events.input_tokens')}: ${event.tokens.input.toLocaleString()}`}>
-              ↑ {event.tokens.input.toLocaleString()}
+            <span title={`${t('events.input_tokens')}: ${formatTokensFull(event.tokens.input)}`}>
+              ↑ {formatTokens(event.tokens.input, tokenStyle)}
             </span>
-            <span title={`${t('events.output_tokens')}: ${event.tokens.output.toLocaleString()}`}>
-              ↓ {event.tokens.output.toLocaleString()}
+            <span title={`${t('events.output_tokens')}: ${formatTokensFull(event.tokens.output)}`}>
+              ↓ {formatTokens(event.tokens.output, tokenStyle)}
             </span>
             {event.tokens.reasoning > 0 && (
               <span
                 className="req-tokens-reasoning"
-                title={`${t('events.reasoning_tokens')}: ${event.tokens.reasoning.toLocaleString()}`}
+                title={`${t('events.reasoning_tokens')}: ${formatTokensFull(event.tokens.reasoning)}`}
               >
                 <BulbOutlined className="req-token-icon-reasoning" />
-                {event.tokens.reasoning.toLocaleString()}
+                {formatTokens(event.tokens.reasoning, tokenStyle)}
               </span>
             )}
           </div>

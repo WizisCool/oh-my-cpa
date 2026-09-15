@@ -29,6 +29,8 @@ const PluginsPage = React.lazy(() => import('./pages/PluginsPage').then(m => ({ 
 const PluginStorePage = React.lazy(() => import('./pages/PluginStorePage').then(m => ({ default: m.PluginStorePage })));
 import { ThemeContext } from './theme/ThemeContext';
 import { I18nProvider, useI18n } from './i18n';
+import { TokenDisplayProvider } from './types/tokenDisplayContext';
+import { OmcSettingsPage } from './pages/OmcSettingsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -85,7 +87,9 @@ const ThemedProviders: React.FC<{ themeContextValue: ThemeContextValue; themeMod
     <ConfigProvider locale={lang === 'zh' ? zhCN : enUS} theme={createThemeConfig(themeMode)}>
       <AntdApp>
         <ThemeContext.Provider value={themeContextValue}>
-          <AppRoutes />
+          <TokenDisplayProvider>
+            <AppRoutes />
+          </TokenDisplayProvider>
         </ThemeContext.Provider>
       </AntdApp>
     </ConfigProvider>
@@ -111,6 +115,7 @@ const AppRoutes: React.FC = () => {
         { path: 'usage/events', element: <UsageEventsPage /> },
         { path: 'pricing', element: <PricingPage /> },
         { path: 'config', element: <ConfigPage /> },
+        { path: 'omc-settings', element: <OmcSettingsPage /> },
         { path: 'plugins', element: <PluginsPage /> },
         { path: 'plugin-store', element: <PluginStorePage /> },
         { path: 'system', element: <SystemPage /> },

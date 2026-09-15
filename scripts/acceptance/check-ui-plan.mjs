@@ -117,6 +117,22 @@ const SCENARIO_PATHS = [
     prefix: 'web/src/types/tokenHeatmap',
     scenarios: ['dashboard-heatmap', 'dashboard-heatmap-mobile', 'dashboard-heatmap-pruned', 'dashboard-heatmap-error'],
   },
+  // The OMC settings page and the preference layer behind it. The page is what the scenario loads,
+  // so a change to the page, its controls or the shared token-display layer reaches it; the token
+  // layer and the preference hook also govern the dashboard's own readouts, which is why the
+  // dashboard's model panels and the OMC page move together.
+  {
+    prefix: 'web/src/pages/OmcSettingsPage',
+    scenarios: ['omc-settings'],
+  },
+  {
+    prefix: 'web/src/types/tokenDisplay',
+    scenarios: ['omc-settings', 'dashboard-charts', 'dashboard-model-panels', 'dashboard-model-panels-states', 'dashboard-model-panels-failure', 'dashboard-model-panels-empty'],
+  },
+  {
+    prefix: 'web/src/hooks/usePreference',
+    scenarios: ['omc-settings', 'dashboard-model-panels-states', 'dashboard-heatmap', 'column-alignment', 'request-list-interactions'],
+  },
 ];
 
 /**

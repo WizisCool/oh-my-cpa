@@ -1,19 +1,23 @@
 import React from 'react';
-import { Alert, Button, Card, Skeleton } from 'antd';
+import { Alert, Button, Card, Segmented, Skeleton, Tooltip } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';
 import { seriesColor, seriesDomainKey } from '../../charts/chartTheme';
 import { useThemeMode } from '../../theme/ThemeContext';
+import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import {
   DASHBOARD_MODELS_QUERY_KEY,
   DASHBOARD_MODELS_REFRESH_MS,
   formatModelShare,
   formatModelTokens,
+  formatTokensFull,
+  withGroupBy,
   type DashboardModelUsage,
   type DashboardModelsResponse,
 } from '../../types/dashboardModels';
+import { formatCost } from '../../types/tokenDisplay';
 import { isSlidingRange, type DashboardRange } from '../../types/dashboard';
 
 const LazyModelTokenTrend = React.lazy(() =>
@@ -49,15 +53,23 @@ export interface ModelUsagePanelsProps {
  *
  * Nothing polls for a closed range. A custom window with a picked end is frozen - its numbers cannot
  * change - so re-reading it would spend the page's heaviest query to redraw an identical panel.
+ *
+ * **The grouping is part of the query.** The view toggle asks the endpoint to rank by call point (the
+ * alias a client requested) or by upstream model, and the choice rides in the request rather than in
+ * a client-side regroup: the ranking, the fold and the colour assignment are the server's single
+ * answer for exactly the grouping on screen. Switching views re-reads the window's ranking, and each
+ * view keeps its own cache entry so the two never patch into each other.
  */
 export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range, enabled }) => {
   const t = useT();
   const { themeMode } = useThemeMode();
+  const { modelView, setModelView, style: tokenStyle } = useTokenDisplayStyle();
   const sliding = isSlidingRange(range);
 
+  const modelsQuery = React.useMemo(() => withGroupBy(query, modelView), [query, modelView]);
   const { data, isError, error, refetch } = useQuery<DashboardModelsResponse>({
-    queryKey: [DASHBOARD_MODELS_QUERY_KEY, query],
-    queryFn: () => api.getDashboardModels(query),
+    queryKey: [DASHBOARD_MODELS_QUERY_KEY, modelsQuery],
+    queryFn: () => api.getDashboardModels(modelsQuery),
     enabled,
     refetchInterval: sliding ? DASHBOARD_MODELS_REFRESH_MS : false,
     refetchOnWindowFocus: sliding,
@@ -76,6 +88,20 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
   // The ring and the trend are loaded together because they are drawn together; one skeleton covers
   // both so the two never appear a frame apart, which reads as one of them failing.
   const chartFallback = <div className="model-chart-skeleton" aria-hidden="true" />;
+
+  const viewToggle = (
+    <Segmented
+      className="model-view-toggle"
+      size="small"
+      value={modelView}
+      options={[
+        { value: 'call', label: t('dash.models.view_call') },
+        { value: 'model', label: t('dash.models.view_model') },
+      ]}
+      onChange={(next) => setModelView(next as 'call' | 'model')}
+      aria-label={t('dash.models.view_toggle_label')}
+    />
+  );
 
   return (
     <div className="dashboard-models">
@@ -104,14 +130,18 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
               <p className="empty-copy model-empty">{t('dash.models.empty')}</p>
             ) : (
               <React.Suspense fallback={chartFallback}>
-                <LazyModelTokenTrend groups={groups} foldedLabel={foldedLabel} height={240} />
+                <LazyModelTokenTrend groups={groups} foldedLabel={foldedLabel} tokenUnitLabel={t('dash.unit_tokens')} height={240} />
               </React.Suspense>
             )}
           </>
         )}
       </Card>
 
-      <Card className="dashboard-tile is-wide model-usage-card" styles={{ body: { padding: 20 } }}>
+      <Card
+        className="dashboard-tile is-wide model-usage-card"
+        styles={{ body: { padding: 20 } }}
+        extra={viewToggle}
+      >
         <div className="tile-label">{t('dash.models.usage_title')}</div>
         {!data && !isError ? (
           <Skeleton active={false} title={false} paragraph={{ rows: 4, width: ['100%', '90%', '95%', '80%'] }} />
@@ -151,8 +181,16 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
                       <span className="model-usage-name" title={groupLabel(group, foldedLabel, unnamedLabel)}>
                         {groupLabel(group, foldedLabel, unnamedLabel)}
                       </span>
-                      <span className="model-usage-tokens">{formatModelTokens(group.tokens)}</span>
+                      <span
+                        className="model-usage-tokens"
+                        // The exact count lives in the accessible name: the compact cell is for scanning,
+                        // and the rounding it applies must never be mistaken for the number itself.
+                        title={`${formatTokensFull(group.tokens)} ${t('dash.unit_tokens')}`}
+                      >
+                        {formatModelTokens(group.tokens, tokenStyle)}
+                      </span>
                       <span className="model-usage-share">{formatModelShare(group.tokens, total)}</span>
+                      <ModelCost group={group} />
                     </li>
                   ))}
                 </ol>
@@ -162,6 +200,34 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
         )}
       </Card>
     </div>
+  );
+};
+
+/**
+ * ModelCost is the ranked list's cost cell.
+ *
+ * The amount is the group's own spend at request-time prices. A group with priced requests prints the
+ * amount, and prints the priced share beside it when that share is partial - a spend summed over part
+ * of the traffic is not the spend of the whole, and the cell would otherwise read as complete. A group
+ * with no priced request at all reports that instead of a zero: a zero would claim these calls were
+ * free, which is the one thing an unpriced window never proves.
+ */
+const ModelCost: React.FC<{ group: DashboardModelUsage }> = ({ group }) => {
+  const t = useT();
+  if (group.priced_requests <= 0 || group.cost_usd == null) {
+    return (
+      <Tooltip title={t('dash.models.cost_unpriced')}>
+        <span className="model-usage-cost is-unpriced">—</span>
+      </Tooltip>
+    );
+  }
+  const isPartial = group.priced_requests < group.requests;
+  const value = formatCost(group.cost_usd);
+  if (!isPartial) return <span className="model-usage-cost">{value}</span>;
+  return (
+    <Tooltip title={t('dash.models.cost_partial', { priced: group.priced_requests, total: group.requests })}>
+      <span className="model-usage-cost is-partial">{value}</span>
+    </Tooltip>
   );
 };
 

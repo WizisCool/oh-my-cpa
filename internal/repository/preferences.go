@@ -20,6 +20,14 @@ const (
 	PreferenceProviderWebsites   = "provider_websites"
 	PreferenceUsageEventsView    = "usage_events_view"
 	PreferenceUsageEventsColumns = "usage_events_columns"
+
+	// PreferenceTokenStyle and PreferenceModelView are Oh My CPA's own display
+	// settings: how token counts are abbreviated across the console and how the
+	// dashboard's model panels group their series (by call point or by upstream
+	// model). They are preferences rather than configuration because they
+	// describe how the operator reads the data, not how anything is served.
+	PreferenceTokenStyle = "omc_token_style"
+	PreferenceModelView  = "omc_models_view"
 )
 
 // MaxPreferenceValueBytes bounds a stored value. Preferences are small UI

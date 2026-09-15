@@ -12,6 +12,13 @@ export interface DashboardTrendChartProps {
   height?: number;
   label?: (timeMs: number) => string;
   format?: (value: number) => string;
+  /**
+   * The exact form of the hovered value, shown as the tooltip's own accessible
+   * name. The visible readout may be abbreviated - a sparkline's tooltip is a
+   * glance, not a ledger - but an abbreviation must never be the only number
+   * available, because "1.2B" is a rounded claim and the exact count is the fact.
+   */
+  formatExact?: (value: number) => string;
 }
 
 const PLAIN_NUMBER_FORMAT = new Intl.NumberFormat('en');
@@ -46,6 +53,7 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
   height = 46,
   label,
   format,
+  formatExact,
 }) => {
   const { themeMode } = useThemeMode();
   const [activeIndex, setActiveIndex] = React.useState<number | null>(null);
@@ -108,6 +116,7 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
   const activeTime = activeIndex === null ? 0 : points[activeIndex]?.t ?? 0;
   const formatTooltipTitle = label ?? ((timeMs: number) => (timeMs > 0 ? dayjs(timeMs).format('MM-DD HH:mm') : ''));
   const formatTooltipValue = format ?? ((value: number) => formatCount(value));
+  const formatTooltipExact = formatExact ?? formatTooltipValue;
   const activeRatio = activeIndex === null || values.length < 2 ? 0 : activeIndex / (values.length - 1);
 
   return (
@@ -121,7 +130,7 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
       {activeValue !== null && (
         <div className="chart-tooltip" style={{ left: `${activeRatio * 100}%` }}>
           <div className="chart-tooltip-time">{formatTooltipTitle(activeTime)}</div>
-          <div className="chart-tooltip-value">{formatTooltipValue(activeValue)}</div>
+          <div className="chart-tooltip-value" title={formatTooltipExact(activeValue)}>{formatTooltipValue(activeValue)}</div>
         </div>
       )}
     </div>

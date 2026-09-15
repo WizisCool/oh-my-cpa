@@ -272,7 +272,9 @@ export const api = {
    *
    * Its own call, for the reason the heatmap has one: it answers for the window the picker selected
    * but on its own cadence, and it walks the detail rows rather than the aggregation rollup, so
-   * folding it into the KPI response would pay that cost on every live tail poll.
+   * folding it into the KPI response would pay that cost on every live tail poll. `query` carries
+   * the serialized window plus the caller's grouping view (`withGroupBy` appends it), because a
+   * ranking read in one grouping cannot be reused for the other.
    */
   async getDashboardModels(query: string): Promise<DashboardModelsResponse> {
     return request<DashboardModelsResponse>(`/management/dashboard/models${query ? `?${query}` : ''}`, { method: 'GET' });

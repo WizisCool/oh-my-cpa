@@ -15,6 +15,7 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   ProfileOutlined,
+  SettingOutlined,
   ShopOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons';
@@ -82,6 +83,7 @@ const navGroups: NavGroup[] = [
     labelKey: 'nav.group.control',
     items: [
       { key: '/config', labelKey: 'nav.config', icon: <ControlOutlined /> },
+      { key: '/omc-settings', labelKey: 'nav.omc_settings', icon: <SettingOutlined /> },
       { key: '/plugins', labelKey: 'nav.plugins', icon: <ApiOutlined /> },
       { key: '/plugin-store', labelKey: 'nav.plugin_store', icon: <ShopOutlined /> },
       { key: '/system', labelKey: 'nav.system', icon: <InfoCircleOutlined /> },
