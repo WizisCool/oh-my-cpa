@@ -1846,6 +1846,16 @@ export async function dashboardModelPanels({ base, page, check }) {
       tokens: row.querySelector('.model-usage-tokens').textContent,
       tokensTitle: row.querySelector('.model-usage-tokens').getAttribute('title'),
       share: row.querySelector('.model-usage-share').textContent,
+      cost: row.querySelector('.model-usage-cost').textContent,
+      // The cells' own left edges, so the reading order can be asserted as geometry rather than by
+      // trusting the markup order - a row whose columns were reordered by CSS would still serialise
+      // in DOM order, and the operator reads the painted positions.
+      lefts: {
+        name: Math.round(row.querySelector('.model-usage-name').getBoundingClientRect().left),
+        cost: Math.round(row.querySelector('.model-usage-cost').getBoundingClientRect().left),
+        tokens: Math.round(row.querySelector('.model-usage-tokens').getBoundingClientRect().left),
+        share: Math.round(row.querySelector('.model-usage-share').getBoundingClientRect().left),
+      },
       color: getComputedStyle(row.querySelector('.model-usage-swatch')).backgroundColor,
     })),
   );
@@ -1863,6 +1873,125 @@ export async function dashboardModelPanels({ base, page, check }) {
     'every row states a name, a volume and a share',
     list.every((row) => row.name.length > 0 && /[\d.]/.test(row.tokens) && /%/.test(row.share)),
     JSON.stringify(list.map((row) => `${row.name}=${row.tokens}/${row.share}`)),
+  );
+  // Every row carries the cost cell, including the folded remainder: a spend column that appeared
+  // only on some rows would make the column's presence depend on what happened to be priced.
+  check(
+    'every row states a cost',
+    list.every((row) => typeof row.cost === 'string' && row.cost.trim().length > 0),
+    JSON.stringify(list.map((row) => `${row.name}=${row.cost}`)),
+  );
+  // The reading order is name, cost, volume, share. Asserted as painted geometry: the columns must
+  // advance left to right in that order on every row, which is what a reader's eye follows and what
+  // a CSS reorder could break without touching the markup order.
+  const misordered = list.filter((row) => !(row.lefts.name < row.lefts.cost && row.lefts.cost < row.lefts.tokens && row.lefts.tokens < row.lefts.share));
+  check(
+    'the columns read name, cost, volume, share',
+    misordered.length === 0,
+    JSON.stringify(list.map((row) => row.lefts)),
+  );
+  // Each numeric column starts on one edge down the whole list. The tracks are declared once on the
+  // list, so this is what proves the rows share them: with a track set per row instead, a row whose
+  // cost happens to be a character wider shifts its own volume and share cells and the column edges
+  // scatter - which is invisible on a fixture whose costs all share a width, and which is why the
+  // spread is asserted as zero rather than as "close".
+  // Sharing the list's tracks must not cost the row its own box. Dissolving the row to inherit them
+  // also dissolves its gap and its separator: the swatch ends up against the name and the rule under
+  // the row withdraws into the column gaps, drawn as fragments. Both are asserted here because both
+  // are invisible to a markup-order check and to the column-edge check above.
+  const rowBoxes = await page.evaluate(() =>
+    [...document.querySelectorAll('.model-usage-row')].map((row) => {
+      const swatch = row.querySelector('.model-usage-swatch').getBoundingClientRect();
+      const name = row.querySelector('.model-usage-name').getBoundingClientRect();
+      const box = row.getBoundingClientRect();
+      return {
+        swatchToName: Math.round(name.left - swatch.right),
+        width: Math.round(box.width),
+        borderBottom: getComputedStyle(row).borderBottomWidth,
+      };
+    }),
+  );
+  check(
+    'the swatch is set apart from the name it marks',
+    rowBoxes.every((row) => row.swatchToName >= 6),
+    JSON.stringify(rowBoxes.map((row) => row.swatchToName)),
+  );
+  // The separator is the row's, not each cell's: a rule drawn per cell stops at every column gap. All
+  // rows therefore share one width, and only the last one drops its border.
+  check(
+    'the row keeps one box wide enough to carry a single unbroken separator',
+    new Set(rowBoxes.map((row) => row.width)).size === 1
+      && rowBoxes.slice(0, -1).every((row) => row.borderBottom === '1px')
+      && rowBoxes.at(-1).borderBottom === '0px',
+    JSON.stringify(rowBoxes.map((row) => [row.width, row.borderBottom])),
+  );
+  const columnSpread = (key) => {
+    const lefts = list.map((row) => row.lefts[key]);
+    return Math.max(...lefts) - Math.min(...lefts);
+  };
+  const spreads = { cost: columnSpread('cost'), tokens: columnSpread('tokens'), share: columnSpread('share') };
+  check(
+    'every numeric column starts on one edge down the list',
+    spreads.cost === 0 && spreads.tokens === 0 && spreads.share === 0,
+    JSON.stringify(spreads),
+  );
+  // The name column is the one part of the row that cannot be abbreviated, so it holds a floor while
+  // the ring yields. Asserted across a sweep of widths rather than at the default one: the failure
+  // this guards is the shrinking card, and at 1440px the fixture's own name widths already exceed the
+  // floor - a single measurement there passes whether or not the floor exists.
+  //
+  // The viewport is a *proxy* for the card's width and the panel chooses its arrangement by the card's
+  // own width, so the sweep is what covers both of the panel's arrangements and the handover between
+  // them. It ends by restoring the default, which the checks below still assume.
+  const sweepWidths = [1920, 1600, 1460, 1450, 1440, 1360, 1280, 1200, 1120, 1040, 900, 700, 500, 390];
+  const sweep = [];
+  for (const width of sweepWidths) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.locator('.model-usage-row').first().waitFor({ state: 'visible', timeout: 10_000 });
+    // The panel re-lays-out on a resize; waiting a frame keeps the measurement from reading the
+    // arrangement that was on screen before the new width.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    sweep.push(await page.evaluate((viewport) => {
+      const list = document.querySelector('.model-usage-list');
+      const cardBody = document.querySelector('.model-usage-card .ant-card-body').getBoundingClientRect();
+      const frame = document.querySelector('.model-ring-frame').getBoundingClientRect();
+      const canvas = document.querySelector('.model-ring canvas');
+      const canvasBox = canvas.getBoundingClientRect();
+      const share = document.querySelector('.model-usage-share').getBoundingClientRect();
+      const name = document.querySelector('.model-usage-name').getBoundingClientRect();
+      return {
+        viewport,
+        // How far the list's own columns reach past the box they were given: a positive value is a
+        // cell painted outside the card, which is the clipped-column state.
+        listOverflow: Math.round(list.scrollWidth - list.clientWidth),
+        sharePastCard: Math.round(share.right - cardBody.right),
+        nameWidth: Math.round(name.width),
+        frame: { w: Math.round(frame.width), h: Math.round(frame.height) },
+        canvas: { w: Math.round(canvasBox.width), h: Math.round(canvasBox.height), backing: `${canvas.width}x${canvas.height}` },
+      };
+    }, width));
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  check(
+    'no column is painted outside the card at any width',
+    sweep.every((entry) => entry.listOverflow <= 0 && entry.sharePastCard <= 0),
+    JSON.stringify(sweep.filter((entry) => entry.listOverflow > 0 || entry.sharePastCard > 0)),
+  );
+  check(
+    'the name column stays readable at every width',
+    sweep.every((entry) => entry.nameWidth >= 140),
+    JSON.stringify(sweep.map((entry) => [entry.viewport, entry.nameWidth])),
+  );
+  // The ring gives width to the list, so it must stay a ring: a drawing whose frame is clamped in one
+  // axis while its canvas keeps the other draws an ellipse and misplaces the readout. The canvas's
+  // *backing* store is included because the library sizes it from the container - a square CSS box
+  // over a non-square backing would still paint an ellipse.
+  check(
+    'the ring stays square at every width',
+    sweep.every((entry) => Math.abs(entry.frame.w - entry.frame.h) <= 1
+      && Math.abs(entry.canvas.w - entry.canvas.h) <= 1
+      && entry.canvas.backing.split('x')[0] === entry.canvas.backing.split('x')[1]),
+    JSON.stringify(sweep.map((entry) => [entry.viewport, entry.frame, entry.canvas])),
   );
   // The remainder is labelled, never blank: the API sends an empty model name for it on purpose,
   // because the label is the client's to translate.
@@ -1936,6 +2065,50 @@ export async function dashboardModelPanels({ base, page, check }) {
     'the centre readout sits on the ring\'s painted centre',
     !ringCentring.error && ringCentring.drift.x <= 2 && ringCentring.drift.y <= 2,
     JSON.stringify(ringCentring),
+  );
+
+  // ── the ring's hover states what the ranked list states ───────────────────
+  //
+  // A slice is judged on three things - which group it is, how much it moved, and its share of the
+  // window - and the trend's hover already prints exactly that shape of row, so the ring's must too.
+  // The hovered point is the *midpoint of the first slice*, taken from the share the list reports:
+  // hovering a fixed screen position would depend on the fixture's ranking, and the whole claim here
+  // is that the two surfaces agree about the same group.
+  const firstShare = Number.parseFloat(list[0].share) / 100;
+  const ringCanvas = page.locator('.model-ring canvas').first();
+  await ringCanvas.scrollIntoViewIfNeeded();
+  const ringBox = await ringCanvas.boundingBox();
+  // The band's own mid-radius, measured against the canvas rather than assumed: the ring is inset by
+  // its padding, so a fraction taken from the canvas edge can fall inside the hole or outside the
+  // outer edge, and either miss lands on no slice at all. The band spans the mark's inner to outer
+  // radius, and its midpoint is the point that is inside the arc at every share.
+  const ringRadius = Math.min(ringBox.width, ringBox.height) * 0.38;
+  // G2 sweeps the ring counterclockwise from twelve o'clock, so the first group occupies the arc from
+  // 0 to its share of the circle and its midpoint is half of that. The sign is the observable that
+  // decides whether the probe lands on the slice it names: read the wrong way it hovers the group on
+  // the other side of twelve o'clock, and the assertion below then fails against a correct tooltip.
+  const hoverAngle = -Math.PI / 2 - firstShare * Math.PI;
+  const hoverX = ringBox.x + ringBox.width / 2 + Math.cos(hoverAngle) * ringRadius;
+  const hoverY = ringBox.y + ringBox.height / 2 + Math.sin(hoverAngle) * ringRadius;
+  await page.mouse.move(hoverX, hoverY);
+  // A second move lands on a slightly different pixel: the library's pointer tracking subscribes to
+  // movement, and a single synthetic move onto an already-hovered pixel can be coalesced away.
+  await page.mouse.move(hoverX + 2, hoverY);
+  const ringHover = await until(async () => {
+    const tip = page.locator('.model-ring .omc-tip').first();
+    if ((await tip.count()) === 0) return false;
+    const read = async (selector) => tip.locator(selector).first().innerText().catch(() => '');
+    const name = await read('.omc-tip-name');
+    if (name.length === 0) return false;
+    return { name, value: await read('.omc-tip-value'), share: await read('.omc-tip-share') };
+  }, { label: 'the ring hover readout to appear' }).catch(() => null);
+  check(
+    'the ring hover states the model, its volume and its share',
+    ringHover !== null
+      && ringHover.name === list[0].name
+      && ringHover.value.includes(list[0].tokens)
+      && ringHover.share === list[0].share,
+    `hover=${JSON.stringify(ringHover)} list=${JSON.stringify({ name: list[0].name, tokens: list[0].tokens, share: list[0].share })}`,
   );
 
   // ── no axis label is clipped by the canvas it is drawn in ──────────────────
