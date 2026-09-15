@@ -61,6 +61,34 @@ test('a dashboard change selects every dashboard scenario', () => {
   );
 });
 
+test('the shared token layer selects every surface that renders it', () => {
+  // The token unit style is rendered by more surfaces than any other shared layer: the OMC page that
+  // owns the setting, the dashboard's KPI charts, both model panels, the token activity grid, and the
+  // request list with its detail drawer. A rule that listed only some of them would be the silent
+  // omission this planner exists to prevent - a change to the number format would land with the
+  // surface it broke left unverified - so the set is pinned rather than left to a comment.
+  const selected = new Set(planFor('web/src/types/tokenDisplay.ts'));
+  for (const id of [
+    'omc-settings',
+    'dashboard-charts',
+    'dashboard-model-panels',
+    'dashboard-heatmap',
+    'dashboard-heatmap-mobile',
+    'dashboard-heatmap-pruned',
+    'dashboard-heatmap-error',
+    'column-alignment',
+    'request-list-interactions',
+  ]) {
+    assert.equal(selected.has(id), true, `the token layer selects ${id}`);
+  }
+  // The provider that resolves the stored style is a sibling of the layer, not a separate concern:
+  // both are matched by the same prefix, so a value written there reaches the same scenarios.
+  assert.deepEqual(
+    planFor('web/src/types/tokenDisplayContext.tsx'),
+    planFor('web/src/types/tokenDisplay.ts'),
+  );
+});
+
 test('a provider-console change selects only the icon-picker scenario', () => {
   assert.deepEqual(planFor('web/src/pages/ProvidersPage.tsx'), ['icon-picker-stacking']);
   assert.deepEqual(planFor('web/src/components/IconPickerModal.tsx'), ['icon-picker-stacking']);

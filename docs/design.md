@@ -301,7 +301,10 @@ Rules:
    its accessible name and in its tooltip, so the shade is never the only encoding — and a key exists
    to explain what a *stepped* scale's bands mean, which a continuous ramp does not have. The shade is
    relative to the window, so a swatch ladder would describe the field's own range rather than any
-   fixed quantity. The numbers are one click away, which is where a reader who wants them goes.
+   fixed quantity. The numbers are one click away, which is where a reader who wants them goes. The
+   tooltip's token volume prints in the console's **Token Unit Style** — the same layer the KPI tiles
+   above it read — with the exact count on the value, while the request count keeps grouped digits
+   because it is not a token volume.
 6. **The tooltip opens on click, not hover.** On a field this dense a hover tooltip fires
    continuously as the pointer crosses it and competes with the hover ring for the same gesture.
    A click is deliberate, and it leaves the tooltip open to be read and followed. The drill-down is
