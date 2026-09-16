@@ -110,4 +110,11 @@ source with `go test ./sdk/cliproxy/auth`, including
 `TestSchedulerPick_RoundRobinHighestPriority`,
 `TestSchedulerPick_WeightedRoundRobin`,
 `TestSchedulerPick_WeightedRoundRobinSkipsNonPositiveWeightPriorityTier`, and
-`TestSchedulerPick_FillFirstSticksToFirstReady`.
+`TestSchedulerPick_FillFirstSticksToFirstReady`. Those tests assert the selected
+credential IDs and weighted pick counts, not merely decoded JSON: the highest
+ready priority tier excludes lower tiers, a non-positive weight is skipped in
+favour of a ready lower-priority credential, and fill-first keeps the same ready
+credential. Additional CPA tests cover persisted metadata weight, cooldown
+recovery, token-expiry demotion, and session-affinity lookup. Oh My CPA's
+ingest-to-persistence round trip separately asserts that the emitted
+`auth_index`/`auth_type` reach both list and detail projections unchanged.

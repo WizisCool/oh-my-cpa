@@ -61,6 +61,9 @@ func TestRequestMetadataSurvivesIngestAndPersistence(t *testing.T) {
 	if row.Endpoint != "POST /v1/chat/completions" {
 		t.Fatalf("stored endpoint = %q", row.Endpoint)
 	}
+	if row.AuthIndex != "fixture-auth-index" || row.AuthType != "apikey" {
+		t.Fatalf("stored routing source = %q/%q, want fixture-auth-index/apikey", row.AuthIndex, row.AuthType)
+	}
 	// Both tiers are distinct facts and neither may stand in for the other.
 	if row.ServiceTier != "auto" {
 		t.Fatalf("stored requested tier = %q, want auto", row.ServiceTier)
@@ -75,6 +78,9 @@ func TestRequestMetadataSurvivesIngestAndPersistence(t *testing.T) {
 	}
 	if detail.Endpoint != "POST /v1/chat/completions" {
 		t.Fatalf("detail endpoint = %q", detail.Endpoint)
+	}
+	if detail.AuthIndex != "fixture-auth-index" || detail.AuthType != "apikey" {
+		t.Fatalf("detail routing source = %q/%q, want fixture-auth-index/apikey", detail.AuthIndex, detail.AuthType)
 	}
 	if detail.ClientIP == nil || *detail.ClientIP != "192.0.2.10" {
 		t.Fatalf("detail client IP = %v", derefString(detail.ClientIP))
