@@ -1038,7 +1038,7 @@ a { color: inherit; }
 }
 .heatmap-cell.is-interactive:hover .heatmap-cell-mark {
   box-shadow: inset 0 0 0 1px var(--fg-2);
-  transform: scale(1.35);
+  transform: scale(1.18);
   z-index: 1;
 }
 /* The cell needs a positioning context for the mark, and the mark has to be able to sit above its
@@ -1047,7 +1047,7 @@ a { color: inherit; }
 /* The colour lives on the mark so the cell's own background stays the layout-neutral empty fill;
    the state and level classes above set it on the cell, and this carries it onto the square. */
 .heatmap-cell > .heatmap-cell-mark { background: inherit; }
-.heatmap-cell:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent); }
+.heatmap-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none; }
 /* The cell whose tooltip is open keeps the ring, so the tooltip is visibly attached to it while
    the pointer moves off to the link inside. */
 .heatmap-cell.ant-tooltip-open { box-shadow: inset 0 0 0 1px var(--fg-2); }

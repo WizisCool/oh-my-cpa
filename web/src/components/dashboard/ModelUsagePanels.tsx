@@ -106,8 +106,11 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
 
   return (
     <div className="dashboard-models">
-      <Card className="dashboard-tile is-wide model-trend-card" styles={{ body: { padding: 20 } }}>
-        <div className="tile-label">{t('dash.models.trend_title')}</div>
+      <Card
+        className="dashboard-tile is-wide model-trend-card"
+        styles={{ body: { padding: 20 } }}
+        title={<span className="tile-label">{t('dash.models.trend_title')}</span>}
+      >
         {!data && !isError ? (
           <Skeleton active={false} title={false} paragraph={{ rows: 4, width: ['100%', '90%', '95%', '80%'] }} />
         ) : isError && !data ? (
@@ -141,9 +144,9 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
       <Card
         className="dashboard-tile is-wide model-usage-card"
         styles={{ body: { padding: 20 } }}
+        title={<span className="tile-label">{t('dash.models.usage_title')}</span>}
         extra={viewToggle}
       >
-        <div className="tile-label">{t('dash.models.usage_title')}</div>
         {!data && !isError ? (
           <Skeleton active={false} title={false} paragraph={{ rows: 4, width: ['100%', '90%', '95%', '80%'] }} />
         ) : isError && !data ? (
