@@ -44,16 +44,17 @@ if (document.errors.length > 0) {
   if (masterBrowser.run.includes('verify:browser:smoke')) {
     throw new Error('the master browser step must not run the pull-request smoke path');
   }
-  for (const marker of ['wait "${acceptance_pid}"', 'wait "${probes_pid}"', 'acceptance_status', 'probes_status']) {
-    if (!masterBrowser.run.includes(marker)) {
-      throw new Error(`the master browser step does not collect both phase statuses (missing ${marker})`);
-    }
+  if (masterBrowser.run !== 'pnpm verify:browser:release') {
+    throw new Error('the master browser step does not use the release browser orchestrator');
   }
   // The probes reach master for the first time here: they used to sit outside every
   // gate, so a regression in overlay stacking or column geometry was only caught if
   // someone remembered the command.
-  if (!masterBrowser.run.includes('pnpm verify:probes')) {
-    throw new Error('CI workflow does not run the focused browser probes on master');
+  const browserOrchestrator = fs.readFileSync(path.join(root, 'scripts', 'run-browser-release.mjs'), 'utf8');
+  for (const marker of ['scripts/browser-acceptance.mjs', 'scripts/browser-probes.mjs', 'Promise.all', 'failed.length']) {
+    if (!browserOrchestrator.includes(marker)) {
+      throw new Error(`the browser orchestrator omits ${marker}`);
+    }
   }
   const browserPreparation = browserSteps.find((step) => step.name === 'Prepare Chromium and build embedded SPA');
   if (!browserPreparation?.run?.includes('install-chromium.mjs') || !browserPreparation.run.includes('pnpm build')) {

@@ -198,26 +198,7 @@ jobs:
         env:
           OMCPA_BROWSER_BINARY: tmp/oh-my-cpa-browser
           OMCPA_SEED_USAGE_BINARY: tmp/seed-usage-browser
-        run: |
-          set -o pipefail
-          pnpm verify:browser >tmp/acceptance.log 2>&1 &
-          acceptance_pid=$!
-          pnpm verify:probes >tmp/probes.log 2>&1 &
-          probes_pid=$!
-          acceptance_status=0
-          wait "${acceptance_pid}" || acceptance_status=$?
-          probes_status=0
-          wait "${probes_pid}" || probes_status=$?
-          echo '::group::browser acceptance log'
-          cat tmp/acceptance.log
-          echo '::endgroup::'
-          echo '::group::browser probes log'
-          cat tmp/probes.log
-          echo '::endgroup::'
-          if [ "${acceptance_status}" -ne 0 ]; then
-            exit "${acceptance_status}"
-          fi
-          exit "${probes_status}"
+        run: pnpm verify:browser:release
 
       - name: Upload browser failure diagnostics
         if: failure()
