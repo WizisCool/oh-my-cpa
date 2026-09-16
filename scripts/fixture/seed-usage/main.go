@@ -7,15 +7,9 @@
 // real insert path owns the request-time price lock, the display-mask rules and
 // the schema, so this fixture cannot drift away from them.
 //
-// Usage (paths are the app's own database file):
+// Usage (the argument is the app's own database file):
 //
-//	seed-usage -db <path> -scenario list     # a deterministic window for the list
-//	seed-usage -db <path> -scenario append   # one more record, later than the rest
-//
-// The scenario names describe what the browser checks need, not what the data
-// "is": `list` seeds a window whose failure share must read as routine noise,
-// and `append` seeds a record that finished after the ones already on screen, so
-// a live poll has something new to report.
+//	seed-usage -db <path>
 package main
 
 import (
@@ -64,7 +58,6 @@ const fixtureClientKey = "omc-e2e-client-secret"
 
 func main() {
 	databasePath := flag.String("db", "", "path to the Oh My CPA SQLite database")
-	scenario := flag.String("scenario", "list", "list | append")
 	// The cipher has to match the one the app runs with, because a caller-key
 	// identity is a keyed fingerprint: seeding under a different key would store an
 	// identity the running application can never produce.
@@ -99,17 +92,8 @@ func main() {
 		fail(err)
 	}
 
-	switch *scenario {
-	case "list":
-		if err := seedList(ctx, repo); err != nil {
-			fail(err)
-		}
-	case "append":
-		if err := seedAppend(ctx, repo); err != nil {
-			fail(err)
-		}
-	default:
-		fail(fmt.Errorf("unknown scenario %q", *scenario))
+	if err := seedList(ctx, repo); err != nil {
+		fail(err)
 	}
 	fmt.Println("SEED_USAGE_OK")
 }
@@ -197,22 +181,6 @@ func seedList(ctx context.Context, repo *repository.Repository) error {
 
 	if _, err := repo.InsertUsageEvents(ctx, events); err != nil {
 		return fmt.Errorf("seed list scenario: %w", err)
-	}
-	return nil
-}
-
-// seedAppend writes one more record than the list scenario, with the newest
-// timestamp, so a poll after this point has exactly one new row to report.
-func seedAppend(ctx context.Context, repo *repository.Repository) error {
-	event := fixtureEvent("fixture-append-00", time.Now().UTC(), shortLatencyMS, false)
-	if _, err := repo.InsertUsageEvents(ctx, []usage.Event{event}); err != nil {
-		return fmt.Errorf("seed append scenario: %w", err)
-	}
-	// The acceptance app owns a long-lived WAL connection. Force the external
-	// writer's committed frames to the database before it exits so the next poll
-	// observes the record even when no checkpoint happened at startup.
-	if _, err := repo.SQL().ExecContext(ctx, `PRAGMA wal_checkpoint(PASSIVE)`); err != nil {
-		return fmt.Errorf("checkpoint append scenario: %w", err)
 	}
 	return nil
 }

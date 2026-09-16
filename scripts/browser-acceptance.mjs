@@ -329,14 +329,12 @@ try {
   } else {
     execFileSync('go', ['build', '-trimpath', '-o', seeder, './scripts/fixture/seed-usage'], { cwd: root, env: { ...process.env, CGO_ENABLED: '0' }, stdio: 'inherit' });
   }
-  const seedScenario = (name) => {
+  const seedUsage = () => {
     const output = execFileSync(
       seeder,
       [
         '-db',
         path.join(temporary, 'data', 'oh-my-cpa.db'),
-        '-scenario',
-        name,
         // The seeder must fingerprint with the same master key the app runs with,
         // or a caller-key identity it writes would not be one the app can derive.
         '-master-key',
@@ -344,9 +342,9 @@ try {
       ],
       { cwd: root, encoding: 'utf8' },
     );
-    if (!output.includes('SEED_USAGE_OK')) throw new Error(`seed ${name} failed: ${output}`);
+    if (!output.includes('SEED_USAGE_OK')) throw new Error(`seed usage failed: ${output}`);
   };
-  seedScenario('list');
+  seedUsage();
   appProcess = spawn(executable, [], {
     cwd: root,
     env: {

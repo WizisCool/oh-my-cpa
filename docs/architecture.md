@@ -488,10 +488,10 @@ case. The arrival count is resolved before the list scan, and the list result se
 is closed before the function returns. With one SQLite connection, issuing the
 count after the list could otherwise keep both statements on the same WAL
 snapshot, so a record committed between polls would remain invisible until a
-later transaction happened to replace it. The optional test fixture also
-checkpoints its external append before exit, because the production collector
-normally writes through the same process while acceptance deliberately writes
-from a separate process.
+later transaction happened to replace it. The acceptance fixture covers the same
+refreshing-window path without a second process writing after the app opens the
+database: it seeds one future-dated row before startup, and a later poll admits
+that row once the sliding window reaches it.
 
 Request *time* is also the windowing key (`timestamp_ms >= from AND <= to`) and the
 axis of every rollup and chart, so the list, the window and the charts all agree on
