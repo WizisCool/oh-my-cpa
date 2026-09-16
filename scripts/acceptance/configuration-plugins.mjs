@@ -42,33 +42,40 @@ export async function runConfigurationPluginsAcceptance({
   await page.goto(`${appURL}/config`, { waitUntil: 'domcontentloaded' });
   await page.locator('.config-page').first().waitFor({ state: 'visible', timeout: 15000 });
   const sourceSegment = page.locator('.ant-segmented-item').filter({ hasText: /源码|Source/ });
-  // The block below is optional, so it is guarded by `isVisible`. That guard is
-  // also the trap: asked before the segmented control has rendered, it answers
-  // false and the two checks inside disappear from the run without a failure.
-  // Waiting for the control first makes the skip a decision instead of a race.
-  await sourceSegment.first().waitFor({ state: 'visible', timeout: 15000 });
-  await sourceSegment.click();
+  // A missing control is a failed assertion, not a reason to abandon the rest
+  // of the release audit. Record the failure and continue so later domains still
+  // produce their own evidence.
+  let sourceModeOpened = false;
+  try {
+    await sourceSegment.first().waitFor({ state: 'visible', timeout: 15000 });
+    await sourceSegment.click();
+    await page.locator('.config-source-toolbar').waitFor({ state: 'visible', timeout: 10000 });
+    sourceModeOpened = true;
+  } catch (error) {
+    check('source mode opens without re-authentication', false, error instanceof Error ? error.message : String(error));
+  }
   // The source view is opened by the session alone: the step-up re-authentication
   // prompt was removed as a deliberate policy change (the reveal grant
   // re-checked the same management key the session already carries). So the
   // observable contract is the opposite of what it used to be - the source
   // editor opens directly, with no modal in the way.
   const sourceToolbar = page.locator('.config-source-toolbar');
-  await sourceToolbar.waitFor({ state: 'visible', timeout: 10000 });
-  check(
-    'source mode opens without re-authentication',
-    (await sourceToolbar.locator('.ant-tag').count()) >= 1 && (await sourceToolbar.locator('button').count()) >= 3,
-  );
-  check(
-    'no re-authentication modal is raised for the source view',
-    (await page.locator('.ant-modal').filter({ hasText: /源码|Source/ }).count()) === 0,
-  );
-  // Return to the visual view so the rest of the audit starts from the same
-  // place it did before this section ran.
-  const visualSegment = page.locator('.ant-segmented-item').filter({ hasText: /可视化|Visual/ });
-  if (await visualSegment.first().isVisible().catch(() => false)) {
-    await visualSegment.first().click();
-    await page.locator('.config-workbench').waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+  if (sourceModeOpened) {
+    check(
+      'source mode opens without re-authentication',
+      (await sourceToolbar.locator('.ant-tag').count()) >= 1 && (await sourceToolbar.locator('button').count()) >= 3,
+    );
+    check(
+      'no re-authentication modal is raised for the source view',
+      (await page.locator('.ant-modal').filter({ hasText: /源码|Source/ }).count()) === 0,
+    );
+    // Return to the visual view so the rest of the audit starts from the same
+    // place it did before this section ran.
+    const visualSegment = page.locator('.ant-segmented-item').filter({ hasText: /可视化|Visual/ });
+    if (await visualSegment.first().isVisible().catch(() => false)) {
+      await visualSegment.first().click();
+      await page.locator('.config-workbench').waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+    }
   }
   await auditRoutes(page, responseBodies, [
     ['/plugins', '.plugins-page', { pageSecrets: providerSecrets }],
