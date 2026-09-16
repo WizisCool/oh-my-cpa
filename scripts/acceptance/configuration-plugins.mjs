@@ -45,10 +45,12 @@ export async function runConfigurationPluginsAcceptance({
   // A missing control is a failed assertion, not a reason to abandon the rest
   // of the release audit. Record the failure and continue so later domains still
   // produce their own evidence.
+  let sourceModeClicked = false;
   let sourceModeOpened = false;
   try {
     await sourceSegment.first().waitFor({ state: 'visible', timeout: 15000 });
     await sourceSegment.click();
+    sourceModeClicked = true;
     await page.locator('.config-source-toolbar').waitFor({ state: 'visible', timeout: 10000 });
     sourceModeOpened = true;
   } catch (error) {
@@ -60,14 +62,16 @@ export async function runConfigurationPluginsAcceptance({
   // observable contract is the opposite of what it used to be - the source
   // editor opens directly, with no modal in the way.
   const sourceToolbar = page.locator('.config-source-toolbar');
+  if (sourceModeClicked) {
+    check(
+      'no re-authentication modal is raised for the source view',
+      (await page.locator('.ant-modal').filter({ hasText: /源码|Source/ }).count()) === 0,
+    );
+  }
   if (sourceModeOpened) {
     check(
       'source mode opens without re-authentication',
       (await sourceToolbar.locator('.ant-tag').count()) >= 1 && (await sourceToolbar.locator('button').count()) >= 3,
-    );
-    check(
-      'no re-authentication modal is raised for the source view',
-      (await page.locator('.ant-modal').filter({ hasText: /源码|Source/ }).count()) === 0,
     );
     // Return to the visual view so the rest of the audit starts from the same
     // place it did before this section ran.
