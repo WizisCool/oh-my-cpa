@@ -484,10 +484,14 @@ the first page, so the console counts arrivals against an ingestion id
 (`?since=<row id>`) rather than diffing the rows it has loaded — which would report
 "nothing new" while records were flowing in. On a real instance **5415 of 5515**
 records sort below page one, so that distinction is the normal case, not an edge
-case. The list query closes its result set before issuing the count: with one
-SQLite connection, an open `Rows` can keep the count on the same WAL snapshot as
-the list, so a record committed between polls would remain invisible until a
-later transaction happened to replace it.
+case. The arrival count is resolved before the list scan, and the list result set
+is closed before the function returns. With one SQLite connection, issuing the
+count after the list could otherwise keep both statements on the same WAL
+snapshot, so a record committed between polls would remain invisible until a
+later transaction happened to replace it. The optional test fixture also
+checkpoints its external append before exit, because the production collector
+normally writes through the same process while acceptance deliberately writes
+from a separate process.
 
 Request *time* is also the windowing key (`timestamp_ms >= from AND <= to`) and the
 axis of every rollup and chart, so the list, the window and the charts all agree on

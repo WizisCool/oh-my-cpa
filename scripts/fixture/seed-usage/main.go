@@ -197,6 +197,12 @@ func seedAppend(ctx context.Context, repo *repository.Repository) error {
 	if _, err := repo.InsertUsageEvents(ctx, []usage.Event{event}); err != nil {
 		return fmt.Errorf("seed append scenario: %w", err)
 	}
+	// The acceptance app owns a long-lived WAL connection. Force the external
+	// writer's committed frames to the database before it exits so the next poll
+	// observes the record even when no checkpoint happened at startup.
+	if _, err := repo.SQL().ExecContext(ctx, `PRAGMA wal_checkpoint(PASSIVE)`); err != nil {
+		return fmt.Errorf("checkpoint append scenario: %w", err)
+	}
 	return nil
 }
 

@@ -257,6 +257,19 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 	if err != nil {
 		return page, err
 	}
+	// Resolve the arrival count before opening the list scan. This is a separate
+	// read statement, so a committed write that landed between polls is visible
+	// even when the previous list scan left the pooled connection in a WAL
+	// snapshot. Waiting until after the list scan made the count depend on that
+	// scan's snapshot and produced the intermittent "backend has the row, the
+	// pill says zero" live-tail failure.
+	var arrivedCount int64
+	if filter.SinceID > 0 {
+		arrivedCount, err = r.countUsageEventsIngestedAfter(ctx, filter, filter.SinceID)
+		if err != nil {
+			return page, err
+		}
+	}
 	if cursor != nil {
 		// The columns must be qualified: the query joins discovered_resources,
 		// which also has an id, and an unqualified name is ambiguous to SQLite.
@@ -346,20 +359,13 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 	if err := rows.Close(); err != nil {
 		return page, fmt.Errorf("close usage events rows: %w", err)
 	}
-
 	if len(page.Items) > page.Limit {
 		page.Items = page.Items[:page.Limit]
 		page.HasMore = true
 		last := page.Items[len(page.Items)-1]
 		page.NextCursor = encodeEventCursor(last.TimestampMS, last.ID)
 	}
-	if filter.SinceID > 0 {
-		arrived, countErr := r.countUsageEventsIngestedAfter(ctx, filter, filter.SinceID)
-		if countErr != nil {
-			return page, countErr
-		}
-		page.ArrivedCount = arrived
-	}
+	page.ArrivedCount = arrivedCount
 	return page, nil
 }
 
