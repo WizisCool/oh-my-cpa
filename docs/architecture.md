@@ -796,6 +796,10 @@ Two properties of this split are load bearing.
 `scripts/browser-acceptance.mjs` once - `PURE`, `COMPONENT`, `BROWSER` or
 `CROSS-STACK` - and every assertion that left the browser names the test that
 replaced it. An assertion may move; it may not disappear silently.
+`scripts/acceptance/key-management.mjs` is the first extracted release domain:
+the top-level acceptance file owns process/browser lifecycle, while key list,
+alias, draft-save, request-filter and management-modal behavior live together in
+that module.
 
 **`pnpm test:fast` never pays for the browser.** No ordinary change may build the
 SPA, build a Go binary, start Vite, start Chromium or start the fake CPA. The

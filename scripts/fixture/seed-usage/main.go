@@ -183,6 +183,17 @@ func seedList(ctx context.Context, repo *repository.Repository) error {
 	callerKey.APIKeyMask = security.MaskSecret(fixtureClientKey)
 	callerKey.Source = "fixture-caller"
 	events = append(events, callerKey)
+	// A fixture-only late arrival: the row is committed before the app starts but
+	// its request time is outside the initial window for a short interval. The
+	// sliding window admits it on a later poll, which exercises the live-tail
+	// path without writing to SQLite from a second process while the app holds a
+	// read snapshot.
+	events = append(events, fixtureEvent(
+		"fixture-future-arrival",
+		now.Add(20*time.Second),
+		shortLatencyMS+50,
+		false,
+	))
 
 	if _, err := repo.InsertUsageEvents(ctx, events); err != nil {
 		return fmt.Errorf("seed list scenario: %w", err)

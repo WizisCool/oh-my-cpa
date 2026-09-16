@@ -85,3 +85,23 @@ The following capabilities are unique to Oh My CPA and have no counterpart in CP
 - `/usage-queue` destructively consumes queue records and must never be invoked during ordinary UI polling; the console does not expose this endpoint, leaving the background collector as the sole consumer.
 - `POST /api-call` allows CPA to make arbitrary upstream requests on behalf of credentials, introducing SSRF and exfiltration risks. General browser access remains disabled; the server uses it exclusively in `internal/quota`, restricted to verified HTTPS endpoints in `AllowedURLPrefixes`.
 - Replacing CPAMC does not mean copying its browser `localStorage` secret storage; Oh My CPA maintains strict server-side secret boundaries.
+
+## Scheduler Semantics (CPA v7.3.4)
+
+Priority and weight are routing fields, not presentation metadata. The console
+validates and writes them against the current CPA contract; the runtime semantics
+are owned by CPA's scheduler:
+
+| Field | CPA semantics | OMC treatment |
+| --- | --- | --- |
+| `priority` | Missing or `0` is the default tier; higher integer values are selected before lower values. A credential in a lower tier is used only after the higher tier has no ready credential. | The drawer accepts a safe integer without inventing a `0..100` range, and readback verifies the runtime value. |
+| `weight` | Missing defaults to `1`; `1..1_000_000` are allowed; non-positive values normalize to `0`, which excludes the credential from `weighted-round-robin`. Weight does not cross priority tiers. | The drawer accepts up to `1_000_000`, preserves the CPA normalization, and verifies persisted/runtime readback. |
+| `fill-first` | Chooses the first ready credential in the highest available priority tier and ignores weight. | The field remains editable but the UI must not imply that weight affects this strategy. |
+| `round-robin` | Rotates credentials within the highest available priority tier and ignores weight. | Same as above. |
+| Session affinity | An existing session may remain bound to its credential; priority and weight apply when no affinity binding can be reused. | The routing help calls this out instead of presenting priority as an unconditional override. |
+
+This matrix is based on the official CPA scheduler behavior at v7.3.4:
+`authPriority` defaults missing/invalid values to `0`; priority buckets are sorted
+descending; `credentialweight.Default` is `1` and `Max` is `1_000_000`;
+`pickWeighted` skips non-positive weights; and `pickReadyLocked` selects only from
+the highest ready priority bucket before applying the configured strategy.

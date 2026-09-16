@@ -1736,6 +1736,33 @@ a { color: inherit; }
   background: transparent;
 }
 
+.keys-key-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.keys-key-editor-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.keys-key-editor-hint {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.keys-key-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .config-api-keys-table .ant-table-tbody > tr > td {
   background: transparent !important;
   border-bottom: 1px solid var(--border-soft);
