@@ -130,6 +130,8 @@ Open **`http://127.0.0.1:5173/omc/`**. Vite serves the UI with HMR and proxies `
 > Running from source or compiling the standalone binary is recommended for now. Preview compose templates are available in the repository:
 > - [`deploy/compose.full.yml`](deploy/compose.full.yml): Stack co-deploying CPA, Oh My CPA, and Caddy.
 > - [`deploy/compose.omc.yml`](deploy/compose.omc.yml): Standalone Oh My CPA connecting to an existing CPA instance.
+>
+> The full stack pins CPA `v7.3.4` by default; override `CPA_IMAGE` when connecting the stack to a different compatible release.
 
 ## Operational Notes
 

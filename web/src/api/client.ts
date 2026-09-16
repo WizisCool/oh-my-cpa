@@ -12,6 +12,11 @@ import {
   ManagementAuthFileModel,
   ManagementAuthFileSafeFields,
 } from '../types/managementAuthFile';
+import {
+  ManagementOAuthModelAlias,
+  ManagementOAuthModelAliasesResponse,
+  ManagementOAuthModelAliasMutationResponse,
+} from '../types/managementOAuthModelAlias';
 import { DashboardResponse, DashboardTailResponse } from '../types/dashboard';
 import { DashboardTokenHeatmap } from '../types/tokenHeatmap';
 import { DashboardModelsResponse } from '../types/dashboardModels';
@@ -565,6 +570,20 @@ export const api = {
 
   async getManagementAuthFileModels(name: string): Promise<{ models: ManagementAuthFileModel[] }> {
     return request<{ models: ManagementAuthFileModel[] }>(`/management/auth-files/models?name=${encodeURIComponent(name)}`, { method: 'GET' });
+  },
+
+  async getManagementOAuthModelAliases(): Promise<ManagementOAuthModelAliasesResponse> {
+    return request<ManagementOAuthModelAliasesResponse>('/management/auth-files/model-aliases', { method: 'GET' });
+  },
+
+  async patchManagementOAuthModelAliases(
+    provider: string,
+    aliases: ManagementOAuthModelAlias[],
+  ): Promise<ManagementOAuthModelAliasMutationResponse> {
+    return request<ManagementOAuthModelAliasMutationResponse>('/management/auth-files/model-aliases', {
+      method: 'PATCH',
+      body: JSON.stringify({ provider, aliases }),
+    });
   },
 
   async getHealth(): Promise<HealthStatus> {

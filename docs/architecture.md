@@ -248,9 +248,12 @@ and `/api/v1/management/auth-files`, layering local preference metadata on read.
 Auth-file edits use CPA's field patch but do not treat its `200` as proof:
 the facade reads the runtime entry and a server-side projection of the
 downloaded JSON back before returning success. The projection exposes only
-prefix, proxy URL, disable-cooling, WebSockets, using-API, note, priority,
+prefix, proxy URL, expiry, disable-cooling, WebSockets, using-API, note, priority,
 weight and excluded models; tokens and other credential material stay inside
-the Go process. These writes and safe reads are audit logged.
+the Go process. Global OAuth model aliases are managed separately through
+`/api/v1/management/auth-files/model-aliases`: the facade replaces one provider
+at a time, reads CPA back before reporting success, and audit logs the write.
+These writes and safe reads are audit logged.
 
 `cpa_bindings` carries `missing_at_ms` and `ON DELETE SET NULL` so upstream
 removal marks a binding missing without cascading into history.

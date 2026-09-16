@@ -12,7 +12,7 @@ export const FAKE_ACCOUNT_SECRET = 'omc-e2e-account-secret';
 export const FAKE_CLIENT_SECRET = 'omc-e2e-client-secret';
 
 function json(response, status, body, headers = {}) {
-  response.writeHead(status, { 'Content-Type': 'application/json', 'X-CPA-Version': '7.2.146-e2e', ...headers });
+  response.writeHead(status, { 'Content-Type': 'application/json', 'X-CPA-Version': '7.3.4-e2e', ...headers });
   response.end(JSON.stringify(body));
 }
 
@@ -55,6 +55,10 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
     },
   ];
   let authFiles = JSON.parse(JSON.stringify(initialAuthFiles));
+  let oauthModelAliases = {
+    codex: [{ name: 'gpt-e2e', alias: 'gpt-e2e-preview', fork: true, 'force-mapping': false, 'display-name': 'GPT E2E Preview' }],
+    claude: [{ name: 'claude-3-5-sonnet', alias: 'sonnet-latest' }],
+  };
 
   // The codex API-key list is stateful for the same reason authFiles is: the
   // provider enable/disable flow writes it and then re-reads it, so a fixture
@@ -94,6 +98,27 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
 
     if (request.method === 'GET' && path === '/auth-files') {
       json(response, 200, { files: authFiles });
+      return;
+    }
+    if (request.method === 'GET' && path === '/oauth-model-alias') {
+      json(response, 200, { 'oauth-model-alias': oauthModelAliases });
+      return;
+    }
+    if (request.method === 'PATCH' && path === '/oauth-model-alias') {
+      const bodyText = Buffer.concat(chunks).toString('utf8');
+      let payload = {};
+      try { payload = JSON.parse(bodyText || '{}'); } catch {}
+      const channel = String(payload.channel ?? '').trim().toLowerCase();
+      if (!channel) {
+        json(response, 400, { error: 'invalid channel' });
+        return;
+      }
+      if (Array.isArray(payload.aliases) && payload.aliases.length > 0) {
+        oauthModelAliases[channel] = payload.aliases;
+      } else {
+        delete oauthModelAliases[channel];
+      }
+      json(response, 200, { status: 'ok' });
       return;
     }
     if (request.method === 'GET' && path === '/auth-files/models') {
@@ -202,7 +227,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       return;
     }
     if (request.method === 'GET' && path === '/config.yaml') {
-      response.writeHead(200, { 'Content-Type': 'application/yaml', 'X-CPA-Version': '7.2.146-e2e' });
+      response.writeHead(200, { 'Content-Type': 'application/yaml', 'X-CPA-Version': '7.3.4-e2e' });
       response.end(renderConfigYaml());
       return;
     }
@@ -243,7 +268,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       return;
     }
     if (request.method === 'GET' && path === '/latest-version') {
-      json(response, 200, { version: '7.2.146-e2e' });
+      json(response, 200, { version: '7.3.4-e2e' });
       return;
     }
     if (request.method === 'GET' && path.endsWith('-auth-url')) {

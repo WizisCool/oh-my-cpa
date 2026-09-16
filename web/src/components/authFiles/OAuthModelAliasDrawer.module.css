@@ -1,0 +1,46 @@
+.drawer-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.provider-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.provider-select {
+  min-width: 220px;
+  flex: 1 1 240px;
+}
+
+.provider-new {
+  min-width: 220px;
+  flex: 1 1 240px;
+}
+
+.provider-tag {
+  align-self: flex-start;
+  margin: 0;
+  font-family: var(--font-mono);
+}
+
+.alias-table {
+  margin-top: 4px;
+}
+
+.drawer-note {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 560px) {
+  .provider-select,
+  .provider-new {
+    min-width: 100%;
+    flex-basis: 100%;
+  }
+}

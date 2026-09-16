@@ -130,6 +130,8 @@ pnpm dev
 > 现阶段推荐通过源码或编译后的二进制运行。仓库中提供了早期预览 Compose 模板：
 > - [`deploy/compose.full.yml`](deploy/compose.full.yml)：协同部署 CPA、Oh My CPA 与 Caddy 的完整栈。
 > - [`deploy/compose.omc.yml`](deploy/compose.omc.yml)：连接已有 CPA 实例的独立 Oh My CPA 容器。
+>
+> 完整栈默认固定 CPA `v7.3.4`；如需连接其他兼容版本，可通过 `CPA_IMAGE` 覆盖。
 
 ## 运维须知
 

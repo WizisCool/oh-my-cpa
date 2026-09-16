@@ -15,6 +15,7 @@ import {
 import {
   AppstoreOutlined,
   BarsOutlined,
+  BranchesOutlined,
   ReloadOutlined,
   SearchOutlined,
   UploadOutlined,
@@ -40,6 +41,7 @@ import { AuthFileCard } from '../components/authFiles/AuthFileCard';
 import { AuthFileDetailDrawer } from '../components/authFiles/AuthFileDetailDrawer';
 import { BatchActionBar } from '../components/authFiles/BatchActionBar';
 import { ModelsModal } from '../components/authFiles/ModelsModal';
+import { OAuthModelAliasDrawer } from '../components/authFiles/OAuthModelAliasDrawer';
 import { ProviderFilterTabs } from '../components/common/ProviderFilterTabs';
 import styles from './authFiles/AuthFilesPage.module.css';
 
@@ -77,6 +79,7 @@ export const AuthFilesPage: React.FC = () => {
   const [selected, setSelected] = useState<string[]>([]);
   const [selectedFile, setSelectedFile] = useState<ManagementAuthFile | null>(null);
   const [modelsFile, setModelsFile] = useState<ManagementAuthFile | null>(null);
+  const [isAliasDrawerOpen, setIsAliasDrawerOpen] = useState(false);
   const [busyFiles, setBusyFiles] = useState<Record<string, boolean>>({});
   const [isOperating, setIsOperating] = useState(false);
 
@@ -485,6 +488,14 @@ export const AuthFilesPage: React.FC = () => {
             {t('af.upload')}
           </Button>
           <Button
+            data-testid="auth-files-model-alias-open"
+            icon={<BranchesOutlined />}
+            onClick={() => setIsAliasDrawerOpen(true)}
+            disabled={isOperating}
+          >
+            {t('af.alias_open')}
+          </Button>
+          <Button
             type="text"
             icon={<ReloadOutlined />}
             onClick={() => filesQuery.refetch()}
@@ -663,6 +674,15 @@ export const AuthFilesPage: React.FC = () => {
         file={modelsFile}
         open={Boolean(modelsFile)}
         onClose={() => setModelsFile(null)}
+      />
+
+      <OAuthModelAliasDrawer
+        open={isAliasDrawerOpen}
+        onClose={() => setIsAliasDrawerOpen(false)}
+        onSaved={() => {
+          void queryClient.invalidateQueries({ queryKey: ['management-overview'] });
+        }}
+        providerOptions={tabProviders.filter((value) => value !== 'all')}
       />
     </div>
   );

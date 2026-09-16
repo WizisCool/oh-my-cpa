@@ -538,6 +538,39 @@ func (c *Client) AuthFileModels(ctx context.Context, name string) ([]AuthModel, 
 	return response.Models, nil
 }
 
+// OAuthModelAlias is the non-secret global model mapping CPA applies to
+// OAuth/file-backed credentials.
+type OAuthModelAlias struct {
+	Name         string `json:"name"`
+	Alias        string `json:"alias"`
+	Fork         bool   `json:"fork,omitempty"`
+	DisplayName  string `json:"display-name,omitempty"`
+	ForceMapping bool   `json:"force-mapping,omitempty"`
+}
+
+// OAuthModelAliases reads CPA's global OAuth model alias map.
+func (c *Client) OAuthModelAliases(ctx context.Context) (map[string][]OAuthModelAlias, error) {
+	var response struct {
+		Aliases map[string][]OAuthModelAlias `json:"oauth-model-alias"`
+	}
+	if err := c.DoJSON(ctx, http.MethodGet, "/oauth-model-alias", &response); err != nil {
+		return nil, err
+	}
+	return response.Aliases, nil
+}
+
+// PatchOAuthModelAliases replaces one provider's alias list. CPA deletes the
+// provider when the replacement list is empty.
+func (c *Client) PatchOAuthModelAliases(ctx context.Context, provider string, aliases []OAuthModelAlias) error {
+	if aliases == nil {
+		aliases = []OAuthModelAlias{}
+	}
+	return c.doJSONBody(ctx, http.MethodPatch, "/oauth-model-alias", map[string]any{
+		"channel": strings.TrimSpace(provider),
+		"aliases": aliases,
+	}, nil)
+}
+
 // ConfigScalarsDTO contains safe, non-sensitive projected scalar configuration.
 type ConfigScalarsDTO struct {
 	ProxyURL               string `json:"proxy_url"`

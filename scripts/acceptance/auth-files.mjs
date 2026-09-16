@@ -200,6 +200,42 @@ export async function runAuthFilesAcceptance({
     await saveDrawer.locator('.ant-drawer-close').click();
     await page.locator('.ant-drawer-open').waitFor({ state: 'hidden', timeout: 5000 });
 
+    // OAuth model aliases are global CPA configuration. Exercise the complete
+    // save -> readback -> close/reopen path, then the provider deletion action.
+    const aliasOpen = page.getByTestId('auth-files-model-alias-open');
+    await aliasOpen.click();
+    const aliasDrawer = page.getByTestId('oauth-model-alias-drawer').last();
+    await aliasDrawer.waitFor({ state: 'visible', timeout: 5000 });
+    const aliasInput = aliasDrawer.locator('[data-alias-field="alias"]').first();
+    await aliasInput.waitFor({ state: 'visible', timeout: 5000 });
+    check('oauth model alias drawer loads the CPA mapping', (await aliasInput.inputValue()) === 'sonnet-latest');
+    await aliasInput.fill('sonnet-preview');
+    await aliasDrawer.getByTestId('oauth-model-alias-save').click();
+    await checkEventually(
+      'oauth model alias save settles after verified readback',
+      async () => aliasDrawer.getByTestId('oauth-model-alias-save').isDisabled(),
+      { detail: async () => `disabled=${await aliasDrawer.getByTestId('oauth-model-alias-save').isDisabled()}` },
+    );
+    await aliasDrawer.locator('.ant-drawer-close').click();
+    await page.locator('.ant-drawer-open').waitFor({ state: 'hidden', timeout: 5000 });
+    await aliasOpen.click();
+    await aliasDrawer.waitFor({ state: 'visible', timeout: 5000 });
+    check(
+      'oauth model alias survives close and reopen',
+      (await aliasDrawer.locator('[data-alias-field="alias"]').first().inputValue()) === 'sonnet-preview',
+    );
+
+    await aliasDrawer.getByTestId('oauth-model-alias-delete-provider').click();
+    const aliasDeleteConfirm = page.locator('.ant-modal-confirm').last();
+    await aliasDeleteConfirm.waitFor({ state: 'visible', timeout: 5000 });
+    await aliasDeleteConfirm.locator('.ant-btn-primary').click();
+    await checkEventually(
+      'oauth model alias deletion is persisted and read back',
+      async () => (await aliasDrawer.locator('[data-alias-field="alias"]').count()) === 0,
+    );
+    await aliasDrawer.locator('.ant-drawer-close').click();
+    await page.locator('.ant-drawer-open').waitFor({ state: 'hidden', timeout: 5000 });
+
     // 10. Viewports at 390px and 320px for auth-files
     for (const width of [390, 320]) {
       await page.setViewportSize({ width, height: 800 });
