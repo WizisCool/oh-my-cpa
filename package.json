@@ -28,6 +28,7 @@
     "verify:browser": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs scripts/browser-acceptance.mjs",
     "verify:browser:release": "node scripts/run-browser-release.mjs",
     "verify:browser:smoke": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs scripts/browser-acceptance.mjs --smoke",
+    "verify:browser:p0": "node --experimental-strip-types --import ./scripts/ts-resolve.mjs scripts/browser-acceptance.mjs --p0",
     "dev:web": "pnpm --dir web dev",
     "verify:toolchain": "node scripts/verify-toolchain.mjs",
     "verify:toolchain:strict": "node scripts/verify-toolchain.mjs --strict",

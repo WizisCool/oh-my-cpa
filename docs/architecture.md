@@ -755,8 +755,13 @@ claim, and it stays in Chromium only when the claim is about the engine.
 | Mechanical repository gates | `pnpm test:docs`, `pnpm test:i18n`, `pnpm test:css-modules`, `pnpm test:dev-target`, `pnpm test:affected-checks`, `pnpm test:sync-web-dist`, `pnpm test:install-chromium`, `pnpm test:check-ui-plan` | Path references, translation keys, CSS class references, the dev proxy target, the embedded-distribution sync, the Chromium installer's decision, the fast-path planner and the UI scenario planner. |
 | **UI fast path** (development only) | `pnpm check:ui` | The subset of browser claims a change can affect, against the **dev server** with mocked routes. No `pnpm build`, no Go binary, no fake CPA. This is the only layer where `React.StrictMode`'s double-invoke happens, so it is the only place a hook that disposes what it should re-create can be observed. |
 | Cross-stack smoke | `pnpm verify:browser:smoke` | The thin path a pull request needs: `/omc` redirect, sign-in rejection and success, the dashboard and request list rendering their seeded rows, no console or page error. |
+| Cross-stack P0 gates | `pnpm verify:browser:p0` | Pull-request release gates over the request-record/live-tail suite and the auth-file/OAuth scheduling-field suite, using the same built binary and deterministic fixture. |
 | Cross-stack acceptance | `pnpm verify:browser` | The whole stack against the fake CPA: auth, every route's render and secret boundary, key aliases, provider enable/disable and its concurrent path, live-tail polling, quota, OAuth. |
 | Browser-only probes | `pnpm verify:probes` | The same claims as the UI fast path, but against the built SPA for release. Drawer/modal stacking and hit-testing, column geometry and truncation, the responsive alignment override, dashboard trend mark paint, refresh sequencing under a held response. |
+
+Pull requests run smoke followed by the P0 gates. Master retains the full
+`verify:browser:release` orchestration, which runs cross-stack acceptance and the
+browser-only probes concurrently.
 
 ### 11.0 The fast path is not a cheaper gate
 

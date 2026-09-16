@@ -43,6 +43,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
  */
 const providerSecrets = [FAKE_PROVIDER_SECRET, FAKE_SECOND_PROVIDER_SECRET];
 const smokeOnly = process.argv.includes('--smoke');
+const p0Only = process.argv.includes('--p0');
 
 class SmokeComplete extends Error {}
 if (process.env.OMCPA_LIVE_CPA === '1') {
@@ -343,37 +344,38 @@ try {
     pageErrors,
     onSmokeComplete: () => { throw new SmokeComplete(); },
   });
-  await auditPage(page, responseBodies, '/pricing', '[data-testid="pricing-page"]', { pageSecrets: providerSecrets });
+  if (!p0Only) {
+    await auditPage(page, responseBodies, '/pricing', '[data-testid="pricing-page"]', { pageSecrets: providerSecrets });
 
-  // The pricing page must open fast: a full table render is the budget, not a
-  // spinner wait. This is the regression guard for the old 5s page freeze.
-  const pricingOpenStart = Date.now();
-  await page.goto(`${appURL}/pricing`);
-  await page.locator('[data-testid="pricing-page"]').first().waitFor({ state: 'visible', timeout: 3000 });
-  const pricingOpenMS = Date.now() - pricingOpenStart;
-  check('pricing page opens under 3s', pricingOpenMS < 3000, `${pricingOpenMS}ms`);
+    // The pricing page must open fast: a full table render is the budget, not a
+    // spinner wait. This is the regression guard for the old 5s page freeze.
+    const pricingOpenStart = Date.now();
+    await page.goto(`${appURL}/pricing`);
+    await page.locator('[data-testid="pricing-page"]').first().waitFor({ state: 'visible', timeout: 3000 });
+    const pricingOpenMS = Date.now() - pricingOpenStart;
+    check('pricing page opens under 3s', pricingOpenMS < 3000, `${pricingOpenMS}ms`);
 
-  // The manual price editor must be a real form: labeled fields with units, not
-  // bare number inputs. This guards the redesigned modal structure.
-  await page.getByRole('button', { name: /添加价格|Add price/ }).first().click();
-  await page.locator('.ant-modal .ant-form .ant-form-item').first().waitFor({ state: 'visible', timeout: 5000 });
-  const editorLabels = await page.locator('.ant-modal .ant-form .ant-form-item-label label').allInnerTexts();
-  check('price editor shows labeled fields', editorLabels.length >= 6, `labels=${editorLabels.length}`);
-  const rateUnits = await page.locator('.ant-modal .ant-form .ant-input-number-suffix').allInnerTexts();
-  check('price editor shows $/1M units', rateUnits.filter((u) => u.includes('/ 1M')).length === 4, `units=${rateUnits.length}`);
-  await page.keyboard.press('Escape');
-  // forceRender keeps the form mounted, so closing hides it instead of detaching.
-  await page.locator('.ant-modal .ant-form').first().waitFor({ state: 'hidden', timeout: 5000 });
-  check('price editor closes cleanly', true);
-  await runProvidersAcceptance({
-    auditPage,
-    appURL,
-    page,
-    check,
-    checkEventually,
-    responseBodies,
-  });
-
+    // The manual price editor must be a real form: labeled fields with units, not
+    // bare number inputs. This guards the redesigned modal structure.
+    await page.getByRole('button', { name: /添加价格|Add price/ }).first().click();
+    await page.locator('.ant-modal .ant-form .ant-form-item').first().waitFor({ state: 'visible', timeout: 5000 });
+    const editorLabels = await page.locator('.ant-modal .ant-form .ant-form-item-label label').allInnerTexts();
+    check('price editor shows labeled fields', editorLabels.length >= 6, `labels=${editorLabels.length}`);
+    const rateUnits = await page.locator('.ant-modal .ant-form .ant-input-number-suffix').allInnerTexts();
+    check('price editor shows $/1M units', rateUnits.filter((u) => u.includes('/ 1M')).length === 4, `units=${rateUnits.length}`);
+    await page.keyboard.press('Escape');
+    // forceRender keeps the form mounted, so closing hides it instead of detaching.
+    await page.locator('.ant-modal .ant-form').first().waitFor({ state: 'hidden', timeout: 5000 });
+    check('price editor closes cleanly', true);
+    await runProvidersAcceptance({
+      auditPage,
+      appURL,
+      page,
+      check,
+      checkEventually,
+      responseBodies,
+    });
+  }
   await runAuthFilesAcceptance({
     auditPage,
     appURL,
@@ -391,32 +393,34 @@ try {
     root,
   });
 
-  await runObservabilityAcceptance({
-    auditPage,
-    appURL,
-    page,
-    check,
-    checkEventually,
-    responseBodies,
-    providerSecrets,
-    settleLayout,
-    lobeIconSignature,
-  });
+  if (!p0Only) {
+    await runObservabilityAcceptance({
+      auditPage,
+      appURL,
+      page,
+      check,
+      checkEventually,
+      responseBodies,
+      providerSecrets,
+      settleLayout,
+      lobeIconSignature,
+    });
 
-  await runKeyManagementAcceptance({ appURL, page, check, checkEventually, responseBodies, clientKeyAlias: CLIENT_KEY_ALIAS, clientKeySecret: FAKE_CLIENT_SECRET });
+    await runKeyManagementAcceptance({ appURL, page, check, checkEventually, responseBodies, clientKeyAlias: CLIENT_KEY_ALIAS, clientKeySecret: FAKE_CLIENT_SECRET });
 
-  await runConfigurationPluginsAcceptance({
-    auditRoutes,
-    appURL,
-    page,
-    check,
-    providerSecrets,
-    responseBodies,
-  });
+    await runConfigurationPluginsAcceptance({
+      auditRoutes,
+      appURL,
+      page,
+      check,
+      providerSecrets,
+      responseBodies,
+    });
 
-  await runThemeBrandAcceptance({ appURL, page, check, until, measureStable, settleLayout });
+    await runThemeBrandAcceptance({ appURL, page, check, until, measureStable, settleLayout });
 
-  await runOAuthFlowAcceptance({ appURL, page, check, responseBodies });
+    await runOAuthFlowAcceptance({ appURL, page, check, responseBodies });
+  }
 
   // Bundle budget check
   const assetsDir = path.join(root, 'web', 'dist', 'assets');
@@ -467,5 +471,6 @@ if (failures.length > 0) {
   if (appLog.length > 0) console.error(appLog.join('').slice(-8000));
   process.exitCode = 1;
 } else {
-  console.log(`\n${checks.length} deterministic browser checks passed${smokeOnly ? ' (smoke)' : ''}.`);
+  const mode = smokeOnly ? ' (smoke)' : p0Only ? ' (p0)' : '';
+  console.log(`\n${checks.length} deterministic browser checks passed${mode}.`);
 }

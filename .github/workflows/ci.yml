@@ -175,6 +175,16 @@ jobs:
           OMCPA_SEED_USAGE_BINARY: tmp/seed-usage-browser
         run: pnpm verify:browser:smoke
 
+      # Pull requests must also clear the two P0 release gates: request-record
+      # correctness and OAuth/auth-file scheduling fields. This mode reuses the
+      # same built binary and fixture while skipping unrelated page suites.
+      - name: Run deterministic browser P0 gates
+        if: github.event_name == 'pull_request'
+        env:
+          OMCPA_BROWSER_BINARY: tmp/oh-my-cpa-browser
+          OMCPA_SEED_USAGE_BINARY: tmp/seed-usage-browser
+        run: pnpm verify:browser:p0
+
       # Master keeps both browser phases, and runs them concurrently. They are
       # independent processes with their own Chromium and their own service under
       # test - the probes drive Vite with mocked routes, the acceptance run drives
