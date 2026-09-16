@@ -48,7 +48,7 @@ export const SERIES_SLOTS = 6;
 export function seriesColor(palette: ThemePalette, index: number): string {
   const slots = palette.series;
   const slot = ((Math.trunc(index) % SERIES_SLOTS) + SERIES_SLOTS) % SERIES_SLOTS;
-  return slots[slot] ?? palette.accent;
+  return slots[slot] ?? slots[0] ?? palette.accent;
 }
 
 /** The trend's plot floor and the usage ring's unfilled track. */

@@ -382,7 +382,7 @@ colour are untouched and still mean exactly one thing.
 
 The table shows the original OMC Dark/OMC Light pair. Every registered preset
 supplies its own six-slot series palette and track in `themeConfig.ts`;
-`scripts/test-chart-marks.ts` checks every preset for at least six slots,
+`scripts/test-chart-marks.ts` checks every preset for exactly six slots,
 graphical contrast on that preset's card surface, and adjacent-slot distance.
 
 **The slot is the identity; the family survives a theme switch.** `seriesColor(mode, 0)` is the blue

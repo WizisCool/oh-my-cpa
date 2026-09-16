@@ -40,7 +40,7 @@ assert.equal(parseThemeId('unknown'), undefined);
 for (const preset of THEME_PRESETS) {
   const palette = preset.palette;
   assert.equal(preset.id, getThemePreset(preset.id).id);
-  assert.ok(palette.series.length >= 6, `${preset.id} needs six series slots`);
+  assert.equal(palette.series.length, 6, `${preset.id} defines exactly six series slots`);
   assert.ok(contrast(palette.fg, palette.bg) >= 7, `${preset.id} primary text contrast is too low`);
   assert.ok(contrast(palette.fg2, palette.bg) >= 4.5, `${preset.id} secondary text contrast is too low`);
   assert.ok(contrast(palette.accent, palette.bg) >= 4.5, `${preset.id} accent text contrast is too low`);
