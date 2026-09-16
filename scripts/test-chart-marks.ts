@@ -88,8 +88,8 @@ function labDistance(a: string, b: string): number {
 
 for (const preset of THEME_PRESETS) {
   assert.ok(
-    preset.palette.series.length >= SERIES_SLOTS,
-    `${preset.id} defines at least ${SERIES_SLOTS} series slots`,
+    preset.palette.series.length === SERIES_SLOTS,
+    `${preset.id} defines exactly ${SERIES_SLOTS} series slots`,
   );
   const slots = [...Array(SERIES_SLOTS).keys()].map((index) => seriesColor(preset.palette, index));
   const card = preset.palette.surface;
