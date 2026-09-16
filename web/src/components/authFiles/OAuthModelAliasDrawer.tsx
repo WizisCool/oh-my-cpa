@@ -207,10 +207,11 @@ export const OAuthModelAliasDrawer: React.FC<OAuthModelAliasDrawerProps> = ({
       message.error(t('af.alias_error_provider'));
       return;
     }
-    setSelectedProvider(normalized);
-    setNewProvider('');
-    setDrafts([]);
-    setBaseline([]);
+    // The endpoint replaces a provider's whole list, and this field offers the
+    // providers that already have aliases, so an existing key has to be seeded
+    // from its saved rows. Starting from an empty table would make the next save
+    // delete every mapping the operator never saw.
+    loadProvider(normalized);
   };
 
   const handleAttemptClose = () => {
