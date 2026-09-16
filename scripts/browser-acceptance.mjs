@@ -419,7 +419,7 @@ try {
 
     await runThemeBrandAcceptance({ appURL, page, check, until, measureStable, settleLayout });
 
-    await runOAuthFlowAcceptance({ appURL, page, check, responseBodies });
+    await runOAuthFlowAcceptance({ appURL, page, check });
   }
 
   // Bundle budget check

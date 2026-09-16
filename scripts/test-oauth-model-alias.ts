@@ -36,6 +36,10 @@ test('model alias validation rejects shapes CPA silently drops', () => {
     { ok: false, error: 'provider' },
   );
   assert.deepEqual(
+    validateOAuthModelAliasDrafts('a'.repeat(65), [{ rowKey: 'row-1', name: 'gpt-5', alias: 'fast' }]),
+    { ok: false, error: 'provider' },
+  );
+  assert.deepEqual(
     validateOAuthModelAliasDrafts('codex', [{ rowKey: 'row-1', name: 'gpt-5', alias: 'gpt-5' }]),
     { ok: false, error: 'alias_same', alias: 'gpt-5' },
   );

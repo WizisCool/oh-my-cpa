@@ -2,6 +2,7 @@ import type { ManagementOAuthModelAlias } from '../../types/managementOAuthModel
 
 export const OAUTH_MODEL_ALIAS_ENTRY_LIMIT = 512;
 export const OAUTH_MODEL_ALIAS_FIELD_LIMIT = 512;
+export const OAUTH_MODEL_ALIAS_PROVIDER_LIMIT = 64;
 
 const PROVIDER_ALIASES: Record<string, string> = {
   'anti-gravity': 'antigravity',
@@ -34,7 +35,9 @@ export function normalizeOAuthModelAliasProvider(value: string): string {
 }
 
 export function isValidOAuthModelAliasProvider(value: string): boolean {
-  return PROVIDER_PATTERN.test(value);
+  return value.length > 0
+    && Array.from(value).length <= OAUTH_MODEL_ALIAS_PROVIDER_LIMIT
+    && PROVIDER_PATTERN.test(value);
 }
 
 export function createOAuthModelAliasDrafts(
@@ -70,7 +73,11 @@ export function validateOAuthModelAliasDrafts(
     if (!name || !alias) {
       return { ok: false, error: 'name_alias_required' };
     }
-    if (name.length > OAUTH_MODEL_ALIAS_FIELD_LIMIT || alias.length > OAUTH_MODEL_ALIAS_FIELD_LIMIT || displayName.length > OAUTH_MODEL_ALIAS_FIELD_LIMIT) {
+    if (
+      Array.from(name).length > OAUTH_MODEL_ALIAS_FIELD_LIMIT
+      || Array.from(alias).length > OAUTH_MODEL_ALIAS_FIELD_LIMIT
+      || Array.from(displayName).length > OAUTH_MODEL_ALIAS_FIELD_LIMIT
+    ) {
       return { ok: false, error: 'field_too_long' };
     }
     if (name.toLowerCase() === alias.toLowerCase()) {

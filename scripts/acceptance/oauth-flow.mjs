@@ -6,7 +6,6 @@ export async function runOAuthFlowAcceptance({
   appURL,
   page,
   check,
-  responseBodies,
 }) {
   // OAuth end-to-end against the deterministic fake: start a flow, confirm
   // the card polls `waiting`, submit a callback whose session already
@@ -14,15 +13,16 @@ export async function runOAuthFlowAcceptance({
   // success state instead of painting an error over saved credentials.
   await page.goto(`${appURL}/oauth`, { waitUntil: 'domcontentloaded' });
   await page.locator('.oauth-page').first().waitFor({ state: 'visible', timeout: 15000 });
-  responseBodies.length = 0;
   const codexStart = page.locator('[data-oauth-start="codex"]');
   await codexStart.waitFor({ state: 'visible', timeout: 15000 });
   await codexStart.click();
   // The auth URL box (or the waiting status) proves the flow started and
   // the 3s status poller is running.
   const codexCard = page.locator('[data-oauth-card="codex"]');
-  await codexCard.getByText(/等待|waiting/i).first().waitFor({ state: 'visible', timeout: 15000 });
-  check('oauth start shows waiting state while polling', true);
+  const waitingState = codexCard.getByText(/等待|waiting/i).first();
+  await waitingState.waitFor({ state: 'visible', timeout: 15000 });
+  const waitingText = await waitingState.innerText();
+  check('oauth start shows waiting state while polling', /等待|waiting/i.test(waitingText), `text=${waitingText}`);
   const callbackInput = codexCard.locator('[data-oauth-callback-input]');
   await callbackInput.waitFor({ state: 'visible', timeout: 15000 });
   await callbackInput.fill('http://127.0.0.1:8317/codex/callback?code=e2e-replayed&state=already-done');
@@ -43,7 +43,9 @@ export async function runOAuthFlowAcceptance({
   check('plugin oauth card shows plugin logo', (await pluginCard.locator('img').count()) > 0);
   const pluginStart = page.locator('[data-oauth-start="iflow"]');
   await pluginStart.click();
-  await pluginCard.getByText(/等待|waiting/i).first().waitFor({ state: 'visible', timeout: 15000 });
-  check('plugin oauth start polls waiting state', true);
+  const pluginWaitingState = pluginCard.getByText(/等待|waiting/i).first();
+  await pluginWaitingState.waitFor({ state: 'visible', timeout: 15000 });
+  const pluginWaitingText = await pluginWaitingState.innerText();
+  check('plugin oauth start polls waiting state', /等待|waiting/i.test(pluginWaitingText), `text=${pluginWaitingText}`);
 
 }

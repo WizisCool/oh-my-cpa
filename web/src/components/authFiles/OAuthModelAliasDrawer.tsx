@@ -266,7 +266,7 @@ export const OAuthModelAliasDrawer: React.FC<OAuthModelAliasDrawerProps> = ({
       render: (value: string | undefined, row: ManagementOAuthModelAliasDraft) => (
         <Input
           data-alias-field="display_name"
-          value={value}
+          value={value ?? ''}
           aria-label={t('af.alias_col_display')}
           onChange={(event) => updateDraft(row.rowKey, 'display_name', event.target.value)}
         />

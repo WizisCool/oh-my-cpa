@@ -129,15 +129,17 @@ func projectManagementOAuthModelAliases(source map[string][]management.OAuthMode
 	for rawProvider, entries := range source {
 		provider, err := normalizeManagementOAuthModelAliasProvider(rawProvider)
 		if err != nil {
-			return nil, fmt.Errorf("CPA returned an invalid OAuth model alias provider: %w", err)
+			// CPA owns the global map, and an unrelated legacy/plugin channel
+			// must not make the whole console capability unreadable.
+			continue
 		}
 		normalized, err := normalizeManagementOAuthModelAliases(managementOAuthModelAliasesFromCPA(entries))
 		if err != nil {
-			return nil, fmt.Errorf("CPA returned invalid OAuth model aliases for %s: %w", provider, err)
+			continue
 		}
 		if len(normalized) > 0 {
 			if _, exists := result[provider]; exists {
-				return nil, fmt.Errorf("CPA returned duplicate OAuth model alias provider %s", provider)
+				continue
 			}
 			result[provider] = normalized
 		}
@@ -168,8 +170,11 @@ func normalizeManagementOAuthModelAliasProvider(raw string) (string, error) {
 	case "grok", "x-ai", "x.ai":
 		provider = "xai"
 	}
-	if provider == "" || len([]rune(provider)) > 64 {
+	if provider == "" {
 		return "", errors.New("provider must be a non-empty provider key")
+	}
+	if len([]rune(provider)) > 64 {
+		return "", errors.New("provider key must be at most 64 characters")
 	}
 	for _, char := range provider {
 		if (char < 'a' || char > 'z') && (char < '0' || char > '9') && char != '-' {

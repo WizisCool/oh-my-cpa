@@ -18,6 +18,12 @@ func TestManagementOAuthModelAliasesRoundTrip(t *testing.T) {
 		"claude": {
 			{Name: "claude-sonnet-4", Alias: "sonnet-latest"},
 		},
+		"legacy:channel": {
+			{Name: "legacy-model", Alias: "legacy-alias"},
+		},
+		"invalid-entry": {
+			{Name: "same-model", Alias: "same-model"},
+		},
 	}
 	handler := func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
@@ -65,6 +71,12 @@ func TestManagementOAuthModelAliasesRoundTrip(t *testing.T) {
 	}
 	if entry := listed.Aliases["codex"][0]; entry.Name != "gpt-5" || entry.Alias != "gpt-5-fast" || !entry.Fork || !entry.ForceMapping || entry.DisplayName != "GPT-5 Fast" {
 		t.Fatalf("projected codex alias = %#v", entry)
+	}
+	if _, exists := listed.Aliases["legacy:channel"]; exists {
+		t.Fatalf("invalid legacy provider leaked into the projection: %#v", listed.Aliases)
+	}
+	if _, exists := listed.Aliases["invalid-entry"]; exists {
+		t.Fatalf("invalid provider entries leaked into the projection: %#v", listed.Aliases)
 	}
 
 	patch := `{"provider":"codex","aliases":[{"name":"gpt-5.1","alias":"gpt-5.1-fast","fork":true,"force_mapping":true,"display_name":"GPT-5.1 Fast"}]}`
@@ -175,5 +187,8 @@ func TestNormalizeManagementOAuthModelAliasProvider(t *testing.T) {
 		if err != nil || got != want {
 			t.Fatalf("normalize provider %q = %q, %v; want %q", input, got, err, want)
 		}
+	}
+	if _, err := normalizeManagementOAuthModelAliasProvider("a" + strings.Repeat("b", 64)); err == nil || !strings.Contains(err.Error(), "at most 64") {
+		t.Fatalf("oversized provider error = %v", err)
 	}
 }
