@@ -45,15 +45,15 @@ export const SERIES_SLOTS = 6;
  * function that silently returns `undefined` past its end is a chart drawn in the wrong colour, and
  * that is worse than one drawn in a repeated colour.
  */
-export function seriesColor(theme: ThemePalette, index: number): string {
-  const slots = theme.series;
+export function seriesColor(palette: ThemePalette, index: number): string {
+  const slots = palette.series;
   const slot = ((Math.trunc(index) % SERIES_SLOTS) + SERIES_SLOTS) % SERIES_SLOTS;
   return slots[slot];
 }
 
 /** The trend's plot floor and the usage ring's unfilled track. */
-export function seriesTrackColor(theme: ThemePalette): string {
-  return theme.seriesTrack;
+export function seriesTrackColor(palette: ThemePalette): string {
+  return palette.seriesTrack;
 }
 
 /**
@@ -77,6 +77,6 @@ export function seriesDomainKey(entry: { folded: boolean; model: string }): stri
  * colours to cycle, so slot assignment is decided here - in one place, testable without a browser -
  * instead of being a library's internal ordering that could change under us.
  */
-export function seriesColorRange(theme: ThemePalette, entries: Array<{ folded: boolean; model: string }>): string[] {
-  return entries.map((_, index) => seriesColor(theme, index));
+export function seriesColorRange(palette: ThemePalette, entries: Array<{ folded: boolean; model: string }>): string[] {
+  return entries.map((_, index) => seriesColor(palette, index));
 }

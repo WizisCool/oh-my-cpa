@@ -51,8 +51,6 @@ assert.equal(lightAccent, '#005d8f', 'the light theme uses the legible step');
 // mistaken for a verdict. Both are measured, and both are asserted against the palette rather than
 // against literals so a token change that breaks either fails here.
 
-const MODES = ['dark', 'light'] as const;
-
 /** Relative luminance and contrast ratio, WCAG 2.x. */
 function luminance(hex: string): number {
   const channels = [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16) / 255)
@@ -88,11 +86,11 @@ function labDistance(a: string, b: string): number {
   return Math.hypot(left[0] - right[0], left[1] - right[1], left[2] - right[2]);
 }
 
-for (const mode of MODES) {
-  const slots = [...Array(SERIES_SLOTS).keys()].map((index) => seriesColor(mode === 'dark' ? palette.dark : palette.light, index));
-  const card = mode === 'dark' ? palette.dark.surface : palette.light.surface;
+for (const preset of THEME_PRESETS) {
+  const slots = [...Array(SERIES_SLOTS).keys()].map((index) => seriesColor(preset.palette, index));
+  const card = preset.palette.surface;
 
-  assert.equal(new Set(slots).size, SERIES_SLOTS, `${mode}: every series slot resolves to its own colour`);
+  assert.equal(new Set(slots).size, SERIES_SLOTS, `${preset.id}: every series slot resolves to its own colour`);
 
   // Legibility. These are drawn as 1.6px lines and 8px swatches on the card, so the bar is the 3:1
   // WCAG sets for a graphical object rather than the 4.5:1 body-text bar. It is the requirement that
@@ -100,7 +98,7 @@ for (const mode of MODES) {
   for (const [index, colour] of slots.entries()) {
     assert.ok(
       contrast(colour, card) >= 3,
-      `${mode}: series ${index} (${colour}) reads ${contrast(colour, card).toFixed(2)}:1 on the card, want >= 3:1`,
+      `${preset.id}: series ${index} (${colour}) reads ${contrast(colour, card).toFixed(2)}:1 on the card, want >= 3:1`,
     );
   }
 
@@ -112,7 +110,7 @@ for (const mode of MODES) {
     const distance = labDistance(slots[index], slots[index + 1]);
     assert.ok(
       distance >= 25,
-      `${mode}: series ${index} and ${index + 1} are only ΔE ${distance.toFixed(1)} apart; adjacent legend entries must be clearly different colours`,
+      `${preset.id}: series ${index} and ${index + 1} are only ΔE ${distance.toFixed(1)} apart; adjacent legend entries must be clearly different colours`,
     );
   }
 }
@@ -183,7 +181,12 @@ assert.deepEqual(
 
 for (const preset of THEME_PRESETS) {
   const css = themePaletteCssVariables(preset);
+  assert.ok(
+    preset.palette.series.length >= SERIES_SLOTS,
+    `${preset.id} defines at least ${SERIES_SLOTS} series slots`,
+  );
   for (let index = 0; index < SERIES_SLOTS; index += 1) {
+    assert.equal(typeof css[`--series-${index + 1}`], 'string', `${preset.id} exports series ${index + 1}`);
     assert.equal(css[`--series-${index + 1}`], preset.palette.series[index]);
   }
 }

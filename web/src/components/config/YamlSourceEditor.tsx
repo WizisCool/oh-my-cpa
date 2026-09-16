@@ -107,30 +107,35 @@ function ensureMonacoConfigured() {
       base: preset.mode === 'dark' ? 'vs-dark' : 'vs',
       inherit: true,
       rules: preset.mode === 'dark' ? darkRules : lightRules,
-      colors: monacoColors(preset.palette),
+      colors: monacoColors(preset.palette, preset.mode),
     });
   }
 }
 
-function monacoColors(palette: ThemePalette): Record<string, string> {
+function monacoColors(palette: ThemePalette, mode: 'dark' | 'light'): Record<string, string> {
+  // The editor sits inside a `var(--bg)` shell. The shipped dark theme used
+  // `bg` for the editor itself and `surface` for the active line; keep that
+  // relationship for every preset rather than swapping the two surfaces.
+  const editorBackground = mode === 'dark' ? palette.bg : palette.surface;
+  const lineHighlight = mode === 'dark' ? palette.surface : palette.bg;
   return {
-    'editor.background': palette.surface,
+    'editor.background': editorBackground,
     'editor.foreground': palette.fg,
     'editorLineNumber.foreground': palette.meta,
     'editorLineNumber.activeForeground': palette.fg,
-    'editor.lineHighlightBackground': palette.bg,
+    'editor.lineHighlightBackground': lineHighlight,
     'editor.selectionBackground': withAlpha(palette.border, '80'),
     'editorCursor.foreground': palette.fg,
     'editorWhitespace.foreground': palette.border,
     'editorIndentGuide.background': palette.borderSoft,
     'editorIndentGuide.activeBackground': palette.border,
-    'editorGutter.background': palette.surface,
+    'editorGutter.background': editorBackground,
     'editorWidget.background': palette.elevated,
     'editorWidget.border': palette.border,
     'input.background': palette.bg,
     'input.border': palette.border,
     'input.foreground': palette.fg,
-    'minimap.background': palette.surface,
+    'minimap.background': editorBackground,
     'minimapSlider.background': withAlpha(palette.meta, '40'),
     'minimapSlider.hoverBackground': withAlpha(palette.muted, '60'),
     'minimapSlider.activeBackground': withAlpha(palette.fg2, '80'),

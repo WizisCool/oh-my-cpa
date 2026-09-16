@@ -177,7 +177,8 @@ family in the app, and the only exception to the semantic-only rule above; see
   ring's unfilled track.
 - Every slot clears 3:1 against the card, adjacent legend entries are at least ΔE 25 apart in CIE Lab,
   and the stylesheet tokens match `themeConfig.ts` character for character. All bounds are asserted by
-  `scripts/test-chart-marks.ts` from the palette itself.
+  `scripts/test-chart-marks.ts` from the palette itself. The values above are the original OMC pair;
+  each registered preset supplies its own six slots and is checked by the same bounds.
 
 ### Neutral
 - **Console Background (`--bg`)** (`#121214`): Base canvas, table row backgrounds, input wells, and overall page substrate.

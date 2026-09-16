@@ -315,7 +315,7 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
       heatmapZeroUnrecorded: '#ece4d6',
       heatmapZeroRecorded: '#ded3c0',
       heatmapTipLink: '#0f766e',
-      series: ['#0f766e', '#2f7d4d', '#7c3aed', '#c2410c', '#a16207', '#0369a1'],
+      series: ['#0f766e', '#15803d', '#7c3aed', '#c2410c', '#a16207', '#0369a1'],
       seriesTrack: '#ded3c0',
     },
   },

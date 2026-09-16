@@ -380,6 +380,11 @@ colour are untouched and still mean exactly one thing.
 | `--series-6` | `#06b6d4` | `#0891b2` | cyan |
 | `--series-track` | `#2a2a30` | `#e5e5ea` | the trend's plot floor and the ring's unfilled track |
 
+The table shows the original OMC Dark/OMC Light pair. Every registered preset
+supplies its own six-slot series palette and track in `themeConfig.ts`;
+`scripts/test-chart-marks.ts` checks every preset for at least six slots,
+graphical contrast on that preset's card surface, and adjacent-slot distance.
+
 **The slot is the identity; the family survives a theme switch.** `seriesColor(mode, 0)` is the blue
 family in both themes and only the step changes, because the bright steps are illegible on a light
 card - the accent's own bright step reads 2.78:1 there, the same measurement that produced the accent

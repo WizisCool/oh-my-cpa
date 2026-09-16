@@ -91,8 +91,6 @@ const DICT: Record<string, [string, string]> = {
   'omc.token_style_zh': ['中文 万/亿', 'Chinese 万/亿'],
   'omc.token_style_full': ['完整数字', 'Full digits'],
   'omc.theme': ['界面主题', 'Theme'],
-  'omc.theme_dark': ['深色', 'Dark'],
-  'omc.theme_light': ['浅色', 'Light'],
   'theme.omc_dark': ['OMC Dark', 'OMC Dark'],
   'theme.omc_dark_desc': ['原始 graphite 深色控制台', 'Original graphite dark console'],
   'theme.omc_light': ['OMC Light', 'OMC Light'],

@@ -1,7 +1,7 @@
 /**
  * Runs the frontend logic suites from one process.
  *
- * `test:logic` used to be a `pnpm` chain, so every suite meant another package-manager
+ * `test:logic` used to be a `pnpm` chain, so every suite meant another package-manager startup
  * startups - each one re-resolving the workspace and spawning a shell before the
  * test itself began. That overhead was a fixed cost paid on every run, unrelated to
  * the work being verified.
@@ -44,7 +44,7 @@ const SUITES = [
   { name: 'oauth model aliases', script: 'scripts/test-oauth-model-alias.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
 ];
 
-/** Bounded so a small machine is not asked to schedule eleven parsers at once. */
+/** Bounded so a small machine is not asked to schedule every parser at once. */
 const concurrency = Math.max(1, Number(process.env.OMCPA_LOGIC_CONCURRENCY ?? 2));
 
 function runSuite(suite) {

@@ -15,7 +15,6 @@ import {
   resolveThemeId,
   themePaletteCssVariables,
   type ThemeId,
-  type ThemePreset,
 } from './theme/themeConfig';
 import { AppLayout } from './components/common/AppLayout';
 import { AuthGate } from './components/common/AuthGate';
@@ -34,7 +33,7 @@ const QuotaPage = React.lazy(() => import('./pages/QuotaPage').then(m => ({ defa
 const SystemPage = React.lazy(() => import('./pages/SystemPage').then(m => ({ default: m.SystemPage })));
 const PluginsPage = React.lazy(() => import('./pages/PluginsPage').then(m => ({ default: m.PluginsPage })));
 const PluginStorePage = React.lazy(() => import('./pages/PluginStorePage').then(m => ({ default: m.PluginStorePage })));
-import { ThemeContext } from './theme/ThemeContext';
+import { ThemeContext, type ThemeContextValue } from './theme/ThemeContext';
 import { I18nProvider, useI18n } from './i18n';
 import { TokenDisplayProvider } from './types/tokenDisplayContext';
 import { OmcSettingsPage } from './pages/OmcSettingsPage';
@@ -48,14 +47,6 @@ const queryClient = new QueryClient({
     },
   },
 });
-
-interface ThemeContextValue {
-  themeId: ThemeId;
-  theme: ThemePreset;
-  themeMode: ThemePreset['mode'];
-  setThemeId: (themeId: ThemeId) => void;
-  toggleTheme: () => void;
-}
 
 export const App: React.FC = () => {
   const [themeId, setThemeId] = React.useState<ThemeId>(() => {
@@ -150,4 +141,3 @@ const AppRoutes: React.FC = () => {
     </AuthGate>
   );
 };
-
