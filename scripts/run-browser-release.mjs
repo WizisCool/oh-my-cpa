@@ -27,6 +27,11 @@ function runPhase(phase) {
       shell: false,
     });
     let output = '';
+    // Decode per stream rather than per chunk: acceptance diagnostics contain
+    // localized text, and a multi-byte character split across two chunks would
+    // otherwise be read as replacement characters in the failure log.
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk) => { output += chunk; });
     child.stderr.on('data', (chunk) => { output += chunk; });
     child.once('error', (error) => resolve({ phase, code: 1, output: `${output}${error.message}\n` }));
