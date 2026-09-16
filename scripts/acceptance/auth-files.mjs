@@ -1,7 +1,7 @@
 /**
  * Auth-file release acceptance: the credential list, provider filters,
  * lifecycle controls, safe field editing and verified persistence readback.
- * The top-level file owns process/browser lifecycle; this module owns the
+ * The top-level runner owns process/browser lifecycle; this module owns the
  * domain flow and receives only the shared harness handles it needs.
  */
 export async function runAuthFilesAcceptance({

@@ -1,6 +1,6 @@
 # Browser acceptance migration ledger
 
-Every assertion in `scripts/browser-acceptance.mjs` is classified once, and every
+Every assertion in the browser acceptance suite is classified once, and every
 assertion that leaves the browser names the test that replaced it. The point of
 the ledger is that no claim is dropped without a replacement: an assertion may
 move, but it may not disappear.
@@ -59,7 +59,8 @@ Granular policy logic and state permutations below had their primary, exhaustive
 verification migrated from timing-sensitive browser steps into deterministic
 Node-based logic tests (such as `scripts/test-usage-events-view-policy.ts`). High-level
 end-to-end user workflows that integrate these capabilities in live browser sessions
-continue to be exercised by `scripts/browser-acceptance.mjs`.
+continue to be exercised by `scripts/browser-acceptance.mjs` and its focused
+domain modules under `scripts/acceptance/`.
 
 | Original claim | Class | Replacement |
 | --- | --- | --- |
