@@ -87,6 +87,10 @@ function labDistance(a: string, b: string): number {
 }
 
 for (const preset of THEME_PRESETS) {
+  assert.ok(
+    preset.palette.series.length >= SERIES_SLOTS,
+    `${preset.id} defines at least ${SERIES_SLOTS} series slots`,
+  );
   const slots = [...Array(SERIES_SLOTS).keys()].map((index) => seriesColor(preset.palette, index));
   const card = preset.palette.surface;
 
@@ -181,10 +185,6 @@ assert.deepEqual(
 
 for (const preset of THEME_PRESETS) {
   const css = themePaletteCssVariables(preset);
-  assert.ok(
-    preset.palette.series.length >= SERIES_SLOTS,
-    `${preset.id} defines at least ${SERIES_SLOTS} series slots`,
-  );
   for (let index = 0; index < SERIES_SLOTS; index += 1) {
     assert.equal(typeof css[`--series-${index + 1}`], 'string', `${preset.id} exports series ${index + 1}`);
     assert.equal(css[`--series-${index + 1}`], preset.palette.series[index]);

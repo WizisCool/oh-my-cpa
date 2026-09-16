@@ -47,8 +47,9 @@ export const SERIES_SLOTS = 6;
  */
 export function seriesColor(palette: ThemePalette, index: number): string {
   const slots = palette.series;
-  const slot = ((Math.trunc(index) % SERIES_SLOTS) + SERIES_SLOTS) % SERIES_SLOTS;
-  return slots[slot];
+  const size = slots.length || SERIES_SLOTS;
+  const slot = ((Math.trunc(index) % size) + size) % size;
+  return slots[slot] ?? slots[0] ?? 'currentColor';
 }
 
 /** The trend's plot floor and the usage ring's unfilled track. */

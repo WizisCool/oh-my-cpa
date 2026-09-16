@@ -129,7 +129,7 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
                 action={<Button size="small" icon={<ReloadOutlined />} onClick={() => void refetch()}>{t('common.retry')}</Button>}
               />
             )}
-            <ModelLegend groups={groups} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} theme={theme.palette} />
+            <ModelLegend groups={groups} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} palette={theme.palette} />
             {groups.length === 0 ? (
               <p className="empty-copy model-empty">{t('dash.models.empty')}</p>
             ) : (
@@ -270,12 +270,12 @@ const ModelLegend: React.FC<{
   groups: DashboardModelUsage[];
   foldedLabel: string;
   unnamedLabel: string;
-  theme: ThemePalette;
-}> = ({ groups, foldedLabel, unnamedLabel, theme }) => (
+  palette: ThemePalette;
+}> = ({ groups, foldedLabel, unnamedLabel, palette }) => (
   <ul className="model-legend">
     {groups.map((group, index) => (
       <li className="model-legend-item" key={seriesDomainKey(group)}>
-        <span className="model-legend-swatch" style={{ background: seriesColor(theme, index) }} aria-hidden="true" />
+        <span className="model-legend-swatch" style={{ background: seriesColor(palette, index) }} aria-hidden="true" />
         <span className="model-legend-label" title={groupLabel(group, foldedLabel, unnamedLabel)}>
           {groupLabel(group, foldedLabel, unnamedLabel)}
         </span>
