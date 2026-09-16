@@ -105,3 +105,9 @@ This matrix is based on the official CPA scheduler behavior at v7.3.4:
 descending; `credentialweight.Default` is `1` and `Max` is `1_000_000`;
 `pickWeighted` skips non-positive weights; and `pickReadyLocked` selects only from
 the highest ready priority bucket before applying the configured strategy.
+The external contract was exercised directly against the official CPA v7.3.4
+source with `go test ./sdk/cliproxy/auth`, including
+`TestSchedulerPick_RoundRobinHighestPriority`,
+`TestSchedulerPick_WeightedRoundRobin`,
+`TestSchedulerPick_WeightedRoundRobinSkipsNonPositiveWeightPriorityTier`, and
+`TestSchedulerPick_FillFirstSticksToFirstReady`.
