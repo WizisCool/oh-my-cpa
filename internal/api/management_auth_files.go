@@ -221,7 +221,8 @@ func (h *Handler) patchManagementAuthFileFields(writer http.ResponseWriter, requ
 	// persisted file and the runtime projection back before answering, so a
 	// dropped priority, weight or note cannot be reported as saved.
 	safeFields := managementAuthFileSafeFields{Name: validatedName}
-	if managementAuthFileNeedsSafeReadback(fields) {
+	hasSafeReadback := managementAuthFileNeedsSafeReadback(fields)
+	if hasSafeReadback {
 		var readbackErr error
 		safeFields, readbackErr = h.readManagementAuthFileSafeFields(request.Context(), client, validatedName, authIndex)
 		if readbackErr != nil {
@@ -251,11 +252,16 @@ func (h *Handler) patchManagementAuthFileFields(writer http.ResponseWriter, requ
 		writeError(writer, http.StatusInternalServerError, "audit log failure after field update")
 		return
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{
+	payload := map[string]any{
 		"status": "ok",
 		"file":   projectManagementAuthFile(file),
-		"fields": safeFields,
-	})
+	}
+	// A zero-valued projection would tell the drawer that untouched safe fields
+	// are empty, so only a verified readback may be published.
+	if hasSafeReadback {
+		payload["fields"] = safeFields
+	}
+	writeJSON(writer, http.StatusOK, payload)
 }
 
 func managementAuthFileNeedsSafeReadback(fields map[string]any) bool {

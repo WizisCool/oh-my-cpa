@@ -76,7 +76,7 @@ func (h *Handler) patchManagementOAuthModelAliases(writer http.ResponseWriter, r
 	if err := client.PatchOAuthModelAliases(request.Context(), provider, managementOAuthModelAliasesToCPA(aliases)); err != nil {
 		// Deleting an already-absent provider reaches the same desired state; a
 		// missing endpoint has an empty body and is still reported as unsupported.
-		if !(len(aliases) == 0 && managementOAuthModelAliasChannelMissing(err)) {
+		if len(aliases) != 0 || !managementOAuthModelAliasChannelMissing(err) {
 			_ = h.recordAudit(request, "oauth_model_alias.update", "oauth_provider", provider, "failure", map[string]any{"error": err.Error()})
 			writeCPAFacadeError(writer, err)
 			return

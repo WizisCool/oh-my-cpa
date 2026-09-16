@@ -101,6 +101,16 @@ func TestManagementAuthFilesPatchFieldsSuccess(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("patch fields status = %d body = %s", resp.StatusCode, payload)
 	}
+	// A routing-only patch reads no safe projection back, and the drawer treats
+	// whatever it receives as an authoritative snapshot, so the key has to be
+	// absent rather than zero-valued.
+	var patchResponse map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &patchResponse); err != nil {
+		t.Fatal(err)
+	}
+	if fields, exists := patchResponse["fields"]; exists {
+		t.Fatalf("routing-only patch published an unverified safe projection: %s", fields)
+	}
 
 	// 2. GET models
 	resp, payload = doJSON(t, client, http.MethodGet, appServer.URL+"/omc/api/v1/management/auth-files/models?name=test.json", "")
