@@ -14,7 +14,6 @@ export async function runAuthFilesAcceptance({
   providerSecrets,
   until,
   measureStable,
-  settleLayout,
   lobeIconSignature,
   lobeIconImageState,
   path,
@@ -32,20 +31,19 @@ export async function runAuthFilesAcceptance({
 
     // 2. Search filtering
     const searchInput = page.locator('.auth-files-page input[placeholder*="Search"], .auth-files-page input[placeholder*="搜索"]').first();
-    if (await searchInput.isVisible()) {
-      await searchInput.fill('claude');
-      await checkEventually(
-        'auth-files search filters to matching file',
-        async () => (await page.locator('.auth-files-page .ant-card').count()) === 1,
-        { detail: async () => `count=${await page.locator('.auth-files-page .ant-card').count()}` },
-      );
-      await searchInput.fill('');
-      // Clearing is a precondition for the tab checks below, so the list is awaited
-      // rather than slept through.
-      await until(async () => (await page.locator('.auth-files-page .ant-card').count()) > 1, {
-        label: 'the cleared search box to restore the card list',
-      });
-    }
+    await searchInput.waitFor({ state: 'visible', timeout: 5000 });
+    await searchInput.fill('claude');
+    await checkEventually(
+      'auth-files search filters to matching file',
+      async () => (await page.locator('.auth-files-page .ant-card').count()) === 1,
+      { detail: async () => `count=${await page.locator('.auth-files-page .ant-card').count()}` },
+    );
+    await searchInput.fill('');
+    // Clearing is a precondition for the tab checks below, so the list is awaited
+    // rather than slept through.
+    await until(async () => (await page.locator('.auth-files-page .ant-card').count()) > 1, {
+      label: 'the cleared search box to restore the card list',
+    });
 
     // 3. Provider tabs & brand icons verification. Tab filtering and the correct
     // brand drawing are pinned together: the failure this guards is a tab that
@@ -107,37 +105,36 @@ export async function runAuthFilesAcceptance({
     // behaviour (the model list, the batch action) is not asserted here at all, so
     // they cost a navigation and a click without adding evidence.
     const editBtn = page.locator('.auth-files-page button').filter({ hasText: /编辑|Edit/i }).first();
-    if (await editBtn.isVisible()) {
-      await editBtn.click();
-      const drawer = page.locator('.ant-drawer');
-      await drawer.waitFor({ state: 'visible', timeout: 5000 });
-      check('auth-files drawer opens', await drawer.isVisible());
+    await editBtn.waitFor({ state: 'visible', timeout: 5000 });
+    await editBtn.click();
+    const drawer = page.locator('.ant-drawer');
+    await drawer.waitFor({ state: 'visible', timeout: 5000 });
+    check('auth-files drawer opens', await drawer.isVisible());
 
-      // Modify a field to dirty the form
-      const noteArea = drawer.locator('#note');
-      await noteArea.fill('new dirty test note');
+    // Modify a field to dirty the form
+    const noteArea = drawer.locator('#note');
+    await noteArea.fill('new dirty test note');
 
-      // Attempt close while dirty -> triggers confirm modal
-      const drawerCloseBtn = drawer.locator('.ant-drawer-close');
-      await drawerCloseBtn.click();
-      const confirmModal = page.locator('.ant-modal-confirm');
-      await confirmModal.waitFor({ state: 'visible', timeout: 5000 });
-      check('auth-files drawer dirty close prompts confirmation', await confirmModal.isVisible());
+    // Attempt close while dirty -> triggers confirm modal
+    const drawerCloseBtn = drawer.locator('.ant-drawer-close');
+    await drawerCloseBtn.click();
+    const confirmModal = page.locator('.ant-modal-confirm');
+    await confirmModal.waitFor({ state: 'visible', timeout: 5000 });
+    check('auth-files drawer dirty close prompts confirmation', await confirmModal.isVisible());
 
-      // Cancel keeping it open
-      const cancelConfirm = confirmModal.locator('.ant-btn').filter({ hasText: /取\s*消|Cancel/i }).first();
-      await cancelConfirm.click();
-      await confirmModal.waitFor({ state: 'hidden', timeout: 5000 });
-      check('auth-files cancel keeps drawer open', await drawer.isVisible());
+    // Cancel keeping it open
+    const cancelConfirm = confirmModal.locator('.ant-btn').filter({ hasText: /取\s*消|Cancel/i }).first();
+    await cancelConfirm.click();
+    await confirmModal.waitFor({ state: 'hidden', timeout: 5000 });
+    check('auth-files cancel keeps drawer open', await drawer.isVisible());
 
-      // Confirm discard
-      await drawerCloseBtn.click();
-      await confirmModal.waitFor({ state: 'visible', timeout: 5000 });
-      const okConfirm = confirmModal.locator('.ant-btn').filter({ hasText: /确\s*定|Confirm/i }).first();
-      await okConfirm.click();
-      await page.locator('.ant-drawer-open').waitFor({ state: 'hidden', timeout: 5000 });
-      check('auth-files discard closes drawer', (await page.locator('.ant-drawer-open').count()) === 0);
-    }
+    // Confirm discard
+    await drawerCloseBtn.click();
+    await confirmModal.waitFor({ state: 'visible', timeout: 5000 });
+    const okConfirm = confirmModal.locator('.ant-btn').filter({ hasText: /确\s*定|Confirm/i }).first();
+    await okConfirm.click();
+    await page.locator('.ant-drawer-open').waitFor({ state: 'hidden', timeout: 5000 });
+    check('auth-files discard closes drawer', (await page.locator('.ant-drawer-open').count()) === 0);
 
     // 5. Actual status toggle on card. A credential that cannot be turned off is the
     // failure that keeps routing traffic into a retired account, so both directions
@@ -162,7 +159,7 @@ export async function runAuthFilesAcceptance({
     check('auth-files runtime card has no selection checkbox', (await runtimeCard.locator('input[type="checkbox"]').count()) === 0);
     check('auth-files runtime card switch is disabled', await runtimeCard.locator('.ant-switch-disabled').isVisible());
 
-    // 9. Drawer save submits patch and updates UI
+    // 7. Drawer save submits patch and updates UI
     const xaiCard = page.locator('.auth-files-page .ant-card').filter({ hasText: 'xai-fixture.json' }).first();
     const xaiEditBtn = xaiCard.locator('button').filter({ hasText: /编辑|Edit/i });
     await xaiEditBtn.click();
@@ -206,6 +203,7 @@ export async function runAuthFilesAcceptance({
     await aliasOpen.click();
     const aliasDrawer = page.getByTestId('oauth-model-alias-drawer').last();
     await aliasDrawer.waitFor({ state: 'visible', timeout: 5000 });
+    check('oauth model alias drawer selects a mapped provider', (await aliasDrawer.getByTestId('oauth-model-alias-provider').innerText()) === 'claude');
     const aliasInput = aliasDrawer.locator('[data-alias-field="alias"]').first();
     await aliasInput.waitFor({ state: 'visible', timeout: 5000 });
     check('oauth model alias drawer loads the CPA mapping', (await aliasInput.inputValue()) === 'sonnet-latest');
@@ -236,7 +234,7 @@ export async function runAuthFilesAcceptance({
     await aliasDrawer.locator('.ant-drawer-close').click();
     await page.locator('.ant-drawer-open').waitFor({ state: 'hidden', timeout: 5000 });
 
-    // 10. Viewports at 390px and 320px for auth-files
+    // 8. Viewports at 390px and 320px for auth-files
     for (const width of [390, 320]) {
       await page.setViewportSize({ width, height: 800 });
       const overflow = await measureStable(

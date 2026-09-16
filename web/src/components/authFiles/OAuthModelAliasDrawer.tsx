@@ -352,7 +352,7 @@ export const OAuthModelAliasDrawer: React.FC<OAuthModelAliasDrawerProps> = ({
             {t('af.alias_load_provider')}
           </Button>
         </div>
-        {provider && <Tag className={styles['provider-tag']}>{provider}</Tag>}
+        {provider && <Tag data-testid="oauth-model-alias-provider" className={styles['provider-tag']}>{provider}</Tag>}
         {isDirty && <Alert type="info" showIcon description={t('af.alias_dirty_hint')} />}
         {drafts.length === 0 ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('af.alias_empty')}>

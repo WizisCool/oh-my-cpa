@@ -386,7 +386,6 @@ try {
     providerSecrets,
     until,
     measureStable,
-    settleLayout,
     lobeIconSignature,
     lobeIconImageState,
     path,
