@@ -3,6 +3,7 @@ import { Segmented, Typography } from 'antd';
 import { useT, useI18n } from '../i18n';
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport';
 import { useThemeMode } from '../theme/ThemeContext';
+import { THEME_PRESETS } from '../theme/themeConfig';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
 import type { TokenNumberStyle } from '../types/tokenDisplay';
 import { TOKEN_NUMBER_STYLES } from '../types/tokenDisplay';
@@ -38,7 +39,7 @@ const { Title } = Typography;
 export const OmcSettingsPage: React.FC = () => {
   const t = useT();
   const { lang, setLang } = useI18n();
-  const { themeMode, toggleTheme } = useThemeMode();
+  const { themeId, setThemeId } = useThemeMode();
   const { style, setStyle } = useTokenDisplayStyle();
   // A three-option picker cannot fit a phone's card as a row: its track is the sum of its labels,
   // and the items do not wrap, so the third option was painted past the card's edge. Below the
@@ -88,17 +89,26 @@ export const OmcSettingsPage: React.FC = () => {
         <SettingRow
           label={t('omc.theme')}
           control={
-            <Segmented
-              value={themeMode}
-              options={[
-                { value: 'dark', label: t('omc.theme_dark') },
-                { value: 'light', label: t('omc.theme_light') },
-              ]}
-              onChange={(next) => {
-                if (next !== themeMode) toggleTheme();
-              }}
-              aria-label={t('omc.theme')}
-            />
+            <div className="theme-preset-grid" role="group" aria-label={t('omc.theme')}>
+              {THEME_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={`theme-preset-card${preset.id === themeId ? ' is-active' : ''}`}
+                  aria-pressed={preset.id === themeId}
+                  onClick={() => setThemeId(preset.id)}
+                >
+                  <span className="theme-preset-preview" aria-hidden="true">
+                    <span style={{ background: preset.palette.bg }} />
+                    <span style={{ background: preset.palette.surface }} />
+                    <span style={{ background: preset.palette.accent }} />
+                    <span style={{ background: preset.palette.success }} />
+                  </span>
+                  <span className="theme-preset-name">{t(preset.nameKey)}</span>
+                  <span className="theme-preset-desc">{t(preset.descriptionKey)}</span>
+                </button>
+              ))}
+            </div>
           }
         />
         <SettingRow

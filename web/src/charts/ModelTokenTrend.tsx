@@ -3,7 +3,7 @@ import { Line } from '@ant-design/charts';
 import dayjs from 'dayjs';
 import { useThemeMode } from '../theme/ThemeContext';
 import { seriesColorRange, seriesDomainKey } from './chartTheme';
-import { MONO_FONT_STACK, palette } from '../theme/themeConfig';
+import { MONO_FONT_STACK } from '../theme/themeConfig';
 import { formatTokens as formatTokensStyled, formatTokensFull } from '../types/tokenDisplay';
 import type { DashboardModelUsage } from '../types/dashboardModels';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
@@ -37,10 +37,10 @@ export interface ModelTokenTrendProps {
  * data, and the geometry swaps whenever the window or the ranking changes.
  */
 export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, foldedLabel, tokenUnitLabel = '', height = 260 }) => {
-  const { themeMode } = useThemeMode();
+  const { theme } = useThemeMode();
   const { style: tokenStyle } = useTokenDisplayStyle();
   // The chart's own colours come from the palette, never from a literal.
-  const colors = palette[themeMode];
+  const colors = theme.palette;
 
   // Domain and range are passed explicitly rather than left to the library's default palette, and the
   // domain is a stable *key* per group rather than the display label or an array position. What that
@@ -48,7 +48,7 @@ export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, folded
   // line and its ring slice cannot be two different hues. A model's colour does follow its rank, so it
   // can change when the ranking does - which the legend beside it always states.
   const domain = React.useMemo(() => groups.map(seriesDomainKey), [groups]);
-  const range = React.useMemo(() => seriesColorRange(themeMode, groups), [themeMode, groups]);
+  const range = React.useMemo(() => seriesColorRange(theme.palette, groups), [theme.palette, groups]);
 
   const labelOf = React.useCallback(
     (key: string) => (key === 'folded' ? foldedLabel : key.replace(/^model:/, '')),

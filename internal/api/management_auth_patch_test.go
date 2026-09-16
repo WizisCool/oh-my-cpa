@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,9 @@ import (
 
 func TestManagementAuthFilesPatchFieldsSuccess(t *testing.T) {
 	recorder := &cpaRecorder{}
+	runtimePriority := 0
+	runtimeWeight := int64(0)
+	runtimeNote := ""
 	cpaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		recorder.record(request)
 		writer.Header().Set("Content-Type", "application/json")
@@ -28,10 +32,22 @@ func TestManagementAuthFilesPatchFieldsSuccess(t *testing.T) {
 			return
 		}
 		if request.Method == http.MethodPatch && strings.HasSuffix(request.URL.Path, "/fields") {
+			var payload struct {
+				Priority int    `json:"priority"`
+				Weight   int64  `json:"weight"`
+				Note     string `json:"note"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode patch: %v", err)
+			}
+			runtimePriority = payload.Priority
+			runtimeWeight = payload.Weight
+			runtimeNote = payload.Note
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 			return
 		}
-		_, _ = writer.Write([]byte(`{"files":[]}`))
+		_, _ = writer.Write([]byte(`{"files":[{"id":"test.json","name":"test.json","auth_index":"idx-1","provider":"claude","priority":` +
+			strconv.Itoa(runtimePriority) + `,"weight":` + strconv.FormatInt(runtimeWeight, 10) + `,"note":"` + runtimeNote + `"}]}`))
 	}))
 	defer cpaServer.Close()
 
@@ -85,6 +101,16 @@ func TestManagementAuthFilesPatchFieldsSuccess(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("patch fields status = %d body = %s", resp.StatusCode, payload)
 	}
+	// A routing-only patch reads no safe projection back, and the drawer treats
+	// whatever it receives as an authoritative snapshot, so the key has to be
+	// absent rather than zero-valued.
+	var patchResponse map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &patchResponse); err != nil {
+		t.Fatal(err)
+	}
+	if fields, exists := patchResponse["fields"]; exists {
+		t.Fatalf("routing-only patch published an unverified safe projection: %s", fields)
+	}
 
 	// 2. GET models
 	resp, payload = doJSON(t, client, http.MethodGet, appServer.URL+"/omc/api/v1/management/auth-files/models?name=test.json", "")
@@ -99,5 +125,31 @@ func TestManagementAuthFilesPatchFieldsSuccess(t *testing.T) {
 	}
 	if modelsRes.Models[0].ID != "gpt-4o" {
 		t.Fatalf("expected model gpt-4o, got %s", modelsRes.Models[0].ID)
+	}
+}
+
+func TestNormalizeManagementAuthFileRoutingFields(t *testing.T) {
+	for _, input := range []int64{-3, 0, 1} {
+		value, err := normalizeManagementAuthFileField("weight", json.Number(strconv.FormatInt(input, 10)))
+		if err != nil {
+			t.Fatalf("weight %d: %v", input, err)
+		}
+		want := input
+		if want < 0 {
+			want = 0
+		}
+		if got, errNumber := numberInt64(value); errNumber != nil || got != want {
+			t.Fatalf("weight %d normalized to %v, want %d", input, value, want)
+		}
+	}
+	if _, err := normalizeManagementAuthFileField("weight", json.Number("1000001")); err == nil {
+		t.Fatal("weight above the CPA maximum was accepted")
+	}
+	priority, err := normalizeManagementAuthFileField("priority", json.Number("-7"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, errNumber := numberInt64(priority); errNumber != nil || got != -7 {
+		t.Fatalf("priority normalized to %v, want -7", priority)
 	}
 }

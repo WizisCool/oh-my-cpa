@@ -1,6 +1,6 @@
 services:
   cpa:
-    image: ${CPA_IMAGE:-eceasy/cli-proxy-api:v7.2.146}
+    image: ${CPA_IMAGE:-eceasy/cli-proxy-api:v7.3.4}
     pull_policy: if_not_present
     container_name: ${CPA_CONTAINER_NAME:-cli-proxy-api}
     environment:

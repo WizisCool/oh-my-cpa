@@ -44,6 +44,9 @@
   --accent: #00a2fb;
   --accent-hover: #0077b8;
   --accent-active: #005d8f;
+  /* The label colour for a filled accent control, matching the presets' own `accentOn` token.
+     White in both fallback palettes; a preset whose accent fill is light carries a dark step. */
+  --accent-on: #ffffff;
   --success: #10b981;
   --warn: #f59e0b;
   --danger: #ef4444;
@@ -107,7 +110,7 @@
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 }
 
-:root[data-theme='light'] {
+:root[data-theme-mode='light'] {
   color-scheme: light;
   --bg: #ffffff;
   --surface: #f6f6f8;
@@ -121,6 +124,7 @@
   --accent: #005d8f;
   --accent-hover: #004770;
   --accent-active: #00344f;
+  --accent-on: #ffffff;
   --border: #e5e5ea;
   --border-soft: #ededf2;
   --hover-inset: #ededf2;
@@ -170,7 +174,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
-::selection { background: var(--accent); color: #fff; }
+::selection { background: var(--accent); color: var(--accent-on); }
 button, input, textarea, select { font: inherit; }
 a { color: inherit; }
 
@@ -1038,7 +1042,7 @@ a { color: inherit; }
 }
 .heatmap-cell.is-interactive:hover .heatmap-cell-mark {
   box-shadow: inset 0 0 0 1px var(--fg-2);
-  transform: scale(1.35);
+  transform: scale(1.18);
   z-index: 1;
 }
 /* The cell needs a positioning context for the mark, and the mark has to be able to sit above its
@@ -1047,7 +1051,7 @@ a { color: inherit; }
 /* The colour lives on the mark so the cell's own background stays the layout-neutral empty fill;
    the state and level classes above set it on the cell, and this carries it onto the square. */
 .heatmap-cell > .heatmap-cell-mark { background: inherit; }
-.heatmap-cell:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent); }
+.heatmap-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: none; }
 /* The cell whose tooltip is open keeps the ring, so the tooltip is visibly attached to it while
    the pointer moves off to the link inside. */
 .heatmap-cell.ant-tooltip-open { box-shadow: inset 0 0 0 1px var(--fg-2); }
@@ -1736,6 +1740,33 @@ a { color: inherit; }
   background: transparent;
 }
 
+.keys-key-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.keys-key-editor-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.keys-key-editor-hint {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.keys-key-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .config-api-keys-table .ant-table-tbody > tr > td {
   background: transparent !important;
   border-bottom: 1px solid var(--border-soft);
@@ -1764,7 +1795,7 @@ a { color: inherit; }
 .config-add-key-btn:hover {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff !important;
+  color: var(--accent-on) !important;
 }
 
 .config-key-box {
@@ -2082,7 +2113,7 @@ a { color: inherit; }
 .config-dirty-btn-save {
   background: var(--accent) !important;
   border-color: var(--accent) !important;
-  color: #fff !important;
+  color: var(--accent-on) !important;
   font-weight: 500;
 }
 
@@ -2373,12 +2404,76 @@ a { color: inherit; }
    section lists over card wrappers for settings. All this adds is the spacing
    between the page's two groups. */
 .omc-settings-group { margin-bottom: 20px; }
+.theme-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  gap: 8px;
+  width: min(100%, 720px);
+}
+
+.theme-preset-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard);
+}
+
+.theme-preset-card:hover {
+  border-color: var(--muted);
+  background: var(--hover-inset);
+}
+
+.theme-preset-card.is-active {
+  border-color: var(--accent);
+  background: var(--selected-inset);
+}
+
+.theme-preset-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.theme-preset-preview {
+  display: grid;
+  width: 100%;
+  height: 34px;
+  grid-template-columns: 1.2fr 1fr 0.7fr 0.7fr;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+.theme-preset-preview > span {
+  display: block;
+  min-width: 0;
+}
+
+.theme-preset-name {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.theme-preset-desc {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
 /* The picker becomes a vertical list once the row stacks (see the page), and antd's `block` variant
    only sets `display: flex` - it does not stretch the root. Left as-is the list shrank to its widest
    label and sat in a narrow column beside empty space, so it is given the row's whole width here:
    the options are the row's content at this width, not a control beside a description. */
 @media (max-width: 900px) {
   .omc-settings-group .settings-toggle-control .ant-segmented { width: 100%; }
+  .theme-preset-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 /* The config panel's rows hand every control a fixed 380px column, which suits its own text inputs
    and switches. These are segmented pickers three or four items wide and measure 456px, so that
@@ -2390,4 +2485,7 @@ a { color: inherit; }
    space. */
 @media (min-width: 901px) {
   .omc-settings-group .settings-toggle-control { width: auto; }
+}
+@media (max-width: 560px) {
+  .theme-preset-grid { grid-template-columns: minmax(0, 1fr); }
 }

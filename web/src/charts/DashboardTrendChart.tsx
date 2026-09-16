@@ -55,11 +55,11 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
   format,
   formatExact,
 }) => {
-  const { themeMode } = useThemeMode();
+  const { theme } = useThemeMode();
   const [activeIndex, setActiveIndex] = React.useState<number | null>(null);
 
   const values = React.useMemo(() => points.map((point) => Math.max(0, pick(point) ?? 0)), [points, pick]);
-  const color = sparkColor(themeMode, tone);
+  const color = sparkColor(theme.palette, tone);
 
   const chartData = React.useMemo(
     () => values.map((value, index) => ({ bucket: String(index), value })),

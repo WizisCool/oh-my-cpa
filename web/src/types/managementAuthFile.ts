@@ -54,5 +54,20 @@ export interface ManagementAuthFileMutationResponse {
   deleted?: number;
   files?: string[];
   failed?: ManagementAuthFileMutationFailure[];
+  file?: ManagementAuthFile;
+  fields?: ManagementAuthFileSafeFields;
 }
 
+export interface ManagementAuthFileSafeFields {
+  name: string;
+  priority?: number;
+  weight?: number;
+  prefix?: string;
+  proxy_url?: string;
+  expired?: string;
+  disable_cooling: boolean;
+  websockets: boolean;
+  using_api: boolean;
+  note?: string;
+  excluded_models?: string[];
+}

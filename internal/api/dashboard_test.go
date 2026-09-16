@@ -955,9 +955,9 @@ func TestUsageEventListOmitsDiagnosticFields(t *testing.T) {
 	// The same record on the detail view keeps diagnosis data behind one id.
 	id := int64(list.Items[0]["id"].(float64))
 	_, detail := getJSON(t, client, fmt.Sprintf("%s/omc/api/v1/usage/events/%d", baseURL, id))
-	// Stored values arrive already minimized: IPs are masked to /24 and the user
-	// agent is reduced, so the detail view leaks neither the host nor the client.
-	for _, expected := range []string{"client_ip", "x_forwarded_for", "user_agent", "endpoint", "192.0.2.0/24", "secret-client", "api_key_mask", "sk-12345••••••••7890"} {
+	// Protected detail keeps the diagnostic address and proxy chain, while the
+	// user agent is still reduced before persistence.
+	for _, expected := range []string{"client_ip", "x_forwarded_for", "user_agent", "endpoint", "192.0.2.44", "203.0.113.9", "secret-client", "api_key_mask", "sk-12345••••••••7890"} {
 		if !strings.Contains(string(detail), expected) {
 			t.Fatalf("detail payload missing diagnostic field %q: %s", expected, detail)
 		}

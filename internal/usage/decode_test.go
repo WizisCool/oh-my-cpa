@@ -325,10 +325,10 @@ func TestDecodeEventWithFingerprinterUsesStableCredentialFingerprint(t *testing.
 	if event.Endpoint != "https://example.test/v1" {
 		t.Fatalf("endpoint = %q", event.Endpoint)
 	}
-	if event.ClientIP == nil || *event.ClientIP != "10.20.30.0/24" {
+	if event.ClientIP == nil || *event.ClientIP != "10.20.30.40" {
 		t.Fatalf("client IP = %v", event.ClientIP)
 	}
-	if event.XForwardedFor == nil || *event.XForwardedFor != "10.20.30.0/24" {
+	if event.XForwardedFor == nil || *event.XForwardedFor != "10.20.30.41, 192.0.2.9" {
 		t.Fatalf("forwarded-for = %v", event.XForwardedFor)
 	}
 	if event.UserAgent == nil || *event.UserAgent != "codex-cli/0.46" {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Card,
   Table,
@@ -7,7 +7,6 @@ import {
   Switch,
   Alert,
   Modal,
-  Input,
   Popconfirm,
   App as AntdApp,
 } from 'antd';
@@ -25,15 +24,18 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
 import type { PluginItem } from '../types/plugin';
+import { PluginConfigEditor } from '../components/plugins/PluginConfigEditor';
+import { parsePluginConfig, pluginConfigsEqual } from '../components/plugins/pluginConfig';
 
 export const PluginsPage: React.FC = () => {
   const t = useT();
   const navigate = useNavigate();
-  const { message } = AntdApp.useApp();
+  const { message, modal } = AntdApp.useApp();
   const queryClient = useQueryClient();
 
   const [configModalPlugin, setConfigModalPlugin] = useState<PluginItem | null>(null);
   const [configText, setConfigText] = useState<string>('');
+  const parsedConfig = useMemo(() => parsePluginConfig(configText), [configText]);
 
   const {
     data: pluginsData,
@@ -91,22 +93,35 @@ export const PluginsPage: React.FC = () => {
   });
 
   const handleOpenConfig = (plugin: PluginItem) => {
+    const text = JSON.stringify(plugin.config || {}, null, 2);
     setConfigModalPlugin(plugin);
-    setConfigText(JSON.stringify(plugin.config || {}, null, 2));
+    setConfigText(text);
   };
 
   const handleSaveConfig = () => {
     if (!configModalPlugin) return;
-    try {
-      const parsed = JSON.parse(configText);
-      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-        message.error(t('plg.config_invalid_json'));
-        return;
-      }
-      configMutation.mutate({ id: configModalPlugin.id, config: parsed as Record<string, unknown> });
-    } catch {
-      message.error(t('plg.config_invalid_json'));
+    if (!parsedConfig.value) {
+      message.error(parsedConfig.error === 'duplicate-key'
+        ? t('plg.config_duplicate_key_desc')
+        : t('plg.config_invalid_json'));
+      return;
     }
+    configMutation.mutate({ id: configModalPlugin.id, config: parsedConfig.value });
+  };
+
+  const handleCloseConfig = () => {
+    if (!configModalPlugin || pluginConfigsEqual(parsedConfig.value, configModalPlugin.config ?? {})) {
+      setConfigModalPlugin(null);
+      return;
+    }
+    modal.confirm({
+      title: t('plg.config_unsaved_title'),
+      content: t('plg.config_unsaved_desc'),
+      okText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+      okButtonProps: { danger: true },
+      onOk: () => setConfigModalPlugin(null),
+    });
   };
 
   const columns: ColumnsType<PluginItem> = [
@@ -170,6 +185,7 @@ export const PluginsPage: React.FC = () => {
             checked={r.enabled}
             loading={statusMutation.isPending && statusMutation.variables?.id === r.id}
             onChange={(checked) => statusMutation.mutate({ id: r.id, enabled: checked })}
+            aria-label={`${t('plg.col_status')}: ${r.name}`}
           />
           <Tag color={r.enabled ? 'success' : 'default'} style={{ margin: 0 }}>
             {r.enabled ? t('plg.status_enabled') : t('plg.status_disabled')}
@@ -188,6 +204,8 @@ export const PluginsPage: React.FC = () => {
             size="small"
             icon={<SettingOutlined />}
             onClick={() => handleOpenConfig(r)}
+            aria-label={`${t('plg.config_title', { name: r.name })}`}
+            title={t('plg.config_title', { name: r.name })}
           />
           <Popconfirm
             title={t('plg.delete_confirm')}
@@ -200,6 +218,8 @@ export const PluginsPage: React.FC = () => {
               danger
               icon={<DeleteOutlined />}
               loading={deleteMutation.isPending && deleteMutation.variables === r.id}
+              aria-label={`${t('common.delete')}: ${r.name}`}
+              title={`${t('common.delete')}: ${r.name}`}
             />
           </Popconfirm>
         </div>
@@ -268,20 +288,13 @@ export const PluginsPage: React.FC = () => {
         title={t('plg.config_title', { name: configModalPlugin?.name || '' })}
         open={!!configModalPlugin}
         onOk={handleSaveConfig}
-        onCancel={() => setConfigModalPlugin(null)}
+        onCancel={handleCloseConfig}
         confirmLoading={configMutation.isPending}
+        okButtonProps={{ disabled: !parsedConfig.value }}
         okText={t('common.confirm')}
         cancelText={t('common.cancel')}
       >
-        <p style={{ fontSize: 13, color: 'var(--meta)' }}>
-          {t('plg.config_json_desc')}
-        </p>
-        <Input.TextArea
-          rows={10}
-          value={configText}
-          onChange={(e) => setConfigText(e.target.value)}
-          style={{ fontFamily: 'monospace', fontSize: 12 }}
-        />
+        <PluginConfigEditor value={configText} onChange={setConfigText} pluginName={configModalPlugin?.name || ''} />
       </Modal>
     </div>
   );

@@ -28,7 +28,7 @@ Mono as fallbacks), 4px radii, dense but breathable spacing.
 
 ## 2. Color palette
 
-### Dark (default)
+### OMC Dark (default)
 
 | Token | Value | antd mapping | Usage |
 | --- | --- | --- | --- |
@@ -43,11 +43,12 @@ Mono as fallbacks), 4px radii, dense but breathable spacing.
 | `--accent` | `#00a2fb` | `colorInfo`, `colorLink` | Links, info, active bars, selection |
 | `--accent-hover` | `#0077b8` | `colorPrimary` | Filled primary buttons |
 | `--accent-active` | `#005d8f` | `colorPrimaryHover/Active` | Pressed state |
+| `--accent-on` | `#ffffff` | `Button.primaryColor` | Label drawn on a filled accent control |
 | `--success` | `#10b981` | `colorSuccess` | Enabled / healthy / ok pip |
 | `--warn` | `#f59e0b` | `colorWarning` | Degraded / quota warning |
 | `--danger` | `#ef4444` | `colorError` | Failed / disabled / delete |
 
-### Light
+### OMC Light
 
 | Token | Value |
 | --- | --- |
@@ -60,6 +61,38 @@ Mono as fallbacks), 4px radii, dense but breathable spacing.
 | `--border` | `#e5e5ea` |
 | `--border-soft` | `#ededf2` |
 
+### Preset registry
+
+The two original palettes remain the exact OMC Dark and OMC Light presets. Four
+additional presets are registered in `web/src/theme/themeConfig.ts`:
+
+| Preset | Mode | Surface direction | Accent family |
+| --- | --- | --- | --- |
+| Midnight | dark | blue-black surfaces | cool blue |
+| Porcelain | light | white/blue-grey surfaces | blue-teal |
+| Forest | dark | deep green surfaces | vivid green |
+| Sandstone | light | warm sand surfaces | teal |
+
+Every preset declares `id`, `mode`, and one complete palette. The active preset
+is the only source for Ant Design's `ConfigProvider`, the CSS custom properties
+written to the document root, the categorical chart/ring series, and the token
+heatmap ramp. `web/src/index.css` keeps the original OMC palette as the
+pre-hydration fallback; `themePaletteCssVariables` supplies every preset's
+runtime values. `omc-theme` stores the preset id and also accepts the legacy
+`dark` and `light` values.
+
+A palette also declares `accentOn`: the label colour for a filled accent control. It reaches Ant
+Design as `Button.primaryColor` and the stylesheet as `--accent-on`, because Ant Design's own
+`Button.primaryColor` default is `colorTextLightSolid` - white in every palette - and a preset whose
+accent fill is light cannot carry a white label. Both original palettes use white; Forest's fill is
+light enough that its label is a near-black step. Every preset's `accentOn` clears **4.5:1** against
+its own filled-control step, and the registry check fails a preset that does not.
+
+The OMC Settings page presents the registry as named cards with a four-swatch
+preview. The appearance controls must not introduce a second palette source:
+new presets extend `themeConfig.ts`, and the registry and contrast checks in
+`scripts/test-theme-presets.ts` fail if a preset is incomplete or unreadable.
+
 ### Accent ladder
 
 The accent is **not** mode-invariant. It is one hue (201) at three lightness steps, and each theme
@@ -71,6 +104,7 @@ legible as text on a dark one:
 | `--accent` | `#00a2fb` | `#005d8f` | link text: **6.03:1** on the dark background, **6.92:1** on the light one |
 | `--accent-hover` | `#0077b8` | `#004770` | white label on a filled control: **4.85:1** and **9.83:1** |
 | `--accent-active` | `#005d8f` | `#00344f` | pressed state |
+| `--accent-on` | `#ffffff` | `#ffffff` | the label on a filled control — the colour both filled-control steps above are measured against |
 
 The dark theme's link step is the light theme's *filled-control* step, which is the same value doing
 two jobs in two themes. That is deliberate: it is the only step of this hue that clears 4.5:1 as text
@@ -78,7 +112,7 @@ on a light page, and white-on-it also clears it. The bright `#00a2fb` reads **2.
 page and **2.78:1** under white text, so it can only ever be the dark theme's text colour.
 
 Brand artwork follows the same tokens: the wordmark's accent marks and its letterforms are drawn from
-`palette[mode]`, so a change here moves the logo with it — see `web/src/assets/brand/markup.ts`.
+the active preset's palette, so a change here moves the logo with it — see `web/src/assets/brand/markup.ts`.
 
 Success/warn/danger are identical in both modes.
 
@@ -355,6 +389,11 @@ colour are untouched and still mean exactly one thing.
 | `--series-6` | `#06b6d4` | `#0891b2` | cyan |
 | `--series-track` | `#2a2a30` | `#e5e5ea` | the trend's plot floor and the ring's unfilled track |
 
+The table shows the original OMC Dark/OMC Light pair. Every registered preset
+supplies its own six-slot series palette and track in `themeConfig.ts`;
+`scripts/test-chart-marks.ts` checks every preset for exactly six slots,
+graphical contrast on that preset's card surface, and adjacent-slot distance.
+
 **The slot is the identity; the family survives a theme switch.** `seriesColor(mode, 0)` is the blue
 family in both themes and only the step changes, because the bright steps are illegible on a light
 card - the accent's own bright step reads 2.78:1 there, the same measurement that produced the accent
@@ -375,9 +414,12 @@ range is 4.01:1 to 7.92:1 on the dark card and 3.41:1 to 5.28:1 on the light one
 2. **Adjacent legend entries are at least ΔE 25 apart in CIE Lab**, so no two neighbours read as one
 swatch. The sequence exists for that bound: it alternates warm and cool families, which also puts a
 warm hue into an ordinary two- or three-model window instead of reserving it for a long tail.
-3. **The two copies of the tokens agree.** `themeConfig.ts` and `index.css` each name the six values,
-and the suite compares them character for character, so a token edited in one place and not the other
-fails rather than shipping a chart in a colour the legend does not show.
+3. **The runtime projection is what every preset is checked against.** `themeConfig.ts` is the only
+source of the six slots. `index.css` carries them for the two original palettes as the pre-hydration
+fallback, and the suite compares that fallback with `palette.dark` / `palette.light` character for
+character; every other preset's slots are projected at runtime by `themePaletteCssVariables` and
+asserted against its own registry entry. A token edited in one place and not the other fails rather
+than shipping a chart in a colour the legend does not show.
 4. **Colour is assigned from one shared ranking, not per panel.** The domain is a *key* per group -
 `model:<name>` or the folded discriminator - rather than the display label, so a real model whose name
 equals the remainder's translated label cannot take the remainder's colour. The range is then generated
@@ -664,9 +706,9 @@ narrow to read as a trend and an hour too coarse to feel like it was moving.
 
 Non-obvious decisions, keep these when editing:
 
-- `colorPrimary: accentHover (#0056b3)` — filled controls use the deeper step;
-  `colorInfo/colorLink: accent (#007aff)`. This is why buttons don't glow
-  antd-blue while links stay recognizable.
+- `colorPrimary: accentHover` (`#0077b8` in OMC Dark, `#004770` in OMC Light) — filled controls
+  use the deeper step; `colorInfo/colorLink: accent` (`#00a2fb` / `#005d8f`). This is why buttons
+  don't glow antd-blue while links stay recognizable.
 - Menu: `itemSelectedBg = transparent`, `itemSelectedColor = fg`,
   `activeBarBorderWidth: 0` — kills the default blue selected block and avoids
   heavy filled blocks; active position uses the left 2px `--fg` inset rule.
@@ -678,8 +720,10 @@ Non-obvious decisions, keep these when editing:
   only complex Drawers retain section dividers.
 - Table: uppercase 12px `--muted` headers on `--bg`, `rowHoverBg = surface`.
 - All shadow tokens set to `'none'`; every motion token pinned to ≤ 0.1s (§7).
-- Components pinned: Button 32/28px, Input active ring `accent22`,
-  Select optionSelectedBg = surface, Tag defaultBg = bg.
+- Components pinned: Button 32/28px with `primaryColor = accentOn` and `Input` active ring
+  `accent22`, Select optionSelectedBg = surface, Tag defaultBg = bg. The button label is pinned
+  because Ant Design defaults it to `colorTextLightSolid`, so a preset with a light accent fill
+  would otherwise draw white on it.
 - Dashboard KPI cards use `@ant-design/charts` (`Area`) to render one trend per tile.
   **The mark is an area, and that is a data-shape decision, not a style one.** The
   backend zero-fills a fixed bucket grid (`fillDashboardBuckets`), so a quiet window
@@ -695,8 +739,8 @@ Non-obvious decisions, keep these when editing:
   zero for the same reason — a lifted domain would float an empty window above its axis.
   The charting runtime is isolated in a separate `vendor-charts` chunk and loaded lazily
   (`React.lazy` dynamic `import()`) so only the dashboard route pays for it, keeping the
-  initial login shell compact. Theme tokens (`palette[mode]`) are bridged into the chart
-  config (`sparkColor(mode, tone)`), default library animations are explicitly disabled
+  initial login shell compact. The active preset's palette is bridged into the chart
+  config (`sparkColor(preset.palette, tone)`), default library animations are explicitly disabled
   (`animate: false`, per §7 rule 5), and the hover readout uses an app-owned HTML
   `.chart-tooltip` styled from CSS custom properties. That readout is a direct child of
   `.chart-slot`, so the slot's child sizing rule must exclude it

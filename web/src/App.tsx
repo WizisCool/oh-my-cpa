@@ -9,7 +9,13 @@ import enUS from 'antd/locale/en_US';
 import zhCN from 'antd/locale/zh_CN';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { getAppConfig } from './types/config';
-import { createThemeConfig, type ThemeMode } from './theme/themeConfig';
+import {
+  createThemeConfig,
+  getThemePreset,
+  resolveThemeId,
+  themePaletteCssVariables,
+  type ThemeId,
+} from './theme/themeConfig';
 import { AppLayout } from './components/common/AppLayout';
 import { AuthGate } from './components/common/AuthGate';
 
@@ -27,7 +33,7 @@ const QuotaPage = React.lazy(() => import('./pages/QuotaPage').then(m => ({ defa
 const SystemPage = React.lazy(() => import('./pages/SystemPage').then(m => ({ default: m.SystemPage })));
 const PluginsPage = React.lazy(() => import('./pages/PluginsPage').then(m => ({ default: m.PluginsPage })));
 const PluginStorePage = React.lazy(() => import('./pages/PluginStorePage').then(m => ({ default: m.PluginStorePage })));
-import { ThemeContext } from './theme/ThemeContext';
+import { ThemeContext, type ThemeContextValue } from './theme/ThemeContext';
 import { I18nProvider, useI18n } from './i18n';
 import { TokenDisplayProvider } from './types/tokenDisplayContext';
 import { OmcSettingsPage } from './pages/OmcSettingsPage';
@@ -42,49 +48,53 @@ const queryClient = new QueryClient({
   },
 });
 
-interface ThemeContextValue {
-  themeMode: ThemeMode;
-  toggleTheme: () => void;
-}
-
 export const App: React.FC = () => {
-  const [themeMode, setThemeMode] = React.useState<ThemeMode>(() => {
-    if (typeof window === 'undefined') return 'dark';
-    return window.localStorage.getItem('omc-theme') === 'light' ? 'light' : 'dark';
+  const [themeId, setThemeId] = React.useState<ThemeId>(() => {
+    if (typeof window === 'undefined') return 'omc-dark';
+    return resolveThemeId(window.localStorage.getItem('omc-theme'));
   });
+  const theme = React.useMemo(() => getThemePreset(themeId), [themeId]);
 
-  React.useEffect(() => {
-    document.documentElement.dataset.theme = themeMode;
-    document.documentElement.style.colorScheme = themeMode;
-    window.localStorage.setItem('omc-theme', themeMode);
-  }, [themeMode]);
+  React.useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.dataset.theme = theme.id;
+    root.dataset.themeMode = theme.mode;
+    root.style.colorScheme = theme.mode;
+    for (const [name, value] of Object.entries(themePaletteCssVariables(theme))) {
+      root.style.setProperty(name, value);
+    }
+    window.localStorage.setItem('omc-theme', theme.id);
+  }, [theme]);
 
   const toggleTheme = React.useCallback(() => {
-    setThemeMode((mode) => mode === 'dark' ? 'light' : 'dark');
+    setThemeId((currentId) => {
+      const current = getThemePreset(currentId);
+      return current.mode === 'dark' ? 'omc-light' : 'omc-dark';
+    });
   }, []);
 
   const themeContextValue = React.useMemo<ThemeContextValue>(
-    () => ({ themeMode, toggleTheme }),
-    [themeMode, toggleTheme],
+    () => ({ themeId, theme, themeMode: theme.mode, setThemeId, toggleTheme }),
+    [theme, themeId, toggleTheme],
   );
 
   return (
     <QueryClientProvider client={queryClient}>
       <I18nProvider>
-        <ThemedProviders themeContextValue={themeContextValue} themeMode={themeMode} />
+        <ThemedProviders themeContextValue={themeContextValue} themeId={themeId} />
       </I18nProvider>
     </QueryClientProvider>
   );
 };
 
 // Sits below I18nProvider so the antd locale follows the app language.
-const ThemedProviders: React.FC<{ themeContextValue: ThemeContextValue; themeMode: ThemeMode }> = ({
+const ThemedProviders: React.FC<{ themeContextValue: ThemeContextValue; themeId: ThemeId }> = ({
   themeContextValue,
-  themeMode,
+  themeId,
 }) => {
   const { lang } = useI18n();
   return (
-    <ConfigProvider locale={lang === 'zh' ? zhCN : enUS} theme={createThemeConfig(themeMode)}>
+    <ConfigProvider locale={lang === 'zh' ? zhCN : enUS} theme={createThemeConfig(themeId)}>
       <AntdApp>
         <ThemeContext.Provider value={themeContextValue}>
           <TokenDisplayProvider>
@@ -131,5 +141,3 @@ const AppRoutes: React.FC = () => {
     </AuthGate>
   );
 };
-
-

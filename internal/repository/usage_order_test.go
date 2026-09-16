@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -115,6 +116,54 @@ func TestListUsageEventsBreaksTimestampTiesByID(t *testing.T) {
 	// Newest first within the tie means the highest id leads.
 	if seen[0] != "tie-c" {
 		t.Fatalf("first record = %q, want the highest id within the tie", seen[0])
+	}
+}
+
+func TestListUsageEventsReturnsEachInsertedIdentityOnce(t *testing.T) {
+	repo := usageTestRepository(t)
+	ctx := context.Background()
+	base := time.Date(2026, 9, 11, 9, 0, 0, 0, time.UTC)
+
+	const count = 75
+	expected := make(map[string]struct{}, count)
+	events := make([]usage.Event, 0, count)
+	for index := 0; index < count; index++ {
+		requestID := fmt.Sprintf("identity-%03d", index)
+		expected[requestID] = struct{}{}
+		events = append(events, usageEventAt("default", requestID, base.Add(time.Duration(index%5)*time.Second), usage.TokenStats{TotalTokens: 1}, false))
+	}
+	if _, err := repo.InsertUsageEvents(ctx, events); err != nil {
+		t.Fatal(err)
+	}
+
+	page, err := repo.ListUsageEvents(ctx, UsageEventFilter{
+		InstanceID: "default",
+		FromMS:     base.Add(-time.Hour).UnixMilli(),
+		ToMS:       base.Add(time.Hour).UnixMilli(),
+		Limit:      500,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := make(map[string]struct{}, len(page.Items))
+	ids := make(map[int64]struct{}, len(page.Items))
+	for _, item := range page.Items {
+		if _, duplicate := ids[item.ID]; duplicate {
+			t.Fatalf("row id %d was returned twice", item.ID)
+		}
+		ids[item.ID] = struct{}{}
+		if _, duplicate := seen[item.RequestID]; duplicate {
+			t.Fatalf("request %q was returned twice", item.RequestID)
+		}
+		seen[item.RequestID] = struct{}{}
+	}
+	if len(seen) != count {
+		t.Fatalf("returned %d unique identities, want %d", len(seen), count)
+	}
+	for requestID := range expected {
+		if _, ok := seen[requestID]; !ok {
+			t.Fatalf("identity %q was not returned", requestID)
+		}
 	}
 }
 

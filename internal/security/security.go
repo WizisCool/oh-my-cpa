@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -329,7 +330,13 @@ func MaskIP(value string) *string {
 	if value == "" {
 		return nil
 	}
-	if host, _, err := net.SplitHostPort(value); err == nil {
+	if host, port, err := net.SplitHostPort(value); err == nil {
+		if port != "" {
+			number, errPort := strconv.Atoi(port)
+			if errPort != nil || number < 0 || number > 65535 {
+				return nil
+			}
+		}
 		value = host
 	}
 	value = strings.Trim(value, "[]")
@@ -365,6 +372,63 @@ func MaskForwardedFor(value string) *string {
 		}
 	}
 	return nil
+}
+
+// NormalizeClientIP preserves the diagnostic client address while removing the
+// transport port and canonicalizing equivalent IPv6 spellings. Unlike MaskIP,
+// this is not a privacy projection: it is used only for the protected request
+// detail view, never for list/search payloads or authorization decisions.
+func NormalizeClientIP(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	if host, port, err := net.SplitHostPort(value); err == nil {
+		if port != "" {
+			number, errPort := strconv.Atoi(port)
+			if errPort != nil || number < 0 || number > 65535 {
+				return nil
+			}
+		}
+		value = host
+	}
+	value = strings.Trim(value, "[]")
+	if value == "" || strings.Contains(value, "/") {
+		return nil
+	}
+	parsed := net.ParseIP(value)
+	if parsed == nil {
+		return nil
+	}
+	normalized := parsed.String()
+	return &normalized
+}
+
+// NormalizeForwardedFor preserves every valid hop in a proxy chain, in the order
+// the upstream sent it. Invalid or empty hops are omitted rather than allowing a
+// malformed diagnostic header to become an unbounded stored string.
+func NormalizeForwardedFor(value string) *string {
+	const (
+		maxHops  = 32
+		maxRunes = 2048
+	)
+	hops := make([]string, 0, maxHops)
+	for _, part := range strings.Split(value, ",") {
+		if len(hops) >= maxHops {
+			break
+		}
+		if normalized := NormalizeClientIP(strings.TrimSpace(part)); normalized != nil {
+			hops = append(hops, *normalized)
+		}
+	}
+	if len(hops) == 0 {
+		return nil
+	}
+	normalized := boundedRunes(strings.Join(hops, ", "), maxRunes)
+	if normalized == "" {
+		return nil
+	}
+	return &normalized
 }
 
 // MinimizeUserAgent keeps a short diagnostic product label.

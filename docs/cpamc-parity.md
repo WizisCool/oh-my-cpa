@@ -6,6 +6,7 @@ This document links the feature inventory of the official [Cli-Proxy-API-Managem
 
 - **Target Upstream**: `router-for-me/CLIProxyAPI` `/v0/management` API.
 - **Official UI Baseline**: CPAMC README targets CLIProxyAPI `>= 7.1.0` and recommends using the latest release.
+- **Recommended Co-deployment**: The full-stack compose template pins CPA `v7.3.4`, the release used to verify the current scheduler and OAuth model-alias contract.
 - **Oh My CPA Principle**: CPA remains responsible for execution and protocol adaptation; Oh My CPA provides the management user experience, security boundaries around real CPA data, and a user-owned resource identity layer.
 - **Credential Boundary**: The CPA Management Key is decrypted and used exclusively inside the Go process; the browser holds only an `HttpOnly` administrator session cookie. Credentials returned by CPA are displayed on-demand under protected administrative pages with masks by default.
 - **Compatibility Strategy**: Endpoints are proxied through an explicit allowlist; arbitrary URL pass-through proxying is forbidden. Missing upstream capabilities surface with explicit "unsupported / upgrade required" statuses.
@@ -29,10 +30,10 @@ Status definitions: `Covered` = Fully implemented with live endpoints and UI; `I
 | Auth file list / filter | `auth_files` | `GET /auth-files` | Covered (verified against real CPA 7.2.146) | Field normalization, runtime-only / disabled empty states |
 | Auth file upload | `auth_files` | `POST /auth-files` multipart | Covered (verified against real CPA 7.2.146) | JSON file upload and invalid file feedback |
 | Auth file download / delete | Detail / batch actions | `GET /auth-files/download`, `DELETE /auth-files` | Covered (verified against real CPA 7.2.146) | Safe filenames, download payload, and batch deletion |
-| Auth file enable / disable & fields | Detail / batch actions | `PATCH /auth-files/status`, `PATCH /auth-files/fields` | Covered (verified against real CPA 7.2.146) | Status toggles, priority / weight / note / proxy fields |
+| Auth file enable / disable & fields | Detail / batch actions | `PATCH /auth-files/status`, `PATCH /auth-files/fields` | Covered (verified against real CPA 7.2.146) | Status toggles plus priority, weight, note, prefix, proxy URL, expiry, disable-cooling, WebSockets, using-API and excluded-model fields. Every update is verified against `GET /auth-files` before the API returns success, the fields held in the downloaded JSON are verified against a server-side safe projection of it as well, and that projection reaches the response only when it was read back |
 | Auth file model list | Detail | `GET /auth-files/models` | Covered (real CPA 7.2.146 returns 200; older versions returning 404 map to 501 capability_missing) | Displays capability notice on older CPA versions |
-| OAuth excluded models | `auth_files` sub-page | `/oauth-excluded-models` (in OMC handled via `excluded_models` in `PATCH /auth-files/fields`) | Partial: API supported, not exposed in UI | Backend field allowlist accepts `excluded_models`; drawer currently exposes priority / weight / note; UI additions will need wildcard and audit tests |
-| OAuth model aliases | `auth_files` sub-page | `/oauth-model-alias` | Planned | Provider key normalization and wildcard testing |
+| OAuth excluded models | `auth_files` sub-page | `/oauth-excluded-models` (in OMC handled via `excluded_models` in `PATCH /auth-files/fields`) | Covered | The credential drawer edits excluded models, normalizes whitespace/duplicates, and verifies the persisted safe projection; the write is audit logged |
+| OAuth model aliases | `auth_files` sub-page | `GET /oauth-model-alias`, `PATCH /oauth-model-alias` | Covered (verified against CPA 7.3.4 source) | Provider key normalization, per-provider replacement/deletion, fork/force-mapping fields, server-side readback, and audit logging through `/management/auth-files/model-aliases` |
 | OAuth login | `oauth` | `GET /{provider}-auth-url`, `GET /get-auth-status`, `DELETE /oauth-session`, `POST /oauth-callback` | Covered | Provider / state polling, cancellation, callback input; no token emulation |
 | Vertex JSON / iFlow Cookie import | OAuth / auth-files | `POST /vertex/import` and provider-specific flows | Planned | Dependent on upstream version capability probes |
 | Quota observation | `quota_management`, credential detail | Quota and `model_quotas` telemetry from `auth-files` | Covered | Credential detail drawer display with field-level sanitization |
@@ -61,8 +62,7 @@ Capability probes (`GET /api/v1/management/capabilities/{key}`) are retained str
 Subsequent milestones:
 
 1. **Legacy Version Compatibility**: Standardize "capability missing" notices for endpoints absent on older CPA releases (such as `/auth-files/models`), documenting minimum version requirements and graceful degradation.
-2. **Capability Additions**: OAuth model aliases and remaining auth-file field bindings (`prefix`, `proxy_url`, `disable_cooling`, `excluded_models`, `expired`) in UI forms.
-3. **Multi-Instance Support**: Instance CRUD, key rotation, and instance-level permissions backed by an ADR (the database schema already models `cpa_bindings.instance_id`, while `/instances/default/*` remains single-instance).
+2. **Multi-Instance Support**: Instance CRUD, key rotation, and instance-level permissions backed by an ADR (the database schema already models `cpa_bindings.instance_id`, while `/instances/default/*` remains single-instance).
 
 ## Oh My CPA Distinct Capabilities (No CPAMC Counterpart)
 
@@ -85,3 +85,36 @@ The following capabilities are unique to Oh My CPA and have no counterpart in CP
 - `/usage-queue` destructively consumes queue records and must never be invoked during ordinary UI polling; the console does not expose this endpoint, leaving the background collector as the sole consumer.
 - `POST /api-call` allows CPA to make arbitrary upstream requests on behalf of credentials, introducing SSRF and exfiltration risks. General browser access remains disabled; the server uses it exclusively in `internal/quota`, restricted to verified HTTPS endpoints in `AllowedURLPrefixes`.
 - Replacing CPAMC does not mean copying its browser `localStorage` secret storage; Oh My CPA maintains strict server-side secret boundaries.
+
+## Scheduler Semantics (CPA v7.3.4)
+
+Priority and weight are routing fields, not presentation metadata. The console
+validates and writes them against the current CPA contract; the runtime semantics
+are owned by CPA's scheduler:
+
+| Field | CPA semantics | OMC treatment |
+| --- | --- | --- |
+| `priority` | Missing or `0` is the default tier; higher integer values are selected before lower values. A credential in a lower tier is used only after the higher tier has no ready credential. | The drawer accepts a safe integer without inventing a `0..100` range, and readback verifies the runtime value. |
+| `weight` | Missing defaults to `1`; `1..1_000_000` are allowed; non-positive values normalize to `0`, which excludes the credential from `weighted-round-robin`. Weight does not cross priority tiers. | The drawer accepts up to `1_000_000`, preserves the CPA normalization, and verifies persisted/runtime readback. |
+| `fill-first` | Chooses the first ready credential in the highest available priority tier and ignores weight. | The field remains editable but the UI must not imply that weight affects this strategy. |
+| `round-robin` | Rotates credentials within the highest available priority tier and ignores weight. | Same as above. |
+| Session affinity | An existing session may remain bound to its credential; priority and weight apply when no affinity binding can be reused. | The routing help calls this out instead of presenting priority as an unconditional override. |
+
+This matrix is based on the official CPA scheduler behavior at v7.3.4:
+`authPriority` defaults missing/invalid values to `0`; priority buckets are sorted
+descending; `credentialweight.Default` is `1` and `Max` is `1_000_000`;
+`pickWeighted` skips non-positive weights; and `pickReadyLocked` selects only from
+the highest ready priority bucket before applying the configured strategy.
+The external contract was exercised directly against the official CPA v7.3.4
+source with `go test ./sdk/cliproxy/auth`, including
+`TestSchedulerPick_RoundRobinHighestPriority`,
+`TestSchedulerPick_WeightedRoundRobin`,
+`TestSchedulerPick_WeightedRoundRobinSkipsNonPositiveWeightPriorityTier`, and
+`TestSchedulerPick_FillFirstSticksToFirstReady`. Those tests assert the selected
+credential IDs and weighted pick counts, not merely decoded JSON: the highest
+ready priority tier excludes lower tiers, a non-positive weight is skipped in
+favour of a ready lower-priority credential, and fill-first keeps the same ready
+credential. Additional CPA tests cover persisted metadata weight, cooldown
+recovery, token-expiry demotion, and session-affinity lookup. Oh My CPA's
+ingest-to-persistence round trip separately asserts that the emitted
+`auth_index`/`auth_type` reach both list and detail projections unchanged.

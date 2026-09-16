@@ -876,7 +876,7 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
   // no probe context can render it: `prefers-reduced-motion` is forced on for determinism. The rule
   // itself is what matters - a colour transition on hover would smear behind a fast sweep, which is
   // what design.md §7 rule 7 forbids, and only the declaration can say which property animates.
-  const declared = await page.evaluate(() => {
+  const declaredMotion = await page.evaluate(() => {
     for (const sheet of document.styleSheets) {
       let rules;
       try {
@@ -890,15 +890,41 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
         if (rule.selectorText === '.heatmap-cell-mark' && rule.style.transition) {
           return rule.style.transition;
         }
+        if (rule.selectorText === '.heatmap-cell.is-interactive:hover .heatmap-cell-mark' && rule.style.transform) {
+          return { transition: null, transform: rule.style.transform };
+        }
       }
     }
     return null;
   });
+  const declared = typeof declaredMotion === 'string' ? declaredMotion : declaredMotion?.transition ?? null;
   check('the stylesheet declares a hover transition', declared !== null, `transition=${declared}`);
   check(
     'the declared hover motion animates only the transform',
     typeof declared === 'string' && declared.includes('transform') && !/color|background|box-shadow/.test(declared),
     `transition=${declared}`,
+  );
+  const declaredScale = await page.evaluate(() => {
+    for (const sheet of document.styleSheets) {
+      let rules;
+      try {
+        rules = sheet.cssRules;
+      } catch {
+        continue;
+      }
+      for (const rule of rules) {
+        if (rule.selectorText === '.heatmap-cell.is-interactive:hover .heatmap-cell-mark' && rule.style.transform) {
+          const match = /scale\(([\d.]+)\)/.exec(rule.style.transform);
+          return match ? Number(match[1]) : null;
+        }
+      }
+    }
+    return null;
+  });
+  check(
+    'the declared hover lift is restrained and cannot clip the edge',
+    declaredScale !== null && declaredScale <= 1.2,
+    `scale=${declaredScale}`,
   );
 
   // A cell with no requests is clickable too, and its tooltip reports the absence rather than the two
@@ -1162,6 +1188,34 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
     'storing the explicit-digit style switches the tooltip\'s token volume to it',
     tokenRowUnderStoredStyle?.value === busiest.tokens.toLocaleString('en'),
     `tokens=${JSON.stringify(tokenRowUnderStoredStyle)}`,
+  );
+
+  // The Chinese unit style is a real browser path, not a formatter assertion:
+  // the previous reports were made while the shared formatter was already
+  // present in source. Switching both language and stored style here catches a
+  // stale context, cache or render path that a pure unit test cannot see.
+  await page.evaluate(async () => {
+    localStorage.setItem('omc-lang', 'zh');
+    await fetch('/omc/api/v1/preferences/omc_token_style', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify('zh'),
+    });
+  });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('.heatmap-grid').waitFor({ timeout: 20_000 });
+  await busiestCell.click();
+  await tooltip.waitFor({ state: 'visible', timeout: 5000 });
+  const tokenRowUnderChineseStyle = tokenRowOf(await tooltipRows());
+  check(
+    'the Chinese unit style reaches the tooltip in the browser',
+    tokenRowUnderChineseStyle !== undefined && /^\d+(\.\d+)?(万|亿)$/.test(tokenRowUnderChineseStyle.value),
+    `tokens=${JSON.stringify(tokenRowUnderChineseStyle)}`,
+  );
+  check(
+    'the Chinese tooltip keeps the exact token count',
+    tokenRowUnderChineseStyle?.exact === busiest.tokens.toLocaleString('en'),
+    `exact=${JSON.stringify(tokenRowUnderChineseStyle?.exact)} expected=${busiest.tokens.toLocaleString('en')}`,
   );
 }
 
@@ -1776,6 +1830,33 @@ export async function dashboardModelPanels({ base, page, check }) {
   // fallback rather than a canvas.
   await page.locator('.model-trend canvas').first().waitFor({ timeout: 20_000 });
   await page.locator('.model-ring canvas').first().waitFor({ timeout: 20_000 });
+
+  const usageHeader = await page.evaluate(() => {
+    const card = document.querySelector('.model-usage-card');
+    const head = card?.querySelector('.ant-card-head');
+    const title = card?.querySelector('.ant-card-head-title');
+    const toggle = card?.querySelector('.model-view-toggle');
+    const bodyTitle = card?.querySelector('.ant-card-body .tile-label');
+    if (!head || !title || !toggle) return { error: 'missing model usage header elements' };
+    const headBox = head.getBoundingClientRect();
+    const titleBox = title.getBoundingClientRect();
+    const toggleBox = toggle.getBoundingClientRect();
+    return {
+      title: title.textContent?.trim() ?? '',
+      bodyTitle: Boolean(bodyTitle),
+      sameRow: Math.abs((titleBox.top + titleBox.height / 2) - (toggleBox.top + toggleBox.height / 2)) <= 2,
+      headContainsToggle: head.contains(toggle),
+      headHeight: headBox.height,
+    };
+  });
+  check(
+    'model usage is the card header title beside its view control',
+    usageHeader.title === 'Model usage'
+      && usageHeader.bodyTitle === false
+      && usageHeader.sameRow === true
+      && usageHeader.headContainsToggle === true,
+    JSON.stringify(usageHeader),
+  );
 
   /**
    * The distinct opaque colours a canvas paints, most frequent first.
@@ -2933,7 +3014,7 @@ export async function omcSettings({ base, page, check, context }) {
       // overflows a container whose own `scrollWidth` does not report it - the box stays
       // its assigned size and the child simply paints past it - so the measurement has to
       // be taken on the child against the row's own edge.
-      const picker = row.querySelector('.ant-segmented') ?? row.querySelector('.settings-toggle-control');
+      const picker = row.querySelector('.ant-segmented, .theme-preset-grid') ?? row.querySelector('.settings-toggle-control');
       const box = row.querySelector('.settings-toggle-control');
       const boxRect = box.getBoundingClientRect();
       const pickerRect = picker.getBoundingClientRect();
@@ -3145,12 +3226,59 @@ export async function omcSettings({ base, page, check, context }) {
     `tile=${JSON.stringify(storedChineseText)}`,
   );
 
+  // ── the preset registry drives palette, persistence and the header switch ──
+  // The theme control is no longer a two-value mode switch. Every preset must
+  // publish both a palette and a mode, survive a reload, and stay the same
+  // source the header shortcut changes.
+  await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
+  const themeCards = page.locator('.theme-preset-card');
+  check(
+    'the settings page exposes the full theme preset registry',
+    (await themeCards.count()) === 6,
+    `cards=${await themeCards.count()}`,
+  );
+  await page.locator('.theme-preset-card').filter({ hasText: /Midnight/ }).click();
+  await until(async () => (await page.locator('html').getAttribute('data-theme')) === 'midnight', {
+    label: 'the midnight preset to become active',
+  });
+  check(
+    'a dark preset persists its id and mode',
+    (await page.evaluate(() => ({ stored: localStorage.getItem('omc-theme'), mode: document.documentElement.dataset.themeMode }))).stored === 'midnight'
+      && (await page.locator('html').getAttribute('data-theme-mode')) === 'dark',
+  );
+  const midnightBg = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim());
+  check('a preset applies its palette through CSS variables', midnightBg === '#0d1117', `--bg=${midnightBg}`);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
+  check(
+    'the selected preset survives a reload',
+    (await page.locator('html').getAttribute('data-theme')) === 'midnight',
+  );
+
+  // The header shortcut and the settings page share one state source. Toggling
+  // from a custom dark preset resolves to the canonical light preset; returning
+  // to settings must show that same preset selected.
+  await page.locator('.app-header').getByRole('button', { name: /Theme|界面主题/ }).click();
+  await until(async () => (await page.locator('html').getAttribute('data-theme')) === 'omc-light', {
+    label: 'the header shortcut to select OMC Light',
+  });
+  check(
+    'the header shortcut writes the same theme state the settings registry reads',
+    (await page.locator('html').getAttribute('data-theme-mode')) === 'light'
+      && (await page.evaluate(() => localStorage.getItem('omc-theme'))) === 'omc-light',
+  );
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
+  check(
+    'the settings page reflects the header shortcut selection',
+    (await page.locator('.theme-preset-card.is-active').filter({ hasText: /OMC Light/ }).count()) === 1,
+  );
+
   // ── the appearance settings drive the live console ────────────────────────
   // Theme and language stay in the browser, and the page's controls must therefore drive the app
   // rather than a copy: switching the language re-renders this page's own copy, and it also makes
   // the Chinese scale selectable.
-  await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
-  await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
   const languageRow = page.locator('.omc-settings-page .settings-toggle-row').filter({ hasText: /Language|界面语言/ });
   await languageRow.locator('.ant-segmented-item').filter({ hasText: /Simplified Chinese|简体中文/ }).click();
   let becameChinese = false;

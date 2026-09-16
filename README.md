@@ -44,7 +44,7 @@ Oh My CPA is a self-hosted control plane for [CLIProxyAPI](https://github.com/ro
 - **Usage Dashboard**: Track request volume, token throughput, cache hit rates, and estimated costs across presets (15m, 1h, 6h, 24h, 7d, 30d, 90d) and custom date ranges, with a year-long contribution-style token heatmap of daily token volume, where clicking a day shows its request count and token volume, and links to that day's request list.
 - **Model-Level Usage Panels**: The token trend and model-usage ring rank the window's traffic by call point (the client-requested model alias) or by upstream model, with per-group costs and shares; the grouping choice persists as a console preference.
 - **Token Unit Style**: Switch the console-wide number abbreviation (English K/M/B or Chinese 万/亿) across the dashboard, its token activity tooltip, the request records and the detail drawer; an abbreviated value always keeps its exact count.
-- **OMC Settings Hub**: The console-wide token unit style, stored with the deployment, on one page together with the browser-local theme and language shortcuts. The model panels' own grouping stays on the panels that plot it.
+- **OMC Settings Hub**: The console-wide token unit style, stored with the deployment, on one page together with six visual presets (OMC Dark/Light, Midnight, Porcelain, Forest, Sandstone) and the language shortcut. The model panels' own grouping stays on the panels that plot it.
 - **Faceted Request Browser**: Filter requests by model, provider, client key alias, status, cost, and latency using multi-select facets and full-text search.
 - **Request Detail & Waterfall**: Inspect duration, time-to-first-token (TTFT), token breakdowns, and download raw per-request logs.
 - **Streaming & Pull Ingestion**: Collects usage events via background RESP stream or polling, with automatic backoff during idle periods.
@@ -130,6 +130,8 @@ Open **`http://127.0.0.1:5173/omc/`**. Vite serves the UI with HMR and proxies `
 > Running from source or compiling the standalone binary is recommended for now. Preview compose templates are available in the repository:
 > - [`deploy/compose.full.yml`](deploy/compose.full.yml): Stack co-deploying CPA, Oh My CPA, and Caddy.
 > - [`deploy/compose.omc.yml`](deploy/compose.omc.yml): Standalone Oh My CPA connecting to an existing CPA instance.
+>
+> The full stack pins CPA `v7.3.4` by default; override `CPA_IMAGE` when connecting the stack to a different compatible release.
 
 ## Operational Notes
 

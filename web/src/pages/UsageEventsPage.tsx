@@ -434,6 +434,10 @@ export const UsageEventsPage: React.FC = () => {
    * live-tail section for what holding means.
    */
   const [heldItems, setHeldItems] = React.useState<UsageEvent[] | null>(null);
+  // The arrival count is anchored to the row id the reader held when Hold began.
+  // Keeping it separate from the rendered rows prevents a poll that carries the
+  // new row from moving the boundary forward and hiding the count it should show.
+  const heldBoundaryIDRef = React.useRef<number | undefined>(undefined);
 
   // The flat committed filter map, derived from the URL through the same
   // normalisation the request itself uses. Chips and persistence both read it,
@@ -537,9 +541,16 @@ export const UsageEventsPage: React.FC = () => {
       // the list follows new records, and scrolling away freezes the rows on
       // screen so the reader keeps their place.
       if (scrollTop <= FOLLOW_TOP_PX) {
-        if (heldItemsRef.current) setHeldItems(null);
+        if (heldItemsRef.current) {
+          heldBoundaryIDRef.current = undefined;
+          setHeldItems(null);
+        }
         if (isReturningToTopRef.current) endReturnToTop();
       } else if (scrollTop > HOLD_FROM_PX && !heldItemsRef.current && latestItemsRef.current.length > 0) {
+        heldBoundaryIDRef.current = latestItemsRef.current.reduce(
+          (highest, event) => Math.max(highest, event.id),
+          0,
+        );
         setHeldItems(latestItemsRef.current);
       }
 
@@ -629,6 +640,7 @@ export const UsageEventsPage: React.FC = () => {
     returnToTopTimerRef.current = setTimeout(endReturnToTop, BACK_TO_TOP_GUARD_MS);
     // Resuming is explicit here: the scroll events that follow will also clear it,
     // but the reader clicked "apply", so do not depend on event timing.
+    heldBoundaryIDRef.current = undefined;
     setHeldItems(null);
     scrollAnimationRef.current?.cancel();
     scrollAnimationRef.current = animateScrollToTop(
@@ -860,9 +872,7 @@ export const UsageEventsPage: React.FC = () => {
   //
   // A held page always contains the rows the reader was looking at, so the
   // boundary is derivable on any page, not just the first.
-  const heldBoundaryID = heldItems && heldItems.length > 0
-    ? heldItems.reduce((highest, event) => Math.max(highest, event.id), 0)
-    : undefined;
+  const heldBoundaryID = heldItems ? heldBoundaryIDRef.current : undefined;
   const queryString = usageEventParams({ ...query, ...activeWindow, cursor, since: heldBoundaryID });
   const result = useQuery({
     queryKey: ['usage-events', queryString, refresh],
@@ -980,6 +990,7 @@ export const UsageEventsPage: React.FC = () => {
 
   // A different view, or a different page, starts following again.
   React.useEffect(() => {
+    heldBoundaryIDRef.current = undefined;
     setHeldItems(null);
   }, [viewScope, cursor]);
 

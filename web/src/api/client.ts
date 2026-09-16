@@ -6,7 +6,17 @@ import {
   ResourceOverridePayload,
 } from '../types/resource';
 import { ManagementOverview } from '../types/management';
-import { ManagementAuthFilesResponse, ManagementAuthFileMutationResponse, ManagementAuthFileModel } from '../types/managementAuthFile';
+import {
+  ManagementAuthFilesResponse,
+  ManagementAuthFileMutationResponse,
+  ManagementAuthFileModel,
+  ManagementAuthFileSafeFields,
+} from '../types/managementAuthFile';
+import {
+  ManagementOAuthModelAlias,
+  ManagementOAuthModelAliasesResponse,
+  ManagementOAuthModelAliasMutationResponse,
+} from '../types/managementOAuthModelAlias';
 import { DashboardResponse, DashboardTailResponse } from '../types/dashboard';
 import { DashboardTokenHeatmap } from '../types/tokenHeatmap';
 import { DashboardModelsResponse } from '../types/dashboardModels';
@@ -524,11 +534,17 @@ export const api = {
     });
   },
 
-  async patchManagementAuthFileFields(name: string, fields: Record<string, unknown>): Promise<ManagementAuthFileMutationResponse> {
+  async patchManagementAuthFileFields(name: string, fields: Record<string, unknown>, authIndex?: string): Promise<ManagementAuthFileMutationResponse> {
     return request<ManagementAuthFileMutationResponse>('/management/auth-files/fields', {
       method: 'PATCH',
-      body: JSON.stringify({ name, ...fields }),
+      body: JSON.stringify({ name, ...(authIndex ? { auth_index: authIndex } : {}), ...fields }),
     });
+  },
+
+  async getManagementAuthFileSafeFields(name: string, authIndex?: string): Promise<ManagementAuthFileSafeFields> {
+    const search = new URLSearchParams({ name });
+    if (authIndex) search.set('auth_index', authIndex);
+    return request<ManagementAuthFileSafeFields>(`/management/auth-files/safe-fields?${search.toString()}`, { method: 'GET' });
   },
 
   async deleteManagementAuthFiles(names: string[]): Promise<ManagementAuthFileMutationResponse> {
@@ -554,6 +570,20 @@ export const api = {
 
   async getManagementAuthFileModels(name: string): Promise<{ models: ManagementAuthFileModel[] }> {
     return request<{ models: ManagementAuthFileModel[] }>(`/management/auth-files/models?name=${encodeURIComponent(name)}`, { method: 'GET' });
+  },
+
+  async getManagementOAuthModelAliases(): Promise<ManagementOAuthModelAliasesResponse> {
+    return request<ManagementOAuthModelAliasesResponse>('/management/auth-files/model-aliases', { method: 'GET' });
+  },
+
+  async patchManagementOAuthModelAliases(
+    provider: string,
+    aliases: ManagementOAuthModelAlias[],
+  ): Promise<ManagementOAuthModelAliasMutationResponse> {
+    return request<ManagementOAuthModelAliasMutationResponse>('/management/auth-files/model-aliases', {
+      method: 'PATCH',
+      body: JSON.stringify({ provider, aliases }),
+    });
   },
 
   async getHealth(): Promise<HealthStatus> {
@@ -746,4 +776,3 @@ export const api = {
     });
   },
 };
-

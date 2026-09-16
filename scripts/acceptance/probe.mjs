@@ -263,8 +263,11 @@ export async function installRoutes(context, extra = []) {
 export async function createProbePage(browser, { viewport = { width: 1440, height: 1000 } } = {}) {
   const context = await browser.newContext({ viewport, reducedMotion: 'reduce' });
   await context.addInitScript(() => {
-    localStorage.setItem('omc-theme', 'light');
-    localStorage.setItem('omc-lang', 'en');
+    // Seed only on a fresh context. addInitScript runs on every navigation and
+    // reload, so unconditional writes would make a scenario's own theme choice
+    // disappear exactly when it reloads to prove persistence.
+    if (!localStorage.getItem('omc-theme')) localStorage.setItem('omc-theme', 'omc-light');
+    if (!localStorage.getItem('omc-lang')) localStorage.setItem('omc-lang', 'en');
   });
   const page = await context.newPage();
   const errors = [];

@@ -11,6 +11,7 @@ import {
   InputNumber,
   Form,
   Table,
+  Switch,
   App as AntdApp,
 } from 'antd';
 import {
@@ -18,16 +19,21 @@ import {
   DownloadOutlined,
   ExclamationCircleOutlined,
 } from '@ant-design/icons';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';
-import type { ManagementAuthFile, ManagementAuthFileModel } from '../../types/managementAuthFile';
+import type {
+  ManagementAuthFile,
+  ManagementAuthFileModel,
+  ManagementAuthFileSafeFields,
+} from '../../types/managementAuthFile';
 import {
   deriveAuthFileIdentity,
   hasAuthFileStatusWarning,
   isAuthFileDisabled,
   isAuthFileProblem,
 } from './authFileLogic';
+import styles from './AuthFileDetailDrawer.module.css';
 
 const { Text } = Typography;
 
@@ -35,7 +41,7 @@ interface AuthFileDetailDrawerProps {
   file: ManagementAuthFile | null;
   open: boolean;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (file?: ManagementAuthFile) => void;
   onDownload: (file: ManagementAuthFile) => void;
 }
 
@@ -43,6 +49,64 @@ interface FormValues {
   priority?: number;
   weight?: number;
   note?: string;
+  prefix?: string;
+  proxy_url?: string;
+  expired?: string;
+  disable_cooling?: boolean;
+  websockets?: boolean;
+  using_api?: boolean;
+  excluded_models?: string;
+}
+
+const MAX_CREDENTIAL_WEIGHT = 1_000_000;
+const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER;
+
+function normalizeExcludedModelsText(value: string | undefined): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const part of (value ?? '').split(/[\n,]/)) {
+    const model = part.trim();
+    const key = model.toLowerCase();
+    if (!model || seen.has(key)) continue;
+    seen.add(key);
+    result.push(model);
+  }
+  return result;
+}
+
+function excludedModelsText(value: string[] | undefined): string {
+  return (value ?? []).join('\n');
+}
+
+function formValues(
+  file: ManagementAuthFile,
+  safeFields?: ManagementAuthFileSafeFields,
+): FormValues {
+  return {
+    priority: safeFields && Number.isSafeInteger(safeFields.priority) ? safeFields.priority : file.priority ?? 0,
+    weight: safeFields && Number.isSafeInteger(safeFields.weight) ? safeFields.weight : file.weight ?? 1,
+    note: safeFields?.note ?? file.note ?? '',
+    prefix: safeFields?.prefix ?? '',
+    proxy_url: safeFields?.proxy_url ?? '',
+    expired: safeFields?.expired ?? '',
+    disable_cooling: safeFields?.disable_cooling ?? false,
+    websockets: safeFields?.websockets ?? false,
+    using_api: safeFields?.using_api ?? false,
+    excluded_models: excludedModelsText(safeFields?.excluded_models),
+  };
+}
+
+function sameFormValues(left: FormValues, right: FormValues): boolean {
+  return left.priority === right.priority
+    && left.weight === right.weight
+    && (left.note ?? '') === (right.note ?? '')
+    && (left.prefix ?? '') === (right.prefix ?? '')
+    && (left.proxy_url ?? '') === (right.proxy_url ?? '')
+    && (left.expired ?? '') === (right.expired ?? '')
+    && Boolean(left.disable_cooling) === Boolean(right.disable_cooling)
+    && Boolean(left.websockets) === Boolean(right.websockets)
+    && Boolean(left.using_api) === Boolean(right.using_api)
+    && (left.excluded_models ?? '') === (right.excluded_models ?? '');
 }
 
 export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
@@ -54,6 +118,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
 }) => {
   const t = useT();
   const { message, modal } = AntdApp.useApp();
+  const queryClient = useQueryClient();
   const [form] = Form.useForm<FormValues>();
   const [baseline, setBaseline] = useState<FormValues>({});
   const [isDirty, setIsDirty] = useState(false);
@@ -75,11 +140,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
       const sid = sessionCounterRef.current;
       currentSessionRef.current = sid;
 
-      const initial: FormValues = {
-        priority: file.priority ?? 0,
-        weight: file.weight ?? 1,
-        note: file.note ?? '',
-      };
+      const initial = formValues(file);
       setBaseline(initial);
       form.setFieldsValue(initial);
       setIsDirty(false);
@@ -92,29 +153,37 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   }, [file?.name, open, form]);
 
   const handleValuesChange = () => {
-    const current = form.getFieldsValue();
-    const changed =
-      current.priority !== baseline.priority ||
-      current.weight !== baseline.weight ||
-      (current.note || '') !== (baseline.note || '');
-    setIsDirty(changed);
+    setIsDirty(!sameFormValues(form.getFieldsValue(), baseline));
   };
 
   const saveMutation = useMutation({
     mutationFn: async ({
       fileName,
+      authIndex,
       patch,
     }: {
       fileName: string;
+      authIndex?: string;
       patch: Record<string, unknown>;
       sessionId: number;
     }) => {
-      return api.patchManagementAuthFileFields(fileName, patch);
+      return api.patchManagementAuthFileFields(fileName, patch, authIndex);
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (response, variables) => {
       isPendingRef.current = false;
-      onSaved();
+      onSaved(response.file);
       if (variables.sessionId === currentSessionRef.current) {
+        if (response.file) {
+          const next = formValues(response.file, response.fields);
+          setBaseline(next);
+          form.setFieldsValue(next);
+        }
+        if (response.fields) {
+          queryClient.setQueryData(
+            ['auth-file-safe-fields', variables.fileName, variables.authIndex],
+            response.fields,
+          );
+        }
         message.success(t('af.save_fields_success'));
         setIsDirty(false);
         onClose();
@@ -147,6 +216,21 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
     }
   }, [isDirty, modal, onClose, saveMutation.isPending, t]);
 
+  const safeFieldsQuery = useQuery({
+    queryKey: ['auth-file-safe-fields', file?.name, file?.auth_index],
+    queryFn: () => api.getManagementAuthFileSafeFields(file!.name, file!.auth_index),
+    enabled: Boolean(file?.name && open && !file?.runtime_only),
+    staleTime: 60_000,
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (!file || !open || !safeFieldsQuery.data || isDirty) return;
+    const next = formValues(file, safeFieldsQuery.data);
+    setBaseline(next);
+    form.setFieldsValue(next);
+  }, [file, form, isDirty, open, safeFieldsQuery.data]);
+
   const {
     data: modelsData,
     isLoading: modelsLoading,
@@ -164,14 +248,38 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
     isPendingRef.current = true;
 
     const patch: Record<string, unknown> = {};
-    if (values.priority !== baseline.priority && values.priority !== undefined) {
-      patch.priority = values.priority;
+    const nextPriority = values.priority ?? 0;
+    const nextWeight = values.weight ?? 1;
+    if (nextPriority !== (baseline.priority ?? 0)) {
+      patch.priority = nextPriority;
     }
-    if (values.weight !== baseline.weight && values.weight !== undefined) {
-      patch.weight = values.weight;
+    if (nextWeight !== (baseline.weight ?? 1)) {
+      patch.weight = nextWeight;
     }
     if ((values.note || '') !== (baseline.note || '')) {
       patch.note = values.note || '';
+    }
+    if ((values.prefix || '') !== (baseline.prefix || '')) {
+      patch.prefix = values.prefix || '';
+    }
+    if ((values.proxy_url || '') !== (baseline.proxy_url || '')) {
+      patch.proxy_url = values.proxy_url || '';
+    }
+    if ((values.expired || '') !== (baseline.expired || '')) {
+      patch.expired = values.expired || '';
+    }
+    if (Boolean(values.disable_cooling) !== Boolean(baseline.disable_cooling)) {
+      patch.disable_cooling = Boolean(values.disable_cooling);
+    }
+    if (Boolean(values.websockets) !== Boolean(baseline.websockets)) {
+      patch.websockets = Boolean(values.websockets);
+    }
+    if (Boolean(values.using_api) !== Boolean(baseline.using_api)) {
+      patch.using_api = Boolean(values.using_api);
+    }
+    const excludedModels = normalizeExcludedModelsText(values.excluded_models);
+    if (excludedModels.join('\n') !== normalizeExcludedModelsText(baseline.excluded_models).join('\n')) {
+      patch.excluded_models = excludedModels;
     }
 
     if (Object.keys(patch).length === 0) {
@@ -182,12 +290,15 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
 
     saveMutation.mutate({
       fileName: file.name,
+      authIndex: file.auth_index,
       patch,
       sessionId: currentSessionRef.current,
     });
   };
 
   const models: ManagementAuthFileModel[] = modelsData?.models || file?.models || [];
+  const safeFieldsReady = safeFieldsQuery.isSuccess;
+  const safeFieldsFailed = safeFieldsQuery.isError;
   const quotaSignals = file?.quota?.signals ? Object.entries(file.quota.signals) : [];
   const identity = file ? deriveAuthFileIdentity(file) : null;
   const isProblem = file ? isAuthFileProblem(file) : false;
@@ -217,7 +328,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
       return <Text type="secondary">{t('af.models_empty')}</Text>;
     }
     return (
-      <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+      <div className={styles['models-scroll']}>
         <Table<ManagementAuthFileModel>
           size="small"
           rowKey="id"
@@ -250,7 +361,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
       onClose={handleAttemptClose}
     >
       {file ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className={styles['drawer-content']}>
           {/* Identity & Status Card */}
           <Card size="small" className="terminal-panel">
             <Descriptions column={{ xs: 1, sm: 2 }} size="small" bordered>
@@ -292,13 +403,21 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                     <b>{t('af.warning_status')}:</b> {file.status_message}
                   </span>
                 }
-                style={{ marginTop: 12 }}
+                className={styles['identity-alert']}
               />
             )}
           </Card>
 
           {/* Safe Field Configuration Form */}
           <Card size="small" title={t('af.fields_title')} className="terminal-panel">
+            {safeFieldsFailed && (
+              <Alert
+                type="warning"
+                showIcon
+                description={t('af.safe_fields_error')}
+                action={<Button size="small" onClick={() => void safeFieldsQuery.refetch()}>{t('common.retry')}</Button>}
+              />
+            )}
             <Form
               form={form}
               layout="vertical"
@@ -306,34 +425,83 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
               onFinish={handleFinish}
               disabled={saveMutation.isPending || file.runtime_only}
             >
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div className={styles['field-grid']}>
                 <Form.Item
                   name="priority"
                   label={t('af.field_priority')}
+                  extra={t('af.field_priority_hint')}
                   rules={[
                     {
                       type: 'integer',
-                      min: 0,
-                      max: 100,
-                      message: t('af.val_priority_int'),
+                      min: -MAX_SAFE_INTEGER,
+                      max: MAX_SAFE_INTEGER,
+                      message: t('af.val_priority_safe_int'),
                     },
                   ]}
                 >
-                  <InputNumber style={{ width: '100%' }} min={0} max={100} precision={0} />
+                  <InputNumber
+                    style={{ width: '100%' }}
+                    min={-MAX_SAFE_INTEGER}
+                    max={MAX_SAFE_INTEGER}
+                    precision={0}
+                  />
                 </Form.Item>
                 <Form.Item
                   name="weight"
                   label={t('af.field_weight')}
+                  extra={t('af.field_weight_hint')}
                   rules={[
                     {
                       type: 'integer',
-                      min: 0,
-                      max: 1000,
-                      message: t('af.val_weight_int'),
+                      max: MAX_CREDENTIAL_WEIGHT,
+                      message: t('af.val_weight_range'),
                     },
                   ]}
                 >
-                  <InputNumber style={{ width: '100%' }} min={0} max={1000} precision={0} />
+                  <InputNumber style={{ width: '100%' }} max={MAX_CREDENTIAL_WEIGHT} precision={0} />
+                </Form.Item>
+
+                <Form.Item name="prefix" label={t('af.field_prefix')}>
+                  <Input allowClear maxLength={4096} disabled={!safeFieldsReady} />
+                </Form.Item>
+                <Form.Item name="proxy_url" label={t('af.field_proxy_url')}>
+                  <Input allowClear maxLength={4096} disabled={!safeFieldsReady} />
+                </Form.Item>
+
+                <Form.Item
+                  name="expired"
+                  label={t('af.field_expired')}
+                  extra={t('af.field_expired_hint')}
+                >
+                  <Input allowClear maxLength={4096} disabled={!safeFieldsReady} placeholder="2027-01-02T03:04:05Z" />
+                </Form.Item>
+
+                <Form.Item
+                  name="disable_cooling"
+                  label={t('af.field_disable_cooling')}
+                  valuePropName="checked"
+                >
+                  <Switch disabled={!safeFieldsReady} />
+                </Form.Item>
+                <Form.Item name="websockets" label={t('af.field_websockets')} valuePropName="checked">
+                  <Switch disabled={!safeFieldsReady} />
+                </Form.Item>
+                <Form.Item name="using_api" label={t('af.field_using_api')} valuePropName="checked">
+                  <Switch disabled={!safeFieldsReady} />
+                </Form.Item>
+
+                <Form.Item
+                  className={styles['field-grid-wide']}
+                  name="excluded_models"
+                  label={t('af.field_excluded_models')}
+                  extra={t('af.field_excluded_models_hint')}
+                >
+                  <Input.TextArea
+                    rows={4}
+                    maxLength={8192}
+                    disabled={!safeFieldsReady}
+                    placeholder="model-a&#10;model-b"
+                  />
                 </Form.Item>
               </div>
 
@@ -341,7 +509,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                 <Input.TextArea rows={3} maxLength={500} showCount />
               </Form.Item>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <div className={styles['form-actions']}>
                 <Button
                   type="primary"
                   htmlType="submit"
@@ -376,7 +544,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
           </Card>
 
           {/* Footer Actions */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, paddingTop: 8 }}>
+          <div className={styles['drawer-footer']}>
             <Button
               icon={<DownloadOutlined />}
               disabled={file.runtime_only}

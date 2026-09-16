@@ -5,6 +5,7 @@ colors:
   primary: "#0077b8"          # dark theme; light theme uses #004770
   primary-accent: "#00a2fb"   # dark theme; light theme uses #005d8f
   primary-active: "#005d8f"   # dark theme; light theme uses #00344f
+  primary-on: "#ffffff"       # label on a filled accent control; Forest uses a near-black step
   neutral-bg: "#121214"
   neutral-surface: "#1c1c1f"
   neutral-border: "#2c2c30"
@@ -156,7 +157,7 @@ Depth is achieved purely through 1px hairline borders and subtle tonal shifts be
 
 ## Colors
 
-The palette is anchored on warm charcoal darks with pure semantic status pigments and an OKLCH-interpolated continuous cache scale.
+The palette is anchored on warm charcoal darks with pure semantic status pigments and an OKLCH-interpolated continuous cache scale. Six complete presets are registered: OMC Dark, OMC Light, Midnight, Porcelain, Forest, and Sandstone. Each declares its mode and full palette; the resolver in `web/src/theme/themeConfig.ts` feeds Ant Design, CSS variables, charts, the heatmap, and the settings preview from that one registry. `omc-theme` stores the preset id and accepts the legacy `dark`/`light` values.
 
 ### Primary
 - **Deep Accent Blue** (`#0077b8` dark / `#004770` light): Used for filled primary action buttons and confirm controls. It provides a decisive focus point without overwhelming the dark theme.
@@ -177,7 +178,8 @@ family in the app, and the only exception to the semantic-only rule above; see
   ring's unfilled track.
 - Every slot clears 3:1 against the card, adjacent legend entries are at least ΔE 25 apart in CIE Lab,
   and the stylesheet tokens match `themeConfig.ts` character for character. All bounds are asserted by
-  `scripts/test-chart-marks.ts` from the palette itself.
+  `scripts/test-chart-marks.ts` from the palette itself. The values above are the original OMC pair;
+  each registered preset supplies its own six slots and is checked by the same bounds.
 
 ### Neutral
 - **Console Background (`--bg`)** (`#121214`): Base canvas, table row backgrounds, input wells, and overall page substrate.
@@ -279,7 +281,7 @@ The geometric form language is compact, rectangular, and tightly controlled:
 ### Buttons
 - **Shape**: 4px radius (`--radius-sm`).
 - **Sizes**: Standard 32px height (padding 0 15px); Small 28px height (antd `controlHeightSM`); Square 32×32px for row-level action icon buttons.
-- **Primary**: Deep accent fill (`#0077b8` dark, `#004770` light), white text, no shadow. Hover shifts one step deeper (`#005d8f` dark, `#00344f` light) with zero transition lag.
+- **Primary**: Deep accent fill (`#0077b8` dark, `#004770` light) with the palette's `accentOn` label step (white in both original palettes; Forest uses a near-black step because its fill is light), no shadow. Hover shifts one step deeper (`#005d8f` dark, `#00344f` light) with zero transition lag.
 - **Secondary / Default**: Surface fill (`#1c1c1f`), 1px border (`#2c2c30`), chalk white text.
 - **Ghost**: Transparent background, borderless, text color `#f4f4f6`, hover reveals `#1c1c1f`.
 
@@ -314,7 +316,7 @@ The geometric form language is compact, rectangular, and tightly controlled:
 ## Do's and Don'ts
 
 ### Do:
-- **Do** import colors exclusively from `palette` or CSS variables (`var(--bg)`, `var(--surface)`, `var(--border)`).
+- **Do** import colors exclusively from the active theme preset or CSS variables (`var(--bg)`, `var(--surface)`, `var(--border)`); add a new preset here and in `themeConfig.ts` rather than introducing palette literals in a component.
 - **Do** pair every status indicator pip with explicit text labels so colorblind users can immediately identify states.
 - **Do** inherit monospaced font families across all components and enable `tabular-nums` for numeric telemetry.
 - **Do** pin motion durations to ≤ 100ms and animate only `opacity` and `transform`.

@@ -2,7 +2,6 @@ import React from 'react';
 import { Pie } from '@ant-design/charts';
 import { useThemeMode } from '../theme/ThemeContext';
 import { seriesColorRange, seriesDomainKey, seriesTrackColor } from './chartTheme';
-import { palette } from '../theme/themeConfig';
 import { formatModelShare, formatModelTokens, type DashboardModelUsage } from '../types/dashboardModels';
 import { formatTokens, formatTokensFull } from '../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
@@ -44,12 +43,12 @@ export const ModelUsageDonut: React.FC<ModelUsageDonutProps> = ({
   foldedLabel,
   tokenUnitLabel,
 }) => {
-  const { themeMode } = useThemeMode();
+  const { theme } = useThemeMode();
   const { style: tokenStyle } = useTokenDisplayStyle();
-  const colors = palette[themeMode];
+  const colors = theme.palette;
 
   const domain = React.useMemo(() => groups.map(seriesDomainKey), [groups]);
-  const range = React.useMemo(() => seriesColorRange(themeMode, groups), [themeMode, groups]);
+  const range = React.useMemo(() => seriesColorRange(theme.palette, groups), [theme.palette, groups]);
   const labelOf = React.useCallback(
     (key: string) => (key === 'folded' ? foldedLabel : key.replace(/^model:/, '')),
     [foldedLabel],
@@ -159,7 +158,7 @@ export const ModelUsageDonut: React.FC<ModelUsageDonutProps> = ({
           <span className="model-ring-unit" aria-hidden="true">{tokenUnitLabel}</span>
         </div>
       </div>
-      {data.length === 0 && <span className="model-ring-track" style={{ borderColor: seriesTrackColor(themeMode) }} aria-hidden="true" />}
+      {data.length === 0 && <span className="model-ring-track" style={{ borderColor: seriesTrackColor(theme.palette) }} aria-hidden="true" />}
     </div>
   );
 };

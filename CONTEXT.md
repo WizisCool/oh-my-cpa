@@ -7,7 +7,8 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
 - **Source**: The service origin a user recognizes, such as OpenAI, OpenCode Go, Command Code GOAT, DeepSeek, or a relay station. It is not the same as CPA's technical provider field.
 - **Subscription**: A purchased plan or entitlement associated with a Source. One subscription may have multiple accounts or credentials.
 - **Account**: A user or upstream identity associated with a Source or Subscription. A local account ID is stable even if an upstream email or identifier changes.
-- **Credential**: Authentication material that CPA can use, such as an OAuth auth file, API key, service account, or runtime-only credential. Oh My CPA references and describes credentials; it does not expose secrets in normal resource responses.
+- **Credential**: Authentication material that CPA can use, such as an OAuth auth file, API key, service account, or runtime-only credential. Oh My CPA references and describes credentials; it does not expose secrets in normal resource responses. Auth-file routing fields may be read and written through an explicit safe projection, and a write is only reported as successful once CPA's runtime entry agrees with it: the fields that live in the downloaded JSON are additionally verified against a server-side projection of it, and the update response carries that projection only when it was read back.
+- **OAuth Model Alias**: A CPA-owned, provider-scoped mapping from an upstream OAuth/file-backed model ID to a client-visible model ID. It is global to the provider rather than to one credential; Oh My CPA replaces one provider's mapping through an allowlisted facade and verifies CPA's readback before reporting success.
 - **Endpoint**: A network destination, represented by a base URL and related connection details. An Endpoint is where traffic goes, not necessarily who provides the service.
 - **Connection**: A user-facing usable line formed from a Source, optional Subscription and Account, Credential, Endpoint, and Protocol Driver. It is the primary resource users organize and name.
 - **Protocol Driver**: The technical protocol adapter used by CPA, such as Codex/Responses, OpenAI-compatible Chat Completions, Anthropic Messages, or Gemini. It is implementation metadata, not the user-facing Source.
@@ -16,6 +17,12 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
 - **Model Price**: The current CPA model catalog is the maintenance scope. Each catalog identity has one current price projection (four per-1M-token rates plus a multiplier); models.dev syncs automatically and manual rows win over sync.
 - **Price Version**: An immutable, time-effective price snapshot. A price change creates a new version; deleting a current price creates a tombstone so future requests stay unpriced while existing snapshots remain valid.
 - **Request Cost Snapshot**: The price version and USD nanos amount selected in the same transaction as a usage event, using the request timestamp. It is never recalculated from the current price projection.
+- **Diagnostic Client Address**: The exact connection peer and the ordered
+  `X-Forwarded-For` chain associated with one request record. They are preserved
+  for the protected single-record detail, never exposed by the request list,
+  search, or authorization logic. Historical records written before this
+  contract may still contain the earlier `/24` or `/64` network mask; that data
+  cannot be recovered and is never synthetically expanded.
 - **Unpriced Usage**: A request for which no valid price version existed at request time. It remains usage-only, is excluded from cost totals, and is never backfilled when a price is added later. Historical rows without a stored snapshot are `legacy_unpriced`.
 - **Model Usage**: The dashboard's two model-level panels - a **Token Trend** and a **Model Usage**
   ring - between the six KPI tiles and the Token Activity Grid. Unlike the grid, whose span is
@@ -127,7 +134,10 @@ matters, and the rest are deliberately shown as payload.
 
 `docs/design.md` is the single source of truth for brand color, typography,
 spacing, and the antd token mapping. `web/src/theme/themeConfig.ts` mirrors its
-palette in code; never hardcode colors in components.
+palette in code and registers every selectable preset (`omc-dark`, `omc-light`,
+`midnight`, `porcelain`, `forest`, `sandstone`). Each preset supplies the same
+theme source to Ant Design, CSS variables, charts, the heatmap and the brand
+artwork; never hardcode colors in components.
 
 ## Time windows
 

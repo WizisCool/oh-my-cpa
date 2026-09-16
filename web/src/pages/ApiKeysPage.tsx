@@ -12,7 +12,7 @@ import {
   Space,
   Typography,
 } from 'antd';
-import { ReloadOutlined, SaveOutlined, UndoOutlined, WarningOutlined } from '@ant-design/icons';
+import { CopyOutlined, KeyOutlined, ReloadOutlined, SaveOutlined, UndoOutlined, WarningOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseDocument } from 'yaml';
 import type { Document } from 'yaml';
@@ -228,6 +228,13 @@ export const ApiKeysPage: React.FC = () => {
     const trimmed = keyInput.trim();
     if (!trimmed) {
       message.warning(t('cfg.api_key_empty_warning'));
+      return;
+    }
+    const duplicate = currentApiKeys.some(
+      (key, index) => key === trimmed && index !== editingIndex,
+    );
+    if (duplicate) {
+      message.error(t('keys.duplicate'));
       return;
     }
     const next = [...currentApiKeys];
@@ -463,6 +470,7 @@ export const ApiKeysPage: React.FC = () => {
         title={editingIndex !== null ? t('cfg.api_keys_edit') : t('cfg.api_keys_add')}
         open={modalOpen}
         onOk={handleSaveKey}
+        okButtonProps={{ disabled: !keyInput.trim() }}
         onCancel={() => {
           setModalOpen(false);
           setKeyInput('');
@@ -472,8 +480,12 @@ export const ApiKeysPage: React.FC = () => {
         cancelText={t('common.cancel')}
         destroyOnHidden
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
+        <div className="keys-key-editor">
+          <label className="keys-key-editor-label" htmlFor="gateway-key-value">
+            <KeyOutlined /> {t('keys.modal_label')}
+          </label>
           <Input.Password
+            id="gateway-key-value"
             placeholder="sk-..."
             value={keyInput}
             onChange={(e) => setKeyInput(e.target.value)}
@@ -481,9 +493,25 @@ export const ApiKeysPage: React.FC = () => {
             className="config-mono-input"
             autoFocus
           />
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Text type="secondary" className="keys-key-editor-hint">{t('keys.modal_hint')}</Text>
+          <div className="keys-key-editor-actions">
             <Button size="small" type="dashed" onClick={handleGenerateKey}>
               {t('cfg.api_keys_generate')}
+            </Button>
+            <Button
+              size="small"
+              icon={<CopyOutlined />}
+              disabled={!keyInput.trim()}
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(keyInput.trim());
+                  message.success(t('cfg.source_copy_success'));
+                } catch {
+                  message.error(t('cfg.copy_failed'));
+                }
+              }}
+            >
+              {t('cfg.api_keys_copy')}
             </Button>
           </div>
         </div>

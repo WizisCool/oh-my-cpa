@@ -1,0 +1,64 @@
+.drawer-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.identity-alert {
+  margin-top: 12px;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+}
+
+.field-grid-wide {
+  grid-column: 1 / -1;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.models-scroll {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.switch-field {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 32px;
+}
+
+.switch-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.switch-hint {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+@media (max-width: 720px) {
+  .field-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

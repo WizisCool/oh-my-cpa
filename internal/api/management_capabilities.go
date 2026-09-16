@@ -31,6 +31,7 @@ var capabilityCheckCatalog = map[string][]capabilityEndpointCheck{
 	},
 	"oauth": {
 		{Name: "oauth_excluded_models", Endpoint: "/oauth-excluded-models"},
+		{Name: "oauth_model_alias", Endpoint: "/oauth-model-alias"},
 		{Name: "auth_status", Endpoint: "/get-auth-status"},
 	},
 	"quota": {

@@ -28,7 +28,7 @@ func (f *capFixtureCPA) serve(writer http.ResponseWriter, request *http.Request)
 	}
 
 	switch path {
-	case "/config", "/config.yaml", "/api-keys", "/plugins", "/plugin-store", "/latest-version", "/auth-files", "/codex-api-key", "/openai-compatibility", "/claude-api-key", "/gemini-api-key", "/oauth-excluded-models", "/get-auth-status":
+	case "/config", "/config.yaml", "/api-keys", "/plugins", "/plugin-store", "/latest-version", "/auth-files", "/codex-api-key", "/openai-compatibility", "/claude-api-key", "/gemini-api-key", "/oauth-excluded-models", "/oauth-model-alias", "/get-auth-status":
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = writer.Write([]byte(`{"status":"ok"}`))
 	default:

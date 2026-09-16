@@ -44,7 +44,7 @@ Oh My CPA 是面向 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 
 - **用量趋势仪表盘**：按相对预设窗口（15m / 1h / 6h / 24h / 7d / 30d / 90d）或自定义日历区间展示请求量、Token 吞吐、缓存命中率与估算费用，并提供全年贡献图式 Token 热力图，按天展示 Token 用量；点击某天可查看当日请求次数与 Token 用量，并跳转到当天的请求记录。
 - **模型级用量面板**：Token 趋势与模型用量环形图按调用点（模型别名）或上游模型两种口径统计，展示 Top 5 模型/调用点的分组费用与占比；口径选择作为控制台偏好随部署持久化。
 - **Token 计量单位切换**：全局统一切换数字缩写风格（英文 K/M/B 或中文万/亿），适用于仪表盘、其 Token 活动提示、请求记录与详情抽屉；缩写值始终保留精确数值。
-- **OMC 设置中心**：随部署存储的 Token 计量单位，与仅存于本机浏览器的主题、语言快捷切换聚合于一处；模型面板的统计口径留在其自身面板上。
+- **OMC 设置中心**：随部署存储的 Token 计量单位，与 6 套可视主题（OMC Dark/Light、Midnight、Porcelain、Forest、Sandstone）及语言快捷切换聚合于一处；模型面板的统计口径留在其自身面板上。
 - **多维分面请求浏览器**：按模型、Provider、客户端 Key 别名、状态、费用及延迟进行多选分面筛选与全文搜索。
 - **单请求详情与延迟分析**：展示总耗时、首字生成延迟（TTFT）、分项 Token 计数，并支持下载单请求原始日志。
 - **流式采集与后台拉取**：基于 RESP 订阅或 HTTP 轮询采集用量事件，队列空闲时自动指数退避。
@@ -130,6 +130,8 @@ pnpm dev
 > 现阶段推荐通过源码或编译后的二进制运行。仓库中提供了早期预览 Compose 模板：
 > - [`deploy/compose.full.yml`](deploy/compose.full.yml)：协同部署 CPA、Oh My CPA 与 Caddy 的完整栈。
 > - [`deploy/compose.omc.yml`](deploy/compose.omc.yml)：连接已有 CPA 实例的独立 Oh My CPA 容器。
+>
+> 完整栈默认固定 CPA `v7.3.4`；如需连接其他兼容版本，可通过 `CPA_IMAGE` 覆盖。
 
 ## 运维须知
 

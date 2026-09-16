@@ -36,6 +36,7 @@ type cpaRecorder struct {
 
 func (r *cpaRecorder) record(request *http.Request) {
 	body, _ := io.ReadAll(request.Body)
+	request.Body = io.NopCloser(bytes.NewReader(body))
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.requests = append(r.requests, recordedCPARequest{
@@ -170,6 +171,19 @@ func TestManagementAuthFilesFacadeProjectsAndForwards(t *testing.T) {
 	"priority":5,"weight":3,"note":"primary","created_at":"2026-01-01T00:00:00Z","updated_at":1767225600,"last_refresh":null,
 	"path":"/var/cpa/secrets/claude.json","account":"REFRESH_TOKEN_SECRET","metadata":{"refresh_token":"REFRESH_TOKEN_SECRET"}},
 	{"name":"a-missing.json","provider":"gemini","status":"failed","runtime_only":true}]}`
+	runtimePriority := 5
+	runtimeWeight := 3
+	runtimeNote := "primary"
+	safeFields := map[string]any{
+		"type":            "claude",
+		"prefix":          "team-a",
+		"proxy_url":       "",
+		"expired":         "2027-01-02T03:04:05Z",
+		"disable_cooling": true,
+		"websockets":      false,
+		"using_api":       false,
+		"excluded_models": []string{"old-model"},
+	}
 
 	handler := func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
@@ -177,12 +191,49 @@ func TestManagementAuthFilesFacadeProjectsAndForwards(t *testing.T) {
 		case request.URL.Path == "/v0/management/auth-files/models":
 			_, _ = writer.Write([]byte(`{"models":[{"id":"gemini-pro","display_name":"Gemini Pro"},{"id":"","display_name":"skip me"}]}`))
 		case request.URL.Path == "/v0/management/auth-files/download":
-			_, _ = writer.Write([]byte(`{"refresh_token":"` + refreshToken + `"}`))
+			payload := make(map[string]any, len(safeFields)+1)
+			for key, value := range safeFields {
+				payload[key] = value
+			}
+			payload["refresh_token"] = refreshToken
+			_ = json.NewEncoder(writer).Encode(payload)
 		case request.URL.Path == "/v0/management/auth-files/status",
 			request.URL.Path == "/v0/management/auth-files/fields":
+			if request.URL.Path == "/v0/management/auth-files/fields" {
+				var forwarded map[string]any
+				if err := json.NewDecoder(request.Body).Decode(&forwarded); err != nil {
+					t.Fatalf("decode fields patch: %v", err)
+				}
+				if value, ok := forwarded["priority"].(float64); ok {
+					runtimePriority = int(value)
+				}
+				if value, ok := forwarded["weight"].(float64); ok {
+					runtimeWeight = int(value)
+				}
+				if value, ok := forwarded["note"].(string); ok {
+					runtimeNote = value
+				}
+				for _, key := range []string{"prefix", "proxy_url", "expired", "disable_cooling", "websockets", "using_api", "excluded_models"} {
+					if value, ok := forwarded[key]; ok {
+						safeFields[key] = value
+					}
+				}
+			}
 			_, _ = writer.Write([]byte(`{"status":"success"}`))
 		case request.URL.Path == "/v0/management/auth-files" && request.Method == http.MethodGet:
-			_, _ = writer.Write([]byte(filesFixture))
+			var response managementAuthFilesResponse
+			if err := json.Unmarshal([]byte(filesFixture), &response); err != nil {
+				t.Fatal(err)
+			}
+			for index := range response.Files {
+				if response.Files[index].Name != "claude.json" {
+					continue
+				}
+				response.Files[index].Priority = runtimePriority
+				response.Files[index].Weight = int64(runtimeWeight)
+				response.Files[index].Note = runtimeNote
+			}
+			_ = json.NewEncoder(writer).Encode(response)
 		case request.URL.Path == "/v0/management/auth-files" && request.Method == http.MethodDelete:
 			_, _ = writer.Write([]byte(`{"status":"ok","deleted":2,"files":["claude.json","second.json"]}`))
 		default:
@@ -265,7 +316,7 @@ func TestManagementAuthFilesFacadeProjectsAndForwards(t *testing.T) {
 		t.Fatalf("forwarded status body = %#v", forwardedStatus)
 	}
 
-	response, raw = doJSON(t, client, http.MethodPatch, base+"/fields", `{"name":"claude.json","priority":10,"websockets":false,"note":"renamed","excluded_models":["x"],"proxy_url":"","using-api":true}`)
+	response, raw = doJSON(t, client, http.MethodPatch, base+"/fields", `{"name":"claude.json","priority":10,"websockets":false,"note":"renamed","excluded_models":["x"],"proxy_url":"","using-api":true,"expired":"2028-02-03T04:05:06Z"}`)
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("fields patch = %d body = %s", response.StatusCode, raw)
 	}
@@ -281,6 +332,42 @@ func TestManagementAuthFilesFacadeProjectsAndForwards(t *testing.T) {
 	}
 	if forwardedFields["using_api"] != true {
 		t.Fatalf("using_api alias = %#v", forwardedFields["using_api"])
+	}
+	for _, secret := range []string{refreshToken, "REFRESH_TOKEN_SECRET", "/var/cpa"} {
+		if strings.Contains(string(raw), secret) {
+			t.Fatalf("fields patch leaked %q: %s", secret, raw)
+		}
+	}
+	var mutation struct {
+		Status string                       `json:"status"`
+		File   managementAuthFileResponse   `json:"file"`
+		Fields managementAuthFileSafeFields `json:"fields"`
+	}
+	if err := json.Unmarshal(raw, &mutation); err != nil {
+		t.Fatal(err)
+	}
+	if mutation.Status != "ok" || mutation.File.Priority != 10 || mutation.File.Note != "renamed" {
+		t.Fatalf("field update was not read back from CPA: %s", raw)
+	}
+	if mutation.Fields.UsingAPI != true || mutation.Fields.Expired != "2028-02-03T04:05:06Z" || !equalStringSlices(mutation.Fields.ExcludedModels, []string{"x"}) {
+		t.Fatalf("safe fields were not read back from CPA: %#v", mutation.Fields)
+	}
+
+	response, raw = doJSON(t, client, http.MethodGet, base+"/safe-fields?name=claude.json&auth_index=idx-1", "")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("safe fields status = %d body = %s", response.StatusCode, raw)
+	}
+	for _, secret := range []string{refreshToken, "REFRESH_TOKEN_SECRET", "/var/cpa"} {
+		if strings.Contains(string(raw), secret) {
+			t.Fatalf("safe fields leaked %q: %s", secret, raw)
+		}
+	}
+	var safe managementAuthFileSafeFields
+	if err := json.Unmarshal(raw, &safe); err != nil {
+		t.Fatal(err)
+	}
+	if safe.Name != "claude.json" || safe.UsingAPI != true || safe.Expired != "2028-02-03T04:05:06Z" || !equalStringSlices(safe.ExcludedModels, []string{"x"}) {
+		t.Fatalf("safe fields response = %#v", safe)
 	}
 
 	response, raw = doJSON(t, client, http.MethodPost, base+"?name=uploaded.json", `{"type":"gemini","token":"secret-token"}`)
@@ -384,6 +471,27 @@ func TestManagementAuthFilesFacadeProjectsAndForwards(t *testing.T) {
 	}
 	if !strings.Contains(string(raw), "gemini-pro") || strings.Contains(string(raw), "skip me") {
 		t.Fatalf("models projection = %s", raw)
+	}
+}
+
+func TestManagementAuthFileFieldsPatchRequiresReadback(t *testing.T) {
+	handler := func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		if request.Method == http.MethodPatch && request.URL.Path == "/v0/management/auth-files/fields" {
+			_, _ = writer.Write([]byte(`{"status":"ok"}`))
+			return
+		}
+		_, _ = writer.Write([]byte(`{"files":[{"id":"test.json","name":"test.json","auth_index":"idx-1","provider":"codex","priority":1,"weight":1}]}`))
+	}
+	client, baseURL, _ := startAuthFilesTestServer(t, "management-secret-value", handler)
+	response, raw := doJSON(t, client, http.MethodPatch,
+		baseURL+"/omc/api/v1/management/auth-files/fields",
+		`{"name":"test.json","auth_index":"idx-1","priority":9}`)
+	if response.StatusCode != http.StatusBadGateway {
+		t.Fatalf("unverified patch status = %d body = %s", response.StatusCode, raw)
+	}
+	if !strings.Contains(string(raw), "priority") {
+		t.Fatalf("unverified patch did not identify the field: %s", raw)
 	}
 }
 
