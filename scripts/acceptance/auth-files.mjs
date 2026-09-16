@@ -184,6 +184,7 @@ export async function runAuthFilesAcceptance({
     await saveDrawer.waitFor({ state: 'visible', timeout: 5000 });
     await saveDrawer.locator('#priority').fill('42');
     await saveDrawer.locator('#weight').fill('7');
+    await saveDrawer.locator('#expired').fill('2028-04-05T06:07:08Z');
     await saveDrawer.locator('button').filter({ hasText: /保存|Save/i }).first().click();
     await page.locator('.ant-drawer-open').waitFor({ state: 'hidden', timeout: 5000 });
     await checkEventually(
@@ -195,6 +196,7 @@ export async function runAuthFilesAcceptance({
     await saveDrawer.waitFor({ state: 'visible', timeout: 5000 });
     check('auth-files reopened drawer shows persisted priority', (await saveDrawer.locator('#priority').inputValue()) === '42');
     check('auth-files reopened drawer shows persisted weight', (await saveDrawer.locator('#weight').inputValue()) === '7');
+    check('auth-files reopened drawer shows persisted expiry', (await saveDrawer.locator('#expired').inputValue()) === '2028-04-05T06:07:08Z');
     await saveDrawer.locator('.ant-drawer-close').click();
     await page.locator('.ant-drawer-open').waitFor({ state: 'hidden', timeout: 5000 });
 

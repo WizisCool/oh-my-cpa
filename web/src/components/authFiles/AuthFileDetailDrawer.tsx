@@ -51,6 +51,7 @@ interface FormValues {
   note?: string;
   prefix?: string;
   proxy_url?: string;
+  expired?: string;
   disable_cooling?: boolean;
   websockets?: boolean;
   using_api?: boolean;
@@ -87,6 +88,7 @@ function formValues(
     note: safeFields?.note ?? file.note ?? '',
     prefix: safeFields?.prefix ?? '',
     proxy_url: safeFields?.proxy_url ?? '',
+    expired: safeFields?.expired ?? '',
     disable_cooling: safeFields?.disable_cooling ?? false,
     websockets: safeFields?.websockets ?? false,
     using_api: safeFields?.using_api ?? false,
@@ -100,6 +102,7 @@ function sameFormValues(left: FormValues, right: FormValues): boolean {
     && (left.note ?? '') === (right.note ?? '')
     && (left.prefix ?? '') === (right.prefix ?? '')
     && (left.proxy_url ?? '') === (right.proxy_url ?? '')
+    && (left.expired ?? '') === (right.expired ?? '')
     && Boolean(left.disable_cooling) === Boolean(right.disable_cooling)
     && Boolean(left.websockets) === Boolean(right.websockets)
     && Boolean(left.using_api) === Boolean(right.using_api)
@@ -261,6 +264,9 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
     }
     if ((values.proxy_url || '') !== (baseline.proxy_url || '')) {
       patch.proxy_url = values.proxy_url || '';
+    }
+    if ((values.expired || '') !== (baseline.expired || '')) {
+      patch.expired = values.expired || '';
     }
     if (Boolean(values.disable_cooling) !== Boolean(baseline.disable_cooling)) {
       patch.disable_cooling = Boolean(values.disable_cooling);
@@ -460,6 +466,14 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                 </Form.Item>
                 <Form.Item name="proxy_url" label={t('af.field_proxy_url')}>
                   <Input allowClear maxLength={4096} disabled={!safeFieldsReady} />
+                </Form.Item>
+
+                <Form.Item
+                  name="expired"
+                  label={t('af.field_expired')}
+                  extra={t('af.field_expired_hint')}
+                >
+                  <Input allowClear maxLength={4096} disabled={!safeFieldsReady} placeholder="2027-01-02T03:04:05Z" />
                 </Form.Item>
 
                 <Form.Item

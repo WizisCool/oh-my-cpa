@@ -85,6 +85,7 @@ type managementAuthFileSafeFields struct {
 	Weight         *int64   `json:"weight,omitempty"`
 	Prefix         string   `json:"prefix,omitempty"`
 	ProxyURL       string   `json:"proxy_url,omitempty"`
+	Expired        string   `json:"expired,omitempty"`
 	DisableCooling bool     `json:"disable_cooling"`
 	Websockets     bool     `json:"websockets"`
 	UsingAPI       bool     `json:"using_api"`
@@ -260,7 +261,7 @@ func (h *Handler) patchManagementAuthFileFields(writer http.ResponseWriter, requ
 func managementAuthFileNeedsSafeReadback(fields map[string]any) bool {
 	for key := range fields {
 		switch key {
-		case "prefix", "proxy_url", "disable_cooling", "websockets", "using_api", "excluded_models":
+		case "prefix", "proxy_url", "expired", "disable_cooling", "websockets", "using_api", "excluded_models":
 			return true
 		}
 	}
@@ -359,6 +360,7 @@ func projectManagementAuthFileSafeFields(name string, data []byte) (managementAu
 	}
 	fields.Prefix = boundedText(stringValue(source["prefix"]), managementAuthFileFieldLimit)
 	fields.ProxyURL = boundedText(stringValue(source["proxy_url"]), managementAuthFileFieldLimit)
+	fields.Expired = boundedText(stringValue(source["expired"]), managementAuthFileFieldLimit)
 	fields.Note = boundedText(stringValue(source["note"]), managementAuthFileFieldLimit)
 	fields.DisableCooling = firstBool(source, "disable_cooling", "disable-cooling")
 	fields.Websockets = boolValue(source["websockets"])
@@ -377,6 +379,10 @@ func managementAuthFileFieldMismatch(requested map[string]any, file management.A
 		case "proxy_url":
 			if stringValue(raw) != safe.ProxyURL {
 				return "proxy_url"
+			}
+		case "expired":
+			if stringValue(raw) != safe.Expired {
+				return "expired"
 			}
 		case "disable_cooling":
 			if boolValue(raw) != safe.DisableCooling {

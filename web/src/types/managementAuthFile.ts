@@ -64,6 +64,7 @@ export interface ManagementAuthFileSafeFields {
   weight?: number;
   prefix?: string;
   proxy_url?: string;
+  expired?: string;
   disable_cooling: boolean;
   websockets: boolean;
   using_api: boolean;

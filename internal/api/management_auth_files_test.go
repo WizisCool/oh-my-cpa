@@ -178,6 +178,7 @@ func TestManagementAuthFilesFacadeProjectsAndForwards(t *testing.T) {
 		"type":            "claude",
 		"prefix":          "team-a",
 		"proxy_url":       "",
+		"expired":         "2027-01-02T03:04:05Z",
 		"disable_cooling": true,
 		"websockets":      false,
 		"using_api":       false,
@@ -212,7 +213,7 @@ func TestManagementAuthFilesFacadeProjectsAndForwards(t *testing.T) {
 				if value, ok := forwarded["note"].(string); ok {
 					runtimeNote = value
 				}
-				for _, key := range []string{"prefix", "proxy_url", "disable_cooling", "websockets", "using_api", "excluded_models"} {
+				for _, key := range []string{"prefix", "proxy_url", "expired", "disable_cooling", "websockets", "using_api", "excluded_models"} {
 					if value, ok := forwarded[key]; ok {
 						safeFields[key] = value
 					}
@@ -315,7 +316,7 @@ func TestManagementAuthFilesFacadeProjectsAndForwards(t *testing.T) {
 		t.Fatalf("forwarded status body = %#v", forwardedStatus)
 	}
 
-	response, raw = doJSON(t, client, http.MethodPatch, base+"/fields", `{"name":"claude.json","priority":10,"websockets":false,"note":"renamed","excluded_models":["x"],"proxy_url":"","using-api":true}`)
+	response, raw = doJSON(t, client, http.MethodPatch, base+"/fields", `{"name":"claude.json","priority":10,"websockets":false,"note":"renamed","excluded_models":["x"],"proxy_url":"","using-api":true,"expired":"2028-02-03T04:05:06Z"}`)
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("fields patch = %d body = %s", response.StatusCode, raw)
 	}
@@ -348,7 +349,7 @@ func TestManagementAuthFilesFacadeProjectsAndForwards(t *testing.T) {
 	if mutation.Status != "ok" || mutation.File.Priority != 10 || mutation.File.Note != "renamed" {
 		t.Fatalf("field update was not read back from CPA: %s", raw)
 	}
-	if mutation.Fields.UsingAPI != true || !equalStringSlices(mutation.Fields.ExcludedModels, []string{"x"}) {
+	if mutation.Fields.UsingAPI != true || mutation.Fields.Expired != "2028-02-03T04:05:06Z" || !equalStringSlices(mutation.Fields.ExcludedModels, []string{"x"}) {
 		t.Fatalf("safe fields were not read back from CPA: %#v", mutation.Fields)
 	}
 
@@ -365,7 +366,7 @@ func TestManagementAuthFilesFacadeProjectsAndForwards(t *testing.T) {
 	if err := json.Unmarshal(raw, &safe); err != nil {
 		t.Fatal(err)
 	}
-	if safe.Name != "claude.json" || safe.UsingAPI != true || !equalStringSlices(safe.ExcludedModels, []string{"x"}) {
+	if safe.Name != "claude.json" || safe.UsingAPI != true || safe.Expired != "2028-02-03T04:05:06Z" || !equalStringSlices(safe.ExcludedModels, []string{"x"}) {
 		t.Fatalf("safe fields response = %#v", safe)
 	}
 

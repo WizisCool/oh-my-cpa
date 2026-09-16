@@ -115,6 +115,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
         disable_cooling: target.disable_cooling ?? false,
         websockets: target.websockets ?? false,
         using_api: target.using_api ?? false,
+        expired: target.expired ?? '',
         note: target.note ?? '',
         excluded_models: target.excluded_models ?? [],
       });
@@ -147,6 +148,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
         if (payload.websockets !== undefined) target.websockets = payload.websockets;
         if (payload.using_api !== undefined) target.using_api = payload.using_api;
         if (payload.excluded_models !== undefined) target.excluded_models = payload.excluded_models;
+        if (payload.expired !== undefined) target.expired = payload.expired;
       }
       json(response, 200, { status: 'ok' });
       return;

@@ -401,6 +401,8 @@ const DICT: Record<string, [string, string]> = {
   'af.model_name': ['显示名称', 'Display Name'],
   'af.field_prefix': ['路由前缀 (Prefix)', 'Prefix'],
   'af.field_proxy_url': ['代理地址 (Proxy URL)', 'Proxy URL'],
+  'af.field_expired': ['令牌过期时间', 'Token expiry'],
+  'af.field_expired_hint': ['按 CPA 凭据契约保存的时间字符串，通常为 RFC 3339；空值表示未设置。', 'The expiry string persisted by the CPA credential contract, usually RFC 3339; empty means unset.'],
   'af.field_disable_cooling': ['禁用冷却机制 (Disable Cooling)', 'Disable Cooling'],
   'af.field_websockets': ['WebSocket 传输 (WebSockets)', 'WebSockets'],
   'af.field_using_api': ['使用 API 模式 (Using API)', 'Using API'],
