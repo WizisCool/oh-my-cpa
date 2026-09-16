@@ -44,6 +44,9 @@
   --accent: #00a2fb;
   --accent-hover: #0077b8;
   --accent-active: #005d8f;
+  /* The label colour for a filled accent control, matching the presets' own `accentOn` token.
+     White in both fallback palettes; a preset whose accent fill is light carries a dark step. */
+  --accent-on: #ffffff;
   --success: #10b981;
   --warn: #f59e0b;
   --danger: #ef4444;
@@ -121,6 +124,7 @@
   --accent: #005d8f;
   --accent-hover: #004770;
   --accent-active: #00344f;
+  --accent-on: #ffffff;
   --border: #e5e5ea;
   --border-soft: #ededf2;
   --hover-inset: #ededf2;
@@ -170,7 +174,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
-::selection { background: var(--accent); color: #fff; }
+::selection { background: var(--accent); color: var(--accent-on); }
 button, input, textarea, select { font: inherit; }
 a { color: inherit; }
 
@@ -1791,7 +1795,7 @@ a { color: inherit; }
 .config-add-key-btn:hover {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff !important;
+  color: var(--accent-on) !important;
 }
 
 .config-key-box {
@@ -2109,7 +2113,7 @@ a { color: inherit; }
 .config-dirty-btn-save {
   background: var(--accent) !important;
   border-color: var(--accent) !important;
-  color: #fff !important;
+  color: var(--accent-on) !important;
   font-weight: 500;
 }
 

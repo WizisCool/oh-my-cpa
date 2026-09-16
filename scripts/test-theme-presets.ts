@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   THEME_IDS,
   THEME_PRESETS,
@@ -58,5 +59,32 @@ for (const preset of THEME_PRESETS) {
   assert.equal(antd.token?.colorBgBase, palette.bg);
   assert.equal(antd.token?.colorInfo, palette.accent);
 }
+
+// The label of a filled accent control. `accentHover` is what `colorPrimary` maps to, so it is the
+// fill a primary button actually paints; Ant Design would otherwise draw that fill's label in
+// `colorTextLightSolid` (white), which the accent ladder's own rule - "white label text sits on the
+// filled-control step" - only allows where white is the legible choice. Testing the pair, not just
+// the wiring, is what catches a preset whose fill is too light for any label.
+for (const preset of THEME_PRESETS) {
+  const { accentHover, accentOn } = preset.palette;
+  assert.equal(
+    createThemeConfig(preset.id).components?.Button?.primaryColor,
+    accentOn,
+    `${preset.id} draws the primary button label in its on-accent step`,
+  );
+  assert.ok(
+    contrast(accentOn, accentHover) >= 4.5,
+    `${preset.id} primary button label (${accentOn}) on the primary fill (${accentHover}) reads ${contrast(accentOn, accentHover).toFixed(2)}:1, want >= 4.5:1`,
+  );
+}
+
+// The stylesheet's own accent fills draw their label from the projected variable, so a preset whose
+// fill is light does not keep a hardcoded white label the palette cannot support.
+const indexCss = readFileSync(new URL('../web/src/index.css', import.meta.url), 'utf8');
+assert.match(
+  indexCss,
+  /::selection\s*\{[^}]*color:\s*var\(--accent-on\)/,
+  'the selection label follows the preset rather than a literal white',
+);
 
 console.log(`${THEME_PRESETS.length} theme presets passed contrast and registry checks.`);

@@ -5,6 +5,7 @@ colors:
   primary: "#0077b8"          # dark theme; light theme uses #004770
   primary-accent: "#00a2fb"   # dark theme; light theme uses #005d8f
   primary-active: "#005d8f"   # dark theme; light theme uses #00344f
+  primary-on: "#ffffff"       # label on a filled accent control; Forest uses a near-black step
   neutral-bg: "#121214"
   neutral-surface: "#1c1c1f"
   neutral-border: "#2c2c30"
@@ -280,7 +281,7 @@ The geometric form language is compact, rectangular, and tightly controlled:
 ### Buttons
 - **Shape**: 4px radius (`--radius-sm`).
 - **Sizes**: Standard 32px height (padding 0 15px); Small 28px height (antd `controlHeightSM`); Square 32×32px for row-level action icon buttons.
-- **Primary**: Deep accent fill (`#0077b8` dark, `#004770` light), white text, no shadow. Hover shifts one step deeper (`#005d8f` dark, `#00344f` light) with zero transition lag.
+- **Primary**: Deep accent fill (`#0077b8` dark, `#004770` light) with the palette's `accentOn` label step (white in both original palettes; Forest uses a near-black step because its fill is light), no shadow. Hover shifts one step deeper (`#005d8f` dark, `#00344f` light) with zero transition lag.
 - **Secondary / Default**: Surface fill (`#1c1c1f`), 1px border (`#2c2c30`), chalk white text.
 - **Ghost**: Transparent background, borderless, text color `#f4f4f6`, hover reveals `#1c1c1f`.
 

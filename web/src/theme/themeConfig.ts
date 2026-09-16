@@ -187,8 +187,8 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
       selected: '#253041',
       hoverInset: '#0d1117',
       accent: '#58a6ff',
-      accentHover: '#388bfd',
-      accentActive: '#1f6feb',
+      accentHover: '#1f6feb',
+      accentActive: '#1158c7',
       accentOn: '#ffffff',
       success: '#3fb950',
       warn: '#d29922',
@@ -453,6 +453,10 @@ export function createThemeConfig(themeId: ThemeId | ThemeMode | string = 'omc-d
         controlHeightSM: 28,
         fontSizeSM: 13,
         fontWeight: 500,
+        // The label of a filled primary control. Ant Design derives this token from
+        // `colorTextLightSolid`, which is white in every palette, so a preset whose
+        // accent fill is light would otherwise draw a white label on it.
+        primaryColor: t.accentOn,
         primaryShadow: 'none',
         defaultShadow: 'none',
         dangerShadow: 'none',
