@@ -175,7 +175,7 @@ Query for server state.
 | `types/` | Wire types, including `usageEventView.ts` (row projection and filters) and `usageEventViewActions.ts` (the view's URL and persistence rewrites) |
 | `hooks/` | `usePreference`, `useLastIntentQueue` (React binding) over `lastIntentQueue` (the framework-free controller) and `disposableSlot` (effect-scoped resource lifetime), `useLogTail`, `useVisibleNow` |
 | `i18n/index.tsx` | The `[zh, en]` dictionary and the `t()` context |
-| `theme/` | `themeConfig.ts` (antd tokens), `cacheScale.ts` (OKLCH cache ramp) |
+| `theme/` | `themeConfig.ts` (preset registry, antd tokens and CSS-variable projection), `ThemeContext.tsx` (single active preset), `cacheScale.ts` (OKLCH cache ramp) |
 | `utils/` | `maskKey.ts`, `externalUrl.ts` (the http/https link rule), `modelOptions.ts` (model-input filtering), `smoothScroll.ts` (the gesture/correction scroll schedule) |
 | `components/`, `pages/` | Feature UI; one page per route, no page owns another. `components/usage/` also carries that page's framework-free policies: `searchDebounce.ts`, `pollingPolicy.ts`, `timeRangePolicy.ts`, `syncPresentation.ts` and `chipDisplay.ts` |
 
@@ -484,7 +484,10 @@ the first page, so the console counts arrivals against an ingestion id
 (`?since=<row id>`) rather than diffing the rows it has loaded — which would report
 "nothing new" while records were flowing in. On a real instance **5415 of 5515**
 records sort below page one, so that distinction is the normal case, not an edge
-case.
+case. The list query closes its result set before issuing the count: with one
+SQLite connection, an open `Rows` can keep the count on the same WAL snapshot as
+the list, so a record committed between polls would remain invisible until a
+later transaction happened to replace it.
 
 Request *time* is also the windowing key (`timestamp_ms >= from AND <= to`) and the
 axis of every rollup and chart, so the list, the window and the charts all agree on

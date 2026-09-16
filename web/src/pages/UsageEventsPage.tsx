@@ -978,6 +978,19 @@ export const UsageEventsPage: React.FC = () => {
   const heldItemsRef = React.useRef<UsageEvent[] | null>(null);
   heldItemsRef.current = heldItems;
 
+  // A list can receive its first rows after the reader has already scrolled: the
+  // virtualizer fires one scroll event while the query is still resolving, so the
+  // event-time guard above sees no rows and never enters Hold. Once the rows
+  // arrive, the same position must still establish Hold or the next poll has no
+  // boundary to count against and the new-record pill never appears. Re-check on
+  // every successful row set, without replacing a Hold the reader already owns.
+  React.useEffect(() => {
+    if (latestItemsRef.current.length === 0) return;
+    if (heldItemsRef.current) return;
+    if (lastScrollTopRef.current <= HOLD_FROM_PX) return;
+    setHeldItems(latestItemsRef.current);
+  }, [latestItems]);
+
   // A different view, or a different page, starts following again.
   React.useEffect(() => {
     setHeldItems(null);
