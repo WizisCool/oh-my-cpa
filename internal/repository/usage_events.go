@@ -352,13 +352,7 @@ func (r *Repository) ListUsageEvents(ctx context.Context, filter UsageEventFilte
 	if err := rows.Err(); err != nil {
 		return page, fmt.Errorf("iterate usage events: %w", err)
 	}
-	// Release the read snapshot before issuing the arrival count. With one
-	// connection in WAL mode, an open Rows can keep the count on the same
-	// snapshot as the list query; a record committed by a concurrent writer
-	// after the list began would then never be visible to the live-tail count.
-	if err := rows.Close(); err != nil {
-		return page, fmt.Errorf("close usage events rows: %w", err)
-	}
+
 	if len(page.Items) > page.Limit {
 		page.Items = page.Items[:page.Limit]
 		page.HasMore = true
