@@ -39,6 +39,7 @@ const SUITES = [
   { name: 'chart marks', script: 'scripts/test-chart-marks.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'token heatmap', script: 'scripts/test-token-heatmap.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'token display', script: 'scripts/test-token-display.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
+  { name: 'theme presets', script: 'scripts/test-theme-presets.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
 ];
 
 /** Bounded so a small machine is not asked to schedule eleven parsers at once. */

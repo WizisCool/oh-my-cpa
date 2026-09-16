@@ -107,7 +107,7 @@
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 }
 
-:root[data-theme='light'] {
+:root[data-theme-mode='light'] {
   color-scheme: light;
   --bg: #ffffff;
   --surface: #f6f6f8;
@@ -2373,12 +2373,76 @@ a { color: inherit; }
    section lists over card wrappers for settings. All this adds is the spacing
    between the page's two groups. */
 .omc-settings-group { margin-bottom: 20px; }
+.theme-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  gap: 8px;
+  width: min(100%, 720px);
+}
+
+.theme-preset-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard);
+}
+
+.theme-preset-card:hover {
+  border-color: var(--muted);
+  background: var(--hover-inset);
+}
+
+.theme-preset-card.is-active {
+  border-color: var(--accent);
+  background: var(--selected-inset);
+}
+
+.theme-preset-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.theme-preset-preview {
+  display: grid;
+  width: 100%;
+  height: 34px;
+  grid-template-columns: 1.2fr 1fr 0.7fr 0.7fr;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+.theme-preset-preview > span {
+  display: block;
+  min-width: 0;
+}
+
+.theme-preset-name {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.theme-preset-desc {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
 /* The picker becomes a vertical list once the row stacks (see the page), and antd's `block` variant
    only sets `display: flex` - it does not stretch the root. Left as-is the list shrank to its widest
    label and sat in a narrow column beside empty space, so it is given the row's whole width here:
    the options are the row's content at this width, not a control beside a description. */
 @media (max-width: 900px) {
   .omc-settings-group .settings-toggle-control .ant-segmented { width: 100%; }
+  .theme-preset-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 /* The config panel's rows hand every control a fixed 380px column, which suits its own text inputs
    and switches. These are segmented pickers three or four items wide and measure 456px, so that
@@ -2390,4 +2454,7 @@ a { color: inherit; }
    space. */
 @media (min-width: 901px) {
   .omc-settings-group .settings-toggle-control { width: auto; }
+}
+@media (max-width: 560px) {
+  .theme-preset-grid { grid-template-columns: minmax(0, 1fr); }
 }

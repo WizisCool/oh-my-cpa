@@ -59,7 +59,7 @@ const { Text } = Typography;
 export const ConfigPage: React.FC = () => {
   const t = useT();
   const { message, modal } = AntdApp.useApp();
-  const { themeMode } = useThemeMode();
+  const { themeId } = useThemeMode();
   const queryClient = useQueryClient();
   const editorRef = useRef<YamlSourceEditorRef | null>(null);
 
@@ -1038,7 +1038,7 @@ export const ConfigPage: React.FC = () => {
                   }
                 }}
                 onSave={requestSaveConfirmation}
-                themeMode={themeMode}
+                themeId={themeId}
                 editorRef={editorRef}
                 loadingText={t('cfg.source_editor_loading')}
               />

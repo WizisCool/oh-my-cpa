@@ -133,7 +133,10 @@ matters, and the rest are deliberately shown as payload.
 
 `docs/design.md` is the single source of truth for brand color, typography,
 spacing, and the antd token mapping. `web/src/theme/themeConfig.ts` mirrors its
-palette in code; never hardcode colors in components.
+palette in code and registers every selectable preset (`omc-dark`, `omc-light`,
+`midnight`, `porcelain`, `forest`, `sandstone`). Each preset supplies the same
+theme source to Ant Design, CSS variables, charts, the heatmap and the brand
+artwork; never hardcode colors in components.
 
 ## Time windows
 

@@ -1,9 +1,8 @@
-import { palette, type ThemeMode } from '../theme/themeConfig';
+import type { ThemePalette } from '../theme/themeConfig';
 
 export type ChartTone = 'accent' | 'success' | 'warn' | 'danger' | 'neutral';
 
-export function sparkColor(mode: ThemeMode, tone: ChartTone): string {
-  const colors = palette[mode];
+export function sparkColor(colors: ThemePalette, tone: ChartTone): string {
   switch (tone) {
     case 'success':
       return colors.success;
@@ -46,15 +45,15 @@ export const SERIES_SLOTS = 6;
  * function that silently returns `undefined` past its end is a chart drawn in the wrong colour, and
  * that is worse than one drawn in a repeated colour.
  */
-export function seriesColor(mode: ThemeMode, index: number): string {
-  const slots = palette[mode].series;
+export function seriesColor(theme: ThemePalette, index: number): string {
+  const slots = theme.series;
   const slot = ((Math.trunc(index) % SERIES_SLOTS) + SERIES_SLOTS) % SERIES_SLOTS;
   return slots[slot];
 }
 
 /** The trend's plot floor and the usage ring's unfilled track. */
-export function seriesTrackColor(mode: ThemeMode): string {
-  return palette[mode].seriesTrack;
+export function seriesTrackColor(theme: ThemePalette): string {
+  return theme.seriesTrack;
 }
 
 /**
@@ -78,6 +77,6 @@ export function seriesDomainKey(entry: { folded: boolean; model: string }): stri
  * colours to cycle, so slot assignment is decided here - in one place, testable without a browser -
  * instead of being a library's internal ordering that could change under us.
  */
-export function seriesColorRange(mode: ThemeMode, entries: Array<{ folded: boolean; model: string }>): string[] {
-  return entries.map((_, index) => seriesColor(mode, index));
+export function seriesColorRange(theme: ThemePalette, entries: Array<{ folded: boolean; model: string }>): string[] {
+  return entries.map((_, index) => seriesColor(theme, index));
 }

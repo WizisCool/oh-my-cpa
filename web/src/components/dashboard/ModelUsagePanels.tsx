@@ -6,6 +6,7 @@ import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';
 import { seriesColor, seriesDomainKey } from '../../charts/chartTheme';
 import { useThemeMode } from '../../theme/ThemeContext';
+import type { ThemePalette } from '../../theme/themeConfig';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import {
   DASHBOARD_MODELS_QUERY_KEY,
@@ -62,7 +63,7 @@ export interface ModelUsagePanelsProps {
  */
 export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range, enabled }) => {
   const t = useT();
-  const { themeMode } = useThemeMode();
+  const { theme } = useThemeMode();
   const { modelView, setModelView, style: tokenStyle } = useTokenDisplayStyle();
   const sliding = isSlidingRange(range);
 
@@ -125,7 +126,7 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
                 action={<Button size="small" icon={<ReloadOutlined />} onClick={() => void refetch()}>{t('common.retry')}</Button>}
               />
             )}
-            <ModelLegend groups={groups} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} themeMode={themeMode} />
+            <ModelLegend groups={groups} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} theme={theme.palette} />
             {groups.length === 0 ? (
               <p className="empty-copy model-empty">{t('dash.models.empty')}</p>
             ) : (
@@ -182,7 +183,7 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
                     // second thing an operator reads a spend table for, and the share stays last
                     // where it continues the percentage column of the ring beside it.
                     <li className="model-usage-row" key={seriesDomainKey(group)}>
-                      <span className="model-usage-swatch" style={{ background: seriesColor(themeMode, index) }} aria-hidden="true" />
+                      <span className="model-usage-swatch" style={{ background: seriesColor(theme.palette, index) }} aria-hidden="true" />
                       <span className="model-usage-name" title={groupLabel(group, foldedLabel, unnamedLabel)}>
                         {groupLabel(group, foldedLabel, unnamedLabel)}
                       </span>
@@ -266,12 +267,12 @@ const ModelLegend: React.FC<{
   groups: DashboardModelUsage[];
   foldedLabel: string;
   unnamedLabel: string;
-  themeMode: 'dark' | 'light';
-}> = ({ groups, foldedLabel, unnamedLabel, themeMode }) => (
+  theme: ThemePalette;
+}> = ({ groups, foldedLabel, unnamedLabel, theme }) => (
   <ul className="model-legend">
     {groups.map((group, index) => (
       <li className="model-legend-item" key={seriesDomainKey(group)}>
-        <span className="model-legend-swatch" style={{ background: seriesColor(themeMode, index) }} aria-hidden="true" />
+        <span className="model-legend-swatch" style={{ background: seriesColor(theme, index) }} aria-hidden="true" />
         <span className="model-legend-label" title={groupLabel(group, foldedLabel, unnamedLabel)}>
           {groupLabel(group, foldedLabel, unnamedLabel)}
         </span>

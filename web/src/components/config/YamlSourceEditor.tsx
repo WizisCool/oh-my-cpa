@@ -11,7 +11,7 @@ import 'monaco-editor/esm/vs/editor/contrib/suggest/browser/suggestInlineComplet
 import { conf as yamlConf, language as yamlLanguage } from 'monaco-editor/esm/vs/languages/definitions/yaml/yaml.js';
 import { configureMonacoYaml, type MonacoYaml } from 'monaco-yaml';
 import { parseDocument } from 'yaml';
-import { palette } from '../../theme/themeConfig';
+import { THEME_PRESETS, type ThemeId, type ThemePalette } from '../../theme/themeConfig';
 
 // ── Configure Local Monaco Environment (Strict Offline / Zero CDN) ───────────
 if (typeof window !== 'undefined') {
@@ -62,11 +62,7 @@ function ensureMonacoConfigured() {
     });
   }
 
-  // Register OMC Themes with semantic non-status syntax palette
-  monaco.editor.defineTheme('omc-dark', {
-    base: 'vs-dark',
-    inherit: true,
-    rules: [
+  const darkRules = [
       { token: 'comment', foreground: '7F858A', fontStyle: 'italic' },
       { token: 'comment.yaml', foreground: '7F858A', fontStyle: 'italic' },
       { token: 'type', foreground: '79A8D8' }, // YAML Keys (host:, port:, etc.)
@@ -85,39 +81,8 @@ function ensureMonacoConfigured() {
       { token: 'tag', foreground: 'A890D0' },
       { token: 'namespace', foreground: 'A890D0' },
       { token: 'attribute.name', foreground: '79A8D8' },
-    ],
-    colors: {
-      'editor.background': palette.dark.bg,
-      'editor.foreground': palette.dark.fg,
-      'editorLineNumber.foreground': palette.dark.meta,
-      'editorLineNumber.activeForeground': palette.dark.fg,
-      'editor.lineHighlightBackground': palette.dark.surface,
-      'editor.selectionBackground': withAlpha(palette.dark.border, '80'),
-      'editorCursor.foreground': palette.dark.fg,
-      'editorWhitespace.foreground': palette.dark.border,
-      'editorIndentGuide.background': palette.dark.borderSoft,
-      'editorIndentGuide.activeBackground': palette.dark.border,
-      'editorGutter.background': palette.dark.bg,
-      'editorWidget.background': palette.dark.surface,
-      'editorWidget.border': palette.dark.border,
-      'input.background': palette.dark.bg,
-      'input.border': palette.dark.border,
-      'input.foreground': palette.dark.fg,
-      'minimap.background': palette.dark.bg,
-      'minimapSlider.background': withAlpha(palette.dark.meta, '40'),
-      'minimapSlider.hoverBackground': withAlpha(palette.dark.muted, '60'),
-      'minimapSlider.activeBackground': withAlpha(palette.dark.fg2, '80'),
-      'scrollbarSlider.background': withAlpha(palette.dark.meta, '40'),
-      'scrollbarSlider.hoverBackground': withAlpha(palette.dark.muted, '60'),
-      'scrollbarSlider.activeBackground': withAlpha(palette.dark.fg2, '80'),
-      'editorOverviewRuler.border': '#00000000',
-    },
-  });
-
-  monaco.editor.defineTheme('omc-light', {
-    base: 'vs',
-    inherit: true,
-    rules: [
+    ];
+  const lightRules = [
       { token: 'comment', foreground: '6E7378', fontStyle: 'italic' },
       { token: 'comment.yaml', foreground: '6E7378', fontStyle: 'italic' },
       { token: 'type', foreground: '185FA5' }, // YAML Keys in light mode
@@ -136,34 +101,44 @@ function ensureMonacoConfigured() {
       { token: 'tag', foreground: '6B4699' },
       { token: 'namespace', foreground: '6B4699' },
       { token: 'attribute.name', foreground: '185FA5' },
-    ],
-    colors: {
-      'editor.background': palette.light.surface,
-      'editor.foreground': palette.light.fg,
-      'editorLineNumber.foreground': palette.light.meta,
-      'editorLineNumber.activeForeground': palette.light.fg,
-      'editor.lineHighlightBackground': palette.light.bg,
-      'editor.selectionBackground': withAlpha(palette.light.border, '80'),
-      'editorCursor.foreground': palette.light.fg,
-      'editorWhitespace.foreground': palette.light.border,
-      'editorIndentGuide.background': palette.light.borderSoft,
-      'editorIndentGuide.activeBackground': palette.light.border,
-      'editorGutter.background': palette.light.surface,
-      'editorWidget.background': palette.light.surface,
-      'editorWidget.border': palette.light.border,
-      'input.background': palette.light.bg,
-      'input.border': palette.light.border,
-      'input.foreground': palette.light.fg,
-      'minimap.background': palette.light.surface,
-      'minimapSlider.background': withAlpha(palette.light.meta, '40'),
-      'minimapSlider.hoverBackground': withAlpha(palette.light.muted, '60'),
-      'minimapSlider.activeBackground': withAlpha(palette.light.fg2, '80'),
-      'scrollbarSlider.background': withAlpha(palette.light.meta, '40'),
-      'scrollbarSlider.hoverBackground': withAlpha(palette.light.muted, '60'),
-      'scrollbarSlider.activeBackground': withAlpha(palette.light.fg2, '80'),
-      'editorOverviewRuler.border': '#00000000',
-    },
-  });
+    ];
+  for (const preset of THEME_PRESETS) {
+    monaco.editor.defineTheme(preset.id, {
+      base: preset.mode === 'dark' ? 'vs-dark' : 'vs',
+      inherit: true,
+      rules: preset.mode === 'dark' ? darkRules : lightRules,
+      colors: monacoColors(preset.palette),
+    });
+  }
+}
+
+function monacoColors(palette: ThemePalette): Record<string, string> {
+  return {
+    'editor.background': palette.surface,
+    'editor.foreground': palette.fg,
+    'editorLineNumber.foreground': palette.meta,
+    'editorLineNumber.activeForeground': palette.fg,
+    'editor.lineHighlightBackground': palette.bg,
+    'editor.selectionBackground': withAlpha(palette.border, '80'),
+    'editorCursor.foreground': palette.fg,
+    'editorWhitespace.foreground': palette.border,
+    'editorIndentGuide.background': palette.borderSoft,
+    'editorIndentGuide.activeBackground': palette.border,
+    'editorGutter.background': palette.surface,
+    'editorWidget.background': palette.elevated,
+    'editorWidget.border': palette.border,
+    'input.background': palette.bg,
+    'input.border': palette.border,
+    'input.foreground': palette.fg,
+    'minimap.background': palette.surface,
+    'minimapSlider.background': withAlpha(palette.meta, '40'),
+    'minimapSlider.hoverBackground': withAlpha(palette.muted, '60'),
+    'minimapSlider.activeBackground': withAlpha(palette.fg2, '80'),
+    'scrollbarSlider.background': withAlpha(palette.meta, '40'),
+    'scrollbarSlider.hoverBackground': withAlpha(palette.muted, '60'),
+    'scrollbarSlider.activeBackground': withAlpha(palette.fg2, '80'),
+    'editorOverviewRuler.border': '#00000000',
+  };
 }
 
 ensureMonacoConfigured();
@@ -179,7 +154,7 @@ export interface YamlSourceEditorProps {
   onChange: (value: string) => void;
   loadingText: string;
   onSave?: () => void;
-  themeMode?: 'dark' | 'light';
+  themeId?: ThemeId;
   editorRef?: React.MutableRefObject<YamlSourceEditorRef | null>;
 }
 
@@ -188,14 +163,14 @@ export const YamlSourceEditor: React.FC<YamlSourceEditorProps> = ({
   onChange,
   loadingText,
   onSave,
-  themeMode = 'dark',
+  themeId = 'omc-dark',
   editorRef,
 }) => {
   const innerEditorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
 
-  const activeTheme = themeMode === 'light' ? 'omc-light' : 'omc-dark';
+  const activeTheme = themeId;
 
   const handleMount: OnMount = (editor) => {
     innerEditorRef.current = editor;

@@ -28,7 +28,7 @@ Mono as fallbacks), 4px radii, dense but breathable spacing.
 
 ## 2. Color palette
 
-### Dark (default)
+### OMC Dark (default)
 
 | Token | Value | antd mapping | Usage |
 | --- | --- | --- | --- |
@@ -47,7 +47,7 @@ Mono as fallbacks), 4px radii, dense but breathable spacing.
 | `--warn` | `#f59e0b` | `colorWarning` | Degraded / quota warning |
 | `--danger` | `#ef4444` | `colorError` | Failed / disabled / delete |
 
-### Light
+### OMC Light
 
 | Token | Value |
 | --- | --- |
@@ -59,6 +59,31 @@ Mono as fallbacks), 4px radii, dense but breathable spacing.
 | `--meta` | `#98989f` |
 | `--border` | `#e5e5ea` |
 | `--border-soft` | `#ededf2` |
+
+### Preset registry
+
+The two original palettes remain the exact OMC Dark and OMC Light presets. Four
+additional presets are registered in `web/src/theme/themeConfig.ts`:
+
+| Preset | Mode | Surface direction | Accent family |
+| --- | --- | --- | --- |
+| Midnight | dark | blue-black surfaces | cool blue |
+| Porcelain | light | white/blue-grey surfaces | blue-teal |
+| Forest | dark | deep green surfaces | vivid green |
+| Sandstone | light | warm sand surfaces | teal |
+
+Every preset declares `id`, `mode`, and one complete palette. The active preset
+is the only source for Ant Design's `ConfigProvider`, the CSS custom properties
+written to the document root, the categorical chart/ring series, and the token
+heatmap ramp. `web/src/index.css` keeps the original OMC palette as the
+pre-hydration fallback; `themePaletteCssVariables` supplies every preset's
+runtime values. `omc-theme` stores the preset id and also accepts the legacy
+`dark` and `light` values.
+
+The OMC Settings page presents the registry as named cards with a four-swatch
+preview. The appearance controls must not introduce a second palette source:
+new presets extend `themeConfig.ts`, and the registry and contrast checks in
+`scripts/test-theme-presets.ts` fail if a preset is incomplete or unreadable.
 
 ### Accent ladder
 
@@ -78,7 +103,7 @@ on a light page, and white-on-it also clears it. The bright `#00a2fb` reads **2.
 page and **2.78:1** under white text, so it can only ever be the dark theme's text colour.
 
 Brand artwork follows the same tokens: the wordmark's accent marks and its letterforms are drawn from
-`palette[mode]`, so a change here moves the logo with it — see `web/src/assets/brand/markup.ts`.
+the active preset's palette, so a change here moves the logo with it — see `web/src/assets/brand/markup.ts`.
 
 Success/warn/danger are identical in both modes.
 
@@ -695,8 +720,8 @@ Non-obvious decisions, keep these when editing:
   zero for the same reason — a lifted domain would float an empty window above its axis.
   The charting runtime is isolated in a separate `vendor-charts` chunk and loaded lazily
   (`React.lazy` dynamic `import()`) so only the dashboard route pays for it, keeping the
-  initial login shell compact. Theme tokens (`palette[mode]`) are bridged into the chart
-  config (`sparkColor(mode, tone)`), default library animations are explicitly disabled
+  initial login shell compact. The active preset's palette is bridged into the chart
+  config (`sparkColor(preset.palette, tone)`), default library animations are explicitly disabled
   (`animate: false`, per §7 rule 5), and the hover readout uses an app-owned HTML
   `.chart-tooltip` styled from CSS custom properties. That readout is a direct child of
   `.chart-slot`, so the slot's child sizing rule must exclude it

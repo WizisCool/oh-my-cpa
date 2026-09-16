@@ -1938,13 +1938,15 @@ try {
 
   // Mobile & Light mode view for Quota page
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
+  await page.evaluate(() => localStorage.setItem('omc-theme', 'omc-light'));
+  await page.reload({ waitUntil: 'domcontentloaded' });
   // The screenshot has to capture the applied theme, so the wait is for the paint
   // rather than for a flat pause.
   await settleLayout(page);
   await page.screenshot({ path: path.join(root, 'tmp', 'quota-mobile-light.png') });
   // Restore viewport and dark theme
-  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+  await page.evaluate(() => localStorage.setItem('omc-theme', 'omc-dark'));
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await page.setViewportSize({ width: 1440, height: 900 });
   await auditPage(page, responseBodies, '/logs', '.logs-page', { pageSecrets: providerSecrets });
   await auditPage(page, responseBodies, '/config', '.config-page');
@@ -2160,13 +2162,13 @@ try {
   ]);
 
   await page.goto(`${appURL}/dashboard`, { waitUntil: 'domcontentloaded' });
-  await page.evaluate(() => localStorage.setItem('omc-theme', 'light'));
+  await page.evaluate(() => localStorage.setItem('omc-theme', 'omc-light'));
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload({ waitUntil: 'domcontentloaded' });
   // The stored theme is applied during hydration. Waiting for it is the readiness
   // signal both checks below depend on, and it is stronger than a pause: a
   // half-hydrated page can show the dark theme with correct geometry.
-  await until(() => page.evaluate(() => document.documentElement.dataset.theme === 'light'), {
+  await until(() => page.evaluate(() => document.documentElement.dataset.theme === 'omc-light'), {
     label: 'the stored light theme to be applied after reload',
   });
   const mobileOverflow = await measureStable(
@@ -2174,7 +2176,7 @@ try {
     { page, label: 'the light-mode mobile overflow measurement' },
   );
   check('390px light view has no document overflow', mobileOverflow <= 1, `overflow=${mobileOverflow}`);
-  check('light theme is active', await page.evaluate(() => document.documentElement.dataset.theme === 'light'));
+  check('light theme is active', await page.evaluate(() => document.documentElement.dataset.theme === 'omc-light'));
 
   // ---- the brand mark follows the console's own theme ----
   // Checking the resolved source rather than the theme attribute: the two drawings are
@@ -2183,9 +2185,9 @@ try {
   // contradict the operating system.
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(`${appURL}/dashboard`, { waitUntil: 'domcontentloaded' });
-  await page.evaluate(() => localStorage.setItem('omc-theme', 'light'));
+  await page.evaluate(() => localStorage.setItem('omc-theme', 'omc-light'));
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await until(() => page.evaluate(() => document.documentElement.dataset.theme === 'light'), {
+  await until(() => page.evaluate(() => document.documentElement.dataset.theme === 'omc-light'), {
     label: 'the light theme before reading the brand mark',
   });
   const lightMark = await brandMarkState(page);
@@ -2201,9 +2203,9 @@ try {
     `mark=${lightMark.accent} token=${lightAccent}`,
   );
 
-  await page.evaluate(() => localStorage.setItem('omc-theme', 'dark'));
+  await page.evaluate(() => localStorage.setItem('omc-theme', 'omc-dark'));
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await until(() => page.evaluate(() => document.documentElement.dataset.theme === 'dark'), {
+  await until(() => page.evaluate(() => document.documentElement.dataset.theme === 'omc-dark'), {
     label: 'the dark theme before reading the brand mark',
   });
   const darkMark = await brandMarkState(page);
@@ -2257,7 +2259,7 @@ try {
     `markCentre=${collapsedBox ? collapsedBox.x + collapsedBox.width / 2 : null} railCentre=${railBox ? railBox.x + railBox.width / 2 : null}`,
   );
   await page.locator('.app-brand-collapsed').click();
-  await page.evaluate(() => localStorage.setItem('omc-theme', 'dark'));
+  await page.evaluate(() => localStorage.setItem('omc-theme', 'omc-dark'));
 
   // OAuth end-to-end against the deterministic fake: start a flow, confirm
   // the card polls `waiting`, submit a callback whose session already

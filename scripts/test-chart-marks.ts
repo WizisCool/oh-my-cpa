@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sparkColor, seriesColor, seriesDomainKey, seriesColorRange, SERIES_SLOTS } from '../web/src/charts/chartTheme.ts';
 import { formatModelShare, formatModelTokens } from '../web/src/types/dashboardModels.ts';
-import { palette } from '../web/src/theme/themeConfig.ts';
+import { palette, THEME_PRESETS, themePaletteCssVariables } from '../web/src/theme/themeConfig.ts';
 
 /**
  * The dashboard mark is drawn by AntV, so there is no app-owned geometry left to
@@ -15,21 +15,21 @@ import { palette } from '../web/src/theme/themeConfig.ts';
 const TONES = ['accent', 'success', 'warn', 'danger', 'neutral'] as const;
 
 for (const tone of TONES) {
-  for (const mode of ['dark', 'light'] as const) {
-    const value = sparkColor(mode, tone);
-    assert.match(value, /^#[0-9a-f]{6}$|^rgba?\(/, `${tone}/${mode} resolves to a colour token`);
+  for (const preset of THEME_PRESETS) {
+    const value = sparkColor(preset.palette, tone);
+    assert.match(value, /^#[0-9a-f]{6}$|^rgba?\(/, `${tone}/${preset.id} resolves to a colour token`);
   }
 }
 
 // The same tone must resolve per theme, not to one frozen literal: a chart that
 // ignores the active mode is the regression this guards.
-const darkAccent = sparkColor('dark', 'accent');
-const lightAccent = sparkColor('light', 'accent');
-const darkMuted = sparkColor('dark', 'neutral');
+const darkAccent = sparkColor(palette.dark, 'accent');
+const lightAccent = sparkColor(palette.light, 'accent');
+const darkMuted = sparkColor(palette.dark, 'neutral');
 
 // Distinct tones stay distinguishable, so a tile's identity colour actually
 // differs from its neighbour's and from the muted floor.
-const resolved = new Set(TONES.map((tone) => sparkColor('dark', tone)));
+const resolved = new Set(TONES.map((tone) => sparkColor(palette.dark, tone)));
 assert.equal(resolved.size, TONES.length, 'each tone resolves to a distinct token');
 
 // Neutral is the muted token, not an accent: the cache-rate and cost tiles rely
@@ -89,7 +89,7 @@ function labDistance(a: string, b: string): number {
 }
 
 for (const mode of MODES) {
-  const slots = [...Array(SERIES_SLOTS).keys()].map((index) => seriesColor(mode, index));
+  const slots = [...Array(SERIES_SLOTS).keys()].map((index) => seriesColor(mode === 'dark' ? palette.dark : palette.light, index));
   const card = mode === 'dark' ? palette.dark.surface : palette.light.surface;
 
   assert.equal(new Set(slots).size, SERIES_SLOTS, `${mode}: every series slot resolves to its own colour`);
@@ -125,8 +125,8 @@ for (const mode of MODES) {
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const indexCss = fs.readFileSync(path.join(rootDir, 'web/src/index.css'), 'utf8');
-const darkRootBlock = indexCss.slice(indexCss.indexOf(':root {'), indexCss.indexOf(":root[data-theme='light']"));
-const lightRootBlock = indexCss.slice(indexCss.indexOf(":root[data-theme='light']"));
+const darkRootBlock = indexCss.slice(indexCss.indexOf(':root {'), indexCss.indexOf(":root[data-theme-mode='light']"));
+const lightRootBlock = indexCss.slice(indexCss.indexOf(":root[data-theme-mode='light']"));
 
 for (let index = 0; index < SERIES_SLOTS; index += 1) {
   const tokenName = `--series-${index + 1}`;
@@ -151,8 +151,8 @@ for (let index = 0; index < SERIES_SLOTS; index += 1) {
 // light card (the vivid blue reads 2.7:1 there).
 for (let index = 0; index < SERIES_SLOTS; index += 1) {
   assert.notEqual(
-    seriesColor('dark', index),
-    seriesColor('light', index),
+    seriesColor(palette.dark, index),
+    seriesColor(palette.light, index),
     `series ${index} resolves per theme`,
   );
 }
@@ -160,8 +160,8 @@ for (let index = 0; index < SERIES_SLOTS; index += 1) {
 // The slot is taken modulo the palette size rather than clamped, so a seventh series folds back to the
 // first identity. Nothing asks for more than six today, but a colour function that returns `undefined`
 // past its end is a chart drawn in the wrong colour, which is worse than one drawn in a repeated one.
-assert.equal(seriesColor('dark', SERIES_SLOTS), seriesColor('dark', 0), 'the slot wraps');
-assert.equal(seriesColor('dark', -1), seriesColor('dark', SERIES_SLOTS - 1), 'a negative slot wraps backwards');
+assert.equal(seriesColor(palette.dark, SERIES_SLOTS), seriesColor(palette.dark, 0), 'the slot wraps');
+assert.equal(seriesColor(palette.dark, -1), seriesColor(palette.dark, SERIES_SLOTS - 1), 'a negative slot wraps backwards');
 
 // The domain key is a *key*, not the display label and not the array position. The ranking changes
 // between polls and the remainder is always last, so a colour bound to a position would follow a model
@@ -176,10 +176,17 @@ assert.notEqual(
   'a model named like the remainder stays distinct',
 );
 assert.deepEqual(
-  seriesColorRange('dark', [{ folded: false, model: 'a' }, { folded: true, model: '' }]),
-  [seriesColor('dark', 0), seriesColor('dark', 1)],
+  seriesColorRange(palette.dark, [{ folded: false, model: 'a' }, { folded: true, model: '' }]),
+  [seriesColor(palette.dark, 0), seriesColor(palette.dark, 1)],
   'the range is generated in the domain order',
 );
+
+for (const preset of THEME_PRESETS) {
+  const css = themePaletteCssVariables(preset);
+  for (let index = 0; index < SERIES_SLOTS; index += 1) {
+    assert.equal(css[`--series-${index + 1}`], preset.palette.series[index]);
+  }
+}
 
 // ── share formatting ──────────────────────────────────────────────────────
 //

@@ -156,7 +156,7 @@ Depth is achieved purely through 1px hairline borders and subtle tonal shifts be
 
 ## Colors
 
-The palette is anchored on warm charcoal darks with pure semantic status pigments and an OKLCH-interpolated continuous cache scale.
+The palette is anchored on warm charcoal darks with pure semantic status pigments and an OKLCH-interpolated continuous cache scale. Six complete presets are registered: OMC Dark, OMC Light, Midnight, Porcelain, Forest, and Sandstone. Each declares its mode and full palette; the resolver in `web/src/theme/themeConfig.ts` feeds Ant Design, CSS variables, charts, the heatmap, and the settings preview from that one registry. `omc-theme` stores the preset id and accepts the legacy `dark`/`light` values.
 
 ### Primary
 - **Deep Accent Blue** (`#0077b8` dark / `#004770` light): Used for filled primary action buttons and confirm controls. It provides a decisive focus point without overwhelming the dark theme.
@@ -314,7 +314,7 @@ The geometric form language is compact, rectangular, and tightly controlled:
 ## Do's and Don'ts
 
 ### Do:
-- **Do** import colors exclusively from `palette` or CSS variables (`var(--bg)`, `var(--surface)`, `var(--border)`).
+- **Do** import colors exclusively from the active theme preset or CSS variables (`var(--bg)`, `var(--surface)`, `var(--border)`); add a new preset here and in `themeConfig.ts` rather than introducing palette literals in a component.
 - **Do** pair every status indicator pip with explicit text labels so colorblind users can immediately identify states.
 - **Do** inherit monospaced font families across all components and enable `tabular-nums` for numeric telemetry.
 - **Do** pin motion durations to ≤ 100ms and animate only `opacity` and `transform`.

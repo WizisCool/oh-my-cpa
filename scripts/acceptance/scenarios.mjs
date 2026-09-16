@@ -2933,7 +2933,7 @@ export async function omcSettings({ base, page, check, context }) {
       // overflows a container whose own `scrollWidth` does not report it - the box stays
       // its assigned size and the child simply paints past it - so the measurement has to
       // be taken on the child against the row's own edge.
-      const picker = row.querySelector('.ant-segmented') ?? row.querySelector('.settings-toggle-control');
+      const picker = row.querySelector('.ant-segmented, .theme-preset-grid') ?? row.querySelector('.settings-toggle-control');
       const box = row.querySelector('.settings-toggle-control');
       const boxRect = box.getBoundingClientRect();
       const pickerRect = picker.getBoundingClientRect();
@@ -3145,12 +3145,59 @@ export async function omcSettings({ base, page, check, context }) {
     `tile=${JSON.stringify(storedChineseText)}`,
   );
 
+  // ── the preset registry drives palette, persistence and the header switch ──
+  // The theme control is no longer a two-value mode switch. Every preset must
+  // publish both a palette and a mode, survive a reload, and stay the same
+  // source the header shortcut changes.
+  await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
+  const themeCards = page.locator('.theme-preset-card');
+  check(
+    'the settings page exposes the full theme preset registry',
+    (await themeCards.count()) === 6,
+    `cards=${await themeCards.count()}`,
+  );
+  await page.locator('.theme-preset-card').filter({ hasText: /Midnight/ }).click();
+  await until(async () => (await page.locator('html').getAttribute('data-theme')) === 'midnight', {
+    label: 'the midnight preset to become active',
+  });
+  check(
+    'a dark preset persists its id and mode',
+    (await page.evaluate(() => ({ stored: localStorage.getItem('omc-theme'), mode: document.documentElement.dataset.themeMode }))).stored === 'midnight'
+      && (await page.locator('html').getAttribute('data-theme-mode')) === 'dark',
+  );
+  const midnightBg = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim());
+  check('a preset applies its palette through CSS variables', midnightBg === '#0d1117', `--bg=${midnightBg}`);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
+  check(
+    'the selected preset survives a reload',
+    (await page.locator('html').getAttribute('data-theme')) === 'midnight',
+  );
+
+  // The header shortcut and the settings page share one state source. Toggling
+  // from a custom dark preset resolves to the canonical light preset; returning
+  // to settings must show that same preset selected.
+  await page.locator('.app-header').getByRole('button', { name: /Theme|界面主题/ }).click();
+  await until(async () => (await page.locator('html').getAttribute('data-theme')) === 'omc-light', {
+    label: 'the header shortcut to select OMC Light',
+  });
+  check(
+    'the header shortcut writes the same theme state the settings registry reads',
+    (await page.locator('html').getAttribute('data-theme-mode')) === 'light'
+      && (await page.evaluate(() => localStorage.getItem('omc-theme'))) === 'omc-light',
+  );
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
+  check(
+    'the settings page reflects the header shortcut selection',
+    (await page.locator('.theme-preset-card.is-active').filter({ hasText: /OMC Light/ }).count()) === 1,
+  );
+
   // ── the appearance settings drive the live console ────────────────────────
   // Theme and language stay in the browser, and the page's controls must therefore drive the app
   // rather than a copy: switching the language re-renders this page's own copy, and it also makes
   // the Chinese scale selectable.
-  await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
-  await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
   const languageRow = page.locator('.omc-settings-page .settings-toggle-row').filter({ hasText: /Language|界面语言/ });
   await languageRow.locator('.ant-segmented-item').filter({ hasText: /Simplified Chinese|简体中文/ }).click();
   let becameChinese = false;
