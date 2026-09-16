@@ -117,3 +117,29 @@ func TestManagementAuthFilesPatchFieldsSuccess(t *testing.T) {
 		t.Fatalf("expected model gpt-4o, got %s", modelsRes.Models[0].ID)
 	}
 }
+
+func TestNormalizeManagementAuthFileRoutingFields(t *testing.T) {
+	for _, input := range []int64{-3, 0, 1} {
+		value, err := normalizeManagementAuthFileField("weight", json.Number(strconv.FormatInt(input, 10)))
+		if err != nil {
+			t.Fatalf("weight %d: %v", input, err)
+		}
+		want := input
+		if want < 0 {
+			want = 0
+		}
+		if got, errNumber := numberInt64(value); errNumber != nil || got != want {
+			t.Fatalf("weight %d normalized to %v, want %d", input, value, want)
+		}
+	}
+	if _, err := normalizeManagementAuthFileField("weight", json.Number("1000001")); err == nil {
+		t.Fatal("weight above the CPA maximum was accepted")
+	}
+	priority, err := normalizeManagementAuthFileField("priority", json.Number("-7"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, errNumber := numberInt64(priority); errNumber != nil || got != -7 {
+		t.Fatalf("priority normalized to %v, want -7", priority)
+	}
+}
