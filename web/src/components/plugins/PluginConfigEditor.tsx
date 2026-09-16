@@ -30,7 +30,9 @@ export const PluginConfigEditor: React.FC<PluginConfigEditorProps> = ({ value, o
     <div className={styles.editor}>
       <div className={styles.toolbar}>
         <div className={styles.validity}>
-          {parsed.error ? (
+          {parsed.error === 'duplicate-key' ? (
+            <Tag color="error">{t('plg.config_duplicate_key', { key: parsed.key ?? '' })}</Tag>
+          ) : parsed.error ? (
             <Tag color="error">{t('plg.config_invalid_json')}</Tag>
           ) : (
             <Tag color="success" icon={<CheckOutlined />}>{t('plg.config_valid')}</Tag>
@@ -42,7 +44,13 @@ export const PluginConfigEditor: React.FC<PluginConfigEditorProps> = ({ value, o
         </Button>
       </div>
 
-      {parsed.error && <Alert type="error" showIcon description={t('plg.config_json_desc')} />}
+      {parsed.error && (
+        <Alert
+          type="error"
+          showIcon
+          description={parsed.error === 'duplicate-key' ? t('plg.config_duplicate_key_desc') : t('plg.config_json_desc')}
+        />
+      )}
 
       <div className={styles.workspace}>
         <Input.TextArea

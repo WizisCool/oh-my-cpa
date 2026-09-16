@@ -1487,6 +1487,8 @@ const DICT: Record<string, [string, string]> = {
   'plg.config_json_desc': ['请输入符合该插件规范的 JSON 配置格式：', 'Enter JSON configuration according to plugin specifications:'],
   'plg.config_saved': ['插件配置已保存', 'Plugin configuration saved'],
   'plg.config_invalid_json': ['配置内容必须是合法的 JSON 对象', 'Configuration must be a valid JSON object'],
+  'plg.config_duplicate_key': ['存在重复键 {key}', 'Duplicate key {key}'],
+  'plg.config_duplicate_key_desc': ['同一个对象中每个键只能出现一次，请删除重复的键后重试。', 'Each key may appear only once in a JSON object. Remove the duplicate key and try again.'],
   'plg.config_valid': ['JSON 有效', 'Valid JSON'],
   'plg.config_format': ['格式化', 'Format'],
   'plg.config_preview': ['结构预览', 'Structure preview'],

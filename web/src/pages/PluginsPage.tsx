@@ -101,7 +101,9 @@ export const PluginsPage: React.FC = () => {
   const handleSaveConfig = () => {
     if (!configModalPlugin) return;
     if (!parsedConfig.value) {
-      message.error(t('plg.config_invalid_json'));
+      message.error(parsedConfig.error === 'duplicate-key'
+        ? t('plg.config_duplicate_key_desc')
+        : t('plg.config_invalid_json'));
       return;
     }
     configMutation.mutate({ id: configModalPlugin.id, config: parsedConfig.value });
