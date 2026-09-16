@@ -170,6 +170,14 @@ export async function runProvidersAcceptance({
     async () => (await providerSwitch.getAttribute('aria-checked')) === 'false',
     { detail: async () => `aria-checked=${await providerSwitch.getAttribute('aria-checked')}` },
   );
+  // The control turns over optimistically, so the rendered state settles before
+  // the PATCH is on the wire. Wait for the recorded write instead of reading the
+  // array immediately, or this check races the request it is about.
+  await checkEventually(
+    'the click produces exactly one recorded status write',
+    () => toggleWrites.length === 1,
+    { detail: () => JSON.stringify(toggleWrites) },
+  );
   check(
     'the toggle writes to the codex family at index 0 rather than the row id',
     toggleWrites.length === 1 &&
@@ -184,8 +192,8 @@ export async function runProvidersAcceptance({
   // silently lose that protection.
   check(
     'the toggle carries the identity of the provider it addresses',
-    toggleWrites[0].expected_auth_index === 'codex-e2e',
-    JSON.stringify(toggleWrites[0]),
+    toggleWrites[0]?.expected_auth_index === 'codex-e2e',
+    JSON.stringify(toggleWrites[0] ?? null),
   );
   await checkEventually(
     'the gateway itself holds the value the click asked for',

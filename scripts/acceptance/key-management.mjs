@@ -5,6 +5,27 @@
  * the key list, alias, draft-save and request-filter flow. The caller supplies
  * only the live browser handles and the fixture identities.
  */
+/**
+ * The stored identity behind an operator-assigned caller name.
+ *
+ * The applied filter must commit the fingerprint the usage records carry, and the
+ * name is a label the API resolves from that same fingerprint. Reading it out of a
+ * captured facet response is what makes the assertion exact: "not the alias" would
+ * still pass for a mask, a truncated identifier, or another key's fingerprint.
+ */
+function callerFingerprintFromResponses(responseBodies, alias) {
+  for (const body of responseBodies) {
+    if (!body.includes('"api_group_keys"')) continue;
+    let parsed;
+    try { parsed = JSON.parse(body); } catch { continue; }
+    const entries = parsed?.facets?.api_group_keys;
+    if (!Array.isArray(entries)) continue;
+    const match = entries.find((entry) => entry?.alias === alias);
+    if (typeof match?.value === 'string' && match.value) return match.value;
+  }
+  return undefined;
+}
+
 export async function runKeyManagementAcceptance({
   appURL,
   page,
@@ -149,10 +170,15 @@ export async function runKeyManagementAcceptance({
       { detail: () => `url=${new URL(page.url()).search}` },
     );
     const filteredUrl = new URL(page.url()).search;
+    const appliedCaller = new URL(page.url()).searchParams.get('api_key');
+    const expectedFingerprint = callerFingerprintFromResponses(responseBodies, clientKeyAlias);
     check(
       'the filter value is the stored fingerprint rather than the displayed name',
-      !filteredUrl.includes(encodeURIComponent(clientKeyAlias)),
-      `url=${filteredUrl}`,
+      expectedFingerprint !== undefined &&
+        appliedCaller === expectedFingerprint &&
+        appliedCaller !== clientKeySecret &&
+        !filteredUrl.includes(encodeURIComponent(clientKeyAlias)),
+      `url=${filteredUrl} fingerprint=${expectedFingerprint ?? 'not captured'}`,
     );
     // The chip names the key the way the list does, so the applied filter is
     // readable without decoding a fingerprint by hand.

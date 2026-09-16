@@ -37,8 +37,9 @@ than an oversight:
   `column alignment` covers track geometry, truncation and the responsive override;
   this was a second measurement of the same layout at one specific width.
 - **The 320px interactive sweep.** Redundant with the 390px and 768px overflow and
-  drawer checks in the acceptance suite; 320px is also below the narrowest viewport
-  the project targets.
+  drawer checks in the acceptance suite. 320px itself is still a supported width -
+  the settings picker and the auth-files viewport check both assert it - so what was
+  dropped is the sweep, not the viewport.
 - **`browser-performance.mjs` in full.** It asserted page-load timings against a dev
   server, which measures the mock and the machine rather than the product. It ran in
   no gate and its numbers were never a budget. The one timing claim that is a real
