@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Card,
   Table,
@@ -36,6 +36,7 @@ export const PluginsPage: React.FC = () => {
   const [configModalPlugin, setConfigModalPlugin] = useState<PluginItem | null>(null);
   const [configText, setConfigText] = useState<string>('');
   const [configBaseline, setConfigBaseline] = useState<string>('');
+  const parsedConfig = useMemo(() => parsePluginConfig(configText), [configText]);
 
   const {
     data: pluginsData,
@@ -101,12 +102,11 @@ export const PluginsPage: React.FC = () => {
 
   const handleSaveConfig = () => {
     if (!configModalPlugin) return;
-    const parsed = parsePluginConfig(configText);
-    if (!parsed.value) {
+    if (!parsedConfig.value) {
       message.error(t('plg.config_invalid_json'));
       return;
     }
-    configMutation.mutate({ id: configModalPlugin.id, config: parsed.value });
+    configMutation.mutate({ id: configModalPlugin.id, config: parsedConfig.value });
   };
 
   const handleCloseConfig = () => {
@@ -290,11 +290,11 @@ export const PluginsPage: React.FC = () => {
         onOk={handleSaveConfig}
         onCancel={handleCloseConfig}
         confirmLoading={configMutation.isPending}
-        okButtonProps={{ disabled: !parsePluginConfig(configText).value }}
+        okButtonProps={{ disabled: !parsedConfig.value }}
         okText={t('common.confirm')}
         cancelText={t('common.cancel')}
       >
-        <PluginConfigEditor value={configText} onChange={setConfigText} />
+        <PluginConfigEditor value={configText} onChange={setConfigText} pluginName={configModalPlugin?.name || ''} />
       </Modal>
     </div>
   );

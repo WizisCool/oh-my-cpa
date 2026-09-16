@@ -5,7 +5,7 @@ export interface PluginConfigParseResult {
 
 export function parsePluginConfig(text: string): PluginConfigParseResult {
   const trimmed = text.trim();
-  if (!trimmed) return { value: {} };
+  if (!trimmed) return { error: 'object-required' };
   try {
     const parsed: unknown = JSON.parse(trimmed);
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
@@ -22,10 +22,12 @@ export function pluginConfigSummary(value: Record<string, unknown>): Array<{ key
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, entry]) => ({
       key,
-      type: Array.isArray(entry)
-        ? `array[${entry.length}]`
-        : entry === null
-          ? 'null'
-          : typeof entry,
+      type: describeValue(entry),
     }));
+}
+
+function describeValue(value: unknown): string {
+  if (Array.isArray(value)) return `array[${value.length}]`;
+  if (value === null) return 'null';
+  return typeof value;
 }

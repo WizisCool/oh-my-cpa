@@ -36,7 +36,7 @@
   background: var(--bg);
 }
 
-.summaryTitle {
+.summary-title {
   margin-bottom: 8px;
   color: var(--muted);
   font-size: 11px;
@@ -45,7 +45,7 @@
   text-transform: uppercase;
 }
 
-.summaryList {
+.summary-list {
   display: flex;
   margin: 0;
   padding: 0;
@@ -54,7 +54,7 @@
   list-style: none;
 }
 
-.summaryList li {
+.summary-list li {
   display: flex;
   min-width: 0;
   align-items: baseline;
@@ -63,14 +63,14 @@
   font-size: 12px;
 }
 
-.summaryKey {
+.summary-key {
   overflow: hidden;
   color: var(--fg);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.summaryType {
+.summary-type {
   flex: 0 0 auto;
   color: var(--meta);
   font-family: var(--font-mono);

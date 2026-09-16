@@ -16,28 +16,27 @@ export async function runConfigurationPluginsAcceptance({
   await page.goto(`${appURL}/config`, { waitUntil: 'domcontentloaded' });
   await page.locator('.config-page').first().waitFor({ state: 'visible', timeout: 15000 });
   const payloadNav = page.locator('.config-nav-btn').filter({ hasText: /Payload/ });
-  if ((await payloadNav.count()) > 0) {
-    await payloadNav.first().click();
-    await page.locator('.payload-rules-container').first().waitFor({ state: 'visible', timeout: 10000 });
-    const payloadHeadingCount = await page.locator('.payload-builder-group .settings-group-title').count();
-    check(
-      'the Payload panel prints no second heading under the section header',
-      payloadHeadingCount === 0,
-      `duplicateHeadings=${payloadHeadingCount}`,
-    );
-    // Losing the head must not lose the capability: the rule builder is the whole
-    // point of the panel, and its five sections must still carry their own
-    // titles and explanations.
-    const payloadPanels = await page.locator('.payload-collapse .ant-collapse-item').count();
-    check('the Payload rule builder still renders its rule panels', payloadPanels >= 5, `panels=${payloadPanels}`);
-    const payloadTitles = await page.locator('.payload-panel-title').count();
-    const payloadDescs = await page.locator('.payload-panel-desc').count();
-    check(
-      'the Payload sections keep their own titles and descriptions',
-      payloadTitles >= 5 && payloadDescs >= 5,
-      `titles=${payloadTitles} descs=${payloadDescs}`,
-    );
-  }
+  await payloadNav.first().waitFor({ state: 'visible', timeout: 10000 });
+  await payloadNav.first().click();
+  await page.locator('.payload-rules-container').first().waitFor({ state: 'visible', timeout: 10000 });
+  const payloadHeadingCount = await page.locator('.payload-builder-group .settings-group-title').count();
+  check(
+    'the Payload panel prints no second heading under the section header',
+    payloadHeadingCount === 0,
+    `duplicateHeadings=${payloadHeadingCount}`,
+  );
+  // Losing the head must not lose the capability: the rule builder is the whole
+  // point of the panel, and its five sections must still carry their own
+  // titles and explanations.
+  const payloadPanels = await page.locator('.payload-collapse .ant-collapse-item').count();
+  check('the Payload rule builder still renders its rule panels', payloadPanels >= 5, `panels=${payloadPanels}`);
+  const payloadTitles = await page.locator('.payload-panel-title').count();
+  const payloadDescs = await page.locator('.payload-panel-desc').count();
+  check(
+    'the Payload sections keep their own titles and descriptions',
+    payloadTitles >= 5 && payloadDescs >= 5,
+    `titles=${payloadTitles} descs=${payloadDescs}`,
+  );
 
   // Config Page: Source tab switch requires reauthentication modal
   await page.goto(`${appURL}/config`, { waitUntil: 'domcontentloaded' });
@@ -92,6 +91,8 @@ export async function runConfigurationPluginsAcceptance({
   await pluginSource.fill('{invalid');
   check('invalid plugin JSON is reported before save', await pluginModal.getByText(/valid JSON object|合法的 JSON 对象/).isVisible());
   check('invalid plugin JSON disables save', await pluginModal.locator('.ant-btn-primary').isDisabled());
+  await pluginSource.fill('');
+  check('empty plugin config is not treated as an implicit clear', await pluginModal.getByText(/valid JSON object|合法的 JSON 对象/).isVisible() && await pluginModal.locator('.ant-btn-primary').isDisabled());
   await pluginSource.fill('{"level":"debug","enabled":true}');
   check('valid plugin JSON is reflected in the preview', (await pluginSummary.getByText('level', { exact: true }).count()) === 1 && (await pluginSummary.getByText('enabled', { exact: true }).count()) === 1);
   await pluginModal.locator('.ant-modal-footer .ant-btn-default').first().click();

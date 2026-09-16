@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { parsePluginConfig, pluginConfigSummary } from '../web/src/components/plugins/pluginConfig.ts';
 
-assert.deepEqual(parsePluginConfig(''), { value: {} });
+assert.equal(parsePluginConfig('').error, 'object-required');
 assert.deepEqual(parsePluginConfig('{"level":"info"}'), { value: { level: 'info' } });
 assert.equal(parsePluginConfig('[]').error, 'object-required');
 assert.equal(parsePluginConfig('null').error, 'object-required');

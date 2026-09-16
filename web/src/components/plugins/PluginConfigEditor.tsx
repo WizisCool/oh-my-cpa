@@ -10,9 +10,10 @@ const { Text } = Typography;
 export interface PluginConfigEditorProps {
   value: string;
   onChange: (value: string) => void;
+  pluginName: string;
 }
 
-export const PluginConfigEditor: React.FC<PluginConfigEditorProps> = ({ value, onChange }) => {
+export const PluginConfigEditor: React.FC<PluginConfigEditorProps> = ({ value, onChange, pluginName }) => {
   const t = useT();
   const parsed = React.useMemo(() => parsePluginConfig(value), [value]);
   const summary = React.useMemo(
@@ -50,19 +51,19 @@ export const PluginConfigEditor: React.FC<PluginConfigEditorProps> = ({ value, o
           onChange={(event) => onChange(event.target.value)}
           rows={12}
           spellCheck={false}
-          aria-label={t('plg.config_title', { name: '' })}
+          aria-label={t('plg.config_title', { name: pluginName })}
           className={styles.source}
         />
         <div className={styles.summary} data-plugin-config-summary aria-label={t('plg.config_preview')}>
-          <div className={styles.summaryTitle}>{t('plg.config_preview')}</div>
+          <div className={styles['summary-title']}>{t('plg.config_preview')}</div>
           {summary.length === 0 ? (
             <Text type="secondary">{t('plg.config_empty')}</Text>
           ) : (
-            <ul className={styles.summaryList}>
+            <ul className={styles['summary-list']}>
               {summary.map((entry) => (
                 <li key={entry.key}>
-                  <span className={styles.summaryKey}>{entry.key}</span>
-                  <span className={styles.summaryType}>{entry.type}</span>
+                  <span className={styles['summary-key']}>{entry.key}</span>
+                  <span className={styles['summary-type']}>{entry.type}</span>
                 </li>
               ))}
             </ul>
