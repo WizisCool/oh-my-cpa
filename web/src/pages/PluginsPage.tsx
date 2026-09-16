@@ -25,7 +25,7 @@ import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
 import type { PluginItem } from '../types/plugin';
 import { PluginConfigEditor } from '../components/plugins/PluginConfigEditor';
-import { parsePluginConfig } from '../components/plugins/pluginConfig';
+import { parsePluginConfig, pluginConfigsEqual } from '../components/plugins/pluginConfig';
 
 export const PluginsPage: React.FC = () => {
   const t = useT();
@@ -35,7 +35,6 @@ export const PluginsPage: React.FC = () => {
 
   const [configModalPlugin, setConfigModalPlugin] = useState<PluginItem | null>(null);
   const [configText, setConfigText] = useState<string>('');
-  const [configBaseline, setConfigBaseline] = useState<string>('');
   const parsedConfig = useMemo(() => parsePluginConfig(configText), [configText]);
 
   const {
@@ -97,7 +96,6 @@ export const PluginsPage: React.FC = () => {
     const text = JSON.stringify(plugin.config || {}, null, 2);
     setConfigModalPlugin(plugin);
     setConfigText(text);
-    setConfigBaseline(text);
   };
 
   const handleSaveConfig = () => {
@@ -110,7 +108,7 @@ export const PluginsPage: React.FC = () => {
   };
 
   const handleCloseConfig = () => {
-    if (configText === configBaseline) {
+    if (!configModalPlugin || pluginConfigsEqual(parsedConfig.value, configModalPlugin.config ?? {})) {
       setConfigModalPlugin(null);
       return;
     }

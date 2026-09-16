@@ -26,6 +26,22 @@ export function pluginConfigSummary(value: Record<string, unknown>): Array<{ key
     }));
 }
 
+export function pluginConfigsEqual(left: unknown, right: unknown): boolean {
+  return stableSerialize(left) === stableSerialize(right);
+}
+
+function stableSerialize(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableSerialize).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableSerialize(record[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
 function describeValue(value: unknown): string {
   if (Array.isArray(value)) return `array[${value.length}]`;
   if (value === null) return 'null';
