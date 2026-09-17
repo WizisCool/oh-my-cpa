@@ -3654,10 +3654,11 @@ export async function omcSettings({ base, page, check, context }) {
    * the assertion, so the wait has to be on the geometry: stacked, the options share one left edge;
    * in a row, each has its own.
    *
-   * Scoped to the unit-style picker by its own label rather than to every picker on the page. Only
-   * that one is given `vertical={isNarrow}` - the theme and language pickers are two options wide and
-   * stay horizontal at every width - so a page-wide "all options share an edge" condition would wait
-   * for a state the page never reaches, which is a hang rather than a fix. The label is the same
+   * Scoped to the picker under assertion by its own label rather than to every segmented control on
+   * the page. The claim is about this picker's shape, and the page carries a second segmented control
+   * whose shape it does not state: a page-wide "all options share an edge" condition would be
+   * asserting the language row's layout from the unit-style check, and would wait for a state the
+   * page never reaches wherever the two disagree - a hang rather than a fix. The label is the same
    * bilingual pair this scenario's row locator uses, so a console in either reading language resolves
    * it.
    *
@@ -3703,6 +3704,33 @@ export async function omcSettings({ base, page, check, context }) {
     'every settings option fits the card on a phone and shows its whole label',
     phoneOverflow.every((entry) => entry.pastCardEdge <= 1 && entry.clippedBy <= 1),
     JSON.stringify(phoneOverflow),
+  );
+  // Fitting the card is not the same as fitting the picker. A row whose options are wider than its
+  // own track stays inside the card and keeps every label whole - so the assertions above pass - while
+  // the selected chip is painted past the edge the track draws, because the cell stretched the track
+  // below the width its options need. That is how a flagged language row looked at 320px before this
+  // page stacked it, and it is measured here per picker rather than per card edge.
+  const trackFits = await page.evaluate(() =>
+    [...document.querySelectorAll('.omc-settings-page .ant-segmented')].map((track) => {
+      const items = [...track.querySelectorAll('.ant-segmented-item')];
+      const boxes = items.map((item) => item.getBoundingClientRect());
+      // One shared left edge means a stack, where only the widest option has to fit; one left edge
+      // each means a row, where the track has to hold all of them.
+      const isStacked = new Set(boxes.map((box) => Math.round(box.left))).size === 1;
+      const needed = isStacked
+        ? Math.max(...boxes.map((box) => box.width))
+        : boxes.reduce((sum, box) => sum + box.width, 0);
+      return {
+        label: track.getAttribute('aria-label'),
+        track: Math.round(track.getBoundingClientRect().width),
+        needed: Math.round(needed),
+      };
+    }),
+  );
+  check(
+    'no picker track is narrower than the options it holds',
+    trackFits.length > 0 && trackFits.every((entry) => entry.track >= entry.needed - 1),
+    JSON.stringify(trackFits),
   );
   // The selected option has to be distinguishable from *both* surfaces it touches: the track it
   // slides in, and the card behind that track. The light palette rendered it as the same white as
@@ -3889,9 +3917,10 @@ export async function omcSettings({ base, page, check, context }) {
   // ── the appearance settings drive the live console ────────────────────────
   // Theme and language stay in the browser, and the page's controls must therefore drive the app
   // rather than a copy: switching the language re-renders this page's own copy, and it also makes
-  // the Chinese scale selectable.
+  // the Chinese scale selectable. The option is located by its endonym, which is the one label this
+  // row shows in either reading (see the header menu's own check below).
   const languageRow = page.locator('.omc-settings-page .settings-toggle-row').filter({ hasText: /Language|界面语言/ });
-  await languageRow.locator('.ant-segmented-item').filter({ hasText: /Simplified Chinese|简体中文/ }).click();
+  await languageRow.locator('.ant-segmented-item').filter({ hasText: /简体中文/ }).click();
   let becameChinese = false;
   await until(async () => {
     becameChinese = /OMC 设置/.test(await page.locator('.omc-settings-page .terminal-title').innerText());
@@ -3944,6 +3973,22 @@ export async function omcSettings({ base, page, check, context }) {
     'the header language menu switches the reading language and stores it',
     becameEnglish && (await page.evaluate(() => localStorage.getItem('omc-lang'))) === 'en',
   );
+  // The menu names each language in its own script and is never translated. This is the state where a
+  // translated name would appear, and the reason the rule exists: the reader this menu has to serve is
+  // the one who cannot read the console's current language, so "Simplified Chinese" would hide the way
+  // back for exactly that person.
+  await page.locator('.app-header').getByRole('button', { name: /Language|界面语言/ }).click();
+  await page.locator('.ant-dropdown:visible .language-menu-item').first().waitFor({ timeout: 10_000 });
+  const menuNamesInEnglish = await page.locator('.ant-dropdown:visible .language-menu-item').allInnerTexts();
+  check(
+    'the language menu names each language in its own script, in both readings',
+    menuNamesInEnglish.length === 2
+      && menuNamesInEnglish.some((text) => text.includes('简体中文'))
+      && menuNamesInEnglish.some((text) => text.includes('English'))
+      && !menuNamesInEnglish.some((text) => /Simplified Chinese/.test(text)),
+    JSON.stringify(menuNamesInEnglish),
+  );
+  await page.keyboard.press('Escape');
   await settleLayout(page);
   check(
     'a language switch does not move the header controls beside it',

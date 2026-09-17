@@ -5,6 +5,7 @@ import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport';
 import { useThemeMode } from '../theme/ThemeContext';
 import { THEME_PRESETS } from '../theme/themeConfig';
 import { ThemeSwatch } from '../components/common/ThemeSwatch';
+import { LanguageFlag } from '../components/common/LanguageFlag';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
 import type { TokenNumberStyle } from '../types/tokenDisplay';
 import { TOKEN_NUMBER_STYLES } from '../types/tokenDisplay';
@@ -112,12 +113,25 @@ export const OmcSettingsPage: React.FC = () => {
           control={
             <Segmented
               value={lang}
-              options={LANGUAGES.map((language) => ({ value: language.id, label: t(language.labelKey) }))}
+              options={LANGUAGES.map((language) => ({
+                value: language.id,
+                label: (
+                  <span className="language-menu-item">
+                    <LanguageFlag country={language.country} />
+                    <span>{language.name}</span>
+                  </span>
+                ),
+              }))}
               onChange={(next) => {
                 const picked = LANGUAGES.find((language) => language.id === next);
                 if (picked) setLang(picked.id);
               }}
               aria-label={t('omc.language')}
+              // Each option carries its language's flag and endonym rather than a translated
+              // name: a reader who cannot read the console's current language has to be able to
+              // find their own here. The endonym is also what keeps this row inside its card on a
+              // phone - a translated "Simplified Chinese" plus its flag measured wider than the
+              // track the narrow-layout rule hands this picker.
             />
           }
         />

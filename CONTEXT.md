@@ -122,12 +122,17 @@ to Chinese ones (proper nouns and industry terms excepted).
 
 The supported languages are listed once, as the `LANGUAGES` registry in the same
 module, and every switcher reads it: adding a language means a dictionary plus one
-registry row. A row carries the language's dictionary key, its own two-glyph code,
-and the flag a switcher draws beside it — a country standing in for a language that
-is not one country's, so the flags are decoration and the language's name is the
-choice's real label. The registry itself is not translated: a language's name and
-code read the same in every console, which is why the header's trigger is a flag and
-a code rather than localized text.
+registry row. A row carries the language's **endonym** — its own name in its own
+script — its own two-glyph code, and the flag a switcher draws beside it. `id`,
+`name` and `code` are stable in every reading, and this is the one part of the
+interface the dictionary does not translate: a switcher that renamed 简体中文 to
+"Simplified Chinese" could not be used by the reader who needs it most, since
+someone who cannot read the console's current language cannot recognize their own
+behind a translation of it and would have no way back. The flag is decoration — a
+country standing in for a language that is not one country's — so the endonym
+beside it is the choice's real label. The header's trigger shows the flag and the
+code rather than the endonym, which is the pair that reads identically either way
+and keeps the action cluster one width in every language.
 
 One deliberate exception is in the code rather than the dictionary: quota
 window labels, plan labels, recommendation reasons, and the discovery fallback

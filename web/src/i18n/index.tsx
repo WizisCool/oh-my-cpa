@@ -9,16 +9,24 @@ export type Lang = 'zh' | 'en';
  * One registry rather than a control's private option list: a language reaches
  * the console through the header menu and the settings page at once, and a second
  * language added to only one of them would leave the two disagreeing about what
- * the console can read. `labelKey` resolves through the active dictionary, `code`
- * is the language's own two-glyph mark (中文 reads 中, English reads EN), and
- * `country` is the flag a switcher draws beside it - a country standing in for a
- * language that is not one country's (English is written the same way in more than
- * one), so a language no flag represents would need a different mark rather than a
- * borrowed flag.
+ * the console can read.
+ *
+ * `name` is the language's **endonym** - its own name in its own script - and is
+ * deliberately not translated. A switcher that renamed 简体中文 to "Simplified
+ * Chinese" would be unusable by exactly the reader who needs it: someone who
+ * cannot read the console's current language cannot recognize their own behind a
+ * translation of it, and would have no way back out. `id` and `code` are likewise
+ * stable in every reading, which is what lets the header's trigger - a flag and a
+ * two-glyph code - be the same width in every language.
+ *
+ * `country` is a country standing in for a language that is not one country's
+ * (English is written the same way in more than one), so the flag is decoration:
+ * the name beside it is the choice's real label, and a language no single flag
+ * represents would need a different mark rather than a borrowed flag.
  */
-export const LANGUAGES: readonly { id: Lang; labelKey: string; code: string; country: string }[] = [
-  { id: 'zh', labelKey: 'omc.language_zh', code: '中', country: 'CN' },
-  { id: 'en', labelKey: 'omc.language_en', code: 'EN', country: 'US' },
+export const LANGUAGES: readonly { id: Lang; name: string; code: string; country: string }[] = [
+  { id: 'zh', name: '简体中文', code: '中', country: 'CN' },
+  { id: 'en', name: 'English', code: 'EN', country: 'US' },
 ];
 
 /**
@@ -120,8 +128,6 @@ const DICT: Record<string, [string, string]> = {
   'theme.sandstone': ['Sandstone', 'Sandstone'],
   'theme.sandstone_desc': ['暖砂浅色背景与青绿色强调色', 'Warm sand surfaces with a teal accent'],
   'omc.language': ['界面语言', 'Language'],
-  'omc.language_zh': ['简体中文', 'Simplified Chinese'],
-  'omc.language_en': ['English', 'English'],
   'header.logout': ['退出', 'Sign out'],
   'shell.cpa': ['CPA', 'CPA'],
   'shell.connected': ['已连接', 'connected'],
