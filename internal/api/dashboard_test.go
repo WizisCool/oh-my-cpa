@@ -258,6 +258,46 @@ func TestDashboardAggregatesStoredRequestsAndTokens(t *testing.T) {
 	}
 }
 
+func TestDashboardFiltersByClientAPIKey(t *testing.T) {
+	client, baseURL, repo := startDashboardTestServer(t, nil)
+	base := time.Now().UTC().Add(-20 * time.Minute).Truncate(time.Minute)
+
+	ev1 := eventFor("ev1", base, usage.TokenStats{InputTokens: 50, OutputTokens: 50, TotalTokens: 100}, false)
+	ev1.APIGroupKey = "key-alpha"
+
+	ev2 := eventFor("ev2", base.Add(time.Minute), usage.TokenStats{InputTokens: 30, OutputTokens: 30, TotalTokens: 60}, false)
+	ev2.APIGroupKey = "key-beta"
+
+	seedEvents(t, repo, base, []repository.UsageDecoded{
+		{Event: ev1},
+		{Event: ev2},
+	})
+
+	// 1. Without api_key: all 2 requests
+	all := getDashboardJSON(t, client, baseURL+"/omc/api/v1/management/dashboard?preset=1h")
+	if all.Requests.Total != 2 || all.Tokens.Total != 160 {
+		t.Fatalf("expected all 2 requests, got requests=%d tokens=%d", all.Requests.Total, all.Tokens.Total)
+	}
+
+	// 2. With api_key=key-alpha: 1 request
+	alpha := getDashboardJSON(t, client, baseURL+"/omc/api/v1/management/dashboard?preset=1h&api_key=key-alpha")
+	if alpha.Requests.Total != 1 || alpha.Tokens.Total != 100 {
+		t.Fatalf("expected 1 request for key-alpha, got requests=%d tokens=%d", alpha.Requests.Total, alpha.Tokens.Total)
+	}
+
+	// 3. With api_key=key-beta: 1 request
+	beta := getDashboardJSON(t, client, baseURL+"/omc/api/v1/management/dashboard?preset=1h&api_key=key-beta")
+	if beta.Requests.Total != 1 || beta.Tokens.Total != 60 {
+		t.Fatalf("expected 1 request for key-beta, got requests=%d tokens=%d", beta.Requests.Total, beta.Tokens.Total)
+	}
+
+	// 4. With nonexistent api_key: 0 requests
+	none := getDashboardJSON(t, client, baseURL+"/omc/api/v1/management/dashboard?preset=1h&api_key=nonexistent")
+	if none.Requests.Total != 0 {
+		t.Fatalf("expected 0 requests for nonexistent key, got requests=%d", none.Requests.Total)
+	}
+}
+
 func TestDashboardUsesRollupOnceAggregated(t *testing.T) {
 	client, baseURL, repo := startDashboardTestServer(t, nil)
 	base := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Hour)

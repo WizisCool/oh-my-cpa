@@ -8,6 +8,7 @@ import {
   Popconfirm,
   Segmented,
   Space,
+  Switch,
   Table,
   Tag,
   Tooltip,
@@ -35,13 +36,12 @@ import styles from './ApiKeysEditor.module.css';
 const { Text } = Typography;
 
 /** One rendered row: the CPA key itself plus the identity and traffic Oh My CPA
- *  knows about it. A key CPA reports but the console has never seen traffic from
- *  still gets a row - it is configured, just unused. */
+ *  knows about it. */
 export interface ApiKeyRecord {
   id: string;
   index: number;
   key: string;
-  /** Usage records identity, absent when it could not be computed. */
+  disabled?: boolean;
   usageFingerprint?: string;
   alias?: string;
   aliasVersion: number;
@@ -49,48 +49,38 @@ export interface ApiKeyRecord {
 }
 
 export interface ApiKeysEditorProps {
-  /** The current key list. The editor never owns it: the caller's draft does. */
+  /** The active key list in the current draft. */
   apiKeys: string[];
-  /** The stored keys and their aliases, keyed by position in `apiKeys`. */
+  /** Temporarily disabled keys. */
+  disabledKeys?: string[];
+  /** Local in-flight / draft aliases. */
+  pendingAliases?: Record<string, string>;
+  /** The stored keys and their aliases, keyed by position or key string. */
   metadata?: ClientAPIKeyItem[];
   /** Keyed by usage fingerprint. */
   usage?: Record<string, ClientKeyUsageItem>;
-  /**
-   * Formats a timestamp for the last-used cell. Injected so the page renders it
-   * through the same format the request list prints, so a key's last use and the
-   * request row it links to cannot disagree about what a time looks like.
-   */
   formatTime: (ms: number) => string;
-  /** The window the usage counts describe, for the scope note. */
   usageRangeLabel: string;
-  /** Replaces the whole list, so the caller stays the single source of truth. */
   onChange: (next: string[]) => void;
-  /** Opens the add/edit dialog the caller owns. */
+  onToggleDisable: (key: string, willBeDisabled: boolean) => void;
+  onDelete: (record: ApiKeyRecord) => void;
   onAdd: () => void;
   onEdit: (index: number, key: string) => void;
-  /** Saves one alias. The caller owns the request and its conflict handling. */
   onRename: (record: ApiKeyRecord, alias: string) => Promise<void>;
-  /** Navigates to the request console filtered by this key's identity. */
   onViewRequests: (record: ApiKeyRecord) => void;
 }
 
-/**
- * ApiKeysEditor is the presentational API-key management surface.
- *
- * It is controlled on purpose. The console persists these keys as part of the
- * visual configuration document, not through the immediate `/management/api-keys`
- * mutations, so the list has to be a view over the caller's draft.
- *
- * Supports responsive layout: sleek high-density table on desktop, and adaptive
- * card view on mobile to prevent horizontal overflow and awkward mobile interaction.
- */
 export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
   apiKeys,
+  disabledKeys = [],
+  pendingAliases = {},
   metadata,
   usage,
   formatTime,
   usageRangeLabel,
   onChange,
+  onToggleDisable,
+  onDelete,
   onAdd,
   onEdit,
   onRename,
@@ -100,43 +90,66 @@ export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
   const { message } = AntdApp.useApp();
   const isNarrow = useIsNarrowViewport();
 
-  const [revealedKeys, setRevealedKeys] = React.useState<Record<number, boolean>>({});
+  const [revealedKeys, setRevealedKeys] = React.useState<Record<string, boolean>>({});
   const [renaming, setRenaming] = React.useState<ApiKeyRecord | null>(null);
   const [renameValue, setRenameValue] = React.useState('');
   const [isSavingName, setIsSavingName] = React.useState(false);
 
   // Search and filter state
   const [searchQuery, setSearchQuery] = React.useState('');
-  const [filterStatus, setFilterStatus] = React.useState<'all' | 'active' | 'idle'>('all');
+  const [filterStatus, setFilterStatus] = React.useState<'all' | 'enabled' | 'disabled'>('all');
   const [viewPreference, setViewPreference] = React.useState<'table' | 'cards' | null>(null);
 
-  // Active view: on narrow screens force cards unless user specifically overrides
   const activeView = viewPreference ?? (isNarrow ? 'cards' : 'table');
 
-  // Metadata is joined by position because CPA's list and Oh My CPA's overlay are
-  // both ordered by the same document.
+  const metaByKey = React.useMemo(() => {
+    const map = new Map<string, ClientAPIKeyItem>();
+    for (const item of metadata ?? []) {
+      map.set(item.key, item);
+    }
+    return map;
+  }, [metadata]);
+
+  // Combine enabled keys from draft YAML and disabled keys from preference
   const dataSource: ApiKeyRecord[] = React.useMemo(() => {
-    return apiKeys.map((key, index) => {
-      const entry = metadata?.[index];
+    const activeRecords: ApiKeyRecord[] = apiKeys.map((key, index) => {
+      const entry = metaByKey.get(key) ?? metadata?.[index];
       const matchesStored = entry !== undefined && entry.key === key;
       const usageFingerprint = matchesStored ? entry.usage_fingerprint : undefined;
+      const assignedAlias = pendingAliases[key] ?? (matchesStored ? entry.alias : undefined);
       return {
-        id: `${index}-${key}`,
+        id: `active-${index}-${key}`,
         index,
         key,
+        disabled: false,
         usageFingerprint,
-        alias: matchesStored ? entry.alias : undefined,
+        alias: assignedAlias,
         aliasVersion: matchesStored ? entry.alias_version : 0,
         usage: usageFingerprint ? usage?.[usageFingerprint] : undefined,
       };
     });
-  }, [apiKeys, metadata, usage]);
 
-  const activeCount = React.useMemo(
-    () => dataSource.filter((r) => (r.usage?.requests ?? 0) > 0).length,
-    [dataSource],
-  );
-  const idleCount = dataSource.length - activeCount;
+    const disabledRecords: ApiKeyRecord[] = disabledKeys.map((key, idx) => {
+      const entry = metaByKey.get(key);
+      const usageFingerprint = entry?.usage_fingerprint;
+      const assignedAlias = pendingAliases[key] ?? entry?.alias;
+      return {
+        id: `disabled-${idx}-${key}`,
+        index: apiKeys.length + idx,
+        key,
+        disabled: true,
+        usageFingerprint,
+        alias: assignedAlias,
+        aliasVersion: entry?.alias_version ?? 0,
+        usage: usageFingerprint ? usage?.[usageFingerprint] : undefined,
+      };
+    });
+
+    return [...activeRecords, ...disabledRecords];
+  }, [apiKeys, disabledKeys, metaByKey, metadata, pendingAliases, usage]);
+
+  const enabledCount = apiKeys.length;
+  const disabledCount = disabledKeys.length;
 
   // Filtered keys
   const filteredData = React.useMemo(() => {
@@ -147,18 +160,22 @@ export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
         const keyMatch = record.key.toLowerCase().includes(q);
         if (!aliasMatch && !keyMatch) return false;
       }
-      if (filterStatus === 'active') {
-        return (record.usage?.requests ?? 0) > 0;
+      if (filterStatus === 'enabled') {
+        return !record.disabled;
       }
-      if (filterStatus === 'idle') {
-        return !record.usage || record.usage.requests === 0;
+      if (filterStatus === 'disabled') {
+        return Boolean(record.disabled);
       }
       return true;
     });
   }, [dataSource, searchQuery, filterStatus]);
 
-  const handleDelete = (index: number) => {
-    onChange(apiKeys.filter((_, position) => position !== index));
+  const handleDelete = (record: ApiKeyRecord) => {
+    if (onDelete) {
+      onDelete(record);
+    } else {
+      onChange(apiKeys.filter((_, position) => position !== record.index));
+    }
     setRevealedKeys({});
   };
 
@@ -175,7 +192,7 @@ export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
       setRenaming(null);
       setRenameValue('');
     } catch {
-      // The caller reports failure; dialog stays open.
+      // Retain dialog so user can retry or adjust
     } finally {
       setIsSavingName(false);
     }
@@ -190,6 +207,8 @@ export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
     }
   };
 
+  const totalKeysCount = apiKeys.length + disabledKeys.length;
+
   return (
     <div className="settings-group">
       {/* settings-group-head retains classes and selectors expected by acceptance tests */}
@@ -197,7 +216,7 @@ export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <KeyOutlined />
           <h3 className="settings-group-title">{t('cfg.api_keys_list')}</h3>
-          <Tag style={{ margin: 0 }}>{t('cfg.api_keys_count', { n: apiKeys.length })}</Tag>
+          <Tag style={{ margin: 0 }}>{t('cfg.api_keys_count', { n: totalKeysCount })}</Tag>
         </div>
         <Button
           size="small"
@@ -211,7 +230,7 @@ export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
       </div>
 
       {/* Toolbar: Search, Status Filter, View Mode */}
-      {apiKeys.length > 0 && (
+      {totalKeysCount > 0 && (
         <div className={styles['toolbar']}>
           <div className={styles['toolbar-left']}>
             <Input
@@ -226,11 +245,11 @@ export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
             <Segmented
               size="small"
               value={filterStatus}
-              onChange={(val) => setFilterStatus(val as 'all' | 'active' | 'idle')}
+              onChange={(val) => setFilterStatus(val as 'all' | 'enabled' | 'disabled')}
               options={[
                 { label: t('keys.filter_all', { n: dataSource.length }), value: 'all' },
-                { label: t('keys.filter_active', { n: activeCount }), value: 'active' },
-                { label: t('keys.filter_idle', { n: idleCount }), value: 'idle' },
+                { label: t('keys.filter_enabled', { n: enabledCount }), value: 'enabled' },
+                { label: t('keys.filter_disabled', { n: disabledCount }), value: 'disabled' },
               ]}
             />
           </div>
@@ -251,7 +270,7 @@ export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
       )}
 
       {/* Empty State */}
-      {apiKeys.length === 0 ? (
+      {totalKeysCount === 0 ? (
         <div className={styles['empty-box']}>
           <KeyOutlined className={styles['empty-icon']} />
           <div className={styles['empty-title']}>{t('keys.empty_title')}</div>
@@ -284,12 +303,25 @@ export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
                   <div className={styles['name-cell']}>
                     <span
                       className={`${styles['status-pip']} ${
-                        isActive ? styles['status-pip-active'] : styles['status-pip-idle']
+                        record.disabled
+                          ? styles['status-pip-idle']
+                          : isActive
+                          ? styles['status-pip-active']
+                          : styles['status-pip-idle']
                       }`}
-                      title={isActive ? t('keys.status_active') : t('keys.status_idle')}
+                      title={record.disabled ? t('keys.status_disabled') : isActive ? t('keys.status_active') : t('keys.status_idle')}
                     />
                     {record.alias ? (
-                      <Text strong className={styles['name-text']}>{record.alias}</Text>
+                      <div
+                        className={styles['name-wrapper']}
+                        onClick={() => openRename(record)}
+                        title={t('keys.rename_title')}
+                      >
+                        <Text strong className={styles['name-text']}>
+                          {record.alias}
+                        </Text>
+                        <EditOutlined className={styles['name-edit-icon']} />
+                      </div>
                     ) : (
                       <button
                         type="button"
@@ -305,12 +337,30 @@ export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
               },
             },
             {
+              title: t('keys.col_status'),
+              key: 'status',
+              width: 140,
+              render: (_: unknown, record: ApiKeyRecord) => (
+                <Space size={8}>
+                  <Switch
+                    size="small"
+                    checked={!record.disabled}
+                    onChange={(checked) => onToggleDisable(record.key, !checked)}
+                    aria-label={record.disabled ? t('keys.action_enable') : t('keys.action_disable')}
+                  />
+                  <Tag color={record.disabled ? 'default' : 'success'} style={{ margin: 0 }}>
+                    {record.disabled ? t('keys.status_disabled') : t('keys.status_enabled')}
+                  </Tag>
+                </Space>
+              ),
+            },
+            {
               title: t('keys.col_key'),
               key: 'key',
               render: (_: unknown, record: ApiKeyRecord) => (
                 <div className="config-key-box">
                   <span className="config-key-text">
-                    {revealedKeys[record.index] ? record.key : maskKeyText(record.key)}
+                    {revealedKeys[record.key] ? record.key : maskKeyText(record.key)}
                   </span>
                 </div>
               ),
@@ -377,7 +427,7 @@ export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
                   </Tooltip>
                   <Tooltip
                     title={
-                      revealedKeys[record.index]
+                      revealedKeys[record.key]
                         ? t('common.hide_secret')
                         : t('common.reveal_secret')
                     }
@@ -388,16 +438,16 @@ export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
                       onClick={() =>
                         setRevealedKeys((prev) => ({
                           ...prev,
-                          [record.index]: !prev[record.index],
+                          [record.key]: !prev[record.key],
                         }))
                       }
                       aria-label={
-                        revealedKeys[record.index]
+                        revealedKeys[record.key]
                           ? t('common.hide_secret')
                           : t('common.reveal_secret')
                       }
                     >
-                      {revealedKeys[record.index] ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                      {revealedKeys[record.key] ? <EyeInvisibleOutlined /> : <EyeOutlined />}
                     </button>
                   </Tooltip>
                   <Tooltip title={t('cfg.api_keys_copy')}>
@@ -410,10 +460,11 @@ export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
                       <CopyOutlined />
                     </button>
                   </Tooltip>
-                  <Tooltip title={t('cfg.api_keys_edit')}>
+                  <Tooltip title={t('keys.edit_key_value')}>
                     <button
                       type="button"
                       className="config-key-action"
+                      disabled={record.disabled}
                       onClick={() => onEdit(record.index, record.key)}
                       aria-label={t('cfg.api_keys_edit')}
                     >
@@ -422,7 +473,7 @@ export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
                   </Tooltip>
                   <Popconfirm
                     title={t('cfg.api_keys_delete_confirm')}
-                    onConfirm={() => handleDelete(record.index)}
+                    onConfirm={() => handleDelete(record)}
                     okText={t('common.confirm')}
                     cancelText={t('common.cancel')}
                   >
@@ -452,39 +503,54 @@ export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
                   <div className={styles['key-card-title']}>
                     <span
                       className={`${styles['status-pip']} ${
-                        isActive ? styles['status-pip-active'] : styles['status-pip-idle']
+                        record.disabled
+                          ? styles['status-pip-idle']
+                          : isActive
+                          ? styles['status-pip-active']
+                          : styles['status-pip-idle']
                       }`}
-                      title={isActive ? t('keys.status_active') : t('keys.status_idle')}
+                      title={record.disabled ? t('keys.status_disabled') : isActive ? t('keys.status_active') : t('keys.status_idle')}
                     />
-                    <span className={styles['name-text']}>
-                      {record.alias ? record.alias : t('keys.unnamed')}
-                    </span>
+                    <div
+                      className={styles['name-wrapper']}
+                      onClick={() => openRename(record)}
+                      title={t('keys.rename_title')}
+                    >
+                      <span className={styles['name-text']}>
+                        {record.alias ? record.alias : t('keys.unnamed')}
+                      </span>
+                      <EditOutlined className={styles['name-edit-icon']} />
+                    </div>
                   </div>
-                  <Button
-                    size="small"
-                    icon={<TagOutlined />}
-                    onClick={() => openRename(record)}
-                  >
-                    {t('keys.rename')}
-                  </Button>
+                  <Space size={8}>
+                    <Switch
+                      size="small"
+                      checked={!record.disabled}
+                      onChange={(checked) => onToggleDisable(record.key, !checked)}
+                      aria-label={record.disabled ? t('keys.action_enable') : t('keys.action_disable')}
+                    />
+                    <Tag color={record.disabled ? 'default' : 'success'} style={{ margin: 0 }}>
+                      {record.disabled ? t('keys.status_disabled') : t('keys.status_enabled')}
+                    </Tag>
+                  </Space>
                 </div>
 
                 <div className={styles['key-card-token-row']}>
                   <span className={styles['key-card-token-text']}>
-                    {revealedKeys[record.index] ? record.key : maskKeyText(record.key)}
+                    {revealedKeys[record.key] ? record.key : maskKeyText(record.key)}
                   </span>
                   <Space size={4}>
                     <Button
                       size="small"
                       type="text"
-                      icon={revealedKeys[record.index] ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                      icon={revealedKeys[record.key] ? <EyeInvisibleOutlined /> : <EyeOutlined />}
                       onClick={() =>
                         setRevealedKeys((prev) => ({
                           ...prev,
-                          [record.index]: !prev[record.index],
+                          [record.key]: !prev[record.key],
                         }))
                       }
-                      title={revealedKeys[record.index] ? t('common.hide_secret') : t('common.reveal_secret')}
+                      title={revealedKeys[record.key] ? t('common.hide_secret') : t('common.reveal_secret')}
                     />
                     <Button
                       size="small"
@@ -516,6 +582,13 @@ export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
                 <div className={styles['key-card-actions']}>
                   <Button
                     size="small"
+                    icon={<TagOutlined />}
+                    onClick={() => openRename(record)}
+                  >
+                    {t('keys.rename')}
+                  </Button>
+                  <Button
+                    size="small"
                     icon={<SearchOutlined />}
                     disabled={!record.usageFingerprint}
                     onClick={() => onViewRequests(record)}
@@ -525,13 +598,14 @@ export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
                   <Button
                     size="small"
                     icon={<EditOutlined />}
+                    disabled={record.disabled}
                     onClick={() => onEdit(record.index, record.key)}
                   >
-                    {t('cfg.api_keys_edit')}
+                    {t('keys.edit_key_value')}
                   </Button>
                   <Popconfirm
                     title={t('cfg.api_keys_delete_confirm')}
-                    onConfirm={() => handleDelete(record.index)}
+                    onConfirm={() => handleDelete(record)}
                     okText={t('common.confirm')}
                     cancelText={t('common.cancel')}
                   >
@@ -546,7 +620,7 @@ export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
         </div>
       )}
 
-      {apiKeys.length > 0 && (
+      {totalKeysCount > 0 && (
         <p className={styles['scope-note']}>
           {t('keys.usage_scope', { range: usageRangeLabel })}
         </p>

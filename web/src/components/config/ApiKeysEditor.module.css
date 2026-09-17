@@ -55,12 +55,28 @@
   opacity: 0.45;
 }
 
-/* Table Name cell */
+/* Table Name cell & Custom Name editing */
 .name-cell {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   max-width: 100%;
+}
+
+.name-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  transition: border-color var(--motion-fast) ease-out, background var(--motion-fast) ease-out;
+}
+
+.name-wrapper:hover {
+  background: var(--surface);
+  border-color: var(--border);
 }
 
 .name-text {
@@ -71,13 +87,23 @@
   white-space: nowrap;
 }
 
+.name-edit-icon {
+  font-size: 11px;
+  color: var(--muted);
+  transition: color var(--motion-fast) ease-out;
+}
+
+.name-wrapper:hover .name-edit-icon {
+  color: var(--fg);
+}
+
 .unnamed-btn {
   background: transparent;
   border: 1px dashed var(--border);
   border-radius: var(--radius-sm);
   color: var(--muted);
   font-size: 11px;
-  padding: 1px 6px;
+  padding: 2px 8px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;

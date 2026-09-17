@@ -98,7 +98,7 @@ func BenchmarkUsageEventWindow(b *testing.B) {
 	repo := performanceRepository(b, 100000)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, _, err := repo.readEventWindow(context.Background(), "default", 1700000000000, 1700000100000, 60000); err != nil {
+		if _, _, err := repo.readEventWindow(context.Background(), "default", 1700000000000, 1700000100000, 60000, ""); err != nil {
 			b.Fatal(err)
 		}
 	}

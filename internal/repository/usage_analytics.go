@@ -188,6 +188,13 @@ func rollupTable(grain string) (string, error) {
 //     from the detail table. A timestamp boundary is required rather than an id
 //     because CPA event times can arrive slightly out of order.
 func (r *Repository) QueryUsageAnalytics(ctx context.Context, instanceID string, fromMS, toMS, bucketMS int64) (UsageAnalytics, error) {
+	return r.QueryUsageAnalyticsFiltered(ctx, instanceID, fromMS, toMS, bucketMS, "")
+}
+
+// QueryUsageAnalyticsFiltered answers a window using the rollup for everything already
+// aggregated and the detail table for the fresh tail, optionally filtered to a single
+// client API key fingerprint (api_group_key).
+func (r *Repository) QueryUsageAnalyticsFiltered(ctx context.Context, instanceID string, fromMS, toMS, bucketMS int64, apiKey string) (UsageAnalytics, error) {
 	result := UsageAnalytics{Buckets: []UsageBucket{}}
 	if r == nil || r.SQL() == nil {
 		return result, errors.New("repository is not initialized")
@@ -231,7 +238,7 @@ func (r *Repository) QueryUsageAnalytics(ctx context.Context, instanceID string,
 
 	// Partial leading bucket straight from the detail table.
 	if rollupFrom > fromMS {
-		totals, buckets, errQuery := r.readEventWindow(ctx, instanceID, fromMS, rollupFrom-1, bucketMS)
+		totals, buckets, errQuery := r.readEventWindow(ctx, instanceID, fromMS, rollupFrom-1, bucketMS, apiKey)
 		if errQuery != nil {
 			return UsageAnalytics{}, errQuery
 		}
@@ -251,7 +258,7 @@ func (r *Repository) QueryUsageAnalytics(ctx context.Context, instanceID string,
 		// rows, but it is the only way to bucket below the aggregation grain; the
 		// rollup stays the cheap path for hourly and coarser requests.
 		if bucketMS < grainMS {
-			totals, buckets, errQuery := r.readEventWindow(ctx, instanceID, rollupFrom, rollupEnd-1, bucketMS)
+			totals, buckets, errQuery := r.readEventWindow(ctx, instanceID, rollupFrom, rollupEnd-1, bucketMS, apiKey)
 			if errQuery != nil {
 				return UsageAnalytics{}, errQuery
 			}
@@ -261,7 +268,7 @@ func (r *Repository) QueryUsageAnalytics(ctx context.Context, instanceID string,
 			if errTable != nil {
 				return UsageAnalytics{}, errTable
 			}
-			totals, buckets, errQuery := r.readRollupWindow(ctx, table, instanceID, rollupFrom, rollupEnd, bucketMS)
+			totals, buckets, errQuery := r.readRollupWindow(ctx, table, instanceID, rollupFrom, rollupEnd, bucketMS, apiKey)
 			if errQuery != nil {
 				return UsageAnalytics{}, errQuery
 			}
@@ -278,7 +285,7 @@ func (r *Repository) QueryUsageAnalytics(ctx context.Context, instanceID string,
 		tailStart = rollupFrom
 	}
 	if tailStart <= toMS {
-		totals, buckets, errQuery := r.readEventWindow(ctx, instanceID, tailStart, toMS, bucketMS)
+		totals, buckets, errQuery := r.readEventWindow(ctx, instanceID, tailStart, toMS, bucketMS, apiKey)
 		if errQuery != nil {
 			return UsageAnalytics{}, errQuery
 		}
@@ -303,17 +310,24 @@ const eventTotalsColumns = `
 	COALESCE(SUM(total_tokens), 0), COALESCE(SUM(latency_ms), 0),
 	COALESCE(SUM(COALESCE(ttft_ms, 0)), 0), COALESCE(SUM(CASE WHEN ttft_ms IS NOT NULL THEN 1 ELSE 0 END), 0)`
 
-func (r *Repository) readRollupWindow(ctx context.Context, table, instanceID string, fromMS, toMS, bucketMS int64) (UsageTotals, []UsageBucket, error) {
+func (r *Repository) readRollupWindow(ctx context.Context, table, instanceID string, fromMS, toMS, bucketMS int64, apiKey string) (UsageTotals, []UsageBucket, error) {
 	var totals UsageTotals
 	// Totals are the sum of the same buckets; avoid scanning the window twice.
 
-	rows, err := r.SQL().QueryContext(ctx, `
-		SELECT (bucket_start_ms / ?) * ? AS aligned, `+rollupTotalsColumns+`
-		FROM `+table+`
-		WHERE instance_id = ? AND bucket_start_ms >= ? AND bucket_start_ms < ?
+	query := `
+		SELECT (bucket_start_ms / ?) * ? AS aligned, ` + rollupTotalsColumns + `
+		FROM ` + table + `
+		WHERE instance_id = ? AND bucket_start_ms >= ? AND bucket_start_ms < ?`
+	args := []any{bucketMS, bucketMS, instanceID, fromMS, toMS}
+	if apiKey != "" {
+		query += " AND api_group_key = ?"
+		args = append(args, apiKey)
+	}
+	query += `
 		GROUP BY aligned
-		ORDER BY aligned ASC`,
-		bucketMS, bucketMS, instanceID, fromMS, toMS)
+		ORDER BY aligned ASC`
+
+	rows, err := r.SQL().QueryContext(ctx, query, args...)
 	if err != nil {
 		return totals, nil, fmt.Errorf("read usage rollup buckets: %w", err)
 	}
@@ -334,17 +348,24 @@ func (r *Repository) readRollupWindow(ctx context.Context, table, instanceID str
 	return totals, buckets, nil
 }
 
-func (r *Repository) readEventWindow(ctx context.Context, instanceID string, fromMS, toMS, bucketMS int64) (UsageTotals, []UsageBucket, error) {
+func (r *Repository) readEventWindow(ctx context.Context, instanceID string, fromMS, toMS, bucketMS int64, apiKey string) (UsageTotals, []UsageBucket, error) {
 	var totals UsageTotals
 	// Totals are the sum of the same buckets; avoid scanning the window twice.
 
-	rows, err := r.SQL().QueryContext(ctx, `
-		SELECT (timestamp_ms / ?) * ? AS aligned, `+eventTotalsColumns+`
+	query := `
+		SELECT (timestamp_ms / ?) * ? AS aligned, ` + eventTotalsColumns + `
 		FROM usage_events
-		WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms <= ?
+		WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms <= ?`
+	args := []any{bucketMS, bucketMS, instanceID, fromMS, toMS}
+	if apiKey != "" {
+		query += " AND api_group_key = ?"
+		args = append(args, apiKey)
+	}
+	query += `
 		GROUP BY aligned
-		ORDER BY aligned ASC`,
-		bucketMS, bucketMS, instanceID, fromMS, toMS)
+		ORDER BY aligned ASC`
+
+	rows, err := r.SQL().QueryContext(ctx, query, args...)
 	if err != nil {
 		return totals, nil, fmt.Errorf("read usage event buckets: %w", err)
 	}

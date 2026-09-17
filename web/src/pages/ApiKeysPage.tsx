@@ -10,21 +10,16 @@ import {
   Popconfirm,
   Skeleton,
   Space,
-  Tag,
   Typography,
 } from 'antd';
 import {
-  CodeOutlined,
   CopyOutlined,
-  DashboardOutlined,
-  DownOutlined,
   KeyOutlined,
   PlusOutlined,
   ReloadOutlined,
   SaveOutlined,
-  ThunderboltOutlined,
+  TagOutlined,
   UndoOutlined,
-  UpOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -36,6 +31,7 @@ import { useT } from '../i18n';
 import { ApiKeysEditor, type ApiKeyRecord } from '../components/config/ApiKeysEditor';
 import { updateFieldWithBaseline, isConfigSemanticallyEqual, getFieldSemanticValue } from '../components/config/configDirty';
 import { ConfigDirtyBar } from '../components/config/ConfigDirtyBar';
+import { usePreference } from '../hooks/usePreference';
 import { ALL_CONFIG_FIELDS } from '../types/configSchema';
 import type { ConfigScalarsResponse } from '../types/configManagement';
 import type { ClientKeyUsageItem } from '../types/providers';
@@ -43,15 +39,19 @@ import styles from './ApiKeysPage.module.css';
 
 const { Text } = Typography;
 
+const parseStringArray = (raw: unknown): string[] | undefined => {
+  if (Array.isArray(raw)) {
+    return raw.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()));
+  }
+  return undefined;
+};
+
 /**
  * ApiKeysPage owns the gateway client API keys as their own surface.
  *
  * The keys are part of CPA's configuration document (`api-keys`), not a separate
- * store. This page therefore edits a draft of that document and saves it with the
- * same revision-guarded transaction the configuration workbench uses, rather than
- * calling the immediate `/management/api-keys` mutations: those write through a
- * different path, and switching to them would change when and how unrelated
- * configuration is persisted.
+ * store. This page edits a draft of that document and saves it with the
+ * same revision-guarded transaction the configuration workbench uses.
  */
 export const ApiKeysPage: React.FC = () => {
   const t = useT();
@@ -77,6 +77,12 @@ export const ApiKeysPage: React.FC = () => {
     staleTime: 60_000,
   });
 
+  const { value: disabledKeys, set: setDisabledKeys } = usePreference<string[]>(
+    'omc_disabled_client_keys',
+    [],
+    parseStringArray,
+  );
+
   const [rawYaml, setRawYaml] = React.useState('');
   const [serverYaml, setServerYaml] = React.useState('');
   const [serverRevision, setServerRevision] = React.useState('');
@@ -85,7 +91,8 @@ export const ApiKeysPage: React.FC = () => {
   const [modalOpen, setModalOpen] = React.useState(false);
   const [editingIndex, setEditingIndex] = React.useState<number | null>(null);
   const [keyInput, setKeyInput] = React.useState('');
-  const [showGuide, setShowGuide] = React.useState(false);
+  const [aliasInput, setAliasInput] = React.useState('');
+  const [pendingAliases, setPendingAliases] = React.useState<Record<string, string>>({});
 
   const docRef = React.useRef<Document | null>(null);
   const serverDocRef = React.useRef<Document | null>(null);
@@ -145,7 +152,7 @@ export const ApiKeysPage: React.FC = () => {
       setConflictRevision(null);
       return api.updateConfigSource(yamlToSave, revision);
     },
-    onSuccess: (data, variables) => {
+    onSuccess: async (data, variables) => {
       message.success(t('keys.saved'));
       setServerYaml(variables.yamlToSave);
       setServerRevision(data.revision);
@@ -155,6 +162,23 @@ export const ApiKeysPage: React.FC = () => {
         // Retain previous baseline
       }
       void queryClient.invalidateQueries({ queryKey: ['management-config'] });
+
+      // Save any pending aliases now that keys are written to CPA
+      if (Object.keys(pendingAliases).length > 0) {
+        try {
+          const fresh = await api.getClientAPIKeys();
+          for (const item of fresh.keys) {
+            const pendingName = pendingAliases[item.key];
+            if (pendingName !== undefined && item.usage_fingerprint) {
+              await api.setClientKeyAlias(item.usage_fingerprint, pendingName, item.alias_version);
+            }
+          }
+          setPendingAliases({});
+        } catch {
+          // ignore or log
+        }
+      }
+      void queryClient.invalidateQueries({ queryKey: ['management-client-keys'] });
     },
     onError: (err: unknown) => {
       if (
@@ -191,6 +215,7 @@ export const ApiKeysPage: React.FC = () => {
     }
     setSaveError(null);
     setConflictRevision(null);
+    setPendingAliases({});
   }, [serverYaml]);
 
   const writeKeys = React.useCallback(
@@ -221,24 +246,42 @@ export const ApiKeysPage: React.FC = () => {
   );
 
   const handleSaveKey = () => {
-    const trimmed = keyInput.trim();
-    if (!trimmed) {
+    const trimmedKey = keyInput.trim();
+    const trimmedAlias = aliasInput.trim();
+    if (!trimmedKey) {
       message.warning(t('cfg.api_key_empty_warning'));
       return;
     }
     const duplicate = currentApiKeys.some(
-      (key, index) => key === trimmed && index !== editingIndex,
+      (key, index) => key === trimmedKey && index !== editingIndex,
     );
     if (duplicate) {
       message.error(t('keys.duplicate'));
       return;
     }
     const next = [...currentApiKeys];
-    if (editingIndex !== null && editingIndex >= 0) next[editingIndex] = trimmed;
-    else next.push(trimmed);
+    if (editingIndex !== null && editingIndex >= 0) {
+      const oldKey = next[editingIndex];
+      next[editingIndex] = trimmedKey;
+      if (trimmedAlias) {
+        setPendingAliases((prev) => ({ ...prev, [trimmedKey]: trimmedAlias }));
+      } else if (oldKey && oldKey !== trimmedKey) {
+        setPendingAliases((prev) => {
+          const clone = { ...prev };
+          delete clone[oldKey];
+          return clone;
+        });
+      }
+    } else {
+      next.push(trimmedKey);
+      if (trimmedAlias) {
+        setPendingAliases((prev) => ({ ...prev, [trimmedKey]: trimmedAlias }));
+      }
+    }
     writeKeys(next);
     setModalOpen(false);
     setKeyInput('');
+    setAliasInput('');
     setEditingIndex(null);
   };
 
@@ -249,11 +292,55 @@ export const ApiKeysPage: React.FC = () => {
     setKeyInput(`sk-cpa-${randomHex}`);
   };
 
+  const handleToggleDisable = React.useCallback(
+    (key: string, willBeDisabled: boolean) => {
+      if (willBeDisabled) {
+        // Move from active keys to disabled keys
+        writeKeys(currentApiKeys.filter((k) => k !== key));
+        if (!disabledKeys.includes(key)) {
+          setDisabledKeys([...disabledKeys, key]);
+        }
+        message.info(t('keys.toggle_disabled_msg'));
+      } else {
+        // Move from disabled keys back to active keys
+        setDisabledKeys(disabledKeys.filter((k) => k !== key));
+        if (!currentApiKeys.includes(key)) {
+          writeKeys([...currentApiKeys, key]);
+        }
+        message.success(t('keys.toggle_enabled_msg'));
+      }
+    },
+    [currentApiKeys, disabledKeys, setDisabledKeys, writeKeys, message, t],
+  );
+
+  const handleDeleteRecord = React.useCallback(
+    (record: ApiKeyRecord) => {
+      if (record.disabled) {
+        setDisabledKeys(disabledKeys.filter((k) => k !== record.key));
+        setPendingAliases((prev) => {
+          const clone = { ...prev };
+          delete clone[record.key];
+          return clone;
+        });
+      } else {
+        writeKeys(currentApiKeys.filter((_, position) => position !== record.index));
+        setPendingAliases((prev) => {
+          const clone = { ...prev };
+          delete clone[record.key];
+          return clone;
+        });
+      }
+    },
+    [currentApiKeys, disabledKeys, setDisabledKeys, writeKeys],
+  );
+
   const renameKey = React.useCallback(
     async (record: ApiKeyRecord, alias: string) => {
+      // If it's a draft key without a server identity yet, remember locally
       if (!record.usageFingerprint) {
-        message.error(t('keys.not_linked'));
-        throw new Error('key has no usage identity');
+        setPendingAliases((prev) => ({ ...prev, [record.key]: alias }));
+        message.success(alias ? t('keys.renamed') : t('keys.rename_cleared'));
+        return;
       }
       if (alias.length > 64) {
         message.error(t('keys.rename_too_long', { n: 64 }));
@@ -302,47 +389,6 @@ export const ApiKeysPage: React.FC = () => {
     return indexed;
   }, [usageQuery.data]);
 
-  const totalRequests24h = React.useMemo(() => {
-    let sum = 0;
-    for (const entry of usageQuery.data?.usage ?? []) {
-      sum += entry.requests || 0;
-    }
-    return sum;
-  }, [usageQuery.data]);
-
-  const activeKeysCount = React.useMemo(() => {
-    let count = 0;
-    for (const entry of usageQuery.data?.usage ?? []) {
-      if ((entry.requests || 0) > 0) count++;
-    }
-    return count;
-  }, [usageQuery.data]);
-
-  const baseUrl = React.useMemo(() => {
-    if (typeof window !== 'undefined') {
-      return `${window.location.origin}/v1`;
-    }
-    return 'http://127.0.0.1:8317/v1';
-  }, []);
-
-  const sampleKey = currentApiKeys[0] || 'sk-cpa-your-key-here';
-
-  const curlSnippet = React.useMemo(() => {
-    return `curl -X POST "${baseUrl}/chat/completions" \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer ${sampleKey}" \\
-  -d '{"model":"gpt-4o","messages":[{"role":"user","content":"Hello"}]}'`;
-  }, [baseUrl, sampleKey]);
-
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      message.success(t('cfg.source_copy_success'));
-    } catch {
-      message.error(t('cfg.copy_failed'));
-    }
-  };
-
   const formatUsageTime = React.useCallback(
     (ms: number) => dayjs(ms).format('MM-DD HH:mm:ss'),
     [],
@@ -362,11 +408,7 @@ export const ApiKeysPage: React.FC = () => {
     <div className={`terminal-page keys-page ${styles['page-container']}`}>
       <header className={`terminal-page-head ${styles['header-row']}`}>
         <div>
-          <div className={styles['header-tag']}>
-            <KeyOutlined /> GATEWAY KEYS
-          </div>
           <h1 className="terminal-title">{t('keys.title')}</h1>
-          <p className="terminal-subtitle">{t('keys.subtitle')}</p>
         </div>
         <div className={`request-actions ${styles['header-actions']}`}>
           <Button
@@ -376,17 +418,11 @@ export const ApiKeysPage: React.FC = () => {
             onClick={() => {
               setEditingIndex(null);
               setKeyInput('');
+              setAliasInput('');
               setModalOpen(true);
             }}
           >
             {t('cfg.api_keys_add')}
-          </Button>
-          <Button
-            size="small"
-            icon={<CodeOutlined />}
-            onClick={() => setShowGuide((prev) => !prev)}
-          >
-            {showGuide ? t('keys.hide_guide') : t('keys.show_guide')}
           </Button>
           <Button
             size="small"
@@ -427,123 +463,6 @@ export const ApiKeysPage: React.FC = () => {
           </Popconfirm>
         </div>
       </header>
-
-      {/* KPI Overview Metric Tiles */}
-      <div className={styles['metrics-grid']}>
-        <div className={styles['metric-card']}>
-          <div className={styles['metric-header']}>
-            <span className={styles['metric-icon-wrap']}>
-              <KeyOutlined /> {t('keys.metric_total')}
-            </span>
-            {isDirty && (
-              <Tag color="warning" style={{ margin: 0 }}>
-                {t('keys.metric_draft_badge')}
-              </Tag>
-            )}
-          </div>
-          <div className={styles['metric-value-row']}>
-            <span className={styles['metric-value']}>{currentApiKeys.length}</span>
-          </div>
-          <span className={styles['metric-subtext']}>{t('keys.persist_note')}</span>
-        </div>
-
-        <div className={styles['metric-card']}>
-          <div className={styles['metric-header']}>
-            <span className={styles['metric-icon-wrap']}>
-              <ThunderboltOutlined style={{ color: 'var(--success)' }} /> {t('keys.metric_active')}
-            </span>
-            <Tag color="success" style={{ margin: 0 }}>
-              24h
-            </Tag>
-          </div>
-          <div className={styles['metric-value-row']}>
-            <span className={styles['metric-value']}>{activeKeysCount}</span>
-          </div>
-          <span className={styles['metric-subtext']}>
-            {t('keys.usage_scope', { range: t('keys.usage_range') })}
-          </span>
-        </div>
-
-        <div className={styles['metric-card']}>
-          <div className={styles['metric-header']}>
-            <span className={styles['metric-icon-wrap']}>
-              <DashboardOutlined style={{ color: 'var(--accent)' }} /> {t('keys.metric_requests')}
-            </span>
-            <Tag style={{ margin: 0 }}>24h</Tag>
-          </div>
-          <div className={styles['metric-value-row']}>
-            <span className={styles['metric-value']}>{totalRequests24h.toLocaleString()}</span>
-          </div>
-          <span className={styles['metric-subtext']}>
-            {t('keys.usage_scope', { range: t('keys.usage_range') })}
-          </span>
-        </div>
-      </div>
-
-      {/* Collapsible Developer Quick Integration Guide */}
-      {showGuide && (
-        <div className={styles['guide-panel']}>
-          <button
-            type="button"
-            className={styles['guide-header']}
-            onClick={() => setShowGuide((prev) => !prev)}
-          >
-            <div className={styles['guide-header-left']}>
-              <CodeOutlined />
-              <span>{t('keys.quick_guide_title')}</span>
-            </div>
-            <span className={styles['guide-header-toggle']}>
-              {showGuide ? <UpOutlined /> : <DownOutlined />}
-            </span>
-          </button>
-          <div className={styles['guide-content']}>
-            <div className={styles['guide-desc']}>{t('keys.quick_guide_desc')}</div>
-
-            <div className={styles['guide-grid']}>
-              <div className={styles['guide-field-block']}>
-                <span className={styles['guide-field-label']}>{t('keys.base_url_label')}</span>
-                <div className={styles['guide-field-value']}>
-                  <span>{baseUrl}</span>
-                  <Button
-                    size="small"
-                    type="text"
-                    icon={<CopyOutlined />}
-                    onClick={() => void copyToClipboard(baseUrl)}
-                    title={t('keys.copy_base_url')}
-                  />
-                </div>
-              </div>
-
-              <div className={styles['guide-field-block']}>
-                <span className={styles['guide-field-label']}>{t('keys.auth_header_label')}</span>
-                <div className={styles['guide-field-value']}>
-                  <span>Authorization: Bearer &lt;YOUR_KEY&gt;</span>
-                  <Button
-                    size="small"
-                    type="text"
-                    icon={<CopyOutlined />}
-                    onClick={() => void copyToClipboard(`Authorization: Bearer ${sampleKey}`)}
-                    title={t('cfg.api_keys_copy')}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className={styles['guide-code-box']}>
-              <pre>{curlSnippet}</pre>
-              <div className={styles['guide-code-actions']}>
-                <Button
-                  size="small"
-                  icon={<CopyOutlined />}
-                  onClick={() => void copyToClipboard(curlSnippet)}
-                >
-                  {t('keys.copy_curl')}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {saveError && (
         <Alert
@@ -593,33 +512,35 @@ export const ApiKeysPage: React.FC = () => {
           />
         </Card>
       ) : (
-        <>
-          <Card size="small" className="config-card">
-            <ApiKeysEditor
-              apiKeys={currentApiKeys}
-              metadata={keysQuery.data?.keys}
-              usage={usageByFingerprint}
-              formatTime={formatUsageTime}
-              usageRangeLabel={t('keys.usage_range')}
-              onChange={writeKeys}
-              onRename={renameKey}
-              onViewRequests={viewRequestsFor}
-              onAdd={() => {
-                setEditingIndex(null);
-                setKeyInput('');
-                setModalOpen(true);
-              }}
-              onEdit={(index, key) => {
-                setEditingIndex(index);
-                setKeyInput(key);
-                setModalOpen(true);
-              }}
-            />
-          </Card>
-          <p className="terminal-subtitle" style={{ marginTop: 12 }}>
-            <Text type="secondary">{t('keys.persist_note')}</Text>
-          </p>
-        </>
+        <Card size="small" className="config-card">
+          <ApiKeysEditor
+            apiKeys={currentApiKeys}
+            disabledKeys={disabledKeys}
+            pendingAliases={pendingAliases}
+            metadata={keysQuery.data?.keys}
+            usage={usageByFingerprint}
+            formatTime={formatUsageTime}
+            usageRangeLabel={t('keys.usage_range')}
+            onChange={writeKeys}
+            onToggleDisable={handleToggleDisable}
+            onDelete={handleDeleteRecord}
+            onRename={renameKey}
+            onViewRequests={viewRequestsFor}
+            onAdd={() => {
+              setEditingIndex(null);
+              setKeyInput('');
+              setAliasInput('');
+              setModalOpen(true);
+            }}
+            onEdit={(index, key) => {
+              setEditingIndex(index);
+              setKeyInput(key);
+              const existingAlias = pendingAliases[key] ?? keysQuery.data?.keys?.[index]?.alias ?? '';
+              setAliasInput(existingAlias);
+              setModalOpen(true);
+            }}
+          />
+        </Card>
       )}
 
       {/* Floating Dirty Bar for unsaved drafts */}
@@ -639,6 +560,7 @@ export const ApiKeysPage: React.FC = () => {
         onCancel={() => {
           setModalOpen(false);
           setKeyInput('');
+          setAliasInput('');
           setEditingIndex(null);
         }}
         okText={t('common.confirm')}
@@ -646,7 +568,19 @@ export const ApiKeysPage: React.FC = () => {
         destroyOnHidden
       >
         <div className="keys-key-editor">
-          <label className="keys-key-editor-label" htmlFor="gateway-key-value">
+          <label className="keys-key-editor-label" htmlFor="gateway-key-alias">
+            <TagOutlined /> {t('keys.modal_alias_label')}
+          </label>
+          <Input
+            id="gateway-key-alias"
+            placeholder={t('keys.modal_alias_placeholder')}
+            value={aliasInput}
+            onChange={(e) => setAliasInput(e.target.value)}
+            maxLength={64}
+            className="config-alias-input"
+          />
+
+          <label className="keys-key-editor-label" htmlFor="gateway-key-value" style={{ marginTop: 8 }}>
             <KeyOutlined /> {t('keys.modal_label')}
           </label>
           <Input.Password

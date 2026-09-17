@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Alert, Button, Card, Empty, Skeleton, Space, Tooltip, Typography } from 'antd';
-import { HistoryOutlined, QuestionCircleOutlined, ReloadOutlined, RightOutlined } from '@ant-design/icons';
+import { Alert, Button, Card, Empty, Select, Skeleton, Space, Tooltip, Typography } from 'antd';
+import { HistoryOutlined, KeyOutlined, QuestionCircleOutlined, ReloadOutlined, RightOutlined } from '@ant-design/icons';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { api, ApiError } from '../api/client';
@@ -9,6 +9,7 @@ import { useT } from '../i18n';
 import { usePreference } from '../hooks/usePreference';
 import { type ChartTone } from '../charts/chartTheme';
 import { type DashboardTrendChartProps } from '../charts/DashboardTrendChart';
+import { maskKeyText } from '../utils/maskKey';
 import { resolveCacheRateReadout } from '../theme/cacheScale';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
 import {
@@ -116,7 +117,43 @@ export const DashboardPage: React.FC = () => {
     parseDashboardRange,
   );
 
-  const query = dashboardRangeParams(range);
+  const [selectedApiKey, setSelectedApiKey] = React.useState<string | undefined>(undefined);
+
+  const keysQuery = useQuery({
+    queryKey: ['management-client-keys'],
+    queryFn: () => api.getClientAPIKeys(),
+    staleTime: 60_000,
+  });
+
+  const clientKeyOptions = React.useMemo(() => {
+    return (keysQuery.data?.keys ?? [])
+      .filter((k) => Boolean(k.usage_fingerprint))
+      .map((k) => ({
+        label: k.alias ? `${k.alias} (${maskKeyText(k.key)})` : maskKeyText(k.key),
+        value: k.usage_fingerprint as string,
+      }));
+  }, [keysQuery.data]);
+
+  const rangeParams = dashboardRangeParams(range);
+  const query = React.useMemo(() => {
+    if (!selectedApiKey) return rangeParams;
+    const separator = rangeParams ? `${rangeParams}&` : '';
+    return `${separator}api_key=${encodeURIComponent(selectedApiKey)}`;
+  }, [rangeParams, selectedApiKey]);
+
+  const handleDrillDown = React.useCallback(() => {
+    const search = new URLSearchParams();
+    if (range.preset) search.set('preset', range.preset);
+    else if (range.from !== undefined) {
+      search.set('from', String(range.from));
+      if (typeof range.to === 'number') search.set('to', String(range.to));
+    }
+    if (selectedApiKey) {
+      search.set('api_key', selectedApiKey);
+    }
+    navigate(`/usage/events?${search.toString()}`);
+  }, [range, selectedApiKey, navigate]);
+
   // A relative preset and an open-ended (through-now) range both move with the
   // clock, so both are worth polling; a closed range is frozen.
   const sliding = isSlidingRange(range);
@@ -241,12 +278,24 @@ export const DashboardPage: React.FC = () => {
         <div>
           <Title level={2} className="terminal-title">{t('nav.dashboard')}</Title>
         </div>
-        <Space size={8}>
+        <Space size={8} wrap>
           <TimeRangeControl range={range} onChange={applyRange} />
+          {clientKeyOptions.length > 0 && (
+            <Select
+              size="small"
+              allowClear
+              placeholder={t('dash.filter_by_key')}
+              style={{ minWidth: 160, maxWidth: 240 }}
+              value={selectedApiKey}
+              onChange={(val) => setSelectedApiKey(val)}
+              options={clientKeyOptions}
+              prefix={<KeyOutlined style={{ color: 'var(--muted)' }} />}
+            />
+          )}
           <Button
             size="small"
             icon={<HistoryOutlined />}
-            onClick={() => navigate('/usage/events')}
+            onClick={handleDrillDown}
           >
             {t('nav.usage_events')}
           </Button>
@@ -268,7 +317,7 @@ export const DashboardPage: React.FC = () => {
               type="link"
               size="small"
               icon={<RightOutlined />}
-              onClick={() => navigate('/usage/events')}
+              onClick={handleDrillDown}
               style={{ padding: 0, height: 'auto', fontSize: 12 }}
             >
               {t('nav.usage_events')}
