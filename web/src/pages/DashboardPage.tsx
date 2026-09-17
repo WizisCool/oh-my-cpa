@@ -9,11 +9,20 @@ import { useT } from '../i18n';
 import { usePreference } from '../hooks/usePreference';
 import { type ChartTone } from '../charts/chartTheme';
 import { type DashboardTrendChartProps } from '../charts/DashboardTrendChart';
-import { formatCacheRate } from '../theme/cacheScale';
+import { resolveCacheRateReadout } from '../theme/cacheScale';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
-import { formatTokens as formatTokensStyled, formatTokensFull } from '../types/tokenDisplay';
+import {
+  formatTokenRate,
+  formatTokens as formatTokensStyled,
+  formatTokensFull,
+  resolveCountFlowReadout,
+  resolveTokenFlowReadout,
+  resolveTokenRateFlowReadout,
+} from '../types/tokenDisplay';
+import type { RollingReadout } from '../types/rollingNumber';
 import { successRateVerdict } from '../types/usageEventView';
 import { TimeRangeControl } from '../components/dashboard/TimeRangeControl';
+import { RollingNumber } from '../components/dashboard/RollingNumber';
 import { TokenHeatmap, TOKEN_HEATMAP_QUERY_KEY } from '../components/dashboard/TokenHeatmap';
 import { ModelUsagePanels, DASHBOARD_MODELS_QUERY_KEY } from '../components/dashboard/ModelUsagePanels';
 import type { ManagementOverview, ManagementOverviewProvider } from '../types/management';
@@ -31,7 +40,6 @@ import {
 
 const { Text, Title } = Typography;
 
-const COMPACT_NUMBER_FORMAT = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 2 });
 const PLAIN_NUMBER_FORMAT = new Intl.NumberFormat('en');
 
 function formatCount(value: number | null | undefined): string {
@@ -39,14 +47,24 @@ function formatCount(value: number | null | undefined): string {
   return PLAIN_NUMBER_FORMAT.format(value);
 }
 
-function formatCompact(value: number | null | undefined): string {
-  if (value === null || value === undefined) return '—';
-  return COMPACT_NUMBER_FORMAT.format(value);
-}
-
 function formatRate(value: number | null | undefined): string {
   if (value === null || value === undefined) return '—';
   return `${value.toFixed(2)}%`;
+}
+
+/**
+ * The spend tile's own reading: two decimals.
+ *
+ * `formatCost` keeps four because a list row's fraction of a cent has to stay
+ * visible; a headline amount reads as money at two.
+ */
+function resolveTileCostReadout(cost: number): RollingReadout {
+  return {
+    number: cost,
+    prefix: '$',
+    suffix: '',
+    format: { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+  };
 }
 
 const LazyDashboardTrendChart = React.lazy(() =>
@@ -253,7 +271,9 @@ export const DashboardPage: React.FC = () => {
               {t('nav.usage_events')}
             </Button>
           </div>
-          <div className="tile-value">{formatCount(data.requests.total)}</div>
+          <div className="tile-value">
+            <RollingNumber readout={resolveCountFlowReadout(data.requests.total)} />
+          </div>
           <div className="tile-caption">
             <span className="tile-rate">
               <Pip tone={rateTone(data.requests.total, data.requests.failed)} />
@@ -278,7 +298,9 @@ export const DashboardPage: React.FC = () => {
 
         <Card className="dashboard-tile is-wide" styles={{ body: { padding: 20 } }}>
           <div className="tile-label">{t('dash.total_tokens')}</div>
-          <div className="tile-value" title={formatTokensFull(data.tokens.total)}>{formatTokensStyled(data.tokens.total, tokenStyle)}</div>
+          <div className="tile-value" title={formatTokensFull(data.tokens.total)}>
+            <RollingNumber readout={resolveTokenFlowReadout(data.tokens.total, tokenStyle)} />
+          </div>
           <div className="tile-caption">
             <span>{t('dash.tokens_input')} <b title={formatTokensFull(data.tokens.input)}>{formatTokensStyled(data.tokens.input, tokenStyle)}</b></span>
             <span>{t('dash.tokens_output')} <b title={formatTokensFull(data.tokens.output)}>{formatTokensStyled(data.tokens.output, tokenStyle)}</b></span>
@@ -300,7 +322,9 @@ export const DashboardPage: React.FC = () => {
 
         <Card className="dashboard-tile" styles={{ body: { padding: 20 } }}>
           <div className="tile-label">{t('dash.rpm')}</div>
-          <div className="tile-value is-small">{formatCount(data.metrics.rpm ?? null)}</div>
+          <div className="tile-value is-small">
+            <RollingNumber readout={resolveCountFlowReadout(data.metrics.rpm)} />
+          </div>
           <div className="tile-caption">
             <span>{t('dash.total_requests')} <b>{formatCount(data.requests.total)}</b></span>
           </div>
@@ -318,7 +342,9 @@ export const DashboardPage: React.FC = () => {
 
         <Card className="dashboard-tile" styles={{ body: { padding: 20 } }}>
           <div className="tile-label">{t('dash.tpm')}</div>
-          <div className="tile-value is-small" title={data.metrics.tpm == null ? undefined : `${formatTokensFull(data.metrics.tpm)} ${t('dash.unit_tokens_per_min')}`}>{formatCompact(data.metrics.tpm ?? null)}</div>
+          <div className="tile-value is-small" title={data.metrics.tpm == null ? undefined : `${formatTokensFull(data.metrics.tpm)} ${t('dash.unit_tokens_per_min')}`}>
+            <RollingNumber readout={resolveTokenRateFlowReadout(data.metrics.tpm)} />
+          </div>
           <div className="tile-caption">
             <span>{t('dash.total_tokens')} <b title={formatTokensFull(data.tokens.total)}>{formatTokensStyled(data.tokens.total, tokenStyle)}</b></span>
           </div>
@@ -331,7 +357,7 @@ export const DashboardPage: React.FC = () => {
             tone="warn"
             height={44}
             label={(timeMs) => dayjs(timeMs).format('MM-DD HH:mm')}
-            format={(value) => `${formatCompact(value)} ${t('dash.unit_tokens_per_min')}`}
+            format={(value) => `${formatTokenRate(value)} ${t('dash.unit_tokens_per_min')}`}
             formatExact={(value) => `${formatTokensFull(value)} ${t('dash.unit_tokens_per_min')}`}
           />
         </Card>
@@ -343,7 +369,9 @@ export const DashboardPage: React.FC = () => {
               <QuestionCircleOutlined className="tile-help" />
             </Tooltip>
           </div>
-          <div className="tile-value is-small">{formatCacheRate(data.metrics.cache_rate)}</div>
+          <div className="tile-value is-small">
+            <RollingNumber readout={resolveCacheRateReadout(data.metrics.cache_rate)} />
+          </div>
           <div className="tile-caption">
             <span>{t('dash.tokens_cache_read')} <b title={formatTokensFull(data.tokens.cache_read)}>{formatTokensStyled(data.tokens.cache_read, tokenStyle)}</b></span>
             <span>{t('dash.tokens_input')} <b title={formatTokensFull(data.tokens.input)}>{formatTokensStyled(data.tokens.input, tokenStyle)}</b></span>
@@ -376,7 +404,9 @@ export const DashboardPage: React.FC = () => {
               <QuestionCircleOutlined className="tile-help" />
             </Tooltip>
           </div>
-          <div className="tile-value is-small">${data.metrics.cost.toFixed(2)}</div>
+          <div className="tile-value is-small">
+            <RollingNumber readout={resolveTileCostReadout(data.metrics.cost)} />
+          </div>
           <div className="tile-caption">
             {/* The backend distinguishes a true placeholder from a partial
                 estimate; keep both visible so an unpriced model never reads as

@@ -79,6 +79,35 @@ const monoFont = [
  */
 export const MONO_FONT_STACK = monoFont;
 
+/**
+ * A named motion token, in the shape both consumers read it: WAAPI takes an `EffectTiming` (which is
+ * this with every field optional) and the chart library takes `duration?: number` with an easing
+ * string, so naming the two fields is what lets one token serve both without a cast.
+ */
+export interface MotionToken {
+  readonly duration: number;
+  readonly easing: string;
+}
+
+/**
+ * docs/design.md §7's `roll` token: the dashboard's KPI readouts sweeping to a new value, and the
+ * AntV marks behind them morphing between two revisions.
+ *
+ * The only motion in the console longer than `base`, and the only one allowed to run on a poll the
+ * reader did not ask for - §7 rules 8 and 5 scope it, and ADR 0007 / ADR 0008 record the trade-off.
+ * It lives here rather than in the components that consume it because it is a design token: a digit
+ * move at `base` is indistinguishable from a redraw, which is the state 240ms exists to leave.
+ */
+export const MOTION_ROLL: MotionToken = { duration: 240, easing: 'cubic-bezier(0.2, 0, 0, 1)' };
+
+/**
+ * Glyph presence within a readout - a digit entering or leaving the number - on the `base` token.
+ *
+ * A presence fade is not the readout's motion but the acknowledgement that its digit count changed,
+ * and holding it to `base` is what stops an arriving `,000` from trailing the sweep over `roll`.
+ */
+export const MOTION_ROLL_PRESENCE: MotionToken = { duration: 100, easing: 'cubic-bezier(0.2, 0, 0, 1)' };
+
 export const palette = {
   dark: {
     bg: '#121214',
