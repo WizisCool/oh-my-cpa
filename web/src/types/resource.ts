@@ -11,6 +11,8 @@ export type ProtocolDriver =
   | 'gemini'
   | 'xai'
   | 'kimi'
+  | 'devin'
+  | 'meta'
   | 'custom'
   | string;
 

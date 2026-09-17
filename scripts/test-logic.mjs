@@ -42,6 +42,7 @@ const SUITES = [
   { name: 'theme presets', script: 'scripts/test-theme-presets.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'plugin config', script: 'scripts/test-plugin-config.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'oauth model aliases', script: 'scripts/test-oauth-model-alias.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
+  { name: 'oauth providers', script: 'scripts/test-oauth-providers.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
 ];
 
 /** Bounded so a small machine is not asked to schedule every parser at once. */

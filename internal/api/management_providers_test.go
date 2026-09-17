@@ -27,6 +27,7 @@ type providerFakeServerState struct {
 	codexProviders  []map[string]any
 	claudeProviders []map[string]any
 	geminiProviders []map[string]any
+	metaProviders   []map[string]any
 	// putCount counts the whole-list writes CPA actually received, so a test can
 	// assert that a refused write never reached the gateway.
 	putCount int
@@ -135,6 +136,13 @@ func newProviderTestFixture(t *testing.T) providerTestFixture {
 				"auth-index": "gem-1",
 			},
 		},
+		metaProviders: []map[string]any{
+			{
+				"api-key":    "meta-test-token-1234",
+				"auth-index": "meta-1",
+				"base-url":   "https://api.meta.ai/v1",
+			},
+		},
 	}
 
 	cpaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -201,6 +209,14 @@ func newProviderTestFixture(t *testing.T) providerTestFixture {
 			var arr []map[string]any
 			_ = json.NewDecoder(request.Body).Decode(&arr)
 			state.geminiProviders = arr
+			_, _ = writer.Write([]byte(`{"status":"ok"}`))
+		case path == "/v0/management/meta-api-key" && request.Method == http.MethodGet:
+			_ = json.NewEncoder(writer).Encode(map[string]any{"meta-api-key": state.metaProviders})
+		case path == "/v0/management/meta-api-key" && request.Method == http.MethodPut:
+			var arr []map[string]any
+			_ = json.NewDecoder(request.Body).Decode(&arr)
+			state.metaProviders = arr
+			state.putCount++
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 		default:
 			writer.WriteHeader(http.StatusOK)
@@ -762,5 +778,126 @@ func TestProviderStatusToggleReachesCPA(t *testing.T) {
 	state.mu.Unlock()
 	if geminiExcluded == nil || !strings.Contains(fmt.Sprintf("%v", geminiExcluded), "*") {
 		t.Fatalf("gemini disable must reach CPA excluded-models, got %#v", geminiExcluded)
+	}
+}
+
+// Meta Muse is managed through the same credential-list family as claude,
+// codex and gemini. It is covered end to end here because it is the family
+// added last, and because a family that is only partly wired (say, create but
+// not delete) reads as a silent gap on the page rather than a loud failure.
+func TestManagementMetaProviderFamily(t *testing.T) {
+	client, baseURL, state := startProviderTestServer(t)
+
+	providersByID := func(query string) map[string]ProviderItemDTO {
+		resp, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/providers"+query)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("providers status = %d body %s", resp.StatusCode, payload)
+		}
+		var res struct {
+			Providers []ProviderItemDTO `json:"providers"`
+		}
+		if err := json.Unmarshal(payload, &res); err != nil {
+			t.Fatal(err)
+		}
+		byID := make(map[string]ProviderItemDTO, len(res.Providers))
+		for _, provider := range res.Providers {
+			byID[provider.ID] = provider
+		}
+		return byID
+	}
+
+	// 1. The fixture's credential is listed with its family and protocol.
+	meta, ok := providersByID("?include_keys=true")["meta-0"]
+	if !ok {
+		t.Fatal("meta-0 is missing from the provider list")
+	}
+	if meta.Family != "meta" || meta.Protocol != "Meta Muse" || meta.Name != "Meta Muse" {
+		t.Fatalf("unexpected meta row: %#v", meta)
+	}
+	if meta.APIKey != "meta-test-token-1234" || meta.AuthIndex != "meta-1" {
+		t.Fatalf("meta row lost its credential: %#v", meta)
+	}
+
+	// 2. The sanitized projection keeps the configured signal and drops the key.
+	sanitized := providersByID("")["meta-0"]
+	if sanitized.APIKey != "" || len(sanitized.KeyEntries) != 0 {
+		t.Fatalf("sanitized projection leaked meta key material: %#v", sanitized)
+	}
+	if !sanitized.KeyConfigured {
+		t.Fatal("sanitized projection must still report that a key is configured")
+	}
+
+	// 3. Create appends to CPA's list under the meta family.
+	create := `{"family":"meta","name":"Meta Muse Team","base_url":"https://api.meta.ai/v1","keys":[{"api_key":"meta-created-key-4321"}],"prefix":"team"}`
+	resp, payload := doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/providers", create)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("create meta provider status = %d body %s", resp.StatusCode, payload)
+	}
+	state.mu.Lock()
+	createdCount := len(state.metaProviders)
+	state.mu.Unlock()
+	if createdCount != 2 {
+		t.Fatalf("CPA meta list length = %d, want 2", createdCount)
+	}
+	created, ok := providersByID("?include_keys=true")["meta-1"]
+	if !ok || created.Name != "Meta Muse Team" || created.Prefix != "team" {
+		t.Fatalf("created meta provider not readable: %#v", created)
+	}
+
+	// 4. A credential CPA stores without an operator name falls back to the
+	// family and its configured prefix.
+	state.mu.Lock()
+	state.metaProviders[0]["prefix"] = "squad-b"
+	state.mu.Unlock()
+	if renamed := providersByID("")["meta-0"]; renamed.Name != "Meta (squad-b)" {
+		t.Fatalf("prefix-derived name = %q, want %q", renamed.Name, "Meta (squad-b)")
+	}
+
+	// 5. Update rewrites the entry in place.
+	update := `{"family":"meta","name":"Meta Muse East","base_url":"https://api.meta.ai/v1","keys":[{"api_key":"meta-rotated-key-8765"}],"prefix":"east"}`
+	resp, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/providers/meta-1", update)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("update meta provider status = %d body %s", resp.StatusCode, payload)
+	}
+	updated := providersByID("?include_keys=true")["meta-1"]
+	if updated.Name != "Meta Muse East" || updated.Prefix != "east" || updated.APIKey != "meta-rotated-key-8765" {
+		t.Fatalf("meta update did not persist: %#v", updated)
+	}
+
+	// 6. The enable toggle reaches CPA as the excluded-all marker, like every
+	// other config API-key family.
+	resp, payload = doJSON(t, client, http.MethodPatch, baseURL+"/omc/api/v1/management/providers/status", `{"family":"meta","index":0,"disabled":true}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("patch meta status = %d body %s", resp.StatusCode, payload)
+	}
+	state.mu.Lock()
+	metaExcluded := state.metaProviders[0]["excluded-models"]
+	state.mu.Unlock()
+	if metaExcluded == nil || !strings.Contains(fmt.Sprintf("%v", metaExcluded), "*") {
+		t.Fatalf("meta disable must reach CPA excluded-models, got %#v", metaExcluded)
+	}
+	if disabled := providersByID("")["meta-0"]; !disabled.Disabled {
+		t.Fatalf("meta-0 must be reported disabled, got %#v", disabled)
+	}
+
+	// 7. Delete removes exactly the addressed entry. Ids are positional, so the
+	// survivor of a delete occupies the freed index: what must hold is that the
+	// deleted credential is gone and the other one is intact.
+	resp, payload = doJSON(t, client, http.MethodDelete, baseURL+"/omc/api/v1/management/providers/meta-0", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("delete meta provider status = %d body %s", resp.StatusCode, payload)
+	}
+	state.mu.Lock()
+	remainingCount := len(state.metaProviders)
+	state.mu.Unlock()
+	if remainingCount != 1 {
+		t.Fatalf("CPA meta list length = %d after delete, want 1", remainingCount)
+	}
+	remaining := providersByID("?include_keys=true")
+	if survivor, present := remaining["meta-0"]; !present || survivor.Name != "Meta Muse East" || survivor.APIKey != "meta-rotated-key-8765" {
+		t.Fatalf("delete removed the wrong meta entry: %#v", remaining)
+	}
+	if _, present := remaining["meta-1"]; present {
+		t.Fatalf("delete left the list untouched: %#v", remaining)
 	}
 }

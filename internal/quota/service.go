@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -51,6 +52,7 @@ var AllowedURLPrefixes = []string{
 	"https://api.kimi.com/coding/v1/",
 	"https://cli-chat-proxy.grok.com/v1/billing",
 	"https://api.x.ai/v1/",
+	DevinSeatStatusURL,
 }
 
 // IsAllowedQuotaURL verifies that a target URL is in the strict quota allowlist.
@@ -101,6 +103,8 @@ func DetectProvider(fileType, provider string) string {
 		return "kimi"
 	case strings.Contains(t, "xai") || strings.Contains(p, "xai") || strings.Contains(t, "grok") || strings.Contains(p, "grok"):
 		return "xai"
+	case strings.Contains(t, "devin") || strings.Contains(p, "devin"):
+		return "devin"
 	default:
 		if t != "" {
 			return t
@@ -122,7 +126,7 @@ func CapabilitiesForProvider(provider string) QuotaCapabilities {
 			ClearCooldownSupported: true,
 			ResetCreditSupported:   true,
 		}
-	case "claude", "antigravity", "kimi", "xai":
+	case "claude", "antigravity", "kimi", "xai", "devin":
 		return QuotaCapabilities{
 			RefreshSupported:       true,
 			ClearCooldownSupported: true,
@@ -293,6 +297,15 @@ func (s *Service) RefreshCredentialQuota(ctx context.Context, file management.Au
 
 	case "xai":
 		plan, windows, err := s.fetchXaiQuota(ctx, file, nowMS)
+		if err != nil {
+			fetchErr = err
+		} else {
+			result.Plan = plan
+			result.Windows = windows
+		}
+
+	case "devin":
+		plan, windows, err := s.fetchDevinQuota(ctx, file, nowMS)
 		if err != nil {
 			fetchErr = err
 		} else {
@@ -552,6 +565,35 @@ func (s *Service) fetchXaiQuota(ctx context.Context, file management.AuthFile, n
 		return nil, nil, err
 	}
 	return nil, nil, errors.New("xAI quota fetch failed")
+}
+
+// fetchDevinQuota reads a Devin credential's seat status.
+//
+// The request is a POST whose body carries CPA's credential marker: Devin's seat
+// API authenticates from the `apiKey` request field rather than a header, so the
+// token is substituted inside the payload by CPA and never reaches this process.
+func (s *Service) fetchDevinQuota(ctx context.Context, file management.AuthFile, nowMS int64) (*QuotaPlan, []QuotaWindow, error) {
+	body, err := BuildDevinQuotaRequestBody()
+	if err != nil {
+		return nil, nil, err
+	}
+	headers := map[string]string{
+		"Content-Type":             "application/json",
+		"Connect-Protocol-Version": DevinConnectProtocolVersion,
+	}
+
+	resp, err := s.SafeApiCall(ctx, file.AuthIndex, http.MethodPost, DevinSeatStatusURL, headers, body)
+	if err != nil {
+		return nil, nil, err
+	}
+	normBody, err := resp.NormalizedBody()
+	if err != nil {
+		return nil, nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, nil, errors.New(sanitizeError(resp.StatusCode, normBody))
+	}
+	return ParseDevinSeatStatus(normBody, nowMS)
 }
 
 // RedeemCodexCredit consumes an available rate limit reset credit for a Codex credential.

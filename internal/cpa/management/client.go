@@ -143,14 +143,6 @@ func (c *Client) AuthFilesWithMeta(ctx context.Context) (AuthFilesResponse, Resp
 	return response, meta, nil
 }
 
-func (c *Client) CodexAPIKeys(ctx context.Context) (CodexAPIKeysResponse, error) {
-	var response CodexAPIKeysResponse
-	if err := c.DoJSON(ctx, http.MethodGet, "/codex-api-key", &response); err != nil {
-		return CodexAPIKeysResponse{}, err
-	}
-	return response, nil
-}
-
 func (c *Client) OpenAICompatibility(ctx context.Context) (OpenAICompatibilityResponse, error) {
 	var response OpenAICompatibilityResponse
 	if err := c.DoJSON(ctx, http.MethodGet, "/openai-compatibility", &response); err != nil {
@@ -178,13 +170,6 @@ func (c *Client) UpdateClientAPIKeys(ctx context.Context, keys []string) error {
 	return c.doJSONBody(ctx, http.MethodPut, "/api-keys", keys, nil)
 }
 
-func (c *Client) UpdateCodexAPIKeys(ctx context.Context, entries []CodexAPIKey) error {
-	if entries == nil {
-		entries = []CodexAPIKey{}
-	}
-	return c.doJSONBody(ctx, http.MethodPut, "/codex-api-key", entries, nil)
-}
-
 func (c *Client) UpdateOpenAICompatibility(ctx context.Context, entries []OpenAICompatibility) error {
 	if entries == nil {
 		entries = []OpenAICompatibility{}
@@ -192,89 +177,36 @@ func (c *Client) UpdateOpenAICompatibility(ctx context.Context, entries []OpenAI
 	return c.doJSONBody(ctx, http.MethodPut, "/openai-compatibility", entries, nil)
 }
 
-type ClaudeAPIKey struct {
-	APIKey         string            `json:"api-key"`
-	AuthIndex      string            `json:"auth-index,omitempty"`
-	Priority       *int              `json:"priority,omitempty"`
-	Weight         *int              `json:"weight,omitempty"`
-	Prefix         string            `json:"prefix,omitempty"`
-	BaseURL        string            `json:"base-url,omitempty"`
-	ProxyURL       string            `json:"proxy-url,omitempty"`
-	Models         []ModelAlias      `json:"models,omitempty"`
-	Headers        map[string]string `json:"headers,omitempty"`
-	DisableCooling *bool             `json:"disable-cooling,omitempty"`
-	ExcludedModels []string          `json:"excluded-models,omitempty"`
-}
-
-type ClaudeAPIKeysResponse struct {
-	Entries []ClaudeAPIKey `json:"claude-api-key"`
-}
-
-func (c *Client) ClaudeAPIKeys(ctx context.Context) ([]ClaudeAPIKey, error) {
-	var response ClaudeAPIKeysResponse
-	if err := c.DoJSON(ctx, http.MethodGet, "/claude-api-key", &response); err != nil {
-		return nil, err
-	}
-	return response.Entries, nil
-}
-
-type GeminiAPIKey struct {
-	APIKey         string            `json:"api-key"`
-	AuthIndex      string            `json:"auth-index,omitempty"`
-	Priority       *int              `json:"priority,omitempty"`
-	Weight         *int              `json:"weight,omitempty"`
-	Prefix         string            `json:"prefix,omitempty"`
-	BaseURL        string            `json:"base-url,omitempty"`
-	ProxyURL       string            `json:"proxy-url,omitempty"`
-	Models         []ModelAlias      `json:"models,omitempty"`
-	Headers        map[string]string `json:"headers,omitempty"`
-	DisableCooling *bool             `json:"disable-cooling,omitempty"`
-	ExcludedModels []string          `json:"excluded-models,omitempty"`
-}
-
-type GeminiAPIKeysResponse struct {
-	Entries []GeminiAPIKey `json:"gemini-api-key"`
-}
-
-func (c *Client) GeminiAPIKeys(ctx context.Context) ([]GeminiAPIKey, error) {
-	var response GeminiAPIKeysResponse
-	if err := c.DoJSON(ctx, http.MethodGet, "/gemini-api-key", &response); err != nil {
-		return nil, err
-	}
-	return response.Entries, nil
-}
-
-func (c *Client) UpdateClaudeAPIKeys(ctx context.Context, entries []ClaudeAPIKey) error {
-	if entries == nil {
-		entries = []ClaudeAPIKey{}
-	}
-	return c.doJSONBody(ctx, http.MethodPut, "/claude-api-key", entries, nil)
-}
-
-func (c *Client) UpdateGeminiAPIKeys(ctx context.Context, entries []GeminiAPIKey) error {
-	if entries == nil {
-		entries = []GeminiAPIKey{}
-	}
-	return c.doJSONBody(ctx, http.MethodPut, "/gemini-api-key", entries, nil)
-}
-
 type OAuthAuthURLResponse struct {
 	URL   string `json:"url"`
 	State string `json:"state,omitempty"`
+	// Flow is CPA's own label for the authorization shape: "device" for the
+	// RFC 8628 device-code providers (Kimi, Meta Muse), absent for flows the
+	// browser completes through a redirect. The console uses it to decide
+	// whether a pasted callback belongs on the card at all.
+	Flow string `json:"flow,omitempty"`
+	// UserCode is the short code the operator types on the vendor's device
+	// page. It is presented to the operator only, never persisted.
+	UserCode string `json:"user_code,omitempty"`
+	// ExpiresIn is the device grant's lifetime in seconds; zero when CPA did
+	// not report one.
+	ExpiresIn int `json:"expires_in,omitempty"`
 }
 
-var webuiSupportedProviders = map[string]bool{
-	"codex":       true,
-	"anthropic":   true,
-	"antigravity": true,
-	"xai":         true,
+// webuiSupportedProviders is derived from the provider registry: the rows whose
+// redirect targets a loopback callback. The device-code providers are absent,
+// because they have no redirect for a forwarder to receive, and plugin
+// providers are absent because only a built-in can declare the flag.
+func usesLoopbackCallback(provider string) bool {
+	registered, ok := LookupOAuthProvider(provider)
+	return ok && registered.UsesLoopbackCallback
 }
 
 func (c *Client) OAuthAuthURL(ctx context.Context, provider string) (OAuthAuthURLResponse, error) {
 	provider = strings.ToLower(strings.TrimSpace(provider))
 	var response OAuthAuthURLResponse
 	endpoint := fmt.Sprintf("/%s-auth-url", url.PathEscape(provider))
-	if webuiSupportedProviders[provider] {
+	if usesLoopbackCallback(provider) {
 		endpoint += "?is_webui=true"
 	}
 	if err := c.DoJSON(ctx, http.MethodGet, endpoint, &response); err != nil {
@@ -302,13 +234,27 @@ func (c *Client) OAuthStatus(ctx context.Context, sessionID string) (OAuthStatus
 	return response, nil
 }
 
-func (c *Client) CancelOAuthSession(ctx context.Context, sessionID string) error {
+// OAuthCancelResult reports whether CPA actually dropped the pending session.
+//
+// A session that already completed or expired cannot be cancelled, and CPA
+// answers those with `cancelled:false` while the credential may already be
+// saved. Reporting plain success there would tell the operator a sign-in was
+// abandoned that in fact produced a credential.
+type OAuthCancelResult struct {
+	Cancelled bool `json:"cancelled"`
+}
+
+func (c *Client) CancelOAuthSession(ctx context.Context, sessionID string) (OAuthCancelResult, error) {
 	endpoint := "/oauth-session"
 	token := strings.TrimSpace(sessionID)
 	if token != "" {
 		endpoint += "?state=" + url.QueryEscape(token) + "&session_id=" + url.QueryEscape(token)
 	}
-	return c.DoJSON(ctx, http.MethodDelete, endpoint, nil)
+	var response OAuthCancelResult
+	if err := c.DoJSON(ctx, http.MethodDelete, endpoint, &response); err != nil {
+		return OAuthCancelResult{}, err
+	}
+	return response, nil
 }
 
 type OAuthCallbackResult struct {
@@ -1264,24 +1210,6 @@ type AuthModel struct {
 	DisplayName string `json:"display_name"`
 }
 
-type CodexAPIKeysResponse struct {
-	Entries []CodexAPIKey `json:"codex-api-key"`
-}
-
-type CodexAPIKey struct {
-	APIKey         string            `json:"api-key"`
-	AuthIndex      string            `json:"auth-index,omitempty"`
-	BaseURL        string            `json:"base-url,omitempty"`
-	ProxyURL       string            `json:"proxy-url,omitempty"`
-	Headers        map[string]string `json:"headers,omitempty"`
-	Models         []ModelAlias      `json:"models,omitempty"`
-	ExcludedModels []string          `json:"excluded-models,omitempty"`
-	Priority       *int              `json:"priority,omitempty"`
-	Weight         *int              `json:"weight,omitempty"`
-	Prefix         string            `json:"prefix,omitempty"`
-	DisableCooling *bool             `json:"disable-cooling,omitempty"`
-}
-
 type OpenAICompatibilityResponse struct {
 	Entries []OpenAICompatibility `json:"openai-compatibility"`
 }
@@ -1520,10 +1448,25 @@ func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]str
 		}
 	}
 
-	if codexResp, err := c.CodexAPIKeys(ctx); err != nil {
-		errs = append(errs, "codex: "+err.Error())
-	} else {
-		for _, entry := range codexResp.Entries {
+	// Every config API-key family contributes its models the same way, so the
+	// families are walked rather than repeated. A family CPA cannot answer for
+	// is reported per family, which keeps a newly added credential list from
+	// silently disappearing out of the catalog.
+	for _, family := range []ConfigKeyFamily{
+		ConfigFamilyCodex,
+		ConfigFamilyClaude,
+		ConfigFamilyGemini,
+		ConfigFamilyMeta,
+	} {
+		entries, err := c.ConfigAPIKeys(ctx, family)
+		if err != nil {
+			// A family an older CPA release does not have is not a catalog failure.
+			if !IsMissingCapability(err) {
+				errs = append(errs, string(family)+": "+err.Error())
+			}
+			continue
+		}
+		for _, entry := range entries {
 			if IsExcludedAll(entry.ExcludedModels) {
 				continue
 			}
@@ -1545,46 +1488,6 @@ func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]str
 	} else {
 		for _, entry := range oaiResp.Entries {
 			if entry.Disabled {
-				continue
-			}
-			for _, m := range entry.Models {
-				name := strings.TrimSpace(m.Name)
-				if name != "" {
-					add(name, name)
-				}
-				alias := strings.TrimSpace(m.Alias)
-				if alias != "" {
-					add(alias, name)
-				}
-			}
-		}
-	}
-
-	if claudeEntries, err := c.ClaudeAPIKeys(ctx); err != nil {
-		errs = append(errs, "claude: "+err.Error())
-	} else {
-		for _, entry := range claudeEntries {
-			if IsExcludedAll(entry.ExcludedModels) {
-				continue
-			}
-			for _, m := range entry.Models {
-				name := strings.TrimSpace(m.Name)
-				if name != "" {
-					add(name, name)
-				}
-				alias := strings.TrimSpace(m.Alias)
-				if alias != "" {
-					add(alias, name)
-				}
-			}
-		}
-	}
-
-	if geminiEntries, err := c.GeminiAPIKeys(ctx); err != nil {
-		errs = append(errs, "gemini: "+err.Error())
-	} else {
-		for _, entry := range geminiEntries {
-			if IsExcludedAll(entry.ExcludedModels) {
 				continue
 			}
 			for _, m := range entry.Models {

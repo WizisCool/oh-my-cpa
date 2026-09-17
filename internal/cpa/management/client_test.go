@@ -30,12 +30,12 @@ func TestClientUsesManagementAuthorizationAndDecodesResponses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := client.CodexAPIKeys(context.Background())
+	entries, err := client.ConfigAPIKeys(context.Background(), ConfigFamilyCodex)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(response.Entries) != 1 || response.Entries[0].AuthIndex != "a1" {
-		t.Fatalf("decoded response = %#v", response)
+	if len(entries) != 1 || entries[0].AuthIndex != "a1" {
+		t.Fatalf("decoded response = %#v", entries)
 	}
 	if !client.HasManagementKey() {
 		t.Fatal("management key should be present")

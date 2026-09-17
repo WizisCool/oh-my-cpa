@@ -34,11 +34,11 @@ Oh My CPA is a self-hosted control plane for [CLIProxyAPI](https://github.com/ro
 ## Features
 
 ### Gateway & Provider Management
-- **AI Providers**: Configure and monitor endpoints for Codex, Claude, Gemini, DeepSeek, and OpenAI-compatible services.
+- **AI Providers**: Configure and monitor endpoints for Codex, Claude, Gemini, Meta Muse, DeepSeek, and OpenAI-compatible services. Each config API-key family (claude, codex, gemini, meta) is managed the same way: credentials, models, priority/weight, proxy, and a gateway-level enable switch.
 - **Protocol-Level Toggling**: Enable or disable providers with real gateway exclusion (`excluded-models: ['*']`), preventing requests from routing to inactive credentials.
 - **Model Catalog Pulling**: Fetch model lists directly from upstream providers to keep available models up to date.
 - **Client Key Management**: Create, view, and delete gateway API keys. Assign aliases so client keys appear by name in request records and filters.
-- **OAuth Credentials**: Upload, download, delete, and inspect OAuth auth files. Edit priority and weight settings, view supported models, and clear rate-limit cooldowns.
+- **OAuth Credentials**: Upload, download, delete, and inspect OAuth auth files. Edit priority and weight settings, view supported models, and clear rate-limit cooldowns. Sign in from the console for Codex, Claude, Antigravity, xAI, Kimi, Devin and Meta Muse; a redirect flow whose callback your browser cannot reach is completed by pasting the final URL back, and a device-code flow shows the code to confirm.
 
 ### Observability & Telemetry
 - **Usage Dashboard**: Track request volume, token throughput, cache hit rates, and estimated costs across presets (15m, 1h, 6h, 24h, 7d, 30d, 90d) and custom date ranges, with a year-long contribution-style token heatmap of daily token volume, where clicking a day shows its request count and token volume, and links to that day's request list.
@@ -131,7 +131,7 @@ Open **`http://127.0.0.1:5173/omc/`**. Vite serves the UI with HMR and proxies `
 > - [`deploy/compose.full.yml`](deploy/compose.full.yml): Stack co-deploying CPA, Oh My CPA, and Caddy.
 > - [`deploy/compose.omc.yml`](deploy/compose.omc.yml): Standalone Oh My CPA connecting to an existing CPA instance.
 >
-> The full stack pins CPA `v7.3.4` by default; override `CPA_IMAGE` when connecting the stack to a different compatible release.
+> The full stack pins CPA `v7.3.5` by default; override `CPA_IMAGE` when connecting the stack to a different compatible release.
 
 ## Operational Notes
 

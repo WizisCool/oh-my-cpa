@@ -13,8 +13,8 @@ func TestMetadataIdenticalEntriesWithDifferentKeysPreserveIdentityAcrossRearrang
 	}
 	discoverer := NewDiscoverer(cipher)
 
-	entryA := management.CodexAPIKey{BaseURL: "https://api.example.test", Prefix: "prod", APIKey: "key-alpha"}
-	entryB := management.CodexAPIKey{BaseURL: "https://api.example.test", Prefix: "prod", APIKey: "key-beta"}
+	entryA := management.ConfigAPIKey{BaseURL: "https://api.example.test", Prefix: "prod", APIKey: "key-alpha"}
+	entryB := management.ConfigAPIKey{BaseURL: "https://api.example.test", Prefix: "prod", APIKey: "key-beta"}
 
 	// Order 1: A at index 0, B at index 1
 	resA1, err := discoverer.fromCodexAPIKey("default", 0, entryA)
@@ -55,16 +55,16 @@ func TestKeyRotationPreservesIdentityWhenAuthIndexPresent(t *testing.T) {
 	discoverer := NewDiscoverer(cipher)
 
 	// When stable auth_index exists: key rotation keeps exact same identity
-	resOld, _ := discoverer.fromCodexAPIKey("default", 0, management.CodexAPIKey{AuthIndex: "idx-stable", APIKey: "old-secret"})
-	resNew, _ := discoverer.fromCodexAPIKey("default", 0, management.CodexAPIKey{AuthIndex: "idx-stable", APIKey: "rotated-new-secret"})
+	resOld, _ := discoverer.fromCodexAPIKey("default", 0, management.ConfigAPIKey{AuthIndex: "idx-stable", APIKey: "old-secret"})
+	resNew, _ := discoverer.fromCodexAPIKey("default", 0, management.ConfigAPIKey{AuthIndex: "idx-stable", APIKey: "rotated-new-secret"})
 
 	if resOld.ResourceKey != resNew.ResourceKey {
 		t.Fatalf("expected stable identity with auth_index across rotation: %q vs %q", resOld.ResourceKey, resNew.ResourceKey)
 	}
 
 	// Without auth_index: changing key changes keyed HMAC cleanly
-	resNoIdx1, _ := discoverer.fromCodexAPIKey("default", 0, management.CodexAPIKey{APIKey: "secret-1"})
-	resNoIdx2, _ := discoverer.fromCodexAPIKey("default", 0, management.CodexAPIKey{APIKey: "secret-2"})
+	resNoIdx1, _ := discoverer.fromCodexAPIKey("default", 0, management.ConfigAPIKey{APIKey: "secret-1"})
+	resNoIdx2, _ := discoverer.fromCodexAPIKey("default", 0, management.ConfigAPIKey{APIKey: "secret-2"})
 	if resNoIdx1.ResourceKey == resNoIdx2.ResourceKey {
 		t.Fatalf("without auth_index, rotated secret must produce distinct pseudonymous HMAC: %q", resNoIdx1.ResourceKey)
 	}

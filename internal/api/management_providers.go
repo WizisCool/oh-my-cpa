@@ -267,10 +267,7 @@ func (h *Handler) saveProviderName(ctx context.Context, id, name string) {
 		names = make(map[string]string)
 	}
 	names[id] = name
-	encoded, err := json.Marshal(names)
-	if err == nil {
-		_ = h.repo.PutPreference(ctx, repository.PreferenceProviderNames, string(encoded))
-	}
+	h.saveProviderNames(ctx, names)
 }
 
 func (h *Handler) removeProviderName(ctx context.Context, id string) {
@@ -282,10 +279,82 @@ func (h *Handler) removeProviderName(ctx context.Context, id string) {
 		return
 	}
 	delete(names, id)
+	h.saveProviderNames(ctx, names)
+}
+
+// saveProviderNames replaces the whole name map. It exists for the operations
+// that re-key several entries at once (a delete shifts every later position), so
+// those cannot leave the stored overlay half-written.
+func (h *Handler) saveProviderNames(ctx context.Context, names map[string]string) {
+	if h.repo == nil {
+		return
+	}
 	encoded, err := json.Marshal(names)
 	if err == nil {
 		_ = h.repo.PutPreference(ctx, repository.PreferenceProviderNames, string(encoded))
 	}
+}
+
+// shiftProviderMetadataAfterDelete re-keys the operator metadata of every entry
+// that moved down one position when an entry was deleted.
+func (h *Handler) shiftProviderMetadataAfterDelete(ctx context.Context, idPrefix string, deletedIndex int) {
+	if idPrefix == "" {
+		return
+	}
+	if names := h.loadProviderNames(ctx); len(names) > 0 {
+		h.saveProviderNames(ctx, shiftPositionalProviderIDs(names, idPrefix, deletedIndex))
+	}
+	if websites := h.loadProviderWebsites(ctx); len(websites) > 0 {
+		h.saveProviderWebsites(ctx, shiftPositionalProviderIDs(websites, idPrefix, deletedIndex))
+	}
+}
+
+// idPrefixForFamily is the positional id prefix a family's rows carry.
+func idPrefixForFamily(family string) string {
+	if spec, ok := lookupProviderConfigFamily(family); ok {
+		return spec.IDPrefix
+	}
+	if family == openAICompatibilityFamily {
+		return openAICompatIDPrefix
+	}
+	return ""
+}
+
+// shiftPositionalProviderIDs re-keys one family's metadata after an entry was
+// deleted, mapping a stored positional id onto the entry's new position.
+//
+// Provider rows are addressed by position, and an operator's name and website are
+// stored under that same id. Deleting an entry moves every later entry down one,
+// so without re-keying the name given to one credential would relabel whichever
+// credential took its place — and the deleted entry's own name would survive on
+// an unrelated row. Ids of other families are left untouched; the overlay is
+// shared across families and only this one's positions moved.
+func shiftPositionalProviderIDs(entries map[string]string, idPrefix string, deletedIndex int) map[string]string {
+	if len(entries) == 0 {
+		return entries
+	}
+	shifted := make(map[string]string, len(entries))
+	for id, value := range entries {
+		if !strings.HasPrefix(id, idPrefix) {
+			shifted[id] = value
+			continue
+		}
+		index, err := strconv.Atoi(strings.TrimPrefix(id, idPrefix))
+		if err != nil {
+			// An id this family cannot be addressed by is not ours to rewrite.
+			shifted[id] = value
+			continue
+		}
+		switch {
+		case index == deletedIndex:
+			// The entry this metadata described no longer exists.
+		case index > deletedIndex:
+			shifted[fmt.Sprintf("%s%d", idPrefix, index-1)] = value
+		default:
+			shifted[id] = value
+		}
+	}
+	return shifted
 }
 
 // loadProviderWebsites reads the per-provider homepage map. It is keyed by the
@@ -325,10 +394,7 @@ func (h *Handler) saveProviderWebsite(ctx context.Context, id, website string) {
 	} else {
 		websites[id] = website
 	}
-	encoded, err := json.Marshal(websites)
-	if err == nil {
-		_ = h.repo.PutPreference(ctx, repository.PreferenceProviderWebsites, string(encoded))
-	}
+	h.saveProviderWebsites(ctx, websites)
 }
 
 // applyProviderWebsite stores a website only when the save request actually
@@ -345,8 +411,129 @@ func (h *Handler) applyProviderWebsite(ctx context.Context, id, website string, 
 	h.saveProviderWebsite(ctx, id, website)
 }
 
+// saveProviderWebsites replaces the whole website map, for the operations that
+// re-key several entries at once.
+func (h *Handler) saveProviderWebsites(ctx context.Context, websites map[string]string) {
+	if h.repo == nil {
+		return
+	}
+	encoded, err := json.Marshal(websites)
+	if err == nil {
+		_ = h.repo.PutPreference(ctx, repository.PreferenceProviderWebsites, string(encoded))
+	}
+}
+
 func (h *Handler) removeProviderWebsite(ctx context.Context, id string) {
 	h.saveProviderWebsite(ctx, id, "")
+}
+
+// providerConfigFamilySpec describes one of CPA's config API-key credential
+// families as the console presents and manages it.
+//
+// The families differ only in constants: which CPA list carries them, the
+// positional id their rows get, and the name and protocol a row falls back to.
+// They share one credential schema and one whole-list write, so they are data
+// here instead of four copies of every code path - adding a provider whose
+// credentials CPA stores this way is a row in providerConfigFamilies plus its
+// console-side presentation.
+type providerConfigFamilySpec struct {
+	Family      management.ConfigKeyFamily
+	IDPrefix    string
+	DefaultName string
+	// PrefixLabel names the family inside a derived row name, e.g. "Codex (team)"
+	// for an entry whose configured prefix is "team".
+	PrefixLabel string
+	Protocol    string
+}
+
+// providerConfigFamilies is the ordered registry of config API-key families the
+// console manages. The declared order is the provider list's row order.
+var providerConfigFamilies = []providerConfigFamilySpec{
+	{Family: management.ConfigFamilyCodex, IDPrefix: "codex-", DefaultName: "Codex / Responses", PrefixLabel: "Codex", Protocol: "OpenAI Responses"},
+	{Family: management.ConfigFamilyClaude, IDPrefix: "claude-", DefaultName: "Anthropic Claude", PrefixLabel: "Claude", Protocol: "Anthropic Messages"},
+	{Family: management.ConfigFamilyGemini, IDPrefix: "gemini-", DefaultName: "Google Gemini", PrefixLabel: "Gemini", Protocol: "Gemini Generate Content"},
+	{Family: management.ConfigFamilyMeta, IDPrefix: "meta-", DefaultName: "Meta Muse", PrefixLabel: "Meta", Protocol: "Meta Muse"},
+}
+
+// lookupProviderConfigFamily resolves a provider family name to its registry row.
+func lookupProviderConfigFamily(family string) (providerConfigFamilySpec, bool) {
+	normalized := strings.ToLower(strings.TrimSpace(family))
+	for _, spec := range providerConfigFamilies {
+		if string(spec.Family) == normalized {
+			return spec, true
+		}
+	}
+	return providerConfigFamilySpec{}, false
+}
+
+// configKeyProviderItems projects one family's credential list into provider rows.
+func configKeyProviderItems(spec providerConfigFamilySpec, entries []management.ConfigAPIKey, customNames map[string]string) []ProviderItemDTO {
+	items := make([]ProviderItemDTO, 0, len(entries))
+	for i, entry := range entries {
+		id := fmt.Sprintf("%s%d", spec.IDPrefix, i)
+		name := spec.DefaultName
+		if customNames != nil && customNames[id] != "" {
+			name = customNames[id]
+		} else if entry.Prefix != "" {
+			name = fmt.Sprintf("%s (%s)", spec.PrefixLabel, entry.Prefix)
+		}
+
+		models := make([]string, 0, len(entry.Models))
+		modelEntries := make([]ProviderModelDTO, 0, len(entry.Models))
+		for _, m := range entry.Models {
+			if m.Name != "" {
+				models = append(models, m.Name)
+			}
+			var thinking *ThinkingDTO
+			if m.Thinking != nil && len(m.Thinking.Levels) > 0 {
+				thinking = &ThinkingDTO{Levels: m.Thinking.Levels}
+			}
+			modelEntries = append(modelEntries, ProviderModelDTO{
+				Name:     m.Name,
+				Alias:    m.Alias,
+				Image:    m.Image,
+				Thinking: thinking,
+			})
+		}
+
+		keyEntries := make([]ProviderKeyEntryDTO, 0)
+		if strings.TrimSpace(entry.APIKey) != "" {
+			keyEntries = append(keyEntries, ProviderKeyEntryDTO{
+				Index:    0,
+				APIKey:   entry.APIKey,
+				ProxyURL: entry.ProxyURL,
+				Weight:   entry.Weight,
+			})
+		}
+
+		var disableCoolingVal bool
+		if entry.DisableCooling != nil {
+			disableCoolingVal = *entry.DisableCooling
+		}
+
+		// CPA disables config API-key credentials through the excluded-all marker
+		// in excluded-models; the UI state must follow that truth.
+		items = append(items, ProviderItemDTO{
+			ID:              id,
+			Family:          string(spec.Family),
+			Name:            name,
+			Protocol:        spec.Protocol,
+			BaseURL:         entry.BaseURL,
+			Prefix:          entry.Prefix,
+			Priority:        entry.Priority,
+			DisableCooling:  disableCoolingVal,
+			AuthIndex:       entry.AuthIndex,
+			Models:          models,
+			ModelEntries:    modelEntries,
+			Disabled:        management.IsExcludedAll(entry.ExcludedModels),
+			KeyConfigured:   strings.TrimSpace(entry.APIKey) != "",
+			APIKey:          entry.APIKey,
+			KeyEntries:      keyEntries,
+			Headers:         entry.Headers,
+			ProxyConfigured: strings.TrimSpace(entry.ProxyURL) != "",
+		})
+	}
+	return items
 }
 
 func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *http.Request) {
@@ -366,78 +553,19 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 	customNames := h.loadProviderNames(ctx)
 	customWebsites := h.loadProviderWebsites(ctx)
 
-	if codexResp, err := client.CodexAPIKeys(ctx); err == nil {
-		for i, entry := range codexResp.Entries {
-			id := fmt.Sprintf("codex-%d", i)
-			name := "Codex / Responses"
-			if customNames != nil && customNames[id] != "" {
-				name = customNames[id]
-			} else if entry.Prefix != "" {
-				name = fmt.Sprintf("Codex (%s)", entry.Prefix)
-			}
-
-			models := make([]string, 0, len(entry.Models))
-			modelEntries := make([]ProviderModelDTO, 0, len(entry.Models))
-			for _, m := range entry.Models {
-				if m.Name != "" {
-					models = append(models, m.Name)
-				}
-				var thinking *ThinkingDTO
-				if m.Thinking != nil && len(m.Thinking.Levels) > 0 {
-					thinking = &ThinkingDTO{Levels: m.Thinking.Levels}
-				}
-				modelEntries = append(modelEntries, ProviderModelDTO{
-					Name:     m.Name,
-					Alias:    m.Alias,
-					Image:    m.Image,
-					Thinking: thinking,
-				})
-			}
-
-			keyEntries := make([]ProviderKeyEntryDTO, 0)
-			if strings.TrimSpace(entry.APIKey) != "" {
-				keyEntries = append(keyEntries, ProviderKeyEntryDTO{
-					Index:    0,
-					APIKey:   entry.APIKey,
-					ProxyURL: entry.ProxyURL,
-					Weight:   entry.Weight,
-				})
-			}
-
-			var disableCoolingVal bool
-			if entry.DisableCooling != nil {
-				disableCoolingVal = *entry.DisableCooling
-			}
-
-			// CPA disables config API-key credentials through the excluded-all
-			// marker in excluded-models; the UI state must follow that truth.
-			isDisabled := management.IsExcludedAll(entry.ExcludedModels)
-
-			items = append(items, ProviderItemDTO{
-				ID:              id,
-				Family:          "codex",
-				Name:            name,
-				Protocol:        "OpenAI Responses",
-				BaseURL:         entry.BaseURL,
-				Prefix:          entry.Prefix,
-				Priority:        entry.Priority,
-				DisableCooling:  disableCoolingVal,
-				AuthIndex:       entry.AuthIndex,
-				Models:          models,
-				ModelEntries:    modelEntries,
-				Disabled:        isDisabled,
-				KeyConfigured:   strings.TrimSpace(entry.APIKey) != "",
-				APIKey:          entry.APIKey,
-				KeyEntries:      keyEntries,
-				Headers:         entry.Headers,
-				ProxyConfigured: strings.TrimSpace(entry.ProxyURL) != "",
-			})
+	// Config API-key families are walked from the registry rather than repeated
+	// per family; the declared order is what the provider list follows.
+	for _, spec := range providerConfigFamilies {
+		entries, err := client.ConfigAPIKeys(ctx, spec.Family)
+		if err != nil {
+			continue
 		}
+		items = append(items, configKeyProviderItems(spec, entries, customNames)...)
 	}
 
 	if oaiResp, err := client.OpenAICompatibility(ctx); err == nil {
 		for i, entry := range oaiResp.Entries {
-			id := fmt.Sprintf("openai-compat-%d", i)
+			id := fmt.Sprintf("%s%d", openAICompatIDPrefix, i)
 			name := firstNonEmpty(entry.Name, "OpenAI Compatible")
 			if customNames != nil && customNames[id] != "" {
 				name = customNames[id]
@@ -486,7 +614,7 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 
 			items = append(items, ProviderItemDTO{
 				ID:              id,
-				Family:          "openai-compatibility",
+				Family:          openAICompatibilityFamily,
 				Name:            name,
 				UpstreamName:    entry.Name,
 				Protocol:        "OpenAI Chat Completions",
@@ -502,144 +630,6 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 				KeyEntries:      keyEntries,
 				Headers:         entry.Headers,
 				ProxyConfigured: false,
-			})
-		}
-	}
-
-	if claudeEntries, err := client.ClaudeAPIKeys(ctx); err == nil {
-		for i, entry := range claudeEntries {
-			id := fmt.Sprintf("claude-%d", i)
-			name := "Anthropic Claude"
-			if customNames != nil && customNames[id] != "" {
-				name = customNames[id]
-			} else if entry.Prefix != "" {
-				name = fmt.Sprintf("Claude (%s)", entry.Prefix)
-			}
-
-			models := make([]string, 0, len(entry.Models))
-			modelEntries := make([]ProviderModelDTO, 0, len(entry.Models))
-			for _, m := range entry.Models {
-				if m.Name != "" {
-					models = append(models, m.Name)
-				}
-				var thinking *ThinkingDTO
-				if m.Thinking != nil && len(m.Thinking.Levels) > 0 {
-					thinking = &ThinkingDTO{Levels: m.Thinking.Levels}
-				}
-				modelEntries = append(modelEntries, ProviderModelDTO{
-					Name:     m.Name,
-					Alias:    m.Alias,
-					Image:    m.Image,
-					Thinking: thinking,
-				})
-			}
-
-			keyEntries := make([]ProviderKeyEntryDTO, 0)
-			if strings.TrimSpace(entry.APIKey) != "" {
-				keyEntries = append(keyEntries, ProviderKeyEntryDTO{
-					Index:    0,
-					APIKey:   entry.APIKey,
-					ProxyURL: entry.ProxyURL,
-					Weight:   entry.Weight,
-				})
-			}
-
-			var disableCoolingVal bool
-			if entry.DisableCooling != nil {
-				disableCoolingVal = *entry.DisableCooling
-			}
-
-			// CPA disables config API-key credentials through the excluded-all
-			// marker in excluded-models; the UI state must follow that truth.
-			isDisabled := management.IsExcludedAll(entry.ExcludedModels)
-
-			items = append(items, ProviderItemDTO{
-				ID:              id,
-				Family:          "claude",
-				Name:            name,
-				Protocol:        "Anthropic Messages",
-				BaseURL:         entry.BaseURL,
-				Prefix:          entry.Prefix,
-				Priority:        entry.Priority,
-				DisableCooling:  disableCoolingVal,
-				AuthIndex:       entry.AuthIndex,
-				Models:          models,
-				ModelEntries:    modelEntries,
-				Disabled:        isDisabled,
-				KeyConfigured:   strings.TrimSpace(entry.APIKey) != "",
-				APIKey:          entry.APIKey,
-				KeyEntries:      keyEntries,
-				Headers:         entry.Headers,
-				ProxyConfigured: strings.TrimSpace(entry.ProxyURL) != "",
-			})
-		}
-	}
-
-	if geminiEntries, err := client.GeminiAPIKeys(ctx); err == nil {
-		for i, entry := range geminiEntries {
-			id := fmt.Sprintf("gemini-%d", i)
-			name := "Google Gemini"
-			if customNames != nil && customNames[id] != "" {
-				name = customNames[id]
-			} else if entry.Prefix != "" {
-				name = fmt.Sprintf("Gemini (%s)", entry.Prefix)
-			}
-
-			models := make([]string, 0, len(entry.Models))
-			modelEntries := make([]ProviderModelDTO, 0, len(entry.Models))
-			for _, m := range entry.Models {
-				if m.Name != "" {
-					models = append(models, m.Name)
-				}
-				var thinking *ThinkingDTO
-				if m.Thinking != nil && len(m.Thinking.Levels) > 0 {
-					thinking = &ThinkingDTO{Levels: m.Thinking.Levels}
-				}
-				modelEntries = append(modelEntries, ProviderModelDTO{
-					Name:     m.Name,
-					Alias:    m.Alias,
-					Image:    m.Image,
-					Thinking: thinking,
-				})
-			}
-
-			keyEntries := make([]ProviderKeyEntryDTO, 0)
-			if strings.TrimSpace(entry.APIKey) != "" {
-				keyEntries = append(keyEntries, ProviderKeyEntryDTO{
-					Index:    0,
-					APIKey:   entry.APIKey,
-					ProxyURL: entry.ProxyURL,
-					Weight:   entry.Weight,
-				})
-			}
-
-			var disableCoolingVal bool
-			if entry.DisableCooling != nil {
-				disableCoolingVal = *entry.DisableCooling
-			}
-
-			// CPA disables config API-key credentials through the excluded-all
-			// marker in excluded-models; the UI state must follow that truth.
-			isDisabled := management.IsExcludedAll(entry.ExcludedModels)
-
-			items = append(items, ProviderItemDTO{
-				ID:              id,
-				Family:          "gemini",
-				Name:            name,
-				Protocol:        "Gemini Generate Content",
-				BaseURL:         entry.BaseURL,
-				Prefix:          entry.Prefix,
-				Priority:        entry.Priority,
-				DisableCooling:  disableCoolingVal,
-				AuthIndex:       entry.AuthIndex,
-				Models:          models,
-				ModelEntries:    modelEntries,
-				Disabled:        isDisabled,
-				KeyConfigured:   strings.TrimSpace(entry.APIKey) != "",
-				APIKey:          entry.APIKey,
-				KeyEntries:      keyEntries,
-				Headers:         entry.Headers,
-				ProxyConfigured: strings.TrimSpace(entry.ProxyURL) != "",
 			})
 		}
 	}
@@ -768,8 +758,11 @@ func (h *Handler) patchManagementProviderStatus(writer http.ResponseWriter, requ
 // reports the outcome instead of replying, because the caller records the audit
 // result and composes the response only after the write window is released.
 func (h *Handler) writeProviderStatus(ctx context.Context, client *management.Client, req patchProviderStatusRequest) error {
+	if spec, ok := lookupProviderConfigFamily(req.Family); ok {
+		return h.writeConfigKeyProviderStatus(ctx, client, spec, req)
+	}
 	switch req.Family {
-	case "openai-compatibility":
+	case openAICompatibilityFamily:
 		return gatedProviderListWrite(h, ctx,
 			func(ctx context.Context) (management.OpenAICompatibilityResponse, error) {
 				return client.OpenAICompatibility(ctx)
@@ -787,70 +780,35 @@ func (h *Handler) writeProviderStatus(ctx context.Context, client *management.Cl
 				list.Entries[req.Index].Disabled = req.Disabled
 				return nil
 			})
-	case "claude", "codex", "gemini":
-		// Config API-key entries have no disabled field in CPA's schema, so the
-		// gateway cannot see a local preference. CPA's own disable mechanism is
-		// the excluded-all marker in excluded-models; anything else only repaints
-		// the UI while the gateway keeps routing — that is exactly the fallback
-		// leak this used to cause.
-		applyExcludedAll := func(entries []string) []string {
-			return management.SetExcludedAll(entries, req.Disabled)
-		}
-		switch req.Family {
-		case "claude":
-			return gatedProviderListWrite(h, ctx,
-				func(ctx context.Context) ([]management.ClaudeAPIKey, error) { return client.ClaudeAPIKeys(ctx) },
-				func(ctx context.Context, list []management.ClaudeAPIKey) error {
-					return client.UpdateClaudeAPIKeys(ctx, list)
-				},
-				func(list *[]management.ClaudeAPIKey) error {
-					if req.Index >= len(*list) {
-						return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
-					}
-					if err := req.verifyAuthIndex((*list)[req.Index].AuthIndex); err != nil {
-						return err
-					}
-					(*list)[req.Index].ExcludedModels = applyExcludedAll((*list)[req.Index].ExcludedModels)
-					return nil
-				})
-		case "codex":
-			return gatedProviderListWrite(h, ctx,
-				func(ctx context.Context) (management.CodexAPIKeysResponse, error) {
-					return client.CodexAPIKeys(ctx)
-				},
-				func(ctx context.Context, list management.CodexAPIKeysResponse) error {
-					return client.UpdateCodexAPIKeys(ctx, list.Entries)
-				},
-				func(list *management.CodexAPIKeysResponse) error {
-					if req.Index >= len(list.Entries) {
-						return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
-					}
-					if err := req.verifyAuthIndex(list.Entries[req.Index].AuthIndex); err != nil {
-						return err
-					}
-					list.Entries[req.Index].ExcludedModels = applyExcludedAll(list.Entries[req.Index].ExcludedModels)
-					return nil
-				})
-		default:
-			return gatedProviderListWrite(h, ctx,
-				func(ctx context.Context) ([]management.GeminiAPIKey, error) { return client.GeminiAPIKeys(ctx) },
-				func(ctx context.Context, list []management.GeminiAPIKey) error {
-					return client.UpdateGeminiAPIKeys(ctx, list)
-				},
-				func(list *[]management.GeminiAPIKey) error {
-					if req.Index >= len(*list) {
-						return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
-					}
-					if err := req.verifyAuthIndex((*list)[req.Index].AuthIndex); err != nil {
-						return err
-					}
-					(*list)[req.Index].ExcludedModels = applyExcludedAll((*list)[req.Index].ExcludedModels)
-					return nil
-				})
-		}
 	default:
 		return newProviderWriteError(http.StatusBadRequest, "provider family does not support status toggle")
 	}
+}
+
+// writeConfigKeyProviderStatus flips one config API-key credential's enable state.
+//
+// These entries have no disabled field in CPA's schema, so the gateway cannot see
+// a local preference. CPA's own disable mechanism is the excluded-all marker in
+// excluded-models; anything else only repaints the UI while the gateway keeps
+// routing — that is exactly the fallback leak this used to cause.
+func (h *Handler) writeConfigKeyProviderStatus(ctx context.Context, client *management.Client, spec providerConfigFamilySpec, req patchProviderStatusRequest) error {
+	return gatedProviderListWrite(h, ctx,
+		func(ctx context.Context) ([]management.ConfigAPIKey, error) {
+			return client.ConfigAPIKeys(ctx, spec.Family)
+		},
+		func(ctx context.Context, list []management.ConfigAPIKey) error {
+			return client.UpdateConfigAPIKeys(ctx, spec.Family, list)
+		},
+		func(list *[]management.ConfigAPIKey) error {
+			if req.Index >= len(*list) {
+				return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
+			}
+			if err := req.verifyAuthIndex((*list)[req.Index].AuthIndex); err != nil {
+				return err
+			}
+			(*list)[req.Index].ExcludedModels = management.SetExcludedAll((*list)[req.Index].ExcludedModels, req.Disabled)
+			return nil
+		})
 }
 
 type SaveProviderKeyEntry struct {
@@ -933,28 +891,31 @@ func resolveProviderWebsite(raw *string) (website string, isProvided bool, isVal
 // document limit, so one absurd entry cannot consume the whole map's budget.
 const maxProviderWebsiteLength = 512
 
+// The openai-compatibility family is not a config API-key list: its entries are
+// whole provider objects with their own credential list, so it keeps constants
+// of its own instead of a row in providerConfigFamilies.
+const (
+	openAICompatibilityFamily = "openai-compatibility"
+	openAICompatIDPrefix      = "openai-compat-"
+)
+
+// parseProviderID splits a positional provider id such as `meta-2` into its
+// family and index. The config API-key prefixes come from the family registry,
+// so a new family is addressable without touching this function.
 func parseProviderID(id string) (string, int, error) {
-	id = strings.TrimSpace(id)
-	switch {
-	case strings.HasPrefix(id, "openai-compat-"):
-		idxStr := strings.TrimPrefix(id, "openai-compat-")
-		idx, err := strconv.Atoi(idxStr)
-		return "openai-compatibility", idx, err
-	case strings.HasPrefix(id, "codex-"):
-		idxStr := strings.TrimPrefix(id, "codex-")
-		idx, err := strconv.Atoi(idxStr)
-		return "codex", idx, err
-	case strings.HasPrefix(id, "claude-"):
-		idxStr := strings.TrimPrefix(id, "claude-")
-		idx, err := strconv.Atoi(idxStr)
-		return "claude", idx, err
-	case strings.HasPrefix(id, "gemini-"):
-		idxStr := strings.TrimPrefix(id, "gemini-")
-		idx, err := strconv.Atoi(idxStr)
-		return "gemini", idx, err
-	default:
-		return "", 0, fmt.Errorf("unknown provider id format: %s", id)
+	trimmed := strings.TrimSpace(id)
+	if strings.HasPrefix(trimmed, openAICompatIDPrefix) {
+		idx, err := strconv.Atoi(strings.TrimPrefix(trimmed, openAICompatIDPrefix))
+		return openAICompatibilityFamily, idx, err
 	}
+	for _, spec := range providerConfigFamilies {
+		if !strings.HasPrefix(trimmed, spec.IDPrefix) {
+			continue
+		}
+		idx, err := strconv.Atoi(strings.TrimPrefix(trimmed, spec.IDPrefix))
+		return string(spec.Family), idx, err
+	}
+	return "", 0, fmt.Errorf("unknown provider id format: %s", trimmed)
 }
 
 // updateOpenAICompatibilityGated is the whole-list write behind create/update/
@@ -978,51 +939,6 @@ func (h *Handler) updateOpenAICompatibilityGated(ctx context.Context, client *ma
 		})
 }
 
-func (h *Handler) updateCodexAPIKeysGated(ctx context.Context, client *management.Client, entries []management.CodexAPIKey) error {
-	return gatedProviderListWrite(h, ctx,
-		func(ctx context.Context) ([]management.CodexAPIKey, error) {
-			resp, err := client.CodexAPIKeys(ctx)
-			if err != nil {
-				return nil, err
-			}
-			return resp.Entries, nil
-		},
-		func(ctx context.Context, list []management.CodexAPIKey) error {
-			return client.UpdateCodexAPIKeys(ctx, list)
-		},
-		func(list *[]management.CodexAPIKey) error {
-			*list = entries
-			return nil
-		})
-}
-
-func (h *Handler) updateClaudeAPIKeysGated(ctx context.Context, client *management.Client, entries []management.ClaudeAPIKey) error {
-	return gatedProviderListWrite(h, ctx,
-		func(ctx context.Context) ([]management.ClaudeAPIKey, error) { return client.ClaudeAPIKeys(ctx) },
-		func(ctx context.Context, list []management.ClaudeAPIKey) error {
-			return client.UpdateClaudeAPIKeys(ctx, list)
-		},
-		func(list *[]management.ClaudeAPIKey) error {
-			*list = entries
-			return nil
-		})
-}
-
-func (h *Handler) updateGeminiAPIKeysGated(ctx context.Context, client *management.Client, entries []management.GeminiAPIKey) error {
-	return gatedProviderListWrite(h, ctx,
-		func(ctx context.Context) ([]management.GeminiAPIKey, error) { return client.GeminiAPIKeys(ctx) },
-		func(ctx context.Context, list []management.GeminiAPIKey) error {
-			return client.UpdateGeminiAPIKeys(ctx, list)
-		},
-		func(list *[]management.GeminiAPIKey) error {
-			*list = entries
-			return nil
-		})
-}
-
-// The append helpers below build the new entry against the list as it exists
-// inside the write window, so an append cannot be based on a stale length.
-
 func (h *Handler) appendOpenAICompatibilityGated(ctx context.Context, client *management.Client, entry management.OpenAICompatibility) ([]management.OpenAICompatibility, error) {
 	var updated []management.OpenAICompatibility
 	err := gatedProviderListWrite(h, ctx,
@@ -1044,55 +960,63 @@ func (h *Handler) appendOpenAICompatibilityGated(ctx context.Context, client *ma
 	return updated, err
 }
 
-func (h *Handler) appendCodexAPIKeyGated(ctx context.Context, client *management.Client, entry management.CodexAPIKey) ([]management.CodexAPIKey, error) {
-	var updated []management.CodexAPIKey
+// The helpers below run one config API-key family's read-modify-write inside the
+// console's provider write window. They are family-agnostic on purpose: the
+// family is a runtime value, so a new credential list needs no new code path.
+
+// appendConfigKeyProvider adds one credential to the family list.
+func (h *Handler) appendConfigKeyProvider(ctx context.Context, client *management.Client, spec providerConfigFamilySpec, entry management.ConfigAPIKey) ([]management.ConfigAPIKey, error) {
+	var updated []management.ConfigAPIKey
 	err := gatedProviderListWrite(h, ctx,
-		func(ctx context.Context) ([]management.CodexAPIKey, error) {
-			resp, err := client.CodexAPIKeys(ctx)
-			if err != nil {
-				return nil, err
+		func(ctx context.Context) ([]management.ConfigAPIKey, error) {
+			return client.ConfigAPIKeys(ctx, spec.Family)
+		},
+		func(ctx context.Context, list []management.ConfigAPIKey) error {
+			return client.UpdateConfigAPIKeys(ctx, spec.Family, list)
+		},
+		func(list *[]management.ConfigAPIKey) error {
+			updated = append(append([]management.ConfigAPIKey{}, *list...), entry)
+			*list = updated
+			return nil
+		})
+	return updated, err
+}
+
+// mutateConfigKeyProvider edits one credential at index. The list is read inside
+// the write window, so the edit cannot be applied to a stale snapshot.
+func (h *Handler) mutateConfigKeyProvider(ctx context.Context, client *management.Client, spec providerConfigFamilySpec, index int, apply func(*management.ConfigAPIKey)) error {
+	return gatedProviderListWrite(h, ctx,
+		func(ctx context.Context) ([]management.ConfigAPIKey, error) {
+			return client.ConfigAPIKeys(ctx, spec.Family)
+		},
+		func(ctx context.Context, list []management.ConfigAPIKey) error {
+			return client.UpdateConfigAPIKeys(ctx, spec.Family, list)
+		},
+		func(list *[]management.ConfigAPIKey) error {
+			if index >= len(*list) {
+				return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
 			}
-			return resp.Entries, nil
-		},
-		func(ctx context.Context, list []management.CodexAPIKey) error {
-			return client.UpdateCodexAPIKeys(ctx, list)
-		},
-		func(list *[]management.CodexAPIKey) error {
-			updated = append(append([]management.CodexAPIKey{}, *list...), entry)
-			*list = updated
+			apply(&(*list)[index])
 			return nil
 		})
-	return updated, err
 }
 
-func (h *Handler) appendClaudeAPIKeyGated(ctx context.Context, client *management.Client, entry management.ClaudeAPIKey) ([]management.ClaudeAPIKey, error) {
-	var updated []management.ClaudeAPIKey
-	err := gatedProviderListWrite(h, ctx,
-		func(ctx context.Context) ([]management.ClaudeAPIKey, error) { return client.ClaudeAPIKeys(ctx) },
-		func(ctx context.Context, list []management.ClaudeAPIKey) error {
-			return client.UpdateClaudeAPIKeys(ctx, list)
+// deleteConfigKeyProvider removes one credential at index.
+func (h *Handler) deleteConfigKeyProvider(ctx context.Context, client *management.Client, spec providerConfigFamilySpec, index int) error {
+	return gatedProviderListWrite(h, ctx,
+		func(ctx context.Context) ([]management.ConfigAPIKey, error) {
+			return client.ConfigAPIKeys(ctx, spec.Family)
 		},
-		func(list *[]management.ClaudeAPIKey) error {
-			updated = append(append([]management.ClaudeAPIKey{}, *list...), entry)
-			*list = updated
+		func(ctx context.Context, list []management.ConfigAPIKey) error {
+			return client.UpdateConfigAPIKeys(ctx, spec.Family, list)
+		},
+		func(list *[]management.ConfigAPIKey) error {
+			if index >= len(*list) {
+				return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
+			}
+			*list = append(append([]management.ConfigAPIKey{}, (*list)[:index]...), (*list)[index+1:]...)
 			return nil
 		})
-	return updated, err
-}
-
-func (h *Handler) appendGeminiAPIKeyGated(ctx context.Context, client *management.Client, entry management.GeminiAPIKey) ([]management.GeminiAPIKey, error) {
-	var updated []management.GeminiAPIKey
-	err := gatedProviderListWrite(h, ctx,
-		func(ctx context.Context) ([]management.GeminiAPIKey, error) { return client.GeminiAPIKeys(ctx) },
-		func(ctx context.Context, list []management.GeminiAPIKey) error {
-			return client.UpdateGeminiAPIKeys(ctx, list)
-		},
-		func(list *[]management.GeminiAPIKey) error {
-			updated = append(append([]management.GeminiAPIKey{}, *list...), entry)
-			*list = updated
-			return nil
-		})
-	return updated, err
 }
 
 func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *http.Request) {
@@ -1104,7 +1028,7 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 
 	family := strings.ToLower(strings.TrimSpace(req.Family))
 	if family == "" {
-		family = "openai-compatibility"
+		family = openAICompatibilityFamily
 	}
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
@@ -1180,7 +1104,7 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 	}
 
 	switch family {
-	case "openai-compatibility":
+	case openAICompatibilityFamily:
 		newEntry := management.OpenAICompatibility{
 			Name:           name,
 			BaseURL:        baseURL,
@@ -1210,79 +1134,38 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 			writeProviderWriteError(writer, err)
 			return
 		}
-		targetID := fmt.Sprintf("openai-compat-%d", len(entries)-1)
-		h.saveProviderName(ctx, targetID, name)
-		h.applyProviderWebsite(ctx, targetID, website, websiteProvided)
-
-	case "codex":
-		newEntry := management.CodexAPIKey{
-			APIKey:         firstKey,
-			BaseURL:        baseURL,
-			ProxyURL:       firstProxy,
-			Prefix:         strings.TrimSpace(req.Prefix),
-			Priority:       req.Priority,
-			Weight:         firstWeight,
-			Headers:        req.Headers,
-			Models:         models,
-			DisableCooling: disableCoolingPtr,
-		}
-		entries, err := h.appendCodexAPIKeyGated(ctx, client, newEntry)
-		if err != nil {
-			_ = h.recordAudit(request, "provider.create", "provider", family, "failure", map[string]any{"error": err.Error()})
-			writeProviderWriteError(writer, err)
-			return
-		}
-		targetID := fmt.Sprintf("codex-%d", len(entries)-1)
-		h.saveProviderName(ctx, targetID, name)
-		h.applyProviderWebsite(ctx, targetID, website, websiteProvided)
-
-	case "claude":
-		newEntry := management.ClaudeAPIKey{
-			APIKey:         firstKey,
-			BaseURL:        baseURL,
-			ProxyURL:       firstProxy,
-			Prefix:         strings.TrimSpace(req.Prefix),
-			Priority:       req.Priority,
-			Weight:         firstWeight,
-			Headers:        req.Headers,
-			Models:         models,
-			DisableCooling: disableCoolingPtr,
-		}
-		entries, err := h.appendClaudeAPIKeyGated(ctx, client, newEntry)
-		if err != nil {
-			_ = h.recordAudit(request, "provider.create", "provider", family, "failure", map[string]any{"error": err.Error()})
-			writeProviderWriteError(writer, err)
-			return
-		}
-		targetID := fmt.Sprintf("claude-%d", len(entries)-1)
-		h.saveProviderName(ctx, targetID, name)
-		h.applyProviderWebsite(ctx, targetID, website, websiteProvided)
-
-	case "gemini":
-		newEntry := management.GeminiAPIKey{
-			APIKey:         firstKey,
-			BaseURL:        baseURL,
-			ProxyURL:       firstProxy,
-			Prefix:         strings.TrimSpace(req.Prefix),
-			Priority:       req.Priority,
-			Weight:         firstWeight,
-			Headers:        req.Headers,
-			Models:         models,
-			DisableCooling: disableCoolingPtr,
-		}
-		entries, err := h.appendGeminiAPIKeyGated(ctx, client, newEntry)
-		if err != nil {
-			_ = h.recordAudit(request, "provider.create", "provider", family, "failure", map[string]any{"error": err.Error()})
-			writeProviderWriteError(writer, err)
-			return
-		}
-		targetID := fmt.Sprintf("gemini-%d", len(entries)-1)
+		targetID := fmt.Sprintf("%s%d", openAICompatIDPrefix, len(entries)-1)
 		h.saveProviderName(ctx, targetID, name)
 		h.applyProviderWebsite(ctx, targetID, website, websiteProvided)
 
 	default:
-		writeError(writer, http.StatusBadRequest, "unsupported provider family: "+family)
-		return
+		// Every other supported family is a config API-key list, which the registry
+		// describes. The entry body is identical across them.
+		spec, isConfigFamily := lookupProviderConfigFamily(family)
+		if !isConfigFamily {
+			writeError(writer, http.StatusBadRequest, "unsupported provider family: "+family)
+			return
+		}
+		newEntry := management.ConfigAPIKey{
+			APIKey:         firstKey,
+			BaseURL:        baseURL,
+			ProxyURL:       firstProxy,
+			Prefix:         strings.TrimSpace(req.Prefix),
+			Priority:       req.Priority,
+			Weight:         firstWeight,
+			Headers:        req.Headers,
+			Models:         models,
+			DisableCooling: disableCoolingPtr,
+		}
+		entries, err := h.appendConfigKeyProvider(ctx, client, spec, newEntry)
+		if err != nil {
+			_ = h.recordAudit(request, "provider.create", "provider", family, "failure", map[string]any{"error": err.Error()})
+			writeProviderWriteError(writer, err)
+			return
+		}
+		targetID := fmt.Sprintf("%s%d", spec.IDPrefix, len(entries)-1)
+		h.saveProviderName(ctx, targetID, name)
+		h.applyProviderWebsite(ctx, targetID, website, websiteProvided)
 	}
 
 	_ = h.recordAudit(request, "provider.create", "provider", family, "success", map[string]any{"name": name})
@@ -1386,7 +1269,7 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 	}
 
 	switch family {
-	case "openai-compatibility":
+	case openAICompatibilityFamily:
 		if err := gatedProviderListWrite(h, ctx,
 			func(ctx context.Context) ([]management.OpenAICompatibility, error) {
 				resp, err := client.OpenAICompatibility(ctx)
@@ -1446,102 +1329,30 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 			return
 		}
 		h.applyProviderWebsite(ctx, id, website, websiteProvided)
-	case "codex":
-		if err := gatedProviderListWrite(h, ctx,
-			func(ctx context.Context) ([]management.CodexAPIKey, error) {
-				resp, err := client.CodexAPIKeys(ctx)
-				if err != nil {
-					return nil, err
-				}
-				return resp.Entries, nil
-			},
-			func(ctx context.Context, list []management.CodexAPIKey) error {
-				return client.UpdateCodexAPIKeys(ctx, list)
-			},
-			func(list *[]management.CodexAPIKey) error {
-				if index >= len(*list) {
-					return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
-				}
-				entry := &(*list)[index]
-				entry.BaseURL = baseURL
-				if firstKey != "" {
-					entry.APIKey = firstKey
-				}
-				entry.ProxyURL = firstProxy
-				entry.Prefix = strings.TrimSpace(req.Prefix)
-				entry.Priority = req.Priority
-				entry.Weight = firstWeight
-				entry.Models = models
-				entry.Headers = req.Headers
-				entry.DisableCooling = disableCoolingPtr
-				return nil
-			}); err != nil {
-			_ = h.recordAudit(request, "provider.update", "provider", id, "failure", map[string]any{"error": err.Error()})
-			writeProviderWriteError(writer, err)
-			return
-		}
-		h.applyProviderWebsite(ctx, id, website, websiteProvided)
-	case "claude":
-		if err := gatedProviderListWrite(h, ctx,
-			func(ctx context.Context) ([]management.ClaudeAPIKey, error) { return client.ClaudeAPIKeys(ctx) },
-			func(ctx context.Context, list []management.ClaudeAPIKey) error {
-				return client.UpdateClaudeAPIKeys(ctx, list)
-			},
-			func(list *[]management.ClaudeAPIKey) error {
-				if index >= len(*list) {
-					return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
-				}
-				entry := &(*list)[index]
-				entry.BaseURL = baseURL
-				if firstKey != "" {
-					entry.APIKey = firstKey
-				}
-				entry.ProxyURL = firstProxy
-				entry.Prefix = strings.TrimSpace(req.Prefix)
-				entry.Priority = req.Priority
-				entry.Weight = firstWeight
-				entry.Models = models
-				entry.Headers = req.Headers
-				entry.DisableCooling = disableCoolingPtr
-				return nil
-			}); err != nil {
-			_ = h.recordAudit(request, "provider.update", "provider", id, "failure", map[string]any{"error": err.Error()})
-			writeProviderWriteError(writer, err)
-			return
-		}
-		h.applyProviderWebsite(ctx, id, website, websiteProvided)
-	case "gemini":
-		if err := gatedProviderListWrite(h, ctx,
-			func(ctx context.Context) ([]management.GeminiAPIKey, error) { return client.GeminiAPIKeys(ctx) },
-			func(ctx context.Context, list []management.GeminiAPIKey) error {
-				return client.UpdateGeminiAPIKeys(ctx, list)
-			},
-			func(list *[]management.GeminiAPIKey) error {
-				if index >= len(*list) {
-					return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
-				}
-				entry := &(*list)[index]
-				entry.BaseURL = baseURL
-				if firstKey != "" {
-					entry.APIKey = firstKey
-				}
-				entry.ProxyURL = firstProxy
-				entry.Prefix = strings.TrimSpace(req.Prefix)
-				entry.Priority = req.Priority
-				entry.Weight = firstWeight
-				entry.Models = models
-				entry.Headers = req.Headers
-				entry.DisableCooling = disableCoolingPtr
-				return nil
-			}); err != nil {
-			_ = h.recordAudit(request, "provider.update", "provider", id, "failure", map[string]any{"error": err.Error()})
-			writeProviderWriteError(writer, err)
-			return
-		}
-		h.applyProviderWebsite(ctx, id, website, websiteProvided)
 	default:
-		writeError(writer, http.StatusBadRequest, "unsupported provider family")
-		return
+		spec, isConfigFamily := lookupProviderConfigFamily(family)
+		if !isConfigFamily {
+			writeError(writer, http.StatusBadRequest, "unsupported provider family")
+			return
+		}
+		if err := h.mutateConfigKeyProvider(ctx, client, spec, index, func(entry *management.ConfigAPIKey) {
+			entry.BaseURL = baseURL
+			if firstKey != "" {
+				entry.APIKey = firstKey
+			}
+			entry.ProxyURL = firstProxy
+			entry.Prefix = strings.TrimSpace(req.Prefix)
+			entry.Priority = req.Priority
+			entry.Weight = firstWeight
+			entry.Models = models
+			entry.Headers = req.Headers
+			entry.DisableCooling = disableCoolingPtr
+		}); err != nil {
+			_ = h.recordAudit(request, "provider.update", "provider", id, "failure", map[string]any{"error": err.Error()})
+			writeProviderWriteError(writer, err)
+			return
+		}
+		h.applyProviderWebsite(ctx, id, website, websiteProvided)
 	}
 
 	_ = h.recordAudit(request, "provider.update", "provider", id, "success", map[string]any{"name": name})
@@ -1577,7 +1388,7 @@ func (h *Handler) deleteManagementProvider(writer http.ResponseWriter, request *
 	}
 
 	switch family {
-	case "openai-compatibility":
+	case openAICompatibilityFamily:
 		if err := gatedProviderListWrite(h, ctx,
 			func(ctx context.Context) ([]management.OpenAICompatibility, error) {
 				resp, err := client.OpenAICompatibility(ctx)
@@ -1600,70 +1411,26 @@ func (h *Handler) deleteManagementProvider(writer http.ResponseWriter, request *
 			writeProviderWriteError(writer, err)
 			return
 		}
-	case "codex":
-		if err := gatedProviderListWrite(h, ctx,
-			func(ctx context.Context) ([]management.CodexAPIKey, error) {
-				resp, err := client.CodexAPIKeys(ctx)
-				if err != nil {
-					return nil, err
-				}
-				return resp.Entries, nil
-			},
-			func(ctx context.Context, list []management.CodexAPIKey) error {
-				return client.UpdateCodexAPIKeys(ctx, list)
-			},
-			func(list *[]management.CodexAPIKey) error {
-				if index >= len(*list) {
-					return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
-				}
-				*list = append(append([]management.CodexAPIKey{}, (*list)[:index]...), (*list)[index+1:]...)
-				return nil
-			}); err != nil {
-			_ = h.recordAudit(request, "provider.delete", "provider", id, "failure", map[string]any{"error": err.Error()})
-			writeProviderWriteError(writer, err)
-			return
-		}
-	case "claude":
-		if err := gatedProviderListWrite(h, ctx,
-			func(ctx context.Context) ([]management.ClaudeAPIKey, error) { return client.ClaudeAPIKeys(ctx) },
-			func(ctx context.Context, list []management.ClaudeAPIKey) error {
-				return client.UpdateClaudeAPIKeys(ctx, list)
-			},
-			func(list *[]management.ClaudeAPIKey) error {
-				if index >= len(*list) {
-					return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
-				}
-				*list = append(append([]management.ClaudeAPIKey{}, (*list)[:index]...), (*list)[index+1:]...)
-				return nil
-			}); err != nil {
-			_ = h.recordAudit(request, "provider.delete", "provider", id, "failure", map[string]any{"error": err.Error()})
-			writeProviderWriteError(writer, err)
-			return
-		}
-	case "gemini":
-		if err := gatedProviderListWrite(h, ctx,
-			func(ctx context.Context) ([]management.GeminiAPIKey, error) { return client.GeminiAPIKeys(ctx) },
-			func(ctx context.Context, list []management.GeminiAPIKey) error {
-				return client.UpdateGeminiAPIKeys(ctx, list)
-			},
-			func(list *[]management.GeminiAPIKey) error {
-				if index >= len(*list) {
-					return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
-				}
-				*list = append(append([]management.GeminiAPIKey{}, (*list)[:index]...), (*list)[index+1:]...)
-				return nil
-			}); err != nil {
-			_ = h.recordAudit(request, "provider.delete", "provider", id, "failure", map[string]any{"error": err.Error()})
-			writeProviderWriteError(writer, err)
-			return
-		}
 	default:
-		writeError(writer, http.StatusBadRequest, "unsupported provider family")
-		return
+		spec, isConfigFamily := lookupProviderConfigFamily(family)
+		if !isConfigFamily {
+			writeError(writer, http.StatusBadRequest, "unsupported provider family")
+			return
+		}
+		if err := h.deleteConfigKeyProvider(ctx, client, spec, index); err != nil {
+			_ = h.recordAudit(request, "provider.delete", "provider", id, "failure", map[string]any{"error": err.Error()})
+			writeProviderWriteError(writer, err)
+			return
+		}
 	}
 
+	// The deleted row's own metadata is dropped, and every later row's metadata
+	// moves down with it: the overlay is keyed by the same positional id the row
+	// is addressed by, so leaving the keys alone would relabel the credentials
+	// that took the freed index.
 	h.removeProviderName(ctx, id)
 	h.removeProviderWebsite(ctx, id)
+	h.shiftProviderMetadataAfterDelete(ctx, idPrefixForFamily(family), index)
 	_ = h.recordAudit(request, "provider.delete", "provider", id, "success", nil)
 
 	if h.pricing != nil {
@@ -1735,8 +1502,8 @@ func (h *Handler) pullProviderModels(writer http.ResponseWriter, request *http.R
 			storedFamily, index, err := parseProviderID(req.ProviderID)
 			if err == nil && index >= 0 {
 				ctx := request.Context()
-				switch storedFamily {
-				case "openai-compatibility":
+				switch {
+				case storedFamily == openAICompatibilityFamily:
 					resp, err := client.OpenAICompatibility(ctx)
 					if err == nil && index < len(resp.Entries) {
 						entry := resp.Entries[index]
@@ -1753,23 +1520,13 @@ func (h *Handler) pullProviderModels(writer http.ResponseWriter, request *http.R
 							headers = entry.Headers
 						}
 					}
-				case "codex":
-					resp, err := client.CodexAPIKeys(ctx)
-					if err == nil && index < len(resp.Entries) {
-						entry := resp.Entries[index]
-						baseURL, apiKey, proxyURL, headers = mergePullDefaults(entry.BaseURL, entry.APIKey, entry.ProxyURL, entry.Headers, baseURL, apiKey, proxyURL, headers)
-					}
-				case "claude":
-					entries, err := client.ClaudeAPIKeys(ctx)
-					if err == nil && index < len(entries) {
-						entry := entries[index]
-						baseURL, apiKey, proxyURL, headers = mergePullDefaults(entry.BaseURL, entry.APIKey, entry.ProxyURL, entry.Headers, baseURL, apiKey, proxyURL, headers)
-					}
-				case "gemini":
-					entries, err := client.GeminiAPIKeys(ctx)
-					if err == nil && index < len(entries) {
-						entry := entries[index]
-						baseURL, apiKey, proxyURL, headers = mergePullDefaults(entry.BaseURL, entry.APIKey, entry.ProxyURL, entry.Headers, baseURL, apiKey, proxyURL, headers)
+				default:
+					if spec, isConfigFamily := lookupProviderConfigFamily(storedFamily); isConfigFamily {
+						entries, err := client.ConfigAPIKeys(ctx, spec.Family)
+						if err == nil && index < len(entries) {
+							entry := entries[index]
+							baseURL, apiKey, proxyURL, headers = mergePullDefaults(entry.BaseURL, entry.APIKey, entry.ProxyURL, entry.Headers, baseURL, apiKey, proxyURL, headers)
+						}
 					}
 				}
 				family = storedFamily

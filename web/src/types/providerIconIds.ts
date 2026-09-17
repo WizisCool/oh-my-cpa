@@ -2,7 +2,7 @@
  * The provider family → brand icon table.
  *
  * It lives in its own leaf module because two unrelated consumers need the same
- * 20 entries: `components/LobeIcon.tsx` resolves a provider to a brand mark, and
+ * entries: `components/LobeIcon.tsx` resolves a provider to a brand mark, and
  * `types/usageEventView.ts` resolves one for a request row. Keeping two copies
  * meant a new provider added to one silently disagreed with the other, and
  * pointing the request-list module at `LobeIcon.tsx` would have dragged the
@@ -17,6 +17,8 @@ export const PROVIDER_ICON_IDS: Record<string, string> = {
   grok: 'XAI',
   kimi: 'Kimi',
   moonshot: 'Kimi',
+  devin: 'Devin',
+  meta: 'Meta',
   openai: 'OpenAI',
   gemini: 'Gemini',
   google: 'Gemini',

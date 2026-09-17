@@ -34,11 +34,11 @@ Oh My CPA 是面向 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 
 ## 功能特性
 
 ### 网关与 Provider 管理
-- **AI 提供商管理**：配置与管理 Codex、Claude、Gemini、DeepSeek 及 OpenAI 兼容服务凭据与端点。
+- **AI 提供商管理**：配置与管理 Codex、Claude、Gemini、Meta Muse、DeepSeek 及 OpenAI 兼容服务的凭据与端点。config API-key 家族（claude、codex、gemini、meta）的管理方式完全一致：凭据、模型、priority/weight、代理以及网关级启停开关。
 - **协议级启停控制**：通过 `excluded-models: ['*']` 实现网关协议层有效阻断，防止流量误路由至已停用凭据。
 - **模型目录自动拉取**：直连上游提供商获取最新可用模型列表。
 - **客户端 Key 别名管理**：创建、查看与删除代理客户端 API Key。支持为 Key 设置可读别名，别名自动呈现在请求记录、详情抽屉与筛选标签中。
-- **OAuth 凭据文件治理**：上传、下载、删除与查看 OAuth 认证文件。编辑 priority 与 weight 字段，查看关联模型，并支持一键清除频率限制冷却。
+- **OAuth 凭据文件治理**：上传、下载、删除与查看 OAuth 认证文件。编辑 priority 与 weight 字段，查看关联模型，并支持一键清除频率限制冷却。可在控制台直接登录 Codex、Claude、Antigravity、xAI、Kimi、Devin 与 Meta Muse；若重定向回调地址在本机无法打开，可粘贴完整回调 URL 完成授权；设备码流程会显示需要确认的授权码。
 
 ### 用量观测与请求浏览器
 - **用量趋势仪表盘**：按相对预设窗口（15m / 1h / 6h / 24h / 7d / 30d / 90d）或自定义日历区间展示请求量、Token 吞吐、缓存命中率与估算费用，并提供全年贡献图式 Token 热力图，按天展示 Token 用量；点击某天可查看当日请求次数与 Token 用量，并跳转到当天的请求记录。
@@ -131,7 +131,7 @@ pnpm dev
 > - [`deploy/compose.full.yml`](deploy/compose.full.yml)：协同部署 CPA、Oh My CPA 与 Caddy 的完整栈。
 > - [`deploy/compose.omc.yml`](deploy/compose.omc.yml)：连接已有 CPA 实例的独立 Oh My CPA 容器。
 >
-> 完整栈默认固定 CPA `v7.3.4`；如需连接其他兼容版本，可通过 `CPA_IMAGE` 覆盖。
+> 完整栈默认固定 CPA `v7.3.5`；如需连接其他兼容版本，可通过 `CPA_IMAGE` 覆盖。
 
 ## 运维须知
 
