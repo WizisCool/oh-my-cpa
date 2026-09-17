@@ -109,7 +109,7 @@
   height: 22px;
   padding: 0 4px;
   border-radius: 3px;
-  transition: background var(--motion-fast);
+  transition: background var(--motion-fast) var(--ease-standard);
   cursor: default;
 }
 
@@ -182,7 +182,7 @@
   gap: 5px;
   padding: 3px 10px;
   border-radius: 3px;
-  transition: color var(--motion-fast), background var(--motion-fast);
+  transition: color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard);
 }
 
 .expand-btn:hover {

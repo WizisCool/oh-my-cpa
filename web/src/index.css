@@ -111,6 +111,9 @@
      as `var(--motion-fast, 50ms)` were quietly paying double the budget they named. */
   --motion-fast: 50ms;
   --motion-base: 100ms;
+  /* §7's `float`: a click already said "open", so a floating panel only fades. antd has no token for
+     it, which is why this one is the console's own. */
+  --motion-float: 60ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 }
 
@@ -207,7 +210,7 @@ a { color: inherit; }
 .ant-dropdown,
 .ant-select-dropdown,
 .ant-picker-dropdown {
-  animation-duration: 60ms !important;
+  animation-duration: var(--motion-float) !important;
 }
 .ant-card, .ant-table-wrapper .ant-table, .ant-drawer-content, .ant-modal-content {
   background: var(--surface);
@@ -1206,6 +1209,20 @@ a { color: inherit; }
 }
 .tile-skeleton.ant-skeleton { width: 100%; }
 @media (prefers-reduced-motion: reduce) {
+  /* antd animates a floating panel in with a zoom (`antZoomBigIn`) and does so under reduced motion
+     as well - measured, not assumed. Killing the animation alone is not enough: rc-motion sets the
+     enter state inline and waits for the animation to remove it, so `animation: none` left the panel
+     at scale 0 and opacity 0, i.e. never visible at all (also measured). The settled state is
+     therefore pinned alongside it - which is exactly the state the animation would have reached, so
+     no positioning is changed - and the panel appears in the frame the click happened. */
+  .ant-popover,
+  .ant-dropdown,
+  .ant-select-dropdown,
+  .ant-picker-dropdown {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
   .route-transition { animation: none; }
   /* Keep the in-flight signal, drop the movement. */
   .data-progress::after { animation: none; opacity: 0.6; }

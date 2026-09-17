@@ -786,8 +786,9 @@ float   60ms    popovers and dropdowns — the click already said "open"
 ease    cubic-bezier(0.2, 0, 0, 1)
 ```
 
-**The table is the budget, and the stylesheet is held to it.** `web/src/index.css` mirrors `fast` and
-`base` as `--motion-fast` and `--motion-base` for every CSS transition the console owns;
+**The table is the budget, and the stylesheet is held to it.** `web/src/index.css` mirrors `fast`,
+`base` and `float` as `--motion-fast`, `--motion-base` and `--motion-float` for every CSS transition
+and animation the console owns;
 `scripts/test-theme-presets.ts` parses both and asserts they equal the Ant Design tokens above, so the
 two spellings of one budget cannot drift apart again. `roll` is the only token with an exception
 attached, and it is scoped to the dashboard by rules 5 and 8.
@@ -802,6 +803,10 @@ outside `fast`. The layout animations that a disclosure genuinely needs are list
 `EXCEPTIONS` table with the reason each is one, and an exception that stops matching a rule is itself
 a failure — the list cannot rot into things that were once true. `scripts/check-motion.test.mjs`
 exercises every rule in both directions on a fixture tree and asserts the repository itself is clean.
+Enforcing the reduced-motion rule immediately paid for itself: antd animates its floating panels in
+with a zoom under reduced motion as well, and the panel has to be pinned to its settled state rather
+than merely un-animated, because rc-motion holds the enter state inline until the animation ends.
+That surface is asserted in the browser now, not only in the declaration.
 
 No bounces, no scale-ins. Content appears; it does not "fly".
 
@@ -829,9 +834,10 @@ Hard rules:
    changed may still say so, which is rules 8 and 5 and nothing else.
 5. **A mark sweeps between revisions instead of hard-cutting.** An AntV mark morphs to its
    new geometry over `roll`, and fades rather than grows when a series enters or leaves.
-   The panel re-reads on the same poll the tiles do, so a plot that hard-cuts every few
-   seconds reads as a redraw rather than as new data - and beside a tile whose number now
-   rolls (rule 8), a snapping line was the one element still saying "this replaced itself".
+   A plot that hard-cuts every few seconds reads as a redraw rather than as new data - and
+   beside a tile whose number now rolls (rule 8), a snapping line was the one element still
+   saying "this replaced itself". The marks are the dashboard's own, so this covers both the
+   six KPI sparklines and the model panels, which re-read on a query of their own.
    Two limits keep this a morph rather than a draw-in: it exists **only because the
    library reuses the chart instance** (the wrapper hands the new spec to the same runtime,
    so an update interpolates, while a remount is a draw-in and stays forbidden), and a
@@ -880,7 +886,7 @@ custom range changes, manual refresh and background refetch.
 | Any request in flight | The app-wide 2px `.data-progress` bar, shown after a 200ms delay. Regions are never dimmed or unmounted. |
 | First load with no data yet | Render the real page frame with static `Skeleton` blocks, not a bare full-page spinner swap. |
 | Error after data existed | Keep the stale data visible and surface a warning; only replace the page when nothing was ever loaded. |
-| Auto-refresh poll | The view does not move, though a reading and the mark behind it may. The poll is not a view change, so it must not reset pagination, remount the list, expand a collapsed header, or relabel the data as "previous results". A dashboard KPI number rolling to its new value, and the chart it belongs to morphing to the same revision, are the only motion a poll may cause (rules 8 and 5). |
+| Auto-refresh poll | The view does not move, though a reading and a mark may. The poll is not a view change, so it must not reset pagination, remount the list, expand a collapsed header, or relabel the data as "previous results". Two things may move: a dashboard KPI number rolling to its new value, and any dashboard chart mark morphing to its own new revision - the six KPI sparklines, and the model trend and usage ring, which re-read on their own endpoint rather than on the tiles' (rules 8 and 5). |
 
 `prefers-reduced-motion` removes the fade and freezes the progress bar, but the
 no-blank rule still applies — fall back to a static loading state.

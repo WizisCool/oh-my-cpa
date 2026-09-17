@@ -1892,14 +1892,22 @@ export async function dashboardRollingReadouts({ base, page, context, check }) {
     body.metrics.cost = cost;
     return body;
   };
-  const serveDashboard = (target, body) => {
+  /**
+   * Serves the two dashboard endpoints from one body.
+   *
+   * `BrowserContext.route()` registers the handler locally and then tells the browser process to
+   * intercept the pattern, so it is asynchronous: a caller that drives a refresh or a navigation
+   * without awaiting it can have the request answered by the previous fixture while the new pattern
+   * is still in flight. Every registration is therefore awaited, here and at the call sites.
+   */
+  const serveDashboard = async (target, body) => {
     // The API path, not the SPA route: `/omc/dashboard` is also the document URL, and a glob would
     // answer the page request with JSON.
-    target.route(
+    await target.route(
       (url) => url.pathname.includes('/omc/api/') && url.pathname.endsWith('/dashboard'),
       (route) => route.fulfill({ json: body }),
     );
-    target.route(
+    await target.route(
       (url) => url.pathname.includes('/omc/api/') && url.pathname.endsWith('/dashboard/tail'),
       (route) => route.fulfill({ json: body }),
     );
@@ -1925,7 +1933,7 @@ export async function dashboardRollingReadouts({ base, page, context, check }) {
       host.addEventListener('animationsstart', () => { window.__readoutSweeps += 1; });
     }
   });
-  serveDashboard(context, bodyWith({ requests: 2_400, tokens: 45_200, rpm: 30, tpm: 2_400, cacheRate: 42, cost: 12.5 }));
+  await serveDashboard(context, bodyWith({ requests: 2_400, tokens: 45_200, rpm: 30, tpm: 2_400, cacheRate: 42, cost: 12.5 }));
   await refresh();
   const reducedArrival = await until(
     async () => (await readings())[1] === '45.2K',
@@ -1956,7 +1964,7 @@ export async function dashboardRollingReadouts({ base, page, context, check }) {
       [(url) => url.pathname.endsWith('/dashboard/token-heatmap'), () => chartTokenHeatmap],
       [(url) => url.pathname.endsWith('/dashboard/models'), () => chartDashboardModels],
     ]);
-    serveDashboard(motionContext, bodyWith({ requests: 1_600, tokens: 31_750, rpm: 12, tpm: 1_234, cacheRate: 42, cost: 12.5 }));
+    await serveDashboard(motionContext, bodyWith({ requests: 1_600, tokens: 31_750, rpm: 12, tpm: 1_234, cacheRate: 42, cost: 12.5 }));
     const motionPage = await motionContext.newPage();
     await motionPage.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
     await motionPage.locator('.dashboard-tile .tile-value number-flow-react').first().waitFor({ timeout: 20_000 });
@@ -1972,7 +1980,7 @@ export async function dashboardRollingReadouts({ base, page, context, check }) {
     // the cache rate does not change at all. Tile order is the grid's: requests, tokens, rpm, tpm,
     // cache, cost.
     const sweepBody = bodyWith({ requests: 14_400, tokens: 2_100_000, rpm: 108, tpm: 11_110, cacheRate: 42, cost: 112.5 });
-    serveDashboard(motionContext, sweepBody);
+    await serveDashboard(motionContext, sweepBody);
     const swept = dashboardResponse(motionPage);
     await motionPage.locator('.terminal-page-head button:has(.anticon-reload)').click();
     await swept;
@@ -2145,15 +2153,17 @@ export async function dashboardChartMotion({ base, page, context, check }) {
     dashboard: JSON.parse(JSON.stringify(chartDashboard)),
     models: JSON.parse(JSON.stringify(chartDashboardModels)),
   };
-  context.route(
+  // Awaited before anything is driven: `BrowserContext.route()` is asynchronous, and a navigation
+  // that starts before the registration lands is answered by the previous fixture.
+  await context.route(
     (url) => url.pathname.includes('/omc/api/') && url.pathname.endsWith('/dashboard'),
     (route) => route.fulfill({ json: bodies.dashboard }),
   );
-  context.route(
+  await context.route(
     (url) => url.pathname.includes('/omc/api/') && url.pathname.endsWith('/dashboard/tail'),
     (route) => route.fulfill({ json: bodies.dashboard }),
   );
-  context.route(
+  await context.route(
     (url) => url.pathname.includes('/omc/api/') && url.pathname.endsWith('/dashboard/models'),
     (route) => route.fulfill({ json: bodies.models }),
   );
@@ -2181,6 +2191,14 @@ export async function dashboardChartMotion({ base, page, context, check }) {
     bodies.models = shiftedModels(revision);
     revision += 1;
     const started = await startSampler(page, markSelector);
+    // The canvas node is captured before the revision lands. A morph keeps it - the library hands the
+    // new spec to the runtime it already has - while a remount mints a new canvas, and a remount is
+    // exactly what would turn this sweep into a draw-in. Painted intermediates cannot tell the two
+    // apart, which is why the identity is asserted rather than inferred from frames.
+    const canvasPresent = await page.evaluate((selector) => {
+      window.__canvasUnderTest = document.querySelector(selector);
+      return Boolean(window.__canvasUnderTest);
+    }, markSelector);
     const answered = page.waitForResponse((response) => {
       const url = new URL(response.url());
       return url.pathname.includes('/omc/api/') && url.pathname.endsWith('/dashboard/models');
@@ -2188,7 +2206,16 @@ export async function dashboardChartMotion({ base, page, context, check }) {
     await page.locator('.terminal-page-head button:has(.anticon-reload)').click();
     await answered;
     await page.waitForTimeout(700);
-    return { started, samples: await stopSampler(page) };
+    const identity = await page.evaluate(
+      (selector) => ({
+        painted: Boolean(window.__canvasUnderTest),
+        // The same selector, resolved after the revision: a morph hands the new spec to the runtime
+        // that owns this node, a remount replaces it.
+        preserved: Boolean(window.__canvasUnderTest) && document.querySelector(selector) === window.__canvasUnderTest,
+      }),
+      markSelector,
+    );
+    return { started, samples: await stopSampler(page), canvasPresent, identity };
   };
 
   // ── a reader who allows motion sees the marks move ─────────────────────────
@@ -2197,6 +2224,12 @@ export async function dashboardChartMotion({ base, page, context, check }) {
   for (const [name, selector] of MARKS) {
     const measured = await measureRevision(selector);
     check(`${name} paints into a canvas this probe can read`, measured.started === 'sampling', `${measured.started}`);
+    check(`${name} has a canvas to hold its chart`, measured.canvasPresent, JSON.stringify(measured.identity));
+    check(
+      `${name} keeps its chart instance across a revision, so the sweep is a morph and not a draw-in`,
+      measured.identity.preserved,
+      JSON.stringify(measured.identity),
+    );
     const summary = summarise(measured.samples);
     check(`${name} reaches its new reading on a revision`, summary.distinct >= 2 && summary.frames > 0, JSON.stringify(summary));
     check(`${name} sweeps instead of hard-cutting`, summary.strays > 0, JSON.stringify(summary));
@@ -2207,6 +2240,30 @@ export async function dashboardChartMotion({ base, page, context, check }) {
   // preference that was in force when the data arrived.
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.waitForTimeout(120);
+
+  // A reduced-motion override has to remove the motion without removing the surface. antd's floating
+  // panels are the case that proves it is not free: they enter with a zoom, rc-motion leaves the enter
+  // state inline until the animation ends, and `animation: none` alone therefore left the panel at
+  // scale 0 and opacity 0 - measured. This asserts the panel still arrives, at the geometry it would
+  // have settled at anyway.
+  await page.locator('.range-trigger').click();
+  await page.waitForTimeout(600);
+  const openedPanel = await page.evaluate(() => {
+    const node = [...document.querySelectorAll('.ant-popover, .ant-dropdown, .ant-picker-dropdown')].find(
+      (candidate) => getComputedStyle(candidate).visibility === 'visible',
+    );
+    if (!node) return { present: false };
+    const style = getComputedStyle(node);
+    const box = node.getBoundingClientRect();
+    return { present: true, opacity: style.opacity, width: Math.round(box.width), height: Math.round(box.height) };
+  });
+  check(
+    'a floating panel still arrives under reduced motion, without its zoom',
+    openedPanel.present && openedPanel.opacity === '1' && openedPanel.width > 0 && openedPanel.height > 0,
+    JSON.stringify(openedPanel),
+  );
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
   for (const [name, selector] of MARKS) {
     const measured = await measureRevision(selector);
     const summary = summarise(measured.samples);

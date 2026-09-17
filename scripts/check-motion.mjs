@@ -127,9 +127,17 @@ const EXCEPTIONS = [
 /** Strip comments so prose about a duration is never read as one. */
 const stripComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 
-/** The non-zero time values in one string. */
+/**
+ * The non-zero time values in one string, as written.
+ *
+ * `.?\d+` rather than `\d*\.?\d+`: both match `.15s`, but only the first reports it as `.15s`
+ * instead of `15s`, and a failure message that misquotes the value it rejected sends the reader
+ * looking for a declaration that is not there.
+ */
 const durationsIn = (value) =>
-  [...value.matchAll(/\b\d*\.?\d+(?:ms|s)\b/g)].map((match) => match[0]).filter((raw) => !/^0(?:ms|s)$/.test(raw));
+  [...value.matchAll(/(?<![\w.])(?:\.\d+|\d+(?:\.\d+)?)(?:ms|s)\b/g)]
+    .map((match) => match[0])
+    .filter((raw) => !/^0(?:ms|s)$/.test(raw));
 
 /** Splits a declaration value into its comma-separated parts, ignoring separators inside `()`. */
 function parts(value) {
@@ -150,8 +158,18 @@ function parts(value) {
   return out;
 }
 
-/** The property a shorthand part animates: its first bare identifier. */
-const propertyOf = (part) => /^([a-z-]+)\b/.exec(part)?.[1] ?? '';
+/**
+ * The property a shorthand part animates: its first bare identifier.
+ *
+ * A part that opens with a function is not a property at all. `transition: var(--motion-fast) ease`
+ * omits the property, and CSS reads that as `all` - so returning `var` here (which the obvious regex
+ * does, because `var` looks like an identifier) would hand the `all` and layout checks a property
+ * they then skip. It returns empty, and the caller treats empty as `all`.
+ */
+const propertyOf = (part) => (/^[a-z-]+\s*\(/.test(part) ? '' : /^([a-z-]+)\b/.exec(part)?.[1] ?? '');
+
+/** The individual selectors of a comma-separated prelude. */
+const selectorList = (selector) => selector.split(',').map((entry) => entry.trim()).filter(Boolean);
 
 /**
  * Parses a stylesheet into leaf rules and keyframe blocks.
@@ -242,6 +260,16 @@ const exceptionFor = (kind, file, selector, property) =>
       exception.property === property,
   );
 
+/**
+ * The motion tokens a usage may name, read from the stylesheets instead of hard-coded here.
+ *
+ * A `var(--motion-fastt)` resolves to nothing at run time, so the declaration silently loses its
+ * duration; a list maintained in this file would accept the typo, and would also go stale every time
+ * a token is added. Reading the definitions means the checker and the stylesheet cannot disagree
+ * about which tokens exist.
+ */
+const tokenNamesIn = (text) => [...text.matchAll(/(--motion-[a-z-]+)\s*:/g)].map((match) => match[1]);
+
 const used = (kind, file, selector, property) => {
   const exception = exceptionFor(kind, file, selector, property);
   if (exception) usedExceptions.add(exception);
@@ -254,18 +282,21 @@ const used = (kind, file, selector, property) => {
  * `selector` is what the rules are keyed by, which for an inline style is the component rather than a
  * CSS selector: an exception is never granted to an inline style, so there is nothing to key.
  */
-function checkTransition({ file, selector, property, value, isHover }) {
+function checkTransition({ file, selector, property, value, isHover, tokens }) {
   const bare = value.replace(/var\([^)]*\)/g, '');
   for (const raw of durationsIn(bare)) {
     if (!used('duration', file, selector, property)) {
       record(`uses the raw duration ${raw}`, file, selector, property);
     }
   }
+  for (const [, token] of value.matchAll(/(--motion-[a-z-]+)/g)) {
+    if (!tokens.has(token)) record(`names \`${token}\`, which no stylesheet defines`, file, selector, property);
+  }
   if (/var\(--motion-[a-z-]+,/.test(value)) {
     record('names a var(--motion-*) fallback, which is never applied and hides the real value', file, selector, property);
   }
-  if (property === 'all') {
-    record('transitions `all`, which includes the layout properties rule 1 forbids', file, selector, property);
+  if (property === 'all' || property === '') {
+    record('transitions `all`, which includes the layout properties rule 1 forbids', file, selector, property || '(none)');
   } else if (LAYOUT_PROPERTIES.includes(property) && !used('layout', file, selector, property)) {
     record(`transitions the layout property \`${property}\``, file, selector, property);
   }
@@ -274,9 +305,17 @@ function checkTransition({ file, selector, property, value, isHover }) {
   }
 }
 
-for (const absolute of collectSources(srcDir)) {
-  const file = path.relative(srcDir, absolute).split(path.sep).join('/');
-  const text = fs.readFileSync(absolute, 'utf8');
+const sources = collectSources(srcDir).map((absolute) => ({
+  absolute,
+  file: path.relative(srcDir, absolute).split(path.sep).join('/'),
+  text: fs.readFileSync(absolute, 'utf8'),
+}));
+
+// Every file is read before any rule runs, because a token is defined in one stylesheet and used in
+// another: `index.css` owns the `:root` block every page's transitions read.
+const tokens = new Set(sources.filter((source) => source.absolute.endsWith('.css')).flatMap((source) => tokenNamesIn(source.text)));
+
+for (const { absolute, file, text } of sources) {
 
   // A component's inline style is a stylesheet this checker cannot parse, so the declarations are
   // lifted out of the string literals and judged by the same rules.
@@ -284,18 +323,27 @@ for (const absolute of collectSources(srcDir)) {
     for (const match of text.matchAll(/transition:\s*'([^']*)'|transition:\s*"([^"]*)"/g)) {
       const value = match[1] ?? match[2] ?? '';
       for (const part of parts(value)) {
-        checkTransition({ file, selector: '(inline style)', property: propertyOf(part), value: part, isHover: false });
+        checkTransition({ file, selector: '(inline style)', property: propertyOf(part), value: part, isHover: false, tokens });
       }
     }
     continue;
   }
 
   const { rules, keyframes } = parseStylesheet(text);
+  // A base rule whose selector has a `:hover` counterpart is a hover's transition: the declaration and
+  // the state it serves are almost never in the same block, and reading only the block with `:hover`
+  // in it let `.card { transition: border-color var(--motion-base) }` pass rule 4 untouched.
+  const hoverSelectors = new Set(
+    rules.filter((rule) => /:hover\b/.test(rule.selector)).flatMap((rule) => selectorList(rule.selector)),
+  );
+  // Individual selectors rather than whole preludes: a reduce block and the rule it answers are
+  // routinely written as multi-line selector lists, and comparing the preludes as strings makes the
+  // match depend on their formatting.
   const reducedKills = new Set(
     rules
       .filter((rule) => rule.media.includes('prefers-reduced-motion'))
       .filter((rule) => /^none\b/.test(rule.declarations.find((entry) => entry.property === 'animation')?.value ?? ''))
-      .map((rule) => rule.selector),
+      .flatMap((rule) => selectorList(rule.selector)),
   );
 
   for (const rule of rules) {
@@ -304,9 +352,11 @@ for (const absolute of collectSources(srcDir)) {
       (entry) => entry.property === 'transition' || entry.property === 'transition-duration',
     );
     if (transition && !isReducedBlock) {
-      const isHover = /:hover\b/.test(rule.selector);
+      const isHover =
+        /:hover\b/.test(rule.selector) ||
+        selectorList(rule.selector).some((entry) => hoverSelectors.has(`${entry}:hover`));
       for (const part of parts(transition.value)) {
-        checkTransition({ file, selector: rule.selector, property: propertyOf(part), value: part, isHover });
+        checkTransition({ file, selector: rule.selector, property: propertyOf(part), value: part, isHover, tokens });
       }
       // Rule 4, second half: a hover's colour parts must name the fast token rather than merely
       // staying under it - a bare `50ms` is a number no document owns.
@@ -321,14 +371,34 @@ for (const absolute of collectSources(srcDir)) {
       }
     }
 
+    // The shorthand and its longhands are one concern: a duration under `animation-duration` is the
+    // same raw number as one inside the shorthand, and a rule that names an animation longhand
+    // animates whatever the shorthand is doing. Reading only the shorthand let both forms through.
     const animation = rule.declarations.find((entry) => entry.property === 'animation');
-    if (animation && !isReducedBlock && !/^none\b/.test(animation.value)) {
-      for (const raw of durationsIn(animation.value.replace(/var\([^)]*\)/g, ''))) {
-        if (!used('duration', file, rule.selector, 'animation')) {
-          record(`animation uses the raw duration ${raw}`, file, rule.selector, 'animation');
+    const animationDuration = rule.declarations.find((entry) => entry.property === 'animation-duration');
+    const animationName = rule.declarations.find((entry) => entry.property === 'animation-name');
+    if (!isReducedBlock) {
+      for (const declaration of [animation, animationDuration]) {
+        if (!declaration || /^none\b/.test(declaration.value)) continue;
+        for (const [, token] of declaration.value.matchAll(/(--motion-[a-z-]+)/g)) {
+          if (!tokens.has(token)) {
+            record(`names \`${token}\`, which no stylesheet defines`, file, rule.selector, declaration.property);
+          }
+        }
+        if (/var\(--motion-[a-z-]+,/.test(declaration.value)) {
+          record('names a var(--motion-*) fallback, which is never applied and hides the real value', file, rule.selector, declaration.property);
+        }
+        for (const raw of durationsIn(declaration.value.replace(/var\([^)]*\)/g, ''))) {
+          if (!used('duration', file, rule.selector, 'animation')) {
+            record(`animation uses the raw duration ${raw}`, file, rule.selector, declaration.property);
+          }
         }
       }
-      if (!reducedKills.has(rule.selector)) {
+      const animates = [animation, animationDuration, animationName].some(
+        (declaration) => declaration && !/^none\b/.test(declaration.value),
+      );
+      const killed = selectorList(rule.selector).every((entry) => reducedKills.has(entry));
+      if (animates && !killed) {
         record('animates with no `prefers-reduced-motion` counterpart', file, rule.selector, 'animation');
       }
     }
@@ -356,7 +426,7 @@ for (const exception of exceptions) {
   });
 }
 
-const filesScanned = collectSources(srcDir).length;
+const filesScanned = sources.length;
 if (filesScanned === 0) {
   output.error('FAIL: no stylesheet or component was scanned; the checker is looking in the wrong place');
   return { filesScanned, violations: [{ file: '(none)', selector: '(none)', property: '(none)', message: 'no sources scanned' }] };

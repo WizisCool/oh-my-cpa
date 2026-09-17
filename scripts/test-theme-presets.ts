@@ -125,6 +125,12 @@ assert.equal(
   toMilliseconds(antdTokens?.motionDurationSlow, 'motionDurationSlow'),
   'the slow token is pinned to the same budget, so a drawer cannot outlast the table',
 );
+// `float` has no Ant Design counterpart - the console owns it, because antd exposes no token for the
+// floating panels' entrance - so it is pinned to §7's documented 60ms instead.
+const floatMatch = /--motion-float:\s*([\d.]+(?:ms|s))/.exec(indexCss);
+assert.ok(floatMatch, 'web/src/index.css defines --motion-float');
+assert.equal(toMilliseconds(floatMatch[1], '--motion-float'), 60, 'the float token is §7\u2019s 60ms');
+
 assert.ok(stylesheetToken('fast') < stylesheetToken('base'), 'fast is the shorter of the two');
 assert.ok(stylesheetToken('base') <= 100, `§7 caps the budget at 100ms (base=${stylesheetToken('base')}ms)`);
 
