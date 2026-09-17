@@ -95,6 +95,59 @@ export async function runProvidersAcceptance({
     (await page.locator('.providers-page tbody a').count()) === 0,
   );
 
+  // ---- Provider icon override: the stored mark is the mark the row draws ----
+  //
+  // The icon is the one provider override rendered as a picture rather than as
+  // text, and it is keyed by the row's positional id. The round trip is asserted
+  // from the rendered `src` after a reload, because the failures this guards were
+  // both "the stored icon is not the one the row draws": an override written under
+  // a display name while the row resolved its id, and a delete that left the
+  // removed provider's override on the index the next credential inherited.
+  const setProviderIcons = async (value) => {
+    const status = await page.evaluate(async (body) => {
+      const response = await fetch('/omc/api/v1/preferences/provider_icons', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+      return response.status;
+    }, JSON.stringify(value));
+    check('provider icon preference is writable through the API', status === 200, `status=${status}`);
+  };
+
+  /** The mark the row actually drew, read from the image it loaded. */
+  const providerMarkSrc = async (id) => {
+    const mark = page.locator(`.providers-page tbody tr[data-row-key="${id}"] img`).first();
+    return (await mark.getAttribute('src')) ?? '';
+  };
+
+  await setProviderIcons({ 'codex-0': 'DeepSeek' });
+  await openProvidersPage();
+  const overriddenMark = await providerMarkSrc('codex-0');
+  check(
+    'a stored icon override is the mark the provider row renders',
+    /deepseek/i.test(overriddenMark),
+    `src=${overriddenMark || 'none'}`,
+  );
+  // Scoped to its own row: the sibling codex credential must keep the family mark,
+  // or one provider's override is standing in for another's identity.
+  const siblingMark = await providerMarkSrc('codex-1');
+  check(
+    'an icon override does not leak onto another provider of the same family',
+    /codex/i.test(siblingMark),
+    `src=${siblingMark || 'none'}`,
+  );
+  // Clearing returns the row to what its family implies, so the mark is a stored
+  // property of the record rather than of the page having been visited.
+  await setProviderIcons({});
+  await openProvidersPage();
+  const clearedMark = await providerMarkSrc('codex-0');
+  check(
+    'clearing the override returns the row to its family mark',
+    /codex/i.test(clearedMark),
+    `src=${clearedMark || 'none'}`,
+  );
+
   // ---- Provider enable/disable: consecutive-operation reliability ----
   //
   // The requirement is that a second click is never lost and that the row never

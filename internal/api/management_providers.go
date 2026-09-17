@@ -307,6 +307,14 @@ func (h *Handler) shiftProviderMetadataAfterDelete(ctx context.Context, idPrefix
 	if websites := h.loadProviderWebsites(ctx); len(websites) > 0 {
 		h.saveProviderWebsites(ctx, shiftPositionalProviderIDs(websites, idPrefix, deletedIndex))
 	}
+	// The icon overlay is written by the console through the preferences API
+	// instead of by a provider save, but it is keyed by the same positional id,
+	// so a delete has to move it here too. Leaving it alone is what made a
+	// deleted provider's brand mark reappear on whichever credential inherited
+	// its index.
+	if icons := h.loadProviderIcons(ctx); len(icons) > 0 {
+		h.saveProviderIcons(ctx, shiftPositionalProviderIDs(icons, idPrefix, deletedIndex))
+	}
 }
 
 // idPrefixForFamily is the positional id prefix a family's rows carry.
@@ -425,6 +433,41 @@ func (h *Handler) saveProviderWebsites(ctx context.Context, websites map[string]
 
 func (h *Handler) removeProviderWebsite(ctx context.Context, id string) {
 	h.saveProviderWebsite(ctx, id, "")
+}
+
+// loadProviderIcons reads the per-provider brand-icon overlay.
+//
+// The console owns this key: an icon is chosen in the picker and written
+// through the preferences API rather than through a provider save, so there is
+// no per-provider setter here. It is read and rewritten only to keep the map
+// aligned with the positions it is keyed by - see
+// shiftProviderMetadataAfterDelete.
+func (h *Handler) loadProviderIcons(ctx context.Context) map[string]string {
+	if h.repo == nil {
+		return nil
+	}
+	raw, found, err := h.repo.GetPreference(ctx, repository.PreferenceProviderIcons)
+	if err != nil || !found || raw == "" {
+		return nil
+	}
+	var res map[string]string
+	if err := json.Unmarshal([]byte(raw), &res); err != nil {
+		return nil
+	}
+	return res
+}
+
+// saveProviderIcons replaces the whole icon map, which is the only way it is
+// written here: the operation that touches it re-keys every later entry, and a
+// per-entry write could leave the map half-shifted.
+func (h *Handler) saveProviderIcons(ctx context.Context, icons map[string]string) {
+	if h.repo == nil {
+		return
+	}
+	encoded, err := json.Marshal(icons)
+	if err == nil {
+		_ = h.repo.PutPreference(ctx, repository.PreferenceProviderIcons, string(encoded))
+	}
 }
 
 // providerConfigFamilySpec describes one of CPA's config API-key credential
@@ -1084,6 +1127,12 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 		return
 	}
 
+	// The created row's positional id, so the response can name the provider it
+	// just added. The console needs it to key the icon it stored for this row:
+	// positions are assigned here, and a browser that only knew the display name
+	// would key an override the row's own id key could then shadow.
+	createdID := ""
+
 	switch family {
 	case openAICompatibilityFamily:
 		newEntry := management.OpenAICompatibility{
@@ -1116,6 +1165,7 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 			return
 		}
 		targetID := fmt.Sprintf("%s%d", openAICompatIDPrefix, len(entries)-1)
+		createdID = targetID
 		h.saveProviderName(ctx, targetID, name)
 		h.applyProviderWebsite(ctx, targetID, website, websiteProvided)
 
@@ -1145,6 +1195,7 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 			return
 		}
 		targetID := fmt.Sprintf("%s%d", spec.IDPrefix, len(entries)-1)
+		createdID = targetID
 		h.saveProviderName(ctx, targetID, name)
 		h.applyProviderWebsite(ctx, targetID, website, websiteProvided)
 	}
@@ -1158,6 +1209,7 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"status": "ok",
 		"family": family,
+		"id":     createdID,
 	})
 }
 
@@ -1408,7 +1460,8 @@ func (h *Handler) deleteManagementProvider(writer http.ResponseWriter, request *
 	// The deleted row's own metadata is dropped, and every later row's metadata
 	// moves down with it: the overlay is keyed by the same positional id the row
 	// is addressed by, so leaving the keys alone would relabel the credentials
-	// that took the freed index.
+	// that took the freed index. The icon overlay rides along with the name and
+	// website maps for the same reason.
 	h.removeProviderName(ctx, id)
 	h.removeProviderWebsite(ctx, id)
 	h.shiftProviderMetadataAfterDelete(ctx, idPrefixForFamily(family), index)

@@ -94,9 +94,9 @@ test('the shared token layer selects every surface that renders it', () => {
   );
 });
 
-test('a provider-console change selects only the icon-picker scenario', () => {
-  assert.deepEqual(planFor('web/src/pages/ProvidersPage.tsx'), ['icon-picker-stacking']);
-  assert.deepEqual(planFor('web/src/components/IconPickerModal.tsx'), ['icon-picker-stacking']);
+test('a provider-console change selects only the provider-console scenarios', () => {
+  assert.deepEqual(planFor('web/src/pages/ProvidersPage.tsx'), ['icon-picker-stacking', 'provider-icon-pick']);
+  assert.deepEqual(planFor('web/src/components/IconPickerModal.tsx'), ['icon-picker-stacking', 'provider-icon-pick']);
 });
 
 test('the shared layer widens the plan to every scenario', () => {
@@ -183,7 +183,7 @@ test('a mixed change unions the narrow plans without widening', () => {
     'dashboard-chart-motion', 'dashboard-charts', 'dashboard-heatmap', 'dashboard-heatmap-error',
     'dashboard-heatmap-mobile', 'dashboard-heatmap-pruned', 'dashboard-model-panels',
     'dashboard-model-panels-empty', 'dashboard-model-panels-failure', 'dashboard-model-panels-states',
-    'dashboard-rolling-readouts', 'icon-picker-stacking',
+    'dashboard-rolling-readouts', 'icon-picker-stacking', 'provider-icon-pick',
   ]);
 });
 
