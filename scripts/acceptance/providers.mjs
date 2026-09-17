@@ -52,6 +52,15 @@ export async function runProvidersAcceptance({
     (await metaRow.innerText()).includes('Meta Muse'),
     `row=${await metaRow.innerText()}`,
   );
+  // The brand mark too, and from the rendered row rather than from the icon module:
+  // the family id reaches the mark through an exact-key table, so a row that carried
+  // the label while falling back to the neutral icon would otherwise look correct.
+  const metaMarkSrc = (await metaRow.locator('img').first().getAttribute('src')) ?? '';
+  check(
+    'the Meta Muse family renders the Meta brand mark',
+    /meta/i.test(metaMarkSrc),
+    `src=${metaMarkSrc || 'none'}`,
+  );
 
   // The codex family's first entry is addressed by the console as `codex-0`; the
   // fixture also configures a second codex entry, so this is a position within a

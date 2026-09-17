@@ -147,8 +147,6 @@ const COMMON_ALIASES: Record<string, string> = {
   'antigravity': 'Antigravity',
   'kimi': 'Kimi',
   'moonshot': 'Kimi',
-  'devin': 'Devin',
-  'meta': 'Meta',
   'xai': 'XAI',
   'grok': 'XAI',
   'codex': 'Codex',
@@ -201,10 +199,6 @@ export function getProviderDefaultIcon(family: string, name?: string, baseURL?: 
   if (f.includes('antigravity')) return 'Antigravity';
   if (f.includes('xai') || f.includes('grok')) return 'XAI';
   if (f.includes('kimi') || f.includes('moonshot')) return 'Kimi';
-  // "meta" is matched on the family alone: the alias table maps llama to the
-  // same brand mark, and a request that merely mentions Meta is not Meta Muse.
-  if (f === 'meta' || f.includes('meta muse')) return 'Meta';
-  if (f.includes('devin')) return 'Devin';
   if (f.includes('qwen')) return 'Qwen';
   if (f.includes('deepseek')) return 'DeepSeek';
   return DEFAULT_PROVIDER_ICON_ID;

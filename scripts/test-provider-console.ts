@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { filterModelOptions, modelOptionsFor } from '../web/src/utils/modelOptions.ts';
 import { isSafeExternalURL, safeExternalURL } from '../web/src/utils/externalUrl.ts';
 import { parseProviderID, providerStatusPayload, FAMILY_BY_PROVIDER_ID_PREFIX } from '../web/src/types/providerId.ts';
+import { PROVIDER_FAMILIES, lookupProviderFamily, matchProviderFamily } from '../web/src/types/providerFamilies.ts';
 
 // ---- provider ids: the list's key is not the API's family name ----
 
@@ -186,4 +187,39 @@ assert.deepEqual(
 
 console.log(
   'PASS model options: configured duplicates suppressed, own value kept, filter and suppression compose',
+);
+
+// ---- provider families: the table the provider list and its form share ----
+
+// The family ids are the console's half of a contract with the Go side: each one
+// must be a family CPA exposes as a credential list, because the form writes the
+// id straight to `POST/PUT /management/providers`. A typo here would create a row
+// the list can render and the gateway rejects.
+assert.deepEqual(
+  PROVIDER_FAMILIES.map((family) => family.id),
+  ['openai-compatibility', 'codex', 'claude', 'gemini', 'meta'],
+);
+
+// The tag's border and fill are derived by appending hex alpha to this value, so a
+// non-hex colour would silently produce an invalid declaration rather than a
+// visible error. Asserting the form here is what keeps that invariant honest.
+for (const family of PROVIDER_FAMILIES) {
+  assert.match(family.color, /^#[0-9a-f]{6}$/i, `${family.id} colour must be 6-digit hex, got ${family.color}`);
+  assert.ok(family.labelKey.startsWith('pro.family_'), `${family.id} needs an i18n label key`);
+  assert.ok(family.iconId.length > 0, `${family.id} needs a brand mark`);
+}
+
+// Resolution is exact on the family and best-effort on a bare protocol string, in
+// that order: a family tag CPA sent is authoritative, while a protocol description
+// is only a guess about which family served a row that carries no tag.
+assert.equal(lookupProviderFamily('meta')?.iconId, 'Meta');
+assert.equal(lookupProviderFamily(' META ')?.id, 'meta');
+assert.equal(matchProviderFamily('gemini')?.id, 'gemini');
+assert.equal(matchProviderFamily(undefined, 'OpenAI Chat Completions')?.id, 'openai-compatibility');
+assert.equal(matchProviderFamily(undefined, 'Anthropic Messages')?.id, 'claude');
+assert.equal(matchProviderFamily('unknown-family'), undefined);
+assert.equal(matchProviderFamily(undefined, undefined), undefined);
+
+console.log(
+  'PASS provider families: every declared family is hex-coloured, labelled, and resolvable by family id before protocol text',
 );

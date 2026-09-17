@@ -17,7 +17,16 @@ export interface ProviderFamilyMeta {
   id: string;
   /** i18n key for the family's protocol label. */
   labelKey: string;
-  /** Brand colour used for the family tag. */
+  /**
+   * Brand colour for the family tag, as a 6-digit hex value.
+   *
+   * The renderer derives the tag's border and fill by appending hex alpha
+   * (`${color}66` / `${color}18`), so the hex form is a requirement rather than a
+   * style preference: a `var(--token)` here would produce invalid CSS. These are
+   * provider brand identities, not theme palette entries - like the brand colours
+   * in `web/src/types/resource.ts`, they do not move with a preset, while the
+   * theme's semantic colours (health, accent, surfaces) do.
+   */
   color: string;
   /** Brand mark id resolved against the lobe icon catalog. */
   iconId: string;
