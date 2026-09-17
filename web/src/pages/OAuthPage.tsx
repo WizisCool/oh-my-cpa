@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Button,
   Input,
@@ -165,6 +165,25 @@ export const OAuthPage: React.FC = () => {
     }
     return list;
   }, [pluginsData, t]);
+
+  const [searchParams] = useSearchParams();
+  const targetProviderParam = searchParams.get('provider');
+
+  useEffect(() => {
+    if (!targetProviderParam) return;
+    const norm = targetProviderParam.toLowerCase().trim();
+    const timer = setTimeout(() => {
+      const el = document.querySelector(`[data-oauth-card="${norm}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add(styles['card-target-highlight']);
+        setTimeout(() => {
+          el.classList.remove(styles['card-target-highlight']);
+        }, 2500);
+      }
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [targetProviderParam, builtinCards, pluginCards]);
 
   const updateProviderState = useCallback((provider: string, next: Partial<ProviderState>) => {
     setStates((prev) => ({

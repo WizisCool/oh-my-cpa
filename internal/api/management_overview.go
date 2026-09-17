@@ -333,6 +333,9 @@ func buildCredentialHealth(files []management.AuthFile) *managementOverviewCrede
 func overviewProviderID(values ...string) string {
 	for _, value := range values {
 		if normalized := strings.ToLower(strings.TrimSpace(value)); normalized != "" && normalized != "empty" {
+			if strings.HasPrefix(normalized, "openai-compatible-") {
+				return strings.TrimPrefix(normalized, "openai-compatible-")
+			}
 			return normalized
 		}
 	}

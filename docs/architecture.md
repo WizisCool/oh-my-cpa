@@ -334,7 +334,7 @@ CPA queue / subscription
                          retention purge
   → /management/dashboard, /management/dashboard/tail,
     /management/dashboard/token-heatmap, /management/dashboard/models,
-    /usage/events
+    /management/dashboard/providers, /usage/events
 ```
 
 The pipeline exists because CPA's queue is destructive and short-lived: the only

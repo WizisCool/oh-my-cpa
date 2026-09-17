@@ -5,7 +5,7 @@ import {
   HealthStatus,
   ResourceOverridePayload,
 } from '../types/resource';
-import { ManagementOverview } from '../types/management';
+import { ManagementOverview, ManagementOverviewBucket } from '../types/management';
 import {
   ManagementAuthFilesResponse,
   ManagementAuthFileMutationResponse,
@@ -17,7 +17,7 @@ import {
   ManagementOAuthModelAliasesResponse,
   ManagementOAuthModelAliasMutationResponse,
 } from '../types/managementOAuthModelAlias';
-import { DashboardResponse, DashboardTailResponse } from '../types/dashboard';
+import { DashboardResponse, DashboardTailResponse, DashboardWindow } from '../types/dashboard';
 import { DashboardTokenHeatmap } from '../types/tokenHeatmap';
 import { DashboardModelsResponse } from '../types/dashboardModels';
 import { ErrorLogFile } from '../types/logs';
@@ -288,6 +288,26 @@ export const api = {
    */
   async getDashboardModels(query: string): Promise<DashboardModelsResponse> {
     return request<DashboardModelsResponse>(`/management/dashboard/models${query ? `?${query}` : ''}`, { method: 'GET' });
+  },
+
+  /**
+   * getDashboardProviders reads per-provider request totals and sparkline buckets for the window
+   * selected by the dashboard range picker.
+   */
+  async getDashboardProviders(query?: string): Promise<{
+    window: DashboardWindow;
+    providers: {
+      id: string;
+      total: number;
+      success: number;
+      failure: number;
+      success_rate: number | null;
+      buckets: ManagementOverviewBucket[];
+    }[];
+    partial_errors: string[];
+  }> {
+    const search = query ? (query.startsWith('?') ? query : `?${query}`) : '';
+    return request(`/management/dashboard/providers${search}`, { method: 'GET' });
   },
 
   /**

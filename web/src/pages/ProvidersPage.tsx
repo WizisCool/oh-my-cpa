@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Card,
   Table,
@@ -426,6 +427,27 @@ export const ProvidersPage: React.FC = () => {
   });
 
   const providers = providersData?.providers || [];
+
+  const [searchParams] = useSearchParams();
+  const targetProviderParam = searchParams.get('provider');
+  const handledTargetRef = useRef<string | null>(null);
+
+  React.useEffect(() => {
+    if (!targetProviderParam || providersLoading || providers.length === 0) return;
+    if (handledTargetRef.current === targetProviderParam) return;
+    handledTargetRef.current = targetProviderParam;
+    const norm = targetProviderParam.toLowerCase().trim();
+    const matched = providers.find(
+      (p) =>
+        p.id.toLowerCase() === norm ||
+        p.name?.toLowerCase() === norm ||
+        p.upstream_name?.toLowerCase() === norm ||
+        p.family?.toLowerCase() === norm
+    );
+    if (matched) {
+      handleOpenEdit(matched);
+    }
+  }, [targetProviderParam, providersLoading, providers]);
 
   /**
    * providersListReads is the revision of the provider list's confirmed state.
