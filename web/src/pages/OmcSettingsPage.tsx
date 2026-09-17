@@ -1,9 +1,11 @@
 import React from 'react';
 import { Segmented, Typography } from 'antd';
-import { useT, useI18n } from '../i18n';
+import { useT, useI18n, LANGUAGES } from '../i18n';
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport';
 import { useThemeMode } from '../theme/ThemeContext';
 import { THEME_PRESETS } from '../theme/themeConfig';
+import { ThemeSwatch } from '../components/common/ThemeSwatch';
+import { LanguageFlag } from '../components/common/LanguageFlag';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
 import type { TokenNumberStyle } from '../types/tokenDisplay';
 import { TOKEN_NUMBER_STYLES } from '../types/tokenDisplay';
@@ -15,11 +17,11 @@ const { Title } = Typography;
  * CPA's gateway configuration.
  *
  * The page owns the preferences that used to live only in scattered shortcuts:
- * the theme and the language in the header, and the token unit style beside the
- * dashboard's own readouts. Each control writes the same underlying setting its
- * shortcut writes, so the two cannot disagree, and an operator configuring a
- * fresh deployment has one place to look instead of discovering each control
- * where it happens to surface.
+ * the theme and the language the header's menus switch, and the token unit style
+ * beside the dashboard's own readouts. Each control writes the same underlying
+ * setting its shortcut writes, so the two cannot disagree, and an operator
+ * configuring a fresh deployment has one place to look instead of discovering
+ * each control where it happens to surface.
  *
  * It carries a single title and no subtitle, and each group is an open list of
  * labelled rows rather than a card: `docs/design.md` §3 allows a subtitle only
@@ -98,12 +100,7 @@ export const OmcSettingsPage: React.FC = () => {
                   aria-pressed={preset.id === themeId}
                   onClick={() => setThemeId(preset.id)}
                 >
-                  <span className="theme-preset-preview" aria-hidden="true">
-                    <span style={{ background: preset.palette.bg }} />
-                    <span style={{ background: preset.palette.surface }} />
-                    <span style={{ background: preset.palette.accent }} />
-                    <span style={{ background: preset.palette.success }} />
-                  </span>
+                  <ThemeSwatch palette={preset.palette} className="theme-preset-preview" />
                   <span className="theme-preset-name">{t(preset.nameKey)}</span>
                   <span className="theme-preset-desc">{t(preset.descriptionKey)}</span>
                 </button>
@@ -116,12 +113,25 @@ export const OmcSettingsPage: React.FC = () => {
           control={
             <Segmented
               value={lang}
-              options={[
-                { value: 'zh', label: t('omc.language_zh') },
-                { value: 'en', label: t('omc.language_en') },
-              ]}
-              onChange={(next) => setLang(next as 'zh' | 'en')}
+              options={LANGUAGES.map((language) => ({
+                value: language.id,
+                label: (
+                  <span className="language-menu-item">
+                    <LanguageFlag country={language.country} />
+                    <span>{language.name}</span>
+                  </span>
+                ),
+              }))}
+              onChange={(next) => {
+                const picked = LANGUAGES.find((language) => language.id === next);
+                if (picked) setLang(picked.id);
+              }}
               aria-label={t('omc.language')}
+              // Each option carries its language's flag and endonym rather than a translated
+              // name: a reader who cannot read the console's current language has to be able to
+              // find their own here. The endonym is also what keeps this row inside its card on a
+              // phone - a translated "Simplified Chinese" plus its flag measured wider than the
+              // track the narrow-layout rule hands this picker.
             />
           }
         />

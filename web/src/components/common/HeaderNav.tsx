@@ -1,78 +1,57 @@
 import React from 'react';
-import { Button, Tag, Tooltip } from 'antd';
-import {
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  LogoutOutlined,
-  MoonOutlined,
-  ReloadOutlined,
-  SunOutlined,
-} from '@ant-design/icons';
-import { getAppConfig } from '../../types/config';
-import { HealthStatus } from '../../types/resource';
-import type { ThemeMode } from '../../theme/themeConfig';
-import { useI18n, useT } from '../../i18n';
+import { Button, Tooltip } from 'antd';
+import { LogoutOutlined, ReloadOutlined } from '@ant-design/icons';
+import { PreferenceMenus } from './PreferenceMenus';
+import { useT } from '../../i18n';
 
 interface HeaderNavProps {
-  health?: HealthStatus;
   isDiscovering?: boolean;
   onDiscover?: () => void;
   onLogout?: () => void;
   isLoggingOut?: boolean;
-  themeMode: ThemeMode;
-  onToggleTheme: () => void;
-  isMobile?: boolean;
 }
 
-// Right-hand header actions (connection pill, refresh, theme, language, sign out).
-// HeaderNav is not self-contained: the breadcrumb and collapse toggle belong to
-// AppLayout, which owns the shell grid these actions sit in.
+/**
+ * The shell's right-hand actions: refresh, theme, language, sign out.
+ *
+ * Every one of them is a fixed-width control. Sign out is an icon button rather than a
+ * labelled one because its label is the only text here that changes length with the
+ * language - "退出" beside "Sign out" - and a button that resizes on a language switch
+ * moves the controls beside it, so the operator has to re-aim at a button they were
+ * already pointing at. Its name is on the tooltip and on the accessible label instead;
+ * the exit-door icon carries the meaning at a glance.
+ *
+ * This cluster carries actions only. Connection status and version are the side rail
+ * foot's, which is their one place, and a mount path is fixed for the life of a
+ * deployment - neither is an action an operator reaches for here.
+ *
+ * The preferences are not implemented here: `PreferenceMenus` owns them, because the
+ * authentication gate shows the same two menus over the same stored values.
+ */
 export const HeaderNav: React.FC<HeaderNavProps> = ({
-  health,
   isDiscovering = false,
   onDiscover,
   onLogout,
   isLoggingOut = false,
-  themeMode,
-  onToggleTheme,
-  isMobile = false,
 }) => {
   const t = useT();
-  const { lang, toggleLang } = useI18n();
-  const config = getAppConfig();
-  // This pill describes CPA itself, not Oh My CPA's aggregate health. The Go
-  // service can remain available in a degraded state while CPA is fully offline.
-  const isOnline = health?.cpa_connected === true;
 
   return (
     <div className="app-header-actions">
-      {!isMobile && (
-        <Tooltip title={t('header.base_path', { path: config.basePath || '/' })}>
-          <Tag className="base-path-tag">{config.basePath || '/'}</Tag>
-        </Tooltip>
-      )}
-      <Tooltip title={
-        isOnline
-          ? t('header.online', { version: health?.version ? ` · ${health.version}` : '' })
-          : t('header.offline')
-      }>
-        <span className={`connection-pill ${isOnline ? 'is-online' : 'is-offline'}`}>
-          {isOnline ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
-          <span>{isOnline ? 'CPA ONLINE' : 'CPA OFFLINE'}</span>
-        </span>
-      </Tooltip>
       <Tooltip title={t('header.refresh_all')}>
         <Button type="text" icon={<ReloadOutlined />} loading={isDiscovering} onClick={onDiscover} aria-label={t('header.refresh_all')} />
       </Tooltip>
-      <Tooltip title={t('header.theme')}>
-        <Button type="text" icon={themeMode === 'dark' ? <SunOutlined /> : <MoonOutlined />} onClick={onToggleTheme} aria-label={t('header.theme')} />
+      <PreferenceMenus />
+      <Tooltip title={t('header.logout')}>
+        <Button
+          className="header-logout"
+          type="text"
+          icon={<LogoutOutlined />}
+          loading={isLoggingOut}
+          onClick={onLogout}
+          aria-label={t('header.logout')}
+        />
       </Tooltip>
-      <Tooltip title={t('header.language')}>
-        <Button type="text" onClick={toggleLang} aria-label={t('header.language')}>
-          <span className="terminal-mono">{lang === 'zh' ? 'EN' : '中'}</span>
-        </Button>
-      </Tooltip>
-      <Button className="header-logout" type="text" icon={<LogoutOutlined />} loading={isLoggingOut} onClick={onLogout}>{t('header.logout')}</Button>
     </div>
   );
 };

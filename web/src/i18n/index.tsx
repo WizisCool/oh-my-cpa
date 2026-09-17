@@ -3,6 +3,33 @@ import React from 'react';
 export type Lang = 'zh' | 'en';
 
 /**
+ * Every reading language the console offers, in the order its switchers list
+ * them.
+ *
+ * One registry rather than a control's private option list: a language reaches
+ * the console through the header menu and the settings page at once, and a second
+ * language added to only one of them would leave the two disagreeing about what
+ * the console can read.
+ *
+ * `name` is the language's **endonym** - its own name in its own script - and is
+ * deliberately not translated. A switcher that renamed 简体中文 to "Simplified
+ * Chinese" would be unusable by exactly the reader who needs it: someone who
+ * cannot read the console's current language cannot recognize their own behind a
+ * translation of it, and would have no way back out. `id` and `code` are likewise
+ * stable in every reading, which is what lets the header's trigger - a flag and a
+ * two-glyph code - be the same width in every language.
+ *
+ * `country` is a country standing in for a language that is not one country's
+ * (English is written the same way in more than one), so the flag is decoration:
+ * the name beside it is the choice's real label, and a language no single flag
+ * represents would need a different mark rather than a borrowed flag.
+ */
+export const LANGUAGES: readonly { id: Lang; name: string; code: string; country: string }[] = [
+  { id: 'zh', name: '简体中文', code: '中', country: 'CN' },
+  { id: 'en', name: 'English', code: 'EN', country: 'US' },
+];
+
+/**
  * Bilingual dictionary, values are [zh, en] pairs. Keys not found fall through
  * to the key itself so misses are visible in dev.
  */
@@ -58,10 +85,7 @@ const DICT: Record<string, [string, string]> = {
   'header.collapse_sidebar': ['收起侧栏', 'Collapse sidebar'],
   'header.expand_sidebar': ['展开侧栏', 'Expand sidebar'],
   'header.open_nav': ['打开导航', 'Open navigation'],
-  'header.base_path': ['挂载路径：{path}', 'Mount path: {path}'],
-  'header.online': ['CPA 在线{version}', 'CPA online{version}'],
   'header.degraded': ['CPA 部分接口可用', 'CPA partially available'],
-  'header.offline': ['CPA 未连接或正在重试', 'CPA offline or retrying'],
   'header.refresh_all': ['刷新全部', 'Refresh all'],
   'header.theme': ['界面主题', 'Theme'],
   'header.language': ['界面语言', 'Language'],
@@ -104,8 +128,6 @@ const DICT: Record<string, [string, string]> = {
   'theme.sandstone': ['Sandstone', 'Sandstone'],
   'theme.sandstone_desc': ['暖砂浅色背景与青绿色强调色', 'Warm sand surfaces with a teal accent'],
   'omc.language': ['界面语言', 'Language'],
-  'omc.language_zh': ['简体中文', 'Simplified Chinese'],
-  'omc.language_en': ['English', 'English'],
   'header.logout': ['退出', 'Sign out'],
   'shell.cpa': ['CPA', 'CPA'],
   'shell.connected': ['已连接', 'connected'],
@@ -1665,14 +1687,12 @@ function readInitialLang(): Lang {
 interface I18nContextValue {
   lang: Lang;
   setLang: (lang: Lang) => void;
-  toggleLang: () => void;
   t: TFunc;
 }
 
 const I18nContext = React.createContext<I18nContextValue>({
   lang: 'zh',
   setLang: () => undefined,
-  toggleLang: () => undefined,
   t: makeT('zh'),
 });
 
@@ -1688,7 +1708,6 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     () => ({
       lang,
       setLang,
-      toggleLang: () => setLang((current) => (current === 'zh' ? 'en' : 'zh')),
       t: makeT(lang),
     }),
     [lang],

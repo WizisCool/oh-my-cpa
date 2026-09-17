@@ -89,8 +89,10 @@ light enough that its label is a near-black step. Every preset's `accentOn` clea
 its own filled-control step, and the registry check fails a preset that does not.
 
 The OMC Settings page presents the registry as named cards with a four-swatch
-preview. The appearance controls must not introduce a second palette source:
-new presets extend `themeConfig.ts`, and the registry and contrast checks in
+preview, and the console header's theme menu presents the same registry as list
+rows carrying the same swatch. The appearance controls must not introduce a
+second palette source: both read `THEME_PRESETS`, so new presets extend
+`themeConfig.ts`, and the registry and contrast checks in
 `scripts/test-theme-presets.ts` fail if a preset is incomplete or unreadable.
 
 ### Accent ladder
@@ -596,7 +598,7 @@ Elevation: **zero shadows** on layout, card, drawer, modal, popover, dropdown.
 
 ```text
 ┌──────────┬──────────────────────────────────────────┐
-│ brand ›_ │ breadcrumb (Group / Page)  actions  ZH|EN│ 56px, border-bottom
+│ brand ›_ │ breadcrumb (Group / Page)   actions ⟳ ◧ ▣ ⇥│ 56px, border-bottom
 │──────────┼──────────────────────────────────────────┤
 │ nav      │                                          │
 │ (groups) │ page content        ← scrolls alone      │
@@ -636,7 +638,9 @@ Oh My CPA draws from OpenCode's minimalist, high-density, engineer-first console
    - Avoid marketing boilerplate or lengthy guides inside UI cards.
 6. **Top Context Slot**
    - The left side hosts the signature `›_` prompt logo, expandable to an instance context selector when multi-instance support lands;
-   - The right side houses live session status, theme toggling, and language switching. Never display fabricated avatars, dummy balances, or mock workspace selectors before real capabilities exist.
+   - The right side houses four fixed-width actions: refresh, the theme menu, the language menu, and sign out. Both preferences are **menus over their whole registry** rather than toggles between two states - the console already carries six presets, and a language pair that cycled would have to be rewritten as soon as a third language lands. The theme menu previews each preset with the same four-swatch mark the settings cards use; the language menu pairs each language's **endonym** - its own name in its own script, never a translation - with its flag, so a reader who cannot read the console's current language can still recognize and choose their own. The settings page's language picker lists the same endonyms.
+   - **Every header action keeps one width in every reading language.** Labels are the one thing whose length changes with the language, so sign out is an icon button named by its tooltip, and the language trigger holds its code in a fixed slot. A control that resizes moves the actions beside it, which is a real defect rather than a cosmetic one: the pointer is already on one of them.
+   - Connection status and version are the side rail foot's, not the header's: this slot carries actions. Never display fabricated avatars, dummy balances, or mock workspace selectors before real capabilities exist.
 7. **Form Workbench & Setting Group Panels**
    - **Full-width Toolbar & Viewport Anchoring**: The top action toolbar and its 1px bottom border span 100% of the viewport, with right-side actions (search / refresh / save) pinned to the far right (vertically aligned with the global header actions) to eliminate awkward empty gaps. The form workbench below maintains a three-track grid: 216px sticky section navigation + 920px reading width + 216px balancing gutter (used solely to center content on wide viewports), establishing an anchored layout that keeps forms focused and legible.
    - **Setting Group Panels**: Related settings converge into **Setting Group Panels** (uniform 1px hairline border, `--surface` background, and 4px terminal radius) rather than an endless flat list of inputs or fragmented cards. Three specialized structures are used:
