@@ -869,6 +869,10 @@ a { color: inherit; }
   border-radius: 2px !important;
   background: var(--surface) !important;
   color: var(--fg) !important;
+  /* The surface is ours and is opaque by construction, so the popper is too. The library's dark theme
+     fades its own tooltip to 0.95, which would let the marks under it show through 5% of the panel -
+     and would make the two themes disagree about a surface neither of them owns. */
+  opacity: 1 !important;
   box-shadow: none !important;
   padding: 6px 8px !important;
 }
