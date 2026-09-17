@@ -193,10 +193,11 @@ type OAuthAuthURLResponse struct {
 	ExpiresIn int `json:"expires_in,omitempty"`
 }
 
-// webuiSupportedProviders is derived from the provider registry: the rows whose
-// redirect targets a loopback callback. The device-code providers are absent,
-// because they have no redirect for a forwarder to receive, and plugin
-// providers are absent because only a built-in can declare the flag.
+// usesLoopbackCallback answers whether CPA should be asked to open its loopback
+// callback forwarder for this provider: the registry rows whose redirect targets a
+// local listener. The device-code providers answer no, because they have no redirect
+// for a forwarder to receive, and a plugin provider answers no because only a
+// built-in can declare the flag - its route belongs to the plugin.
 func usesLoopbackCallback(provider string) bool {
 	registered, ok := LookupOAuthProvider(provider)
 	return ok && registered.UsesLoopbackCallback

@@ -918,27 +918,8 @@ func parseProviderID(id string) (string, int, error) {
 	return "", 0, fmt.Errorf("unknown provider id format: %s", trimmed)
 }
 
-// updateOpenAICompatibilityGated is the whole-list write behind create/update/
-// delete. Reads happen inside the write window: a list fetched before entering
-// it is a snapshot another writer may already have replaced.
-func (h *Handler) updateOpenAICompatibilityGated(ctx context.Context, client *management.Client, entries []management.OpenAICompatibility) error {
-	return gatedProviderListWrite(h, ctx,
-		func(ctx context.Context) ([]management.OpenAICompatibility, error) {
-			resp, err := client.OpenAICompatibility(ctx)
-			if err != nil {
-				return nil, err
-			}
-			return resp.Entries, nil
-		},
-		func(ctx context.Context, list []management.OpenAICompatibility) error {
-			return client.UpdateOpenAICompatibility(ctx, list)
-		},
-		func(list *[]management.OpenAICompatibility) error {
-			*list = entries
-			return nil
-		})
-}
-
+// The openai-compatibility append helper builds the new entry against the list as it
+// exists inside the write window, so an append cannot be based on a stale length.
 func (h *Handler) appendOpenAICompatibilityGated(ctx context.Context, client *management.Client, entry management.OpenAICompatibility) ([]management.OpenAICompatibility, error) {
 	var updated []management.OpenAICompatibility
 	err := gatedProviderListWrite(h, ctx,
