@@ -248,10 +248,3 @@
   max-width: 420px;
   line-height: 1.5;
 }
-
-.scope-note {
-  margin: 10px 0 0;
-  font-size: 11px;
-  line-height: 1.5;
-  color: var(--muted);
-}

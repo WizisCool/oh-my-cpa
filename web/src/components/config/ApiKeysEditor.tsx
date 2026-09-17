@@ -60,7 +60,7 @@ export interface ApiKeysEditorProps {
   /** Keyed by usage fingerprint. */
   usage?: Record<string, ClientKeyUsageItem>;
   formatTime: (ms: number) => string;
-  usageRangeLabel: string;
+  usageRangeLabel?: string;
   onChange: (next: string[]) => void;
   onToggleDisable: (key: string, willBeDisabled: boolean) => void;
   onDelete: (record: ApiKeyRecord) => void;
@@ -77,7 +77,6 @@ export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
   metadata,
   usage,
   formatTime,
-  usageRangeLabel,
   onChange,
   onToggleDisable,
   onDelete,
@@ -620,12 +619,6 @@ export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
         </div>
       )}
 
-      {totalKeysCount > 0 && (
-        <p className={styles['scope-note']}>
-          {t('keys.usage_scope', { range: usageRangeLabel })}
-        </p>
-      )}
-
       {/* Rename Modal */}
       <Modal
         title={t('keys.rename_title')}
@@ -640,7 +633,7 @@ export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
         cancelText={t('common.cancel')}
         destroyOnHidden
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
+        <div style={{ marginTop: 16 }}>
           <Input
             value={renameValue}
             onChange={(event) => setRenameValue(event.target.value)}
@@ -650,9 +643,6 @@ export const ApiKeysEditor: React.FC<ApiKeysEditorProps> = ({
             autoFocus
             aria-label={t('keys.rename_label')}
           />
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            {t('keys.rename_hint')}
-          </Text>
         </div>
       </Modal>
     </div>

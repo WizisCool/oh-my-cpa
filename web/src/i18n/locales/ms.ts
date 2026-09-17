@@ -628,7 +628,7 @@ export const MS: Readonly<Record<string, string>> = {
   "keys.modal_hint": "Kunci hanya wujud dalam draf semasa sehingga disimpan; nilai kosong tidak pernah diserahkan.",
   "keys.duplicate": "Kunci ini sudah ada dalam senarai",
   "keys.save_first_to_rename": "Sila simpan draf kunci dahulu sebelum menetapkan nama tersuai",
-  "keys.edit_key_value": "Ubah suai rahsia kunci",
+  "keys.edit_key_value": "Ubah suai kunci",
   "keys.col_status": "Status",
   "keys.status_enabled": "Didayakan",
   "keys.status_disabled": "Dilumpuhkan",

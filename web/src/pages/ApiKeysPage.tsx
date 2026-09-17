@@ -10,7 +10,6 @@ import {
   Popconfirm,
   Skeleton,
   Space,
-  Typography,
 } from 'antd';
 import {
   CopyOutlined,
@@ -36,8 +35,6 @@ import { ALL_CONFIG_FIELDS } from '../types/configSchema';
 import type { ConfigScalarsResponse } from '../types/configManagement';
 import type { ClientKeyUsageItem } from '../types/providers';
 import styles from './ApiKeysPage.module.css';
-
-const { Text } = Typography;
 
 const parseStringArray = (raw: unknown): string[] | undefined => {
   if (Array.isArray(raw)) {
@@ -92,6 +89,7 @@ export const ApiKeysPage: React.FC = () => {
   const [editingIndex, setEditingIndex] = React.useState<number | null>(null);
   const [keyInput, setKeyInput] = React.useState('');
   const [aliasInput, setAliasInput] = React.useState('');
+  const [isKeyVisible, setIsKeyVisible] = React.useState(false);
   const [pendingAliases, setPendingAliases] = React.useState<Record<string, string>>({});
 
   const docRef = React.useRef<Document | null>(null);
@@ -290,6 +288,7 @@ export const ApiKeysPage: React.FC = () => {
       .map((byte) => byte.toString(16).padStart(2, '0'))
       .join('');
     setKeyInput(`sk-cpa-${randomHex}`);
+    setIsKeyVisible(true);
   };
 
   const handleToggleDisable = React.useCallback(
@@ -419,6 +418,7 @@ export const ApiKeysPage: React.FC = () => {
               setEditingIndex(null);
               setKeyInput('');
               setAliasInput('');
+              setIsKeyVisible(false);
               setModalOpen(true);
             }}
           >
@@ -530,6 +530,7 @@ export const ApiKeysPage: React.FC = () => {
               setEditingIndex(null);
               setKeyInput('');
               setAliasInput('');
+              setIsKeyVisible(false);
               setModalOpen(true);
             }}
             onEdit={(index, key) => {
@@ -537,6 +538,7 @@ export const ApiKeysPage: React.FC = () => {
               setKeyInput(key);
               const existingAlias = pendingAliases[key] ?? keysQuery.data?.keys?.[index]?.alias ?? '';
               setAliasInput(existingAlias);
+              setIsKeyVisible(false);
               setModalOpen(true);
             }}
           />
@@ -561,6 +563,7 @@ export const ApiKeysPage: React.FC = () => {
           setModalOpen(false);
           setKeyInput('');
           setAliasInput('');
+          setIsKeyVisible(false);
           setEditingIndex(null);
         }}
         okText={t('common.confirm')}
@@ -589,11 +592,14 @@ export const ApiKeysPage: React.FC = () => {
             value={keyInput}
             onChange={(e) => setKeyInput(e.target.value)}
             onPressEnter={handleSaveKey}
+            visibilityToggle={{
+              visible: isKeyVisible,
+              onVisibleChange: setIsKeyVisible,
+            }}
             className="config-mono-input"
             autoFocus
           />
-          <Text type="secondary" className="keys-key-editor-hint">{t('keys.modal_hint')}</Text>
-          <div className="keys-key-editor-actions">
+          <div className="keys-key-editor-actions" style={{ marginTop: 8 }}>
             <Button size="small" type="dashed" onClick={handleGenerateKey}>
               {t('cfg.api_keys_generate')}
             </Button>
