@@ -10,9 +10,23 @@ import {
   Popconfirm,
   Skeleton,
   Space,
+  Tag,
   Typography,
 } from 'antd';
-import { CopyOutlined, KeyOutlined, ReloadOutlined, SaveOutlined, UndoOutlined, WarningOutlined } from '@ant-design/icons';
+import {
+  CodeOutlined,
+  CopyOutlined,
+  DashboardOutlined,
+  DownOutlined,
+  KeyOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  SaveOutlined,
+  ThunderboltOutlined,
+  UndoOutlined,
+  UpOutlined,
+  WarningOutlined,
+} from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseDocument } from 'yaml';
 import type { Document } from 'yaml';
@@ -21,9 +35,11 @@ import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
 import { ApiKeysEditor, type ApiKeyRecord } from '../components/config/ApiKeysEditor';
 import { updateFieldWithBaseline, isConfigSemanticallyEqual, getFieldSemanticValue } from '../components/config/configDirty';
+import { ConfigDirtyBar } from '../components/config/ConfigDirtyBar';
 import { ALL_CONFIG_FIELDS } from '../types/configSchema';
 import type { ConfigScalarsResponse } from '../types/configManagement';
 import type { ClientKeyUsageItem } from '../types/providers';
+import styles from './ApiKeysPage.module.css';
 
 const { Text } = Typography;
 
@@ -35,9 +51,7 @@ const { Text } = Typography;
  * same revision-guarded transaction the configuration workbench uses, rather than
  * calling the immediate `/management/api-keys` mutations: those write through a
  * different path, and switching to them would change when and how unrelated
- * configuration is persisted. Nothing outside the key list is ever modified - the
- * draft starts as the server's own copy and only that one field is touched - so
- * the rest of the document, including its comments and unknown keys, survives.
+ * configuration is persisted.
  */
 export const ApiKeysPage: React.FC = () => {
   const t = useT();
@@ -51,23 +65,12 @@ export const ApiKeysPage: React.FC = () => {
     staleTime: 60_000,
   });
 
-  /**
-   * The key list with its aliases and usage identities, read from the immediate
-   * management endpoint rather than the configuration draft.
-   *
-   * This is what makes a name attachable at all: the draft carries only the raw
-   * strings, while this response carries the usage fingerprint each alias is
-   * keyed by. It is read separately from the configuration so renaming a key
-   * never has to write CPA's document.
-   */
   const keysQuery = useQuery({
     queryKey: ['management-client-keys'],
     queryFn: () => api.getClientAPIKeys(),
     staleTime: 30_000,
   });
 
-  // Usage covers the request console's default window so the two surfaces cannot
-  // report different numbers for the same key.
   const usageQuery = useQuery({
     queryKey: ['management-client-key-usage'],
     queryFn: () => api.getClientKeyUsage('preset=24h'),
@@ -82,6 +85,7 @@ export const ApiKeysPage: React.FC = () => {
   const [modalOpen, setModalOpen] = React.useState(false);
   const [editingIndex, setEditingIndex] = React.useState<number | null>(null);
   const [keyInput, setKeyInput] = React.useState('');
+  const [showGuide, setShowGuide] = React.useState(false);
 
   const docRef = React.useRef<Document | null>(null);
   const serverDocRef = React.useRef<Document | null>(null);
@@ -98,22 +102,20 @@ export const ApiKeysPage: React.FC = () => {
     const safe = configQuery.data?.safe_yaml;
     if (safe === undefined) return;
     const revision = configQuery.data?.revision || '';
-    // Same rule as the configuration workbench: adopt the server's copy as the
-    // baseline, but never overwrite a draft that is already being edited.
     const hasDraft = rawYamlRef.current !== serverYamlRef.current;
     setServerYaml(safe);
     setServerRevision(revision);
     try {
       serverDocRef.current = parseDocument(safe);
     } catch {
-      // A malformed document is expected here: the previous baseline stays.
+      // Previous baseline remains on malformed document.
     }
     if (hasDraft) return;
     setRawYaml(safe);
     try {
       docRef.current = parseDocument(safe);
     } catch {
-      // A malformed document is expected here: the previous baseline stays.
+      // Previous baseline remains on malformed document.
     }
   }, [configQuery.data?.safe_yaml, configQuery.data?.revision]);
 
@@ -131,10 +133,6 @@ export const ApiKeysPage: React.FC = () => {
         return [];
       }
     }
-    // getFieldSemanticValue unwraps the YAML AST node. Collection getters on a
-    // Document return collection nodes (`YAMLSeq` here), not plain arrays, so
-    // reading the node directly would report an empty list for a populated
-    // `api-keys`.
     const value = getFieldSemanticValue(docRef.current, apiKeysField);
     if (Array.isArray(value)) return value.map(String);
     if (typeof value === 'string' && value) return [value];
@@ -154,7 +152,7 @@ export const ApiKeysPage: React.FC = () => {
       try {
         serverDocRef.current = parseDocument(variables.yamlToSave);
       } catch {
-        // A malformed document is expected here: the previous baseline stays.
+        // Retain previous baseline
       }
       void queryClient.invalidateQueries({ queryKey: ['management-config'] });
     },
@@ -189,7 +187,7 @@ export const ApiKeysPage: React.FC = () => {
     try {
       docRef.current = parseDocument(serverYaml);
     } catch {
-      // A malformed document is expected here: the previous baseline stays.
+      // Baseline stays on error
     }
     setSaveError(null);
     setConflictRevision(null);
@@ -209,8 +207,6 @@ export const ApiKeysPage: React.FC = () => {
         }
       }
       updateFieldWithBaseline(currentDoc, serverDocRef.current, apiKeysField, next);
-      // Reverting to the server's exact text when nothing changed keeps a
-      // formatting artefact from presenting itself as an unsaved edit.
       if (
         serverDocRef.current &&
         isConfigSemanticallyEqual(currentDoc, serverDocRef.current, ALL_CONFIG_FIELDS)
@@ -253,14 +249,6 @@ export const ApiKeysPage: React.FC = () => {
     setKeyInput(`sk-cpa-${randomHex}`);
   };
 
-  /**
-   * Saves one key's name.
-   *
-   * The name is Oh My CPA metadata, so this is its own request against its own
-   * endpoint and never touches CPA's configuration document. The version the row
-   * was rendered with is sent along, so a rename prepared against a stale read is
-   * refused with 409 instead of overwriting another session's change.
-   */
   const renameKey = React.useCallback(
     async (record: ApiKeyRecord, alias: string) => {
       if (!record.usageFingerprint) {
@@ -275,9 +263,6 @@ export const ApiKeysPage: React.FC = () => {
         await api.setClientKeyAlias(record.usageFingerprint, alias, record.aliasVersion);
         message.success(alias ? t('keys.renamed') : t('keys.rename_cleared'));
         await queryClient.invalidateQueries({ queryKey: ['management-client-keys'] });
-        // The alias is resolved into request rows server-side, so every surface
-        // that prints a caller key has to re-read. The reader's position is
-        // untouched: this invalidates cached data, it does not navigate.
         await queryClient.invalidateQueries({ queryKey: ['usage-events'] });
         await queryClient.invalidateQueries({ queryKey: ['usage-facets'] });
         await queryClient.invalidateQueries({ queryKey: ['usage-event'] });
@@ -287,13 +272,10 @@ export const ApiKeysPage: React.FC = () => {
           (error.status === 409 || (error.data as Record<string, unknown>)?.code === 'alias_version_conflict')
         ) {
           message.warning(t('keys.rename_conflict'));
-          // Reload so the next attempt cites the version that actually exists.
           await queryClient.invalidateQueries({ queryKey: ['management-client-keys'] });
           throw error;
         }
         const detail = error instanceof ApiError ? error.message : String(error);
-        // A server-side validation message is more specific than the generic one,
-        // so it is surfaced rather than replaced.
         message.error(detail || t('keys.rename_control'));
         throw error;
       }
@@ -301,15 +283,6 @@ export const ApiKeysPage: React.FC = () => {
     [message, queryClient, t],
   );
 
-  /**
-   * Opens the request console filtered to one key's traffic.
-   *
-   * The filter value is the usage fingerprint, which is the identity the request
-   * list already filters by. Navigating to an alias would need the list to
-   * resolve a name back into an identity, and a filter that means something
-   * different from what it displays is the kind of ambiguity this page exists to
-   * remove.
-   */
   const viewRequestsFor = React.useCallback(
     (record: ApiKeyRecord) => {
       if (!record.usageFingerprint) return;
@@ -321,8 +294,6 @@ export const ApiKeysPage: React.FC = () => {
     [navigate],
   );
 
-  // Joined by fingerprint so the table can print a request count per key in one
-  // pass instead of scanning the usage array per row.
   const usageByFingerprint = React.useMemo(() => {
     const indexed: Record<string, ClientKeyUsageItem> = {};
     for (const entry of usageQuery.data?.usage ?? []) {
@@ -330,6 +301,47 @@ export const ApiKeysPage: React.FC = () => {
     }
     return indexed;
   }, [usageQuery.data]);
+
+  const totalRequests24h = React.useMemo(() => {
+    let sum = 0;
+    for (const entry of usageQuery.data?.usage ?? []) {
+      sum += entry.requests || 0;
+    }
+    return sum;
+  }, [usageQuery.data]);
+
+  const activeKeysCount = React.useMemo(() => {
+    let count = 0;
+    for (const entry of usageQuery.data?.usage ?? []) {
+      if ((entry.requests || 0) > 0) count++;
+    }
+    return count;
+  }, [usageQuery.data]);
+
+  const baseUrl = React.useMemo(() => {
+    if (typeof window !== 'undefined') {
+      return `${window.location.origin}/v1`;
+    }
+    return 'http://127.0.0.1:8317/v1';
+  }, []);
+
+  const sampleKey = currentApiKeys[0] || 'sk-cpa-your-key-here';
+
+  const curlSnippet = React.useMemo(() => {
+    return `curl -X POST "${baseUrl}/chat/completions" \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${sampleKey}" \\
+  -d '{"model":"gpt-4o","messages":[{"role":"user","content":"Hello"}]}'`;
+  }, [baseUrl, sampleKey]);
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      message.success(t('cfg.source_copy_success'));
+    } catch {
+      message.error(t('cfg.copy_failed'));
+    }
+  };
 
   const formatUsageTime = React.useCallback(
     (ms: number) => dayjs(ms).format('MM-DD HH:mm:ss'),
@@ -342,18 +354,40 @@ export const ApiKeysPage: React.FC = () => {
     try {
       docRef.current = parseDocument(serverYaml);
     } catch {
-      // A malformed document is expected here: the previous baseline stays.
+      // Baseline stays
     }
   };
 
   return (
-    <div className="terminal-page keys-page">
-      <header className="terminal-page-head">
+    <div className={`terminal-page keys-page ${styles['page-container']}`}>
+      <header className={`terminal-page-head ${styles['header-row']}`}>
         <div>
+          <div className={styles['header-tag']}>
+            <KeyOutlined /> GATEWAY KEYS
+          </div>
           <h1 className="terminal-title">{t('keys.title')}</h1>
           <p className="terminal-subtitle">{t('keys.subtitle')}</p>
         </div>
-        <div className="request-actions">
+        <div className={`request-actions ${styles['header-actions']}`}>
+          <Button
+            size="small"
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              setEditingIndex(null);
+              setKeyInput('');
+              setModalOpen(true);
+            }}
+          >
+            {t('cfg.api_keys_add')}
+          </Button>
+          <Button
+            size="small"
+            icon={<CodeOutlined />}
+            onClick={() => setShowGuide((prev) => !prev)}
+          >
+            {showGuide ? t('keys.hide_guide') : t('keys.show_guide')}
+          </Button>
           <Button
             size="small"
             icon={<ReloadOutlined />}
@@ -364,7 +398,12 @@ export const ApiKeysPage: React.FC = () => {
             {t('cfg.reload')}
           </Button>
           {isDirty && (
-            <Button size="small" icon={<UndoOutlined />} disabled={saveMutation.isPending} onClick={discardChanges}>
+            <Button
+              size="small"
+              icon={<UndoOutlined />}
+              disabled={saveMutation.isPending}
+              onClick={discardChanges}
+            >
               {t('cfg.dirty_bar_discard')}
             </Button>
           )}
@@ -388,6 +427,123 @@ export const ApiKeysPage: React.FC = () => {
           </Popconfirm>
         </div>
       </header>
+
+      {/* KPI Overview Metric Tiles */}
+      <div className={styles['metrics-grid']}>
+        <div className={styles['metric-card']}>
+          <div className={styles['metric-header']}>
+            <span className={styles['metric-icon-wrap']}>
+              <KeyOutlined /> {t('keys.metric_total')}
+            </span>
+            {isDirty && (
+              <Tag color="warning" style={{ margin: 0 }}>
+                {t('keys.metric_draft_badge')}
+              </Tag>
+            )}
+          </div>
+          <div className={styles['metric-value-row']}>
+            <span className={styles['metric-value']}>{currentApiKeys.length}</span>
+          </div>
+          <span className={styles['metric-subtext']}>{t('keys.persist_note')}</span>
+        </div>
+
+        <div className={styles['metric-card']}>
+          <div className={styles['metric-header']}>
+            <span className={styles['metric-icon-wrap']}>
+              <ThunderboltOutlined style={{ color: 'var(--success)' }} /> {t('keys.metric_active')}
+            </span>
+            <Tag color="success" style={{ margin: 0 }}>
+              24h
+            </Tag>
+          </div>
+          <div className={styles['metric-value-row']}>
+            <span className={styles['metric-value']}>{activeKeysCount}</span>
+          </div>
+          <span className={styles['metric-subtext']}>
+            {t('keys.usage_scope', { range: t('keys.usage_range') })}
+          </span>
+        </div>
+
+        <div className={styles['metric-card']}>
+          <div className={styles['metric-header']}>
+            <span className={styles['metric-icon-wrap']}>
+              <DashboardOutlined style={{ color: 'var(--accent)' }} /> {t('keys.metric_requests')}
+            </span>
+            <Tag style={{ margin: 0 }}>24h</Tag>
+          </div>
+          <div className={styles['metric-value-row']}>
+            <span className={styles['metric-value']}>{totalRequests24h.toLocaleString()}</span>
+          </div>
+          <span className={styles['metric-subtext']}>
+            {t('keys.usage_scope', { range: t('keys.usage_range') })}
+          </span>
+        </div>
+      </div>
+
+      {/* Collapsible Developer Quick Integration Guide */}
+      {showGuide && (
+        <div className={styles['guide-panel']}>
+          <button
+            type="button"
+            className={styles['guide-header']}
+            onClick={() => setShowGuide((prev) => !prev)}
+          >
+            <div className={styles['guide-header-left']}>
+              <CodeOutlined />
+              <span>{t('keys.quick_guide_title')}</span>
+            </div>
+            <span className={styles['guide-header-toggle']}>
+              {showGuide ? <UpOutlined /> : <DownOutlined />}
+            </span>
+          </button>
+          <div className={styles['guide-content']}>
+            <div className={styles['guide-desc']}>{t('keys.quick_guide_desc')}</div>
+
+            <div className={styles['guide-grid']}>
+              <div className={styles['guide-field-block']}>
+                <span className={styles['guide-field-label']}>{t('keys.base_url_label')}</span>
+                <div className={styles['guide-field-value']}>
+                  <span>{baseUrl}</span>
+                  <Button
+                    size="small"
+                    type="text"
+                    icon={<CopyOutlined />}
+                    onClick={() => void copyToClipboard(baseUrl)}
+                    title={t('keys.copy_base_url')}
+                  />
+                </div>
+              </div>
+
+              <div className={styles['guide-field-block']}>
+                <span className={styles['guide-field-label']}>{t('keys.auth_header_label')}</span>
+                <div className={styles['guide-field-value']}>
+                  <span>Authorization: Bearer &lt;YOUR_KEY&gt;</span>
+                  <Button
+                    size="small"
+                    type="text"
+                    icon={<CopyOutlined />}
+                    onClick={() => void copyToClipboard(`Authorization: Bearer ${sampleKey}`)}
+                    title={t('cfg.api_keys_copy')}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className={styles['guide-code-box']}>
+              <pre>{curlSnippet}</pre>
+              <div className={styles['guide-code-actions']}>
+                <Button
+                  size="small"
+                  icon={<CopyOutlined />}
+                  onClick={() => void copyToClipboard(curlSnippet)}
+                >
+                  {t('keys.copy_curl')}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {saveError && (
         <Alert
@@ -466,6 +622,15 @@ export const ApiKeysPage: React.FC = () => {
         </>
       )}
 
+      {/* Floating Dirty Bar for unsaved drafts */}
+      <ConfigDirtyBar
+        isDirty={isDirty}
+        isSaving={saveMutation.isPending}
+        onSave={saveKeys}
+        onDiscard={discardChanges}
+      />
+
+      {/* Add / Edit Key Modal */}
       <Modal
         title={editingIndex !== null ? t('cfg.api_keys_edit') : t('cfg.api_keys_add')}
         open={modalOpen}

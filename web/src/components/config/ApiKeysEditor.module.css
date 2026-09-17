@@ -1,0 +1,231 @@
+/* ApiKeysEditor.module.css — Gateway Client Key Editor
+   Follows Oh My CPA design tokens: 1px borders, Sarasa Mono stack, no shadows.
+   All class selectors are line-initial and kebab-case.
+*/
+
+.toolbar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 240px;
+  flex-wrap: wrap;
+}
+
+.toolbar-search {
+  max-width: 280px;
+  flex: 1;
+  min-width: 160px;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Status Indicator Dot */
+.status-pip {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.status-pip-active {
+  background: var(--success);
+}
+
+.status-pip-idle {
+  background: var(--muted);
+  opacity: 0.45;
+}
+
+/* Table Name cell */
+.name-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.name-text {
+  font-weight: 600;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unnamed-btn {
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 11px;
+  padding: 1px 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: color var(--motion-fast) ease-out, border-color var(--motion-fast) ease-out;
+}
+
+.unnamed-btn:hover {
+  color: var(--fg);
+  border-color: var(--muted);
+}
+
+/* Mobile Cards View */
+.mobile-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.key-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-sizing: border-box;
+  transition: border-color var(--motion-fast) ease-out;
+}
+
+.key-card:hover {
+  border-color: var(--muted);
+}
+
+.key-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.key-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.key-card-token-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.key-card-token-text {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.5px;
+}
+
+.key-card-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  border: 1px solid var(--border-soft);
+}
+
+.key-card-stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.key-card-stat-label {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.key-card-stat-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.key-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 10px;
+}
+
+/* Empty State */
+.empty-box {
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  padding: 36px 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.empty-icon {
+  font-size: 32px;
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.empty-desc {
+  font-size: 12px;
+  color: var(--muted);
+  max-width: 420px;
+  line-height: 1.5;
+}
+
+.scope-note {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
