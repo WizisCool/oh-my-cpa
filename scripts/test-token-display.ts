@@ -16,6 +16,7 @@ import {
   resolveTokenNumberStyle,
 } from '../web/src/types/tokenDisplay.ts';
 import { formatCacheRate, resolveCacheRateReadout } from '../web/src/theme/cacheScale.ts';
+import { LANGUAGES, isChineseLanguage, languageLocale } from '../web/src/i18n/language.ts';
 import type { RollingReadout } from '../web/src/types/rollingNumber.ts';
 import {
   formatModelShare,
@@ -48,7 +49,7 @@ assert.equal(formatTokens(NaN, 'en-compact'), '—');
 assert.equal(formatTokens(Infinity, 'zh'), '—');
 
 // The `full` style is the same reading as the exact form: grouped digits with no
-// unit word. It is the one style that means the same thing in both consoles, which
+// unit word. It is the one style that means the same thing in every console, which
 // is why it is offered to an English reader as the alternative to an abbreviation.
 assert.equal(formatTokens(1234567, 'full'), '1,234,567');
 assert.equal(formatTokens(0, 'full'), '0');
@@ -64,16 +65,35 @@ assert.equal(formatTokensFull(NaN), '—');
 
 // ── the language guard ────────────────────────────────────────────────────────
 
-// 万 and 亿 are words, so a Chinese scale in an English console would mix two
+// 万 and 亿 are words, so a Chinese scale in a non-Chinese console would mix two
 // languages in one reading. A stored `zh` therefore resolves to the compact form
 // whenever the console is not Chinese...
 assert.equal(resolveTokenNumberStyle('zh', 'en'), 'en-compact');
 assert.equal(resolveTokenNumberStyle('zh', 'zh'), 'zh');
-// ...while the language-neutral styles pass through untouched, in both consoles.
+assert.equal(resolveTokenNumberStyle('zh', 'zh-Hant'), 'zh');
+assert.equal(resolveTokenNumberStyle('zh', 'ms'), 'en-compact');
+// ...while the language-neutral styles pass through untouched in every console.
 assert.equal(resolveTokenNumberStyle('en-compact', 'en'), 'en-compact');
 assert.equal(resolveTokenNumberStyle('en-compact', 'zh'), 'en-compact');
+assert.equal(resolveTokenNumberStyle('en-compact', 'zh-Hant'), 'en-compact');
+assert.equal(resolveTokenNumberStyle('en-compact', 'ms'), 'en-compact');
 assert.equal(resolveTokenNumberStyle('full', 'en'), 'full');
 assert.equal(resolveTokenNumberStyle('full', 'zh'), 'full');
+assert.equal(resolveTokenNumberStyle('full', 'zh-Hant'), 'full');
+assert.equal(resolveTokenNumberStyle('full', 'ms'), 'full');
+
+// The language registry is the single source every switcher reads, and both Chinese
+// scripts carry the language-specific unit rule.
+assert.deepEqual(
+  LANGUAGES.map((language) => language.id),
+  ['zh', 'zh-Hant', 'en', 'ms'],
+);
+assert.equal(isChineseLanguage('zh'), true);
+assert.equal(isChineseLanguage('zh-Hant'), true);
+assert.equal(isChineseLanguage('en'), false);
+assert.equal(isChineseLanguage('ms'), false);
+assert.equal(languageLocale('zh-Hant'), 'zh-Hant');
+assert.equal(languageLocale('ms'), 'ms-MY');
 
 // ── parsing stored preferences ─────────────────────────────────────────────────
 

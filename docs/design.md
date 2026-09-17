@@ -573,9 +573,9 @@ Tabular      font-variant-numeric: tabular-nums on all numeric data
    an action (`Retry`) is the whole message. Sentences explaining *why* the switch
    exists, or promising what another screen will do, are documentation pasted
    into the UI — an operator who needs them is looking at the wrong product.
-3. No stacked language pairs: a Chinese UI never shows English captions for the
-   same thing (both languages localize fully; proper nouns like "Provider" may
-   remain English in zh copy where that is the industry term).
+3. No stacked translations: a localized UI never shows captions from another
+   language for the same thing (every registered language localizes fully; proper
+   nouns like "Provider" may remain English where that is the industry term).
 4. Body max width `1440px`; page padding 32px desktop / 24px tablet / 16px phone.
 
 ## 4. Shape, spacing, elevation
@@ -638,7 +638,7 @@ Oh My CPA draws from OpenCode's minimalist, high-density, engineer-first console
    - Avoid marketing boilerplate or lengthy guides inside UI cards.
 6. **Top Context Slot**
    - The left side hosts the signature `›_` prompt logo, expandable to an instance context selector when multi-instance support lands;
-   - The right side houses four fixed-width actions: refresh, the theme menu, the language menu, and sign out. Both preferences are **menus over their whole registry** rather than toggles between two states - the console already carries six presets, and a language pair that cycled would have to be rewritten as soon as a third language lands. The theme menu previews each preset with the same four-swatch mark the settings cards use; the language menu pairs each language's **endonym** - its own name in its own script, never a translation - with its flag, so a reader who cannot read the console's current language can still recognize and choose their own. The settings page's language picker lists the same endonyms.
+   - The right side houses four fixed-width actions: refresh, the theme menu, the language menu, and sign out. Both preferences are **menus over their whole registry** rather than toggles between two states - the console already carries six presets and four reading languages. The theme menu previews each preset with the same four-swatch mark the settings cards use; the language menu names every choice by its **endonym** - its own name in its own script, never a translation - so a reader who cannot read the console's current language can still recognize and choose their own. The settings page's language picker lists the same endonyms.
    - **Every header action keeps one width in every reading language.** Labels are the one thing whose length changes with the language, so sign out is an icon button named by its tooltip, and the language trigger holds its code in a fixed slot. A control that resizes moves the actions beside it, which is a real defect rather than a cosmetic one: the pointer is already on one of them.
    - Connection status and version are the side rail foot's, not the header's: this slot carries actions. Never display fabricated avatars, dummy balances, or mock workspace selectors before real capabilities exist.
 7. **Form Workbench & Setting Group Panels**
@@ -1010,7 +1010,7 @@ publishes no creation date, so any such column would be a guess rendered as data
       per-component hex, and stays ≥ 4.5:1 against its own badge fill
 - [ ] No shadows, no gradients, 4px radius
 - [ ] Mono font inherited (never set a new font-family)
-- [ ] One page title; subtitles only with live data; no zh/en duplication
+- [ ] One page title; subtitles only with live data; no duplicated translations
 - [ ] Nav position marked by 2px `--fg` left tick rule, not a filled block or semantic color
 - [ ] Settings and management favor open section lists over heavy card wrappers
 - [ ] Cards reserved for KPIs, summaries, and peer comparisons

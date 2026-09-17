@@ -5,7 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { findMissingKeys } from './check-missing-i18n.mjs';
+import { findCatalogGaps, findMissingKeys } from './check-missing-i18n.mjs';
 
 const checker = fileURLToPath(new URL('./check-missing-i18n.mjs', import.meta.url));
 
@@ -22,7 +22,7 @@ function fixture(t, dictionary, sources) {
   return { dictionaryFile, sourceDirectory };
 }
 
-test('accepts source keys defined by the bilingual dictionary', (t) => {
+test('accepts source keys defined by the base dictionary', (t) => {
   const files = fixture(t, "export const DICT = { 'page.title': ['标题', 'Title'] };", {
     'Page.tsx': "export const Page = () => t('page.title');",
   });
@@ -48,4 +48,26 @@ test('command exits non-zero when a translation key is missing', (t) => {
   });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /MISSING KEY/);
+});
+
+test('reports missing, stale, and placeholder-invalid locale translations', (t) => {
+  const files = fixture(t, "export const DICT = { 'page.title': ['标题 {n}', 'Title {n}'], 'page.body': ['正文', 'Body'] };", {
+    'Page.tsx': "t('page.title');",
+  });
+  const catalog = path.join(path.dirname(files.dictionaryFile), 'zh-Hant.ts');
+  fs.writeFileSync(catalog, 'export const ZH_HANT = {\n  "page.title": "標題 {count}",\n  "page.old": "舊",\n};\n');
+  const gaps = findCatalogGaps({
+    dictionaryFile: files.dictionaryFile,
+    catalogFiles: [{ id: 'zh-Hant', file: catalog }],
+  });
+  assert.deepEqual(gaps, [{
+    id: 'zh-Hant',
+    missing: ['page.body'],
+    extra: ['page.old'],
+    placeholderMismatches: [{
+      key: 'page.title',
+      expected: ['{n}'],
+      actual: ['{count}'],
+    }],
+  }]);
 });

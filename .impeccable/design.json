@@ -253,7 +253,7 @@
       "Don't use decorative gradients, animated skeleton sweeps, or spring/bounce easing curves.",
       "Don't use danger red on the cache-rate scale; cache misses are not system execution failures.",
       "Don't hard-swap an active screen to a blank white canvas during navigation or background polling.",
-      "Don't display duplicated English and Chinese text strings side-by-side in the interface.",
+      "Don't display duplicated translations side-by-side in the interface.",
       "Don't pack single settings or isolated input fields into individual card boxes."
     ]
   }

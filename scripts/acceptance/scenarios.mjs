@@ -3659,7 +3659,7 @@ export async function omcSettings({ base, page, check, context }) {
    * whose shape it does not state: a page-wide "all options share an edge" condition would be
    * asserting the language row's layout from the unit-style check, and would wait for a state the
    * page never reaches wherever the two disagree - a hang rather than a fix. The label is the same
-   * bilingual pair this scenario's row locator uses, so a console in either reading language resolves
+   * registered language pair this scenario's row locator uses, so a console in any reading language resolves
    * it.
    *
    * Bounded by Playwright's own polling rather than a fixed sleep, because how long the listener
@@ -3752,6 +3752,7 @@ export async function omcSettings({ base, page, check, context }) {
   // ── the Chinese scale is offered to Chinese consoles only ─────────────────
   const tokenRow = page.locator('.omc-settings-page .settings-toggle-row').filter({ hasText: /Token unit style|Token 计量单位/ });
   const chineseOption = tokenRow.locator('.ant-segmented-item').filter({ hasText: /万\/亿/ });
+  const chineseScaleOption = () => page.locator('.omc-settings-page .ant-segmented-item').filter({ hasText: /万\/亿|萬\/億/ });
   check(
     'the Chinese unit style is shown but disabled on an English console',
     (await chineseOption.count()) === 1 && (await chineseOption.locator('input').isDisabled()),
@@ -3918,8 +3919,8 @@ export async function omcSettings({ base, page, check, context }) {
   // Theme and language stay in the browser, and the page's controls must therefore drive the app
   // rather than a copy: switching the language re-renders this page's own copy, and it also makes
   // the Chinese scale selectable. The option is located by its endonym, which is the one label this
-  // row shows in either reading (see the header menu's own check below).
-  const languageRow = page.locator('.omc-settings-page .settings-toggle-row').filter({ hasText: /Language|界面语言/ });
+  // row shows in every reading (see the header menu's own check below).
+  const languageRow = page.locator('.omc-settings-page .settings-toggle-row').filter({ hasText: /Language|界面语言|介面語言|Bahasa/ });
   await languageRow.locator('.ant-segmented-item').filter({ hasText: /简体中文/ }).click();
   let becameChinese = false;
   await until(async () => {
@@ -3929,7 +3930,7 @@ export async function omcSettings({ base, page, check, context }) {
   check('switching the language on this page re-renders the console', becameChinese);
   check(
     'the Chinese unit style becomes selectable once the console is Chinese',
-    !(await tokenRow.locator('.ant-segmented-item').filter({ hasText: /万\/亿/ }).locator('input').isDisabled()),
+    !(await chineseScaleOption().locator('input').isDisabled()),
   );
 
   // ── the header's language menu, and the geometry a switch must not disturb ─
@@ -3954,13 +3955,14 @@ export async function omcSettings({ base, page, check, context }) {
     `geometry=${JSON.stringify(geometryInChinese)}`,
   );
 
-  await page.locator('.app-header').getByRole('button', { name: /Language|界面语言/ }).click();
+  const languageMenuButton = () => page.locator('.app-header').getByRole('button', { name: /Language|界面语言|介面語言|Bahasa/ });
+  await languageMenuButton().click();
   const languageMenuItems = page.locator('.ant-dropdown:visible .language-menu-item');
   await languageMenuItems.first().waitFor({ timeout: 10_000 });
   check(
     'the header language menu lists the registered languages with their flags',
-    (await languageMenuItems.count()) === 2
-      && (await page.locator('.ant-dropdown:visible .language-flag svg').count()) === 2,
+    (await languageMenuItems.count()) === 4
+      && (await page.locator('.ant-dropdown:visible .language-flag svg').count()) === 4,
     `items=${await languageMenuItems.count()} flags=${await page.locator('.ant-dropdown:visible .language-flag svg').count()}`,
   );
   await languageMenuItems.filter({ hasText: /English/ }).click();
@@ -3977,17 +3979,53 @@ export async function omcSettings({ base, page, check, context }) {
   // translated name would appear, and the reason the rule exists: the reader this menu has to serve is
   // the one who cannot read the console's current language, so "Simplified Chinese" would hide the way
   // back for exactly that person.
-  await page.locator('.app-header').getByRole('button', { name: /Language|界面语言/ }).click();
+  await languageMenuButton().click();
   await page.locator('.ant-dropdown:visible .language-menu-item').first().waitFor({ timeout: 10_000 });
   const menuNamesInEnglish = await page.locator('.ant-dropdown:visible .language-menu-item').allInnerTexts();
   check(
-    'the language menu names each language in its own script, in both readings',
-    menuNamesInEnglish.length === 2
+    'the language menu names each language in its own script in every reading',
+    menuNamesInEnglish.length === 4
       && menuNamesInEnglish.some((text) => text.includes('简体中文'))
+      && menuNamesInEnglish.some((text) => text.includes('繁體中文'))
       && menuNamesInEnglish.some((text) => text.includes('English'))
+      && menuNamesInEnglish.some((text) => text.includes('Bahasa Melayu'))
       && !menuNamesInEnglish.some((text) => /Simplified Chinese/.test(text)),
     JSON.stringify(menuNamesInEnglish),
   );
+  await languageMenuItems.filter({ hasText: /繁體中文/ }).click();
+  let becameTraditionalChinese = false;
+  await until(async () => {
+    becameTraditionalChinese = /OMC 設定/.test(await page.locator('.omc-settings-page .terminal-title').innerText())
+      && (await page.evaluate(() => document.documentElement.lang)) === 'zh-Hant';
+    return becameTraditionalChinese;
+  }, { label: 'the header menu to switch the console to Traditional Chinese' }).catch(() => {});
+  check(
+    'Traditional Chinese is a complete reading language with the Chinese unit scale',
+    becameTraditionalChinese
+      && (await page.evaluate(() => localStorage.getItem('omc-lang'))) === 'zh-Hant'
+      && !(await chineseScaleOption().locator('input').isDisabled()),
+  );
+
+  await languageMenuButton().click();
+  await page.locator('.ant-dropdown:visible .language-menu-item').filter({ hasText: /Bahasa Melayu/ }).click();
+  let becameMalay = false;
+  await until(async () => {
+    becameMalay = /Tetapan OMC/.test(await page.locator('.omc-settings-page .terminal-title').innerText())
+      && (await page.evaluate(() => document.documentElement.lang)) === 'ms-MY';
+    return becameMalay;
+  }, { label: 'the header menu to switch the console to Malay' }).catch(() => {});
+  check(
+    'Malay is a complete reading language and keeps the Chinese scale unavailable',
+    becameMalay
+      && (await page.evaluate(() => localStorage.getItem('omc-lang'))) === 'ms'
+      && await chineseScaleOption().locator('input').isDisabled(),
+  );
+
+  await languageMenuButton().click();
+  await page.locator('.ant-dropdown:visible .language-menu-item').filter({ hasText: /English/ }).click();
+  await until(async () => /OMC Settings/.test(await page.locator('.omc-settings-page .terminal-title').innerText()), {
+    label: 'the header menu to return the console to English',
+  });
   await page.keyboard.press('Escape');
   await settleLayout(page);
   check(

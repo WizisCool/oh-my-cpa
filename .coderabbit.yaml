@@ -114,9 +114,10 @@ reviews:
     - path: 'web/src/**/*.{ts,tsx}'
       instructions: >-
         React console. User-visible copy is never hardcoded: new strings are
-        `[zh, en]` pairs in `web/src/i18n/index.tsx`. Requests go through the
-        single typed client in `web/src/api/client.ts`; a page calling `fetch`
-        directly is a defect. Colors come from the tokens in
+        `[zh, en]` pairs in `web/src/i18n/index.tsx` plus matching entries in
+        every catalog under `web/src/i18n/locales/`. Requests go through the single
+        typed client in `web/src/api/client.ts`; a page calling `fetch` directly is
+        a defect. Colors come from the tokens in
         `web/src/theme/themeConfig.ts` or the CSS variables in `docs/design.md`,
         so a color literal outside those definitions is a defect; the visual
         system is terminal-flat with no box shadows, and green/amber/red stay

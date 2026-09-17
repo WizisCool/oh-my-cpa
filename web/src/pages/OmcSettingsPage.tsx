@@ -1,6 +1,6 @@
 import React from 'react';
 import { Segmented, Typography } from 'antd';
-import { useT, useI18n, LANGUAGES } from '../i18n';
+import { isChineseLanguage, useT, useI18n, LANGUAGES } from '../i18n';
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport';
 import { useThemeMode } from '../theme/ThemeContext';
 import { THEME_PRESETS } from '../theme/themeConfig';
@@ -43,9 +43,9 @@ export const OmcSettingsPage: React.FC = () => {
   const { lang, setLang } = useI18n();
   const { themeId, setThemeId } = useThemeMode();
   const { style, setStyle } = useTokenDisplayStyle();
-  // A three-option picker cannot fit a phone's card as a row: its track is the sum of its labels,
-  // and the items do not wrap, so the third option was painted past the card's edge. Below the
-  // console's narrow breakpoint it becomes a vertical list instead, which is the shape that fits.
+  // A multi-option picker cannot fit a phone's card as a row: its track is the sum of its labels,
+  // and the items do not wrap, so later options paint past the card's edge. Below the console's
+  // narrow breakpoint it becomes a vertical list instead, which is the shape that fits.
   const isNarrow = useIsNarrowViewport();
 
   // The Chinese scale is words - 万, 亿 - so it is offered only to a Chinese
@@ -55,7 +55,7 @@ export const OmcSettingsPage: React.FC = () => {
   const tokenStyleOptions = TOKEN_NUMBER_STYLES.map((value: TokenNumberStyle) => ({
     value,
     label: value === 'zh' ? t('omc.token_style_zh') : value === 'full' ? t('omc.token_style_full') : t('omc.token_style_en'),
-    disabled: value === 'zh' && lang !== 'zh',
+    disabled: value === 'zh' && !isChineseLanguage(lang),
   }));
 
   return (
@@ -127,11 +127,13 @@ export const OmcSettingsPage: React.FC = () => {
                 if (picked) setLang(picked.id);
               }}
               aria-label={t('omc.language')}
-              // Each option carries its language's flag and endonym rather than a translated
-              // name: a reader who cannot read the console's current language has to be able to
-              // find their own here. The endonym is also what keeps this row inside its card on a
-              // phone - a translated "Simplified Chinese" plus its flag measured wider than the
-              // track the narrow-layout rule hands this picker.
+              vertical={isNarrow}
+              block={isNarrow}
+              // Each option carries its language's endonym rather than a translated name: a
+              // reader who cannot read the console's current language has to be able to find
+              // their own here. The endonym is also what keeps this row inside its card on a
+              // phone - a translated "Simplified Chinese" measured wider than the track the
+              // narrow-layout rule hands this picker.
             />
           }
         />

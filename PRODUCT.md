@@ -51,7 +51,7 @@ web
   - Native sub-path compatibility: All code must natively support the `/omc` prefix (`VITE_BASE_URL`), forbidding hardcoded root paths (`/`);
   - Single-replica single-writer: Designed specifically for single-instance SQLite WAL; no distributed multi-writer mechanisms are introduced;
   - Strict allowlisted APIs: The browser communicates only with the Oh My CPA backend; arbitrary CPA endpoint pass-through proxies are forbidden;
-  - Complete bilingual localization: Full Chinese and English alignment (`web/src/i18n/index.tsx`); no unlocalized captions or mixed languages in the UI.
+  - Complete multilingual localization: Full Simplified Chinese, Traditional Chinese, English and Malay alignment (`web/src/i18n/index.tsx` plus the catalogs under `web/src/i18n/locales/`); no unlocalized captions or mixed languages in the UI.
 
 ## Brand Commitments
 

@@ -1,37 +1,12 @@
 import React from 'react';
+import { LANGUAGES, languageLocale, type Lang } from './language';
 
-export type Lang = 'zh' | 'en';
-
-/**
- * Every reading language the console offers, in the order its switchers list
- * them.
- *
- * One registry rather than a control's private option list: a language reaches
- * the console through the header menu and the settings page at once, and a second
- * language added to only one of them would leave the two disagreeing about what
- * the console can read.
- *
- * `name` is the language's **endonym** - its own name in its own script - and is
- * deliberately not translated. A switcher that renamed 简体中文 to "Simplified
- * Chinese" would be unusable by exactly the reader who needs it: someone who
- * cannot read the console's current language cannot recognize their own behind a
- * translation of it, and would have no way back out. `id` and `code` are likewise
- * stable in every reading, which is what lets the header's trigger - a flag and a
- * two-glyph code - be the same width in every language.
- *
- * `country` is a country standing in for a language that is not one country's
- * (English is written the same way in more than one), so the flag is decoration:
- * the name beside it is the choice's real label, and a language no single flag
- * represents would need a different mark rather than a borrowed flag.
- */
-export const LANGUAGES: readonly { id: Lang; name: string; code: string; country: string }[] = [
-  { id: 'zh', name: '简体中文', code: '中', country: 'CN' },
-  { id: 'en', name: 'English', code: 'EN', country: 'US' },
-];
+export { LANGUAGES, languageLocale, isChineseLanguage } from './language';
+export type { Lang } from './language';
 
 /**
- * Bilingual dictionary, values are [zh, en] pairs. Keys not found fall through
- * to the key itself so misses are visible in dev.
+ * Base dictionary, values are [Simplified Chinese, English] pairs. Keys not
+ * found fall through to the key itself so misses are visible in dev.
  */
 const DICT: Record<string, [string, string]> = {
   // ── app / shell ──────────────────────────────────────────────────────────
@@ -1664,10 +1639,52 @@ const DICT: Record<string, [string, string]> = {
 
 export type TFunc = (key: string, vars?: Record<string, string | number>) => string;
 
+type Catalog = Readonly<Record<string, string>>;
+
+/**
+ * The catalogs loaded on demand.
+ *
+ * The base dictionary already carries two complete languages, but the additional
+ * catalogs are large enough that bundling them into the entry chunk would make every
+ * reader pay for languages they did not choose. Keeping the loaders here also means
+ * the registry remains the only place a language must be declared: when a switcher
+ * asks for one of these ids, this map supplies the catalog that makes it readable.
+ */
+const CATALOG_LOADERS: Partial<Record<Lang, () => Promise<Catalog>>> = {
+  'zh-Hant': () => import('./locales/zh-Hant').then((module) => module.ZH_HANT),
+  ms: () => import('./locales/ms').then((module) => module.MS),
+};
+
+const loadedCatalogs = new Map<Lang, Catalog>();
+const catalogPromises = new Map<Lang, Promise<Catalog>>();
+
+function isDeferredLanguage(lang: Lang): boolean {
+  return Boolean(CATALOG_LOADERS[lang]);
+}
+
+function loadCatalog(lang: Lang): Promise<Catalog> {
+  const loaded = loadedCatalogs.get(lang);
+  if (loaded) return Promise.resolve(loaded);
+  const existing = catalogPromises.get(lang);
+  if (existing) return existing;
+  const loader = CATALOG_LOADERS[lang];
+  if (!loader) return Promise.resolve({});
+  const pending = loader().then((catalog) => {
+    loadedCatalogs.set(lang, catalog);
+    catalogPromises.delete(lang);
+    return catalog;
+  });
+  catalogPromises.set(lang, pending);
+  return pending;
+}
+
 export function makeT(lang: Lang): TFunc {
   return (key, vars) => {
     const entry = DICT[key];
-    let text = entry ? (lang === 'en' ? entry[1] : entry[0]) : key;
+    let text = key;
+    if (lang === 'zh') text = entry?.[0] ?? key;
+    else if (lang === 'en') text = entry?.[1] ?? key;
+    else text = loadedCatalogs.get(lang)?.[key] ?? key;
     if (vars) {
       for (const [name, value] of Object.entries(vars)) {
         text = text.split(`{${name}}`).join(String(value));
@@ -1681,7 +1698,8 @@ const LANG_KEY = 'omc-lang';
 
 function readInitialLang(): Lang {
   if (typeof window === 'undefined') return 'zh';
-  return window.localStorage.getItem(LANG_KEY) === 'en' ? 'en' : 'zh';
+  const stored = window.localStorage.getItem(LANG_KEY);
+  return LANGUAGES.some((language) => language.id === stored) ? (stored as Lang) : 'zh';
 }
 
 interface I18nContextValue {
@@ -1697,12 +1715,41 @@ const I18nContext = React.createContext<I18nContextValue>({
 });
 
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [lang, setLang] = React.useState<Lang>(readInitialLang);
+  const [initialLang] = React.useState<Lang>(readInitialLang);
+  const [lang, setLangState] = React.useState<Lang>(initialLang);
+  const [isReady, setIsReady] = React.useState(() => !isDeferredLanguage(initialLang));
+  const languageRequest = React.useRef(0);
 
   React.useEffect(() => {
+    if (isReady) return;
+    let cancelled = false;
+    loadCatalog(initialLang).then(() => {
+      if (cancelled) return;
+      setLangState(initialLang);
+      setIsReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [initialLang, isReady]);
+
+  const setLang = React.useCallback((next: Lang) => {
+    const request = languageRequest.current + 1;
+    languageRequest.current = request;
+    if (!isDeferredLanguage(next)) {
+      setLangState(next);
+      return;
+    }
+    loadCatalog(next).then(() => {
+      if (languageRequest.current === request) setLangState(next);
+    });
+  }, []);
+
+  React.useEffect(() => {
+    if (!isReady) return;
     window.localStorage.setItem(LANG_KEY, lang);
-    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
-  }, [lang]);
+    document.documentElement.lang = languageLocale(lang);
+  }, [isReady, lang]);
 
   const value = React.useMemo<I18nContextValue>(
     () => ({
@@ -1713,7 +1760,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [lang],
   );
 
-  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+  return isReady ? <I18nContext.Provider value={value}>{children}</I18nContext.Provider> : null;
 };
 
 export function useI18n(): I18nContextValue {
