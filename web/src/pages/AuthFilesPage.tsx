@@ -71,16 +71,12 @@ export const AuthFilesPage: React.FC = () => {
   const targetProvider = searchParams.get('provider');
   const targetQuery = searchParams.get('q');
 
-  const [query, setQuery] = useState('');
-  const [provider, setProvider] = useState(targetProvider ? targetProvider.toLowerCase().trim() : 'all');
+  const [query, setQuery] = useState(targetQuery ?? '');
+  const [provider, setProvider] = useState(targetProvider?.trim() ? targetProvider.trim().toLowerCase() : 'all');
 
   useEffect(() => {
-    if (targetProvider) {
-      setProvider(targetProvider.toLowerCase().trim());
-    }
-    if (targetQuery) {
-      setQuery(targetQuery);
-    }
+    setProvider(targetProvider?.trim() ? targetProvider.trim().toLowerCase() : 'all');
+    setQuery(targetQuery ?? '');
   }, [targetProvider, targetQuery]);
   const [statusFilter, setStatusFilter] = useState<AuthFileStatusFilter>('all');
   const [sortMode, setSortMode] = useState<AuthFileSortKey>('name-asc');

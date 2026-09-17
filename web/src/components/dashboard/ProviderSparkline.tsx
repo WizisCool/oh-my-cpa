@@ -1,17 +1,19 @@
 import React from 'react';
 import type { ManagementOverviewBucket } from '../../types/management';
+import { successRateVerdict } from '../../types/usageEventView';
 
 export interface ProviderSparklineProps {
   buckets?: ManagementOverviewBucket[];
   total: number;
-  successRate: number | null;
+  failures?: number;
+  successRate?: number | null;
   height?: number;
 }
 
 export const ProviderSparkline: React.FC<ProviderSparklineProps> = ({
   buckets = [],
   total,
-  successRate,
+  failures: explicitFailures,
   height = 18,
 }) => {
   if (total === 0 || buckets.length === 0) {
@@ -44,11 +46,16 @@ export const ProviderSparkline: React.FC<ProviderSparklineProps> = ({
   const barWidth = Math.max(0.6, slotWidth * 0.72);
   const offset = (slotWidth - barWidth) / 2;
 
-  // Tone color based on success rate
+  // Use documented provider-health classifier based on total requests and failure count
+  const failures = explicitFailures !== undefined
+    ? explicitFailures
+    : buckets.reduce((acc, b) => acc + (b.failed || 0), 0);
+  const tone = successRateVerdict(total, failures);
+
   const color =
-    successRate !== null && successRate < 70
+    tone === 'danger'
       ? 'var(--danger)'
-      : successRate !== null && successRate < 95
+      : tone === 'warn'
         ? 'var(--warn)'
         : 'var(--accent)';
 

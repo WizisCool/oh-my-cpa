@@ -407,7 +407,7 @@ export const ProvidersPage: React.FC = () => {
     error: providersErr,
     refetch: refetchProviders,
   } = useQuery({
-    queryKey: ['management-providers'],
+    queryKey: ['management-providers', true],
     // The providers page owns key management, so it is the one consumer that
     // opts back into plaintext key material (display is masked client-side).
     queryFn: async () => {
@@ -419,7 +419,7 @@ export const ProvidersPage: React.FC = () => {
       // returned rather than thrown so the read does not put the page into an
       // error state over data that is merely superseded.
       if (generation !== providersListReadsRef.current) {
-        return queryClient.getQueryData<ManagementProvidersData>(['management-providers']) ?? data;
+        return queryClient.getQueryData<ManagementProvidersData>(['management-providers', true]) ?? data;
       }
       return data;
     },
@@ -472,7 +472,7 @@ export const ProvidersPage: React.FC = () => {
     (id: string, isEnabled: boolean) => {
       providersListReadsRef.current += 1;
       queryClient.setQueryData<ManagementProvidersData>(
-        ['management-providers'],
+        ['management-providers', true],
         (previous) => {
           if (!previous) return previous;
           let didChange = false;
@@ -544,7 +544,7 @@ export const ProvidersPage: React.FC = () => {
       // the row as it is now, or its identity precondition would be checked
       // against values the console has already replaced.
       const row = queryClient
-        .getQueryData<ManagementProvidersData>(['management-providers'])
+        .getQueryData<ManagementProvidersData>(['management-providers', true])
         ?.providers.find((provider) => provider.id === id);
       await api.patchManagementProviderStatus(payload.family, payload.index, payload.disabled, {
         signal,

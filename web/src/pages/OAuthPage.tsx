@@ -175,7 +175,8 @@ export const OAuthPage: React.FC = () => {
     const timer = setTimeout(() => {
       const el = document.querySelector(`[data-oauth-card="${norm}"]`);
       if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        el.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
         el.classList.add(styles['card-target-highlight']);
         setTimeout(() => {
           el.classList.remove(styles['card-target-highlight']);

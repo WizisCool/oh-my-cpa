@@ -156,6 +156,7 @@ export function aggregateProviders({
     successRate: number | null;
     buckets: ManagementOverviewBucket[];
   }>();
+  const consumedTrafficKeys = new Set<string>();
 
   const hasWindowData = Array.isArray(windowProviders);
   if (hasWindowData) {
@@ -182,13 +183,14 @@ export function aggregateProviders({
     }
   }
 
-  // Helper to resolve traffic for any candidate keys
+  // Helper to resolve traffic for any candidate keys (ensures each traffic record is assigned to at most one provider)
   const resolveTraffic = (candidateKeys: (string | undefined)[]) => {
     // Exact match first
     for (const candidate of candidateKeys) {
       if (!candidate) continue;
       const key = normalizeProviderKey(candidate);
-      if (trafficMap.has(key)) {
+      if (trafficMap.has(key) && !consumedTrafficKeys.has(key)) {
+        consumedTrafficKeys.add(key);
         return trafficMap.get(key)!;
       }
     }
@@ -198,7 +200,8 @@ export function aggregateProviders({
       const cleanCandidate = normalizeProviderKey(candidate);
       if (!cleanCandidate || cleanCandidate.length < 3) continue;
       for (const [trafficKey, stats] of trafficMap.entries()) {
-        if (trafficKey.includes(cleanCandidate) || cleanCandidate.includes(trafficKey)) {
+        if (!consumedTrafficKeys.has(trafficKey) && (trafficKey === cleanCandidate || trafficKey.includes(cleanCandidate) || cleanCandidate.includes(trafficKey))) {
+          consumedTrafficKeys.add(trafficKey);
           return stats;
         }
       }
@@ -290,9 +293,13 @@ export function aggregateProviders({
 
     markClaimed(cp.id, cp.name, cp.upstream_name, normName, normUpstream, normId);
 
+    const oauthChannelId = isOAuth
+      ? (OAUTH_CHANNEL_META[normUpstream] ? normUpstream : OAUTH_CHANNEL_META[normName] ? normName : OAUTH_CHANNEL_META[normId] ? normId : (normUpstream || normName || cp.id))
+      : cp.id;
+
     result.push({
       key: `configured:${cp.id}`,
-      id: cp.id,
+      id: isOAuth ? oauthChannelId : cp.id,
       providerId: cp.id,
       name,
       kind: isOAuth ? 'oauth' : 'ai_provider',

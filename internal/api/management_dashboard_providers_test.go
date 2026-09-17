@@ -106,11 +106,12 @@ func TestDashboardProvidersWindowAggregation(t *testing.T) {
 
 	for i := range parsed.Providers {
 		p := &parsed.Providers[i]
-		if p.ID == "codex" {
+		switch p.ID {
+		case "codex":
 			codex = p
-		} else if p.ID == "cline" {
+		case "cline":
 			cline = p
-		} else if p.ID == "antigravity" {
+		case "antigravity":
 			antigravity = p
 		}
 	}

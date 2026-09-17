@@ -57,7 +57,6 @@
 
 .card-target-highlight {
   border-color: var(--accent) !important;
-  box-shadow: 0 0 0 2px rgba(0, 162, 251, 0.35) !important;
 }
 
 .card-header {

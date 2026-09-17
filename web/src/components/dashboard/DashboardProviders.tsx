@@ -54,7 +54,7 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
 
   // All configured AI providers from settings
   const { data: providersData } = useQuery({
-    queryKey: ['management-providers'],
+    queryKey: ['management-providers', false],
     queryFn: () => api.getManagementProviders(false),
     refetchInterval: 30000,
     staleTime: 10000,
@@ -93,7 +93,8 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
   const configuredProviders = providersData?.providers || [];
   const overviewProviders: ManagementOverviewProvider[] = overview.providers || [];
   const authFilesByType = overview.credentials?.by_type || [];
-  const windowProviders = windowProvidersData?.providers;
+  // If the windowed query failed with partial errors, avoid fabricating zero traffic and fall back to overview
+  const windowProviders = windowProvidersData?.partial_errors?.length ? undefined : windowProvidersData?.providers;
 
   // Aggregated list: windowed traffic (or live overview fallback) + configured AI providers + OAuth channels
   const aggregated = useMemo<AggregatedProvider[]>(() => {
@@ -158,8 +159,10 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
                       {isOAuth && (
                         <Tag className="provider-badge is-oauth">{t('dash.providers_type_oauth')}</Tag>
                       )}
-                      {provider.disabled && (
+                      {provider.disabled ? (
                         <Tag className="provider-badge is-disabled">{t('dash.providers_status_disabled')}</Tag>
+                      ) : (
+                        <Tag className="provider-badge is-active">{t('dash.providers_status_active')}</Tag>
                       )}
                       <RightOutlined className="provider-jump-arrow" aria-hidden="true" />
                     </div>
@@ -187,6 +190,7 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
                     <ProviderSparkline
                       buckets={provider.buckets}
                       total={provider.total}
+                      failures={provider.failure}
                       successRate={provider.successRate}
                       height={18}
                     />

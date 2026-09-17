@@ -505,7 +505,7 @@ a { color: inherit; }
   border-bottom: none;
 }
 .provider-row-enhanced:hover {
-  background-color: var(--hover-inset, rgba(255, 255, 255, 0.03));
+  background-color: var(--hover-inset);
 }
 
 .provider-main-col {
@@ -561,18 +561,23 @@ a { color: inherit; }
 }
 .provider-badge.is-oauth {
   color: var(--accent) !important;
-  border-color: rgba(0, 162, 251, 0.35) !important;
-  background: rgba(0, 162, 251, 0.08) !important;
+  border-color: var(--border) !important;
+  background: var(--surface) !important;
 }
 .provider-badge.is-ai {
   color: var(--fg-2) !important;
   border-color: var(--border) !important;
   background: transparent !important;
 }
+.provider-badge.is-active {
+  color: var(--success) !important;
+  border-color: var(--border) !important;
+  background: transparent !important;
+}
 .provider-badge.is-disabled {
   color: var(--danger) !important;
-  border-color: rgba(239, 68, 68, 0.35) !important;
-  background: rgba(239, 68, 68, 0.08) !important;
+  border-color: var(--border) !important;
+  background: var(--surface) !important;
 }
 
 .provider-jump-arrow {

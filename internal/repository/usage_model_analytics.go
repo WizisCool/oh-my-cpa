@@ -144,7 +144,7 @@ func (r *Repository) QueryUsageProviderBuckets(ctx context.Context, instanceID s
 		       COUNT(1),
 		       COALESCE(SUM(failed), 0)
 		FROM usage_events
-		WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms <= ?
+		WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms < ?
 		GROUP BY provider_key, aligned
 		ORDER BY provider_key ASC, aligned ASC`
 	rows, err := r.SQL().QueryContext(ctx, query, bucketMS, bucketMS, instanceID, fromMS, toMS)
