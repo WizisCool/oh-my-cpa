@@ -222,7 +222,7 @@ Query for server state.
 | `api/client.ts` | The one typed HTTP client; every endpoint is declared here |
 | `types/` | Wire types, including `usageEventView.ts` (row projection and filters), `usageEventViewActions.ts` (the view's URL and persistence rewrites), `tokenDisplay.ts` (the one layer every user-facing token number is formatted through) and `rollingNumber.ts` (the animated shape of a reading) |
 | `hooks/` | `usePreference`, `useLastIntentQueue` (React binding) over `lastIntentQueue` (the framework-free controller) and `disposableSlot` (effect-scoped resource lifetime), `useLogTail`, `useVisibleNow`, `useIsNarrowViewport`, `usePrefersReducedMotion` (the app-owned reduced-motion switch the canvas marks need, since neither `@antv/g2` nor `@ant-design/plots` reads the preference) |
-| `i18n/index.tsx` | The `[zh, en]` dictionary and the `t()` context |
+| `i18n/` | `index.tsx` owns the base `[zh, en]` dictionary and the `t()` context; `language.ts` is the reading-language registry and locale helpers; `locales/zh-Hant.ts` and `locales/ms.ts` are the complete additional catalogs |
 | `theme/` | `themeConfig.ts` (preset registry, antd tokens and CSS-variable projection), `ThemeContext.tsx` (single active preset), `cacheScale.ts` (OKLCH cache ramp) |
 | `utils/` | `maskKey.ts`, `externalUrl.ts` (the http/https link rule), `modelOptions.ts` (model-input filtering), `smoothScroll.ts` (the gesture/correction scroll schedule) |
 | `components/`, `pages/` | Feature UI; one page per route, no page owns another. `components/usage/` also carries that page's framework-free policies: `searchDebounce.ts`, `pollingPolicy.ts`, `timeRangePolicy.ts`, `syncPresentation.ts` and `chipDisplay.ts` |

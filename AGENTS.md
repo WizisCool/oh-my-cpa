@@ -124,7 +124,7 @@ Semantic requirements:
 - Meaningless abbreviations are prohibited (`temp`, `tmp`, `a`, `b`, `obj`, `el`, `val`, `res`, `idx`); only pure loop counters may use `i`, `j`. Note that `idx` is particularly dangerous: in quota/credential loops it often represents a string Auth Index, not a numeric index.
 - Booleans must carry a state prefix: `isActive`, `hasPermission`, `canEdit`, `shouldRetry`. React `useState` booleans follow the same rule (`isVisible`, `isSubmitting`).
 - Functions/methods must use verb-noun phrases: `calculateTotal()`, `validateInput()`, `nextDelay()`, `formatRequestTick()`.
-- User-visible copy must not be hardcoded in backend responses or frontend components; new copy must be added to `web/src/i18n/index.tsx` as `[zh, en]` pairs.
+- User-visible copy must not be hardcoded in backend responses or frontend components; new copy must be added to `web/src/i18n/index.tsx` as `[zh, en]` pairs and to every complete catalog under `web/src/i18n/locales/`.
 
 **Boundaries (Do not alter these purely for style)**:
 

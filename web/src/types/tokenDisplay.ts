@@ -20,6 +20,7 @@
  */
 
 import type { RollingReadout } from './rollingNumber';
+import { isChineseLanguage, type Lang } from '../i18n/language';
 
 /**
  * The stored preference values. `en-compact` is the default.
@@ -27,7 +28,7 @@ import type { RollingReadout } from './rollingNumber';
  * The Chinese scale is a *language*, not just a notation: 亿 and 万 are words, so
  * it is meaningful only beside Chinese copy. `full` is language-neutral - grouped
  * digits with no unit word - which is why it is the one style that reads the same
- * in both consoles.
+ * in every console.
  */
 export const TOKEN_NUMBER_STYLES = ['en-compact', 'zh', 'full'] as const;
 export type TokenNumberStyle = (typeof TOKEN_NUMBER_STYLES)[number];
@@ -118,18 +119,18 @@ const FULL = new Intl.NumberFormat('en');
  * resolveTokenNumberStyle picks the style a surface actually renders in.
  *
  * A stored `zh` resolves back to the compact form whenever the reading language is
- * not Chinese, because an English console printing `12亿` beside an English legend
- * would mix two languages in one reading - the same defect `docs/design.md`
- * forbids for copy, applied to the one number format that carries a language.
+ * not Chinese, because a Malay console printing `12亿` beside a Malay legend would
+ * mix two languages in one reading - the same defect `docs/design.md` forbids for
+ * copy, applied to the one number format that carries a language.
  *
  * The *stored* value is deliberately left alone: it is the operator's choice, and
  * switching the console back to Chinese must restore it rather than silently
  * rewriting what they picked. Only the reading changes.
  *
- * `full` is language-neutral, so it renders as itself in both consoles.
+ * `full` is language-neutral, so it renders as itself in every console.
  */
-export function resolveTokenNumberStyle(style: TokenNumberStyle, lang: 'zh' | 'en'): TokenNumberStyle {
-  if (style === 'zh' && lang !== 'zh') return DEFAULT_TOKEN_NUMBER_STYLE;
+export function resolveTokenNumberStyle(style: TokenNumberStyle, lang: Lang): TokenNumberStyle {
+  if (style === 'zh' && !isChineseLanguage(lang)) return DEFAULT_TOKEN_NUMBER_STYLE;
   return style;
 }
 

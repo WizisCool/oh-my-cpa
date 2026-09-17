@@ -12,7 +12,7 @@ import { LANGUAGES, useI18n, useT } from '../../i18n';
  *
  * Both are menus rather than toggles. A toggle answers only "the other one", which
  * stopped being the whole answer once the console carried six registered themes; and a
- * language pair that cycles has to be rewritten the moment a third language lands.
+ * language toggle that cycles has to be rewritten the moment another language lands.
  * Each menu lists every registered choice and marks the active one: a preset's palette
  * is drawn beside its name, and a language is shown under its own name in its own
  * script, so the menu stays readable to someone who cannot read the console's current

@@ -210,7 +210,7 @@ family in the app, and the only exception to the semantic-only rule above; see
 **Body Font:** "Sarasa Mono SC", "Sarasa UI SC", "Berkeley Mono", "IBM Plex Mono", ui-monospace, monospace
 **Label/Mono Font:** "Sarasa Mono SC", "Sarasa UI SC", "Berkeley Mono", "IBM Plex Mono", ui-monospace, monospace
 
-**Character:** Unified, technical, and precise. The monospaced character set across Chinese, English, and code symbols gives Oh My CPA the rhythm of an interactive terminal monitor while retaining high CJK legibility.
+**Character:** Unified, technical, and precise. The monospaced character set across Chinese, English, Malay, and code symbols gives Oh My CPA the rhythm of an interactive terminal monitor while retaining high CJK legibility.
 
 ### Hierarchy
 - **Display** (700, 42px, line-height 1.1, letter-spacing -0.04em): The single prominent dashboard KPI (e.g. Total Requests, Estimated Cost).
@@ -330,5 +330,5 @@ The geometric form language is compact, rectangular, and tightly controlled:
 - **Don't** use decorative gradients, animated skeleton sweeps, or spring/bounce easing curves.
 - **Don't** use danger red on the cache-rate scale; cache misses are not system execution failures.
 - **Don't** hard-swap an active screen to a blank white canvas during navigation or background polling.
-- **Don't** display duplicated English and Chinese text strings side-by-side in the interface.
+- **Don't** display duplicated translations side-by-side in the interface.
 - **Don't** pack single settings or isolated input fields into individual card boxes.

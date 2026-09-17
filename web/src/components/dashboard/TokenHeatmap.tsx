@@ -5,7 +5,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { heatmapRampMax, heatmapRampPosition } from '../../theme/heatmapRamp';
-import { useT, useI18n, type Lang } from '../../i18n';
+import { languageLocale, useT, useI18n, type Lang } from '../../i18n';
 import { formatTokens, formatTokensFull } from '../../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import {
@@ -91,7 +91,7 @@ export function viewerTimezone(): string | null {
  */
 function formatDay(day: string, lang: Lang, options: Intl.DateTimeFormatOptions): string {
   const [year, month, date] = day.split('-').map(Number);
-  return new Intl.DateTimeFormat(lang === 'zh' ? 'zh-CN' : 'en-US', options)
+  return new Intl.DateTimeFormat(languageLocale(lang), options)
     .format(new Date(year, (month ?? 1) - 1, date ?? 1));
 }
 

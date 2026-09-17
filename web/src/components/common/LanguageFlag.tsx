@@ -1,5 +1,7 @@
 import React from 'react';
 import cnFlagMarkup from 'country-flag-icons/string/3x2/CN';
+import hkFlagMarkup from 'country-flag-icons/string/3x2/HK';
+import myFlagMarkup from 'country-flag-icons/string/3x2/MY';
 import usFlagMarkup from 'country-flag-icons/string/3x2/US';
 
 /**
@@ -9,10 +11,12 @@ import usFlagMarkup from 'country-flag-icons/string/3x2/US';
  * also publishes a React component per country, but each of those re-exports the
  * package's single 331KB module holding every flag at once, which the bundler
  * cannot drop - so the markup strings are imported individually and drawn inline,
- * the same way `BrandArtwork` draws the product mark. Two flags cost about 2KB.
+ * the same way `BrandArtwork` draws the product mark. Four flags cost about 4KB.
  */
 const FLAG_MARKUP: Record<string, string> = {
   CN: cnFlagMarkup,
+  HK: hkFlagMarkup,
+  MY: myFlagMarkup,
   US: usFlagMarkup,
 };
 

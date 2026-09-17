@@ -3832,7 +3832,7 @@ export async function omcSettings({ base, page, check, context }) {
    * whose shape it does not state: a page-wide "all options share an edge" condition would be
    * asserting the language row's layout from the unit-style check, and would wait for a state the
    * page never reaches wherever the two disagree - a hang rather than a fix. The label is the same
-   * bilingual pair this scenario's row locator uses, so a console in either reading language resolves
+   * registered language pair this scenario's row locator uses, so a console in any reading language resolves
    * it.
    *
    * Bounded by Playwright's own polling rather than a fixed sleep, because how long the listener
@@ -3925,6 +3925,7 @@ export async function omcSettings({ base, page, check, context }) {
   // ── the Chinese scale is offered to Chinese consoles only ─────────────────
   const tokenRow = page.locator('.omc-settings-page .settings-toggle-row').filter({ hasText: /Token unit style|Token 计量单位/ });
   const chineseOption = tokenRow.locator('.ant-segmented-item').filter({ hasText: /万\/亿/ });
+  const chineseScaleOption = () => page.locator('.omc-settings-page .ant-segmented-item').filter({ hasText: /万\/亿|萬\/億/ });
   check(
     'the Chinese unit style is shown but disabled on an English console',
     (await chineseOption.count()) === 1 && (await chineseOption.locator('input').isDisabled()),
@@ -4091,8 +4092,8 @@ export async function omcSettings({ base, page, check, context }) {
   // Theme and language stay in the browser, and the page's controls must therefore drive the app
   // rather than a copy: switching the language re-renders this page's own copy, and it also makes
   // the Chinese scale selectable. The option is located by its endonym, which is the one label this
-  // row shows in either reading (see the header menu's own check below).
-  const languageRow = page.locator('.omc-settings-page .settings-toggle-row').filter({ hasText: /Language|界面语言/ });
+  // row shows in every reading (see the header menu's own check below).
+  const languageRow = page.locator('.omc-settings-page .settings-toggle-row').filter({ hasText: /Language|界面语言|介面語言|Bahasa/ });
   await languageRow.locator('.ant-segmented-item').filter({ hasText: /简体中文/ }).click();
   let becameChinese = false;
   await until(async () => {
@@ -4102,7 +4103,7 @@ export async function omcSettings({ base, page, check, context }) {
   check('switching the language on this page re-renders the console', becameChinese);
   check(
     'the Chinese unit style becomes selectable once the console is Chinese',
-    !(await tokenRow.locator('.ant-segmented-item').filter({ hasText: /万\/亿/ }).locator('input').isDisabled()),
+    !(await chineseScaleOption().locator('input').isDisabled()),
   );
 
   // ── the header's language menu, and the geometry a switch must not disturb ─
@@ -4127,13 +4128,14 @@ export async function omcSettings({ base, page, check, context }) {
     `geometry=${JSON.stringify(geometryInChinese)}`,
   );
 
-  await page.locator('.app-header').getByRole('button', { name: /Language|界面语言/ }).click();
+  const languageMenuButton = () => page.locator('.app-header').getByRole('button', { name: /Language|界面语言|介面語言|Bahasa/ });
+  await languageMenuButton().click();
   const languageMenuItems = page.locator('.ant-dropdown:visible .language-menu-item');
   await languageMenuItems.first().waitFor({ timeout: 10_000 });
   check(
     'the header language menu lists the registered languages with their flags',
-    (await languageMenuItems.count()) === 2
-      && (await page.locator('.ant-dropdown:visible .language-flag svg').count()) === 2,
+    (await languageMenuItems.count()) === 4
+      && (await page.locator('.ant-dropdown:visible .language-flag svg').count()) === 4,
     `items=${await languageMenuItems.count()} flags=${await page.locator('.ant-dropdown:visible .language-flag svg').count()}`,
   );
   await languageMenuItems.filter({ hasText: /English/ }).click();
@@ -4150,17 +4152,53 @@ export async function omcSettings({ base, page, check, context }) {
   // translated name would appear, and the reason the rule exists: the reader this menu has to serve is
   // the one who cannot read the console's current language, so "Simplified Chinese" would hide the way
   // back for exactly that person.
-  await page.locator('.app-header').getByRole('button', { name: /Language|界面语言/ }).click();
+  await languageMenuButton().click();
   await page.locator('.ant-dropdown:visible .language-menu-item').first().waitFor({ timeout: 10_000 });
   const menuNamesInEnglish = await page.locator('.ant-dropdown:visible .language-menu-item').allInnerTexts();
   check(
-    'the language menu names each language in its own script, in both readings',
-    menuNamesInEnglish.length === 2
+    'the language menu names each language in its own script in every reading',
+    menuNamesInEnglish.length === 4
       && menuNamesInEnglish.some((text) => text.includes('简体中文'))
+      && menuNamesInEnglish.some((text) => text.includes('繁體中文'))
       && menuNamesInEnglish.some((text) => text.includes('English'))
+      && menuNamesInEnglish.some((text) => text.includes('Bahasa Melayu'))
       && !menuNamesInEnglish.some((text) => /Simplified Chinese/.test(text)),
     JSON.stringify(menuNamesInEnglish),
   );
+  await languageMenuItems.filter({ hasText: /繁體中文/ }).click();
+  let becameTraditionalChinese = false;
+  await until(async () => {
+    becameTraditionalChinese = /OMC 設定/.test(await page.locator('.omc-settings-page .terminal-title').innerText())
+      && (await page.evaluate(() => document.documentElement.lang)) === 'zh-Hant';
+    return becameTraditionalChinese;
+  }, { label: 'the header menu to switch the console to Traditional Chinese' }).catch(() => {});
+  check(
+    'Traditional Chinese is a complete reading language with the Chinese unit scale',
+    becameTraditionalChinese
+      && (await page.evaluate(() => localStorage.getItem('omc-lang'))) === 'zh-Hant'
+      && !(await chineseScaleOption().locator('input').isDisabled()),
+  );
+
+  await languageMenuButton().click();
+  await page.locator('.ant-dropdown:visible .language-menu-item').filter({ hasText: /Bahasa Melayu/ }).click();
+  let becameMalay = false;
+  await until(async () => {
+    becameMalay = /Tetapan OMC/.test(await page.locator('.omc-settings-page .terminal-title').innerText())
+      && (await page.evaluate(() => document.documentElement.lang)) === 'ms-MY';
+    return becameMalay;
+  }, { label: 'the header menu to switch the console to Malay' }).catch(() => {});
+  check(
+    'Malay is a complete reading language and keeps the Chinese scale unavailable',
+    becameMalay
+      && (await page.evaluate(() => localStorage.getItem('omc-lang'))) === 'ms'
+      && await chineseScaleOption().locator('input').isDisabled(),
+  );
+
+  await languageMenuButton().click();
+  await page.locator('.ant-dropdown:visible .language-menu-item').filter({ hasText: /English/ }).click();
+  await until(async () => /OMC Settings/.test(await page.locator('.omc-settings-page .terminal-title').innerText()), {
+    label: 'the header menu to return the console to English',
+  });
   await page.keyboard.press('Escape');
   await settleLayout(page);
   check(
@@ -4168,6 +4206,103 @@ export async function omcSettings({ base, page, check, context }) {
     (await headerActionGeometry()) === geometryInChinese,
     `zh=${JSON.stringify(geometryInChinese)} en=${JSON.stringify(await headerActionGeometry())}`,
   );
+
+  // ── a catalog whose chunk cannot be fetched ──────────────────────────────
+  //
+  // The additional catalogs are separate chunks, so a tab older than the deployment serving it asks
+  // for a chunk name that no longer exists. Two failure modes came out of that, and neither is about
+  // the copy the console prints: a stored language whose chunk could not be fetched left the provider
+  // with nothing to render - a blank page, with no way out but clearing storage - and a switch that
+  // failed leaked an unhandled rejection and cached it.
+  //
+  // Both are asserted on the console rather than on the string: a blank document, a leaked error, and
+  // a stored preference overwritten by the fallback are the three things a reader would be left with.
+  // The fetch is failed by aborting the chunk request, which is the same state a redeploy produces.
+  // The browser refuses to re-fetch a module whose import has already failed in a document, so the
+  // recovery asserted below is the reload, not a second click.
+  const isCatalogChunk = (url) => /\/i18n\/locales\/ms(\.ts)?$/.test(url.pathname) || /\/assets\/ms-[^/]*\.js$/.test(url.pathname);
+  const pageErrors = [];
+  const collectPageError = (error) => pageErrors.push(String(error.message));
+  page.on('pageerror', collectPageError);
+  const abortCatalogChunk = async () => {
+    await page.route('**/*', (route) => (isCatalogChunk(new URL(route.request().url())) ? route.abort() : route.fallback()));
+  };
+  const languageState = () => page.evaluate(() => ({
+    lang: document.documentElement.lang,
+    stored: localStorage.getItem('omc-lang'),
+    // The page's own title, which is the copy actually on screen: a document attribute alone would be
+    // satisfied by the markup the server sent, before React has rendered anything.
+    title: document.querySelector('.omc-settings-page .terminal-title')?.textContent ?? '',
+  }));
+
+  // A fresh document, because the catalogs the earlier checks switched to are still in memory: a switch
+  // would find them there without fetching anything, and the failure being asserted is the fetch's.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
+  const beforeBlockedSwitch = await languageState();
+  await abortCatalogChunk();
+  pageErrors.length = 0;
+  await languageMenuButton().click();
+  await page.locator('.ant-dropdown:visible .language-menu-item').filter({ hasText: /Bahasa Melayu/ }).click();
+  // Long enough for a failed fetch to have landed: the assertion is that nothing changed, and a
+  // shorter window would pass before the rejection existed.
+  await sleep(1_000);
+  const afterBlockedSwitch = await languageState();
+  check(
+    'a switch whose catalog cannot be fetched leaves the console readable and unchanged',
+    afterBlockedSwitch.lang === beforeBlockedSwitch.lang
+      && afterBlockedSwitch.stored === beforeBlockedSwitch.stored
+      && afterBlockedSwitch.title === beforeBlockedSwitch.title,
+    `before=${JSON.stringify(beforeBlockedSwitch)} after=${JSON.stringify(afterBlockedSwitch)}`,
+  );
+  check(
+    'a catalog that failed to load raises no unhandled error',
+    pageErrors.length === 0,
+    JSON.stringify(pageErrors.slice(0, 2)),
+  );
+  await page.unroute('**/*');
+
+  // A stored deferred language is reached before the first paint, so its chunk failing there is the
+  // state that used to render nothing at all. Asserted through the rendered document, and through the
+  // stored value: the console falls back to its default reading language, and the reader's own choice
+  // is still stored for the load that can read it.
+  await page.evaluate(() => localStorage.setItem('omc-lang', 'ms'));
+  await abortCatalogChunk();
+  pageErrors.length = 0;
+  await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
+  // Waited for by the copy that proves the page rendered *in the fallback language*: an empty document
+  // and a document whose attributes say `zh-CN` while React has painted nothing both satisfy a weaker
+  // reading, and "the console is still usable" is the claim.
+  const fellBack = await until(async () => {
+    const state = await languageState();
+    return /OMC 设置/.test(state.title) ? state : false;
+  }, { label: 'the console to render in its default language while the stored catalog is unreachable' }).catch(() => null);
+  check(
+    'a stored catalog that cannot be fetched renders the console in its default language',
+    fellBack !== null && fellBack.lang === 'zh-CN' && fellBack.stored === 'ms',
+    `state=${JSON.stringify(fellBack ?? await languageState())}`,
+  );
+  check(
+    'the fallback does not raise an unhandled error either',
+    pageErrors.length === 0,
+    JSON.stringify(pageErrors.slice(0, 2)),
+  );
+  await page.unroute('**/*');
+  page.off('pageerror', collectPageError);
+
+  // The recovery path the fallback leaves open: the preferred language is still stored, so the load
+  // that can fetch the chunk comes up in it rather than in the fallback.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  const recovered = await until(async () => {
+    const state = await languageState();
+    return /Tetapan OMC/.test(state.title) ? state : false;
+  }, { label: 'the stored language to load once its chunk is reachable again' }).catch(() => null);
+  check(
+    'the language a failed load could not print is still the stored choice',
+    recovered !== null && recovered.lang === 'ms-MY' && recovered.stored === 'ms',
+    `state=${JSON.stringify(recovered ?? await languageState())}`,
+  );
+  await page.evaluate(() => localStorage.setItem('omc-lang', 'en'));
 }
 
 export const SCENARIOS = [

@@ -15,7 +15,7 @@
  *     operator's own name for that line.
  *
  * The function returns the *value* to display, never the sentence around it: the
- * label template comes from the dictionary so both languages stay localized.
+ * label template comes from the dictionary so every language stays localized.
  */
 import type { EventFilterKey } from '../../types/usageEventView';
 import type { UsageFacets } from '../../types/usageEvents';

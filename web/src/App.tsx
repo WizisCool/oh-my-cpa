@@ -6,7 +6,9 @@ import {
 } from 'react-router-dom';
 import { App as AntdApp, ConfigProvider } from 'antd';
 import enUS from 'antd/locale/en_US';
+import msMY from 'antd/locale/ms_MY';
 import zhCN from 'antd/locale/zh_CN';
+import zhTW from 'antd/locale/zh_TW';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { getAppConfig } from './types/config';
 import {
@@ -48,6 +50,13 @@ const queryClient = new QueryClient({
   },
 });
 
+const ANTD_LOCALES = {
+  zh: zhCN,
+  'zh-Hant': zhTW,
+  en: enUS,
+  ms: msMY,
+} as const;
+
 export const App: React.FC = () => {
   const [themeId, setThemeId] = React.useState<ThemeId>(() => {
     if (typeof window === 'undefined') return 'omc-dark';
@@ -87,7 +96,7 @@ const ThemedProviders: React.FC<{ themeContextValue: ThemeContextValue; themeId:
 }) => {
   const { lang } = useI18n();
   return (
-    <ConfigProvider locale={lang === 'zh' ? zhCN : enUS} theme={createThemeConfig(themeId)}>
+    <ConfigProvider locale={ANTD_LOCALES[lang]} theme={createThemeConfig(themeId)}>
       <AntdApp>
         <ThemeContext.Provider value={themeContextValue}>
           <TokenDisplayProvider>

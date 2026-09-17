@@ -36,8 +36,8 @@ const { Text } = Typography;
 const RENDER_CHUNK = 300;
 
 // Status classes are shown as the numeric class, not as invented English words:
-// the log line itself says 400, and a Chinese UI must not caption it SUCCESS
-// (design.md rule 3).
+// the log line itself says 400, and a localized UI must not caption it SUCCESS
+// under a different reading language (design.md rule 3).
 const STATUS_CLASS_LABELS: Record<LogStatusClass, string> = {
   all: '',
   success: '2xx',

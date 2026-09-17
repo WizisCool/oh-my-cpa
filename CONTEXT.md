@@ -114,25 +114,32 @@ audits.
 
 ## i18n
 
-Native zh/en bilingual UI. Dictionary lives in `web/src/i18n/index.tsx` as
-`[zh, en]` pairs accessed through `t(key, vars)`; language persists in
-`localStorage('omc-lang')` and the antd locale follows. Rule: both languages
-fully localize — a Chinese UI must not show untranslated English captions next
-to Chinese ones (proper nouns and industry terms excepted).
+Native Simplified Chinese, Traditional Chinese, English and Malay UI. The base
+dictionary lives in `web/src/i18n/index.tsx` as `[zh, en]` pairs, while
+`web/src/i18n/locales/zh-Hant.ts` and `web/src/i18n/locales/ms.ts` carry the
+additional catalogs. All four are accessed through `t(key, vars)`; language
+persists in `localStorage('omc-lang')` and the antd locale follows. Rule: every
+registered language fully localizes — a localized UI must not show untranslated
+captions from another language beside its own copy (proper nouns and industry
+terms excepted).
 
-The supported languages are listed once, as the `LANGUAGES` registry in the same
-module, and every switcher reads it: adding a language means a dictionary plus one
-registry row. A row carries the language's **endonym** — its own name in its own
-script — its own two-glyph code, and the flag a switcher draws beside it. `id`,
-`name` and `code` are stable in every reading, and this is the one part of the
-interface the dictionary does not translate: a switcher that renamed 简体中文 to
-"Simplified Chinese" could not be used by the reader who needs it most, since
+The supported languages are listed once in `web/src/i18n/language.ts`, and every
+switcher reads that registry. A row carries the language's **endonym** — its own
+name in its own script — its stable id, two-glyph code and BCP 47 locale. `id`,
+`name` and `code` are stable in every reading, and the endonym is the one part of
+the interface the dictionary does not translate: a switcher that renamed 简体中文
+to "Simplified Chinese" could not be used by the reader who needs it most, since
 someone who cannot read the console's current language cannot recognize their own
-behind a translation of it and would have no way back. The flag is decoration — a
-country standing in for a language that is not one country's — so the endonym
-beside it is the choice's real label. The header's trigger shows the flag and the
-code rather than the endonym, which is the pair that reads identically either way
-and keeps the action cluster one width in every language.
+behind a translation of it and would have no way back.
+
+The two additional catalogs are separate chunks, fetched when the language is
+selected, so the stored preference is a **choice** rather than a guarantee: a tab
+older than the deployment serving it asks for a chunk name that no longer exists.
+A catalog that cannot be fetched leaves the console reading in its default language
+while `omc-lang` keeps the operator's choice, and a switch that cannot fetch one
+leaves the reading where it was — never a blank page, and never a leaked rejection.
+A browser does not re-fetch a module whose import has already failed in a document,
+so the language arrives on the next load rather than on a second click.
 
 One deliberate exception is in the code rather than the dictionary: quota
 window labels, plan labels, recommendation reasons, and the discovery fallback
@@ -192,10 +199,10 @@ artwork; never hardcode colors in components.
   in a chart is fine while the same rounding presented as the only number on offer
   is a wrong number. The Chinese scale is a *word*, not just a notation,
   so it belongs only to a Chinese console: a stored `zh` resolves to
-  `en-compact` whenever the reading language is not Chinese, and the option is
-  shown disabled there. The stored value itself is never rewritten, so returning
-  the console to Chinese restores the operator's own choice. `full` is
-  language-neutral and reads the same in both.
+  `en-compact` whenever the reading language is neither Simplified nor Traditional
+  Chinese, and the option is shown disabled there. The stored value itself is
+  never rewritten, so returning the console to Chinese restores the operator's own
+  choice. `full` is language-neutral and reads the same in every language.
 - **Call Point**: The client-facing identity of a model request: the model alias
   a client requested, or the upstream model name when no alias was set. It is a
   *grouping key*, not a display rewrite — in the model panels' call view one

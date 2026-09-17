@@ -4,7 +4,7 @@ const pad2 = (n: number): string => (n < 10 ? `0${n}` : String(n));
 
 /**
  * Short absolute time used across the quota card, e.g. "09/30 01:05".
- * Numeric and locale-neutral on purpose so zh/en share one layout.
+ * Numeric and locale-neutral on purpose so every language shares one layout.
  */
 export function formatShortDateTime(ms: number): string {
   const d = new Date(ms);

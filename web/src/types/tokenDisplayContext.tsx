@@ -57,7 +57,7 @@ export const TokenDisplayProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const viewPref = usePreference<ModelChartView>(MODEL_VIEW_PREFERENCE, DEFAULT_MODEL_CHART_VIEW, parseView);
 
   // The language rule lives here and only here: every surface reads the resolved
-  // value, so a Chinese-only unit can never reach an English reading even if a
+  // value, so a Chinese-only unit can never reach a non-Chinese reading even if a
   // future page forgets the rule.
   const style = React.useMemo(
     () => resolveTokenNumberStyle(stylePref.value, lang),
