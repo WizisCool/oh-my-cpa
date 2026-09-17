@@ -36,10 +36,10 @@ Mono as fallbacks), 4px radii, dense but breathable spacing.
 | `--surface` | `#1c1c1f` | `colorBgElevated`, `colorFillTertiary` | Cards, panels, dropdowns, hover states |
 | `--fg` | `#f4f4f6` | `colorText`, `colorTextBase` | Primary text |
 | `--fg-2` | `#a1a1aa` | `colorTextSecondary` | Secondary text |
-| `--muted` | `#71717a` | `colorTextTertiary` | Hints, legends, labels |
+| `--muted` | `#71717a` | `colorTextTertiary` | Hints, legends, labels, chart crosshair rules |
 | `--meta` | `#52525b` | `colorTextQuaternary` | Group labels, footnotes |
 | `--border` | `#2c2c30` | `colorBorder` | Primary 1px borders |
-| `--border-soft` | `#222226` | `colorBorderSecondary`, `colorSplit` | Row dividers, inner borders |
+| `--border-soft` | `#222226` | `colorBorderSecondary`, `colorSplit` | Row dividers, inner borders, chart grid rules |
 | `--accent` | `#00a2fb` | `colorInfo`, `colorLink` | Links, info, active bars, selection |
 | `--accent-hover` | `#0077b8` | `colorPrimary` | Filled primary buttons |
 | `--accent-active` | `#005d8f` | `colorPrimaryHover/Active` | Pressed state |
@@ -468,6 +468,18 @@ asserts this from painted pixels: no series-coloured ink appears below the axis 
 when - and the numbers are in the tooltip and in the usage list beside it. An axis would take the width
 the lines need to add a scale nothing on the card refers to. The plot floor and the x labels stay: the
 floor is what makes a quiet stretch read as zero rather than as absent data.
+
+**The plot's chrome is the palette's ink, at the palette's own opacity.** The grid rules, the axis rule
+and the tooltip's crosshair are the one part of this mark the console does not draw itself: the runtime
+paints them from its own theme, which is one of the library's *light* themes unless the mark names the
+console's mode, and it multiplies the inks it *is* handed by that theme's opacity tokens (`alpha45` on
+the labels, the axis rule and the ticks, `alpha10` on the grid). A palette colour handed through either
+one is not the colour that reaches the card - a near-black grid on a dark card is one 8-bit step from the
+surface it is drawn on. So every rule is named from the palette *and* pinned to full opacity, and the
+theme's mode follows the console's: `--border-soft` for the grid, `--border` for the axis rule and its
+ticks, `--fg-2` for the labels, `--muted` for the crosshair. The browser probe reads both themes' painted
+pixels and matches the ink to the token, because the light card is exactly the surface on which a wrong
+ink still looks correct.
 
 **Four x ticks, chosen by position.** The bucket grid runs to ~48 points; a tick per bucket printed the
 same instant forty-eight times across a half-width card. The first and last bucket are always among the

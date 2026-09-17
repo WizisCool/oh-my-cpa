@@ -184,11 +184,11 @@ family in the app, and the only exception to the semantic-only rule above; see
 ### Neutral
 - **Console Background (`--bg`)** (`#121214`): Base canvas, table row backgrounds, input wells, and overall page substrate.
 - **Graphite Surface (`--surface`)** (`#1c1c1f`): Elevated containers, cards, dropdown menus, modals, and row hover states.
-- **Hairline Border (`--border`)** (`#2c2c30`): Primary 1px structural separator for cards, tables, sider borders, and toolbars.
-- **Soft Divider (`--border-soft`)** (`#222226`): Inner item dividers, table row borders, and subtle panel boundaries.
+- **Hairline Border (`--border`)** (`#2c2c30`): Primary 1px structural separator for cards, tables, sider borders, toolbars, and the model trend's axis rule and ticks.
+- **Soft Divider (`--border-soft`)** (`#222226`): Inner item dividers, table row borders, subtle panel boundaries, and the model trend's grid rules.
 - **Chalk White Text (`--fg`)** (`#f4f4f6`): Primary readable text, titles, numbers, and selected navigation items.
-- **Silver Secondary Text (`--fg-2`)** (`#a1a1aa`): Secondary descriptions, field hints, and subtitle text.
-- **Ash Muted (`--muted`)** (`#71717a`): Table column headers, units, disabled text, and legend entries.
+- **Silver Secondary Text (`--fg-2`)** (`#a1a1aa`): Secondary descriptions, field hints, subtitle text, and the model trend's axis labels.
+- **Ash Muted (`--muted`)** (`#71717a`): Table column headers, units, disabled text, legend entries, and the model trend's tooltip crosshair.
 - **Slate Metadata (`--meta`)** (`#52525b`): Navigation group headers, timestamps, masked keys, and footer build metadata.
 
 ### Status & Functional
@@ -201,6 +201,8 @@ family in the app, and the only exception to the semantic-only rule above; see
 **The Semantic Color Rule.** Color is never applied as casual visual decoration. Green, amber, and red strictly communicate boolean health, degradation, or active errors. Scaffolding, icons, and containers remain neutral.
 
 **The Honest Cache Scale Rule.** Cache-rate indicators never display danger red. A cache miss or low hit rate is an inherent trait of novel prompts, not an infrastructure defect. Red is reserved exclusively for failed executions.
+
+**The Palette Ink Rule.** Chart chrome the runtime would otherwise paint from its own theme — grid rules, the axis rule and its ticks, axis labels, and the tooltip's crosshair — is named from the palette and drawn at the palette's own opacity, and a mark's chart theme follows the console's mode rather than the runtime's light default. The light card is exactly the surface on which a wrong ink still looks correct, so both themes are asserted from painted pixels.
 
 ## Typography
 

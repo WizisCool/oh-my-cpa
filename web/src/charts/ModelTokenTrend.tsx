@@ -42,7 +42,7 @@ export interface ModelTokenTrendProps {
  * mark is painted on a canvas that CSS cannot reach. See `chartMotion.ts`.
  */
 export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, foldedLabel, tokenUnitLabel = '', height = 260 }) => {
-  const { theme } = useThemeMode();
+  const { theme, themeMode } = useThemeMode();
   const isReducedMotion = usePrefersReducedMotion();
   const animate = resolveChartAnimation(isReducedMotion);
   const { style: tokenStyle } = useTokenDisplayStyle();
@@ -120,6 +120,15 @@ export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, folded
     return (_value: string, index: number) => wanted.has(index);
   }, [buckets]);
 
+  // Every ink the plot's frame is drawn with is named from the palette *and* pinned to full opacity.
+  //
+  // G2's axis theme multiplies the inks it is handed by its own opacity tokens - the labels, the axis
+  // rule and the ticks by `alpha45`, the grid by `alpha10` - so a palette value handed through them is
+  // not the colour that reaches the card. Those tokens, and the palette behind them, also belong to the
+  // theme the mark renders under rather than to this console's, which is how a dark card came to be
+  // framed in the library's near-black ink: the grid was painted one 8-bit step away from the card's own
+  // background, and the labels and rule at roughly half their token's contrast. The weights below are
+  // the palette's own, which the design system already measured for each surface.
   const axis = React.useMemo(() => ({
     x: {
       // The tick values are the bucket keys, so the digits are parsed back for the label. The format
@@ -131,9 +140,11 @@ export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, folded
       // the console's mono stack.
       labelFontFamily: MONO_FONT_STACK,
       labelFontSize: 10,
-      // `fg2` rather than `muted`: these labels are data - the instants the window covers - and
-      // `fg2` measures 8.10:1 on the dark card and 8.68:1 on the light one, clear of AA at 10px.
+      // `fg2` rather than `muted`: these labels are data - the instants the window covers - and the
+      // secondary text step is the one that carries them: 6.63:1 on the dark card and 7.43:1 on the
+      // light one (WCAG 2.x relative luminance against the card surface), clear of AA at 10px.
       labelFill: colors.fg2,
+      labelOpacity: 1,
       // Two lines of the readout's own width: the labels are the widest thing on this axis and the
       // card is half the page wide, so the last one is pulled inside the frame rather than centred on
       // its bucket where half of it would hang past the padding.
@@ -141,7 +152,9 @@ export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, folded
       tickFilter,
       line: true,
       lineStroke: colors.border,
+      lineStrokeOpacity: 1,
       tickStroke: colors.border,
+      tickOpacity: 1,
     },
     y: {
       // No y-axis at all. The reading is the shape of each line against its own baseline - which
@@ -199,11 +212,25 @@ export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, folded
         }}
         axis={axis}
         theme={{
-          // Only the grid ink is set here, and the transparent fills keep the library from painting its
-          // own plot background over the card. The axis labels are styled on `axis.x` above instead,
+          // The mode is named so nothing the palette does not name is drawn in the wrong half of the
+          // library's ink: without it every chart renders the library's *light* theme, whose ink is
+          // near-black, onto a card that may be dark.
+          type: themeMode,
+          // The grid ink belongs to the *axis*, not to a scale under it. The axis renderer resolves
+          // `theme.axis` and then `theme.axis<Position>` / `theme.axis<Channel>`, so a channel nested
+          // under `axis` is never read at all - which is where the grid's ink used to be declared, and
+          // why the grid kept the library's own. The axis labels are styled on `axis.x` above instead,
           // because that is the object the axis renderer reads for them.
-          axis: {
-            y: { line: false, gridStroke: colors.borderSoft },
+          axis: { gridStroke: colors.borderSoft, gridStrokeOpacity: 1 },
+          // The crosshair is drawn by the tooltip interaction, so its ink is a `tooltip` token of the
+          // *theme* - a different `tooltip` from the mark's interaction spec below, which is read from
+          // the interaction's own options. Both rules are drawn, because `crosshairsY` follows the
+          // `crosshairs` level, so both are named: the interaction's default ink is near-black, which is
+          // how the one line a reader follows with the pointer disappeared on every dark card.
+          tooltip: {
+            crosshairsStroke: colors.muted,
+            crosshairsStrokeOpacity: 1,
+            crosshairsLineWidth: 1,
           },
           view: {
             viewFill: 'transparent',

@@ -116,7 +116,11 @@ const SCENARIO_PATHS = [
   },
   {
     prefix: 'web/src/charts/',
-    scenarios: ['dashboard-charts'],
+    // Every scenario that reads a mark's paint: the KPI tiles' sparkline, the model panels' trend and
+    // ring - whose chrome ink is asserted in both themes - and the marks' shared palette. A chart file
+    // that only one panel imports still selects both, because which file a mark's ink comes from is not
+    // something this planner can see; over-selecting is the side this file is required to err on.
+    scenarios: ['dashboard-charts', 'dashboard-model-panels'],
   },
   // The dashboard's own panels. Both scenarios read the page, so a panel change
   // reaches both: the heatmap is a sibling of the tiles, not a child of a chart.
