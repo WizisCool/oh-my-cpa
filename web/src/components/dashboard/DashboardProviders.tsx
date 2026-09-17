@@ -151,7 +151,7 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
                       <LobeIcon iconId={provider.iconId} size={20} className="provider-brand-icon" />
                       <span
                         className={`status-pip ${provider.disabled ? 'is-disabled' : 'is-active'}`}
-                        title={provider.disabled ? t('dash.providers_status_disabled') : t('dash.providers_status_active')}
+                        title={provider.disabled ? t('dash.providers_status_disabled') : undefined}
                       />
                     </div>
                     <div className="provider-title-line">
@@ -159,10 +159,8 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
                       {isOAuth && (
                         <Tag className="provider-badge is-oauth">{t('dash.providers_type_oauth')}</Tag>
                       )}
-                      {provider.disabled ? (
+                      {provider.disabled && (
                         <Tag className="provider-badge is-disabled">{t('dash.providers_status_disabled')}</Tag>
-                      ) : (
-                        <Tag className="provider-badge is-active">{t('dash.providers_status_active')}</Tag>
                       )}
                       <RightOutlined className="provider-jump-arrow" aria-hidden="true" />
                     </div>

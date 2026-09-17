@@ -569,11 +569,6 @@ a { color: inherit; }
   border-color: var(--border) !important;
   background: transparent !important;
 }
-.provider-badge.is-active {
-  color: var(--success) !important;
-  border-color: var(--border) !important;
-  background: transparent !important;
-}
 .provider-badge.is-disabled {
   color: var(--danger) !important;
   border-color: var(--border) !important;

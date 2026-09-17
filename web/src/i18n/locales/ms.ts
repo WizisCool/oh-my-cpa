@@ -240,7 +240,6 @@ export const MS: Readonly<Record<string, string>> = {
   "dash.providers": "Pembekal",
   "dash.providers_hint": "Kredensial langsung dan jumlah permintaan",
   "dash.providers_type_oauth": "OAuth",
-  "dash.providers_status_active": "Aktif",
   "dash.providers_status_disabled": "Dilumpuhkan",
   "dash.empty_providers": "Tiada trafik pembekal lagi",
   "dash.credentials_n": "{n} kredensial",
