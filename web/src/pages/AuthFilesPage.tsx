@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Alert,
   App as AntdApp,
@@ -66,8 +67,17 @@ export const AuthFilesPage: React.FC = () => {
   const queryClient = useQueryClient();
 
   // Filters, sorting, view modes
-  const [query, setQuery] = useState('');
-  const [provider, setProvider] = useState('all');
+  const [searchParams] = useSearchParams();
+  const targetProvider = searchParams.get('provider');
+  const targetQuery = searchParams.get('q');
+
+  const [query, setQuery] = useState(targetQuery ?? '');
+  const [provider, setProvider] = useState(targetProvider?.trim() ? targetProvider.trim().toLowerCase() : 'all');
+
+  useEffect(() => {
+    setProvider(targetProvider?.trim() ? targetProvider.trim().toLowerCase() : 'all');
+    setQuery(targetQuery ?? '');
+  }, [targetProvider, targetQuery]);
   const [statusFilter, setStatusFilter] = useState<AuthFileStatusFilter>('all');
   const [sortMode, setSortMode] = useState<AuthFileSortKey>('name-asc');
   const [compactMode, setCompactMode] = useState(false);

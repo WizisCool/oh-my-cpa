@@ -473,6 +473,161 @@ a { color: inherit; }
 .status-pip { width: 7px; height: 7px; border-radius: 2px; background: var(--success); }
 .provider-credentials, .provider-rate { color: var(--muted); font-size: 13px; }
 .provider-total { font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* ── Dashboard Providers Section ─────────────────────────────────────────── */
+.dashboard-providers-section { margin-bottom: 32px; }
+
+.provider-list-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  margin-bottom: 0;
+}
+.provider-list-items {
+  display: flex;
+  flex-direction: column;
+}
+.provider-row-enhanced {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.8fr) minmax(90px, .9fr) 80px 75px minmax(110px, 1.2fr);
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border-soft);
+  transition: background-color var(--motion-fast) var(--ease-standard);
+}
+.provider-row-enhanced.is-clickable {
+  cursor: pointer;
+  user-select: none;
+}
+.provider-row-enhanced:last-child {
+  border-bottom: none;
+}
+.provider-row-enhanced:hover {
+  background-color: var(--hover-inset);
+}
+
+.provider-main-col {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.provider-brand-badge {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+.provider-brand-badge .status-pip {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid var(--surface);
+}
+.status-pip.is-active { background: var(--success); }
+.status-pip.is-disabled { background: var(--danger); }
+
+.provider-title-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.provider-title {
+  color: var(--fg);
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.provider-badge {
+  margin: 0 !important;
+  font-size: 10px !important;
+  line-height: 16px !important;
+  padding: 0 5px !important;
+  border-radius: 2px !important;
+}
+.provider-badge.is-oauth {
+  color: var(--accent) !important;
+  border-color: var(--border) !important;
+  background: var(--surface) !important;
+}
+.provider-badge.is-ai {
+  color: var(--fg-2) !important;
+  border-color: var(--border) !important;
+  background: transparent !important;
+}
+.provider-badge.is-disabled {
+  color: var(--danger) !important;
+  border-color: var(--border) !important;
+  background: var(--surface) !important;
+}
+
+.provider-jump-arrow {
+  color: var(--meta);
+  font-size: 11px;
+  opacity: 0;
+  transform: translateX(-3px);
+  transition: opacity var(--motion-fast) var(--ease-standard), transform var(--motion-fast) var(--ease-standard);
+}
+.provider-row-enhanced:hover .provider-jump-arrow {
+  opacity: 0.8;
+  transform: translateX(0);
+}
+
+.provider-creds-col {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.provider-total-col {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+.provider-rate-col {
+  font-size: 12.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.provider-visual-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.provider-sparkline {
+  display: block;
+  overflow: visible;
+}
+
+@media (max-width: 768px) {
+  .provider-row-enhanced {
+    grid-template-columns: minmax(130px, 1fr) auto auto;
+    gap: 10px 12px;
+  }
+  .provider-creds-col {
+    grid-column: 1;
+  }
+  .provider-total-col, .provider-rate-col {
+    text-align: right;
+  }
+  .provider-visual-col {
+    grid-column: 1 / -1;
+  }
+}
 .dashboard-lower { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .dashboard-card { min-height: 250px; padding: 20px; }
 .health-meter { display: flex; height: 8px; gap: 2px; margin: 24px 0 14px; background: var(--border); }

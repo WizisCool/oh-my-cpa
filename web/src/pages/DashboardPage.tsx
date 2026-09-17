@@ -25,7 +25,8 @@ import { TimeRangeControl } from '../components/dashboard/TimeRangeControl';
 import { RollingNumber } from '../components/dashboard/RollingNumber';
 import { TokenHeatmap, TOKEN_HEATMAP_QUERY_KEY } from '../components/dashboard/TokenHeatmap';
 import { ModelUsagePanels, DASHBOARD_MODELS_QUERY_KEY } from '../components/dashboard/ModelUsagePanels';
-import type { ManagementOverview, ManagementOverviewProvider } from '../types/management';
+import { DashboardProviders } from '../components/dashboard/DashboardProviders';
+import type { ManagementOverview } from '../types/management';
 import {
   applyTail,
   DASHBOARD_RANGE_PREFERENCE,
@@ -171,6 +172,8 @@ export const DashboardPage: React.FC = () => {
     // meaning - re-read this page. A refresh that left a ranking on screen from a minute ago would
     // be answering a question nobody asked it.
     void queryClient.invalidateQueries({ queryKey: [DASHBOARD_MODELS_QUERY_KEY] });
+    void queryClient.invalidateQueries({ queryKey: ['dashboard-providers'] });
+    void queryClient.invalidateQueries({ queryKey: ['management-overview'] });
     void refetch();
   }, [queryClient, refetch]);
 
@@ -444,7 +447,7 @@ export const DashboardPage: React.FC = () => {
           prop. */}
       <TokenHeatmap />
 
-      <OverviewSecondary />
+      <OverviewSecondary query={query} range={range} enabled={rangeReady} />
 
       {data.coverage.stored_events === 0 && (
         <div className="terminal-panel dashboard-empty">
@@ -474,7 +477,11 @@ export const DashboardPage: React.FC = () => {
  * carry: which instance answered, provider fleet totals, credential health and
  * runtime versions. It reads the overview endpoint, not the request store.
  */
-const OverviewSecondary: React.FC = () => {
+const OverviewSecondary: React.FC<{
+  query?: string;
+  range?: DashboardRange;
+  enabled?: boolean;
+}> = ({ query, range, enabled }) => {
   const t = useT();
   const { data } = useQuery({
     queryKey: ['management-overview'],
@@ -490,29 +497,12 @@ const OverviewSecondary: React.FC = () => {
 
   return (
     <div className="dashboard-secondary">
-      <section className="dashboard-section">
-        <div className="section-heading">
-          <h2>{t('dash.providers')}</h2>
-          <Text type="secondary">{t('dash.providers_hint')}</Text>
-        </div>
-        <div className="terminal-panel provider-list">
-          {overview.providers.length === 0 ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('dash.empty_providers')} />
-          ) : (
-            overview.providers.map((provider: ManagementOverviewProvider) => (
-              <div className="provider-row" key={provider.id}>
-                <div className="provider-name"><span className="status-pip" />{provider.id}</div>
-                <span className="provider-credentials">{t('dash.credentials_n', { n: provider.credentials })}</span>
-                <span className="provider-total">{formatCount(provider.total)}</span>
-                <span className="provider-rate">{formatRate(provider.success_rate)}</span>
-                <div className="dashboard-meter">
-                  <span style={{ width: `${Math.max(0, Math.min(100, provider.success_rate ?? 0))}%` }} />
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
+      <DashboardProviders
+        overview={overview}
+        query={query}
+        range={range}
+        enabled={enabled}
+      />
 
       <div className="dashboard-lower">
         <div className="terminal-panel dashboard-card">

@@ -55,6 +55,10 @@
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
 }
 
+.card-target-highlight {
+  border-color: var(--accent) !important;
+}
+
 .card-header {
   display: flex;
   align-items: flex-start;

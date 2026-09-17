@@ -116,3 +116,54 @@ func (r *Repository) QueryUsageModelBuckets(ctx context.Context, instanceID stri
 	}
 	return result, nil
 }
+
+// UsageProviderBucketRow is one provider's traffic inside one bucket of the requested grid.
+type UsageProviderBucketRow struct {
+	Provider string
+	StartMS  int64
+	Requests int64
+	Failures int64
+}
+
+// QueryUsageProviderBuckets aggregates one window per provider per bucket, ordered by
+// provider and then by bucket.
+func (r *Repository) QueryUsageProviderBuckets(ctx context.Context, instanceID string, fromMS, toMS, bucketMS int64) ([]UsageProviderBucketRow, error) {
+	if r == nil || r.SQL() == nil {
+		return nil, errors.New("repository is not initialized")
+	}
+	if bucketMS <= 0 {
+		return nil, fmt.Errorf("invalid provider analytics bucket width %d", bucketMS)
+	}
+	if toMS < fromMS {
+		return nil, errors.New("provider analytics window is negative")
+	}
+
+	query := `
+		SELECT COALESCE(NULLIF(TRIM(provider), ''), 'unknown') AS provider_key,
+		       (timestamp_ms / ?) * ? AS aligned,
+		       COUNT(1),
+		       COALESCE(SUM(failed), 0)
+		FROM usage_events
+		WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms < ?
+		GROUP BY provider_key, aligned
+		ORDER BY provider_key ASC, aligned ASC`
+	rows, err := r.SQL().QueryContext(ctx, query, bucketMS, bucketMS, instanceID, fromMS, toMS)
+	if err != nil {
+		return nil, fmt.Errorf("read usage provider buckets: %w", err)
+	}
+	defer rows.Close()
+
+	result := []UsageProviderBucketRow{}
+	for rows.Next() {
+		var row UsageProviderBucketRow
+		if errScan := rows.Scan(&row.Provider, &row.StartMS, &row.Requests, &row.Failures); errScan != nil {
+			return nil, fmt.Errorf("scan usage provider bucket: %w", errScan)
+		}
+		result = append(result, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate usage provider buckets: %w", err)
+	}
+	return result, nil
+}
+
