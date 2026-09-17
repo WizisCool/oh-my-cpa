@@ -114,7 +114,7 @@ export const AuthFileCard: React.FC<AuthFileCardProps> = ({
       style={{
         borderColor: selected ? 'var(--accent)' : undefined,
         opacity: disabled ? 0.72 : 1,
-        transition: 'border-color 0.15s ease',
+        transition: 'border-color var(--motion-fast)',
       }}
       styles={{
         body: {

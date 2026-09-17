@@ -171,7 +171,7 @@
   font-family: monospace;
   color: var(--fg);
   cursor: pointer;
-  transition: all var(--motion-fast, 50ms) ease;
+  transition: background var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
 }
 
 .unpriced-chip:hover {
@@ -241,7 +241,7 @@
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  transition: all var(--motion-fast, 50ms) ease;
+  transition: color var(--motion-fast), background var(--motion-fast), border-color var(--motion-fast);
   line-height: 1.4;
 }
 

@@ -48,6 +48,7 @@ const COMMANDS = {
   i18n: { label: 'frontend translation keys', command: 'pnpm', args: ['check-i18n'] },
   'antd-lint': { label: 'Ant Design lint', command: 'pnpm', args: ['lint:antd'] },
   'css-modules': { label: 'CSS module references', command: 'pnpm', args: ['check-css-modules'] },
+  motion: { label: 'motion budget', command: 'pnpm', args: ['check:motion'] },
   go: { label: 'Go tests', command: 'go', args: ['test', './...'] },
   docs: { label: 'documentation references', command: 'pnpm', args: ['check-docs'] },
   workflow: { label: 'GitHub workflow syntax', command: 'pnpm', args: ['verify:workflow'] },

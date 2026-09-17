@@ -1,0 +1,383 @@
+/**
+ * The motion budget, enforced.
+ *
+ * docs/design.md §7 states one budget three times - its token table, the Ant Design motion tokens in
+ * `themeConfig.ts`, and the `--motion-*` variables in `index.css` - and the stylesheet had drifted
+ * from the other two (100ms/150ms against a documented 50ms/100ms) for long enough that call sites
+ * written as `var(--motion-fast, 50ms)` were paying double the budget they named. `test-theme-presets`
+ * pins the variables to the tokens; this checker pins the *call sites* to the variables.
+ *
+ * Four rules, all of them objective:
+ *
+ *   1. **Every duration is a token**, in a `transition` or an `animation`, and no `var(--motion-*)`
+ *      carries a fallback - a fallback is never applied, and the one that read `50ms` beside a
+ *      variable holding `100ms` is exactly how this drift stayed invisible. The exceptions are
+ *      indeterminate progress cycles, whose period is not a state transition and has no token.
+ *   2. **No transition on a layout property**, and no `transition: all`, which is every property
+ *      including the layout ones. §7 rule 1's list; the exceptions are disclosures and the bar whose
+ *      width positions its own label. An exception is keyed by file, selector and property, and it
+ *      must carry a reason - an unexplained exception is how a budget disappears.
+ *   3. **Every keyframe animation has a reduced-motion counterpart.** §7's override is a promise, and
+ *      a keyframe cannot be reached by a media query written after the fact: the counterpart has to
+ *      exist next to the motion. Scope note: transitions are not checked here, because the console
+ *      kills them per-rule where the motion is intrusive (the heatmap mark scales, so its colour fade
+ *      would smear) and a blanket requirement would flag every 50ms hover.
+ *   4. **A hover may transition colour only within the fast token.** §7 rule 7 was written as a ban
+ *      after Ant Design's 0.3s drag; the console's own hovers are 50ms, which is three frames, and
+ *      banning them would rewrite hover behaviour on every page for no measurable gain. See ADR 0009.
+ *
+ * Limitations, stated rather than implied: this reads `.css` and inline `transition:` strings in
+ * `.tsx`, so a duration assembled at runtime is invisible to it, and it matches selectors textually,
+ * so a rule restated under a different selector is not associated with its motion.
+ */
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+/** Properties that trigger layout, per §7 rule 1. Any of these in a transition needs an exception. */
+const LAYOUT_PROPERTIES = [
+  'width',
+  'min-width',
+  'max-width',
+  'height',
+  'min-height',
+  'max-height',
+  'margin',
+  'margin-top',
+  'margin-bottom',
+  'margin-left',
+  'margin-right',
+  'padding',
+  'padding-top',
+  'padding-bottom',
+  'top',
+  'bottom',
+  'left',
+  'right',
+  'inset',
+  'inset-inline-start',
+  'inset-inline-end',
+  'grid-template-rows',
+  'grid-template-columns',
+  'flex-basis',
+  'font-size',
+];
+
+/**
+ * The exceptions, each with the reason it is one.
+ *
+ * `duration` waives rule 1 (an indeterminate bar's period is not a state transition); `layout` waives
+ * rule 2 (a disclosure cannot be composited). Both are asserted to be *used*, so the table cannot rot
+ * into a list of things nobody remembers reading.
+ */
+const EXCEPTIONS = [
+  {
+    kind: 'duration',
+    file: 'index.css',
+    selector: '.data-progress::after',
+    property: 'animation',
+    why: 'The indeterminate background-refresh bar loops for as long as the request takes; 900ms is its period, not a transition, and §7 handles it by freezing it under reduced motion rather than by shortening it.',
+  },
+  {
+    kind: 'duration',
+    file: 'index.css',
+    selector: '.heatmap-progress::after',
+    property: 'animation',
+    why: 'Same treatment as the app-wide progress bar, for the heatmap panel\u2019s own re-read.',
+  },
+  {
+    kind: 'layout',
+    file: 'index.css',
+    selector: '.settings-tls-body',
+    property: 'grid-template-rows',
+    why: 'A disclosure. Expanding and collapsing an accordion reflows by definition, and the grid 0fr/1fr technique is the least costly form of it; the alternative is an accordion that snaps open, which reads as broken.',
+  },
+  {
+    kind: 'layout',
+    file: 'index.css',
+    selector: '.config-dirty-bar-portal',
+    property: 'inset-inline-start',
+    why: 'The floating save bar is centred in the content column, and collapsing the sider resizes that column. Encoding the shift as a transform would mean recomputing a delta outside CSS; here the custom property already carries it.',
+  },
+  {
+    kind: 'layout',
+    file: 'pages/UsageEventsPage.css',
+    selector: '.request-collapsible-header',
+    property: 'max-height',
+    why: 'A disclosure, and a large one: this block is the request page\u2019s own header and its whole filter toolbar, folded away so a reader can scroll it out of the way. Its `margin` rides along in the same declaration for the same reason.',
+  },
+  {
+    kind: 'layout',
+    file: 'pages/UsageEventsPage.css',
+    selector: '.request-collapsible-header',
+    property: 'margin',
+    why: 'Part of the same disclosure: collapsing the header to zero height still leaves its box gap, and the negative margin is what takes that back.',
+  },
+  {
+    kind: 'layout',
+    file: 'pages/pricing/PricingLeaderboard.module.css',
+    selector: '.bar-fill',
+    property: 'width',
+    why: 'The request count and model name are siblings that sit immediately after the bar, so the bar\u2019s width *is* the layout that positions its own label. Sweeping it with a transform would move the painted bar while the number it labels jumped to its final place.',
+  },
+];
+
+/** Strip comments so prose about a duration is never read as one. */
+const stripComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
+
+/** The non-zero time values in one string. */
+const durationsIn = (value) =>
+  [...value.matchAll(/\b\d*\.?\d+(?:ms|s)\b/g)].map((match) => match[0]).filter((raw) => !/^0(?:ms|s)$/.test(raw));
+
+/** Splits a declaration value into its comma-separated parts, ignoring separators inside `()`. */
+function parts(value) {
+  let depth = 0;
+  const out = [];
+  let current = '';
+  for (const char of value) {
+    if (char === '(') depth += 1;
+    if (char === ')') depth -= 1;
+    if (char === ',' && depth === 0) {
+      out.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  if (current.trim()) out.push(current.trim());
+  return out;
+}
+
+/** The property a shorthand part animates: its first bare identifier. */
+const propertyOf = (part) => /^([a-z-]+)\b/.exec(part)?.[1] ?? '';
+
+/**
+ * Parses a stylesheet into leaf rules and keyframe blocks.
+ *
+ * A hand-rolled brace matcher rather than a CSS parser: the input is one repository's stylesheets, and
+ * what this needs - the selector, the declarations, and whether the rule sits inside a reduced-motion
+ * media query - follows from the brace and semicolon structure. Comments are removed first so a `}`
+ * inside prose cannot end a rule.
+ */
+function parseStylesheet(css) {
+  const source = stripComments(css);
+  const rules = [];
+  const keyframes = [];
+  const stack = [];
+  let start = 0;
+
+  const declarations = (body) => {
+    const found = [];
+    for (const line of body.split(';')) {
+      const colon = line.indexOf(':');
+      if (colon === -1) continue;
+      found.push({ property: line.slice(0, colon).trim(), value: line.slice(colon + 1).trim() });
+    }
+    return found;
+  };
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === '{') {
+      const selector = source.slice(start, index).trim();
+      stack.push(selector);
+      start = index + 1;
+    } else if (char === '}') {
+      const body = source.slice(start, index);
+      const selector = stack.pop() ?? '';
+      const media = stack.filter((entry) => entry.startsWith('@media')).join(' ');
+      const frame = stack.find((entry) => entry.startsWith('@keyframes'));
+      if (frame) {
+        // Inside a keyframe block: these declarations say what the motion animates.
+        keyframes.push({ selector, media, declarations: declarations(body), frame });
+      } else if (selector && !selector.startsWith('@')) {
+        rules.push({ selector, media, declarations: declarations(body) });
+      }
+      start = index + 1;
+    } else if (char === ';' && stack.length === 0) {
+      start = index + 1;
+    }
+  }
+  return { rules, keyframes };
+}
+
+/** Every stylesheet under `web/src`, and every component that carries an inline transition. */
+function collectSources(srcDir) {
+  const files = [];
+  const walk = (directory) => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const absolute = path.join(directory, entry.name);
+      if (entry.isDirectory()) walk(absolute);
+      else if (entry.name.endsWith('.css') || entry.name.endsWith('.tsx')) files.push(absolute);
+    }
+  };
+  walk(srcDir);
+  return files.sort();
+}
+
+/**
+ * Runs the checker over one source tree.
+ *
+ * `projectRoot` is a parameter rather than the module's own `..` so the self-test can run the real
+ * rules against a fixture tree: a checker whose only input is the live repository can be tested by
+ * mutating the repository, which is not a test.
+ */
+export function runCheck({ projectRoot = root, exceptions = EXCEPTIONS, output = console } = {}) {
+const srcDir = path.join(projectRoot, 'web', 'src');
+const violations = [];
+const usedExceptions = new Set();
+
+const record = (message, file, selector, property) => {
+  violations.push({ file, selector, property, message });
+};
+
+const exceptionFor = (kind, file, selector, property) =>
+  exceptions.find(
+    (exception) =>
+      exception.kind === kind &&
+      exception.file === file &&
+      exception.selector === selector &&
+      exception.property === property,
+  );
+
+const used = (kind, file, selector, property) => {
+  const exception = exceptionFor(kind, file, selector, property);
+  if (exception) usedExceptions.add(exception);
+  return Boolean(exception);
+};
+
+/**
+ * Checks one transition declaration against rules 1, 2 and 4.
+ *
+ * `selector` is what the rules are keyed by, which for an inline style is the component rather than a
+ * CSS selector: an exception is never granted to an inline style, so there is nothing to key.
+ */
+function checkTransition({ file, selector, property, value, isHover }) {
+  const bare = value.replace(/var\([^)]*\)/g, '');
+  for (const raw of durationsIn(bare)) {
+    if (!used('duration', file, selector, property)) {
+      record(`uses the raw duration ${raw}`, file, selector, property);
+    }
+  }
+  if (/var\(--motion-[a-z-]+,/.test(value)) {
+    record('names a var(--motion-*) fallback, which is never applied and hides the real value', file, selector, property);
+  }
+  if (property === 'all') {
+    record('transitions `all`, which includes the layout properties rule 1 forbids', file, selector, property);
+  } else if (LAYOUT_PROPERTIES.includes(property) && !used('layout', file, selector, property)) {
+    record(`transitions the layout property \`${property}\``, file, selector, property);
+  }
+  if (isHover && property === 'all') {
+    record('a hover transitions every property', file, selector, property);
+  }
+}
+
+for (const absolute of collectSources(srcDir)) {
+  const file = path.relative(srcDir, absolute).split(path.sep).join('/');
+  const text = fs.readFileSync(absolute, 'utf8');
+
+  // A component's inline style is a stylesheet this checker cannot parse, so the declarations are
+  // lifted out of the string literals and judged by the same rules.
+  if (absolute.endsWith('.tsx')) {
+    for (const match of text.matchAll(/transition:\s*'([^']*)'|transition:\s*"([^"]*)"/g)) {
+      const value = match[1] ?? match[2] ?? '';
+      for (const part of parts(value)) {
+        checkTransition({ file, selector: '(inline style)', property: propertyOf(part), value: part, isHover: false });
+      }
+    }
+    continue;
+  }
+
+  const { rules, keyframes } = parseStylesheet(text);
+  const reducedKills = new Set(
+    rules
+      .filter((rule) => rule.media.includes('prefers-reduced-motion'))
+      .filter((rule) => /^none\b/.test(rule.declarations.find((entry) => entry.property === 'animation')?.value ?? ''))
+      .map((rule) => rule.selector),
+  );
+
+  for (const rule of rules) {
+    const isReducedBlock = rule.media.includes('prefers-reduced-motion');
+    const transition = rule.declarations.find(
+      (entry) => entry.property === 'transition' || entry.property === 'transition-duration',
+    );
+    if (transition && !isReducedBlock) {
+      const isHover = /:hover\b/.test(rule.selector);
+      for (const part of parts(transition.value)) {
+        checkTransition({ file, selector: rule.selector, property: propertyOf(part), value: part, isHover });
+      }
+      // Rule 4, second half: a hover's colour parts must name the fast token rather than merely
+      // staying under it - a bare `50ms` is a number no document owns.
+      if (isHover) {
+        for (const part of parts(transition.value)) {
+          const property = propertyOf(part);
+          if (!/^(color|background|background-color|border-color|box-shadow|opacity)$/.test(property)) continue;
+          if (!/var\(--motion-fast\)/.test(part)) {
+            record(`a hover transitions \`${property}\` outside the fast token`, file, rule.selector, property);
+          }
+        }
+      }
+    }
+
+    const animation = rule.declarations.find((entry) => entry.property === 'animation');
+    if (animation && !isReducedBlock && !/^none\b/.test(animation.value)) {
+      for (const raw of durationsIn(animation.value.replace(/var\([^)]*\)/g, ''))) {
+        if (!used('duration', file, rule.selector, 'animation')) {
+          record(`animation uses the raw duration ${raw}`, file, rule.selector, 'animation');
+        }
+      }
+      if (!reducedKills.has(rule.selector)) {
+        record('animates with no `prefers-reduced-motion` counterpart', file, rule.selector, 'animation');
+      }
+    }
+  }
+
+  // Rule 2 reaches into keyframes too: a keyframe that animates a layout property reflows on every
+  // frame of its motion, wherever the transform it was meant to be lives.
+  for (const frame of keyframes) {
+    for (const declaration of frame.declarations) {
+      if (!LAYOUT_PROPERTIES.includes(declaration.property)) continue;
+      record(`animates the layout property \`${declaration.property}\` in ${frame.frame}`, file, frame.selector, declaration.property);
+    }
+  }
+}
+
+// An exception nobody uses is a claim the stylesheet no longer makes, and leaving it in place is how a
+// budget turns into a list of things that were once true.
+for (const exception of exceptions) {
+  if (usedExceptions.has(exception)) continue;
+  violations.push({
+    file: exception.file,
+    selector: exception.selector,
+    property: exception.property,
+    message: `the \`${exception.kind}\` exception is no longer used`,
+  });
+}
+
+const filesScanned = collectSources(srcDir).length;
+if (filesScanned === 0) {
+  output.error('FAIL: no stylesheet or component was scanned; the checker is looking in the wrong place');
+  return { filesScanned, violations: [{ file: '(none)', selector: '(none)', property: '(none)', message: 'no sources scanned' }] };
+}
+
+for (const violation of violations) {
+  output.error(`FAIL: ${violation.file} — ${violation.message}\n      at ${violation.selector} { ${violation.property} }`);
+}
+if (violations.length === 0) {
+  output.log(`Sources checked: ${filesScanned} (stylesheets and inline transition strings)`);
+  output.log(`Motion exceptions in use: ${usedExceptions.size} of ${exceptions.length}`);
+  output.log('Every duration is a token, no transition animates layout, and every keyframe honours reduced motion.');
+} else {
+  output.error(`\n${violations.length} motion violation(s) across ${filesScanned} files.`);
+  output.error('Every duration must be a --motion-* token, and every layout exception must be listed in EXCEPTIONS with a reason.');
+}
+
+return { filesScanned, violations };
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const { violations } = runCheck();
+  process.exit(violations.length > 0 ? 1 : 0);
+}

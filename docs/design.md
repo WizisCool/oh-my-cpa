@@ -488,7 +488,8 @@ slice's angle is a poor way to compare 5.9% against 4.6%. A share that rounds to
 under the smallest step rather than as `0%`, which would claim a model carried nothing.
 
 **Both marks are native `@ant-design/charts` components** (`Line` and `Pie`) inside the existing lazily
-loaded `vendor-charts` chunk, and both disable animation per §7 rule 5. The ring is not a chart-runtime
+loaded `vendor-charts` chunk, and both morph between two revisions on §7's `roll` token (§7 rule 5).
+The ring is not a chart-runtime
 heatmap, so ADR 0005's DOM grid is untouched.
 
 **The usage list's columns are one grid, not one per row.** The tracks are declared on the list and the
@@ -740,8 +741,9 @@ Non-obvious decisions, keep these when editing:
   The charting runtime is isolated in a separate `vendor-charts` chunk and loaded lazily
   (`React.lazy` dynamic `import()`) so only the dashboard route pays for it, keeping the
   initial login shell compact. The active preset's palette is bridged into the chart
-  config (`sparkColor(preset.palette, tone)`), default library animations are explicitly disabled
-  (`animate: false`, per §7 rule 5), and the hover readout uses an app-owned HTML
+  config (`sparkColor(preset.palette, tone)`), the marks morph between two revisions on
+  §7's `roll` token with a reduced-motion escape (`chartMotion.ts`, §7 rule 5), and the hover
+  readout uses an app-owned HTML
   `.chart-tooltip` styled from CSS custom properties. That readout is a direct child of
   `.chart-slot`, so the slot's child sizing rule must exclude it
   (`.chart-slot > div:not(.chart-tooltip)`); sizing every direct `div` stretches a
@@ -758,17 +760,48 @@ Non-obvious decisions, keep these when editing:
   own minutes is what makes an RPM readout an RPM.
   The `dashboard-charts` probe asserts the six tiles paint six *distinct* pixel
   patterns; without that check a tile wired back to another tile's series passes
-  every per-tile assertion.
+  every per-tile assertion. `dashboard-chart-motion` is its sibling for the motion:
+  it drives a revision with motion allowed and again after switching the preference
+  in place, and asserts the marks paint intermediate frames in the first case and
+  none in the second.
+- **The tile numbers are one readout layer, and they roll per §7 rule 8.** Each value is
+  derived from the formatter that already owns that reading — `formatTokens` and its
+  `zh`/`full` styles, `formatCacheRate`, the compact token rate, the plain count — and an
+  `Intl`-backed one reads its number and unit word back out of that formatter's own parts
+  rather than rounding a second time. The animated digits are therefore the printed digits:
+  31,750 cannot arrive as `31.8K` and settle as `32K`. The unit word travels beside the
+  number, and a tile whose unit word changes prints the new reading in place instead of
+  rolling, because sliding 1.2 into 900 while `B` becomes `M` shows digits that never
+  described the window. The exact count stays on the tile's `title`, which the readout's
+  accessible reading matches.
 
 ## 7. Motion
 
 ```text
-hover / state colour   none — it paints the frame the pointer arrives
+hover / state colour   ≤ fast — the acknowledgement must land on the pointer's frame (rule 7)
 fast    50ms    antd motionDurationFast
 base    100ms   antd motionDurationMid and Slow: drawers, modals, route and data transitions
+roll    240ms   the dashboard's KPI readouts and the marks drawn from them (rules 8 and 5)
 float   60ms    popovers and dropdowns — the click already said "open"
 ease    cubic-bezier(0.2, 0, 0, 1)
 ```
+
+**The table is the budget, and the stylesheet is held to it.** `web/src/index.css` mirrors `fast` and
+`base` as `--motion-fast` and `--motion-base` for every CSS transition the console owns;
+`scripts/test-theme-presets.ts` parses both and asserts they equal the Ant Design tokens above, so the
+two spellings of one budget cannot drift apart again. `roll` is the only token with an exception
+attached, and it is scoped to the dashboard by rules 5 and 8.
+
+### The budget is enforced, not documented
+
+`pnpm check:motion` reads every stylesheet and every inline `transition:` in a component, and fails
+on four things: a duration that is not a `--motion-*` token (or a `var()` fallback, which is never
+applied and is how a wrong value hid for months), a transition on a layout property or on `all`, a
+keyframe animation with no `prefers-reduced-motion` counterpart, and a hover transitioning colour
+outside `fast`. The layout animations that a disclosure genuinely needs are listed in the checker's
+`EXCEPTIONS` table with the reason each is one, and an exception that stops matching a rule is itself
+a failure — the list cannot rot into things that were once true. `scripts/check-motion.test.mjs`
+exercises every rule in both directions on a fixture tree and asserts the repository itself is clean.
 
 No bounces, no scale-ins. Content appears; it does not "fly".
 
@@ -792,18 +825,47 @@ Hard rules:
    blocks.
 4. **Suppress spinner flash.** A request that resolves quickly must never paint a
    loading indicator at all (`DataProgress` waits 200ms before showing).
-   Background auto-refresh should be invisible.
-5. **Charts do not animate.** Sparkline geometry swaps on the data revision
-   with no transition or entrance animation; a line snapping to new data reads
-   as honest, not janky.
+   Background auto-refresh must not paint a loading state at all; a reading that
+   changed may still say so, which is rules 8 and 5 and nothing else.
+5. **A mark sweeps between revisions instead of hard-cutting.** An AntV mark morphs to its
+   new geometry over `roll`, and fades rather than grows when a series enters or leaves.
+   The panel re-reads on the same poll the tiles do, so a plot that hard-cuts every few
+   seconds reads as a redraw rather than as new data - and beside a tile whose number now
+   rolls (rule 8), a snapping line was the one element still saying "this replaced itself".
+   Two limits keep this a morph rather than a draw-in: it exists **only because the
+   library reuses the chart instance** (the wrapper hands the new spec to the same runtime,
+   so an update interpolates, while a remount is a draw-in and stays forbidden), and a
+   canvas cannot be
+   reached by CSS, so the reduced-motion switch is app-owned
+   (`usePrefersReducedMotion` in `web/src/hooks/`) and must stay wired: the library has no
+   handling of its own and its default update animation is a 900ms spring, which would
+   animate hardest for the reader who asked for none. The cost is stated rather than hidden:
+   a canvas mark is redrawn frame by frame instead of being composited, so rule 1 is *not*
+   satisfied by these eight marks, and 240ms on surfaces this small is the whole of what the
+   exception buys. See ADR 0008.
 6. **Feedback must be immediate.** Optimistic affordances (button `loading`,
    the progress bar) appear on the interaction itself, not after a transition.
-7. **Hover is not an animation.** A hover is the interface acknowledging the
-   pointer, so it paints on the frame the pointer arrives — never a transition
-   on a hover colour. The trap: antd hangs menu-item hover, submenu expand and
-   the sider collapse off `motionDurationSlow`, whose default is 0.3s, and
-   setting only Fast/Mid leaves the nav feeling drags. All three tokens are
-   pinned ≤ 0.1s in `themeConfig.ts`.
+7. **A hover lands within the fast token.** A hover is the interface acknowledging the
+   pointer, so it must land on the frame the pointer arrives — a transition longer than
+   `fast` (50ms) is a drag, not an acknowledgement, and the rule was written after antd's
+   `motionDurationSlow` default of 0.3s on menu-item hover, submenu expand and the sider
+   collapse. All three tokens are pinned ≤ 0.1s in `themeConfig.ts` for the same reason.
+   The bound is on the *duration*, not on the property (ADR 0009): three frames is the
+   acknowledgement, and anything longer is the drag. Two narrower rules stand inside it: a
+   hover may never animate a layout property, and the one element that scales under the
+   pointer (the heatmap mark) may not fade its colour, because the fade would smear behind
+   the scale it is meant to accompany.
+8. **The dashboard's numbers may travel.** The six dashboard KPI numbers roll to
+   their new value over `roll` (`MOTION_ROLL` in `themeConfig.ts`), for the reason that names
+   the whole exception: those tiles change under a poll the reader did not ask for, a number
+   that swaps in place is indistinguishable from a number that was already there, and the
+   sweep is what says "this reading moved" without the page moving. Rule 5 gives the marks
+   drawn from those numbers the same token; nothing else in the console moves on a poll. For
+   the digits the exception is cheap and scoped -
+   glyphs transforming inside a 34px-tall box, so rules 1 and 2 hold as written, and a change
+   of *unit* prints in place, because rolling 1.2 into 900 under a swapping unit word would
+   show digits that never described the window. `prefers-reduced-motion` removes it and the
+   value still updates. See ADR 0007 for the token and ADR 0008 for what rule 5 costs.
 
 ### Never hard-swap a view
 
@@ -818,7 +880,7 @@ custom range changes, manual refresh and background refetch.
 | Any request in flight | The app-wide 2px `.data-progress` bar, shown after a 200ms delay. Regions are never dimmed or unmounted. |
 | First load with no data yet | Render the real page frame with static `Skeleton` blocks, not a bare full-page spinner swap. |
 | Error after data existed | Keep the stale data visible and surface a warning; only replace the page when nothing was ever loaded. |
-| Auto-refresh poll | Nothing moves. The poll is not a view change, so it must not reset pagination, remount the list, expand a collapsed header, or relabel the data as "previous results". |
+| Auto-refresh poll | The view does not move, though a reading and the mark behind it may. The poll is not a view change, so it must not reset pagination, remount the list, expand a collapsed header, or relabel the data as "previous results". A dashboard KPI number rolling to its new value, and the chart it belongs to morphing to the same revision, are the only motion a poll may cause (rules 8 and 5). |
 
 `prefers-reduced-motion` removes the fade and freezes the progress bar, but the
 no-blank rule still applies — fall back to a static loading state.

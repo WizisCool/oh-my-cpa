@@ -185,7 +185,7 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
                   border: isSelected ? '2px solid var(--accent)' : '1px solid var(--border)',
                   background: isSelected ? 'color-mix(in srgb, var(--accent) 12%, var(--surface))' : 'var(--surface)',
                   cursor: 'pointer',
-                  transition: 'border-color var(--motion-fast, 50ms), background-color var(--motion-fast, 50ms)',
+                  transition: 'border-color var(--motion-fast), background-color var(--motion-fast)',
                   userSelect: 'none',
                 }}
                 title={`${item.fullTitle} (${item.id})`}

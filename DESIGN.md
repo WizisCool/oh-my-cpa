@@ -145,7 +145,7 @@ components:
 
 **Creative North Star: "The Terminal-Flat Console"**
 
-Oh My CPA is a dedicated developer control plane for AI resources and proxy telemetry. Built upon an OpenCode-inspired minimalist console philosophy, the system delivers dense, honest, and high-frequency operational visibility without aesthetic clutter. It repudiates decorative gradients, glassmorphism, heavy shadows, and artificial entrance animations in favor of strict terminal discipline.
+Oh My CPA is a dedicated developer control plane for AI resources and proxy telemetry. Built upon an OpenCode-inspired minimalist console philosophy, the system delivers dense, honest, and high-frequency operational visibility without aesthetic clutter. It repudiates decorative gradients, glassmorphism, heavy shadows, and flying entrances in favor of strict terminal discipline.
 
 Depth is achieved purely through 1px hairline borders and subtle tonal shifts between dark background tiers (`#121214` base and `#1c1c1f` elevated surface). Typography is universally monospaced across Latin, Cyrillic, and CJK characters, anchoring every token count, timestamp, and latency reading on stable tabular columns. The interface follows the doctrine of "Quiet chrome, loud data"—the surrounding scaffolding remains dark and muted, reserving saturated chromatic accents exclusively for genuine operational states.
 
@@ -153,7 +153,7 @@ Depth is achieved purely through 1px hairline borders and subtle tonal shifts be
 - **Terminal-Flat Structure**: Zero drop shadows (`box-shadow: none`), no rounded bubble aesthetics, crisp 1px borders.
 - **Monospace Everywhere**: Sarasa Mono SC, Berkeley Mono, and IBM Plex Mono stacks across labels, titles, inputs, and tabular numbers.
 - **Quiet Chrome, Loud Data**: Dark charcoal scaffolding ensures that green, amber, red, and blue badges instantly telegraph system health.
-- **Immediate Feedback**: Motion budget capped at ≤ 100ms with zero spring physics; hover states paint on pointer arrival.
+- **Immediate Feedback**: Motion budget capped at ≤ 100ms with zero spring physics, plus one 240ms `roll` exception shared by the dashboard's KPI readouts and the chart marks drawn from them; hover states land within the 50ms fast token, because a longer hover is a drag rather than an acknowledgement.
 
 ## Colors
 
@@ -319,7 +319,7 @@ The geometric form language is compact, rectangular, and tightly controlled:
 - **Do** import colors exclusively from the active theme preset or CSS variables (`var(--bg)`, `var(--surface)`, `var(--border)`); add a new preset here and in `themeConfig.ts` rather than introducing palette literals in a component.
 - **Do** pair every status indicator pip with explicit text labels so colorblind users can immediately identify states.
 - **Do** inherit monospaced font families across all components and enable `tabular-nums` for numeric telemetry.
-- **Do** pin motion durations to ≤ 100ms and animate only `opacity` and `transform`.
+- **Do** pin motion durations to ≤ 100ms and animate only `opacity` and `transform`; the dashboard's KPI numbers and chart marks are the one `roll` (240ms) exception — the numbers transform glyphs, the marks are redrawn by the canvas library and stop entirely under `prefers-reduced-motion`. The exact count stays on the tile's `title`.
 - **Do** preserve previous rendered content during query filter updates using `placeholderData: keepPreviousData`.
 - **Do** delay loading spinners by 200ms (`DataProgress`) to eliminate flicker on fast responses.
 

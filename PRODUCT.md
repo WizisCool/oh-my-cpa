@@ -61,7 +61,7 @@ web
   - Universal monospace typography: Sarasa Mono SC prioritized, Berkeley Mono / IBM Plex Mono as fallbacks, with tabular numerical alignment;
   - Quiet chrome, loud data: UI scaffolding recedes into dark charcoal neutrals; saturated color is reserved exclusively for operational states;
   - Strictly semantic colors: Green (healthy/enabled), amber (degraded/warning), red (error/disabled), gray (offline/inactive);
-  - High-tempo motion: Transitions pinned to ≤ 100ms with zero spring physics; hover states paint on pointer arrival; no loading shimmer or chart animations.
+  - High-tempo motion: Transitions pinned to ≤ 100ms with zero spring physics; hover states land within the 50ms fast token; no loading shimmer. Chart marks and the dashboard's KPI numbers are the one named exception, morphing on a 240ms `roll` token (ADR 0007, ADR 0008).
 
 ## Evidence on Hand
 
@@ -83,4 +83,4 @@ web
 - Complete keyboard navigation with high-visibility `:focus-visible` outlines;
 - Strict compliance with WCAG AA (≥ 4.5:1) color contrast; continuous states (such as Cache Rate) are computed in OKLCH color space to guarantee text contrast;
 - Colorblind-safe status indication: All statuses are communicated through paired "status pip + text", never color alone;
-- Full support for `prefers-reduced-motion`, automatically freezing dynamic progress bars and disabling transform animations.
+- Full support for `prefers-reduced-motion`, automatically freezing dynamic progress bars, disabling transform animations, and dropping the chart marks' morph — the canvas library reads no such preference, so the switch is the console's own.
