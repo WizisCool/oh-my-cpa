@@ -89,14 +89,15 @@ const SCENARIO_PATHS = [
     ],
   },
   // The provider console and its icon picker: the drawer/modal stacking assertion
-  // is about those two overlays specifically.
+  // is about those two overlays specifically, and picking a mark from the picker is
+  // the page's own write path.
   {
     prefix: 'web/src/components/IconPickerModal',
-    scenarios: ['icon-picker-stacking'],
+    scenarios: ['icon-picker-stacking', 'provider-icon-pick'],
   },
   {
     prefix: 'web/src/pages/ProvidersPage',
-    scenarios: ['icon-picker-stacking'],
+    scenarios: ['icon-picker-stacking', 'provider-icon-pick'],
   },
   // The dashboard: the sparkline marks its tiles draw and the daily-token calendar
   // beneath them. Both live on this page, and the page is what the scenarios load,

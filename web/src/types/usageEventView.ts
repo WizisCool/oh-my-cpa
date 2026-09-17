@@ -3,6 +3,7 @@ import {
   NEUTRAL_PROVIDER_ICON_ID,
   providerIconId,
 } from './providerIconIds';
+import { resolveProviderIcon } from './providerIcons';
 import type {
   RangeBound,
   UsageCostFilter,
@@ -1058,8 +1059,12 @@ export function resolveProviderInfo(
   }
 
   const providerFamily = (matched?.family || event.provider || '').toLowerCase();
+  // The matched provider's own override resolves through the same order the
+  // provider table uses, so a mark stored for one surface cannot apply on another.
+  // The rest are the request record's own fallbacks: the provider label CPA wrote
+  // on the record, then the display name this page derived for it.
   const iconId =
-    (matched && (providerIcons[matched.id] || providerIcons[matched.name])) ||
+    (matched && resolveProviderIcon(providerIcons, matched, '')) ||
     providerIcons[event.provider] ||
     providerIcons[providerName] ||
     resolveIcon(providerFamily, providerName, matched?.base_url);

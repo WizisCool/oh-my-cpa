@@ -37,6 +37,14 @@ import { usePreference } from '../hooks/usePreference';
 import { useLastIntentQueue, LastIntentTimeoutError } from '../hooks/useLastIntentQueue';
 import { LobeIcon, getProviderDefaultIcon } from '../components/LobeIcon';
 import { IconPickerModal } from '../components/IconPickerModal';
+import {
+  EMPTY_PROVIDER_ICONS,
+  PROVIDER_ICONS_PREFERENCE,
+  parseProviderIcons,
+  providerIconIdPrefix,
+  resolveProviderIcon,
+  shiftProviderIconsAfterDelete,
+} from '../types/providerIcons';
 import { maskKeyText } from '../utils/maskKey';
 import { isSafeExternalURL, safeExternalURL } from '../utils/externalUrl';
 import { modelOptionsFor } from '../utils/modelOptions';
@@ -127,14 +135,80 @@ export const ProvidersPage: React.FC = () => {
 
   // Stored icon preferences
   const { value: providerIcons, set: setProviderIcons } = usePreference<Record<string, string>>(
-    'provider_icons',
-    {},
-    (raw) => (typeof raw === 'object' && raw ? (raw as Record<string, string>) : {}),
+    PROVIDER_ICONS_PREFERENCE,
+    EMPTY_PROVIDER_ICONS,
+    parseProviderIcons,
   );
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [targetProviderForIcon, setTargetProviderForIcon] = useState<ProviderItem | null>(null);
   const [formIcon, setFormIcon] = useState<string>('OpenAI');
   const [iconManuallySelected, setIconManuallySelected] = useState<boolean>(false);
+
+  /**
+   * currentProviderIcons reads the icon map as the preference cache holds it
+   * now.
+   *
+   * A write that happens on a mutation's confirmation runs several renders
+   * after the drawer that started it, so merging into this render's
+   * `providerIcons` would drop an override another control stored in between.
+   * Reading the cache is what keeps the merge additive.
+   */
+  const currentProviderIcons = React.useCallback(
+    () =>
+      parseProviderIcons(
+        queryClient.getQueryData<Record<string, unknown>>(['preferences'])?.[PROVIDER_ICONS_PREFERENCE],
+      ),
+    [queryClient],
+  );
+
+  /**
+   * writeProviderIcon stores one override under one provider id.
+   *
+   * The id is the row's own positional one: the table resolves an id key first,
+   * so an override stored only under a display name could be shadowed by the id
+   * the row reads first - and a display name is not unique, so two credentials
+   * sharing one would overwrite each other's mark.
+   */
+  const writeProviderIcon = React.useCallback(
+    (id: string, icon: string) => {
+      if (!id) return;
+      setProviderIcons({ ...currentProviderIcons(), [id]: icon });
+    },
+    [currentProviderIcons, setProviderIcons],
+  );
+
+  /**
+   * shiftCachedProviderIcons replays a provider delete's re-keying of the icon
+   * overlay into this console's cache, without writing it back.
+   *
+   * The stored document is already re-keyed server-side as part of the delete,
+   * so keeping the deleted row's override in this cache would only matter as the
+   * baseline of the next icon write, which would then restore the key the delete
+   * removed. Writing only the cache - rather than PUTting the whole document from
+   * a client that may not be the one that authored it - is what keeps this from
+   * overwriting an override another console stored in the meantime.
+   */
+  const shiftCachedProviderIcons = React.useCallback(
+    (id: string) => {
+      const idPrefix = providerIconIdPrefix(id);
+      if (!idPrefix) return;
+      // Evaluated only against a document that is already loaded: creating the
+      // cache entry here would publish it as fresh, and every other preference
+      // would then read as unset until the page was reloaded.
+      const cached = queryClient.getQueryData<Record<string, unknown>>(['preferences']);
+      if (!cached) return;
+      const deletedIndex = Number(id.slice(idPrefix.length));
+      queryClient.setQueryData<Record<string, unknown>>(['preferences'], {
+        ...cached,
+        [PROVIDER_ICONS_PREFERENCE]: shiftProviderIconsAfterDelete(
+          parseProviderIcons(cached[PROVIDER_ICONS_PREFERENCE]),
+          idPrefix,
+          deletedIndex,
+        ),
+      });
+    },
+    [queryClient],
+  );
 
   // Endpoint models pull state & custom models expand state
   const modelFetchSeqRef = useRef<number>(0);
@@ -264,11 +338,7 @@ export const ProvidersPage: React.FC = () => {
 
   const handleSelectIcon = (selectedIconId: string) => {
     if (targetProviderForIcon) {
-      setProviderIcons({
-        ...providerIcons,
-        [targetProviderForIcon.id]: selectedIconId,
-        [targetProviderForIcon.name]: selectedIconId,
-      });
+      writeProviderIcon(targetProviderForIcon.id, selectedIconId);
       message.success(t('pro.icon_updated'));
       setTargetProviderForIcon(null);
     } else {
@@ -494,9 +564,15 @@ export const ProvidersPage: React.FC = () => {
   });
 
   const createProviderMutation = useMutation({
-    mutationFn: (payload: SaveProviderPayload) => api.createManagementProvider(payload),
-    onSuccess: () => {
+    mutationFn: ({ payload }: { payload: SaveProviderPayload; icon: string }) =>
+      api.createManagementProvider(payload),
+    // The icon is written only once the create has named the row it added. A
+    // create stores a positional id server-side, and the table resolves an id
+    // key before a name key, so an override stored under the display name alone
+    // could be shadowed by whatever id the new row landed on.
+    onSuccess: (data, variables) => {
       message.success(t('pro.provider_created'));
+      writeProviderIcon(data.id, variables.icon);
       handleCloseProviderDrawer();
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
     },
@@ -507,10 +583,11 @@ export const ProvidersPage: React.FC = () => {
   });
 
   const updateProviderMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: SaveProviderPayload }) =>
+    mutationFn: ({ id, payload }: { id: string; payload: SaveProviderPayload; icon: string }) =>
       api.updateManagementProvider(id, payload),
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       message.success(t('pro.provider_updated'));
+      writeProviderIcon(data.id, variables.icon);
       handleCloseProviderDrawer();
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
     },
@@ -522,8 +599,9 @@ export const ProvidersPage: React.FC = () => {
 
   const deleteProviderMutation = useMutation({
     mutationFn: (id: string) => api.deleteManagementProvider(id),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
       message.success(t('pro.provider_deleted'));
+      shiftCachedProviderIcons(id);
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
     },
     onError: (err: unknown) => {
@@ -572,10 +650,11 @@ export const ProvidersPage: React.FC = () => {
     setFormDisableCooling(Boolean(provider.disable_cooling));
 
     setFormTestModel('auto');
-    const existingIcon =
-      providerIcons[provider.id] ||
-      providerIcons[provider.name] ||
-      getProviderDefaultIcon(provider.family, provider.name, provider.base_url);
+    const existingIcon = resolveProviderIcon(
+      providerIcons,
+      provider,
+      getProviderDefaultIcon(provider.family, provider.name, provider.base_url),
+    );
     setFormIcon(existingIcon);
     setIconManuallySelected(Boolean(providerIcons[provider.id] || providerIcons[provider.name]));
     // Populate keys (plaintext — the tool mirrors the CPA config file as-is)
@@ -695,19 +774,13 @@ export const ProvidersPage: React.FC = () => {
       headers: headersPayload,
     };
 
+    // The icon travels with the write rather than being stored here: it is keyed
+    // by the id the server answers with, and for a create that id does not exist
+    // until the row does.
     if (editingProvider) {
-      updateProviderMutation.mutate({ id: editingProvider.id, payload });
-      setProviderIcons({
-        ...providerIcons,
-        [editingProvider.id]: formIcon,
-        [formName.trim()]: formIcon,
-      });
+      updateProviderMutation.mutate({ id: editingProvider.id, payload, icon: formIcon });
     } else {
-      createProviderMutation.mutate(payload);
-      setProviderIcons({
-        ...providerIcons,
-        [formName.trim()]: formIcon,
-      });
+      createProviderMutation.mutate({ payload, icon: formIcon });
     }
   };
 
@@ -742,10 +815,11 @@ export const ProvidersPage: React.FC = () => {
       title: t('pro.col_provider'),
       key: 'name',
       render: (_, record) => {
-        const iconId =
-          providerIcons[record.id] ||
-          providerIcons[record.name] ||
-          getProviderDefaultIcon(record.family, record.name, record.base_url);
+        const iconId = resolveProviderIcon(
+          providerIcons,
+          record,
+          getProviderDefaultIcon(record.family, record.name, record.base_url),
+        );
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div
@@ -2060,12 +2134,14 @@ export const ProvidersPage: React.FC = () => {
         open={iconPickerOpen}
         currentIcon={
           targetProviderForIcon
-            ? providerIcons[targetProviderForIcon.id] ||
-              providerIcons[targetProviderForIcon.name] ||
-              getProviderDefaultIcon(
-                targetProviderForIcon.family,
-                targetProviderForIcon.name,
-                targetProviderForIcon.base_url,
+            ? resolveProviderIcon(
+                providerIcons,
+                targetProviderForIcon,
+                getProviderDefaultIcon(
+                  targetProviderForIcon.family,
+                  targetProviderForIcon.name,
+                  targetProviderForIcon.base_url,
+                ),
               )
             : formIcon
         }

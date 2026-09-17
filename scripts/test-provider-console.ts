@@ -10,6 +10,11 @@ import { filterModelOptions, modelOptionsFor } from '../web/src/utils/modelOptio
 import { isSafeExternalURL, safeExternalURL } from '../web/src/utils/externalUrl.ts';
 import { parseProviderID, providerStatusPayload, FAMILY_BY_PROVIDER_ID_PREFIX } from '../web/src/types/providerId.ts';
 import { PROVIDER_FAMILIES, lookupProviderFamily, matchProviderFamily } from '../web/src/types/providerFamilies.ts';
+import {
+  providerIconIdPrefix,
+  resolveProviderIcon,
+  shiftProviderIconsAfterDelete,
+} from '../web/src/types/providerIcons.ts';
 
 // ---- provider ids: the list's key is not the API's family name ----
 
@@ -223,3 +228,52 @@ assert.equal(matchProviderFamily(undefined, undefined), undefined);
 console.log(
   'PASS provider families: every declared family is hex-coloured, labelled, and resolvable by family id before protocol text',
 );
+
+// ---- provider icon overrides: keyed by the row the override belongs to ----
+
+// The row id is the identity and wins; the display name is only a fallback for an
+// override stored before the id was known. Resolution lives in one place because a
+// second copy of this order is a surface that can silently disagree with the rest.
+assert.equal(resolveProviderIcon({ 'codex-0': 'DeepSeek', relay: 'OpenAI' }, { id: 'codex-0', name: 'relay' }, 'Codex'), 'DeepSeek');
+assert.equal(resolveProviderIcon({ relay: 'OpenAI' }, { id: 'codex-0', name: 'relay' }, 'Codex'), 'OpenAI');
+assert.equal(resolveProviderIcon({}, { id: 'codex-0', name: 'relay' }, 'Codex'), 'Codex');
+assert.equal(resolveProviderIcon({ 'codex-0': 'DeepSeek' }, { name: 'relay' }, 'Codex'), 'Codex');
+assert.equal(resolveProviderIcon({ relay: 'OpenAI' }, {}, 'Codex'), 'Codex');
+
+console.log('PASS provider icons: the row id resolves first and the default is the last resort');
+
+// The positional prefix comes from the id rather than a family table, so a family
+// added on the Go side cannot be left out of the shift by forgetting to list it.
+assert.equal(providerIconIdPrefix('openai-compat-3'), 'openai-compat-');
+assert.equal(providerIconIdPrefix('meta-0'), 'meta-');
+assert.equal(providerIconIdPrefix('codex-12'), 'codex-');
+for (const bad of ['', 'codex', 'codex-', 'codex-abc', '-1', 'codex-1.5']) {
+  assert.equal(providerIconIdPrefix(bad), undefined, `${bad} must not yield a prefix`);
+}
+
+// A delete drops the removed row's own override and moves every later one down with
+// it. Leaving the key behind is what made a deleted provider's brand mark reappear
+// on whichever credential inherited its index; a sibling family's ids must not move,
+// because the map is shared across families.
+assert.deepEqual(
+  shiftProviderIconsAfterDelete(
+    { 'codex-0': 'Zero', 'codex-1': 'One', 'codex-2': 'Two', 'meta-0': 'Untouched', relay: 'OpenAI' },
+    'codex-',
+    0,
+  ),
+  { 'codex-0': 'One', 'codex-1': 'Two', 'meta-0': 'Untouched', relay: 'OpenAI' },
+);
+// Deleting the last row only drops it - nothing below it moves.
+assert.deepEqual(
+  shiftProviderIconsAfterDelete({ 'codex-0': 'Zero', 'codex-1': 'One' }, 'codex-', 1),
+  { 'codex-0': 'Zero' },
+);
+// Deleting the only row leaves an empty map rather than a key nothing addresses.
+assert.deepEqual(shiftProviderIconsAfterDelete({ 'codex-0': 'Zero' }, 'codex-', 0), {});
+// An id this family cannot be addressed by is kept as it is rather than rewritten.
+assert.deepEqual(
+  shiftProviderIconsAfterDelete({ 'codex-x': 'Odd', 'codex-2': 'Two' }, 'codex-', 0),
+  { 'codex-x': 'Odd', 'codex-1': 'Two' },
+);
+
+console.log('PASS provider icons: a delete drops its own override and shifts the later ones down');

@@ -162,11 +162,16 @@ Properties to preserve when changing this code:
   different provider and report success. The precondition is optional, so a
   caller with no identity to send still works, and a mismatch answers `409`
   rather than writing.
-- The operator's name and website for a provider are stored under the same
-  positional id (`provider_names`, `provider_websites`). A delete therefore
-  re-keys every later entry of that family (`shiftPositionalProviderIDs`),
-  because otherwise the name given to one credential would relabel whichever
-  credential took the freed index.
+- The operator's name, website and icon for a provider are stored under the
+  same positional id (`provider_names`, `provider_websites`, `provider_icons`).
+  A delete therefore re-keys every later entry of that family
+  (`shiftPositionalProviderIDs`), because otherwise the name given to one
+  credential would relabel whichever credential took the freed index, and the
+  deleted row's own brand mark would reappear on it. The icon overlay is written
+  by the console through the preferences API rather than by a provider save, so
+  the server both re-keys the stored document and the console replays the same
+  shift into its local cache - a cache that kept the deleted key would write it
+  back on the next icon change.
 
 ### Provider families are data, not code paths
 
