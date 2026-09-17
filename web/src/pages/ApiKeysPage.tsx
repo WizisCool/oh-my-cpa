@@ -74,11 +74,13 @@ export const ApiKeysPage: React.FC = () => {
     staleTime: 60_000,
   });
 
-  const { value: disabledKeys, set: setDisabledKeys } = usePreference<string[]>(
+  const { value: persistedDisabledKeys, set: setDisabledKeys } = usePreference<string[]>(
     'omc_disabled_client_keys',
     [],
     parseStringArray,
   );
+
+  const [draftDisabledKeys, setDraftDisabledKeys] = React.useState<string[]>([]);
 
   const [rawYaml, setRawYaml] = React.useState('');
   const [serverYaml, setServerYaml] = React.useState('');
@@ -127,7 +129,16 @@ export const ApiKeysPage: React.FC = () => {
   rawYamlRef.current = rawYaml;
   serverYamlRef.current = serverYaml;
 
-  const isDirty = rawYaml !== serverYaml;
+  // Sync draftDisabledKeys with persisted baseline when not editing
+  React.useEffect(() => {
+    if (rawYamlRef.current === serverYamlRef.current) {
+      setDraftDisabledKeys(persistedDisabledKeys);
+    }
+  }, [persistedDisabledKeys]);
+
+  const isDirty =
+    rawYaml !== serverYaml ||
+    JSON.stringify(draftDisabledKeys.slice().sort()) !== JSON.stringify(persistedDisabledKeys.slice().sort());
 
   const currentApiKeys: string[] = React.useMemo(() => {
     if (!apiKeysField) return [];
@@ -161,6 +172,9 @@ export const ApiKeysPage: React.FC = () => {
       }
       void queryClient.invalidateQueries({ queryKey: ['management-config'] });
 
+      // Commit disabled keys draft to persisted preference
+      setDisabledKeys(draftDisabledKeys);
+
       // Save any pending aliases now that keys are written to CPA
       if (Object.keys(pendingAliases).length > 0) {
         try {
@@ -172,8 +186,9 @@ export const ApiKeysPage: React.FC = () => {
             }
           }
           setPendingAliases({});
-        } catch {
-          // ignore or log
+        } catch (err: unknown) {
+          const detail = err instanceof ApiError ? err.message : String(err);
+          message.error(detail || t('keys.alias_save_failed'));
         }
       }
       void queryClient.invalidateQueries({ queryKey: ['management-client-keys'] });
@@ -211,10 +226,11 @@ export const ApiKeysPage: React.FC = () => {
     } catch {
       // Baseline stays on error
     }
+    setDraftDisabledKeys([...persistedDisabledKeys]);
     setSaveError(null);
     setConflictRevision(null);
     setPendingAliases({});
-  }, [serverYaml]);
+  }, [serverYaml, persistedDisabledKeys]);
 
   const writeKeys = React.useCallback(
     (next: string[]) => {
@@ -294,28 +310,26 @@ export const ApiKeysPage: React.FC = () => {
   const handleToggleDisable = React.useCallback(
     (key: string, willBeDisabled: boolean) => {
       if (willBeDisabled) {
-        // Move from active keys to disabled keys
+        // Move from active keys to disabled keys in draft
         writeKeys(currentApiKeys.filter((k) => k !== key));
-        if (!disabledKeys.includes(key)) {
-          setDisabledKeys([...disabledKeys, key]);
-        }
+        setDraftDisabledKeys((prev) => (prev.includes(key) ? prev : [...prev, key]));
         message.info(t('keys.toggle_disabled_msg'));
       } else {
-        // Move from disabled keys back to active keys
-        setDisabledKeys(disabledKeys.filter((k) => k !== key));
+        // Move from disabled keys back to active keys in draft
+        setDraftDisabledKeys((prev) => prev.filter((k) => k !== key));
         if (!currentApiKeys.includes(key)) {
           writeKeys([...currentApiKeys, key]);
         }
         message.success(t('keys.toggle_enabled_msg'));
       }
     },
-    [currentApiKeys, disabledKeys, setDisabledKeys, writeKeys, message, t],
+    [currentApiKeys, writeKeys, message, t],
   );
 
   const handleDeleteRecord = React.useCallback(
     (record: ApiKeyRecord) => {
       if (record.disabled) {
-        setDisabledKeys(disabledKeys.filter((k) => k !== record.key));
+        setDraftDisabledKeys((prev) => prev.filter((k) => k !== record.key));
         setPendingAliases((prev) => {
           const clone = { ...prev };
           delete clone[record.key];
@@ -330,7 +344,7 @@ export const ApiKeysPage: React.FC = () => {
         });
       }
     },
-    [currentApiKeys, disabledKeys, setDisabledKeys, writeKeys],
+    [currentApiKeys, writeKeys],
   );
 
   const renameKey = React.useCallback(
@@ -396,6 +410,7 @@ export const ApiKeysPage: React.FC = () => {
   const handleReloadServerVersion = () => {
     setConflictRevision(null);
     setRawYaml(serverYaml);
+    setDraftDisabledKeys([...persistedDisabledKeys]);
     try {
       docRef.current = parseDocument(serverYaml);
     } catch {
@@ -515,7 +530,7 @@ export const ApiKeysPage: React.FC = () => {
         <Card size="small" className="config-card">
           <ApiKeysEditor
             apiKeys={currentApiKeys}
-            disabledKeys={disabledKeys}
+            disabledKeys={draftDisabledKeys}
             pendingAliases={pendingAliases}
             metadata={keysQuery.data?.keys}
             usage={usageByFingerprint}
@@ -536,7 +551,10 @@ export const ApiKeysPage: React.FC = () => {
             onEdit={(index, key) => {
               setEditingIndex(index);
               setKeyInput(key);
-              const existingAlias = pendingAliases[key] ?? keysQuery.data?.keys?.[index]?.alias ?? '';
+              const existingAlias =
+                pendingAliases[key] ??
+                keysQuery.data?.keys?.find((item) => item.key === key)?.alias ??
+                '';
               setAliasInput(existingAlias);
               setIsKeyVisible(false);
               setModalOpen(true);

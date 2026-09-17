@@ -713,6 +713,7 @@ const DICT: Record<string, [string, string]> = {
   'keys.modal_hint': ['密钥在保存前只存在于当前草稿中；留空不会生成密钥。', 'The key exists only in the current draft until saved; an empty value is never submitted.'],
   'keys.duplicate': ['该密钥已经在列表中', 'This key is already in the list'],
   'keys.save_first_to_rename': ['请先保存密钥草稿，再为其设置自定义名称', 'Please save the keys draft first before setting a custom name'],
+  'keys.alias_save_failed': ['保存密钥别名失败，已保留待重试', 'Failed to save key alias; preserved for retry'],
   'keys.edit_key_value': ['修改密钥', 'Edit key'],
   'keys.col_status': ['状态', 'Status'],
   'keys.status_enabled': ['启用', 'Enabled'],

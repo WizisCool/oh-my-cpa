@@ -628,6 +628,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "keys.modal_hint": "金鑰在儲存前只存在於目前草稿中；留空不會生成金鑰。",
   "keys.duplicate": "該金鑰已經在列表中",
   "keys.save_first_to_rename": "請先儲存金鑰草稿，再為其設定自訂名稱",
+  "keys.alias_save_failed": "儲存金鑰別名失敗，已保留待重試",
   "keys.edit_key_value": "修改金鑰",
   "keys.col_status": "狀態",
   "keys.status_enabled": "啟用",

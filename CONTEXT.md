@@ -298,7 +298,7 @@ A deployment may connect Oh My CPA to a CLIProxyAPI (CPA) instance that was alre
 2. **Immediate discovery without configuration modification**:
    When connecting to an existing CPA instance:
    - Pre-configured client keys (`api-keys:` in `config.yaml`) are immediately discovered and rendered in the Key Management console (`/api-keys`).
-   - Discovered keys start as unnamed (`未命名`), but their HMAC usage fingerprints (`api_group_key` with purpose `usage-api-key`) immediately join with any historical request traffic captured in `usage_events`.
+   - Discovered keys start with no alias and fall back to displaying their masked key, but their HMAC usage fingerprints (`api_group_key` with purpose `usage-api-key`) immediately join with any historical request traffic captured in `usage_events`.
    - Adding, renaming, or clearing a custom name (alias) is stored as Oh My CPA presentation metadata in the SQLite table `client_key_aliases`, keyed by `(instance_id, key_fingerprint)`. It **never** mutates CPA's `config.yaml`, never rotates CPA configuration revisions, and never disrupts running proxy traffic.
    - When adding new keys, operators can optionally supply a custom name immediately; leaving it blank keeps the key unnamed.
 
