@@ -87,4 +87,60 @@ assert.match(
   'the selection label follows the preset rather than a literal white',
 );
 
+// ── the motion budget ──────────────────────────────────────────────────────
+//
+// §7 states one budget in three places - its token table, the Ant Design motion tokens in
+// `themeConfig.ts`, and the two stylesheet variables every transition in the console reads - and
+// nothing tied them together. They had drifted: the stylesheet carried 100ms/150ms against the
+// table's 50ms/100ms, so the call sites written as `var(--motion-fast, 50ms)` - their own fallback
+// naming the documented value - were paying 100ms, and a route transition documented at 100ms only
+// happened to be right because the fast token was wrong by the same amount in its favour. Parsed
+// rather than compared as strings, because the table states milliseconds and Ant Design takes
+// seconds.
+const toMilliseconds = (value: string | undefined, label: string): number => {
+  const match = /^([\d.]+)(ms|s)$/.exec(value ?? '');
+  assert.ok(match, `${label} is a duration (${String(value)})`);
+  return match[2] === 's' ? Number(match[1]) * 1000 : Number(match[1]);
+};
+
+const stylesheetToken = (name: string): number => {
+  const match = new RegExp(`--motion-${name}:\\s*([\\d.]+(?:ms|s))`).exec(indexCss);
+  assert.ok(match, `web/src/index.css defines --motion-${name}`);
+  return toMilliseconds(match[1], `--motion-${name}`);
+};
+
+const antdTokens = createThemeConfig('omc-dark').token;
+assert.equal(
+  stylesheetToken('fast'),
+  toMilliseconds(antdTokens?.motionDurationFast, 'motionDurationFast'),
+  '--motion-fast is the fast token Ant Design animates with',
+);
+assert.equal(
+  stylesheetToken('base'),
+  toMilliseconds(antdTokens?.motionDurationMid, 'motionDurationMid'),
+  '--motion-base is the mid token Ant Design animates with',
+);
+assert.equal(
+  stylesheetToken('base'),
+  toMilliseconds(antdTokens?.motionDurationSlow, 'motionDurationSlow'),
+  'the slow token is pinned to the same budget, so a drawer cannot outlast the table',
+);
+// `float` has no Ant Design counterpart - the console owns it, because antd exposes no token for the
+// floating panels' entrance - so it is pinned to §7's documented 60ms instead.
+const floatMatch = /--motion-float:\s*([\d.]+(?:ms|s))/.exec(indexCss);
+assert.ok(floatMatch, 'web/src/index.css defines --motion-float');
+assert.equal(toMilliseconds(floatMatch[1], '--motion-float'), 60, 'the float token is §7\u2019s 60ms');
+
+assert.ok(stylesheetToken('fast') < stylesheetToken('base'), 'fast is the shorter of the two');
+assert.ok(stylesheetToken('base') <= 100, `§7 caps the budget at 100ms (base=${stylesheetToken('base')}ms)`);
+
+// The route transition is the one rule whose *documented* duration is not the fast token: §7's table
+// states that a route change fades in over 100ms. Nothing observable changed while it read `fast`,
+// because the two tokens held the same number - which is exactly why it needs pinning here.
+assert.match(
+  indexCss,
+  /\.route-transition\s*\{[^}]*animation:[^;]*var\(--motion-base\)/,
+  'the route transition spends the token its documented 100ms names',
+);
+
 console.log(`${THEME_PRESETS.length} theme presets passed contrast and registry checks.`);

@@ -109,7 +109,7 @@
   height: 22px;
   padding: 0 4px;
   border-radius: 3px;
-  transition: background 0.15s ease;
+  transition: background var(--motion-fast) var(--ease-standard);
   cursor: default;
 }
 
@@ -130,7 +130,7 @@
   height: 12px;
   border-radius: 2px;
   background: var(--accent);
-  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: width var(--motion-base) var(--ease-standard);
   flex-shrink: 0;
 }
 
@@ -182,7 +182,7 @@
   gap: 5px;
   padding: 3px 10px;
   border-radius: 3px;
-  transition: all 0.15s ease;
+  transition: color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard);
 }
 
 .expand-btn:hover {

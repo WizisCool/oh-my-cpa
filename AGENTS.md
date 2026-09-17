@@ -159,6 +159,7 @@ Test layering criteria and "what belongs in the browser" are detailed in [`docs/
 | `pnpm check-i18n` | Find translation keys referenced in code but missing from the dictionary |
 | `pnpm check-docs` | Validate context document path references, retired references, and absolute line numbers (`pnpm test:docs` self-test) |
 | `pnpm check-css-modules` | Validate every `styles[...]` reference matches a defined class in `*.module.css` (`pnpm test:css-modules` self-test) |
+| `pnpm check:motion` | Enforce §7's motion budget: every duration is a `--motion-*` token, no transition animates a layout property, every keyframe honours `prefers-reduced-motion`, and hovers stay within `fast` (`pnpm test:motion` self-test) |
 | `pnpm lint:antd` | Check antd usage and accessibility rules |
 
 ---

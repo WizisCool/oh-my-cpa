@@ -2,6 +2,8 @@ import React from 'react';
 import { Area } from '@ant-design/charts';
 import dayjs from 'dayjs';
 import { useThemeMode } from '../theme/ThemeContext';
+import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
+import { resolveChartAnimation } from './chartMotion';
 import { sparkColor, type ChartTone } from './chartTheme';
 import type { DashboardSeriesPoint } from '../types/dashboard';
 
@@ -43,8 +45,10 @@ function formatCount(value: number | null | undefined): string {
  * A stroked area closes its path along the baseline, so a single mark would draw a
  * horizontal rule across the plot floor.
  *
- * Animation is off because the geometry swaps on the data revision; a mark that
- * eases between two revisions reads as a repaint rather than as new data.
+ * Animation is on: the mark morphs between two revisions instead of being replaced, which is what
+ * makes a poll's new data read as movement rather than as a hard cut. A reader who asked for reduced
+ * motion gets the old behaviour, an instant swap, because the mark is redrawn on a canvas that CSS
+ * cannot reach. See `chartMotion.ts` and docs/design.md §7 rule 5.
  */
 export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
   points,
@@ -56,6 +60,8 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
   formatExact,
 }) => {
   const { theme } = useThemeMode();
+  const isReducedMotion = usePrefersReducedMotion();
+  const animate = resolveChartAnimation(isReducedMotion);
   const [activeIndex, setActiveIndex] = React.useState<number | null>(null);
 
   const values = React.useMemo(() => points.map((point) => Math.max(0, pick(point) ?? 0)), [points, pick]);
@@ -93,9 +99,9 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
       axis: false,
       legend: false,
       tooltip: false,
-      animate: false,
+      animate,
     }),
-    [chartData, height, color],
+    [chartData, height, color, animate],
   );
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {

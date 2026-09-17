@@ -48,6 +48,9 @@ test('an ordinary component change selects the frontend gates and nothing else',
     'logic',
     'i18n',
     'antd-lint',
+    // A component's inline style is a motion declaration too: `transition: 'all 0.15s'` inside a
+    // `style` object is a duration the budget owns, and the checker reads both extensions.
+    'motion',
   ]);
 });
 
@@ -71,9 +74,9 @@ test('a Go module change selects the Go tests', () => {
 });
 
 test('a CSS change selects the CSS module check without the TypeScript gates', () => {
-  // A stylesheet can only break a class reference, and `check-css-modules` is the
-  // gate that catches exactly that.
-  assert.deepEqual(planChecks(['web/src/pages/UsageEventsPage.css']), ['css-modules']);
+  // A stylesheet can break a class reference and the motion budget, and those are the two gates that
+  // catch exactly that; neither needs the type checker.
+  assert.deepEqual(planChecks(['web/src/pages/UsageEventsPage.css']), ['css-modules', 'motion']);
 });
 
 test('the regenerated embedded bundle is a Go-relevant change', () => {

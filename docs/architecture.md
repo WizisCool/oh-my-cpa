@@ -215,8 +215,8 @@ Query for server state.
 | --- | --- |
 | `App.tsx` | Router, lazily loaded pages, theme and locale providers |
 | `api/client.ts` | The one typed HTTP client; every endpoint is declared here |
-| `types/` | Wire types, including `usageEventView.ts` (row projection and filters) and `usageEventViewActions.ts` (the view's URL and persistence rewrites) |
-| `hooks/` | `usePreference`, `useLastIntentQueue` (React binding) over `lastIntentQueue` (the framework-free controller) and `disposableSlot` (effect-scoped resource lifetime), `useLogTail`, `useVisibleNow` |
+| `types/` | Wire types, including `usageEventView.ts` (row projection and filters), `usageEventViewActions.ts` (the view's URL and persistence rewrites), `tokenDisplay.ts` (the one layer every user-facing token number is formatted through) and `rollingNumber.ts` (the animated shape of a reading) |
+| `hooks/` | `usePreference`, `useLastIntentQueue` (React binding) over `lastIntentQueue` (the framework-free controller) and `disposableSlot` (effect-scoped resource lifetime), `useLogTail`, `useVisibleNow`, `useIsNarrowViewport`, `usePrefersReducedMotion` (the app-owned reduced-motion switch the canvas marks need, since neither `@antv/g2` nor `@ant-design/plots` reads the preference) |
 | `i18n/index.tsx` | The `[zh, en]` dictionary and the `t()` context |
 | `theme/` | `themeConfig.ts` (preset registry, antd tokens and CSS-variable projection), `ThemeContext.tsx` (single active preset), `cacheScale.ts` (OKLCH cache ramp) |
 | `utils/` | `maskKey.ts`, `externalUrl.ts` (the http/https link rule), `modelOptions.ts` (model-input filtering), `smoothScroll.ts` (the gesture/correction scroll schedule) |
@@ -230,7 +230,14 @@ as SVG URLs. The small catalog used for lookup and grouping is vendored in
 `web/src/generated/lobeIconCatalog.json`; the React icon package is not a
 dependency, because importing it would pull hundreds of components into the
 eager bundle. Dashboard KPI cards use `@ant-design/charts` in a dedicated
-`vendor-charts` chunk, lazily loaded so the entry bundle stays small.
+`vendor-charts` chunk, lazily loaded so the entry bundle stays small. Their
+numbers animate through `@number-flow/react`, which the dashboard page imports
+directly instead of through a vendor chunk: only that route uses it, and being on
+a lazy route boundary it never enters the entry's static module graph. The marks
+themselves morph between revisions on the same motion token, gated by the
+reduced-motion hook above. `docs/design.md`
+§7 rules 5 and 8 own the motion they are allowed to run, and ADRs 0007 and 0008 own the
+trade-offs.
 `components/resources/` and `components/icons/PresetIcon.tsx`
 are retained from the retired triage console and are currently unreferenced; the
 backend discovery/binding model they rendered is still live behind Providers and
@@ -241,6 +248,15 @@ which are consumed as `styles['kebab-case']`. That is not cosmetic: `tsc` types 
 CSS module as `Record<string, string>`, so a stale class reference compiles and
 fails silently at runtime. `pnpm check-css-modules` is the guard that closes
 that hole.
+
+The motion budget is enforced the same way. `pnpm check:motion` reads the
+stylesheets and the inline `transition:` strings in components, and fails on a
+duration that is not a `--motion-*` token, a transition on a layout property (or
+on `all`), a keyframe animation with no `prefers-reduced-motion` counterpart, and
+a hover transitioning colour outside the fast token; the disclosures that need a
+layout animation are listed in its `EXCEPTIONS` table with a reason each, and a
+stale entry is itself a failure. The budget it enforces is stated in
+`docs/design.md` §7, and the reasoning behind the hover bound is ADR 0009.
 
 ## 4. Request and session flow
 

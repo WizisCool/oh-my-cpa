@@ -2,6 +2,8 @@ import React from 'react';
 import { Line } from '@ant-design/charts';
 import dayjs from 'dayjs';
 import { useThemeMode } from '../theme/ThemeContext';
+import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
+import { resolveChartAnimation } from './chartMotion';
 import { seriesColorRange, seriesDomainKey } from './chartTheme';
 import { MONO_FONT_STACK } from '../theme/themeConfig';
 import { formatTokens as formatTokensStyled, formatTokensFull } from '../types/tokenDisplay';
@@ -33,11 +35,16 @@ export interface ModelTokenTrendProps {
  * in the trend's legend and in the usage list, which is only guaranteed if one list produces both. The
  * mark therefore draws no legend of its own.
  *
- * Animation is off. A mark that eases between two revisions reads as a repaint rather than as new
- * data, and the geometry swaps whenever the window or the ranking changes.
+ * The lines morph between two revisions rather than being replaced (§7 rule 5). The panel re-reads on
+ * the same poll the tiles do, so a plot that hard-cut every few seconds looked like a redraw; the
+ * library reuses its chart instance across an update, which is what makes the change a morph instead
+ * of a draw-in. A reader who asked for reduced motion gets the geometry swapped in place, because the
+ * mark is painted on a canvas that CSS cannot reach. See `chartMotion.ts`.
  */
 export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, foldedLabel, tokenUnitLabel = '', height = 260 }) => {
   const { theme } = useThemeMode();
+  const isReducedMotion = usePrefersReducedMotion();
+  const animate = resolveChartAnimation(isReducedMotion);
   const { style: tokenStyle } = useTokenDisplayStyle();
   // The chart's own colours come from the palette, never from a literal.
   const colors = theme.palette;
@@ -162,7 +169,10 @@ export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, folded
         colorField="series"
         height={height}
         autoFit
-        animate={false}
+        // The lines morph between two revisions rather than being redrawn: the panel re-reads on the same
+        // poll the tiles do, and a ranking that hard-cuts every few seconds reads as a flicker. See
+        // `chartMotion.ts` for the motion and its reduced-motion escape.
+        animate={animate}
         // A smoothed line rather than straight segments between buckets.
         //
         // G2 resolves this string to its `smooth` shape, which draws with `curveMonotoneX` - a monotone

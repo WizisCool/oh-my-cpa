@@ -43,6 +43,8 @@ const SHELL_PATHS = [
  */
 const DASHBOARD_SCENARIOS = [
   'dashboard-charts',
+  'dashboard-chart-motion',
+  'dashboard-rolling-readouts',
   'dashboard-model-panels',
   'dashboard-model-panels-states',
   'dashboard-model-panels-failure',
@@ -104,6 +106,14 @@ const SCENARIO_PATHS = [
     scenarios: DASHBOARD_SCENARIOS,
   },
   {
+    prefix: 'web/src/charts/chartMotion',
+    scenarios: ['dashboard-charts', 'dashboard-chart-motion'],
+  },
+  {
+    prefix: 'web/src/hooks/usePrefersReducedMotion',
+    scenarios: DASHBOARD_SCENARIOS,
+  },
+  {
     prefix: 'web/src/charts/',
     scenarios: ['dashboard-charts'],
   },
@@ -135,11 +145,17 @@ const SCENARIO_PATHS = [
     // planner treats as a green run that proved nothing - so the grid and the request list belong
     // here exactly as the panels do.
     scenarios: [
-      'omc-settings', 'dashboard-charts', 'dashboard-model-panels', 'dashboard-model-panels-states',
-      'dashboard-model-panels-failure', 'dashboard-model-panels-empty',
-      'dashboard-heatmap', 'dashboard-heatmap-pruned', 'dashboard-heatmap-mobile', 'dashboard-heatmap-error',
-      'column-alignment', 'request-list-interactions',
+      ...DASHBOARD_SCENARIOS,
+      'omc-settings', 'column-alignment', 'request-list-interactions',
     ],
+  },
+  {
+    // The animated shape of a reading: the contract every readout on the dashboard's KPI tiles is
+    // built from. Only those tiles construct one, so the dashboard scenarios and the OMC settings
+    // scenario - which reads the same tiles back when it asserts the unit style they print in - are
+    // what a change here can reach.
+    prefix: 'web/src/types/rollingNumber',
+    scenarios: ['omc-settings', ...DASHBOARD_SCENARIOS],
   },
   {
     prefix: 'web/src/hooks/usePreference',

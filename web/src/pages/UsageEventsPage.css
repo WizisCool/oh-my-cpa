@@ -239,7 +239,9 @@
      the expanded state from clipping controls before the collapse transition. */
   max-height: 1200px;
   opacity: 1;
-  transition: max-height 260ms cubic-bezier(0.2, 0, 0, 1), opacity 200ms ease, margin 260ms ease;
+  transition: max-height var(--motion-base) var(--ease-standard),
+              opacity var(--motion-base) var(--ease-standard),
+              margin var(--motion-base) var(--ease-standard);
 }
 .request-collapsible-header.is-collapsed {
   max-height: 0;
@@ -306,11 +308,11 @@
   outline: none;
   /* Compositor-only: the entry is a fade and a short rise, which the engine can
      run without laying anything out. */
-  animation: reqBackTopEnter 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
-              background-color 150ms ease,
-              border-color 150ms ease,
-              color 150ms ease;
+  animation: reqBackTopEnter var(--motion-base) var(--ease-standard) forwards;
+  transition: transform var(--motion-fast) var(--ease-standard),
+              background-color var(--motion-fast),
+              border-color var(--motion-fast),
+              color var(--motion-fast);
 }
 
 @keyframes reqBackTopEnter {
@@ -350,7 +352,7 @@
 .req-back-to-top-btn .anticon {
   font-size: 12px;
   color: var(--accent);
-  transition: transform 180ms ease;
+  transition: transform var(--motion-fast) var(--ease-standard);
 }
 
 .req-back-to-top-btn:hover .anticon {
@@ -472,7 +474,7 @@
   height: 16px;
   background: transparent;
   border-radius: 0;
-  transition: background var(--motion-fast, 50ms) ease;
+  transition: background var(--motion-fast) ease;
 }
 
 .req-col-resizer:hover::after,
@@ -541,7 +543,7 @@
   cursor: pointer;
   font-size: 12px;
   position: relative;
-  transition: background var(--motion-fast, 50ms) ease;
+  transition: background var(--motion-fast) ease;
 }
 
 .request-row:hover {
@@ -628,7 +630,7 @@
   opacity: 0;
   color: var(--muted);
   cursor: pointer;
-  transition: opacity var(--motion-fast, 50ms) ease, color var(--motion-fast, 50ms) ease;
+  transition: opacity var(--motion-fast) ease, color var(--motion-fast) ease;
   display: inline-flex;
   align-items: center;
   padding: 1px 3px;
@@ -796,7 +798,7 @@
   font-size: 11px;
   cursor: help;
   flex-shrink: 0;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
 }
 .req-non-stream-icon:hover {
   background: color-mix(in srgb, var(--muted) 16%, transparent);
@@ -1502,3 +1504,17 @@
 
 
 
+
+/* ── reduced motion ─────────────────────────────────────────────────────────
+   §7's override is a promise this file has to keep for itself: the back-to-top
+   affordance rises into place and the filter header folds and unfolds, and a
+   reader who asked for less movement should get the state where it lands. The
+   kill is on movement - a keyframe's transform, a disclosure's height - and the
+   colour hints are left alone, because at the fast token they are three frames
+   rather than motion. `index.css` splits the heatmap mark the same way. */
+@media (prefers-reduced-motion: reduce) {
+  .req-back-to-top-btn { animation: none; }
+  .req-back-to-top-btn,
+  .req-back-to-top-btn .anticon,
+  .request-collapsible-header { transition: none; }
+}

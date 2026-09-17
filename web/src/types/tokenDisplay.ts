@@ -19,6 +19,8 @@
  * as exact.
  */
 
+import type { RollingReadout } from './rollingNumber';
+
 /**
  * The stored preference values. `en-compact` is the default.
  *
@@ -67,6 +69,14 @@ export function parseModelChartView(raw: unknown): ModelChartView | undefined {
 const COMPACT_EN = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 
 /**
+ * The abbreviation the dashboard's tokens-per-minute tile prints.
+ *
+ * TPM is a rate rather than a volume, so it does not follow the console's unit
+ * style and keeps two decimals instead of one.
+ */
+const COMPACT_RATE = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 2 });
+
+/**
  * The Chinese scale's steps, largest first. A value is divided by the largest
  * step it reaches, which keeps every readout to one unit word: 1.2万 rather
  * than 1.2万3千, because the latter is a reconstruction, not a reading.
@@ -80,18 +90,26 @@ const ZH_STEPS: Array<{ limit: number; divisor: number; suffix: string }> = [
   { limit: 10_000, divisor: 10_000, suffix: '万' },
 ];
 
-function formatZh(tokens: number): string {
-  if (tokens < 10_000) return String(Math.round(tokens));
+/**
+ * zhParts splits a token count into the number and the unit word the Chinese scale prints.
+ *
+ * `formatZh` and the animated readout both read the split, so a tile cannot round
+ * differently from the text it stands in for.
+ */
+function zhParts(tokens: number): { number: number; suffix: string } {
+  if (tokens < 10_000) return { number: Math.round(tokens), suffix: '' };
   for (const step of ZH_STEPS) {
     if (tokens < step.limit) continue;
-    const scaled = tokens / step.divisor;
     // One decimal, trailing zeros trimmed: 300万, 1.2亿, not 300.0万.
-    const rounded = Math.round(scaled * 10) / 10;
-    const text = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
-    return `${text}${step.suffix}`;
+    return { number: Math.round((tokens / step.divisor) * 10) / 10, suffix: step.suffix };
   }
   // Unreachable: the loop covers every value >= 10_000.
-  return String(Math.round(tokens));
+  return { number: Math.round(tokens), suffix: '' };
+}
+
+function formatZh(tokens: number): string {
+  const { number, suffix } = zhParts(tokens);
+  return Number.isInteger(number) ? `${number}${suffix}` : `${number.toFixed(1)}${suffix}`;
 }
 
 const FULL = new Intl.NumberFormat('en');
@@ -136,6 +154,77 @@ export function formatTokens(tokens: number, style: TokenNumberStyle): string {
 export function formatTokensFull(tokens: number): string {
   if (!Number.isFinite(tokens)) return '—';
   return FULL.format(tokens);
+}
+
+/**
+ * splitFormatted reassembles a formatter's own output as a number plus its unit word.
+ *
+ * The abbreviation decisions - when to switch unit, how far to round - live in the
+ * formatter, and reading them back out of `formatToParts` means a rolling readout
+ * animates the digits the formatter chose rather than digits it re-derived.
+ */
+function splitFormatted(formatter: Intl.NumberFormat, value: number): { number: number; suffix: string } {
+  let digits = '';
+  let suffix = '';
+  for (const part of formatter.formatToParts(value)) {
+    if (part.type === 'integer' || part.type === 'fraction') digits += part.value;
+    else if (part.type === 'decimal') digits += '.';
+    else if (part.type === 'compact') suffix += part.value;
+  }
+  return { number: Number(digits), suffix };
+}
+
+/**
+ * resolveCountFlowReadout is the animated form of a plain count - requests, requests
+ * per minute - which the console prints as exact grouped digits.
+ *
+ * A count is not abbreviated and has no unit word, so the readout carries none: the
+ * earlier reading and the next one are always the same scale. A missing count has no
+ * reading at all, which is the same em dash the printed form uses.
+ */
+export function resolveCountFlowReadout(value: number | null | undefined): RollingReadout | undefined {
+  if (value === null || value === undefined || !Number.isFinite(value)) return undefined;
+  return { ...splitFormatted(FULL, value), format: { maximumFractionDigits: 3 } };
+}
+
+/**
+ * resolveTokenFlowReadout is `formatTokens` as an animated readout.
+ *
+ * The unit word travels beside the number rather than inside it because two of the
+ * three styles change it mid-scale - `en-compact` and `zh` both print a different
+ * unit at a different magnitude, and that swap is what tells a surface the reading
+ * changed scale rather than size.
+ */
+export function resolveTokenFlowReadout(tokens: number, style: TokenNumberStyle): RollingReadout | undefined {
+  if (!Number.isFinite(tokens)) return undefined;
+  if (style === 'full') return resolveCountFlowReadout(tokens);
+  if (style === 'zh') {
+    // Below 万 the printed form continues in bare digits, so grouping stays off
+    // with it: "9999" is the reading, not "9,999".
+    return { ...zhParts(tokens), format: { useGrouping: false, maximumFractionDigits: 1 } };
+  }
+  return { ...splitFormatted(COMPACT_EN, tokens), format: { maximumFractionDigits: 1 } };
+}
+
+/**
+ * resolveTokenRateFlowReadout is the animated form of a token *rate* - tokens per minute.
+ *
+ * A rate keeps the compact style in every console language: the unit-word styles
+ * describe a total, and `12万` beside a per-minute label would read as a quantity of
+ * minutes rather than a rate.
+ */
+export function resolveTokenRateFlowReadout(value: number | null | undefined): RollingReadout | undefined {
+  if (value === null || value === undefined || !Number.isFinite(value)) return undefined;
+  return { ...splitFormatted(COMPACT_RATE, value), format: { maximumFractionDigits: 2 } };
+}
+
+/**
+ * formatTokenRate renders a token rate for a surface that cannot animate - a trend
+ * tooltip - in the same compact style the rate's tile prints.
+ */
+export function formatTokenRate(value: number): string {
+  if (!Number.isFinite(value)) return '—';
+  return COMPACT_RATE.format(value);
 }
 
 /**

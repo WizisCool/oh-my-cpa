@@ -760,7 +760,6 @@ export const ProvidersPage: React.FC = () => {
                 justifyContent: 'center',
                 cursor: 'pointer',
                 flexShrink: 0,
-                transition: 'all 0.15s ease',
               }}
               title={t('pro.change_icon')}
               onClick={() => {
@@ -2007,7 +2006,7 @@ export const ProvidersPage: React.FC = () => {
                                             display: 'flex',
                                             justifyContent: 'space-between',
                                             alignItems: 'center',
-                                            transition: 'all 0.15s ease',
+                                            transition: 'border-color var(--motion-fast), background var(--motion-fast)',
                                             userSelect: 'none',
                                           }}
                                         >

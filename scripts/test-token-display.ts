@@ -5,12 +5,18 @@ import {
   MODEL_CHART_VIEWS,
   TOKEN_NUMBER_STYLES,
   formatCost,
+  formatTokenRate,
   formatTokens,
   formatTokensFull,
   parseModelChartView,
   parseTokenNumberStyle,
+  resolveCountFlowReadout,
+  resolveTokenFlowReadout,
+  resolveTokenRateFlowReadout,
   resolveTokenNumberStyle,
 } from '../web/src/types/tokenDisplay.ts';
+import { formatCacheRate, resolveCacheRateReadout } from '../web/src/theme/cacheScale.ts';
+import type { RollingReadout } from '../web/src/types/rollingNumber.ts';
 import {
   formatModelShare,
   formatModelTokens,
@@ -123,5 +129,90 @@ assert.equal(withGroupBy('preset=7d', 'call'), 'preset=7d&group_by=call');
 assert.equal(withGroupBy('preset=7d', 'model'), 'preset=7d');
 assert.equal(withGroupBy('', 'call'), 'group_by=call');
 assert.equal(withGroupBy('', 'model'), '');
+
+// ── the animated readouts ──────────────────────────────────────────────────────
+
+/**
+ * Renders a readout the way the animation runtime does.
+ *
+ * The runtime builds an `Intl.NumberFormat` from the readout's locale and format and
+ * paints its parts with the prefix and suffix beside them, so this reproduces the
+ * contract the tile depends on rather than the tile's own implementation.
+ */
+function renderReadout(readout: RollingReadout | undefined): string {
+  if (!readout) return '—';
+  return `${readout.prefix ?? ''}${new Intl.NumberFormat('en', readout.format).format(readout.number)}${readout.suffix}`;
+}
+
+// The animated tile and the printed string must be the same reading, and the readout
+// derives its number from the formatter's *own* parts for exactly that reason. The
+// failure this guards against is the one a second rounding rule would hide: a scaled
+// number re-formatted back across a unit boundary - 999,999 printing as `1000K`
+// where the formatter says `1M`.
+//
+// A spread of real magnitudes is checked rather than the handful of examples above,
+// because those boundaries are where the two paths can disagree and no one would
+// think to try them by hand.
+const TOKEN_SPREAD = [0, 1, 999, 1_000, 9_999, 10_000, 300_000, 999_999, 1_200_000,
+  99_999_999, 120_000_000, 1_200_000_000, 1_200_000_000_000];
+for (let power = 1; power <= 1_000_000_000_000; power *= 10) {
+  TOKEN_SPREAD.push(power - 1, power, power + 1);
+}
+let seed = 20260917;
+for (let sample = 0; sample < 400; sample += 1) {
+  seed = (seed * 48_271) % 2_147_483_647;
+  TOKEN_SPREAD.push(seed % 10_000_000_000_000);
+}
+for (const style of TOKEN_NUMBER_STYLES) {
+  for (const tokens of TOKEN_SPREAD) {
+    assert.equal(
+      renderReadout(resolveTokenFlowReadout(tokens, style)),
+      formatTokens(tokens, style),
+      `${style} tile reading for ${tokens}`,
+    );
+  }
+}
+
+// The unit word is what tells a surface the reading changed *scale*, so it has to be
+// the unit the formatter actually printed - the same `.suffix` the freeze watches.
+assert.equal(resolveTokenFlowReadout(300_000, 'en-compact')?.suffix, 'K');
+assert.equal(resolveTokenFlowReadout(1_200_000_000, 'en-compact')?.suffix, 'B');
+assert.equal(resolveTokenFlowReadout(300_000, 'zh')?.suffix, '万');
+assert.equal(resolveTokenFlowReadout(120_000_000, 'zh')?.suffix, '亿');
+assert.equal(resolveTokenFlowReadout(9_999, 'zh')?.suffix, '');
+assert.equal(resolveTokenFlowReadout(1_234_567, 'full')?.suffix, '');
+// The unit word travels beside the number, so the number is already scaled.
+assert.equal(resolveTokenFlowReadout(1_200_000_000, 'en-compact')?.number, 1.2);
+assert.equal(resolveTokenFlowReadout(120_000_000, 'zh')?.number, 1.2);
+// A count the console cannot read is not a zero, in the animated form either.
+assert.equal(resolveTokenFlowReadout(NaN, 'zh'), undefined);
+assert.equal(resolveTokenFlowReadout(Infinity, 'en-compact'), undefined);
+assert.equal(resolveCountFlowReadout(null), undefined);
+assert.equal(resolveCountFlowReadout(undefined), undefined);
+assert.equal(resolveTokenRateFlowReadout(null), undefined);
+
+// The same claim for the plain counts and the token rate: the tile animates the value
+// the caption, the tooltip and the trend already print.
+for (const count of [0, 1, 999, 1_000, 1_234_567, 12_345_678_901]) {
+  assert.equal(renderReadout(resolveCountFlowReadout(count)), formatTokensFull(count));
+}
+for (const rate of [0, 7, 999, 1_000, 12_345, 999_999, 1_200_000]) {
+  assert.equal(renderReadout(resolveTokenRateFlowReadout(rate)), formatTokenRate(rate));
+}
+assert.equal(formatTokenRate(12_345), '12.35K');
+assert.equal(formatTokenRate(NaN), '—');
+
+// The cache tile reads off the same tenths the badge and the colour scale use, so the
+// percentage sign is a suffix and the fraction digits follow the printed form's rule:
+// an exact zero keeps no decimal, every other rate keeps its tenth.
+for (const rate of [null, undefined, NaN, -5, 0, 0.04, 0.4, 40, 40.05, 40.5, 99.9, 100, 120]) {
+  assert.equal(
+    renderReadout(resolveCacheRateReadout(rate)),
+    formatCacheRate(rate),
+    `cache tile reading for ${String(rate)}`,
+  );
+}
+assert.equal(resolveCacheRateReadout(40)?.format.minimumFractionDigits, 1);
+assert.equal(resolveCacheRateReadout(0)?.format.minimumFractionDigits, 0);
 
 console.log('token display: all assertions passed');
