@@ -132,6 +132,15 @@ to "Simplified Chinese" could not be used by the reader who needs it most, since
 someone who cannot read the console's current language cannot recognize their own
 behind a translation of it and would have no way back.
 
+The two additional catalogs are separate chunks, fetched when the language is
+selected, so the stored preference is a **choice** rather than a guarantee: a tab
+older than the deployment serving it asks for a chunk name that no longer exists.
+A catalog that cannot be fetched leaves the console reading in its default language
+while `omc-lang` keeps the operator's choice, and a switch that cannot fetch one
+leaves the reading where it was — never a blank page, and never a leaked rejection.
+A browser does not re-fetch a module whose import has already failed in a document,
+so the language arrives on the next load rather than on a second click.
+
 One deliberate exception is in the code rather than the dictionary: quota
 window labels, plan labels, recommendation reasons, and the discovery fallback
 source name are composed by the Go normalizers and rendered verbatim, so an

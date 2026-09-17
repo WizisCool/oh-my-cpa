@@ -1669,11 +1669,21 @@ function loadCatalog(lang: Lang): Promise<Catalog> {
   if (existing) return existing;
   const loader = CATALOG_LOADERS[lang];
   if (!loader) return Promise.resolve({});
-  const pending = loader().then((catalog) => {
-    loadedCatalogs.set(lang, catalog);
-    catalogPromises.delete(lang);
-    return catalog;
-  });
+  const pending = loader().then(
+    (catalog) => {
+      loadedCatalogs.set(lang, catalog);
+      catalogPromises.delete(lang);
+      return catalog;
+    },
+    (error: unknown) => {
+      // A failed load is not cached, so the failure a later attempt meets is the fetch's rather than
+      // this map's: the browser refuses to re-fetch a module whose import already failed in a
+      // document, which is why the recovery below is a reload and not a second click. Holding the
+      // rejection here anyway would leave the loader permanently disagreeing with itself.
+      catalogPromises.delete(lang);
+      throw error;
+    },
+  );
   catalogPromises.set(lang, pending);
   return pending;
 }
@@ -1696,6 +1706,13 @@ export function makeT(lang: Lang): TFunc {
 
 const LANG_KEY = 'omc-lang';
 
+/**
+ * The reading language the console falls back to when the stored one cannot be fetched.
+ *
+ * It is the same language `readInitialLang` picks for an unrecognized stored id, so a console that
+ * cannot read its stored preference still lands somewhere deliberate instead of nowhere.
+ */
+const FALLBACK_LANG: Lang = 'zh';
 function readInitialLang(): Lang {
   if (typeof window === 'undefined') return 'zh';
   const stored = window.localStorage.getItem(LANG_KEY);
@@ -1716,51 +1733,78 @@ const I18nContext = React.createContext<I18nContextValue>({
 
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [initialLang] = React.useState<Lang>(readInitialLang);
-  const [lang, setLangState] = React.useState<Lang>(initialLang);
-  const [isReady, setIsReady] = React.useState(() => !isDeferredLanguage(initialLang));
+  // Two languages, because a reader's choice and what the console can print are not the same thing
+  // while a catalog is on its way. `requestedLang` is what they picked and what gets stored; `lang` is
+  // what is rendered, and it is `null` only until the chosen catalog arrives - so the first paint is
+  // never a reading language the reader did not ask for.
+  const [requestedLang, setRequestedLang] = React.useState<Lang>(initialLang);
+  const [lang, setLangState] = React.useState<Lang | null>(() => (isDeferredLanguage(initialLang) ? null : initialLang));
   const languageRequest = React.useRef(0);
 
   React.useEffect(() => {
-    if (isReady) return;
+    if (!isDeferredLanguage(initialLang)) return;
     let cancelled = false;
-    loadCatalog(initialLang).then(() => {
-      if (cancelled) return;
-      setLangState(initialLang);
-      setIsReady(true);
-    });
+    loadCatalog(initialLang).then(
+      () => {
+        if (!cancelled) setLangState(initialLang);
+      },
+      () => {
+        // A stored catalog whose chunk cannot be fetched - a tab older than the deployment serving it
+        // is the usual reason - leaves the console in the default reading language rather than blank.
+        // That is the whole point: a blank page is a console with nothing on it to act from, and the
+        // settings page is where a reader picks a language that is still there. The stored preference
+        // is left alone, so the next load returns them to the language they chose.
+        if (!cancelled) setLangState(FALLBACK_LANG);
+      },
+    );
     return () => {
       cancelled = true;
     };
-  }, [initialLang, isReady]);
+  }, [initialLang]);
 
   const setLang = React.useCallback((next: Lang) => {
+    // Every switch invalidates an in-flight one, deferred or not, so a catalog that lands late cannot
+    // take the console back to a language the reader has already left.
     const request = languageRequest.current + 1;
     languageRequest.current = request;
+    setRequestedLang(next);
     if (!isDeferredLanguage(next)) {
       setLangState(next);
       return;
     }
-    loadCatalog(next).then(() => {
-      if (languageRequest.current === request) setLangState(next);
-    });
+    // A switch to a language whose catalog has not arrived keeps the current reading until it does. A
+    // fetch that fails leaves the console where it was and stores nothing: the browser will not
+    // re-fetch the module in this document (see `loadCatalog`), so the language arrives on the next
+    // load - which is the reload a tab this stale needs anyway - and never as an unhandled rejection.
+    loadCatalog(next).then(
+      () => {
+        if (languageRequest.current === request) setLangState(next);
+      },
+      () => undefined,
+    );
   }, []);
 
+  const activeLang = lang ?? FALLBACK_LANG;
+
   React.useEffect(() => {
-    if (!isReady) return;
-    window.localStorage.setItem(LANG_KEY, lang);
+    if (lang === null) return;
+    // The document's own language is what is *rendered* - a fallback is still what a screen reader
+    // has to read - while only the reader's own choice is stored. Writing the fallback would replace
+    // the preference the next successful load is meant to restore.
     document.documentElement.lang = languageLocale(lang);
-  }, [isReady, lang]);
+    if (lang === requestedLang) window.localStorage.setItem(LANG_KEY, lang);
+  }, [lang, requestedLang]);
 
   const value = React.useMemo<I18nContextValue>(
     () => ({
-      lang,
+      lang: activeLang,
       setLang,
-      t: makeT(lang),
+      t: makeT(activeLang),
     }),
-    [lang],
+    [activeLang, setLang],
   );
 
-  return isReady ? <I18nContext.Provider value={value}>{children}</I18nContext.Provider> : null;
+  return lang === null ? null : <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 };
 
 export function useI18n(): I18nContextValue {

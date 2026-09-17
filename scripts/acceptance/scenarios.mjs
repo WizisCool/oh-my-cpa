@@ -4206,6 +4206,103 @@ export async function omcSettings({ base, page, check, context }) {
     (await headerActionGeometry()) === geometryInChinese,
     `zh=${JSON.stringify(geometryInChinese)} en=${JSON.stringify(await headerActionGeometry())}`,
   );
+
+  // ── a catalog whose chunk cannot be fetched ──────────────────────────────
+  //
+  // The additional catalogs are separate chunks, so a tab older than the deployment serving it asks
+  // for a chunk name that no longer exists. Two failure modes came out of that, and neither is about
+  // the copy the console prints: a stored language whose chunk could not be fetched left the provider
+  // with nothing to render - a blank page, with no way out but clearing storage - and a switch that
+  // failed leaked an unhandled rejection and cached it.
+  //
+  // Both are asserted on the console rather than on the string: a blank document, a leaked error, and
+  // a stored preference overwritten by the fallback are the three things a reader would be left with.
+  // The fetch is failed by aborting the chunk request, which is the same state a redeploy produces.
+  // The browser refuses to re-fetch a module whose import has already failed in a document, so the
+  // recovery asserted below is the reload, not a second click.
+  const isCatalogChunk = (url) => /\/i18n\/locales\/ms(\.ts)?$/.test(url.pathname) || /\/assets\/ms-[^/]*\.js$/.test(url.pathname);
+  const pageErrors = [];
+  const collectPageError = (error) => pageErrors.push(String(error.message));
+  page.on('pageerror', collectPageError);
+  const abortCatalogChunk = async () => {
+    await page.route('**/*', (route) => (isCatalogChunk(new URL(route.request().url())) ? route.abort() : route.fallback()));
+  };
+  const languageState = () => page.evaluate(() => ({
+    lang: document.documentElement.lang,
+    stored: localStorage.getItem('omc-lang'),
+    // The page's own title, which is the copy actually on screen: a document attribute alone would be
+    // satisfied by the markup the server sent, before React has rendered anything.
+    title: document.querySelector('.omc-settings-page .terminal-title')?.textContent ?? '',
+  }));
+
+  // A fresh document, because the catalogs the earlier checks switched to are still in memory: a switch
+  // would find them there without fetching anything, and the failure being asserted is the fetch's.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
+  const beforeBlockedSwitch = await languageState();
+  await abortCatalogChunk();
+  pageErrors.length = 0;
+  await languageMenuButton().click();
+  await page.locator('.ant-dropdown:visible .language-menu-item').filter({ hasText: /Bahasa Melayu/ }).click();
+  // Long enough for a failed fetch to have landed: the assertion is that nothing changed, and a
+  // shorter window would pass before the rejection existed.
+  await sleep(1_000);
+  const afterBlockedSwitch = await languageState();
+  check(
+    'a switch whose catalog cannot be fetched leaves the console readable and unchanged',
+    afterBlockedSwitch.lang === beforeBlockedSwitch.lang
+      && afterBlockedSwitch.stored === beforeBlockedSwitch.stored
+      && afterBlockedSwitch.title === beforeBlockedSwitch.title,
+    `before=${JSON.stringify(beforeBlockedSwitch)} after=${JSON.stringify(afterBlockedSwitch)}`,
+  );
+  check(
+    'a catalog that failed to load raises no unhandled error',
+    pageErrors.length === 0,
+    JSON.stringify(pageErrors.slice(0, 2)),
+  );
+  await page.unroute('**/*');
+
+  // A stored deferred language is reached before the first paint, so its chunk failing there is the
+  // state that used to render nothing at all. Asserted through the rendered document, and through the
+  // stored value: the console falls back to its default reading language, and the reader's own choice
+  // is still stored for the load that can read it.
+  await page.evaluate(() => localStorage.setItem('omc-lang', 'ms'));
+  await abortCatalogChunk();
+  pageErrors.length = 0;
+  await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
+  // Waited for by the copy that proves the page rendered *in the fallback language*: an empty document
+  // and a document whose attributes say `zh-CN` while React has painted nothing both satisfy a weaker
+  // reading, and "the console is still usable" is the claim.
+  const fellBack = await until(async () => {
+    const state = await languageState();
+    return /OMC 设置/.test(state.title) ? state : false;
+  }, { label: 'the console to render in its default language while the stored catalog is unreachable' }).catch(() => null);
+  check(
+    'a stored catalog that cannot be fetched renders the console in its default language',
+    fellBack !== null && fellBack.lang === 'zh-CN' && fellBack.stored === 'ms',
+    `state=${JSON.stringify(fellBack ?? await languageState())}`,
+  );
+  check(
+    'the fallback does not raise an unhandled error either',
+    pageErrors.length === 0,
+    JSON.stringify(pageErrors.slice(0, 2)),
+  );
+  await page.unroute('**/*');
+  page.off('pageerror', collectPageError);
+
+  // The recovery path the fallback leaves open: the preferred language is still stored, so the load
+  // that can fetch the chunk comes up in it rather than in the fallback.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  const recovered = await until(async () => {
+    const state = await languageState();
+    return /Tetapan OMC/.test(state.title) ? state : false;
+  }, { label: 'the stored language to load once its chunk is reachable again' }).catch(() => null);
+  check(
+    'the language a failed load could not print is still the stored choice',
+    recovered !== null && recovered.lang === 'ms-MY' && recovered.stored === 'ms',
+    `state=${JSON.stringify(recovered ?? await languageState())}`,
+  );
+  await page.evaluate(() => localStorage.setItem('omc-lang', 'en'));
 }
 
 export const SCENARIOS = [
