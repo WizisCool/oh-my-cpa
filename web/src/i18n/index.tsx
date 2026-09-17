@@ -3,6 +3,25 @@ import React from 'react';
 export type Lang = 'zh' | 'en';
 
 /**
+ * Every reading language the console offers, in the order its switchers list
+ * them.
+ *
+ * One registry rather than a control's private option list: a language reaches
+ * the console through the header menu and the settings page at once, and a second
+ * language added to only one of them would leave the two disagreeing about what
+ * the console can read. `labelKey` resolves through the active dictionary, `code`
+ * is the language's own two-glyph mark (中文 reads 中, English reads EN), and
+ * `country` is the flag a switcher draws beside it - a country standing in for a
+ * language that is not one country's (English is written the same way in more than
+ * one), so a language no flag represents would need a different mark rather than a
+ * borrowed flag.
+ */
+export const LANGUAGES: readonly { id: Lang; labelKey: string; code: string; country: string }[] = [
+  { id: 'zh', labelKey: 'omc.language_zh', code: '中', country: 'CN' },
+  { id: 'en', labelKey: 'omc.language_en', code: 'EN', country: 'US' },
+];
+
+/**
  * Bilingual dictionary, values are [zh, en] pairs. Keys not found fall through
  * to the key itself so misses are visible in dev.
  */
@@ -58,10 +77,7 @@ const DICT: Record<string, [string, string]> = {
   'header.collapse_sidebar': ['收起侧栏', 'Collapse sidebar'],
   'header.expand_sidebar': ['展开侧栏', 'Expand sidebar'],
   'header.open_nav': ['打开导航', 'Open navigation'],
-  'header.base_path': ['挂载路径：{path}', 'Mount path: {path}'],
-  'header.online': ['CPA 在线{version}', 'CPA online{version}'],
   'header.degraded': ['CPA 部分接口可用', 'CPA partially available'],
-  'header.offline': ['CPA 未连接或正在重试', 'CPA offline or retrying'],
   'header.refresh_all': ['刷新全部', 'Refresh all'],
   'header.theme': ['界面主题', 'Theme'],
   'header.language': ['界面语言', 'Language'],
@@ -1665,14 +1681,12 @@ function readInitialLang(): Lang {
 interface I18nContextValue {
   lang: Lang;
   setLang: (lang: Lang) => void;
-  toggleLang: () => void;
   t: TFunc;
 }
 
 const I18nContext = React.createContext<I18nContextValue>({
   lang: 'zh',
   setLang: () => undefined,
-  toggleLang: () => undefined,
   t: makeT('zh'),
 });
 
@@ -1688,7 +1702,6 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     () => ({
       lang,
       setLang,
-      toggleLang: () => setLang((current) => (current === 'zh' ? 'en' : 'zh')),
       t: makeT(lang),
     }),
     [lang],

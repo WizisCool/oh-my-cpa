@@ -66,16 +66,9 @@ export const App: React.FC = () => {
     window.localStorage.setItem('omc-theme', theme.id);
   }, [theme]);
 
-  const toggleTheme = React.useCallback(() => {
-    setThemeId((currentId) => {
-      const current = getThemePreset(currentId);
-      return current.mode === 'dark' ? 'omc-light' : 'omc-dark';
-    });
-  }, []);
-
   const themeContextValue = React.useMemo<ThemeContextValue>(
-    () => ({ themeId, theme, themeMode: theme.mode, setThemeId, toggleTheme }),
-    [theme, themeId, toggleTheme],
+    () => ({ themeId, theme, themeMode: theme.mode, setThemeId }),
+    [theme, themeId],
   );
 
   return (

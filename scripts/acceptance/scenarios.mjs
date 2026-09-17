@@ -12,7 +12,7 @@
  * `--plan` must be able to answer without starting a browser, and a module that
  * spawned a server at import time could not support that.
  */
-import { until } from './harness.mjs';
+import { until, settleLayout } from './harness.mjs';
 import { installRoutes, sleep } from './probe.mjs';
 
 export const LONG_PROVIDER = 'openai-compatible-commandcode-goat-super-long-relay-name';
@@ -3527,6 +3527,32 @@ export async function omcSettings({ base, page, check, context }) {
   await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
   await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
 
+  // ── every header action names itself on hover ─────────────────────────────
+  // Sign out is an icon button, because its label is the one string in this cluster whose
+  // length changes with the language. That makes its tooltip the control's name rather than
+  // decoration, and hovering the two menu triggers proves they did not lose the hover to the
+  // dropdown wrapped inside them.
+  const unnamedActions = [];
+  for (const name of ['Refresh all', 'Theme', 'Language', 'Sign out']) {
+    const action = page.locator('.app-header-actions').getByRole('button', { name, exact: true });
+    if ((await action.count()) !== 1) {
+      unnamedActions.push(`${name} (${await action.count()} matches)`);
+      continue;
+    }
+    await action.hover();
+    const shown = await until(async () => {
+      const text = await page.locator('.ant-tooltip:visible').first().innerText().catch(() => '');
+      return text.includes(name) ? text : false;
+    }, { label: `the ${name} tooltip`, timeoutMs: 5000 }).catch(() => false);
+    if (!shown) unnamedActions.push(`${name} (no tooltip)`);
+    // Leave the control, so the next hover cannot be read from the previous tooltip.
+    await page.mouse.move(2, 2);
+  }
+  check('every header action names itself on hover', unnamedActions.length === 0, unnamedActions.join(' | '));
+
+  await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
+
   // ── the page states itself once, without decorative copy ──────────────────
   // docs/design.md §3: one page title, and a subtitle only when it carries live data. The titles
   // and descriptions this page shipped with were static explanation, so their absence is the claim.
@@ -3797,9 +3823,8 @@ export async function omcSettings({ base, page, check, context }) {
   );
 
   // ── the preset registry drives palette, persistence and the header switch ──
-  // The theme control is no longer a two-value mode switch. Every preset must
-  // publish both a palette and a mode, survive a reload, and stay the same
-  // source the header shortcut changes.
+  // Every preset publishes both a palette and a mode, survives a reload, and stays the same source
+  // the header's menu writes.
   await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
   await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
   const themeCards = page.locator('.theme-preset-card');
@@ -3826,22 +3851,38 @@ export async function omcSettings({ base, page, check, context }) {
     (await page.locator('html').getAttribute('data-theme')) === 'midnight',
   );
 
-  // The header shortcut and the settings page share one state source. Toggling
-  // from a custom dark preset resolves to the canonical light preset; returning
-  // to settings must show that same preset selected.
+  // ── the header's preference menus drive the registry the page reads ───────
+  // The header's theme menu lists every registered preset, marks the stored one, and writes the
+  // same key the settings page reads. Midnight is stored at this point, which is what makes the
+  // marking claim testable - a menu that only highlighted the current mode would pass on either of
+  // the two presets it happened to hold.
   await page.locator('.app-header').getByRole('button', { name: /Theme|界面主题/ }).click();
+  const themeMenuItems = page.locator('.ant-dropdown:visible .theme-menu-item');
+  await themeMenuItems.first().waitFor({ timeout: 10_000 });
+  check(
+    'the header theme menu lists every registered preset',
+    (await themeMenuItems.count()) === 6,
+    `items=${await themeMenuItems.count()}`,
+  );
+  const selectedThemeItem = page.locator('.ant-dropdown:visible .ant-dropdown-menu-item-selected');
+  check(
+    'the header theme menu marks the stored preset, not merely the current mode',
+    /Midnight/.test(await selectedThemeItem.innerText()),
+    `selected=${JSON.stringify(await selectedThemeItem.innerText().catch(() => ''))}`,
+  );
+  await themeMenuItems.filter({ hasText: /OMC Light/ }).click();
   await until(async () => (await page.locator('html').getAttribute('data-theme')) === 'omc-light', {
-    label: 'the header shortcut to select OMC Light',
+    label: 'the header menu to select OMC Light',
   });
   check(
-    'the header shortcut writes the same theme state the settings registry reads',
+    'the header menu writes the same theme state the settings registry reads',
     (await page.locator('html').getAttribute('data-theme-mode')) === 'light'
       && (await page.evaluate(() => localStorage.getItem('omc-theme'))) === 'omc-light',
   );
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
   check(
-    'the settings page reflects the header shortcut selection',
+    'the settings page reflects the header menu selection',
     (await page.locator('.theme-preset-card.is-active').filter({ hasText: /OMC Light/ }).count()) === 1,
   );
 
@@ -3860,6 +3901,54 @@ export async function omcSettings({ base, page, check, context }) {
   check(
     'the Chinese unit style becomes selectable once the console is Chinese',
     !(await tokenRow.locator('.ant-segmented-item').filter({ hasText: /万\/亿/ }).locator('input').isDisabled()),
+  );
+
+  // ── the header's language menu, and the geometry a switch must not disturb ─
+  // The reported defect: the cluster's labels change length with the language - "退出" beside
+  // "Sign out" - so a switch slid every control beside the one that was just clicked out from
+  // under the pointer. Fixed-size controls are the fix, and this is the only place it is
+  // observable: the widths are a fact about the painted layout, not about the components.
+  const headerActionGeometry = () =>
+    page.evaluate(() =>
+      Array.from(document.querySelectorAll('.app-header-actions .ant-btn'))
+        .map((node) => {
+          const box = node.getBoundingClientRect();
+          return `${Math.round(box.x)},${Math.round(box.width)}`;
+        })
+        .join(' '),
+    );
+  await settleLayout(page);
+  const geometryInChinese = await headerActionGeometry();
+  check(
+    'the header actions are measured before the language switch',
+    geometryInChinese.split(' ').length === 4,
+    `geometry=${JSON.stringify(geometryInChinese)}`,
+  );
+
+  await page.locator('.app-header').getByRole('button', { name: /Language|界面语言/ }).click();
+  const languageMenuItems = page.locator('.ant-dropdown:visible .language-menu-item');
+  await languageMenuItems.first().waitFor({ timeout: 10_000 });
+  check(
+    'the header language menu lists the registered languages with their flags',
+    (await languageMenuItems.count()) === 2
+      && (await page.locator('.ant-dropdown:visible .language-flag svg').count()) === 2,
+    `items=${await languageMenuItems.count()} flags=${await page.locator('.ant-dropdown:visible .language-flag svg').count()}`,
+  );
+  await languageMenuItems.filter({ hasText: /English/ }).click();
+  let becameEnglish = false;
+  await until(async () => {
+    becameEnglish = /OMC Settings/.test(await page.locator('.omc-settings-page .terminal-title').innerText());
+    return becameEnglish;
+  }, { label: 'the header menu to switch the console to English' }).catch(() => {});
+  check(
+    'the header language menu switches the reading language and stores it',
+    becameEnglish && (await page.evaluate(() => localStorage.getItem('omc-lang'))) === 'en',
+  );
+  await settleLayout(page);
+  check(
+    'a language switch does not move the header controls beside it',
+    (await headerActionGeometry()) === geometryInChinese,
+    `zh=${JSON.stringify(geometryInChinese)} en=${JSON.stringify(await headerActionGeometry())}`,
   );
 }
 

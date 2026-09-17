@@ -120,6 +120,15 @@ Native zh/en bilingual UI. Dictionary lives in `web/src/i18n/index.tsx` as
 fully localize — a Chinese UI must not show untranslated English captions next
 to Chinese ones (proper nouns and industry terms excepted).
 
+The supported languages are listed once, as the `LANGUAGES` registry in the same
+module, and every switcher reads it: adding a language means a dictionary plus one
+registry row. A row carries the language's dictionary key, its own two-glyph code,
+and the flag a switcher draws beside it — a country standing in for a language that
+is not one country's, so the flags are decoration and the language's name is the
+choice's real label. The registry itself is not translated: a language's name and
+code read the same in every console, which is why the header's trigger is a flag and
+a code rather than localized text.
+
 One deliberate exception is in the code rather than the dictionary: quota
 window labels, plan labels, recommendation reasons, and the discovery fallback
 source name are composed by the Go normalizers and rendered verbatim, so an

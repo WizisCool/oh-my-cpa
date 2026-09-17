@@ -157,7 +157,7 @@ Depth is achieved purely through 1px hairline borders and subtle tonal shifts be
 
 ## Colors
 
-The palette is anchored on warm charcoal darks with pure semantic status pigments and an OKLCH-interpolated continuous cache scale. Six complete presets are registered: OMC Dark, OMC Light, Midnight, Porcelain, Forest, and Sandstone. Each declares its mode and full palette; the resolver in `web/src/theme/themeConfig.ts` feeds Ant Design, CSS variables, charts, the heatmap, and the settings preview from that one registry. `omc-theme` stores the preset id and accepts the legacy `dark`/`light` values.
+The palette is anchored on warm charcoal darks with pure semantic status pigments and an OKLCH-interpolated continuous cache scale. Six complete presets are registered: OMC Dark, OMC Light, Midnight, Porcelain, Forest, and Sandstone. Each declares its mode and full palette; the resolver in `web/src/theme/themeConfig.ts` feeds Ant Design, CSS variables, charts, the heatmap, the settings preview, and the header's theme menu from that one registry. `omc-theme` stores the preset id and accepts the legacy `dark`/`light` values.
 
 ### Primary
 - **Deep Accent Blue** (`#0077b8` dark / `#004770` light): Used for filled primary action buttons and confirm controls. It provides a decisive focus point without overwhelming the dark theme.
@@ -229,7 +229,7 @@ The application viewport uses a fixed shell architecture (`100dvh`, `body { over
 
 ```text
 ┌──────────┬──────────────────────────────────────────┐
-│ brand ›_ │ breadcrumb (Group / Page)  actions  ZH|EN│ 56px, border-bottom 1px
+│ brand ›_ │ breadcrumb (Group / Page)   actions ⟳ ◧ ▣ ⇥│ 56px, border-bottom 1px
 │──────────┼──────────────────────────────────────────┤
 │ nav      │                                          │
 │ (236px)  │ page content        ← scrolls alone      │
@@ -239,7 +239,7 @@ The application viewport uses a fixed shell architecture (`100dvh`, `body { over
 └──────────┴──────────────────────────────────────────┘
 ```
 
-- **Top Header**: Fixed 56px height, full-width with 1px bottom border (`#2c2c30`). Contains the `›_` terminal prompt logo, breadcrumb hierarchy, connection status pill, discovery refresh, theme toggle, language switch, and logout triggers.
+- **Top Header**: Fixed 56px height, full-width with 1px bottom border (`#2c2c30`). Contains the `›_` terminal prompt logo, breadcrumb hierarchy, and four right-aligned actions: refresh, the theme menu, the language menu, and sign out. Both preferences are menus over their full registry (`THEME_PRESETS` and `LANGUAGES`) rather than toggles between two states, and each action keeps one width in every reading language — labels change length with the language, so sign out is an icon button named by its tooltip. CPA connection status and version are reported in the side rail's foot only.
 - **Navigation Sidebar**: Fixed 236px width (58px collapsed), 1px right border. Houses grouped navigation categories: `Operate`, `Gateway`, `Observe`, `Control`.
 - **Content Area**: Single-scroll container with responsive padding (32px desktop / 24px tablet / 16px mobile).
 - **Settings Workbench Layout**: A three-track grid — 216px sticky section nav + 920px reading column + 216px balancing gutter — accompanied by a full-width sticky action bar, so the form never drifts to one side on wide screens.

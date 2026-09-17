@@ -13,6 +13,13 @@ declare module 'monaco-editor/esm/vs/languages/definitions/yaml/yaml.js' {
   export const language: languages.IMonarchLanguage;
 }
 
+// `country-flag-icons` ships types for its `string/3x2` index only; each
+// per-country module this app imports default-exports that flag's SVG markup.
+declare module 'country-flag-icons/string/3x2/*' {
+  const flagMarkup: string;
+  export default flagMarkup;
+}
+
 declare global {
   interface Window {
     MonacoEnvironment?: {

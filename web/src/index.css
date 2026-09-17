@@ -335,11 +335,6 @@ a { color: inherit; }
 .app-breadcrumb .ant-breadcrumb-link { color: var(--muted); }
 .app-breadcrumb li:last-child .ant-breadcrumb-link { color: var(--fg); }
 .app-breadcrumb-current { color: var(--fg); font-weight: 500; }
-.base-path-tag { margin: 0; border-color: var(--border); color: var(--muted); background: transparent; font-size: 10px; }
-.connection-pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; font-size: 10px; letter-spacing: .04em; white-space: nowrap; }
-.connection-pill.is-online { color: var(--success); border-color: rgba(48, 209, 88, .45); }
-.connection-pill.is-degraded { color: var(--warn); border-color: rgba(255, 159, 10, .45); }
-.connection-pill.is-offline { color: var(--danger); border-color: rgba(255, 59, 48, .45); }
 .header-logout { color: var(--muted) !important; }
 .app-content { flex: 1 1 0; min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; background: var(--bg); }
 .app-footer { display: none; }
@@ -500,7 +495,6 @@ a { color: inherit; }
 
 @media (max-width: 900px) {
   .terminal-page { padding: 24px 16px 40px; }
-  .base-path-tag { display: none; }
   .app-footer { padding-inline: 16px; flex-direction: column; gap: 4px; }
   .dashboard-hero { align-items: flex-start; flex-direction: column; padding: 20px; }
   .dashboard-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -535,7 +529,6 @@ a { color: inherit; }
 
 @media (max-width: 900px) {
   .app-breadcrumb a, .app-breadcrumb span { display: none; }
-  .connection-pill span { display: none; }
   .dashboard-kpis { grid-template-columns: 1fr; }
   .hero-number { font-size: 34px; }
   .capability-state { padding: 20px; }
@@ -2469,19 +2462,70 @@ a { color: inherit; }
   outline-offset: 2px;
 }
 
-.theme-preset-preview {
+/* One preset's palette as four colour bands, drawn wherever a preset has to be
+   recognisable without being applied (settings cards, header theme menu). */
+.theme-swatch {
   display: grid;
-  width: 100%;
-  height: 34px;
   grid-template-columns: 1.2fr 1fr 0.7fr 0.7fr;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 3px;
 }
 
-.theme-preset-preview > span {
+.theme-swatch > span {
   display: block;
   min-width: 0;
+}
+
+.theme-preset-preview {
+  width: 100%;
+  height: 34px;
+}
+
+.theme-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.theme-menu-swatch {
+  width: 44px;
+  height: 14px;
+  flex: none;
+}
+
+/* A flag is drawn at a fixed size so a language switch cannot resize the control it
+   sits in. The hairline border is the same one the swatches wear: several flags carry
+   a white field, which would otherwise dissolve into a light theme's surface. */
+.language-flag {
+  display: inline-block;
+  width: 18px;
+  height: 12px;
+  flex: none;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+
+.language-flag > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.language-menu-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Both language codes occupy the same slot, so the trigger keeps one width in every
+   reading language. */
+.language-trigger-code {
+  display: inline-block;
+  min-width: 2ch;
+  text-align: center;
 }
 
 .theme-preset-name {

@@ -26,7 +26,6 @@ import { NARROW_VIEWPORT_QUERY } from '../../hooks/useIsNarrowViewport';
 import { DataProgress } from './DataProgress';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { useThemeMode } from '../../theme/ThemeContext';
 import { BrandArtwork } from './BrandArtwork';
 import { useT, type TFunc } from '../../i18n';
 
@@ -117,7 +116,6 @@ function isNarrowViewport(): boolean {
 export const AppLayout: React.FC = () => {
   const t = useT();
   const { message } = AntdApp.useApp();
-  const { themeMode, toggleTheme } = useThemeMode();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -288,14 +286,10 @@ export const AppLayout: React.FC = () => {
             />
           </div>
           <HeaderNav
-            health={health}
             isDiscovering={false}
             onDiscover={() => { void queryClient.invalidateQueries(); message.success(t('common.refresh')); }}
             onLogout={() => logoutMutation.mutate()}
             isLoggingOut={logoutMutation.isPending}
-            themeMode={themeMode}
-            onToggleTheme={toggleTheme}
-            isMobile={isMobile}
           />
         </header>
         <Content className="app-content" ref={contentRef}>

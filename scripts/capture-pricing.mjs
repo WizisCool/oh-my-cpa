@@ -42,12 +42,15 @@ function launchOptions() {
   return executablePath ? { executablePath, headless: true } : { headless: true };
 }
 
-// The language toggle renders the active language, so the button reads "中" in
-// English mode and "EN" in Chinese mode; clicking it switches to the other one.
+// The language switch is a menu: the trigger opens it, and the reading language is
+// picked from the list rather than cycled to.
 async function switchLanguage(page, label) {
-  const button = page.locator(`button:has(span.terminal-mono:text("${label}"))`);
-  if ((await button.count()) === 0) return false;
-  await button.first().click();
+  const trigger = page.locator('.app-header').getByRole('button', { name: /Language|界面语言/ });
+  if ((await trigger.count()) === 0) return false;
+  await trigger.click();
+  const item = page.locator('.ant-dropdown:visible .language-menu-item').filter({ hasText: new RegExp(label) });
+  if ((await item.count()) === 0) return false;
+  await item.first().click();
   await page.waitForTimeout(600);
   return true;
 }
@@ -80,7 +83,7 @@ async function main() {
     await leaderboard.screenshot({ path: path.join(outDir, 'pricing_leaderboard_zh.png') });
     await page.screenshot({ path: path.join(outDir, 'pricing_full_zh.png') });
 
-    if (await switchLanguage(page, 'EN')) {
+    if (await switchLanguage(page, 'English')) {
       await leaderboard.scrollIntoViewIfNeeded();
       await page.waitForTimeout(500);
       await leaderboard.screenshot({ path: path.join(outDir, 'pricing_leaderboard_en.png') });

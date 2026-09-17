@@ -11,7 +11,6 @@ export interface ThemeContextValue {
   theme: ThemePreset;
   themeMode: ThemeMode;
   setThemeId: (themeId: ThemeId) => void;
-  toggleTheme: () => void;
 }
 
 const defaultTheme = getThemePreset('omc-dark');
@@ -21,7 +20,6 @@ export const ThemeContext = React.createContext<ThemeContextValue>({
   theme: defaultTheme,
   themeMode: defaultTheme.mode,
   setThemeId: () => undefined,
-  toggleTheme: () => undefined,
 });
 
 export function useThemeMode(): ThemeContextValue {
