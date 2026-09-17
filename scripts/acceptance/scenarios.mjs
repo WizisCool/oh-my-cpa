@@ -1007,13 +1007,41 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
   await quietCell.click();
   await page.waitForTimeout(200);
 
-  // The tooltip is centred on its cell and placed above it. Measured on an interior cell first: a
-  // cell in the last column gets its tooltip clamped inward to stay on screen, which is correct and
-  // would have read as a centring failure.
+  // The tooltip is centred on its cell and placed above it. Measured on a cell with room on both
+  // sides: antd shifts a popper that would leave the viewport inward, which is correct and would
+  // read here as a centring failure.
+  //
+  // "Room on both sides" is a fact about the viewport, not about the column index or a position in
+  // the DOM. The assessed cells are spread across the year, and the grid is ordered by weekday row
+  // rather than by date, so an index into that list lands on whatever weekday the fixture's marks
+  // happen to occupy - on today's date it landed on today's own cell, the final column, which is
+  // exactly the clamped case this measurement has to avoid. The central half of the viewport is
+  // roomy by more than a popper's width and does not depend on either the calendar or the fixture.
   const interior = await page.evaluate(() => {
-    const cells = [...document.querySelectorAll('.heatmap-grid .heatmap-cell.is-measured')];
-    return cells[Math.floor(cells.length / 2)]?.getAttribute('data-day') ?? null;
+    const midViewport = window.innerWidth / 2;
+    const hasRoom = (cell) => {
+      const rect = cell.getBoundingClientRect();
+      const centre = rect.left + rect.width / 2;
+      const quarter = window.innerWidth / 4;
+      return centre > quarter && centre < window.innerWidth - quarter;
+    };
+    const measured = [...document.querySelectorAll('.heatmap-grid .heatmap-cell.is-measured')];
+    // A measured cell is preferred because it carries counts and a drill-down link; every cell opens
+    // a tooltip, so any cell with room is still a valid anchor for a placement measurement.
+    const candidates = measured.some(hasRoom)
+      ? measured.filter(hasRoom)
+      : [...document.querySelectorAll('.heatmap-grid .heatmap-cell')].filter(hasRoom);
+    const closestToCentre = candidates.reduce(
+      (best, cell) => {
+        const rect = cell.getBoundingClientRect();
+        const distance = Math.abs(rect.left + rect.width / 2 - midViewport);
+        return best === null || distance < best.distance ? { cell, distance } : best;
+      },
+      null,
+    );
+    return closestToCentre?.cell.getAttribute('data-day') ?? null;
   });
+  check('the fixture places a measured cell clear of the viewport edges', interior !== null, `interior=${interior}`);
   await page.locator(`.heatmap-cell[data-day="${interior}"]`).click();
   await page.waitForTimeout(250);
   const anchored = await page.evaluate((day) => {

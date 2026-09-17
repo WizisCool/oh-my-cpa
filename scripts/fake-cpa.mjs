@@ -12,7 +12,7 @@ export const FAKE_ACCOUNT_SECRET = 'omc-e2e-account-secret';
 export const FAKE_CLIENT_SECRET = 'omc-e2e-client-secret';
 
 function json(response, status, body, headers = {}) {
-  response.writeHead(status, { 'Content-Type': 'application/json', 'X-CPA-Version': '7.3.4-e2e', ...headers });
+  response.writeHead(status, { 'Content-Type': 'application/json', 'X-CPA-Version': '7.3.5-e2e', ...headers });
   response.end(JSON.stringify(body));
 }
 
@@ -71,6 +71,16 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
     { 'api-key': FAKE_SECOND_PROVIDER_SECRET, 'auth-index': 'codex-e2e-second', 'base-url': 'https://provider-second.example.test', models: [{ name: 'gpt-e2e-second', alias: 'gpt-e2e-second' }] },
   ];
   let codexProviders = JSON.parse(JSON.stringify(initialCodexProviders));
+
+  // The Meta Muse credential list is served so the console's family wiring is
+  // observable in the browser: a family that reaches the API but not the page
+  // renders as a row without its protocol label. It is stateful for the same
+  // reason codex is - an acknowledged write that is not stored cannot be told
+  // apart from a lost one.
+  const initialMetaProviders = [
+    { 'api-key': FAKE_PROVIDER_SECRET, 'auth-index': 'meta-e2e', 'base-url': 'https://api.meta.ai/v1' },
+  ];
+  let metaProviders = JSON.parse(JSON.stringify(initialMetaProviders));
 
   // The gateway client keys are stateful for the same reason authFiles is: the
   // key-management page renders its list from `/config.yaml` but rewrites it
@@ -227,7 +237,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       return;
     }
     if (request.method === 'GET' && path === '/config.yaml') {
-      response.writeHead(200, { 'Content-Type': 'application/yaml', 'X-CPA-Version': '7.3.4-e2e' });
+      response.writeHead(200, { 'Content-Type': 'application/yaml', 'X-CPA-Version': '7.3.5-e2e' });
       response.end(renderConfigYaml());
       return;
     }
@@ -268,10 +278,23 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       return;
     }
     if (request.method === 'GET' && path === '/latest-version') {
-      json(response, 200, { version: '7.3.4-e2e' });
+      json(response, 200, { version: '7.3.5-e2e' });
       return;
     }
     if (request.method === 'GET' && path.endsWith('-auth-url')) {
+      const provider = path.replace(/^\//, '').replace(/-auth-url$/, '');
+      // Device-code providers answer with their flow label and the short code
+      // the operator confirms on the vendor page, as CPA does.
+      if (provider === 'meta' || provider === 'kimi') {
+        json(response, 200, {
+          url: 'https://auth.example.test/oauth?session=e2e',
+          state: 'e2e-state',
+          flow: 'device',
+          user_code: 'E2E-CODE-1',
+          expires_in: 900,
+        });
+        return;
+      }
       json(response, 200, { url: 'https://auth.example.test/oauth?session=e2e', state: 'e2e-state' });
       return;
     }
@@ -287,7 +310,10 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       return;
     }
     if (request.method === 'DELETE' && path === '/oauth-session') {
-      json(response, 200, { status: 'ok' });
+      const state = url.searchParams.get('state') || url.searchParams.get('session_id') || '';
+      // A session CPA could not cancel (already finished or expired) reports
+      // cancelled:false rather than pretending it was abandoned.
+      json(response, 200, { status: 'ok', cancelled: state !== 'already-done' });
       return;
     }
     if (request.method === 'POST' && path === '/oauth-callback') {
@@ -468,6 +494,23 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
     }
     if (request.method === 'GET' && ['/claude-api-key', '/gemini-api-key', '/oauth-excluded-models'].includes(path)) {
       json(response, 200, {});
+      return;
+    }
+    if (request.method === 'GET' && path === '/meta-api-key') {
+      json(response, 200, { 'meta-api-key': metaProviders });
+      return;
+    }
+    if (request.method === 'PUT' && path === '/meta-api-key') {
+      let parsed = null;
+      try {
+        parsed = JSON.parse(requests[requests.length - 1].body || '[]');
+      } catch { /* keep the stored list */ }
+      if (Array.isArray(parsed)) {
+        metaProviders = parsed;
+      } else if (Array.isArray(parsed?.['meta-api-key'])) {
+        metaProviders = parsed['meta-api-key'];
+      }
+      json(response, 200, { status: 'ok' });
       return;
     }
     // A config write replaces the whole document, so the fixture stores it and

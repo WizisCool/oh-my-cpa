@@ -277,6 +277,7 @@ func countConfiguredKeys(raw map[string]any) (managementKeys, providerKeys int) 
 		"xai-api-key",
 		"claude-api-key",
 		"vertex-api-key",
+		"meta-api-key",
 	} {
 		providerKeys += arrayLength(raw[section])
 	}

@@ -25,6 +25,9 @@ type oauthCPAState struct {
 	lastCallback map[string]string
 	resetIndex   string
 	cancelled    string
+	// lastAuthURLQuery records the is_webui value CPA received on the most
+	// recent authorization-URL request.
+	lastAuthURLQuery string
 }
 
 func startOAuthTestServer(t *testing.T) (*http.Client, string, *oauthCPAState, *repository.Repository) {
@@ -42,11 +45,18 @@ func startOAuthTestServer(t *testing.T) (*http.Client, string, *oauthCPAState, *
 			_, _ = writer.Write([]byte(`{"url":"https://auth.example.test/authorize?client_id=nostate"}`))
 		case strings.HasSuffix(path, "-auth-url"):
 			isWebUI := request.URL.Query().Get("is_webui")
+			state.lastAuthURLQuery = isWebUI
 			stateVal := "cpa-state-123"
 			if isWebUI == "true" {
 				stateVal = "cpa-state-webui"
 			}
-			_, _ = writer.Write([]byte(fmt.Sprintf(`{"url":"https://auth.example.test/authorize?client_id=123","state":"%s"}`, stateVal)))
+			// A device grant answers with its flow label and the code the
+			// operator confirms on the vendor page, exactly as CPA does.
+			extra := ""
+			if strings.Contains(path, "meta-auth-url") {
+				extra = `,"flow":"device","user_code":"META-1234","expires_in":900`
+			}
+			_, _ = writer.Write([]byte(fmt.Sprintf(`{"url":"https://auth.example.test/authorize?client_id=123","state":"%s"%s}`, stateVal, extra)))
 		case path == "/v0/management/get-auth-status":
 			reqState := request.URL.Query().Get("state")
 			if reqState == "" {
@@ -83,7 +93,13 @@ func startOAuthTestServer(t *testing.T) (*http.Client, string, *oauthCPAState, *
 			if state.cancelled == "" {
 				state.cancelled = request.URL.Query().Get("session_id")
 			}
-			_, _ = writer.Write([]byte(`{"status":"ok"}`))
+			// A session that already completed or expired cannot be cancelled,
+			// and CPA says so rather than pretending it was.
+			if strings.HasPrefix(state.cancelled, "already-done") {
+				_, _ = writer.Write([]byte(`{"status":"ok","cancelled":false}`))
+				return
+			}
+			_, _ = writer.Write([]byte(`{"status":"ok","cancelled":true}`))
 		case path == "/v0/management/reset-quota":
 			var body map[string]string
 			_ = json.NewDecoder(request.Body).Decode(&body)
@@ -257,7 +273,7 @@ func TestOAuthFlowLifecycle(t *testing.T) {
 
 	// 5. Cancel OAuth session with state
 	cancelURL := fmt.Sprintf("%s/omc/api/v1/management/oauth/session?state=%s", baseURL, startRes.State)
-	resp, _ = doJSON(t, client, http.MethodDelete, cancelURL, "")
+	resp, cancelPayload := doJSON(t, client, http.MethodDelete, cancelURL, "")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("cancel status = %d", resp.StatusCode)
 	}
@@ -266,6 +282,26 @@ func TestOAuthFlowLifecycle(t *testing.T) {
 	state.mu.Unlock()
 	if cancelledID != startRes.State {
 		t.Fatalf("CPA cancel session mismatch: %s vs %s", cancelledID, startRes.State)
+	}
+	var cancelRes struct {
+		Cancelled bool `json:"cancelled"`
+	}
+	if err := json.Unmarshal(cancelPayload, &cancelRes); err != nil || !cancelRes.Cancelled {
+		t.Fatalf("expected a confirmed cancellation, got %s", cancelPayload)
+	}
+
+	// 5a. A session CPA could not cancel must not be reported as cancelled: the
+	// console would otherwise claim a sign-in was abandoned that may have just
+	// saved a credential.
+	resp, payload = doJSON(t, client, http.MethodDelete, baseURL+"/omc/api/v1/management/oauth/session?state=already-done", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("uncancellable session status = %d body %s", resp.StatusCode, payload)
+	}
+	var uncancelledRes struct {
+		Cancelled bool `json:"cancelled"`
+	}
+	if err := json.Unmarshal(payload, &uncancelledRes); err != nil || uncancelledRes.Cancelled {
+		t.Fatalf("expected cancelled=false for a finished session, got %s", payload)
 	}
 
 	// 5b. Start OAuth flow without state from CPA (verifies no random UUID generated)
@@ -351,5 +387,77 @@ func TestQuotaOverviewAndReset(t *testing.T) {
 	}
 	if !foundReset {
 		t.Fatalf("expected audit for quota.reset, got %#v", events)
+	}
+}
+
+// The OAuth registry decides three things per provider: which management path is
+// called, which flow shape the console renders, and whether CPA is asked to open
+// its loopback callback. A provider wired into only one of those places works
+// until the moment it is used, so the wiring is asserted here rather than
+// discovered on the login page.
+func TestOAuthProviderRegistryWiring(t *testing.T) {
+	client, baseURL, state, _ := startOAuthTestServer(t)
+
+	resp, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/oauth/providers")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("list providers status = %d body %s", resp.StatusCode, payload)
+	}
+	var listRes struct {
+		Providers []OAuthProviderDTO `json:"providers"`
+	}
+	if err := json.Unmarshal(payload, &listRes); err != nil {
+		t.Fatal(err)
+	}
+	flows := make(map[string]string, len(listRes.Providers))
+	for _, provider := range listRes.Providers {
+		flows[provider.ID] = provider.Flow
+	}
+	if flows["devin"] != "redirect" {
+		t.Fatalf("devin flow = %q, want redirect", flows["devin"])
+	}
+	if flows["meta"] != "device" {
+		t.Fatalf("meta flow = %q, want device", flows["meta"])
+	}
+	if flows["kimi"] != "device" || flows["codex"] != "redirect" {
+		t.Fatalf("existing providers changed flow: %#v", flows)
+	}
+
+	// The loopback flag is what makes CPA serve the redirect locally. Devin needs
+	// it, and a device grant must never receive it: there is no redirect for a
+	// forwarder to receive, and asking would make CPA bind an unused port.
+	isWebUIFor := func(provider string) string {
+		state.mu.Lock()
+		state.lastAuthURLQuery = ""
+		state.mu.Unlock()
+		body := `{"provider":"` + provider + `"}`
+		resp, payload := doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/oauth/start", body)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("start %s status = %d body %s", provider, resp.StatusCode, payload)
+		}
+		state.mu.Lock()
+		defer state.mu.Unlock()
+		return state.lastAuthURLQuery
+	}
+
+	if query := isWebUIFor("devin"); query != "true" {
+		t.Fatalf("devin is_webui = %q, want true", query)
+	}
+	if query := isWebUIFor("meta"); query != "" {
+		t.Fatalf("meta must not request the loopback callback, got is_webui=%q", query)
+	}
+
+	// A device grant's code and flow reach the browser, which is what lets the
+	// card show the code the operator has to confirm.
+	_, payload = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/oauth/start", `{"provider":"meta"}`)
+	var metaStart struct {
+		Flow     string `json:"flow"`
+		UserCode string `json:"user_code"`
+		Expires  int    `json:"expires_in"`
+	}
+	if err := json.Unmarshal(payload, &metaStart); err != nil {
+		t.Fatal(err)
+	}
+	if metaStart.Flow != "device" || metaStart.UserCode != "META-1234" || metaStart.Expires != 900 {
+		t.Fatalf("device grant metadata was dropped: %s", payload)
 	}
 }

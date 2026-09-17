@@ -162,6 +162,49 @@ Properties to preserve when changing this code:
   different provider and report success. The precondition is optional, so a
   caller with no identity to send still works, and a mismatch answers `409`
   rather than writing.
+- The operator's name and website for a provider are stored under the same
+  positional id (`provider_names`, `provider_websites`). A delete therefore
+  re-keys every later entry of that family (`shiftPositionalProviderIDs`),
+  because otherwise the name given to one credential would relabel whichever
+  credential took the freed index.
+
+### Provider families are data, not code paths
+
+CPA stores `claude`, `codex`, `gemini` and `meta` credentials as four lists with
+one shared entry schema and one shared write shape. The console mirrors that:
+`internal/cpa/management/config_keys.go` owns the family values, the endpoints
+and the decoding, and `internal/api/management_providers.go` holds one
+declaration per family (`providerConfigFamilies`) that supplies the presentation
+constants. List, create, update, delete, status toggle and model pull are written
+once against that table.
+
+Adding such a family is a constant plus a row, and the pieces that must stay in
+step are the same three in both stacks: the family's credential list in CPA, its
+row in that table, and its label in `PROVIDER_FAMILIES`
+(`web/src/types/providerFamilies.ts`). A family that reaches the API but not the
+frontend table renders as a row without a protocol label, so both the contract
+test in `internal/cpa/management/config_keys_test.go` and the browser acceptance
+check on the rendered provider table assert the label rather than the module.
+
+A family an installed CPA does not have answers `404`; that is a missing
+capability rather than an empty or broken list (`IsMissingCapability`), so a
+console release that knows a newer family still works against an older gateway.
+
+### OAuth providers are one registry
+
+`internal/cpa/management/oauth_providers.go` is the single declaration of which
+authorizations exist, the shape of each (`redirect` or `device`), and whether CPA
+should open its loopback callback forwarder for it (`UsesLoopbackCallback`, sent
+as `is_webui`). The facade's provider list and the client's request are both
+projections of it, and the browser's card registry
+(`web/src/pages/oauthProviderLogic.ts`) carries the matching presentation plus the
+rules for judging a pasted redirect.
+
+The registry is deliberately not an allowlist: CPA plugins register their own
+`{provider}-auth-url` routes at runtime, the console discovers them from the
+plugin list, and an id the registry does not know is forwarded unchanged with no
+per-provider flags. The two registries are held together by an id, so a provider
+is added in both or in neither.
 
 ## 3. Frontend shape
 
@@ -231,8 +274,8 @@ startup so a rotation needs no SQLite surgery.
 
 ```text
 POST /api/v1/instances/default/discover
-  → internal/cpa/management reads auth-files, codex/claude/gemini API keys,
-    openai-compatibility entries
+  → internal/cpa/management reads auth-files, the claude/codex/gemini/meta API-key
+    lists, and openai-compatibility entries
   → cpa/discovery derives a stable resource key and binding fingerprint
   → repository upserts discovered_resources + cpa_bindings (served via /api/v1/resources)
 ```
@@ -715,6 +758,10 @@ reach the provider's own usage endpoint. Targets are restricted to
 the resulting snapshot is normalized and stored in `quota_snapshots`. This is the
 only place Oh My CPA uses CPA as a request proxy, and it is server-initiated:
 there is no user-supplied URL or generic `/api-call` surface.
+
+A provider is observed only once `internal/quota` both recognizes it
+(`DetectProvider`) and implements its probe; a credential whose provider has no
+probe is reported with `refresh_supported: false` rather than as a failed fetch.
 
 ## 9. Storage
 

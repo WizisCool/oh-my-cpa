@@ -9,6 +9,7 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
 - **Account**: A user or upstream identity associated with a Source or Subscription. A local account ID is stable even if an upstream email or identifier changes.
 - **Credential**: Authentication material that CPA can use, such as an OAuth auth file, API key, service account, or runtime-only credential. Oh My CPA references and describes credentials; it does not expose secrets in normal resource responses. Auth-file routing fields may be read and written through an explicit safe projection, and a write is only reported as successful once CPA's runtime entry agrees with it: the fields that live in the downloaded JSON are additionally verified against a server-side projection of it, and the update response carries that projection only when it was read back.
 - **OAuth Model Alias**: A CPA-owned, provider-scoped mapping from an upstream OAuth/file-backed model ID to a client-visible model ID. It is global to the provider rather than to one credential; Oh My CPA replaces one provider's mapping through an allowlisted facade and verifies CPA's readback before reporting success.
+- **Authorization Flow Shape**: How an OAuth sign-in is completed, and the distinction the sign-in page renders. A **redirect flow** ends at a callback URL carrying the authorization code, which an operator on a remote browser may have to paste back (Devin's callback is a loopback address on the CPA host, so pasting is the normal path there rather than a fallback); a **device flow** asks the operator to confirm a short code on the vendor's own page while the console polls (Kimi, Meta Muse). The shape is declared once per provider rather than inferred from its name, and CPA reports it when a flow starts so the console renders the box that actually applies.
 - **Endpoint**: A network destination, represented by a base URL and related connection details. An Endpoint is where traffic goes, not necessarily who provides the service.
 - **Connection**: A user-facing usable line formed from a Source, optional Subscription and Account, Credential, Endpoint, and Protocol Driver. It is the primary resource users organize and name.
 - **Protocol Driver**: The technical protocol adapter used by CPA, such as Codex/Responses, OpenAI-compatible Chat Completions, Anthropic Messages, or Gemini. It is implementation metadata, not the user-facing Source.
@@ -53,11 +54,11 @@ User-facing names, icons, colors, ownership, and subscription metadata belong to
 ## Provider disable rule
 
 A provider toggle must change the gateway, not the console. `openai-compatibility`
-entries carry CPA's native `disabled` field; claude/codex/gemini API-key entries
-have none, so OMC applies CPA's own mechanism instead: the excluded-all marker
-`*` in `excluded-models` (`management.SetExcludedAll`). Writing a local
-preference only used to repaint the UI while fallback kept routing into the
-"disabled" credential.
+entries carry CPA's native `disabled` field; a `{family}-api-key` credential
+(claude, codex, gemini, meta) has none, so OMC applies CPA's own mechanism
+instead: the excluded-all marker `*` in `excluded-models`
+(`management.SetExcludedAll`). Writing a local preference only used to repaint
+the UI while fallback kept routing into the "disabled" credential.
 
 Because a toggle is a gateway write followed by a re-read, the operator's second
 click lands in that gap. The console serialises toggles **per provider** through a

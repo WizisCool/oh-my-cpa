@@ -41,6 +41,7 @@ import { maskKeyText } from '../utils/maskKey';
 import { isSafeExternalURL, safeExternalURL } from '../utils/externalUrl';
 import { modelOptionsFor } from '../utils/modelOptions';
 import { providerStatusPayload } from '../types/providerId';
+import { PROVIDER_FAMILIES, matchProviderFamily } from '../types/providerFamilies';
 import type {
   ProviderItem,
   SaveProviderPayload,
@@ -93,57 +94,6 @@ interface FormModelItem {
     levels?: string[];
   };
 }
-
-interface ProtocolMeta {
-  labelKey: string;
-  color: string;
-  iconId: string;
-}
-
-
-
-const PROTOCOL_META: Record<string, ProtocolMeta> = {
-  'openai-compatibility': {
-    labelKey: 'pro.family_openai_compat',
-    color: '#10A37F',
-    iconId: 'OpenAI',
-  },
-  'codex': {
-    labelKey: 'pro.family_codex',
-    color: '#60A5FA',
-    iconId: 'Codex',
-  },
-  'claude': {
-    labelKey: 'pro.family_claude',
-    color: '#D97757',
-    iconId: 'Anthropic',
-  },
-  'gemini': {
-    labelKey: 'pro.family_gemini',
-    color: '#A78BFA',
-    iconId: 'Gemini',
-  },
-};
-
-const getProtocolMeta = (family?: string, protocol?: string): ProtocolMeta | undefined => {
-  if (!family && !protocol) return undefined;
-  const f = (family || '').toLowerCase().trim();
-  const p = (protocol || '').toLowerCase().trim();
-
-  if (f === 'openai-compatibility' || f.includes('openai') || p.includes('chat completion')) {
-    return PROTOCOL_META['openai-compatibility'];
-  }
-  if (f === 'codex' || f.includes('response') || p.includes('response')) {
-    return PROTOCOL_META['codex'];
-  }
-  if (f === 'claude' || f.includes('claude') || f.includes('anthropic') || p.includes('anthropic') || p.includes('messages')) {
-    return PROTOCOL_META['claude'];
-  }
-  if (f === 'gemini' || f.includes('gemini') || f.includes('google') || p.includes('gemini')) {
-    return PROTOCOL_META['gemini'];
-  }
-  return undefined;
-};
 
 export const ProvidersPage: React.FC = () => {
   const t = useT();
@@ -774,12 +724,15 @@ export const ProvidersPage: React.FC = () => {
     return target === undefined ? !record.disabled : target;
   };
 
-  const familyDisplayNames: Record<string, string> = {
-    'openai-compatibility': t(PROTOCOL_META['openai-compatibility'].labelKey),
-    'codex': t(PROTOCOL_META['codex'].labelKey),
-    'claude': t(PROTOCOL_META['claude'].labelKey),
-    'gemini': t(PROTOCOL_META['gemini'].labelKey),
-  };
+  // Family labels and the picker's options both come from the family registry,
+  // so a family the console manages cannot appear in one and not the other.
+  const familyDisplayNames: Record<string, string> = Object.fromEntries(
+    PROVIDER_FAMILIES.map((family) => [family.id, t(family.labelKey)]),
+  );
+  const familyOptions = PROVIDER_FAMILIES.map((family) => ({
+    label: `${t(family.labelKey)} (${family.id})`,
+    value: family.id,
+  }));
 
   // Column order mirrors the CPAMC provider table so operators moving between
   // the two consoles find the same facts in the same sequence.
@@ -864,7 +817,7 @@ export const ProvidersPage: React.FC = () => {
       title: t('pro.col_protocol'),
       key: 'protocol',
       render: (_, record) => {
-        const meta = getProtocolMeta(record.family, record.protocol);
+        const meta = matchProviderFamily(record.family, record.protocol);
         if (!meta) {
           return (
             <Tag style={{ margin: 0 }}>
@@ -1295,12 +1248,7 @@ export const ProvidersPage: React.FC = () => {
                   }
                 }}
                   disabled={!!editingProvider}
-                  options={[
-                    { label: `${t(PROTOCOL_META['openai-compatibility'].labelKey)} (openai-compatibility)`, value: 'openai-compatibility' },
-                    { label: `${t(PROTOCOL_META['codex'].labelKey)} (codex)`, value: 'codex' },
-                    { label: `${t(PROTOCOL_META['claude'].labelKey)} (claude)`, value: 'claude' },
-                    { label: `${t(PROTOCOL_META['gemini'].labelKey)} (gemini)`, value: 'gemini' },
-                  ]}
+                  options={familyOptions}
                 />
               </Form.Item>
             </Col>

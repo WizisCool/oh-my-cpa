@@ -213,10 +213,9 @@ export const TokenHeatmap: React.FC = () => {
   // state update.
   const timezone = React.useMemo(() => viewerTimezone(), []);
   const [focusDay, setFocusDay] = React.useState<string | null>(null);
-  // Only the readout's day is state; the hover ring is pure CSS. A state write per
-  // `pointerenter` is unavoidable while the readout names the hovered day, so the cost is
-  // contained instead: the cell elements are memoized below, which makes a hover update the
-  // readout's text without React reconciling 372 cells.
+  // The hover ring is pure CSS and no state records it, so the only writes to this panel's own state
+  // are moving the tab stop and opening a tooltip. The cell elements are memoized below, which keeps
+  // either of them from reconciling all ~370 cells.
   const gridRef = React.useRef<HTMLDivElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
   const hasScrolledToToday = React.useRef(false);
@@ -256,8 +255,8 @@ export const TokenHeatmap: React.FC = () => {
     [cells, columns, lang],
   );
   const resolvedFocus = heatmapFocusDay(cells, focusDay);
-  // The tooltip's day: whatever the pointer or the keyboard is on. There is no separate
-  // readout to keep in sync, so one piece of state drives both.
+  // The tab stop and the open tooltip are separate facts: the keyboard can walk the field without
+  // opening anything, and a click opens the cell it hit whatever the tab stop was.
 
   // The tab stop holds real DOM focus, not just state: a roving tabindex that only moves
   // a class leaves the operator tabbing into a panel whose focus ring is painted somewhere

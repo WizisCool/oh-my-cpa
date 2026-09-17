@@ -43,10 +43,10 @@ func (d *Discoverer) Discover(ctx context.Context, client *management.Client, in
 			resources = append(resources, resource)
 		}
 	}
-	if response, err := client.CodexAPIKeys(ctx); err != nil {
+	if entries, err := client.ConfigAPIKeys(ctx, management.ConfigFamilyCodex); err != nil {
 		errorsFound = append(errorsFound, "codex-api-key: "+err.Error())
 	} else {
-		for index, entry := range response.Entries {
+		for index, entry := range entries {
 			resource, err := d.fromCodexAPIKey(instanceID, index, entry)
 			if err != nil {
 				errorsFound = append(errorsFound, "codex-api-key: "+err.Error())
@@ -122,7 +122,7 @@ func (d *Discoverer) fromAuthFile(instanceID string, file management.AuthFile) (
 	}, nil
 }
 
-func (d *Discoverer) fromCodexAPIKey(instanceID string, index int, entry management.CodexAPIKey) (domain.DiscoveredResource, error) {
+func (d *Discoverer) fromCodexAPIKey(instanceID string, index int, entry management.ConfigAPIKey) (domain.DiscoveredResource, error) {
 	_ = index // CPA array positions are not identity.
 	baseURL := publicURL(entry.BaseURL)
 	key, err := d.resolveResourceKey(instanceID, "codex-api-key", entry.AuthIndex, entry.APIKey, baseURL, safeDisplayText(entry.Prefix, 128))

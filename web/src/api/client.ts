@@ -24,7 +24,7 @@ import { ErrorLogFile } from '../types/logs';
 import { CapabilityProbeReport } from '../types/capability';
 import { ConfigScalarsResponse, ConfigSourceResponse } from '../types/configManagement';
 import { ClientAPIKeyItem, ClientKeyUsageItem, ProviderItem, SaveProviderPayload } from '../types/providers';
-import { OAuthProviderItem, StartOAuthResponse, OAuthStatusResponse, OAuthCallbackResponse } from '../types/oauth';
+import { OAuthProviderItem, StartOAuthResponse, OAuthStatusResponse, OAuthCallbackResponse, OAuthCancelResponse } from '../types/oauth';
 import { QuotaOverviewResponse, CredentialQuotaDetailResponse, QuotaItem } from '../types/quota';
 import { SystemInfoResponse } from '../types/system';
 import { PluginsResponse, PluginStoreResponse } from '../types/plugin';
@@ -644,9 +644,9 @@ export const api = {
     });
   },
 
-  async cancelOAuthSession(sessionId?: string): Promise<{ status: string }> {
+  async cancelOAuthSession(sessionId?: string): Promise<OAuthCancelResponse> {
     const search = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : '';
-    return request<{ status: string }>(`/management/oauth/session${search}`, { method: 'DELETE' });
+    return request<OAuthCancelResponse>(`/management/oauth/session${search}`, { method: 'DELETE' });
   },
 
   // Plugins

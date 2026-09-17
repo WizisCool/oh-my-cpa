@@ -15,11 +15,11 @@ func TestResourceKeyPrefersCPAAuthIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	discoverer := NewDiscoverer(cipher)
-	first, err := discoverer.fromCodexAPIKey("default", 0, management.CodexAPIKey{AuthIndex: "auth-1", BaseURL: "https://one.example"})
+	first, err := discoverer.fromCodexAPIKey("default", 0, management.ConfigAPIKey{AuthIndex: "auth-1", BaseURL: "https://one.example"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := discoverer.fromCodexAPIKey("default", 12, management.CodexAPIKey{AuthIndex: "auth-1", BaseURL: "https://changed.example"})
+	second, err := discoverer.fromCodexAPIKey("default", 12, management.ConfigAPIKey{AuthIndex: "auth-1", BaseURL: "https://changed.example"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func TestDiscoveryRedactsCredentialBearingURLs(t *testing.T) {
 		t.Fatal(err)
 	}
 	discoverer := NewDiscoverer(cipher)
-	resource, err := discoverer.fromCodexAPIKey("default", 0, management.CodexAPIKey{
+	resource, err := discoverer.fromCodexAPIKey("default", 0, management.ConfigAPIKey{
 		BaseURL:  "https://user:password@api.example.test/v1/",
 		ProxyURL: "socks5://proxy-user:proxy-password@proxy.example.test:1080",
 	})
@@ -83,7 +83,7 @@ func TestSourceSuggestionsSeparateTechnicalDriver(t *testing.T) {
 		t.Fatal(err)
 	}
 	discoverer := NewDiscoverer(cipher)
-	resource, err := discoverer.fromCodexAPIKey("default", 0, management.CodexAPIKey{BaseURL: "https://api.deepseek.com"})
+	resource, err := discoverer.fromCodexAPIKey("default", 0, management.ConfigAPIKey{BaseURL: "https://api.deepseek.com"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,11 +132,11 @@ func TestFallbackIdentityIgnoresArrayPosition(t *testing.T) {
 		t.Fatal(err)
 	}
 	discoverer := NewDiscoverer(cipher)
-	first, err := discoverer.fromCodexAPIKey("default", 0, management.CodexAPIKey{BaseURL: "https://api.example.test/v1", Prefix: "team"})
+	first, err := discoverer.fromCodexAPIKey("default", 0, management.ConfigAPIKey{BaseURL: "https://api.example.test/v1", Prefix: "team"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := discoverer.fromCodexAPIKey("default", 12, management.CodexAPIKey{BaseURL: "https://api.example.test/v1", Prefix: "team"})
+	second, err := discoverer.fromCodexAPIKey("default", 12, management.ConfigAPIKey{BaseURL: "https://api.example.test/v1", Prefix: "team"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestPublicURLDropsQueryAndFragment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resource, err := NewDiscoverer(cipher).fromCodexAPIKey("default", 0, management.CodexAPIKey{BaseURL: "https://api.example.test/v1?token=fixture#fragment"})
+	resource, err := NewDiscoverer(cipher).fromCodexAPIKey("default", 0, management.ConfigAPIKey{BaseURL: "https://api.example.test/v1?token=fixture#fragment"})
 	if err != nil {
 		t.Fatal(err)
 	}

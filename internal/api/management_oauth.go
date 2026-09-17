@@ -5,29 +5,48 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
 var oauthProviderPattern = regexp.MustCompile(`^[a-z0-9-]+$`)
 
+// OAuthProviderDTO is the facade's view of a built-in authorization. It is a
+// projection of the CPA contract registry: the provider table lives next to the
+// client that calls it, so the list the browser reads and the requests the
+// facade sends cannot disagree about which providers exist.
 type OAuthProviderDTO struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	// Flow is "redirect" or "device", the shape the card has to render. CPA
+	// reports the same value when a flow starts; this one lets the console
+	// describe it before anything is started.
+	Flow string `json:"flow"`
 }
 
-var supportedOAuthProviders = []OAuthProviderDTO{
-	{ID: "kimi", Name: "Kimi", Description: "Moonshot Kimi Device Code / OAuth flow"},
-	{ID: "codex", Name: "OpenAI Codex / ChatGPT Plus", Description: "Official OpenAI OAuth authorization flow"},
-	{ID: "anthropic", Name: "Anthropic Claude", Description: "Anthropic Claude OAuth authentication flow"},
-	{ID: "antigravity", Name: "Antigravity", Description: "Antigravity Google account OAuth flow"},
-	{ID: "xai", Name: "xAI Grok", Description: "xAI Grok OAuth authentication flow"},
+// supportedOAuthProviders projects the built-in registry.
+//
+// It is not the set of accepted provider ids: CPA plugins register their own
+// `{provider}-auth-url` routes, and the console forwards those ids through
+// unchanged. This list is what the facade advertises as built in.
+func supportedOAuthProviders() []OAuthProviderDTO {
+	providers := make([]OAuthProviderDTO, 0, len(management.OAuthProviders))
+	for _, provider := range management.OAuthProviders {
+		providers = append(providers, OAuthProviderDTO{
+			ID:          provider.ID,
+			Name:        provider.Name,
+			Description: provider.Description,
+			Flow:        string(provider.Flow),
+		})
+	}
+	return providers
 }
 
 func (h *Handler) listOAuthProviders(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	writeJSON(writer, http.StatusOK, map[string]any{
-		"providers": supportedOAuthProviders,
+		"providers": supportedOAuthProviders(),
 	})
 }
 
@@ -85,12 +104,26 @@ func (h *Handler) startOAuthFlow(writer http.ResponseWriter, request *http.Reque
 	}
 	_ = h.recordAudit(request, "oauth.start", "oauth_provider", provider, "success", map[string]any{"session_id": security.RedactText(auditSessionID)})
 
-	writeJSON(writer, http.StatusOK, map[string]any{
+	response := map[string]any{
 		"url":        authRes.URL,
 		"state":      authRes.State,
 		"session_id": sessionID,
 		"provider":   provider,
-	})
+	}
+	// Device-code providers answer with the flow label and the code the
+	// operator types on the vendor page. Passing them through keeps the
+	// console from having to infer the flow from the provider id.
+	if flow := strings.TrimSpace(authRes.Flow); flow != "" {
+		response["flow"] = flow
+	}
+	if userCode := strings.TrimSpace(authRes.UserCode); userCode != "" {
+		response["user_code"] = userCode
+	}
+	if authRes.ExpiresIn > 0 {
+		response["expires_in"] = authRes.ExpiresIn
+	}
+
+	writeJSON(writer, http.StatusOK, response)
 }
 
 func (h *Handler) getOAuthStatus(writer http.ResponseWriter, request *http.Request) {
@@ -202,14 +235,19 @@ func (h *Handler) cancelOAuthSession(writer http.ResponseWriter, request *http.R
 	}
 
 	_ = h.recordAudit(request, "oauth.cancel", "oauth_session", security.RedactText(sessionID), "attempt", nil)
-	if err := client.CancelOAuthSession(request.Context(), sessionID); err != nil {
+	result, err := client.CancelOAuthSession(request.Context(), sessionID)
+	if err != nil {
 		_ = h.recordAudit(request, "oauth.cancel", "oauth_session", security.RedactText(sessionID), "failure", map[string]any{"error": err.Error()})
 		writeCPAFacadeError(writer, err)
 		return
 	}
-	_ = h.recordAudit(request, "oauth.cancel", "oauth_session", security.RedactText(sessionID), "success", nil)
+	_ = h.recordAudit(request, "oauth.cancel", "oauth_session", security.RedactText(sessionID), "success", map[string]any{"cancelled": result.Cancelled})
 
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"status": "ok",
+		// A session that already completed or expired cannot be cancelled.
+		// Reporting plain success there would tell the operator a sign-in was
+		// abandoned that in fact saved a credential, so the outcome is kept.
+		"cancelled": result.Cancelled,
 	})
 }

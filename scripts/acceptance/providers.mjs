@@ -41,6 +41,27 @@ export async function runProvidersAcceptance({
     `links=${await page.locator('.providers-page tbody a').count()}`,
   );
 
+  // The Meta Muse credential list is a family like claude/codex/gemini, and the
+  // page's family labels come from one registry. A family that reaches the API
+  // but not that registry would render as a bare row, so the label is asserted
+  // from the rendered table rather than from the module.
+  const metaRow = page.locator('.providers-page tbody tr', { hasText: 'Meta Muse' }).first();
+  await metaRow.waitFor({ state: 'visible', timeout: 15000 });
+  check(
+    'the Meta Muse family renders with its own protocol label',
+    (await metaRow.innerText()).includes('Meta Muse'),
+    `row=${await metaRow.innerText()}`,
+  );
+  // The brand mark too, and from the rendered row rather than from the icon module:
+  // the family id reaches the mark through an exact-key table, so a row that carried
+  // the label while falling back to the neutral icon would otherwise look correct.
+  const metaMarkSrc = (await metaRow.locator('img').first().getAttribute('src')) ?? '';
+  check(
+    'the Meta Muse family renders the Meta brand mark',
+    /meta/i.test(metaMarkSrc),
+    `src=${metaMarkSrc || 'none'}`,
+  );
+
   // The codex family's first entry is addressed by the console as `codex-0`; the
   // fixture also configures a second codex entry, so this is a position within a
   // family rather than the deployment's whole provider list.
@@ -155,10 +176,16 @@ export async function runProvidersAcceptance({
     initialEnabled === true,
     `enabled=${initialEnabled}`,
   );
+  // Every row of the table renders exactly one enable switch. The comparison is
+  // between rows and switches rather than against a fixed count, so a fixture that
+  // gains a provider does not make this pass by coincidence or fail for a reason
+  // it is not about.
+  const renderedRows = await page.locator('.providers-page tbody tr').count();
+  const renderedSwitches = await page.locator('.providers-page tbody .ant-switch').count();
   check(
-    'every provider in the fixture renders exactly one enable switch',
-    (await page.locator('.providers-page tbody .ant-switch').count()) === 2,
-    `switches=${await page.locator('.providers-page tbody .ant-switch').count()}`,
+    'every provider row renders exactly one enable switch',
+    renderedRows > 0 && renderedSwitches === renderedRows,
+    `rows=${renderedRows} switches=${renderedSwitches}`,
   );
 
   // One deliberate click first, to pin the whole round trip before measuring a
@@ -328,11 +355,16 @@ export async function runProvidersAcceptance({
   // for the lost update. That regression is
   // `TestConcurrentProviderTogglesDoNotLoseAWrite` in `internal/api`, which
   // controls the ordering at the fake gateway and fails when the gate is removed.
-  const switchCount = await page.locator('.providers-page tbody .ant-switch').count();
+  // Scoped to the codex family: this block is about one family's whole-list
+  // write, and the fixture's other families are not part of the race. Counting
+  // the whole table instead would make the check fail for the wrong reason the
+  // moment the fixture gains a provider - and pass for the wrong reason if the
+  // codex entries were ever removed.
+  const codexSwitchCount = await page.locator('.providers-page tbody tr[data-row-key^="codex-"] .ant-switch').count();
   check(
-    'the fixture provides two toggles to race',
-    switchCount === 2,
-    `switches=${switchCount}`,
+    'the fixture provides two codex toggles to race',
+    codexSwitchCount === 2,
+    `switches=${codexSwitchCount}`,
   );
 
   // Each switch is clicked to the opposite of the state its *own row* currently
@@ -341,8 +373,10 @@ export async function runProvidersAcceptance({
   // added.
   const beforeConcurrent = await toggleStatesFromApi();
   const concurrentIntents = await page.evaluate(() => {
+    const codexRows = Array.from(document.querySelectorAll('.providers-page tbody tr'))
+      .filter((row) => (row.getAttribute('data-row-key') ?? '').startsWith('codex-'));
     const intents = {};
-    for (const row of Array.from(document.querySelectorAll('.providers-page tbody tr'))) {
+    for (const row of codexRows) {
       const id = row.getAttribute('data-row-key');
       const node = row.querySelector('.ant-switch');
       if (!id || !node) continue;
@@ -350,14 +384,14 @@ export async function runProvidersAcceptance({
     }
     // Dispatched only after every intent is recorded, so the whole burst is one
     // synchronous pass and no round trip can resolve in between.
-    for (const row of Array.from(document.querySelectorAll('.providers-page tbody tr'))) {
+    for (const row of codexRows) {
       row.querySelector('.ant-switch')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     }
     return intents;
   });
 
   check(
-    'the concurrent race has two providers to observe',
+    'the concurrent race has two codex providers to observe',
     Object.keys(concurrentIntents).length === 2,
     `intents=${JSON.stringify(concurrentIntents)}`,
   );

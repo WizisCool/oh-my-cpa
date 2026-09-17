@@ -43,9 +43,8 @@ import { BatchActionBar } from '../components/authFiles/BatchActionBar';
 import { ModelsModal } from '../components/authFiles/ModelsModal';
 import { OAuthModelAliasDrawer } from '../components/authFiles/OAuthModelAliasDrawer';
 import { ProviderFilterTabs } from '../components/common/ProviderFilterTabs';
+import { providerFilterTabs } from '../types/credentialProviders';
 import styles from './authFiles/AuthFilesPage.module.css';
-
-const KNOWN_PROVIDERS = ['claude', 'antigravity', 'codex', 'xai', 'kimi'];
 
 function safeError(error: unknown, t: TFunc): string {
   if (error instanceof ApiError && error.status === 501) return t('af.unsupported');
@@ -137,19 +136,12 @@ export const AuthFilesPage: React.FC = () => {
   const disabledCount = useMemo(() => files.filter(isAuthFileDisabled).length, [files]);
   const problemCount = useMemo(() => files.filter(isAuthFileProblem).length, [files]);
 
-  // Provider tabs calculation: known providers first, then any extra providers observed (including unknown)
-  const tabProviders = useMemo(() => {
-    const extras = files
-      .map(providerOf)
-      .filter((p) => p && !KNOWN_PROVIDERS.includes(p));
-    return ['all', ...KNOWN_PROVIDERS, ...Array.from(new Set(extras)).sort()];
-  }, [files]);
+  // Provider tabs: the pinned providers first, then anything else the credential
+  // list contains.
+  const tabProviders = useMemo(() => providerFilterTabs(files.map(providerOf)), [files]);
 
   const tabCounts = useMemo(() => {
     const counts: Record<string, number> = { all: files.length };
-    for (const p of KNOWN_PROVIDERS) {
-      counts[p] = 0;
-    }
     for (const f of files) {
       const p = providerOf(f);
       counts[p] = (counts[p] ?? 0) + 1;
