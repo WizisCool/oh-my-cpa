@@ -199,6 +199,10 @@ test('no scenario id is selected by a path that cannot affect it', () => {
   // and vice versa. If a rule is ever widened by accident, this notices.
   const charts = new Set(planFor('web/src/charts/chartTheme.ts'));
   assert.equal(charts.has('request-list-interactions'), false);
+  // Positive control for the same rule: the model panels' trend and ring are chart files too, so a
+  // change under `charts/` has to reach the scenario that reads their paint. A rule that mapped the
+  // directory to the KPI tile scenario alone would leave the panel mark unverified.
+  assert.equal(charts.has('dashboard-model-panels'), true);
   const rows = new Set(planFor('web/src/components/usage/RequestRow.tsx'));
   assert.equal(rows.has('dashboard-charts'), false);
   assert.equal(rows.has('icon-picker-stacking'), false);

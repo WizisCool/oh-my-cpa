@@ -185,10 +185,10 @@ family in the app, and the only exception to the semantic-only rule above; see
 - **Console Background (`--bg`)** (`#121214`): Base canvas, table row backgrounds, input wells, and overall page substrate.
 - **Graphite Surface (`--surface`)** (`#1c1c1f`): Elevated containers, cards, dropdown menus, modals, and row hover states.
 - **Hairline Border (`--border`)** (`#2c2c30`): Primary 1px structural separator for cards, tables, sider borders, and toolbars.
-- **Soft Divider (`--border-soft`)** (`#222226`): Inner item dividers, table row borders, and subtle panel boundaries.
+- **Soft Divider (`--border-soft`)** (`#222226`): Inner item dividers, table row borders, subtle panel boundaries, and the model trend's grid rules.
 - **Chalk White Text (`--fg`)** (`#f4f4f6`): Primary readable text, titles, numbers, and selected navigation items.
 - **Silver Secondary Text (`--fg-2`)** (`#a1a1aa`): Secondary descriptions, field hints, and subtitle text.
-- **Ash Muted (`--muted`)** (`#71717a`): Table column headers, units, disabled text, and legend entries.
+- **Ash Muted (`--muted`)** (`#71717a`): Table column headers, units, disabled text, legend entries, and the model trend's tooltip crosshair.
 - **Slate Metadata (`--meta`)** (`#52525b`): Navigation group headers, timestamps, masked keys, and footer build metadata.
 
 ### Status & Functional

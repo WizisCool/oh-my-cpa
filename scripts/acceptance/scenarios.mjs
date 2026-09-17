@@ -2379,6 +2379,11 @@ export async function dashboardChartMotion({ base, page, context, check }) {
  *     renderings of one ranking, and the api's `folded` discriminator is the only thing keeping a real
  *     model named like the remainder out of the remainder.
  *   - Nothing overflows the card at its own width, which is the container this chart is drawn into.
+ *   - The plot's chrome - the grid rules, the tooltip's crosshair and the axis labels - is painted in
+ *     the palette's ink, in both themes. That is the one part of the mark the runtime draws from its own
+ *     theme rather than from ours, and the dark card is the one that shows when it does: a near-black rule
+ *     there is one 8-bit step from the background it is drawn on. All three are read from the canvas, so
+ *     what is asserted is the paint rather than the spec that asked for it.
  */
 export async function dashboardModelPanels({ base, page, check }) {
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
@@ -2979,6 +2984,174 @@ export async function dashboardModelPanels({ base, page, check }) {
     'the ring\'s frame is centred in the stacked layout',
     Math.abs(phoneDrift.ringFrame) <= 2 && Math.abs(desktopDrift.ringFrame) > 2,
     `phone=${phoneDrift.ringFrame} desktop=${desktopDrift.ringFrame}`,
+  );
+
+  // ── the plot's chrome ink, in both themes ────────────────────────────────
+  //
+  // The grid rules, the tooltip's crosshair and the axis labels are the part of this mark the console
+  // does not paint itself: the runtime draws them from its own theme, which is one of the library's
+  // *light* themes unless the mark names the console's mode, and it multiplies the inks it *is* handed
+  // by that theme's opacity tokens. So the ink was near-black - legible on the light card and one 8-bit
+  // step away from a dark card's background - the palette's own ink did not always reach the canvas at
+  // all, and the labels it did reach were drawn at 45% of the step they name.
+  //
+  // All three are paint, so all three are read from the pixels, and in both themes: a named token in the
+  // spec proves the spec, and the light card is exactly the surface on which a wrong ink still looks
+  // correct.
+  //
+  // The ink is matched to the token rather than allowed to sit near it. `--border-soft` and `--border`
+  // are neighbours in every palette, and the axis rule is drawn in the second of the two at a coverage of
+  // about 110 - so a tolerance wide enough to let that rule stand in for the grid would pass on a mark
+  // that never painted a grid at all, which is exactly the state this asserts against. Measured on the
+  // canvas, a rule drawn in the token rounds to 0-1 of a channel.
+  const CHROME_INK_TOLERANCE = 4;
+  // A 0.5px rule reaches an alpha of about 125, and the library's own opacity step leaves about 13: the
+  // floor between them rejects the faded ink rather than a particular rule width.
+  const CHROME_INK_COVERAGE = 48;
+  // Type is matched more loosely than a rule: a 10px glyph's edges are blends, so only its strokes are
+  // the token, and they still clear 200. An opacity step of 0.45 caps a glyph pixel at about 115, which
+  // is what leaves the floor between the two.
+  const LABEL_INK_TOLERANCE = 6;
+  const LABEL_INK_COVERAGE = 200;
+  // A dashed rule inks 3 of every 7 pixels along its length, so a grid row carries about a third of the
+  // canvas width. Counting *rows* rather than pixels is what separates the grid from the incidental
+  // near-token pixel - a marker, a label edge - that a whole-canvas maximum would accept as a gridline.
+  const GRID_ROW_COVERAGE = 0.15;
+  // The y-axis draws about seven rules on this fixture. Two is the floor: it survives a tick-count change
+  // and it is still zero for a mark whose grid ink never reached the canvas.
+  const GRID_ROWS_MIN = 2;
+  const chromeInk = () => page.evaluate(([tolerance, inkCoverage, labelTolerance, labelCoverage, rowCoverage]) => {
+    const channels = (value) => {
+      const text = String(value).trim();
+      const hex = /^#([0-9a-f]{6})$/i.exec(text);
+      if (hex) return [0, 2, 4].map((offset) => parseInt(hex[1].slice(offset, offset + 2), 16));
+      return (text.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+    };
+    const canvas = document.querySelector('.model-trend canvas');
+    if (!canvas) return { error: 'no trend canvas' };
+    const probe = document.createElement('canvas');
+    probe.width = canvas.width;
+    probe.height = canvas.height;
+    probe.getContext('2d').drawImage(canvas, 0, 0);
+    const { data } = probe.getContext('2d').getImageData(0, 0, probe.width, probe.height);
+    const styles = getComputedStyle(document.documentElement);
+    const gridToken = channels(styles.getPropertyValue('--border-soft'));
+    const chromeToken = channels(styles.getPropertyValue('--muted'));
+    const labelToken = channels(styles.getPropertyValue('--fg-2'));
+    const isToken = (offset, token, within = tolerance) => Math.abs(data[offset] - token[0]) <= within
+      && Math.abs(data[offset + 1] - token[1]) <= within
+      && Math.abs(data[offset + 2] - token[2]) <= within;
+    // The strongest coverage the palette's chrome ink reaches anywhere, which the pointer's rule is the
+    // only thing on this mark to draw.
+    let crosshair = 0;
+    for (let offset = 0; offset < data.length; offset += 4) {
+      const alpha = data[offset + 3];
+      if (alpha > crosshair && alpha >= inkCoverage && isToken(offset, chromeToken)) crosshair = alpha;
+    }
+    // The axis labels are the canvas's only text, and they are painted below the plot's own bottom edge:
+    // the strongest coverage of the label ink is read from that strip, so nothing inside the plot can
+    // stand in for a glyph.
+    let labels = 0;
+    for (let y = Math.round(probe.height * 0.85); y < probe.height; y += 1) {
+      for (let x = 0; x < probe.width; x += 1) {
+        const offset = (y * probe.width + x) * 4;
+        const alpha = data[offset + 3];
+        if (alpha > labels && alpha >= labelCoverage && isToken(offset, labelToken, labelTolerance)) labels = alpha;
+      }
+    }
+    // The horizontal rules drawn in the palette's grid ink, one count per row: the floor the check
+    // stands on is that a grid whose ink never reached the canvas has no such rows at all.
+    let gridRows = 0;
+    for (let y = 0; y < probe.height; y += 1) {
+      let inked = 0;
+      for (let x = 0; x < probe.width; x += 1) {
+        const offset = (y * probe.width + x) * 4;
+        if (data[offset + 3] >= inkCoverage && isToken(offset, gridToken)) inked += 1;
+      }
+      if (inked >= probe.width * rowCoverage) gridRows += 1;
+    }
+    return {
+      theme: document.documentElement.dataset.theme,
+      gridRows,
+      gridInk: gridToken.join('/'),
+      chromeInk: chromeToken.join('/'),
+      labelInk: labelToken.join('/'),
+      crosshair,
+      labels,
+      card: channels(getComputedStyle(document.querySelector('.model-trend-card')).backgroundColor),
+    };
+  }, [CHROME_INK_TOLERANCE, CHROME_INK_COVERAGE, LABEL_INK_TOLERANCE, LABEL_INK_COVERAGE, GRID_ROW_COVERAGE]);
+
+  const trendCanvas = page.locator('.model-trend canvas').first();
+  const hoverTrend = async () => {
+    const box = await trendCanvas.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    // A second move lands on a different pixel: the library's pointer tracking subscribes to movement,
+    // and one synthetic move onto an already-hovered pixel can be coalesced away.
+    await page.mouse.move(box.x + box.width / 2 + 2, box.y + box.height / 2);
+    // The crosshair is drawn in the same interaction update that shows the readout, so the readout
+    // appearing is the readiness signal for the rule rather than a pause.
+    await page.locator('.model-trend .omc-tip').first().waitFor({ timeout: 10_000 });
+  };
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.locator('.model-trend canvas').first().waitFor({ timeout: 20_000 });
+  // Nothing has put the pointer over the trend yet, so this read is the mark at rest.
+  const lightChrome = await chromeInk();
+  check(
+    'the light trend draws its grid rules in the palette grid ink',
+    lightChrome.gridRows >= GRID_ROWS_MIN,
+    `gridRows=${lightChrome.gridRows} want>=${GRID_ROWS_MIN} card=${lightChrome.card.join('/')} gridInk=${lightChrome.gridInk}`,
+  );
+  check(
+    'the light trend draws no crosshair while the pointer is elsewhere',
+    lightChrome.crosshair === 0,
+    `crosshairCoverage=${lightChrome.crosshair} theme=${lightChrome.theme}`,
+  );
+  check(
+    'the light trend paints its axis labels at the palette label ink',
+    lightChrome.labels >= LABEL_INK_COVERAGE,
+    `labelCoverage=${lightChrome.labels} want>=${LABEL_INK_COVERAGE} labelInk=${lightChrome.labelInk}`,
+  );
+  await hoverTrend();
+  const lightHover = await chromeInk();
+  check(
+    'the light trend draws its crosshair in the palette chrome ink',
+    lightHover.crosshair >= CHROME_INK_COVERAGE,
+    `crosshairCoverage=${lightHover.crosshair} want>=${CHROME_INK_COVERAGE} chromeInk=${lightHover.chromeInk}`,
+  );
+
+  // The dark card is the one that cannot hide a wrong ink: the same mark, the same rules, read again
+  // from the pixels after the theme is switched.
+  await page.evaluate(() => localStorage.setItem('omc-theme', 'omc-dark'));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await until(() => page.evaluate(() => document.documentElement.dataset.theme === 'omc-dark'), {
+    label: 'the stored dark theme to be applied before reading the mark',
+  });
+  await page.locator('.model-trend canvas').first().waitFor({ timeout: 20_000 });
+  await hoverTrend();
+  const darkChrome = await chromeInk();
+  check(
+    'the dark trend draws its grid rules in the palette grid ink',
+    darkChrome.gridRows >= GRID_ROWS_MIN,
+    `gridRows=${darkChrome.gridRows} want>=${GRID_ROWS_MIN} card=${darkChrome.card.join('/')} gridInk=${darkChrome.gridInk}`,
+  );
+  check(
+    'the dark trend draws its crosshair in the palette chrome ink',
+    darkChrome.crosshair >= CHROME_INK_COVERAGE,
+    `crosshairCoverage=${darkChrome.crosshair} want>=${CHROME_INK_COVERAGE} chromeInk=${darkChrome.chromeInk}`,
+  );
+  check(
+    'the dark trend paints its axis labels at the palette label ink',
+    darkChrome.labels >= LABEL_INK_COVERAGE,
+    `labelCoverage=${darkChrome.labels} want>=${LABEL_INK_COVERAGE} labelInk=${darkChrome.labelInk}`,
+  );
+  // A second pass that silently re-rendered the light theme would satisfy every check above, so the
+  // two surfaces are required to differ.
+  check(
+    'the two passes drew different card surfaces',
+    lightChrome.card.join() !== darkChrome.card.join(),
+    `light=${lightChrome.card.join('/')} dark=${darkChrome.card.join('/')}`,
   );
 }
 
