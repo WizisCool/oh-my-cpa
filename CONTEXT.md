@@ -287,3 +287,29 @@ repeated poll, server-issued cursor, client-side splice — and key on the
 a sliding window keeps invalidating. The request list itself already does this:
 it is ordered and paged by request time (`timestamp_ms`), while "what has
 arrived since" is a separate count anchored on the row `id`.
+
+## Pre-existing CPA adoption and co-existence invariants
+
+A deployment may connect Oh My CPA to a CLIProxyAPI (CPA) instance that was already configured, deployed, and serving traffic independently before Oh My CPA was introduced. Architecture decisions and surface designs must maintain these backward-compatibility and non-destructive adoption invariants:
+
+1. **Zero-destructive configuration adoption**:
+   Oh My CPA must never wipe, overwrite, or mutate pre-existing CPA configuration entries that it does not own. Comments, unknown YAML keys, custom routing rules, and unrelated provider definitions in `config.yaml` must survive round trips byte-for-byte. Configuration writes are revision-guarded and modify only the targeted field subtree via AST manipulation (`components/config/configDirty.ts`).
+
+2. **Immediate discovery without configuration modification**:
+   When connecting to an existing CPA instance:
+   - Pre-configured client keys (`api-keys:` in `config.yaml`) are immediately discovered and rendered in the Key Management console (`/api-keys`).
+   - Discovered keys start with no alias and fall back to displaying their masked key, but their HMAC usage fingerprints (`api_group_key` with purpose `usage-api-key`) immediately join with any historical request traffic captured in `usage_events`.
+   - Adding, renaming, or clearing a custom name (alias) is stored as Oh My CPA presentation metadata in the SQLite table `client_key_aliases`, keyed by `(instance_id, key_fingerprint)`. It **never** mutates CPA's `config.yaml`, never rotates CPA configuration revisions, and never disrupts running proxy traffic.
+   - When adding new keys, operators can optionally supply a custom name immediately; leaving it blank keeps the key unnamed.
+
+3. **Temporary key disabling boundary**:
+   CPA strictly authenticates inbound caller requests against its active `api-keys:` list. To temporarily disable a client key without deleting its secret, custom name, or usage history:
+   - Oh My CPA removes the key from CPA's active `api-keys:` YAML draft (causing CPA to reject requests with 401 Unauthorized upon save).
+   - The disabled key and its state are preserved in Oh My CPA's `ui_preferences` (`omc_disabled_client_keys`).
+   - Toggling the key back to enabled moves it back into active `api-keys:` in `config.yaml`.
+   - Operators can review all keys (enabled and disabled) and filter by status on the Key Management console.
+
+4. **Multi-dimensional observability and filtering**:
+   - Both the Request Records console (`/usage/events`) and the Dashboard (`/dashboard`) support filtering metrics, throughput, token volume, model ranking, and drill-down links by specific client key fingerprint (`api_key`).
+   - Pre-existing traffic with or without custom names remains fully filterable via the stable HMAC fingerprint.
+

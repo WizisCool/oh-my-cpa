@@ -10,9 +10,17 @@ import {
   Popconfirm,
   Skeleton,
   Space,
-  Typography,
 } from 'antd';
-import { CopyOutlined, KeyOutlined, ReloadOutlined, SaveOutlined, UndoOutlined, WarningOutlined } from '@ant-design/icons';
+import {
+  CopyOutlined,
+  KeyOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  SaveOutlined,
+  TagOutlined,
+  UndoOutlined,
+  WarningOutlined,
+} from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseDocument } from 'yaml';
 import type { Document } from 'yaml';
@@ -21,23 +29,26 @@ import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
 import { ApiKeysEditor, type ApiKeyRecord } from '../components/config/ApiKeysEditor';
 import { updateFieldWithBaseline, isConfigSemanticallyEqual, getFieldSemanticValue } from '../components/config/configDirty';
+import { ConfigDirtyBar } from '../components/config/ConfigDirtyBar';
+import { usePreference } from '../hooks/usePreference';
 import { ALL_CONFIG_FIELDS } from '../types/configSchema';
 import type { ConfigScalarsResponse } from '../types/configManagement';
 import type { ClientKeyUsageItem } from '../types/providers';
+import styles from './ApiKeysPage.module.css';
 
-const { Text } = Typography;
+const parseStringArray = (raw: unknown): string[] | undefined => {
+  if (Array.isArray(raw)) {
+    return raw.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()));
+  }
+  return undefined;
+};
 
 /**
  * ApiKeysPage owns the gateway client API keys as their own surface.
  *
  * The keys are part of CPA's configuration document (`api-keys`), not a separate
- * store. This page therefore edits a draft of that document and saves it with the
- * same revision-guarded transaction the configuration workbench uses, rather than
- * calling the immediate `/management/api-keys` mutations: those write through a
- * different path, and switching to them would change when and how unrelated
- * configuration is persisted. Nothing outside the key list is ever modified - the
- * draft starts as the server's own copy and only that one field is touched - so
- * the rest of the document, including its comments and unknown keys, survives.
+ * store. This page edits a draft of that document and saves it with the
+ * same revision-guarded transaction the configuration workbench uses.
  */
 export const ApiKeysPage: React.FC = () => {
   const t = useT();
@@ -51,28 +62,25 @@ export const ApiKeysPage: React.FC = () => {
     staleTime: 60_000,
   });
 
-  /**
-   * The key list with its aliases and usage identities, read from the immediate
-   * management endpoint rather than the configuration draft.
-   *
-   * This is what makes a name attachable at all: the draft carries only the raw
-   * strings, while this response carries the usage fingerprint each alias is
-   * keyed by. It is read separately from the configuration so renaming a key
-   * never has to write CPA's document.
-   */
   const keysQuery = useQuery({
     queryKey: ['management-client-keys'],
     queryFn: () => api.getClientAPIKeys(),
     staleTime: 30_000,
   });
 
-  // Usage covers the request console's default window so the two surfaces cannot
-  // report different numbers for the same key.
   const usageQuery = useQuery({
     queryKey: ['management-client-key-usage'],
     queryFn: () => api.getClientKeyUsage('preset=24h'),
     staleTime: 60_000,
   });
+
+  const { value: persistedDisabledKeys, set: setDisabledKeys } = usePreference<string[]>(
+    'omc_disabled_client_keys',
+    [],
+    parseStringArray,
+  );
+
+  const [draftDisabledKeys, setDraftDisabledKeys] = React.useState<string[]>([]);
 
   const [rawYaml, setRawYaml] = React.useState('');
   const [serverYaml, setServerYaml] = React.useState('');
@@ -82,6 +90,9 @@ export const ApiKeysPage: React.FC = () => {
   const [modalOpen, setModalOpen] = React.useState(false);
   const [editingIndex, setEditingIndex] = React.useState<number | null>(null);
   const [keyInput, setKeyInput] = React.useState('');
+  const [aliasInput, setAliasInput] = React.useState('');
+  const [isKeyVisible, setIsKeyVisible] = React.useState(false);
+  const [pendingAliases, setPendingAliases] = React.useState<Record<string, string>>({});
 
   const docRef = React.useRef<Document | null>(null);
   const serverDocRef = React.useRef<Document | null>(null);
@@ -98,29 +109,36 @@ export const ApiKeysPage: React.FC = () => {
     const safe = configQuery.data?.safe_yaml;
     if (safe === undefined) return;
     const revision = configQuery.data?.revision || '';
-    // Same rule as the configuration workbench: adopt the server's copy as the
-    // baseline, but never overwrite a draft that is already being edited.
     const hasDraft = rawYamlRef.current !== serverYamlRef.current;
     setServerYaml(safe);
     setServerRevision(revision);
     try {
       serverDocRef.current = parseDocument(safe);
     } catch {
-      // A malformed document is expected here: the previous baseline stays.
+      // Previous baseline remains on malformed document.
     }
     if (hasDraft) return;
     setRawYaml(safe);
     try {
       docRef.current = parseDocument(safe);
     } catch {
-      // A malformed document is expected here: the previous baseline stays.
+      // Previous baseline remains on malformed document.
     }
   }, [configQuery.data?.safe_yaml, configQuery.data?.revision]);
 
   rawYamlRef.current = rawYaml;
   serverYamlRef.current = serverYaml;
 
-  const isDirty = rawYaml !== serverYaml;
+  // Sync draftDisabledKeys with persisted baseline when not editing
+  React.useEffect(() => {
+    if (rawYamlRef.current === serverYamlRef.current) {
+      setDraftDisabledKeys(persistedDisabledKeys);
+    }
+  }, [persistedDisabledKeys]);
+
+  const isDirty =
+    rawYaml !== serverYaml ||
+    JSON.stringify(draftDisabledKeys.slice().sort()) !== JSON.stringify(persistedDisabledKeys.slice().sort());
 
   const currentApiKeys: string[] = React.useMemo(() => {
     if (!apiKeysField) return [];
@@ -131,10 +149,6 @@ export const ApiKeysPage: React.FC = () => {
         return [];
       }
     }
-    // getFieldSemanticValue unwraps the YAML AST node. Collection getters on a
-    // Document return collection nodes (`YAMLSeq` here), not plain arrays, so
-    // reading the node directly would report an empty list for a populated
-    // `api-keys`.
     const value = getFieldSemanticValue(docRef.current, apiKeysField);
     if (Array.isArray(value)) return value.map(String);
     if (typeof value === 'string' && value) return [value];
@@ -147,16 +161,37 @@ export const ApiKeysPage: React.FC = () => {
       setConflictRevision(null);
       return api.updateConfigSource(yamlToSave, revision);
     },
-    onSuccess: (data, variables) => {
+    onSuccess: async (data, variables) => {
       message.success(t('keys.saved'));
       setServerYaml(variables.yamlToSave);
       setServerRevision(data.revision);
       try {
         serverDocRef.current = parseDocument(variables.yamlToSave);
       } catch {
-        // A malformed document is expected here: the previous baseline stays.
+        // Retain previous baseline
       }
       void queryClient.invalidateQueries({ queryKey: ['management-config'] });
+
+      // Commit disabled keys draft to persisted preference
+      setDisabledKeys(draftDisabledKeys);
+
+      // Save any pending aliases now that keys are written to CPA
+      if (Object.keys(pendingAliases).length > 0) {
+        try {
+          const fresh = await api.getClientAPIKeys();
+          for (const item of fresh.keys) {
+            const pendingName = pendingAliases[item.key];
+            if (pendingName !== undefined && item.usage_fingerprint) {
+              await api.setClientKeyAlias(item.usage_fingerprint, pendingName, item.alias_version);
+            }
+          }
+          setPendingAliases({});
+        } catch (err: unknown) {
+          const detail = err instanceof ApiError ? err.message : String(err);
+          message.error(detail || t('keys.alias_save_failed'));
+        }
+      }
+      void queryClient.invalidateQueries({ queryKey: ['management-client-keys'] });
     },
     onError: (err: unknown) => {
       if (
@@ -189,11 +224,13 @@ export const ApiKeysPage: React.FC = () => {
     try {
       docRef.current = parseDocument(serverYaml);
     } catch {
-      // A malformed document is expected here: the previous baseline stays.
+      // Baseline stays on error
     }
+    setDraftDisabledKeys([...persistedDisabledKeys]);
     setSaveError(null);
     setConflictRevision(null);
-  }, [serverYaml]);
+    setPendingAliases({});
+  }, [serverYaml, persistedDisabledKeys]);
 
   const writeKeys = React.useCallback(
     (next: string[]) => {
@@ -209,8 +246,6 @@ export const ApiKeysPage: React.FC = () => {
         }
       }
       updateFieldWithBaseline(currentDoc, serverDocRef.current, apiKeysField, next);
-      // Reverting to the server's exact text when nothing changed keeps a
-      // formatting artefact from presenting itself as an unsaved edit.
       if (
         serverDocRef.current &&
         isConfigSemanticallyEqual(currentDoc, serverDocRef.current, ALL_CONFIG_FIELDS)
@@ -225,24 +260,42 @@ export const ApiKeysPage: React.FC = () => {
   );
 
   const handleSaveKey = () => {
-    const trimmed = keyInput.trim();
-    if (!trimmed) {
+    const trimmedKey = keyInput.trim();
+    const trimmedAlias = aliasInput.trim();
+    if (!trimmedKey) {
       message.warning(t('cfg.api_key_empty_warning'));
       return;
     }
     const duplicate = currentApiKeys.some(
-      (key, index) => key === trimmed && index !== editingIndex,
+      (key, index) => key === trimmedKey && index !== editingIndex,
     );
     if (duplicate) {
       message.error(t('keys.duplicate'));
       return;
     }
     const next = [...currentApiKeys];
-    if (editingIndex !== null && editingIndex >= 0) next[editingIndex] = trimmed;
-    else next.push(trimmed);
+    if (editingIndex !== null && editingIndex >= 0) {
+      const oldKey = next[editingIndex];
+      next[editingIndex] = trimmedKey;
+      if (trimmedAlias) {
+        setPendingAliases((prev) => ({ ...prev, [trimmedKey]: trimmedAlias }));
+      } else if (oldKey && oldKey !== trimmedKey) {
+        setPendingAliases((prev) => {
+          const clone = { ...prev };
+          delete clone[oldKey];
+          return clone;
+        });
+      }
+    } else {
+      next.push(trimmedKey);
+      if (trimmedAlias) {
+        setPendingAliases((prev) => ({ ...prev, [trimmedKey]: trimmedAlias }));
+      }
+    }
     writeKeys(next);
     setModalOpen(false);
     setKeyInput('');
+    setAliasInput('');
     setEditingIndex(null);
   };
 
@@ -251,21 +304,56 @@ export const ApiKeysPage: React.FC = () => {
       .map((byte) => byte.toString(16).padStart(2, '0'))
       .join('');
     setKeyInput(`sk-cpa-${randomHex}`);
+    setIsKeyVisible(true);
   };
 
-  /**
-   * Saves one key's name.
-   *
-   * The name is Oh My CPA metadata, so this is its own request against its own
-   * endpoint and never touches CPA's configuration document. The version the row
-   * was rendered with is sent along, so a rename prepared against a stale read is
-   * refused with 409 instead of overwriting another session's change.
-   */
+  const handleToggleDisable = React.useCallback(
+    (key: string, willBeDisabled: boolean) => {
+      if (willBeDisabled) {
+        // Move from active keys to disabled keys in draft
+        writeKeys(currentApiKeys.filter((k) => k !== key));
+        setDraftDisabledKeys((prev) => (prev.includes(key) ? prev : [...prev, key]));
+        message.info(t('keys.toggle_disabled_msg'));
+      } else {
+        // Move from disabled keys back to active keys in draft
+        setDraftDisabledKeys((prev) => prev.filter((k) => k !== key));
+        if (!currentApiKeys.includes(key)) {
+          writeKeys([...currentApiKeys, key]);
+        }
+        message.success(t('keys.toggle_enabled_msg'));
+      }
+    },
+    [currentApiKeys, writeKeys, message, t],
+  );
+
+  const handleDeleteRecord = React.useCallback(
+    (record: ApiKeyRecord) => {
+      if (record.disabled) {
+        setDraftDisabledKeys((prev) => prev.filter((k) => k !== record.key));
+        setPendingAliases((prev) => {
+          const clone = { ...prev };
+          delete clone[record.key];
+          return clone;
+        });
+      } else {
+        writeKeys(currentApiKeys.filter((_, position) => position !== record.index));
+        setPendingAliases((prev) => {
+          const clone = { ...prev };
+          delete clone[record.key];
+          return clone;
+        });
+      }
+    },
+    [currentApiKeys, writeKeys],
+  );
+
   const renameKey = React.useCallback(
     async (record: ApiKeyRecord, alias: string) => {
+      // If it's a draft key without a server identity yet, remember locally
       if (!record.usageFingerprint) {
-        message.error(t('keys.not_linked'));
-        throw new Error('key has no usage identity');
+        setPendingAliases((prev) => ({ ...prev, [record.key]: alias }));
+        message.success(alias ? t('keys.renamed') : t('keys.rename_cleared'));
+        return;
       }
       if (alias.length > 64) {
         message.error(t('keys.rename_too_long', { n: 64 }));
@@ -275,9 +363,6 @@ export const ApiKeysPage: React.FC = () => {
         await api.setClientKeyAlias(record.usageFingerprint, alias, record.aliasVersion);
         message.success(alias ? t('keys.renamed') : t('keys.rename_cleared'));
         await queryClient.invalidateQueries({ queryKey: ['management-client-keys'] });
-        // The alias is resolved into request rows server-side, so every surface
-        // that prints a caller key has to re-read. The reader's position is
-        // untouched: this invalidates cached data, it does not navigate.
         await queryClient.invalidateQueries({ queryKey: ['usage-events'] });
         await queryClient.invalidateQueries({ queryKey: ['usage-facets'] });
         await queryClient.invalidateQueries({ queryKey: ['usage-event'] });
@@ -287,13 +372,10 @@ export const ApiKeysPage: React.FC = () => {
           (error.status === 409 || (error.data as Record<string, unknown>)?.code === 'alias_version_conflict')
         ) {
           message.warning(t('keys.rename_conflict'));
-          // Reload so the next attempt cites the version that actually exists.
           await queryClient.invalidateQueries({ queryKey: ['management-client-keys'] });
           throw error;
         }
         const detail = error instanceof ApiError ? error.message : String(error);
-        // A server-side validation message is more specific than the generic one,
-        // so it is surfaced rather than replaced.
         message.error(detail || t('keys.rename_control'));
         throw error;
       }
@@ -301,15 +383,6 @@ export const ApiKeysPage: React.FC = () => {
     [message, queryClient, t],
   );
 
-  /**
-   * Opens the request console filtered to one key's traffic.
-   *
-   * The filter value is the usage fingerprint, which is the identity the request
-   * list already filters by. Navigating to an alias would need the list to
-   * resolve a name back into an identity, and a filter that means something
-   * different from what it displays is the kind of ambiguity this page exists to
-   * remove.
-   */
   const viewRequestsFor = React.useCallback(
     (record: ApiKeyRecord) => {
       if (!record.usageFingerprint) return;
@@ -321,8 +394,6 @@ export const ApiKeysPage: React.FC = () => {
     [navigate],
   );
 
-  // Joined by fingerprint so the table can print a request count per key in one
-  // pass instead of scanning the usage array per row.
   const usageByFingerprint = React.useMemo(() => {
     const indexed: Record<string, ClientKeyUsageItem> = {};
     for (const entry of usageQuery.data?.usage ?? []) {
@@ -339,21 +410,35 @@ export const ApiKeysPage: React.FC = () => {
   const handleReloadServerVersion = () => {
     setConflictRevision(null);
     setRawYaml(serverYaml);
+    setDraftDisabledKeys([...persistedDisabledKeys]);
     try {
       docRef.current = parseDocument(serverYaml);
     } catch {
-      // A malformed document is expected here: the previous baseline stays.
+      // Baseline stays
     }
   };
 
   return (
-    <div className="terminal-page keys-page">
-      <header className="terminal-page-head">
+    <div className={`terminal-page keys-page ${styles['page-container']}`}>
+      <header className={`terminal-page-head ${styles['header-row']}`}>
         <div>
           <h1 className="terminal-title">{t('keys.title')}</h1>
-          <p className="terminal-subtitle">{t('keys.subtitle')}</p>
         </div>
-        <div className="request-actions">
+        <div className={`request-actions ${styles['header-actions']}`}>
+          <Button
+            size="small"
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              setEditingIndex(null);
+              setKeyInput('');
+              setAliasInput('');
+              setIsKeyVisible(false);
+              setModalOpen(true);
+            }}
+          >
+            {t('cfg.api_keys_add')}
+          </Button>
           <Button
             size="small"
             icon={<ReloadOutlined />}
@@ -364,7 +449,12 @@ export const ApiKeysPage: React.FC = () => {
             {t('cfg.reload')}
           </Button>
           {isDirty && (
-            <Button size="small" icon={<UndoOutlined />} disabled={saveMutation.isPending} onClick={discardChanges}>
+            <Button
+              size="small"
+              icon={<UndoOutlined />}
+              disabled={saveMutation.isPending}
+              onClick={discardChanges}
+            >
               {t('cfg.dirty_bar_discard')}
             </Button>
           )}
@@ -437,35 +527,51 @@ export const ApiKeysPage: React.FC = () => {
           />
         </Card>
       ) : (
-        <>
-          <Card size="small" className="config-card">
-            <ApiKeysEditor
-              apiKeys={currentApiKeys}
-              metadata={keysQuery.data?.keys}
-              usage={usageByFingerprint}
-              formatTime={formatUsageTime}
-              usageRangeLabel={t('keys.usage_range')}
-              onChange={writeKeys}
-              onRename={renameKey}
-              onViewRequests={viewRequestsFor}
-              onAdd={() => {
-                setEditingIndex(null);
-                setKeyInput('');
-                setModalOpen(true);
-              }}
-              onEdit={(index, key) => {
-                setEditingIndex(index);
-                setKeyInput(key);
-                setModalOpen(true);
-              }}
-            />
-          </Card>
-          <p className="terminal-subtitle" style={{ marginTop: 12 }}>
-            <Text type="secondary">{t('keys.persist_note')}</Text>
-          </p>
-        </>
+        <Card size="small" className="config-card">
+          <ApiKeysEditor
+            apiKeys={currentApiKeys}
+            disabledKeys={draftDisabledKeys}
+            pendingAliases={pendingAliases}
+            metadata={keysQuery.data?.keys}
+            usage={usageByFingerprint}
+            formatTime={formatUsageTime}
+            usageRangeLabel={t('keys.usage_range')}
+            onChange={writeKeys}
+            onToggleDisable={handleToggleDisable}
+            onDelete={handleDeleteRecord}
+            onRename={renameKey}
+            onViewRequests={viewRequestsFor}
+            onAdd={() => {
+              setEditingIndex(null);
+              setKeyInput('');
+              setAliasInput('');
+              setIsKeyVisible(false);
+              setModalOpen(true);
+            }}
+            onEdit={(index, key) => {
+              setEditingIndex(index);
+              setKeyInput(key);
+              const existingAlias =
+                pendingAliases[key] ??
+                keysQuery.data?.keys?.find((item) => item.key === key)?.alias ??
+                '';
+              setAliasInput(existingAlias);
+              setIsKeyVisible(false);
+              setModalOpen(true);
+            }}
+          />
+        </Card>
       )}
 
+      {/* Floating Dirty Bar for unsaved drafts */}
+      <ConfigDirtyBar
+        isDirty={isDirty}
+        isSaving={saveMutation.isPending}
+        onSave={saveKeys}
+        onDiscard={discardChanges}
+      />
+
+      {/* Add / Edit Key Modal */}
       <Modal
         title={editingIndex !== null ? t('cfg.api_keys_edit') : t('cfg.api_keys_add')}
         open={modalOpen}
@@ -474,6 +580,8 @@ export const ApiKeysPage: React.FC = () => {
         onCancel={() => {
           setModalOpen(false);
           setKeyInput('');
+          setAliasInput('');
+          setIsKeyVisible(false);
           setEditingIndex(null);
         }}
         okText={t('common.confirm')}
@@ -481,7 +589,19 @@ export const ApiKeysPage: React.FC = () => {
         destroyOnHidden
       >
         <div className="keys-key-editor">
-          <label className="keys-key-editor-label" htmlFor="gateway-key-value">
+          <label className="keys-key-editor-label" htmlFor="gateway-key-alias">
+            <TagOutlined /> {t('keys.modal_alias_label')}
+          </label>
+          <Input
+            id="gateway-key-alias"
+            placeholder={t('keys.modal_alias_placeholder')}
+            value={aliasInput}
+            onChange={(e) => setAliasInput(e.target.value)}
+            maxLength={64}
+            className="config-alias-input"
+          />
+
+          <label className="keys-key-editor-label" htmlFor="gateway-key-value" style={{ marginTop: 8 }}>
             <KeyOutlined /> {t('keys.modal_label')}
           </label>
           <Input.Password
@@ -490,11 +610,14 @@ export const ApiKeysPage: React.FC = () => {
             value={keyInput}
             onChange={(e) => setKeyInput(e.target.value)}
             onPressEnter={handleSaveKey}
+            visibilityToggle={{
+              visible: isKeyVisible,
+              onVisibleChange: setIsKeyVisible,
+            }}
             className="config-mono-input"
             autoFocus
           />
-          <Text type="secondary" className="keys-key-editor-hint">{t('keys.modal_hint')}</Text>
-          <div className="keys-key-editor-actions">
+          <div className="keys-key-editor-actions" style={{ marginTop: 8 }}>
             <Button size="small" type="dashed" onClick={handleGenerateKey}>
               {t('cfg.api_keys_generate')}
             </Button>

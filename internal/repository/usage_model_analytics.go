@@ -16,6 +16,8 @@ type UsageModelBucketOptions struct {
 	// call point is the client-facing identity: the model alias a client
 	// requested when there is one, the upstream model name otherwise.
 	IsGroupedByCallPoint bool
+	// APIGroupKey narrows analytics to a single client key fingerprint.
+	APIGroupKey string
 }
 
 // UsageModelBucketRow is one model's traffic inside one bucket of the requested grid.
@@ -91,10 +93,16 @@ func (r *Repository) QueryUsageModelBuckets(ctx context.Context, instanceID stri
 		       COALESCE(SUM(total_tokens), 0), COUNT(1),
 		       COALESCE(SUM(cost_nanos), 0), COALESCE(SUM(cost_nanos IS NOT NULL), 0)
 		FROM usage_events
-		WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms <= ?
+		WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms <= ?`
+	args := []any{bucketMS, bucketMS, instanceID, fromMS, toMS}
+	if opts.APIGroupKey != "" {
+		query += " AND api_group_key = ?"
+		args = append(args, opts.APIGroupKey)
+	}
+	query += `
 		GROUP BY group_key, aligned
 		ORDER BY group_key ASC, aligned ASC`
-	rows, err := r.SQL().QueryContext(ctx, query, bucketMS, bucketMS, instanceID, fromMS, toMS)
+	rows, err := r.SQL().QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("read usage model buckets: %w", err)
 	}

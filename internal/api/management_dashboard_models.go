@@ -117,8 +117,9 @@ func (h *Handler) dashboardModels(writer http.ResponseWriter, request *http.Requ
 	}
 
 	response := dashboardModelsResponse{Window: window, Models: []dashboardModelUsage{}, Errors: []string{}}
+	apiKey := h.resolveDashboardAPIKey(request)
 	rows, err := h.repo.QueryUsageModelBuckets(ctx, defaultInstanceID(), window.FromMS, window.ToMS, window.BucketMS,
-		repository.UsageModelBucketOptions{IsGroupedByCallPoint: group == "call"})
+		repository.UsageModelBucketOptions{IsGroupedByCallPoint: group == "call", APIGroupKey: apiKey})
 	if err != nil {
 		writeInternalError(writer, fmt.Errorf("query usage model buckets: %w", err))
 		return

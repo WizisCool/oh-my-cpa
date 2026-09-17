@@ -257,11 +257,22 @@ func (r *Repository) QueryUsageCost(ctx context.Context, instanceID string, from
 // and a rollup cannot preserve which version each row was priced at. So this
 // reads usage_events regardless of which table served the token series.
 func (r *Repository) QueryUsageCostWindow(ctx context.Context, instanceID string, fromMS, toMS, bucketMS int64) (UsageCostStats, error) {
+	return r.QueryUsageCostWindowFiltered(ctx, instanceID, fromMS, toMS, bucketMS, "")
+}
+
+// QueryUsageCostWindowFiltered sums locked request costs, optionally filtered by
+// client API key fingerprint (api_group_key).
+func (r *Repository) QueryUsageCostWindowFiltered(ctx context.Context, instanceID string, fromMS, toMS, bucketMS int64, apiKey string) (UsageCostStats, error) {
 	query := `SELECT COALESCE(TOTAL(cost_nanos), 0) / 1000000000.0,
  COALESCE(SUM(pricing_status = 'priced'), 0), COALESCE(SUM(pricing_status <> 'priced'), 0)
  FROM usage_events WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms <= ?`
+	args := []any{instanceID, fromMS, toMS}
+	if apiKey != "" {
+		query += " AND api_group_key = ?"
+		args = append(args, apiKey)
+	}
 	var stats UsageCostStats
-	if err := r.SQL().QueryRowContext(ctx, query, instanceID, fromMS, toMS).Scan(&stats.CostUSD, &stats.PricedEvents, &stats.UnpricedEvents); err != nil {
+	if err := r.SQL().QueryRowContext(ctx, query, args...).Scan(&stats.CostUSD, &stats.PricedEvents, &stats.UnpricedEvents); err != nil {
 		return UsageCostStats{}, fmt.Errorf("query usage cost: %w", err)
 	}
 	if bucketMS <= 0 {
@@ -272,9 +283,16 @@ func (r *Repository) QueryUsageCostWindow(ctx context.Context, instanceID string
 	// int64: SQLite hands back a float64 and the driver rejects the conversion. Sum
 	// the integer column instead, which is also exact - cost_nanos is integral and
 	// an accumulated float would lose precision over a long window.
-	rows, err := r.SQL().QueryContext(ctx, `SELECT (timestamp_ms / ?) * ? AS aligned, COALESCE(SUM(cost_nanos), 0)
- FROM usage_events WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms <= ?
- GROUP BY aligned ORDER BY aligned ASC`, bucketMS, bucketMS, instanceID, fromMS, toMS)
+	bucketQuery := `SELECT (timestamp_ms / ?) * ? AS aligned, COALESCE(SUM(cost_nanos), 0)
+ FROM usage_events WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms <= ?`
+	bucketArgs := []any{bucketMS, bucketMS, instanceID, fromMS, toMS}
+	if apiKey != "" {
+		bucketQuery += " AND api_group_key = ?"
+		bucketArgs = append(bucketArgs, apiKey)
+	}
+	bucketQuery += " GROUP BY aligned ORDER BY aligned ASC"
+
+	rows, err := r.SQL().QueryContext(ctx, bucketQuery, bucketArgs...)
 	if err != nil {
 		return UsageCostStats{}, fmt.Errorf("query usage cost buckets: %w", err)
 	}
