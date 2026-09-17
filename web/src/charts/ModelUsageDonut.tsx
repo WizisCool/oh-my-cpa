@@ -1,6 +1,8 @@
 import React from 'react';
 import { Pie } from '@ant-design/charts';
 import { useThemeMode } from '../theme/ThemeContext';
+import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
+import { resolveChartAnimation } from './chartMotion';
 import { seriesColorRange, seriesDomainKey, seriesTrackColor } from './chartTheme';
 import { formatModelShare, formatModelTokens, type DashboardModelUsage } from '../types/dashboardModels';
 import { formatTokens, formatTokensFull } from '../types/tokenDisplay';
@@ -44,6 +46,8 @@ export const ModelUsageDonut: React.FC<ModelUsageDonutProps> = ({
   tokenUnitLabel,
 }) => {
   const { theme } = useThemeMode();
+  const isReducedMotion = usePrefersReducedMotion();
+  const animate = resolveChartAnimation(isReducedMotion);
   const { style: tokenStyle } = useTokenDisplayStyle();
   const colors = theme.palette;
 
@@ -93,7 +97,10 @@ export const ModelUsageDonut: React.FC<ModelUsageDonutProps> = ({
             // outranks `autoFit` and pins the canvas to 220px tall while the frame is clamped narrower,
             // which draws an ellipse and drops the readout below the arcs' centre.
             autoFit
-            animate={false}
+            // The arcs morph when a revision moves the shares, and fade in or out when a group enters or
+            // leaves the ranking: an angle that jumps between two readings is a chart that looks like it
+            // reloaded. See `chartMotion.ts` and docs/design.md §7 rule 5.
+            animate={animate}
             legend={false}
             label={false}
             // The readout is rendered here for the same reasons as the trend's: the library's own panel is

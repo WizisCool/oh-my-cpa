@@ -46,12 +46,16 @@ test('the four request-records concerns select only their own scenarios', () => 
 test('a dashboard change selects every dashboard scenario', () => {
   // Registry order, which is the order the plan preserves and the order `--list` prints.
   const all = [
-    'dashboard-charts', 'dashboard-model-panels', 'dashboard-model-panels-states',
-    'dashboard-model-panels-failure', 'dashboard-model-panels-empty',
+    'dashboard-charts', 'dashboard-chart-motion', 'dashboard-rolling-readouts', 'dashboard-model-panels',
+    'dashboard-model-panels-states', 'dashboard-model-panels-failure', 'dashboard-model-panels-empty',
     'dashboard-heatmap', 'dashboard-heatmap-pruned', 'dashboard-heatmap-mobile', 'dashboard-heatmap-error',
   ];
   assert.deepEqual(planFor('web/src/pages/DashboardPage.tsx'), all);
   assert.deepEqual(planFor('web/src/components/dashboard/TokenHeatmap.tsx'), all);
+  // The readout contract is a panel of the same page, and the OMC settings scenario reads the same
+  // tiles back when it asserts the unit style they print in - so this path reaches one scenario more
+  // than the page's own rule does.
+  assert.deepEqual(planFor('web/src/types/rollingNumber.ts'), ['omc-settings', ...all]);
   // The strip's own layout and ramp logic is only read by the heatmap scenarios, and
   // the phone layout is one of them: a change to the cell geometry is exactly what
   // breaks the narrow viewport.
@@ -71,6 +75,7 @@ test('the shared token layer selects every surface that renders it', () => {
   for (const id of [
     'omc-settings',
     'dashboard-charts',
+    'dashboard-rolling-readouts',
     'dashboard-model-panels',
     'dashboard-heatmap',
     'dashboard-heatmap-mobile',
@@ -175,9 +180,10 @@ test('a mixed change unions the narrow plans without widening', () => {
   // Two placed paths union; only an *unplaced* one widens. This is the distinction
   // that keeps a two-page change from running everything.
   assert.deepEqual(plan.ids.sort(), [
-    'dashboard-charts', 'dashboard-heatmap', 'dashboard-heatmap-error', 'dashboard-heatmap-mobile',
-    'dashboard-heatmap-pruned', 'dashboard-model-panels', 'dashboard-model-panels-empty',
-    'dashboard-model-panels-failure', 'dashboard-model-panels-states', 'icon-picker-stacking',
+    'dashboard-chart-motion', 'dashboard-charts', 'dashboard-heatmap', 'dashboard-heatmap-error',
+    'dashboard-heatmap-mobile', 'dashboard-heatmap-pruned', 'dashboard-model-panels',
+    'dashboard-model-panels-empty', 'dashboard-model-panels-failure', 'dashboard-model-panels-states',
+    'dashboard-rolling-readouts', 'icon-picker-stacking',
   ]);
 });
 
