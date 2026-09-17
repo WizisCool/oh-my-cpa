@@ -9,8 +9,10 @@
  *
  * Four rules, all of them objective:
  *
- *   1. **Every duration is a token**, in a `transition` or an `animation`, and no `var(--motion-*)`
- *      carries a fallback - a fallback is never applied, and the one that read `50ms` beside a
+ *   1. **Every duration is a token**, in a `transition` or an `animation` and in their longhands, and
+ *      the token has to be one a stylesheet actually defines - `var(--motion-fastt)` resolves to
+ *      nothing at run time, so the declaration would silently lose its duration. No `var(--motion-*)`
+ *      carries a fallback either: a fallback is never applied, and the one that read `50ms` beside a
  *      variable holding `100ms` is exactly how this drift stayed invisible. The exceptions are
  *      indeterminate progress cycles, whose period is not a state transition and has no token.
  *   2. **No transition on a layout property**, and no `transition: all`, which is every property
@@ -27,8 +29,9 @@
  *      banning them would rewrite hover behaviour on every page for no measurable gain. See ADR 0009.
  *
  * Limitations, stated rather than implied: this reads `.css` and inline `transition:` strings in
- * `.tsx`, so a duration assembled at runtime is invisible to it, and it matches selectors textually,
- * so a rule restated under a different selector is not associated with its motion.
+ * `.tsx`, so a duration assembled at runtime is invisible to it, and it matches selectors textually -
+ * a base rule is associated with its `:hover` counterpart by name alone, so a hover written as a
+ * different selector (through `:not()`, or a different descendant chain) is not recognised as one.
  */
 import fs from 'node:fs';
 import path from 'node:path';
