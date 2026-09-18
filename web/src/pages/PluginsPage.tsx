@@ -26,6 +26,7 @@ import { useT } from '../i18n';
 import type { PluginItem } from '../types/plugin';
 import { PluginConfigEditor } from '../components/plugins/PluginConfigEditor';
 import { parsePluginConfig, pluginConfigsEqual } from '../components/plugins/pluginConfig';
+import { useOverlayHistory } from '../hooks/useOverlayHistory';
 
 export const PluginsPage: React.FC = () => {
   const t = useT();
@@ -109,6 +110,8 @@ export const PluginsPage: React.FC = () => {
     configMutation.mutate({ id: configModalPlugin.id, config: parsedConfig.value });
   };
 
+  // The config dialog refuses to close while an edit is in progress, which the hook handles:
+  // a refused close re-arms its sentinel rather than letting the next Back leave the page.
   const handleCloseConfig = () => {
     if (!configModalPlugin || pluginConfigsEqual(parsedConfig.value, configModalPlugin.config ?? {})) {
       setConfigModalPlugin(null);
@@ -123,6 +126,11 @@ export const PluginsPage: React.FC = () => {
       onOk: () => setConfigModalPlugin(null),
     });
   };
+
+  // The dialog refuses to close while an edit is in progress, which the hook handles: a refused
+  // close re-arms its sentinel instead of letting the next Back press leave the page under an
+  // open editor.
+  useOverlayHistory({ isOpen: configModalPlugin !== null, onClose: handleCloseConfig });
 
   const columns: ColumnsType<PluginItem> = [
     {

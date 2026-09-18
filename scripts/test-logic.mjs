@@ -35,6 +35,7 @@ const SUITES = [
   { name: 'provider console', script: 'scripts/test-provider-console.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'provider toggle queue', script: 'scripts/test-provider-toggle-queue.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'scroll intent', script: 'scripts/test-scroll-intent.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
+  { name: 'overlay history', script: 'scripts/test-overlay-history.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'mask parity', script: 'scripts/test-mask-key.ts', flags: ['--experimental-strip-types'] },
   { name: 'clipboard strategy', script: 'scripts/test-clipboard.ts', flags: ['--experimental-strip-types'] },
   { name: 'visible clock', script: 'scripts/test-visible-clock.ts', flags: ['--experimental-strip-types'] },
@@ -45,8 +46,7 @@ const SUITES = [
   { name: 'plugin config', script: 'scripts/test-plugin-config.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'oauth model aliases', script: 'scripts/test-oauth-model-alias.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'oauth providers', script: 'scripts/test-oauth-providers.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'dashboard providers', script: 'scripts/test-dashboard-providers.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-];
+  { name: 'dashboard providers', script: 'scripts/test-dashboard-providers.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },];
 
 /** Bounded so a small machine is not asked to schedule every parser at once. */
 const concurrency = Math.max(1, Number(process.env.OMCPA_LOGIC_CONCURRENCY ?? 2));

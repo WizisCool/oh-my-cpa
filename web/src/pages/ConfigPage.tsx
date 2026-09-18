@@ -29,6 +29,7 @@ import { copyText } from '../utils/clipboard';
 import { useTheme } from '../theme/ThemeContext';
 import { ConfigDirtyBar } from '../components/config/ConfigDirtyBar';
 import { useConfigDraft } from '../components/config/useConfigDraft';
+import { useOverlayHistory } from '../hooks/useOverlayHistory';
 import {
   renderGroupPanel,
   sectionIcon,
@@ -81,6 +82,10 @@ export const ConfigPage: React.FC = () => {
     handleViewModeChange,
   } = draft;
 
+  // The revision-conflict dialog is a decision the operator must make before the draft can be
+  // saved, so Back dismissing it is the same as its own Cancel: the draft is untouched and the
+  // conflict stays reported by the save flow.
+  useOverlayHistory({ isOpen: Boolean(conflictState), onClose: () => setConflictState(null) });
 
   // ── API Keys ────────────────────────────────────────────
   // The key list is edited on its own page (/api-keys), which is the only editor

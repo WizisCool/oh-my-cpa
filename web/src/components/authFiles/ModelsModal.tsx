@@ -6,6 +6,7 @@ import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';
 import { copyText } from '../../utils/clipboard';
 import type { ManagementAuthFile, ManagementAuthFileModel } from '../../types/managementAuthFile';
+import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 
 const { Text } = Typography;
 
@@ -17,6 +18,7 @@ interface ModelsModalProps {
 
 export const ModelsModal: React.FC<ModelsModalProps> = ({ file, open, onClose }) => {
   const t = useT();
+  useOverlayHistory({ isOpen: open, onClose });
   const { message } = AntdApp.useApp();
   const [filter, setFilter] = useState('');
 

@@ -1238,6 +1238,44 @@ because double-tap and pinch zoom are how a reader enlarges a dense table.
 - `touch-action: manipulation` is applied to controls, where it removes the double-tap delay
   the reader feels as lag. It is deliberately *not* applied to the page.
 
+### Back dismisses the overlay, and it is the platform's own Back
+
+The console does not implement a swipe gesture, and the reason is not effort. iOS Safari and
+Android predictive back already own the screen edges: a JavaScript edge-swipe either loses the
+gesture to the browser or fights it, and it can only ever approximately follow the finger. The
+platform's Back is native, so joining it means the hardware button, the browser's back arrow and
+the edge gesture all dismiss an overlay at native frame rate with nothing to reconcile.
+
+**The contract.** Any Drawer- or Modal-class overlay is one history entry. Opening it pushes an
+entry that keeps the same URL and the router's own bookkeeping, marked with the overlay's id;
+the platform Back pops that entry, and the pop dismisses the topmost overlay. The route never
+changes, so Back on an open overlay cannot navigate. `useOverlayHistory`
+(`web/src/hooks/useOverlayHistory.ts`) is the whole wiring, and its policy lives in
+`web/src/hooks/overlayHistory.ts`:
+
+```tsx
+useOverlayHistory({ isOpen, onClose });
+```
+
+**The boundary is Drawer and Modal.** Popovers, dropdowns, selects and tooltips are not
+overlays: they are opened by a click that also says what they are for, they close on the same
+gesture that opened them, and giving each one a history entry would make Back traverse the
+toolbar instead of the page.
+
+Four consequences are designed for rather than discovered, and each is pinned by
+`scripts/test-overlay-history.ts` and the `overlay-back` browser scenario:
+
+| Situation | Behaviour | Why |
+| --- | --- | --- |
+| A router navigation happened after the overlay opened | The sentinel is abandoned, not consumed | History entries cannot be removed, so consuming it would traverse the entry that was just written - the filter drawer's Apply closing over its own filters |
+| The overlay is closed by its own UI | Its sentinel is consumed, so no dead entry is left | Otherwise the reader's next Back spends itself on an entry that holds nothing |
+| The overlay's page unmounts while it is open | The sentinel is abandoned in place | A dead entry costs one Back press at most and never a wrong navigation |
+| The overlay refuses to close (an unsaved-edit confirmation) | Its sentinel is re-armed | Without this the next Back would leave the page out from under an open editor |
+| The reader goes *forward* after a Back | Nothing reopens | A forward press is spent; reopening overlays on it would resurrect a dialog the reader dismissed |
+
+`prefers-reduced-motion` is not involved: the platform owns the animation, which is one more
+reason this is the right mechanism rather than a JS gesture.
+
 ### What a phone layout is, and is not
 
 A phone layout is a second *rendering* of one list, never a second list. The dataset, the

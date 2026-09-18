@@ -23,6 +23,7 @@ import type { MenuProps } from 'antd';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { HeaderNav } from './HeaderNav';
 import { NARROW_VIEWPORT_QUERY } from '../../hooks/useIsNarrowViewport';
+import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { DataProgress } from './DataProgress';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
@@ -122,6 +123,12 @@ export const AppLayout: React.FC = () => {
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   const [isMobile, setIsMobile] = React.useState(isNarrowViewport);
   const [isMobileNavOpen, setIsMobileNavOpen] = React.useState(false);
+
+  // The sheet is an overlay like any other: Back puts it away rather than leaving the route,
+  // which on a phone is what the hardware button is expected to do. Gated on `isMobile`
+  // because the sheet only exists there, so a rotation that closes it must not leave a
+  // sentinel behind.
+  useOverlayHistory({ isOpen: isMobile && isMobileNavOpen, onClose: () => setIsMobileNavOpen(false) });
 
   React.useEffect(() => {
     const onResize = () => {

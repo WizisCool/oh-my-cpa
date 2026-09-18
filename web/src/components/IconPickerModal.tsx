@@ -4,6 +4,7 @@ import { SearchOutlined } from '@ant-design/icons';
 import { LOBE_ICON_CATALOG, type LobeIconCatalogEntry } from '../types/lobeIconCatalog';
 import { LobeIcon } from './LobeIcon';
 import { useT } from '../i18n';
+import { useOverlayHistory } from '../hooks/useOverlayHistory';
 
 /**
  * ANTD_CONTAINER_ZINDEX_STEP is the step antd 6 reserves per container level
@@ -36,6 +37,7 @@ export const IconPickerModal: React.FC<IconPickerModalProps> = ({
   onClose,
 }) => {
   const t = useT();
+  useOverlayHistory({ isOpen: open, onClose });
   const { token } = theme.useToken();
   // Derived from the live theme token, so a themed z-index base is respected
   // rather than pinned to today's default of 1000.

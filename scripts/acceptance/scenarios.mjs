@@ -41,6 +41,7 @@ import {
   dashboardTokenHeatmapPruned,
 } from './probes/dashboardTokenHeatmap.mjs';
 import { omcSettings } from './probes/omcSettings.mjs';
+import { overlayBackDismisses } from './probes/overlayHistory.mjs';
 import { iconPickerStacking, pickerProvider, providerIconPick } from './probes/providerConsole.mjs';
 import {
   alignmentFacets,
@@ -353,6 +354,43 @@ export const SCENARIOS = [
       // absence keeps the check honest about what it observed.
       assert('the search box raises no page error', errors.length === 0, errors.join(' | '));
     },
+  },
+  /**
+   * The platform's Back button, which is the only dismissal a phone has that is always in reach.
+   *
+   * The fixtures are the minimum each surface needs. The dashboard appears because the probe
+   * arrives at every route through a real in-app navigation - a reload replaces the history
+   * entry rather than adding one, and Back would then have nowhere to go - and the dashboard is
+   * the hop that needs the most of its own data to render. Everything else is one request record
+   * for the list and one provider for its editor; a richer fixture would not change what is
+   * asserted, which is about the history entry an overlay pushed.
+   */
+  {
+    id: 'overlay-back',
+    name: "overlays answer the platform's Back",
+    options: {
+      // A phone, because that is where the claim comes from: the hardware Back button and the
+      // edge gesture are the dismissals a phone always has in reach. The navigation sheet is a
+      // phone-only surface anyway, so a desktop viewport could not test it at all.
+      viewport: { width: 390, height: 844 },
+      routes: [
+        [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
+        [(url) => url.pathname.endsWith('/dashboard/tail'), () => chartDashboard],
+        [(url) => url.pathname.endsWith('/dashboard/token-heatmap'), () => chartTokenHeatmap],
+        [(url) => url.pathname.endsWith('/dashboard/models'), () => chartDashboardModels],
+        [(url) => url.pathname.endsWith('/usage/facets'), () => alignmentFacets],
+        [
+          (url) => url.pathname.includes('/usage/events'),
+          () => ({ items: interactionRecords, has_more: false, limit: 100 }),
+        ],
+        [
+          (url) => url.pathname.endsWith('/usage/ingest-status'),
+          () => ({ enabled: true, healthy: true, collector: { mode: 'http_pull', captured: 500, coverage_gaps: 0 }, stats: { pending: 0 } }),
+        ],
+        [(url) => url.pathname.endsWith('/management/providers'), () => ({ providers: [pickerProvider], total: 1 })],
+      ],
+    },
+    run: overlayBackDismisses,
   },
   {
     id: 'request-list-interactions',

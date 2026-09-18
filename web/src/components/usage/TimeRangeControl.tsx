@@ -3,6 +3,7 @@ import { Button, DatePicker, Dropdown, Modal } from 'antd';
 import { ClockCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useT } from '../../i18n';
+import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import {
   rangeErrorKey,
   selectedPresetKeys,
@@ -36,6 +37,9 @@ export interface TimeRangeControlProps {
 export const TimeRangeControl: React.FC<TimeRangeControlProps> = ({ preset, from, to, onChange }) => {
   const t = useT();
   const [isPickerOpen, setIsPickerOpen] = React.useState(false);
+  // The custom-range dialog is a modal over the page, so Back closes it rather than leaving the
+  // window the operator was configuring.
+  useOverlayHistory({ isOpen: isPickerOpen, onClose: () => setIsPickerOpen(false) });
 
   const isAbsolute = from !== undefined;
   const label = isAbsolute

@@ -349,6 +349,7 @@ The geometric form language is compact, rectangular, and tightly controlled:
 - **Do** preserve previous rendered content during query filter updates using `placeholderData: keepPreviousData`.
 - **Do** give a `:hover` reveal a `@media (hover: none)` counterpart, and express a phone arrangement as a `640px` viewport rule (or a `920px` container query on the box the layout is about) rather than a new magic number.
 - **Do** size focusable text controls at 16px under `(pointer: coarse)`, and give touch-only hit areas to controls whose drawn box stays at its token size.
+- **Do** wire a Drawer or Modal to `useOverlayHistory({ isOpen, onClose })` so the platform's Back dismisses it, and leave Popovers, dropdowns, selects and tooltips out of the history — Back traverses pages, not the toolbar.
 - **Do** delay loading spinners by 200ms (`DataProgress`) to eliminate flicker on fast responses.
 
 ### Don't:

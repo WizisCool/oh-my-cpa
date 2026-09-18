@@ -28,6 +28,7 @@ import type { Document } from 'yaml';
 import dayjs from 'dayjs';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
+import { useOverlayHistory } from '../hooks/useOverlayHistory';
 import { copyText } from '../utils/clipboard';
 import { ApiKeysList, type ApiKeyRecord } from '../components/keys/ApiKeysList';
 import { updateFieldWithBaseline, isConfigSemanticallyEqual, getFieldSemanticValue } from '../components/config/configDirty';
@@ -246,6 +247,8 @@ export const ApiKeysPage: React.FC = () => {
     setIsKeyVisible(false);
     setEditingIndex(null);
   }, []);
+
+  useOverlayHistory({ isOpen: modalOpen, onClose: closeEditor });
 
   const openAddEditor = React.useCallback(() => {
     setEditingIndex(null);

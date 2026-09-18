@@ -30,6 +30,7 @@ import {
   type OAuthModelAliasValidationError,
 } from './oauthModelAliasLogic';
 import styles from './OAuthModelAliasDrawer.module.css';
+import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 
 const { Text } = Typography;
 
@@ -71,6 +72,7 @@ export const OAuthModelAliasDrawer: React.FC<OAuthModelAliasDrawerProps> = ({
   providerOptions,
 }) => {
   const t = useT();
+  useOverlayHistory({ isOpen: open, onClose });
   const { message, modal } = AntdApp.useApp();
   const queryClient = useQueryClient();
   const rowCounterRef = useRef(0);

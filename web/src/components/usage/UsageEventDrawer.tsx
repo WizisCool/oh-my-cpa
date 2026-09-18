@@ -26,6 +26,7 @@ import {
   isNonStreamingEvent,
 } from '../../types/usageEventMetrics';
 import { requestGroupName } from '../../types/usageEventLabels';
+import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 
 export interface UsageEventDrawerProps {
   eventId: number | null;
@@ -48,6 +49,14 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   const { style: tokenStyle } = useTokenDisplayStyle();
   const { message } = AntdApp.useApp();
   const [downloadModalOpen, setDownloadModalOpen] = React.useState(false);
+
+  // The drawer and the download confirmation over it are two overlays on one stack, so Back
+  // closes the confirmation first and the record second - the order the reader sees them in.
+  useOverlayHistory({ isOpen: eventId != null, onClose });
+  useOverlayHistory({
+    isOpen: downloadModalOpen && eventId != null,
+    onClose: () => setDownloadModalOpen(false),
+  });
   const [downloading, setDownloading] = React.useState(false);
   const [tab, setTab] = React.useState('overview');
   React.useEffect(() => {

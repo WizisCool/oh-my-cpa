@@ -77,6 +77,7 @@ const SCENARIO_PATHS = [
       'refresh-sequencing',
       'search-dev-server',
       'request-list-interactions',
+      'overlay-back',
     ],
   },
   {
@@ -87,6 +88,18 @@ const SCENARIO_PATHS = [
       'search-dev-server',
       'request-list-interactions',
     ],
+  },
+  // The overlay history layer and everything it is wired into. Named as one rule because the
+  // claim is about the layer plus a representative overlay of each kind: the navigation sheet
+  // from the shell, the request detail and filter drawers from the request list, and the
+  // provider editor. A change to the hook itself moves all of them.
+  {
+    prefix: 'web/src/hooks/useOverlayHistory',
+    scenarios: ['overlay-back'],
+  },
+  {
+    prefix: 'web/src/hooks/overlayHistory',
+    scenarios: ['overlay-back'],
   },
   // The provider console and its icon picker: the drawer/modal stacking assertion
   // is about those two overlays specifically, and picking a mark from the picker is

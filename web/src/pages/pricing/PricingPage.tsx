@@ -16,6 +16,7 @@ import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';
 import type { ModelPrice } from '../../types/pricing';
 import { PricingLeaderboard } from './PricingLeaderboard';
+import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import styles from './PricingPage.module.css';
 
 /** Per-1M rates share one cell format: plain number with up to 6 decimal places. */
@@ -48,6 +49,7 @@ export const PricingPage: React.FC = () => {
   const [search, setSearch] = React.useState('');
   const [activeTab, setActiveTab] = React.useState<FilterTabKey>('all');
   const [editor, setEditor] = React.useState<EditorState>(CLOSED_EDITOR);
+  useOverlayHistory({ isOpen: editor.open, onClose: () => setEditor(CLOSED_EDITOR) });
   const [form] = Form.useForm<PriceFormValues>();
 
   const watchedPrompt = Number(Form.useWatch('prompt', form) ?? 0) || 0;

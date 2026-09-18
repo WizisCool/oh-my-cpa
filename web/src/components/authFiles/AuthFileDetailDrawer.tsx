@@ -34,6 +34,7 @@ import {
   isAuthFileProblem,
 } from './authFileLogic';
 import styles from './AuthFileDetailDrawer.module.css';
+import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 
 const { Text } = Typography;
 
@@ -215,6 +216,10 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
       onClose();
     }
   }, [isDirty, modal, onClose, saveMutation.isPending, t]);
+
+  // Back goes through the same guard the drawer's own X does, so an edit in progress is never
+  // discarded by a physical key that the reader may have pressed by accident.
+  useOverlayHistory({ isOpen: open, onClose: handleAttemptClose });
 
   const safeFieldsQuery = useQuery({
     queryKey: ['auth-file-safe-fields', file?.name, file?.auth_index],
