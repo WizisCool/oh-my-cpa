@@ -17,7 +17,62 @@
  * awaited anything whenever the modern API is absent.
  */
 
-const COPY_SCRATCH_ATTRIBUTE = 'data-omc-copy-scratch';
+const DIALOG_SELECTOR = '[role="dialog"], [role="alertdialog"]';
+
+/**
+ * The subtree the scratch element has to join.
+ *
+ * A dialog - antd's Drawer and Modal both - intercepts `focusin` and pulls focus
+ * straight back into its own subtree, synchronously. A scratch element attached to
+ * `document.body` is outside that subtree, so it never keeps the focus its selection
+ * needs: `select()` selects nothing, and `execCommand('copy')` still answers `true`
+ * for that empty selection - a failure announced as a success. Joining the dialog is
+ * what keeps the copy real.
+ *
+ * The focused node is the anchor rather than a class name or a global "open dialog"
+ * lookup, and both directions are searched: a focused control is a *descendant* of
+ * the role-bearing element, while a dialog that has just opened parks focus on its
+ * own root, which is an *ancestor* of it.
+ */
+function focusContainer(): HTMLElement {
+  const active = document.activeElement as
+    | (Element & {
+        closest?: (selector: string) => Element | null;
+        querySelector?: (selector: string) => Element | null;
+      })
+    | null;
+  // Document-level focus means no dialog owns it. Searching from here would find a
+  // dialog that is merely still in the DOM after being closed - antd portals them to
+  // the body - and attaching the scratch element to that hidden subtree loses a copy
+  // that would otherwise have worked.
+  if (!active || active === document.body) return document.body;
+  const owning = active.closest?.(DIALOG_SELECTOR);
+  if (owning) return owning as HTMLElement;
+  const enclosing = active.querySelector?.(DIALOG_SELECTOR);
+  if (enclosing) return enclosing as HTMLElement;
+  return document.body;
+}
+
+/**
+ * Whether the scratch element really holds the selection it just made.
+ *
+ * Two facts have to be read off the element rather than off the document.
+ * `window.getSelection()` does not expose a textarea's internal selection - it
+ * reports an empty one - so the element's own range is what shows the text is
+ * selected, and `document.activeElement` is what shows the copy will use it.
+ * `execCommand('copy')` answers `true` for an empty selection, so without this check
+ * a dialog's focus trap turns a defeated copy into a reported success.
+ *
+ * An empty value fails this on purpose. At length zero the range check holds before
+ * anything is selected, and a copy of nothing leaves the clipboard untouched while
+ * still answering `true` - so there would be no verification and no copy, yet a
+ * success reported for both.
+ */
+function scratchHoldsSelection(scratch: HTMLTextAreaElement): boolean {
+  if (document.activeElement !== scratch) return false;
+  if (scratch.value.length === 0) return false;
+  return scratch.selectionStart === 0 && scratch.selectionEnd === scratch.value.length;
+}
 
 /**
  * legacyCopy moves the text through a scratch element and the document selection.
@@ -45,7 +100,6 @@ function legacyCopy(text: string): boolean {
   }
 
   const scratch = document.createElement('textarea');
-  scratch.setAttribute(COPY_SCRATCH_ATTRIBUTE, '');
   scratch.setAttribute('readonly', '');
   scratch.setAttribute('aria-hidden', 'true');
   scratch.tabIndex = -1;
@@ -54,14 +108,16 @@ function legacyCopy(text: string): boolean {
   scratch.style.top = '0';
   scratch.style.left = '-9999px';
   scratch.style.opacity = '0';
-  document.body.appendChild(scratch);
+  // Inside the dialog that owns the focus, when there is one. `position: fixed`
+  // keeps this from disturbing the container's layout.
+  focusContainer().appendChild(scratch);
 
   let copied = false;
   try {
     scratch.focus();
     scratch.select();
     scratch.setSelectionRange(0, text.length);
-    copied = document.execCommand('copy');
+    copied = scratchHoldsSelection(scratch) && document.execCommand('copy');
   } catch {
     copied = false;
   } finally {
