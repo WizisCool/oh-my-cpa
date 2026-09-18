@@ -13,7 +13,7 @@
  * The list of presets is derived from `EVENT_PRESETS` rather than restated, so a
  * preset added there cannot be silently missing from the menu.
  */
-import { EVENT_PRESETS } from '../../types/usageEventView';
+import { EVENT_PRESETS } from '../../types/usageEventQuery';
 
 /** The presets offered inline; the rest of `EVENT_PRESETS` follows under a divider. */
 export const QUICK_PRESETS: readonly string[] = ['15m', '1h', '6h', '24h'];

@@ -1,9 +1,9 @@
 import React from 'react';
 import { Button, Drawer, Input, InputNumber, Segmented, Select, Tooltip } from 'antd';
 import type { UsageCostFilter, UsageFacetValue, UsageFacets, UsageResultFilter } from '../../types/usageEvents';
-import { providerFacetLabel, usageFacetLabel } from '../../types/usageEventView';
+import { providerFacetLabel, usageFacetLabel } from '../../types/usageEventLabels';
 import { ResultMarker } from './ResultMarker';
-import type { EventFilterKey } from '../../types/usageEventView';
+import type { EventFilterKey } from '../../types/usageEventQuery';
 import { parseUsageRangeBound } from '../../types/usageEvents';
 import type { RangeFieldKey, RangeBound } from '../../types/usageEventFilters';
 import type { UsageEventsFilterDraft, UsageEventsView } from '../../types/usageEventFilters';

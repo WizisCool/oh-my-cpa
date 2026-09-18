@@ -6,44 +6,54 @@ import {
   filterParamsToUrl,
   queryToFilterParams,
   eventWindow,
+  mergeFacetOptions,
+  activeFilterCount,
+  EVENT_FILTER_KEYS,
+  hasExplicitEventQuery,
+} from '../web/src/types/usageEventQuery.ts';
+import { EVENT_AUTO_REFRESH_MS } from '../web/src/types/usageEventCadence.ts';
+import {
+  DEFAULT_USAGE_EVENTS_VIEW,
+  USAGE_EVENTS_VIEW_PREFERENCE,
+  EVENT_GROUPING_VALUES,
+  parseEventGrouping,
+  parseUsageEventsView,
+} from '../web/src/types/usageEventViewPreference.ts';
+import {
   indexCredentialFiles,
   resolveCredential,
+  resolveProviderInfo,
+  createProviderNameResolver,
+} from '../web/src/types/usageEventIdentity.ts';
+import {
   requestGroupName,
-  eventPageMetrics,
-  formatEventDuration,
   eventKeyLabel,
   eventResultLabelKey,
   eventUserAgentLabel,
   usageFacetLabel,
-  mergeFacetOptions,
-  activeFilterCount,
-  USAGE_EVENTS_VIEW_PREFERENCE,
-  DEFAULT_USAGE_EVENTS_VIEW,
-  EVENT_FILTER_KEYS,
-  EVENT_AUTO_REFRESH_MS,
-  parseUsageEventsView,
-  hasExplicitEventQuery,
+  providerFacetLabel,
+} from '../web/src/types/usageEventLabels.ts';
+import {
+  eventPageMetrics,
+  formatEventDuration,
   eventCacheRate,
   successRateVerdict,
   SUCCESS_ROUTINE_FAILURE_PERCENT,
   SUCCESS_ELEVATED_FAILURE_PERCENT,
   SUCCESS_VERDICT_MIN_FAILURES,
   SUCCESS_VERDICT_MIN_SAMPLE,
-  resolveProviderInfo,
-  createProviderNameResolver,
-  providerFacetLabel,
   eventTokensPerSecond,
   hasMeasurableTTFT,
   isNonStreamingEvent,
-  parseEventGrouping,
+} from '../web/src/types/usageEventMetrics.ts';
+import {
   eventProviderIdentity,
   eventCredentialIdentity,
   eventUserAgentGroupKey,
   formatEventSourceGroupTitle,
   providersWithMultipleAuthSources,
-  EVENT_GROUPING_VALUES,
   UNKNOWN_EVENT_GROUP,
-} from '../web/src/types/usageEventView.ts';
+} from '../web/src/types/usageEventGrouping.ts';
 import {
   EMPTY_FILTER_DRAFT,
   draftFromView,

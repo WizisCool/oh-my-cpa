@@ -180,8 +180,11 @@ one shared entry schema and one shared write shape. The console mirrors that:
 `internal/cpa/management/config_keys.go` owns the family values, the endpoints
 and the decoding, and `internal/api/management_providers.go` holds one
 declaration per family (`providerConfigFamilies`) that supplies the presentation
-constants. List, create, update, delete, status toggle and model pull are written
-once against that table.
+constants, with the list projection it feeds beside it. The writes live in
+`internal/api/management_provider_crud.go`, the enable/disable toggle in
+`management_provider_status.go` and the model-list pull in
+`management_provider_models.go`, and all of them are written once against that
+table.
 
 Adding such a family is a constant plus a row, and the pieces that must stay in
 step are the same three in both stacks: the family's credential list in CPA, its
@@ -220,7 +223,7 @@ Query for server state.
 | --- | --- |
 | `App.tsx` | Router, lazily loaded pages, theme and locale providers; the theme provider sits above `ConfigProvider` (Ant Design's tokens are a projection of the resolved palette) while `ThemeServerSync` sits inside `App`, because a refused save is reported through Ant Design's message API |
 | `api/client.ts` | The one typed HTTP client; every endpoint is declared here |
-| `types/` | Wire types, including `usageEventView.ts` (row projection and filters), `usageEventViewActions.ts` (the view's URL and persistence rewrites), `tokenDisplay.ts` (the one layer every user-facing token number is formatted through) and `rollingNumber.ts` (the animated shape of a reading) |
+| `types/` | Wire types, including the request-record view model split by responsibility (`usageEventQuery.ts` for the URL and filter contract, `usageEventViewPreference.ts` for the stored view, `usageEventIdentity.ts` for the credential and provider behind a row, `usageEventGrouping.ts` for how records bucket, `usageEventLabels.ts` for what a row prints, `usageEventMetrics.ts` for its numbers and `usageEventCadence.ts` for the page's timing constants), `usageEventViewActions.ts` (the view's URL and persistence rewrites), `tokenDisplay.ts` (the one layer every user-facing token number is formatted through) and `rollingNumber.ts` (the animated shape of a reading) |
 | `hooks/` | `usePreference`, `useLastIntentQueue` (React binding) over `lastIntentQueue` (the framework-free controller) and `disposableSlot` (effect-scoped resource lifetime), `useLogTail`, `useVisibleNow`, `useIsNarrowViewport`, `usePrefersReducedMotion` (the app-owned reduced-motion switch the canvas marks need, since neither `@antv/g2` nor `@ant-design/plots` reads the preference) |
 | `i18n/` | `index.tsx` owns the base `[zh, en]` dictionary and the `t()` context; `language.ts` is the reading-language registry and locale helpers; `locales/zh-Hant.ts` and `locales/ms.ts` are the complete additional catalogs |
 | `theme/` | `palette.ts` (the nine authored tokens, the seventeen-token derivation, the registered palettes and the resolution of a mode plus a selection into a palette), `themePreference.ts` (the stored preference document, its parse and its migration from the earlier bare palette id), `ThemeContext.tsx` (the preference, the system follow, the in-progress edit, and the server sync), `themeConfig.ts` (antd tokens and CSS-variable projection), `colorMath.ts` (OKLCH mixing, luminance and contrast - the one authority for every ratio in the console), `cacheScale.ts` and `heatmapRamp.ts` (the two sequential ramps' stops) |
@@ -629,7 +632,7 @@ its whole payload in one chunk. Throughput therefore keys on the observed residu
 window rather than the recorded mode:
 
 - When `latency_ms - ttft_ms >= MIN_STREAMING_GENERATION_WINDOW_MS` (50 ms,
-  defined in `web/src/types/usageEventView.ts`), `ttft_ms` is treated as a genuine
+  defined in `web/src/types/usageEventMetrics.ts`), `ttft_ms` is treated as a genuine
   generation boundary and TPS is `output_tokens * 1000 / (latency_ms - ttft_ms)`.
 - When TTFT is missing or the residual window is collapsed, the response was not
   observed progressively enough to isolate generation. TPS falls back to
@@ -743,9 +746,10 @@ worth printing. That decision is a property of the *page*, not of one bucket —
 window — so a line served by a single credential reads as the provider alone
 while a line split across two names both.
 
-Grouping keys and labels are computed in `web/src/types/usageEventView.ts`, which
-is what the logic test harness loads, and are pinned there rather than by reading
-the DOM. Two properties matter beyond the labels:
+Grouping keys and labels are computed in `web/src/types/usageEventGrouping.ts` and
+`web/src/types/usageEventLabels.ts`, which is what the logic test harness loads,
+and are pinned there rather than by reading the DOM. Two properties matter beyond
+the labels:
 
 - **The stored preference migrates.** `parseUsageEventsView` maps the retired
   `provider` and `credential` values onto `source`, so an operator returning to a

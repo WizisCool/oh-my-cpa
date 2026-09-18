@@ -8,18 +8,22 @@ import { copyText } from '../../utils/clipboard';
 import { cacheScaleMix, formatCacheRate } from '../../theme/cacheScale';
 import type { UsageEvent } from '../../types/usageEvents';
 import {
-  eventCacheRate,
-  eventKeyLabel,
-  eventResultLabelKey,
-  eventTokensPerSecond,
-  eventUserAgentLabel,
-  formatEventDuration,
-  hasMeasurableTTFT,
-  isNonStreamingEvent,
   resolveProviderInfo,
   type CredentialIndex,
   type ProviderLookupEntry,
-} from '../../types/usageEventView';
+} from '../../types/usageEventIdentity';
+import {
+  eventCacheRate,
+  eventTokensPerSecond,
+  formatEventDuration,
+  hasMeasurableTTFT,
+  isNonStreamingEvent,
+} from '../../types/usageEventMetrics';
+import {
+  eventKeyLabel,
+  eventResultLabelKey,
+  eventUserAgentLabel,
+} from '../../types/usageEventLabels';
 import { requestColumnAlignClass } from './requestColumns';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { formatTokens, formatTokensFull } from '../../types/tokenDisplay';

@@ -5,7 +5,7 @@ import { pastDeadline, sleep } from './harness.mjs';
 import {
   EVENT_AUTO_REFRESH_MS,
   EVENT_SEARCH_DEBOUNCE_MS,
-} from '../../web/src/types/usageEventView.ts';
+} from '../../web/src/types/usageEventCadence.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 

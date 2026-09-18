@@ -1,10 +1,11 @@
-import type { EventFilterKey, UsageEventsViewPreference } from './usageEventView';
+import type { EventFilterKey } from './usageEventQuery';
 import {
   EVENT_FILTER_KEYS,
   filterParamsToUrl,
   readEventQuery,
   queryToFilterParams,
-} from './usageEventView';
+} from './usageEventQuery';
+import type { UsageEventsViewPreference } from './usageEventViewPreference';
 import type { UsageResultFilter } from './usageEvents';
 
 /**

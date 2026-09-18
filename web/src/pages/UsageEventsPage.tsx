@@ -41,36 +41,40 @@ import {
   type UsageResultFilter,
 } from '../types/usageEvents';
 import {
-  indexCredentialFiles,
   EVENT_AUTO_REFRESH_MS,
   EVENT_SEARCH_DEBOUNCE_MS,
   EVENT_SYNC_NOTICE_MS,
+} from '../types/usageEventCadence';
+import {
   EVENT_FILTER_KEYS,
   activeFilterCount,
   eventWindow,
   filterParamsToUrl,
+  hasExplicitEventQuery,
+  mergeFacetOptions,
   readEventQuery,
   readFilterParams,
   rejectedEventParams,
-  USAGE_EVENTS_VIEW_PREFERENCE,
+  type EventFilterKey,
+} from '../types/usageEventQuery';
+import {
   DEFAULT_USAGE_EVENTS_VIEW,
+  EVENT_GROUPING_VALUES,
+  USAGE_EVENTS_VIEW_PREFERENCE,
   parseUsageEventsView,
-  hasExplicitEventQuery,
-  usageFacetLabel,
-  providerFacetLabel,
-  createProviderNameResolver,
-  mergeFacetOptions,
-  eventProviderIdentity,
+  type EventGrouping,
+  type UsageEventsViewPreference,
+} from '../types/usageEventViewPreference';
+import { createProviderNameResolver, indexCredentialFiles } from '../types/usageEventIdentity';
+import { providerFacetLabel, usageFacetLabel } from '../types/usageEventLabels';
+import {
+  UNKNOWN_EVENT_GROUP,
   eventCredentialIdentity,
+  eventProviderIdentity,
   eventUserAgentGroupKey,
   formatEventSourceGroupTitle,
   providersWithMultipleAuthSources,
-  EVENT_GROUPING_VALUES,
-  UNKNOWN_EVENT_GROUP,
-  type EventFilterKey,
-  type UsageEventsViewPreference,
-  type EventGrouping,
-} from '../types/usageEventView';
+} from '../types/usageEventGrouping';
 import { animateScrollToTop, type ScrollAnimationHandle } from '../utils/smoothScroll';
 import type { UsageEventsView } from '../types/usageEventFilters';
 import {
