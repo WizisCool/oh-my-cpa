@@ -1,3 +1,8 @@
+import {
+  EVENT_SEARCH_DEBOUNCE_MS,
+} from '../../../web/src/types/usageEventCadence.ts';
+import { sleep, pastDeadline } from '../harness.mjs';
+
 /**
  * The search box against everything else: a keystroke queued while another filter
  * changes, the term following navigation, and the parameters that cannot be applied.

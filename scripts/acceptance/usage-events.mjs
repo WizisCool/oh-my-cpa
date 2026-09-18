@@ -179,6 +179,8 @@ export async function runUsageEventsAcceptance({
     consoleErrors,
     pageErrors,
     onSmokeComplete,
+    root,
+    initialFilterQuery,
     clickSettled,
     listScroller,
     describeListTree,

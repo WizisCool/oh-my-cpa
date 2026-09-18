@@ -1,3 +1,8 @@
+import {
+  EVENT_SEARCH_DEBOUNCE_MS,
+} from '../../../web/src/types/usageEventCadence.ts';
+import { sleep, pastDeadline } from '../harness.mjs';
+
 /**
  * The filter panel's edits: a chip, the advanced drawer's draft and apply, the
  * irreducible window refusal, clear-all, the result verdict, and the cursor a filter
@@ -5,6 +10,7 @@
  */
 export async function filterPanelSection(context) {
   const {
+    initialFilterQuery,
     page,
     check,
     checkEventually,

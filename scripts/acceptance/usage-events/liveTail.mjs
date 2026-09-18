@@ -1,3 +1,7 @@
+import {
+  EVENT_AUTO_REFRESH_MS,
+} from '../../../web/src/types/usageEventCadence.ts';
+
 /**
  * The live tail and the poll: ordering, the auto-refresh switch, the hold a reader
  * takes when they scroll away, the arrival pill, and the facets' freshness policy.

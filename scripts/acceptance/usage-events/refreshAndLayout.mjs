@@ -1,9 +1,12 @@
+import path from 'node:path';
+
 /**
  * The manual refresh and the layout sweeps: the facets a refresh re-reads, and every
  * supported viewport's overflow.
  */
 export async function refreshAndLayoutSection(context) {
   const {
+    root,
     page,
     check,
     checkEventually,
