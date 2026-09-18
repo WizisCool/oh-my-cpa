@@ -225,9 +225,3 @@ export async function providerIconPick({ base, page, check }) {
     `mark=${reloaded || 'none'}`,
   );
 }
-
-// ---------------------------------------------------------------------------
-// Dashboard token heatmap
-// ---------------------------------------------------------------------------
-
-/** Local `YYYY-MM-DD` and midnight bounds for an offset from today. */

@@ -6,6 +6,28 @@ import { sleep } from '../probe.mjs';
  * their window and refresh states, a first-load failure and an empty window.
  */
 
+/**
+ * The dashboard's two model panels: the per-model token trend and the model-usage ring.
+ *
+ * Both are AntV marks, so the assertions read painted pixels rather than DOM - a canvas that exists
+ * proves nothing, and the failure this has to catch is a mark drawn with the wrong data or in one
+ * colour repeated. Four claims are made, and each is one a per-component test cannot reach:
+ *
+ *   - Each group's line is painted in its own colour. A `colorField` that failed to bind, or a domain
+ *     and range that were passed in an order the library did not honour, paints every series the same
+ *     and still renders a plausible chart.
+ *   - The ring draws as many distinct slice colours as the legend claims groups. A ring wired to the
+ *     first group repeated would look like a ring.
+ *   - The legend and the ranked list agree, group for group and colour for colour. They are two
+ *     renderings of one ranking, and the api's `folded` discriminator is the only thing keeping a real
+ *     model named like the remainder out of the remainder.
+ *   - Nothing overflows the card at its own width, which is the container this chart is drawn into.
+ *   - The plot's chrome - the grid rules, the tooltip's crosshair and the axis labels - is painted in
+ *     the palette's ink, in both themes. That is the one part of the mark the runtime draws from its own
+ *     theme rather than from ours, and the dark card is the one that shows when it does: a near-black rule
+ *     there is one 8-bit step from the background it is drawn on. All three are read from the canvas, so
+ *     what is asserted is the paint rather than the spec that asked for it.
+ */
 export async function dashboardModelPanels({ base, page, check }) {
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
   await page.locator('.dashboard-models').waitFor({ timeout: 20_000 });
@@ -994,16 +1016,3 @@ export async function dashboardModelPanelsEmpty({ base, page, check }) {
   );
 }
 
-/**
- * The request list's reader interactions: virtualization bounds, the column
- * resizer and its persistence, the collapse gesture, keyboard access to the detail
- * drawer, and the gated request-log download.
- *
- * These came from `scripts/browser-usage-events.mjs`, which was deleted when the
- * probe files were combined. They are restored here rather than dropped: every one
- * is a claim only a real engine can make, and several (the download gate, the
- * keyboard path, the resize handle) had no replacement anywhere. The scenario runs
- * against the same Vite dev server and mocked API as the other probes, with a large
- * record set because a bounded virtual window is only observable when there is
- * something to virtualize.
- */

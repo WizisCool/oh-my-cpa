@@ -264,6 +264,19 @@ export const interactionRecords = (() => {
 })();
 
 
+/**
+ * The request list's reader interactions: virtualization bounds, the column
+ * resizer and its persistence, the collapse gesture, keyboard access to the detail
+ * drawer, and the gated request-log download.
+ *
+ * These came from `scripts/browser-usage-events.mjs`, which was deleted when the
+ * probe files were combined. They are restored here rather than dropped: every one
+ * is a claim only a real engine can make, and several (the download gate, the
+ * keyboard path, the resize handle) had no replacement anywhere. The scenario runs
+ * against the same Vite dev server and mocked API as the other probes, with a large
+ * record set because a bounded virtual window is only observable when there is
+ * something to virtualize.
+ */
 export async function requestListInteractions({ base, page, check }) {
   const downloads = [];
   page.on('request', (request) => {

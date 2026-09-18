@@ -7,6 +7,15 @@ import { installRoutes } from '../probe.mjs';
  * readouts they print, and the sweep a revision triggers.
  */
 
+/**
+ * The area marks @ant-design/charts paints into each card's .chart-slot.
+ *
+ * Counting canvases proves almost nothing here: an empty canvas, a mark drawn in
+ * the wrong colour, and a mark collapsed onto the plot floor all satisfy it. So the
+ * assertions read the painted pixels instead - several distinct tones per tile, ink
+ * spanning the plot rather than a stub. That is the check an earlier revision of
+ * this probe lacked, which is why it passed on a mark the design never called for.
+ */
 export async function dashboardChartMarks({ base, page, check }) {
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
   await page.locator('.chart-slot canvas, .chart-slot svg').first().waitFor({ timeout: 20_000 });
@@ -586,25 +595,3 @@ export async function dashboardChartMotion({ base, page, context, check }) {
   }
 }
 
-/**
- * The dashboard's two model panels: the per-model token trend and the model-usage ring.
- *
- * Both are AntV marks, so the assertions read painted pixels rather than DOM - a canvas that exists
- * proves nothing, and the failure this has to catch is a mark drawn with the wrong data or in one
- * colour repeated. Four claims are made, and each is one a per-component test cannot reach:
- *
- *   - Each group's line is painted in its own colour. A `colorField` that failed to bind, or a domain
- *     and range that were passed in an order the library did not honour, paints every series the same
- *     and still renders a plausible chart.
- *   - The ring draws as many distinct slice colours as the legend claims groups. A ring wired to the
- *     first group repeated would look like a ring.
- *   - The legend and the ranked list agree, group for group and colour for colour. They are two
- *     renderings of one ranking, and the api's `folded` discriminator is the only thing keeping a real
- *     model named like the remainder out of the remainder.
- *   - Nothing overflows the card at its own width, which is the container this chart is drawn into.
- *   - The plot's chrome - the grid rules, the tooltip's crosshair and the axis labels - is painted in
- *     the palette's ink, in both themes. That is the one part of the mark the runtime draws from its own
- *     theme rather than from ours, and the dark card is the one that shows when it does: a near-black rule
- *     there is one 8-bit step from the background it is drawn on. All three are read from the canvas, so
- *     what is asserted is the paint rather than the spec that asked for it.
- */

@@ -4,6 +4,7 @@
  * They live together because a scenario's route table names them by value.
  */
 
+/** Local `YYYY-MM-DD` and midnight bounds for an offset from today. */
 function heatmapDayEntry(dayOffset, tokens, requests, failures) {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
@@ -293,12 +294,3 @@ export const chartDashboard = {
   partial_errors: [],
 };
 
-/**
- * The area marks @ant-design/charts paints into each card's .chart-slot.
- *
- * Counting canvases proves almost nothing here: an empty canvas, a mark drawn in
- * the wrong colour, and a mark collapsed onto the plot floor all satisfy it. So the
- * assertions read the painted pixels instead - several distinct tones per tile, ink
- * spanning the plot rather than a stub. That is the check an earlier revision of
- * this probe lacked, which is why it passed on a mark the design never called for.
- */

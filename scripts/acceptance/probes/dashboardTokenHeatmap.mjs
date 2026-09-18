@@ -1,10 +1,9 @@
-import {
-
 /**
  * Probes for the dashboard's token-activity grid: its day geometry and ramp, the
  * phone layout, the failure state of one panel, and the grid over pruned history.
  */
 
+import {
   HEATMAP_TODAY,
   HEATMAP_TOTAL_DAYS,
   HEATMAP_WEEKS,
