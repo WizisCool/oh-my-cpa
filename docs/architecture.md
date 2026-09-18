@@ -235,6 +235,14 @@ where `navigator.clipboard` is `undefined` outright. The helper therefore falls
 back to the selection path and returns whether the text actually reached the
 clipboard, and no control may announce a copy it did not make.
 
+That fallback carries two constraints a control inside a dialog depends on. A dialog -
+antd's Drawer and Modal both - pulls focus back into its own subtree, so the scratch
+element the selection path types through has to join that subtree rather than
+`document.body`: attached outside it, the element never keeps the focus its selection
+needs and the selection stays empty. And `execCommand('copy')` answers `true` for an
+empty selection, so the helper checks that the scratch element holds focus and its own
+selection before believing the result.
+
 All page routes are `React.lazy` import boundaries so the entry chunk stays
 small; the shell (`AppLayout`, `AuthGate`) is loaded eagerly because every
 route needs it. Brand/provider marks are copied from the pinned
@@ -923,11 +931,13 @@ broad gates rather than nothing.
   before the reads, so the probe holds the response and observes the ordering.
 - **The copy path is split between a unit test and the browser.** Which route a copy
   takes - the async Clipboard API, or the selection path a plain-HTTP origin needs -
-  is a decision over stubbed globals (`scripts/test-clipboard.ts`). Whether that
+  is a decision over stubbed globals (`scripts/test-clipboard.ts`), including where a
+  dialog's focus trap requires the scratch element to be attached. Whether that
   selection path puts the text on the clipboard is not: it needs a real document, so
-  the key-list acceptance pastes the value back out of the browser's own paste
-  pipeline. That context is granted no clipboard permission on purpose - granting it
-  would stop the acceptance from exercising the fallback at all.
+  the acceptance pastes the value back out of the browser's own paste pipeline from
+  inside a dialog and from a drawer, which are the containers that trap focus. That
+  context is granted no clipboard permission on purpose - granting it would stop the
+  acceptance from exercising the fallback at all.
 
 ### 11.2 Where the wall clock actually goes
 

@@ -227,8 +227,45 @@ export async function runKeyManagementAcceptance({
     const generatedKey = await keyModal.locator('#gateway-key-value').inputValue();
     check('key add dialog generates a non-empty gateway key', /^sk-cpa-[0-9a-f]{32}$/.test(generatedKey), `key=${generatedKey.slice(0, 10)}…`);
     check('key add dialog enables save only for a non-empty key', !(await keyModal.locator('.ant-btn-primary').isDisabled()));
+    // The dialog traps focus inside its own subtree, so its copy control is asserted
+    // here and not only on the list: a copy path that attaches its scratch element
+    // outside the dialog selects nothing, and `execCommand('copy')` answers `true` for
+    // that empty selection. The draft is pasted back with the dialog closed, because
+    // its focus trap would keep the probe input from taking focus while it is open.
+    const dialogCopyMessage = page.locator('.ant-message').getByText(/已复制到剪贴板|Copied to clipboard/);
+    // Waited for rather than edited away: the message nodes belong to React, and removing
+    // one detaches the holder the next message is rendered into, so the copy below would
+    // report itself nowhere. Waiting for a leftover carrying this exact text also keeps
+    // the assertion below from passing on a toast an earlier step left behind.
+    await dialogCopyMessage.waitFor({ state: 'detached', timeout: 10000 }).catch(() => undefined);
+    await keyModal.locator('.keys-key-editor-actions button').filter({ hasText: /^(复制|Copy)$/ }).click();
+    // The app's own statement that the copy completed, rather than a fixed pause that
+    // only guesses when it did.
+    await checkEventually(
+      'the key dialog copy control reports a copy it made',
+      async () => (await dialogCopyMessage.count()) > 0,
+      { label: "the key dialog's copy success message" },
+    );
     await keyModal.locator('.ant-modal-footer .ant-btn-default').first().click();
     await keyModal.waitFor({ state: 'hidden', timeout: 5000 });
+    await page.evaluate(() => {
+      const probe = document.createElement('input');
+      probe.setAttribute('data-copy-probe', '');
+      probe.style.position = 'fixed';
+      probe.style.top = '0';
+      probe.style.left = '-9999px';
+      probe.value = '';
+      document.body.appendChild(probe);
+      probe.focus();
+    });
+    await page.keyboard.press('Control+V');
+    const pastedDraftKey = await page.evaluate(() => document.querySelector('input[data-copy-probe]')?.value ?? '');
+    await page.evaluate(() => document.querySelector('input[data-copy-probe]')?.remove());
+    check(
+      'the key dialog copy control puts the draft key on the clipboard',
+      generatedKey.length > 0 && pastedDraftKey === generatedKey,
+      `match=${pastedDraftKey === generatedKey} pastedLength=${pastedDraftKey.length} expectedLength=${generatedKey.length}`,
+    );
     check('cancelling key add leaves the saved list unchanged', (await page.locator('.config-api-keys-table .ant-table-row').count()) === keyRows);
 
     // ---- the request list shows the name instead of the mask ----

@@ -885,5 +885,53 @@ export async function runUsageEventsAcceptance({
     await page.locator('.req-time-modal').waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
   }
   await page.setViewportSize({ width: 1440, height: 900 });
+  // The detail drawer's copy control sits inside a container that traps focus, which
+  // is exactly what makes it worth a browser assertion: a copy path that attaches its
+  // scratch element outside the drawer selects nothing, and `execCommand('copy')`
+  // answers `true` for that empty selection - so the console announced a copy that
+  // never happened. A toast therefore proves nothing. The value is pasted back out of
+  // the browser's own pipeline instead, with the drawer closed, because its focus trap
+  // would keep the probe input from taking focus while it is open.
+  await page.locator('.request-row').first().click();
+  await page.locator('.request-detail-id').waitFor({ state: 'visible', timeout: 10000 });
+  const drawerRequestId = (await page.locator('.request-detail-id span').first().innerText()).trim();
+  const drawerCopyMessage = page.locator('.ant-message').getByText(/已复制|Copied/);
+  // Waited for rather than edited away: the message nodes belong to React, and removing
+  // one detaches the holder the next message is rendered into, so the copy below would
+  // report itself nowhere. Waiting for a leftover carrying this text also keeps the
+  // assertion below from passing on a toast an earlier step left behind.
+  await drawerCopyMessage.waitFor({ state: 'detached', timeout: 10000 }).catch(() => undefined);
+  await page.locator('.request-detail-id').getByRole('button').first().click();
+  // The app's own statement that the copy completed, rather than a fixed pause that
+  // only guesses when it did.
+  await checkEventually(
+    'the request detail copy control reports a copy it made',
+    async () => (await drawerCopyMessage.count()) > 0,
+    { label: "the drawer's copy success message" },
+  );
+  await page.keyboard.press('Escape');
+  // Waited for rather than tolerated: a drawer still closing leaves a mask over the
+  // page, and the probe input below could not take focus through it.
+  await page.locator('.request-detail-id').waitFor({ state: 'hidden', timeout: 10000 });
+  await page.locator('.ant-drawer-mask').waitFor({ state: 'hidden', timeout: 10000 }).catch(() => undefined);
+  await page.evaluate(() => {
+    const probe = document.createElement('input');
+    probe.setAttribute('data-copy-probe', '');
+    probe.style.position = 'fixed';
+    probe.style.top = '0';
+    probe.style.left = '-9999px';
+    probe.value = '';
+    document.body.appendChild(probe);
+    probe.focus();
+  });
+  await page.keyboard.press('Control+V');
+  const pastedRequestId = await page.evaluate(() => document.querySelector('input[data-copy-probe]')?.value ?? '');
+  await page.evaluate(() => document.querySelector('input[data-copy-probe]')?.remove());
+  check(
+    'the request detail copy control puts the id on the clipboard',
+    drawerRequestId.length > 0 && pastedRequestId === drawerRequestId,
+    `match=${pastedRequestId === drawerRequestId} pastedLength=${pastedRequestId.length} expectedLength=${drawerRequestId.length}`,
+  );
+
   responseBodies.length = 0;
 }

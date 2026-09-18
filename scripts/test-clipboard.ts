@@ -7,14 +7,16 @@
  * listens on :80, and the dev server is reachable from a LAN or Tailscale device -
  * the property is `undefined`, so every copy in the console failed at once.
  *
- * What can only be asserted here is the decision: which route is taken, in what
- * order, and whether the caller is told the truth. That the selection path works
- * in a real browser is not a claim this file makes; it is verified end to end
- * where a real document exists.
+ * The second defect, and the reason the fake document here models focus at all: a
+ * dialog traps focus inside its own subtree, so a scratch element attached to
+ * `document.body` selects nothing - and `execCommand('copy')` answers `true` for the
+ * empty selection anyway. A copy inside the request detail drawer therefore reported
+ * success while leaving the clipboard untouched.
  *
- * The scratch element is observed through `document.createElement`, because the
- * route taken is the whole point - a test that only read the boolean could not
- * tell "the modern API worked" from "the fallback rescued it".
+ * What can only be asserted here is the decision: which route is taken, where the
+ * scratch element is attached, and whether the caller is told the truth. That the
+ * selection path works in a real browser is not a claim this file makes; it is
+ * verified end to end where a real document exists.
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -28,15 +30,19 @@ interface FakeScratchElement {
   value: string;
   style: Record<string, string>;
   tabIndex: number;
+  selectionStart: number;
+  selectionEnd: number;
+  setAttribute: (name: string, value: string) => void;
   focus: () => void;
   select: () => void;
   setSelectionRange: (start: number, end: number) => void;
-  setAttribute: (name: string, value: string) => void;
   remove: () => void;
 }
 
 interface ClipboardRoute {
   createdScratchElements: FakeScratchElement[];
+  appendedToBody: FakeScratchElement[];
+  appendedToDialog: FakeScratchElement[];
   focusedLabels: string[];
   restoredRanges: number;
   removedScratchElements: number;
@@ -49,14 +55,34 @@ interface DomOptions {
   focusedElementLabel?: string;
   /** Makes the caret restore itself fail, as a range whose node has gone would. */
   restoreThrows?: boolean;
+  /**
+   * Where the focused element's dialog sits. `ancestor` is what a focused control
+   * inside a dialog reports; `enclosing` is antd's Drawer, which parks focus on the
+   * drawer root that *holds* the role-bearing element rather than being one - the
+   * exact shape the request detail drawer presents.
+   */
+  dialog?: 'ancestor' | 'enclosing';
+  /** Takes focus and the selection back, as a dialog's focus trap does. */
+  focusTrap?: boolean;
+  /**
+   * Focus sits on the body while a closed dialog is still in the DOM, which is what
+   * antd leaves behind: it portals dialogs to the body and keeps them after closing.
+   */
+  focusOnBody?: boolean;
 }
 
 /**
  * installDom replaces the globals `copyText` reads and records the route it took.
+ *
+ * Focus and selection are modelled as one piece of state rather than two, because
+ * that is the behaviour under test: a selection only exists where focus is, which is
+ * precisely why losing focus to a focus trap leaves an empty selection behind.
  */
 function installDom(options: DomOptions): { route: ClipboardRoute; restore: () => void } {
   const route: ClipboardRoute = {
     createdScratchElements: [],
+    appendedToBody: [],
+    appendedToDialog: [],
     focusedLabels: [],
     restoredRanges: 0,
     removedScratchElements: 0,
@@ -64,23 +90,73 @@ function installDom(options: DomOptions): { route: ClipboardRoute; restore: () =
   const originalDocument = globalThis.document;
   const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
 
+  const dialog = {
+    appendChild: (element: FakeScratchElement) => {
+      route.appendedToDialog.push(element);
+      return element;
+    },
+  };
+  const body = {
+    appendChild: (element: FakeScratchElement) => {
+      route.appendedToBody.push(element);
+      return element;
+    },
+    // A closed dialog stays inside the body, so a search from the body finds one.
+    closest: () => null,
+    querySelector: () => dialog,
+  };
+  /** The node a focus trap parks focus on when it takes focus back. */
+  const trapTarget = { tagName: 'BUTTON' };
+
+  const state = {
+    activeElement: undefined as unknown,
+    selectionAnchor: null as unknown,
+  };
+
+  const focusedElement = {
+    focus: () => {
+      if (options.focusTrap) {
+        state.activeElement = trapTarget;
+        state.selectionAnchor = trapTarget;
+        return;
+      }
+      state.activeElement = focusedElement;
+      route.focusedLabels.push(options.focusedElementLabel ?? 'the previous element');
+    },
+    // antd's Drawer parks focus on the drawer root: it contains the role-bearing
+    // element rather than sitting inside one.
+    closest: () => (options.dialog === 'ancestor' ? dialog : null),
+    querySelector: () => (options.dialog === 'enclosing' ? dialog : null),
+  };
+  state.activeElement = options.focusOnBody ? body : focusedElement;
+
   const document = {
-    body: { appendChild: (element: FakeScratchElement) => element },
-    activeElement: {
-      focus: () => {
-        if (options.restoreThrows) throw new Error('the range is no longer in the document');
-        route.focusedLabels.push(options.focusedElementLabel ?? 'the previous element');
-      },
+    body,
+    get activeElement() {
+      return state.activeElement;
     },
     createElement: (): FakeScratchElement => {
       const element: FakeScratchElement = {
         value: '',
         style: {},
         tabIndex: 0,
-        focus: () => undefined,
-        select: () => undefined,
-        setSelectionRange: () => undefined,
+        selectionStart: 0,
+        selectionEnd: 0,
         setAttribute: () => undefined,
+        // A focus trap intercepts focus synchronously, which is why the scratch
+        // element never sees it: the trap's target is already focused when
+        // `focus()` returns.
+        focus: () => {
+          state.activeElement = options.focusTrap ? trapTarget : element;
+        },
+        select: () => {
+          element.selectionStart = 0;
+          element.selectionEnd = element.value.length;
+        },
+        setSelectionRange: (start: number, end: number) => {
+          element.selectionStart = start;
+          element.selectionEnd = end;
+        },
         remove: () => {
           route.removedScratchElements += 1;
         },
@@ -93,6 +169,9 @@ function installDom(options: DomOptions): { route: ClipboardRoute; restore: () =
       return options.execCommand ? options.execCommand() : false;
     },
     getSelection: () => ({
+      get anchorNode() {
+        return state.selectionAnchor;
+      },
       rangeCount: 1,
       getRangeAt: () => ({ cloneRange: () => ({ cloneRange: () => ({}) as FakeRange }) as FakeRange }),
       addRange: () => {
@@ -144,6 +223,7 @@ test('a non-secure origin still copies, through the selection path', async () =>
     assert.equal(await copyText('endpoint-value'), true);
     assert.equal(route.createdScratchElements.length, 1, 'the selection path ran');
     assert.equal(route.createdScratchElements[0].value, 'endpoint-value');
+    assert.equal(route.appendedToBody.length, 1, 'the scratch element joins the document outside a dialog');
     assert.equal(route.removedScratchElements, 1, 'the scratch element is cleaned up');
   } finally {
     restore();
@@ -212,6 +292,73 @@ test('a caret that cannot be restored does not hide the copy', async () => {
   try {
     assert.equal(await copyText('value'), true);
     assert.equal(route.removedScratchElements, 1);
+  } finally {
+    restore();
+  }
+});
+
+test('the scratch element joins the dialog that contains the focused control', async () => {
+  // A dialog traps focus to its own subtree. The scratch element has to be inside it
+  // or the selection it relies on never materialises.
+  const { route, restore } = installDom({ execCommand: () => true, dialog: 'ancestor' });
+  try {
+    assert.equal(await copyText('inside-a-dialog'), true);
+    assert.equal(route.appendedToDialog.length, 1);
+    assert.equal(route.appendedToBody.length, 0);
+  } finally {
+    restore();
+  }
+});
+
+test('the scratch element joins a dialog that only contains the focused root', async () => {
+  // antd's Drawer parks focus on the drawer root, which holds the role-bearing
+  // element rather than being inside one. This is the request detail drawer's shape,
+  // and searching only upwards leaves the copy selecting nothing.
+  const { route, restore } = installDom({ execCommand: () => true, dialog: 'enclosing' });
+  try {
+    assert.equal(await copyText('inside-the-drawer-root'), true);
+    assert.equal(route.appendedToDialog.length, 1);
+    assert.equal(route.appendedToBody.length, 0);
+  } finally {
+    restore();
+  }
+});
+
+test('a closed dialog left in the body does not capture the scratch element', async () => {
+  // antd portals dialogs to the body and keeps them after closing, so a search from a
+  // document-level focus finds a hidden subtree. Attaching there would lose copies that
+  // work today, which is why document-level focus goes straight to the body.
+  const { route, restore } = installDom({ execCommand: () => true, focusOnBody: true });
+  try {
+    assert.equal(await copyText('plain-page-value'), true);
+    assert.equal(route.appendedToBody.length, 1);
+    assert.equal(route.appendedToDialog.length, 0);
+  } finally {
+    restore();
+  }
+});
+
+test('an empty value is not reported as a copied one', async () => {
+  // Measured rather than assumed: `execCommand('copy')` answers `true` for an empty
+  // value while leaving the clipboard exactly as it was, and the range check is
+  // vacuous at length zero. Nothing reached the clipboard, so nothing may be claimed.
+  const { route, restore } = installDom({ execCommand: () => true });
+  try {
+    assert.equal(await copyText(''), false);
+    assert.equal(route.removedScratchElements, 1, 'the scratch element is still cleaned up');
+  } finally {
+    restore();
+  }
+});
+
+test('a focus trap that takes the focus is reported as failure, not success', async () => {
+  // The reported defect: `execCommand('copy')` answers `true` for an empty selection,
+  // so a copy the trap silently defeated still announced itself as a success. Whether
+  // the scratch element holds focus is what decides.
+  const { route, restore } = installDom({ execCommand: () => true, focusTrap: true });
+  try {
+    assert.equal(await copyText('never-selected'), false);
+    assert.equal(route.removedScratchElements, 1, 'the scratch element is still cleaned up');
   } finally {
     restore();
   }
