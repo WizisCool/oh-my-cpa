@@ -285,16 +285,22 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
                 render: (_: unknown, record: ApiKeyRecord) => (
                   <div className={styles['name-cell']}>
                     {record.alias ? (
-                      <div
+                      /* A real button, like the unnamed state beside it: the name cell is a
+                         rename affordance, so it has to be reachable without a pointer.
+                         antd's icon carries its own aria-label, which is why the name is
+                         stated outright here instead of being assembled from the contents. */
+                      <button
+                        type="button"
                         className={styles['name-wrapper']}
                         onClick={() => onEdit(record.index)}
                         title={t('keys.rename_title')}
+                        aria-label={`${t('cfg.api_keys_edit')}: ${record.alias}`}
                       >
                         <Text strong className={styles['name-text']}>
                           {record.alias}
                         </Text>
                         <EditOutlined className={styles['name-edit-icon']} />
-                      </div>
+                      </button>
                     ) : (
                       <button
                         type="button"

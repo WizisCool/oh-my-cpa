@@ -14,6 +14,10 @@
 
 .name-wrapper {
   display: inline-flex;
+  /* The element is a button, so the user agent's own background has to go; the
+     focus ring comes from the console-wide `:focus-visible` rule and the font
+     from the global `button { font: inherit }`, so neither is repeated here. */
+  background: transparent;
   align-items: center;
   gap: 6px;
   cursor: pointer;
