@@ -39,6 +39,46 @@ export async function runUsageEventsAcceptance({
   // Find the scroll holder by behaviour rather than by class: the list is
   // virtualized and the scrolling element is Listy's own holder nested inside
   // the wrapper, so naming it by class couples the check to component internals.
+  /**
+   * Clicks a toolbar control once the filter row has stopped re-flowing.
+   *
+   * `.request-filters` is a wrapping flex row, so adding or removing a filter re-wraps it, which moves
+   * the controls and the list beneath them. A click issued straight after a filter change can therefore
+   * land on geometry that has already changed: measured, Playwright retried for its full 30s and reported
+   * a table header covering the button's centre, because the point it had computed belonged to the
+   * previous layout.
+   *
+   * Two conditions, both real rather than a sleep: the control's own box has stopped changing, and the
+   * control is the element at its own centre. The second is the property a click needs, and stating it
+   * here turns a genuine overlap into a named diagnostic instead of an opaque "intercepts pointer
+   * events" after thirty seconds.
+   */
+  const clickSettled = async (selector, label) => {
+    const control = page.locator(selector);
+    await control.waitFor({ state: 'visible', timeout: 15_000 });
+    await measureStable(
+      async () => {
+        const box = await control.boundingBox();
+        return box
+          ? `${Math.round(box.x)},${Math.round(box.y)},${Math.round(box.width)},${Math.round(box.height)}`
+          : 'absent';
+      },
+      { page, label: `${label} to stop moving`, settleMs: 50 },
+    );
+    const covering = await page.evaluate((target) => {
+      const element = document.querySelector(target);
+      if (!element) return 'nothing (the control is gone)';
+      const rect = element.getBoundingClientRect();
+      const top = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      if (!top) return 'nothing (the point is outside the viewport)';
+      return top === element || element.contains(top) || top.contains(element)
+        ? null
+        : `${top.tagName.toLowerCase()}.${String(top.className)}`;
+    }, selector);
+    if (covering) throw new Error(`${label} is covered by ${covering} at its own centre`);
+    await control.click();
+  };
+
   const listScroller = async () => {
     const handle = await page.evaluateHandle(() => {
       const root = document.querySelector('.request-list-host');
@@ -322,7 +362,7 @@ export async function runUsageEventsAcceptance({
   await page.locator('.req-clear-all-chips').click();
   await until(() => !filterSuffix().includes('model='), { label: 'clear-all to drop the facet'});
   // Return to the window the rest of the audit expects before it continues.
-  await page.locator('.req-time-button').click();
+  await clickSettled('.req-time-button', 'the time-range control');
   await page
     .locator('.ant-dropdown-menu-item')
     .filter({ hasText: /1h/ })
@@ -487,7 +527,7 @@ export async function runUsageEventsAcceptance({
   // the checks above, so this is the one place the saved view is exercised end to
   // end: choose an explicit window, a page size and a cost filter, clear the
   // filters, then reopen the bare route.
-  await page.locator('.req-time-button').click();
+  await clickSettled('.req-time-button', 'the time-range control');
   await page
     .locator('.ant-dropdown-menu-item')
     .filter({ hasText: /24h/ })
@@ -514,7 +554,7 @@ export async function runUsageEventsAcceptance({
   // preset chosen from it reaches the URL.
   await page.goto(`${appURL}/usage/events?preset=7d`, { waitUntil: 'domcontentloaded' });
   await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 15000 });
-  await page.locator('.req-time-button').click();
+  await clickSettled('.req-time-button', 'the time-range control');
   const presetItems = await page.locator('.ant-dropdown-menu-item').allInnerTexts();
   await page.keyboard.press('Escape');
   await page
@@ -854,7 +894,7 @@ export async function runUsageEventsAcceptance({
     await page.locator('[data-testid="req-filter-cancel"]').click();
     await page.locator('.req-filter-drawer').waitFor({ state: 'hidden', timeout: 15000 });
 
-    await page.locator('.req-time-button').click();
+    await clickSettled('.req-time-button', 'the time-range control');
     // The trigger opens the preset menu; the absolute dialog is a menu item, so a
     // click on the trigger alone never opens it.
     await page
