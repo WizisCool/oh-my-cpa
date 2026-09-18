@@ -141,6 +141,8 @@ test('a change to the probe framework itself widens the plan', () => {
   for (const file of [
     'scripts/acceptance/probe.mjs',
     'scripts/acceptance/scenarios.mjs',
+    'scripts/acceptance/probes/dashboardCharts.mjs',
+    'scripts/acceptance/probes/usageRecords.mjs',
     'scripts/acceptance/check-ui-plan.mjs',
     'scripts/browser-probes.mjs',
     'scripts/check-ui.mjs',

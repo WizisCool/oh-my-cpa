@@ -228,7 +228,7 @@ Query for server state.
 | `i18n/` | `index.tsx` owns the base `[zh, en]` dictionary and the `t()` context; `language.ts` is the reading-language registry and locale helpers; `locales/zh-Hant.ts` and `locales/ms.ts` are the complete additional catalogs |
 | `theme/` | `palette.ts` (the nine authored tokens, the seventeen-token derivation, the registered palettes and the resolution of a mode plus a selection into a palette), `themePreference.ts` (the stored preference document, its parse and its migration from the earlier bare palette id), `ThemeContext.tsx` (the preference, the system follow, the in-progress edit, and the server sync), `themeConfig.ts` (antd tokens and CSS-variable projection), `colorMath.ts` (OKLCH mixing, luminance and contrast - the one authority for every ratio in the console), `cacheScale.ts` and `heatmapRamp.ts` (the two sequential ramps' stops) |
 | `utils/` | `maskKey.ts` (the console's one caller-key mask shape, kept branch for branch with the server's `security.MaskSecret`), `externalUrl.ts` (the http/https link rule), `modelOptions.ts` (model-input filtering), `smoothScroll.ts` (the gesture/correction scroll schedule), `clipboard.ts` (the one copy path, below) |
-| `components/`, `pages/` | Feature UI; one page per route, no page owns another. `components/usage/` also carries that page's framework-free policies: `searchDebounce.ts`, `pollingPolicy.ts`, `timeRangePolicy.ts`, `syncPresentation.ts` and `chipDisplay.ts` |
+| `components/`, `pages/` | Feature UI; one page per route, no page owns another. A page composes its surface rather than carrying it: `pages/UsageEventsPage.tsx` renders `components/usage/`'s toolbar, header and rows and takes its state from that directory's hooks, `pages/ProvidersPage.tsx` renders `components/providers/`'s table and editor, and `pages/ConfigPage.tsx` renders `components/config/`'s renderers. The framework-free policies of a surface stay beside it: `components/usage/` carries `searchDebounce.ts`, `pollingPolicy.ts`, `timeRangePolicy.ts`, `syncPresentation.ts` and `chipDisplay.ts`, and `components/config/` carries `payloadRules.ts` and `configDirty.ts` |
 
 Every copy control goes through `utils/clipboard.ts` rather than calling the
 Clipboard API itself. That API exists only in a secure context, and a plain-HTTP
@@ -855,7 +855,9 @@ browser-only probes concurrently.
 ### 11.0 The fast path is not a cheaper gate
 
 `check:ui` and `verify:probes` run the **same scenarios** from
-`scripts/acceptance/scenarios.mjs`; the difference is what they run them against, and
+`scripts/acceptance/scenarios.mjs`, which orders the implementations under
+`scripts/acceptance/probes/` (one module per product surface); the difference is
+what they run them against, and
 that difference is not a cost trade - it is a coverage difference in both directions.
 
 `check:ui` cannot replace `verify:probes`, because the dev server and a mocked API
