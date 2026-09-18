@@ -52,6 +52,13 @@ const SURFACES = [
       ],
     ],
   },
+  {
+    id: 'ai providers',
+    route: '/ai-providers',
+    tableSelector: '.providers-page .ant-table',
+    rowSelector: '[data-testid="phone-row"]',
+    routes: [],
+  },
 ];
 
 /**

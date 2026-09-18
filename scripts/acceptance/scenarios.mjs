@@ -427,6 +427,22 @@ export const SCENARIOS = [
           revision: 'fixture-r1',
           safe_yaml: 'api-keys:\n  - omc-fixture-key-aaaaaaaaaaaaaaaa\n  - omc-fixture-key-bbbbbbbbbbbbbbbb\n',
         })],
+        [(url) => url.pathname.endsWith('/management/providers'), () => ({
+          providers: [
+            pickerProvider,
+            {
+              id: 'claude-api-key-0',
+              family: 'claude-api-key',
+              name: 'Claude relay',
+              protocol: 'Anthropic Messages',
+              base_url: 'https://relay.example.test',
+              disabled: true,
+              key_configured: true,
+              models: [],
+            },
+          ],
+          total: 2,
+        })],
       ],
     },
     run: phoneListRendering,

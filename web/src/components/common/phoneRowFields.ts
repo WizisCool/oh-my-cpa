@@ -105,6 +105,25 @@ function cellValue<T>(column: PhoneRowSource<T>, record: T): unknown {
   return value;
 }
 
+/**
+ * One column's rendered cell, for a caller that draws it outside the table.
+ *
+ * A row's controls live in columns too - a switch, an action cluster - and a phone row draws
+ * them on their own line rather than as a field. This is how such a caller gets them without
+ * writing the control a second time: the column's own `render` produces it, so the table's
+ * switch and the row's switch cannot diverge in state, disabled-ness or label.
+ */
+export function renderedCell<T>(
+  columns: readonly PhoneRowSource<T>[],
+  columnKey: string,
+  record: T,
+  index: number,
+): ReactNode | undefined {
+  const column = columns.find((candidate) => columnIdentity(candidate) === columnKey);
+  if (!column || !column.render) return undefined;
+  return renderedNode(column.render(cellValue(column, record), record, index));
+}
+
 export function phoneRowFields<T>(
   columns: readonly PhoneRowSource<T>[],
   record: T,

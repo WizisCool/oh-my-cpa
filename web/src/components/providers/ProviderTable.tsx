@@ -9,6 +9,9 @@ import { safeExternalURL } from '../../utils/externalUrl';
 import { resolveProviderIcon } from '../../types/providerIcons';
 import type { ProviderItem } from '../../types/providers';
 import { matchProviderFamily } from '../../types/providerFamilies';
+import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
+import { PhoneRow } from '../common/PhoneRow';
+import { phoneRowFields, renderedCell } from '../common/phoneRowFields';
 import type { useProviderManagement } from './useProviderManagement';
 
 type ProviderManagement = ReturnType<typeof useProviderManagement>;
@@ -325,6 +328,7 @@ export function ProviderTable({
             size="small"
             checked={resolveEnabled(record)}
             aria-busy={statusQueue.isBusy(record.id)}
+            aria-label={`${t('pro.col_switch')}: ${record.name}`}
             onChange={(checked) => statusQueue.request(record.id, checked)}
           />
         );
@@ -338,12 +342,16 @@ export function ProviderTable({
       width: 110,
       align: 'right',
       render: (_, record) => (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4 }}>
+        /* An 8px gap rather than 4: 28px controls 8px apart leave the touch rules' expanded hit
+           areas meeting exactly instead of overlapping by 4px, and three of them still fit the
+           110px column. */
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <Tooltip title={t('common.details')}>
             <Button
               size="small"
               icon={<EyeOutlined />}
               onClick={() => handleOpenEdit(record)}
+              aria-label={`${t('common.details')}: ${record.name}`}
               style={{
                 width: 28,
                 height: 28,
@@ -363,6 +371,7 @@ export function ProviderTable({
               size="small"
               icon={<EditOutlined />}
               onClick={() => handleOpenEdit(record)}
+              aria-label={`${t('common.edit')}: ${record.name}`}
               style={{
                 width: 28,
                 height: 28,
@@ -389,6 +398,7 @@ export function ProviderTable({
                 danger
                 icon={<DeleteOutlined />}
                 loading={deleteProviderMutation.isPending && deleteProviderMutation.variables === record.id}
+                aria-label={`${t('common.delete')}: ${record.name}`}
                 style={{
                   width: 28,
                   height: 28,
@@ -408,18 +418,53 @@ export function ProviderTable({
     },
   ];
 
+  // Below 640px each credential line becomes a row (ADR 0012). Both renderings read the same
+  // `providerColumns`, so the fields are the table's own columns in the table's own order with
+  // the table's own labels, and the switch and the action cluster are the columns' own rendered
+  // cells rather than a second copy of them.
+  const isPhone = useIsPhoneViewport();
+
   return (
     <Card>
-      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-        <Table
-          columns={providerColumns}
-          dataSource={providers}
-          rowKey="id"
-          loading={providersLoading}
-          pagination={false}
-          locale={{ emptyText: t('pro.providers_empty') }}
-        />
-      </div>
+      {isPhone ? (
+        providers.length === 0 ? (
+          <p className="empty-copy">{t('pro.providers_empty')}</p>
+        ) : (
+          <div>
+            {providers.map((record, index) => (
+              <PhoneRow
+                key={record.id}
+                identity={renderedCell(providerColumns, 'name', record, index)}
+                fields={phoneRowFields(providerColumns, record, {
+                  // The name is the headline, and the state, the switch and the actions are the
+                  // row's control strip - printing them twice would make the row read as if it
+                  // had two states that could disagree.
+                  skip: ['name', 'status', 'switch', 'actions'],
+                  index,
+                })}
+                actions={
+                  <>
+                    {renderedCell(providerColumns, 'status', record, index)}
+                    {renderedCell(providerColumns, 'switch', record, index)}
+                    {renderedCell(providerColumns, 'actions', record, index)}
+                  </>
+                }
+              />
+            ))}
+          </div>
+        )
+      ) : (
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <Table
+            columns={providerColumns}
+            dataSource={providers}
+            rowKey="id"
+            loading={providersLoading}
+            pagination={false}
+            locale={{ emptyText: t('pro.providers_empty') }}
+          />
+        </div>
+      )}
     </Card>
   );
 }
