@@ -335,7 +335,13 @@ a { color: inherit; }
 .app-sider-foot-row { display: flex; justify-content: space-between; gap: 8px; }
 /* Collapsed there is no room for a wordmark, so the row centres the O instead. */
 .app-brand-collapsed { justify-content: center; padding: 0; border-bottom: 1px solid var(--border); }
-.app-header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 56px; padding: 0 24px 0 12px; background: var(--bg) !important; border-bottom: 1px solid var(--border); }
+/* With `viewport-fit=cover` the shell owns the whole screen, which in landscape puts the
+   notch over its left edge and the home indicator under its right. The insets are applied
+   to the chrome that touches an edge rather than to `.app-content`, because a scroll
+   container given a bottom inset scrolls its last line out from under itself. Each inset
+   is a floor beneath the design system's own padding, never a replacement for it. */
+.app-header { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 56px; padding: 0 max(24px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); background: var(--bg) !important; border-bottom: 1px solid var(--border); }
+.app-sider { padding-left: env(safe-area-inset-left); }
 .app-header-left, .app-header-actions, .app-breadcrumb { display: flex; align-items: center; }
 .app-header-left { min-width: 0; gap: 8px; }
 .app-header-actions { gap: 6px; }
@@ -360,11 +366,10 @@ a { color: inherit; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24px 0 16px;
+  padding: 0 max(24px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
   border-bottom: 1px solid var(--border);
   background: var(--bg);
-}
-.auth-brand {
+}.auth-brand {
   min-width: 0;
   display: flex;
   align-items: center;
@@ -692,7 +697,10 @@ a { color: inherit; }
 .auth-files-empty { padding: 64px 24px; }
 
 @media (max-width: 900px) {
-  .app-breadcrumb a, .app-breadcrumb span { display: none; }
+  /* Both breadcrumb rows are hidden rather than the whole list: the current page's own name
+     is the one piece of orientation a phone can still use, and it is the *last* item. The
+     group is what the sheet's Highlight already carries when the reader went through it. */
+  .app-breadcrumb li:not(:last-child) { display: none; }
   .dashboard-kpis { grid-template-columns: 1fr; }
   .hero-number { font-size: 34px; }
   .capability-state { padding: 20px; }
@@ -1443,7 +1451,12 @@ a { color: inherit; }
 .logs-tail { position: relative; }
 .logs-alert { margin-bottom: 10px; }
 .log-list {
+  /* `dvh` rather than `vh`: the logs tail is sized against a fixed chrome budget, and on a
+     phone the URL bar changes what `100vh` means continuously - the list grew and shrank
+     under the reader as they scrolled. The `vh` line stays first as the fallback for a
+     browser without dynamic viewport units. */
   height: calc(100vh - 330px);
+  height: calc(100dvh - 330px);
   min-height: 300px;
   overflow: auto;
   overscroll-behavior: contain;
@@ -1498,7 +1511,7 @@ a { color: inherit; }
 @media (max-width: 900px) {
   .logs-search { width: 148px; }
   .logs-counts { margin-left: 0; width: 100%; }
-  .log-list { height: calc(100vh - 380px); }
+  .log-list { height: calc(100vh - 380px); height: calc(100dvh - 380px); }
 }
 
 /* ── config page ─────────────────────────────────────────────────────────── */
@@ -1871,7 +1884,6 @@ a { color: inherit; }
 .settings-field-control .ant-input-affix-wrapper > input.ant-input {
   height: auto !important;
   line-height: 1.5 !important;
-  font-size: 14px !important;
   padding: 0 !important;
   margin: 0 !important;
 }
@@ -1915,7 +1927,6 @@ a { color: inherit; }
 .settings-number-control .ant-input-number-input {
   height: 38px !important;
   line-height: 38px !important;
-  font-size: 14px !important;
   text-align: left !important;
   padding-inline-start: 12px !important;
   padding-inline-end: 34px !important;
@@ -2203,7 +2214,11 @@ a { color: inherit; }
 
 .config-monaco-shell {
   width: 100%;
+  /* `dvh` for the same reason as the logs tail: the toolbar above this editor is sticky, so a
+     viewport unit that changes with the on-screen keyboard resizes the editor underneath the
+     caret while it is being typed into. */
   height: clamp(520px, calc(100vh - 280px), 800px);
+  height: clamp(520px, calc(100dvh - 280px), 800px);
   position: relative;
 }
 
@@ -2844,6 +2859,108 @@ a { color: inherit; }
 @media (min-width: 901px) {
   .omc-settings-group .settings-toggle-control { width: auto; }
 }
-@media (max-width: 560px) {
-  .theme-preset-grid { grid-template-columns: minmax(0, 1fr); }
+/* ── touch and small viewports ────────────────────────────────────────────────
+   The console was built for a pointer, and two device facts were never expressed in
+   the stylesheet: a coarse pointer has no hover, and a finger is not a 1px cursor.
+   Both are stated here rather than per component, so a new control inherits them.
+
+   The breakpoints are deliberately two, and they mean different things:
+     900px - the shell changes shape (rail becomes a sheet, columns stack)
+     640px - the device is a phone (list rows replace tables, controls grow)
+   See docs/design.md §8. */
+
+/* A finger cannot produce a hover, so an affordance revealed only by one is an
+   affordance that does not exist. The dashboard's row arrows mark a row as
+   interactive and are therefore always drawn when no pointer can reach them. */
+@media (hover: none) {
+  .provider-jump-arrow { opacity: .5; transform: none; }
 }
+
+@media (pointer: coarse) {
+  /* `manipulation` removes the double-tap-to-zoom delay from controls, which is where
+     the delay is felt as lag. It is deliberately not applied to the page: double-tap
+     zoom is how a reader enlarges a dense table, and taking it away would be an
+     accessibility regression dressed as a latency win. */
+  button, a, label, summary, .ant-switch, .ant-segmented-item, .ant-tabs-tab, .ant-select-selector {
+    touch-action: manipulation;
+  }
+
+  /* iOS Safari zooms the whole page when a focused field is under 16px, and the design
+     system's base size is 14px, so every text control in the console triggered it. The
+     zoom is the browser's fix for an unreadable field - the field is what should change,
+     not the page's scale. This is also the rule that covers Monaco's hidden textarea,
+     which is an `input`-like element the editor library owns.
+
+     `!important` is deliberate here and is not a shortcut. antd injects its component styles
+     into the document at runtime, after this stylesheet, so an equal-specificity rule from
+     here loses on source order; and the console's own field wrappers
+     (`.settings-field-control`, `.config-number-control`) raise specificity above it again.
+     Enumerating those wrappers would mean this floor silently stops applying the next time a
+     field gains one, which is the defect it exists to prevent. It is a device-level floor,
+     so it is meant to outrank the component layer. */
+  .ant-input,
+  .ant-input-affix-wrapper > input.ant-input,
+  .ant-input-textarea textarea,
+  .ant-input-number-input,
+  .ant-select-input,
+  .ant-picker-input > input,
+  textarea,
+  input {
+    font-size: 16px !important;
+  }
+  /* The *displayed* text of a Select is deliberately left as the token sizes it: the browser
+     reads the size of the element it focuses, and that is the search input above, not this
+     label. Enlarging the label would trade the console's density for zoom that is already
+     prevented. */
+
+  /* The switch is the one control whose drawn size cannot be rescued by a hit area: 28x16
+     is below the floor in both dimensions, and antd's small variant is used on five
+     surfaces. It grows here instead, because on a touch device the thumb is the pointer. */
+  .ant-switch-small { min-width: 44px; height: 22px; line-height: 22px; }
+  .ant-switch-small .ant-switch-handle { width: 18px; height: 18px; inset-inline-start: 2px; }
+  .ant-switch-small.ant-switch-checked .ant-switch-handle { inset-inline-start: calc(100% - 20px); }
+
+  /* Tabs and segmented items sit edge to edge, so they grow on the axis nothing else
+     occupies. A horizontal inset would steal the neighbour's taps, and on the request
+     page the segmented control is three options in a 350px row - there is no gap to take. */
+  .ant-tabs-nav-list .ant-tabs-tab { padding-block: 6px; }
+  .ant-segmented-item > .ant-segmented-item-label { min-height: 30px; display: flex; align-items: center; justify-content: center; }
+
+  /* Measured at 1x19px against the config page: the steppers are a mouse affordance that
+     cannot be hit by a finger, and `!important` for the same source-order reason as the
+     font floor above - antd keeps its own display value for this box. Keyboard entry and
+     the native numeric keypad remain, and an unusable control is worse than an absent one. */
+  .ant-input-number-actions { display: none !important; }
+  .ant-input-number-input { padding-inline-end: 8px; }
+
+  /* The hit area grows while the control keeps its drawn size: the spacing scale in
+     design.md §4 is what the console's density *is*, so enlarging every 28px button would
+     trade a reachability defect for a layout one.
+
+     The cost is stated rather than hidden: in an action cluster whose gap is 4px, two
+     adjacent 4px insets overlap by 4px, and the DOM-later button wins that band. That is
+     accepted here because the band is smaller than the finger contact area the inset was
+     added for, and because the surfaces with 4px clusters (provider, key and plugin rows)
+     re-space their actions when they gain a phone row layout. */
+  .ant-btn.ant-btn-icon-only,
+  .ant-pagination-prev,
+  .ant-pagination-next,
+  .ant-input-clear-icon {
+    position: relative;
+  }
+  .ant-btn.ant-btn-icon-only::before,
+  .ant-pagination-prev::before,
+  .ant-pagination-next::before,
+  .ant-input-clear-icon::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+  }
+}
+/* A short phone in landscape, or a split-screen phone view, can leave the editor and the
+   logs tail shorter than their floors. The floors exist to keep the panel usable, so they
+   lose to the viewport rather than pushing the page taller than the screen. */
+@media (pointer: coarse) and (max-height: 640px) {
+  .log-list, .config-monaco-shell { min-height: 240px; }
+}
+

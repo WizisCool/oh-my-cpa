@@ -3,7 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- `viewport-fit=cover` is what makes `env(safe-area-inset-*)` resolve on a notched phone.
+         It is deliberately not paired with `maximum-scale` or `user-scalable`: pinch-zoom is an
+         accessibility affordance, and the iOS focus zoom it would suppress is handled where it
+         belongs instead, by giving form controls a 16px font size on coarse pointers. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Oh My CPA · AI 资源管理中心</title>
     <!-- Injected at runtime by Oh My CPA Go server if present -->
     <script>
@@ -16,12 +20,12 @@
         };
       }
     </script>
-    <script type="module" crossorigin src="./assets/index-6-h6WTnB.js"></script>
+    <script type="module" crossorigin src="./assets/index--ubQ1Pmj.js"></script>
     <link rel="modulepreload" crossorigin href="./assets/vendor-react-BqeIaX2e.js">
     <link rel="modulepreload" crossorigin href="./assets/vendor-preload-Dp1pzeXC.js">
     <link rel="modulepreload" crossorigin href="./assets/vendor-antd-BZUjEH1x.js">
     <link rel="modulepreload" crossorigin href="./assets/vendor-query-BxDCPJ19.js">
-    <link rel="stylesheet" crossorigin href="./assets/index-CfhgBX8T.css">
+    <link rel="stylesheet" crossorigin href="./assets/index-D4yvyDhf.css">
   </head>
   <body>
     <div id="root"></div>

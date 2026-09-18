@@ -1146,7 +1146,107 @@ language. One table serves every viewport width — it scrolls sideways on narro
 screens instead of becoming a second layout — and a single line under it states the
 window its counts cover.
 
-## 8. Checklist for new UI
+## 8. Small viewports and touch
+
+The console is operated from a phone as well as from a desktop, and a phone is not a small
+desktop. It has no hover, its pointer is a finger rather than a 1px cursor, its viewport
+changes height while the reader scrolls, and on Android it has a hardware Back button that
+has to mean something. None of those four facts was expressed anywhere in the system, which
+is what this section records.
+
+### Two viewport breakpoints and one container threshold
+
+| Threshold | Kind | What it decides |
+| --- | --- | --- |
+| `900px` | viewport | The shell changes shape: the rail becomes a sheet, page head and grid columns stack. |
+| `640px` | viewport | The device is a phone: list surfaces render labelled rows instead of a table, and controls take their touch sizes. |
+| `920px` | container (`reqstream`) | The request list's own width no longer fits its ten columns, so each record becomes a stacked row. |
+
+The third is a container query rather than a viewport breakpoint, and deliberately so: that
+list sits inside the page's content column, so the same viewport holds a different list width
+depending on whether the rail is open. "Do ten columns still fit" is a question about the box
+the columns are in, and only the container can answer it. The same reasoning governs the
+dashboard's `@container modelusage (max-width: 500px)` panel stack.
+
+Three thresholds with three distinct meanings is the budget. A fourth number needs a reason
+stated beside it, and two rules that compute the same thing at slightly different widths are
+a defect: the request list carried a viewport `@media (max-width: 920px)` block duplicating
+its container query, and it could only ever fire where the container already had (the
+container is at most `viewport − 64px`), so it was removed rather than left as an unexplained
+second breakpoint.
+
+### A finger has no hover
+
+Every affordance is drawn where it can be reached. A control revealed only by `:hover` sits at
+`opacity: 0` for the whole life of a touch session, so a row marked interactive by a hover
+arrow is a row with no visible affordance at all. Reveal-on-hover rules therefore carry a
+`@media (hover: none)` counterpart that draws them permanently (`.provider-jump-arrow`,
+`.req-id-quick-copy`), and the console has no rule that hides meaning behind a hover.
+
+A tooltip is not an affordance either: it may *name* a control, never be the only way to
+reach one. Where a control's name is short enough to matter on a phone, the name is drawn.
+
+### The tap floor is a hit area, not a drawn size
+
+`space scale 4 · 8 · 12 · 16 · 20 · 24 · 32 · 48px` (§4) is what the console's density *is*.
+Enlarging every 28px control would trade a reachability defect for a layout one, so the hit
+area grows while the control keeps its drawn size:
+
+| Situation | Treatment |
+| --- | --- |
+| 28×28 icon buttons, pagination steps, the clear affordance | `::before { inset: -4px }` under `(pointer: coarse)` |
+| Tabs and segmented items, which sit edge to edge | grow on the vertical axis only — a horizontal inset would steal the neighbour's taps |
+| antd's small switch (28×16) | grows to 44×22: the floor needs real dimensions, and five surfaces use it |
+| Number-input steppers (measured 1×19px) | hidden: a control a finger cannot hit is worse than an absent one, and the numeric keypad remains |
+| The request list's column resizer | hidden: a drag near a header edge means "scroll", never "resize a column" |
+
+The cost is stated rather than hidden: in an action cluster whose gap is 4px, two adjacent 4px
+insets overlap by 4px and the DOM-later control wins that band. That is accepted because the
+band is narrower than the finger contact area the inset exists for, and because those clusters
+re-space their actions when their surface gains a phone row layout.
+
+### 16px is the focus floor
+
+iOS Safari zooms the entire page when a focused field's font size is under 16px, and the design
+system's base size is 14px — so every text control in the console triggered it. The zoom is the
+browser's fix for an unreadable field, so the *field* changes, not the page's scale: under
+`(pointer: coarse)` every focusable text control takes `font-size: 16px`.
+
+The declaration carries `!important`, which is deliberate rather than lazy. antd injects its
+component styles into the document at runtime, after the stylesheet, so an equal-specificity
+rule loses on source order; and this stylesheet's own field wrappers raise specificity above
+it again. The console's wrappers no longer restate the 14px token (antd's component rule
+already applies it, so desktop is unchanged), and what remains is one device-level floor that
+is meant to outrank the component layer.
+
+The *displayed* text of a Select is deliberately left at its token size. The browser reads the
+size of the element it focuses, and that is the control's search input, not its label; growing
+the label as well would trade the console's density for a zoom that is already prevented.
+
+Pinch-zoom is never disabled. `maximum-scale=1` and `user-scalable=no` are absent on purpose,
+because double-tap and pinch zoom are how a reader enlarges a dense table.
+
+### The viewport is not a fixed rectangle
+
+- `viewport-fit=cover` is declared in `web/index.html`, which is what makes
+  `env(safe-area-inset-*)` resolve at all. The insets are applied to chrome that touches a
+  screen edge (header, rail, sheet), never to a scroll container — a scroller given a bottom
+  inset scrolls its own last line out from under itself.
+- Heights that decide how much data fits use `dvh`, not `vh`: the mobile URL bar changes
+  `100vh` continuously, so a `vh`-sized logs tail grows and shrinks under the reader while
+  they scroll. `vh` stays first in each pair as the fallback.
+- `touch-action: manipulation` is applied to controls, where it removes the double-tap delay
+  the reader feels as lag. It is deliberately *not* applied to the page.
+
+### What a phone layout is, and is not
+
+A phone layout is a second *rendering* of one list, never a second list. The dataset, the
+filters, the URL and the actions are the same; only the arrangement changes, and the change is
+made by width rather than by a control the operator has to find. ADR 0012 records why the
+earlier operator-facing table/card toggle was rejected and why a responsive arrangement is not
+the same thing.
+
+## 9. Checklist for new UI
 - [ ] Colors only via the resolved palette / CSS vars; semantic colors carry meaning
 - [ ] A *relationship* between two colors (a hover step, a divider, the surface a tooltip sits on) is
       part of the derivation in `web/src/theme/palette.ts`, not a literal in a component and not a second
@@ -1168,3 +1268,9 @@ window its counts cover.
       loading (no answer yet), empty (a live source with nothing in it). One
       shared message makes a working page look broken.
 - [ ] Wheel scrolls only the hovered column; page never scrolls body-wide
+- [ ] Nothing is reachable only by hover: a reveal-on-hover rule carries a `(hover: none)` counterpart
+      (§8)
+- [ ] A control a finger must hit is at least ~40px after its hit area, and a focusable text control is
+      at least 16px; both are achieved without moving the drawn size (§8)
+- [ ] A new threshold is one of the two viewport breakpoints or a container query on the box the layout
+      is actually about, and it states which (§8)

@@ -1005,6 +1005,20 @@
   font-size: 11px;
 }
 
+/* The row layout is chosen by the *list's* width, not by the device's.
+
+   A container query rather than a viewport breakpoint, and deliberately so: this list sits
+   inside the page's content column, so a 1440px viewport with a collapsed rail and a wide
+   card holds a different list width than the same viewport with the rail open. The
+   question "do ten columns still fit" is about the box the columns are in, and only the
+   container can answer it.
+
+   920px is therefore a third, distinct threshold from the shell's 900 (the viewport at
+   which the rail becomes a sheet) and the phone's 640 (see docs/design.md §8). A viewport
+   `@media (max-width: 920px)` block carrying the identical rules used to sit just below
+   this one; it could only ever fire where this one already had, because the container is
+   at most `viewport - 64px` here, so it was removed rather than left as a second,
+   unexplained breakpoint. */
 @container reqstream (max-width: 920px) {
   .request-table-scroll-area {
     overflow-x: visible;
@@ -1044,44 +1058,6 @@
   }
 }
 
-@media (max-width: 920px) {
-  .request-table-scroll-area {
-    overflow-x: visible;
-  }
-  .request-table-header {
-    display: none;
-  }
-  .request-list-host {
-    min-width: 100%;
-  }
-  .req-mobile-label {
-    display: block;
-  }
-  .request-row {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-    padding: 14px 16px;
-    width: 100%;
-    min-width: 100%;
-    min-height: auto;
-  }
-  .req-col {
-    width: 100%;
-  }
-  .req-col-latency,
-  .req-col-tps,
-  .req-col-tokens,
-  .req-col-cost,
-  .req-col-cache {
-    align-items: flex-start;
-    text-align: left;
-  }
-  .request-chevron {
-    display: none;
-  }
-}
 .request-group-title {
   display: flex;
   justify-content: space-between;
@@ -1504,6 +1480,32 @@
 
 
 
+
+/* ── touch devices ───────────────────────────────────────────────────────────
+   Two rules that belong to this list rather than to the console, because both are
+   about controls this file draws. The console-wide touch rules are in `index.css`. */
+
+/* A finger cannot produce a hover, so the quick-copy control is always drawn where
+   hovering is not an option. It is the only way to take a request id in hand, and it
+   was previously reachable only from a pointer. */
+@media (hover: none) {
+  .req-id-quick-copy { opacity: .55; }
+}
+
+@media (pointer: coarse) {
+  .req-id-quick-copy { position: relative; }
+  .req-id-quick-copy::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+  }
+
+  /* The column header is already `display: none` below 920px, so this is the tablet and
+     touch-laptop case: a drag near a header edge means "scroll this list", never "resize
+     this column". The handle also sets `touch-action: none`, which would eat the scroll
+     outright rather than merely misinterpret it. */
+  .req-col-resizer { display: none; }
+}
 
 /* ── reduced motion ─────────────────────────────────────────────────────────
    §7's override is a promise this file has to keep for itself: the back-to-top

@@ -247,7 +247,21 @@ The application viewport uses a fixed shell architecture (`100dvh`, `body { over
 - **Content Area**: Single-scroll container with responsive padding (32px desktop / 24px tablet / 16px mobile), inside a 1440px content column. The widths that follow: content column 1376px (1440 − 2×32), and a list inside a Card 1334px (1376 − 2×1 border − 2×20 body padding). Every page measures these; a page that needs a different column states why where the rule is written (the configuration workbench's 920px reading column is the one case).
 - **Settings Workbench Layout**: A three-track grid — 216px sticky section nav + 920px reading column + 216px balancing gutter — accompanied by a full-width sticky action bar, so the form never drifts to one side on wide screens.
 
+### Small Viewports & Touch
+
+The console is operated from a phone as well as a desktop, and the phone is treated as its own device rather than a narrow desktop.
+
+**Two viewport breakpoints, one container threshold.** `900px` — the shell changes shape (the rail becomes a sheet, page head and grid columns stack). `640px` — the device is a phone (list surfaces render labelled rows instead of a table, controls take their touch sizes). `920px` **container** (`reqstream`) — the request list's own width no longer fits ten columns, so each record becomes a stacked row. The third is a container query on purpose: that list lives inside the content column, so the same viewport holds a different list width depending on whether the rail is open, and "do ten columns fit" is a question only the box can answer.
+
+- **A finger has no hover.** Every `:hover` reveal carries a `@media (hover: none)` counterpart that draws it permanently (`.provider-jump-arrow`, `.req-id-quick-copy`). A tooltip may name a control, never be the only way to reach one.
+- **The tap floor is a hit area, not a drawn size.** `space scale 4 · 8 · 12 · 16 · 20 · 24 · 32 · 48px` is what the density *is*, so a 28×28 control keeps its size and gains `::before { inset: -4px }` under `(pointer: coarse)`. Tabs and segmented items grow vertically only, since edge-to-edge neighbours would lose taps to a horizontal inset. antd's small switch grows to 44×22 because the floor needs real dimensions; number steppers (measured 1×19px) and the request list's column resizer are hidden on touch, where a drag near a header edge means "scroll".
+- **16px is the focus floor.** iOS Safari zooms the page when a focused field is under 16px, and the base size is 14px, so under `(pointer: coarse)` every focusable text control takes 16px. The declaration carries `!important` because antd injects its component styles at runtime, after the stylesheet: an equal-specificity rule loses on source order. The *displayed* text of a Select keeps its token size, because the browser reads the size of the element it focuses.
+- **Pinch-zoom is never disabled.** `maximum-scale=1` and `user-scalable=no` are absent on purpose.
+- **The viewport is not a fixed rectangle.** `viewport-fit=cover` is declared so `env(safe-area-inset-*)` resolves, and the insets go on chrome that touches a screen edge — never on a scroll container. Heights that decide how much data fits use `dvh`, not `vh`, because the mobile URL bar changes `100vh` continuously. `touch-action: manipulation` goes on controls, not on the page.
+
 ### Named Rules
+**The Finger Is Not a Cursor Rule.** A control that a finger must reach is drawn where a finger can reach it: at least ~40px after its hit area, never smaller than 16px of text if it can take focus, and never revealed only by a hover. Nothing is enlarged to achieve this unless it cannot be rescued by a hit area — the drawn size is the design system's density and is not the knob.
+
 **The Independent Column Rule.** The sider and the main content area scroll independently with `overscroll-behavior: contain`. Wheel events only affect the container currently beneath the cursor; the page never scrolls globally.
 
 **The Gesture vs. Correction Rule.** A scroll the reader asked for (back to top, applying a new-records backlog) is animated unless `prefers-reduced-motion` is set; a scroll that exists to keep the view correct (pinning row one after the header collapses, resetting on page change) is instant, because a virtualized list re-measures after committing rows and a correction still in flight has not landed. Gesture animations are driven frame by frame through the list's own scroll entry point, never by CSS `scroll-behavior` on the holder — the virtualizer owns that element and would overwrite it.
@@ -333,6 +347,8 @@ The geometric form language is compact, rectangular, and tightly controlled:
 - **Do** inherit monospaced font families across all components and enable `tabular-nums` for numeric telemetry.
 - **Do** pin motion durations to ≤ 100ms and animate only `opacity` and `transform`; the dashboard's KPI numbers and chart marks are the one `roll` (240ms) exception — the numbers transform glyphs, the marks are redrawn by the canvas library and stop entirely under `prefers-reduced-motion`. The exact count stays on the tile's `title`.
 - **Do** preserve previous rendered content during query filter updates using `placeholderData: keepPreviousData`.
+- **Do** give a `:hover` reveal a `@media (hover: none)` counterpart, and express a phone arrangement as a `640px` viewport rule (or a `920px` container query on the box the layout is about) rather than a new magic number.
+- **Do** size focusable text controls at 16px under `(pointer: coarse)`, and give touch-only hit areas to controls whose drawn box stays at its token size.
 - **Do** delay loading spinners by 200ms (`DataProgress`) to eliminate flicker on fast responses.
 
 ### Don't:
