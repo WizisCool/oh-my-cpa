@@ -13,6 +13,12 @@ import type { ThemeModePreference } from '../../theme/themePreference';
  * visible as itself, or an operator who chose it would read the console as having picked a mode for
  * them. The desktop mark is what "the machine decides" looks like next to a sun and a moon.
  */
+const MODE_LABEL_KEYS: Record<ThemeModePreference, string> = {
+  light: 'omc.theme_mode_light',
+  dark: 'omc.theme_mode_dark',
+  system: 'omc.theme_mode_system',
+};
+
 const MODE_ICONS: Record<ThemeModePreference, React.ReactNode> = {
   light: <SunOutlined />,
   dark: <MoonOutlined />,
@@ -64,11 +70,14 @@ export const PreferenceMenus: React.FC = () => {
 
   return (
     <>
+      {/* The tooltip is the control's name; the accessible name additionally states the mode in force,
+          because the icon that carries it is decoration to a screen reader - without the state there, all
+          three states of the cycle announce identically. */}
       <Tooltip title={t('header.theme')}>
         <Button
           type="text"
           icon={MODE_ICONS[modePreference]}
-          aria-label={t('header.theme')}
+          aria-label={t('header.theme_state', { mode: t(MODE_LABEL_KEYS[modePreference]) })}
           onClick={cycleModePreference}
         />
       </Tooltip>

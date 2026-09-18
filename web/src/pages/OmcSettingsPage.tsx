@@ -366,6 +366,10 @@ const PaletteTokenRow: React.FC<{
       <ColorPicker
         value={value}
         disabledAlpha
+        // Named for a screen reader: the row's label is a sibling span, so without this the control
+        // announces a hex value and nothing about which token it belongs to. Ant Design forwards `aria-*`
+        // to the trigger, which is what makes the name land on the focusable element rather than the field.
+        aria-label={t(TOKEN_LABEL_KEYS[tokenKey])}
         showText={(color) => color.toHexString()}
         onChange={(color) => onChange(color.toHexString())}
         onChangeComplete={() => onCommit()}

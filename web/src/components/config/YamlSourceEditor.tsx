@@ -12,6 +12,7 @@ import { conf as yamlConf, language as yamlLanguage } from 'monaco-editor/esm/vs
 import { configureMonacoYaml, type MonacoYaml } from 'monaco-yaml';
 import { parseDocument } from 'yaml';
 import type { ResolvedPalette, ThemeMode, ThemePalette } from '../../theme/palette';
+import { relativeLuminance } from '../../theme/colorMath';
 
 // ── Configure Local Monaco Environment (Strict Offline / Zero CDN) ───────────
 if (typeof window !== 'undefined') {
@@ -64,12 +65,17 @@ function ensureMonacoConfigured() {
 }
 
 /**
- * Monaco's YAML token rules, one set per mode.
+ * Monaco's YAML token rules, one set per editor background.
  *
  * Independent of the console's palette on purpose: these are *syntax* colours - a key, a string, a
- * number - and a syntax hue carries no verdict and no layer, so it is not a theme token. They are
- * grouped by mode because the two sets are the same hues at steps legible on that mode's editor
- * background, which is the one thing about them the palette does decide.
+ * number - and a syntax hue carries no verdict and no layer, so it is not a theme token, and deriving
+ * eighteen of them from nine palette tokens would be inventing a relationship that does not exist.
+ *
+ * They are selected by the **editor background's own lightness**, not by the console's mode. The two were
+ * the same thing while every palette was hand-tuned, and they stopped being the same thing the moment an
+ * operator could author one: a dark-mode palette with a light page is a legal palette, and choosing the
+ * pastel rules for it would draw pale text on a pale field. Keyed on the background, the rule set follows
+ * the surface it is read against.
  */
 const MONACO_TOKEN_RULES: Record<ThemeMode, monaco.editor.ITokenThemeRule[]> = {
   dark: [
@@ -122,19 +128,40 @@ const MONACO_TOKEN_RULES: Record<ThemeMode, monaco.editor.ITokenThemeRule[]> = {
  * built-ins no longer need six definitions to exist before anyone asks for them.
  */
 export function defineMonacoTheme(id: string, palette: ThemePalette, mode: ThemeMode): void {
+  const editorBackground = editorBackgroundFor(palette, mode);
+  // The rules follow the field they are drawn on; `base` and the rest of the colours follow the mode, which
+  // is what decides the editor's own chrome and its inherited defaults.
+  const rulesFor = relativeLuminance(editorBackground) < DARK_BACKGROUND_LUMINANCE ? 'dark' : 'light';
   monaco.editor.defineTheme(id, {
     base: mode === 'dark' ? 'vs-dark' : 'vs',
     inherit: true,
-    rules: MONACO_TOKEN_RULES[mode],
+    rules: MONACO_TOKEN_RULES[rulesFor],
     colors: monacoColors(palette, mode),
   });
 }
 
+/**
+ * The luminance below which an editor background counts as dark.
+ *
+ * 0.18 is the usual mid-point for this decision and it is deliberately not 0.5: a mid-grey field carries
+ * dark text comfortably, so treating it as dark would pick the pastel rules for a surface they are not
+ * legible on.
+ */
+const DARK_BACKGROUND_LUMINANCE = 0.18;
+
+/**
+ * The fill the editor itself paints.
+ *
+ * The editor sits inside a `var(--bg)` shell. The shipped dark theme used `bg` for the editor itself and
+ * `surface` for the active line; keep that relationship for every palette rather than swapping the two
+ * surfaces. Named once because two things read it: the colours below and the choice of token rules.
+ */
+function editorBackgroundFor(palette: ThemePalette, mode: 'dark' | 'light'): string {
+  return mode === 'dark' ? palette.bg : palette.surface;
+}
+
 function monacoColors(palette: ThemePalette, mode: 'dark' | 'light'): Record<string, string> {
-  // The editor sits inside a `var(--bg)` shell. The shipped dark theme used
-  // `bg` for the editor itself and `surface` for the active line; keep that
-  // relationship for every preset rather than swapping the two surfaces.
-  const editorBackground = mode === 'dark' ? palette.bg : palette.surface;
+  const editorBackground = editorBackgroundFor(palette, mode);
   const lineHighlight = mode === 'dark' ? palette.surface : palette.bg;
   return {
     'editor.background': editorBackground,

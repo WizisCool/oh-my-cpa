@@ -356,9 +356,12 @@ rendering hole: the shape promises a full week.
 
 A measured cell mixes these two stops in **OKLCH** at a weight its own `--heatmap-quiet-share`
 carries, so the whole ramp is one declaration and the endpoint it reaches is the accent token above.
-`--heatmap-quiet` and `--heatmap-zero-recorded` are the same value on purpose: a measured day at the
-bottom of the scale and a recorded day with no traffic have to be adjacent or the ramp does not start
-where the field's floor is.
+`--heatmap-quiet` and `--heatmap-zero-unrecorded` are the same value on purpose: a measured day at the
+bottom of the scale has to start exactly where the field's floor is, or the ramp begins above a day that
+records nothing. `--heatmap-zero-recorded` then takes the next step - the border step - so that an ordered
+reading survives: nothing stored (quietest), recorded but empty, and measured. The derivation holds that
+order (`heatmapQuiet = heatmapZeroUnrecorded = borderSoft`, `heatmapZeroRecorded = border`), which is why
+these four tokens are not four independent choices.
 
 The two zero states are a **solid fill, never an outline**, and they form an ordered scale
 against the card rather than against the page. Both are required properties, not styling

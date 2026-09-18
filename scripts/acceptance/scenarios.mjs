@@ -3705,9 +3705,19 @@ export async function omcSettings({ base, page, check, context }) {
   // length changes with the language. That makes its tooltip the control's name rather than
   // decoration, and hovering the two menu triggers proves they did not lose the hover to the
   // dropdown wrapped inside them.
+  //
+  // The mode control's name is matched as "Theme: <mode>" rather than as the bare word: it cycles three
+  // states whose only other signal is an icon, and a screen reader cannot see an icon - so the name states
+  // the mode, and this pins that it does.
+  const headerActions = [
+    { name: 'Refresh all', matcher: /^Refresh all$/ },
+    { name: 'Theme', matcher: /^Theme: (Light|Dark|Follow system)$/ },
+    { name: 'Language', matcher: /^Language$/ },
+    { name: 'Sign out', matcher: /^Sign out$/ },
+  ];
   const unnamedActions = [];
-  for (const name of ['Refresh all', 'Theme', 'Language', 'Sign out']) {
-    const action = page.locator('.app-header-actions').getByRole('button', { name, exact: true });
+  for (const { name, matcher } of headerActions) {
+    const action = page.locator('.app-header-actions').getByRole('button', { name: matcher });
     if ((await action.count()) !== 1) {
       unnamedActions.push(`${name} (${await action.count()} matches)`);
       continue;

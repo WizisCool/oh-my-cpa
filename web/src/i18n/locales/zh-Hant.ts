@@ -54,6 +54,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "header.degraded": "CPA 部分介面可用",
   "header.refresh_all": "重新整理全部",
   "header.theme": "介面主題",
+  "header.theme_state": "\u4ecb\u9762\u4e3b\u984c\uff1a{mode}",
   "header.language": "介面語言",
   "omc.title": "OMC 設定",
   "omc.section_display": "資料顯示",

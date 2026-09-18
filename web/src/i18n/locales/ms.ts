@@ -54,6 +54,7 @@ export const MS: Readonly<Record<string, string>> = {
   "header.degraded": "CPA tersedia sebahagiannya",
   "header.refresh_all": "Muat semula semua",
   "header.theme": "Tema",
+  "header.theme_state": "Tema: {mode}",
   "header.language": "Bahasa",
   "omc.title": "Tetapan OMC",
   "omc.section_display": "Paparan data",

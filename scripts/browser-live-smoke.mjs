@@ -137,8 +137,9 @@ async function main() {
   const themePersisted = await page.evaluate(() => window.localStorage.getItem('omc-theme') || '');
   check('主题选择已持久化', themePersisted, themePersisted !== '');
 
-  // 模式控件是三态循环（浅色 → 暗色 → 跟随系统），所以再点两次才回到出发点；只点一次会停在
-  // 「跟随系统」，后面的检查就会跟着操作系统走。
+  // The mode control cycles three states (light -> dark -> follow-the-system), so returning to where this
+  // started takes two more clicks. One would leave the console following the operating system, and every
+  // later check that reads a colour would then depend on the machine rather than on the fixture.
   await page.getByRole('button', { name: '界面主题' }).click();
   await page.waitForTimeout(200);
   await page.getByRole('button', { name: '界面主题' }).click();

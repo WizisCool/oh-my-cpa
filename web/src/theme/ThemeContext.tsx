@@ -365,11 +365,15 @@ export const ThemeServerSync: React.FC = () => {
     if (!ready) return;
     if (!settled.current) {
       settled.current = true;
+      // Recorded whether or not this settles by pushing. Nothing before this point is a change this session
+      // made, so treating the settling revision as already sent is what stops the effect from pushing a
+      // document the deployment already holds - which is exactly what a StrictMode remount would do, since
+      // it re-runs effects while these refs survive.
+      pushedRevision.current = revision;
       if (bootstrap.isDirty) {
         // `latest` rather than the bootstrap document: a change made while this request was in flight is
         // part of this browser's newer opinion, and pushing the value the session opened with would send
         // the older document and then read the newer local one as a refused write.
-        pushedRevision.current = revision;
         set(latest.current);
         return;
       }

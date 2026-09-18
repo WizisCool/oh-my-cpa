@@ -33,11 +33,14 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
  */
 export function paletteValue(mode, key) {
   const source = fs.readFileSync(path.join(root, 'web/src/theme/palette.ts'), 'utf8');
-  // The mode's default palette: the registry entry for that mode, whose `core` block holds the tokens.
-  const entry = new RegExp(`mode: '${mode}',[\\s\\S]*?core: \\{([\\s\\S]*?)\\n    \\},`).exec(source);
-  if (!entry) throw new Error(`theme palette module has no ${mode} palette core`);
+  // The mode's default palette, selected by id rather than by being the first entry carrying that mode:
+  // matching on `mode` alone would silently follow a registry reorder and paint the READMEs' wordmark in
+  // another palette's accent, with nothing to fail.
+  const paletteId = `omc-${mode}`;
+  const entry = new RegExp(`id: '${paletteId}',[\\s\\S]*?core: \\{([\\s\\S]*?)\\n    \\},`).exec(source);
+  if (!entry) throw new Error(`theme palette module has no ${paletteId} palette core`);
   const match = new RegExp(`\\b${key}: '(#[0-9a-fA-F]{3,8})'`).exec(entry[1]);
-  if (!match) throw new Error(`the ${mode} palette has no ${key} colour`);
+  if (!match) throw new Error(`the ${paletteId} palette has no ${key} colour`);
   return match[1];
 }
 

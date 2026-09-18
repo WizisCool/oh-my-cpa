@@ -3,8 +3,9 @@
 - Status: Accepted
 - Date: 2026-09-15
 - File pointer (2026-09-18): the six slots and the track now live in `MODE_SEMANTICS` in
-  `web/src/theme/palette.ts`, which ADR 0011 moved the palettes into. The decision below is unchanged;
-  only the file this ADR names for it is.
+  `web/src/theme/palette.ts`, which ADR 0011 moved the palettes into. **Every reference to
+  `themeConfig.ts` in the Decision and Consequences below is historical** - that file is now only the Ant
+  Design projection. The decision itself is unchanged and this ADR is still the record of it.
 
 ## Context
 

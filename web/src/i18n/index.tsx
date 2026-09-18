@@ -64,6 +64,9 @@ const DICT: Record<string, [string, string]> = {
   'header.degraded': ['CPA 部分接口可用', 'CPA partially available'],
   'header.refresh_all': ['刷新全部', 'Refresh all'],
   'header.theme': ['界面主题', 'Theme'],
+  // The mode control's accessible name. Its tooltip is the control's own name and says nothing about the
+  // state - the icon carries that - so the name states the mode for readers who cannot see the icon.
+  'header.theme_state': ['界面主题：{mode}', 'Theme: {mode}'],
   'header.language': ['界面语言', 'Language'],
 
   // ── OMC settings page ───────────────────────────────────────────
