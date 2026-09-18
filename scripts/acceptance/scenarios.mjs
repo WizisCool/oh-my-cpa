@@ -43,6 +43,7 @@ import {
 import { omcSettings } from './probes/omcSettings.mjs';
 import { overlayBackDismisses } from './probes/overlayHistory.mjs';
 import { phoneListRendering } from './probes/phoneLists.mjs';
+import { touchErgonomics } from './probes/touchErgonomics.mjs';
 import { iconPickerStacking, pickerProvider, providerIconPick } from './probes/providerConsole.mjs';
 import {
   alignmentFacets,
@@ -392,6 +393,70 @@ export const SCENARIOS = [
       ],
     },
     run: overlayBackDismisses,
+  },
+  /**
+   * The console's touch rules, on a context that has a coarse pointer and no hover.
+   *
+   * `hasTouch` is the whole point of this scenario: the rules live in `@media (pointer: coarse)`
+   * and `@media (hover: none)`, so on an ordinary context they are never exercised and the
+   * scenario would pass while testing nothing. See `createProbePage` for why it is `hasTouch`
+   * without Playwright's `isMobile`.
+   */
+  {
+    id: 'touch-ergonomics',
+    name: 'the console obeys its touch rules on a coarse pointer',
+    options: {
+      viewport: { width: 390, height: 844 },
+      hasTouch: true,
+      routes: [
+        [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
+        [(url) => url.pathname.endsWith('/dashboard/tail'), () => chartDashboard],
+        [(url) => url.pathname.endsWith('/dashboard/token-heatmap'), () => chartTokenHeatmap],
+        [(url) => url.pathname.endsWith('/dashboard/models'), () => chartDashboardModels],
+        [(url) => url.pathname.endsWith('/management/providers'), () => ({ providers: [pickerProvider], total: 1 })],
+        /* The dashboard's provider rows, which is what its reveal-on-hover arrow lives on. Both
+           halves are supplied because the panel aggregates configured providers with the window's
+           traffic: one of either produces no row at all. */
+        [(url) => url.pathname.endsWith('/management/dashboard/providers'), () => ({
+          window: { preset: '1h', from: Date.now() - 3_600_000, to: Date.now(), bucket_ms: 60_000 },
+          providers: [
+            { id: 'codex-api-key', total: 12, success: 12, failure: 0, success_rate: 1, buckets: [] },
+          ],
+          partial_errors: [],
+        })],
+        [(url) => url.pathname.endsWith('/management/overview'), () => ({
+          cpa: { connected: true, version: 'probe', latency_ms: 1 },
+          counts: { management_keys: 1, provider_keys: 1, credentials: 1, models: 1 },
+          providers: [{
+            id: 'codex-api-key',
+            credentials: 1,
+            success: 12,
+            failure: 0,
+            total: 12,
+            success_rate: 1,
+            buckets: [{ success: 12, failed: 0 }],
+          }],
+          credentials: { total: 1, active: 1, disabled: 0, unavailable: 0, by_type: [] },
+          traffic: { bucket_minutes: 10, window_minutes: 60, buckets: [], total_success: 12, total_failure: 0, total: 12, success_rate: 1 },
+          partial_errors: [],
+        })],
+        [(url) => url.pathname.endsWith('/management/api-keys'), () => ({
+          keys: [
+            { index: 0, key: 'omc-fixture-key-aaaaaaaaaaaaaaaa', fingerprint: 'fp-1', usage_fingerprint: 'ufp-1', length: 30, alias: 'Primary caller', alias_version: 1 },
+          ],
+          total: 1,
+        })],
+        [(url) => url.pathname.endsWith('/management/client-key-usage'), () => ({
+          window: { from: Date.now() - 86_400_000, to: Date.now() },
+          usage: [{ key_fingerprint: 'ufp-1', requests: 1284, failed: 3, total_tokens: 918_000, last_used_ms: Date.now() - 60_000 }],
+        })],
+        [(url) => url.pathname.endsWith('/management/config'), () => ({ scalars: {}, supported_keys: [], revision: 'fixture-r1', safe_yaml: 'api-keys:\n  - omc-fixture-key-aaaaaaaaaaaaaaaa\n' })],
+        [(url) => url.pathname.endsWith('/usage/facets'), () => alignmentFacets],
+        [(url) => url.pathname.includes('/usage/events'), () => ({ items: interactionRecords, has_more: false, limit: 100 })],
+        [(url) => url.pathname.endsWith('/usage/ingest-status'), () => ({ enabled: true, healthy: true, collector: { mode: 'http_pull', captured: 500, coverage_gaps: 0 }, stats: { pending: 0 } })],
+      ],
+    },
+    run: touchErgonomics,
   },
   /**
    * A list at a phone width, and the same list at a desktop width.

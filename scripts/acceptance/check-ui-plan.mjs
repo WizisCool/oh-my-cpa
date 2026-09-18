@@ -101,18 +101,21 @@ const SCENARIO_PATHS = [
     prefix: 'web/src/hooks/overlayHistory',
     scenarios: ['overlay-back'],
   },
+  // The console's global stylesheet is already a shared path, and the touch rules live in it, so
+  // any change to the shell selects the touch scenario too. Named here rather than folded into
+  // SHELL_PATHS because it is about the rules those files carry, not about every scenario.
+  {
+    prefix: 'web/src/hooks/useIsPhoneViewport',
+    scenarios: ['phone-lists', 'touch-ergonomics'],
+  },
+  {
+    prefix: 'web/src/components/common/PhoneRow',
+    scenarios: ['phone-lists', 'touch-ergonomics'],
+  },
   // The list surfaces whose phone rendering ADR 0012 introduced, and the shared pieces that
   // rendering is derived from: a change to either reaches every one of them.
   {
-    prefix: 'web/src/components/common/PhoneRow',
-    scenarios: ['phone-lists'],
-  },
-  {
     prefix: 'web/src/components/common/phoneRowFields',
-    scenarios: ['phone-lists'],
-  },
-  {
-    prefix: 'web/src/hooks/useIsPhoneViewport',
     scenarios: ['phone-lists'],
   },
   {

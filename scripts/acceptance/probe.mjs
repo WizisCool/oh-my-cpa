@@ -260,8 +260,17 @@ export async function installRoutes(context, extra = []) {
  * the first paint: a probe that measures colours or geometry must not race the
  * stored-theme application.
  */
-export async function createProbePage(browser, { viewport = { width: 1440, height: 1000 } } = {}) {
-  const context = await browser.newContext({ viewport, reducedMotion: 'reduce' });
+export async function createProbePage(
+  browser,
+  { viewport = { width: 1440, height: 1000 }, hasTouch = false } = {},
+) {
+  // `hasTouch` alone, without Playwright's `isMobile`, and that distinction is load-bearing: a
+  // scenario asserting the console's touch rules needs `(pointer: coarse)` and `(hover: none)` to
+  // match, which `hasTouch` provides, but it must NOT get the mobile viewport emulation - that
+  // one makes Chrome zoom out to fit content which overflows, and the zoom grows
+  // `window.innerWidth`, which flips the very breakpoint the scenario is measuring and hides the
+  // overflow that caused it.
+  const context = await browser.newContext({ viewport, reducedMotion: 'reduce', hasTouch });
   await context.addInitScript(() => {
     // Seed only on a fresh context. addInitScript runs on every navigation and
     // reload, so unconditional writes would make a scenario's own theme choice
