@@ -851,7 +851,14 @@ a { color: inherit; }
   margin-bottom: 32px;
 }
 .model-trend-card { grid-column: span 2; }
-.model-usage-card { grid-column: span 2; }
+.model-usage-card {
+  grid-column: span 2;
+  /* Both model cards share one grid row, so the taller trend card stretches the usage card even
+     when its own row is shorter. A flex column lets the body claim that spare height instead of
+     leaving the row at the top of the card with an empty strip beneath it. */
+  display: flex;
+  flex-direction: column;
+}
 
 /* The trend's key. It wraps rather than scrolls: a legend that scrolls hides the very series the
    reader is looking for, and six entries in a two-column card is at most two rows. */
@@ -878,7 +885,16 @@ a { color: inherit; }
    container, and without it a long model name in the legend would push the card wider than its
    track instead of truncating. */
 .model-trend { position: relative; min-width: 0; margin-top: 4px; }
-.model-usage-card .ant-card-body { container-type: inline-size; container-name: modelusage; }
+.model-usage-card .ant-card-body {
+  flex: 1 1 auto;
+  /* Centre the row in the height the card actually has below its header. Grid centring keeps the
+     row stretched to the body's full width, unlike flex centring, which would shrink it to its
+     content width and let the list collapse. */
+  display: grid;
+  align-content: center;
+  container-type: inline-size;
+  container-name: modelusage;
+}
 
 .model-usage-body { display: flex; align-items: center; gap: 24px; min-width: 0; }
 /* The ring yields width to the list down to a floor: the list's numeric columns cannot be abbreviated,

@@ -567,6 +567,11 @@ the same ranking a second time with no numbers, and a reader comparing two model
 slice's angle is a poor way to compare 5.9% against 4.6%. A share that rounds to zero is reported as
 under the smallest step rather than as `0%`, which would claim a model carried nothing.
 
+**A stretched card still centres its reading.** The two model cards share a grid row, so the taller
+trend card can leave the usage card with more height than its ring and list need. The usage body
+claims that remaining height and centres the row in it; leaving the body at its intrinsic height put
+the ring near the top of the card and made the unused space below look like a missing panel.
+
 **Both marks are native `@ant-design/charts` components** (`Line` and `Pie`) inside the existing lazily
 loaded `vendor-charts` chunk, and both morph between two revisions on §7's `roll` token (§7 rule 5).
 The ring is not a chart-runtime

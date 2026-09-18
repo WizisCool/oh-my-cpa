@@ -586,7 +586,10 @@ export async function dashboardModelPanels({ base, page, check }) {
           canvasWidth: rect.width,
         };
       };
+      const card = document.querySelector('.model-usage-card').getBoundingClientRect();
+      const head = document.querySelector('.model-usage-card .ant-card-head').getBoundingClientRect();
       const cardBody = document.querySelector('.model-usage-card .ant-card-body').getBoundingClientRect();
+      const usageRow = document.querySelector('.model-usage-body').getBoundingClientRect();
       const ringFrame = document.querySelector('.model-ring-frame').getBoundingClientRect();
       return {
         ringInk: inkCentre('.model-ring canvas'),
@@ -594,12 +597,18 @@ export async function dashboardModelPanels({ base, page, check }) {
         ringFrameCentre: ringFrame.left + ringFrame.width / 2,
         cardCentre: cardBody.left + cardBody.width / 2,
         cardWidth: cardBody.width,
+        // The grid makes the usage and trend cards the same height. The usage card's own body must
+        // spend that height rather than leaving the row marooned above the card's lower edge.
+        usageRowCentreY: usageRow.top + usageRow.height / 2,
+        sectionCentreY: (head.bottom + card.bottom) / 2,
+        cardHeight: card.height,
       };
     });
     const drifts = {
       ringInk: measured.ringInk ? Math.round(measured.ringInk.inkCentre - measured.ringInk.canvasCentre) : null,
       trendInk: measured.trendInk ? Math.round(measured.trendInk.inkCentre - measured.trendInk.canvasCentre) : null,
       ringFrame: Math.round(measured.ringFrameCentre - measured.cardCentre),
+      usageRowVertical: Math.round(measured.usageRowCentreY - measured.sectionCentreY),
     };
     check(
       `the ring's drawing is centred in its card (${label})`,
@@ -610,6 +619,11 @@ export async function dashboardModelPanels({ base, page, check }) {
       `the trend's drawing is centred in its canvas (${label})`,
       drifts.trendInk !== null && Math.abs(drifts.trendInk) <= 2,
       `drift=${drifts.trendInk} cardWidth=${Math.round(measured.cardWidth)}`,
+    );
+    check(
+      `the usage row is centred in the card below its header (${label})`,
+      Math.abs(drifts.usageRowVertical) <= 2,
+      `drift=${drifts.usageRowVertical} cardHeight=${Math.round(measured.cardHeight)}`,
     );
     return drifts;
   };
