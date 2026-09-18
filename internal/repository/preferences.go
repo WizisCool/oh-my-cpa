@@ -21,13 +21,15 @@ const (
 	PreferenceUsageEventsView    = "usage_events_view"
 	PreferenceUsageEventsColumns = "usage_events_columns"
 
-	// PreferenceTokenStyle and PreferenceModelView are Oh My CPA's own display
-	// settings: how token counts are abbreviated across the console and how the
-	// dashboard's model panels group their series (by call point or by upstream
-	// model). They are preferences rather than configuration because they
-	// describe how the operator reads the data, not how anything is served.
+	// PreferenceTokenStyle, PreferenceModelView and PreferenceTheme are Oh My CPA's own
+	// display settings: how token counts are abbreviated across the console, how the
+	// dashboard's model panels group their series (by call point or by upstream model), and
+	// which palette each theme mode uses along with any palette the operator authored. They
+	// are preferences rather than configuration because they describe how the operator reads
+	// the console, not how anything is served.
 	PreferenceTokenStyle = "omc_token_style"
 	PreferenceModelView  = "omc_models_view"
+	PreferenceTheme      = "omc_theme"
 )
 
 // MaxPreferenceValueBytes bounds a stored value. Preferences are small UI

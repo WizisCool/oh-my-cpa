@@ -1,6 +1,6 @@
 import React from 'react';
 import { brandDrawing, brandMarkup, type BrandShape } from '../../assets/brand/markup';
-import { useThemeMode } from '../../theme/ThemeContext';
+import { useTheme } from '../../theme/ThemeContext';
 
 /**
  * The two drawings the brand is available in.
@@ -42,7 +42,7 @@ export interface BrandArtworkProps {
  * this way - the browser fetches it outside the app - so it keeps a media query of its own.
  */
 export const BrandArtwork: React.FC<BrandArtworkProps> = ({ shape, height, className, label }) => {
-  const { theme } = useThemeMode();
+  const { theme } = useTheme();
   const colors = theme.palette;
   const { viewBox, width, height: canvasHeight } = brandDrawing(shape);
   const markup = brandMarkup(shape, { ink: colors.fg, accent: colors.accent });

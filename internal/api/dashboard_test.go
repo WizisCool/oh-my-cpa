@@ -1661,12 +1661,24 @@ func TestPreferencesRoundTripThroughTheDatabase(t *testing.T) {
 		t.Fatalf("usage events columns status = %d body %s", response.StatusCode, payload)
 	}
 
+	// The theme is stored as one document: the mode, the palette each mode uses, and any palette
+	// the operator authored. The server keeps it verbatim - it is the console's shape, and the
+	// console is the only thing that reads it.
+	themeDocument := `{"mode":"system","palettes":{"dark":"midnight","light":"custom"},` +
+		`"custom":{"light":{"name":"Studio","base":"porcelain","core":{"bg":"#ffffff",` +
+		`"surface":"#f6f6f8","elevated":"#ffffff","fg":"#1c1c1e","fg2":"#505055",` +
+		`"muted":"#787880","meta":"#98989f","border":"#e5e5ea","accent":"#005d8f"}}}}`
+	if response, payload = doJSON(t, client, http.MethodPut, base+"/omc_theme", themeDocument); response.StatusCode != http.StatusOK {
+		t.Fatalf("theme status = %d body %s", response.StatusCode, payload)
+	}
+
 	_, payload = getJSON(t, client, base)
 	if !strings.Contains(string(payload), `"dashboard_range":{"preset":"6h"}`) ||
 		!strings.Contains(string(payload), `"log_filters":{"hideManagement":true,"levels":["warn"],"statusClass":"all"}`) ||
 		!strings.Contains(string(payload), `"provider_icons":{"openai-compat-0":"DeepSeek","relay":"OpenAI"}`) ||
 		!strings.Contains(string(payload), `"usage_events_view":{"preset":"24h","result":"failed","grouping":"provider","advanced":true}`) ||
-		!strings.Contains(string(payload), `"usage_events_columns":{"time":120,"provider":220,"tps":90}`) {
+		!strings.Contains(string(payload), `"usage_events_columns":{"time":120,"provider":220,"tps":90}`) ||
+		!strings.Contains(string(payload), `"omc_theme":`+themeDocument) {
 		t.Fatalf("stored values did not come back verbatim: %s", payload)
 	}
 	stored, found, err := repo.GetPreference(context.Background(), repository.PreferenceDashboardRange)

@@ -1,4 +1,4 @@
-import type { ThemePalette } from '../theme/themeConfig';
+import type { ThemePalette } from '../theme/palette';
 
 export type ChartTone = 'accent' | 'success' | 'warn' | 'danger' | 'neutral';
 

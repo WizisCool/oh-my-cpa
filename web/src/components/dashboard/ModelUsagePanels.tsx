@@ -5,8 +5,8 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';
 import { seriesColor, seriesDomainKey } from '../../charts/chartTheme';
-import { useThemeMode } from '../../theme/ThemeContext';
-import type { ThemePalette } from '../../theme/themeConfig';
+import { useTheme } from '../../theme/ThemeContext';
+import type { ThemePalette } from '../../theme/palette';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import {
   DASHBOARD_MODELS_QUERY_KEY,
@@ -63,7 +63,7 @@ export interface ModelUsagePanelsProps {
  */
 export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range, enabled }) => {
   const t = useT();
-  const { theme } = useThemeMode();
+  const { theme } = useTheme();
   const { modelView, setModelView, style: tokenStyle } = useTokenDisplayStyle();
   const sliding = isSlidingRange(range);
 

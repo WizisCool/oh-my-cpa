@@ -11,7 +11,7 @@ import 'monaco-editor/esm/vs/editor/contrib/suggest/browser/suggestInlineComplet
 import { conf as yamlConf, language as yamlLanguage } from 'monaco-editor/esm/vs/languages/definitions/yaml/yaml.js';
 import { configureMonacoYaml, type MonacoYaml } from 'monaco-yaml';
 import { parseDocument } from 'yaml';
-import { THEME_PRESETS, type ThemeId, type ThemePalette } from '../../theme/themeConfig';
+import type { ResolvedPalette, ThemeMode, ThemePalette } from '../../theme/palette';
 
 // ── Configure Local Monaco Environment (Strict Offline / Zero CDN) ───────────
 if (typeof window !== 'undefined') {
@@ -61,55 +61,73 @@ function ensureMonacoConfigured() {
       yamlVersion: '1.2',
     });
   }
+}
 
-  const darkRules = [
-      { token: 'comment', foreground: '7F858A', fontStyle: 'italic' },
-      { token: 'comment.yaml', foreground: '7F858A', fontStyle: 'italic' },
-      { token: 'type', foreground: '79A8D8' }, // YAML Keys (host:, port:, etc.)
-      { token: 'type.yaml', foreground: '79A8D8' },
-      { token: 'string', foreground: 'B7A7D8' }, // Strings (soft lavender)
-      { token: 'string.yaml', foreground: 'B7A7D8' },
-      { token: 'number', foreground: '72A7A0' }, // Numbers (soft sage/teal)
-      { token: 'number.yaml', foreground: '72A7A0' },
-      { token: 'keyword', foreground: 'C58FB0' }, // true, false, null (soft dusky rose)
-      { token: 'keyword.yaml', foreground: 'C58FB0' },
-      { token: 'operators', foreground: 'A6A3A1' },
-      { token: 'operators.yaml', foreground: 'A6A3A1' },
-      { token: 'delimiter', foreground: 'A6A3A1' },
-      { token: 'delimiter.bracket', foreground: 'A6A3A1' },
-      { token: 'delimiter.square', foreground: 'A6A3A1' },
-      { token: 'tag', foreground: 'A890D0' },
-      { token: 'namespace', foreground: 'A890D0' },
-      { token: 'attribute.name', foreground: '79A8D8' },
-    ];
-  const lightRules = [
-      { token: 'comment', foreground: '6E7378', fontStyle: 'italic' },
-      { token: 'comment.yaml', foreground: '6E7378', fontStyle: 'italic' },
-      { token: 'type', foreground: '185FA5' }, // YAML Keys in light mode
-      { token: 'type.yaml', foreground: '185FA5' },
-      { token: 'string', foreground: '5D4B8B' }, // Strings in light mode
-      { token: 'string.yaml', foreground: '5D4B8B' },
-      { token: 'number', foreground: '1B7F75' }, // Numbers in light mode
-      { token: 'number.yaml', foreground: '1B7F75' },
-      { token: 'keyword', foreground: '8E3E6F' }, // true, false in light mode
-      { token: 'keyword.yaml', foreground: '8E3E6F' },
-      { token: 'operators', foreground: '4F4D4B' },
-      { token: 'operators.yaml', foreground: '4F4D4B' },
-      { token: 'delimiter', foreground: '4F4D4B' },
-      { token: 'delimiter.bracket', foreground: '4F4D4B' },
-      { token: 'delimiter.square', foreground: '4F4D4B' },
-      { token: 'tag', foreground: '6B4699' },
-      { token: 'namespace', foreground: '6B4699' },
-      { token: 'attribute.name', foreground: '185FA5' },
-    ];
-  for (const preset of THEME_PRESETS) {
-    monaco.editor.defineTheme(preset.id, {
-      base: preset.mode === 'dark' ? 'vs-dark' : 'vs',
-      inherit: true,
-      rules: preset.mode === 'dark' ? darkRules : lightRules,
-      colors: monacoColors(preset.palette, preset.mode),
-    });
-  }
+/**
+ * Monaco's YAML token rules, one set per mode.
+ *
+ * Independent of the console's palette on purpose: these are *syntax* colours - a key, a string, a
+ * number - and a syntax hue carries no verdict and no layer, so it is not a theme token. They are
+ * grouped by mode because the two sets are the same hues at steps legible on that mode's editor
+ * background, which is the one thing about them the palette does decide.
+ */
+const MONACO_TOKEN_RULES: Record<ThemeMode, monaco.editor.ITokenThemeRule[]> = {
+  dark: [
+    { token: 'comment', foreground: '7F858A', fontStyle: 'italic' },
+    { token: 'comment.yaml', foreground: '7F858A', fontStyle: 'italic' },
+    { token: 'type', foreground: '79A8D8' }, // YAML keys (host:, port:, ...)
+    { token: 'type.yaml', foreground: '79A8D8' },
+    { token: 'string', foreground: 'B7A7D8' },
+    { token: 'string.yaml', foreground: 'B7A7D8' },
+    { token: 'number', foreground: '72A7A0' },
+    { token: 'number.yaml', foreground: '72A7A0' },
+    { token: 'keyword', foreground: 'C58FB0' }, // true, false, null
+    { token: 'keyword.yaml', foreground: 'C58FB0' },
+    { token: 'operators', foreground: 'A6A3A1' },
+    { token: 'operators.yaml', foreground: 'A6A3A1' },
+    { token: 'delimiter', foreground: 'A6A3A1' },
+    { token: 'delimiter.bracket', foreground: 'A6A3A1' },
+    { token: 'delimiter.square', foreground: 'A6A3A1' },
+    { token: 'tag', foreground: 'A890D0' },
+    { token: 'namespace', foreground: 'A890D0' },
+    { token: 'attribute.name', foreground: '79A8D8' },
+  ],
+  light: [
+    { token: 'comment', foreground: '6E7378', fontStyle: 'italic' },
+    { token: 'comment.yaml', foreground: '6E7378', fontStyle: 'italic' },
+    { token: 'type', foreground: '185FA5' },
+    { token: 'type.yaml', foreground: '185FA5' },
+    { token: 'string', foreground: '5D4B8B' },
+    { token: 'string.yaml', foreground: '5D4B8B' },
+    { token: 'number', foreground: '1B7F75' },
+    { token: 'number.yaml', foreground: '1B7F75' },
+    { token: 'keyword', foreground: '8E3E6F' },
+    { token: 'keyword.yaml', foreground: '8E3E6F' },
+    { token: 'operators', foreground: '4F4D4B' },
+    { token: 'operators.yaml', foreground: '4F4D4B' },
+    { token: 'delimiter', foreground: '4F4D4B' },
+    { token: 'delimiter.bracket', foreground: '4F4D4B' },
+    { token: 'delimiter.square', foreground: '4F4D4B' },
+    { token: 'tag', foreground: '6B4699' },
+    { token: 'namespace', foreground: '6B4699' },
+    { token: 'attribute.name', foreground: '185FA5' },
+  ],
+};
+
+/**
+ * defineMonacoTheme registers one resolved palette with Monaco under its own id.
+ *
+ * Called for the palette in force rather than for every palette at load: a palette's colours are
+ * derived at runtime, so an operator's own palette has no id to define ahead of time, and the six
+ * built-ins no longer need six definitions to exist before anyone asks for them.
+ */
+export function defineMonacoTheme(id: string, palette: ThemePalette, mode: ThemeMode): void {
+  monaco.editor.defineTheme(id, {
+    base: mode === 'dark' ? 'vs-dark' : 'vs',
+    inherit: true,
+    rules: MONACO_TOKEN_RULES[mode],
+    colors: monacoColors(palette, mode),
+  });
 }
 
 function monacoColors(palette: ThemePalette, mode: 'dark' | 'light'): Record<string, string> {
@@ -159,7 +177,7 @@ export interface YamlSourceEditorProps {
   onChange: (value: string) => void;
   loadingText: string;
   onSave?: () => void;
-  themeId?: ThemeId;
+  theme: Pick<ResolvedPalette, 'id' | 'mode' | 'palette'>;
   editorRef?: React.MutableRefObject<YamlSourceEditorRef | null>;
 }
 
@@ -168,14 +186,21 @@ export const YamlSourceEditor: React.FC<YamlSourceEditorProps> = ({
   onChange,
   loadingText,
   onSave,
-  themeId = 'omc-dark',
+  theme,
   editorRef,
 }) => {
   const innerEditorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
 
-  const activeTheme = themeId;
+  // Registered in a layout effect rather than at module load: the palette in force is only known
+  // once a preference has been read, and an operator's own palette has no id to pre-define. Monaco
+  // creates the editor after its loader resolves, which is later than this runs, so the theme is
+  // always defined before the first paint of the editor.
+  React.useLayoutEffect(() => {
+    defineMonacoTheme(theme.id, theme.palette, theme.mode);
+    monaco.editor.setTheme(theme.id);
+  }, [theme]);
 
   const handleMount: OnMount = (editor) => {
     innerEditorRef.current = editor;
@@ -255,7 +280,7 @@ export const YamlSourceEditor: React.FC<YamlSourceEditorProps> = ({
         path="config.yaml"
         height="100%"
         language="yaml"
-        theme={activeTheme}
+        theme={theme.id}
         value={value}
         onChange={(val) => onChange(val ?? '')}
         onMount={handleMount}

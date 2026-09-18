@@ -12,7 +12,7 @@
  * "The same source" has to include the *colours*, not just the drawings: reading the paths from
  * `markup.ts` while holding the accent as a literal here would have connected one half and left the
  * other free to drift, and the staleness check would have passed while the two disagreed. The
- * palette is read out of `web/src/theme/themeConfig.ts` for that reason.
+ * palette is read out of `web/src/theme/palette.ts` for that reason.
  *
  * Run it with `pnpm sync-brand`; `pnpm check-brand` fails if the committed files are stale.
  */
@@ -23,18 +23,20 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
- * Reads one value out of a palette block in `web/src/theme/themeConfig.ts`.
+ * Reads one authored token out of `web/src/theme/palette.ts`.
  *
- * Parsed rather than imported because that module is TypeScript with a React dependency chain, and
- * this script runs under plain Node before any bundler exists. The block is delimited by the mode
- * key and the closing brace that returns to the top level, and the value is asserted to look like a
- * colour: a format change then fails here rather than silently producing artwork with no accent.
+ * Parsed rather than imported because that module is TypeScript with a dependency chain this script
+ * runs without, and it runs under plain Node before any bundler exists. Only the *authored* tokens
+ * are readable here, which is the point: the derived ones are computed at runtime and appear nowhere
+ * in the source. Both values this script asks for - `fg` and `accent` - are authored, so this stays a
+ * read of a literal rather than a second implementation of the derivation.
  */
 export function paletteValue(mode, key) {
-  const source = fs.readFileSync(path.join(root, 'web/src/theme/themeConfig.ts'), 'utf8');
-  const block = new RegExp(`\\b${mode}: \\{([\\s\\S]*?)\\n  \\},`).exec(source);
-  if (!block) throw new Error(`theme config has no ${mode} palette`);
-  const match = new RegExp(`\\b${key}: '(#[0-9a-fA-F]{3,8})'`).exec(block[1]);
+  const source = fs.readFileSync(path.join(root, 'web/src/theme/palette.ts'), 'utf8');
+  // The mode's default palette: the registry entry for that mode, whose `core` block holds the tokens.
+  const entry = new RegExp(`mode: '${mode}',[\\s\\S]*?core: \\{([\\s\\S]*?)\\n    \\},`).exec(source);
+  if (!entry) throw new Error(`theme palette module has no ${mode} palette core`);
+  const match = new RegExp(`\\b${key}: '(#[0-9a-fA-F]{3,8})'`).exec(entry[1]);
   if (!match) throw new Error(`the ${mode} palette has no ${key} colour`);
   return match[1];
 }

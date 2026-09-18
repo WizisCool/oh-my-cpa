@@ -1,5 +1,5 @@
 import React from 'react';
-import type { ThemePalette } from '../../theme/themeConfig';
+import type { ThemePalette } from '../../theme/palette';
 
 /**
  * The palette bands a swatch paints, in the order they are drawn.

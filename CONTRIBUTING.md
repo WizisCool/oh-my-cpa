@@ -68,7 +68,7 @@ Additional targeted checks:
 User-facing strings must never be hardcoded in backend responses or React components. Add all new strings as `[zh, en]` pairs to `web/src/i18n/index.tsx`, add the corresponding entries to `web/src/i18n/locales/zh-Hant.ts` and `web/src/i18n/locales/ms.ts`, and verify with `pnpm check-i18n`.
 
 ### 2. Styling & Theme Tokens
-- Never hardcode color hex values in components. Import from `palette` in `web/src/theme/themeConfig.ts` or use CSS variables from `docs/design.md`.
+- Never hardcode color hex values in components. Read the resolved palette from `web/src/theme/palette.ts` or use the CSS variables from `docs/design.md`; the seventeen derived tokens are computed, so reach for the relationship rather than re-deriving one.
 - Oh My CPA uses a **terminal-flat** design language: zero box shadows (`box-shadow: none`), 4px border radii, and 1px hairline borders. Status colors (green, amber, red) are reserved strictly for semantic system health.
 
 ### 3. API & DTO Allowlisting

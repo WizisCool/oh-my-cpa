@@ -1,7 +1,7 @@
 import React from 'react';
 import { Area } from '@ant-design/charts';
 import dayjs from 'dayjs';
-import { useThemeMode } from '../theme/ThemeContext';
+import { useTheme } from '../theme/ThemeContext';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import { resolveChartAnimation } from './chartMotion';
 import { sparkColor, type ChartTone } from './chartTheme';
@@ -59,7 +59,7 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
   format,
   formatExact,
 }) => {
-  const { theme } = useThemeMode();
+  const { theme } = useTheme();
   const isReducedMotion = usePrefersReducedMotion();
   const animate = resolveChartAnimation(isReducedMotion);
   const [activeIndex, setActiveIndex] = React.useState<number | null>(null);
