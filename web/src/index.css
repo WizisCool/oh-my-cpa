@@ -353,6 +353,22 @@ a { color: inherit; }
 .header-logout { color: var(--muted) !important; }
 .app-content { flex: 1 1 0; min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; background: var(--bg); }
 .app-footer { display: none; }
+
+/* ── mobile navigation sheet ────────────────────────────────────────────────
+   The sheet is the side rail at a phone width, so it carries the rail's three parts -
+   brand, nav, foot - and its rules are the rail's, not a second set. All this adds is
+   what a full-height overlay needs and a rail does not: the notch inset, and a scroll
+   region that cannot drag the sheet itself. */
+.mobile-nav-drawer .ant-drawer-body {
+  padding: 0;
+  padding-left: env(safe-area-inset-left);
+  /* The mask is transparent, so the sheet's own edge is what separates it from the page. */
+  border-right: 1px solid var(--border);
+}
+/* The nav is the only region that scrolls, so the brand and the foot stay put and the sheet
+   never becomes a second scroller the reader has to find. */
+.mobile-nav-drawer .app-sider-scroll { overscroll-behavior: contain; }
+.mobile-nav-drawer .app-brand { cursor: default; }
 .auth-shell {
   height: 100vh;
   height: 100dvh;

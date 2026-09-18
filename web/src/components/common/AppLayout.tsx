@@ -214,6 +214,30 @@ export const AppLayout: React.FC = () => {
     document.documentElement.style.setProperty('--app-sider-width', `${width}px`);
   }, [isMobile, isCollapsed]);
 
+  const cpaState = health ? (health.cpa_connected ? t('shell.connected') : t('shell.offline')) : '—';
+
+  /**
+   * The rail's foot: live CPA connection and version.
+   *
+   * It is one component because both navigations show it. The sheet used to omit it, which meant
+   * the surface a phone actually navigates from was the one surface that could not answer "is the
+   * gateway up" - and that answer is the reason an operator opens this console at all.
+   */
+  const siderFoot = (
+    <div className="app-sider-foot">
+      <div className="app-sider-foot-row">
+        <span>{t('shell.cpa')}</span>
+        <span className="terminal-mono">{cpaState}</span>
+      </div>
+      {health?.version && (
+        <div className="app-sider-foot-row">
+          <span>{t('shell.version')}</span>
+          <span className="terminal-mono">{health.version}</span>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <Layout
       className="app-shell"
@@ -251,7 +275,7 @@ export const AppLayout: React.FC = () => {
           <div className="app-sider-scroll">{menu}</div>
           {isCollapsed ? (
             <Tooltip
-              title={`${t('shell.cpa')} · ${health ? (health.cpa_connected ? t('shell.connected') : t('shell.offline')) : '—'}`}
+              title={`${t('shell.cpa')} · ${cpaState}`}
               placement="right"
             >
               <div className="app-sider-foot is-collapsed">
@@ -259,18 +283,7 @@ export const AppLayout: React.FC = () => {
               </div>
             </Tooltip>
           ) : (
-          <div className="app-sider-foot">
-            <div className="app-sider-foot-row">
-              <span>{t('shell.cpa')}</span>
-              <span className="terminal-mono">{health ? (health.cpa_connected ? t('shell.connected') : t('shell.offline')) : '—'}</span>
-            </div>
-            {health?.version && (
-              <div className="app-sider-foot-row">
-                <span>{t('shell.version')}</span>
-                <span className="terminal-mono">{health.version}</span>
-              </div>
-            )}
-          </div>
+            siderFoot
           )}
         </Sider>
       )}
@@ -312,17 +325,23 @@ export const AppLayout: React.FC = () => {
         </Content>
       </Layout>
       {isMobile && (
+        /* The sheet carries the same three parts as the rail - brand, nav, foot - because it is the
+           rail at a phone width, not a menu of links. Its width is bounded in `vw` as well as `px:`
+           at a 320px viewport a fixed 320px sheet leaves no page visible behind the mask, and the
+           reader loses the sense that this is a layer over where they were. The safe-area inset
+           keeps the rail's labels clear of a landscape notch. */
         <Drawer
           placement="left"
           open={isMobileNavOpen}
           onClose={() => setIsMobileNavOpen(false)}
-          width={280}
+          width="min(320px, 86vw)"
           closable={false}
           className="mobile-nav-drawer"
           styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column' } }}
         >
           {brand}
           <div className="app-sider-scroll">{menu}</div>
+          {siderFoot}
         </Drawer>
       )}
     </Layout>

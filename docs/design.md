@@ -1175,6 +1175,23 @@ its container query, and it could only ever fire where the container already had
 container is at most `viewport − 64px`), so it was removed rather than left as an unexplained
 second breakpoint.
 
+### The phone's navigation is the rail, in a sheet
+
+There is no bottom bar and no phone-specific menu. The sheet carries the rail's own three parts —
+brand, grouped nav, then the CPA connection and version — because a phone does not have less to
+navigate, it has less room to show it in, and a second navigation would be a second place for the
+grouping to drift. Two consequences follow:
+
+- **The foot is not optional.** The connection state is why an operator opens this console at all,
+  and a sheet that omits it makes the phone the one surface that cannot answer "is the gateway up".
+- **The sheet is bounded in `vw` as well as `px`** (`min(320px, 86vw)`). At a 320px viewport a fixed
+  320px sheet leaves no page visible behind the mask, and the reader loses the sense that this is a
+  layer over where they were — which is also what tells them Back will put it away.
+
+A bottom tab bar was considered and rejected: it costs 56px of vertical space plus the home-indicator
+inset on every screen, in a console whose subject is dense tables, and it cannot express four groups
+of seventeen destinations without a "More" that reintroduces the sheet anyway.
+
 ### A finger has no hover
 
 Every affordance is drawn where it can be reached. A control revealed only by `:hover` sits at
