@@ -28,6 +28,7 @@ import type { Document } from 'yaml';
 import dayjs from 'dayjs';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
+import { copyText } from '../utils/clipboard';
 import { ApiKeysList, type ApiKeyRecord } from '../components/keys/ApiKeysList';
 import { updateFieldWithBaseline, isConfigSemanticallyEqual, getFieldSemanticValue } from '../components/config/configDirty';
 import { ALL_CONFIG_FIELDS } from '../types/configSchema';
@@ -622,12 +623,11 @@ export const ApiKeysPage: React.FC = () => {
               icon={<CopyOutlined />}
               disabled={!keyInput.trim()}
               onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(keyInput.trim());
+                if (await copyText(keyInput.trim())) {
                   message.success(t('cfg.source_copy_success'));
-                } catch {
-                  message.error(t('cfg.copy_failed'));
+                  return;
                 }
+                message.error(t('cfg.copy_failed'));
               }}
             >
               {t('cfg.api_keys_copy')}

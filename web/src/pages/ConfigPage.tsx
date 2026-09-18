@@ -37,6 +37,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseDocument, type Document } from 'yaml';
 import { api, ApiError, apiErrorCode } from '../api/client';
 import { useT } from '../i18n';
+import { copyText } from '../utils/clipboard';
 import { useThemeMode } from '../theme/ThemeContext';
 import { ConfigDirtyBar } from '../components/config/ConfigDirtyBar';
 import { PayloadRulesEditor, type PayloadValidationIssue } from '../components/config/PayloadRulesEditor';
@@ -1051,8 +1052,11 @@ export const ConfigPage: React.FC = () => {
                 icon={<CopyOutlined />}
                 disabled={!rawYaml}
                 onClick={async () => {
-                  await navigator.clipboard.writeText(rawYaml);
-                  message.success(t('cfg.source_copy_success'));
+                  if (await copyText(rawYaml)) {
+                    message.success(t('cfg.source_copy_success'));
+                    return;
+                  }
+                  message.error(t('cfg.copy_failed'));
                 }}
               >
                 {t('cfg.source_copy')}
@@ -1116,9 +1120,12 @@ export const ConfigPage: React.FC = () => {
           <Button
             key="copy"
             icon={<CopyOutlined />}
-            onClick={() => {
-              void navigator.clipboard.writeText(rawYaml);
-              message.success(t('cfg.api_keys_copy'));
+            onClick={async () => {
+              if (await copyText(rawYaml)) {
+                message.success(t('cfg.source_copy_success'));
+                return;
+              }
+              message.error(t('cfg.copy_failed'));
             }}
           >
             {t('cfg.conflict_copy')}

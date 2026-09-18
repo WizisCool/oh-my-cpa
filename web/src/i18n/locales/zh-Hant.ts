@@ -23,6 +23,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "common.all": "全部",
   "common.copy": "複製",
   "common.copied": "已複製",
+  "common.copy_failed": "複製失敗",
   "common.search": "搜尋",
   "nav.group.operate": "執行",
   "nav.group.gateway": "閘道",
