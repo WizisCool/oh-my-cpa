@@ -38,6 +38,47 @@ export async function runConfigurationPluginsAcceptance({
     `titles=${payloadTitles} descs=${payloadDescs}`,
   );
 
+  // Adding a rule must leave the page savable. The symptom this guards is not an error
+  // message but the absence of one: a write that throws inside the React handler leaves
+  // the document untouched, so nothing reads as dirty and the save bar - the only save
+  // control on this page - never appears at all. The section is opened here on a fresh
+  // fixture config, which has no `payload` key, and that is exactly the state the write
+  // used to fail in.
+  const overrideRawPanel = page
+    .locator('.payload-builder-group .ant-collapse-item')
+    .filter({ hasText: /覆盖 Raw 规则|Override Raw Rules/ })
+    .first();
+  let payloadRuleAdded = false;
+  try {
+    await overrideRawPanel.locator('.ant-collapse-header').first().click();
+    await overrideRawPanel
+      .locator('.payload-empty-box button, .payload-add-rule-footer button')
+      .filter({ hasText: /添加规则|Add Rule/ })
+      .first()
+      .click();
+    payloadRuleAdded = true;
+  } catch (error) {
+    check(
+      'adding a payload rule makes the configuration savable',
+      false,
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+  if (payloadRuleAdded) {
+    await page.locator('.config-dirty-bar').waitFor({ state: 'visible', timeout: 10000 }).catch(() => undefined);
+    check(
+      'adding a payload rule makes the configuration savable',
+      await page.locator('.config-dirty-btn-save').isVisible(),
+      `dirtyBar=${await page.locator('.config-dirty-bar').count()} ruleCards=${await overrideRawPanel.locator('.payload-rule-card').count()}`,
+    );
+    // Discarded rather than saved, so the rest of the audit starts from the document
+    // the page loaded with. Tolerated rather than required: the bar is missing exactly
+    // when the write regressed, which the assertion above has already recorded, and a
+    // click that throws would take the rest of the release audit down with it.
+    await page.locator('.config-dirty-btn-discard').click({ timeout: 5000 }).catch(() => undefined);
+    await page.locator('.config-dirty-bar').waitFor({ state: 'hidden', timeout: 10000 }).catch(() => undefined);
+  }
+
   // Config Page: Source tab switch requires reauthentication modal
   await page.goto(`${appURL}/config`, { waitUntil: 'domcontentloaded' });
   await page.locator('.config-page').first().waitFor({ state: 'visible', timeout: 15000 });
