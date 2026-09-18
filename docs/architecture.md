@@ -198,6 +198,15 @@ A family an installed CPA does not have answers `404`; that is a missing
 capability rather than an empty or broken list (`IsMissingCapability`), so a
 console release that knows a newer family still works against an older gateway.
 
+Model-list pulls carry a provider credential from the OMC process directly to
+the configured endpoint. `management_provider_models.go` therefore accepts
+HTTPS, or HTTP only for localhost, loopback, and private IP literals, and it
+refuses any redirect whose scheme or host changes. The redirect check runs before
+the next request leaves the process, so neither the provider key nor custom
+provider headers can reach a target the operator did not enter. Invalid URL
+policy answers `400 invalid_model_pull_url`; a refused redirect answers
+`502 model_pull_redirect_refused`.
+
 ### OAuth providers are one registry
 
 `internal/cpa/management/oauth_providers.go` is the single declaration of which

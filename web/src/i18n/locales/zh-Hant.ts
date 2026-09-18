@@ -894,7 +894,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "pro.provider_updated": "供應商已成功更新",
   "pro.provider_deleted": "供應商已刪除",
   "pro.delete_provider_confirm": "確定刪除該供應商？刪除後 CPA 將停止向該端點轉發請求。",
-  "pro.field_base_url_desc": "此供應商要求填寫服務地址",
+  "pro.field_base_url_desc": "供應商服務地址；模型拉取要求 HTTPS，僅 localhost、回環或私人 IP 字面量可使用 HTTP",
   "pro.field_website": "官網",
   "pro.field_website_desc": "僅儲存在 Oh My CPA，不寫入 CPA 設定",
   "pro.field_website_invalid": "請填寫以 http:// 或 https:// 開頭的完整地址",

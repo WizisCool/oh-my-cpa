@@ -36,7 +36,7 @@ Oh My CPA is a self-hosted control plane for [CLIProxyAPI](https://github.com/ro
 ### Gateway & Provider Management
 - **AI Providers**: Configure and monitor endpoints for Codex, Claude, Gemini, Meta Muse, DeepSeek, and OpenAI-compatible services. Each config API-key family (claude, codex, gemini, meta) is managed the same way: credentials, models, priority/weight, proxy, and a gateway-level enable switch.
 - **Protocol-Level Toggling**: Enable or disable providers with real gateway exclusion (`excluded-models: ['*']`), preventing requests from routing to inactive credentials.
-- **Model Catalog Pulling**: Fetch model lists directly from upstream providers to keep available models up to date.
+- **Model Catalog Pulling**: Fetch model lists directly from upstream providers to keep available models up to date. Pulls require HTTPS except for localhost, loopback, or private IP literals; cross-origin redirects are refused.
 - **Client Key Management**: Create, view, and delete gateway API keys. Assign aliases so client keys appear by name in request records and filters.
 - **OAuth Credentials**: Upload, download, delete, and inspect OAuth auth files. Edit priority and weight settings, view supported models, and clear rate-limit cooldowns. Sign in from the console for Codex, Claude, Antigravity, xAI, Kimi, Devin and Meta Muse; a redirect flow whose callback your browser cannot reach is completed by pasting the final URL back, and a device-code flow shows the code to confirm.
 

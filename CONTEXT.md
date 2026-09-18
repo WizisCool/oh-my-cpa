@@ -11,6 +11,12 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
 - **OAuth Model Alias**: A CPA-owned, provider-scoped mapping from an upstream OAuth/file-backed model ID to a client-visible model ID. It is global to the provider rather than to one credential; Oh My CPA replaces one provider's mapping through an allowlisted facade and verifies CPA's readback before reporting success.
 - **Authorization Flow Shape**: How an OAuth sign-in is completed, and the distinction the sign-in page renders. A **redirect flow** ends at a callback URL carrying the authorization code, which an operator on a remote browser may have to paste back (Devin's callback is a loopback address on the CPA host, so pasting is the normal path there rather than a fallback); a **device flow** asks the operator to confirm a short code on the vendor's own page while the console polls (Kimi, Meta Muse). The shape is declared once per provider rather than inferred from its name, and CPA reports it when a flow starts so the console renders the box that actually applies.
 - **Endpoint**: A network destination, represented by a base URL and related connection details. An Endpoint is where traffic goes, not necessarily who provides the service.
+- **Provider Model Pull**: The console's server-side model-list request to an
+  operator-supplied provider endpoint using the provider credential. Model pulls
+  require HTTPS; plain HTTP is limited to localhost, loopback, and private IP
+  literals. A redirect is followed only when both its scheme and host stay
+  unchanged, so credentials and custom headers are never forwarded to a target
+  the operator did not enter.
 - **Connection**: A user-facing usable line formed from a Source, optional Subscription and Account, Credential, Endpoint, and Protocol Driver. It is the primary resource users organize and name.
 - **Protocol Driver**: The technical protocol adapter used by CPA, such as Codex/Responses, OpenAI-compatible Chat Completions, Anthropic Messages, or Gemini. It is implementation metadata, not the user-facing Source.
 - **CPA Binding**: The link between a Connection and a concrete resource on one CPA instance, including the CPA resource type and runtime auth index.
@@ -338,4 +344,3 @@ A deployment may connect Oh My CPA to a CLIProxyAPI (CPA) instance that was alre
 4. **Multi-dimensional observability and filtering**:
    - Both the Request Records console (`/usage/events`) and the Dashboard (`/dashboard`) support filtering metrics, throughput, token volume, model ranking, and drill-down links by specific client key fingerprint (`api_key`).
    - Pre-existing traffic with or without custom names remains fully filterable via the stable HMAC fingerprint.
-
