@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   Alert,
-  App as AntdApp,
   Badge,
   Button,
   Descriptions,
@@ -26,10 +25,10 @@ import {
   SearchOutlined,
   VerticalAlignTopOutlined,
 } from '@ant-design/icons';
-import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
-import { api, ApiError } from '../api/client';
+import { api } from '../api/client';
 import { usePreference } from '../hooks/usePreference';
 import { useT } from '../i18n';
 import {
@@ -40,11 +39,6 @@ import {
   type UsageFacets,
   type UsageResultFilter,
 } from '../types/usageEvents';
-import {
-  EVENT_AUTO_REFRESH_MS,
-  EVENT_SEARCH_DEBOUNCE_MS,
-  EVENT_SYNC_NOTICE_MS,
-} from '../types/usageEventCadence';
 import {
   EVENT_FILTER_KEYS,
   activeFilterCount,
@@ -84,20 +78,13 @@ import {
   replaceFilters,
   viewPreferenceFromUrl,
 } from '../types/usageEventViewActions';
-import { createSearchDebounce } from '../components/usage/searchDebounce';
-import { createDisposableSlot, type DisposableSlot } from '../hooks/disposableSlot';
-import { isListStale, isViewChange, pendingArrivalCount, shouldPoll } from '../components/usage/pollingPolicy';
-import { syncOutcomeMessage, syncShortfallReason, shouldAnnounceStuckSync } from '../components/usage/syncPresentation';
+import { useDebouncedSearch } from '../components/usage/useDebouncedSearch';
+import { useRequestColumnLayout } from '../components/usage/useRequestColumnLayout';
+import { useUsageEventSync } from '../components/usage/useUsageEventSync';
+import { isListStale, isViewChange, pendingArrivalCount } from '../components/usage/pollingPolicy';
 import { chipDisplayValue } from '../components/usage/chipDisplay';
 import {
   REQUEST_COLUMNS,
-  COLUMN_MAP,
-  USAGE_EVENTS_COLUMNS_PREFERENCE,
-  type RequestColumnId,
-  type RequestColumnWidths,
-  parseUsageEventsColumns,
-  buildGridTemplateColumns,
-  computeGridMinWidth,
   requestColumnAlignClass,
 } from '../components/usage/requestColumns';
 import {
@@ -112,106 +99,6 @@ import { RequestFilterChips } from '../components/usage/RequestFilterChips';
 import { ResultMarker } from '../components/usage/ResultMarker';
 import { TimeRangeControl } from '../components/usage/TimeRangeControl';
 import './UsageEventsPage.css';
-
-interface IngestStatus {
-  enabled?: boolean;
-  healthy?: boolean;
-  collector?: {
-    mode?: string;
-    running?: boolean;
-    captured?: number;
-    coverage_gaps?: number;
-    last_error?: string;
-  };
-  stats?: { pending?: number };
-}
-
-/**
- * The search box's debounce.
- *
- * The policy - what invalidates a queued keystroke, and why the commit is read at
- * fire time - lives in `searchDebounce.ts` and is tested there. This hook owns only
- * what needs a component: the box's rendered value, the controller's lifetime, and
- * reading the latest commit so a filter changed during the debounce window is not
- * erased.
- *
- * `resetToken` is the signal the committed value cannot provide: a clear-all runs
- * while this box is usually already empty, so nothing observable changes and a
- * queued keystroke would land after it.
- */
-function useDebouncedSearch(
-  committed: string,
-  commit: (value: string) => void,
-  resetToken: number,
-) {
-  const [value, setValue] = React.useState(committed);
-  // The controller is built by the effect that owns it and released by its cleanup,
-  // so a StrictMode remount builds a fresh one. Creating it during render and
-  // disposing it in the cleanup is the failure this avoids: React runs mount ->
-  // unmount -> mount in development, the first cleanup would dispose the controller,
-  // and the remount would hand every consumer the *disposed* one - `change` returns
-  // early forever, so the search box stops committing while looking perfectly
-  // healthy. Production builds skip the double-invoke, so only the dev server ever
-  // showed it. `disposableSlot` owns that rule for the provider toggle too.
-  const slotRef = React.useRef<DisposableSlot<ReturnType<typeof createSearchDebounce>> | null>(null);
-  if (slotRef.current === null) {
-    slotRef.current = createDisposableSlot(() =>
-      createSearchDebounce({ delayMs: EVENT_SEARCH_DEBOUNCE_MS }),
-    );
-  }
-  const slot = slotRef.current;
-  const controller = slot.current();
-
-  // Read at call time so the timer invokes the current render's commit rather than
-  // the one captured when it was scheduled.
-  const commitRef = React.useRef(commit);
-  React.useEffect(() => {
-    commitRef.current = commit;
-  });
-
-  // Installs the controller for this effect lifetime. A remount after the StrictMode
-  // unmount takes this path again and builds a live controller, which is what keeps
-  // the search box working on the development server.
-  React.useEffect(() => {
-    slot.setup();
-    return () => slot.teardown();
-  }, [slot]);
-
-  // The committed value is the source of truth for every change that did not come
-  // from this box: hydration from saved preferences, Back/Forward, a drill-down, a
-  // removed chip. Adopting it also cancels whatever this box had queued against the
-  // value it replaces.
-  React.useEffect(() => {
-    controller?.sync(committed);
-    setValue(committed);
-  }, [committed, controller]);
-
-  // A clear runs while this box is usually already empty, so nothing observable
-  // changes and the committed value cannot signal that queued work must be dropped.
-  // That is what the token is for.
-  //
-  // The rendered value is reset here as well as the queue being invalidated. The two
-  // are separate needs that share one event: clearing must drop queued work (the
-  // token's job) *and* empty the box, because a keystroke typed before the clear is
-  // still on screen even though the URL it was typed against is gone.
-  React.useEffect(() => {
-    controller?.invalidate();
-    setValue(committed);
-  }, [resetToken, committed, controller]);
-
-  const change = React.useCallback(
-    (next: string) => {
-      setValue(next);
-      // Read through the slot rather than closing over the controller: a StrictMode
-      // remount replaces the instance, and a handler captured against the old one
-      // would write into a controller nobody is draining.
-      slot.current()?.change(next, (value_) => commitRef.current(value_));
-    },
-    [slot],
-  );
-
-  return [value, change] as const;
-}
 
 /**
  * Distance from the top at which the list counts as "following the live edge".
@@ -236,7 +123,6 @@ const BACK_TO_TOP_GUARD_MS = 1_200;
 
 export const UsageEventsPage: React.FC = () => {
   const t = useT();
-  const { message } = AntdApp.useApp();
   const [params, setParams] = useSearchParams();
   const signature = params.toString();
   const query = React.useMemo(() => readEventQuery(new URLSearchParams(signature)), [signature]);
@@ -246,168 +132,40 @@ export const UsageEventsPage: React.FC = () => {
     DEFAULT_USAGE_EVENTS_VIEW,
     parseUsageEventsView,
   );
+
   const {
-    value: columnWidthsPref,
-    ready: columnWidthsReady,
-    set: setColumnWidthsPref,
-  } = usePreference<RequestColumnWidths>(
-    USAGE_EVENTS_COLUMNS_PREFERENCE,
-    {},
-    parseUsageEventsColumns,
-  );
-
-  const [colWidths, setColWidths] = React.useState<RequestColumnWidths>({});
-
-  React.useEffect(() => {
-    if (columnWidthsReady) {
-      setColWidths(columnWidthsPref);
-    }
-  }, [columnWidthsReady, columnWidthsPref]);
-
-  const gridTemplate = React.useMemo(
-    () => buildGridTemplateColumns(colWidths),
-    [colWidths],
-  );
-  const gridMinWidth = React.useMemo(() => computeGridMinWidth(colWidths), [colWidths]);
-
-  // The row list scrolls vertically and therefore loses a scrollbar's worth of
-  // inner width that the header never loses. Measuring the real gutter (rather
-  // than assuming a platform width) lets the header pad exactly that much, so
-  // column boundaries line up on Windows, macOS overlay scrollbars and touch.
-  const [scrollbarGutter, setScrollbarGutter] = React.useState(0);
-  React.useEffect(() => {
-    const probe = document.createElement('div');
-    probe.style.cssText =
-      'position:absolute;top:-9999px;left:-9999px;width:64px;height:64px;overflow:scroll;';
-    document.body.appendChild(probe);
-    setScrollbarGutter(Math.max(0, probe.offsetWidth - probe.clientWidth));
-    probe.remove();
-  }, []);
-
-  const handleResizeStart = React.useCallback(
-    (colId: RequestColumnId, e: React.PointerEvent<HTMLSpanElement>) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const target = e.currentTarget;
-      target.setPointerCapture(e.pointerId);
-
-      const colDef = COLUMN_MAP.get(colId)!;
-      const thElement = target.parentElement as HTMLElement;
-      const startWidth = thElement
-        ? thElement.getBoundingClientRect().width
-        : (colWidths[colId] || colDef.defaultWidth);
-      const startX = e.clientX;
-
-      let latestWidth = startWidth;
-
-      const onPointerMove = (moveEvent: PointerEvent) => {
-        const delta = moveEvent.clientX - startX;
-        latestWidth = Math.round(
-          Math.min(colDef.maxWidth, Math.max(colDef.minWidth, startWidth + delta)),
-        );
-        setColWidths((prev) => ({
-          ...prev,
-          [colId]: latestWidth,
-        }));
-      };
-
-      const onPointerUp = (upEvent: PointerEvent) => {
-        try {
-          target.releasePointerCapture(upEvent.pointerId);
-        } catch {}
-        target.removeEventListener('pointermove', onPointerMove);
-        target.removeEventListener('pointerup', onPointerUp);
-        target.removeEventListener('pointercancel', onPointerUp);
-
-        setColWidths((prev) => {
-          const next = { ...prev, [colId]: latestWidth };
-          setColumnWidthsPref(next);
-          return next;
-        });
-      };
-
-      target.addEventListener('pointermove', onPointerMove);
-      target.addEventListener('pointerup', onPointerUp);
-      target.addEventListener('pointercancel', onPointerUp);
-    },
-    [colWidths, setColumnWidthsPref],
-  );
-
-  const handleResetColumn = React.useCallback(
-    (colId: RequestColumnId) => {
-      setColWidths((prev) => {
-        const next = { ...prev };
-        delete next[colId];
-        setColumnWidthsPref(next);
-        return next;
-      });
-    },
-    [setColumnWidthsPref],
-  );
-
-  const handleResetAllColumns = React.useCallback(() => {
-    setColWidths({});
-    setColumnWidthsPref({});
-  }, [setColumnWidthsPref]);
-
-  const handleResizeKeyDown = React.useCallback(
-    (colId: RequestColumnId, e: React.KeyboardEvent) => {
-      const colDef = COLUMN_MAP.get(colId)!;
-      const currentWidth = colWidths[colId] ?? colDef.defaultWidth;
-      let nextWidth: number | null = null;
-      if (e.key === 'ArrowLeft') {
-        nextWidth = Math.max(colDef.minWidth, currentWidth - 10);
-      } else if (e.key === 'ArrowRight') {
-        nextWidth = Math.min(colDef.maxWidth, currentWidth + 10);
-      } else if (e.key === 'Enter' || e.key === 'Escape') {
-        handleResetColumn(colId);
-        return;
-      }
-      if (nextWidth !== null) {
-        e.preventDefault();
-        const finalWidth = nextWidth;
-        setColWidths((prev) => {
-          const next = { ...prev, [colId]: finalWidth };
-          setColumnWidthsPref(next);
-          return next;
-        });
-      }
-    },
-    [colWidths, handleResetColumn, setColumnWidthsPref],
-  );
+    colWidths,
+    gridTemplate,
+    gridMinWidth,
+    scrollbarGutter,
+    hasCustomWidths,
+    handleResizeStart,
+    handleResetColumn,
+    handleResetAllColumns,
+    handleResizeKeyDown,
+  } = useRequestColumnLayout();
 
   // Initial URL check: did the user enter with explicit query params (e.g. from dashboard drill-down)?
   const initialParamsRef = React.useRef(params);
   const hasExplicit = React.useMemo(() => hasExplicitEventQuery(initialParamsRef.current), []);
   const [hydrated, setHydrated] = React.useState(hasExplicit);
 
-  const [refresh, setRefresh] = React.useState(0);
   const [isAutoRefresh, setIsAutoRefresh] = React.useState(false);
+  // The sync hook's poll reads the list's in-flight state through this ref rather
+  // than closing over it; the interval it installs explains why the dependency
+  // list cannot name the flag.
+  const isFetchingRef = React.useRef(false);
+  const {
+    ingest,
+    status,
+    isSyncing,
+    facetWindow,
+    facetRevision,
+    refresh,
+    handleManualRefresh,
+  } = useUsageEventSync({ query, isAutoRefresh, isFetchingRef });
   const activeWindow = React.useMemo(() => eventWindow(query, Date.now()), [query, refresh]);
 
-  /**
-   * Facets are read on their own window, not on the list's poll counter.
-   *
-   * `activeWindow` advances on every poll, so keying the facet query on it made
-   * each ten-second tick re-issue ten grouped scans - the most expensive query
-   * on the page - to answer a question whose answer barely moves. Facets describe
-   * which values exist in a window, so they only need re-reading when the window
-   * is *redefined* (a new preset or absolute range) or the operator asks for a
-   * refresh. `facetWindowRevision` is exactly those two events, and the resolved
-   * timestamps still live in the query key, so a genuinely new window is a
-   * genuinely new cache entry.
-   */
-  const [facetWindowRevision, setFacetWindowRevision] = React.useState(0);
-  const facetWindow = React.useMemo(
-    () => eventWindow(query, Date.now()),
-    [query, facetWindowRevision],
-  );
-  // The revision is part of the key, not only of the params it computes. An
-  // absolute range resolves to the same two timestamps on every render, so a
-  // revision that only moved the memo would leave the facet entry inside its
-  // five-minute staleTime and the dropdowns would keep the counts the operator
-  // just asked to have recomputed.
-  const facetRevision = facetWindowRevision;
 
   // viewScope identifies the view the reader is looking at: the filters and
   // window they picked, plus which page of it. The auto-refresh counter is
@@ -839,33 +597,6 @@ export const UsageEventsPage: React.FC = () => {
     // dropdowns populated while a poll is in flight.
     staleTime: 5 * 60_000,
   });
-  const ingest = useQuery({
-    queryKey: ['usage-ingest-status'],
-    queryFn: api.getUsageIngestStatus,
-    refetchInterval: 15_000,
-  });
-  const status = ingest.data as IngestStatus | undefined;
-
-  /**
-   * A manual refresh asks the gateway for its newest records first, then re-reads
-   * what was stored.
-   *
-   * The two steps are one action on purpose: refreshing only the reads would
-   * redraw exactly the same rows, while the records the operator is looking for
-   * are still sitting in CPA's queue. Everything on screen is refreshed after the
-   * pull - list, facets and pipeline status - so the page never mixes pre- and
-   * post-sync data. The turn finishes either way: when the gateway could not be
-   * drained, the stored data is still re-read and the failure is reported on top
-   * of it.
-   */
-  const syncMutation = useMutation({
-    mutationFn: () => api.refreshUsageIngest(),
-    onSettled: () => {
-      setRefresh((value) => value + 1);
-      setFacetWindowRevision((value) => value + 1);
-      void ingest.refetch();
-    },
-  });
   // While the reader is holding rows, ask the server how much has been recorded
   // since the newest row id they are holding. The anchor is an id rather than a
   // timestamp because the list is sorted by request time: the records ingested
@@ -885,22 +616,9 @@ export const UsageEventsPage: React.FC = () => {
     placeholderData: keepPreviousData,
     staleTime: 5_000,
   });
-
-  // A manual sync is in flight. The poll is held during it so the list cannot be
-  // refreshed from data the sync is about to replace, which would show the old
-  // page right after the operator asked for the new one.
-  const isSyncing = syncMutation.isPending;
-  // A sync that is still running after a visible delay has stopped looking like
-  // "working on it": say so, so the page never looks frozen.
-  const [isSyncStuck, setIsSyncStuck] = React.useState(false);
-  React.useEffect(() => {
-    if (!isSyncing) {
-      setIsSyncStuck(false);
-      return;
-    }
-    const timer = setTimeout(() => setIsSyncStuck(true), EVENT_SYNC_NOTICE_MS);
-    return () => clearTimeout(timer);
-  }, [isSyncing]);
+  // Assigned after the read it describes, so the poll's interval always observes
+  // the latest value without naming it in its dependency list.
+  isFetchingRef.current = result.isFetching;
 
   const handlePrevPage = React.useCallback(() => {
     if (!cursors.length || result.isFetching) return;
@@ -917,35 +635,6 @@ export const UsageEventsPage: React.FC = () => {
     scrollListToTop();
     schedulePageNavigationReset();
   }, [cursors, result.data, result.isFetching, result.isError, schedulePageNavigationReset, scrollListToTop, viewScope]);
-
-  // The poll reads the in-flight state through a ref rather than closing over it.
-  // Naming `result.isFetching` in the dependency list rebuilt the timer on every
-  // fetch, which reset the interval each time and turned a 10-second poll into
-  // "10 seconds after the last response finished" - the cadence the operator
-  // asked for is wall-clock, not round-trip dependent.
-  const isFetchingRef = React.useRef(false);
-  isFetchingRef.current = result.isFetching;
-  const isSyncingRef = React.useRef(false);
-  isSyncingRef.current = isSyncing;
-  React.useEffect(() => {
-    if (!isAutoRefresh) return;
-    const timer = setInterval(() => {
-      // The three reasons to skip a tick live in `pollingPolicy.shouldPoll`: the tab
-      // is hidden, a read is already in flight, or a manual sync owns the next
-      // refresh. Skipping rather than queueing is what keeps the cadence wall-clock
-      // - a queued tick would fire the moment a slow query resolved.
-      if (!shouldPoll({
-        isAutoRefresh,
-        isVisible: document.visibilityState === 'visible',
-        isFetching: isFetchingRef.current,
-        isSyncing: isSyncingRef.current,
-      })) {
-        return;
-      }
-      setRefresh((value) => value + 1);
-    }, EVENT_AUTO_REFRESH_MS);
-    return () => clearInterval(timer);
-  }, [isAutoRefresh]);
 
   const toggleAutoRefresh = React.useCallback(
     (next: boolean) => {
@@ -1231,38 +920,6 @@ export const UsageEventsPage: React.FC = () => {
           ? 'events.ingest_healthy'
           : 'events.ingest_attention';
 
-  const { mutate: requestSync, isPending: isSyncPending } = syncMutation;
-  React.useEffect(() => {
-    // A sync still running after a visible delay has stopped looking like "working
-    // on it" and started looking like a frozen page.
-    if (shouldAnnounceStuckSync(isSyncPending, isSyncStuck)) {
-      void message.warning(t('events.sync_still_running'), 6);
-    }
-  }, [isSyncPending, isSyncStuck, message, t]);
-  const handleManualRefresh = React.useCallback(() => {
-    requestSync(undefined, {
-      onSuccess: (outcome) => {
-        // Which of the three outcomes this was - and how loudly to say it - is
-        // decided in `syncPresentation`. The reported bug lived here: a pull that
-        // could not drain CPA was shown as a success because "the request
-        // completed" was read as "the records were fetched".
-        const outcomeMessage = syncOutcomeMessage({
-          ...outcome,
-          error: outcome.synced
-            ? outcome.error
-            : syncShortfallReason(outcome, t('events.sync_unknown_reason')),
-        });
-        const text = t(outcomeMessage.key, outcomeMessage.vars);
-        if (outcomeMessage.tone === 'info') message.info(text);
-        else if (outcomeMessage.tone === 'success') message.success(text);
-        else message.warning(text, 6);
-      },
-      onError: (error: unknown) => {
-        const msg = error instanceof ApiError ? error.message : String(error);
-        message.error(t('events.sync_failed', { msg }));
-      },
-    });
-  }, [message, requestSync, t]);
 
   return (
     <div className="terminal-page usage-events-page request-events-page">
@@ -1325,7 +982,7 @@ export const UsageEventsPage: React.FC = () => {
                 <Badge status={ingestTone} text={t(ingestLabel)} />
               </Button>
             </Popover>
-            {Object.keys(colWidths).length > 0 && (
+            {hasCustomWidths && (
               <Button
                 size="small"
                 type="text"
