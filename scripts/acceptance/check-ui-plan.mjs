@@ -99,6 +99,14 @@ const SCENARIO_PATHS = [
     prefix: 'web/src/pages/ProvidersPage',
     scenarios: ['icon-picker-stacking', 'provider-icon-pick'],
   },
+  // The provider console's own modules: the list table, the editor drawer, the
+  // writes and the icon overlay. The page renders nothing but these, so a change
+  // to any of them reaches exactly what a change to the page reaches - and the
+  // drawer is one of the two overlays the stacking assertion is about.
+  {
+    prefix: 'web/src/components/providers/',
+    scenarios: ['icon-picker-stacking', 'provider-icon-pick'],
+  },
   // The dashboard: the sparkline marks its tiles draw and the daily-token calendar
   // beneath them. Both live on this page, and the page is what the scenarios load,
   // so a page change can move either one.

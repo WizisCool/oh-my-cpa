@@ -18,7 +18,6 @@ import {
   VerticalAlignTopOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { api } from '../api/client';
 import { usePreference } from '../hooks/usePreference';
@@ -28,26 +27,12 @@ import {
   isUsageFacetsResponse,
   type UsageEvent,
   type UsageEventPage,
-  type UsageResultFilter,
 } from '../types/usageEvents';
 import {
   EVENT_FILTER_KEYS,
-  activeFilterCount,
   eventWindow,
-  filterParamsToUrl,
-  hasExplicitEventQuery,
-  readEventQuery,
-  readFilterParams,
-  rejectedEventParams,
   type EventFilterKey,
 } from '../types/usageEventQuery';
-import {
-  DEFAULT_USAGE_EVENTS_VIEW,
-  USAGE_EVENTS_VIEW_PREFERENCE,
-  parseUsageEventsView,
-  type EventGrouping,
-  type UsageEventsViewPreference,
-} from '../types/usageEventViewPreference';
 import { createProviderNameResolver, indexCredentialFiles } from '../types/usageEventIdentity';
 import {
   UNKNOWN_EVENT_GROUP,
@@ -57,16 +42,8 @@ import {
   formatEventSourceGroupTitle,
   providersWithMultipleAuthSources,
 } from '../types/usageEventGrouping';
-import type { UsageEventsView } from '../types/usageEventFilters';
-import {
-  applyTimeWindow,
-  clearAllFilters,
-  mergeFilters,
-  replaceFilters,
-  viewPreferenceFromUrl,
-} from '../types/usageEventViewActions';
-import { useDebouncedSearch } from '../components/usage/useDebouncedSearch';
 import { useRequestColumnLayout } from '../components/usage/useRequestColumnLayout';
+import { useUsageEventViewState } from '../components/usage/useUsageEventViewState';
 import { useRequestListScroll } from '../components/usage/useRequestListScroll';
 import { useUsageEventSync } from '../components/usage/useUsageEventSync';
 import { isListStale, isViewChange } from '../components/usage/pollingPolicy';
@@ -87,15 +64,29 @@ import './UsageEventsPage.css';
 
 export const UsageEventsPage: React.FC = () => {
   const t = useT();
-  const [params, setParams] = useSearchParams();
-  const signature = params.toString();
-  const query = React.useMemo(() => readEventQuery(new URLSearchParams(signature)), [signature]);
-
-  const { value: viewPref, ready: prefReady, set: setViewPref } = usePreference<UsageEventsViewPreference>(
-    USAGE_EVENTS_VIEW_PREFERENCE,
-    DEFAULT_USAGE_EVENTS_VIEW,
-    parseUsageEventsView,
-  );
+  const {
+    signature,
+    query,
+    committedParams,
+    rejectedParams,
+    committedView,
+    filterCount,
+    search,
+    setSearch,
+    grouping,
+    changeGrouping,
+    isAutoRefresh,
+    toggleAutoRefresh,
+    commit,
+    setFilter,
+    removeFilterValue,
+    clearFilters,
+    setTimeWindow,
+    setResult,
+    setPageSize,
+    resetSearchQueue,
+    isEnabled,
+  } = useUsageEventViewState();
 
   const {
     colWidths,
@@ -109,12 +100,6 @@ export const UsageEventsPage: React.FC = () => {
     handleResizeKeyDown,
   } = useRequestColumnLayout();
 
-  // Initial URL check: did the user enter with explicit query params (e.g. from dashboard drill-down)?
-  const initialParamsRef = React.useRef(params);
-  const hasExplicit = React.useMemo(() => hasExplicitEventQuery(initialParamsRef.current), []);
-  const [hydrated, setHydrated] = React.useState(hasExplicit);
-
-  const [isAutoRefresh, setIsAutoRefresh] = React.useState(false);
   // The sync hook's poll reads the list's in-flight state through this ref rather
   // than closing over it; the interval it installs explains why the dependency
   // list cannot name the flag.
@@ -161,189 +146,8 @@ export const UsageEventsPage: React.FC = () => {
   } = liveEdge;
   const [selected, setSelected] = React.useState<number | null>(null);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = React.useState(false);
-  // Bumped whenever filters are discarded on the operator's behalf, so a text
-  // filter with a queued keystroke cannot commit after the discard.
-  const [searchResetToken, setSearchResetToken] = React.useState(0);
-  const [grouping, setGrouping] = React.useState<EventGrouping>('time');
 
-
-  // The flat committed filter map, derived from the URL through the same
-  // normalisation the request itself uses. Chips and persistence both read it,
-  // so a chip can never describe a filter the query did not apply.
-  const committedParams = React.useMemo(() => readFilterParams(params), [signature]);
-  const rejectedParams = React.useMemo(() => rejectedEventParams(params), [signature]);
-  const committedView = React.useMemo<UsageEventsView>(
-    () => ({ result: query.result ?? 'all', params: committedParams }),
-    [query.result, committedParams],
-  );
-  const filterCount = activeFilterCount(committedParams);
-
-  /**
-   * Every local URL write records its signature first, so the effect below can tell
-   * a change this page made from one that arrived from outside it. Without that
-   * distinction a keystroke queued behind the debounce would survive a Back or a
-   * drill-down and be written onto the view the operator navigated to.
-   */
-  const selfWrittenSignatureRef = React.useRef<string | null>(null);
-  const writeParams = React.useCallback(
-    (next: URLSearchParams) => {
-      selfWrittenSignatureRef.current = next.toString();
-      setParams(next, { replace: true });
-    },
-    [setParams],
-  );
-
-  React.useEffect(() => {
-    if (selfWrittenSignatureRef.current === signature) return;
-    // A URL this page did not write: history navigation, a drill-down link, or a
-    // pasted address. A pending keystroke belongs to the view that was just left.
-    setSearchResetToken((value) => value + 1);
-  }, [signature]);
-
-  // One-time hydration from server preferences when entering bare route without query parameters
-  React.useEffect(() => {
-    if (!prefReady || hydrated) return;
-    setHydrated(true);
-    if (viewPref.grouping) setGrouping(viewPref.grouping);
-    if (typeof viewPref.autoRefresh === 'boolean') setIsAutoRefresh(viewPref.autoRefresh);
-
-    if (!hasExplicit) {
-      const nextParams = new URLSearchParams();
-      if (viewPref.from !== undefined) {
-        nextParams.set('from', String(viewPref.from));
-        if (viewPref.to !== undefined) nextParams.set('to', String(viewPref.to));
-      } else if (viewPref.preset && viewPref.preset !== '1h') {
-        nextParams.set('preset', viewPref.preset);
-      }
-      if (viewPref.result && viewPref.result !== 'all') {
-        nextParams.set('result', viewPref.result);
-      }
-      if (viewPref.limit && viewPref.limit !== 100) {
-        nextParams.set('limit', String(viewPref.limit));
-      }
-      if (viewPref.cost && viewPref.cost !== 'all') {
-        nextParams.set('cost', viewPref.cost);
-      }
-      // `cost` is a top-level query field, not a repeated filter dimension, so it
-      // travels as its own parameter. It must not also be replayed from the stored
-      // filter map, or the URL would carry it twice.
-      const storedFilters = filterParamsToUrl({
-        ...(viewPref.filterValues ?? {}),
-        cost: undefined,
-      });
-      storedFilters.forEach((value, key) => nextParams.append(key, value));
-      if (nextParams.toString()) {
-        writeParams(nextParams);
-      }
-    }
-  }, [prefReady, hydrated, hasExplicit, viewPref, writeParams]);
-
-  // Restore the layout preferences even when arriving on a drill-down link.
-  React.useEffect(() => {
-    if (!prefReady || !hasExplicit) return;
-    if (viewPref.grouping) setGrouping(viewPref.grouping);
-    if (typeof viewPref.autoRefresh === 'boolean') setIsAutoRefresh(viewPref.autoRefresh);
-  }, [prefReady, hasExplicit, viewPref.grouping, viewPref.autoRefresh]);
-
-  /**
-   * persistView writes the saved view for the *complete* next state.
-   *
-   * It used to take partial overrides and fall back to the previous query for
-   * anything not mentioned. That is what made a cleared filter come back: the
-   * override said `{ model: undefined }`, the fallback then read the model out of
-   * the still-old `query`, and the removed value was written straight back into
-   * storage. Deriving every field from one normalised state removes the class of
-   * bug rather than the instance.
-   */
-  const persistView = React.useCallback(
-    (nextParams: URLSearchParams, overrides?: { grouping?: EventGrouping; autoRefresh?: boolean }) => {
-      // The saved view is derived from the URL that is actually being navigated to.
-      // Deriving every field from one normalised state - rather than merging the
-      // changed fields into the previous query - is what stops a cleared filter from
-      // being read back out of the query it was removed from and reappearing on the
-      // next visit. See `viewPreferenceFromUrl`.
-      setViewPref(
-        viewPreferenceFromUrl(nextParams, {
-          grouping: overrides?.grouping ?? grouping,
-          autoRefresh: overrides?.autoRefresh ?? isAutoRefresh,
-        }),
-      );
-    },
-    [grouping, isAutoRefresh, setViewPref],
-  );
-
-  /**
-   * commit applies a filter change. `values` is the complete next filter map, so
-   * a removal is expressed by the key being absent rather than by a sentinel.
-   * The change is written to the URL and to the saved view together, which is
-   * what keeps a reload equivalent to not having reloaded.
-   */
-  /**
-   * Every local URL write records its signature first, so the effect above can tell
-   * a change this page made from one that arrived from outside it.
-   */
-  const commit = React.useCallback(
-    (values: Partial<Record<EventFilterKey, string[]>>, options?: { result?: UsageResultFilter; keepWindow?: boolean }) => {
-      // The rewrite is defined in `usageEventViewActions`: every filter dimension is
-      // replaced wholesale so a removal is expressible, while the window, page size
-      // and cursor are left alone.
-      const nextParams = replaceFilters(params, values, { result: options?.result });
-      writeParams(nextParams);
-      persistView(nextParams, { grouping });
-    },
-    [grouping, params, persistView, writeParams],
-  );
-
-  /** setFilter replaces one dimension wholesale. An empty list clears it. */
-  const setFilter = React.useCallback(
-    (key: EventFilterKey, values: string[]) => {
-      commit(mergeFilters(committedParams, key, values));
-    },
-    [commit, committedParams],
-  );
-
-  const removeFilterValue = React.useCallback(
-    (key: EventFilterKey, value?: string) => {
-      const current = committedParams[key] ?? [];
-      // Removing the search chip removes the whole filter, so a keystroke still
-      // queued behind the debounce must be dropped with it.
-      if (key === 'q') setSearchResetToken((token) => token + 1);
-      setFilter(key, value === undefined ? [] : current.filter((entry) => entry !== value));
-    },
-    [committedParams, setFilter],
-  );
-
-  const clearFilters = React.useCallback(() => {
-    // Filters and the verdict go; the window, page size and cursor stay. Reset the
-    // window too and the reader is silently moved to a different hour.
-    const windowOnly = clearAllFilters(params);
-    writeParams(windowOnly);
-    // Cancels any queued keystroke. The search box's committed value is already
-    // empty during a clear, so nothing else would signal that its pending timer
-    // must not fire.
-    setSearchResetToken((value) => value + 1);
-    // Persisted from the URL that is actually being navigated to. Saving the
-    // defaults here instead is what reset the operator's window and page size in
-    // storage while the URL kept them, so a later reload silently moved them.
-    persistView(windowOnly, { grouping });
-  }, [grouping, params, persistView, writeParams]);
-
-  const setTimeWindow = React.useCallback(
-    (window: { preset?: string; from?: number; to?: number }) => {
-      const nextParams = applyTimeWindow(params, window);
-      writeParams(nextParams);
-      persistView(nextParams, { grouping });
-    },
-    [grouping, params, persistView, writeParams],
-  );
-
-  const [search, setSearch] = useDebouncedSearch(
-    committedParams.q?.[0] ?? '',
-    (value) => {
-      setFilter('q', value ? [value] : []);
-    },
-    searchResetToken,
-  );  const isQueryEnabled = hasExplicit || prefReady;
+  const isQueryEnabled = isEnabled;
   const facetParams = usageEventParams(facetWindow);
   const facets = useQuery({
     queryKey: ['usage-facets', facetParams, facetRevision],
@@ -403,13 +207,6 @@ export const UsageEventsPage: React.FC = () => {
     schedulePageNavigationReset();
   }, [cursors, markPageNavigation, result.data, result.isFetching, result.isError, schedulePageNavigationReset, scrollListToTop, viewScope]);
 
-  const toggleAutoRefresh = React.useCallback(
-    (next: boolean) => {
-      setIsAutoRefresh(next);
-      persistView(params, { grouping, autoRefresh: next });
-    },
-    [grouping, params, persistView],
-  );
 
   // keepPreviousData covers in-flight changes; retain the last successful page
   // after a failed query too, with an explicit stale-data label.
@@ -542,17 +339,6 @@ export const UsageEventsPage: React.FC = () => {
     observer.observe(host);
     return () => observer.disconnect();
   }, []);
-
-  const handlePageSizeChange = React.useCallback(
-    (nextLimit: number) => {
-      const nextParams = new URLSearchParams(params);
-      if (nextLimit === 100) nextParams.delete('limit');
-      else nextParams.set('limit', String(nextLimit));
-      writeParams(nextParams);
-      persistView(nextParams, { grouping });
-    },
-    [grouping, params, persistView, writeParams],
-  );
 
   /**
    * Clear-all is offered in two places (the bar and the chip strip) and must
@@ -746,7 +532,7 @@ export const UsageEventsPage: React.FC = () => {
           onSearchChange={setSearch}
           query={query}
           onTimeWindowChange={setTimeWindow}
-          onResultChange={(result) => commit(committedParams, { result })}
+          onResultChange={setResult}
           committedParams={committedParams}
           onFilterChange={setFilter}
           facets={facets.data?.facets}
@@ -759,10 +545,7 @@ export const UsageEventsPage: React.FC = () => {
           activeFilterCount={activeFilters.length}
           onClearFilters={clearFilters}
           grouping={grouping}
-          onGroupingChange={(next) => {
-            setGrouping(next);
-            persistView(params, { grouping: next });
-          }}
+          onGroupingChange={changeGrouping}
         />
         <RequestFilterChips
           committed={committedParams}
@@ -781,7 +564,7 @@ export const UsageEventsPage: React.FC = () => {
           onApply={(next) => {
             // Apply replaces every filter dimension, so a keystroke queued in the
             // search box must not land on top of the applied view.
-            setSearchResetToken((token) => token + 1);
+            resetSearchQueue();
             commit(next.params, { result: next.result });
             setIsFilterDrawerOpen(false);
           }}
@@ -884,7 +667,7 @@ export const UsageEventsPage: React.FC = () => {
           hasMore={!!result.data?.has_more}
           hasNextCursor={!!result.data?.next_cursor}
           hasPrev={cursors.length > 0}
-          onPageSizeChange={handlePageSizeChange}
+          onPageSizeChange={setPageSize}
           onPrev={handlePrevPage}
           onNext={handleNextPage}
         />
