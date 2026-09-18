@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import Editor, { loader, type OnMount } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import 'monaco-editor/esm/vs/features/find/register.js';
@@ -263,6 +264,10 @@ export const YamlSourceEditor: React.FC<YamlSourceEditorProps> = ({
   const innerEditorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
+  // The hook is read here rather than the options below being styled by CSS, because these are the
+  // editor's own options: Monaco draws its content on a canvas-backed view, so a stylesheet cannot
+  // wrap it or turn off its minimap.
+  const isNarrowEditor = useIsPhoneViewport();
 
   // Registered in a layout effect rather than at module load: the palette in force is only known
   // once a preference has been read, and an operator's own palette has no id to pre-define. Monaco
@@ -363,16 +368,20 @@ export const YamlSourceEditor: React.FC<YamlSourceEditorProps> = ({
         options={{
           fontFamily:
             '"Sarasa Mono SC", "Sarasa UI SC", "Sarasa Term SC", "更纱黑体 SC", monospace',
-          fontSize: 13,
-          lineHeight: 21,
+          /* A phone is not a smaller desktop for a source editor. At 13px the code is below the
+             16px floor iOS zooms on, `wordWrap: 'off'` forces horizontal scrolling on a surface
+             with no keyboard to escape it, and the minimap is decoration standing in a column that
+             is already narrow. The measured budget is unchanged on a desktop pointer. */
+          fontSize: isNarrowEditor ? 16 : 13,
+          lineHeight: isNarrowEditor ? 24 : 21,
           tabSize: 2,
           insertSpaces: true,
           detectIndentation: false,
           automaticLayout: true,
           scrollBeyondLastLine: false,
-          wordWrap: 'off',
+          wordWrap: isNarrowEditor ? 'on' : 'off',
           minimap: {
-            enabled: true,
+            enabled: !isNarrowEditor,
             side: 'right',
             size: 'proportional',
             showSlider: 'always',

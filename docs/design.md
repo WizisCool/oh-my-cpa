@@ -1250,6 +1250,21 @@ the label as well would trade the console's density for a zoom that is already p
 Pinch-zoom is never disabled. `maximum-scale=1` and `user-scalable=no` are absent on purpose,
 because double-tap and pinch zoom are how a reader enlarges a dense table.
 
+### The source editor is a phone surface too
+
+The configuration page's YAML editor stays editable on a phone, and the options it needs there are
+the editor's own rather than the stylesheet's - Monaco draws its content on a canvas-backed view, so
+no rule can wrap it or turn off its minimap:
+
+| Option | On a phone | Why |
+| --- | --- | --- |
+| `fontSize` / `lineHeight` | 16 / 24, against 13 / 21 on a desktop pointer | 13px is below the focus floor for readability as much as for zoom, and a line of YAML at 13px in a 390px column is a third of the width it needs |
+| `wordWrap` | `on` | `off` forces horizontal scrolling on the surface least able to perform it, and the reader's alternative - pinch-zooming a code block - loses the line numbers |
+| `minimap` | disabled | It is decoration standing in a column that is already the whole width of the screen |
+
+The editor's height is a `dvh` clamp, so the on-screen keyboard does not resize it under the caret
+while it is being typed into.
+
 ### The viewport is not a fixed rectangle
 
 - `viewport-fit=cover` is declared in `web/index.html`, which is what makes

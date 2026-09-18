@@ -2153,8 +2153,17 @@ a { color: inherit; }
     align-items: stretch;
     gap: 12px;
   }
+  /* The title and the status pills wrap rather than share one squeezed line, and the title does
+     not shrink below its own text. It was shrinking to its min-content width, which for a CJK title
+     is one character - the measured defect was "配置面板" printed as four stacked glyphs beside the
+     mode picker, because a flex item may shrink below its content and a title has no break
+     opportunity to offer in exchange. */
   .config-toolbar-left {
-    justify-content: space-between;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+  .config-toolbar-left .terminal-title {
+    flex: 0 0 auto;
   }
   .config-toolbar-actions {
     justify-content: space-between;
