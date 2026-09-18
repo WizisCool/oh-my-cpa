@@ -179,7 +179,152 @@ const deletedRow = withDeletedChannelTraffic.find((p) => p.id === 'deleted-old-c
 assert.equal(deletedRow, undefined, 'Deleted channels must NOT be displayed in the provider fleet');
 console.log('✓ Deleted provider exclusion verified');
 
-// Test 5: Summary stats calculation
+// Test 5: Enabled channels always precede disabled ones, whatever the volume
+//
+// A disabled channel's requests are history rather than capacity in play: beta has
+// the window's largest volume and still sorts below alpha, while the disabled
+// group itself keeps the volume order (beta before gamma).
+const orderingFixture = aggregateProviders({
+  windowProviders: [
+    { id: 'beta', total: 5000, success: 5000, failure: 0, success_rate: 100, buckets: [] },
+    { id: 'alpha', total: 10, success: 10, failure: 0, success_rate: 100, buckets: [] },
+    { id: 'gamma', total: 900, success: 900, failure: 0, success_rate: 100, buckets: [] },
+  ],
+  configuredProviders: [
+    {
+      id: 'openai-compat-0',
+      family: 'openai-compatibility',
+      name: 'alpha',
+      upstream_name: 'alpha',
+      protocol: 'OpenAI Chat Completions',
+      disabled: false,
+      key_configured: true,
+    },
+    {
+      id: 'openai-compat-1',
+      family: 'openai-compatibility',
+      name: 'beta',
+      upstream_name: 'beta',
+      protocol: 'OpenAI Chat Completions',
+      disabled: true,
+      key_configured: true,
+    },
+    {
+      id: 'openai-compat-2',
+      family: 'openai-compatibility',
+      name: 'gamma',
+      upstream_name: 'gamma',
+      protocol: 'OpenAI Chat Completions',
+      disabled: true,
+      key_configured: true,
+    },
+  ],
+});
+assert.deepEqual(
+  orderingFixture.map((p) => p.name),
+  ['alpha', 'beta', 'gamma'],
+  'The enabled channel leads even with the smallest volume, and the disabled group keeps volume order',
+);
+assert.equal(orderingFixture[0].disabled, false);
+assert.equal(orderingFixture[1].disabled, true);
+assert.equal(orderingFixture[1].total, 5000, 'The disabled group still ranks by volume inside itself');
+console.log('✓ Enabled-first ordering verified');
+
+// Test 6: A channel reads as disabled when the gateway reports every one of its
+// credentials disabled - and only then
+const credentialState = aggregateProviders({
+  authFilesByType: [
+    { type: 'codex', count: 2, disabled: 2 },
+    { type: 'kimi', count: 2, disabled: 1 },
+    { type: 'gemini', count: 1, disabled: 1 },
+  ],
+  configuredProviders: [
+    // The containment match traffic uses must not leak into this claim: a relay
+    // whose name merely contains a disabled type key is not that channel.
+    {
+      id: 'openai-compat-9',
+      family: 'openai-compatibility',
+      name: 'gemini-relay',
+      upstream_name: 'gemini-relay',
+      protocol: 'OpenAI Chat Completions',
+      disabled: false,
+      key_configured: true,
+    },
+  ],
+});
+const codexChannel = credentialState.find((p) => p.name === 'CodeX');
+assert.ok(codexChannel, 'CodeX row must exist');
+assert.equal(codexChannel.disabled, true, 'Every CodeX credential is disabled, so the channel is disabled');
+assert.equal(codexChannel.credentials, 2, 'The credential count still reports the files the gateway holds');
+const kimiChannel = credentialState.find((p) => p.name === 'Kimi');
+assert.ok(kimiChannel, 'Kimi row must exist');
+assert.equal(kimiChannel.disabled, false, 'One enabled Kimi credential keeps the channel on');
+const relayRow = credentialState.find((p) => p.name === 'gemini-relay');
+assert.ok(relayRow, 'Relay row must exist');
+assert.equal(relayRow.disabled, false, 'A disabled type key must not disable a provider that merely contains it');
+assert.equal(credentialState[credentialState.length - 1].name, 'CodeX', 'The disabled channel sorts last');
+console.log('✓ All-credentials-disabled channel detection verified');
+
+// Test 7: The all-disabled claim follows only the credentials a row owns
+//
+// CPA's tally covers every auth-file type, so a configured relay that merely
+// shares a name with one of them must not inherit its state.
+const relayNamedLikeAType = aggregateProviders({
+  authFilesByType: [{ type: 'gemini', count: 2, disabled: 2 }],
+  configuredProviders: [
+    {
+      id: 'openai-compat-4',
+      family: 'openai-compatibility',
+      name: 'gemini',
+      upstream_name: 'gemini',
+      protocol: 'OpenAI Chat Completions',
+      disabled: false,
+      key_configured: true,
+    },
+  ],
+});
+assert.equal(relayNamedLikeAType.length, 1);
+assert.equal(relayNamedLikeAType[0].name, 'gemini');
+assert.equal(relayNamedLikeAType[0].disabled, false, 'A relay is not the channel its name collides with');
+
+// The console's own Gemini family does hold those files.
+const geminiFamily = aggregateProviders({
+  authFilesByType: [{ type: 'gemini', count: 2, disabled: 2 }],
+  configuredProviders: [
+    {
+      id: 'gemini-0',
+      family: 'gemini',
+      name: 'Gemini',
+      protocol: 'Gemini API',
+      disabled: false,
+      key_configured: true,
+    },
+  ],
+});
+assert.equal(geminiFamily.length, 1);
+assert.equal(geminiFamily[0].disabled, true, 'A console family reads the credentials it owns');
+
+// A plugin-driven OAuth channel owns the files its plugin id names.
+const pluginChannel = aggregateProviders({
+  authFilesByType: [{ type: 'acme', count: 1, disabled: 1 }],
+  pluginOAuthIds: new Set(['acme']),
+  configuredProviders: [
+    {
+      id: 'openai-compat-5',
+      family: 'openai-compatibility',
+      name: 'acme',
+      upstream_name: 'acme',
+      protocol: 'OpenAI Chat Completions',
+      disabled: false,
+      key_configured: true,
+    },
+  ],
+});
+assert.equal(pluginChannel.length, 1);
+assert.equal(pluginChannel[0].disabled, true, 'A plugin OAuth channel reads the files its plugin id names');
+console.log('✓ Credential ownership boundary verified');
+
+// Test 8: Summary stats calculation
 const summary = computeProviderSummary(aggregated);
 assert.equal(summary.totalProviders, 6);
 assert.equal(summary.totalCredentials, 8); // 1 + 1 + 2 + 1 + 2 + 1 = 8

@@ -32,7 +32,8 @@ export interface AggregatedProvider {
   successRate: number | null;
   /** Time buckets of requests for sparklines / charts */
   buckets: ManagementOverviewBucket[];
-  /** Whether the provider is disabled */
+  /** Whether the channel is disabled: its own toggle is off, or the gateway
+   *  holds no enabled credential for it */
   disabled: boolean;
   /** Number of models configured on this provider, if known */
   modelsCount?: number;
@@ -134,8 +135,12 @@ export interface AggregateProvidersOptions {
  * 2. Each channel is unified under its canonical identity; no channel is ever displayed twice.
  * 3. OAuth channels (CodeX, Meta, Devin, Antigravity, Kimi, Codebuddy, etc.) use their proper channel names and icons.
  * 4. If windowProviders is supplied (from the dashboard time-range selector), traffic stats reflect that exact window.
- * 5. All active configured AI providers are displayed (including disabled ones with [已停用]), even if 0 requests in the window.
- * 6. Rows sort by request volume descending; idle configured rows follow.
+ * 5. All active configured AI providers are displayed (including disabled ones), even if 0 requests in the
+ *    window. A row reads as disabled when its own toggle is off, or when the gateway reports every
+ *    credential of its type disabled.
+ * 6. Enabled rows always precede disabled ones; inside each group rows sort by request volume
+ *    descending, then credentials descending, then name ascending. A disabled channel's requests are
+ *    history rather than capacity in play, so its volume never lifts it above one that still serves.
  */
 export function aggregateProviders({
   overviewProviders = [],
@@ -215,11 +220,17 @@ export function aggregateProviders({
     };
   };
 
-  // 2. Build credentials lookup map
+  // 2. Build credentials lookup map. The gateway's own per-type tally - how many
+  //    credentials a type holds and how many of them are switched off - is kept
+  //    beside it, because that tally is what tells a channel switched off
+  //    wholesale from one whose remaining credentials still serve.
   const credsMap = new Map<string, number>();
+  const authFileCredsMap = new Map<string, { count: number; disabled: number }>();
   for (const item of authFilesByType) {
     if (item.type && item.count > 0) {
-      credsMap.set(normalizeProviderKey(item.type), item.count);
+      const key = normalizeProviderKey(item.type);
+      credsMap.set(key, item.count);
+      authFileCredsMap.set(key, { count: item.count, disabled: item.disabled || 0 });
     }
   }
   for (const op of overviewProviders) {
@@ -240,6 +251,50 @@ export function aggregateProviders({
       }
     }
     return fallback;
+  };
+
+  /**
+   * areAllCredentialsDisabled answers "does the gateway hold no enabled
+   * credential for this provider?"
+   *
+   * Exact normalized keys only. Unlike traffic, which falls back to containment
+   * matching because CPA labels a queue by upstream name, this claim rests on the
+   * credentials of one auth-file type; a looser match would read a channel as off
+   * on another channel's evidence. The keys are ordered by how directly they name
+   * the row's own credentials, and the first type CPA actually holds credentials
+   * for is the one that answers: summing a second, different type would let one
+   * channel's live file vouch for another channel's switched-off set.
+   */
+  const areAllCredentialsDisabled = (candidateKeys: (string | undefined)[]): boolean => {
+    for (const candidate of candidateKeys) {
+      if (!candidate) continue;
+      const health = authFileCredsMap.get(normalizeProviderKey(candidate));
+      if (health) return health.disabled >= health.count;
+    }
+    return false;
+  };
+
+  /**
+   * ownedCredentialKeys names the auth-file types a configured provider may take
+   * its disabled state from.
+   *
+   * A configured provider is not itself a credential type, and the tally covers
+   * every auth-file type: matching on the provider's names alone would let an
+   * openai-compatibility relay that happens to be called "gemini" read as off
+   * while its own key still serves. A `{family}-api-key` provider's family names
+   * the credentials it holds, and a row the console presents as a channel (a
+   * plugin OAuth id, or a channel CPA names itself) holds that channel's files;
+   * no other name of a configured row does.
+   */
+  const ownedCredentialKeys = (provider: ProviderItem, isOAuth: boolean): string[] => {
+    const keys = [normalizeProviderKey(provider.family)];
+    if (!isOAuth) return keys;
+    for (const candidate of [provider.upstream_name, provider.name, provider.id]) {
+      if (candidate && isOAuthChannel(candidate, undefined, pluginOAuthIds)) {
+        keys.push(normalizeProviderKey(candidate));
+      }
+    }
+    return keys;
   };
 
   // Helper to register all aliases of a provider as claimed
@@ -271,7 +326,7 @@ export function aggregateProviders({
     const isOAuth =
       isOAuthChannel(cp.family, undefined, pluginOAuthIds) ||
       isOAuthChannel(cp.name, undefined, pluginOAuthIds) ||
-      (cp.upstream_name && isOAuthChannel(cp.upstream_name, undefined, pluginOAuthIds));
+      (cp.upstream_name ? isOAuthChannel(cp.upstream_name, undefined, pluginOAuthIds) : false);
 
     const meta = isOAuth ? (OAUTH_CHANNEL_META[normId] || OAUTH_CHANNEL_META[normUpstream] || OAUTH_CHANNEL_META[normName]) : undefined;
     const name = isOAuth && meta ? meta.name : (cp.name || cp.upstream_name || cp.id);
@@ -288,6 +343,7 @@ export function aggregateProviders({
       configuredCreds = 1;
     }
     const credentials = resolveCredentials([cp.upstream_name, cp.name, cp.id, cp.family], configuredCreds);
+    const disabled = cp.disabled || areAllCredentialsDisabled(ownedCredentialKeys(cp, isOAuth));
 
     const traffic = resolveTraffic([cp.upstream_name, cp.name, cp.id, cp.family]);
 
@@ -311,7 +367,7 @@ export function aggregateProviders({
       failure: traffic.failure,
       successRate: traffic.successRate,
       buckets: traffic.buckets,
-      disabled: cp.disabled,
+      disabled,
       models: cp.models,
       modelsCount: cp.models?.length,
       baseUrl: cp.base_url,
@@ -350,7 +406,7 @@ export function aggregateProviders({
       failure: traffic.failure,
       successRate: traffic.successRate,
       buckets: traffic.buckets,
-      disabled: false,
+      disabled: areAllCredentialsDisabled([item.type]),
       protocol: meta?.protocol || 'OAuth',
     });
   }
@@ -385,13 +441,19 @@ export function aggregateProviders({
       failure: traffic.failure,
       successRate: traffic.successRate,
       buckets: traffic.buckets,
-      disabled: false,
+      disabled: areAllCredentialsDisabled([op.id]),
       protocol: isOAuth ? (meta?.protocol || 'OAuth') : undefined,
     });
   }
 
-  // 6. Stable sort: active providers with total desc, then credentials desc, then name asc
+  // 6. Two-level stable sort: enabled rows always precede disabled ones, then
+  //    request volume descending inside each group. A disabled channel's requests
+  //    are history rather than capacity in play, so its volume never lifts it
+  //    above a channel that can still serve.
   result.sort((a, b) => {
+    if (a.disabled !== b.disabled) {
+      return a.disabled ? 1 : -1;
+    }
     if (a.total !== b.total) {
       return b.total - a.total;
     }
