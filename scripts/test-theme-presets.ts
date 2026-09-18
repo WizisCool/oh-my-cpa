@@ -342,4 +342,99 @@ for (const definition of BUILT_IN_PALETTES) {
   assert.equal(antd.components?.Tooltip?.colorBgSpotlight, resolved.palette.tooltipBg, `${definition.id} paints the spotlight from its palette`);
 }
 
+// ── the filled control's label, on both fills ────────────────────────────────
+//
+// One label sits on all three filled-control states, so the floor has to hold on the pressed state too
+// and not only on the resting hover. Solving the ladder against the hover fill alone left Midnight's
+// near-black label at 3.14:1 the moment its button was pressed, and seven of eighteen authored accents
+// broke the same way - which is why the derivation now solves the two fills together and why this
+// checks both rather than the pair that happens to be the resting one.
+for (const definition of BUILT_IN_PALETTES) {
+  const palette = derivePalette(definition.mode, definition.core);
+  for (const [state, fill] of [['resting hover', palette.accentHover], ['pressed', palette.accentActive]] as const) {
+    const ratio = contrastRatio(palette.accentOn, fill);
+    assert.ok(
+      ratio >= ACCENT_LABEL_CONTRAST_FLOOR,
+      `${definition.id}: the primary button label (${palette.accentOn}) on its ${state} fill (${fill}) reads ${ratio.toFixed(2)}:1`,
+    );
+  }
+}
+for (const mode of ['dark', 'light'] as const) {
+  const base = getBuiltInPalette(mode === 'dark' ? 'omc-dark' : 'omc-light').core;
+  for (const accent of ACCENT_SWEEP) {
+    const palette = derivePalette(mode, { ...base, accent });
+    const worst = Math.min(
+      contrastRatio(palette.accentOn, palette.accentHover),
+      contrastRatio(palette.accentOn, palette.accentActive),
+    );
+    assert.ok(
+      worst >= ACCENT_LABEL_CONTRAST_FLOOR,
+      `${mode} accent ${accent}: the label reads ${worst.toFixed(2)}:1 on the weaker of the two fills`,
+    );
+  }
+}
+
+// ── a palette reference belongs to one mode ─────────────────────────────────
+//
+// `palettes.dark = 'omc-light'` is a document that claims dark mode and paints a light console. The UI
+// cannot produce it; a stored document and a preference endpoint that accepts any JSON can, so the
+// parser is where the claim has to be enforced.
+const crossMode = parseThemePreferences({
+  mode: 'dark',
+  palettes: { dark: 'omc-light' },
+  custom: { dark: { base: 'porcelain', core: getBuiltInPalette('porcelain').core } },
+});
+assert.equal(crossMode?.palettes.dark, DEFAULT_THEME_PREFERENCES.palettes.dark, 'a reference from the other mode is refused');
+assert.equal(crossMode?.custom.dark, undefined, 'and so is a custom palette started from one');
+assert.equal(
+  parseThemePreferences({ palettes: { dark: 'forest' }, custom: { dark: { base: 'forest', core: getBuiltInPalette('forest').core } } })?.palettes.dark,
+  'forest',
+  'a reference from the same mode is kept',
+);
+assert.equal(emptyCustomPalette('light', 'forest').base, 'omc-light', 'a cross-mode starting palette falls back to this mode');
+
+// ── the motion budget, across its three spellings ────────────────────────────
+//
+// docs/design.md §7 states one budget in three places: its own token table, the Ant Design motion tokens
+// `createThemeConfig` projects, and the `--motion-*` variables every transition in the console reads.
+// Nothing tied them together until they had already drifted once - the stylesheet carried 100ms/150ms
+// against the table's 50ms/100ms, so call sites written as `var(--motion-fast, 50ms)` were paying double
+// the budget they named. Parsed rather than compared as strings, because the table states milliseconds
+// and Ant Design takes seconds.
+const toMilliseconds = (value: string | undefined, label: string): number => {
+  const match = /^([\d.]+)(ms|s)$/.exec(value ?? '');
+  assert.ok(match, `${label} is a duration (${String(value)})`);
+  return match[2] === 's' ? Number(match[1]) * 1000 : Number(match[1]);
+};
+const stylesheetToken = (name: string): number => {
+  const match = new RegExp(`--motion-${name}:\\s*([\\d.]+(?:ms|s))`).exec(css);
+  assert.ok(match, `web/src/index.css defines --motion-${name}`);
+  return toMilliseconds(match[1], `--motion-${name}`);
+};
+const antdMotion = createThemeConfig(resolvedBuiltInPalette('omc-dark')).token;
+assert.equal(stylesheetToken('fast'), toMilliseconds(antdMotion?.motionDurationFast, 'motionDurationFast'),
+  '--motion-fast is the fast token Ant Design animates with');
+assert.equal(stylesheetToken('base'), toMilliseconds(antdMotion?.motionDurationMid, 'motionDurationMid'),
+  '--motion-base is the mid token Ant Design animates with');
+assert.equal(stylesheetToken('base'), toMilliseconds(antdMotion?.motionDurationSlow, 'motionDurationSlow'),
+  'the slow token is pinned to the same budget, so a drawer cannot outlast the table');
+// `float` has no Ant Design counterpart - the console owns it, because antd exposes no token for the
+// floating panels' entrance - so it is pinned to §7's documented 60ms instead.
+const floatMatch = /--motion-float:\s*([\d.]+(?:ms|s))/.exec(css);
+assert.ok(floatMatch, 'web/src/index.css defines --motion-float');
+assert.equal(toMilliseconds(floatMatch[1], '--motion-float'), 60, 'the float token is §7\u2019s 60ms');
+assert.ok(stylesheetToken('fast') < stylesheetToken('base'), 'fast is the shorter of the two');
+assert.ok(stylesheetToken('base') <= 100, `§7 caps the budget at 100ms (base=${stylesheetToken('base')}ms)`);
+
+// The route transition is the one rule whose *documented* duration is not the fast token: §7's table
+// states that a route change fades in over 100ms. Nothing observable changed while it read `fast`,
+// because the two tokens held the same number - which is exactly why it needs pinning.
+assert.match(css, /\.route-transition\s*\{[^}]*animation:[^;]*var\(--motion-base\)/,
+  'the route transition spends the token its documented 100ms names');
+
+// The stylesheet's own accent fills draw their label from the projected variable, so a palette whose fill
+// is light does not keep a hardcoded white label the palette cannot support.
+assert.match(css, /::selection\s*\{[^}]*color:\s*var\(--accent-on\)/,
+  'the selection label follows the resolved palette rather than a literal white');
+
 console.log('theme contracts hold: derivation, preference document and both mirrors');

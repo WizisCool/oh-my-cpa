@@ -4,7 +4,7 @@ description: Terminal-flat developer console for AI resource identity & organiza
 colors:
   primary: "#0579bd"          # dark mode's filled-control step; light mode uses #004a73
   primary-accent: "#00a2fb"   # dark mode's link step; light mode uses #005d8f
-  primary-active: "#02629b"   # dark mode's pressed step; light mode uses #023b5d
+  primary-active: "#025e94"   # dark mode's pressed step; light mode uses #023b5d
   primary-on: "#ffffff"       # label on a filled accent control; computed per palette, near-black where white cannot clear 4.5:1
   neutral-bg: "#121214"
   neutral-surface: "#1c1c1f"
@@ -162,7 +162,7 @@ The palette is anchored on warm charcoal darks with pure semantic status pigment
 ### Primary
 - **Deep Accent Blue** (`#0579bd` dark / `#004a73` light): Used for filled primary action buttons and confirm controls. It provides a decisive focus point without overwhelming the dark mode.
 - **Accent Ladder** (hue 201, per mode): `#00a2fb` / `#005d8f` are the link steps for dark and light, `#0579bd` / `#004a73` the filled-control steps. The accent is deliberately *not* mode-invariant: the bright step reads 6.74:1 on the dark background but only 2.71:1 on the light one, so each mode's palette uses the step that is legible there. Used for interactive links, breadcrumb highlights, active progress bars, `:focus-visible` focus rings, the brand wordmark, and the token heatmap's ramp. The ladder is *derived*: a proportional OKLCH lightness step from the authored accent, then deepened until one of white and near-black clears 4.5:1 as the filled control's label. Measured ratios are in `docs/design.md` §2.
-- **Pressed Blue** (`#02629b` dark / `#023b5d` light): Used for button active/down states.
+- **Pressed Blue** (`#025e94` dark / `#023b5d` light): Used for button active/down states.
 
 ### Series (categorical)
 

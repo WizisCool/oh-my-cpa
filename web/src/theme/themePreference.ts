@@ -20,7 +20,7 @@
 import {
   CORE_TOKEN_KEYS,
   isBuiltInPaletteId,
-  isPaletteRef,
+  isPaletteRefForMode,
   type CustomPalette,
   type PaletteRef,
   type ThemeCore,
@@ -76,13 +76,14 @@ function parseCore(value: unknown): ThemeCore | undefined {
   return core;
 }
 
-function parseCustomPalette(value: unknown): CustomPalette | undefined {
+function parseCustomPalette(mode: ThemeMode, value: unknown): CustomPalette | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
   const candidate = value as Record<string, unknown>;
   const core = parseCore(candidate.core);
   // An unreadable palette is dropped rather than repaired: inventing nine tokens would put a
-  // palette the operator never authored in front of them.
-  if (!core || !isBuiltInPaletteId(candidate.base)) return undefined;
+  // palette the operator never authored in front of them. The starting palette has to belong to this
+  // mode for the same reason a reference does - it is what reset returns to.
+  if (!core || !isBuiltInPaletteId(candidate.base) || !isPaletteRefForMode(mode, candidate.base)) return undefined;
   return { base: candidate.base, core };
 }
 
@@ -101,14 +102,14 @@ export function parseThemePreferences(value: unknown): ThemePreferences | undefi
   if (typeof candidate.palettes === 'object' && candidate.palettes !== null) {
     const stored = candidate.palettes as Record<string, unknown>;
     for (const mode of ['dark', 'light'] as const) {
-      if (isPaletteRef(stored[mode])) palettes[mode] = stored[mode];
+      if (isPaletteRefForMode(mode, stored[mode])) palettes[mode] = stored[mode];
     }
   }
   const custom: Partial<Record<ThemeMode, CustomPalette>> = {};
   if (typeof candidate.custom === 'object' && candidate.custom !== null) {
     const stored = candidate.custom as Record<string, unknown>;
     for (const mode of ['dark', 'light'] as const) {
-      const palette = parseCustomPalette(stored[mode]);
+      const palette = parseCustomPalette(mode, stored[mode]);
       if (palette) custom[mode] = palette;
     }
   }

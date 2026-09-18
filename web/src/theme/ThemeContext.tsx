@@ -181,15 +181,22 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
    */
   const openCustomEditor = React.useCallback(
     (mode: ThemeMode) => {
-      setDraft((current) => ({
+      const seeded = draft[mode] ?? preferences.custom[mode] ?? emptyCustomPalette(mode, preferences.palettes[mode]);
+      setDraft((current) => ({ ...current, [mode]: seeded }));
+      // The palette is stored with the reference that points at it, in one change. Selecting "custom"
+      // without storing one would leave the document claiming a custom palette it does not hold, and a
+      // reload before the first edit would then show the mode's first registered palette under a card
+      // that says otherwise. The seed is a complete, valid palette - it is the one the operator was
+      // looking at - so there is nothing provisional about persisting it.
+      commit((current) => ({
         ...current,
-        [mode]: current[mode] ?? preferences.custom[mode] ?? emptyCustomPalette(mode, preferences.palettes[mode]),
+        palettes: { ...current.palettes, [mode]: 'custom' },
+        custom: { ...current.custom, [mode]: seeded },
       }));
-      commit((current) => ({ ...current, palettes: { ...current.palettes, [mode]: 'custom' } }));
       setEditingCustomMode(mode);
       setPreviewMode(mode);
     },
-    [commit, preferences.custom, preferences.palettes],
+    [commit, draft, preferences.custom, preferences.palettes],
   );
 
   /**
@@ -345,7 +352,7 @@ export function useTheme(): ThemeContextValue {
  * `ConfigProvider`, since Ant Design's tokens are projected from the palette it resolves.
  */
 export const ThemeServerSync: React.FC = () => {
-  const { preferences, revision, setDirty, adoptServerPreferences, isDirty } = useTheme();
+  const { preferences, revision, setDirty, adoptServerPreferences } = useTheme();
   // The preference as it stood before this session changed anything. It is both the value the
   // request falls back to when the deployment has nothing stored, and the answer to "did this
   // browser already have something newer than the deployment?" - which is the whole conflict rule.
@@ -361,6 +368,24 @@ export const ThemeServerSync: React.FC = () => {
   const latest = React.useRef(preferences);
   latest.current = preferences;
 
+  /**
+   * Writes the preference and clears the flag only when the deployment has accepted it.
+   *
+   * `dirty` means "this browser holds something the deployment does not", and the hook's write is
+   * optimistic: the value reaches the query cache before the request resolves. Clearing the flag on that
+   * cache value - which is what comparing against it does - would mark this browser clean while the write
+   * was still in flight, so a page closed in that window would record `dirty: false` and let the next
+   * load adopt the deployment's older value over the operator's change. That is the exact failure the flag
+   * exists to prevent, so the flag now follows the write's own outcome.
+   */
+  const push = React.useCallback(
+    (value: ThemePreferences) => {
+      void set(value).then(({ ok }) => setDirty(!ok));
+    },
+    [set, setDirty],
+  );
+
+
   React.useEffect(() => {
     if (!ready) return;
     if (!settled.current) {
@@ -374,7 +399,7 @@ export const ThemeServerSync: React.FC = () => {
         // `latest` rather than the bootstrap document: a change made while this request was in flight is
         // part of this browser's newer opinion, and pushing the value the session opened with would send
         // the older document and then read the newer local one as a refused write.
-        set(latest.current);
+        push(latest.current);
         return;
       }
       if (!sameThemePreferences(stored, latest.current)) adoptServerPreferences(stored);
@@ -387,17 +412,13 @@ export const ThemeServerSync: React.FC = () => {
     // the operator's only sign that the deployment is not keeping up.
     isBlocked.current = false;
     pushedRevision.current = revision;
-    set(latest.current);
-  }, [adoptServerPreferences, bootstrap.isDirty, ready, revision, set, stored]);
+    push(latest.current);
+  }, [adoptServerPreferences, bootstrap.isDirty, push, ready, revision, stored]);
 
   React.useEffect(() => {
     if (!ready || !settled.current) return;
     if (sameThemePreferences(stored, latest.current)) {
-      // The deployment holds what this browser holds, so there is nothing left to push. Clearing the
-      // flag here, and only here, is what stops a stale `dirty` from overwriting the deployment's
-      // newer value at the next sign-in.
       isBlocked.current = false;
-      if (isDirty) setDirty(false);
       return;
     }
     if (revision === pushedRevision.current) {
@@ -406,9 +427,8 @@ export const ThemeServerSync: React.FC = () => {
       // a refusing server, so this revision is not retried - the flag stays set so the next load pushes
       // this browser's choice again, and the next local change pushes on its own account.
       isBlocked.current = true;
-      if (!isDirty) setDirty(true);
     }
-  }, [isDirty, ready, revision, setDirty, stored]);
+  }, [push, ready, revision, stored]);
 
   return null;
 };

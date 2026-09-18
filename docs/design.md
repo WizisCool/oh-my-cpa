@@ -75,7 +75,7 @@ console renders what the operator asked for.
 | `--border` | `#2c2c30` | `colorBorder` | Primary 1px borders |
 | `--accent` | `#00a2fb` | `colorInfo`, `colorLink` | Links, info, active bars, selection |
 | `--accent-hover` | `#0579bd` | `colorPrimary` | Filled primary buttons |
-| `--accent-active` | `#02629b` | `colorPrimaryHover/Active` | Pressed state |
+| `--accent-active` | `#025e94` | `colorPrimaryHover/Active` | Pressed state |
 | `--accent-on` | `#ffffff` | `Button.primaryColor` | Label drawn on a filled accent control |
 | `--success` | `#10b981` | `colorSuccess` | Enabled / healthy / ok pip |
 | `--warn` | `#f59e0b` | `colorWarning` | Degraded / quota warning |

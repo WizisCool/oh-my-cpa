@@ -21,7 +21,7 @@
  * hand-tuned values.
  */
 
-import { bestInkOn, contrastRatio, mixOklch, oklchLightness, withLightness, type InkChoice } from './colorMath';
+import { contrastRatio, mixOklch, oklchLightness, withLightness, type InkChoice } from './colorMath';
 
 export type ThemeMode = 'dark' | 'light';
 
@@ -254,53 +254,64 @@ export const CONTRAST_FLOORS: Record<ContrastRole, number | undefined> = {
 };
 
 /**
- * accentLadderStep moves the accent one step and returns the fill plus the label it can carry.
+ * The ink that reads best across *both* fills, and how well it reads on the weaker of the two.
  *
- * The loop is the contract. A fixed lightness step can land a fill in the dead zone where
- * neither white nor near-black clears 4.5:1 - measured on the six built-ins, a −0.075 step
- * puts OMC Dark's label at 3.73:1 and Midnight's at 3.38:1 - and no label choice can
- * rescue that pair. So the step is the *starting point*, and the fill keeps moving along its
- * direction until one of the two inks clears the target.
- *
- * `ACCENT_LABEL_CONTRAST_FLOOR` is the floor a caller may rely on; the loop aims at
- * `LABEL_CONTRAST_TARGET`, which is that floor plus the room hex rounding needs. Both are read
- * here so the pair cannot drift apart.
+ * One ink sits on all three filled-control states, so a label is only as legible as its worst pair.
+ * Scoring each candidate by the minimum of its two contrasts is what makes that the quantity being
+ * solved for, rather than the hover pair that happens to be the resting state.
  */
-function accentLadderStep(
-  accent: string,
-  lightness: number,
-  factor: number,
-  direction: LadderDirection,
-): { color: string; ink: string } {
-  // Mirror the proportional step for the lighter direction: the same fraction of the room that
-  // remains, measured from the other end of the scale. That keeps the *size* of the step a property
-  // of the palette's own contrast position rather than of which direction it happens to travel.
-  let candidate = direction === 'deeper' ? lightness * factor : 1 - (1 - lightness) * factor;
+function bestInkAcross(fills: readonly string[]): InkChoice {
   let best: InkChoice = { ink: ON_ACCENT_INKS[0], ratio: 0 };
-  for (let step = 0; step < MAX_LADDER_STEPS; step += 1) {
-    const color = withLightness(accent, Math.min(1, Math.max(0, candidate)));
-    best = bestInkOn(color, ON_ACCENT_INKS);
-    if (best.ratio >= LABEL_CONTRAST_TARGET) return { color, ink: best.ink };
-    candidate += direction === 'deeper' ? -LADDER_STEP : LADDER_STEP;
+  for (const ink of ON_ACCENT_INKS) {
+    const ratio = Math.min(...fills.map((fill) => contrastRatio(ink, fill)));
+    if (ratio > best.ratio) best = { ink, ratio };
   }
-  // Unreachable: the scale's own end carries 21:1 against one of the two inks. The return keeps the
-  // function total rather than trusting the loop to have converged.
-  return { color: withLightness(accent, direction === 'deeper' ? 0 : 1), ink: best.ink };
+  return best;
 }
 
 /**
- * accentLadder derives all three filled-control states, in one direction.
+ * accentLadder derives the filled control's three states and the one label they share.
  *
- * One direction for all three, chosen once: a ladder whose hover deepens and whose pressed state
- * lightens would make pressing a button look like releasing it.
+ * The loop is the contract. A fixed lightness step can land a fill in the dead zone where neither
+ * white nor near-black clears 4.5:1 - measured on the six built-ins, a −0.075 step puts OMC Dark's
+ * label at 3.73:1 and Midnight's at 3.38:1 - and no label choice rescues that pair. So the step is the
+ * *starting point*, and both fills keep moving along one direction until a single ink clears the target
+ * on *both* of them.
+ *
+ * Solving the two fills together, rather than each on its own, is what this owes the operator: the
+ * pressed state is a state the same label is read in, and solving only the hover fill left Midnight's
+ * near-black label at 3.14:1 the moment the button was pressed. Because both moves are in one
+ * direction, the ink that wins on the deeper fill is the one being tested on the lighter one.
+ *
+ * `ACCENT_LABEL_CONTRAST_FLOOR` is the floor a caller may rely on; the loop aims at
+ * `LABEL_CONTRAST_TARGET`, which is that floor plus the room hex rounding needs.
  */
 function accentLadder(mode: ThemeMode, accent: string): { hover: string; active: string; ink: string } {
   const step = ACCENT_LADDER[mode];
   const lightness = oklchLightness(accent);
   const direction: LadderDirection = lightness * step.hover > MIN_DEEPENING_ROOM ? 'deeper' : 'lighter';
-  const hover = accentLadderStep(accent, lightness, step.hover, direction);
-  const active = accentLadderStep(accent, lightness, step.active, direction);
-  return { hover: hover.color, active: active.color, ink: hover.ink };
+  // Mirror the proportional step for the lighter direction: the same fraction of the room that remains,
+  // measured from the other end of the scale. That keeps the *size* of a step a property of the palette's
+  // own contrast position rather than of which direction it happens to travel.
+  const startOf = (factor: number) => (direction === 'deeper' ? lightness * factor : 1 - (1 - lightness) * factor);
+  let hoverLightness = startOf(step.hover);
+  let activeLightness = startOf(step.active);
+  const travel = direction === 'deeper' ? -LADDER_STEP : LADDER_STEP;
+  let best: InkChoice = { ink: ON_ACCENT_INKS[0], ratio: 0 };
+
+  for (let stepIndex = 0; stepIndex < MAX_LADDER_STEPS; stepIndex += 1) {
+    const at = (lightness: number) => withLightness(accent, Math.min(1, Math.max(0, lightness)));
+    const hover = at(hoverLightness);
+    const active = at(activeLightness);
+    best = bestInkAcross([hover, active]);
+    if (best.ratio >= LABEL_CONTRAST_TARGET) return { hover, active, ink: best.ink };
+    hoverLightness += travel;
+    activeLightness += travel;
+  }
+  // Unreachable: the scale's own end carries 21:1 against one of the two inks. The return keeps the
+  // function total rather than trusting the loop to have converged.
+  const end = direction === 'deeper' ? 0 : 1;
+  return { hover: withLightness(accent, end), active: withLightness(accent, end), ink: best.ink };
 }
 
 /**
@@ -483,6 +494,20 @@ export function isPaletteRef(value: unknown): value is PaletteRef {
   return value === 'custom' || isBuiltInPaletteId(value);
 }
 
+/**
+ * Whether a reference may be used *by this mode*.
+ *
+ * `isPaletteRef` answers "is this a palette id at all"; this answers the question the resolver
+ * actually depends on. A palette is authored for one mode's surfaces with its text ladder pointing one
+ * way, so `palettes.dark = 'omc-light'` is a document that claims dark mode and paints a light console
+ * - a state the UI cannot produce and a stored document must not be able to either, since the value
+ * arrives from `localStorage` and from a preference endpoint that accepts any JSON.
+ */
+export function isPaletteRefForMode(mode: ThemeMode, value: unknown): value is PaletteRef {
+  if (value === 'custom') return true;
+  return isBuiltInPaletteId(value) && getBuiltInPalette(value).mode === mode;
+}
+
 export function getBuiltInPalette(id: BuiltInPaletteId): BuiltInPalette {
   const palette = BUILT_IN_PALETTES.find((candidate) => candidate.id === id);
   if (!palette) throw new Error(`unknown palette id: ${id}`);
@@ -574,7 +599,7 @@ export function resolvedBuiltInPalette(id: BuiltInPaletteId): ResolvedPalette {
 
 /** The reference a freshly opened editor starts from, given the mode's current selection. */
 function defaultCustomBase(mode: ThemeMode, ref: PaletteRef): BuiltInPaletteId {
-  if (isBuiltInPaletteId(ref)) return ref;
+  if (isPaletteRefForMode(mode, ref) && ref !== 'custom') return ref;
   return builtInPalettesForMode(mode)[0].id;
 }
 

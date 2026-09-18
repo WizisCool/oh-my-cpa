@@ -45,11 +45,12 @@
   --border: #2c2c30;
   --border-soft: #212124;
   /* Accent ladder, hue 201. The link step is the bright one because it sits on the dark
-     background (6.74:1); the two deeper steps are what white label text can sit on (4.69:1 and
-     6.52:1). Measured ratios are in docs/design.md §2. */
+     background (6.74:1); the two deeper steps are what white label text can sit on (4.69:1 resting,
+     6.93:1 pressed). Both are measured against the *same* label, which is why the ladder solves them
+     together rather than one at a time. Ratios are in docs/design.md §2. */
   --accent: #00a2fb;
   --accent-hover: #0579bd;
-  --accent-active: #02629b;
+  --accent-active: #025e94;
   /* The label colour for a filled accent control, matching the presets' own `accentOn` token.
      White in both fallback palettes; a preset whose accent fill is light carries a dark step. */
   --accent-on: #ffffff;

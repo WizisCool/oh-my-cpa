@@ -12,7 +12,7 @@ import { conf as yamlConf, language as yamlLanguage } from 'monaco-editor/esm/vs
 import { configureMonacoYaml, type MonacoYaml } from 'monaco-yaml';
 import { parseDocument } from 'yaml';
 import type { ResolvedPalette, ThemeMode, ThemePalette } from '../../theme/palette';
-import { relativeLuminance } from '../../theme/colorMath';
+import { contrastRatio, oklchLightness, relativeLuminance, withLightness } from '../../theme/colorMath';
 
 // ── Configure Local Monaco Environment (Strict Offline / Zero CDN) ───────────
 if (typeof window !== 'undefined') {
@@ -129,13 +129,17 @@ const MONACO_TOKEN_RULES: Record<ThemeMode, monaco.editor.ITokenThemeRule[]> = {
  */
 export function defineMonacoTheme(id: string, palette: ThemePalette, mode: ThemeMode): void {
   const editorBackground = editorBackgroundFor(palette, mode);
-  // The rules follow the field they are drawn on; `base` and the rest of the colours follow the mode, which
-  // is what decides the editor's own chrome and its inherited defaults.
+  // The nearer hand-picked step is the starting point; the fit below is the guarantee. `base` and the rest
+  // of the colours follow the mode, which is what decides the editor's own chrome and its inherited
+  // defaults.
   const rulesFor = relativeLuminance(editorBackground) < DARK_BACKGROUND_LUMINANCE ? 'dark' : 'light';
   monaco.editor.defineTheme(id, {
     base: mode === 'dark' ? 'vs-dark' : 'vs',
     inherit: true,
-    rules: MONACO_TOKEN_RULES[rulesFor],
+    rules: MONACO_TOKEN_RULES[rulesFor].map((rule) => ({
+      ...rule,
+      foreground: fitSyntaxColor(rule.foreground as string, editorBackground).replace('#', '').toUpperCase(),
+    })),
     colors: monacoColors(palette, mode),
   });
 }
@@ -148,6 +152,46 @@ export function defineMonacoTheme(id: string, palette: ThemePalette, mode: Theme
  * legible on.
  */
 const DARK_BACKGROUND_LUMINANCE = 0.18;
+
+/**
+ * The contrast every syntax colour must clear against the editor background.
+ *
+ * 4.5:1 - the console's floor for text, which syntax is - and the shipped palettes meet it as a rule
+ * rather than by luck: measured across the six, the tightest colour is OMC Light's comment at 4.44:1, so
+ * the fit moves that one step and leaves the other seventeen as they were designed.
+ */
+const SYNTAX_CONTRAST_FLOOR = 4.5;
+
+/**
+ * fitSyntaxColor moves a syntax hue along its own lightness until it is legible on the given field.
+ *
+ * The two hand-picked rule sets assume the field matches the mode, which was true while every palette
+ * was hand-tuned and stopped being true once palettes are authored: an operator can put a mid-grey page
+ * behind dark mode, and there the grey comment step reads 1.07:1 - invisible, not merely quiet. The
+ * *hues* are still not theme tokens (a key is blue, a string is lavender, and none of that is a
+ * relationship the palette knows about), but their lightness is a property of the field they are drawn
+ * on, so this adapts the step rather than inventing eighteen palette-derived colours.
+ *
+ * It moves toward whichever end of the scale the field leaves more room for, which is the direction that
+ * reaches the floor in the fewest steps and the one a colour picked for that field would have taken.
+ */
+function fitSyntaxColor(hue: string, background: string): string {
+  if (contrastRatio(hue, background) >= SYNTAX_CONTRAST_FLOOR) return hue;
+  const towardLight = contrastRatio('#ffffff', background) >= contrastRatio('#000000', background);
+  let lightness = oklchLightness(hue);
+  for (let step = 0; step < MAX_SYNTAX_FIT_STEPS; step += 1) {
+    lightness = Math.min(1, Math.max(0, lightness + (towardLight ? SYNTAX_FIT_STEP : -SYNTAX_FIT_STEP)));
+    const candidate = withLightness(hue, lightness);
+    if (contrastRatio(candidate, background) >= SYNTAX_CONTRAST_FLOOR) return candidate;
+    if (lightness === 0 || lightness === 1) return candidate;
+  }
+  return hue;
+}
+
+/** Below the threshold at which a syntax colour's step can be told from its neighbour. */
+const SYNTAX_FIT_STEP = 0.01;
+/** Reaches either end of the scale from any starting lightness. */
+const MAX_SYNTAX_FIT_STEPS = 120;
 
 /**
  * The fill the editor itself paints.

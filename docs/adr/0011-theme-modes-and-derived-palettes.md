@@ -48,10 +48,14 @@ seventeen derived ones.**
    `system`; `palettes[mode]` names the palette that mode uses. Choosing a palette for the mode that is
    not in force *records* it and does not move the console - one click changes one setting.
 
-2. **Nine tokens are authored, seventeen are computed.** The authored set is `bg`, `surface`,
+2. **A palette is nine authored tokens, seventeen derived from them, and four mode constants.** The authored set is `bg`, `surface`,
    `elevated`, `fg`, `fg2`, `muted`, `meta`, `border`, `accent`. Everything else - the hover and
    selected fills, the border-soft step, the accent ladder, the tooltip fill, the heatmap stops, the
    cache-rate stops and the chart track - is derived by `derivePalette` in `web/src/theme/palette.ts`.
+   The remaining four are `success`, `warn`, `danger` and the six-slot `series`, which come from
+   `MODE_SEMANTICS[mode]`: they are semantics rather than palette, so a palette inherits its mode's set
+   instead of deriving one (see the rejected alternative below). Those are the whole of a palette's
+   thirty tokens.
    The six registered palettes are authored at nine tokens too and derived by the same function: there
    are no hand-tuned values left anywhere, which is what makes a custom palette *the same kind of
    thing* as a built-in one rather than a second, weaker path.
@@ -63,11 +67,13 @@ seventeen derived ones.**
    `0.699 / 0.737` for active) followed by a solve. Two conventions survived fitting exactly and are
    kept: `tooltipBg = light ? fg : surface`, and `heatmapBusy = heatmapTipLink = accent`.
 
-4. **The accent ladder solves rather than steps.** A fixed step can land a fill in the dead zone where
+4. **The accent ladder solves its fills together rather than one at a time.** A fixed step can land a fill in the dead zone where
    neither white nor near-black clears 4.5:1 as a label - measured, a −0.075 step puts OMC Dark's label
    at 3.73:1 and Midnight's at 3.38:1 - and no label choice rescues that pair. So the step is the
-   starting point and the fill keeps moving until one of two inks clears the target (4.6:1, leaving hex
-   rounding the room the asserted floor of 4.5:1 needs). The direction is chosen once per palette and
+   starting point and both fills keep moving until *one* ink clears the target (4.6:1, leaving hex
+   rounding the room the asserted floor of 4.5:1 needs) on *both* of them. A single label is read in all
+   three states, and solving the hover fill alone left Midnight's near-black label at 3.14:1 the moment
+   its button was pressed; seven of eighteen authored accents broke the same way. The direction is chosen once per palette and
    used for all three states, and mirrors to *lightening* when the accent is too dark to deepen - an
    accent of `#000000` otherwise solves both its hover and pressed states to the same black, which is a
    filled control with no hover feedback.
@@ -99,8 +105,8 @@ seventeen derived ones.**
 
 ## Named deviations from the hand-tuned values
 
-Applying the derivation to the six registered palettes changes **60 of the 102** derived tokens (17 per
-palette: OMC Dark 10, OMC Light 11, Midnight 9, Porcelain 8, Forest 11, Sandstone 11 - counted against
+Applying the derivation to the six registered palettes changes **59 of the 102** derived tokens (17 per
+palette: OMC Dark 10, OMC Light 11, Midnight 8, Porcelain 8, Forest 11, Sandstone 11 - counted against
 the previous commit's `themeConfig.ts` rather than remembered). Most are imperceptible (ΔL ≤ 0.03); these
 are the ones a reader would notice, and they are accepted rather than tuned away, because tuning them away
 would re-introduce hand-authored values into a derived set.
@@ -108,8 +114,8 @@ would re-introduce hand-authored values into a derived set.
 | Palette | Token | Was | Now | Effect |
 | --- | --- | --- | --- | --- |
 | OMC Dark | `selected` | `#242428` | `#2e2e37` | the selected state is visibly accent-tinted rather than a plain hover, which follows the four newer palettes |
-| OMC Dark | `accentHover` | `#0077b8` | `#0579bd` | the filled-control step is slightly lighter; white on it measures 4.69:1 |
-| Midnight | `accentOn` | `#ffffff` | `#101014` | the derived fill is lighter, and near-black is the ink that clears the floor on it |
+| OMC Dark | `accentHover`, `accentActive` | `#0077b8`, `#005d8f` | `#0579bd`, `#025e94` | both filled-control steps move, so one ink clears the floor on the resting and the pressed state alike; white measures 4.69:1 and 6.93:1 |
+| Midnight | `accentHover`, `accentActive` | `#1f6feb`, `#1158c7` | `#2475ca`, `#0259a7` | both fills deepen so that one ink clears the floor on both - the label stays white |
 | Midnight | `seriesTrack` | `#21262d` | `#30363d` | the plot floor is the border step, which Midnight had swapped |
 | Forest | `hover`, `rowHover` | `#213127` | `#232926` | a quieter hover, because the family constant follows the palette's own foreground |
 | OMC Light | `borderSoft`, `hover`, `hoverInset` | `#ededf2`, `#ececf0`, `#ededf2` | `#f1f1f4`, `#f3f3f3`, `#f2f2f2` | the neutral steps of the light fallback follow the same rule as every other palette's |
