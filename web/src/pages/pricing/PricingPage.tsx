@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, App as AntdApp, Button, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Table, Tooltip } from 'antd';
+import { Alert, App as AntdApp, Button, Empty, Form, Input, InputNumber, Modal, Pagination, Popconfirm, Select, Table, Tooltip } from 'antd';
 import {
   ReloadOutlined,
   SyncOutlined,
@@ -17,6 +17,13 @@ import { useT } from '../../i18n';
 import type { ModelPrice } from '../../types/pricing';
 import { PricingLeaderboard } from './PricingLeaderboard';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
+import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
+import { PhoneRow } from '../../components/common/PhoneRow';
+import { phoneRowFields, renderedCell } from '../../components/common/phoneRowFields';
+
+/** One page of the price list, shared by both renderings so a page means the same thing at
+ *  either width. */
+const PAGE_SIZE = 50;
 import styles from './PricingPage.module.css';
 
 /** Per-1M rates share one cell format: plain number with up to 6 decimal places. */
@@ -211,6 +218,14 @@ export const PricingPage: React.FC = () => {
       return true;
     });
   }, [models, unpricedList, search, activeTab]);
+
+  const isPhone = useIsPhoneViewport();
+  const [phonePage, setPhonePage] = React.useState(1);
+  // Clamped rather than trusted: the list is filtered by the search box and the tabs, so a page
+  // past the end would render an empty table with no way back.
+  const lastPhonePage = Math.max(1, Math.ceil(filteredData.length / PAGE_SIZE));
+  const safePhonePage = Math.min(phonePage, lastPhonePage);
+  const pagedPrices = filteredData.slice((safePhonePage - 1) * PAGE_SIZE, safePhonePage * PAGE_SIZE);
 
   // Table Columns
   const columns = [
@@ -581,23 +596,50 @@ export const PricingPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Dense Data Table */}
-        <Table<ModelPrice>
-          rowKey="model"
-          size="small"
-          loading={result.isLoading}
-          columns={columns}
-          dataSource={filteredData}
-          pagination={{ pageSize: 50, showSizeChanger: false, hideOnSinglePage: true }}
-          locale={{
-            emptyText: (
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={t('pricing.table.empty')}
-              />
-            ),
-          }}
-        />
+        {/* Dense Data Table, or one row per model on a phone (ADR 0012) */}
+        {isPhone ? (
+          filteredData.length === 0 ? (
+            <p className="empty-copy">{t('pricing.table.empty')}</p>
+          ) : (
+            <>
+              {pagedPrices.map((price, index) => (
+                <PhoneRow
+                  key={price.model}
+                  identity={renderedCell(columns, 'model', price, index)}
+                  fields={phoneRowFields(columns, price, { skip: ['model', 'actions'], index })}
+                  actions={renderedCell(columns, 'actions', price, index)}
+                />
+              ))}
+              {filteredData.length > PAGE_SIZE && (
+                <Pagination
+                  size="small"
+                  simple
+                  current={safePhonePage}
+                  pageSize={PAGE_SIZE}
+                  total={filteredData.length}
+                  onChange={setPhonePage}
+                />
+              )}
+            </>
+          )
+        ) : (
+          <Table<ModelPrice>
+            rowKey="model"
+            size="small"
+            loading={result.isLoading}
+            columns={columns}
+            dataSource={filteredData}
+            pagination={{ pageSize: PAGE_SIZE, showSizeChanger: false, hideOnSinglePage: true }}
+            locale={{
+              emptyText: (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={t('pricing.table.empty')}
+                />
+              ),
+            }}
+          />
+        )}
 
         {/* Workbench Footer Status */}
         <div className={styles['workbench-footer']}>

@@ -67,6 +67,13 @@ const SURFACES = [
     routes: [],
   },
   {
+    id: 'cost & usage',
+    route: '/pricing',
+    tableSelector: '.ant-table',
+    rowSelector: '[data-testid="phone-row"]',
+    routes: [],
+  },
+  {
     id: 'plugin store',
     route: '/plugin-store',
     tableSelector: '.ant-table',

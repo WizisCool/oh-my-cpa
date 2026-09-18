@@ -466,6 +466,48 @@ export const SCENARIOS = [
             },
           ],
         })],
+        [(url) => url.pathname.endsWith('/management/pricing') || url.pathname.endsWith('/pricing'), () => ({
+          source: 'models.dev',
+          models: [
+            {
+              model: 'gpt-5-codex',
+              prompt_price_per_1m: 1.25,
+              completion_price_per_1m: 10,
+              cache_read_price_per_1m: 0.125,
+              cache_write_price_per_1m: 1.25,
+              price_multiplier: 1,
+              source: 'models.dev',
+              synced_at_ms: Date.now() - 3_600_000,
+              updated_at_ms: Date.now() - 3_600_000,
+            },
+            {
+              model: 'claude-sonnet-4-5-20250929',
+              prompt_price_per_1m: 3,
+              completion_price_per_1m: 15,
+              cache_read_price_per_1m: 0.3,
+              cache_write_price_per_1m: 3.75,
+              price_multiplier: 1.2,
+              source: 'manual',
+              synced_at_ms: 0,
+              updated_at_ms: Date.now() - 7_200_000,
+            },
+          ],
+          unpriced: ['vendor/unpriced-fixture-model'],
+          sync: {
+            known: true,
+            running: false,
+            state: {
+              source: 'models.dev',
+              last_error: '',
+              last_matched: 2,
+              last_unmatched: 1,
+              last_success_at_ms: Date.now() - 3_600_000,
+              updated_at_ms: Date.now() - 3_600_000,
+              auto_sync_interval_hours: 24,
+              next_sync_at_ms: Date.now() + 86_400_000,
+            },
+          },
+        })],
         [(url) => url.pathname.endsWith('/management/plugin-store'), () => ({
           plugins: [
             {

@@ -27,7 +27,7 @@ import type { Key, ReactNode } from 'react';
  */
 
 /** The structural part of an antd `ColumnType` this module needs, so it can be tested alone. */
-export interface PhoneRowSource<T> {
+export interface PhoneRowSource {
   key?: Key;
   /**
    * The path a column's value is read from. Typed loosely for the same reason as `title`: antd
@@ -46,11 +46,27 @@ export interface PhoneRowSource<T> {
    */
   title?: unknown;
   /**
-   * The column's renderer. Its return type is antd's, which is a node *or* the
-   * `{ children, props }` envelope a cell uses to control its own `colSpan`/`rowSpan`; the
-   * envelope is unwrapped below rather than rendered, because React would receive an object.
+   * The column's renderer, typed loosely for the same reason as `title` and `dataIndex`: antd
+   * types a cell's value as `any` and each column narrows it to what it expects, so a strict
+   * signature here would reject every real column. `CellRenderer` below is the shape this module
+   * calls one through, and the single cast in `renderCell` is where the two meet.
    */
-  render?: (value: unknown, record: T, index: number) => ReactNode | RenderedCellLike;
+  render?: unknown;
+}
+
+/**
+ * A cell renderer, as this module calls it. Generic in the record, because that is the part this
+ * module does constrain: it hands the renderer the record it was given.
+ *
+ * antd's return type is a node *or* the `{ children, props }` envelope a cell uses to control its
+ * own `colSpan`/`rowSpan`; the envelope is unwrapped rather than rendered, because React would
+ * receive an object.
+ */
+type CellRenderer<T> = (value: unknown, record: T, index: number) => ReactNode | RenderedCellLike;
+
+/** antd's column array, seen as the renderers this module calls. */
+function rendererOf<T>(column: PhoneRowSource): CellRenderer<T> | undefined {
+  return typeof column.render === 'function' ? (column.render as CellRenderer<T>) : undefined;
 }
 
 /** antd's `RenderedCell`'s structural part: a cell that spans, wrapping its own content. */
@@ -84,7 +100,7 @@ export interface PhoneRowField {
   value: ReactNode;
 }
 
-function columnIdentity<T>(column: PhoneRowSource<T>): string | undefined {
+function columnIdentity(column: PhoneRowSource): string | undefined {
   if (column.key !== undefined) return String(column.key);
   if (typeof column.dataIndex === 'string') return column.dataIndex;
   // A path array is addressed by its first segment for the purpose of *naming* the field;
@@ -94,7 +110,7 @@ function columnIdentity<T>(column: PhoneRowSource<T>): string | undefined {
 }
 
 /** The value antd would hand a column's `render` as its first argument. */
-function cellValue<T>(column: PhoneRowSource<T>, record: T): unknown {
+function cellValue<T>(column: PhoneRowSource, record: T): unknown {
   if (column.dataIndex === undefined) return record;
   const path = Array.isArray(column.dataIndex) ? column.dataIndex : [column.dataIndex];
   let value: unknown = record;
@@ -114,18 +130,20 @@ function cellValue<T>(column: PhoneRowSource<T>, record: T): unknown {
  * switch and the row's switch cannot diverge in state, disabled-ness or label.
  */
 export function renderedCell<T>(
-  columns: readonly PhoneRowSource<T>[],
+  columns: readonly PhoneRowSource[],
   columnKey: string,
   record: T,
   index: number,
 ): ReactNode | undefined {
   const column = columns.find((candidate) => columnIdentity(candidate) === columnKey);
-  if (!column || !column.render) return undefined;
-  return renderedNode(column.render(cellValue(column, record), record, index));
+  if (!column) return undefined;
+  const render = rendererOf(column);
+  if (!render) return undefined;
+  return renderedNode(render(cellValue(column, record), record, index));
 }
 
 export function phoneRowFields<T>(
-  columns: readonly PhoneRowSource<T>[],
+  columns: readonly PhoneRowSource[],
   record: T,
   { skip = [], index }: { skip?: readonly string[]; index: number },
 ): PhoneRowField[] {
@@ -144,8 +162,9 @@ export function phoneRowFields<T>(
       : (column.title as ReactNode);
     // A column without a `render` prints its own value (antd does the same), so the fallback is
     // that value rather than the record.
-    const value: ReactNode | undefined = column.render
-      ? renderedNode(column.render(cellValue(column, record), record, index))
+    const render = rendererOf(column);
+    const value: ReactNode | undefined = render
+      ? renderedNode(render(cellValue(column, record), record, index))
       : (cellValue(column, record) as ReactNode | undefined);
     if (value === undefined || value === null) continue;
     fields.push({ key, label, value });
