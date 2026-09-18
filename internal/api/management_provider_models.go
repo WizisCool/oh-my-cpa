@@ -3,12 +3,21 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+)
+
+const MAX_MODEL_PULL_REDIRECTS = 10
+
+var (
+	errInvalidModelPullURL      = errors.New("invalid model pull URL")
+	errModelPullRedirectRefused = errors.New("model pull redirect refused")
 )
 
 type pullModelsRequest struct {
@@ -109,7 +118,20 @@ func (h *Handler) pullProviderModels(writer http.ResponseWriter, request *http.R
 
 	models, err := fetchEndpointModels(request.Context(), baseURL, apiKey, proxyURL, pullProtocol(family), headers)
 	if err != nil {
-		writeError(writer, http.StatusBadGateway, fmt.Sprintf("failed to pull models: %v", err))
+		switch {
+		case errors.Is(err, errInvalidModelPullURL):
+			writeJSON(writer, http.StatusBadRequest, map[string]string{
+				"error": err.Error(),
+				"code":  "invalid_model_pull_url",
+			})
+		case errors.Is(err, errModelPullRedirectRefused):
+			writeJSON(writer, http.StatusBadGateway, map[string]string{
+				"error": err.Error(),
+				"code":  "model_pull_redirect_refused",
+			})
+		default:
+			writeError(writer, http.StatusBadGateway, fmt.Sprintf("failed to pull models: %v", err))
+		}
 		return
 	}
 
@@ -124,8 +146,11 @@ func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr, prot
 	defer cancel()
 
 	parsed, err := url.Parse(rawBaseURL)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-		return nil, fmt.Errorf("invalid base URL scheme: %s", rawBaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errInvalidModelPullURL, err)
+	}
+	if !isModelPullURLAllowed(parsed) {
+		return nil, fmt.Errorf("%w: base URL must use HTTPS unless it targets localhost, a loopback address, or a private IP address", errInvalidModelPullURL)
 	}
 
 	transport := &http.Transport{
@@ -139,6 +164,19 @@ func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr, prot
 	client := &http.Client{
 		Timeout:   15 * time.Second,
 		Transport: transport,
+		// Refuse cross-origin redirects instead of trying to scrub known
+		// credential headers: custom provider headers can carry secrets too,
+		// and a scheme change could downgrade any credential that survived.
+		CheckRedirect: func(redirectedRequest *http.Request, via []*http.Request) error {
+			if len(via) >= MAX_MODEL_PULL_REDIRECTS {
+				return fmt.Errorf("%w: stopped after %d redirects", errModelPullRedirectRefused, MAX_MODEL_PULL_REDIRECTS)
+			}
+			origin := via[0].URL
+			if !strings.EqualFold(redirectedRequest.URL.Scheme, origin.Scheme) || !strings.EqualFold(redirectedRequest.URL.Host, origin.Host) {
+				return fmt.Errorf("%w: cross-origin redirect", errModelPullRedirectRefused)
+			}
+			return nil
+		},
 	}
 
 	trimmed := strings.TrimRight(rawBaseURL, "/")
@@ -184,6 +222,38 @@ func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr, prot
 	}
 
 	return parseModelsResponse(resp.Body)
+}
+
+// isModelPullURLAllowed keeps the operator's upstream key off public plaintext
+// links while still allowing self-hosted relays reached over loopback or
+// private addresses.
+func isModelPullURLAllowed(parsed *url.URL) bool {
+	if parsed == nil {
+		return false
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "https":
+		return true
+	case "http":
+		return isPlaintextModelPullHostAllowed(parsed.Hostname())
+	default:
+		return false
+	}
+}
+
+func isPlaintextModelPullHostAllowed(host string) bool {
+	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
+	if host == "localhost" {
+		return true
+	}
+	if zoneIndex := strings.IndexByte(host, '%'); zoneIndex >= 0 {
+		host = host[:zoneIndex]
+	}
+	address := net.ParseIP(host)
+	if address == nil {
+		return false
+	}
+	return address.IsLoopback() || address.IsPrivate()
 }
 
 // setModelPullAuthHeaders authenticates a model-list request the way each

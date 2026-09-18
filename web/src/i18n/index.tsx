@@ -1036,7 +1036,7 @@ const DICT: Record<string, [string, string]> = {
   'pro.provider_updated': ['提供商已成功更新', 'Provider updated successfully'],
   'pro.provider_deleted': ['提供商已删除', 'Provider deleted'],
   'pro.delete_provider_confirm': ['确定删除该提供商？删除后 CPA 将停止向该端点转发请求。', 'Delete this provider? CPA will stop forwarding requests to this endpoint.'],
-  'pro.field_base_url_desc': ['此提供商要求填写服务地址', 'This provider requires a service endpoint URL'],
+  'pro.field_base_url_desc': ['提供商服务地址；模型拉取要求 HTTPS，仅 localhost、回环或私有 IP 字面量可使用 HTTP', 'Provider endpoint URL; model pulls require HTTPS except for localhost, loopback, or private IP literals'],
   'pro.field_website': ['官网', 'Website'],
   'pro.field_website_desc': ['仅保存在 Oh My CPA，不写入 CPA 配置', 'Stored in Oh My CPA only, never written to the CPA config'],
   'pro.field_website_invalid': ['请填写以 http:// 或 https:// 开头的完整地址', 'Enter a full address starting with http:// or https://'],

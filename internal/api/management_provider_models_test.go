@@ -1,10 +1,13 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -58,6 +61,158 @@ func TestPullProviderModels(t *testing.T) {
 	resp, _ = doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/providers/pull-models", badKeyReq)
 	if resp.StatusCode != http.StatusBadGateway {
 		t.Fatalf("expected 502 for upstream unauthorized, got %d", resp.StatusCode)
+	}
+}
+
+func TestModelPullBaseURLPolicy(t *testing.T) {
+	tests := []struct {
+		name      string
+		rawURL    string
+		isAllowed bool
+	}{
+		{name: "public https", rawURL: "https://api.example.com/v1", isAllowed: true},
+		{name: "public http", rawURL: "http://api.example.com/v1", isAllowed: false},
+		{name: "localhost", rawURL: "http://localhost:8080/v1", isAllowed: true},
+		{name: "loopback ipv4", rawURL: "http://127.0.0.1:8080/v1", isAllowed: true},
+		{name: "loopback ipv6", rawURL: "http://[::1]:8080/v1", isAllowed: true},
+		{name: "private ipv4", rawURL: "http://10.20.30.40:8080/v1", isAllowed: true},
+		{name: "private ipv6", rawURL: "http://[fd00::1]:8080/v1", isAllowed: true},
+		{name: "link-local ipv4", rawURL: "http://169.254.10.20:8080/v1", isAllowed: false},
+		{name: "cloud metadata", rawURL: "http://169.254.169.254/latest/meta-data", isAllowed: false},
+		{name: "other scheme", rawURL: "ftp://localhost/v1", isAllowed: false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			parsed, err := url.Parse(test.rawURL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := isModelPullURLAllowed(parsed); got != test.isAllowed {
+				t.Fatalf("isModelPullURLAllowed(%q) = %v, want %v", test.rawURL, got, test.isAllowed)
+			}
+		})
+	}
+}
+
+func TestFetchEndpointModelsRejectsPublicHTTP(t *testing.T) {
+	_, err := fetchEndpointModels(context.Background(), "http://example.com/v1", "sk-provider-secret-1234", "", "openai", nil)
+	if err == nil || !strings.Contains(err.Error(), "HTTPS") {
+		t.Fatalf("expected HTTPS policy error, got %v", err)
+	}
+}
+
+func TestPullProviderModelsReportsInvalidURL(t *testing.T) {
+	client, baseURL, _ := startProviderTestServer(t)
+
+	resp, payload := doJSON(
+		t,
+		client,
+		http.MethodPost,
+		baseURL+"/omc/api/v1/management/providers/pull-models",
+		`{"base_url":"http://example.com/v1","api_key":"sk-provider-secret-1234"}`,
+	)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("invalid base URL status = %d body %s", resp.StatusCode, payload)
+	}
+	var response struct {
+		Error string `json:"error"`
+		Code  string `json:"code"`
+	}
+	if err := json.Unmarshal(payload, &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != "invalid_model_pull_url" || !strings.Contains(response.Error, "HTTPS") {
+		t.Fatalf("unexpected invalid URL response: %#v", response)
+	}
+}
+
+func TestPullProviderModelsReportsRedirectRefusal(t *testing.T) {
+	redirectTarget := httptest.NewServer(http.NotFoundHandler())
+	defer redirectTarget.Close()
+
+	redirectSource := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		http.Redirect(writer, request, redirectTarget.URL+"/models", http.StatusFound)
+	}))
+	defer redirectSource.Close()
+
+	client, baseURL, _ := startProviderTestServer(t)
+	body := fmt.Sprintf(`{"base_url":%q,"api_key":"sk-provider-secret-1234"}`, redirectSource.URL)
+	resp, payload := doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/providers/pull-models", body)
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("redirect refusal status = %d body %s", resp.StatusCode, payload)
+	}
+	var response struct {
+		Error string `json:"error"`
+		Code  string `json:"code"`
+	}
+	if err := json.Unmarshal(payload, &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != "model_pull_redirect_refused" || !strings.Contains(response.Error, "cross-origin redirect") {
+		t.Fatalf("unexpected redirect response: %#v", response)
+	}
+}
+
+func TestFetchEndpointModelsRefusesCrossOriginRedirect(t *testing.T) {
+	for _, protocol := range []string{"openai", "anthropic", "gemini"} {
+		t.Run(protocol, func(t *testing.T) {
+			redirectedHeaders := make(chan http.Header, 1)
+			redirectTarget := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				redirectedHeaders <- request.Header.Clone()
+				_ = json.NewEncoder(writer).Encode(map[string]any{"data": []map[string]any{{"id": "leaked-model"}}})
+			}))
+			defer redirectTarget.Close()
+
+			redirectSource := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				http.Redirect(writer, request, redirectTarget.URL+"/models", http.StatusFound)
+			}))
+			defer redirectSource.Close()
+
+			_, err := fetchEndpointModels(
+				context.Background(),
+				redirectSource.URL,
+				"sk-provider-secret-1234",
+				"",
+				protocol,
+				map[string]string{"X-Provider-Secret": "custom-secret"},
+			)
+			if err == nil {
+				t.Fatal("expected cross-origin redirect to be refused")
+			}
+			select {
+			case headers := <-redirectedHeaders:
+				t.Fatalf("redirect target received credentials: %v", headers)
+			default:
+			}
+		})
+	}
+}
+
+func TestFetchEndpointModelsFollowsSameOriginRedirect(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/models" {
+			http.Redirect(writer, request, "/v1/models", http.StatusFound)
+			return
+		}
+		if request.URL.Path != "/v1/models" {
+			http.NotFound(writer, request)
+			return
+		}
+		if request.Header.Get("Authorization") != "Bearer sk-provider-secret-1234" {
+			http.Error(writer, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		_ = json.NewEncoder(writer).Encode(map[string]any{"data": []map[string]any{{"id": "redirected-model"}}})
+	}))
+	defer upstream.Close()
+
+	models, err := fetchEndpointModels(context.Background(), upstream.URL, "sk-provider-secret-1234", "", "openai", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(models) != 1 || models[0] != "redirected-model" {
+		t.Fatalf("unexpected models after same-origin redirect: %#v", models)
 	}
 }
 

@@ -894,7 +894,7 @@ export const MS: Readonly<Record<string, string>> = {
   "pro.provider_updated": "Pembekal berjaya dikemas kini",
   "pro.provider_deleted": "Pembekal dipadamkan",
   "pro.delete_provider_confirm": "Padamkan pembekal ini? CPA akan berhenti mengirim semula permintaan ke titik akhir ini.",
-  "pro.field_base_url_desc": "Pembekal ini memerlukan URL titik akhir perkhidmatan",
+  "pro.field_base_url_desc": "URL titik akhir pembekal; tarikan model memerlukan HTTPS kecuali localhost, loopback atau literal IP persendirian",
   "pro.field_website": "Laman web",
   "pro.field_website_desc": "Disimpan dalam Oh My CPA sahaja, tidak pernah ditulis pada konfigurasi CPA",
   "pro.field_website_invalid": "Masukkan alamat penuh bermula dengan http:// atau https://",

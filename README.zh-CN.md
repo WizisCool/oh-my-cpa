@@ -36,7 +36,7 @@ Oh My CPA 是面向 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 
 ### 网关与 Provider 管理
 - **AI 提供商管理**：配置与管理 Codex、Claude、Gemini、Meta Muse、DeepSeek 及 OpenAI 兼容服务的凭据与端点。config API-key 家族（claude、codex、gemini、meta）的管理方式完全一致：凭据、模型、priority/weight、代理以及网关级启停开关。
 - **协议级启停控制**：通过 `excluded-models: ['*']` 实现网关协议层有效阻断，防止流量误路由至已停用凭据。
-- **模型目录自动拉取**：直连上游提供商获取最新可用模型列表。
+- **模型目录自动拉取**：直连上游提供商获取最新可用模型列表。模型拉取要求 HTTPS，仅 localhost、回环或私有 IP 字面量可使用 HTTP，并拒绝跨源重定向。
 - **客户端 Key 别名管理**：创建、查看与删除代理客户端 API Key。支持为 Key 设置可读别名，别名自动呈现在请求记录、详情抽屉与筛选标签中。
 - **OAuth 凭据文件治理**：上传、下载、删除与查看 OAuth 认证文件。编辑 priority 与 weight 字段，查看关联模型，并支持一键清除频率限制冷却。可在控制台直接登录 Codex、Claude、Antigravity、xAI、Kimi、Devin 与 Meta Muse；若重定向回调地址在本机无法打开，可粘贴完整回调 URL 完成授权；设备码流程会显示需要确认的授权码。
 
