@@ -37,7 +37,9 @@
   line-height: 1.5;
 }
 
-@media (max-width: 560px) {
+/* A phone: the provider picker and its "new provider" field each take a whole row, because two
+   selects side by side leave neither enough width for a provider name. */
+@media (max-width: 640px) {
   .provider-select,
   .provider-new {
     min-width: 100%;

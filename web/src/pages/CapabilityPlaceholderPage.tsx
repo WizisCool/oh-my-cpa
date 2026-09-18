@@ -5,7 +5,11 @@ import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { api, apiErrorCode } from '../api/client';
 import { useT } from '../i18n';
+import type { ColumnsType } from 'antd/es/table';
 import type { CapabilityCheckItem, CapabilityProbeReport, CapabilityStatus } from '../types/capability';
+import { useIsPhoneViewport } from '../hooks/useIsPhoneViewport';
+import { PhoneRow } from '../components/common/PhoneRow';
+import { phoneRowFields, renderedCell } from '../components/common/phoneRowFields';
 
 const { Text } = Typography;
 
@@ -53,6 +57,56 @@ export const CapabilityPlaceholderPage: React.FC<CapabilityPlaceholderPageProps>
   });
 
   const tone = data ? overallStatusTone(data.status) : null;
+  // Both above any early return, because hooks cannot come after one.
+  const isPhone = useIsPhoneViewport();
+
+  /**
+   * The probe results' columns: the one description of a check.
+   *
+   * The table renders them and the phone row derives its labelled fields from the same array
+   * (ADR 0012), so a check's endpoint, status code, latency and verdict cannot be printed one way
+   * in a cell and another in a field.
+   */
+  const checkColumns: ColumnsType<CapabilityCheckItem> = [
+    {
+      title: t('cap.check_name'),
+      dataIndex: 'name',
+      key: 'name',
+      width: 200,
+      render: (val: string) => <Text strong>{val}</Text>,
+    },
+    {
+      title: t('cap.check_endpoint'),
+      dataIndex: 'endpoint',
+      key: 'endpoint',
+      render: (val: string) => <Text code>{val}</Text>,
+    },
+    {
+      title: t('cap.check_http'),
+      dataIndex: 'http_status',
+      key: 'http_status',
+      width: 100,
+      render: (val: number) => (val > 0 ? <Text className="mono-num">{val}</Text> : '\u2014'),
+    },
+    {
+      title: t('cap.check_latency'),
+      dataIndex: 'latency_ms',
+      key: 'latency_ms',
+      width: 100,
+      render: (val: number) => (val > 0 ? <Text className="mono-num">{val}ms</Text> : '\u2014'),
+    },
+    {
+      title: t('cap.check_status'),
+      dataIndex: 'status',
+      key: 'status',
+      width: 110,
+      render: (status: CapabilityCheckItem['status']) => (
+        <Tag color={statusTagColor(status)} style={{ margin: 0 }}>
+          {t(`cap.check_status_${status}`)}
+        </Tag>
+      ),
+    },
+  ];
 
   return (
     <div className="terminal-page capability-page">
@@ -91,52 +145,25 @@ export const CapabilityPlaceholderPage: React.FC<CapabilityPlaceholderPageProps>
             </Text>
           </div>
 
-          <Table<CapabilityCheckItem>
-            size="small"
-            rowKey="name"
-            dataSource={data.checks}
-            pagination={false}
-            columns={[
-              {
-                title: t('cap.check_name'),
-                dataIndex: 'name',
-                key: 'name',
-                width: 200,
-                render: (val: string) => <Text strong>{val}</Text>,
-              },
-              {
-                title: t('cap.check_endpoint'),
-                dataIndex: 'endpoint',
-                key: 'endpoint',
-                render: (val: string) => <Text code>{val}</Text>,
-              },
-              {
-                title: t('cap.check_http'),
-                dataIndex: 'http_status',
-                key: 'http_status',
-                width: 100,
-                render: (val: number) => (val > 0 ? <Text className="mono-num">{val}</Text> : '—'),
-              },
-              {
-                title: t('cap.check_latency'),
-                dataIndex: 'latency_ms',
-                key: 'latency_ms',
-                width: 100,
-                render: (val: number) => (val > 0 ? <Text className="mono-num">{val}ms</Text> : '—'),
-              },
-              {
-                title: t('cap.check_status'),
-                dataIndex: 'status',
-                key: 'status',
-                width: 110,
-                render: (status: CapabilityCheckItem['status']) => (
-                  <Tag color={statusTagColor(status)} style={{ margin: 0 }}>
-                    {t(`cap.check_status_${status}`)}
-                  </Tag>
-                ),
-              },
-            ]}
-          />
+          {isPhone ? (
+            <>
+              {data.checks.map((check, index) => (
+                <PhoneRow
+                  key={check.name}
+                  identity={renderedCell(checkColumns, 'name', check, index)}
+                  fields={phoneRowFields(checkColumns, check, { skip: ['name'], index })}
+                />
+              ))}
+            </>
+          ) : (
+            <Table<CapabilityCheckItem>
+              size="small"
+              rowKey="name"
+              dataSource={data.checks}
+              pagination={false}
+              columns={checkColumns}
+            />
+          )}
         </div>
       ) : null}
     </div>

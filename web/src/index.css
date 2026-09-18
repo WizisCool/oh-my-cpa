@@ -2145,7 +2145,9 @@ a { color: inherit; }
   }
 }
 
-@media (max-width: 680px) {
+/* The configuration workbench on a phone: its toolbar stacks and its paired host/port fields
+   become one column. At the console's phone breakpoint, not a number of its own. */
+@media (max-width: 640px) {
   .config-toolbar {
     flex-direction: column;
     align-items: stretch;
@@ -2597,7 +2599,9 @@ a { color: inherit; }
   align-items: center;
 }
 
-@media (max-width: 680px) {
+/* The configuration workbench on a phone: the floating save bar reaches both edges, and the
+   payload rows wrap so their controls keep their width. At the console's phone breakpoint. */
+@media (max-width: 640px) {
   .config-dirty-bar-portal {
     inset-inline-start: 0;
     bottom: max(12px, env(safe-area-inset-bottom));

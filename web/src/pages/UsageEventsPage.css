@@ -1413,7 +1413,9 @@
 .request-detail-empty {
   padding: 28px 0;
 }
-@media (max-width: 600px) {
+/* The phone refinements, at the console's phone breakpoint rather than a third number of their
+   own (docs/design.md §8). The band between 600 and 640 used to get none of them. */
+@media (max-width: 640px) {
   .request-events-page {
     padding: 20px 12px 16px;
     gap: 14px;

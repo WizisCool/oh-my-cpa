@@ -76,6 +76,8 @@
   font-family: var(--font-mono);
 }
 
+/* 720px is the editor's own width, not the device's: its two panes are a JSON document beside a
+   parsed view, and below this the parsed table has no room left for its own columns. */
 @media (max-width: 720px) {
   .workspace {
     grid-template-columns: minmax(0, 1fr);

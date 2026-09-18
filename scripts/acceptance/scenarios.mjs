@@ -508,6 +508,14 @@ export const SCENARIOS = [
             },
           },
         })],
+        [(url) => url.pathname.endsWith('/management/request-error-logs'), () => ({
+          files: [
+            { name: 'errors-2026-09-19.log', size: 262144, modified: Math.floor(Date.now() / 1000) - 600 },
+            { name: 'errors-2026-09-18.log', size: 1048576, modified: Math.floor(Date.now() / 1000) - 86_400 },
+          ],
+        })],
+        [(url) => url.pathname.endsWith('/management/logs'), () => ({ lines: [], latest_after: 0, next_cursor: '', cursor_reset: false, limit: 2000 })],
+        [(url) => url.pathname.endsWith('/management/logs/status'), () => ({ logging_to_file: true, request_log: false })],
         [(url) => url.pathname.endsWith('/management/plugin-store'), () => ({
           plugins: [
             {

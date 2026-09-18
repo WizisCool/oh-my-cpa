@@ -74,6 +74,22 @@ const SURFACES = [
     routes: [],
   },
   {
+    id: 'error log files',
+    route: '/logs',
+    tableSelector: '.log-files .ant-table',
+    rowSelector: '[data-testid="phone-row"]',
+    routes: [],
+    /** The list lives on the page's second tab, so the tab is part of arriving at it. */
+    prepare: async (page) => {
+      // Clicked by its tab id rather than its label: the label is localized, and the scenario runs
+      // with the console's own stored language.
+      const tab = page.locator('#rc-tabs-0-tab-errors');
+      if (await tab.count()) await tab.click();
+      else await page.locator('.ant-tabs-tab').last().click();
+      await page.waitForTimeout(400);
+    },
+  },
+  {
     id: 'plugin store',
     route: '/plugin-store',
     tableSelector: '.ant-table',
@@ -89,6 +105,19 @@ const SURFACES = [
  * ordinary. A control 664px to the *right* is not reachable at all, and that is the defect the
  * phone rendering exists to remove.
  */
+/**
+ * Arrives at a surface, including any step inside the page a list is behind.
+ *
+ * The logs page keeps its error-file list on a tab, so "the route shows the list" is not a claim
+ * every surface can make; `prepare` is where a surface says what its own page needs first.
+ */
+async function openSurface(base, page, surface, viewport) {
+  await page.setViewportSize(viewport);
+  await page.goto(`${base}${surface.route}`, { waitUntil: 'domcontentloaded' });
+  await surface.prepare?.(page);
+  await page.locator(surface.rowSelector).first().waitFor({ state: 'visible', timeout: 20_000 });
+}
+
 const INSIDE_VIEWPORT = (selector) => `(() => {
   const nodes = Array.from(document.querySelectorAll(${JSON.stringify(selector)}));
   const outside = [];
@@ -105,9 +134,7 @@ const INSIDE_VIEWPORT = (selector) => `(() => {
 export async function phoneListRendering({ base, page, check }) {
   for (const surface of SURFACES) {
     // ---- the phone rendering ----
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto(`${base}${surface.route}`, { waitUntil: 'domcontentloaded' });
-    await page.locator(surface.rowSelector).first().waitFor({ state: 'visible', timeout: 20_000 });
+    await openSurface(base, page, surface, { width: 390, height: 844 });
 
     check(
       `${surface.id}: a phone renders rows rather than a table`,
@@ -137,6 +164,7 @@ export async function phoneListRendering({ base, page, check }) {
     // against a page whose viewport was moved mid-probe.
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`${base}${surface.route}`, { waitUntil: 'domcontentloaded' });
+    await surface.prepare?.(page);
     await page.locator(surface.tableSelector).first().waitFor({ state: 'visible', timeout: 20_000 });
     check(
       `${surface.id}: a wide viewport still renders the table`,
