@@ -1011,14 +1011,8 @@
    inside the page's content column, so a 1440px viewport with a collapsed rail and a wide
    card holds a different list width than the same viewport with the rail open. The
    question "do ten columns still fit" is about the box the columns are in, and only the
-   container can answer it.
-
-   920px is therefore a third, distinct threshold from the shell's 900 (the viewport at
-   which the rail becomes a sheet) and the phone's 640 (see docs/design.md §8). A viewport
-   `@media (max-width: 920px)` block carrying the identical rules used to sit just below
-   this one; it could only ever fire where this one already had, because the container is
-   at most `viewport - 64px` here, so it was removed rather than left as a second,
-   unexplained breakpoint. */
+   container can answer it. It is therefore the one threshold in the console that is not a
+   viewport one, alongside the shell's 900px and the phone's 640px (docs/design.md §8). */
 @container reqstream (max-width: 920px) {
   .request-table-scroll-area {
     overflow-x: visible;

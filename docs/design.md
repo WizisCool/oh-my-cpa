@@ -1145,13 +1145,11 @@ and it wraps rather than scrolls so the controls keep their width in every readi
 language. A single line under the list states the window its counts cover.
 
 **One dataset, rendered responsively.** The list is a table on a pointer-fine viewport and
-labelled rows below 640px. This replaces the earlier "one table serves every width, scrolling
-sideways" by measurement rather than by preference: at 390px the table measured 316 → 980px
-inside its card, which put the reveal, copy and edit controls §2 requires to be *in the open*
-664px off the screen, and no scroller said it scrolled. What is not coming back is the
-operator-facing table/card toggle of `b9cf688` — see ADR 0012. The two renderings are derived
-from one column array (`web/src/components/common/phoneRowFields.ts`), so a column added to
-the table reaches the row and a value cannot be formatted two ways.
+labelled rows below 640px, and the width decides — never a control the operator has to find. The
+two renderings are derived from one column array
+(`web/src/components/common/phoneRowFields.ts`), so a column added to the table reaches the row
+and a value cannot be formatted two ways. The measurement that fixed the threshold, and the
+alternatives it was chosen over, are in ADR 0012.
 
 ## 8. Small viewports and touch
 
@@ -1315,13 +1313,12 @@ Four consequences are designed for rather than discovered, and each is pinned by
 `prefers-reduced-motion` is not involved: the platform owns the animation, which is one more
 reason this is the right mechanism rather than a JS gesture.
 
-### What a phone layout is, and is not
+### What a phone layout is
 
 A phone layout is a second *rendering* of one list, never a second list. The dataset, the
-filters, the URL and the actions are the same; only the arrangement changes, and the change is
-made by width rather than by a control the operator has to find. ADR 0012 records why the
-earlier operator-facing table/card toggle was rejected and why a responsive arrangement is not
-the same thing.
+filters, the URL and the actions are the same; only the arrangement changes, and the width is
+what changes it — never a control the operator has to find, and never a mode that has to be
+remembered. ADR 0012 records the threshold, its measurement and its alternatives.
 
 ## 9. Checklist for new UI
 - [ ] Colors only via the resolved palette / CSS vars; semantic colors carry meaning
