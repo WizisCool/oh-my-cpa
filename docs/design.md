@@ -212,7 +212,7 @@ reasons about; `2% of requests failed` is a decision):
 | > 5% and ≤ 20% failed | `warn` — worth a look |
 | > 20% failed | `danger` — broken, whatever the sample |
 
-The bands live in `successRateVerdict` (`web/src/types/usageEventView.ts`). The
+The bands live in `successRateVerdict` (`web/src/types/usageEventMetrics.ts`). The
 dashboard tile reads them; the request list does not show a verdict of its own,
 for the reason below.
 

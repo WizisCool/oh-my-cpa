@@ -156,7 +156,7 @@ test('no planned check for any representative path reaches the browser or a buil
     'web/src/App.tsx',
     'web/src/pages/UsageEventsPage.tsx',
     'web/src/pages/UsageEventsPage.css',
-    'web/src/types/usageEventView.ts',
+    'web/src/types/usageEventQuery.ts',
     'web/src/i18n/index.tsx',
     'internal/api/handler.go',
     'internal/api/management_provider_writes.go',

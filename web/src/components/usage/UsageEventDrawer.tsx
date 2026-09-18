@@ -18,12 +18,14 @@ import { formatTokens, formatTokensFull } from '../../types/tokenDisplay';
 import type { UsageEvent } from '../../types/usageEvents';
 import {
   resolveCredential,
-  requestGroupName,
+  type CredentialIndex,
+} from '../../types/usageEventIdentity';
+import {
   formatEventDuration,
   hasMeasurableTTFT,
   isNonStreamingEvent,
-  type CredentialIndex,
-} from '../../types/usageEventView';
+} from '../../types/usageEventMetrics';
+import { requestGroupName } from '../../types/usageEventLabels';
 
 export interface UsageEventDrawerProps {
   eventId: number | null;

@@ -2,8 +2,8 @@ import React from 'react';
 import { Button } from 'antd';
 import { CloseOutlined } from '@ant-design/icons';
 import { useT } from '../../i18n';
-import type { EventFilterKey } from '../../types/usageEventView';
-import { activeFilterCount } from '../../types/usageEventView';
+import type { EventFilterKey } from '../../types/usageEventQuery';
+import { activeFilterCount } from '../../types/usageEventQuery';
 
 /** How one chip names itself, given the raw committed value. */
 export interface ChipDescriptor {

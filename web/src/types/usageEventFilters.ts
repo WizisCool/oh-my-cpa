@@ -5,8 +5,8 @@ import {
   formatUsageRangeBound,
   usageRangeParamKey,
 } from './usageEvents';
-import { EVENT_FILTER_KEYS, USAGE_RANGE_MAX, parseUsageRangeBound } from './usageEventView';
-import type { EventFilterKey } from './usageEventView';
+import { EVENT_FILTER_KEYS, USAGE_RANGE_MAX, parseUsageRangeBound } from './usageEventQuery';
+import type { EventFilterKey } from './usageEventQuery';
 import { compareCostBounds, isCostRange } from './usageEvents';
 
 /**

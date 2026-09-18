@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Alert,
@@ -6,14 +6,11 @@ import {
   Button,
   Card,
   Input,
-  InputNumber,
   Modal,
   Popconfirm,
   Segmented,
-  Select,
   Skeleton,
   Space,
-  Switch,
   Tag,
   Typography,
 } from 'antd';
@@ -21,368 +18,69 @@ import {
   AppstoreOutlined,
   CodeOutlined,
   CopyOutlined,
-  ExperimentOutlined,
-  FieldTimeOutlined,
   FormatPainterOutlined,
-  GlobalOutlined,
-  KeyOutlined,
-  NodeIndexOutlined,
-  ProfileOutlined,
   ReloadOutlined,
   SaveOutlined,
   SearchOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { parseDocument, type Document } from 'yaml';
-import { api, ApiError, apiErrorCode } from '../api/client';
 import { useT } from '../i18n';
 import { copyText } from '../utils/clipboard';
 import { useTheme } from '../theme/ThemeContext';
 import { ConfigDirtyBar } from '../components/config/ConfigDirtyBar';
-import { PayloadRulesEditor, type PayloadValidationIssue } from '../components/config/PayloadRulesEditor';
-import { updateFieldWithBaseline, isConfigSemanticallyEqual } from '../components/config/configDirty';
-import type { YamlSourceEditorRef } from '../components/config/YamlSourceEditor';
+import { useConfigDraft } from '../components/config/useConfigDraft';
+import {
+  renderGroupPanel,
+  sectionIcon,
+  type ConfigSectionContext,
+} from '../components/config/configSectionRenderers';
 
 const YamlSourceEditor = React.lazy(() => import('../components/config/YamlSourceEditor'));
+import { parseDocument } from 'yaml';
 import {
   ALL_CONFIG_FIELDS,
   CONFIG_SECTIONS,
   CONFIG_GROUPS,
   getGroupsForSection,
-  type ConfigFieldDefinition,
   type ConfigGroupDefinition,
-  type ConfigSectionId,
 } from '../types/configSchema';
-import type { ConfigScalarsResponse } from '../types/configManagement';
 
 const { Text } = Typography;
 
 export const ConfigPage: React.FC = () => {
   const t = useT();
-  const { message, modal } = AntdApp.useApp();
+  const { message } = AntdApp.useApp();
   const { theme } = useTheme();
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const editorRef = useRef<YamlSourceEditorRef | null>(null);
-
-  const [viewMode, setViewMode] = React.useState<'visual' | 'source'>('visual');
-  const [activeSection, setActiveSection] = React.useState<ConfigSectionId>('connectivity');
-  const [searchQuery, setSearchQuery] = React.useState<string>('');
-
-  const configQuery = useQuery<ConfigScalarsResponse>({
-    queryKey: ['management-config'],
-    queryFn: () => api.getConfigScalars(),
-    staleTime: 60000,
-  });
-
-  const [rawYaml, setRawYaml] = React.useState<string>('');
-  const [serverYaml, setServerYaml] = React.useState<string>('');
-  const [serverRevision, setServerRevision] = React.useState<string>('');
-  const [conflictState, setConflictState] = React.useState<{ currentRevision: string } | null>(null);
-  const [saveError, setSaveError] = React.useState<string | null>(null);
-
-  const docRef = React.useRef<Document | null>(null);
-  const serverDocRef = React.useRef<Document | null>(null);
-  const rawYamlRef = React.useRef('');
-  const serverYamlRef = React.useRef('');
-  /** Guards against a second save starting before isPending propagates. */
-  const saveInFlightRef = React.useRef(false);
-
-  React.useEffect(() => {
-    if (viewMode !== 'visual' || configQuery.data?.safe_yaml === undefined) return;
-    const safe = configQuery.data.safe_yaml;
-    const revision = configQuery.data.revision || '';
-    // A refetch or an invalidation must never overwrite a draft the operator is
-    // still writing. Saving snapshot A while they have already begun draft B has
-    // to advance the saved baseline to A and leave B alone, so the baseline is
-    // always adopted here and rawYaml is only replaced when there is no draft to
-    // lose. Applying the server copy unconditionally was the bug: the save's own
-    // invalidation would come back and silently discard the newer edits.
-    const hasLocalEdits = rawYamlRef.current !== serverYamlRef.current;
-    setServerYaml(safe);
-    setServerRevision(revision);
-    try {
-      serverDocRef.current = parseDocument(safe);
-    } catch {
-      // A malformed document is expected here: the previous baseline stays in place.
-    }
-    if (hasLocalEdits) return;
-    setRawYaml(safe);
-    try {
-      docRef.current = parseDocument(safe);
-    } catch {
-      // A malformed document is expected here: the previous baseline stays in place.
-    }
-  }, [configQuery.data?.safe_yaml, configQuery.data?.revision, viewMode]);
-
-  // Mirrored into refs so the hydration effect and saveConfig can read the current
-  // values without being re-created on every keystroke.
-  rawYamlRef.current = rawYaml;
-  serverYamlRef.current = serverYaml;
-
-  const isDirty = rawYaml !== serverYaml;
-
-  const updateFieldInDoc = React.useCallback(
-    (field: ConfigFieldDefinition, value: unknown) => {
-      let currentDoc = docRef.current;
-      if (!currentDoc) {
-        try {
-          currentDoc = parseDocument(rawYaml || '');
-          docRef.current = currentDoc;
-        } catch {
-          message.error(t('cfg.yaml_syntax_error'));
-          return;
-        }
-      }
-
-      updateFieldWithBaseline(currentDoc, serverDocRef.current, field, value);
-
-      // If after update, currentDoc is semantically identical to serverDoc across all fields and payload,
-      // revert rawYaml completely back to serverYaml so no formatting artifacts trigger dirty!
-      if (serverDocRef.current && isConfigSemanticallyEqual(currentDoc, serverDocRef.current, ALL_CONFIG_FIELDS)) {
-        setRawYaml(serverYaml);
-        docRef.current = parseDocument(serverYaml);
-      } else {
-        const nextYaml = currentDoc.toString();
-        setRawYaml(nextYaml);
-      }
-    },
-    [rawYaml, serverYaml, message, t],
-  );
-
-  const getFieldValue = React.useCallback(
-    (field: ConfigFieldDefinition): unknown => {
-      if (!docRef.current) {
-        try {
-          docRef.current = parseDocument(rawYaml || '');
-        } catch {
-          return field.defaultValue;
-        }
-      }
-      const val = docRef.current.getIn(field.yamlPath);
-      if (val === undefined || val === null) {
-        return field.defaultValue;
-      }
-      if (typeof val === 'object' && 'toJSON' in val && typeof (val as { toJSON: () => unknown }).toJSON === 'function') {
-        return (val as { toJSON: () => unknown }).toJSON();
-      }
-      return val;
-    },
-    [rawYaml],
-  );
-
-  const saveMutation = useMutation({
-    mutationFn: async ({ yamlToSave, revision }: { yamlToSave: string; revision: string }) => {
-      setSaveError(null);
-      setConflictState(null);
-      return api.updateConfigSource(yamlToSave, revision);
-    },
-    onSuccess: (data, variables) => {
-      message.success(t('cfg.source_save_success'));
-      setServerYaml(variables.yamlToSave);
-      setServerRevision(data.revision);
-      try {
-        serverDocRef.current = parseDocument(variables.yamlToSave);
-      } catch {
-        // A malformed document is expected here: the previous baseline stays in place.
-      }
-      setPayloadIssues([]);
-      setShowErrorFeedback(false);
-      setValidateTrigger(0);
-      void queryClient.invalidateQueries({ queryKey: ['management-config'] });
-    },
-    onError: (err: unknown) => {
-      if (err instanceof ApiError && (err.status === 409 || (err.data as Record<string, unknown>)?.code === 'config_conflict')) {
-        const currentRev = String((err.data as Record<string, unknown>)?.current_revision || '');
-        setConflictState({ currentRevision: currentRev });
-        return;
-      }
-      // A configuration save shares the provider write gate, so it can now be
-      // refused while a provider change is being written. The server's message for
-      // that is English prose; the banner comes from the dictionary instead, like
-      // every other user-visible string.
-      const msg = apiErrorCode(err) === 'write_busy'
-        ? t('cfg.save_busy')
-        : err instanceof ApiError
-          ? err.message
-          : String(err);
-      setSaveError(msg);
-      message.error(msg);
-    },
-  });
-
-  const [validateTrigger, setValidateTrigger] = React.useState(0);
-  const [showErrorFeedback, setShowErrorFeedback] = React.useState(false);
-
-  const handleDiscardChanges = React.useCallback(() => {
-    setRawYaml(serverYaml);
-    try {
-      docRef.current = parseDocument(serverYaml);
-      serverDocRef.current = parseDocument(serverYaml);
-    } catch {
-      // A malformed document is expected here: the previous baseline stays in place.
-    }
-    setSaveError(null);
-    setPayloadIssues([]);
-    setShowErrorFeedback(false);
-    setValidateTrigger(0);
-  }, [serverYaml]);
-
-  const [payloadIssues, setPayloadIssues] = React.useState<PayloadValidationIssue[]>([]);
-
-  const hasYamlErrors = React.useMemo(() => {
-    try {
-      const doc = parseDocument(rawYaml);
-      return Boolean(doc.errors && doc.errors.length > 0);
-    } catch {
-      return true;
-    }
-  }, [rawYaml]);
-
-  const hasConfigErrors = hasYamlErrors || payloadIssues.length > 0;
-
-  /**
-   * saveConfig is the single save path for the whole page.
-   *
-   * Every entry point - the toolbar button, the bottom dirty bar and the keyboard
-   * shortcut - ends here, so validation, the mutation, the conflict handling and
-   * the baseline reset exist once. It reports validation problems itself rather
-   * than returning silently, which is what lets a caller that owns its own
-   * confirmation (a Popconfirm on the button) skip the extra global modal: the
-   * operator already confirmed, so a second prompt would be asking the same
-   * question twice.
-   */
-  const saveConfig = React.useCallback(() => {
-    if (!isDirty || configQuery.isError) return Promise.resolve();
-    // isPending lags a render, so a second activation in the same tick (a double
-    // click, or Ctrl+S bubbling out of the editor) would start a second mutation
-    // against the same revision and race the first one to the conflict check.
-    if (saveInFlightRef.current || saveMutation.isPending) return Promise.resolve();
-    if (hasYamlErrors) {
-      setShowErrorFeedback(true);
-      message.error(t('cfg.dirty_bar_yaml_error'));
-      return Promise.resolve();
-    }
-    if (payloadIssues.length > 0) {
-      setValidateTrigger((v) => v + 1);
-      setShowErrorFeedback(true);
-      message.warning(t('cfg.dirty_bar_payload_issues', { n: payloadIssues.length }));
-      return Promise.resolve();
-    }
-    saveInFlightRef.current = true;
-    // The promise is returned so a Popconfirm can hold its own loading state, and
-    // it is settled here rather than left to the caller: a keyboard handler has
-    // nobody to catch a rejection, and the mutation's onError already reports it.
-    return saveMutation
-      .mutateAsync({ yamlToSave: rawYaml, revision: serverRevision })
-      .catch(() => undefined)
-      .finally(() => {
-        saveInFlightRef.current = false;
-      });
-  }, [
-    isDirty,
-    saveMutation,
-    hasYamlErrors,
-    payloadIssues.length,
-    configQuery.isError,
+  const draft = useConfigDraft();
+  const {
+    editorRef,
+    viewMode,
+    activeSection,
+    setActiveSection,
+    searchQuery,
+    setSearchQuery,
+    configQuery,
     rawYaml,
-    serverRevision,
-    message,
-    t,
-  ]);
+    setRawYaml,
+    conflictState,
+    setConflictState,
+    saveError,
+    setSaveError,
+    docRef,
+    isDirty,
+    getFieldValue,
+    saveMutation,
+    showErrorFeedback,
+    handleDiscardChanges,
+    payloadIssues,
+    hasYamlErrors,
+    hasConfigErrors,
+    saveConfig,
+    requestSaveConfirmation,
+    handleViewModeChange,
+  } = draft;
 
-  /**
-   * requestSaveConfirmation is for entry points that have no confirmation UI of
-   * their own - Ctrl+S and the editor's own save hook. It asks once and then
-   * calls the same saveConfig, so the keyboard cannot drift from the buttons.
-   */
-  const requestSaveConfirmation = React.useCallback(() => {
-    if (!isDirty || saveMutation.isPending) return;
-    if (hasYamlErrors || payloadIssues.length > 0 || configQuery.isError) {
-      saveConfig();
-      return;
-    }
-    modal.confirm({
-      title: t('cfg.source_save_confirm'),
-      content: t('cfg.source_save_confirm_desc'),
-      okText: t('common.confirm'),
-      cancelText: t('common.cancel'),
-      onOk: () => {
-        // Returning the promise keeps the confirm dialog open until the save
-        // settles, so a failure cannot look like it already succeeded.
-        return saveConfig();
-      },
-    });
-  }, [configQuery.isError, hasYamlErrors, isDirty, modal, payloadIssues.length, saveMutation.isPending, saveConfig, t]);
-
-  React.useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        requestSaveConfirmation();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [requestSaveConfirmation]);
-
-  /**
-   * confirmDiscardDraft asks before a mode switch throws away unsaved edits.
-   *
-   * It resolves to whether the switch may proceed, so the caller can also use it
-   * to decide when to *start* loading the other view: the source read must not
-   * begin before the operator has accepted that its result replaces their draft.
-   */
-  const confirmDiscardDraft = React.useCallback(
-    () =>
-      new Promise<boolean>((resolve) => {
-        if (!(rawYamlRef.current !== serverYamlRef.current)) {
-          resolve(true);
-          return;
-        }
-        modal.confirm({
-          title: t('cfg.source_switch_discard'),
-          okText: t('common.confirm'),
-          cancelText: t('common.cancel'),
-          onOk: () => resolve(true),
-          onCancel: () => resolve(false),
-        });
-      }),
-    [modal, t],
-  );
-
-  const handleViewModeChange = async (targetMode: 'visual' | 'source') => {
-    // Disposition comes first: loading the other view and only then asking would
-    // either discard silently or apply a stale response over a newer draft.
-    if (!(await confirmDiscardDraft())) return;
-    if (targetMode === 'source') {
-      // Reading the raw source no longer demands the management key again: this
-      // page is already behind the authenticated session, and the backend keeps
-      // the audit and no-store boundary. A failure here is a real read failure.
-      try {
-        const src = await api.getConfigSource();
-        setRawYaml(src.yaml);
-        setServerYaml(src.yaml);
-        setServerRevision(src.revision);
-        try {
-          docRef.current = parseDocument(src.yaml);
-          serverDocRef.current = parseDocument(src.yaml);
-        } catch {
-          // A malformed document is expected here: the previous baseline stays in place.
-        }
-        setSaveError(null);
-        setViewMode('source');
-      } catch (err) {
-        const msg = err instanceof ApiError ? err.message : String(err);
-        message.error(t('cfg.source_load_failed', { msg }));
-      }
-    } else {
-      setViewMode('visual');
-      queryClient.removeQueries({ queryKey: ['management-config-source'] });
-      void configQuery.refetch();
-    }
-  };
 
   // ── API Keys ────────────────────────────────────────────
   // The key list is edited on its own page (/api-keys), which is the only editor
@@ -411,25 +109,6 @@ export const ConfigPage: React.FC = () => {
     return typeof value === 'string' && value ? 1 : 0;
   }, [apiKeysField, rawYaml, getFieldValue]);
 
-  // Section icons helper
-  const sectionIcon = (id: ConfigSectionId) => {
-    switch (id) {
-      case 'connectivity':
-        return <KeyOutlined />;
-      case 'network':
-        return <GlobalOutlined />;
-      case 'logging':
-        return <ProfileOutlined />;
-      case 'quota':
-        return <FieldTimeOutlined />;
-      case 'streaming':
-        return <NodeIndexOutlined />;
-      case 'advanced':
-        return <ExperimentOutlined />;
-      case 'payload':
-        return <CodeOutlined />;
-    }
-  };
 
   const currentSectionDef = React.useMemo(() => {
     return CONFIG_SECTIONS.find((s) => s.id === activeSection) ?? CONFIG_SECTIONS[0];
@@ -462,350 +141,14 @@ export const ConfigPage: React.FC = () => {
   }, [searchMatchedGroups]);
 
   // Render individual input/select/switch control
-  const renderFieldControl = (field: ConfigFieldDefinition, disabled = false) => {
-    const val = getFieldValue(field);
-
-    if (field.type === 'switch') {
-      return (
-        <Switch
-          id={`cfg-${field.id}`}
-          aria-describedby={`desc-${field.id}`}
-          checked={Boolean(val)}
-          disabled={disabled}
-          onChange={(checked) => updateFieldInDoc(field, checked)}
-        />
-      );
-    }
-
-    if (field.type === 'string') {
-      return (
-        <Input
-          id={`cfg-${field.id}`}
-          aria-describedby={`desc-${field.id}`}
-          className="config-mono-input"
-          allowClear
-          disabled={disabled}
-          placeholder={field.placeholderKey ? (field.placeholderKey.startsWith('cfg.') ? t(field.placeholderKey) : field.placeholderKey) : ''}
-          value={String(val ?? '')}
-          onChange={(e) => updateFieldInDoc(field, e.target.value)}
-        />
-      );
-    }
-
-    if (field.type === 'number') {
-      return (
-        <div className="settings-number-control">
-          <InputNumber
-            id={`cfg-${field.id}`}
-            aria-describedby={`desc-${field.id}`}
-            className="config-mono-input"
-            min={field.min ?? 0}
-            max={field.max}
-            disabled={disabled}
-            value={typeof val === 'number' ? val : Number(val) || 0}
-            onChange={(num) => updateFieldInDoc(field, num ?? 0)}
-          />
-          {field.unitKey && (
-            <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-              {t(field.unitKey)}
-            </Text>
-          )}
-        </div>
-      );
-    }
-
-    if (field.type === 'select') {
-      return (
-        <Select
-          id={`cfg-${field.id}`}
-          aria-describedby={`desc-${field.id}`}
-          disabled={disabled}
-          value={String(val ?? field.defaultValue ?? '')}
-          options={(field.options ?? []).map((opt) => ({
-            value: opt.value,
-            label: t(opt.labelKey),
-          }))}
-          onChange={(selected) => updateFieldInDoc(field, selected)}
-        />
-      );
-    }
-
-    if (field.type === 'json_editor') {
-      return (
-        <Input.TextArea
-          id={`cfg-${field.id}`}
-          aria-describedby={`desc-${field.id}`}
-          rows={2}
-          className="config-mono-textarea"
-          placeholder="{}"
-          disabled={disabled}
-          value={typeof val === 'object' && val !== null ? JSON.stringify(val, null, 2) : String(val ?? '')}
-          onChange={(e) => {
-            const str = e.target.value;
-            try {
-              const parsed = JSON.parse(str);
-              updateFieldInDoc(field, parsed);
-            } catch {
-              updateFieldInDoc(field, str);
-            }
-          }}
-        />
-      );
-    }
-
-    if (field.type === 'textarea') {
-      return (
-        <Input.TextArea
-          id={`cfg-${field.id}`}
-          aria-describedby={`desc-${field.id}`}
-          rows={3}
-          className="config-mono-textarea"
-          disabled={disabled}
-          placeholder={field.placeholderKey ? (field.placeholderKey.startsWith('cfg.') ? t(field.placeholderKey) : field.placeholderKey) : ''}
-          value={String(val ?? '')}
-          onChange={(e) => updateFieldInDoc(field, e.target.value)}
-        />
-      );
-    }
-
-    return null;
-  };
-
-  // Variant 1: Grid Field (Label on top, input below)
-  const renderGridField = (field: ConfigFieldDefinition, disabled = false) => {
-    const isFull =
-      field.type === 'textarea' ||
-      field.type === 'json_editor' ||
-      field.id === 'proxyUrl' ||
-      field.id === 'authDir' ||
-      field.id === 'logDir' ||
-      field.id === 'rmSecretKey' ||
-      field.id === 'corsOrigins';
-
-    return (
-      <div key={field.id} className={`settings-field${isFull ? ' is-full' : ''}`}>
-        <label htmlFor={`cfg-${field.id}`} className="settings-field-label">
-          <span>{t(field.labelKey)}</span>
-        </label>
-        <div id={`desc-${field.id}`} className="settings-field-desc">
-          {t(field.descKey)}
-        </div>
-        <div className={`settings-field-control is-${field.type}`}>
-          {renderFieldControl(field, disabled)}
-        </div>
-      </div>
-    );
-  };
-
-  // Variant 2: Toggle Row (Title/desc on left, control on right)
-  const renderToggleRow = (field: ConfigFieldDefinition, disabled = false) => {
-    return (
-      <div key={field.id} className="settings-toggle-row">
-        <div className="settings-toggle-info">
-          <label htmlFor={`cfg-${field.id}`} className="settings-toggle-title">
-            {t(field.labelKey)}
-          </label>
-          <div id={`desc-${field.id}`} className="settings-toggle-desc">
-            {t(field.descKey)}
-          </div>
-        </div>
-        <div className={`settings-toggle-control is-${field.type}`}>
-          {renderFieldControl(field, disabled)}
-        </div>
-      </div>
-    );
-  };
-
-  // Render a cohesive Setting Group Panel
-  //
-  // `context` says which heading the caller is already showing above this group,
-  // because the Payload panel is the one variant whose group head restates its
-  // section header. Under the section header the group head is therefore dropped:
-  // the reader was shown the section's own title and description and then the
-  // same panel named a second time underneath it. Under search results the header
-  // names the search rather than the section, so the group head is the only
-  // heading the panel has and must stay.
-  const renderGroupPanel = (
-    grp: ConfigGroupDefinition,
-    visibleFieldIds?: string[],
-    context: 'section' | 'search' = 'section',
-  ) => {
-    const rawFields = grp.fieldIds
-      .map((fid) => ALL_CONFIG_FIELDS.find((f) => f.id === fid))
-      .filter((f): f is ConfigFieldDefinition => Boolean(f));
-
-    const groupFields = visibleFieldIds
-      ? rawFields.filter((f) => visibleFieldIds.includes(f.id))
-      : rawFields;
-
-    if (groupFields.length === 0) return null;
-
-    // Managed-elsewhere variant (the client API keys)
-    //
-    // This group points at the surface that owns the field rather than editing
-    // it: one editor per field, and the operator who looks here is told where
-    // that editor is. It renders in the search context too, so searching for the
-    // field finds the panel that names it instead of nothing at all.
-    if (grp.variant === 'managed-elsewhere') {
-      return (
-        <div key={grp.id} className="settings-group">
-          <div className="settings-group-head">
-            <div>
-              <h3 className="settings-group-title">{t(grp.labelKey)}</h3>
-              {grp.descKey && <p className="settings-group-desc">{t(grp.descKey)}</p>}
-            </div>
-          </div>
-          <div className="settings-group-body">
-            <div className="settings-managed-elsewhere">
-              <span className="settings-managed-count">
-                {t('cfg.api_keys_count', { n: configuredKeyCount })}
-              </span>
-              <Button size="small" type="primary" onClick={() => navigate('/api-keys')}>
-                {t('cfg.api_keys_manage')}
-              </Button>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // Payload Builder variant (structured JSON rules for models and parameters)
-    if (grp.variant === 'payload-builder') {
-      return (
-        <div key={grp.id} className="settings-group payload-builder-group">
-          {context === 'search' && (
-            <div className="settings-group-head">
-              <div>
-                <h3 className="settings-group-title">{t(grp.labelKey)}</h3>
-                {grp.descKey && <p className="settings-group-desc">{t(grp.descKey)}</p>}
-              </div>
-            </div>
-          )}
-          <div className="settings-group-body">
-            <PayloadRulesEditor
-              doc={docRef.current}
-              onDocChange={() => {
-                if (docRef.current) {
-                  // Check semantic equality with serverDocRef before setting rawYaml
-                  if (serverDocRef.current && isConfigSemanticallyEqual(docRef.current, serverDocRef.current, ALL_CONFIG_FIELDS)) {
-                    setRawYaml(serverYaml);
-                    docRef.current = parseDocument(serverYaml);
-                  } else {
-                    setRawYaml(docRef.current.toString());
-                  }
-                }
-              }}
-              onValidationChange={setPayloadIssues}
-              validateTrigger={validateTrigger}
-            />
-          </div>
-        </div>
-      );
-    }
-
-    // TLS Accordion variant
-    if (grp.variant === 'tls-accordion') {
-      const tlsEnableField = ALL_CONFIG_FIELDS.find((f) => f.id === 'tlsEnable');
-      const tlsCertField = ALL_CONFIG_FIELDS.find((f) => f.id === 'tlsCert');
-      const tlsKeyField = ALL_CONFIG_FIELDS.find((f) => f.id === 'tlsKey');
-      const tlsEnabled = tlsEnableField ? Boolean(getFieldValue(tlsEnableField)) : false;
-
-      // If user searched for cert or key directly, open the panel
-      const isSearchActive = Boolean(visibleFieldIds);
-      const isOpen = isSearchActive ? true : tlsEnabled;
-
-      return (
-        <div key={grp.id} className="settings-group">
-          <div className="settings-group-head">
-            <div>
-              <h3 className="settings-group-title">{t(grp.labelKey)}</h3>
-              {grp.descKey && (
-                <p id="desc-tlsEnable" className="settings-group-desc">
-                  {t(grp.descKey)}
-                </p>
-              )}
-            </div>
-            {tlsEnableField && (!visibleFieldIds || visibleFieldIds.includes('tlsEnable')) && (
-              <div className="settings-toggle-control is-switch">
-                {renderFieldControl(tlsEnableField)}
-              </div>
-            )}
-          </div>
-          <div className={`settings-tls-body${isOpen ? ' is-open' : ''}`} aria-hidden={!isOpen}>
-            <div className="settings-tls-inner">
-              <div className="settings-form-grid">
-                {tlsCertField && (!visibleFieldIds || visibleFieldIds.includes('tlsCert')) && renderGridField(tlsCertField, !isOpen)}
-                {tlsKeyField && (!visibleFieldIds || visibleFieldIds.includes('tlsKey')) && renderGridField(tlsKeyField, !isOpen)}
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // Settings List variant (toggle switches and flags)
-    if (grp.variant === 'settings-list') {
-      return (
-        <div key={grp.id} className="settings-group">
-          <div className="settings-group-head">
-            <div>
-              <h3 className="settings-group-title">{t(grp.labelKey)}</h3>
-              {grp.descKey && <p className="settings-group-desc">{t(grp.descKey)}</p>}
-            </div>
-          </div>
-          <div className="settings-list-rows">
-            {groupFields.map((f) => renderToggleRow(f))}
-          </div>
-        </div>
-      );
-    }
-
-    // Default: Form Grid variant
-    const hasHost = groupFields.some((f) => f.id === 'host');
-    const hasPort = groupFields.some((f) => f.id === 'port');
-    const hostField = ALL_CONFIG_FIELDS.find((f) => f.id === 'host');
-    const portField = ALL_CONFIG_FIELDS.find((f) => f.id === 'port');
-    const combineHostPort = hasHost && hasPort && !visibleFieldIds;
-
-    return (
-      <div key={grp.id} className="settings-group">
-        <div className="settings-group-head">
-          <div>
-            <h3 className="settings-group-title">{t(grp.labelKey)}</h3>
-            {grp.descKey && <p className="settings-group-desc">{t(grp.descKey)}</p>}
-          </div>
-        </div>
-        <div className="settings-group-body">
-          <div className="settings-form-grid">
-            {combineHostPort && hostField && portField && (
-              <div key="host-port-combo" className="settings-field-host-port">
-                <div className="settings-field">
-                  <label htmlFor="cfg-host" className="settings-field-label">
-                    <span>{t(hostField.labelKey)}</span>
-                  </label>
-                  <div id="desc-host" className="settings-field-desc">
-                    {t(hostField.descKey)}
-                  </div>
-                  <div className="settings-field-control">{renderFieldControl(hostField)}</div>
-                </div>
-                <div className="settings-field">
-                  <label htmlFor="cfg-port" className="settings-field-label">
-                    <span>{t(portField.labelKey)}</span>
-                  </label>
-                  <div id="desc-port" className="settings-field-desc">
-                    {t(portField.descKey)}
-                  </div>
-                  <div className="settings-field-control">{renderFieldControl(portField)}</div>
-                </div>
-              </div>
-            )}
-            {groupFields
-              .filter((f) => (combineHostPort ? f.id !== 'host' && f.id !== 'port' : true))
-              .map((f) => renderGridField(f))}
-          </div>
-        </div>
-      </div>
-    );
+  const sectionContext: ConfigSectionContext = {
+    ...draft,
+    doc: docRef.current,
+    configuredKeyCount,
+    navigate,
+    searchQuery,
+    searchMatchedGroups,
+    t,
   };
 
   return (
@@ -967,7 +310,7 @@ export const ConfigPage: React.FC = () => {
                   }}
                 >
                   <span className="config-nav-btn-left">
-                    {sectionIcon(sec.id)}
+                    {sectionIcon(sectionContext, sec.id)}
                     <span>{t(sec.labelKey)}</span>
                   </span>
                 </button>
@@ -991,12 +334,12 @@ export const ConfigPage: React.FC = () => {
             {searchQuery ? (
               /* Search Results: Grouped by semantic Setting Group Panels */
               <div className="settings-stack">
-                {searchMatchedGroups.map((sg) => renderGroupPanel(sg.group, sg.matchedFieldIds, 'search'))}
+                {searchMatchedGroups.map((sg) => renderGroupPanel(sectionContext, sg.group, sg.matchedFieldIds, 'search'))}
               </div>
             ) : (
               /* Standard Section Group Panels */
               <div className="settings-stack">
-                {getGroupsForSection(activeSection).map((grp) => renderGroupPanel(grp))}
+                {getGroupsForSection(activeSection).map((grp) => renderGroupPanel(sectionContext, grp))}
               </div>
             )}
           </main>

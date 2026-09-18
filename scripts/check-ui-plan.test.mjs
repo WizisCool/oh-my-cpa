@@ -97,6 +97,17 @@ test('the shared token layer selects every surface that renders it', () => {
 test('a provider-console change selects only the provider-console scenarios', () => {
   assert.deepEqual(planFor('web/src/pages/ProvidersPage.tsx'), ['icon-picker-stacking', 'provider-icon-pick']);
   assert.deepEqual(planFor('web/src/components/IconPickerModal.tsx'), ['icon-picker-stacking', 'provider-icon-pick']);
+  // The page renders the console's own modules rather than carrying them, so a
+  // change to one of those has to select the same scenarios the page does - the
+  // drawer is one of the two overlays the stacking claim is about, and an
+  // unplaced path here would widen instead of narrowing.
+  for (const file of [
+    'web/src/components/providers/ProviderEditorDrawer.tsx',
+    'web/src/components/providers/ProviderTable.tsx',
+    'web/src/components/providers/useProviderManagement.ts',
+  ]) {
+    assert.deepEqual(planFor(file), ['icon-picker-stacking', 'provider-icon-pick'], file);
+  }
 });
 
 test('the shared layer widens the plan to every scenario', () => {
@@ -130,6 +141,8 @@ test('a change to the probe framework itself widens the plan', () => {
   for (const file of [
     'scripts/acceptance/probe.mjs',
     'scripts/acceptance/scenarios.mjs',
+    'scripts/acceptance/probes/dashboardCharts.mjs',
+    'scripts/acceptance/probes/usageRecords.mjs',
     'scripts/acceptance/check-ui-plan.mjs',
     'scripts/browser-probes.mjs',
     'scripts/check-ui.mjs',

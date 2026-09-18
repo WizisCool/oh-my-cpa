@@ -21,7 +21,7 @@ import {
   resolveTokenRateFlowReadout,
 } from '../types/tokenDisplay';
 import type { RollingReadout } from '../types/rollingNumber';
-import { successRateVerdict } from '../types/usageEventView';
+import { successRateVerdict } from '../types/usageEventMetrics';
 import { TimeRangeControl } from '../components/dashboard/TimeRangeControl';
 import { RollingNumber } from '../components/dashboard/RollingNumber';
 import { TokenHeatmap, TOKEN_HEATMAP_QUERY_KEY } from '../components/dashboard/TokenHeatmap';

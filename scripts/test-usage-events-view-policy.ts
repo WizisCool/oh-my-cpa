@@ -46,7 +46,7 @@ import {
   syncShortfallReason,
 } from '../web/src/components/usage/syncPresentation.ts';
 import { chipDisplayValue } from '../web/src/components/usage/chipDisplay.ts';
-import { EVENT_PRESETS } from '../web/src/types/usageEventView.ts';
+import { EVENT_PRESETS } from '../web/src/types/usageEventQuery.ts';
 
 let checks = 0;
 function test(name: string, run: () => void) {

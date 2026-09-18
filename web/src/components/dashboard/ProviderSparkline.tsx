@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ManagementOverviewBucket } from '../../types/management';
-import { successRateVerdict } from '../../types/usageEventView';
+import { successRateVerdict } from '../../types/usageEventMetrics';
 
 export interface ProviderSparklineProps {
   buckets?: ManagementOverviewBucket[];

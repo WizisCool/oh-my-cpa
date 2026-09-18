@@ -5,7 +5,7 @@ import { LOBE_ICON_CATALOG } from './lobeIconCatalog';
  *
  * It lives in its own leaf module because two unrelated consumers need the same
  * entries: `components/LobeIcon.tsx` resolves a provider to a brand mark, and
- * `types/usageEventView.ts` resolves one for a request row. Keeping two copies
+ * `types/usageEventIdentity.ts` resolves one for a request row. Keeping two copies
  * meant a new provider added to one silently disagreed with the other, and
  * pointing the request-list module at `LobeIcon.tsx` would have dragged the
  * whole icon renderer into a module the logic test harness loads.

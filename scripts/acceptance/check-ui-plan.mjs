@@ -99,6 +99,14 @@ const SCENARIO_PATHS = [
     prefix: 'web/src/pages/ProvidersPage',
     scenarios: ['icon-picker-stacking', 'provider-icon-pick'],
   },
+  // The provider console's own modules: the list table, the editor drawer, the
+  // writes and the icon overlay. The page renders nothing but these, so a change
+  // to any of them reaches exactly what a change to the page reaches - and the
+  // drawer is one of the two overlays the stacking assertion is about.
+  {
+    prefix: 'web/src/components/providers/',
+    scenarios: ['icon-picker-stacking', 'provider-icon-pick'],
+  },
   // The dashboard: the sparkline marks its tiles draw and the daily-token calendar
   // beneath them. Both live on this page, and the page is what the scenarios load,
   // so a page change can move either one.
@@ -190,13 +198,23 @@ const FRONTEND_SOURCE = 'web/src/';
 const PROBE_FRAMEWORK = [
   'scripts/acceptance/probe.mjs',
   'scripts/acceptance/scenarios.mjs',
+  // The scenario implementations. They are the claims themselves rather than the
+  // runner, but a change to one of them is exactly as unplaceable as a change to
+  // the registry that orders them: the planner cannot tell from a filename which
+  // scenario a helper two files away is shared with. Enumerating the modules would
+  // also mean a new module silently selecting nothing until someone remembered to
+  // list it, which is the failure this whole function exists to prevent.
+  'scripts/acceptance/probes/',
   'scripts/acceptance/check-ui-plan.mjs',
   'scripts/browser-probes.mjs',
   'scripts/check-ui.mjs',
 ];
 
 export function isProbeFramework(file) {
-  return PROBE_FRAMEWORK.includes(file);
+  // Prefixes rather than exact paths, so a directory can be named once and a module
+  // added to it stays covered. A file the list names exactly is matched by the same
+  // rule.
+  return PROBE_FRAMEWORK.some((prefix) => file.startsWith(prefix));
 }
 
 export function isFrontendSource(file) {
