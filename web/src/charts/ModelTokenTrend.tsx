@@ -1,7 +1,7 @@
 import React from 'react';
 import { Line } from '@ant-design/charts';
 import dayjs from 'dayjs';
-import { useThemeMode } from '../theme/ThemeContext';
+import { useTheme } from '../theme/ThemeContext';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import { resolveChartAnimation } from './chartMotion';
 import { seriesColorRange, seriesDomainKey } from './chartTheme';
@@ -42,7 +42,7 @@ export interface ModelTokenTrendProps {
  * mark is painted on a canvas that CSS cannot reach. See `chartMotion.ts`.
  */
 export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, foldedLabel, tokenUnitLabel = '', height = 260 }) => {
-  const { theme, themeMode } = useThemeMode();
+  const { theme, themeMode } = useTheme();
   const isReducedMotion = usePrefersReducedMotion();
   const animate = resolveChartAnimation(isReducedMotion);
   const { style: tokenStyle } = useTokenDisplayStyle();

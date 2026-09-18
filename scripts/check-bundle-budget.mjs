@@ -2,6 +2,29 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+/**
+ * The bundle budgets, re-baselined for the theme modes and the palette editor (2026-09-18).
+ *
+ * Measured against the previous commit and this one, in kB:
+ *
+ * | Budget | before | after |
+ * | --- | --- | --- |
+ * | main entry | 174.32 | 179.94 |
+ * | vendor antd | 1097.99 | 1159.17 |
+ * | total JavaScript | 7777.71 | 7852.86 |
+ * | total web/dist | 9255.46 | 9332.11 |
+ *
+ * The cost is two deliberate additions: Ant Design's colour picker, which the palette editor needs and
+ * which lands in the `vendor-antd` chunk (+61 kB), and the palette derivation itself, which runs at
+ * startup to paint the resolved palette and so sits in the entry (+5.6 kB). The entry's first version of
+ * this change had the settings page imported eagerly, which put the colour picker in the first paint at
+ * 185.55 kB; the page is lazy now, like every other route.
+ *
+ * The limits below are the measured values plus the margin each budget carried before, so the headroom a
+ * future change gets is the same as it was rather than the near-zero the feature left behind. A budget
+ * raised to whatever the last change happened to produce is not a budget.
+ */
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const distDir = path.join(root, 'web', 'dist');
 const assetsDir = path.join(distDir, 'assets');
@@ -36,7 +59,7 @@ const iconBytes = totalDirectorySize(iconDir);
 const totalDistBytes = totalDirectorySize(distDir);
 
 const budgets = [
-  { label: 'main entry', pattern: /^index-.*\.js$/, maxKB: 180, required: true },
+  { label: 'main entry', pattern: /^index-.*\.js$/, maxKB: 186, required: true },
   { label: 'Lobe icon JS', pattern: /^LobeIcon-.*\.js$/, maxKB: 96, required: true },
   { label: 'vendor antd', pattern: /^vendor-antd-.*\.js$/, maxKB: 1250, required: true },
   { label: 'vendor charts', pattern: /^vendor-charts-.*\.js$/, maxKB: 1600, required: true },
@@ -59,9 +82,9 @@ for (const budget of budgets) {
 }
 
 const aggregateBudgets = [
-  { label: 'total JavaScript', bytes: totalJSBytes, maxKB: 7800 },
+  { label: 'total JavaScript', bytes: totalJSBytes, maxKB: 7875 },
   { label: 'generated Lobe SVG assets', bytes: iconBytes, maxKB: 1200 },
-  { label: 'total web/dist', bytes: totalDistBytes, maxKB: 9300 },
+  { label: 'total web/dist', bytes: totalDistBytes, maxKB: 9375 },
 ];
 for (const budget of aggregateBudgets) {
   const sizeKB = budget.bytes / 1024;

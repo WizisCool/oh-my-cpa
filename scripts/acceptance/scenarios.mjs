@@ -3705,9 +3705,19 @@ export async function omcSettings({ base, page, check, context }) {
   // length changes with the language. That makes its tooltip the control's name rather than
   // decoration, and hovering the two menu triggers proves they did not lose the hover to the
   // dropdown wrapped inside them.
+  //
+  // The mode control's name is matched as "Theme: <mode>" rather than as the bare word: it cycles three
+  // states whose only other signal is an icon, and a screen reader cannot see an icon - so the name states
+  // the mode, and this pins that it does.
+  const headerActions = [
+    { name: 'Refresh all', matcher: /^Refresh all$/ },
+    { name: 'Theme', matcher: /^Theme: (Light|Dark|Follow system)$/ },
+    { name: 'Language', matcher: /^Language$/ },
+    { name: 'Sign out', matcher: /^Sign out$/ },
+  ];
   const unnamedActions = [];
-  for (const name of ['Refresh all', 'Theme', 'Language', 'Sign out']) {
-    const action = page.locator('.app-header-actions').getByRole('button', { name, exact: true });
+  for (const { name, matcher } of headerActions) {
+    const action = page.locator('.app-header-actions').getByRole('button', { name: matcher });
     if ((await action.count()) !== 1) {
       unnamedActions.push(`${name} (${await action.count()} matches)`);
       continue;
@@ -3739,13 +3749,19 @@ export async function omcSettings({ base, page, check, context }) {
 
   // Every console setting this page owns, once. A duplicated row would be two controls for one
   // setting - the operator changes one and the other silently disagrees.
+  //
+  // Five rows, because the theme is now a mode and the palette each of the two modes uses: the mode
+  // is the setting an operator changes often, and the two palettes are the considered choices behind
+  // it. A single "theme" row could only be one of those.
   const labels = await page.locator('.omc-settings-page .settings-toggle-title').allInnerTexts();
   check(
     'the settings page lists each console setting once',
-    labels.length === 3
+    labels.length === 5
       && new Set(labels).size === labels.length
       && labels.some((label) => /Token unit style|Token 计量单位/.test(label))
-      && labels.some((label) => /Theme|界面主题/.test(label))
+      && labels.some((label) => /Theme mode|主题模式/.test(label))
+      && labels.some((label) => /Light-mode palette|浅色模式配色/.test(label))
+      && labels.some((label) => /Dark-mode palette|暗色模式配色/.test(label))
       && labels.some((label) => /Language|界面语言/.test(label)),
     `labels=${labels.join(' | ')}`,
   );
@@ -4024,68 +4040,243 @@ export async function omcSettings({ base, page, check, context }) {
     `tile=${JSON.stringify(storedChineseText)}`,
   );
 
-  // ── the preset registry drives palette, persistence and the header switch ──
-  // Every preset publishes both a palette and a mode, survives a reload, and stays the same source
-  // the header's menu writes.
+  // ── the appearance section is one mode and two palettes ───────────────────
+  //
+  // The registry no longer decides what is on screen; it offers choices *within* a mode. So this
+  // section is driven from a written preference rather than from whatever the previous check left
+  // behind: the mode and both palette selections go in as one document, which is the shape the
+  // console itself writes.
+  const themeDocument = { mode: 'light', palettes: { dark: 'omc-dark', light: 'omc-light' }, custom: {} };
   await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
   await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
-  const themeCards = page.locator('.theme-preset-card');
-  check(
-    'the settings page exposes the full theme preset registry',
-    (await themeCards.count()) === 6,
-    `cards=${await themeCards.count()}`,
-  );
-  await page.locator('.theme-preset-card').filter({ hasText: /Midnight/ }).click();
-  await until(async () => (await page.locator('html').getAttribute('data-theme')) === 'midnight', {
-    label: 'the midnight preset to become active',
-  });
-  check(
-    'a dark preset persists its id and mode',
-    (await page.evaluate(() => ({ stored: localStorage.getItem('omc-theme'), mode: document.documentElement.dataset.themeMode }))).stored === 'midnight'
-      && (await page.locator('html').getAttribute('data-theme-mode')) === 'dark',
-  );
-  const midnightBg = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim());
-  check('a preset applies its palette through CSS variables', midnightBg === '#0d1117', `--bg=${midnightBg}`);
+  await page.evaluate((document) => localStorage.setItem('omc-theme', JSON.stringify(document)), themeDocument);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
+
+  const paletteGroups = page.locator('.omc-settings-page .theme-preset-grid');
+  check('every mode is offered its own palette group', (await paletteGroups.count()) === 2, `groups=${await paletteGroups.count()}`);
+  const lightGroup = paletteGroups.nth(0);
+  const darkGroup = paletteGroups.nth(1);
   check(
-    'the selected preset survives a reload',
-    (await page.locator('html').getAttribute('data-theme')) === 'midnight',
+    "each mode offers three registered palettes plus the operator's own",
+    (await lightGroup.locator('.theme-preset-card').count()) === 4 && (await darkGroup.locator('.theme-preset-card').count()) === 4,
+    `light=${await lightGroup.locator('.theme-preset-card').count()} dark=${await darkGroup.locator('.theme-preset-card').count()}`,
+  );
+  // A palette belongs to a mode - its text ladder points one way - so a group holding another mode's
+  // palette would offer a dark palette to a light console.
+  check(
+    'a mode groups only its own palettes',
+    (await lightGroup.getByText(/Porcelain|Sandstone/).count()) === 2
+      && (await lightGroup.getByText(/Midnight|Forest/).count()) === 0
+      && (await darkGroup.getByText(/Midnight|Forest/).count()) === 2
+      && (await darkGroup.getByText(/Porcelain|Sandstone/).count()) === 0,
+    `light-only=${await lightGroup.getByText(/Midnight|Forest/).count()} dark-only=${await darkGroup.getByText(/Porcelain|Sandstone/).count()}`,
+  );
+  check(
+    'every palette group marks exactly one active choice',
+    (await lightGroup.locator('.theme-preset-card.is-active').count()) === 1
+      && (await darkGroup.locator('.theme-preset-card.is-active').count()) === 1,
   );
 
-  // ── the header's preference menus drive the registry the page reads ───────
-  // The header's theme menu lists every registered preset, marks the stored one, and writes the
-  // same key the settings page reads. Midnight is stored at this point, which is what makes the
-  // marking claim testable - a menu that only highlighted the current mode would pass on either of
-  // the two presets it happened to hold.
-  await page.locator('.app-header').getByRole('button', { name: /Theme|界面主题/ }).click();
-  const themeMenuItems = page.locator('.ant-dropdown:visible .theme-menu-item');
-  await themeMenuItems.first().waitFor({ timeout: 10_000 });
-  check(
-    'the header theme menu lists every registered preset',
-    (await themeMenuItems.count()) === 6,
-    `items=${await themeMenuItems.count()}`,
+  // ── choosing a palette for the mode that is not in force ─────────────────
+  // A click says "dark mode uses Midnight", not "show me Midnight". The mode control is the row
+  // above; a click that changed both would be a click whose second effect was not asked for.
+  await darkGroup.locator('.theme-preset-card').filter({ hasText: /Midnight/ }).click();
+  await until(
+    async () => JSON.parse(await page.evaluate(() => localStorage.getItem('omc-theme'))).palettes.dark === 'midnight',
+    { label: 'the dark mode to record Midnight' },
   );
-  const selectedThemeItem = page.locator('.ant-dropdown:visible .ant-dropdown-menu-item-selected');
   check(
-    'the header theme menu marks the stored preset, not merely the current mode',
-    /Midnight/.test(await selectedThemeItem.innerText()),
-    `selected=${JSON.stringify(await selectedThemeItem.innerText().catch(() => ''))}`,
-  );
-  await themeMenuItems.filter({ hasText: /OMC Light/ }).click();
-  await until(async () => (await page.locator('html').getAttribute('data-theme')) === 'omc-light', {
-    label: 'the header menu to select OMC Light',
-  });
-  check(
-    'the header menu writes the same theme state the settings registry reads',
+    'choosing a palette for the other mode does not move the console',
     (await page.locator('html').getAttribute('data-theme-mode')) === 'light'
-      && (await page.evaluate(() => localStorage.getItem('omc-theme'))) === 'omc-light',
+      && (await page.locator('html').getAttribute('data-theme')) === 'omc-light',
+    `mode=${await page.locator('html').getAttribute('data-theme-mode')} theme=${await page.locator('html').getAttribute('data-theme')}`,
   );
+
+  const modeRow = page.locator('.omc-settings-page .settings-toggle-row').filter({ hasText: /Theme mode|主题模式/ });
+  await modeRow.locator('.ant-segmented-item').filter({ hasText: /Dark|暗色/ }).click();
+  await until(async () => (await page.locator('html').getAttribute('data-theme')) === 'midnight', {
+    label: 'the recorded dark palette to apply when dark mode arrives',
+  });
+  const midnightBg = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim());
+  check('the recorded palette paints the console when its mode arrives', midnightBg === '#0d1117', `--bg=${midnightBg}`);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
   check(
-    'the settings page reflects the header menu selection',
-    (await page.locator('.theme-preset-card.is-active').filter({ hasText: /OMC Light/ }).count()) === 1,
+    'both the mode and the palette it recorded survive a reload',
+    (await page.locator('html').getAttribute('data-theme')) === 'midnight'
+      && (await page.locator('html').getAttribute('data-theme-mode')) === 'dark',
+  );
+
+  // ── the header's single control cycles three modes ──────────────────────
+  // It used to be a menu over six registered palettes. Now the palettes belong to the modes and are
+  // chosen where they can be previewed, so the header answers the one question asked repeatedly. What
+  // says which of the three states is in force is the icon - and the cluster-wide "every header action
+  // names itself on hover" check above still holds, because the control's tooltip is its own name.
+  const themeButton = page.locator('.app-header').getByRole('button', { name: /Theme|界面主题/ });
+  const themePreference = () => page.locator('html').getAttribute('data-theme-preference');
+  check('the header control reports the stored preference, not the resolved mode', (await themePreference()) === 'dark');
+  await themeButton.click();
+  await until(async () => (await themePreference()) === 'system', { label: 'the header control to reach follow-the-system' });
+  await themeButton.click();
+  await until(async () => (await themePreference()) === 'light', { label: 'the cycle to close back onto light' });
+
+  // ── following the system repaints when the system does ──────────────────
+  await themeButton.click(); // light → dark
+  await until(async () => (await themePreference()) === 'dark', { label: 'the cycle to reach dark' });
+  await themeButton.click(); // dark → system
+  await until(async () => (await themePreference()) === 'system', { label: 'the cycle to reach follow-the-system' });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await until(async () => (await page.locator('html').getAttribute('data-theme-mode')) === 'light', {
+    label: 'the console to follow the system into light',
+  });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await until(async () => (await page.locator('html').getAttribute('data-theme-mode')) === 'dark', {
+    label: 'the console to follow the system back into dark',
+  });
+  check(
+    'following the system follows it in both directions',
+    (await page.locator('html').getAttribute('data-theme-preference')) === 'system',
+  );
+  await page.emulateMedia({ colorScheme: null });
+
+  // ── the custom palette editor ───────────────────────────────────────────
+  await modeRow.locator('.ant-segmented-item').filter({ hasText: /Dark|暗色/ }).click();
+  await until(async () => (await page.locator('html').getAttribute('data-theme-mode')) === 'dark', {
+    label: 'dark mode to be in force before the editor is opened',
+  });
+  await lightGroup.locator('.theme-preset-card.is-custom').click();
+  await page.locator('.palette-editor').waitFor({ timeout: 10_000 });
+  // Editing the mode the console is not in previews that mode, and says so: nine swatches judged
+  // against the wrong page would be judged against nothing.
+  check(
+    'editing the other mode previews it and announces the preview',
+    (await page.locator('html').getAttribute('data-theme-preview')) === 'light'
+      && (await page.locator('html').getAttribute('data-theme-mode')) === 'light'
+      && (await page.locator('.palette-preview-note').count()) === 1,
+    `preview=${await page.locator('html').getAttribute('data-theme-preview')} note=${await page.locator('.palette-preview-note').count()}`,
+  );
+  check('the editor exposes the nine authored tokens', (await page.locator('.palette-token-row').count()) === 9, `rows=${await page.locator('.palette-token-row').count()}`);
+  check(
+    'every token row reports what the colour measures against the page',
+    (await page.locator('.palette-token-row .palette-token-ratio').allInnerTexts()).every((text) => /[✓⚠·]\s[\d.]+:1/.test(text)),
+    JSON.stringify(await page.locator('.palette-token-row .palette-token-ratio').allInnerTexts()),
+  );
+  check(
+    'a seeded custom palette starts from the palette it was opened on',
+    (await page.locator('.palette-token-row').first().innerText()).includes('#ffffff'),
+    JSON.stringify(await page.locator('.palette-token-row').first().innerText()),
+  );
+
+  // The custom palette has no name of its own: it is labelled by the dictionary, so its card reads in
+  // whichever language the console is set to, exactly like the palette names beside it. A name the
+  // operator typed would be the one label in the console that could not be translated.
+  const customCard = lightGroup.locator('.theme-preset-card.is-custom');
+  check(
+    "the custom palette's label follows the reading language",
+    (await customCard.innerText()).includes('Custom'),
+    JSON.stringify(await customCard.innerText()),
+  );
+  // Located by every translation of its label: the row's own copy changes when the language does, so a
+  // locator filtered by the current language stops matching the moment the switch lands.
+  const appearanceLanguageRow = page
+    .locator('.omc-settings-page .settings-toggle-row')
+    .filter({ hasText: /Language|界面语言|介面語言|Bahasa/ });
+  await appearanceLanguageRow.locator('.ant-segmented-item').filter({ hasText: /繁體中文/ }).click();
+  await until(async () => (await customCard.innerText()).includes('自訂'), {
+    label: 'the custom label to follow the reading language',
+  });
+  check(
+    'the custom label is translated rather than hardcoded',
+    !(await customCard.innerText()).includes('Custom'),
+    JSON.stringify(await customCard.innerText()),
+  );
+  await appearanceLanguageRow.locator('.ant-segmented-item').filter({ hasText: /English/ }).click();
+  await until(async () => (await customCard.innerText()).includes('Custom'), {
+    label: 'the language to return to English',
+  });
+
+  // ── the editing model: live repaint, one request per completed change ────
+  //
+  // The console repaints as the edit proceeds and only a *completed* change is persisted, so an
+  // operator can experiment without a half-chosen palette reaching the deployment.
+  //
+  // The gesture driven here is the editor's own "start from" control, which writes the same draft and
+  // commits through the same path a colour drag does. The colour panel's own handler is deliberately
+  // not driven: it tracks a captured pointer, and synthesised input cannot follow a pointer capture, so
+  // a scripted drag on it reports nothing rather than reporting a defect. What that leaves unasserted is
+  // Ant Design's drag plumbing; the console's editing model is what these checks cover.
+  const accentRow = page.locator('.palette-token-row').filter({ hasText: /Accent|强调色/ });
+  check(
+    'the accent token reports its own contrast against the page',
+    /[✓⚠]\s[\d.]+:1/.test(await accentRow.locator('.palette-token-ratio').innerText()),
+    `ratio=${await accentRow.locator('.palette-token-ratio').innerText()}`,
+  );
+  // Every token is judged against the floor its own role carries, so a correct palette never shows a
+  // marker it did not earn: the nine rows of a freshly seeded palette are the six built-ins' own.
+  const ratios = await page.locator('.palette-token-row .palette-token-ratio').allInnerTexts();
+  check(
+    'no token of a freshly seeded palette is flagged',
+    ratios.every((text) => text.startsWith('✓') || text.startsWith('·')),
+    JSON.stringify(ratios),
+  );
+
+  const baseSelect = page.locator('.palette-editor .ant-select').first();
+  await baseSelect.click();
+  const baseOptions = await page.locator('.ant-select-dropdown:visible .ant-select-item-option').allInnerTexts();
+  check(
+    'the editor starts a palette from this mode\'s own palettes',
+    baseOptions.length === 3 && !baseOptions.some((label) => /Midnight|Forest|OMC Dark/.test(label)),
+    JSON.stringify(baseOptions),
+  );
+  await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: /Sandstone/ }).first().click();
+  let repainted = '';
+  await until(async () => {
+    repainted = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim());
+    return repainted.toLowerCase() === '#0f766e';
+  }, { label: 'the edit to repaint the console' }).catch(() => undefined);
+  check(
+    'an edit repaints the whole console rather than only the editor',
+    repainted.toLowerCase() === '#0f766e',
+    `--accent=${repainted}`,
+  );
+  check(
+    'a completed change is what reaches the deployment',
+    writes.some((write) => {
+      if (write.key !== 'omc_theme') return false;
+      return JSON.parse(write.body)?.custom?.light?.core?.accent?.toLowerCase() === '#0f766e';
+    }),
+    `writes=${JSON.stringify(writes.filter((write) => write.key === 'omc_theme').slice(-1))}`,
+  );
+
+  await page.locator('.palette-editor').getByRole('button', { name: /Done|完成/ }).click();
+  await until(async () => (await page.locator('.palette-editor').count()) === 0, { label: 'the editor to close' });
+  check(
+    'closing the editor returns the console to the mode in force',
+    (await page.locator('html').getAttribute('data-theme-mode')) === 'dark'
+      && (await page.locator('html').getAttribute('data-theme-preview')) === null,
+    `mode=${await page.locator('html').getAttribute('data-theme-mode')} preview=${await page.locator('html').getAttribute('data-theme-preview')}`,
+  );
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
+  const lightGroupAfterReload = page.locator('.omc-settings-page .theme-preset-grid').nth(0);
+  check(
+    'the authored palette is stored under its own mode and survives a reload',
+    (await lightGroupAfterReload.locator('.theme-preset-card.is-active').getAttribute('class') ?? '').includes('is-custom')
+      && (await lightGroupAfterReload.locator('.theme-preset-card.is-active').innerText()).includes('Custom'),
+    `active=${await lightGroupAfterReload.locator('.theme-preset-card.is-active').innerText().catch(() => '')}`,
+  );
+  // The deployment holds the same document, not just this browser: the preference endpoint is what
+  // makes a palette follow the operator to another machine.
+  check(
+    'the theme reaches the deployment as one document',
+    writes.some((write) => {
+      if (write.key !== 'omc_theme') return false;
+      const document = JSON.parse(write.body);
+      return document.mode === 'dark' && document.palettes?.light === 'custom' && document.custom?.light?.base === 'sandstone';
+    }),
+    `writes=${JSON.stringify(writes.filter((write) => write.key === 'omc_theme').slice(-1))}`,
   );
 
   // ── the appearance settings drive the live console ────────────────────────

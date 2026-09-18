@@ -155,11 +155,23 @@ matters, and the rest are deliberately shown as payload.
 ## Visual system
 
 `docs/design.md` is the single source of truth for brand color, typography,
-spacing, and the antd token mapping. `web/src/theme/themeConfig.ts` mirrors its
-palette in code and registers every selectable preset (`omc-dark`, `omc-light`,
-`midnight`, `porcelain`, `forest`, `sandstone`). Each preset supplies the same
-theme source to Ant Design, CSS variables, charts, the heatmap and the brand
-artwork; never hardcode colors in components.
+spacing, and the antd token mapping. `web/src/theme/palette.ts` is the single
+source of truth for the palettes: a **palette** is nine **authored tokens**
+(`bg`, `surface`, `elevated`, `fg`, `fg2`, `muted`, `meta`, `border`, `accent`)
+and seventeen **derived tokens** computed from them, so the six **registered
+palettes** and an operator's own are the same kind of object. `themeConfig.ts`
+projects a resolved palette onto Ant Design and onto the stylesheet's custom
+properties; every other surface - charts, the heatmap, the Monaco editor, the
+brand artwork - reads that same resolved palette. Never hardcode colors in
+components.
+
+The console has two **theme modes**, light and dark, plus **follow the system**.
+Each mode holds one **palette** of its own, so choosing a palette for the mode
+that is not in force records it without moving the console. A **custom palette**
+is a palette the operator authored; it is labelled 自定义/自訂/Custom/Tersuai
+rather than named, and it carries the registered palette it started from, which
+is what its reset returns to. See ADR 0011 for the derivation, its constants,
+and the places it deliberately differs from the hand-tuned values it replaced.
 
 ## Time windows
 

@@ -5,7 +5,22 @@ import { fileURLToPath } from 'node:url';
 import { CHART_ROLL, resolveChartAnimation } from '../web/src/charts/chartMotion.ts';
 import { sparkColor, seriesColor, seriesDomainKey, seriesColorRange, SERIES_SLOTS } from '../web/src/charts/chartTheme.ts';
 import { formatModelShare, formatModelTokens } from '../web/src/types/dashboardModels.ts';
-import { MOTION_ROLL, palette, THEME_PRESETS, themePaletteCssVariables } from '../web/src/theme/themeConfig.ts';
+import { BUILT_IN_PALETTES, resolvedBuiltInPalette } from '../web/src/theme/palette.ts';
+import { MOTION_ROLL, themePaletteCssVariables } from '../web/src/theme/themeConfig.ts';
+
+/**
+ * The palettes the console ships, resolved, plus the two the stylesheet's fallback mirrors.
+ *
+ * The chart runtime reads a *resolved* palette - the same object Ant Design and the stylesheet are
+ * given - so this suite resolves the registry rather than reaching for a hand-written table. What it
+ * is pinning is unchanged: a tone and a series slot must come from the palette in force, in both
+ * modes, and the tail of this file still checks the stylesheet against the same values.
+ */
+const RESOLVED_PALETTES = BUILT_IN_PALETTES.map((definition) => resolvedBuiltInPalette(definition.id));
+const palette = {
+  dark: resolvedBuiltInPalette('omc-dark').palette,
+  light: resolvedBuiltInPalette('omc-light').palette,
+};
 
 /**
  * The dashboard mark is drawn by AntV, so there is no app-owned geometry left to
@@ -16,7 +31,7 @@ import { MOTION_ROLL, palette, THEME_PRESETS, themePaletteCssVariables } from '.
 const TONES = ['accent', 'success', 'warn', 'danger', 'neutral'] as const;
 
 for (const tone of TONES) {
-  for (const preset of THEME_PRESETS) {
+  for (const preset of RESOLVED_PALETTES) {
     const value = sparkColor(preset.palette, tone);
     assert.match(value, /^#[0-9a-f]{6}$|^rgba?\(/, `${tone}/${preset.id} resolves to a colour token`);
   }
@@ -87,7 +102,7 @@ function labDistance(a: string, b: string): number {
   return Math.hypot(left[0] - right[0], left[1] - right[1], left[2] - right[2]);
 }
 
-for (const preset of THEME_PRESETS) {
+for (const preset of RESOLVED_PALETTES) {
   assert.equal(
     preset.palette.series.length,
     SERIES_SLOTS,
@@ -123,7 +138,8 @@ for (const preset of THEME_PRESETS) {
 
 // ── CSS and TypeScript token synchronization ──────────────────────────────
 //
-// The palette is defined in `web/src/theme/themeConfig.ts` for Ant Design, React components and
+// The palette is defined in `web/src/theme/palette.ts` (nine authored tokens, seventeen derived) and
+// projected by `themeConfig.ts` for Ant Design, React components and
 // chart runtime options, and in `web/src/index.css` for stylesheet consumers. Assert that every series
 // token matches character for character so the two copies cannot drift.
 
@@ -185,8 +201,8 @@ assert.deepEqual(
   'the range is generated in the domain order',
 );
 
-for (const preset of THEME_PRESETS) {
-  const css = themePaletteCssVariables(preset);
+for (const preset of RESOLVED_PALETTES) {
+  const css = themePaletteCssVariables(preset.palette);
   for (let index = 0; index < SERIES_SLOTS; index += 1) {
     assert.equal(typeof css[`--series-${index + 1}`], 'string', `${preset.id} exports series ${index + 1}`);
     assert.equal(css[`--series-${index + 1}`], preset.palette.series[index]);

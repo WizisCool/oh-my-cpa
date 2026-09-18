@@ -1,57 +1,15 @@
 import { theme, type ThemeConfig } from 'antd';
 
-export type ThemeMode = 'dark' | 'light';
+import type { ResolvedPalette, ThemePalette } from './palette';
 
-export const THEME_IDS = [
-  'omc-dark',
-  'omc-light',
-  'midnight',
-  'porcelain',
-  'forest',
-  'sandstone',
-] as const;
-export type ThemeId = (typeof THEME_IDS)[number];
-
-export interface ThemePalette {
-  bg: string;
-  surface: string;
-  elevated: string;
-  fg: string;
-  fg2: string;
-  muted: string;
-  meta: string;
-  border: string;
-  borderSoft: string;
-  hover: string;
-  rowHover: string;
-  selected: string;
-  hoverInset: string;
-  accent: string;
-  accentHover: string;
-  accentActive: string;
-  accentOn: string;
-  success: string;
-  warn: string;
-  danger: string;
-  cacheRateYellow: string;
-  cacheRateGreen: string;
-  tooltipBg: string;
-  heatmapQuiet: string;
-  heatmapBusy: string;
-  heatmapZeroUnrecorded: string;
-  heatmapZeroRecorded: string;
-  heatmapTipLink: string;
-  series: readonly string[];
-  seriesTrack: string;
-}
-
-export interface ThemePreset {
-  id: ThemeId;
-  mode: ThemeMode;
-  nameKey: string;
-  descriptionKey: string;
-  palette: ThemePalette;
-}
+/**
+ * The palette projected onto Ant Design, and onto the stylesheet's custom properties.
+ *
+ * This module computes nothing about colour. A palette is resolved once in `palette.ts`, and this
+ * is one of the surfaces that reads it - the same way the chart runtime, the Monaco editor and the
+ * brand artwork do. That separation is why a custom palette reaches every one of those surfaces
+ * without any of them knowing custom palettes exist.
+ */
 
 const monoFont = [
   '"Sarasa Mono SC"',
@@ -108,270 +66,9 @@ export const MOTION_ROLL: MotionToken = { duration: 240, easing: 'cubic-bezier(0
  */
 export const MOTION_ROLL_PRESENCE: MotionToken = { duration: 100, easing: 'cubic-bezier(0.2, 0, 0, 1)' };
 
-export const palette = {
-  dark: {
-    bg: '#121214',
-    surface: '#1c1c1f',
-    elevated: '#222226',
-    fg: '#f4f4f6',
-    fg2: '#a1a1aa',
-    muted: '#71717a',
-    meta: '#52525b',
-    border: '#2c2c30',
-    borderSoft: '#222226',
-    hover: '#242428',
-    rowHover: '#222226',
-    selected: '#242428',
-    hoverInset: '#121214',
-    accent: '#00a2fb',
-    accentHover: '#0077b8',
-    accentActive: '#005d8f',
-    accentOn: '#ffffff',
-    success: '#10b981',
-    warn: '#f59e0b',
-    danger: '#ef4444',
-    cacheRateYellow: '#f59e0b',
-    cacheRateGreen: '#10b981',
-    tooltipBg: '#1c1c1f',
-    heatmapQuiet: '#222226',
-    heatmapBusy: '#00a2fb',
-    heatmapZeroUnrecorded: '#222226',
-    heatmapZeroRecorded: '#2a2a30',
-    heatmapTipLink: '#00a2fb',
-    series: ['#3b82f6', '#10b981', '#8b5cf6', '#f43f5e', '#f59e0b', '#06b6d4'],
-    seriesTrack: '#2a2a30',
-  },
-  light: {
-    bg: '#ffffff',
-    surface: '#f6f6f8',
-    elevated: '#ffffff',
-    fg: '#1c1c1e',
-    fg2: '#505055',
-    muted: '#787880',
-    meta: '#98989f',
-    border: '#e5e5ea',
-    borderSoft: '#ededf2',
-    hover: '#ececf0',
-    rowHover: '#ececf0',
-    selected: '#ececf0',
-    hoverInset: '#ededf2',
-    accent: '#005d8f',
-    accentHover: '#004770',
-    accentActive: '#00344f',
-    accentOn: '#ffffff',
-    success: '#059669',
-    warn: '#b45309',
-    danger: '#dc2626',
-    cacheRateYellow: '#b45309',
-    cacheRateGreen: '#047857',
-    tooltipBg: '#1c1c1e',
-    heatmapQuiet: '#ececf0',
-    heatmapBusy: '#005d8f',
-    heatmapZeroUnrecorded: '#ececf0',
-    heatmapZeroRecorded: '#e2e2e8',
-    heatmapTipLink: '#005d8f',
-    series: ['#2563eb', '#059669', '#7c3aed', '#e11d48', '#b45309', '#0891b2'],
-    seriesTrack: '#e5e5ea',
-  },
-} as const satisfies Record<ThemeMode, ThemePalette>;
-
-/**
- * Presets are the only place a palette is declared. The two original modes keep
- * their exact values; the additional presets change both surfaces and semantic
- * hues together so charts, statuses and controls never inherit a mismatched
- * palette from another theme.
- */
-export const THEME_PRESETS: readonly ThemePreset[] = [
-  {
-    id: 'omc-dark',
-    mode: 'dark',
-    nameKey: 'theme.omc_dark',
-    descriptionKey: 'theme.omc_dark_desc',
-    palette: palette.dark,
-  },
-  {
-    id: 'omc-light',
-    mode: 'light',
-    nameKey: 'theme.omc_light',
-    descriptionKey: 'theme.omc_light_desc',
-    palette: palette.light,
-  },
-  {
-    id: 'midnight',
-    mode: 'dark',
-    nameKey: 'theme.midnight',
-    descriptionKey: 'theme.midnight_desc',
-    palette: {
-      bg: '#0d1117',
-      surface: '#161b22',
-      elevated: '#1f242c',
-      fg: '#e6edf3',
-      fg2: '#9da7b3',
-      muted: '#6e7681',
-      meta: '#484f58',
-      border: '#30363d',
-      borderSoft: '#21262d',
-      hover: '#21262d',
-      rowHover: '#21262d',
-      selected: '#253041',
-      hoverInset: '#0d1117',
-      accent: '#58a6ff',
-      accentHover: '#1f6feb',
-      accentActive: '#1158c7',
-      accentOn: '#ffffff',
-      success: '#3fb950',
-      warn: '#d29922',
-      danger: '#f85149',
-      cacheRateYellow: '#d29922',
-      cacheRateGreen: '#3fb950',
-      tooltipBg: '#161b22',
-      heatmapQuiet: '#21262d',
-      heatmapBusy: '#58a6ff',
-      heatmapZeroUnrecorded: '#21262d',
-      heatmapZeroRecorded: '#30363d',
-      heatmapTipLink: '#58a6ff',
-      series: ['#58a6ff', '#3fb950', '#bc8cff', '#ff7b72', '#d29922', '#39c5cf'],
-      seriesTrack: '#21262d',
-    },
-  },
-  {
-    id: 'porcelain',
-    mode: 'light',
-    nameKey: 'theme.porcelain',
-    descriptionKey: 'theme.porcelain_desc',
-    palette: {
-      bg: '#f7f8fa',
-      surface: '#ffffff',
-      elevated: '#ffffff',
-      fg: '#17212b',
-      fg2: '#4b5563',
-      muted: '#6b7280',
-      meta: '#9ca3af',
-      border: '#d8dee7',
-      borderSoft: '#e6eaf0',
-      hover: '#eef2f7',
-      rowHover: '#eef2f7',
-      selected: '#e4edf8',
-      hoverInset: '#eef2f7',
-      accent: '#0b6e99',
-      accentHover: '#075985',
-      accentActive: '#0c4a6e',
-      accentOn: '#ffffff',
-      success: '#157a4b',
-      warn: '#a15c00',
-      danger: '#c62828',
-      cacheRateYellow: '#a15c00',
-      cacheRateGreen: '#157a4b',
-      tooltipBg: '#17212b',
-      heatmapQuiet: '#e6eaf0',
-      heatmapBusy: '#0b6e99',
-      heatmapZeroUnrecorded: '#e6eaf0',
-      heatmapZeroRecorded: '#d8dee7',
-      heatmapTipLink: '#0b6e99',
-      series: ['#0b6e99', '#157a4b', '#6d4aff', '#c62863', '#a15c00', '#0e7c86'],
-      seriesTrack: '#d8dee7',
-    },
-  },
-  {
-    id: 'forest',
-    mode: 'dark',
-    nameKey: 'theme.forest',
-    descriptionKey: 'theme.forest_desc',
-    palette: {
-      bg: '#0e1411',
-      surface: '#162019',
-      elevated: '#1d2a21',
-      fg: '#edf5ef',
-      fg2: '#a8b8ad',
-      muted: '#74887b',
-      meta: '#4d5f53',
-      border: '#293a2f',
-      borderSoft: '#1d2a21',
-      hover: '#213127',
-      rowHover: '#213127',
-      selected: '#263d2e',
-      hoverInset: '#0e1411',
-      accent: '#6ee7a8',
-      accentHover: '#34c978',
-      accentActive: '#1f9d5a',
-      accentOn: '#07140c',
-      success: '#4ade80',
-      warn: '#fbbf24',
-      danger: '#f87171',
-      cacheRateYellow: '#fbbf24',
-      cacheRateGreen: '#4ade80',
-      tooltipBg: '#162019',
-      heatmapQuiet: '#1d2a21',
-      heatmapBusy: '#6ee7a8',
-      heatmapZeroUnrecorded: '#1d2a21',
-      heatmapZeroRecorded: '#293a2f',
-      heatmapTipLink: '#6ee7a8',
-      series: ['#60a5fa', '#4ade80', '#a78bfa', '#fb7185', '#fbbf24', '#2dd4bf'],
-      seriesTrack: '#293a2f',
-    },
-  },
-  {
-    id: 'sandstone',
-    mode: 'light',
-    nameKey: 'theme.sandstone',
-    descriptionKey: 'theme.sandstone_desc',
-    palette: {
-      bg: '#f8f3e8',
-      surface: '#fffaf0',
-      elevated: '#fffaf0',
-      fg: '#2f2a22',
-      fg2: '#5f574b',
-      muted: '#7c7263',
-      meta: '#a79b89',
-      border: '#ded3c0',
-      borderSoft: '#ece4d6',
-      hover: '#f1e8d8',
-      rowHover: '#f1e8d8',
-      selected: '#eadcc5',
-      hoverInset: '#f1e8d8',
-      accent: '#0f766e',
-      accentHover: '#115e59',
-      accentActive: '#134e4a',
-      accentOn: '#ffffff',
-      success: '#2f7d4d',
-      warn: '#a16207',
-      danger: '#c2410c',
-      cacheRateYellow: '#a16207',
-      cacheRateGreen: '#2f7d4d',
-      tooltipBg: '#2f2a22',
-      heatmapQuiet: '#ece4d6',
-      heatmapBusy: '#0f766e',
-      heatmapZeroUnrecorded: '#ece4d6',
-      heatmapZeroRecorded: '#ded3c0',
-      heatmapTipLink: '#0f766e',
-      series: ['#0f766e', '#15803d', '#7c3aed', '#c2410c', '#a16207', '#0369a1'],
-      seriesTrack: '#ded3c0',
-    },
-  },
-];
-
-export function parseThemeId(value: unknown): ThemeId | undefined {
-  if (typeof value !== 'string') return undefined;
-  const normalized = value.trim().toLowerCase();
-  if ((THEME_IDS as readonly string[]).includes(normalized)) return normalized as ThemeId;
-  if (normalized === 'dark') return 'omc-dark';
-  if (normalized === 'light') return 'omc-light';
-  return undefined;
-}
-
-export function resolveThemeId(value: unknown): ThemeId {
-  return parseThemeId(value) ?? 'omc-dark';
-}
-
-export function getThemePreset(value: ThemeId | ThemeMode | string | undefined): ThemePreset {
-  const id = parseThemeId(value) ?? (value === 'dark' ? 'omc-dark' : value === 'light' ? 'omc-light' : 'omc-dark');
-  return THEME_PRESETS.find((preset) => preset.id === id) ?? THEME_PRESETS[0];
-}
-
-export function createThemeConfig(themeId: ThemeId | ThemeMode | string = 'omc-dark'): ThemeConfig {
-  const preset = getThemePreset(themeId);
-  const dark = preset.mode === 'dark';
-  const t = preset.palette;
+export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'palette'>): ThemeConfig {
+  const dark = resolved.mode === 'dark';
+  const t = resolved.palette;
 
   const noShadow = {
     boxShadow: 'none',
@@ -483,8 +180,9 @@ export function createThemeConfig(themeId: ThemeId | ThemeMode | string = 'omc-d
         fontSizeSM: 13,
         fontWeight: 500,
         // The label of a filled primary control. Ant Design derives this token from
-        // `colorTextLightSolid`, which is white in every palette, so a preset whose
-        // accent fill is light would otherwise draw a white label on it.
+        // `colorTextLightSolid`, which is white in every palette, so a palette whose accent fill is
+        // light would otherwise draw a white label on it. `accentOn` is solved by the derivation, so
+        // this is the same value on a built-in palette and on an operator's own.
         primaryColor: t.accentOn,
         primaryShadow: 'none',
         defaultShadow: 'none',
@@ -543,8 +241,7 @@ export function createThemeConfig(themeId: ThemeId | ThemeMode | string = 'omc-d
   };
 }
 
-export function themePaletteCssVariables(preset: ThemePreset): Record<string, string> {
-  const palette = preset.palette;
+export function themePaletteCssVariables(palette: ThemePalette): Record<string, string> {
   const variables: Record<string, string> = {
     '--bg': palette.bg,
     '--surface': palette.surface,
@@ -579,5 +276,3 @@ export function themePaletteCssVariables(preset: ThemePreset): Record<string, st
   });
   return variables;
 }
-
-export const themeConfig = createThemeConfig('omc-dark');

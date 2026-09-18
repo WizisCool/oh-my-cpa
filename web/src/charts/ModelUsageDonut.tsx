@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pie } from '@ant-design/charts';
-import { useThemeMode } from '../theme/ThemeContext';
+import { useTheme } from '../theme/ThemeContext';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import { resolveChartAnimation } from './chartMotion';
 import { seriesColorRange, seriesDomainKey, seriesTrackColor } from './chartTheme';
@@ -45,7 +45,7 @@ export const ModelUsageDonut: React.FC<ModelUsageDonutProps> = ({
   foldedLabel,
   tokenUnitLabel,
 }) => {
-  const { theme } = useThemeMode();
+  const { theme } = useTheme();
   const isReducedMotion = usePrefersReducedMotion();
   const animate = resolveChartAnimation(isReducedMotion);
   const { style: tokenStyle } = useTokenDisplayStyle();

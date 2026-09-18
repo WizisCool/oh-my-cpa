@@ -26,7 +26,7 @@ Treat the table below as a hard constraint. Whenever a change touches a "Trigger
 | --- | --- | --- |
 | `CONTEXT.md` | Domain terminology, domain rules | Adding, renaming, or deprecating domain concepts; changes to time windows, i18n, auth, pricing, provider disablement; discovering terminology discrepancies with the implementation |
 | `docs/architecture.md` | Module map, data flows, invariants, schema, background loops | Adding or removing `internal/*` packages; router or middleware changes; data flow stage adjustments; new background loops; database schema or migration gate changes |
-| `docs/design.md` | Source of truth for visual system and antd tokens | Changes to palettes, typography, spacing, motion, or token mappings (must synchronously update `web/src/theme/themeConfig.ts` and `web/src/index.css`) |
+| `docs/design.md` | Source of truth for visual system and the derived palette; `DESIGN.md` is its design-tool summary | Changes to palettes or their derivation, typography, spacing, motion, or token mappings (must synchronously update `web/src/theme/palette.ts`, `web/src/theme/themeConfig.ts` and `web/src/index.css`) |
 | `DESIGN.md` | Brand design system summary (for design tooling) | Same as `docs/design.md`; both must stay strictly synchronized |
 | `PRODUCT.md` | Product positioning, capability matrix, constraints | Capability additions or removals, constraint shifts, target audience or positioning adjustments |
 | `README.md` / `README.zh-CN.md` | User and operator landing page (English and Simplified Chinese) | Command, environment variable, default value, endpoint, deployment topology, or security boundary changes |

@@ -2,14 +2,14 @@
 name: Oh My CPA
 description: Terminal-flat developer console for AI resource identity & organization
 colors:
-  primary: "#0077b8"          # dark theme; light theme uses #004770
-  primary-accent: "#00a2fb"   # dark theme; light theme uses #005d8f
-  primary-active: "#005d8f"   # dark theme; light theme uses #00344f
-  primary-on: "#ffffff"       # label on a filled accent control; Forest uses a near-black step
+  primary: "#0579bd"          # dark mode's filled-control step; light mode uses #004a73
+  primary-accent: "#00a2fb"   # dark mode's link step; light mode uses #005d8f
+  primary-active: "#025e94"   # dark mode's pressed step; light mode uses #023b5d
+  primary-on: "#ffffff"       # label on a filled accent control; computed per palette, near-black where white cannot clear 4.5:1
   neutral-bg: "#121214"
   neutral-surface: "#1c1c1f"
   neutral-border: "#2c2c30"
-  neutral-border-soft: "#222226"
+  neutral-border-soft: "#212124"
   neutral-fg: "#f4f4f6"
   neutral-fg-subtle: "#a1a1aa"
   neutral-muted: "#71717a"
@@ -157,12 +157,12 @@ Depth is achieved purely through 1px hairline borders and subtle tonal shifts be
 
 ## Colors
 
-The palette is anchored on warm charcoal darks with pure semantic status pigments and an OKLCH-interpolated continuous cache scale. Six complete presets are registered: OMC Dark, OMC Light, Midnight, Porcelain, Forest, and Sandstone. Each declares its mode and full palette; the resolver in `web/src/theme/themeConfig.ts` feeds Ant Design, CSS variables, charts, the heatmap, the settings preview, and the header's theme menu from that one registry. `omc-theme` stores the preset id and accepts the legacy `dark`/`light` values.
+The palette is anchored on warm charcoal darks with pure semantic status pigments and an OKLCH-interpolated continuous cache scale. A palette is **nine authored tokens and seventeen derived ones**: `web/src/theme/palette.ts` declares the authored set and computes the rest, so the six registered palettes - OMC Dark, Midnight and Forest for dark mode; OMC Light, Porcelain and Sandstone for light mode - and an operator's own are the same kind of object. The resolved palette feeds Ant Design, CSS variables, charts, the heatmap, the Monaco editor, the settings preview and the brand artwork from that one place. A theme mode (light, dark, or follow-the-system) holds one palette of its own, and an operator-authored palette is labelled «Custom» in the reading language. `omc-theme` stores the whole preference document and still reads an older build's bare palette id or bare `dark`/`light`. See `docs/adr/0011-theme-modes-and-derived-palettes.md`.
 
 ### Primary
-- **Deep Accent Blue** (`#0077b8` dark / `#004770` light): Used for filled primary action buttons and confirm controls. It provides a decisive focus point without overwhelming the dark theme.
-- **Accent Ladder** (hue 201, per theme): `#00a2fb` / `#005d8f` are the link steps for the dark and light themes, `#0077b8` / `#004770` the filled-control steps. The accent is deliberately *not* mode-invariant: the bright step reads 6.03:1 on the dark background but only 2.71:1 on the light one, so each theme uses the step that is legible there. Used for interactive links, breadcrumb highlights, active progress bars, `:focus-visible` focus rings, the brand wordmark, and the token heatmap's ramp. Measured ratios are in `docs/design.md` §2.
-- **Pressed Blue** (`#005d8f` dark / `#00344f` light): Used for button active/down states.
+- **Deep Accent Blue** (`#0579bd` dark / `#004a73` light): Used for filled primary action buttons and confirm controls. It provides a decisive focus point without overwhelming the dark mode.
+- **Accent Ladder** (hue 201, per mode): `#00a2fb` / `#005d8f` are the link steps for dark and light, `#0579bd` / `#004a73` the filled-control steps. The accent is deliberately *not* mode-invariant: the bright step reads 6.74:1 on the dark background but only 2.71:1 on the light one, so each mode's palette uses the step that is legible there. Used for interactive links, breadcrumb highlights, active progress bars, `:focus-visible` focus rings, the brand wordmark, and the token heatmap's ramp. The ladder is *derived*: a proportional OKLCH lightness step from the authored accent, then deepened until one of white and near-black clears 4.5:1 as the filled control's label. Measured ratios are in `docs/design.md` §2.
+- **Pressed Blue** (`#025e94` dark / `#023b5d` light): Used for button active/down states.
 
 ### Series (categorical)
 
@@ -174,12 +174,13 @@ family in the app, and the only exception to the semantic-only rule above; see
 - **Slots** (`--series-1` … `--series-6`): blue `#3b82f6` / `#2563eb`, emerald `#10b981` / `#059669`,
   purple `#8b5cf6` / `#7c3aed`, coral `#f43f5e` / `#e11d48`, amber `#f59e0b` / `#b45309`, cyan
   `#06b6d4` / `#0891b2` (dark / light). Matches AntV, Tremor, and ZCode/CodeX data visualization standards.
-- **Track** (`--series-track`, `#2a2a30` dark / `#e5e5ea` light): the trend's plot floor and the usage
-  ring's unfilled track.
+- **Track** (`--series-track`, `#2c2c30` dark / `#e5e5ea` light): the trend's plot floor and the usage
+  ring's unfilled track, which is each mode's border step.
 - Every slot clears 3:1 against the card, adjacent legend entries are at least ΔE 25 apart in CIE Lab,
-  and the stylesheet tokens match `themeConfig.ts` character for character. All bounds are asserted by
-  `scripts/test-chart-marks.ts` from the palette itself. The values above are the original OMC pair;
-  each registered preset supplies its own six slots and is checked by the same bounds.
+  and the stylesheet tokens match the derived palette character for character. All bounds are asserted by
+  `scripts/test-chart-marks.ts` from the palette itself. The slots above are the OMC Dark/OMC Light pair;
+  the six slots are **per-mode constants rather than derived tokens**, so every palette inherits its
+  mode's set.
 
 ### Neutral
 - **Console Background (`--bg`)** (`#121214`): Base canvas, table row backgrounds, input wells, and overall page substrate.
@@ -241,7 +242,7 @@ The application viewport uses a fixed shell architecture (`100dvh`, `body { over
 └──────────┴──────────────────────────────────────────┘
 ```
 
-- **Top Header**: Fixed 56px height, full-width with 1px bottom border (`#2c2c30`). Contains the `›_` terminal prompt logo, breadcrumb hierarchy, and four right-aligned actions: refresh, the theme menu, the language menu, and sign out. Both preferences are menus over their full registry (`THEME_PRESETS` and `LANGUAGES`) rather than toggles between two states, and each action keeps one width in every reading language — labels change length with the language, so sign out is an icon button named by its tooltip. CPA connection status and version are reported in the side rail's foot only.
+- **Top Header**: Fixed 56px height, full-width with 1px bottom border (`#2c2c30`). Contains the `›_` terminal prompt logo, breadcrumb hierarchy, and four right-aligned actions: refresh, the theme mode control, the language menu, and sign out. The mode control is a **cycling button** — light → dark → follow-the-system, one icon per state (sun, moon, desktop) — because the palettes belong to the modes and are chosen on the OMC Settings page, where each candidate repaints the console as it is picked; the language stays a **menu** over `LANGUAGES`, because four languages, one of which the reader may not read, is exactly the case a list answers. Each action keeps one width in every reading language — labels change length with the language, so sign out is an icon button named by its tooltip. CPA connection status and version are reported in the side rail's foot only.
 - **Navigation Sidebar**: Fixed 236px width (58px collapsed), 1px right border. Houses grouped navigation categories: `Operate`, `Gateway`, `Observe`, `Control`.
 - **Content Area**: Single-scroll container with responsive padding (32px desktop / 24px tablet / 16px mobile), inside a 1440px content column. The widths that follow: content column 1376px (1440 − 2×32), and a list inside a Card 1334px (1376 − 2×1 border − 2×20 body padding). Every page measures these; a page that needs a different column states why where the rule is written (the configuration workbench's 920px reading column is the one case).
 - **Settings Workbench Layout**: A three-track grid — 216px sticky section nav + 920px reading column + 216px balancing gutter — accompanied by a full-width sticky action bar, so the form never drifts to one side on wide screens.
@@ -317,7 +318,7 @@ The geometric form language is compact, rectangular, and tightly controlled:
 - **Status Pip**: 7×7px square, 2px radius, paired with explicit status text (e.g. `[●] Running`). Green = healthy, Amber = degraded/warning, Red = error, Gray = offline. A pip reports whether a window needs attention, never how far a number sits from its ideal: success rate stays gray for ≤ 5% failures, amber above that, red above 20%, and a window under 20 requests with under 3 failures carries no verdict at all. Only a verdict gets a pip: the request console's Success / Failed filter segments carry one each, while All carries none.
 - **Latency**: never tinted by an absolute threshold. Agent requests legitimately run for minutes, so a time-based amber rule would flag healthy traffic; the detail drawer compares TTFT against total duration instead.
 - **Cache-Rate Badge**: Pill-shaped badge featuring continuous OKLCH gradient tint fill with ≥ 4.5:1 text contrast. Displays values up to `99.9%` with one decimal place. The scale is never red: a cache miss is the shape of a novel prompt, not a failed execution.
-- **Token Activity Heatmap**: The dashboard's token grid is the one sequential *quantity* encoding, so it uses a **continuous** ramp of the theme accent rather than four fixed steps or any status hue — "lots of tokens" and "credential healthy" must not be the same colour, and a stepped scale paints every day between two steps identically. Brightness is the square root of the day's volume against the window's busiest day, which keeps day-to-day differences visible across the several orders of magnitude a window spans. The shape is a contribution-graph field (one row per weekday, one column per week, a year of weeks) that fills its panel via fractional CSS tracks, so it never scrolls horizontally at desktop widths and never leaves a gutter. The current week is a complete column: the days after today are drawn as normal unrecorded cells, because a day that has not happened is a day nothing is stored for. Every cell is interactive and lifts on hover with a compositor-only `transform` scale; clicking one opens its tooltip, so a day with nothing recorded says so rather than refusing the question. The tooltip prints the day's token volume in the console's token unit style, keeping the exact count on the value. The day's drill-down is a link inside the tooltip rather than the cell itself. The two zero states (recorded-but-empty, and nothing-stored) are solid fills ordered against the card at roughly 1.06:1 and 1.16:1, never outlines — an outline over a year-long grid whose cells mostly predate the retention horizon renders as a wire mesh. The ramp is relative to the window rather than absolute, so the same shade means different volumes on two installs - which is why every cell carries its date and counts in text, and the shade is never the only encoding. DOM, not a chart mark.
+- **Token Activity Heatmap**: The dashboard's token grid is the one sequential *quantity* encoding, so it uses a **continuous** ramp of the theme accent rather than four fixed steps or any status hue — "lots of tokens" and "credential healthy" must not be the same colour, and a stepped scale paints every day between two steps identically. Brightness is the square root of the day's volume against the window's busiest day, which keeps day-to-day differences visible across the several orders of magnitude a window spans. The shape is a contribution-graph field (one row per weekday, one column per week, a year of weeks) that fills its panel via fractional CSS tracks, so it never scrolls horizontally at desktop widths and never leaves a gutter. The current week is a complete column: the days after today are drawn as normal unrecorded cells, because a day that has not happened is a day nothing is stored for. Every cell is interactive and lifts on hover with a compositor-only `transform` scale; clicking one opens its tooltip, so a day with nothing recorded says so rather than refusing the question. The tooltip prints the day's token volume in the console's token unit style, keeping the exact count on the value. The day's drill-down is a link inside the tooltip rather than the cell itself. The two zero states (recorded-but-empty, and nothing-stored) are solid fills ordered against the card at 1.04–1.06:1 and 1.16–1.22:1 (light to dark mode), never outlines — an outline over a year-long grid whose cells mostly predate the retention horizon renders as a wire mesh. The ramp is relative to the window rather than absolute, so the same shade means different volumes on two installs - which is why every cell carries its date and counts in text, and the shade is never the only encoding. DOM, not a chart mark.
 
 ### Floating Action Bar (Dirty Bar)
 - **Position**: Floating fixed bar anchored 24px above the viewport bottom, centered dynamically within the content column.
@@ -327,7 +328,7 @@ The geometric form language is compact, rectangular, and tightly controlled:
 ## Do's and Don'ts
 
 ### Do:
-- **Do** import colors exclusively from the active theme preset or CSS variables (`var(--bg)`, `var(--surface)`, `var(--border)`); add a new preset here and in `themeConfig.ts` rather than introducing palette literals in a component.
+- **Do** import colors exclusively from the resolved palette or CSS variables (`var(--bg)`, `var(--surface)`, `var(--border)`); add a palette to the registry in `web/src/theme/palette.ts` rather than introducing palette literals in a component. The seventeen derived tokens are computed from the nine authored ones, so a component should reach for a *relationship* (the surface a tooltip sits on, the border-soft step) rather than re-deriving one.
 - **Do** pair every status indicator pip with explicit text labels so colorblind users can immediately identify states.
 - **Do** inherit monospaced font families across all components and enable `tabular-nums` for numeric telemetry.
 - **Do** pin motion durations to ≤ 100ms and animate only `opacity` and `transform`; the dashboard's KPI numbers and chart marks are the one `roll` (240ms) exception — the numbers transform glyphs, the marks are redrawn by the canvas library and stop entirely under `prefers-reduced-motion`. The exact count stays on the tile's `title`.

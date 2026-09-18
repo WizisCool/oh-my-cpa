@@ -85,7 +85,9 @@ test('the README colours are read from the app palette, not held as literals', (
 test('a palette value that does not exist is refused rather than rendered empty', () => {
   // The failure that would otherwise ship as artwork with no accent in it.
   assert.throws(() => paletteValue('dark', 'notAColour'), /no notAColour colour/, 'an unknown key throws');
-  assert.throws(() => paletteValue('chartreuse', 'accent'), /no chartreuse palette/, 'an unknown mode throws');
+  // The message names the palette id it looked for - `omc-<mode>` - because that is the thing the reader
+  // has to reconcile with the registry when this fires.
+  assert.throws(() => paletteValue('chartreuse', 'accent'), /no omc-chartreuse palette core/, 'an unknown mode throws');
 });
 
 test('an unknown shape is refused rather than rendered empty', () => {

@@ -117,9 +117,11 @@ reviews:
         `[zh, en]` pairs in `web/src/i18n/index.tsx` plus matching entries in
         every catalog under `web/src/i18n/locales/`. Requests go through the single
         typed client in `web/src/api/client.ts`; a page calling `fetch` directly is
-        a defect. Colors come from the tokens in
-        `web/src/theme/themeConfig.ts` or the CSS variables in `docs/design.md`,
-        so a color literal outside those definitions is a defect; the visual
+        a defect. Colors come from the resolved palette in
+        `web/src/theme/palette.ts` - nine authored tokens with seventeen derived
+        from them, so re-deriving a relationship in a component is also a defect -
+        or from the CSS variables in `docs/design.md`; a color literal outside
+        those definitions is a defect; the visual
         system is terminal-flat with no box shadows, and green/amber/red stay
         reserved for system health. CSS-module classes are kebab-case and read
         as `styles['kebab-case']`. The SPA must stay embeddable in the single Go

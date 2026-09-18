@@ -38,7 +38,7 @@ import { parseDocument, type Document } from 'yaml';
 import { api, ApiError, apiErrorCode } from '../api/client';
 import { useT } from '../i18n';
 import { copyText } from '../utils/clipboard';
-import { useThemeMode } from '../theme/ThemeContext';
+import { useTheme } from '../theme/ThemeContext';
 import { ConfigDirtyBar } from '../components/config/ConfigDirtyBar';
 import { PayloadRulesEditor, type PayloadValidationIssue } from '../components/config/PayloadRulesEditor';
 import { updateFieldWithBaseline, isConfigSemanticallyEqual } from '../components/config/configDirty';
@@ -61,7 +61,7 @@ const { Text } = Typography;
 export const ConfigPage: React.FC = () => {
   const t = useT();
   const { message, modal } = AntdApp.useApp();
-  const { themeId } = useThemeMode();
+  const { theme } = useTheme();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const editorRef = useRef<YamlSourceEditorRef | null>(null);
@@ -1083,7 +1083,7 @@ export const ConfigPage: React.FC = () => {
                   }
                 }}
                 onSave={requestSaveConfirmation}
-                themeId={themeId}
+                theme={theme}
                 editorRef={editorRef}
                 loadingText={t('cfg.source_editor_loading')}
               />

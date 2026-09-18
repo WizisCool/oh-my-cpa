@@ -4,14 +4,22 @@ Single source of truth for the visual system. OpenCode-inspired, product-owned:
 interaction patterns and information density draw inspiration from OpenCode's
 minimalist developer console, while brand identity (`›_`), warm terminal palette,
 CPA information architecture, and security boundaries strictly belong to Oh My CPA.
-Values are mirrored in code at:
+The palette is declared and derived in code at:
 
-- `web/src/theme/themeConfig.ts` — `palette` object + antd `ThemeConfig`
-- `web/src/index.css` — CSS custom properties on `:root`
+- `web/src/theme/palette.ts` — the nine authored tokens per palette, the seventeen derived tokens, and
+  the registered palettes
+- `web/src/theme/themeConfig.ts` — the antd `ThemeConfig` projection
+- `web/src/index.css` — the pre-hydration fallback's custom properties on `:root`
 
-**Rule: never hardcode a color in components.** Import from `palette`, or use
-the CSS variable. When a value changes, change it here and in those two files
-only.
+**Rule: never hardcode a color in components.** Read the resolved palette, or use the CSS variable.
+
+**Rule: the tables in §2 are generated, not authored.** Seventeen of a palette's tokens are computed
+from the other nine (`derivePalette`), so a value here that disagrees with the function is a defect in
+this document. Changing an *authored* token is a one-line change plus the tables it moves; changing a
+*relationship* - how a hover fill relates to the page, how deep a filled control goes - means changing a
+constant in `palette.ts`, and the numbers in the tables below and in `DESIGN.md` move with it. Nothing
+here is hand-tuned any more, which is what makes an operator's own palette the same kind of object as a
+registered one; see `docs/adr/0011-theme-modes-and-derived-palettes.md`.
 
 ## 1. Design language
 
@@ -28,25 +36,56 @@ Mono as fallbacks), 4px radii, dense but breathable spacing.
 
 ## 2. Color palette
 
+A palette is **nine authored tokens and seventeen derived ones**. `web/src/theme/palette.ts` declares the
+authored set and computes the rest; `docs/adr/0011-theme-modes-and-derived-palettes.md` records the
+formula, its calibrated constants, and the places where applying it changed the values below. Nothing in
+this section is hand-tuned any more, so a value here that disagrees with `derivePalette` is a defect in
+this document rather than a palette exception - `scripts/test-theme-presets.ts` asserts the stylesheet's
+fallback against the same function, though it cannot read this table.
+
+### The authored tokens
+
+| Token | Role | Contrast floor against `--bg` |
+| --- | --- | --- |
+| `--bg` | the page itself | - |
+| `--surface` | cards and panels | layer step |
+| `--elevated` | menus, popovers, dialogs | layer step |
+| `--fg` | primary text | 4.5:1 |
+| `--fg-2` | secondary text | 4.5:1 |
+| `--muted` | hints, legends, labels, chart axis text | 3:1 |
+| `--meta` | group labels, footnotes, chart tick text | 2:1 |
+| `--border` | 1px borders, row dividers, chart grid rules | layer step |
+| `--accent` | links, info, active bars, the heatmap ramp | 4.5:1 |
+
+The floors are the ones the six registered palettes actually meet, and they are the ones the custom-palette
+editor reports against. A palette is never *refused* for missing one: the editor states the ratio and the
+console renders what the operator asked for.
+
 ### OMC Dark (default)
 
 | Token | Value | antd mapping | Usage |
 | --- | --- | --- | --- |
 | `--bg` | `#121214` | `colorBgBase`, `colorBgLayout`, `colorBgContainer` | App background, inputs, tables |
 | `--surface` | `#1c1c1f` | `colorBgElevated`, `colorFillTertiary` | Cards, panels, dropdowns, hover states |
+| `--elevated` | `#222226` | `colorBgElevated` for overlays | Menus, popovers, dialogs |
 | `--fg` | `#f4f4f6` | `colorText`, `colorTextBase` | Primary text |
 | `--fg-2` | `#a1a1aa` | `colorTextSecondary` | Secondary text |
 | `--muted` | `#71717a` | `colorTextTertiary` | Hints, legends, labels, chart crosshair rules |
 | `--meta` | `#52525b` | `colorTextQuaternary` | Group labels, footnotes |
 | `--border` | `#2c2c30` | `colorBorder` | Primary 1px borders |
-| `--border-soft` | `#222226` | `colorBorderSecondary`, `colorSplit` | Row dividers, inner borders, chart grid rules |
 | `--accent` | `#00a2fb` | `colorInfo`, `colorLink` | Links, info, active bars, selection |
-| `--accent-hover` | `#0077b8` | `colorPrimary` | Filled primary buttons |
-| `--accent-active` | `#005d8f` | `colorPrimaryHover/Active` | Pressed state |
+| `--accent-hover` | `#0579bd` | `colorPrimary` | Filled primary buttons |
+| `--accent-active` | `#025e94` | `colorPrimaryHover/Active` | Pressed state |
 | `--accent-on` | `#ffffff` | `Button.primaryColor` | Label drawn on a filled accent control |
 | `--success` | `#10b981` | `colorSuccess` | Enabled / healthy / ok pip |
 | `--warn` | `#f59e0b` | `colorWarning` | Degraded / quota warning |
 | `--danger` | `#ef4444` | `colorError` | Failed / disabled / delete |
+
+**Derived** (computed, listed for reference): `--border-soft` `#212124`, `--hover`/`--row-hover` `#272729`,
+`--selected-inset` `#2e2e37`, `--hover-inset` `#121214`, `--tooltip-bg` `#1c1c1f`, `--heatmap-quiet`
+`#212124`, `--heatmap-busy` `#00a2fb`, `--heatmap-zero-recorded` `#2c2c30`,
+`--heatmap-zero-unrecorded` `#212124`, `--heatmap-tip-link` `#00a2fb`, `--series-track` `#2c2c30`,
+`--cache-rate-yellow` `#f59e0b`, `--cache-rate-green` `#10b981`.
 
 ### OMC Light
 
@@ -54,46 +93,67 @@ Mono as fallbacks), 4px radii, dense but breathable spacing.
 | --- | --- |
 | `--bg` | `#ffffff` |
 | `--surface` | `#f6f6f8` |
+| `--elevated` | `#ffffff` |
 | `--fg` | `#1c1c1e` |
 | `--fg-2` | `#505055` |
 | `--muted` | `#787880` |
 | `--meta` | `#98989f` |
 | `--border` | `#e5e5ea` |
-| `--border-soft` | `#ededf2` |
+| `--accent` | `#005d8f` |
+| `--accent-hover` | `#004a73` |
+| `--accent-active` | `#023b5d` |
+| `--accent-on` | `#ffffff` |
 
-### Preset registry
+**Derived**: `--border-soft` `#f1f1f4`, `--hover`/`--row-hover` `#f3f3f3`, `--selected-inset` `#eaedef`,
+`--hover-inset` `#f2f2f2`, `--tooltip-bg` `#1c1c1e`, `--heatmap-quiet` `#f1f1f4`, `--heatmap-busy`
+`#005d8f`, `--heatmap-zero-recorded` `#e5e5ea`, `--heatmap-zero-unrecorded` `#f1f1f4`,
+`--heatmap-tip-link` `#005d8f`, `--series-track` `#e5e5ea`, `--cache-rate-yellow` `#b45309`,
+`--cache-rate-green` `#059669`.
 
-The two original palettes remain the exact OMC Dark and OMC Light presets. Four
-additional presets are registered in `web/src/theme/themeConfig.ts`:
+### Registered palettes
 
-| Preset | Mode | Surface direction | Accent family |
+Three per mode. A palette belongs to a mode - its nine tokens are chosen for that mode's surfaces, and
+its text ladder points one way - so the settings page offers a dark palette only while the console is
+reading palettes *for* dark, whichever mode is in force.
+
+| Palette | Mode | Authored `bg` | Accent |
 | --- | --- | --- | --- |
-| Midnight | dark | blue-black surfaces | cool blue |
-| Porcelain | light | white/blue-grey surfaces | blue-teal |
-| Forest | dark | deep green surfaces | vivid green |
-| Sandstone | light | warm sand surfaces | teal |
+| OMC Dark | dark | `#121214` | `#00a2fb` |
+| Midnight | dark | `#0d1117` | `#58a6ff` |
+| Forest | dark | `#0e1411` | `#6ee7a8` |
+| OMC Light | light | `#ffffff` | `#005d8f` |
+| Porcelain | light | `#f7f8fa` | `#0b6e99` |
+| Sandstone | light | `#f8f3e8` | `#0f766e` |
 
-Every preset declares `id`, `mode`, and one complete palette. The active preset
-is the only source for Ant Design's `ConfigProvider`, the CSS custom properties
-written to the document root, the categorical chart/ring series, and the token
-heatmap ramp. `web/src/index.css` keeps the original OMC palette as the
-pre-hydration fallback; `themePaletteCssVariables` supplies every preset's
-runtime values. `omc-theme` stores the preset id and also accepts the legacy
-`dark` and `light` values.
+A **theme mode** is light, dark or follow-the-system; each mode holds one palette. The resolved palette is
+the only source for Ant Design's `ConfigProvider`, the CSS custom properties written to the document root,
+the categorical chart/ring series, the Monaco theme and the token heatmap ramp. `web/src/index.css` keeps
+OMC Dark and OMC Light as the pre-hydration fallback and `themePaletteCssVariables` supplies every
+palette's runtime values; the two are asserted equal for those two palettes, so the first frame paints the
+same console the palette resolves to. `omc-theme` holds the whole preference document - mode, one palette
+reference per mode, and any authored palettes - and a bare palette id or a bare `dark`/`light` from an
+earlier build is still read.
+
+An **operator-authored palette** carries the registered palette it started from, which is what its reset
+returns to, and no name: it is labelled `omc.palette_custom` in the reading language, because the swatch
+beside the label already says what it looks like and a name would be the one string in the console that
+could not be translated. Both the starting palette and the tokens it is reset to come from the same mode,
+for the reason the palette groups are grouped at all. The editor reports each authorable token's contrast against the page, judged
+against the floor that token's own role carries (see the table above) - the surface and border steps are
+layers and answer to no text floor, which is why a correct palette shows no warning at all.
 
 A palette also declares `accentOn`: the label colour for a filled accent control. It reaches Ant
 Design as `Button.primaryColor` and the stylesheet as `--accent-on`, because Ant Design's own
-`Button.primaryColor` default is `colorTextLightSolid` - white in every palette - and a preset whose
-accent fill is light cannot carry a white label. Both original palettes use white; Forest's fill is
-light enough that its label is a near-black step. Every preset's `accentOn` clears **4.5:1** against
-its own filled-control step, and the registry check fails a preset that does not.
+`Button.primaryColor` default is `colorTextLightSolid` - white in every palette - and a palette whose
+accent fill is light cannot carry a white label. It is **computed, never authored**: the derivation picks
+whichever of white and near-black reads better on the fill, and the fill is deepened until one of them
+clears **4.5:1**. Every palette's label clears it, and the registry check fails a palette that does not.
 
-The OMC Settings page presents the registry as named cards with a four-swatch
-preview, and the console header's theme menu presents the same registry as list
-rows carrying the same swatch. The appearance controls must not introduce a
-second palette source: both read `THEME_PRESETS`, so new presets extend
-`themeConfig.ts`, and the registry and contrast checks in
-`scripts/test-theme-presets.ts` fail if a preset is incomplete or unreadable.
+The OMC Settings page presents two groups of named cards with a four-swatch preview, one per mode, and
+each group's last card is the operator's own. The header's control presents the mode alone. The appearance
+controls must not introduce a second palette source: both read the registry, so new palettes extend
+`web/src/theme/palette.ts`, and the derivation, contrast and mirror checks in
+`scripts/test-theme-presets.ts` fail if a palette is incomplete or unreadable.
 
 ### Accent ladder
 
@@ -114,7 +174,8 @@ on a light page, and white-on-it also clears it. The bright `#00a2fb` reads **2.
 page and **2.78:1** under white text, so it can only ever be the dark theme's text colour.
 
 Brand artwork follows the same tokens: the wordmark's accent marks and its letterforms are drawn from
-the active preset's palette, so a change here moves the logo with it — see `web/src/assets/brand/markup.ts`.
+the resolved palette, so a change here moves the logo with it — an operator's own accent included. See
+`web/src/assets/brand/markup.ts`.
 
 Success/warn/danger are identical in both modes.
 
@@ -288,16 +349,19 @@ rendering hole: the shape promises a full week.
 
 | Token | Dark | Light | Role |
 | --- | --- | --- | --- |
-| `--heatmap-quiet` | `#3a3636` | `#e2dede` | the ramp's floor: a cell with no traffic |
+| `--heatmap-quiet` | `#212124` | `#f1f1f4` | the ramp's floor: a cell with no traffic |
 | `--heatmap-busy` | `#00a2fb` | `#005d8f` | the ramp's ceiling: the window's busiest day |
-| `--heatmap-zero-recorded` | `#3a3636` | `#e2dede` | recorded, no traffic |
-| `--heatmap-zero-unrecorded` | `#343030` | `#eae6e6` | nothing stored for that day |
+| `--heatmap-zero-recorded` | `#2c2c30` | `#e5e5ea` | recorded, no traffic |
+| `--heatmap-zero-unrecorded` | `#212124` | `#f1f1f4` | nothing stored for that day |
 
 A measured cell mixes these two stops in **OKLCH** at a weight its own `--heatmap-quiet-share`
 carries, so the whole ramp is one declaration and the endpoint it reaches is the accent token above.
-`--heatmap-quiet` and `--heatmap-zero-recorded` are the same value on purpose: a measured day at the
-bottom of the scale and a recorded day with no traffic have to be adjacent or the ramp does not start
-where the field's floor is.
+`--heatmap-quiet` and `--heatmap-zero-unrecorded` are the same value on purpose: a measured day at the
+bottom of the scale has to start exactly where the field's floor is, or the ramp begins above a day that
+records nothing. `--heatmap-zero-recorded` then takes the next step - the border step - so that an ordered
+reading survives: nothing stored (quietest), recorded but empty, and measured. The derivation holds that
+order (`heatmapQuiet = heatmapZeroUnrecorded = borderSoft`, `heatmapZeroRecorded = border`), which is why
+these four tokens are not four independent choices.
 
 The two zero states are a **solid fill, never an outline**, and they form an ordered scale
 against the card rather than against the page. Both are required properties, not styling
@@ -389,12 +453,14 @@ colour are untouched and still mean exactly one thing.
 | `--series-4` | `#f43f5e` | `#e11d48` | coral |
 | `--series-5` | `#f59e0b` | `#b45309` | amber |
 | `--series-6` | `#06b6d4` | `#0891b2` | cyan |
-| `--series-track` | `#2a2a30` | `#e5e5ea` | the trend's plot floor and the ring's unfilled track |
+| `--series-track` | `#2c2c30` | `#e5e5ea` | the trend's plot floor and the ring's unfilled track - the `border` step in each mode |
 
-The table shows the original OMC Dark/OMC Light pair. Every registered preset
-supplies its own six-slot series palette and track in `themeConfig.ts`;
-`scripts/test-chart-marks.ts` checks every preset for exactly six slots,
-graphical contrast on that preset's card surface, and adjacent-slot distance.
+The six slots are **per-mode constants, not derived tokens**: they are semantics rather than palette,
+so an operator's accent cannot rotate them (`docs/adr/0011-theme-modes-and-derived-palettes.md`). Every
+palette therefore inherits its mode's set through `derivePalette`, and `--series-track` is the mode's
+`border` step. The table shows the OMC Dark/OMC Light pair, which is also what `web/src/index.css`
+carries as the pre-hydration fallback; `scripts/test-chart-marks.ts` checks every registered palette for
+exactly six slots, graphical contrast on its own card surface, and adjacent-slot distance.
 
 **The slot is the identity; the family survives a theme switch.** `seriesColor(mode, 0)` is the blue
 family in both themes and only the step changes, because the bright steps are illegible on a light
@@ -416,12 +482,12 @@ range is 4.01:1 to 7.92:1 on the dark card and 3.41:1 to 5.28:1 on the light one
 2. **Adjacent legend entries are at least ΔE 25 apart in CIE Lab**, so no two neighbours read as one
 swatch. The sequence exists for that bound: it alternates warm and cool families, which also puts a
 warm hue into an ordinary two- or three-model window instead of reserving it for a long tail.
-3. **The runtime projection is what every preset is checked against.** `themeConfig.ts` is the only
-source of the six slots. `index.css` carries them for the two original palettes as the pre-hydration
-fallback, and the suite compares that fallback with `palette.dark` / `palette.light` character for
-character; every other preset's slots are projected at runtime by `themePaletteCssVariables` and
-asserted against its own registry entry. A token edited in one place and not the other fails rather
-than shipping a chart in a colour the legend does not show.
+3. **The runtime projection is what every palette is checked against.** `web/src/theme/palette.ts` is
+the only source of the six slots. `index.css` carries the dark and light sets as the pre-hydration
+fallback, and the suite compares that fallback with the derived palettes character for character; every
+other palette's slots are projected at runtime by `themePaletteCssVariables` and asserted against its own
+derivation. A token changed in one place and not the other fails rather than shipping a chart in a colour
+the legend does not show.
 4. **Colour is assigned from one shared ranking, not per panel.** The domain is a *key* per group -
 `model:<name>` or the folded discriminator - rather than the display label, so a real model whose name
 equals the remainder's translated label cannot take the remainder's colour. The range is then generated
@@ -689,7 +755,7 @@ Oh My CPA draws from OpenCode's minimalist, high-density, engineer-first console
    - Avoid marketing boilerplate or lengthy guides inside UI cards.
 6. **Top Context Slot**
    - The left side hosts the signature `›_` prompt logo, expandable to an instance context selector when multi-instance support lands;
-   - The right side houses four fixed-width actions: refresh, the theme menu, the language menu, and sign out. Both preferences are **menus over their whole registry** rather than toggles between two states - the console already carries six presets and four reading languages. The theme menu previews each preset with the same four-swatch mark the settings cards use; the language menu names every choice by its **endonym** - its own name in its own script, never a translation - so a reader who cannot read the console's current language can still recognize and choose their own. The settings page's language picker lists the same endonyms.
+   - The right side houses four fixed-width actions: refresh, the theme mode control, the language menu, and sign out. **The mode control cycles and the language control is a menu**, and that asymmetry is deliberate. The theme was a menu while the console carried six palettes and a toggle could only answer "the other one"; the palettes now belong to the modes and are chosen on the OMC Settings page, where each candidate repaints the whole console as it is picked, so the header's remaining question is light or dark - with follow-the-system as the third state, one icon per state (a sun, a moon, a desktop). The control's tooltip is its own name and deliberately not a sentence about its state; the states are named in words on the settings page's own row. The language stays a menu because four languages, one of which the reader may not read, is exactly the case a list answers: it names every choice by its **endonym** - its own name in its own script, never a translation. The settings page's language picker lists the same endonyms.
    - **Every header action keeps one width in every reading language.** Labels are the one thing whose length changes with the language, so sign out is an icon button named by its tooltip, and the language trigger holds its code in a fixed slot. A control that resizes moves the actions beside it, which is a real defect rather than a cosmetic one: the pointer is already on one of them.
    - Connection status and version are the side rail foot's, not the header's: this slot carries actions. Never display fabricated avatars, dummy balances, or mock workspace selectors before real capabilities exist.
 7. **Form Workbench & Setting Group Panels**
@@ -778,8 +844,10 @@ Non-obvious decisions, keep these when editing:
 - All shadow tokens set to `'none'`; every motion token pinned to ≤ 0.1s (§7).
 - Components pinned: Button 32/28px with `primaryColor = accentOn` and `Input` active ring
   `accent22`, Select optionSelectedBg = surface, Tag defaultBg = bg. The button label is pinned
-  because Ant Design defaults it to `colorTextLightSolid`, so a preset with a light accent fill
-  would otherwise draw white on it.
+  because Ant Design defaults it to `colorTextLightSolid`, so a palette with a light accent fill
+  would otherwise draw white on it. `createThemeConfig` takes the *resolved* palette rather than an id,
+  so the antd tokens are a projection of the same object the stylesheet, the charts and the Monaco theme
+  read, and an operator's own palette reaches Ant Design through the same path a registered one does.
 - Dashboard KPI cards use `@ant-design/charts` (`Area`) to render one trend per tile.
   **The mark is an area, and that is a data-shape decision, not a style one.** The
   backend zero-fills a fixed bucket grid (`fillDashboardBuckets`), so a quiet window
@@ -795,8 +863,8 @@ Non-obvious decisions, keep these when editing:
   zero for the same reason — a lifted domain would float an empty window above its axis.
   The charting runtime is isolated in a separate `vendor-charts` chunk and loaded lazily
   (`React.lazy` dynamic `import()`) so only the dashboard route pays for it, keeping the
-  initial login shell compact. The active preset's palette is bridged into the chart
-  config (`sparkColor(preset.palette, tone)`), the marks morph between two revisions on
+  initial login shell compact. The resolved palette is bridged into the chart
+  config (`sparkColor(resolved.palette, tone)`), the marks morph between two revisions on
   §7's `roll` token with a reduced-motion escape (`chartMotion.ts`, §7 rule 5), and the hover
   readout uses an app-owned HTML
   `.chart-tooltip` styled from CSS custom properties. That readout is a direct child of
@@ -1074,7 +1142,10 @@ screens instead of becoming a second layout — and a single line under it state
 window its counts cover.
 
 ## 8. Checklist for new UI
-- [ ] Colors only via `palette` / CSS vars; semantic colors carry meaning
+- [ ] Colors only via the resolved palette / CSS vars; semantic colors carry meaning
+- [ ] A *relationship* between two colors (a hover step, a divider, the surface a tooltip sits on) is
+      part of the derivation in `web/src/theme/palette.ts`, not a literal in a component and not a second
+      formula - an operator's own palette has to inherit it
 - [ ] A continuous scale (cache rate) reads from its own tokens, never a
       per-component hex, and stays ≥ 4.5:1 against its own badge fill
 - [ ] No shadows, no gradients, 4px radius

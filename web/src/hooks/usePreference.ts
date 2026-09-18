@@ -7,7 +7,18 @@ export interface Preference<T> {
   value: T;
   /** False until the stored value has been read, so a page can wait instead of painting a default and correcting it. */
   ready: boolean;
-  set: (next: T) => void;
+  set: (next: T) => Promise<PreferenceWrite>;
+}
+
+/**
+ * The outcome of one write, so a caller can tell a saved value from an optimistically shown one.
+ *
+ * A rejection would be the tidier shape, but this hook is used by callers that have nothing to do with
+ * the result, and a rejected promise nobody handles is a console error rather than a signal. Reporting
+ * it instead means the callers that care can wait, and the ones that do not are unchanged.
+ */
+export interface PreferenceWrite {
+  ok: boolean;
 }
 
 const writeQueues = new Map<string, Promise<void>>();
@@ -60,10 +71,12 @@ export function usePreference<T>(
       [key]: next,
     }));
     const previousPromise = writeQueues.get(key) ?? Promise.resolve();
+    let ok = true;
     const nextPromise = previousPromise
       .catch(() => {})
       .then(() => api.putPreference(key, next))
       .catch((err: unknown) => {
+        ok = false;
         message.error(err instanceof ApiError ? err.message : String(err));
         // Put the control back where it was. Without this the optimistic value
         // stays in the cache while the server still holds the old one, and
@@ -89,6 +102,9 @@ export function usePreference<T>(
         }
       });
     writeQueues.set(key, nextPromise);
+    // The queue holds the write itself; the caller gets the outcome of it. Reading `ok` when this
+    // resolves is safe because the flag is set by the catch that has to have run first.
+    return nextPromise.then(() => ({ ok }));
   }, [key, message, queryClient]);
 
   return { value, ready: !isPending || isError, set };

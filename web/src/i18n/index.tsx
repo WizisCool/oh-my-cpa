@@ -64,6 +64,9 @@ const DICT: Record<string, [string, string]> = {
   'header.degraded': ['CPA 部分接口可用', 'CPA partially available'],
   'header.refresh_all': ['刷新全部', 'Refresh all'],
   'header.theme': ['界面主题', 'Theme'],
+  // The mode control's accessible name. Its tooltip is the control's own name and says nothing about the
+  // state - the icon carries that - so the name states the mode for readers who cannot see the icon.
+  'header.theme_state': ['界面主题：{mode}', 'Theme: {mode}'],
   'header.language': ['界面语言', 'Language'],
 
   // ── OMC settings page ───────────────────────────────────────────
@@ -90,7 +93,44 @@ const DICT: Record<string, [string, string]> = {
   'omc.token_style_en': ['缩写 K/M/B', 'Compact K/M/B'],
   'omc.token_style_zh': ['中文 万/亿', 'Chinese 万/亿'],
   'omc.token_style_full': ['完整数字', 'Full digits'],
-  'omc.theme': ['界面主题', 'Theme'],
+  // The appearance controls: one mode, two palettes, and the editor behind a custom one. The
+  // mode names are also the header control's states, so they are worded to stand alone.
+  'omc.theme_mode': ['主题模式', 'Theme mode'],
+  'omc.theme_mode_light': ['浅色', 'Light'],
+  'omc.theme_mode_dark': ['暗色', 'Dark'],
+  'omc.theme_mode_system': ['跟随系统', 'Follow system'],
+  'omc.theme_mode_desc': ['当前为{mode}', 'Currently {mode}'],
+  'omc.theme_mode_desc_system': ['跟随系统，当前为{mode}', 'Following the system, currently {mode}'],
+  'omc.palette_light': ['浅色模式配色', 'Light-mode palette'],
+  'omc.palette_dark': ['暗色模式配色', 'Dark-mode palette'],
+  // A custom palette is named by the dictionary rather than by the operator, so its label is
+  // translated like every other control's and there is no untranslatable string in the console.
+  'omc.palette_custom': ['自定义', 'Custom'],
+  'omc.palette_custom_desc': ['自己调整九个颜色', 'Adjust nine colours yourself'],
+  'omc.palette_editor_label': ['{mode}自定义配色', 'Custom {mode} palette'],
+  'omc.palette_base': ['起点', 'Start from'],
+  'omc.palette_reset': ['重置', 'Reset'],
+  'omc.palette_done': ['完成', 'Done'],
+  'omc.palette_previewing': ['正在预览{mode}配色，关闭编辑器后返回', 'Previewing the {mode} palette; closing the editor returns'],
+  // The nine editable tokens, named by what they paint rather than by what they are called in
+  // code: an operator sees a page and its panels, not `bg` and `elevated`.
+  'omc.token_bg': ['页面', 'Page'],
+  'omc.token_surface': ['卡片与面板', 'Cards and panels'],
+  'omc.token_elevated': ['浮层与菜单', 'Menus and dialogs'],
+  'omc.token_fg': ['主要文字', 'Primary text'],
+  'omc.token_fg2': ['次要文字', 'Secondary text'],
+  'omc.token_muted': ['提示文字', 'Hint text'],
+  'omc.token_meta': ['注脚与图表标签', 'Footnotes and chart labels'],
+  'omc.token_border': ['边框与分隔线', 'Borders and dividers'],
+  'omc.token_accent': ['强调色', 'Accent'],
+  // The contrast readout. Each token is judged against the floor its own role carries, and the
+  // tooltip names the role so the marker never has to be memorised.
+  'omc.contrast_floor': ['需 ≥ {floor}:1（{role}）', 'Needs ≥ {floor}:1 ({role})'],
+  'omc.contrast_layer': ['层次差异，无文字对比度要求', 'A layer step; no text-contrast floor'],
+  'omc.contrast_role_text': ['正文', 'body text'],
+  'omc.contrast_role_hint': ['提示', 'hint text'],
+  'omc.contrast_role_quiet': ['注脚', 'footnote'],
+  'omc.contrast_role_layer': ['层次', 'layer'],
   'theme.omc_dark': ['OMC Dark', 'OMC Dark'],
   'theme.omc_dark_desc': ['原始 graphite 深色控制台', 'Original graphite dark console'],
   'theme.omc_light': ['OMC Light', 'OMC Light'],
