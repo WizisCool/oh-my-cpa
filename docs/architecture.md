@@ -224,8 +224,16 @@ Query for server state.
 | `hooks/` | `usePreference`, `useLastIntentQueue` (React binding) over `lastIntentQueue` (the framework-free controller) and `disposableSlot` (effect-scoped resource lifetime), `useLogTail`, `useVisibleNow`, `useIsNarrowViewport`, `usePrefersReducedMotion` (the app-owned reduced-motion switch the canvas marks need, since neither `@antv/g2` nor `@ant-design/plots` reads the preference) |
 | `i18n/` | `index.tsx` owns the base `[zh, en]` dictionary and the `t()` context; `language.ts` is the reading-language registry and locale helpers; `locales/zh-Hant.ts` and `locales/ms.ts` are the complete additional catalogs |
 | `theme/` | `themeConfig.ts` (preset registry, antd tokens and CSS-variable projection), `ThemeContext.tsx` (single active preset), `cacheScale.ts` (OKLCH cache ramp) |
-| `utils/` | `maskKey.ts` (the console's one caller-key mask shape, kept branch for branch with the server's `security.MaskSecret`), `externalUrl.ts` (the http/https link rule), `modelOptions.ts` (model-input filtering), `smoothScroll.ts` (the gesture/correction scroll schedule) |
+| `utils/` | `maskKey.ts` (the console's one caller-key mask shape, kept branch for branch with the server's `security.MaskSecret`), `externalUrl.ts` (the http/https link rule), `modelOptions.ts` (model-input filtering), `smoothScroll.ts` (the gesture/correction scroll schedule), `clipboard.ts` (the one copy path, below) |
 | `components/`, `pages/` | Feature UI; one page per route, no page owns another. `components/usage/` also carries that page's framework-free policies: `searchDebounce.ts`, `pollingPolicy.ts`, `timeRangePolicy.ts`, `syncPresentation.ts` and `chipDisplay.ts` |
+
+Every copy control goes through `utils/clipboard.ts` rather than calling the
+Clipboard API itself. That API exists only in a secure context, and a plain-HTTP
+origin is a supported deployment of this console (`deploy/nginx.conf` listens on
+:80 without TLS, and the dev server is reachable from a LAN or Tailscale device),
+where `navigator.clipboard` is `undefined` outright. The helper therefore falls
+back to the selection path and returns whether the text actually reached the
+clipboard, and no control may announce a copy it did not make.
 
 All page routes are `React.lazy` import boundaries so the entry chunk stays
 small; the shell (`AppLayout`, `AuthGate`) is loaded eagerly because every
@@ -913,6 +921,13 @@ broad gates rather than nothing.
 - **Refresh sequencing cannot be replaced by a poll-decision test.** A
   `shouldPoll()` unit test says nothing about whether the page serialises the pull
   before the reads, so the probe holds the response and observes the ordering.
+- **The copy path is split between a unit test and the browser.** Which route a copy
+  takes - the async Clipboard API, or the selection path a plain-HTTP origin needs -
+  is a decision over stubbed globals (`scripts/test-clipboard.ts`). Whether that
+  selection path puts the text on the clipboard is not: it needs a real document, so
+  the key-list acceptance pastes the value back out of the browser's own paste
+  pipeline. That context is granted no clipboard permission on purpose - granting it
+  would stop the acceptance from exercising the fallback at all.
 
 ### 11.2 Where the wall clock actually goes
 

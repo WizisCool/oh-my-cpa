@@ -29,6 +29,7 @@ const DICT: Record<string, [string, string]> = {
   'common.all': ['全部', 'All'],
   'common.copy': ['复制', 'Copy'],
   'common.copied': ['已复制', 'Copied'],
+  'common.copy_failed': ['复制失败', 'Copy failed'],
   'common.search': ['搜索', 'Search'],
 
   // ── navigation ───────────────────────────────────────────────────────────

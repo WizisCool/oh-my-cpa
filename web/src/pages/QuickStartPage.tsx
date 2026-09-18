@@ -19,6 +19,7 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useT } from '../i18n';
+import { copyText } from '../utils/clipboard';
 const { Text, Paragraph } = Typography;
 
 export const QuickStartPage: React.FC = () => {
@@ -30,12 +31,14 @@ export const QuickStartPage: React.FC = () => {
   const origin = typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:8080';
   const proxyBase = `${origin}/v1`;
 
-  const handleCopy = (text: string, key: string) => {
-    void navigator.clipboard.writeText(text).then(() => {
-      setCopiedKey(key);
-      message.success(t('qs.copied'));
-      setTimeout(() => setCopiedKey(null), 2000);
-    });
+  const handleCopy = async (text: string, key: string) => {
+    if (!(await copyText(text))) {
+      message.error(t('common.copy_failed'));
+      return;
+    }
+    setCopiedKey(key);
+    message.success(t('qs.copied'));
+    setTimeout(() => setCopiedKey(null), 2000);
   };
 
   const authHeader = ['-H', '"' + ['Authorization', 'Bearer <YOUR_CLIENT_KEY>'].join(': ') + '"'].join(' ');
@@ -185,7 +188,7 @@ main();`;
                 <Button
                   size="small"
                   icon={copiedKey === 'chat' ? <CheckOutlined /> : <CopyOutlined />}
-                  onClick={() => handleCopy(`${proxyBase}/chat/completions`, 'chat')}
+                  onClick={() => void handleCopy(`${proxyBase}/chat/completions`, 'chat')}
                 />
               </div>
             </Col>
@@ -198,7 +201,7 @@ main();`;
                 <Button
                   size="small"
                   icon={copiedKey === 'models' ? <CheckOutlined /> : <CopyOutlined />}
-                  onClick={() => handleCopy(`${proxyBase}/models`, 'models')}
+                  onClick={() => void handleCopy(`${proxyBase}/models`, 'models')}
                 />
               </div>
             </Col>
@@ -229,7 +232,7 @@ main();`;
                     size="small"
                     style={{ position: 'absolute', top: 12, right: 12 }}
                     icon={copiedKey === 'curl_code' ? <CheckOutlined /> : <CopyOutlined />}
-                    onClick={() => handleCopy(curlSnippet, 'curl_code')}
+                    onClick={() => void handleCopy(curlSnippet, 'curl_code')}
                   >
                     {t('qs.copy')}
                   </Button>
@@ -257,7 +260,7 @@ main();`;
                     size="small"
                     style={{ position: 'absolute', top: 12, right: 12 }}
                     icon={copiedKey === 'py_code' ? <CheckOutlined /> : <CopyOutlined />}
-                    onClick={() => handleCopy(pythonSnippet, 'py_code')}
+                    onClick={() => void handleCopy(pythonSnippet, 'py_code')}
                   >
                     {t('qs.copy')}
                   </Button>
@@ -285,7 +288,7 @@ main();`;
                     size="small"
                     style={{ position: 'absolute', top: 12, right: 12 }}
                     icon={copiedKey === 'node_code' ? <CheckOutlined /> : <CopyOutlined />}
-                    onClick={() => handleCopy(nodeSnippet, 'node_code')}
+                    onClick={() => void handleCopy(nodeSnippet, 'node_code')}
                   >
                     {t('qs.copy')}
                   </Button>

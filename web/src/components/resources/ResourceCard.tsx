@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Tag, Button, Typography, Tooltip, Dropdown, MenuProps } from 'antd';
+import { Card, Tag, Button, Typography, Tooltip, Dropdown, MenuProps, App as AntdApp } from 'antd';
 import {
   EditOutlined,
   CopyOutlined,
@@ -10,6 +10,7 @@ import {
   KeyOutlined,
 } from '@ant-design/icons';
 import { useT } from '../../i18n';
+import { copyText } from '../../utils/clipboard';
 import { DiscoveredResource } from '../../types/resource';
 import { PresetIcon } from '../icons/PresetIcon';
 
@@ -29,15 +30,20 @@ export const ResourceCard: React.FC<ResourceCardProps> = ({
   onIgnore,
 }) => {
   const t = useT();
+  const { message } = AntdApp.useApp();
   const [copied, setCopied] = React.useState(false);
 
-  const handleCopyUrl = (e: React.MouseEvent) => {
+  const handleCopyUrl = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (resource.base_url) {
-      navigator.clipboard.writeText(resource.base_url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+    if (!resource.base_url) return;
+    // The checkmark is the only feedback this control has, so it may not claim a
+    // copy that did not happen.
+    if (!(await copyText(resource.base_url))) {
+      message.error(t('common.copy_failed'));
+      return;
     }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const cardColor = resource.color || '#007aff';

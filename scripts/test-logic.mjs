@@ -36,6 +36,7 @@ const SUITES = [
   { name: 'provider toggle queue', script: 'scripts/test-provider-toggle-queue.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'scroll intent', script: 'scripts/test-scroll-intent.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'mask parity', script: 'scripts/test-mask-key.ts', flags: ['--experimental-strip-types'] },
+  { name: 'clipboard strategy', script: 'scripts/test-clipboard.ts', flags: ['--experimental-strip-types'] },
   { name: 'visible clock', script: 'scripts/test-visible-clock.ts', flags: ['--experimental-strip-types'] },
   { name: 'chart marks', script: 'scripts/test-chart-marks.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'token heatmap', script: 'scripts/test-token-heatmap.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },

@@ -22,6 +22,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import { useT, type TFunc } from '../i18n';
+import { copyText } from '../utils/clipboard';
 import { LobeIcon, getProviderDefaultIcon } from '../components/LobeIcon';
 import {
   BUILTIN_OAUTH_IDS,
@@ -458,12 +459,11 @@ export const OAuthPage: React.FC = () => {
 
   const handleCopyLink = async (url?: string) => {
     if (!url) return;
-    try {
-      await navigator.clipboard.writeText(url);
+    if (await copyText(url)) {
       message.success(t('oauth.link_copied'));
-    } catch {
-      message.error(t('oauth.copy_failed'));
+      return;
     }
+    message.error(t('oauth.copy_failed'));
   };
 
   const handleSubmitCallback = async (card: OAuthCard) => {

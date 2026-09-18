@@ -24,6 +24,7 @@ import {
 } from '@ant-design/icons';
 import { useT } from '../../i18n';
 import { maskKeyText } from '../../utils/maskKey';
+import { copyText } from '../../utils/clipboard';
 import type { ClientAPIKeyItem, ClientKeyUsageItem } from '../../types/providers';
 import styles from './ApiKeysList.module.css';
 
@@ -133,12 +134,11 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
   };
 
   const handleCopy = async (keyText: string) => {
-    try {
-      await navigator.clipboard.writeText(keyText);
+    if (await copyText(keyText)) {
       message.success(t('cfg.source_copy_success'));
-    } catch {
-      message.error(t('cfg.copy_failed'));
+      return;
     }
+    message.error(t('cfg.copy_failed'));
   };
 
   /** The overflow menu holds what is not about the secret: following a key's

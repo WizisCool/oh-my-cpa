@@ -116,7 +116,11 @@ export async function runKeyManagementAcceptance({
     // several actions, so "the first button" is no longer the reveal control.
     await page.getByRole('button', { name: /显示密钥|Reveal secret/ }).first().click();
     const revealedKey = await page.locator('.config-api-keys-table .config-key-text').first().innerText();
-    check('revealing a key shows its full value', revealedKey.trim() === clientKeySecret, `text="${revealedKey}"`);
+    check(
+      'revealing a key shows its full value',
+      revealedKey.trim() === clientKeySecret,
+      `revealedLength=${revealedKey.trim().length} expectedLength=${clientKeySecret.length}`,
+    );
     const keyCellAfter = await page.locator('.config-api-keys-table .config-key-box').first().boundingBox();
     const nameCellAfter = await page.locator('.config-api-keys-table .ant-table-row').first().locator('td').first().boundingBox();
     check(
@@ -125,6 +129,52 @@ export async function runKeyManagementAcceptance({
         && Math.round(keyCellBefore.x) === Math.round(keyCellAfter.x)
         && Math.round(nameCellBefore.width) === Math.round(nameCellAfter.width),
       `keyBox=${Math.round(keyCellBefore.width)}->${Math.round(keyCellAfter.width)} name=${Math.round(nameCellBefore.width)}->${Math.round(nameCellAfter.width)}`,
+    );
+    // The copy control may not announce a copy it did not make, and the value has to
+    // actually arrive on the clipboard. This context is granted no clipboard
+    // permission, so the async Clipboard API is refused here exactly as an
+    // operator's denied permission refuses it, and what carries the copy is the
+    // console's selection path - the same route a plain-HTTP origin depends on,
+    // where `navigator.clipboard` is undefined outright. Which route is chosen is a
+    // unit test (`scripts/test-clipboard.ts`); that the selection route works in a
+    // real document is browser behavior, which is why it is asserted here.
+    await page
+      .locator('.config-api-keys-table .ant-table-row')
+      .first()
+      .getByRole('button', { name: /^(复制|Copy)$/ })
+      .click();
+    await checkEventually(
+      'the copy control reports a copy it made',
+      async () =>
+        (await page.locator('.ant-message').getByText(/已复制到剪贴板|Copied to clipboard/).count()) > 0,
+      { label: "the copy control's success message" },
+    );
+    // Read back through the browser's own paste pipeline rather than through the
+    // Clipboard API: a toast only proves the handler ran, while this proves the key
+    // reached the clipboard. Pasting is a user gesture, so it needs no permission.
+    await page.evaluate(() => {
+      const probe = document.createElement('input');
+      probe.setAttribute('data-copy-probe', '');
+      probe.style.position = 'fixed';
+      probe.style.top = '0';
+      probe.style.left = '-9999px';
+      probe.value = '';
+      document.body.appendChild(probe);
+      probe.focus();
+    });
+    await page.keyboard.press('Control+V');
+    const pastedKey = await page.evaluate(
+      () => document.querySelector('input[data-copy-probe]')?.value ?? '',
+    );
+    await page.evaluate(() => document.querySelector('input[data-copy-probe]')?.remove());
+    check(
+      'the copy control puts the key on the clipboard',
+      pastedKey === clientKeySecret,
+      // Lengths rather than the values: the detail is read in CI logs, and a copy
+      // either matched or did not - the clipboard's own contents add nothing an
+      // operator needs to diagnose this, while printing them would echo a credential
+      // shape into a log that the suite refuses to find in the app's own surfaces.
+      `pastedLength=${pastedKey.length} expectedLength=${clientKeySecret.length}`,
     );
     responseBodies.length = 0;
 

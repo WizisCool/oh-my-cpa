@@ -1,9 +1,10 @@
 import React from 'react';
-import { Tooltip } from 'antd';
+import { Tooltip, App as AntdApp } from 'antd';
 import { BlockOutlined, BulbOutlined, CopyOutlined, RightOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { LobeIcon, getProviderDefaultIcon } from '../LobeIcon';
 import { useT } from '../../i18n';
+import { copyText } from '../../utils/clipboard';
 import { cacheScaleMix, formatCacheRate } from '../../theme/cacheScale';
 import type { UsageEvent } from '../../types/usageEvents';
 import {
@@ -42,6 +43,7 @@ export const RequestRow = React.memo<RequestRowProps>(
     isSelected = false,
   }) => {
     const t = useT();
+    const { message } = AntdApp.useApp();
     // The console-wide token unit style: the list scans compactly while every
     // accessible name keeps the exact count.
     const { style: tokenStyle } = useTokenDisplayStyle();
@@ -74,8 +76,12 @@ export const RequestRow = React.memo<RequestRowProps>(
     const uaLabel = eventUserAgentLabel(event);
     const resultLabel = t(eventResultLabelKey(event));
     const copyRequestId = () => {
-      if (!event.request_id || !navigator.clipboard) return;
-      void navigator.clipboard.writeText(event.request_id).catch(() => undefined);
+      if (!event.request_id) return;
+      // The quick-copy control carries no success state of its own, so a silent
+      // failure would read exactly like a copy that worked.
+      void copyText(event.request_id).then((copied) => {
+        if (!copied) message.error(t('common.copy_failed'));
+      });
     };
 
     const formattedTime = dayjs(event.timestamp_ms).format('MM-DD HH:mm:ss');

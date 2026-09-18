@@ -12,6 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';
+import { copyText } from '../../utils/clipboard';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { formatTokens, formatTokensFull } from '../../types/tokenDisplay';
 import type { UsageEvent } from '../../types/usageEvents';
@@ -76,12 +77,11 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
     </section>
   );
   const copy = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
+    if (await copyText(text)) {
       message.success(t('res.copied'));
-    } catch {
-      message.error(t('events.copy_failed'));
+      return;
     }
+    message.error(t('events.copy_failed'));
   };
   const download = async () => {
     if (eventId == null || !event?.request_id) return;

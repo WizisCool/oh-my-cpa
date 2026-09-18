@@ -23,6 +23,7 @@ export const MS: Readonly<Record<string, string>> = {
   "common.all": "Semua",
   "common.copy": "Salin",
   "common.copied": "Disalin",
+  "common.copy_failed": "Gagal menyalin",
   "common.search": "Cari",
   "nav.group.operate": "Operasi",
   "nav.group.gateway": "Gerbang",
