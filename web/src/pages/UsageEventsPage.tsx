@@ -5,23 +5,16 @@ import {
   Button,
   Descriptions,
   Empty,
-  Input,
   Listy,
   Popover,
-  Segmented,
-  Select,
   Skeleton,
   Switch,
   Tooltip,
 } from 'antd';
 import {
-  FilterOutlined,
   FullscreenExitOutlined,
   FullscreenOutlined,
-  LeftOutlined,
   ReloadOutlined,
-  RightOutlined,
-  SearchOutlined,
   VerticalAlignTopOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
@@ -35,7 +28,6 @@ import {
   isUsageFacetsResponse,
   type UsageEvent,
   type UsageEventPage,
-  type UsageFacets,
   type UsageResultFilter,
 } from '../types/usageEvents';
 import {
@@ -44,7 +36,6 @@ import {
   eventWindow,
   filterParamsToUrl,
   hasExplicitEventQuery,
-  mergeFacetOptions,
   readEventQuery,
   readFilterParams,
   rejectedEventParams,
@@ -52,14 +43,12 @@ import {
 } from '../types/usageEventQuery';
 import {
   DEFAULT_USAGE_EVENTS_VIEW,
-  EVENT_GROUPING_VALUES,
   USAGE_EVENTS_VIEW_PREFERENCE,
   parseUsageEventsView,
   type EventGrouping,
   type UsageEventsViewPreference,
 } from '../types/usageEventViewPreference';
 import { createProviderNameResolver, indexCredentialFiles } from '../types/usageEventIdentity';
-import { providerFacetLabel, usageFacetLabel } from '../types/usageEventLabels';
 import {
   UNKNOWN_EVENT_GROUP,
   eventCredentialIdentity,
@@ -83,10 +72,6 @@ import { useUsageEventSync } from '../components/usage/useUsageEventSync';
 import { isListStale, isViewChange } from '../components/usage/pollingPolicy';
 import { chipDisplayValue } from '../components/usage/chipDisplay';
 import {
-  REQUEST_COLUMNS,
-  requestColumnAlignClass,
-} from '../components/usage/requestColumns';
-import {
   PROVIDER_ICONS_PREFERENCE,
   EMPTY_PROVIDER_ICONS,
   parseProviderIcons,
@@ -95,8 +80,9 @@ import { RequestRow } from '../components/usage/RequestRow';
 import { UsageEventDrawer } from '../components/usage/UsageEventDrawer';
 import { RequestFilterDrawer } from '../components/usage/RequestFilterDrawer';
 import { RequestFilterChips } from '../components/usage/RequestFilterChips';
-import { ResultMarker } from '../components/usage/ResultMarker';
-import { TimeRangeControl } from '../components/usage/TimeRangeControl';
+import { RequestPagination } from '../components/usage/RequestPagination';
+import { RequestStreamHeader } from '../components/usage/RequestStreamHeader';
+import { RequestToolbar } from '../components/usage/RequestToolbar';
 import './UsageEventsPage.css';
 
 export const UsageEventsPage: React.FC = () => {
@@ -557,48 +543,16 @@ export const UsageEventsPage: React.FC = () => {
     return () => observer.disconnect();
   }, []);
 
-  /**
-   * Facet options carry the window's request count; `expandProps` was dropped
-   * because the count in the label is what makes the option worth reading.
-   * A selected value missing from a capped response is re-added, so the control
-   * can never render blank while its filter is still applied.
-   */
-  const facetMulti = (
-    key: EventFilterKey,
-    labelKey: string,
-    values: UsageFacets[keyof UsageFacets] | undefined,
-  ) => {
-    const selected = committedParams[key] ?? [];
-    return (
-      <Select
-        className="req-facet-select"
-        mode="multiple"
-        aria-label={t(labelKey)}
-        placeholder={t(labelKey)}
-        value={selected}
-        allowClear
-        maxTagCount="responsive"
-        showSearch={{ optionFilterProp: 'label' }}
-        onChange={(next) => setFilter(key, next as string[])}
-        options={mergeFacetOptions(
-          values,
-          selected,
-          // The provider dimension is stored as CPA's key, so it is labelled with
-          // the operator's own name for that line; the value stays the key.
-          key === 'provider'
-            ? (entry) => providerFacetLabel(providerName(entry.value), entry.requests)
-            : usageFacetLabel,
-          (value) =>
-            key === 'provider'
-              ? providerName(value)
-              : key === 'auth_index'
-                ? `${credentials.get(value)?.name || value} · ${value}`
-                : value,
-        )}
-        notFoundContent={facets.isError ? t('events.facets_error') : undefined}
-      />
-    );
-  };
+  const handlePageSizeChange = React.useCallback(
+    (nextLimit: number) => {
+      const nextParams = new URLSearchParams(params);
+      if (nextLimit === 100) nextParams.delete('limit');
+      else nextParams.set('limit', String(nextLimit));
+      writeParams(nextParams);
+      persistView(nextParams, { grouping });
+    },
+    [grouping, params, persistView, writeParams],
+  );
 
   /**
    * Clear-all is offered in two places (the bar and the chip strip) and must
@@ -787,86 +741,29 @@ export const UsageEventsPage: React.FC = () => {
             action={<Button onClick={() => void result.refetch()}>{t('common.retry')}</Button>}
           />
         )}
-        <section className="request-toolbar" aria-label={t('events.filters')}>
-          <div className="request-filters">
-            <Input
-              className="request-search"
-              aria-label={t('events.search_hint')}
-              placeholder={t('events.search_placeholder')}
-              prefix={<SearchOutlined />}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              allowClear
-            />
-            <TimeRangeControl
-              preset={query.preset}
-              from={query.from}
-              to={query.to}
-              onChange={setTimeWindow}
-            />
-            <Segmented
-              className="req-result-segmented"
-              aria-label={t('events.col_result')}
-              value={query.result}
-              onChange={(value) => {
-                const next = value as UsageResultFilter;
-                commit(committedParams, { result: next });
-              }}
-              options={(['all', 'success', 'failed'] as const).map((value) => ({
-                value,
-                // The marker reuses the Result column's own vocabulary, so
-                // "success" and "failed" mean the same thing in the filter and
-                // in the list it filters. 'all' gets none: it is the absence of
-                // a verdict, and two bullets would read as a third outcome.
-                label: (
-                  <span className="req-result-option">
-                    {value !== 'all' && <ResultMarker kind={value} />}
-                    {t(`events.filter_${value}`)}
-                  </span>
-                ),
-              }))}
-            />
-            {facetMulti('model', 'events.col_model', facets.data?.facets.models)}
-            {facetMulti('provider', 'events.provider', facets.data?.facets.providers)}
-            <Button
-              className="req-more-filters"
-              aria-label={t('events.more_filters')}
-              icon={<FilterOutlined />}
-              onClick={() => setIsFilterDrawerOpen(true)}
-            >
-              {t('events.more_filters')}
-              {filterCount > 0 ? <span className="req-more-filters-count">{filterCount}</span> : null}
-            </Button>
-          </div>
-          <div className="request-toolbar-bottom">
-            {facets.isError && (
-              <span className="req-facets-note" role="status">
-                {t('events.facets_error')}
-              </span>
-            )}
-            <div className="request-actions">
-              {hasActiveFilter && (
-                <Button type="text" className="req-reset-filters" onClick={clearFilters}>
-                  {t('events.reset')}
-                  <span className="req-reset-count">{activeFilters.length || 1}</span>
-                </Button>
-              )}
-              <Select
-                aria-label={t('events.group_by')}
-                value={grouping}
-                onChange={(value) => {
-                  const next = value as EventGrouping;
-                  setGrouping(next);
-                  persistView(params, { grouping: next });
-                }}
-                options={EVENT_GROUPING_VALUES.map((value) => ({
-                  value,
-                  label: t(`events.group_${value}`),
-                }))}
-              />
-            </div>
-          </div>
-        </section>
+        <RequestToolbar
+          search={search}
+          onSearchChange={setSearch}
+          query={query}
+          onTimeWindowChange={setTimeWindow}
+          onResultChange={(result) => commit(committedParams, { result })}
+          committedParams={committedParams}
+          onFilterChange={setFilter}
+          facets={facets.data?.facets}
+          facetsFailed={facets.isError}
+          credentials={credentials}
+          resolveProviderName={providerName}
+          filterCount={filterCount}
+          onOpenFilters={() => setIsFilterDrawerOpen(true)}
+          hasActiveFilter={hasActiveFilter}
+          activeFilterCount={activeFilters.length}
+          onClearFilters={clearFilters}
+          grouping={grouping}
+          onGroupingChange={(next) => {
+            setGrouping(next);
+            persistView(params, { grouping: next });
+          }}
+        />
         <RequestFilterChips
           committed={committedParams}
           describe={describeChip}
@@ -908,32 +805,12 @@ export const UsageEventsPage: React.FC = () => {
         }
       >
         <div className="request-table-scroll-area" onWheel={handleWheel}>
-          <div className="request-table-header">
-            {REQUEST_COLUMNS.map((col) => (
-              <div
-                key={col.id}
-                className={`req-th req-th-${col.id} ${requestColumnAlignClass(col.id)}`}
-              >
-                <span className="req-th-label">{t(col.labelKey)}</span>
-                {col.resizable && (
-                  <span
-                    className="req-col-resizer"
-                    role="separator"
-                    aria-orientation="vertical"
-                    aria-label={t('events.col_resizer')}
-                    aria-valuenow={colWidths[col.id] ?? col.defaultWidth}
-                    aria-valuemin={col.minWidth}
-                    aria-valuemax={col.maxWidth}
-                    tabIndex={0}
-                    onPointerDown={(e) => handleResizeStart(col.id, e)}
-                    onDoubleClick={() => handleResetColumn(col.id)}
-                    onKeyDown={(e) => handleResizeKeyDown(col.id, e)}
-                  />
-                )}
-              </div>
-            ))}
-            <span className="req-th req-th-chevron" />
-          </div>
+          <RequestStreamHeader
+            colWidths={colWidths}
+            handleResizeStart={handleResizeStart}
+            handleResetColumn={handleResetColumn}
+            handleResizeKeyDown={handleResizeKeyDown}
+          />
           <div ref={listHost} className="request-list-host">
             {!isQueryEnabled || result.isLoading ? (
               <div className="request-loading">
@@ -996,46 +873,21 @@ export const UsageEventsPage: React.FC = () => {
             </span>
           </button>
         )}
-        <footer className="request-pagination">
-          <span aria-live="polite">
-            {stale
-              ? t('events.previous_results')
-              : t('events.page_loaded', { page: cursors.length + 1, n: events.length })}
-            {result.isPlaceholderData && ` · ${t('events.updating')}`}
-          </span>
-          <div className="request-actions">
-            <Select
-              aria-label={t('events.page_size')}
-              value={query.limit}
-              onChange={(value) => {
-                const nextParams = new URLSearchParams(params);
-                if (value === 100) nextParams.delete('limit');
-                else nextParams.set('limit', String(value));
-                writeParams(nextParams);
-                persistView(nextParams, { grouping });
-              }}
-              options={Array.from(new Set([100, 250, 500, query.limit!]))
-                .sort((a, b) => a - b)
-                .map((value) => ({ value, label: t('events.per_page', { n: value }) }))}
-            />
-            <Tooltip title={t('events.prev_page')}>
-              <Button
-                aria-label={t('events.prev_page')}
-                icon={<LeftOutlined />}
-                disabled={!cursors.length || result.isFetching}
-                onClick={handlePrevPage}
-              />
-            </Tooltip>
-            <Tooltip title={t('events.next_page')}>
-              <Button
-                aria-label={t('events.next_page')}
-                icon={<RightOutlined />}
-                disabled={!result.data?.has_more || !result.data?.next_cursor || result.isFetching || result.isError}
-                onClick={handleNextPage}
-              />
-            </Tooltip>
-          </div>
-        </footer>
+        <RequestPagination
+          stale={stale}
+          isPlaceholderData={result.isPlaceholderData}
+          page={cursors.length + 1}
+          count={events.length}
+          limit={query.limit!}
+          isFetching={result.isFetching}
+          isError={result.isError}
+          hasMore={!!result.data?.has_more}
+          hasNextCursor={!!result.data?.next_cursor}
+          hasPrev={cursors.length > 0}
+          onPageSizeChange={handlePageSizeChange}
+          onPrev={handlePrevPage}
+          onNext={handleNextPage}
+        />
       </section>
       <UsageEventDrawer
         credentials={credentials}
