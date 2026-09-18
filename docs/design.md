@@ -541,6 +541,18 @@ away half the secret while still failing to name it, so short keys are
 intentionally indistinguishable from one another. The filler is a constant
 length, so the mask never reveals the secret's length.
 
+- **One shape, both surfaces.** The key-management list computes its mask from the
+  value it holds, while the request list and the caller facet read the mask stored
+  with the event. Both render the same shape from the same thresholds, so a key
+  never looks like two different keys depending on which page it is read on: the
+  console's `web/src/utils/maskKey.ts` is kept branch for branch with the server's
+  `security.MaskSecret`. Every key this console generates (`sk-cpa-` plus 32 hex
+  characters) is 20 glyphs masked.
+- **The reveal toggle changes the ink, not the width.** The list prints the secret
+  inside a box whose width does not depend on the value in it, and the mask and the
+  secret are the same shape, so revealing a key moves nothing in the table. Masked
+  keys carry `--meta` and a revealed secret the console's full-contrast ink: the
+  colour says which of the two is on screen.
 - **Identity is the fingerprint.** Grouping, filtering and deduplication use the
   keyed HMAC (`api_group_key`), which is also what the detail drawer shows. The
   mask exists only for a human reading the list.
@@ -579,8 +591,10 @@ Tabular      font-variant-numeric: tabular-nums on all numeric data
 
 1. One page title per page — the dashboard title is the *verdict* (e.g. `Healthy.`),
    other pages use the nav label. No duplicated subtitles restating it.
-2. No decorative subtitles. A subtitle exists only when it carries live data
-   (e.g. `Default CPA · Connected`, `3 auth files`), never static marketing copy.
+2. No decorative subtitles. A page subtitle is one line naming the surface's subject
+   (`Manage upstream AI provider endpoints, protocol drivers, and models`) or it carries
+   live data (`Default CPA · Connected`, `3 auth files`) — never a restatement of the
+   title, an instruction, or marketing copy.
    The same rule covers warning text: a state label (`CPA file logging disabled`) plus
    an action (`Retry`) is the whole message. Sentences explaining *why* the switch
    exists, or promising what another screen will do, are documentation pasted
@@ -589,6 +603,31 @@ Tabular      font-variant-numeric: tabular-nums on all numeric data
    language for the same thing (every registered language localizes fully; proper
    nouns like "Provider" may remain English where that is the industry term).
 4. Body max width `1440px`; page padding 32px desktop / 24px tablet / 16px phone.
+
+The content widths that follow from those two numbers are the console's, and a page
+measures what every other page measures:
+
+```text
+content area         viewport − 236 (the sider)
+page column         min(1440, content area)   centred once the cap binds
+content column      1440 − 2×32 = 1376  (what the page owns)
+list inside a Card  1376 − 2×1 − 2×20 = 1334  (antd Card body padding, 20px each side)
+```
+
+- **One content column.** `.terminal-page` owns it. A page-level class must not
+declare its own `max-width`: a rule of equal specificity wins by source order
+(CSS module styles are injected after the stylesheet), so a page that sets
+`max-width: 100%` silently drops the 1440px cap and runs the full width of the
+content area — measured at 1684px on a 1920px viewport, i.e. 244px wider than
+every other surface. Where a page genuinely needs a different column it states
+the reason next to the rule (the configuration workbench is the one such case:
+a 920px reading column between a nav track and a balancing gutter).
+- **Lists do not change the column.** A list sits inside the page's Card and keeps
+that card's 20px inset; the table's width follows from the card, not from the
+viewport or from a column count. Measured at a 1920px viewport: card 1376,
+table 1334, both at the same x as the AI Providers table.
+- **A page's own surface is never wider than the page.** Sideways scrolling for a
+wide table happens inside the card, so the column stays where the reader left it.
 
 ## 4. Shape, spacing, elevation
 
@@ -658,7 +697,7 @@ Oh My CPA draws from OpenCode's minimalist, high-density, engineer-first console
    - **Setting Group Panels**: Related settings converge into **Setting Group Panels** (uniform 1px hairline border, `--surface` background, and 4px terminal radius) rather than an endless flat list of inputs or fragmented cards. Three specialized structures are used:
      1. **Form Grid**: Labels and descriptions on top, controls below; related short fields (such as Host and Port, retry counts and delays) sit side by side; short number inputs are bounded to 120px and selects to 260px;
      2. **Settings List**: Toggles and flags use in-card row lists with "title and description on left + Switch on right", bounded by the panel container;
-     3. **Entity List**: Proxy client API keys use dedicated 32×32px square buttons with tooltips for deliberate, safe interaction;
+     3. **Managed Elsewhere**: A group whose field is edited on its own page (the proxy client API keys) states how much is configured and leads there with a single action, rather than carrying a second editor that could disagree with the first. It renders in search results too, so searching for that field finds the panel that names it;
      4. **Progressive Disclosure Panel**: TLS sections host an enable switch in the group header; when disabled, only explanatory text is shown; when enabled, certificate and private key path fields expand smoothly, while preserving YAML data and disabling hidden controls when collapsed.
    - **Sticky Action Toolbar**: Title, sync pill, mode switch (`Visual / Source`), and actions (search, refresh, save) converge into a single sticky bar. The Save button stays anchored to the far right.
    - **Target Ergonomics**: High-frequency inline actions use discrete 32×32px square buttons (1px border and subtle background), providing ample click targets and tooltip feedback rather than bare icons.
@@ -1015,6 +1054,24 @@ key's whole life. The table says so next to them: a count that reads as a lifeti
 total would be a fact the system does not have. A key with no matching records
 shows "not linked" rather than a fabricated `0` or an invented creation date — CPA
 publishes no creation date, so any such column would be a guess rendered as data.
+
+**Three actions in the open, the rest behind the overflow.** A row's reveal, copy
+and edit controls are square buttons the operator can see, because they are the ones
+that take the key itself in hand and a secret reachable only through a menu sits one
+click further from the operation that needs it. Following a key's traffic and
+removing the key live in the overflow menu, since neither is about reading it.
+Removal is the list's only irreversible action — CPA accepts a key by presence in
+`api-keys` and the console keeps no copy of the value — so its confirmation says the
+value cannot be recovered and must be copied first (ADR 0010).
+
+**The list is one container.** The head row, its rule and the table are one surface,
+because a card holding another card holding a toolbar is exactly the nesting the
+open-list rule exists to prevent. The head carries the surface's name, how many keys
+are configured, the search box and every action that applies to the list as a whole,
+and it wraps rather than scrolls so the controls keep their width in every reading
+language. One table serves every viewport width — it scrolls sideways on narrow
+screens instead of becoming a second layout — and a single line under it states the
+window its counts cover.
 
 ## 8. Checklist for new UI
 - [ ] Colors only via `palette` / CSS vars; semantic colors carry meaning

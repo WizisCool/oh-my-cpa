@@ -1,0 +1,123 @@
+/* ApiKeysList.module.css — Gateway client key list
+   Terminal-flat console: 1px borders, no shadows. Class names are kebab-case and
+   read through styles['kebab-case'].
+*/
+
+/* Name cell: the alias is the primary identifier, so it is the control that
+   names the key (design.md: naming is a first-class action, not a setting). */
+.name-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.name-wrapper {
+  display: inline-flex;
+  /* The element is a button, so the user agent's own background has to go; the
+     focus ring comes from the console-wide `:focus-visible` rule and the font
+     from the global `button { font: inherit }`, so neither is repeated here. */
+  background: transparent;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  transition: border-color var(--motion-fast) ease-out, background var(--motion-fast) ease-out;
+}
+
+.name-wrapper:hover {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+.name-text {
+  font-weight: 600;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name-edit-icon {
+  font-size: 11px;
+  color: var(--muted);
+  transition: color var(--motion-fast) ease-out;
+}
+
+.name-wrapper:hover .name-edit-icon {
+  color: var(--fg);
+}
+
+.unnamed-btn {
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: color var(--motion-fast) ease-out, border-color var(--motion-fast) ease-out;
+}
+
+.unnamed-btn:hover {
+  color: var(--fg);
+  border-color: var(--muted);
+}
+
+/* Overflow menu label. The item that cannot act still says why, rather than
+   disappearing: the missing usage identity is worth seeing. */
+.menu-label {
+  display: inline-block;
+}
+
+/* Counts describe this console's stored records in one window, not the key's
+   whole life; saying so prevents "12 requests" from reading as a lifetime total. */
+.scope-note {
+  margin: 0;
+  padding: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* Empty State */
+.empty-box {
+  padding: 32px 0;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.empty-icon {
+  font-size: 32px;
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.empty-desc {
+  font-size: 12px;
+  color: var(--muted);
+  max-width: 420px;
+  line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .name-wrapper,
+  .name-edit-icon,
+  .unnamed-btn {
+    transition: none;
+  }
+}

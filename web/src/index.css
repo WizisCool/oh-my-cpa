@@ -1660,6 +1660,23 @@ a { color: inherit; }
   padding: 20px;
 }
 
+/* A group whose field is edited on its own page: the panel states how much is
+   configured and leads to the surface that owns it, rather than carrying a second
+   editor that could disagree with the first. */
+.settings-managed-elsewhere {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.settings-managed-count {
+  color: var(--fg);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Variant 1: Form Grid */
 .settings-form-grid {
   display: grid;
@@ -1956,30 +1973,13 @@ a { color: inherit; }
   border-bottom: none;
 }
 
-.config-api-keys-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
-
-.config-add-key-btn {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--fg);
-  font-weight: 500;
-  height: 32px;
-}
-
-.config-add-key-btn:hover {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-on) !important;
-}
-
+/* A fixed width rather than a maximum: this box is what stops the reveal toggle
+   from resizing the key column, so its contribution to the table's layout must
+   not depend on how long the value inside it happens to be. A key longer than the
+   box scrolls inside it. */
 .config-key-box {
-  width: 100%;
-  max-width: 440px;
+  width: 380px;
+  max-width: 100%;
   height: 32px;
   display: inline-flex;
   align-items: center;
@@ -1999,6 +1999,26 @@ a { color: inherit; }
   color: var(--fg);
   letter-spacing: 0.5px;
   user-select: all;
+}
+
+/* The mask and the secret are the same shape and length, so the ink is what says
+   which one is on screen: masked keys carry the metadata colour the design system
+   names for them, and a revealed secret takes the console's full-contrast ink. */
+.config-key-text.is-masked {
+  color: var(--meta);
+}
+
+.config-key-text.is-revealed {
+  color: var(--fg);
+}
+
+/* The row's action cluster: the two actions that touch the secret stay inline as
+   32x32 squares, everything else lives behind the overflow trigger. */
+.keys-row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 /* 32x32px square key action buttons */
@@ -2021,34 +2041,6 @@ a { color: inherit; }
   color: var(--fg) !important;
   border-color: var(--muted) !important;
   background: var(--bg) !important;
-}
-
-.config-key-action.is-danger:hover {
-  color: var(--danger) !important;
-  border-color: var(--danger) !important;
-  background: rgba(255, 59, 48, 0.1) !important;
-}
-
-/* A key the console has no usage identity for cannot be filtered to, so the
-   action is disabled rather than hidden: the missing identity is worth seeing. */
-.config-key-action:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.config-key-action:disabled:hover {
-  color: var(--muted) !important;
-  border-color: var(--border) !important;
-  background: var(--surface) !important;
-}
-
-/* States what the per-key counts measure. They describe this console's stored
-   records in one window, not the key's whole life, and saying so prevents
-   "12 requests" from reading as a lifetime total. */
-.config-keys-scope-note {
-  margin: 10px 0 0;
-  font-size: 11px;
-  line-height: 1.5;
 }
 
 @media (max-width: 1719px) {

@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Alert,
   App as AntdApp,
@@ -61,6 +62,7 @@ export const ConfigPage: React.FC = () => {
   const { message, modal } = AntdApp.useApp();
   const { themeId } = useThemeMode();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const editorRef = useRef<YamlSourceEditorRef | null>(null);
 
   const [viewMode, setViewMode] = React.useState<'visual' | 'source'>('visual');
@@ -382,10 +384,31 @@ export const ConfigPage: React.FC = () => {
   };
 
   // ── API Keys ────────────────────────────────────────────
-  // The key list is edited on its own page (/api-keys) so the console keeps one
-  // entry point into that field. The `apiKeys` schema field itself stays: the
-  // source view still renders the whole document, and semantic comparison of that
-  // document still has to account for `api-keys`.
+  // The key list is edited on its own page (/api-keys), which is the only editor
+  // of that field (ADR 0010). What the configuration panel owns is the pointer to
+  // it: a group that names the field, states how many keys are configured, and
+  // leads there. Hiding the group instead - what this page did before - left the
+  // panel silent about a field it owns. The `apiKeys` schema field itself stays:
+  // the source view still renders the whole document, and semantic comparison of
+  // that document still has to account for `api-keys`.
+  const apiKeysField = React.useMemo(
+    () => ALL_CONFIG_FIELDS.find((field) => field.id === 'apiKeys'),
+    [],
+  );
+
+  const configuredKeyCount = React.useMemo(() => {
+    if (!apiKeysField) return 0;
+    if (!docRef.current) {
+      try {
+        docRef.current = parseDocument(rawYaml || '');
+      } catch {
+        return 0;
+      }
+    }
+    const value = getFieldValue(apiKeysField);
+    if (Array.isArray(value)) return value.length;
+    return typeof value === 'string' && value ? 1 : 0;
+  }, [apiKeysField, rawYaml, getFieldValue]);
 
   // Section icons helper
   const sectionIcon = (id: ConfigSectionId) => {
@@ -616,15 +639,33 @@ export const ConfigPage: React.FC = () => {
 
     if (groupFields.length === 0) return null;
 
-    // Entity List variant (e.g. API Keys)
+    // Managed-elsewhere variant (the client API keys)
     //
-    // The key list is no longer rendered here. It lives on /api-keys, which is a
-    // first-class gateway surface, so the configuration workbench does not carry
-    // a second editor that could disagree with it. The field itself stays in the
-    // schema: the YAML source view still shows the whole document, and semantic
-    // comparison of the document still has to know about `api-keys`.
-    if (grp.variant === 'entity-list') {
-      return null;
+    // This group points at the surface that owns the field rather than editing
+    // it: one editor per field, and the operator who looks here is told where
+    // that editor is. It renders in the search context too, so searching for the
+    // field finds the panel that names it instead of nothing at all.
+    if (grp.variant === 'managed-elsewhere') {
+      return (
+        <div key={grp.id} className="settings-group">
+          <div className="settings-group-head">
+            <div>
+              <h3 className="settings-group-title">{t(grp.labelKey)}</h3>
+              {grp.descKey && <p className="settings-group-desc">{t(grp.descKey)}</p>}
+            </div>
+          </div>
+          <div className="settings-group-body">
+            <div className="settings-managed-elsewhere">
+              <span className="settings-managed-count">
+                {t('cfg.api_keys_count', { n: configuredKeyCount })}
+              </span>
+              <Button size="small" type="primary" onClick={() => navigate('/api-keys')}>
+                {t('cfg.api_keys_manage')}
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
     }
 
     // Payload Builder variant (structured JSON rules for models and parameters)

@@ -302,12 +302,11 @@ A deployment may connect Oh My CPA to a CLIProxyAPI (CPA) instance that was alre
    - Adding, renaming, or clearing a custom name (alias) is stored as Oh My CPA presentation metadata in the SQLite table `client_key_aliases`, keyed by `(instance_id, key_fingerprint)`. It **never** mutates CPA's `config.yaml`, never rotates CPA configuration revisions, and never disrupts running proxy traffic.
    - When adding new keys, operators can optionally supply a custom name immediately; leaving it blank keeps the key unnamed.
 
-3. **Temporary key disabling boundary**:
-   CPA strictly authenticates inbound caller requests against its active `api-keys:` list. To temporarily disable a client key without deleting its secret, custom name, or usage history:
-   - Oh My CPA removes the key from CPA's active `api-keys:` YAML draft (causing CPA to reject requests with 401 Unauthorized upon save).
-   - The disabled key and its state are preserved in Oh My CPA's `ui_preferences` (`omc_disabled_client_keys`).
-   - Toggling the key back to enabled moves it back into active `api-keys:` in `config.yaml`.
-   - Operators can review all keys (enabled and disabled) and filter by status on the Key Management console.
+3. **Client key removal boundary**:
+   CPA authenticates inbound caller requests strictly against its active `api-keys:` list, and that list is the only state a client key has: present (accepted) or absent (rejected with 401 Unauthorized). Oh My CPA deliberately models no suspended or disabled state of its own, because a flag stored here could not stop CPA from accepting the key and would therefore read as a security control it is not. Stopping a key means removing it from `api-keys`, through the same revision-guarded draft transaction as every other configuration write (see ADR 0010).
+   - Removal is irreversible for the secret: Oh My CPA stores no copy of a key value, so the console's delete confirmation states that the value cannot be recovered and must be copied first if it is wanted.
+   - A custom name and the key's historical traffic outlive its removal, because `client_key_aliases` and `usage_events` are keyed by the usage fingerprint rather than by the key text.
+   - The list on the Key Management console (`/api-keys`) carries no status filter, because there is no status to filter: it is exactly what CPA will accept.
 
 4. **Multi-dimensional observability and filtering**:
    - Both the Request Records console (`/usage/events`) and the Dashboard (`/dashboard`) support filtering metrics, throughput, token volume, model ranking, and drill-down links by specific client key fingerprint (`api_key`).
