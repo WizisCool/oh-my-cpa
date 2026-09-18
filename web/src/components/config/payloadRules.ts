@@ -1,4 +1,4 @@
-import type { Document } from 'yaml';
+import { isMap, type Document } from 'yaml';
 
 export type PayloadProtocol = '' | 'openai' | 'gemini' | 'claude' | 'codex' | 'antigravity';
 
@@ -413,19 +413,27 @@ export function writePayloadCategory(
   category: PayloadCategoryKey,
   serializedValue: unknown[]
 ): void {
-  if (!doc.has('payload')) {
-    doc.set('payload', {});
+  // Every write below goes through `setIn`/`deleteIn`, and both throw when an
+  // intermediate node is not a collection. A fresh CPA config has no `payload` key at
+  // all, and `payload:` left empty is just as common, so the map has to be made
+  // writable first. A throw here leaves the React event handler before it reaches the
+  // change callback: the document is never updated, nothing reads as dirty, the save
+  // bar never appears, and payload rules cannot be saved at all.
+  //
+  // Made with `createNode`, not `doc.set('payload', {})`. That renders as
+  // `payload: {}` and reads back as an empty object, so it looks right, but it stores
+  // a plain object rather than a YAMLMap - and the next write through it throws.
+  if (!isMap(doc.get('payload', true))) {
+    if (serializedValue.length === 0) return;
+    doc.set('payload', doc.createNode({}));
   }
+
   if (serializedValue.length === 0) {
     doc.deleteIn(['payload', category]);
-    const payloadNode = doc.get('payload');
-    if (
-      typeof payloadNode === 'object' &&
-      payloadNode !== null &&
-      'items' in payloadNode &&
-      Array.isArray((payloadNode as { items: unknown[] }).items) &&
-      (payloadNode as { items: unknown[] }).items.length === 0
-    ) {
+    const payloadNode = doc.get('payload', true);
+    // The map goes too once its last category is gone, so a document the operator
+    // never configured is not written back with an empty `payload: {}`.
+    if (isMap(payloadNode) && payloadNode.items.length === 0) {
       doc.delete('payload');
     }
   } else {
