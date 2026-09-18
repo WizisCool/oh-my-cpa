@@ -221,7 +221,7 @@ family in the app, and the only exception to the semantic-only rule above; see
 - **Label / Eyebrow** (500, 10px, line-height 1.2, letter-spacing 0.16em, uppercase): Small metadata headers above KPI cards and navigation category headers.
 
 ### Named Rules
-**The One Verdict Rule.** Exactly one top-level title is permitted per page. Subtitles exist strictly to carry live dynamic data (e.g. `Default CPA · Connected`), never static marketing boilerplate or repetitive translations.
+**The One Verdict Rule.** Exactly one top-level title is permitted per page. A subtitle is one line naming the surface's subject (e.g. `Manage upstream AI provider endpoints…`) or it carries live dynamic data (e.g. `Default CPA · Connected`) — never a restatement of the title, an instruction, marketing boilerplate, or a repetitive translation.
 
 **The Tabular Numerals Rule.** All numbers, financial values, latency figures, and timestamps must inherit `font-variant-numeric: tabular-nums` to ensure perfectly steady columns during real-time streaming updates.
 
@@ -243,7 +243,7 @@ The application viewport uses a fixed shell architecture (`100dvh`, `body { over
 
 - **Top Header**: Fixed 56px height, full-width with 1px bottom border (`#2c2c30`). Contains the `›_` terminal prompt logo, breadcrumb hierarchy, and four right-aligned actions: refresh, the theme menu, the language menu, and sign out. Both preferences are menus over their full registry (`THEME_PRESETS` and `LANGUAGES`) rather than toggles between two states, and each action keeps one width in every reading language — labels change length with the language, so sign out is an icon button named by its tooltip. CPA connection status and version are reported in the side rail's foot only.
 - **Navigation Sidebar**: Fixed 236px width (58px collapsed), 1px right border. Houses grouped navigation categories: `Operate`, `Gateway`, `Observe`, `Control`.
-- **Content Area**: Single-scroll container with responsive padding (32px desktop / 24px tablet / 16px mobile).
+- **Content Area**: Single-scroll container with responsive padding (32px desktop / 24px tablet / 16px mobile), inside a 1440px content column. The widths that follow: content column 1376px (1440 − 2×32), and a list inside a Card 1334px (1376 − 2×1 border − 2×20 body padding). Every page measures these; a page that needs a different column states why where the rule is written (the configuration workbench's 920px reading column is the one case).
 - **Settings Workbench Layout**: A three-track grid — 216px sticky section nav + 920px reading column + 216px balancing gutter — accompanied by a full-width sticky action bar, so the form never drifts to one side on wide screens.
 
 ### Named Rules
@@ -251,7 +251,9 @@ The application viewport uses a fixed shell architecture (`100dvh`, `body { over
 
 **The Gesture vs. Correction Rule.** A scroll the reader asked for (back to top, applying a new-records backlog) is animated unless `prefers-reduced-motion` is set; a scroll that exists to keep the view correct (pinning row one after the header collapses, resetting on page change) is instant, because a virtualized list re-measures after committing rows and a correction still in flight has not landed. Gesture animations are driven frame by frame through the list's own scroll entry point, never by CSS `scroll-behavior` on the holder — the virtualizer owns that element and would overwrite it.
 
-**The Open List Rule.** Prefer border-separated open rows (`border-bottom: 1px solid var(--border-soft)`) over nested card wrappers for resource, provider, and model lists. Cards are reserved for summaries, metrics, and comparisons.
+**The Open List Rule.** Prefer border-separated open rows (`border-bottom: 1px solid var(--border-soft)`) over nested card wrappers for resource, provider, and model lists. Cards are reserved for summaries, metrics, and comparisons. A management list is one container: its head row, the rule under it, and the table are a single surface, and it scrolls sideways on narrow viewports rather than becoming a second layout.
+
+**The One Content Column Rule.** `.terminal-page` owns the console's 1440px content column, and no page-level class may declare a `max-width` of its own: a rule of equal specificity wins by source order (CSS module styles load after the stylesheet), so `max-width: 100%` on a page root silently drops the cap and that surface renders wider than every other one. Width comes from the column; a list's inset comes from its card's 20px body padding. Where a surface deliberately reads narrower, the reason sits next to the rule that makes it so.
 
 ## Elevation & Depth
 
@@ -283,6 +285,7 @@ The geometric form language is compact, rectangular, and tightly controlled:
 ### Buttons
 - **Shape**: 4px radius (`--radius-sm`).
 - **Sizes**: Standard 32px height (padding 0 15px); Small 28px height (antd `controlHeightSM`); Square 32×32px for row-level action icon buttons.
+- **Row Actions**: A row's secret-facing actions (reveal, copy, edit) stay in the open as square buttons. Actions that do not read the value — a drill-down into the row's traffic, and removal — group behind one overflow trigger of the same size. An action that cannot apply is disabled with its reason rather than hidden.
 - **Primary**: Deep accent fill (`#0077b8` dark, `#004770` light) with the palette's `accentOn` label step (white in both original palettes; Forest uses a near-black step because its fill is light), no shadow. Hover shifts one step deeper (`#005d8f` dark, `#00344f` light) with zero transition lag.
 - **Secondary / Default**: Surface fill (`#1c1c1f`), 1px border (`#2c2c30`), chalk white text.
 - **Ghost**: Transparent background, borderless, text color `#f4f4f6`, hover reveals `#1c1c1f`.
@@ -292,6 +295,12 @@ The geometric form language is compact, rectangular, and tightly controlled:
 - **Background**: `#1c1c1f` (`--surface`).
 - **Internal Padding**: 20px (`space scale: 20px`).
 - **Usage**: Restricted to KPI stats, entity summary headers, and peer comparison panels.
+- **Managed Elsewhere**: A group whose field is edited on its own page states how much is configured and leads there with one action, and it still renders in search results. One editor per field; a second editor could disagree with the first.
+
+### Caller-Key Masks
+- **One Shape**: The key list computes its mask from the value in hand and the request list reads the stored one. Both use the same thresholds — a short head, a fixed `••••••••` run, a short tail — so one key renders identically on both surfaces and the mask never carries the secret's exact length.
+- **Fixed Box**: The key list prints the mask and the secret inside a box whose width does not depend on the value in it, so revealing a key moves nothing in the table.
+- **Ink**: Masked keys are `--meta`; a revealed secret is `--fg`. The colour says which of the two is on screen.
 
 ### Inputs & Selects
 - **Style**: Dark background (`#121214`), 1px border (`#2c2c30`), 4px radius, 32px height (enhanced to 38–40px on dense configuration workbenches).

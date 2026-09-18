@@ -92,7 +92,7 @@ export function findCatalogGaps({ dictionaryFile, catalogFiles }) {
         expected: basePlaceholders.get(key),
         actual: value.match(/\{[A-Za-z0-9_]+\}/g) ?? [],
       }));
-    return { id, missing, extra, placeholderMismatches };
+    return { id, file, missing, extra, placeholderMismatches };
   });
 }
 

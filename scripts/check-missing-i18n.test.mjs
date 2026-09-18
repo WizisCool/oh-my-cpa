@@ -62,6 +62,7 @@ test('reports missing, stale, and placeholder-invalid locale translations', (t) 
   });
   assert.deepEqual(gaps, [{
     id: 'zh-Hant',
+    file: catalog,
     missing: ['page.body'],
     extra: ['page.old'],
     placeholderMismatches: [{

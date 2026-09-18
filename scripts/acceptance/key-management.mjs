@@ -42,11 +42,53 @@ export async function runKeyManagementAcceptance({
     // fixture keeps the config round trip stateful so this reads the real path.
     await page.goto(`${appURL}/api-keys`, { waitUntil: 'domcontentloaded' });
     await page.locator('.keys-page').first().waitFor({ state: 'visible', timeout: 15000 });
+    // The console has one content column, and this page may not widen it. A page-level
+    // `max-width: 100%` on the page root used to win by source order against
+    // `.terminal-page` (CSS module styles load after the stylesheet), which made this
+    // surface render the full width of the content area - 244px wider than every other
+    // page at a 1920px viewport. Measured against the providers page rather than against
+    // a literal, so what this pins is the convention instead of a magic number.
+    const keysColumn = await page.locator('.keys-page').evaluate((el) => getComputedStyle(el).maxWidth);
+    await page.goto(`${appURL}/ai-providers`, { waitUntil: 'domcontentloaded' });
+    const providersPage = page.locator('.providers-page').first();
+    await providersPage.waitFor({ state: 'visible', timeout: 15000 });
+    const providersColumn = await providersPage.evaluate((el) => getComputedStyle(el).maxWidth);
+    check(
+      'key management uses the console content column rather than the viewport',
+      keysColumn === providersColumn && keysColumn !== '100%',
+      `keys=${keysColumn} providers=${providersColumn}`,
+    );
+    await page.goto(`${appURL}/api-keys`, { waitUntil: 'domcontentloaded' });
+    await page.locator('.keys-page').first().waitFor({ state: 'visible', timeout: 15000 });
     await page.locator('.config-api-keys-table .ant-table-row').first().waitFor({ state: 'visible', timeout: 15000 });
     const keyRows = await page.locator('.config-api-keys-table .ant-table-row').count();
     check('key management lists the client keys CPA reports', keyRows === 1, `rows=${keyRows}`);
-    const keySummary = await page.locator('.settings-group-head .ant-tag').first().innerText();
+    // Addressed by a data hook rather than by its class: the count element's class is
+    // owned by a CSS module and is hashed at build time, so a class selector here would
+    // silently match nothing and time out instead of asserting.
+    const keySummary = await page.locator('.keys-page [data-testid="keys-count"]').first().innerText();
     check('key management counts the listed keys', /(^|\D)1(\D|$)/.test(keySummary), `summary="${keySummary}"`);
+    // The surface is one container: a card holding another card holding a toolbar
+    // is the nesting the open-list rule exists to prevent, and it is what made the
+    // old page read as a frame inside a frame.
+    const containerCount = await page.locator('.keys-page .ant-card').count();
+    const nestedPanelCount = await page.locator('.keys-page .settings-group').count();
+    check(
+      'key management renders one container rather than nested frames',
+      containerCount === 1 && nestedPanelCount === 0,
+      `cards=${containerCount} nested=${nestedPanelCount}`,
+    );
+    // ...and it keeps that card's own inset, which is what makes this list exactly as
+    // wide as the list every other page renders.
+    const cardBodyPadding = await page
+      .locator('.keys-page .ant-card-body')
+      .first()
+      .evaluate((el) => getComputedStyle(el).paddingLeft);
+    check(
+      'the key list keeps the card inset other lists use',
+      cardBodyPadding === '20px',
+      `padding=${cardBodyPadding}`,
+    );
     // Masked by default: the row shows a preview, never the stored secret.
     const keyText = await page.locator('.config-api-keys-table .config-key-text').first().innerText();
     check(
@@ -54,12 +96,36 @@ export async function runKeyManagementAcceptance({
       keyText.includes('•') && keyText !== clientKeySecret,
       `text="${keyText}"`,
     );
+    // The mask is the server's own shape, not a second opinion about it. The key
+    // list and the request list read different sources for the same key, so an
+    // independent implementation here would silently make one key look like two.
+    // It is also a fixed shape: a mask that tracked the secret's length would print
+    // the length of every key in the list.
+    const expectedMask = `${clientKeySecret.slice(0, 8)}••••••••${clientKeySecret.slice(-4)}`;
+    check(
+      'the key list renders the mask shape the server defines',
+      keyText.trim() === expectedMask,
+      `text="${keyText}" expected="${expectedMask}"`,
+    );
+    // Revealing must not move the row: the mask and the secret are the same shape
+    // and the box that holds them has a fixed width.
+    const keyCellBefore = await page.locator('.config-api-keys-table .config-key-box').first().boundingBox();
+    const nameCellBefore = await page.locator('.config-api-keys-table .ant-table-row').first().locator('td').first().boundingBox();
     // Reveal is the operator's explicit action, and then the full value is shown.
     // Located by its accessible name rather than by position: the row now carries
     // several actions, so "the first button" is no longer the reveal control.
     await page.getByRole('button', { name: /显示密钥|Reveal secret/ }).first().click();
     const revealedKey = await page.locator('.config-api-keys-table .config-key-text').first().innerText();
     check('revealing a key shows its full value', revealedKey.trim() === clientKeySecret, `text="${revealedKey}"`);
+    const keyCellAfter = await page.locator('.config-api-keys-table .config-key-box').first().boundingBox();
+    const nameCellAfter = await page.locator('.config-api-keys-table .ant-table-row').first().locator('td').first().boundingBox();
+    check(
+      'revealing a key does not resize the key column or move the row',
+      Math.round(keyCellBefore.width) === Math.round(keyCellAfter.width)
+        && Math.round(keyCellBefore.x) === Math.round(keyCellAfter.x)
+        && Math.round(nameCellBefore.width) === Math.round(nameCellAfter.width),
+      `keyBox=${Math.round(keyCellBefore.width)}->${Math.round(keyCellAfter.width)} name=${Math.round(nameCellBefore.width)}->${Math.round(nameCellAfter.width)}`,
+    );
     responseBodies.length = 0;
 
     // ---- key aliases: name a key, then see that name on its request records ----
@@ -74,8 +140,10 @@ export async function runKeyManagementAcceptance({
       (await aliasRow.locator('td').first().innerText()).trim().length > 0,
       `name="${await aliasRow.locator('td').first().innerText()}"`,
     );
-    await aliasRow.getByRole('button', { name: /重命名|Rename/ }).click();
-    const renameInput = page.locator('.ant-modal input').first();
+    // One editor holds both of a key's editable parts; it is the row's edit control,
+    // and the name cell opens the same dialog.
+    await aliasRow.getByRole('button', { name: /编辑|Edit/ }).click();
+    const renameInput = page.locator('.ant-modal input#gateway-key-alias');
     await renameInput.waitFor({ state: 'visible', timeout: 10000 });
     await renameInput.fill(clientKeyAlias);
     await page.locator('.ant-modal .ant-btn-primary').click();
@@ -199,4 +267,35 @@ export async function runKeyManagementAcceptance({
     );
     await page.locator('.req-clear-all-chips').click();
     responseBodies.length = 0;
+
+    // ---- removing a key is the only irreversible action the list offers ----
+    // There is no disabled state to park a key in, so the confirmation has to carry
+    // the consequence: CPA drops the key and this console keeps no copy of the
+    // value. The check cancels rather than confirming: what it asserts is the copy
+    // and that nothing was written, not that deletion works.
+    await page.goto(`${appURL}/api-keys`, { waitUntil: 'domcontentloaded' });
+    const listRow = page.locator('.config-api-keys-table .ant-table-row').first();
+    await listRow.waitFor({ state: 'visible', timeout: 15000 });
+    const rowsBeforeDelete = await page.locator('.config-api-keys-table .ant-table-row').count();
+    await listRow.getByRole('button', { name: /更多操作|More actions/ }).click();
+    // Addressed as a menu item rather than by text: the label and its wrapper span both
+    // read as "删除", which is a strict-mode violation in a click locator.
+    await page.locator('.ant-dropdown:visible').getByRole('menuitem', { name: /删除|Delete/ }).click();
+    const deleteConfirm = page.locator('.ant-popover:visible');
+    await deleteConfirm.waitFor({ state: 'visible', timeout: 5000 });
+    const deleteCopy = await deleteConfirm.innerText();
+    check(
+      'the removal confirmation states that the key cannot be recovered',
+      /无法恢复/.test(deleteCopy) || /cannot be recovered/i.test(deleteCopy),
+      `copy="${deleteCopy.replace(/\n/g, ' ')}"`,
+    );
+    // The label is matched with an optional inner space: antd inserts one between the two
+    // characters of a two-character label, so the accessible name reads "取 消".
+    await deleteConfirm.getByRole('button', { name: /取\s*消|Cancel/ }).click();
+    await deleteConfirm.waitFor({ state: 'hidden', timeout: 5000 });
+    check(
+      'cancelling the removal leaves the key list unchanged',
+      (await page.locator('.config-api-keys-table .ant-table-row').count()) === rowsBeforeDelete,
+      `rows=${rowsBeforeDelete}`,
+    );
 }

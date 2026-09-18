@@ -53,7 +53,7 @@ export interface ConfigGroupDefinition {
   sectionId: ConfigSectionId;
   labelKey: string;
   descKey?: string;
-  variant: 'form-grid' | 'settings-list' | 'entity-list' | 'tls-accordion' | 'payload-builder';
+  variant: 'form-grid' | 'settings-list' | 'managed-elsewhere' | 'tls-accordion' | 'payload-builder';
   fieldIds: string[];
 }
 
@@ -72,7 +72,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     sectionId: 'connectivity',
     labelKey: 'cfg.grp_apikeys',
     descKey: 'cfg.grp_apikeys_desc',
-    variant: 'entity-list',
+    variant: 'managed-elsewhere',
     fieldIds: ['apiKeys'],
   },
   {

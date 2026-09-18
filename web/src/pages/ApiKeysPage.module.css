@@ -1,13 +1,19 @@
 /* ApiKeysPage.module.css — Gateway Client Key Management Page
-   Terminal-flat console: 1px borders, zero shadows, pure background shifts
+   Terminal-flat console: 1px borders, zero shadows, pure background shifts.
+   The page is one container: a head row, its rule, and the list.
 */
 
+/* The page container. It must not declare a max-width of its own: this element also
+   carries `.terminal-page`, and a page-level rule of equal specificity wins by
+   source order (CSS modules are injected after the stylesheet), which would drop
+   the console's 1440px content column and let this page run the full width of the
+   content area - visibly wider than every other page. Width comes from
+   `.terminal-page`; the list's own inset comes from the card. */
 .page-container {
   display: flex;
   flex-direction: column;
   gap: 16px;
   width: 100%;
-  max-width: 100%;
   box-sizing: border-box;
 }
 
@@ -20,9 +26,61 @@
   width: 100%;
 }
 
-.header-actions {
+.keys-panel {
+  overflow: hidden;
+}
+
+/* Head row carries the surface's name, how many keys it holds, and every action
+   that applies to the list as a whole. It wraps rather than scrolls: the actions
+   keep their width in every reading language. */
+.keys-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.keys-head-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.keys-head-icon {
+  color: var(--muted);
+}
+
+.keys-head-name {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.keys-head-count {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.keys-head-actions {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.keys-search {
+  width: 240px;
+  max-width: 100%;
+}
+
+/* Loading and failure states occupy the card's own inset, so the surface does not
+   change shape when the query resolves. */
+.keys-state {
+  min-height: 88px;
 }
