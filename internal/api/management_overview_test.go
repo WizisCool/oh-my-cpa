@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/auth"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/config"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
@@ -91,7 +93,7 @@ func TestManagementOverviewAggregatesWithoutSecrets(t *testing.T) {
 		case "/v0/management/config":
 			_, _ = writer.Write([]byte(`{"api-keys":["management-client"],"codex-api-key":[{"api-key":"` + apiKey + `"}],"openai-compatibility":[{"name":"relay","api-key-entries":[{"api-key":"other-secret"},{"api-key":"third-secret"}]}]}`))
 		case "/v0/management/auth-files":
-			_, _ = writer.Write([]byte(`{"files":[{"id":"auth-1","auth_index":"a1","type":"gemini","provider":"gemini","status":"ok","success":100,"failed":40,"recent_requests":[{"time":"now","success":4,"failed":1}],"account_type":"oauth","email":"owner@example.test"}]}`))
+			_, _ = writer.Write([]byte(`{"files":[{"id":"auth-1","auth_index":"a1","type":"gemini","provider":"gemini","status":"ok","success":100,"failed":40,"recent_requests":[{"time":"now","success":4,"failed":1}],"account_type":"oauth","email":"owner@example.test"},{"id":"auth-2","auth_index":"a2","type":"codex","provider":"codex","status":"ok","disabled":true,"account_type":"oauth"}]}`))
 		case "/v0/management/api-key-usage":
 			_, _ = writer.Write([]byte(`{"codex":{"https://provider.test|` + apiKey + `":{"success":2,"failed":0,"recent_requests":[{"time":"now","success":2,"failed":0}]}}}`))
 		default:
@@ -150,8 +152,12 @@ func TestManagementOverviewAggregatesWithoutSecrets(t *testing.T) {
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("overview status = %d", response.StatusCode)
 	}
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var payload managementOverviewResponse
-	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+	if err := json.Unmarshal(body, &payload); err != nil {
 		t.Fatal(err)
 	}
 	if payload.Status != "connected" || !payload.CPAConnected {
@@ -175,8 +181,47 @@ func TestManagementOverviewAggregatesWithoutSecrets(t *testing.T) {
 	if payload.Counts.ProviderKeys == nil || *payload.Counts.ProviderKeys != 2 {
 		t.Fatalf("provider key count = %#v", payload.Counts.ProviderKeys)
 	}
-	if payload.Counts.Credentials == nil || *payload.Counts.Credentials != 1 {
+	if payload.Counts.Credentials == nil || *payload.Counts.Credentials != 2 {
 		t.Fatalf("credential count = %#v", payload.Counts.Credentials)
+	}
+	// The per-type disabled tally is asserted on the wire rather than only through
+	// the handler's own struct: a surface reads the JSON key, so the key is what
+	// has to be right.
+	var wireOverview struct {
+		Credentials *struct {
+			Total    int `json:"total"`
+			Active   int `json:"active"`
+			Disabled int `json:"disabled"`
+			ByType   []struct {
+				Type     string `json:"type"`
+				Count    int    `json:"count"`
+				Disabled int    `json:"disabled"`
+			} `json:"by_type"`
+		} `json:"credentials"`
+	}
+	if err := json.Unmarshal(body, &wireOverview); err != nil {
+		t.Fatal(err)
+	}
+	if wireOverview.Credentials == nil {
+		t.Fatalf("wire credentials = %#v", wireOverview.Credentials)
+	}
+	if wireOverview.Credentials.Total != 2 || wireOverview.Credentials.Active != 1 || wireOverview.Credentials.Disabled != 1 {
+		t.Fatalf("wire credential health = %#v", wireOverview.Credentials)
+	}
+	if len(wireOverview.Credentials.ByType) != 2 {
+		t.Fatalf("wire by_type = %#v", wireOverview.Credentials)
+	}
+	countByType := map[string]int{}
+	disabledByType := map[string]int{}
+	for _, entry := range wireOverview.Credentials.ByType {
+		countByType[entry.Type] = entry.Count
+		disabledByType[entry.Type] = entry.Disabled
+	}
+	if countByType["gemini"] != 1 || disabledByType["gemini"] != 0 {
+		t.Fatalf("gemini wire tally = %d of %d disabled", disabledByType["gemini"], countByType["gemini"])
+	}
+	if countByType["codex"] != 1 || disabledByType["codex"] != 1 {
+		t.Fatalf("codex wire tally = %d of %d disabled", disabledByType["codex"], countByType["codex"])
 	}
 	if payload.Traffic == nil || payload.Traffic.Total != 7 || payload.Traffic.TotalSuccess != 6 || payload.Traffic.TotalFailure != 1 {
 		t.Fatalf("traffic = %#v", payload.Traffic)
@@ -276,5 +321,28 @@ func TestManagementOverviewPartialFailureAndNullCounts(t *testing.T) {
 	}
 	if payload.Traffic == nil {
 		t.Fatal("traffic should remain available from successful auth-files endpoint")
+	}
+}
+
+// The per-type tally keeps every file it has always counted and adds how many of
+// them the gateway reports disabled, which is the only thing that can tell a
+// channel switched off wholesale from one whose remaining credentials still serve.
+func TestBuildCredentialHealthTallyDisabledPerType(t *testing.T) {
+	health := buildCredentialHealth([]management.AuthFile{
+		{ID: "a1", Type: "codex", Provider: "codex", AccountType: "oauth"},
+		{ID: "a2", Type: "codex", Provider: "codex", AccountType: "oauth", Disabled: true},
+		{ID: "a3", Type: "kimi", Provider: "kimi", AccountType: "oauth", Disabled: true},
+	})
+	if health.Total != 3 || health.Disabled != 2 || health.Active != 1 {
+		t.Fatalf("credential totals = %#v", health)
+	}
+	if len(health.ByType) != 2 {
+		t.Fatalf("by_type = %#v", health.ByType)
+	}
+	if entry := health.ByType[0]; entry.Type != "codex" || entry.Count != 2 || entry.Disabled != 1 {
+		t.Fatalf("codex tally = %#v", entry)
+	}
+	if entry := health.ByType[1]; entry.Type != "kimi" || entry.Count != 1 || entry.Disabled != 1 {
+		t.Fatalf("kimi tally = %#v", entry)
 	}
 }

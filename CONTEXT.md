@@ -95,6 +95,21 @@ that check the retry itself would be a defect — a deletion during the retry de
 shifts the positions, and repeating the old position would toggle a provider the
 operator never clicked.
 
+Disablement is also what a surface reads back, and reading it is not the toggle's
+own field alone: a provider counts as disabled when its own toggle is off **or**
+when the gateway holds no enabled credential for its type — the per-type
+`disabled` tally `/management/overview` returns beside each type's credential
+count. The dashboard's provider fleet orders on that answer before any traffic
+number (`web/src/components/dashboard/dashboardProvidersLogic.ts`): every enabled
+channel precedes every disabled one, and request volume only orders the rows
+inside each group, because a disabled channel's requests are history rather than
+capacity in play. That claim is matched on the exact normalized type key and never
+by containment, and only against the credential types the row owns — the
+`{family}-api-key` family a configured provider belongs to, or the channel a
+plugin-driven row names — since CPA's tally covers every auth-file type, and
+calling a channel off on another channel's files would assert something false
+about who can still serve.
+
 ## Auth model
 
 There is exactly one administrator login credential in the whole system: the

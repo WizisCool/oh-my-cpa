@@ -34,6 +34,8 @@ export interface ManagementOverviewProvider {
 export interface ManagementOverviewTypeCount {
   type: string;
   count: number;
+  /** How many of `count` the gateway reports disabled. */
+  disabled: number;
 }
 
 export interface ManagementOverviewCredentials {
