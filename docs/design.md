@@ -1137,14 +1137,21 @@ Removal is the list's only irreversible action — CPA accepts a key by presence
 `api-keys` and the console keeps no copy of the value — so its confirmation says the
 value cannot be recovered and must be copied first (ADR 0010).
 
-**The list is one container.** The head row, its rule and the table are one surface,
+**The list is one container.** The head row, its rule and the list are one surface,
 because a card holding another card holding a toolbar is exactly the nesting the
 open-list rule exists to prevent. The head carries the surface's name, how many keys
 are configured, the search box and every action that applies to the list as a whole,
 and it wraps rather than scrolls so the controls keep their width in every reading
-language. One table serves every viewport width — it scrolls sideways on narrow
-screens instead of becoming a second layout — and a single line under it states the
-window its counts cover.
+language. A single line under the list states the window its counts cover.
+
+**One dataset, rendered responsively.** The list is a table on a pointer-fine viewport and
+labelled rows below 640px. This replaces the earlier "one table serves every width, scrolling
+sideways" by measurement rather than by preference: at 390px the table measured 316 → 980px
+inside its card, which put the reveal, copy and edit controls §2 requires to be *in the open*
+664px off the screen, and no scroller said it scrolled. What is not coming back is the
+operator-facing table/card toggle of `b9cf688` — see ADR 0012. The two renderings are derived
+from one column array (`web/src/components/common/phoneRowFields.ts`), so a column added to
+the table reaches the row and a value cannot be formatted two ways.
 
 ## 8. Small viewports and touch
 

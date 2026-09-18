@@ -42,6 +42,7 @@ import {
 } from './probes/dashboardTokenHeatmap.mjs';
 import { omcSettings } from './probes/omcSettings.mjs';
 import { overlayBackDismisses } from './probes/overlayHistory.mjs';
+import { phoneListRendering } from './probes/phoneLists.mjs';
 import { iconPickerStacking, pickerProvider, providerIconPick } from './probes/providerConsole.mjs';
 import {
   alignmentFacets,
@@ -391,6 +392,44 @@ export const SCENARIOS = [
       ],
     },
     run: overlayBackDismisses,
+  },
+  /**
+   * A list at a phone width, and the same list at a desktop width.
+   *
+   * The scenario owns its viewport changes rather than being run twice, because the claim is the
+   * *pairing*: a response to width, not one layout that happens to exist. Its fixtures are the
+   * list surfaces the phone rendering was measured for (ADR 0012), each one a row in the probe's
+   * own table.
+   */
+  {
+    id: 'phone-lists',
+    name: 'a list renders rows on a phone and a table on a desktop',
+    options: {
+      viewport: { width: 1440, height: 900 },
+      routes: [
+        [(url) => url.pathname.endsWith('/management/api-keys'), () => ({
+          keys: [
+            { index: 0, key: 'omc-fixture-key-aaaaaaaaaaaaaaaa', fingerprint: 'fp-1', usage_fingerprint: 'ufp-1', length: 30, alias: 'Primary caller', alias_version: 1 },
+            { index: 1, key: 'omc-fixture-key-bbbbbbbbbbbbbbbb', fingerprint: 'fp-2', usage_fingerprint: 'ufp-2', length: 30, alias_version: 0 },
+          ],
+          total: 2,
+        })],
+        [(url) => url.pathname.endsWith('/management/client-key-usage'), () => ({
+          window: { from: Date.now() - 86_400_000, to: Date.now() },
+          usage: [
+            { key_fingerprint: 'ufp-1', requests: 1284, failed: 3, total_tokens: 918_000, last_used_ms: Date.now() - 60_000 },
+            { key_fingerprint: 'ufp-2', requests: 12, failed: 0, total_tokens: 4_000, last_used_ms: Date.now() - 3_600_000 },
+          ],
+        })],
+        [(url) => url.pathname.endsWith('/management/config'), () => ({
+          scalars: {},
+          supported_keys: [],
+          revision: 'fixture-r1',
+          safe_yaml: 'api-keys:\n  - omc-fixture-key-aaaaaaaaaaaaaaaa\n  - omc-fixture-key-bbbbbbbbbbbbbbbb\n',
+        })],
+      ],
+    },
+    run: phoneListRendering,
   },
   {
     id: 'request-list-interactions',

@@ -26,6 +26,10 @@ import { useT } from '../../i18n';
 import { maskKeyText } from '../../utils/maskKey';
 import { copyText } from '../../utils/clipboard';
 import type { ClientAPIKeyItem, ClientKeyUsageItem } from '../../types/providers';
+import type { ColumnsType } from 'antd/es/table';
+import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
+import { PhoneRow } from '../common/PhoneRow';
+import { phoneRowFields } from '../common/phoneRowFields';
 import styles from './ApiKeysList.module.css';
 
 const { Text } = Typography;
@@ -111,6 +115,10 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
     [apiKeys, metaByKey, metadata, pendingAliases, usage],
   );
 
+  // Read here rather than beside the row branch below: it is a hook, so it cannot sit after the
+  // empty-state return, and the branch that uses it is the return statement itself.
+  const isPhone = useIsPhoneViewport();
+
   const filteredData = React.useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return dataSource;
@@ -170,6 +178,63 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
       onClick: () => setPendingDeleteId(record.id),
     },
   ];
+
+  /**
+   * The name cell, which is also the rename affordance.
+   *
+   * One function rather than one per rendering: the table's cell and the phone row's headline
+   * are the same control, and a rename that works in one place and not the other is the kind of
+   * divergence a second copy would produce eventually.
+   */
+  const nameCell = (record: ApiKeyRecord) => (
+    <div className={styles['name-cell']}>
+      {record.alias ? (
+        /* A real button, like the unnamed state beside it: the name cell is a rename
+           affordance, so it has to be reachable without a pointer. antd's icon carries its own
+           aria-label, which is why the name is stated outright here instead of being assembled
+           from the contents. */
+        <button
+          type="button"
+          className={styles['name-wrapper']}
+          onClick={() => onEdit(record.index)}
+          title={t('keys.rename_title')}
+          aria-label={`${t('cfg.api_keys_edit')}: ${record.alias}`}
+        >
+          <Text strong className={styles['name-text']}>
+            {record.alias}
+          </Text>
+          <EditOutlined className={styles['name-edit-icon']} />
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onEdit(record.index)}
+          className={styles['unnamed-btn']}
+          title={t('keys.rename_title')}
+        >
+          <TagOutlined /> {t('keys.unnamed')}
+        </button>
+      )}
+    </div>
+  );
+
+  /**
+   * The mask, and the secret once revealed.
+   *
+   * The box is a fixed width and the two states are the same shape, so revealing moves
+   * nothing - which is what makes it usable on a phone row, where a value that reflowed would
+   * push the controls off the line.
+   */
+  const keyCell = (record: ApiKeyRecord) => {
+    const isRevealed = Boolean(revealedKeys[record.key]);
+    return (
+      <div className="config-key-box">
+        <span className={`config-key-text${isRevealed ? ' is-revealed' : ' is-masked'}`}>
+          {isRevealed ? record.key : maskKeyText(record.key)}
+        </span>
+      </div>
+    );
+  };
 
   const renderActions = (record: ApiKeyRecord) => {
     const isRevealed = Boolean(revealedKeys[record.key]);
@@ -247,6 +312,73 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
     );
   };
 
+  /**
+   * The list's columns: the one description of what a key shows.
+   *
+   * The table renders them, and `phoneRowFields` derives the phone row's fields from the same
+   * array - so a column added here reaches both renderings, and a column's label and value
+   * cannot differ between them.
+   *
+   * Built on every render rather than memoised, and deliberately: it closes over the reveal map
+   * and the callbacks above, all of which are rebuilt per render, so a dependency array for it
+   * would change every time and the memo would never hit. The array is a handful of literals,
+   * and antd already received a fresh one per render before this existed.
+   *
+   * It sits above the empty-state early return because hooks cannot come after one, and the
+   * phone-row branch below is what reads the viewport.
+   */
+  const columns: ColumnsType<ApiKeyRecord> = [
+      {
+        title: t('keys.col_name'),
+        key: 'name',
+        render: (_: unknown, record: ApiKeyRecord) => nameCell(record),
+      },
+      {
+        title: t('keys.col_key'),
+        key: 'key',
+        width: 420,
+        render: (_: unknown, record: ApiKeyRecord) => keyCell(record),
+      },
+      {
+        title: t('keys.col_requests'),
+        key: 'requests',
+        width: 110,
+        align: 'right' as const,
+        render: (_: unknown, record: ApiKeyRecord) =>
+          record.usage ? (
+            <Text className="mono-num">{record.usage.requests.toLocaleString()}</Text>
+          ) : (
+            <Tooltip title={t('keys.not_linked')}>
+              <Text type="secondary">—</Text>
+            </Tooltip>
+          ),
+      },
+      {
+        title: t('keys.col_last_used'),
+        key: 'lastUsed',
+        width: 170,
+        align: 'right' as const,
+        render: (_: unknown, record: ApiKeyRecord) =>
+          record.usage && record.usage.last_used_ms > 0 ? (
+            <time dateTime={new Date(record.usage.last_used_ms).toISOString()}>
+              <Text type="secondary" className="mono-num">
+                {formatTime(record.usage.last_used_ms)}
+              </Text>
+            </time>
+          ) : (
+            <Text type="secondary">—</Text>
+          ),
+      },
+      {
+        title: t('keys.col_actions'),
+        key: 'actions',
+        width: 190,
+        align: 'right' as const,
+        render: (_: unknown, record: ApiKeyRecord) => renderActions(record),
+      },
+  ];
+
+
   if (apiKeys.length === 0) {
     return (
       <div className={styles['empty-box']}>
@@ -266,10 +398,25 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
         <div className={styles['empty-box']}>
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('keys.search_empty')} />
         </div>
+      ) : isPhone ? (
+        /* One record per block below 640px. The fields are derived from `columns` rather than
+           restated, so the row prints what the table would have printed - in the table's own
+           order, with the table's own labels. The name and the key are drawn as the headline
+           and the summary, which is why they are skipped as fields. */
+        <div>
+          {filteredData.map((record, index) => (
+            <PhoneRow
+              key={record.id}
+              identity={nameCell(record)}
+              summary={keyCell(record)}
+              fields={phoneRowFields(columns, record, { skip: ['name', 'key', 'actions'], index })}
+              actions={renderActions(record)}
+            />
+          ))}
+        </div>
       ) : (
-        /* The scroll wrapper and the table's own x-scroll are the list pages'
-           convention: the same table serves every width, scrolling sideways
-           rather than becoming a second layout. */
+        /* Sideways scrolling stays the convention where the table is still a table: it happens
+           inside the card, so the page's content column stays where the reader left it. */
         <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <Table<ApiKeyRecord>
             className="config-api-keys-table"
@@ -278,99 +425,7 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
             dataSource={filteredData}
             pagination={false}
             scroll={{ x: 'max-content' }}
-            columns={[
-              {
-                title: t('keys.col_name'),
-                key: 'name',
-                render: (_: unknown, record: ApiKeyRecord) => (
-                  <div className={styles['name-cell']}>
-                    {record.alias ? (
-                      /* A real button, like the unnamed state beside it: the name cell is a
-                         rename affordance, so it has to be reachable without a pointer.
-                         antd's icon carries its own aria-label, which is why the name is
-                         stated outright here instead of being assembled from the contents. */
-                      <button
-                        type="button"
-                        className={styles['name-wrapper']}
-                        onClick={() => onEdit(record.index)}
-                        title={t('keys.rename_title')}
-                        aria-label={`${t('cfg.api_keys_edit')}: ${record.alias}`}
-                      >
-                        <Text strong className={styles['name-text']}>
-                          {record.alias}
-                        </Text>
-                        <EditOutlined className={styles['name-edit-icon']} />
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => onEdit(record.index)}
-                        className={styles['unnamed-btn']}
-                        title={t('keys.rename_title')}
-                      >
-                        <TagOutlined /> {t('keys.unnamed')}
-                      </button>
-                    )}
-                  </div>
-                ),
-              },
-              {
-                title: t('keys.col_key'),
-                key: 'key',
-                width: 420,
-                render: (_: unknown, record: ApiKeyRecord) => {
-                  const isRevealed = Boolean(revealedKeys[record.key]);
-                  return (
-                    <div className="config-key-box">
-                      {/* Mask and secret are the same shape, and the box that holds
-                          them has a fixed width, so revealing moves nothing. */}
-                      <span
-                        className={`config-key-text${isRevealed ? ' is-revealed' : ' is-masked'}`}
-                      >
-                        {isRevealed ? record.key : maskKeyText(record.key)}
-                      </span>
-                    </div>
-                  );
-                },
-              },
-              {
-                title: t('keys.col_requests'),
-                key: 'requests',
-                width: 110,
-                align: 'right' as const,
-                render: (_: unknown, record: ApiKeyRecord) =>
-                  record.usage ? (
-                    <Text className="mono-num">{record.usage.requests.toLocaleString()}</Text>
-                  ) : (
-                    <Tooltip title={t('keys.not_linked')}>
-                      <Text type="secondary">—</Text>
-                    </Tooltip>
-                  ),
-              },
-              {
-                title: t('keys.col_last_used'),
-                key: 'lastUsed',
-                width: 170,
-                align: 'right' as const,
-                render: (_: unknown, record: ApiKeyRecord) =>
-                  record.usage && record.usage.last_used_ms > 0 ? (
-                    <time dateTime={new Date(record.usage.last_used_ms).toISOString()}>
-                      <Text type="secondary" className="mono-num">
-                        {formatTime(record.usage.last_used_ms)}
-                      </Text>
-                    </time>
-                  ) : (
-                    <Text type="secondary">—</Text>
-                  ),
-              },
-              {
-                title: t('keys.col_actions'),
-                key: 'actions',
-                width: 190,
-                align: 'right' as const,
-                render: (_: unknown, record: ApiKeyRecord) => renderActions(record),
-              },
-            ]}
+            columns={columns}
           />
         </div>
       )}

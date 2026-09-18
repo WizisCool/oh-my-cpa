@@ -101,6 +101,24 @@ const SCENARIO_PATHS = [
     prefix: 'web/src/hooks/overlayHistory',
     scenarios: ['overlay-back'],
   },
+  // The list surfaces whose phone rendering ADR 0012 introduced, and the shared pieces that
+  // rendering is derived from: a change to either reaches every one of them.
+  {
+    prefix: 'web/src/components/common/PhoneRow',
+    scenarios: ['phone-lists'],
+  },
+  {
+    prefix: 'web/src/components/common/phoneRowFields',
+    scenarios: ['phone-lists'],
+  },
+  {
+    prefix: 'web/src/hooks/useIsPhoneViewport',
+    scenarios: ['phone-lists'],
+  },
+  {
+    prefix: 'web/src/components/keys/',
+    scenarios: ['phone-lists'],
+  },
   // The provider console and its icon picker: the drawer/modal stacking assertion
   // is about those two overlays specifically, and picking a mark from the picker is
   // the page's own write path.

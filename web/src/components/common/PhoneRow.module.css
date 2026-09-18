@@ -1,0 +1,79 @@
+/* The phone row: one record from a list, as a labelled block.
+   Colours are palette tokens and the 1px hairlines are the same rule the tables'
+   rows use, so a list reads as the same surface at either width. */
+
+.phone-row {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+/* The last row's rule belongs to the container's own border, not to the list: two
+   adjacent 1px lines read as a heavier divider than the rest. */
+.phone-row:last-child {
+  border-bottom: none;
+}
+
+.phone-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.phone-row-summary {
+  margin-top: 8px;
+  min-width: 0;
+}
+
+.phone-row-fields {
+  margin: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* A label column sized to its content would leave the values starting at a
+   different x on every row, so the track is declared once for the list - the
+   same reason the model panels declare their numeric tracks rather than per
+   row. 76px holds the console's longest field labels in every reading
+   language. */
+.phone-row-field {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+}
+
+.phone-row-field dt {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.phone-row-field dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--fg-2);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* The controls get their own line, separated by the same rule a table uses above
+   its footer. The gap is a real one: on a phone the action cluster has a line to
+   itself, so the 4px insets the touch rules accept an overlap for are not needed
+   here. */
+.phone-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.phone-row-actions > * {
+  min-width: 0;
+}
