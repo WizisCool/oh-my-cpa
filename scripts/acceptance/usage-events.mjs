@@ -52,10 +52,38 @@ export async function runUsageEventsAcceptance({
    * control is the element at its own centre. The second is the property a click needs, and stating it
    * here turns a genuine overlap into a named diagnostic instead of an opaque "intercepts pointer
    * events" after thirty seconds.
+   *
+   * A control in the page header is first brought back to the view it is clicked in. The console folds
+   * that header - filters included - into full-screen mode while the list is scrolled, and this suite
+   * scrolls the list on purpose to prove the live-tail behaviour. A folded control keeps its layout box
+   * (it is clipped to zero height and its header takes no pointer events, not detached), so aiming at it
+   * lands on the row underneath: that is the reader's mode, not the overlap this function exists to
+   * name. The console leaves that mode through a return to the top - the list's own pill, which is also
+   * what expands the header - so the same gesture is used here, and a failure stays a claim about
+   * coverage.
    */
   const clickSettled = async (selector, label) => {
     const control = page.locator(selector);
     await control.waitFor({ state: 'visible', timeout: 15_000 });
+    const foldedHeader = page.locator('.request-collapsible-header.is-collapsed');
+    const isFolded = await page.evaluate(
+      (target) => Boolean(document.querySelector(target)?.closest('.request-collapsible-header.is-collapsed')),
+      selector,
+    );
+    if (isFolded) {
+      const returnPill = page.locator('.req-back-to-top-btn');
+      if ((await returnPill.count()) > 0) {
+        await returnPill.first().click();
+      } else {
+        // Folded with the list already at the top: the console folds by scrolling and unfolds by
+        // returning to the top, and the pill only exists while the list is scrolled, so this state
+        // offers no in-page way back. A fresh load is the view the console gives a reader who opens
+        // the page, which is what the interaction needs.
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await page.locator('.request-row').first().waitFor({ state: 'visible', timeout: 15_000 });
+      }
+      await foldedHeader.waitFor({ state: 'detached', timeout: 5_000 });
+    }
     await measureStable(
       async () => {
         const box = await control.boundingBox();
