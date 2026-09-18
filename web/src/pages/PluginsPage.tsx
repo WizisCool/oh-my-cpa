@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Card,
+  Pagination,
   Table,
   Tag,
   Button,
@@ -26,7 +27,13 @@ import { useT } from '../i18n';
 import type { PluginItem } from '../types/plugin';
 import { PluginConfigEditor } from '../components/plugins/PluginConfigEditor';
 import { parsePluginConfig, pluginConfigsEqual } from '../components/plugins/pluginConfig';
+
+/** One page of the list, shared by both renderings so a page means the same thing at either width. */
+const PAGE_SIZE = 20;
 import { useOverlayHistory } from '../hooks/useOverlayHistory';
+import { useIsPhoneViewport } from '../hooks/useIsPhoneViewport';
+import { PhoneRow } from '../components/common/PhoneRow';
+import { phoneRowFields, renderedCell } from '../components/common/phoneRowFields';
 
 export const PluginsPage: React.FC = () => {
   const t = useT();
@@ -35,6 +42,10 @@ export const PluginsPage: React.FC = () => {
   const queryClient = useQueryClient();
 
   const [configModalPlugin, setConfigModalPlugin] = useState<PluginItem | null>(null);
+  // The phone rendering pages in React, because it is not a Table and antd's own paging lives
+  // inside the Table. Only one of the two renderings is mounted, so there is never a second page
+  // number the reader could be on.
+  const [phonePage, setPhonePage] = useState(1);
   const [configText, setConfigText] = useState<string>('');
   const parsedConfig = useMemo(() => parsePluginConfig(configText), [configText]);
 
@@ -131,6 +142,16 @@ export const PluginsPage: React.FC = () => {
   // close re-arms its sentinel instead of letting the next Back press leave the page under an
   // open editor.
   useOverlayHistory({ isOpen: configModalPlugin !== null, onClose: handleCloseConfig });
+
+  const isPhone = useIsPhoneViewport();
+  // Clamped rather than trusted: removing or installing a plugin changes the page count, and a
+  // page past the end would render an empty list with no way back.
+  const lastPhonePage = Math.max(1, Math.ceil(plugins.length / PAGE_SIZE));
+  const safePhonePage = Math.min(phonePage, lastPhonePage);
+  const pagedPlugins = useMemo(
+    () => plugins.slice((safePhonePage - 1) * PAGE_SIZE, safePhonePage * PAGE_SIZE),
+    [plugins, safePhonePage],
+  );
 
   const columns: ColumnsType<PluginItem> = [
     {
@@ -279,16 +300,48 @@ export const PluginsPage: React.FC = () => {
       )}
 
       <Card>
-        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          <Table
-            columns={columns}
-            dataSource={plugins}
-            rowKey="id"
-            loading={isLoading}
-            pagination={{ pageSize: 20, showSizeChanger: false }}
-            locale={{ emptyText: t('plg.empty') }}
-          />
-        </div>
+        {isPhone ? (
+          plugins.length === 0 ? (
+            <p className="empty-copy">{t('plg.empty')}</p>
+          ) : (
+            <>
+              {pagedPlugins.map((plugin, index) => (
+                <PhoneRow
+                  key={plugin.id}
+                  identity={renderedCell(columns, 'name', plugin, index)}
+                  fields={phoneRowFields(columns, plugin, { skip: ['name', 'status', 'actions'], index })}
+                  /* The status column draws the switch *and* its label, so the whole cell is the
+                     control strip: the row cannot show a state the switch disagrees with. */
+                  actions={
+                    <>
+                      {renderedCell(columns, 'status', plugin, index)}
+                      {renderedCell(columns, 'actions', plugin, index)}
+                    </>
+                  }
+                />
+              ))}
+              <Pagination
+                size="small"
+                simple
+                current={safePhonePage}
+                pageSize={PAGE_SIZE}
+                total={plugins.length}
+                onChange={setPhonePage}
+              />
+            </>
+          )
+        ) : (
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <Table
+              columns={columns}
+              dataSource={plugins}
+              rowKey="id"
+              loading={isLoading}
+              pagination={{ pageSize: PAGE_SIZE, showSizeChanger: false }}
+              locale={{ emptyText: t('plg.empty') }}
+            />
+          </div>
+        )}
       </Card>
 
       {/* Config Edit Modal */}

@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   Card,
+  Pagination,
   Table,
   Tag,
   Button,
@@ -22,6 +23,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
 import type { StorePluginItem } from '../types/plugin';
+import { useIsPhoneViewport } from '../hooks/useIsPhoneViewport';
+import { PhoneRow } from '../components/common/PhoneRow';
+import { phoneRowFields, renderedCell } from '../components/common/phoneRowFields';
+
+/** One page of the list, shared by both renderings so a page means the same thing at either width. */
+const PAGE_SIZE = 20;
 
 export const PluginStorePage: React.FC = () => {
   const t = useT();
@@ -56,6 +63,14 @@ export const PluginStorePage: React.FC = () => {
       message.error(t('store.install_failed', { msg }));
     },
   });
+
+  const isPhone = useIsPhoneViewport();
+  const [phonePage, setPhonePage] = React.useState(1);
+  // Clamped rather than trusted: the store list is fetched, and a page past the end would render
+  // an empty list with no way back.
+  const lastPhonePage = Math.max(1, Math.ceil(storePlugins.length / PAGE_SIZE));
+  const safePhonePage = Math.min(phonePage, lastPhonePage);
+  const pagedPlugins = storePlugins.slice((safePhonePage - 1) * PAGE_SIZE, safePhonePage * PAGE_SIZE);
 
   const columns: ColumnsType<StorePluginItem> = [
     {
@@ -188,16 +203,41 @@ export const PluginStorePage: React.FC = () => {
       )}
 
       <Card>
-        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          <Table
-            columns={columns}
-            dataSource={storePlugins}
-            rowKey="id"
-            loading={isLoading}
-            pagination={{ pageSize: 20, showSizeChanger: false }}
-            locale={{ emptyText: t('store.empty') }}
-          />
-        </div>
+        {isPhone ? (
+          storePlugins.length === 0 ? (
+            <p className="empty-copy">{t('store.empty')}</p>
+          ) : (
+            <>
+              {pagedPlugins.map((plugin, index) => (
+                <PhoneRow
+                  key={plugin.id}
+                  identity={renderedCell(columns, 'name', plugin, index)}
+                  fields={phoneRowFields(columns, plugin, { skip: ['name', 'actions'], index })}
+                  actions={renderedCell(columns, 'actions', plugin, index)}
+                />
+              ))}
+              <Pagination
+                size="small"
+                simple
+                current={safePhonePage}
+                pageSize={PAGE_SIZE}
+                total={storePlugins.length}
+                onChange={setPhonePage}
+              />
+            </>
+          )
+        ) : (
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <Table
+              columns={columns}
+              dataSource={storePlugins}
+              rowKey="id"
+              loading={isLoading}
+              pagination={{ pageSize: PAGE_SIZE, showSizeChanger: false }}
+              locale={{ emptyText: t('store.empty') }}
+            />
+          </div>
+        )}
       </Card>
     </div>
   );

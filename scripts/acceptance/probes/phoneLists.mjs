@@ -59,6 +59,20 @@ const SURFACES = [
     rowSelector: '[data-testid="phone-row"]',
     routes: [],
   },
+  {
+    id: 'plugin manager',
+    route: '/plugins',
+    tableSelector: '.ant-table',
+    rowSelector: '[data-testid="phone-row"]',
+    routes: [],
+  },
+  {
+    id: 'plugin store',
+    route: '/plugin-store',
+    tableSelector: '.ant-table',
+    rowSelector: '[data-testid="phone-row"]',
+    routes: [],
+  },
 ];
 
 /**

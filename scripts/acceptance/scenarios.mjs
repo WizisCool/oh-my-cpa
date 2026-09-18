@@ -443,6 +443,42 @@ export const SCENARIOS = [
           ],
           total: 2,
         })],
+        [(url) => url.pathname.endsWith('/management/plugins'), () => ({
+          plugins: [
+            {
+              id: 'fixture-logger',
+              name: 'Request Logger Plugin',
+              version: '1.0.0',
+              author: 'cpa-official',
+              description: 'Audits and logs request metadata to internal store',
+              permissions: ['read_request', 'write_log'],
+              enabled: true,
+              config: {},
+            },
+            {
+              id: 'fixture-auth',
+              name: 'iFlow Alliance Auth',
+              version: '1.0.0',
+              author: 'cpa-official',
+              permissions: ['oauth'],
+              enabled: false,
+              config: {},
+            },
+          ],
+        })],
+        [(url) => url.pathname.endsWith('/management/plugin-store'), () => ({
+          plugins: [
+            {
+              id: 'store-fixture',
+              name: 'Store Fixture Plugin',
+              version: '2.1.0',
+              author: 'community',
+              description: 'A plugin the store offers',
+              permissions: ['read_request'],
+              installed: false,
+            },
+          ],
+        })],
       ],
     },
     run: phoneListRendering,
