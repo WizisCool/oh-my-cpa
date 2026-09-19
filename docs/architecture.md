@@ -212,8 +212,10 @@ Properties to preserve when changing this code:
   A partial commit still notifies the pricing manager before the refusal is
   returned, because CPA's model catalogue may already have changed even though the
   console metadata transaction did not.
-  The icon overlay is written by the console through the preferences API and so is
-  never part of a provider save.
+  Icon values are authored by the console through the preferences API; a provider
+  save never sets them. A delete is the exception to that authorship split: it
+  re-keys the stored icon together with the name and website maps in the same
+  gated metadata transaction.
 
 ### Provider families are data, not code paths
 
