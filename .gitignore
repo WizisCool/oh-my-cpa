@@ -28,6 +28,9 @@ Thumbs.db
 # Go build artifacts
 bin/
 tmp/
+# Scratch with the `tmp-` prefix rather than the directory: agent and review tooling writes
+# both, and one of them reached master because this line named only the directory.
+tmp-*
 
 # Runtime data
 /data/
