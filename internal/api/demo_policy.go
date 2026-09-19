@@ -356,6 +356,21 @@ func stripBasePath(basePath, path string) string {
 	return strings.TrimPrefix(path, basePath)
 }
 
+// revealKeysAllowed decides whether a list response may carry key material.
+//
+// The console asks for it with `include_keys=true` on the two pages whose contract
+// includes editing keys. A public demonstration never answers it, because revealing a
+// credential is one of the operations a demo must not perform - the fixture's keys are
+// not real, and showing them would teach the wrong thing about what the deployment
+// protects. The pages still render: they receive the mask the same endpoint already
+// sends to every caller that does not ask.
+func (h *Handler) revealKeysAllowed(request *http.Request) bool {
+	if h.cfg.IsDemoMode {
+		return false
+	}
+	return strings.EqualFold(request.URL.Query().Get("include_keys"), "true")
+}
+
 // demoGuard enforces the classification table. It is installed only in demo mode,
 // so the self-hosted request path is unchanged.
 func (h *Handler) demoGuard(next http.Handler) http.Handler {

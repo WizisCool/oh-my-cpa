@@ -183,7 +183,7 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 	// includes key management. Every other consumer (icon resolution, usage
 	// pages) must request the sanitized projection; the secret never reaches
 	// responses those pages receive.
-	includeKeys := strings.EqualFold(request.URL.Query().Get("include_keys"), "true")
+	includeKeys := h.revealKeysAllowed(request)
 
 	ctx := request.Context()
 	items := make([]ProviderItemDTO, 0)

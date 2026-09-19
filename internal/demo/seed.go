@@ -333,9 +333,10 @@ func seedRollups(ctx context.Context, repo *repository.Repository) error {
 // recentWindow is the shortest window the dashboard offers.
 const recentWindow = 15 * time.Minute
 
-// recentWindowFloor is how many requests the shortest window always carries. Two is the
-// least that makes the window's own numbers (a success rate, a rate per minute) mean
-// anything rather than being a single sample.
+// recentWindowFloor is how many requests the shortest window always carries.
+//
+// Four rather than one: the window prints a success rate and a per-minute rate, and a
+// single sample makes both of them the same number as the sample itself.
 const recentWindowFloor = 4
 
 // fillRecentWindow tops the seeded history up so the most recent window is never empty.

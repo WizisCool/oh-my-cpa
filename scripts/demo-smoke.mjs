@@ -309,6 +309,29 @@ async function main() {
     );
     check('a permitted edit reports that it is not persisted', notice !== '', notice.replace(/\s+/g, ' ').slice(0, 120));
 
+    // Revealing a credential is one of the operations a demo must not perform, and both
+    // pages whose contract includes editing keys ask for it with `include_keys=true`.
+    // Asserted on the real endpoint rather than on a unit: this is the response a
+    // visitor gets.
+    const revealed = await page.evaluate(async () => {
+      const [keys, providers] = await Promise.all([
+        fetch('/api/v1/management/api-keys?include_keys=true', { credentials: 'same-origin' }).then((r) => r.json()),
+        fetch('/api/v1/management/providers?include_keys=true', { credentials: 'same-origin' }).then((r) => r.json()),
+      ]);
+      return { keys, providers };
+    });
+    const revealedBody = JSON.stringify(revealed);
+    check(
+      'asking for key material in the demo returns masks',
+      !revealedBody.includes('omc-demo-key-'),
+      revealedBody.slice(0, 200),
+    );
+    check(
+      'the key list still answers, so the page renders',
+      Array.isArray(revealed.keys?.keys) && revealed.keys.keys.length > 0 && revealed.keys.keys.every((item) => typeof item.key === 'string'),
+      `keys=${revealed.keys?.keys?.length}`,
+    );
+
     // The demonstration holds no CPA credential, and the run proves it: the process
     // was started with one, and the instance it serves is its own fixture.
     const system = await page.evaluate(async () => {
