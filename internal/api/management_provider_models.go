@@ -148,7 +148,7 @@ func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr, prot
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errInvalidModelPullURL, err)
 	}
-	if !isOutboundFetchURLAllowed(parsed) {
+	if !isModelPullURLAllowed(parsed) {
 		return nil, fmt.Errorf("%w: base URL must use HTTPS unless it targets localhost, a loopback address, or a private IP address", errInvalidModelPullURL)
 	}
 
@@ -305,4 +305,21 @@ func parseModelsResponse(r io.Reader) ([]string, error) {
 	}
 
 	return []string{}, nil
+}
+
+// isModelPullURLAllowed keeps the operator's upstream key off public plaintext links
+// while still allowing self-hosted relays reached over loopback or private addresses:
+// the operator typed this URL for a provider they run.
+func isModelPullURLAllowed(parsed *url.URL) bool {
+	if parsed == nil {
+		return false
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "https":
+		return true
+	case "http":
+		return isPlaintextOutboundHostAllowed(parsed.Hostname())
+	default:
+		return false
+	}
 }

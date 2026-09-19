@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/base64"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -200,17 +203,25 @@ func TestPluginLogoFetcherCachesSuccessAndFailure(t *testing.T) {
 		}, nil
 	})
 
-	plugins := []management.PluginItem{
-		pluginWithLogo("acme", "https://cdn.example.test/logo.png"),
-		pluginWithLogo("broken", "https://cdn.example.test/broken.png"),
+	// Each poll rebuilds its own slice: `inline` rewrites the plugins it is given, so
+	// reusing the first call's slice would short-circuit on the already-inlined value and
+	// pass without ever consulting the cache.
+	newRound := func() []management.PluginItem {
+		return []management.PluginItem{
+			pluginWithLogo("acme", "https://cdn.example.test/logo.png"),
+			pluginWithLogo("broken", "https://cdn.example.test/broken.png"),
+		}
 	}
+	plugins := newRound()
 	fetcher.inline(context.Background(), plugins)
 	firstHits := calls.Load()
 
-	fetcher.inline(context.Background(), plugins)
+	second := newRound()
+	fetcher.inline(context.Background(), second)
 	if calls.Load() != firstHits {
 		t.Fatalf("fetch calls grew on a second poll (%d -> %d): the cache must hold the answer", firstHits, calls.Load())
 	}
+	plugins = second
 	if !strings.HasPrefix(plugins[0].Logo, "data:image/png;base64,") {
 		t.Fatalf("cached logo = %q, want the inlined image", plugins[0].Logo)
 	}
@@ -314,9 +325,15 @@ func TestPluginLogoFetcherKeepsTheEntryCountBounded(t *testing.T) {
 		}, nil
 	})
 
+	// One distinct URL per round: repeating a handful of URLs would never cross the cap
+	// this test exists to check.
 	for index := 0; index < maxPluginLogoCacheEntries+10; index++ {
-		plugins := []management.PluginItem{pluginWithLogo("acme", "https://cdn.example.test/"+string(rune('a'+index%26))+".png")}
+		logoURL := "https://cdn.example.test/" + strconv.Itoa(index) + ".png"
+		plugins := []management.PluginItem{pluginWithLogo("acme", logoURL)}
 		fetcher.inline(context.Background(), plugins)
+		if plugins[0].Logo == "" {
+			t.Fatalf("round %d lost its logo", index)
+		}
 		if len(fetcher.entries) > maxPluginLogoCacheEntries {
 			t.Fatalf("cache holds %d entries, want at most %d", len(fetcher.entries), maxPluginLogoCacheEntries)
 		}
@@ -357,4 +374,111 @@ func TestPluginLogoFetcherIsConcurrencySafe(t *testing.T) {
 		}()
 	}
 	waitGroup.Wait()
+}
+
+func TestPluginLogoURLPolicyHoldsAPluginToPublicDestinations(t *testing.T) {
+	allowed := []string{
+		"https://cdn.example.test/logo.svg",
+		"https://203.0.113.7/logo.svg",
+		"http://127.0.0.1:8317/logo.svg",
+		"http://localhost:8317/logo.svg",
+		"http://[::1]:8317/logo.svg",
+	}
+	for _, raw := range allowed {
+		parsed, err := url.Parse(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !isPluginLogoURLAllowed(parsed) {
+			t.Errorf("isPluginLogoURLAllowed(%q) = false, want true", raw)
+		}
+	}
+
+	refused := []string{
+		// The operator's own network is not somewhere a plugin manifest may send this
+		// process, including the metadata endpoints every cloud deployment has.
+		"https://169.254.169.254/latest/meta-data",
+		"https://10.20.30.40/logo.svg",
+		"https://192.168.1.5/logo.svg",
+		"https://[fd00::1]/logo.svg",
+		"http://example.com/logo.svg",
+		"http://192.168.1.5/logo.svg",
+		"ftp://cdn.example.test/logo.svg",
+		"javascript:alert(1)",
+	}
+	for _, raw := range refused {
+		parsed, err := url.Parse(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if isPluginLogoURLAllowed(parsed) {
+			t.Errorf("isPluginLogoURLAllowed(%q) = true, want false", raw)
+		}
+	}
+}
+
+func TestPluginLogoAddressPolicyRefusesInternalResolutions(t *testing.T) {
+	for _, raw := range []string{"127.0.0.1", "::1"} {
+		if !isResolvedAddressAllowed(net.ParseIP(raw)) {
+			t.Errorf("isResolvedAddressAllowed(%s) = false; the machine itself is reachable", raw)
+		}
+	}
+	for _, raw := range []string{"203.0.113.7", "2606:4700::1111"} {
+		if !isResolvedAddressAllowed(net.ParseIP(raw)) {
+			t.Errorf("isResolvedAddressAllowed(%s) = false, want true", raw)
+		}
+	}
+	for _, raw := range []string{"10.0.0.1", "192.168.0.1", "172.16.5.4", "169.254.169.254", "fd00::1", "fe80::1", "224.0.0.1", "0.0.0.0"} {
+		if isResolvedAddressAllowed(net.ParseIP(raw)) {
+			t.Errorf("isResolvedAddressAllowed(%s) = true, want false", raw)
+		}
+	}
+	if isResolvedAddressAllowed(nil) {
+		t.Error("isResolvedAddressAllowed(nil) = true, want false")
+	}
+}
+
+func TestPluginLogoFetcherRefusesAnOversizedInlineLogo(t *testing.T) {
+	fetcher, calls := countingFetcher(t, func(*http.Request) (*http.Response, error) {
+		t.Fatal("inline artwork must not be fetched")
+		return nil, nil
+	})
+
+	oversized := "data:image/png;base64," + strings.Repeat("A", maxPluginLogoBytes+1)
+	plugins := []management.PluginItem{pluginWithLogo("acme", oversized)}
+	fetcher.inline(context.Background(), plugins)
+
+	if calls.Load() != 0 {
+		t.Fatalf("fetch calls = %d, want 0", calls.Load())
+	}
+	// The ceiling has to hold for both routes: a plugin that publishes the artwork
+	// inline must not be able to ship something larger than a fetched one.
+	if plugins[0].Logo != "" {
+		t.Fatalf("logo = %d bytes, want it cleared above the ceiling", len(plugins[0].Logo))
+	}
+}
+
+func TestPluginLogoFetcherDoesNotCacheAnExhaustedBudget(t *testing.T) {
+	var calls atomic.Int64
+	fetcher, _ := countingFetcher(t, func(request *http.Request) (*http.Response, error) {
+		calls.Add(1)
+		<-request.Context().Done()
+		return nil, request.Context().Err()
+	})
+
+	// A budget that ran out is not an answer about the logo: caching it would cost the
+	// plugin its mark for the whole TTL because one poll was slow.
+	expired, cancel := context.WithCancel(context.Background())
+	cancel()
+	plugins := []management.PluginItem{pluginWithLogo("acme", "https://cdn.example.test/logo.png")}
+	fetcher.inline(expired, plugins)
+	if plugins[0].Logo != "" {
+		t.Fatalf("logo = %q, want it absent when the budget ran out", plugins[0].Logo)
+	}
+	if len(fetcher.entries) != 0 {
+		t.Fatalf("cache holds %d entries, want none for an exhausted budget", len(fetcher.entries))
+	}
+	if calls.Load() == 0 {
+		t.Fatal("the fetch was never attempted")
+	}
 }

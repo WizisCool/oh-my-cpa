@@ -198,25 +198,35 @@ A family an installed CPA does not have answers `404`; that is a missing
 capability rather than an empty or broken list (`IsMissingCapability`), so a
 console release that knows a newer family still works against an older gateway.
 
-Model-list pulls carry a provider credential from the OMC process directly to
-the configured endpoint, and a plugin logo is fetched from the host the plugin
-declares. Both are outbound fetches of an address the process did not construct,
-so `internal/api/outbound_fetch.go` owns one policy for them: it accepts HTTPS, or
-HTTP only for localhost, loopback, and private IP literals, and it refuses any
-redirect whose scheme or host changes. The redirect check runs before the next
-request leaves the process, so neither the provider key nor custom provider
-headers can reach a target the operator did not enter. Invalid URL policy answers
-`400 invalid_model_pull_url`; a refused redirect answers
-`502 model_pull_redirect_refused`.
+Two callers fetch an address the process did not construct: a model-list pull, whose
+URL the operator typed for a provider they run, and a plugin logo, whose URL an
+installed plugin's manifest declares. `internal/api/outbound_fetch.go` owns the
+redirect rule both obey - a redirect that changes scheme or host is refused before
+the next request leaves the process, so neither the provider key nor custom
+provider headers can reach a target the operator did not enter - and the two
+destination policies sit in their own callers, because the authority behind the URL
+is not the same. A model pull accepts HTTP for localhost, loopback and private
+literals, since a self-hosted relay on the operator's LAN is the normal case;
+invalid URL policy answers `400 invalid_model_pull_url` and a refused redirect
+answers `502 model_pull_redirect_refused`. A plugin logo is allowed only over
+public HTTPS, or HTTP to the machine itself, and the resolved address is checked in
+the dialer - so a hostname that resolves into the operator's network, or a cloud
+metadata endpoint, is refused where the connection would actually be made rather
+than trusted because the name looked public. A plugin is not trusted to choose what
+this process connects to.
 
 A plugin's logo is fetched for a different reason than a model list: not to reach
 the plugin's host from the browser, but to keep the browser away from it.
 `internal/api/management_plugin_logos.go` fetches the URL a plugin publishes,
-requires an image media type from a bound allowlist, caps the response, caches the
-result - including the failures, because the console polls the plugin list - and
-reports it as an inline `data:` URL on both `logo` and `metadata.logo`. A logo that
-cannot be inlined is reported as absent rather than as a URL, which is what makes
-every provider surface fall back to the vendored catalog mark; see §3.
+requires an image media type from a bound allowlist, caps the response - for a logo
+published inline as well as for one fetched - and reports it as an inline `data:`
+URL on both `logo` and `metadata.logo`. The whole plugin list shares one fetch
+deadline, because what has to stay bounded is the endpoint the console polls and not
+each request; the result is cached, failures included, so a plugin list that names an
+unreachable host does not refetch it on every poll. An exhausted budget is the one
+outcome that is not cached, since running out of time is not an answer about the
+logo. A logo that cannot be inlined is reported as absent rather than as a URL, which
+is what makes every provider surface fall back to the vendored catalog mark; see §3.
 
 ### OAuth providers are one registry
 

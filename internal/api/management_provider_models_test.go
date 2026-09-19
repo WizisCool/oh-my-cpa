@@ -88,8 +88,8 @@ func TestModelPullBaseURLPolicy(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := isOutboundFetchURLAllowed(parsed); got != test.isAllowed {
-				t.Fatalf("isOutboundFetchURLAllowed(%q) = %v, want %v", test.rawURL, got, test.isAllowed)
+			if got := isModelPullURLAllowed(parsed); got != test.isAllowed {
+				t.Fatalf("isModelPullURLAllowed(%q) = %v, want %v", test.rawURL, got, test.isAllowed)
 			}
 		})
 	}

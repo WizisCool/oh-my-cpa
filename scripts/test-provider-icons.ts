@@ -164,6 +164,26 @@ test('pluginOAuthProviderLogos: a provider key that shadows Object.prototype sti
   assert.equal(pluginOAuthLogoFor({}, 'constructor'), undefined, 'a plain object must not answer with a prototype member');
 });
 
+test('pluginOAuthProviderLogos: OAuth capability and a provider key are each enough', () => {
+  // The filter is deliberately lenient - a plugin that declares `supports_oauth` but no
+  // `oauth_provider` keys its provider by its own id, and a plugin that declares only
+  // `oauth_provider` still owns that provider. Requiring both would drop the mark for
+  // exactly those plugins, leaving a provider tab with no brand while the plugin
+  // publishes one.
+  const byId = pluginOAuthProviderLogos([
+    { id: 'idkeyed', name: 'Id keyed', enabled: true, supports_oauth: true, logo: INLINE_LOGO },
+  ]);
+  assert.equal(pluginOAuthLogoFor(byId, 'idkeyed'), INLINE_LOGO);
+
+  const byKey = pluginOAuthProviderLogos([
+    { id: 'other', name: 'Other', enabled: true, oauth_provider: 'keyed', logo: INLINE_LOGO },
+  ]);
+  assert.equal(pluginOAuthLogoFor(byKey, 'keyed'), INLINE_LOGO);
+
+  // Neither declaration means no provider of its own, so no logo either.
+  assert.deepEqual({ ...pluginOAuthProviderLogos([{ id: 'plain', name: 'Plain', enabled: true, logo: INLINE_LOGO }]) }, {});
+});
+
 test('pluginOAuthLogoFor: lookup is case and pad insensitive, and misses are empty', () => {
   const logos = pluginOAuthProviderLogos([
     { id: 'codebuddy', name: 'CodeBuddy', enabled: true, supports_oauth: true, oauth_provider: 'codebuddy', logo: INLINE_LOGO },

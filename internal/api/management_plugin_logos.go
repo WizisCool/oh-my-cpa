@@ -6,10 +6,12 @@ import (
 	"errors"
 	"io"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
@@ -58,7 +60,14 @@ const (
 	maxPluginLogoRedirects = 5
 )
 
-var errPluginLogoRedirectRefused = errors.New("plugin logo redirect refused")
+var (
+	errPluginLogoRedirectRefused = errors.New("plugin logo redirect refused")
+	errPluginLogoAddressRefused  = errors.New("plugin logo address refused")
+	// errPluginLogoUnusable is a definitive answer about the logo itself - the scheme is
+	// not fetchable, the host said no, the response is not an image, it is too large.
+	// It is cached, because a retry would ask the same question and get the same answer.
+	errPluginLogoUnusable = errors.New("plugin logo is not usable")
+)
 
 // renderableLogoMediaTypes is the allowlist of image types a plugin logo may be
 // inlined as. Anything else - including `text/html`, `image/svg+xml`'s script-bearing
@@ -97,15 +106,60 @@ type pluginLogoFetcher struct {
 }
 
 func newPluginLogoFetcher() *pluginLogoFetcher {
+	dialer := &net.Dialer{
+		Timeout: pluginLogoFetchTimeout,
+		// The address check happens where the connection is made, after resolution, so
+		// a hostname that resolves into the operator's network is refused there rather
+		// than trusted because the name looked public.
+		Control: pluginLogoDialControl,
+	}
 	return &pluginLogoFetcher{
 		client: &http.Client{
 			Timeout:       pluginLogoFetchTimeout,
-			Transport:     &http.Transport{Proxy: http.ProxyFromEnvironment},
+			Transport:     &http.Transport{Proxy: http.ProxyFromEnvironment, DialContext: dialer.DialContext},
 			CheckRedirect: sameOriginRedirectGuard(errPluginLogoRedirectRefused, maxPluginLogoRedirects),
 		},
 		now:     time.Now,
 		entries: make(map[string]pluginLogoCacheEntry),
 	}
+}
+
+// pluginLogoDialControl is the dial-time half of the destination policy; see
+// outbound_fetch.go for why a plugin-declared URL is held to a stricter rule than an
+// operator-typed one.
+func pluginLogoDialControl(_ string, address string, _ syscall.RawConn) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return errPluginLogoAddressRefused
+	}
+	if !isResolvedAddressAllowed(net.ParseIP(host)) {
+		return errPluginLogoAddressRefused
+	}
+	return nil
+}
+
+// isPluginLogoURLAllowed is the name-checked half of the policy. A literal internal
+// address is refused here; a name that resolves into internal space is refused at dial
+// time, which is what closes the gap between "looks public" and "is public".
+func isPluginLogoURLAllowed(parsed *url.URL) bool {
+	if parsed == nil {
+		return false
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "https":
+		return !isInternalAddressLiteral(parsed.Hostname())
+	case "http":
+		return isLoopbackPlaintextHostAllowed(parsed.Hostname())
+	default:
+		return false
+	}
+}
+
+// isInternalAddressLiteral reports whether a host string is a literal address inside
+// the operator's own network.
+func isInternalAddressLiteral(host string) bool {
+	address := hostAddressLiteral(host)
+	return address != nil && !isResolvedAddressAllowed(address)
 }
 
 // inline replaces every plugin's declared logo with an inline `data:` URL, or clears
@@ -138,7 +192,14 @@ func (f *pluginLogoFetcher) inline(ctx context.Context, plugins []management.Plu
 		targets = append(targets, raw)
 	}
 
-	inlined := f.resolveAll(ctx, targets)
+	// One deadline for the whole plugin list, not one per logo: this fetch sits inside an
+	// endpoint the console polls, so what has to be bounded is the response, not each
+	// request. Whatever has not resolved when the budget runs out is reported as absent
+	// (and deliberately not cached), which leaves the catalog mark on screen.
+	fetchCtx, cancel := context.WithTimeout(ctx, pluginLogoFetchTimeout)
+	defer cancel()
+
+	inlined := f.resolveAll(fetchCtx, targets)
 
 	for index := range plugins {
 		resolved := ""
@@ -187,7 +248,8 @@ func (f *pluginLogoFetcher) resolveAll(ctx context.Context, targets []string) []
 	return results
 }
 
-// dataURL returns the inline logo for one URL, from the cache when it is fresh.
+// dataURL returns the inline logo for one URL, from the cache when it is fresh. A false
+// result means "no usable logo", never "retry immediately".
 func (f *pluginLogoFetcher) dataURL(ctx context.Context, raw string) (string, bool) {
 	if _, ok := inlineImageMediaType(raw); ok {
 		// Self-contained artwork: the plugin already published something the browser
@@ -203,12 +265,18 @@ func (f *pluginLogoFetcher) dataURL(ctx context.Context, raw string) (string, bo
 	}
 	f.mu.Unlock()
 
-	inlined, ok := f.fetch(ctx, raw)
+	inlined, err := f.fetch(ctx, raw)
 
 	f.mu.Lock()
-	f.store(raw, pluginLogoCacheEntry{dataURL: inlined, expiresAt: f.now().Add(pluginLogoCachingTTL)})
+	// Everything is cached except a budget that ran out: running out of time is not an
+	// answer about the logo, and caching it would cost the plugin its mark for an hour
+	// because one poll was slow. An unreachable host is cached, which is what keeps a
+	// poll from hammering it.
+	if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+		f.store(raw, pluginLogoCacheEntry{dataURL: inlined, expiresAt: f.now().Add(pluginLogoCachingTTL)})
+	}
 	f.mu.Unlock()
-	return inlined, ok
+	return inlined, err == nil
 }
 
 // store writes one entry, evicting expired ones first and then, if the cache is still
@@ -230,20 +298,18 @@ func (f *pluginLogoFetcher) store(raw string, entry pluginLogoCacheEntry) {
 	f.entries[raw] = entry
 }
 
-// fetch retrieves one logo and inlines it. A false result means "no usable logo",
-// never "retry immediately".
-func (f *pluginLogoFetcher) fetch(ctx context.Context, raw string) (string, bool) {
+// fetch retrieves one logo and inlines it. It reports errPluginLogoUnusable for a
+// definitive refusal, and the transport's own error otherwise, so the caller can tell
+// an answer about the logo from a fetch that did not get one.
+func (f *pluginLogoFetcher) fetch(ctx context.Context, raw string) (string, error) {
 	parsed, err := url.Parse(raw)
-	if err != nil || !isOutboundFetchURLAllowed(parsed) {
-		return "", false
+	if err != nil || !isPluginLogoURLAllowed(parsed) {
+		return "", errPluginLogoUnusable
 	}
 
-	fetchCtx, cancel := context.WithTimeout(ctx, pluginLogoFetchTimeout)
-	defer cancel()
-
-	request, err := http.NewRequestWithContext(fetchCtx, http.MethodGet, raw, nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
 	if err != nil {
-		return "", false
+		return "", errPluginLogoUnusable
 	}
 	// A logo is fetched, not negotiated: an explicit image preference keeps a host
 	// that content-negotiates from answering with a page.
@@ -251,24 +317,27 @@ func (f *pluginLogoFetcher) fetch(ctx context.Context, raw string) (string, bool
 
 	response, err := f.client.Do(request)
 	if err != nil {
-		return "", false
+		return "", err
 	}
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		return "", false
+		return "", errPluginLogoUnusable
 	}
 	mediaType, ok := renderableLogoMediaType(response.Header.Get("Content-Type"))
 	if !ok {
-		return "", false
+		return "", errPluginLogoUnusable
 	}
 
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxPluginLogoBytes+1))
-	if err != nil || len(body) == 0 || len(body) > maxPluginLogoBytes {
-		return "", false
+	if err != nil {
+		return "", err
+	}
+	if len(body) == 0 || len(body) > maxPluginLogoBytes {
+		return "", errPluginLogoUnusable
 	}
 
-	return "data:" + mediaType + ";base64," + base64.StdEncoding.EncodeToString(body), true
+	return "data:" + mediaType + ";base64," + base64.StdEncoding.EncodeToString(body), nil
 }
 
 // renderableLogoMediaType narrows a Content-Type header to the media type allowlist.
@@ -307,13 +376,17 @@ func pluginLogoURL(plugin management.PluginItem) string {
 
 // inlineImageMediaType reports the media type of an inline `data:` image URL, and
 // whether the console is willing to render it.
+//
+// The payload is measured against the same ceiling a fetched logo is held to, or a
+// plugin could bypass the bound by publishing the artwork inline instead of at a URL:
+// this value is forwarded to the browser as it stands.
 func inlineImageMediaType(raw string) (string, bool) {
 	rest, found := strings.CutPrefix(raw, "data:")
 	if !found {
 		return "", false
 	}
-	header, _, found := strings.Cut(rest, ",")
-	if !found {
+	header, payload, found := strings.Cut(rest, ",")
+	if !found || len(payload) == 0 || len(payload) > maxPluginLogoBytes {
 		return "", false
 	}
 	mediaType := strings.ToLower(strings.TrimSpace(strings.SplitN(header, ";", 2)[0]))

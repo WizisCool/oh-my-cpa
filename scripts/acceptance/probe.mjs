@@ -26,8 +26,16 @@ import { chromium } from 'playwright-core';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-/** Longer than any probe expects to wait, short enough to fail the run rather than hang CI. */
-const DEFAULT_WATCHDOG_MS = 150_000;
+/**
+ * Longer than any probe expects to wait, short enough to fail the run rather than hang CI.
+ *
+ * Measured rather than guessed: the suite takes ~135s on an idle machine and was observed at
+ * 149-151s when `verify:full` runs it alongside the browser acceptance and the static gates, so
+ * the previous 150s ceiling sat inside the spread and failed the gate at random. The watchdog
+ * exists to stop a hang, not to enforce a speed budget, so the margin is wide enough that only a
+ * stuck run reaches it.
+ */
+const DEFAULT_WATCHDOG_MS = 300_000;
 
 export const probeRoot = root;
 
@@ -314,16 +322,34 @@ export function createProbeChecker({ quiet = false } = {}) {
  * scenario's runtime errors cannot be attributed to another.
  */
 export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG_MS }) {
-  const watchdog = setTimeout(() => {
-    console.error('FAIL probe run timed out');
-    process.exit(2);
-  }, watchdogMs);
-  watchdog.unref();
+  let watchdog;
 
   let server;
   let browser;
   const failures = [];
   let passed = 0;
+
+  /**
+   * Releases what the run holds. Idempotent, because both the watchdog and the normal exit
+   * path call it.
+   */
+  const shutdown = async () => {
+    await browser?.close().catch(() => {});
+    browser = undefined;
+    server?.kill('SIGTERM');
+    server = undefined;
+    await sleep(300);
+  };
+
+  watchdog = setTimeout(async () => {
+    console.error('FAIL probe run timed out');
+    // `process.exit` skips the `finally` below, so the timed-out run used to leave its Vite
+    // server listening on the probe port. Every later run then failed at startup with a port
+    // conflict -- a confusing symptom that outlived the timeout it came from.
+    await shutdown();
+    process.exit(2);
+  }, watchdogMs);
+  watchdog.unref();
 
   try {
     const started = await startVite(port);
@@ -369,9 +395,7 @@ export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG
     }
   } finally {
     clearTimeout(watchdog);
-    await browser?.close().catch(() => {});
-    server?.kill('SIGTERM');
-    await sleep(300);
+    await shutdown();
   }
 
   return { passed, failures };
