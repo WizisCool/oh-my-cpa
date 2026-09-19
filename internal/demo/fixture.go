@@ -2,7 +2,10 @@ package demo
 
 import (
 	"fmt"
+	"strings"
 	"time"
+
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
 
 // fixtureInstanceName is the CPA instance the fixture impersonates. The console
@@ -125,6 +128,24 @@ func compatibilityCatalog() []compatibilityProvider {
 			keys: []string{"relay-dashscope-primary"},
 		},
 	}
+}
+
+// compatibilityRecordLabel is the provider label CPA writes on a request served
+// through the openai-compatibility list, derived from the provider's own name the
+// way the gateway derives it. The fixture builds its records with this rather than
+// with a literal, so the demonstration's provider labels cannot drift from what a
+// real gateway writes - and the request list's resolution therefore has something
+// real to match.
+func compatibilityRecordLabel(providerName string) string {
+	return management.OpenAICompatibilityLabelPrefix + strings.ToLower(providerName)
+}
+
+// compatibilityAuthIndex is the runtime auth index the fixture's credentials carry
+// for the position-th key of a compatibility provider. The provider list the console
+// reads and the request records it seeds both derive it here, so the two sides cannot
+// disagree about which key answered a request.
+func compatibilityAuthIndex(prefix string, position int) string {
+	return fmt.Sprintf("auth-%s-%02d", prefix, position)
 }
 
 // apiKeyFamily is one of CPA's `{family}-api-key` credential lists.
@@ -258,13 +279,18 @@ func modelCatalog() []modelProfile {
 		{name: "grok-4", provider: "xai", weight: 2, authType: "oauth", endpoint: "/v1/chat/completions",
 			inputMean: 11200, outputMean: 1760, reasonShare: 0.4, cacheRead: 0.33, cacheCreate: 0.02,
 			latencyMS: 6800, ttftRatio: 0.27, failureRate: 0.015},
-		{name: "deepseek-chat", provider: "deepseek", weight: 3, authType: "api_key", endpoint: "/v1/chat/completions",
+		// A record served through the openai-compatibility list carries the label CPA
+		// writes for such a provider, which is derived from the provider's own name in
+		// the same way the gateway derives it. That label is what the request list's
+		// "which key answered" lookup is guarded by, so the demonstration has a record
+		// it can actually resolve.
+		{name: "deepseek-chat", provider: compatibilityRecordLabel("DeepSeek"), weight: 3, authType: "api_key", endpoint: "/v1/chat/completions",
 			inputMean: 8800, outputMean: 1180, reasonShare: 0.2, cacheRead: 0.55, cacheCreate: 0.02,
 			latencyMS: 3400, ttftRatio: 0.32, failureRate: 0.009},
-		{name: "deepseek-reasoner", provider: "deepseek", weight: 1, authType: "api_key", endpoint: "/v1/chat/completions",
+		{name: "deepseek-reasoner", provider: compatibilityRecordLabel("DeepSeek"), weight: 1, authType: "api_key", endpoint: "/v1/chat/completions",
 			inputMean: 10400, outputMean: 1980, reasonShare: 0.85, cacheRead: 0.5, cacheCreate: 0.02,
 			latencyMS: 15800, ttftRatio: 0.4, failureRate: 0.017},
-		{name: "qwen3-max", provider: "qwen", weight: 1, authType: "api_key", endpoint: "/v1/chat/completions",
+		{name: "qwen3-max", provider: compatibilityRecordLabel("DashScope (Qwen)"), weight: 1, authType: "api_key", endpoint: "/v1/chat/completions",
 			inputMean: 7200, outputMean: 1080, reasonShare: 0.25, cacheRead: 0.3, cacheCreate: 0.02,
 			latencyMS: 4100, ttftRatio: 0.31, failureRate: 0.01},
 	}
@@ -655,7 +681,7 @@ func compatibilitySection() []map[string]any {
 		for index, key := range provider.keys {
 			keys = append(keys, map[string]any{
 				"api-key":    key,
-				"auth-index": fmt.Sprintf("auth-%s-%02d", provider.prefix, index+1),
+				"auth-index": compatibilityAuthIndex(provider.prefix, index+1),
 			})
 		}
 		entries = append(entries, map[string]any{

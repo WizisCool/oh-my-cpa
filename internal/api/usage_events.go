@@ -45,7 +45,16 @@ type usageEventResponse struct {
 	// APIKeyMask is the display-only label for the caller key. The request
 	// record keeps only a fingerprint, so records ingested before the mask
 	// column existed omit it.
-	APIKeyMask          string `json:"api_key_mask,omitempty"`
+	APIKeyMask string `json:"api_key_mask,omitempty"`
+	// ProviderKeyMask is the display-only mask of the upstream credential that
+	// answered the request, resolved at read time from the credential lists CPA
+	// currently reports (see usage_provider_key_masks.go). It is empty whenever
+	// the credential cannot be identified - a rotated or deleted key, an
+	// unclaimed or ambiguously claimed index, an OAuth credential, or a gateway
+	// that could not be read - in which case the console prints nothing rather
+	// than a guess. A provider that is merely switched off is not one of those
+	// cases: its current state does not change which key answered.
+	ProviderKeyMask     string `json:"provider_key_mask,omitempty"`
 	Source              string `json:"source,omitempty"`
 	UserAgent           string `json:"user_agent,omitempty"`
 	Model               string `json:"model"`
@@ -459,6 +468,10 @@ func (h *Handler) listUsageEvents(writer http.ResponseWriter, request *http.Requ
 		items = append(items, projectUsageEvent(row))
 	}
 	h.attachClientKeyAliases(request, items)
+	// Which provider key answered is resolved after projection, like the caller key
+	// alias, because it is a read-time label over credentials CPA currently holds
+	// rather than a fact stored with the record.
+	h.attachProviderKeyMasks(request, items)
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"window":        window,
 		"items":         items,
@@ -529,7 +542,12 @@ func (h *Handler) getUsageEvent(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 
-	response := map[string]any{"event": projectUsageEventDetail(row)}
+	// The provider key mask is resolved on the detail view as well as the list: the
+	// two must not disagree about which credential answered, and the drawer is where
+	// an operator goes to check the claim a row made.
+	item := projectUsageEvent(row)
+	applyProviderKeyMask(&item, h.resolveProviderKeyMasks(request, []usageEventResponse{item}))
+	response := map[string]any{"event": projectUsageEventDetail(row, item.ProviderKeyMask)}
 	if row.AuthIndex != "" {
 		correlated, corrErr := h.repo.CorrelatedErrorEvents(request.Context(), row.AuthIndex, row.TimestampMS, 2*60*1000)
 		if corrErr != nil {
@@ -543,7 +561,7 @@ func (h *Handler) getUsageEvent(writer http.ResponseWriter, request *http.Reques
 
 // projectUsageEventDetail is the single-record view: it may include the endpoint
 // and client metadata the list view deliberately omits.
-func projectUsageEventDetail(row repository.UsageEventRow) map[string]any {
+func projectUsageEventDetail(row repository.UsageEventRow, providerKeyMask string) map[string]any {
 	item := projectUsageEvent(row)
 	detail := map[string]any{
 		"id":                    item.ID,
@@ -579,6 +597,12 @@ func projectUsageEventDetail(row repository.UsageEventRow) map[string]any {
 		"client_ip":             row.ClientIP,
 		"x_forwarded_for":       row.XForwardedFor,
 		"user_agent":            row.UserAgent,
+	}
+	// Present only when a credential was actually identified: an absent key and an
+	// empty one read differently to a consumer, and the console prints no key line
+	// for a record it cannot attribute.
+	if providerKeyMask != "" {
+		detail["provider_key_mask"] = providerKeyMask
 	}
 	return detail
 }

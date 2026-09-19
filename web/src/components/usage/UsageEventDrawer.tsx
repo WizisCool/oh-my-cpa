@@ -14,6 +14,7 @@ import { api } from '../../api/client';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import { copyText } from '../../utils/clipboard';
+import { maskKeyText } from '../../utils/maskKey';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { formatTokens, formatTokensFull } from '../../types/tokenDisplay';
 import type { UsageEvent } from '../../types/usageEvents';
@@ -72,6 +73,16 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   });
   const event = result.data?.event;
   const identity = event ? resolveCredential(event, credentials) : undefined;
+  // The upstream credential that answered, as the record's own response reported
+  // it. Re-rendered from whatever arrived so this surface cannot print a value the
+  // server never masked, and absent when the credential could not be identified.
+  const providerKeyMask = maskKeyText(event?.provider_key_mask);
+  // Rendered only when the server identified the credential: a record it cannot
+  // attribute prints nothing here, the same as it prints no key line in the list,
+  // rather than a row that reads like a fact which failed to load.
+  const providerKeyFields: Array<[string, React.ReactNode]> = providerKeyMask
+    ? [[t('events.provider_key'), providerKeyMask]]
+    : [];
   const errors = result.data?.related_errors || [];
   const missing = <span className="terminal-muted">{t('events.not_captured')}</span>;
   const value = (text: string | null | undefined) => text || missing;
@@ -335,6 +346,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                       t('events.routing'),
                       fields([
                         [t('events.provider'), value(event.provider)],
+                        ...providerKeyFields,
                         [t('events.credential'), value(identity?.name)],
                         [
                           t('events.identity_basis'),

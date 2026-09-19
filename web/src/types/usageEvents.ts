@@ -35,6 +35,18 @@ export interface UsageEvent {
    *  a rename never changes what a saved filter selects. Absent when the key has
    *  not been named, and the mask is shown instead. */
   api_key_alias?: string;
+  /** Display mask of the upstream credential that answered this request.
+   *
+   *  Not stored with the record: CPA's payload carries the credential's runtime
+   *  `auth_index`, and the keys themselves live in CPA's configuration, so the
+   *  server resolves the mask at read time from the credential lists it can read.
+   *  Absent whenever the credential cannot be identified - rotated or deleted
+   *  since the request, an unclaimed or ambiguously claimed index, an OAuth
+   *  credential, or a gateway that could not be read - and the row then prints no
+   *  key line rather than a guess. A provider that has since been switched off is
+   *  not one of those cases: its current state does not change which key answered.
+   */
+  provider_key_mask?: string;
   /** Client product label, redacted and shortened on the persistence path. */
   user_agent?: string | null;
   source?: string;

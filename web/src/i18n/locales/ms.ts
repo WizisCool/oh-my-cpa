@@ -995,6 +995,7 @@ export const MS: Readonly<Record<string, string>> = {
   "events.group_category": "Jenis kumpulan asal",
   "events.credentials_unavailable": "Metadata fail pengesahan tidak tersedia. Sumber terpaut atau indeks pengesahan ditunjukkan sebaliknya.",
   "events.provider": "Pembekal",
+  "events.provider_key": "Kunci pembekal",
   "events.credential": "Sumber kredensial",
   "events.source": "Cap jari sumber",
   "events.resource_name": "Nama sumber terpaut",

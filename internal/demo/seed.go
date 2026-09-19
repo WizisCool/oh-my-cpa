@@ -382,8 +382,16 @@ func credentialAuthIndexes() map[string]string {
 			indexes[item.provider] = item.authIndex
 		}
 	}
-	indexes["deepseek"] = "auth-ds-01"
-	indexes["qwen"] = "auth-qwen-01"
+	// A compatibility provider's records carry the provider label CPA writes, and the
+	// credential that answers them is that provider's first key. Both are derived from
+	// the same catalog entry, so renaming a provider in the fixture cannot leave a
+	// request pointing at an index its credential list no longer publishes.
+	for _, provider := range compatibilityCatalog() {
+		if len(provider.keys) == 0 {
+			continue
+		}
+		indexes[compatibilityRecordLabel(provider.name)] = compatibilityAuthIndex(provider.prefix, 1)
+	}
 	return indexes
 }
 

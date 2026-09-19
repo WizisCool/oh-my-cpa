@@ -995,6 +995,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "events.group_category": "來源分組型別",
   "events.credentials_unavailable": "認證檔案後設資料暫時不可用，仍顯示已關聯資源或認證索引。",
   "events.provider": "供應商",
+  "events.provider_key": "上游密鑰",
   "events.credential": "認證來源",
   "events.source": "來源指紋",
   "events.resource_name": "關聯資源名稱",

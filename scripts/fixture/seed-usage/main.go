@@ -53,6 +53,21 @@ const (
 	// provider. It is the second newest, so the plugin's own logo is inside the
 	// list's first virtual window, while slot 0 keeps carrying the failure share.
 	pluginProviderRecord = 1
+	// The window slot answered by an API-key provider, bound to one of the two
+	// credentials the fake CPA configures for `codex-api-key`. The record stores the
+	// credential's runtime auth index and the provider label CPA writes, which is
+	// what lets the console resolve which key answered; a second record below points
+	// at an index no credential claims, so the acceptance run can require the row to
+	// print nothing rather than a guess.
+	providerKeyRecord = 2
+)
+
+// The credential auth indexes the fake CPA publishes for its codex list, and the
+// provider label CPA puts on a request such a credential served.
+const (
+	fixtureProviderIndex  = "codex-e2e"
+	fixtureUnclaimedIndex = "codex-e2e-absent"
+	fixtureProviderLabel  = "codex"
 )
 
 // fixtureClientKey is the gateway client key the acceptance run also configures in
@@ -154,6 +169,18 @@ func seedList(ctx context.Context, repo *repository.Repository) error {
 		if isPluginProvider {
 			eventKey = "fixture-plugin-provider"
 		}
+		// A record answered by an API-key credential, and one whose auth index nothing
+		// claims. The record carries what CPA stores - the provider label and the
+		// credential's runtime auth index - and nothing else, so the acceptance run can
+		// require a resolved mask on one row and no line at all on the other.
+		isProviderKey := index == providerKeyRecord
+		isUnclaimedKey := index == providerKeyRecord+1
+		if isProviderKey {
+			eventKey = "fixture-provider-key"
+		}
+		if isUnclaimedKey {
+			eventKey = "fixture-provider-key-absent"
+		}
 		event := fixtureEvent(
 			eventKey,
 			now.Add(-time.Duration(minutesAgo)*time.Minute),
@@ -163,6 +190,14 @@ func seedList(ctx context.Context, repo *repository.Repository) error {
 		if isPluginProvider {
 			event.Provider = "iflow"
 			event.AuthIndex = "auth-index-e2e-7"
+		}
+		if isProviderKey || isUnclaimedKey {
+			event.Provider = fixtureProviderLabel
+			event.AuthType = "apikey"
+			event.AuthIndex = fixtureProviderIndex
+			if isUnclaimedKey {
+				event.AuthIndex = fixtureUnclaimedIndex
+			}
 		}
 		events = append(events, event)
 	}

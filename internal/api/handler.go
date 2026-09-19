@@ -51,20 +51,24 @@ type Handler struct {
 	// providerWrites serialises whole-list provider configuration writes; see
 	// management_provider_writes.go for why one global permit is required.
 	providerWrites providerWriteGate
+	// providerKeyMasks caches the auth index to provider key mask mapping the
+	// request list needs; see usage_provider_key_masks.go.
+	providerKeyMasks *providerKeyMaskCache
 }
 
 func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypto.Cipher, logger *slog.Logger, authManager *auth.Manager) *Handler {
 	handler := &Handler{
-		cfg:            cfg,
-		repo:           repo,
-		cipher:         cipher,
-		discoverer:     discovery.NewDiscoverer(cipher),
-		logger:         logger,
-		auth:           authManager,
-		startTime:      time.Now(),
-		limiter:        newLoginLimiter(),
-		providerWrites: newProviderWriteGate(),
-		pluginLogos:    newPluginLogoFetcher(),
+		cfg:              cfg,
+		repo:             repo,
+		cipher:           cipher,
+		discoverer:       discovery.NewDiscoverer(cipher),
+		logger:           logger,
+		auth:             authManager,
+		startTime:        time.Now(),
+		limiter:          newLoginLimiter(),
+		providerWrites:   newProviderWriteGate(),
+		providerKeyMasks: newProviderKeyMaskCache(),
+		pluginLogos:      newPluginLogoFetcher(),
 	}
 	if cfg.IsDemoMode {
 		// Inlining a plugin's logo means fetching a URL the plugin declares. The

@@ -1154,6 +1154,7 @@ const DICT: Record<string, [string, string]> = {
   'events.group_category': ['来源分组类型', 'Origin grouping type'],
   'events.credentials_unavailable': ['认证文件元数据暂时不可用，仍显示已关联资源或认证索引。', 'Auth file metadata is unavailable. Linked resources or auth indexes are shown instead.'],
   'events.provider': ['提供商', 'Provider'],
+  'events.provider_key': ['上游密钥', 'Provider key'],
   'events.credential': ['认证来源', 'Credential source'],
   'events.source': ['来源指纹', 'Source fingerprint'],
   'events.resource_name': ['关联资源名称', 'Linked resource name'],

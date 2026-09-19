@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
@@ -319,6 +320,98 @@ func TestSeedNeverStoresACallerKeyInTheClear(t *testing.T) {
 	// console and the fixture agree on what a masked key looks like.
 	if mask := security.MaskSecret(gatewayKeyCatalog()[0].value); !strings.Contains(mask, "•") && mask == gatewayKeyCatalog()[0].value {
 		t.Fatalf("MaskSecret produced an unmasked value: %q", mask)
+	}
+}
+
+// TestSeedAttributesRequestsToConfiguredCredentials keeps the demonstration able to
+// show which provider key answered. The request list resolves that from the record's
+// auth index against the credential lists the gateway reports, and both sides of that
+// join are fixtures here: a record whose index no credential claims, or a credential
+// list that reports no index, would leave every request row silent while the console
+// still looked correct.
+func TestSeedAttributesRequestsToConfiguredCredentials(t *testing.T) {
+	ctx := context.Background()
+	repo, _, _ := seededDatabase(t)
+
+	// Every auth index the compatibility fixture publishes, read the way the resolver
+	// reads it.
+	declared := make(map[string]bool)
+	for _, provider := range compatibilitySection() {
+		entries, ok := provider["api-key-entries"].([]map[string]any)
+		if !ok {
+			t.Fatalf("provider %v publishes no api-key-entries", provider["name"])
+		}
+		for _, entry := range entries {
+			index, _ := entry["auth-index"].(string)
+			if strings.TrimSpace(index) == "" {
+				t.Fatalf("provider %v publishes a key with no auth-index", provider["name"])
+			}
+			declared[index] = true
+		}
+	}
+	// The families the console manages report an index per credential too.
+	for _, family := range familyCatalog() {
+		for _, key := range family.keys {
+			if strings.TrimSpace(key.authIndex) == "" {
+				t.Fatalf("%s credential %q has no auth index", family.family, key.apiKey)
+			}
+			declared[key.authIndex] = true
+		}
+	}
+	// And each compatibility provider's own label, derived the way the gateway derives
+	// it, is the label its records must carry.
+	for _, provider := range compatibilityCatalog() {
+		if label := compatibilityRecordLabel(provider.name); !strings.HasPrefix(label, management.OpenAICompatibilityLabelPrefix) {
+			t.Fatalf("compatibility provider %q produces the label %q", provider.name, label)
+		}
+	}
+	familyNames := map[string]bool{
+		string(management.ConfigFamilyCodex):  true,
+		string(management.ConfigFamilyClaude): true,
+		string(management.ConfigFamilyGemini): true,
+		string(management.ConfigFamilyMeta):   true,
+	}
+
+	// A seeded request answered through one of those credentials must name an index
+	// that credential list actually claims. The fixture stores the payload's own
+	// spelling of the auth type, which is why both are selected here.
+	//
+	// No LIMIT: the statement orders nothing, so a cap would check an arbitrary subset
+	// and could stop covering the very rows this is meant to verify.
+	rows, err := repo.SQL().QueryContext(ctx, `
+		SELECT provider, auth_type, auth_index FROM usage_events
+		WHERE auth_type IN ('apikey', 'api_key')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	attributed := 0
+	for rows.Next() {
+		var provider, authType, authIndex string
+		if err := rows.Scan(&provider, &authType, &authIndex); err != nil {
+			t.Fatal(err)
+		}
+		attributed++
+		if strings.TrimSpace(authIndex) == "" {
+			t.Fatalf("an API-key request from %s carries no auth index", provider)
+		}
+		if !declared[authIndex] {
+			t.Fatalf("API-key request from %s carries auth index %q, which no credential claims: "+
+				"the request list would print no provider key", provider, authIndex)
+		}
+		// The provider label is the other half of the join: the console resolves a
+		// record only when its label names a credential list, so a fixture that used a
+		// display name here would look right on screen and resolve nothing.
+		label := strings.ToLower(strings.TrimSpace(provider))
+		if !familyNames[label] && !strings.HasPrefix(label, management.OpenAICompatibilityLabelPrefix) {
+			t.Fatalf("API-key request labels its provider %q, which names no credential list", provider)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if attributed == 0 {
+		t.Fatal("no API-key request in the fixture can name the key that served it")
 	}
 }
 
