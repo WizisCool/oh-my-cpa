@@ -208,13 +208,26 @@ func TestSeedPricesTheFabricatedHistory(t *testing.T) {
 		t.Fatalf("%d of %d stored prices are visible against the seeded catalogue", visible, len(rows))
 	}
 
-	// The page also prints the sync bookkeeping beside those rows.
+	// Both sources have to be present. The pricing page has a tab per source, and a
+	// fixture that marked every row `modelsdev` would claim an operator's own rates came
+	// from the public catalogue - which is what happened while the catalogue that decides
+	// visibility was also being read as the answer to "did models.dev match this model".
+	sources := make(map[string]int)
+	for _, row := range rows {
+		sources[row.Source]++
+	}
+	if sources[pricing.SourceManual] == 0 || sources[pricing.SourceModelsDev] == 0 {
+		t.Fatalf("seeded price sources = %v, want both a synced and a hand-set rate", sources)
+	}
+
+	// The page also prints the sync bookkeeping beside those rows, and the count it
+	// reports has to be the rows it actually marked as synced.
 	state, err := repo.GetPricingSyncState(ctx, pricing.SourceModelsDev)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.LastSuccessAtMS == nil || state.LastMatched == 0 {
-		t.Fatalf("pricing sync state = %+v, want a completed sync", state)
+	if state.LastSuccessAtMS == nil || state.LastMatched != int64(sources[pricing.SourceModelsDev]) {
+		t.Fatalf("pricing sync state = %+v, want %d matched models", state, sources[pricing.SourceModelsDev])
 	}
 }
 

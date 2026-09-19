@@ -150,12 +150,15 @@ func ensureInstance(ctx context.Context, repo *repository.Repository, now time.T
 // no sync. Without it the pricing page would intersect sixteen stored prices with
 // an empty catalogue and render nothing at all.
 func seedPrices(ctx context.Context, repo *repository.Repository, now time.Time) (int, error) {
-	catalog := pricingCatalogTargets()
-	rows := make([]repository.ModelPrice, 0, len(priceCatalog()))
 	matched := int64(0)
+	rows := make([]repository.ModelPrice, 0, len(priceCatalog()))
 	for _, price := range priceCatalog() {
+		// The catalogue decides what the page *shows*; this decides what the price
+		// *claims to be*. They are different questions and answering both with the
+		// catalogue made every row look like it came from models.dev, including the
+		// relay models whose rate only an operator could have set.
 		source := pricing.SourceManual
-		if _, tracked := catalog[price.model]; tracked {
+		if _, tracked := modelsDevCanonical[price.model]; tracked {
 			source = pricing.SourceModelsDev
 			matched++
 		}
