@@ -55,3 +55,7 @@ caddy-config/
 # a bare name would also match scripts/fixture/seed-usage/, which is source.
 /seed-usage
 /seed-usage.exe
+
+# Vercel's local project link. It holds the project and team identifiers, which are
+# per-machine deployment state rather than anything the repository needs.
+.vercel/
