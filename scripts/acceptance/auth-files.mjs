@@ -4,6 +4,8 @@
  * The top-level runner owns process/browser lifecycle; this module owns the
  * domain flow and receives only the shared harness handles it needs.
  */
+import { FAKE_PLUGIN_LOGO_DATA_URL } from '../fake-cpa.mjs';
+
 export async function runAuthFilesAcceptance({
   auditPage,
   appURL,
@@ -110,12 +112,13 @@ export async function runAuthFilesAcceptance({
       'a plugin-owned provider tab draws the plugin\u2019s own logo',
       async () => {
         const mark = await providerMarkImage(pluginTab);
-        // The fixture plugin publishes an inline SVG, so a catalog mark here would
-        // resolve against the console's own /lobe-icons/ assets instead.
+        // The fixture's own artwork, not merely "an image loaded": a catalog mark, a
+        // neighbouring plugin's logo and the console's fallback would all satisfy a
+        // weaker check while answering a different question.
         return Boolean(mark)
           && mark.complete === true
           && mark.naturalWidth > 0
-          && /^data:image\//i.test(mark.src);
+          && mark.src === FAKE_PLUGIN_LOGO_DATA_URL;
       },
       { detail: async () => JSON.stringify(await providerMarkImage(pluginTab)) },
     );

@@ -6,6 +6,12 @@ export interface ProviderMetadata {
   iconId: string;
 }
 
+/**
+ * The labels are the brands' own names, deliberately not i18n keys: a product name is a
+ * proper noun and reads identically in every catalog, and every row here (Claude, Codex,
+ * Antigravity, xAI, Kimi, Devin, Meta, Codebuddy, …) already states it as a literal. The
+ * catalogue holds UI copy, which this table has none of.
+ */
 export const CREDENTIAL_PROVIDERS: Record<string, ProviderMetadata> = {
   claude: { id: 'claude', label: 'Claude', iconId: 'Claude' },
   antigravity: { id: 'antigravity', label: 'Antigravity', iconId: 'Antigravity' },
@@ -55,6 +61,12 @@ export function getCredentialProviderMetadata(providerKey: string): ProviderMeta
  * provider, or a plugin registering one - still has a mark in the vendored icon
  * catalog, and falling through to it is what keeps a tab or card from rendering the
  * neutral placeholder while its brand artwork ships in the bundle.
+ *
+ * The hint is the credential or account label the caller has, and it is consulted only
+ * when the provider key itself is unknown - a generic family CPA labels for the operator
+ * (`openai-compatibility`), where the credential's own name is the only evidence of whose
+ * account it is. A key the table names always wins over the hint, so an account called
+ * "claude-prod" cannot rename the provider it belongs to.
  *
  * An unmatched provider resolves to no mark at all rather than to a default: the
  * caller renders its own neutral placeholder, so an unknown provider is never

@@ -21,6 +21,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
  * and pagination races, and responsive layout. The top-level runner owns the
  * browser and fake CPA; this module owns the request-record domain flow.
  */
+import { FAKE_PLUGIN_LOGO_DATA_URL } from '../fake-cpa.mjs';
+
 export async function runUsageEventsAcceptance({
   auditPage,
   appURL,
@@ -153,7 +155,7 @@ export async function runUsageEventsAcceptance({
         return Boolean(mark)
           && mark.complete === true
           && mark.naturalWidth > 0
-          && /^data:image\//i.test(mark.src);
+          && mark.src === FAKE_PLUGIN_LOGO_DATA_URL;
       },
       { detail: async () => JSON.stringify(await providerMarkImage(pluginRow.locator('.req-provider-icon-wrapper'))) },
     );

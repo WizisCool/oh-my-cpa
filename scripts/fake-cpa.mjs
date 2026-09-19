@@ -11,6 +11,15 @@ export const FAKE_SECOND_PROVIDER_SECRET = 'omc-e2e-provider-secret-second';
 export const FAKE_ACCOUNT_SECRET = 'omc-e2e-account-secret';
 export const FAKE_CLIENT_SECRET = 'omc-e2e-client-secret';
 
+/**
+ * The inline artwork the `iflow-auth` fixture plugin publishes for its OAuth provider.
+ *
+ * Exported because the acceptance flows assert that a plugin-owned provider draws *this*
+ * mark: "an <img> loaded" would also pass for a catalog mark, a neighbouring plugin's
+ * logo, or the console's own fallback, none of which is the claim being made.
+ */
+export const FAKE_PLUGIN_LOGO_DATA_URL = 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\'%3E%3Crect width=\'24\' height=\'24\' rx=\'6\' fill=\'%234F46E5\'/%3E%3Ctext x=\'12\' y=\'16\' font-size=\'9\' font-family=\'monospace\' fill=\'white\' text-anchor=\'middle\'%3EiF%3C/text%3E%3C/svg%3E';
+
 function json(response, status, body, headers = {}) {
   response.writeHead(status, { 'Content-Type': 'application/json', 'X-CPA-Version': '7.3.5-e2e', ...headers });
   response.end(JSON.stringify(body));
@@ -472,7 +481,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
           registered: true,
           supports_oauth: true,
           oauth_provider: 'iflow',
-          logo: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%234F46E5'/%3E%3Ctext x='12' y='16' font-size='9' font-family='monospace' fill='white' text-anchor='middle'%3EiF%3C/text%3E%3C/svg%3E",
+          logo: FAKE_PLUGIN_LOGO_DATA_URL,
           permissions: ['oauth'],
         },
       ] });

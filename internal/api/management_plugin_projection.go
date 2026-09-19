@@ -14,9 +14,12 @@ import (
  * a caller-visible value is bounded - plugin text arrives from an installed plugin's
  * manifest, not from this process.
  *
- * The plugin configuration document passes through unbounded on purpose: it is the
- * plugin's own settings, edited through this console, and its shape belongs to the
- * plugin rather than to this contract.
+ * The plugin configuration document passes through unbounded on purpose. It is the
+ * plugin's own settings document, its shape belongs to the plugin rather than to this
+ * contract, and the console's plugin editor reads and writes exactly this field - so
+ * omitting it here would remove the plugin configuration capability rather than protect
+ * anything. It is not a place this project keeps a secret: nothing OMC or CPA holds is
+ * ever written into it, and the endpoint that serves it is management-authenticated.
  */
 const (
 	// pluginTextLimit bounds one free-text manifest field. Descriptions legitimately run

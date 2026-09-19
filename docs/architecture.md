@@ -312,10 +312,11 @@ reduced-motion hook above. `docs/design.md`
 trade-offs.
 
 **A plugin's published logo outranks the catalog mark for the provider it
-registers.** A plugin that declares `supports_oauth` also publishes its own logo,
-and it is the only authority on what that provider looks like: the vendored
-catalog cannot be updated by installing a plugin, so guessing a brand from the
-provider key would label the operator's own credential with somebody else's mark.
+registers.** A plugin that declares `supports_oauth` may publish its own logo, and
+when it publishes usable artwork that mark is the one drawn: the plugin is the only
+authority on what its own provider looks like, and the vendored catalog cannot be
+updated by installing a plugin, so guessing a brand from the provider key would
+label the operator's own credential with somebody else's mark.
 It is not loaded from the plugin's host, though - the deployment must not
 depend on a CDN, and the console's CSP allows images only from itself or inline -
 so the Go process inlines it (§2) and `types/pluginOAuthProviders.ts` resolves the

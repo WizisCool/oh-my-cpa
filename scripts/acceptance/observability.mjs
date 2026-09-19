@@ -1,4 +1,6 @@
 import path from 'node:path';
+
+import { FAKE_PLUGIN_LOGO_DATA_URL } from '../fake-cpa.mjs';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -61,7 +63,7 @@ export async function runObservabilityAcceptance({
       return Boolean(mark)
         && mark.complete === true
         && mark.naturalWidth > 0
-        && /^data:image\//i.test(mark.src);
+        && mark.src === FAKE_PLUGIN_LOGO_DATA_URL;
     },
     { detail: async () => JSON.stringify(await providerMarkImage(quotaPluginTab)) },
   );
