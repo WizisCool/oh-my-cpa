@@ -130,7 +130,8 @@ func (h *Handler) writeProviderStatus(ctx context.Context, client *management.Cl
 				}
 				list.Entries[req.Index].Disabled = req.Disabled
 				return nil
-			})
+			},
+			nil)
 	default:
 		return newProviderWriteError(http.StatusBadRequest, "provider family does not support status toggle")
 	}
@@ -159,5 +160,6 @@ func (h *Handler) writeConfigKeyProviderStatus(ctx context.Context, client *mana
 			}
 			(*list)[req.Index].ExcludedModels = management.SetExcludedAll((*list)[req.Index].ExcludedModels, req.Disabled)
 			return nil
-		})
+		},
+		nil)
 }

@@ -51,6 +51,9 @@ type Handler struct {
 	// providerWrites serialises whole-list provider configuration writes; see
 	// management_provider_writes.go for why one global permit is required.
 	providerWrites providerWriteGate
+	// beforeProviderNamesSave is a test seam for holding one overlay write open
+	// while another provider request is issued. Production leaves it nil.
+	beforeProviderNamesSave func()
 	// providerKeyMasks caches the auth index to provider key mask mapping the
 	// request list needs; see usage_provider_key_masks.go.
 	providerKeyMasks *providerKeyMaskCache

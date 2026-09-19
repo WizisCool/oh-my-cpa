@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -77,6 +79,95 @@ func TestConcurrentProviderTogglesDoNotLoseAWrite(t *testing.T) {
 			firstDisabled, secondDisabled,
 		)
 	}
+}
+
+// TestProviderUpdateHoldsOverlayInsideAdmission is the regression for the
+// ordering gap between CPA's accepted list write and the console's local name
+// overlay.
+//
+// The first request is held inside saveProviderNames after CPA has accepted its
+// list write. A second update is then issued. With the overlay outside the write
+// window, that second request can finish first and be overwritten by the paused
+// first request's overlay; with the overlay inside the window, the second request
+// cannot pass the gate until the first overlay is stored. The final name must be
+// the last admitted request's name, Second.
+func TestProviderUpdateHoldsOverlayInsideAdmission(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+
+	firstOverlayEntered := make(chan struct{})
+	releaseFirstOverlay := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseFirst := func() {
+		releaseOnce.Do(func() { close(releaseFirstOverlay) })
+	}
+	t.Cleanup(releaseFirst)
+
+	var saveCalls atomic.Int32
+	fixture.handler.beforeProviderNamesSave = func() {
+		if saveCalls.Add(1) != 1 {
+			return
+		}
+		close(firstOverlayEntered)
+		<-releaseFirstOverlay
+	}
+
+	type updateResult struct {
+		name   string
+		status int
+		body   string
+	}
+	results := make(chan updateResult, 2)
+	update := func(name string) {
+		body := fmt.Sprintf(`{"family":"codex","name":%q,"base_url":"https://api.openai.com"}`, name)
+		resp, payload := doJSON(t, fixture.client, http.MethodPut,
+			fixture.baseURL+"/omc/api/v1/management/providers/codex-0", body)
+		results <- updateResult{name: name, status: resp.StatusCode, body: string(payload)}
+	}
+
+	go update("First")
+	select {
+	case <-firstOverlayEntered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first provider update never reached its overlay write")
+	}
+
+	go update("Second")
+	select {
+	case result := <-results:
+		releaseFirst()
+		t.Fatalf("second provider update completed while the first overlay write was held: %s -> %d %s",
+			result.name, result.status, result.body)
+	case <-time.After(500 * time.Millisecond):
+	}
+
+	releaseFirst()
+	first := <-results
+	second := <-results
+	for _, result := range []updateResult{first, second} {
+		if result.status != http.StatusOK {
+			t.Fatalf("%s provider update status = %d body %s", result.name, result.status, result.body)
+		}
+	}
+
+	resp, payload := getJSON(t, fixture.client, fixture.baseURL+"/omc/api/v1/management/providers?include_keys=true")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("provider list status = %d body %s", resp.StatusCode, payload)
+	}
+	var providers struct {
+		Providers []ProviderItemDTO `json:"providers"`
+	}
+	if err := json.Unmarshal(payload, &providers); err != nil {
+		t.Fatalf("provider list is not JSON: %v (%s)", err, payload)
+	}
+	for _, provider := range providers.Providers {
+		if provider.ID == "codex-0" {
+			if provider.Name != "Second" {
+				t.Fatalf("provider codex-0 name = %q after the last admitted update, want Second", provider.Name)
+			}
+			return
+		}
+	}
+	t.Fatal("provider codex-0 was not present in the provider list")
 }
 
 func isExcludedAll(entry map[string]any) bool {

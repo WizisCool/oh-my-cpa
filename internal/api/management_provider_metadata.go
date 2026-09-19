@@ -56,6 +56,9 @@ func (h *Handler) saveProviderNames(ctx context.Context, names map[string]string
 	if h.repo == nil {
 		return
 	}
+	if h.beforeProviderNamesSave != nil {
+		h.beforeProviderNamesSave()
+	}
 	encoded, err := json.Marshal(names)
 	if err == nil {
 		_ = h.repo.PutPreference(ctx, repository.PreferenceProviderNames, string(encoded))

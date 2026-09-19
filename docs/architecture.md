@@ -198,11 +198,13 @@ Properties to preserve when changing this code:
   the server both re-keys the stored document and the console replays the same
   shift into its local cache - a cache that kept the deleted key would write it
   back on the next icon change. The name and website overlays of an update are
-  written only after the gateway accepted the write, while the icon overlay is
-  written by the console through the preferences API and so is never part of a
-  provider save: the row, the request list's provider label and the name resolver
-  read these maps, so an entry recorded ahead of a refused write would leave the
-  console naming a credential CPA never accepted.
+  written by the gated write itself, after the gateway accepted the update and
+  before the write permit is released. The row, the request list's provider label
+  and the name resolver read these maps, so an entry recorded ahead of a refused
+  write would leave the console naming a credential CPA never accepted; recording
+  it after the permit would let two accepted updates invert their overlay order.
+  The icon overlay is written by the console through the preferences API and so is
+  never part of a provider save.
 
 ### Provider families are data, not code paths
 

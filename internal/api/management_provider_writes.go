@@ -132,13 +132,17 @@ func writeProviderWriteError(writer http.ResponseWriter, err error) {
 // outside the window is a snapshot another writer may already have replaced, so
 // reading first and locking later would reproduce the very lost update this
 // gate exists to prevent. `mutate` receives a pointer because appending to a
-// list is as much a modification as editing an element.
+// list is as much a modification as editing an element. `afterUpdate` runs after
+// the gateway has accepted the list but while the permit is still held, so the
+// console's local overlays can be recorded in the same admission as the write
+// they describe.
 func gatedProviderListWrite[T any](
 	h *Handler,
 	ctx context.Context,
 	read func(context.Context) (T, error),
 	update func(context.Context, T) error,
 	mutate func(*T) error,
+	afterUpdate func(context.Context, T),
 ) error {
 	if err := h.providerWrites.acquire(ctx); err != nil {
 		return err
@@ -162,5 +166,8 @@ func gatedProviderListWrite[T any](
 	// them are stale. Dropping them here means a re-keyed or renamed credential
 	// reads correctly on the next page rather than at the end of the TTL.
 	h.providerKeyMasks.invalidate()
+	if afterUpdate != nil {
+		afterUpdate(ctx, list)
+	}
 	return nil
 }
