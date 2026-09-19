@@ -1210,11 +1210,27 @@ that serves the SPA comes last. That ordering is load-bearing: while the wildcar
 sat first, it classified every `GET` in the application as public - including the
 credential download and the request log - and both were allowed.
 
-Refusals answer `403` with `X-OMCPA-Demo-Blocked` and a message naming the reason,
-so a caller that follows an old link is told why. Reads are marked with
-`X-OMCPA-Demo: active`, and a write carries `X-OMCPA-Demo-Persistence: none`, which
-is how a response can say its result is not durable without the page having to
-know.
+Last is not enough on its own, though. A wildcard that resolves before the refusal
+for an unclassified API path makes the coverage test unfalsifiable for reads: an
+unlisted `GET` matches the wildcard and looks classified. The fallback and the
+console are therefore separate lists, and the coverage test refuses a fallback match
+as a verdict - so a read endpoint added without one fails the suite, and is refused
+at runtime while it does.
+
+Refusals answer `403` with `{"error": ..., "code": "demo_operation_refused"}` - the
+code the facade's other failures already carry - plus `X-OMCPA-Demo-Blocked` for a
+caller that never parses a body. Reads are marked with `X-OMCPA-Demo: active`, and a
+write carries `X-OMCPA-Demo-Persistence: none`, which is how a response can say its
+result is not durable without the page having to know.
+
+The classification resolves in three passes - the endpoint verdicts, then the
+fallbacks, then the console itself - and the third exists because a trailing wildcard
+matches every path below it. That ordering is what keeps the SPA fallback from
+answering for an API path: `/api/v1/...` is refused by the fallback, while `/api-keys`
+is a page and stays public. Writing the coverage test against that arrangement found
+two reads - the gateway key list and the error-log file list - that had been matching
+the SPA wildcard, which is to say they were being served without anyone having decided
+they should be.
 
 What the demo refuses is whatever moves credential material, starts a real sign-in,
 executes a plugin, writes the gateway configuration, spends a quota entitlement,

@@ -252,10 +252,18 @@ async function main() {
       return results;
     }, REFUSED);
     for (const result of refused) {
+      // Decoded rather than matched as text: the code is the part a client may branch on,
+      // and the message is prose that may be reworded.
+      let body = {};
+      try {
+        body = JSON.parse(result.body);
+      } catch {
+        body = {};
+      }
       check(
         `the server refuses ${result.path}`,
-        result.status === 403 && result.marker === 'demo mode' && result.body.includes('demo mode'),
-        `status=${result.status} marker=${result.marker}`,
+        result.status === 403 && result.marker === 'demo mode' && body.code === 'demo_operation_refused',
+        `status=${result.status} marker=${result.marker} code=${body.code}`,
       );
     }
 

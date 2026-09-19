@@ -19,9 +19,15 @@ const (
 	// demoHeader marks every response the demo serves, so a caller that never saw
 	// the injected page configuration can still tell what it is talking to.
 	demoHeader = "X-OMCPA-Demo"
-	// demoBlockedHeader marks a refusal specifically. The browser turns it into
-	// "not available in the demo" rather than a generic permission error.
+	// demoBlockedHeader marks a refusal specifically, for a caller that never reads the
+	// body: the browser turns it into "not available in the demo" rather than a generic
+	// permission error.
 	demoBlockedHeader = "X-OMCPA-Demo-Blocked"
+	// demoRefusedCode is the machine-readable half of a refusal, in the shaped this
+	// facade already uses elsewhere (`{"error": ..., "code": ...}`). A caller must be
+	// able to tell "the demo does not do this" from "you may not" and from "it failed"
+	// without matching on English prose.
+	demoRefusedCode = "demo_operation_refused"
 	// demoPersistenceHeader marks a request that would have changed durable state
 	// in a self-hosted deployment. A demo holds its writes in memory, so the
 	// answer is one the caller has to be told not to trust as permanent.
@@ -57,6 +63,22 @@ type demoPolicyRule struct {
 	reason string
 }
 
+// demoMatch is how a request met the classification.
+type demoMatch int
+
+const (
+	// demoMatchNone means nothing in either list describes the request. The caller
+	// treats it as a refusal; see demoGuard.
+	demoMatchNone demoMatch = iota
+	// demoMatchVerdict means somebody decided on this route.
+	demoMatchVerdict
+	// demoMatchFallback means the request was answered by a rule that exists so an
+	// unlisted path is refused rather than served. The request is refused, but nobody
+	// decided on the route: the coverage test fails on a fallback match, which is what
+	// forces an explicit verdict for a route that has just been added.
+	demoMatchFallback
+)
+
 // demoPolicy is the classification table.
 //
 // The refusals are grouped by what makes them dangerous:
@@ -79,6 +101,13 @@ type demoPolicyRule struct {
 // preferences, credential metadata, configuration reads, quota reads and the
 // in-process discovery sweep.
 var demoPolicy = []demoPolicyRule{
+	// The public surface of the API: the health probe and the session endpoints the
+	// sign-in card uses. They are verdicts on API paths, so they resolve before the
+	// `/api/*` fallback refuses an unclassified one.
+	{http.MethodGet, "/api/healthz", demoAllow, ""},
+	{http.MethodPost, "/api/auth/login", demoAllow, ""},
+	{http.MethodGet, "/api/auth/session", demoAllow, ""},
+	{http.MethodPost, "/api/auth/logout", demoAllow, ""},
 	// Discovery runs against the in-process fixture, so it is a read of the demo's
 	// own data even though it is a POST.
 	{http.MethodPost, "/api/v1/instances/default/discover", demoAllow, ""},
@@ -107,6 +136,11 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodGet, "/api/v1/management/dashboard/providers", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/logs", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/logs/status", demoAllow, ""},
+	// The error-log file list. Its download is refused below; naming the file is not.
+	{http.MethodGet, "/api/v1/management/request-error-logs", demoAllow, ""},
+	// The gateway key list. Creating and deleting keys are refused below; reading them is
+	// what the key page is.
+	{http.MethodGet, "/api/v1/management/api-keys", demoAllow, ""},
 	{http.MethodGet, "/api/v1/usage/ingest-status", demoAllow, ""},
 	{http.MethodGet, "/api/v1/usage/events", demoAllow, ""},
 	{http.MethodGet, "/api/v1/usage/events/{id}", demoAllow, ""},
@@ -190,17 +224,21 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodPost, "/api/v1/management/quota/reset", demoRefuse, "resetting a credential's quota is disabled"},
 	{http.MethodPost, "/api/v1/management/quota/clear-cooldown", demoRefuse, "changing a credential's cooldown is disabled"},
 	{http.MethodPost, "/api/v1/management/quota/redeem-credit", demoRefuse, "redeeming a reset credit is disabled: it spends a real entitlement"},
+}
 
-	// The public surface, last on purpose. Order is the whole resolution rule here: a
-	// trailing wildcard matches every path below it, so `/spa-route` and `/assets/x`
-	// have to be reached only after every endpoint rule has had its chance. Placed
-	// first - which is where the wildcard reads most naturally - they would classify
-	// every GET in the application as public, including the credential download and
-	// the request log that must never be served.
-	{http.MethodGet, "/api/healthz", demoAllow, ""},
-	{http.MethodPost, "/api/auth/login", demoAllow, ""},
-	{http.MethodGet, "/api/auth/session", demoAllow, ""},
-	{http.MethodPost, "/api/auth/logout", demoAllow, ""},
+// demoPolicyConsole is the console itself and the assets it loads.
+//
+// It is a third list because it resolves last of all: a trailing wildcard matches every
+// path below it, so these rules have to be reached only after the endpoint verdicts and
+// the fallbacks have had their chance. Placed first - which is where a wildcard reads
+// most naturally - the SPA wildcard classified every `GET` in the application as public,
+// including the credential download and the request log that must never be served.
+//
+// Every rule here is still a verdict: `/api/*` is refused by the fallback list rather
+// than by the wildcard, so the wildcard only ever answers for the console and its own
+// assets. `/api-keys` is a page and stays public, because the API is mounted at
+// `/api/` and not at every path beginning with those four letters.
+var demoPolicyConsole = []demoPolicyRule{
 	{http.MethodGet, "/assets/*", demoAllow, ""},
 	{http.MethodHead, "/assets/*", demoAllow, ""},
 	{http.MethodGet, "/lobe-icons/*", demoAllow, ""},
@@ -211,20 +249,51 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodHead, "/*", demoAllow, ""},
 }
 
-// demoVerdictFor classifies one request. The first matching rule wins, so the table
-// is ordered from the most specific to the most general. matched is false when
-// nothing in the table describes it, which the caller must treat as a refusal.
-func demoVerdictFor(method, path string) (demoPolicyRule, bool) {
+// demoPolicyFallbacks answer a request no verdict describes.
+//
+// They are a separate list because they are not verdicts on a route: the coverage test
+// requires a non-fallback match for every route the router registers, and the runtime
+// uses these to fail closed. Putting them in the table above with a marker would say
+// the same thing twice; keeping them here says it once, in the place that means it.
+var demoPolicyFallbacks = []demoPolicyRule{
+	// An API path nobody classified is a gap, and a gap must not be answered by the SPA
+	// wildcard at the end of the table above - which is what a trailing wildcard does to
+	// every unlisted `GET`. This sits between the table and the wildcard, so the wildcard
+	// covers the console and its assets only: `/api-keys` is a page and stays public,
+	// `/api/v1/...` is an API and is refused.
+	{"*", "/api/*", demoRefuse, "this endpoint is not part of the demo"},
+}
+
+// demoVerdictFor classifies one request. The three lists are consulted in order - the
+// endpoint verdicts, then the fallbacks, then the console itself - and the first match
+// wins, so each list is only reached when nothing before it applies.
+func demoVerdictFor(method, path string) (demoPolicyRule, demoMatch) {
 	method = strings.ToUpper(strings.TrimSpace(method))
 	for _, rule := range demoPolicy {
 		if rule.method != method && rule.method != "*" {
 			continue
 		}
 		if routePatternMatches(rule.pattern, path) {
-			return rule, true
+			return rule, demoMatchVerdict
 		}
 	}
-	return demoPolicyRule{}, false
+	for _, rule := range demoPolicyFallbacks {
+		if rule.method != method && rule.method != "*" {
+			continue
+		}
+		if routePatternMatches(rule.pattern, path) {
+			return rule, demoMatchFallback
+		}
+	}
+	for _, rule := range demoPolicyConsole {
+		if rule.method != method && rule.method != "*" {
+			continue
+		}
+		if routePatternMatches(rule.pattern, path) {
+			return rule, demoMatchVerdict
+		}
+	}
+	return demoPolicyRule{}, demoMatchNone
 }
 
 // routePatternMatches reports whether a request path matches one chi route
@@ -295,8 +364,8 @@ func (h *Handler) demoGuard(next http.Handler) http.Handler {
 	}
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set(demoHeader, demoValue)
-		rule, matched := demoVerdictFor(request.Method, stripBasePath(h.cfg.BasePath, request.URL.Path))
-		if !matched {
+		rule, match := demoVerdictFor(request.Method, stripBasePath(h.cfg.BasePath, request.URL.Path))
+		if match == demoMatchNone {
 			writeDemoRefusal(writer, "this endpoint is not part of the demo")
 			return
 		}
@@ -316,5 +385,8 @@ func (h *Handler) demoGuard(next http.Handler) http.Handler {
 func writeDemoRefusal(writer http.ResponseWriter, reason string) {
 	writer.Header().Set(demoHeader, demoValue)
 	writer.Header().Set(demoBlockedHeader, demoBlockedReason)
-	writeError(writer, http.StatusForbidden, "demo mode — "+reason)
+	writeJSON(writer, http.StatusForbidden, map[string]string{
+		"error": "demo mode — " + reason,
+		"code":  demoRefusedCode,
+	})
 }

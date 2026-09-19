@@ -102,10 +102,21 @@ function authUrl(path: string): string {
   return `${apiRoot()}/api/auth${path}`;
 }
 
+/**
+ * The code the server puts on a refusal in demo mode. Declared here rather than read
+ * from a header so the two sides cannot drift: the header says the same thing for a
+ * caller that never parses a body.
+ */
+export const DEMO_REFUSED_CODE = 'demo_operation_refused';
+
 async function readError(response: Response): Promise<{ data: unknown; message: string; demoBlocked: boolean }> {
-  const demoBlocked = response.headers.get('X-OMCPA-Demo-Blocked') !== null;
+  // Either signal is enough. The header survives a body that a proxy rewrote, and the
+  // code survives a proxy that drops headers - and the code is the one the rest of the
+  // facade already branches on, so a refusal is not a special case for a caller.
+  const headerBlocked = response.headers.get('X-OMCPA-Demo-Blocked') !== null;
   let errorData: unknown = null;
   let message = `Request failed [HTTP ${response.status}]`;
+  let codeBlocked = false;
   try {
     errorData = await response.json();
     if (typeof errorData === 'object' && errorData !== null) {
@@ -115,12 +126,13 @@ async function readError(response: Response): Promise<{ data: unknown; message: 
       } else if (typeof errorObj.error === 'string') {
         message = errorObj.error;
       }
+      codeBlocked = errorObj.code === DEMO_REFUSED_CODE;
     }
   } catch {
     const text = await response.text().catch(() => '');
     if (text) message += `: ${text.slice(0, 100)}`;
   }
-  return { data: errorData, message, demoBlocked };
+  return { data: errorData, message, demoBlocked: headerBlocked || codeBlocked };
 }
 
 /**

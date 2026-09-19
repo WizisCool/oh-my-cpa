@@ -1,8 +1,8 @@
 package api
 
 import (
-	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -52,7 +52,7 @@ func TestDemoPolicyClassifiesEveryRegisteredRoute(t *testing.T) {
 	if err := chi.Walk(routes, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
 		seen++
 		path := stripBasePath(basePath, route)
-		if _, matched := demoVerdictFor(method, path); !matched {
+		if _, match := demoVerdictFor(method, path); match != demoMatchVerdict {
 			unclassified = append(unclassified, method+" "+route)
 		}
 		return nil
@@ -104,9 +104,9 @@ func TestDemoPolicyRefusesTheDangerousSurface(t *testing.T) {
 		{http.MethodPost, "/api/v1/pricing/sync"},
 	}
 	for _, route := range refused {
-		rule, matched := demoVerdictFor(route.method, route.path)
-		if !matched {
-			t.Fatalf("%s %s is not classified at all", route.method, route.path)
+		rule, match := demoVerdictFor(route.method, route.path)
+		if match != demoMatchVerdict {
+			t.Fatalf("%s %s is not classified by a verdict", route.method, route.path)
 		}
 		if rule.verdict != demoRefuse {
 			t.Errorf("%s %s is allowed in demo mode, want refused", route.method, route.path)
@@ -132,6 +132,8 @@ func TestDemoPolicyKeepsTheReadingSurface(t *testing.T) {
 		{http.MethodGet, "/api/v1/usage/events/41"},
 		{http.MethodGet, "/api/v1/usage/facets"},
 		{http.MethodGet, "/api/v1/management/logs"},
+		{http.MethodGet, "/api/v1/management/api-keys"},
+		{http.MethodGet, "/api/v1/management/request-error-logs"},
 		{http.MethodGet, "/api/v1/management/request-error-logs"},
 		{http.MethodGet, "/api/v1/management/auth-files"},
 		{http.MethodGet, "/api/v1/management/auth-files/models"},
@@ -164,9 +166,9 @@ func TestDemoPolicyKeepsTheReadingSurface(t *testing.T) {
 		{http.MethodPost, "/api/v1/usage/ingest/refresh"},
 	}
 	for _, route := range allowed {
-		rule, matched := demoVerdictFor(route.method, route.path)
-		if !matched {
-			t.Fatalf("%s %s is not classified at all", route.method, route.path)
+		rule, match := demoVerdictFor(route.method, route.path)
+		if match != demoMatchVerdict {
+			t.Fatalf("%s %s is not classified by a verdict", route.method, route.path)
 		}
 		if rule.verdict != demoAllow {
 			t.Errorf("%s %s is refused in demo mode (%s), want allowed", route.method, route.path, rule.reason)
@@ -174,32 +176,75 @@ func TestDemoPolicyKeepsTheReadingSurface(t *testing.T) {
 	}
 }
 
-// A route nobody classified is refused rather than served. The coverage test above
-// is what keeps this from being reachable by accident, and this is what makes the
-// consequence of a mistake the safe one.
+// A route nobody classified is refused rather than served - and that has to hold for
+// reads too, which is the case a trailing wildcard gets wrong: a wildcard that serves
+// the SPA matches every unlisted `GET` as well, so a read endpoint added without a
+// verdict would inherit "public" and be served by the public demo.
 func TestDemoPolicyRefusesAnUnclassifiedRoute(t *testing.T) {
-	if _, matched := demoVerdictFor(http.MethodPost, "/api/v1/management/some/future/mutation"); matched {
-		t.Fatal("an unclassified route was reported as classified")
+	for _, probe := range []struct{ method, path string }{
+		{http.MethodPost, "/api/v1/management/some/future/mutation"},
+		{http.MethodGet, "/api/v1/management/some/future/read"},
+		{http.MethodGet, "/api/v1/management/auth-files/export"},
+		{http.MethodHead, "/api/v1/usage/events/1"},
+		{http.MethodGet, "/api/auth/tokens"},
+	} {
+		_, match := demoVerdictFor(probe.method, probe.path)
+		if match == demoMatchVerdict {
+			t.Errorf("%s %s was reported as classified by a verdict", probe.method, probe.path)
+		}
+		if match != demoMatchFallback {
+			t.Errorf("%s %s matched nothing at all, so the SPA wildcard could answer it", probe.method, probe.path)
+		}
 	}
+
 	handler := demoHandler(t, "/omc")
 	server := httptest.NewServer(handler.Router())
 	defer server.Close()
+	client := demoClient(t, server.URL)
 
-	request, err := http.NewRequest(http.MethodPost, server.URL+"/omc/api/v1/management/some/future/mutation", bytes.NewReader([]byte("{}")))
-	if err != nil {
-		t.Fatal(err)
+	// The other half of the property: the wildcard still serves the console, including its
+	// own routes that begin with `/api-`, which are pages rather than API paths.
+	for _, probe := range []struct{ method, path string }{
+		{http.MethodGet, "/omc/api/v1/management/some/future/read"},
+		{http.MethodGet, "/omc/api/v1/usage/events/1/export"},
+	} {
+		request, err := http.NewRequest(probe.method, server.URL+probe.path, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response, err := client.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if response.StatusCode != http.StatusForbidden {
+			t.Errorf("%s %s status = %d, want 403", probe.method, probe.path, response.StatusCode)
+		}
+		body := readBody(t, response)
+		if response.Header.Get(demoBlockedHeader) == "" {
+			t.Errorf("%s %s was refused without the demo marker", probe.method, probe.path)
+		}
+		if !strings.Contains(body, `"code":"`+demoRefusedCode+`"`) {
+			t.Errorf("%s %s refusal has no machine-readable code: %s", probe.method, probe.path, body)
+		}
 	}
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatal(err)
+
+	for _, path := range []string{"/omc/api-keys", "/omc/dashboard", "/omc/usage/events"} {
+		response, err := client.Get(server.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body := readBody(t, response)
+		if response.StatusCode != http.StatusOK || !strings.Contains(body, "text/html") && !strings.Contains(response.Header.Get("Content-Type"), "text/html") {
+			t.Errorf("GET %s = %d (%s), want the console shell", path, response.StatusCode, firstLine(body))
+		}
 	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusForbidden {
-		t.Fatalf("unclassified route status = %d, want 403", response.StatusCode)
+}
+
+func firstLine(value string) string {
+	if index := strings.IndexByte(value, '\n'); index >= 0 {
+		return value[:index]
 	}
-	if response.Header.Get(demoBlockedHeader) == "" {
-		t.Fatal("a refusal must be marked as a demo refusal")
-	}
+	return value
 }
 
 // The refusal has to be the server's answer, not the browser's. These calls go
@@ -245,10 +290,21 @@ func TestDemoGuardRefusesOverHTTP(t *testing.T) {
 		if response.Header.Get(demoBlockedHeader) == "" {
 			t.Errorf("%s %s was refused without the demo marker", call.method, call.path)
 		}
-		// The message has to name the demonstration: an operator who follows an old
-		// link should be told why, not shown a bare permission error.
-		if !strings.Contains(body, "demo mode") {
-			t.Errorf("%s %s refusal body = %s, want it to name demo mode", call.method, call.path, body)
+		// Decoded rather than matched as text: the code is the part a client is allowed to
+		// branch on, and the message is prose that may be reworded.
+		var refusal struct {
+			Error string `json:"error"`
+			Code  string `json:"code"`
+		}
+		if err := json.Unmarshal([]byte(body), &refusal); err != nil {
+			t.Errorf("%s %s refusal is not JSON: %s", call.method, call.path, body)
+			continue
+		}
+		if refusal.Code != demoRefusedCode {
+			t.Errorf("%s %s refusal code = %q, want %q", call.method, call.path, refusal.Code, demoRefusedCode)
+		}
+		if !strings.Contains(refusal.Error, "demo mode") {
+			t.Errorf("%s %s refusal message = %q, want it to name demo mode", call.method, call.path, refusal.Error)
 		}
 	}
 }
