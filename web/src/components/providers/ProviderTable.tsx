@@ -132,7 +132,11 @@ export function ProviderTable({
               </div>
               {record.api_key && (
                 <div
-                  title={record.api_key}
+                  /* The tooltip repeats what the cell shows, so it may only ever carry the
+                     same mask: the value is edited in the drawer, behind an explicit
+                     reveal, and a `title` attribute is readable from the document (and on
+                     hover) without one. */
+                  title={maskKeyText(record.api_key)}
                   style={{
                     fontFamily: 'monospace',
                     fontSize: 11,

@@ -63,8 +63,12 @@ export const ApiKeysPage: React.FC = () => {
   });
 
   const keysQuery = useQuery({
-    queryKey: ['management-client-keys'],
-    queryFn: () => api.getClientAPIKeys(),
+    // Its own cache entry, not the dashboard's: that one reads the masked list, and a
+    // shared entry would let whichever page fetched first decide what the other sees.
+    // A mask here would not merely display wrong - the alias join below is by key text,
+    // so every name and every usage column would quietly empty out.
+    queryKey: ['management-client-keys', 'with-keys'],
+    queryFn: () => api.getClientAPIKeys(true),
     staleTime: 30_000,
   });
 
@@ -160,7 +164,7 @@ export const ApiKeysPage: React.FC = () => {
       // Save any pending aliases now that keys are written to CPA
       if (Object.keys(pendingAliases).length > 0) {
         try {
-          const fresh = await api.getClientAPIKeys();
+          const fresh = await api.getClientAPIKeys(true);
           for (const item of fresh.keys) {
             const pendingName = pendingAliases[item.key];
             if (pendingName !== undefined && item.usage_fingerprint) {

@@ -70,3 +70,28 @@ test('the mask is not the secret and never contains its middle', () => {
   assert.ok(!masked.includes(key.slice(8, -4)));
   assert.ok(masked.includes(MASK_RUN));
 });
+
+// Masking an already-masked value returns it unchanged, for every branch.
+//
+// The management API sends a key's display mask by default and the value only to the
+// page that opts in, so a reader that masks whatever it is handed - the dashboard's
+// key picker - renders the same string either way. That holds only while the mask is
+// idempotent: it is exactly head + filler + tail, so re-masking selects the same head
+// and tail and leaves the filler alone, and the all-filler short-key branch is its own
+// fixed point. A future shape change that broke this would make one page print a
+// double-masked label, so the property is pinned rather than assumed.
+//
+// Short keys are the case worth naming: two of them share one mask by design, and a
+// masked value is only 8 runes, which must not be re-read as a key with edges.
+test('masking a mask returns the same mask', () => {
+  for (const value of [
+    'sk-cpa-00000000000000000000000000000000',
+    'sk-1234567890abcdefghij',
+    '123456789012',
+    'abcdefgh',
+    'sk-1',
+  ]) {
+    const masked = maskKeyText(value);
+    assert.equal(maskKeyText(masked), masked);
+  }
+});

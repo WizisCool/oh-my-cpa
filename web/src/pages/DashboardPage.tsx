@@ -120,6 +120,9 @@ export const DashboardPage: React.FC = () => {
   const [selectedApiKey, setSelectedApiKey] = React.useState<string | undefined>(undefined);
 
   const keysQuery = useQuery({
+    // The masked list: this picker labels a key by its name or its mask, so it has no
+    // use for the value, and it keeps the bare query key the key page deliberately does
+    // not share - that page opts into the values and must not read a masked entry.
     queryKey: ['management-client-keys'],
     queryFn: () => api.getClientAPIKeys(),
     staleTime: 60_000,

@@ -374,8 +374,20 @@ export const api = {
     });
   },
 
-  async getClientAPIKeys(): Promise<{ keys: ClientAPIKeyItem[]; total: number }> {
-    return request<{ keys: ClientAPIKeyItem[]; total: number }>('/management/api-keys', { method: 'GET' });
+  /**
+   * `includeKeys` asks the server for the caller keys themselves, which only the key
+   * page needs: it joins this list against the configuration document it edits, by the
+   * key text, because neither a mask (not unique) nor an index (moves when CPA's list
+   * changes) identifies a key. Every other reader renders the mask the server sends by
+   * default, so reading this list never has to put a credential in a response body.
+   * A caller that opts in gets it at its own cache entry - see the query keys on the
+   * key page and the dashboard - because one entry cannot answer both contracts.
+   */
+  async getClientAPIKeys(includeKeys = false): Promise<{ keys: ClientAPIKeyItem[]; total: number }> {
+    return request<{ keys: ClientAPIKeyItem[]; total: number }>(
+      `/management/api-keys${includeKeys ? '?include_keys=true' : ''}`,
+      { method: 'GET' },
+    );
   },
 
   async createClientAPIKey(key: string): Promise<{ status: string; index: number; key: string }> {

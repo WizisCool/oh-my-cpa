@@ -1,5 +1,9 @@
 export interface ClientAPIKeyItem {
   index: number;
+  /** The key's display mask, or the key itself for a reader that opted in to the
+   *  values (`?include_keys=true`, which only the key page does: it joins this list
+   *  against the draft it edits, by the key text). Every other reader renders the
+   *  mask, so it never has to hold a credential. */
   key: string;
   /** Legacy keys-page identity, computed under the "client-key" purpose. It does
    *  not match any usage record. */

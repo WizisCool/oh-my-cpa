@@ -14,9 +14,14 @@ import (
 
 // aliasFor reads one key's alias out of the sanitized key list the console
 // actually renders.
+//
+// It opts into the values, which is what the key page does: the alias overlay is
+// joined to the operator's draft by the key text, so this is the one reader of the
+// list that needs it (ADR 0015). Matching on the mask instead would not identify a
+// key - two keys can share one.
 func aliasFor(t *testing.T, client *http.Client, baseURL, rawKey string) ClientAPIKeyItemDTO {
 	t.Helper()
-	resp, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/api-keys")
+	resp, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/api-keys?include_keys=true")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("api-keys status = %d body %s", resp.StatusCode, payload)
 	}
