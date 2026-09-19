@@ -25,10 +25,12 @@ import (
  * Three properties bound what this can answer, and each is deliberate:
  *
  *   - **It resolves against the configuration as it is read, not as it was at
- *     request time.** A credential that has since been rotated, deleted or
- *     disabled no longer claims its index, so the row prints nothing. The console
+ *     request time.** A credential that has since been rotated or deleted stops
+ *     being offered as that index's owner, so the row prints nothing. The console
  *     cannot reconstruct a key it can no longer read, and printing a plausible
- *     one would be a fabrication.
+ *     one would be a fabrication. A provider that was only switched off is not a
+ *     removal: it reports no index to claim, so it resolves to nothing on its own,
+ *     while the key that served a request before the switch-off stays named.
  *   - **A mask is not an identity, and neither is an index on its own.** An index
  *     claimed by more than one credential resolves to nothing rather than to
  *     whichever entry was read first: one key's mask on another key's request is

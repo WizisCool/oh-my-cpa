@@ -49,9 +49,11 @@ type usageEventResponse struct {
 	// ProviderKeyMask is the display-only mask of the upstream credential that
 	// answered the request, resolved at read time from the credential lists CPA
 	// currently reports (see usage_provider_key_masks.go). It is empty whenever
-	// the credential cannot be identified - a rotated, deleted or disabled key,
-	// an OAuth credential, or a gateway that could not be read - in which case
-	// the console prints nothing rather than a guess.
+	// the credential cannot be identified - a rotated or deleted key, an
+	// unclaimed or ambiguously claimed index, an OAuth credential, or a gateway
+	// that could not be read - in which case the console prints nothing rather
+	// than a guess. A provider that is merely switched off is not one of those
+	// cases: its current state does not change which key answered.
 	ProviderKeyMask     string `json:"provider_key_mask,omitempty"`
 	Source              string `json:"source,omitempty"`
 	UserAgent           string `json:"user_agent,omitempty"`
