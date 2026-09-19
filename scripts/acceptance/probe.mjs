@@ -330,14 +330,21 @@ export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG
   let passed = 0;
 
   /**
-   * Releases what the run holds. Idempotent, because both the watchdog and the normal exit
-   * path call it.
+   * Releases what the run holds, in the order that matters. Idempotent, because both the
+   * watchdog and the normal exit path call it.
+   *
+   * The server goes first: it holds the probe port, and a port left listening is what made
+   * every later run fail at startup with a conflict instead of reporting the timeout that
+   * caused it. The browser close is bounded, because this runs on the watchdog path too -
+   * a wedged browser must not stop the watchdog from exiting.
    */
   const shutdown = async () => {
-    await browser?.close().catch(() => {});
-    browser = undefined;
-    server?.kill('SIGTERM');
+    const runningServer = server;
+    const runningBrowser = browser;
     server = undefined;
+    browser = undefined;
+    runningServer?.kill('SIGTERM');
+    await Promise.race([runningBrowser?.close().catch(() => {}), sleep(2000)]);
     await sleep(300);
   };
 
