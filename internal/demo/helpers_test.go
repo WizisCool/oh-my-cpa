@@ -30,19 +30,34 @@ func startTestUpstream(t *testing.T) *Upstream {
 // nothing else. A call written in a test therefore reads as the call the console
 // makes, and a mistake in the address cannot leak the key to another host.
 type fixtureTransport struct {
-	base string
-	key  string
+	base  string
+	key   string
+	inner *http.Transport
 }
 
 func (t *fixtureTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	if strings.HasPrefix(request.URL.String(), t.base) {
 		request.Header.Set("Authorization", "Bearer "+t.key)
 	}
-	return http.DefaultTransport.RoundTrip(request)
+	return t.inner.RoundTrip(request)
 }
 
+// upstreamClient talks to one fixture over a connection pool of its own, with
+// keep-alives off.
+//
+// Both details are deliberate. Every fixture prefers the port a gateway normally uses,
+// so consecutive tests in this package listen on the same address; a pooled connection
+// surviving into the next test is handed to a server that has already shut down, and the
+// call fails with an `EOF` that has nothing to do with what the test asserts. Sharing
+// `http.DefaultTransport` did exactly that, on CI, while passing on the machine it was
+// written on.
 func upstreamClient(upstream *Upstream) *http.Client {
-	return &http.Client{Transport: &fixtureTransport{base: upstream.BaseURL(), key: upstream.ManagementKey()}}
+	inner := http.DefaultTransport.(*http.Transport).Clone()
+	inner.DisableKeepAlives = true
+	// The fixture is on loopback; a proxy from the environment must not be asked to
+	// reach it.
+	inner.Proxy = nil
+	return &http.Client{Transport: &fixtureTransport{base: upstream.BaseURL(), key: upstream.ManagementKey(), inner: inner}}
 }
 
 func postJSON(t *testing.T, client *http.Client, url string, payload any) *http.Response {
