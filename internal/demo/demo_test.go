@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/quota"
@@ -357,6 +358,19 @@ func TestSeedAttributesRequestsToConfiguredCredentials(t *testing.T) {
 			declared[key.authIndex] = true
 		}
 	}
+	// And each compatibility provider's own label, derived the way the gateway derives
+	// it, is the label its records must carry.
+	for _, provider := range compatibilityCatalog() {
+		if label := compatibilityRecordLabel(provider.name); !strings.HasPrefix(label, management.OpenAICompatibilityLabelPrefix) {
+			t.Fatalf("compatibility provider %q produces the label %q", provider.name, label)
+		}
+	}
+	familyNames := map[string]bool{
+		string(management.ConfigFamilyCodex):  true,
+		string(management.ConfigFamilyClaude): true,
+		string(management.ConfigFamilyGemini): true,
+		string(management.ConfigFamilyMeta):   true,
+	}
 
 	// A seeded request answered through one of those credentials must name an index
 	// that credential list actually claims. The fixture stores the payload's own
@@ -381,6 +395,13 @@ func TestSeedAttributesRequestsToConfiguredCredentials(t *testing.T) {
 		if !declared[authIndex] {
 			t.Fatalf("API-key request from %s carries auth index %q, which no credential claims: "+
 				"the request list would print no provider key", provider, authIndex)
+		}
+		// The provider label is the other half of the join: the console resolves a
+		// record only when its label names a credential list, so a fixture that used a
+		// display name here would look right on screen and resolve nothing.
+		label := strings.ToLower(strings.TrimSpace(provider))
+		if !familyNames[label] && !strings.HasPrefix(label, management.OpenAICompatibilityLabelPrefix) {
+			t.Fatalf("API-key request labels its provider %q, which names no credential list", provider)
 		}
 	}
 	if err := rows.Err(); err != nil {

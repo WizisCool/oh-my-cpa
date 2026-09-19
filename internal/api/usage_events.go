@@ -574,7 +574,6 @@ func projectUsageEventDetail(row repository.UsageEventRow, providerKeyMask strin
 		"api_group_key":         item.APIGroupKey,
 		"api_group_label":       item.APIGroupLabel,
 		"api_key_mask":          item.APIKeyMask,
-		"provider_key_mask":     providerKeyMask,
 		"source":                item.Source,
 		"model":                 item.Model,
 		"model_alias":           item.ModelAlias,
@@ -596,6 +595,12 @@ func projectUsageEventDetail(row repository.UsageEventRow, providerKeyMask strin
 		"client_ip":             row.ClientIP,
 		"x_forwarded_for":       row.XForwardedFor,
 		"user_agent":            row.UserAgent,
+	}
+	// Present only when a credential was actually identified: an absent key and an
+	// empty one read differently to a consumer, and the console prints no key line
+	// for a record it cannot attribute.
+	if providerKeyMask != "" {
+		detail["provider_key_mask"] = providerKeyMask
 	}
 	return detail
 }

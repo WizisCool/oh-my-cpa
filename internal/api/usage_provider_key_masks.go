@@ -59,8 +59,9 @@ type providerKeyMaskNamespace string
 const namespaceOpenAICompatibility providerKeyMaskNamespace = "openai-compatibility"
 
 // providerKeyMaskFamilies are the credential lists CPA stores one entry per
-// credential for, keyed by the label such a record carries. Every other provider
-// label belongs to the openai-compatibility list.
+// credential for, keyed by the label such a record carries. A record CPA labels
+// with `openai-compatible-<provider name>` belongs to the compatibility list
+// instead; any other label belongs to neither and is not a candidate.
 var providerKeyMaskFamilies = map[string]bool{
 	string(management.ConfigFamilyCodex):  true,
 	string(management.ConfigFamilyClaude): true,
@@ -185,12 +186,21 @@ func (c *providerKeyMaskCache) masks(
 		} else {
 			stored.masks = masks
 		}
-		if current, ok := c.entries[key]; ok && current.refreshing == done {
+		current, stillOwned := c.entries[key]
+		if stillOwned && current.refreshing == done {
 			c.entries[key] = stored
 		}
 		c.mu.Unlock()
 		close(done)
 
+		// A write that landed while this read was in flight has invalidated every
+		// entry, which means the list this read saw was replaced underneath it. Its
+		// answer is therefore not known to still describe the configuration, so it is
+		// withheld as well as not stored: returning it would hand this request the
+		// very claim the invalidation exists to withdraw.
+		if !stillOwned || current.refreshing != done {
+			return nil
+		}
 		if err != nil {
 			return nil
 		}
@@ -282,9 +292,11 @@ func (h *Handler) resolveProviderKeyMasks(
 			masks, readErr := readProviderKeyMaskClaims(readCtx, client, namespace)
 			if readErr != nil && h.logger != nil {
 				// Coalesced and negatively cached, so this is at most one line per
-				// credential list per failure window - not one per request row.
+				// credential list per failure window - not one per request row. The
+				// message is the same public classifier every other gateway failure
+				// uses: a management error body can echo the credential it rejected.
 				h.logger.Warn("provider key mask read failed",
-					"namespace", string(namespace), "error", readErr.Error())
+					"namespace", string(namespace), "error", publicCPAErrorMessage(readErr))
 			}
 			return masks, readErr
 		})
@@ -314,6 +326,13 @@ func applyProviderKeyMask(
 // the auth file it used instead, and its index must never be looked up in a key
 // list - the two live in the same column, and a family's index would otherwise be
 // answerable by a compatibility provider's entry.
+//
+// The namespace is read from the provider label, and an unrecognized label is not
+// a candidate. CPA labels a config API-key credential with the family name and a
+// compatibility one with `openai-compatible-<upstream name>`, so those two shapes
+// are what a request this console can attribute looks like. Treating every other
+// label as a compatibility provider would mean resolving, say, an OAuth-only
+// provider's index against a key list it has nothing to do with.
 func providerKeyMaskNamespaceForEvent(item usageEventResponse) (providerKeyMaskNamespace, bool) {
 	if strings.TrimSpace(item.AuthIndex) == "" {
 		return "", false
@@ -323,15 +342,17 @@ func providerKeyMaskNamespaceForEvent(item usageEventResponse) (providerKeyMaskN
 	default:
 		return "", false
 	}
-	// CPA labels a record with the family name for a config API-key credential, and
-	// with `openai-compatible-<upstream name>` for a compatibility provider. Only
-	// the family labels are matched by name: a compatibility record is resolved by
-	// its index alone, so renaming that provider in CPA does not orphan the
-	// requests recorded under its previous name.
-	if label := strings.ToLower(strings.TrimSpace(item.Provider)); providerKeyMaskFamilies[label] {
+	label := strings.ToLower(strings.TrimSpace(item.Provider))
+	if providerKeyMaskFamilies[label] {
 		return providerKeyMaskNamespace(label), true
 	}
-	return namespaceOpenAICompatibility, true
+	if strings.HasPrefix(label, management.OpenAICompatibilityLabelPrefix) {
+		// The suffix is the provider's name and is deliberately ignored: renaming it
+		// in CPA changes the label on later records while the credential, and CPA's
+		// index for it, stay the same, so the match inside this list is by index alone.
+		return namespaceOpenAICompatibility, true
+	}
+	return "", false
 }
 
 // readProviderKeyMaskClaims indexes one credential list by auth index.

@@ -61,6 +61,16 @@ type OpenAICompatibility struct {
 	Headers        map[string]string `json:"headers,omitempty"`
 }
 
+// OpenAICompatibilityLabelPrefix is what CPA puts in front of a compatibility
+// provider's own name when it labels a usage record that provider served, so a
+// provider called "Cline Pass" labels its requests `openai-compatible-cline pass`.
+//
+// It is declared here, beside the configuration it is derived from, because several
+// layers have to agree on it: the dashboard's provider grouping, the request list's
+// resolution of which key answered, and any fixture that stands in for a gateway.
+// A divergence between them would not fail loudly - it would silently stop matching.
+const OpenAICompatibilityLabelPrefix = "openai-compatible-"
+
 type APIKeyEntry struct {
 	APIKey    string `json:"api-key"`
 	AuthIndex string `json:"auth-index,omitempty"`

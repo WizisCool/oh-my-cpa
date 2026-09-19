@@ -735,37 +735,51 @@ record as `provider_key_mask`.
 
 `internal/api/usage_provider_key_masks.go` owns that resolution. It reads the
 credential lists CPA currently reports — the four config API-key families and the
-`openai-compatibility` providers — indexes them by auth index, and matches each
-record against the list its own provider label belongs to, so a family's index
-cannot be answered by a compatibility provider's entry or the other way round.
-Within the `openai-compatibility` list the match is by index alone, deliberately:
-renaming a provider in CPA changes the label on later records while the credential,
-and CPA's index for it, stay the same, so a name-scoped match would orphan history
-that is still perfectly identifiable.
+`openai-compatibility` providers — and indexes each one by auth index.
+
+**The record's own provider label chooses the list, and an unrecognized label is not
+a candidate at all.** CPA labels a config API-key credential with the family name
+(`codex`, `claude`, `gemini`, `meta`) and a compatibility credential with
+`openai-compatible-<upstream name>`
+(`management.OpenAICompatibilityLabelPrefix`, the same constant the dashboard's
+provider grouping uses). Those two shapes are what an attributable request looks
+like; anything else — an OAuth-only provider, a family the console does not manage —
+reads nothing, so an index that happens to collide across lists can never be answered
+by the wrong one. Within each list the match is by index alone, deliberately:
+renaming a compatibility provider in CPA changes the label on later records while the
+credential, and CPA's index for it, stay the same, so a name-scoped match would
+orphan history that is still perfectly identifiable.
 
 Four properties are load-bearing:
 
 - **It resolves against the configuration as it is read, not as it was at request
   time.** A credential that has been rotated, deleted or disabled since the request
-  no longer claims its index, so that record prints nothing. The console cannot
+  stops being offered as that index's owner, so that record prints nothing once the
+  cached read of its list expires — at once if the operator removed it through this
+  console, and within the TTL if it was changed outside it. The console cannot
   reconstruct a key it can no longer read, and a plausible-looking mask would be a
   fabrication rather than a display label.
 - **Nothing is guessed.** An index no entry claims, a key CPA reports without an
   index (the compatibility list's legacy `api-keys` array), an index two entries
-  claim, and a record with no index at all are all left empty. The duplicate case is
-  resolved to nothing even when the two masks look alike, because neither an index
-  nor a mask is an identity — the same rule the resource join follows.
+  claim, a record with no index at all, and a provider that has exactly one key but
+  does not claim the record's index are all left empty. The duplicate case is resolved
+  to nothing even when the two masks are identical, because neither an index nor a
+  mask is an identity — the same rule the resource join follows.
 - **Only an API-key credential has one.** An OAuth record names the account it used
   instead, and its index lives in the same column, so an auth-type check stands in
-  front of the lookup. The mask is display only, is stored on no row, and is never a
-  filter value; only `security.MaskSecret` output ever leaves the process.
+  front of the lookup. The mask is display only, is stored on no row, is never a
+  filter value, and the property is absent rather than empty when nothing was
+  resolved; only `security.MaskSecret` output ever leaves the process, and a failed
+  read is reported through the same public classifier every other gateway failure
+  uses, because a management error body can echo the credential it rejected.
 - **It is best effort and bounded.** The lists are read at most once per TTL, one
   read is shared by concurrent pages, failures are negatively cached, and the whole
   enrichment has its own short deadline. A gateway that is down, slow or missing a
   family leaves the masks empty and returns the request list unchanged, because a
   display label must not be able to fail the page whose job is to show request
-  history. A provider write through this console drops the cached read, so an edit is
-  reflected immediately; an edit made outside it is reflected within the TTL.
+  history. A write through this console drops the cached read, so an edit is
+  reflected immediately; a read that was already in flight when that write landed is
+  withheld as well as not stored, since the list it saw is the one being replaced.
 
 ### Streaming status and throughput (TPS) derivation
 

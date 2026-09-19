@@ -41,14 +41,19 @@ through the management API. Two shapes were available:
    browser renders it beneath the provider name and holds no credential to do so.
 2. **Resolution is current-config, never a snapshot.** The response states which
    configured credential claims the record's index *now*. A credential that has
-   since been rotated, deleted or disabled claims no index, so the row prints
-   nothing. The console never reconstructs a key it cannot read, and a mask is never
-   inferred from a provider name, a position, or the caller key.
+   since been rotated, deleted or disabled stops claiming its index, so the row
+   prints nothing — immediately for a change made through this console, and within
+   the cached read's short TTL for one made outside it. The console never
+   reconstructs a key it cannot read, and a mask is never inferred from a provider
+   name, a position, a single configured key, or the caller key.
 3. **Nothing is guessed when identification is ambiguous.** An unclaimed index, a
    key CPA reports without an index, an index two entries claim (even when their
    masks are alike), and a record with no index resolve to nothing. Only an API-key
-   record is a candidate at all: an OAuth record's index identifies an auth file,
-   not a provider key.
+   record whose provider label names a credential list is a candidate at all: an
+   OAuth record's index identifies an auth file, not a provider key, and a provider
+   outside every key-backed list has no key to name. The resolved field is absent
+   rather than empty when there is none, so a consumer can tell "no key identified"
+   from "a key whose mask renders as nothing".
 4. **The mask is the only thing that leaves the process.** Resolution uses CPA's
    configured values and `security.MaskSecret`; the plaintext reaches no cache entry
    that outlives the read, no response, and no browser. ADR 0015 stands unchanged for
@@ -111,9 +116,9 @@ through the management API. Two shapes were available:
 - **Match provider identity as well as the auth index.** Rejected: CPA's provider
   label for a compatibility record follows the name the operator gave it, so a rename
   would orphan every request recorded before it even though the credential - and
-  CPA's index for it - is unchanged. The index is the credential's own runtime
-  identity, and it is what the match uses within the list the record's provider
-  belongs to.
+  CPA's index for it - is unchanged. The label therefore selects the credential
+  *list* while the index is the identity inside it, which is what keeps a renamed
+  provider's history resolvable.
 - **Fall back to the provider's only key when the index does not match.** Rejected:
   "there is one configured key, so it must be the one" is an inference, and it becomes
   wrong the moment a key is added or replaced - printing one key's mask on another

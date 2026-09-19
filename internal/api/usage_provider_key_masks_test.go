@@ -12,27 +12,46 @@ import (
 	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage"
 )
 
 /**
  * Secret values used by this file's fixture.
  *
- * They are synthetic and deliberately distinctive: the assertions below require
- * that none of them reaches a response body, so a fixture that reused a plausible
- * string could pass while leaking something real. `assertNoProviderSecrets` checks
- * the raw response text rather than the decoded field, because a leak into any
- * other field is the failure this is guarding against.
+ * They are synthetic and deliberately distinctive, and the two `testProviderKeyA`
+ * / `testProviderKeyB` keys are chosen so their masks are **different**: the
+ * duplicate-claim case below has to show that an ambiguous index resolves to nothing
+ * even when a reader could not tell the two apart by their mask, so a third pair is
+ * built whose masks are deliberately identical.
+ *
+ * The assertions require that none of these reaches a response body, so a fixture
+ * that reused a plausible string could pass while leaking something real.
+ * `assertNoProviderSecrets` checks the raw response text rather than the decoded
+ * field, because a leak into any other field is the failure this is guarding against.
  */
 const (
 	testProviderKeyA = "test-provider-key-aaaaaaaaaaaa-alpha"
 	testProviderKeyB = "test-provider-key-bbbbbbbbbbbb-bravo"
 	testProviderKeyC = "test-provider-key-cccccccccccc-charlie"
+	// Two distinct secrets whose masks are identical: same head, same tail, so
+	// `security.MaskSecret` cannot tell them apart. Only 20+ rune keys take this
+	// branch, hence the padding.
+	testProviderKeyTwinA = "test-twin-key-1111111111111111-shared"
+	testProviderKeyTwinB = "test-twin-key-2222222222222222-shared"
 )
 
+// testProviderKeyMask is the expected mask of a fixture key. It mirrors
+// `security.MaskSecret` rather than hard-coding the rendered string, so a change to
+// the one mask shape updates the fixture with it.
+func testProviderKeyMask(key string) string {
+	return security.MaskSecret(key)
+}
+
 // providerKeyMaskFixture answers CPA's credential lists with a provider that has
-// two keys, a renamed compatibility provider, a config family, an OAuth-only
-// family and an index two entries claim.
+// two keys, a renamed compatibility provider, a config family, an index two entries
+// claim, an index three entries claim, an OAuth-only family and an index no list
+// claims at all.
 func providerKeyMaskFixture(t *testing.T, reads *atomic.Int64, delay time.Duration) http.HandlerFunc {
 	t.Helper()
 	return func(writer http.ResponseWriter, request *http.Request) {
@@ -64,9 +83,25 @@ func providerKeyMaskFixture(t *testing.T, reads *atomic.Int64, delay time.Durati
 						]
 					},
 					{
+						"name": "Twin Claimed",
+						"base-url": "https://twin.example.test/v1",
+						"api-key-entries": [
+							{"api-key": "` + testProviderKeyTwinA + `", "auth-index": "idx-twins"},
+							{"api-key": "` + testProviderKeyTwinB + `", "auth-index": "idx-twins"},
+							{"api-key": "` + testProviderKeyTwinA + `", "auth-index": "idx-twins"}
+						]
+					},
+					{
 						"name": "Legacy Relay",
 						"base-url": "https://legacy.example.test/v1",
 						"api-keys": ["` + testProviderKeyC + `"]
+					},
+					{
+						"name": "One Key Only",
+						"base-url": "https://one.example.test/v1",
+						"api-key-entries": [
+							{"api-key": "` + testProviderKeyC + `", "auth-index": "idx-single"}
+						]
 					}
 				]
 			}`))
@@ -100,6 +135,17 @@ func seedProviderKeyMaskEvents(t *testing.T, repo *repository.Repository) {
 		{InstanceID: "default", EventKey: "evt-clash", Provider: "openai-compatible-twice claimed", AuthType: "apikey", AuthIndex: "idx-clash", Model: "m", TimestampMS: now - 5},
 		// A compatibility key CPA reports with no index at all.
 		{InstanceID: "default", EventKey: "evt-legacy", Provider: "openai-compatible-legacy relay", AuthType: "apikey", AuthIndex: "idx-legacy-unknown", Model: "m", TimestampMS: now - 6},
+		// An index three entries claim, two of which are distinct secrets whose masks
+		// are identical.
+		{InstanceID: "default", EventKey: "evt-twins", Provider: "openai-compatible-twin claimed", AuthType: "apikey", AuthIndex: "idx-twins", Model: "m", TimestampMS: now - 5},
+		// A provider label that names no credential list. Its index is claimed by the
+		// claude family, and it must still resolve to nothing: the label is the
+		// namespace, not a hint.
+		{InstanceID: "default", EventKey: "evt-unlabelled", Provider: "codebuddy", AuthType: "apikey", AuthIndex: "idx-claude", Model: "m", TimestampMS: now - 5},
+		// An API-key record from a provider with a single configured key whose auth
+		// index does not claim any entry. "It must be that one" is an inference, and
+		// the row must stay silent rather than print it.
+		{InstanceID: "default", EventKey: "evt-single-mismatch", Provider: "openai-compatible-one key only", AuthType: "apikey", AuthIndex: "idx-single-absent", Model: "m", TimestampMS: now - 5},
 		// An OAuth credential: its auth file index is not a provider key index.
 		{InstanceID: "default", EventKey: "evt-oauth", Provider: "codex", AuthType: "oauth", AuthIndex: "idx-claude", Model: "m", TimestampMS: now - 7},
 		// No auth index at all.
@@ -158,9 +204,12 @@ func fetchProviderKeyMaskPage(t *testing.T, client *http.Client, baseURL string)
 // the payload, or any future addition to this response.
 func assertNoProviderSecrets(t *testing.T, label, body string) {
 	t.Helper()
-	for _, secret := range []string{testProviderKeyA, testProviderKeyB, testProviderKeyC} {
+	for _, secret := range []string{
+		testProviderKeyA, testProviderKeyB, testProviderKeyC,
+		testProviderKeyTwinA, testProviderKeyTwinB,
+	} {
 		if strings.Contains(body, secret) {
-			t.Fatalf("%s exposed a provider key in the response body: %s", label, body)
+			t.Fatalf("%s exposed a provider key in the response body", label)
 		}
 	}
 }
@@ -187,11 +236,14 @@ func TestUsageEventsResolveProviderKeyMask(t *testing.T) {
 
 	// Two keys under one provider resolve to two different masks, and each is the
 	// mask of the key that actually claims its index.
+	if got, want := masks["evt-relay-a"], testProviderKeyMask(testProviderKeyA); got != want {
+		t.Fatalf("evt-relay-a mask = %q, want the mask of its own key %q", got, want)
+	}
+	if got, want := masks["evt-relay-b"], testProviderKeyMask(testProviderKeyB); got != want {
+		t.Fatalf("evt-relay-b mask = %q, want the mask of its own key %q", got, want)
+	}
 	if masks["evt-relay-a"] == masks["evt-relay-b"] {
 		t.Fatalf("the two keys of one provider resolved to the same mask %q", masks["evt-relay-a"])
-	}
-	if masks["evt-relay-a"] == "" || !strings.Contains(masks["evt-relay-a"], "••••") {
-		t.Fatalf("expected a mask for evt-relay-a, got %q", masks["evt-relay-a"])
 	}
 	// The same index recorded under the provider's previous name still resolves: a
 	// rename in CPA does not orphan the requests it already served.
@@ -200,8 +252,16 @@ func TestUsageEventsResolveProviderKeyMask(t *testing.T) {
 			masks["evt-relay-old-name"], masks["evt-relay-a"])
 	}
 	// A config family resolves through its own list.
-	if masks["evt-claude"] == "" {
-		t.Fatalf("expected the claude credential's mask, got none")
+	if got, want := masks["evt-claude"], testProviderKeyMask(testProviderKeyC); got != want {
+		t.Fatalf("evt-claude mask = %q, want %q", got, want)
+	}
+	// The twins' masks are identical, which is exactly why an index two of them claim
+	// cannot be resolved: it must not print even though the answer "looks" right.
+	if testProviderKeyMask(testProviderKeyTwinA) != testProviderKeyMask(testProviderKeyTwinB) {
+		t.Fatal("the twin fixture keys must share a mask for this case to mean anything")
+	}
+	if masks["evt-twins"] != "" {
+		t.Fatalf("an index three credentials claim must resolve to nothing, got %q", masks["evt-twins"])
 	}
 	// An index claimed twice is not an identity, even though both masks look alike.
 	if masks["evt-clash"] != "" {
@@ -210,6 +270,14 @@ func TestUsageEventsResolveProviderKeyMask(t *testing.T) {
 	// A compatibility index cannot be answered by a config family's entry...
 	if masks["evt-deleted"] != "" {
 		t.Fatalf("an unclaimed family index resolved to %q", masks["evt-deleted"])
+	}
+	// ...nor a family index by a label that names no credential list...
+	if masks["evt-unlabelled"] != "" {
+		t.Fatalf("a provider label outside every credential list resolved to %q", masks["evt-unlabelled"])
+	}
+	// ...nor a single-key provider's key by the request's own index...
+	if masks["evt-single-mismatch"] != "" {
+		t.Fatalf("an unclaimed index resolved to its provider's only key: %q", masks["evt-single-mismatch"])
 	}
 	// ...and an OAuth record's credential index is not a provider key index.
 	if masks["evt-oauth"] != "" {
@@ -241,6 +309,7 @@ func TestUsageEventDetailMatchesListProviderKeyMask(t *testing.T) {
 		listMasks[item.ID] = item.ProviderKeyMask
 	}
 
+	resolved, omitted := 0, 0
 	for key, id := range ids {
 		response, payload := getJSON(t, client, fmt.Sprintf("%s/omc/api/v1/usage/events/%d", baseURL, id))
 		if response.StatusCode != http.StatusOK {
@@ -248,17 +317,117 @@ func TestUsageEventDetailMatchesListProviderKeyMask(t *testing.T) {
 		}
 		assertNoProviderSecrets(t, "usage event detail "+key, string(payload))
 		var detail struct {
-			Event struct {
-				ProviderKeyMask string `json:"provider_key_mask"`
-			} `json:"event"`
+			Event map[string]json.RawMessage `json:"event"`
 		}
 		if err := json.Unmarshal(payload, &detail); err != nil {
 			t.Fatal(err)
 		}
-		if detail.Event.ProviderKeyMask != listMasks[id] {
-			t.Fatalf("detail and list disagree for %s: %q vs %q", key, detail.Event.ProviderKeyMask, listMasks[id])
+		raw, present := detail.Event["provider_key_mask"]
+		if listMasks[id] == "" {
+			// An unresolved record must omit the property, not send it empty: an
+			// absent key and an empty one read differently to a consumer, and the
+			// console prints no key line for a record it cannot attribute.
+			if present {
+				t.Fatalf("detail %s sent provider_key_mask = %s for a record the list left empty", key, raw)
+			}
+			omitted++
+			continue
 		}
+		if !present {
+			t.Fatalf("detail %s omitted the mask the list resolved (%q)", key, listMasks[id])
+		}
+		var mask string
+		if err := json.Unmarshal(raw, &mask); err != nil {
+			t.Fatal(err)
+		}
+		if mask != listMasks[id] {
+			t.Fatalf("detail and list disagree for %s: %q vs %q", key, mask, listMasks[id])
+		}
+		resolved++
 	}
+	// Anchored so the loop cannot pass by only visiting the omitted case.
+	if resolved == 0 || omitted == 0 {
+		t.Fatalf("expected both resolved and omitted records, got resolved=%d omitted=%d", resolved, omitted)
+	}
+}
+
+// TestProviderKeyMaskCacheWithholdsAnInvalidatedRead pins the race between a read
+// and a write. A provider write drops every cached mask because the configuration
+// the read saw has been replaced; a read already in flight would otherwise hand its
+// own requester the very mapping the invalidation withdrew.
+//
+// The interleaving is controlled by channels rather than by sleeping, so the test
+// asserts the ordering it claims instead of hoping for it.
+func TestProviderKeyMaskCacheWithholdsAnInvalidatedRead(t *testing.T) {
+	cache := newProviderKeyMaskCache()
+	const key = "default|http://cpa|openai-compatibility"
+
+	loadStarted := make(chan struct{})
+	releaseLoad := make(chan struct{})
+	stale := map[string]string{"idx-a": "stale-ke••••••••aaaa"}
+	load := func(context.Context) (map[string]string, error) {
+		close(loadStarted)
+		<-releaseLoad
+		return stale, nil
+	}
+
+	result := make(chan map[string]string, 1)
+	go func() { result <- cache.masks(context.Background(), key, load) }()
+
+	<-loadStarted
+	// The write lands while the read is still in flight.
+	cache.invalidate()
+	close(releaseLoad)
+
+	if masks := <-result; masks != nil {
+		t.Fatalf("a read invalidated mid-flight returned its mapping: %v", masks)
+	}
+	// And nothing was stored, so the next caller reads again rather than being
+	// served the withdrawn answer.
+	loads := 0
+	fresh := map[string]string{"idx-a": "fresh-ke••••••••bbbb"}
+	if masks := cache.masks(context.Background(), key, func(context.Context) (map[string]string, error) {
+		loads++
+		return fresh, nil
+	}); masks["idx-a"] != fresh["idx-a"] {
+		t.Fatalf("expected a fresh read after invalidation, got %v", masks)
+	}
+	if loads != 1 {
+		t.Fatalf("expected exactly one re-read, got %d", loads)
+	}
+}
+
+// TestProviderKeyMaskCacheHonoursCancellation pins that a waiter gives up when its
+// own request is over, rather than parking until a read it no longer needs finishes.
+func TestProviderKeyMaskCacheHonoursCancellation(t *testing.T) {
+	cache := newProviderKeyMaskCache()
+	const key = "default|http://cpa|openai-compatibility"
+
+	loadStarted := make(chan struct{})
+	releaseLoad := make(chan struct{})
+	go func() {
+		cache.masks(context.Background(), key, func(context.Context) (map[string]string, error) {
+			close(loadStarted)
+			<-releaseLoad
+			return map[string]string{"idx-a": "late-key••••••••aaaa"}, nil
+		})
+	}()
+	<-loadStarted
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	started := time.Now()
+	if masks := cache.masks(ctx, key, func(context.Context) (map[string]string, error) {
+		t.Fatal("a cancelled waiter started its own read")
+		return nil, nil
+	}); masks != nil {
+		t.Fatalf("a cancelled waiter returned masks: %v", masks)
+	}
+	if elapsed := time.Since(started); elapsed > 2*time.Second {
+		t.Fatalf("a cancelled waiter waited %s for an in-flight read", elapsed)
+	}
+	close(releaseLoad)
 }
 
 // TestProviderKeyMaskCacheCoalescesAndCaches pins the two properties that keep
