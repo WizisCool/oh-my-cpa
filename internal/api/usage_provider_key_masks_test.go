@@ -102,6 +102,14 @@ func providerKeyMaskFixture(t *testing.T, reads *atomic.Int64, delay time.Durati
 						"api-key-entries": [
 							{"api-key": "` + testProviderKeyC + `", "auth-index": "idx-single"}
 						]
+					},
+					{
+						"name": "Switched Off",
+						"disabled": true,
+						"base-url": "https://off.example.test/v1",
+						"api-key-entries": [
+							{"api-key": "` + testProviderKeyA + `", "auth-index": "idx-disabled"}
+						]
 					}
 				]
 			}`))
@@ -146,6 +154,10 @@ func seedProviderKeyMaskEvents(t *testing.T, repo *repository.Repository) {
 		// index does not claim any entry. "It must be that one" is an inference, and
 		// the row must stay silent rather than print it.
 		{InstanceID: "default", EventKey: "evt-single-mismatch", Provider: "openai-compatible-one key only", AuthType: "apikey", AuthIndex: "idx-single-absent", Model: "m", TimestampMS: now - 5},
+		// A request served by a provider that has since been switched off. The key is the
+		// one that answered, and its provider's current enabled state is not part of the
+		// credential's identity, so the row still names it.
+		{InstanceID: "default", EventKey: "evt-disabled-provider", Provider: "openai-compatible-switched off", AuthType: "apikey", AuthIndex: "idx-disabled", Model: "m", TimestampMS: now - 5},
 		// An OAuth credential: its auth file index is not a provider key index.
 		{InstanceID: "default", EventKey: "evt-oauth", Provider: "codex", AuthType: "oauth", AuthIndex: "idx-claude", Model: "m", TimestampMS: now - 7},
 		// No auth index at all.
@@ -282,6 +294,19 @@ func TestUsageEventsResolveProviderKeyMask(t *testing.T) {
 	// ...and an OAuth record's credential index is not a provider key index.
 	if masks["evt-oauth"] != "" {
 		t.Fatalf("an OAuth record resolved to provider key mask %q", masks["evt-oauth"])
+	}
+	// A provider that has since been switched off still names the key that answered.
+	//
+	// This is deliberate, and is what a review asked to change: filtering out disabled
+	// providers was rejected on both evidence and semantics. On the evidence, CPA does
+	// not report an auth index for a disabled compatibility provider at all, so such an
+	// entry claims nothing already. On the semantics, the enabled state of the provider
+	// is not part of the credential's identity: the request was served by that key, and
+	// dropping the label would erase a true fact from history rather than remove a wrong
+	// one. The ambiguity rule still protects the interesting case - a disabled entry and
+	// a live one claiming the same index resolve to nothing.
+	if got, want := masks["evt-disabled-provider"], testProviderKeyMask(testProviderKeyA); got != want {
+		t.Fatalf("a request served before its provider was switched off lost its key: got %q, want %q", got, want)
 	}
 	// A key CPA reports with no index cannot be tied to a request.
 	if masks["evt-legacy"] != "" {

@@ -753,12 +753,20 @@ orphan history that is still perfectly identifiable.
 Four properties are load-bearing:
 
 - **It resolves against the configuration as it is read, not as it was at request
-  time.** A credential that has been rotated, deleted or disabled since the request
-  stops being offered as that index's owner, so that record prints nothing once the
-  cached read of its list expires — at once if the operator removed it through this
-  console, and within the TTL if it was changed outside it. The console cannot
-  reconstruct a key it can no longer read, and a plausible-looking mask would be a
-  fabrication rather than a display label.
+  time.** A credential that has been rotated or deleted since the request stops
+  being offered as that index's owner, so that record prints nothing once the cached
+  read of its list expires — at once if the operator removed it through this console,
+  and within the TTL if it was changed outside it. The console cannot reconstruct a
+  key it can no longer read, and a plausible-looking mask would be a fabrication
+  rather than a display label.
+
+  A provider that has merely been **switched off** is deliberately not treated as a
+  removal. CPA reports no auth index for a disabled compatibility provider, so such
+  an entry claims nothing anyway, while filtering on the flag would additionally hide
+  the key of a request served *before* the provider was switched off — the provider's
+  current state is not part of the credential's identity, and that label is a true
+  fact about the request rather than a wrong one. An index claimed by both a disabled
+  and a live entry resolves to nothing, so the protection that matters is kept.
 - **Nothing is guessed.** An index no entry claims, a key CPA reports without an
   index (the compatibility list's legacy `api-keys` array), an index two entries
   claim, a record with no index at all, and a provider that has exactly one key but

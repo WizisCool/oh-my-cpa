@@ -375,9 +375,12 @@ func TestSeedAttributesRequestsToConfiguredCredentials(t *testing.T) {
 	// A seeded request answered through one of those credentials must name an index
 	// that credential list actually claims. The fixture stores the payload's own
 	// spelling of the auth type, which is why both are selected here.
+	//
+	// No LIMIT: the statement orders nothing, so a cap would check an arbitrary subset
+	// and could stop covering the very rows this is meant to verify.
 	rows, err := repo.SQL().QueryContext(ctx, `
 		SELECT provider, auth_type, auth_index FROM usage_events
-		WHERE auth_type IN ('apikey', 'api_key') LIMIT 20`)
+		WHERE auth_type IN ('apikey', 'api_key')`)
 	if err != nil {
 		t.Fatal(err)
 	}

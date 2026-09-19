@@ -368,6 +368,13 @@ func readProviderKeyMaskClaims(
 			return nil, err
 		}
 		for _, provider := range response.Entries {
+			// A provider that is currently switched off is read like any other. Whether
+			// its entries can claim an index is the gateway's call, and in practice it
+			// reports no index for them, so they claim nothing already. Filtering on the
+			// flag here would go further than that and also hide the key of a request
+			// that was served before the provider was switched off: the provider's
+			// enabled state is not part of the credential's identity, and dropping the
+			// label would erase a true fact from history rather than a wrong one.
 			for _, key := range provider.APIKeyEntries {
 				claimProviderKeyMask(claims, key.AuthIndex, key.APIKey)
 			}

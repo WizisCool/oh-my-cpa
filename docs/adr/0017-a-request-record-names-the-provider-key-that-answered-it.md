@@ -41,11 +41,14 @@ through the management API. Two shapes were available:
    browser renders it beneath the provider name and holds no credential to do so.
 2. **Resolution is current-config, never a snapshot.** The response states which
    configured credential claims the record's index *now*. A credential that has
-   since been rotated, deleted or disabled stops claiming its index, so the row
-   prints nothing — immediately for a change made through this console, and within
-   the cached read's short TTL for one made outside it. The console never
-   reconstructs a key it cannot read, and a mask is never inferred from a provider
-   name, a position, a single configured key, or the caller key.
+   since been rotated or deleted stops claiming its index, so the row prints nothing
+   — immediately for a change made through this console, and within the cached read's
+   short TTL for one made outside it. A provider that has only been switched off is
+   not treated as a removal: it reports no index to claim, and the key that served an
+   earlier request stays named, because the provider's current state is not part of
+   the credential's identity. The console never reconstructs a key it cannot read,
+   and a mask is never inferred from a provider name, a position, a single configured
+   key, or the caller key.
 3. **Nothing is guessed when identification is ambiguous.** An unclaimed index, a
    key CPA reports without an index, an index two entries claim (even when their
    masks are alike), and a record with no index resolve to nothing. Only an API-key
