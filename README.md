@@ -159,6 +159,7 @@ The public demo runs the same binary as a Vercel container image. `Dockerfile.ve
 - **Single Replica**: SQLite WAL requires exclusive single-process access. Run one replica mounting the data directory; do not mount over network filesystems (NFS/CIFS).
 - **Master Key**: `OMCPA_MASTER_KEY` is required to decrypt stored credentials and payloads. Back it up securely.
 - **Network Security**: Keep CPA on a private network or loopback interface, and serve Oh My CPA over HTTPS.
+- **Demo Mode**: `OMCPA_DEMO_MODE` (default `false`) serves the console from a built-in fixture instead of a CPA, so it needs no management key and no provider credential. Its storage is not durable — the database is deleted and rebuilt on every boot — and the server refuses sign-in flows, credential movement, plugin execution, gateway configuration writes and anything that would leave the process. Turn it on only for a demonstration deployment; the public one is described under [Live Demo](#live-demo).
 
 ## Developer Commands
 

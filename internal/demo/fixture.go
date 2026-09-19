@@ -29,7 +29,7 @@ type credential struct {
 	priority    int
 	weight      int64
 	note        string
-	disabled    bool
+	isDisabled  bool
 }
 
 // credentialCatalog is deliberately recognisable: the providers a real gateway
@@ -82,7 +82,7 @@ func credentialCatalog() []credential {
 			name: "codex-standby.json", authIndex: "auth-codex-03", kind: "codex", provider: "codex",
 			label: "Codex · standby", email: "backup@acme-labs.example", accountType: "oauth", plan: "free",
 			models:  []string{"gpt-5"},
-			success: 96, failed: 2, priority: 1, weight: 1, note: "kept for failover drills", disabled: true,
+			success: 96, failed: 2, priority: 1, weight: 1, note: "kept for failover drills", isDisabled: true,
 		},
 	}
 }
@@ -323,15 +323,15 @@ func priceCatalog() []priceRow {
 
 // pluginEntry is one installed CPA plugin.
 type pluginEntry struct {
-	id          string
-	name        string
-	version     string
-	author      string
-	description string
-	enabled     bool
-	configured  bool
-	registered  bool
-	permissions []string
+	id           string
+	name         string
+	version      string
+	author       string
+	description  string
+	isEnabled    bool
+	isConfigured bool
+	isRegistered bool
+	permissions  []string
 	// No fixture plugin declares a logo URL on purpose: the console inlines
 	// plugin-declared logos by fetching them, and a public demo must not fetch
 	// anything a plugin names. See internal/demo/README-less doc comment on the
@@ -343,19 +343,19 @@ func pluginCatalog() []pluginEntry {
 		{
 			id: "usage-exporter", name: "Usage exporter", version: "1.4.2", author: "oh-my-cpa",
 			description: "Streams every captured request record to an S3-compatible bucket.",
-			enabled:     true, configured: true, registered: true,
+			isEnabled:   true, isConfigured: true, isRegistered: true,
 			permissions: []string{"usage:read", "network:egress"},
 		},
 		{
 			id: "prompt-redactor", name: "Prompt redactor", version: "0.9.0", author: "community",
 			description: "Rewrites prompt bodies before they reach an upstream provider.",
-			enabled:     true, configured: false, registered: true,
+			isEnabled:   true, isConfigured: false, isRegistered: true,
 			permissions: []string{"request:mutate"},
 		},
 		{
 			id: "quota-notifier", name: "Quota notifier", version: "2.1.0", author: "community",
 			description: "Posts a webhook when a credential's quota window crosses a threshold.",
-			enabled:     false, configured: true, registered: true,
+			isEnabled:   false, isConfigured: true, isRegistered: true,
 			permissions: []string{"quota:read", "network:egress"},
 		},
 	}

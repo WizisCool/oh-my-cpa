@@ -475,6 +475,103 @@ func TestSelfHostedRouterIsUnchanged(t *testing.T) {
 	}
 }
 
+// The wire contract of the guard, in one table: what a caller sees for each kind of
+// request. The classification is asserted elsewhere; this is what it looks like on the
+// wire, including the two markers a caller may branch on and the base path the console
+// is mounted under.
+func TestDemoGuardWireContract(t *testing.T) {
+	handler := demoHandler(t, "/omc")
+	server := httptest.NewServer(handler.Router())
+	defer server.Close()
+	client := demoClient(t, server.URL)
+
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+		// wantStatus is the status a caller must see.
+		wantStatus int
+		// wantBlocked is whether the refusal marker and code must be present.
+		wantBlocked bool
+		// wantPersistence is whether the "not durable" marker must be present.
+		wantPersistence bool
+	}{
+		{"an allowed read", http.MethodGet, "/omc/api/v1/management/dashboard", "", http.StatusOK, false, false},
+		// A write the demonstration performs, on a route that needs no CPA instance: the
+		// fixture-backed writes are exercised against the fixture in internal/demo.
+		{"an allowed write", http.MethodPut, "/omc/api/v1/preferences/dashboard_range", `"24h"`, http.StatusOK, false, true},
+		{"a refused write", http.MethodPost, "/omc/api/v1/management/oauth/start", `{"provider":"codex"}`, http.StatusForbidden, true, false},
+		{"a refused read", http.MethodGet, "/omc/api/v1/management/auth-files/download?name=x.json", "", http.StatusForbidden, true, false},
+		{"an unclassified API read", http.MethodGet, "/omc/api/v1/management/some/future/read", "", http.StatusForbidden, true, false},
+		{"an unclassified API write", http.MethodPost, "/omc/api/v1/management/some/future/write", `{}`, http.StatusForbidden, true, false},
+		{"a console page", http.MethodGet, "/omc/dashboard", "", http.StatusOK, false, false},
+		{"a page whose name begins with the API prefix", http.MethodGet, "/omc/api-keys", "", http.StatusOK, false, false},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			var body io.Reader
+			if testCase.body != "" {
+				body = strings.NewReader(testCase.body)
+			}
+			request, err := http.NewRequest(testCase.method, server.URL+testCase.path, body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if testCase.body != "" {
+				request.Header.Set("Content-Type", "application/json")
+			}
+			response, err := client.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			payload := readBody(t, response)
+
+			if response.StatusCode != testCase.wantStatus {
+				t.Fatalf("status = %d (%s), want %d", response.StatusCode, payload, testCase.wantStatus)
+			}
+			if got := response.Header.Get(demoHeader); got != demoValue {
+				t.Errorf("demo marker = %q, want %q", got, demoValue)
+			}
+			blocked := response.Header.Get(demoBlockedHeader) != ""
+			if blocked != testCase.wantBlocked {
+				t.Errorf("blocked marker present = %v, want %v", blocked, testCase.wantBlocked)
+			}
+			if got := response.Header.Get(demoPersistenceHeader); (got == demoNotPersisted) != testCase.wantPersistence {
+				t.Errorf("persistence marker = %q, want present=%v", got, testCase.wantPersistence)
+			}
+			if !testCase.wantBlocked {
+				return
+			}
+			var refusal struct {
+				Error string `json:"error"`
+				Code  string `json:"code"`
+			}
+			if err := json.Unmarshal([]byte(payload), &refusal); err != nil {
+				t.Fatalf("refusal is not JSON: %s", payload)
+			}
+			if refusal.Code != demoRefusedCode {
+				t.Errorf("refusal code = %q, want %q", refusal.Code, demoRefusedCode)
+			}
+			if !strings.Contains(refusal.Error, "demo mode") {
+				t.Errorf("refusal message = %q, want it to name demo mode", refusal.Error)
+			}
+		})
+	}
+
+	// The bare mount path redirects to its slash before the guard sees it, so this is
+	// checked separately rather than in the table.
+	noRedirect := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	response, err := noRedirect.Get(server.URL + "/omc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	readBody(t, response)
+	if response.StatusCode != http.StatusPermanentRedirect {
+		t.Fatalf("bare mount path = %d, want 308", response.StatusCode)
+	}
+}
+
 func demoClient(t *testing.T, baseURL string) *http.Client {
 	t.Helper()
 	// The guard runs above authentication, but the reads behind it do not: the demo

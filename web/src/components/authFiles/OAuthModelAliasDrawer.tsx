@@ -18,6 +18,7 @@ import { DeleteOutlined, PlusOutlined, SaveOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { useT, type TFunc } from '../../i18n';
+import { isDemoMode } from '../../types/demoMode';
 import type { ManagementOAuthModelAlias } from '../../types/managementOAuthModelAlias';
 import {
   createOAuthModelAliasDrafts,
@@ -72,6 +73,7 @@ export const OAuthModelAliasDrawer: React.FC<OAuthModelAliasDrawerProps> = ({
   providerOptions,
 }) => {
   const t = useT();
+  const isDemo = isDemoMode();
   const { message, modal } = AntdApp.useApp();
   const queryClient = useQueryClient();
   const rowCounterRef = useRef(0);
@@ -399,7 +401,8 @@ export const OAuthModelAliasDrawer: React.FC<OAuthModelAliasDrawerProps> = ({
             type="primary"
             icon={<SaveOutlined />}
             loading={saveMutation.isPending}
-            disabled={!provider || !isDirty}
+            disabled={!provider || !isDirty || isDemo}
+            title={isDemo ? t('demo.blocked') : undefined}
             onClick={() => void handleSave()}
           >
             {t('af.alias_save')}

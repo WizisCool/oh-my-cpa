@@ -22,6 +22,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';
+import { isDemoMode } from '../../types/demoMode';
 import type {
   ManagementAuthFile,
   ManagementAuthFileModel,
@@ -118,6 +119,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   onDownload,
 }) => {
   const t = useT();
+  const isDemo = isDemoMode();
   const { message, modal } = AntdApp.useApp();
   const queryClient = useQueryClient();
   const [form] = Form.useForm<FormValues>();
@@ -552,7 +554,10 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
           <div className={styles['drawer-footer']}>
             <Button
               icon={<DownloadOutlined />}
-              disabled={file.runtime_only}
+              // Downloading credential material is refused by the demonstration, here as
+              // well as on the card behind this drawer.
+              disabled={file.runtime_only || isDemo}
+              title={isDemo ? t('demo.blocked') : undefined}
               onClick={() => onDownload(file)}
             >
               {t('af.download_one', { name: file.name })}
