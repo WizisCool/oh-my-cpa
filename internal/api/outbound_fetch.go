@@ -21,10 +21,12 @@ import (
  *     operator never typed it. A plugin is not trusted to choose what this process
  *     connects to: `isPluginLogoURLAllowed` allows public HTTPS, or HTTP only to the
  *     machine itself, and `pluginLogoDialControl` then refuses the resolved address if
- *     it is private, link-local, multicast, unspecified or a cloud metadata endpoint.
- *     Checking the resolved address at dial time is what makes that a real boundary
- *     rather than a name check: a hostname that resolves into internal space is
- *     refused where the connection would actually be made.
+ *     it is private, link-local, multicast, unspecified or a reserved block. Checking
+ *     the resolved address at dial time is what makes that a real boundary rather than
+ *     a name check: a hostname that resolves into internal space is refused where the
+ *     connection would actually be made. That is also why the logo fetch does not use
+ *     an environment proxy - through one, the dialer would see the proxy's address and
+ *     the target would be unverifiable.
  *
  * The redirect rule underneath them is the same and is shared, because it answers a
  * question neither policy restates: may this fetch be moved somewhere else.
@@ -66,8 +68,16 @@ func isLoopbackPlaintextHostAllowed(host string) bool {
 
 // isResolvedAddressAllowed reports whether a connection may be made to an address that
 // has already been resolved. Loopback is permitted - the machine itself is not a
-// destination a plugin can use to reach anything new - and everything the operator's
-// network holds is not.
+// destination a plugin can use to reach anything new - and everything that is not
+// public internet space is not: the operator's network, the ranges an ISP or an overlay
+// network shares, and the addresses a cloud deployment answers on.
+//
+// `IsPrivate` alone is not that rule. It covers RFC 1918 and IPv6 unique-local space, and
+// leaves out the blocks the IANA special-purpose registry reserves - carrier-grade NAT
+// (`100.64.0.0/10`, which is also what an overlay network such as Tailscale hands out),
+// benchmarking, IETF protocol assignments and the documentation ranges. A plugin manifest
+// must not be able to reach any of them, and the list is deliberately wider than the
+// strict minimum because the cost of a false refusal is one fallback to the bundled mark.
 func isResolvedAddressAllowed(address net.IP) bool {
 	if address == nil {
 		return false
@@ -75,12 +85,39 @@ func isResolvedAddressAllowed(address net.IP) bool {
 	if address.IsLoopback() {
 		return true
 	}
-	return !(address.IsPrivate() ||
+	if address.IsPrivate() ||
 		address.IsLinkLocalUnicast() ||
 		address.IsLinkLocalMulticast() ||
 		address.IsInterfaceLocalMulticast() ||
 		address.IsMulticast() ||
-		address.IsUnspecified())
+		address.IsUnspecified() {
+		return false
+	}
+	return !isSpecialPurposeAddress(address)
+}
+
+// specialPurposeRanges are the IPv4 blocks that are not public internet space and that
+// `net.IP`'s own predicates do not cover.
+var specialPurposeRanges = func() []*net.IPNet {
+	const list = "100.64.0.0/10 192.0.0.0/24 192.0.2.0/24 192.88.99.0/24 198.18.0.0/15 198.51.100.0/24 203.0.113.0/24 240.0.0.0/4"
+	ranges := make([]*net.IPNet, 0, 8)
+	for _, value := range strings.Fields(list) {
+		_, block, err := net.ParseCIDR(value)
+		if err != nil {
+			continue
+		}
+		ranges = append(ranges, block)
+	}
+	return ranges
+}()
+
+func isSpecialPurposeAddress(address net.IP) bool {
+	for _, block := range specialPurposeRanges {
+		if block.Contains(address) {
+			return true
+		}
+	}
+	return false
 }
 
 // sameOriginRedirectGuard refuses a redirect that leaves the origin, instead of

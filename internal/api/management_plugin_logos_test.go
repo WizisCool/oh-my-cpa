@@ -379,7 +379,8 @@ func TestPluginLogoFetcherIsConcurrencySafe(t *testing.T) {
 func TestPluginLogoURLPolicyHoldsAPluginToPublicDestinations(t *testing.T) {
 	allowed := []string{
 		"https://cdn.example.test/logo.svg",
-		"https://203.0.113.7/logo.svg",
+		"https://1.1.1.1/logo.svg",
+		"https://[2606:4700:4700::1111]/logo.svg",
 		"http://127.0.0.1:8317/logo.svg",
 		"http://localhost:8317/logo.svg",
 		"http://[::1]:8317/logo.svg",
@@ -396,11 +397,13 @@ func TestPluginLogoURLPolicyHoldsAPluginToPublicDestinations(t *testing.T) {
 
 	refused := []string{
 		// The operator's own network is not somewhere a plugin manifest may send this
-		// process, including the metadata endpoints every cloud deployment has.
+		// process, including the metadata endpoints every cloud deployment has and the
+		// shared-address range an overlay network hands out.
 		"https://169.254.169.254/latest/meta-data",
 		"https://10.20.30.40/logo.svg",
 		"https://192.168.1.5/logo.svg",
 		"https://[fd00::1]/logo.svg",
+		"https://100.64.12.7/logo.svg",
 		"http://example.com/logo.svg",
 		"http://192.168.1.5/logo.svg",
 		"ftp://cdn.example.test/logo.svg",
@@ -423,12 +426,20 @@ func TestPluginLogoAddressPolicyRefusesInternalResolutions(t *testing.T) {
 			t.Errorf("isResolvedAddressAllowed(%s) = false; the machine itself is reachable", raw)
 		}
 	}
-	for _, raw := range []string{"203.0.113.7", "2606:4700::1111"} {
+	for _, raw := range []string{"1.1.1.1", "8.8.8.8", "2606:4700::1111", "2001:4860:4860::8888"} {
 		if !isResolvedAddressAllowed(net.ParseIP(raw)) {
 			t.Errorf("isResolvedAddressAllowed(%s) = false, want true", raw)
 		}
 	}
-	for _, raw := range []string{"10.0.0.1", "192.168.0.1", "172.16.5.4", "169.254.169.254", "fd00::1", "fe80::1", "224.0.0.1", "0.0.0.0"} {
+	// Everything the IANA special-purpose registry reserves, plus the operator's own
+	// network. `net.IP.IsPrivate` covers only the middle of this list, which is why the
+	// addresses around it are named here.
+	for _, raw := range []string{
+		"10.0.0.1", "192.168.0.1", "172.16.5.4", "fd00::1",
+		"169.254.169.254", "fe80::1", "224.0.0.1", "0.0.0.0",
+		"100.64.0.1", "100.127.255.254", "192.0.0.1", "192.0.2.5", "192.88.99.1",
+		"198.18.0.1", "198.51.100.9", "203.0.113.7", "240.0.0.1", "255.255.255.255",
+	} {
 		if isResolvedAddressAllowed(net.ParseIP(raw)) {
 			t.Errorf("isResolvedAddressAllowed(%s) = true, want false", raw)
 		}
