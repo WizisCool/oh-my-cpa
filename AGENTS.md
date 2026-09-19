@@ -33,6 +33,7 @@ Treat the table below as a hard constraint. Whenever a change touches a "Trigger
 | `docs/adr/NNNN-*.md` | Important and irreversible architectural decisions | When a decision involves real trade-offs, **add a new** ADR; do not rewrite accepted ADRs (supersede them with a new ADR) |
 | `docs/cpamc-parity.md` | Parity matrix against CPAMC | Changing an item from "planned/in-progress" to "covered"; interface capability or page wiring changes; newly identified gaps |
 | `docs/ops/sqlite-operations.md` | Backup, restore, master key governance, migration gates | Migration or backup strategy, retention period, backup count, related environment variable default changes |
+| `docs/ops/vercel-demo.md` | Deployment runbook for the public online demo (Vercel container image) | Changes to the demo's deployment, its environment variables, its platform configuration, or the console steps it needs |
 | `docs/plans/model-prices.md` | Pricing design, matching rules, known limitations | Pricing match chain, sync rules, pricing schema changes |
 
 ### Documentation Maintenance Checklist (Execute Before Declaring Complete)
@@ -150,6 +151,7 @@ Test layering criteria and "what belongs in the browser" are detailed in [`docs/
 | `pnpm check:ui` | UI fast lane: dev server + mock API, running only affected scenarios; `--list` / `--plan` inspects without launching a browser |
 | `pnpm verify` | Toolchain check (warns on version divergence) + full static gates + worktree secret scan |
 | `pnpm verify:full` | Parallel orchestrated full final gate |
+| `pnpm verify:demo` | Browser smoke test for the demo deployment; `OMCPA_DEMO_URL` checks a remote one instead of starting a local one |
 | `pnpm verify:full:serial` | Serial final gate, used only for diagnosing parallel orchestration discrepancies |
 | `pnpm verify:browser` | Run deterministic browser acceptance against built SPA (with fake CPA fixture) |
 | `pnpm verify:browser:smoke` | Run browser smoke tests covering core auth, dashboard, and request list paths |

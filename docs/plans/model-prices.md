@@ -99,3 +99,12 @@ the price table and unpriced models still load.
   classifiable (`IsMissingCapability`) apart from one that failed to answer.
 - Cached-token prices differ per provider; a missing field in the catalog means
   that bucket is billed at zero in estimates (recorded as-is, not invented).
+- **Demo mode is the one deployment that breaks principle 3, and it breaks it in the
+  direction of having no source at all.** It runs no sync, so the price list, the
+  model catalog the pricing page resolves against, and the sync bookkeeping beside
+  those rows are all fixture data. The prices are still locked by the same
+  request-time rule as a live deployment's: the fixture writes the version its
+  fabricated history has to be priced against, because the trigger that shadows a
+  price write stamps the moment of the write and a request from last month would
+  otherwise find no version and report `unpriced`. See
+  `docs/architecture.md` §12 and `Repository.SeedModelPriceHistoryBackfill`.

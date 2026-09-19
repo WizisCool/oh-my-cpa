@@ -30,6 +30,25 @@ The React bundle is built into `internal/web/dist` and embedded with
 browser can reach is a handwritten JSON endpoint; there is no generic pass
 through to CPA.
 
+### Demo mode is the same process with the gateway replaced
+
+`OMCPA_DEMO_MODE=true` runs this binary against its own fixture; see §12. The shape
+above still describes it, with two edges replaced and one added:
+
+```text
+browser ──▶ Go process (one binary, demo mode)
+              ├─ chi router + the demo policy (internal/api/demo_policy.go)
+              ├─ embedded React SPA
+              ├─ SQLite (temporary, rebuilt on every boot)
+              ├─ CPA management API ──▶ internal/demo's in-process fixture (loopback)
+              └─ usage collector: not started; pricing sync: not started
+```
+
+There is no arrow to models.dev and none to a provider, because the demo starts
+neither the pricing sync nor any capture loop, and the fixture answers the quota
+reads from its own catalogue instead of forwarding them. The only socket it opens
+is its sink into its own fixture.
+
 ## 2. Go package map
 
 Dependency direction is acyclic at package level. `internal/usage` (payload
@@ -53,7 +72,8 @@ cycle even though the `internal/usage` directory appears in both directions.
 | `internal/repository` | SQLite schema, migrations, queries, transactional invariants | `crypto`, `domain`, `pricing`, `security`, `usage` |
 | `internal/usage/ingest` | Collector loop, decode processor, rollup and retention maintenance | `repository`, `management`, `security`, `usage` |
 | `internal/quota` | Per-provider quota probes and normalization | `management` |
-| `internal/api` | Routes, DTO allowlists, audited sensitive reveals, audit writes | all of the above, `internal/web` |
+| `internal/demo` | The publication fixture: an in-process CPA stand-in, the seeded history, and the capture state the console renders | `domain`, `pricing`, `quota`, `repository`, `security`, `usage`, `usage/ingest` |
+| `internal/api` | Routes, DTO allowlists, audited sensitive reveals, audit writes, the demo policy | all of the above, `internal/web` |
 | `internal/web` | `go:embed` of the built SPA | — |
 | `internal/app` | Wiring, background loops, graceful shutdown | all of the above |
 
@@ -916,6 +936,10 @@ fix a defect with a new migration, never by editing `schema_migrations`
 | Pricing sync | `app.Run` → `pricing.Service` | Best effort; prices go stale, capture continues |
 | Rollup + retention | `ingest.Maintenance` inside the pipeline | Retried on its own interval; errors surface in ingest status |
 
+A demo deployment starts only the HTTP server: its history is the fixture, so there
+is no collector to lose and no sync loop to let prices go stale. `docs/architecture.md`
+§12 and `internal/demo` explain what replaces them.
+
 ## 11. Test layering
 
 The suite is split by what each layer can actually prove, not by which runner is
@@ -932,6 +956,7 @@ claim, and it stays in Chromium only when the claim is about the engine.
 | Cross-stack P0 gates | `pnpm verify:browser:p0` | Pull-request release gates over the request-record/live-tail suite and the auth-file/OAuth scheduling-field suite, using the same built binary and deterministic fixture. |
 | Cross-stack acceptance | `pnpm verify:browser` | The whole stack against the fake CPA: auth, every route's render and secret boundary, key aliases, provider enable/disable and its concurrent path, live-tail polling, quota, OAuth. |
 | Browser-only probes | `pnpm verify:probes` | The same claims as the UI fast path, but against the built SPA for release. Drawer/modal stacking and hit-testing, column geometry and truncation, the responsive alignment override, dashboard trend mark paint, refresh sequencing under a held response, the platform's Back dismissing each overlay class, the phone rendering of each list surface against its table, and the touch rules on a deliberately coarse-and-hoverless context. |
+| Demo smoke | `pnpm verify:demo` | The demonstration as a deployment: the binary in demo mode with no gateway anywhere in its environment, every console page rendering its own fixture data with no failed request and no script error, the refusals reached with `fetch` rather than through the page, and one permitted edit reporting that it is not durable. `verify:browser` cannot cover this, because it drives the self-hosted path against a fake gateway. |
 
 Pull requests run smoke followed by the P0 gates. Master retains the full
 `verify:browser:release` orchestration, which runs cross-stack acceptance and the
@@ -1132,7 +1157,127 @@ Two constraints keep the preparation step's shape:
   says nothing about the shared libraries.** That is why the OS dependencies are
   still guaranteed on every run, just by probe rather than unconditionally.
 
-## 12. Where to look next
+## 12. Demo mode
+
+A public demonstration has to show the product without a gateway behind it, without
+any credential, and without becoming a second frontend to maintain. Demo mode is
+that, expressed as a thin layer over the ordinary process: `OMCPA_DEMO_MODE=true`
+changes where the data comes from and refuses what must not happen, and nothing
+declares itself a demo at compile time.
+
+It is off unless it is asked for, and everything it changes is scoped to it, so the
+self-hosted path is byte-for-byte the same code (ADR 0016 records the decision and
+the alternatives).
+
+| Concern | Self-hosted | Demo |
+| --- | --- | --- |
+| Upstream | The configured CPA instance | `internal/demo`'s fixture, over a loopback socket, with a key minted per process |
+| Management key | `OMCPA_CPA_MANAGEMENT_KEY` | The fixture's own key; an inherited one is discarded, never encrypted into the instance row |
+| Database | `oh-my-cpa.db` under `OMCPA_DATA_DIR` | `oh-my-cpa-demo.db`, deleted and rebuilt on every boot |
+| Capture and sync | Collector and pricing loop run | Neither starts; the fixture is the history and the price list |
+| Sign-in | The CPA management key | A session on first sight, so a link can be opened by anyone |
+| Dangerous routes | Served | Refused by `internal/api/demo_policy.go` |
+
+### Why the upstream is a fixture rather than a separate adapter
+
+The console reads the gateway through `internal/cpa/management` in about twenty
+handlers. The cheapest way to keep all of them working - including the DTO
+allowlists, the credential projection and the model catalog resolution - is to keep
+the client and replace what is on the other end of it, so `internal/demo` serves the
+management API on a loopback port and the application is pointed at it exactly as it
+would be pointed at a real gateway. An adapter at the handler layer would have had
+to reproduce every response shape from Go structs and would have grown a branch in
+every handler that reads one.
+
+The fixture never dials the URL it is handed: it resolves the requested provider
+endpoint against its own catalogue and refuses anything else, which is what makes
+"the demonstration performs no outbound request" a property of the code rather than
+a promise about the environment. The URLs it answers are pinned to
+`internal/quota`'s allowlist by a test, so the duplication cannot drift into
+answering a request the console would never make.
+
+### The boundary is a classification, not a list of disabled buttons
+
+The server classifies every route it serves. `internal/api/demo_policy.go` holds one
+table of `method + chi pattern + verdict`, first match wins, and the test suite walks
+the **real** routing table asserting that every registered route is classified: an
+endpoint added without a verdict fails the suite rather than inheriting one. At
+runtime an unclassified route is refused, so the failure mode of a gap is a blocked
+feature.
+
+The table is ordered from the specific to the general, and the trailing wildcard
+that serves the SPA comes last. That ordering is load-bearing: while the wildcard
+sat first, it classified every `GET` in the application as public - including the
+credential download and the request log - and both were allowed.
+
+Refusals answer `403` with `X-OMCPA-Demo-Blocked` and a message naming the reason,
+so a caller that follows an old link is told why. Reads are marked with
+`X-OMCPA-Demo: active`, and a write carries `X-OMCPA-Demo-Persistence: none`, which
+is how a response can say its result is not durable without the page having to
+know.
+
+What the demo refuses is whatever moves credential material, starts a real sign-in,
+executes a plugin, writes the gateway configuration, spends a quota entitlement,
+hands back a raw request or error log, or would leave the process - provider model
+reads, the pricing catalogue sync, the diagnostic bundle. What it performs instead
+are the writes that only touch the fixture or Oh My CPA's own metadata: credential
+metadata, the enabled state, client-key names, preferences, price rows, resource
+overrides, and a quota refresh the fixture answers itself.
+
+### The fixture is seeded through the real write path
+
+`internal/demo` builds the history a deployment would have accumulated - roughly
+forty days of a year of growth, fifteen models across eight providers, cached and
+reasoning tokens, latency and TTFT, a failure share, named caller keys and a price
+list - and writes it through `repository.InsertUsageEvents`, the same call the
+capture path uses. That is what keeps the fixture subject to the request-time price
+lock, the display-mask rules and the schema instead of drifting from them.
+
+The consequence is that the fabricated history needs the price version it is
+pretending existed: the price lock resolves a version by the request's own
+timestamp, and the trigger that shadows every price write stamps the moment of the
+write. `Repository.SeedModelPriceHistoryBackfill` is the one caller that writes a
+version at an explicit time, and it exists so the fixture can stay under the real
+lock rather than writing a cost column directly.
+
+The price list is seeded with the catalogue the pricing page resolves against,
+because a real deployment fills that catalogue from the gateway's own model list
+during a sync and the demo deliberately runs none. Without it the page would
+intersect its stored prices with an empty catalogue and render nothing.
+
+Seeding is also why the demo database is rebuilt on every boot. A platform that
+scales to zero brings the process back hours later; a database left behind would end
+its history hours ago, and the fifteen-minute and one-hour windows - the panels that
+make the console look alive - would be empty.
+
+### The capture state is reported, not faked
+
+The request list prints the capture state in its own header, and a demo has no
+collector to report on. Rather than render "capture disabled" over a page full of
+requests, the demo answers with the deployment its fixture describes - a
+subscribe-mode collector that last captured seconds ago - while every number that
+describes stored data is read from the database. A manual sync is answered the same
+way: it reports a pass that found an empty queue, which is what a real deployment
+answers when nothing arrived in between.
+
+### On the platform it is deployed to
+
+Vercel builds and routes to `Dockerfile.vercel` (declared in `vercel.json` as a
+container service behind a catch-all rewrite), which runs the same binary with the
+demo environment baked in: the console at the site root, data under `/tmp`, and the
+listening address following the platform's `PORT` at start-up. The only adaptation
+the platform needs is that entry point; everything else is the application's own.
+
+The session is issued on any unauthenticated request rather than only on the
+sign-in endpoint. That is not a boundary decision - the route policy is the
+boundary, and it refuses the same operations either way - but the platform runs
+several container instances behind one address, each with its own fixture key, so a
+cookie minted by one is invalid at the next. Refusing those reads would turn a
+working page into a sign-in card, because the console issues its first queries in
+parallel with the session check.
+`docs/ops/vercel-demo.md` is the deployment runbook.
+
+## 13. Where to look next
 
 - Domain wording: `CONTEXT.md`
 - Deployment and its trade-offs: `docs/adr/0001-go-react-sqlite-modular-monolith.md`

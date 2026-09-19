@@ -30,7 +30,7 @@ web
 
 ## Operating Context
 
-- **Deployment Model**: Co-deployed alongside CPA on the same host, typically within a Docker Compose internal network or bound to local intranet ports;
+- **Deployment Model**: Co-deployed alongside CPA on the same host, typically within a Docker Compose internal network or bound to local intranet ports. One hosted exception exists and is scoped to one purpose: a **public demonstration** of this same binary, deployed as a container image on Vercel with `OMCPA_DEMO_MODE=true`, serving the console from a built-in fixture with no gateway, no credential and no outbound request, and refusing sign-in flows, credential movement, plugin execution, gateway configuration writes and anything else a public deployment must not perform (`docs/architecture.md` §12, ADR 0016, `docs/ops/vercel-demo.md`). It is a demonstration, not a second product: it is off unless it is asked for, and it changes nothing about a self-hosted deployment;
 - **Access Entrypoint**: Bound to the sub-path `/omc/` by default, reached via Caddy or Nginx reverse proxies or Vite during development;
 - **Device Context**: Operated from desktops and from phones, at the same deployment and the same URL. A list renders as a table above 640px and as labelled rows at 640px and below (ADR 0012), chosen by width alone - the touch rules below are pointer-gated, the choice of rendering is not; every Drawer and Modal answers the platform's Back button, so the hardware key and the edge gesture put an overlay away rather than leaving the page; and the touch rules in `docs/design.md` §8 - nothing reachable only by hover, a ~40px hit area, a 16px focus floor - are enforced there;
 - **Architecture Topology**: Go modular monolith backend (providing `/omc/api/v1` endpoints), SQLite in WAL mode for storage, and an embedded React + TypeScript + Ant Design SPA frontend;
@@ -47,7 +47,7 @@ web
   - Monitoring dashboard and usage streaming: Streaming usage event collection over the CPA RESP protocol; supports a 15m sliding live window, multiple preset periods, and custom closed or open-ended calendar ranges. Every dashboard panel follows that window, from the six traffic KPI tiles through the per-model token trend and usage-share ring; the token activity grid is the deliberate exception, carrying a fixed rolling year so its shape stays a calendar rather than collapsing to a single column at the shortest preset. The model panels rank by call point (the client-requested alias) or by upstream model, carry each group's priced spend, and persist the grouping on the panels themselves plus a console-wide token unit style as deployment-stored preferences, the latter managed alongside the theme and language on an OMC Settings page; the theme is a mode - light, dark, or follow-the-system - each mode holding one of three registered palettes and, optionally, one the operator authored, and the mode alone is reachable without leaving the page you are on from the console header's own cycling control;
   - Model pricing and cost computation: Request-time price locking (ADR 0003), automated pricing sync from models.dev, and local row-level pricing overrides;
   - System health self-checks, sanitized diagnostics export, plugin and plugin store management, and append-only audit logging;
-  - Zero-CDN offline execution: Frontend assets are embedded into the Go binary for completely offline operation.
+  - Zero-CDN offline execution: Frontend assets are embedded into the Go binary for completely offline operation. The demonstration deployment holds this too: it starts no pricing sync, no capture loop and no plugin-logo fetch, so the only socket it opens is its own in-process fixture;
 - **Mandatory Constraints**:
   - Native sub-path compatibility: All code must natively support the `/omc` prefix (`VITE_BASE_URL`), forbidding hardcoded root paths (`/`);
   - Single-replica single-writer: Designed specifically for single-instance SQLite WAL; no distributed multi-writer mechanisms are introduced;
@@ -70,7 +70,7 @@ web
 - **Module Map, Data Flows & Invariants**: `docs/architecture.md`;
 - **Architecture Decision Records**: `docs/adr/`;
 - **Visual System & Token Authority**: `docs/design.md`, with the palette itself in `web/src/theme/palette.ts` (nine authored tokens per palette, seventeen derived) and its projection into `web/src/theme/themeConfig.ts` and `web/src/index.css` (root `DESIGN.md` is the synchronized design-tool summary);
-- Automated test suites: `internal/api/*_test.go`, covering credential protection, dashboard statistics, quota throttling, and DTO allowlist enforcement.
+- Automated test suites: `internal/api/*_test.go`, covering credential protection, dashboard statistics, quota throttling, and DTO allowlist enforcement; `internal/demo/demo_test.go`, covering the fixture, its refusal layers and the total route classification; `scripts/demo-smoke.mjs` (`pnpm verify:demo`), driving a browser across the demonstration's pages against a locally started binary.
 
 ## Product Principles
 

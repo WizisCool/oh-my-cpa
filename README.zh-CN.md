@@ -31,6 +31,19 @@
 
 Oh My CPA 是面向 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) (CPA) 的自托管控制面。本项目提供 Web 仪表盘、请求浏览器、凭据管理、模型定价与配置编辑，采用 Go 模块化单体架构，内嵌 React 前端产物，并使用本地 SQLite 存储，单二进制开箱即用，零外部 CDN 依赖。
 
+## 在线体验
+
+**[oh-my-cpa-demo.vercel.app](https://oh-my-cpa-demo.vercel.app)** —— 运行在内置样例数据上的控制台。
+
+无需账号、无需密钥、无需安装：打开链接即可看到仪表盘。它由一份内置样例支撑（跨 8 个提供商、15 个模型的一年流量），因此各面板展示的是结构真实的数据；同时它运行在与正式部署完全相同的路由策略之后：登录、凭据下载、插件执行、网关配置写入，以及任何会离开本进程的操作都由服务端拒绝，控制台也会在修改不会被保存时明确告知。
+
+Demo 不是第二套实现：它就是这个二进制在 `OMCPA_DEMO_MODE=true`、且后端没有任何真实网关的情况下运行，并以 Vercel 容器镜像方式部署（见 `docs/architecture.md` §12、`docs/ops/vercel-demo.md`）。想在本地运行同样的实例：
+
+```bash
+pnpm build
+go run ./cmd/oh-my-cpa        # 需设置 OMCPA_DEMO_MODE=true
+```
+
 ## 功能特性
 
 ### 网关与 Provider 管理
@@ -123,6 +136,10 @@ pnpm dev
 
 ## 部署说明
 
+### 在线 Demo（Vercel）
+
+公开 Demo 以 Vercel 容器镜像方式运行同一个二进制。`Dockerfile.vercel` 与 `vercel.json` 就是该平台的全部配置；在 Vercel 控制台将项目与仓库连接后，推送到 `master` 即可自动更新生产环境。完整步骤（含两项无法用命令完成的账号级授权）见 [`docs/ops/vercel-demo.md`](docs/ops/vercel-demo.md)。
+
 ### Docker（筹备中）
 
 > 容器镜像打包与自动化发布（`ghcr.io` / Docker Hub）目前正在筹备中。
@@ -150,6 +167,7 @@ pnpm dev
 | `pnpm check:ui` | 基于 Vite 开发服务器与 mock API 的界面场景快测 |
 | `pnpm verify` | 静态门禁：工具链检查、静态代码分析与密钥扫描 |
 | `pnpm verify:full` | 全量发布门禁：构建、Bundle 预算、浏览器端到端验收与几何探针 |
+| `pnpm verify:demo` | Demo 部署的浏览器冒烟测试（设置 `OMCPA_DEMO_URL` 可校验线上部署） |
 
 ## 贡献与安全
 
@@ -162,6 +180,7 @@ pnpm dev
 - [`docs/architecture.md`](docs/architecture.md) — 模块架构图、数据流与系统不变量
 - [`docs/design.md`](docs/design.md) — 视觉设计系统与主题 Token
 - [`docs/ops/sqlite-operations.md`](docs/ops/sqlite-operations.md) — SQLite 运维、备份演练与恢复手册
+- [`docs/ops/vercel-demo.md`](docs/ops/vercel-demo.md) — 在线 Demo 的 Vercel 部署手册与人工步骤
 - [`docs/cpamc-parity.md`](docs/cpamc-parity.md) — 与官方 CPAMC 的功能对位矩阵
 - [`AGENTS.md`](AGENTS.md) — 开发者与 AI Agent 协作契约与文档同步规范
 
