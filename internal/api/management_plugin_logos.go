@@ -115,8 +115,14 @@ func newPluginLogoFetcher() *pluginLogoFetcher {
 	}
 	return &pluginLogoFetcher{
 		client: &http.Client{
-			Timeout:       pluginLogoFetchTimeout,
-			Transport:     &http.Transport{Proxy: http.ProxyFromEnvironment, DialContext: dialer.DialContext},
+			Timeout: pluginLogoFetchTimeout,
+			// No proxy from the environment, deliberately. Through one, the connection is
+			// made to the proxy and `pluginLogoDialControl` would be asked about the
+			// proxy's address rather than the target's - which is exactly the check that
+			// makes a plugin-declared URL unable to reach the operator's network. A
+			// deployment that mandates an egress proxy therefore cannot inline plugin
+			// logos and falls back to the bundled mark, which is the safe direction.
+			Transport:     &http.Transport{DialContext: dialer.DialContext},
 			CheckRedirect: sameOriginRedirectGuard(errPluginLogoRedirectRefused, maxPluginLogoRedirects),
 		},
 		now:     time.Now,
