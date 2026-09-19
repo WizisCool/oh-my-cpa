@@ -327,6 +327,50 @@ func TestDemoSessionIsIssuedOnFirstSight(t *testing.T) {
 	}
 }
 
+// A read must never be refused for lack of a session. The console issues its first
+// queries in parallel with the session check, and on the platform the demo is
+// deployed to those requests can reach a different container instance than the one
+// that minted the cookie - so a 401 here would turn a working page into a sign-in
+// card. Each such request is served and handed the cookie it was missing.
+func TestDemoServesAnUnauthenticatedRead(t *testing.T) {
+	handler := demoHandler(t, "/omc")
+	server := httptest.NewServer(handler.Router())
+	defer server.Close()
+
+	// No jar at all: every request is as unauthenticated as the first one of a page.
+	client := &http.Client{}
+	for _, path := range []string{"/omc/api/v1/preferences", "/omc/api/v1/management/dashboard", "/omc/api/v1/usage/events"} {
+		response, err := client.Get(server.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body := readBody(t, response)
+		if response.StatusCode != http.StatusOK {
+			t.Errorf("GET %s = %d (%s), want 200", path, response.StatusCode, body)
+		}
+		if len(response.Cookies()) == 0 {
+			t.Errorf("GET %s was served without issuing the missing session", path)
+		}
+	}
+
+	// A cross-site mutation is still refused, so the demonstration cannot be driven
+	// from another origin.
+	request, err := http.NewRequest(http.MethodPut, server.URL+"/omc/api/v1/preferences/dashboard.range", strings.NewReader(`{"value":"24h"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Origin", "https://attacker.example")
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readBody(t, response)
+	if response.StatusCode != http.StatusForbidden {
+		t.Fatalf("cross-origin demo write = %d, want 403", response.StatusCode)
+	}
+}
+
 // The sign-in form is still reachable - a visitor whose cookie was cleared lands on
 // it - and it must not be a dead end.
 func TestDemoLoginAcceptsAnyPassword(t *testing.T) {

@@ -317,8 +317,27 @@ func (h *Handler) logout(writer http.ResponseWriter, request *http.Request) {
 func (h *Handler) requireAuthentication(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if h.auth == nil || !h.auth.Valid(request) {
-			writeError(writer, http.StatusUnauthorized, "authentication required")
-			return
+			if h.cfg.DemoMode && h.auth != nil {
+				// The demonstration hands a session to whoever asks, so an unauthenticated
+				// request is not refused: it is served, and given the cookie it was missing.
+				//
+				// This is not a relaxation of a boundary. Nothing is granted by the cookie
+				// that the auto-issued session did not already grant - demo_policy.go is what
+				// refuses the operations a demo must not perform - and refusing here would
+				// break the demonstration on the platform it is deployed to: a container
+				// scales to zero and runs as several instances behind one address, each with
+				// its own fixture key, so a cookie minted by one is invalid at the next. The
+				// first reads of a page overlap the session check that would have replaced
+				// it, and a 401 among them turns the console back into a sign-in card that
+				// nothing was wrong with.
+				if err := h.auth.Issue(writer); err != nil {
+					writeInternalError(writer, err)
+					return
+				}
+			} else {
+				writeError(writer, http.StatusUnauthorized, "authentication required")
+				return
+			}
 		}
 		if request.Method != http.MethodGet && request.Method != http.MethodHead && !sameOrigin(request) {
 			writeError(writer, http.StatusForbidden, "same-origin request required")
