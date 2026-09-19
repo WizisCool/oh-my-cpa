@@ -13,6 +13,7 @@ import { credentialProviderIconId } from '../../components/common/providerMetada
 import { ProviderBrandIcon } from '../../components/LobeIcon';
 import { useT } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
+import { isDemoMode } from '../../types/demoMode';
 import { QuotaProgressBar } from './QuotaProgressBar';
 import {
   formatGmtOffsetLabel,
@@ -40,6 +41,9 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
   onRedeemCredit,
 }) => {
   const t = useT();
+  // Redeeming a reset credit spends a real entitlement and clearing a cooldown changes a
+  // credential's state; the demonstration refuses both, so neither is offered.
+  const isDemo = isDemoMode();
   const nowMS = useVisibleNow();
 
   const iconId = credentialProviderIconId(item.provider, item.name);
@@ -197,6 +201,8 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
           <Button
             size="small"
             danger
+            disabled={isDemo}
+            title={isDemo ? t('demo.blocked') : undefined}
             onClick={() => onClearCooldown(item.auth_index)}
           >
             {t('quota.clear_cooldown')}
@@ -257,6 +263,8 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
               <Button
                 size="small"
                 icon={<ThunderboltOutlined />}
+                disabled={isDemo}
+                title={isDemo ? t('demo.blocked') : undefined}
               >
                 {t('quota.btn_reset_quota')}
               </Button>

@@ -5,6 +5,11 @@
  */
 export const ZH_HANT: Readonly<Record<string, string>> = {
   "app.name": "oh-my-cpa",
+  "demo.badge": "DEMO",
+  "demo.badge_tooltip": "線上演示：資料來自內建範例，不會連線任何真實的 CPA 或模型服務。",
+  "demo.notice": "演示模式 — 修改不會被儲存。",
+  "demo.blocked": "演示模式不提供該操作。",
+  "demo.login_hint": "這是一個公開演示，直接登入即可查看主控台。",
   "common.management": "管理中心",
   "common.retry": "重試",
   "common.refresh": "重新整理",

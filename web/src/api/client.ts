@@ -1,4 +1,5 @@
 import { getAppConfig } from '../types/config';
+import { isDemoMode } from '../types/demoMode';
 import {
   DiscoveredResource,
   DiscoveryResult,
@@ -51,12 +52,20 @@ import { UsageEventPage, UsageEventDetail, UsageFacetsResponse, parseUsageIngest
 export class ApiError extends Error {
   status: number;
   data: unknown;
+  /**
+   * True when the server refused the call because the deployment is the public
+   * demonstration. A caller distinguishes it from a permission error or from a
+   * failure, because the honest answer to the operator is "the demo does not do
+   * this" rather than "your request was denied".
+   */
+  demoBlocked: boolean;
 
-  constructor(message: string, status: number, data?: unknown) {
+  constructor(message: string, status: number, data?: unknown, demoBlocked = false) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.data = data;
+    this.demoBlocked = demoBlocked;
   }
 }
 
@@ -65,6 +74,23 @@ let unauthorizedHandler: UnauthorizedHandler | undefined;
 
 export function setUnauthorizedHandler(handler: UnauthorizedHandler | undefined): void {
   unauthorizedHandler = handler;
+}
+
+/**
+ * A successful write on a demo deployment is kept in memory and lost when the
+ * instance is replaced, so the console has to say so. The handler is how the API
+ * layer reports it without knowing that a message API exists.
+ */
+type DemoEventHandler = () => void;
+let demoNoticeHandler: DemoEventHandler | undefined;
+let demoBlockedHandler: DemoEventHandler | undefined;
+
+export function setDemoNoticeHandler(handler: DemoEventHandler | undefined): void {
+  demoNoticeHandler = handler;
+}
+
+export function setDemoBlockedHandler(handler: DemoEventHandler | undefined): void {
+  demoBlockedHandler = handler;
 }
 
 function apiRoot(): string {
@@ -76,7 +102,8 @@ function authUrl(path: string): string {
   return `${apiRoot()}/api/auth${path}`;
 }
 
-async function readError(response: Response): Promise<{ data: unknown; message: string }> {
+async function readError(response: Response): Promise<{ data: unknown; message: string; demoBlocked: boolean }> {
+  const demoBlocked = response.headers.get('X-OMCPA-Demo-Blocked') !== null;
   let errorData: unknown = null;
   let message = `Request failed [HTTP ${response.status}]`;
   try {
@@ -93,7 +120,7 @@ async function readError(response: Response): Promise<{ data: unknown; message: 
     const text = await response.text().catch(() => '');
     if (text) message += `: ${text.slice(0, 100)}`;
   }
-  return { data: errorData, message };
+  return { data: errorData, message, demoBlocked };
 }
 
 /**
@@ -169,7 +196,8 @@ async function downloadBlob(url: string): Promise<Blob> {
   if (!response.ok) {
     const error = await readError(response);
     if (response.status === 401) unauthorizedHandler?.();
-    throw new ApiError(error.message, response.status, error.data);
+    if (error.demoBlocked) demoBlockedHandler?.();
+    throw new ApiError(error.message, response.status, error.data, error.demoBlocked);
   }
   return response.blob();
 }
@@ -199,11 +227,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const errorMsg = err instanceof Error ? err.message : String(err);
     throw new ApiError(`Network request failed (${errorMsg}); check that the backend is running`, 0);
   }
+  const method = (options.method ?? 'GET').toUpperCase();
   if (!response.ok) {
     const error = await readError(response);
     if (response.status === 401) unauthorizedHandler?.();
-    throw new ApiError(error.message, response.status, error.data);
+    if (error.demoBlocked) demoBlockedHandler?.();
+    throw new ApiError(error.message, response.status, error.data, error.demoBlocked);
   }
+  // A write that succeeded on a demo is stored in memory only. Reporting it here
+  // rather than in each form means no write can be added later that forgets to.
+  if (isDemoMode() && method !== 'GET' && method !== 'HEAD') demoNoticeHandler?.();
   if (response.status === 204) return {} as T;
   return response.json() as Promise<T>;
 }

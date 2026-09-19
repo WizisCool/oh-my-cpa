@@ -154,6 +154,11 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodGet, "/api/v1/management/quota/{authIndex}", demoAllow, ""},
 	{http.MethodPost, "/api/v1/management/quota/refresh", demoAllow, ""},
 
+	// A manual capture pass is answered locally: it reports a pass that found an
+	// empty queue, so the request list's own refresh button works without a queue
+	// to pop.
+	{http.MethodPost, "/api/v1/usage/ingest/refresh", demoAllow, ""},
+
 	// Plugin and store reads: the lists are fixture data, and a plugin's declared
 	// logo is never fetched because no fixture plugin publishes one.
 	{http.MethodGet, "/api/v1/management/plugins", demoAllow, ""},
@@ -178,7 +183,6 @@ var demoPolicy = []demoPolicyRule{
 	// Anything that would reach outside this process.
 	{http.MethodPost, "/api/v1/management/providers/pull-models", demoRefuse, "reading models from a provider is disabled: it would call the provider"},
 	{http.MethodPost, "/api/v1/pricing/sync", demoRefuse, "syncing the price catalogue is disabled: it would call models.dev"},
-	{http.MethodPost, "/api/v1/usage/ingest/refresh", demoRefuse, "the demo has no capture pipeline to refresh"},
 	{http.MethodGet, "/api/v1/management/system/diagnostics", demoRefuse, "generating a diagnostic bundle is disabled"},
 
 	// Plugin execution.

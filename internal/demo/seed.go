@@ -109,11 +109,24 @@ func Seed(ctx context.Context, repo *repository.Repository, now time.Time) (Seed
 	return stats, nil
 }
 
-// seedPrices publishes the price list the cost column is computed from, and the
-// one historical version the fabricated history is priced against.
+// seedPrices publishes the price list the cost column is computed from, the
+// catalogue that decides which of those rows the pricing page shows, and the one
+// historical version the fabricated history is priced against.
+//
+// The catalogue is part of the fixture because a self-hosted deployment fills it
+// from the gateway's own model list during a sync, and the demo deliberately runs
+// no sync. Without it the pricing page would intersect sixteen stored prices with
+// an empty catalogue and render nothing at all.
 func seedPrices(ctx context.Context, repo *repository.Repository, now time.Time) (int, error) {
+	catalog := pricingCatalogTargets()
 	rows := make([]repository.ModelPrice, 0, len(priceCatalog()))
+	matched := int64(0)
 	for _, price := range priceCatalog() {
+		source := pricing.SourceManual
+		if _, tracked := catalog[price.model]; tracked {
+			source = pricing.SourceModelsDev
+			matched++
+		}
 		rows = append(rows, repository.ModelPrice{
 			Model:            price.model,
 			PromptPricePer1M: price.prompt,
@@ -121,7 +134,7 @@ func seedPrices(ctx context.Context, repo *repository.Repository, now time.Time)
 			CacheReadPer1M:   price.cacheRead,
 			CacheWritePer1M:  price.cacheWrite,
 			PriceMultiplier:  1,
-			Source:           pricing.SourceManual,
+			Source:           source,
 			SyncedAtMS:       now.UnixMilli(),
 		})
 	}
@@ -132,7 +145,49 @@ func seedPrices(ctx context.Context, repo *repository.Repository, now time.Time)
 	if err := repo.SeedModelPriceHistoryBackfill(ctx, rows, historyStart.UnixMilli()); err != nil {
 		return 0, fmt.Errorf("seed price history: %w", err)
 	}
+	if _, err := repo.ReplacePricingModels(ctx, pricingCatalogTargets()); err != nil {
+		return 0, fmt.Errorf("seed pricing catalogue: %w", err)
+	}
+	// The sync bookkeeping is what the pricing page prints beside its rows. A
+	// fixture that left it untouched would show "never synced" on a page whose
+	// prices are present, which reads as a broken sync rather than as a demo.
+	lastSuccess := now.Add(-3 * time.Hour).UnixMilli()
+	state := pricing.SyncState{
+		Source:                pricing.SourceModelsDev,
+		LastSuccessAtMS:       &lastSuccess,
+		UpdatedAtMS:           lastSuccess,
+		LastMatched:           matched,
+		AutoSyncIntervalHours: 24,
+		CatalogUpdatedAtMS:    lastSuccess,
+	}
+	if err := repo.SavePricingSyncState(ctx, state); err != nil {
+		return 0, fmt.Errorf("seed pricing sync state: %w", err)
+	}
 	return len(rows), nil
+}
+
+// pricingCatalogTargets is the model catalogue the pricing page resolves prices
+// against, keyed by the model the gateway serves and valued by the canonical
+// identity a price is looked up under.
+//
+// A model whose canonical identity is empty is one a real deployment prices by
+// hand: the relay and self-hosted models whose operators set their own rate.
+func pricingCatalogTargets() map[string]string {
+	targets := make(map[string]string)
+	for _, model := range modelCatalog() {
+		if canonical, ok := modelsDevCanonical[model.name]; ok {
+			targets[model.name] = canonical
+		}
+	}
+	for _, price := range priceCatalog() {
+		if _, ok := targets[price.model]; ok {
+			continue
+		}
+		if canonical, ok := modelsDevCanonical[price.model]; ok {
+			targets[price.model] = canonical
+		}
+	}
+	return targets
 }
 
 // seedClientKeyAliases names the caller keys the request list attributes traffic

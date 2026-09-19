@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/demo"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage/ingest"
 )
@@ -444,6 +445,18 @@ func (h *Handler) queryDashboard(ctx context.Context, window dashboardWindow, ap
 // dashboardIngestStatus reports the capture/decode/maintenance loops.
 func (h *Handler) dashboardIngestStatus(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
+	if h.cfg.DemoMode {
+		// The demonstration has no collector to report on, so it reports the
+		// deployment its fixture describes instead of a disabled pipeline; see
+		// internal/demo/ingest.go.
+		status, err := demo.IngestStatus(request.Context(), h.repo, time.Now().UTC())
+		if err != nil {
+			writeInternalError(writer, err)
+			return
+		}
+		writeJSON(writer, http.StatusOK, status)
+		return
+	}
 	if h.usage == nil {
 		writeJSON(writer, http.StatusOK, map[string]any{
 			"enabled": false,
@@ -469,6 +482,13 @@ func (h *Handler) dashboardIngestStatus(writer http.ResponseWriter, request *htt
 // the browser must never pop it itself.
 func (h *Handler) refreshUsageIngest(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
+	if h.cfg.DemoMode {
+		// A manual sync in the demonstration is answered locally: it reports a pass
+		// that found an empty queue rather than popping one from a gateway that is
+		// not there.
+		writeJSON(writer, http.StatusOK, demo.RefreshResult())
+		return
+	}
 	if h.usage == nil {
 		// An explicit "disabled" beats an error: the deployment is healthy, it
 		// simply captures nothing, and the page can say exactly that.

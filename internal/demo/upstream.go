@@ -26,6 +26,11 @@ const managementPrefix = "/v0/management"
 // demo holds even if a route were ever misclassified.
 const demoRefusal = "demo mode: this operation is not available in the public demo"
 
+// fixtureListenAddr is the address a CLIProxyAPI instance is normally reached at.
+// The fixture prefers it so the address the console prints for its gateway reads
+// like a deployment rather than like whatever port was free.
+const fixtureListenAddr = "127.0.0.1:8317"
+
 // Upstream is an in-process stand-in for a CLIProxyAPI management endpoint.
 //
 // It exists so the demo can reuse every existing read path - the console talks
@@ -71,9 +76,15 @@ func StartUpstream(logger *slog.Logger) (*Upstream, error) {
 	if err != nil {
 		return nil, err
 	}
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := net.Listen("tcp", fixtureListenAddr)
 	if err != nil {
-		return nil, fmt.Errorf("bind demo upstream: %w", err)
+		// The port a gateway normally uses may be taken on a development machine.
+		// Any free loopback port serves the fixture just as well, and only the
+		// address the console displays changes.
+		listener, err = net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			return nil, fmt.Errorf("bind demo upstream: %w", err)
+		}
 	}
 	now := time.Now().UTC()
 	upstream := &Upstream{

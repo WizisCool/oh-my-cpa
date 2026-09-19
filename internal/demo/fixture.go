@@ -270,6 +270,25 @@ func modelCatalog() []modelProfile {
 	}
 }
 
+// modelsDevCanonical maps a model the gateway serves to the identity the public
+// price catalogue lists it under. A model that is absent is priced by hand: the
+// relay and self-hosted models whose operator sets their own rate, and the ones
+// whose name here is already its catalogue identity.
+var modelsDevCanonical = map[string]string{
+	"gpt-5-codex":                "gpt-5-codex",
+	"gpt-5.1-codex":              "gpt-5.1-codex",
+	"gpt-5":                      "gpt-5",
+	"gpt-5-mini":                 "gpt-5-mini",
+	"claude-sonnet-4-5-20250929": "claude-sonnet-4-5",
+	"claude-opus-4-1":            "claude-opus-4-1",
+	"claude-haiku-4-5":           "claude-haiku-4-5",
+	"gemini-2.5-pro":             "gemini-2.5-pro",
+	"gemini-2.5-flash":           "gemini-2.5-flash",
+	"gemini-3-pro-preview":       "gemini-3-pro-preview",
+	"kimi-k2-0905":               "kimi-k2",
+	"grok-4":                     "grok-4",
+}
+
 // priceRow is one model's price, in USD per million tokens.
 type priceRow struct {
 	model      string

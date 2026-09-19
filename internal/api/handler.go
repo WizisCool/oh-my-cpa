@@ -240,6 +240,17 @@ func (h *Handler) login(writer http.ResponseWriter, request *http.Request) {
 		writeError(writer, http.StatusBadRequest, "management key is required")
 		return
 	}
+	if h.cfg.DemoMode {
+		// A public demonstration has no secret to check: the same session is issued on
+		// first sight, so a visitor who lands on the sign-in card must not be able to
+		// get stuck behind a key they were never given.
+		if err := h.auth.Issue(writer); err != nil {
+			writeInternalError(writer, err)
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"authenticated": true, "demo": true})
+		return
+	}
 	if !h.auth.KeyMatches(payload.Password) {
 		if h.limiter != nil {
 			h.limiter.recordFailure(ip)

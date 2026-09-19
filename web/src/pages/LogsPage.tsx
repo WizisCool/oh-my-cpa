@@ -13,6 +13,7 @@ import dayjs from 'dayjs';
 import type { ColumnsType } from 'antd/es/table';
 import { api, apiErrorCode, ApiError } from '../api/client';
 import { useT } from '../i18n';
+import { isDemoMode } from '../types/demoMode';
 import { useLogTail } from '../hooks/useLogTail';
 import { useIsPhoneViewport } from '../hooks/useIsPhoneViewport';
 import { PhoneRow } from '../components/common/PhoneRow';
@@ -95,6 +96,7 @@ const LogRow: React.FC<LogRowProps> = ({ parts }) => {
 
 const ErrorLogFiles: React.FC = () => {
   const t = useT();
+  const isDemo = isDemoMode();
   const { message } = AntdApp.useApp();
   const query = useQuery({
     queryKey: ['request-error-logs'],
@@ -147,6 +149,10 @@ const ErrorLogFiles: React.FC = () => {
               type="text"
               icon={<DownloadOutlined />}
               aria-label={`${t('logs.download')} ${file.name}`}
+              // An error log quotes request content, so the demonstration does not hand
+              // one back at all; the server refuses the download too.
+              disabled={isDemo}
+              title={isDemo ? t('demo.blocked') : undefined}
               onClick={async () => {
                 try {
                   const blob = await api.downloadRequestErrorLog(file.name);
@@ -196,6 +202,7 @@ const ErrorLogFiles: React.FC = () => {
 
 export const LogsPage: React.FC = () => {
   const t = useT();
+  const isDemo = isDemoMode();
   const { message } = AntdApp.useApp();
   const { value: filters, ready: filtersReady, set: setFilters } = usePreference<LogFilters>(
     LOG_FILTERS_PREFERENCE,
@@ -314,8 +321,14 @@ export const LogsPage: React.FC = () => {
               <Button size="small" onClick={() => setConfirmClear(false)}>{t('common.cancel')}</Button>
             </Space>
           ) : (
-            <Tooltip title={t('logs.clear_hint')}>
-              <Button size="small" icon={<ClearOutlined />} onClick={() => setConfirmClear(true)} aria-label={t('logs.clear')} />
+            <Tooltip title={isDemo ? t('demo.blocked') : t('logs.clear_hint')}>
+              <Button
+                size="small"
+                icon={<ClearOutlined />}
+                disabled={isDemo}
+                onClick={() => setConfirmClear(true)}
+                aria-label={t('logs.clear')}
+              />
             </Tooltip>
           )}
         </Space>

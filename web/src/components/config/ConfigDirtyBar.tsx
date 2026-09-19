@@ -12,6 +12,8 @@ export interface ConfigDirtyBarProps {
   showErrorFeedback?: boolean;
   onSave: () => void;
   onDiscard: () => void;
+  /** True when the deployment refuses configuration writes, as the demo does. */
+  disabled?: boolean;
 }
 
 export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
@@ -22,6 +24,7 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
   showErrorFeedback = false,
   onSave,
   onDiscard,
+  disabled = false,
 }) => {
   const t = useT();
 
@@ -73,7 +76,8 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
               type="primary"
               icon={<CheckOutlined />}
               loading={isSaving}
-              disabled={isSaving}
+              disabled={isSaving || disabled}
+              title={disabled ? t('demo.blocked') : undefined}
               onClick={onSave}
               className="config-dirty-btn-save"
             >
@@ -86,7 +90,7 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
               onConfirm={onSave}
               okText={t('common.confirm')}
               cancelText={t('common.cancel')}
-              disabled={isSaving}
+              disabled={isSaving || disabled}
               placement="topRight"
             >
               <Button
@@ -94,7 +98,8 @@ export const ConfigDirtyBar: React.FC<ConfigDirtyBarProps> = ({
                 type="primary"
                 icon={<CheckOutlined />}
                 loading={isSaving}
-                disabled={isSaving}
+                disabled={isSaving || disabled}
+                title={disabled ? t('demo.blocked') : undefined}
                 className="config-dirty-btn-save"
               >
                 {t('cfg.dirty_bar_save')}

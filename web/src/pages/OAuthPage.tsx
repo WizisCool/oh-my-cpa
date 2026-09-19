@@ -23,6 +23,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import { useT, type TFunc } from '../i18n';
 import { copyText } from '../utils/clipboard';
+import { isDemoMode } from '../types/demoMode';
 import { credentialProviderIconId } from '../components/common/providerMetadata';
 import { ProviderBrandIcon } from '../components/LobeIcon';
 import { pluginOAuthLogoFor, pluginOAuthProviderLogos } from '../types/pluginOAuthProviders';
@@ -172,6 +173,7 @@ export const OAuthPage: React.FC = () => {
     return list;
   }, [pluginsData, t]);
 
+  const isDemo = isDemoMode();
   const [searchParams] = useSearchParams();
   const targetProviderParam = searchParams.get('provider');
 
@@ -674,8 +676,11 @@ export const OAuthPage: React.FC = () => {
               loading={state.starting}
               // One attempt per provider at a time: a second session would
               // leave the first one open on CPA while the operator still holds
-              // its authorization URL.
-              disabled={isWaiting}
+              // its authorization URL. On the demonstration there is no first
+              // attempt to make: authorizing would mint a real credential against a
+              // real provider account, which is the one thing a public demo must
+              // never do.
+              disabled={isWaiting || isDemo}
               onClick={() => handleStartAuth(card)}
               data-oauth-start={card.id}
             >
