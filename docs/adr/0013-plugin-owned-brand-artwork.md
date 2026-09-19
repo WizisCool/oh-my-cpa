@@ -56,7 +56,7 @@ refused) between the two outbound fetches, but not the destination rule:
 | Fetch | Who chose the URL | Plaintext HTTP | Address check |
 | --- | --- | --- | --- |
 | Model-list pull | the operator, for a provider they run | allowed for localhost, loopback and private literals | none beyond the scheme |
-| Plugin logo | an installed plugin's manifest | allowed only to this machine | resolved address refused in the dialer if private, link-local, multicast, unspecified or a metadata endpoint |
+| Plugin logo | an installed plugin's manifest | allowed only to this machine | resolved address refused in the dialer unless it is public internet space: the operator's network, carrier-grade NAT (`100.64.0.0/10`), multicast, unspecified and the reserved IANA blocks are all refused, and the fetch connects directly so the check cannot be moved onto a proxy |
 
 The asymmetry is the point: a self-hosted relay on the operator's LAN is a normal model-pull target,
 while a plugin manifest is third-party input and must not become a way to reach the operator's network

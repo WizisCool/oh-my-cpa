@@ -215,10 +215,14 @@ literals, since a self-hosted relay on the operator's LAN is the normal case;
 invalid URL policy answers `400 invalid_model_pull_url` and a refused redirect
 answers `502 model_pull_redirect_refused`. A plugin logo is allowed only over
 public HTTPS, or HTTP to the machine itself, and the resolved address is checked in
-the dialer - so a hostname that resolves into the operator's network, or a cloud
-metadata endpoint, is refused where the connection would actually be made rather
-than trusted because the name looked public. A plugin is not trusted to choose what
-this process connects to.
+the dialer against everything that is not public internet space - the operator's
+network, the shared-address range an overlay network hands out (`100.64.0.0/10`), the
+reserved IANA blocks and a cloud metadata endpoint - so a hostname that resolves into
+any of them is refused where the connection would actually be made rather than trusted
+because the name looked public. A plugin is not trusted to choose what this process
+connects to, which is also why this fetch connects directly instead of through an
+environment proxy: through one, the dialer would be asked about the proxy's address and
+the target would be unverifiable.
 
 A plugin's logo is fetched for a different reason than a model list: not to reach
 the plugin's host from the browser, but to keep the browser away from it.
