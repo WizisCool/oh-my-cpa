@@ -1,6 +1,7 @@
 # ADR 0013: A plugin owns its provider's brand mark, and the server inlines it
 
-- Status: Accepted
+- Status: Accepted; decision 1's *"Only an effectively-enabled plugin contributes"* clause is
+  superseded by [ADR 0014](0014-plugin-branding-does-not-depend-on-plugin-enablement.md)
 - Date: 2026-09-19
 
 ## Context

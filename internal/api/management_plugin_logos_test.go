@@ -408,6 +408,10 @@ func TestPluginLogoURLPolicyHoldsAPluginToPublicDestinations(t *testing.T) {
 		"http://192.168.1.5/logo.svg",
 		"ftp://cdn.example.test/logo.svg",
 		"javascript:alert(1)",
+		// `http.Client` sends userinfo as `Authorization: Basic`, so a manifest could make
+		// this process authenticate to a host it names.
+		"https://user:pass@cdn.example.test/logo.svg",
+		"https://token@cdn.example.test/logo.svg",
 	}
 	for _, raw := range refused {
 		parsed, err := url.Parse(raw)

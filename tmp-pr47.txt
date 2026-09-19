@@ -1,0 +1,12 @@
+[20:53:54] reviews=0 inline=0
+  browser	pending	0	https://github.com/WizisCool/oh-my-cpa/actions/runs/35444169915/job/105900131462	;static	pending	0	https://github.com/WizisCool/oh-my-cpa/actions/runs/35444169915/job/105900131591	;CodeRabbit	pass	0		Re
+[20:54:41] reviews=0 inline=0
+  browser	pending	0	https://github.com/WizisCool/oh-my-cpa/actions/runs/35444169915/job/105900131462	;static	pending	0	https://github.com/WizisCool/oh-my-cpa/actions/runs/35444169915/job/105900131591	;CodeRabbit	pass	0		Re
+[20:55:28] reviews=0 inline=0
+  static	pass	1m9s	https://github.com/WizisCool/oh-my-cpa/actions/runs/35444169915/job/105900131591	;browser	pending	0	https://github.com/WizisCool/oh-my-cpa/actions/runs/35444169915/job/105900131462	;CodeRabbit	pass	0		Re
+[20:56:15] reviews=0 inline=0
+  CodeRabbit	pass	0		Review rate limited;browser	pass	2m1s	https://github.com/WizisCool/oh-my-cpa/actions/runs/35444169915/job/105900131462	;static	pass	1m9s	https://github.com/WizisCool/oh-my-cpa/actions/runs/35444169915/
+[20:57:02] reviews=0 inline=0
+  CodeRabbit	pass	0		Review rate limited;browser	pass	2m1s	https://github.com/WizisCool/oh-my-cpa/actions/runs/35444169915/job/105900131462	;static	pass	1m9s	https://github.com/WizisCool/oh-my-cpa/actions/runs/35444169915/
+[20:57:48] reviews=0 inline=0
+  CodeRabbit	pass	0		Review rate limited;browser	pass	2m1s	https://github.com/WizisCool/oh-my-cpa/actions/runs/35444169915/job/105900131462	;static	pass	1m9s	https://github.com/WizisCool/oh-my-cpa/actions/runs/35444169915/

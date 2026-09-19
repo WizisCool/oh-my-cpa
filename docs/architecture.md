@@ -333,9 +333,11 @@ those surfaces cannot disagree about the same provider. Only inline artwork is
 rendered: a provider no plugin owns, a logo that could not be inlined, and a value
 at a scheme the browser may not load all fall back to the catalog mark, and a
 plugin-owned row shows the plugin's mark even when an operator icon override is
-stored for that key. ADR 0013 owns the trade-offs behind all three of those choices,
-including why a plugin-declared logo URL is held to a stricter destination policy
-than an operator-typed one.
+stored for that key, and it does not depend on the plugin being enabled — the mark
+identifies the provider behind a credential or a past request, which does not stop being
+true when the plugin is switched off (ADR 0014). ADR 0013 owns the trade-offs behind the
+other choices here, including why a plugin-declared logo URL is held to a stricter
+destination policy than an operator-typed one.
 `components/resources/` and `components/icons/PresetIcon.tsx`
 are retained from the retired triage console and are currently unreferenced; the
 backend discovery/binding model they rendered is still live behind Providers and

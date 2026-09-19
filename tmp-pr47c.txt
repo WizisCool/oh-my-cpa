@@ -1,0 +1,70 @@
+[13:26:12Z] reviews=0 inline=0 last_bot=2026-09-19T13:25:11Z
+[13:27:13Z] reviews=0 inline=0 last_bot=2026-09-19T13:25:11Z
+[13:28:14Z] reviews=0 inline=0 last_bot=2026-09-19T13:25:11Z
+[13:29:15Z] reviews=0 inline=0 last_bot=2026-09-19T13:25:11Z
+[13:30:17Z] reviews=0 inline=0 last_bot=2026-09-19T13:25:11Z
+[13:31:18Z] reviews=0 inline=0 last_bot=2026-09-19T13:25:11Z
+[13:32:19Z] reviews=1 inline=1 last_bot=2026-09-19T13:25:11Z
+=== 审查已落地 ===
+
+=== 审查意见（逐条） ===
+docs/adr/0013-plugin-owned-brand-artwork.md:85
+_📐 Maintainability & Code Quality_ | _🟡 Minor_ | _⚡ Quick win_
+
+<details>
+<summary>🔎 Supported by static analysis</summary>
+
+🏁 Script executed:
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+ast-grep outline internal/api/management_plugin_logos.go --items all --type function
+rg -n -C 8 'NewRequest|NewRequestWithContext|Header|Authorization|Cookie|ClientCert|Do\(' \
+  internal/api/management_plugin_logos.go internal/api/outbound_fetch.go
+```
+
+Repository: WizisCool/oh-my-cpa
+
+Length of output: 3229
+
+---
+
+🏁 Script executed:
+
+```bash
+#!/bin/bash
+set -euo pipefail
+sed -n '90,155p' internal/api/management_
+---
+=== review 正文 ===
+**Actionable comments posted: 1**
+
+> [!CAUTION]
+> Some comments are outside the diff and can’t be posted inline due to GitHub limitations.
+> 
+> **⚠️ Outside diff range comments (1)**
+> 
+> <details>
+> <summary><em>🟡 Minor</em> · Record this reversed decision in a superseding ADR. · <code>pluginOAuthProviders.ts:61</code></summary><blockquote>
+> 
+> `web/src/types/pluginOAuthProviders.ts:61`
+> _📐 Maintainability & Code Quality_ | _🟡 Minor_ | _⚡ Quick win_
+> 
+> **Record this reversed decision in a superseding ADR.**
+> 
+> Removing the effective-enabled filter reverses ADR 0013 decision 1, which says that only effectively enabled plugins contribute. Do not leave the accepted ADR as the active record of the opposite behavior. Add a new ADR that supersedes ADR 0013 and update the related context d
+=== 机器人最新回复 ===
+<!-- This is an auto-generated reply by CodeRabbit -->
+<!-- CodeRabbit review command invocation: v2:c820b80becb5c7579b204191825f6d0250df41427896f64611a1545205a5e495 -->
+`@WizisCool`: I will review the changes and the documented security boundaries.
+
+<details>
+<summary>✅ Action performed</summary>
+
+Review finished.
+
+> Note: CodeRabbit is an incremental review system and does not re-review already reviewed commits. This command is applicable only when automatic reviews are paused.
+
+</details>
