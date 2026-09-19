@@ -141,10 +141,11 @@ sign-in answers 503 until `OMCPA_CPA_MANAGEMENT_KEY` is set. Demo mode is the on
 exception, and it is not a relaxation of this rule: there the session is derived
 from the fixture's own per-process key and issued on first sight, because a public
 demonstration has no administrator whose identity it could be establishing.
-Authenticated
-secret-management surfaces (such as raw YAML source viewing or client-key
-reveals) explicitly return credentials to authorized administrators and log
-audits.
+Authenticated secret-management surfaces (such as raw YAML source viewing or
+explicit caller-key and provider-key reveals) explicitly return credentials to
+authorized administrators. Each reveal writes its audit record before the
+response is emitted; if that write fails, the read is refused rather than served
+unaudited.
 
 ## i18n
 

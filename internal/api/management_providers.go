@@ -173,6 +173,22 @@ func configKeyProviderItems(spec providerConfigFamilySpec, entries []management.
 	return items
 }
 
+// revealedProviderKeyCount counts the distinct credential entries in a provider
+// response. KeyEntries is the complete list for both provider shapes, while a
+// legacy response may carry only the first APIKey; counting both would report the
+// compatibility providers' first key twice.
+func revealedProviderKeyCount(items []ProviderItemDTO) int {
+	count := 0
+	for _, item := range items {
+		if len(item.KeyEntries) > 0 {
+			count += len(item.KeyEntries)
+		} else if item.APIKey != "" {
+			count++
+		}
+	}
+	return count
+}
+
 func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
@@ -287,6 +303,16 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 		for index := range items {
 			items[index].APIKey = ""
 			items[index].KeyEntries = nil
+		}
+	} else {
+		// The reveal is the audit boundary: a masked response carries no credential,
+		// so it is not a credential read and must not fill the log on every poll.
+		if auditErr := h.recordAudit(request, "provider.reveal_keys", "provider", "list", "success", map[string]any{
+			"provider_count": len(items),
+			"key_count":      revealedProviderKeyCount(items),
+		}); auditErr != nil {
+			writeAuditFailure(writer, "audit log failure; provider key reveal aborted")
+			return
 		}
 	}
 	writeJSON(writer, http.StatusOK, map[string]any{

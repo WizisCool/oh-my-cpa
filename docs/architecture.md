@@ -416,6 +416,14 @@ stale entry is itself a failure. The budget it enforces is stated in
    write. This is a deliberate removal of step-up authentication, not a
    frontend-only prompt change: the grant endpoint and its state are gone.
 
+6. The two list endpoints that can carry plaintext credentials on request,
+   `/management/api-keys?include_keys=true` and
+   `/management/providers?include_keys=true`, write `api_key.reveal` or
+   `provider.reveal_keys` before the response is emitted. The record identifies
+   the list and carries counts rather than one event per credential. Audit-write
+   failure answers `500` and no credential is returned; masked reads are not
+   audited because no credential leaves the server (ADR 0018).
+
 The key itself is encrypted with `OMCPA_MASTER_KEY` and stored on the
 `cpa_instances` row, where `bootstrapDefaultInstance` refreshes it at every
 startup so a rotation needs no SQLite surgery.
