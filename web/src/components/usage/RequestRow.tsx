@@ -2,7 +2,8 @@ import React from 'react';
 import { Tooltip, App as AntdApp } from 'antd';
 import { BlockOutlined, BulbOutlined, CopyOutlined, RightOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { LobeIcon, getProviderDefaultIcon } from '../LobeIcon';
+import { getProviderDefaultIcon } from '../LobeIcon';
+import { ProviderBrandIcon } from '../LobeIcon';
 import { useT } from '../../i18n';
 import { copyText } from '../../utils/clipboard';
 import { cacheScaleMix, formatCacheRate } from '../../theme/cacheScale';
@@ -12,6 +13,7 @@ import {
   type CredentialIndex,
   type ProviderLookupEntry,
 } from '../../types/usageEventIdentity';
+import type { PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import {
   eventCacheRate,
   eventTokensPerSecond,
@@ -33,6 +35,8 @@ export interface RequestRowProps {
   credentials: CredentialIndex;
   providerIcons?: Record<string, string>;
   configuredProviders?: ProviderLookupEntry[];
+  /** Logos published by installed plugins, keyed by the OAuth provider they register. */
+  pluginLogos?: PluginOAuthLogos;
   onOpen: (id: number) => void;
   isSelected?: boolean;
 }
@@ -43,6 +47,7 @@ export const RequestRow = React.memo<RequestRowProps>(
     credentials,
     providerIcons = {},
     configuredProviders = [],
+    pluginLogos = {},
     onOpen,
     isSelected = false,
   }) => {
@@ -58,6 +63,7 @@ export const RequestRow = React.memo<RequestRowProps>(
       providerIcons,
       configuredProviders,
       getProviderDefaultIcon,
+      pluginLogos,
     );
 
     // 2. Cache rate calculation, plus its stop on the 0–100% colour scale.
@@ -148,7 +154,7 @@ export const RequestRow = React.memo<RequestRowProps>(
         {/* Column 3: provider (credential that answered) */}
         <div className={`req-col req-col-provider ${requestColumnAlignClass('provider')}`}>
           <div className="req-provider-icon-wrapper">
-            <LobeIcon iconId={providerInfo.iconId} size={20} />
+            <ProviderBrandIcon iconId={providerInfo.iconId} logo={providerInfo.logo} size={20} />
           </div>
           <div className="req-provider-content">
             <div className="req-provider-title-row">

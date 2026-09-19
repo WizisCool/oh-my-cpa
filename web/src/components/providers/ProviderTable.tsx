@@ -3,10 +3,11 @@ import { DeleteOutlined, EditOutlined, EyeOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 
 import { useT } from '../../i18n';
-import { getProviderDefaultIcon, LobeIcon } from '../LobeIcon';
+import { getProviderDefaultIcon, LobeIcon, ProviderBrandIcon } from '../LobeIcon';
 import { maskKeyText } from '../../utils/maskKey';
 import { safeExternalURL } from '../../utils/externalUrl';
 import { resolveProviderIcon } from '../../types/providerIcons';
+import { pluginOAuthLogoFor, type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import type { ProviderItem } from '../../types/providers';
 import { matchProviderFamily } from '../../types/providerFamilies';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
@@ -20,6 +21,8 @@ interface ProviderTableProps {
   providers: ProviderItem[];
   providersLoading: boolean;
   providerIcons: Record<string, string>;
+  /** Logos published by installed plugins, keyed by the OAuth provider they register. */
+  pluginLogos?: PluginOAuthLogos;
   statusQueue: ProviderManagement['statusQueue'];
   deleteProviderMutation: ProviderManagement['deleteProviderMutation'];
   /** Opens the editor on the row the operator clicked. */
@@ -43,6 +46,7 @@ export function ProviderTable({
   providers,
   providersLoading,
   providerIcons,
+  pluginLogos,
   statusQueue,
   deleteProviderMutation,
   handleOpenEdit,
@@ -77,6 +81,13 @@ export function ProviderTable({
           record,
           getProviderDefaultIcon(record.family, record.name, record.base_url),
         );
+        // A plugin that registers this provider publishes the mark to use; a stored
+        // icon preference cannot outrank it, because the console does not own that
+        // provider's identity.
+        const pluginLogo = pluginOAuthLogoFor(pluginLogos, record.family)
+          ?? pluginOAuthLogoFor(pluginLogos, record.upstream_name)
+          ?? pluginOAuthLogoFor(pluginLogos, record.name)
+          ?? pluginOAuthLogoFor(pluginLogos, record.id);
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div
@@ -98,7 +109,7 @@ export function ProviderTable({
                 setIconPickerOpen(true);
               }}
             >
-              <LobeIcon iconId={iconId} size={22} />
+              <ProviderBrandIcon iconId={iconId} logo={pluginLogo} size={22} />
             </div>
             <div>
               <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--fg)' }}>

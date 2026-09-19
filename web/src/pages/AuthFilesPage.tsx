@@ -45,6 +45,8 @@ import { ModelsModal } from '../components/authFiles/ModelsModal';
 import { OAuthModelAliasDrawer } from '../components/authFiles/OAuthModelAliasDrawer';
 import { ProviderFilterTabs } from '../components/common/ProviderFilterTabs';
 import { providerFilterTabs } from '../types/credentialProviders';
+import { usePluginOAuthLogos } from '../hooks/usePluginOAuthLogos';
+import { pluginOAuthLogoFor } from '../types/pluginOAuthProviders';
 import styles from './authFiles/AuthFilesPage.module.css';
 
 function safeError(error: unknown, t: TFunc): string {
@@ -73,6 +75,10 @@ export const AuthFilesPage: React.FC = () => {
 
   const [query, setQuery] = useState(targetQuery ?? '');
   const [provider, setProvider] = useState(targetProvider?.trim() ? targetProvider.trim().toLowerCase() : 'all');
+
+  // A plugin-registered OAuth provider publishes its own logo, which wins over the
+  // console's catalog mark for that provider key.
+  const pluginLogos = usePluginOAuthLogos();
 
   useEffect(() => {
     setProvider(targetProvider?.trim() ? targetProvider.trim().toLowerCase() : 'all');
@@ -515,6 +521,7 @@ export const AuthFilesPage: React.FC = () => {
         counts={tabCounts}
         active={provider}
         onChange={setProvider}
+        pluginLogos={pluginLogos}
       />
 
       {/* Floating Batch Action Bar */}
@@ -622,6 +629,7 @@ export const AuthFilesPage: React.FC = () => {
                 <AuthFileCard
                   key={`${file.name}:${file.auth_index ?? ''}`}
                   file={file}
+                  pluginLogo={pluginOAuthLogoFor(pluginLogos, providerOf(file))}
                   compact={compactMode}
                   selected={selected.includes(file.name)}
                   busy={fileBusy}

@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useEffect, useState } from 'react';
 import { LOBE_ICON_CATALOG, lobeIconSlug } from '../types/lobeIconCatalog';
 import { CloudServerOutlined } from '@ant-design/icons';
 
@@ -73,3 +73,62 @@ export const LobeIcon: React.FC<LobeIconProps> = memo(({
   );
 });
 
+export interface ProviderBrandIconProps {
+  /** Brand mark id from the vendored icon catalog. Empty renders a neutral placeholder. */
+  iconId?: string;
+  /** Logo published by the plugin that owns this provider, when there is one. */
+  logo?: string;
+  size: number;
+  className?: string;
+  style?: React.CSSProperties;
+}
+
+/**
+ * The mark for one provider, wherever a provider is shown.
+ *
+ * A plugin's own logo wins over the catalog mark: a plugin knows what its provider
+ * looks like, and installing a plugin cannot update the console's catalog. The
+ * catalog mark is the fallback rather than the default, because a plugin logo is a
+ * network fetch that can fail or be withdrawn, and a provider row that renders
+ * nothing is worse than one rendering the known brand.
+ *
+ * It lives beside the catalog renderer rather than in a component of its own for two
+ * reasons: they answer the same question, and two modules answering it is how a
+ * surface ends up drawing a mark the others do not. A separate module also renames
+ * the shared chunk this code is bundled into, and the bundle budget pins that chunk
+ * by name (`Lobe icon JS`, derived from this file).
+ */
+export const ProviderBrandIcon: React.FC<ProviderBrandIconProps> = ({
+  iconId,
+  logo,
+  size,
+  className,
+  style,
+}) => {
+  const [isLogoBroken, setIsLogoBroken] = useState(false);
+
+  // A swapped logo (a plugin upgrade, or a provider whose plugin changed) starts
+  // from a clean slate, so one broken URL cannot mask the next one forever.
+  useEffect(() => {
+    setIsLogoBroken(false);
+  }, [logo]);
+
+  const trimmedLogo = (logo || '').trim();
+  if (trimmedLogo && !isLogoBroken) {
+    return (
+      <img
+        src={trimmedLogo}
+        alt=""
+        width={size}
+        height={size}
+        className={className}
+        style={{ display: 'block', objectFit: 'contain', borderRadius: 4, ...style }}
+        loading="eager"
+        decoding="async"
+        onError={() => setIsLogoBroken(true)}
+      />
+    );
+  }
+
+  return <LobeIcon iconId={iconId} size={size} className={className} style={style} />;
+};

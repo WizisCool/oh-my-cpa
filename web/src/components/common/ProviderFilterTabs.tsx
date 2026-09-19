@@ -1,8 +1,9 @@
 import React from 'react';
 import { Tabs, Space } from 'antd';
 import { AppstoreOutlined } from '@ant-design/icons';
-import { LobeIcon } from '../LobeIcon';
-import { getCredentialProviderMetadata } from './providerMetadata';
+import { credentialProviderIconId, getCredentialProviderMetadata } from './providerMetadata';
+import { ProviderBrandIcon } from '../LobeIcon';
+import { pluginOAuthLogoFor, type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import { useT } from '../../i18n';
 import styles from './ProviderFilterTabs.module.css';
 
@@ -11,6 +12,8 @@ export interface ProviderFilterTabsProps {
   counts: Record<string, number>;
   active: string;
   onChange: (provider: string) => void;
+  /** Logos published by installed plugins, keyed by the OAuth provider they register. */
+  pluginLogos?: PluginOAuthLogos;
 }
 
 /**
@@ -18,13 +21,21 @@ export interface ProviderFilterTabsProps {
  * terminal-flat spec:
  * - quiet underline with a var(--fg) ink bar, never antd blue
  * - mono count pills over var(--surface)/var(--border-soft), tabular numerals
- * - explicit provider brand icons (Codex, Claude, Antigravity, xAI, Kimi)
+ * - the provider's own brand mark, from its plugin when a plugin owns it and from
+ *   the vendored catalog otherwise (Codex, Claude, Antigravity, xAI, Kimi, Devin,
+ *   Meta, and any plugin-registered provider)
+ *
+ * The mark is resolved through `credentialProviderIconId` rather than read off the
+ * display table alone: a provider the table has not been taught yet must still
+ * render the brand artwork the bundle already ships, instead of a neutral glyph
+ * that hides which provider a tab belongs to.
  */
 export const ProviderFilterTabs: React.FC<ProviderFilterTabsProps> = ({
   providers,
   counts,
   active,
   onChange,
+  pluginLogos,
 }) => {
   const t = useT();
 
@@ -33,7 +44,8 @@ export const ProviderFilterTabs: React.FC<ProviderFilterTabsProps> = ({
     const isActive = provider === active;
     const meta = isAll ? null : getCredentialProviderMetadata(provider);
     const label = isAll ? t('common.all') : meta?.label ?? provider;
-    const iconId = isAll ? null : meta?.iconId ?? '';
+    const iconId = isAll ? '' : credentialProviderIconId(provider, label);
+    const logo = isAll ? undefined : pluginOAuthLogoFor(pluginLogos, provider);
     const count = counts[provider] ?? 0;
 
     return {
@@ -41,8 +53,8 @@ export const ProviderFilterTabs: React.FC<ProviderFilterTabsProps> = ({
       label: (
         <Space size={6} align="center">
           <span className={styles['tab-icon']}>
-            {iconId ? (
-              <LobeIcon iconId={iconId} size={15} />
+            {iconId || logo ? (
+              <ProviderBrandIcon iconId={iconId} logo={logo} size={15} />
             ) : (
               <AppstoreOutlined style={{ fontSize: 14, color: isActive ? 'var(--fg)' : 'var(--meta)' }} />
             )}

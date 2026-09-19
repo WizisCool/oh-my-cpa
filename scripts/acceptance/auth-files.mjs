@@ -16,6 +16,7 @@ export async function runAuthFilesAcceptance({
   measureStable,
   lobeIconSignature,
   lobeIconImageState,
+  providerMarkImage,
   path,
   root,
 }) {
@@ -86,6 +87,38 @@ export async function runAuthFilesAcceptance({
     const kimiTab = page.locator('.auth-files-page .ant-tabs-tab').filter({ hasText: /Kimi/i }).first();
     const kimiIcon = await lobeIconSignature(kimiTab);
     check('Kimi tab icon is not OpenAI', /kimi/i.test(kimiIcon) && !/openai/i.test(kimiIcon), kimiIcon);
+
+    // The brand marks that used to render as a neutral placeholder while their
+    // artwork sat unused in the bundle: a catalog brand the display table had not
+    // been taught (Devin), and a provider whose mark only its plugin can supply.
+    const devinTab = page.locator('.auth-files-page .ant-tabs-tab').filter({ hasText: /Devin/i }).first();
+    await checkEventually(
+      'Devin tab draws the Devin brand mark',
+      async () => {
+        const mark = await providerMarkImage(devinTab);
+        return Boolean(mark)
+          && mark.complete === true
+          && mark.naturalWidth > 0
+          && /devin/i.test(mark.src)
+          && !/openai/i.test(mark.src);
+      },
+      { detail: async () => JSON.stringify(await providerMarkImage(devinTab)) },
+    );
+
+    const pluginTab = page.locator('.auth-files-page .ant-tabs-tab').filter({ hasText: /Iflow/i }).first();
+    await checkEventually(
+      'a plugin-owned provider tab draws the plugin\u2019s own logo',
+      async () => {
+        const mark = await providerMarkImage(pluginTab);
+        // The fixture plugin publishes an inline SVG, so a catalog mark here would
+        // resolve against the console's own /lobe-icons/ assets instead.
+        return Boolean(mark)
+          && mark.complete === true
+          && mark.naturalWidth > 0
+          && /^data:image\//i.test(mark.src);
+      },
+      { detail: async () => JSON.stringify(await providerMarkImage(pluginTab)) },
+    );
 
     // Verify tab hover stability
     await codexTab.hover();

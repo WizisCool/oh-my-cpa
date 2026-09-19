@@ -37,6 +37,7 @@ export async function runUsageEventsAcceptance({
   consoleErrors,
   pageErrors,
   onSmokeComplete,
+  providerMarkImage,
 }) {
   await auditPage(page, responseBodies, '/usage/events', '.usage-events-page', { pageSecrets: providerSecrets });
 
@@ -141,6 +142,22 @@ export async function runUsageEventsAcceptance({
         .join(' :: ');
     });
   const rowTimestamps = async () => {
+    // A request answered through a plugin-registered provider draws that plugin's
+    // own logo. The console has no catalog mark to guess for this provider, and
+    // guessing one is exactly what the plugin's published logo replaces.
+    const pluginRow = page.locator('.request-row').filter({ hasText: 'fixture-plugin-provider' }).first();
+    await checkEventually(
+      'a plugin-owned provider draws its plugin logo on the request row',
+      async () => {
+        const mark = await providerMarkImage(pluginRow.locator('.req-provider-icon-wrapper'));
+        return Boolean(mark)
+          && mark.complete === true
+          && mark.naturalWidth > 0
+          && /^data:image\//i.test(mark.src);
+      },
+      { detail: async () => JSON.stringify(await providerMarkImage(pluginRow.locator('.req-provider-icon-wrapper'))) },
+    );
+
     const values = await page.locator('.request-row .req-col-time time').evaluateAll((nodes) =>
       nodes.map((node) => Date.parse(node.getAttribute('datetime') ?? '')),
     );

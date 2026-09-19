@@ -223,6 +223,13 @@ plugin list, and an id the registry does not know is forwarded unchanged with no
 per-provider flags. The two registries are held together by an id, so a provider
 is added in both or in neither.
 
+A provider the console's own registry names also needs a brand mark, because a
+surface that cannot draw one falls back to a neutral placeholder - which reads as
+"this provider has no identity" even though its artwork ships in the bundle. The
+catalog marks are declared in `web/src/components/common/providerMetadata.ts` and
+`web/src/types/providerIconIds.ts`; a plugin-registered provider instead brings
+the logo it publishes (§3).
+
 ## 3. Frontend shape
 
 `web/src` is a single-page app on React + TypeScript + Ant Design, with TanStack
@@ -232,8 +239,8 @@ Query for server state.
 | --- | --- |
 | `App.tsx` | Router, lazily loaded pages, theme and locale providers; the theme provider sits above `ConfigProvider` (Ant Design's tokens are a projection of the resolved palette) while `ThemeServerSync` sits inside `App`, because a refused save is reported through Ant Design's message API |
 | `api/client.ts` | The one typed HTTP client; every endpoint is declared here |
-| `types/` | Wire types, including the request-record view model split by responsibility (`usageEventQuery.ts` for the URL and filter contract, `usageEventViewPreference.ts` for the stored view, `usageEventIdentity.ts` for the credential and provider behind a row, `usageEventGrouping.ts` for how records bucket, `usageEventLabels.ts` for what a row prints, `usageEventMetrics.ts` for its numbers and `usageEventCadence.ts` for the page's timing constants), `usageEventViewActions.ts` (the view's URL and persistence rewrites), `tokenDisplay.ts` (the one layer every user-facing token number is formatted through) and `rollingNumber.ts` (the animated shape of a reading) |
-| `hooks/` | `usePreference`, `useLastIntentQueue` (React binding) over `lastIntentQueue` (the framework-free controller) and `disposableSlot` (effect-scoped resource lifetime), `useLogTail`, `useVisibleNow`, `useIsNarrowViewport` (900px, the shell), `useIsPhoneViewport` (640px, lists and control sizes), `useOverlayHistory` (React binding) over `overlayHistory` (the framework-free overlay/history policy: one sentinel per open Drawer or Modal, so the platform's Back dismisses the topmost one), `usePrefersReducedMotion` (the app-owned reduced-motion switch the canvas marks need, since neither `@antv/g2` nor `@ant-design/plots` reads the preference) |
+| `types/` | Wire types, including the request-record view model split by responsibility (`usageEventQuery.ts` for the URL and filter contract, `usageEventViewPreference.ts` for the stored view, `usageEventIdentity.ts` for the credential and provider behind a row, `usageEventGrouping.ts` for how records bucket, `usageEventLabels.ts` for what a row prints, `usageEventMetrics.ts` for its numbers and `usageEventCadence.ts` for the page's timing constants), `usageEventViewActions.ts` (the view's URL and persistence rewrites), `pluginOAuthProviders.ts` (which logo an installed plugin publishes for the OAuth provider it registers, and whether a URL may be rendered as an image at all), `tokenDisplay.ts` (the one layer every user-facing token number is formatted through) and `rollingNumber.ts` (the animated shape of a reading) |
+| `hooks/` | `usePreference`, `useLastIntentQueue` (React binding) over `lastIntentQueue` (the framework-free controller) and `disposableSlot` (effect-scoped resource lifetime), `useLogTail`, `useVisibleNow`, `useIsNarrowViewport` (900px, the shell), `useIsPhoneViewport` (640px, lists and control sizes), `useOverlayHistory` (React binding) over `overlayHistory` (the framework-free overlay/history policy: one sentinel per open Drawer or Modal, so the platform's Back dismisses the topmost one), `usePluginOAuthLogos` (the plugin list read once, projected to provider-key logos), `usePrefersReducedMotion` (the app-owned reduced-motion switch the canvas marks need, since neither `@antv/g2` nor `@ant-design/plots` reads the preference) |
 | `i18n/` | `index.tsx` owns the base `[zh, en]` dictionary and the `t()` context; `language.ts` is the reading-language registry and locale helpers; `locales/zh-Hant.ts` and `locales/ms.ts` are the complete additional catalogs |
 | `theme/` | `palette.ts` (the nine authored tokens, the seventeen-token derivation, the registered palettes and the resolution of a mode plus a selection into a palette), `themePreference.ts` (the stored preference document, its parse and its migration from the earlier bare palette id), `ThemeContext.tsx` (the preference, the system follow, the in-progress edit, and the server sync), `themeConfig.ts` (antd tokens and CSS-variable projection), `colorMath.ts` (OKLCH mixing, luminance and contrast - the one authority for every ratio in the console), `cacheScale.ts` and `heatmapRamp.ts` (the two sequential ramps' stops) |
 | `utils/` | `maskKey.ts` (the console's one caller-key mask shape, kept branch for branch with the server's `security.MaskSecret`), `externalUrl.ts` (the http/https link rule), `modelOptions.ts` (model-input filtering), `smoothScroll.ts` (the gesture/correction scroll schedule), `clipboard.ts` (the one copy path, below) |
@@ -273,6 +280,21 @@ themselves morph between revisions on the same motion token, gated by the
 reduced-motion hook above. `docs/design.md`
 §7 rules 5 and 8 own the motion they are allowed to run, and ADRs 0007 and 0008 own the
 trade-offs.
+
+**A plugin's published logo outranks the catalog mark for the provider it
+registers.** A plugin that declares `supports_oauth` also publishes its own logo,
+and it is the only authority on what that provider looks like: the vendored
+catalog cannot be updated by installing a plugin, so guessing a brand from the
+provider key would label the operator's own credential with somebody else's mark.
+`types/pluginOAuthProviders.ts` resolves the plugin list into provider-key logos
+(including a plugin whose auths are typed by its own id rather than by
+`oauth_provider`), and `LobeIcon.tsx`'s `ProviderBrandIcon` renders it - one
+component for the provider tabs, the quota and credential cards, the request
+records, the provider table and the dashboard's provider rows, so those surfaces
+cannot disagree about the same provider. The catalog mark stays the fallback for a
+provider no plugin owns and for a logo that fails to load or was published at a
+scheme the console will not fetch, and a plugin-owned row shows the plugin's mark
+even when an operator icon override is stored for that key.
 `components/resources/` and `components/icons/PresetIcon.tsx`
 are retained from the retired triage console and are currently unreferenced; the
 backend discovery/binding model they rendered is still live behind Providers and

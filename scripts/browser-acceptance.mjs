@@ -136,6 +136,28 @@ async function lobeIconImageState(locator) {
   });
 }
 
+/**
+ * The artwork a provider surface actually draws, whatever its source.
+ *
+ * `lobeIconImageState` answers for the console's own catalog only (an embedded
+ * `/lobe-icons/` image), so it cannot see a plugin-published logo - which is
+ * exactly the mark a plugin-owned provider is supposed to draw. This reads the
+ * element's own source and decoded size, so "the plugin's icon is used, and it
+ * loaded" is one assertion instead of two.
+ */
+async function providerMarkImage(locator) {
+  return locator.evaluate((root) => {
+    const image = root.querySelector('img');
+    if (!image) return null;
+    return {
+      src: image.getAttribute('src') ?? '',
+      complete: image.complete,
+      naturalWidth: image.naturalWidth,
+      naturalHeight: image.naturalHeight,
+    };
+  });
+}
+
 function shorten(value, max = 64) {
   if (typeof value !== 'string') return String(value);
   return value.length <= max ? value : `${value.slice(0, max)}…`;
@@ -343,6 +365,7 @@ try {
     consoleErrors,
     pageErrors,
     onSmokeComplete: () => { throw new SmokeComplete(); },
+    providerMarkImage,
   });
   if (!p0Only) {
     await auditPage(page, responseBodies, '/pricing', '[data-testid="pricing-page"]', { pageSecrets: providerSecrets });
@@ -388,6 +411,7 @@ try {
     measureStable,
     lobeIconSignature,
     lobeIconImageState,
+    providerMarkImage,
     path,
     root,
   });
@@ -403,6 +427,7 @@ try {
       providerSecrets,
       settleLayout,
       lobeIconSignature,
+      providerMarkImage,
     });
 
     await runKeyManagementAcceptance({ appURL, page, check, checkEventually, responseBodies, clientKeyAlias: CLIENT_KEY_ALIAS, clientKeySecret: FAKE_CLIENT_SECRET });

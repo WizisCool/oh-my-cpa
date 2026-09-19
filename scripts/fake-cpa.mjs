@@ -53,6 +53,20 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       label: 'Virtual fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: true,
       success: 0, failed: 0, models: [], priority: 0, weight: 1,
     },
+    // One credential per brand-mark path the provider filters have to draw: a
+    // built-in the console's catalog carries (Devin), and one owned by a plugin
+    // (the `iflow-auth` fixture below), which draws the plugin's own logo.
+    {
+      id: 'auth-e2e-6', auth_index: 'auth-index-e2e-6', name: 'devin-fixture.json', type: 'devin', provider: 'devin',
+      label: 'Devin fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: false,
+      email: 'devin-fixture@example.test', account_type: 'oauth',
+      success: 1, failed: 0, models: [], priority: 1, weight: 1,
+    },
+    {
+      id: 'auth-e2e-7', auth_index: 'auth-index-e2e-7', name: 'iflow-fixture.json', type: 'iflow', provider: 'iflow',
+      label: 'iFlow fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: false,
+      account_type: 'oauth', success: 1, failed: 0, models: [], priority: 1, weight: 1,
+    },
   ];
   let authFiles = JSON.parse(JSON.stringify(initialAuthFiles));
   let oauthModelAliases = {

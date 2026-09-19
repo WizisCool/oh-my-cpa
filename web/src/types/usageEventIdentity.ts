@@ -5,6 +5,10 @@ import {
 import {
   resolveProviderIcon,
 } from './providerIcons';
+import {
+  pluginOAuthLogoFor,
+  type PluginOAuthLogos,
+} from './pluginOAuthProviders';
 import type {
   UsageEvent,
 } from './usageEvents';
@@ -131,6 +135,8 @@ export function createProviderNameResolver(
 export interface ResolvedProviderInfo {
   isOAuth: boolean;
   iconId: string;
+  /** Logo the plugin owning this provider publishes, which outranks the catalog mark. */
+  logo?: string;
   title: string;
   subtitle?: string;
   authFile?: string;
@@ -143,6 +149,7 @@ export function resolveProviderInfo(
   providerIcons: Record<string, string> = {},
   configuredProviders: ProviderLookupEntry[] = [],
   fallbackIconResolver?: (family: string, name?: string, url?: string) => string,
+  pluginLogos: PluginOAuthLogos = {},
 ): ResolvedProviderInfo {
   const file = event.auth_index ? credentials.get(event.auth_index) : undefined;
   const isOAuth =
@@ -153,6 +160,17 @@ export function resolveProviderInfo(
   const resolveIcon = (family: string, name?: string, url?: string): string => {
     if (fallbackIconResolver) return fallbackIconResolver(family, name, url);
     return providerIconId(family) || NEUTRAL_PROVIDER_ICON_ID;
+  };
+
+  // The plugin that registers a provider is the authority on its artwork, so its
+  // logo is looked up by every key the record carries for that provider before the
+  // row falls back to the console's own catalog mark.
+  const resolveLogo = (...keys: (string | undefined)[]): string | undefined => {
+    for (const key of keys) {
+      const logo = pluginOAuthLogoFor(pluginLogos, key);
+      if (logo) return logo;
+    }
+    return undefined;
   };
 
   if (isOAuth) {
@@ -170,6 +188,7 @@ export function resolveProviderInfo(
     return {
       isOAuth: true,
       iconId,
+      logo: resolveLogo(file?.provider, file?.type, event.provider),
       title: displayName,
       subtitle: secondary,
       authFile: fileName,
@@ -236,6 +255,7 @@ export function resolveProviderInfo(
   return {
     isOAuth: false,
     iconId,
+    logo: resolveLogo(matched?.family, matched?.upstream_name, event.provider),
     title: providerName,
     subtitle: undefined,
     authFile: fileName,
