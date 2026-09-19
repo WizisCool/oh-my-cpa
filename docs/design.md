@@ -1214,13 +1214,27 @@ reach one. Where a control's name is short enough to matter on a phone, the name
 Enlarging every 28px control would trade a reachability defect for a layout one, so the hit
 area grows while the control keeps its drawn size:
 
+**The scope is controls that are small in both dimensions.** A control that is *wide* — a labelled
+button, or any of the console's 32px-tall buttons, which is antd's own height everywhere — is aimable
+even when it is short, so it keeps its box. Requiring 40px of height from every button would be
+asserting a change the design system deliberately does not make.
+
 | Situation | Treatment |
 | --- | --- |
-| 28×28 icon buttons, pagination steps, the clear affordance | `::before { inset: -4px }` under `(pointer: coarse)` |
+| Icon buttons and the console's own dense controls — `.config-key-action`, antd's icon-only variant, the drawer close button, pagination steps, the clear affordance | `::before { inset: -4px }` under `(pointer: coarse)`, leaving ~3px of slop beyond the drawn box once the 1px border is accounted for |
 | Tabs and segmented items, which sit edge to edge | grow on the vertical axis only — a horizontal inset would steal the neighbour's taps |
 | antd's small switch (28×16) | grows to 44×22: the floor needs real dimensions, and five surfaces use it |
 | Number-input steppers (measured 1×19px) | hidden: a control a finger cannot hit is worse than an absent one, and the numeric keypad remains |
 | The request list's column resizer | hidden: a drag near a header edge means "scroll", never "resize a column" |
+| An action cluster whose gap is under 8px | the gap widens, so two 4px insets meet instead of overlapping |
+
+**The selector list is a maintenance surface, and its failure mode is silent.** The first version named
+only antd's icon-only variant, which missed the console's own dense controls — the key list's reveal,
+copy, edit and overflow buttons are plain `<button>`s, so they never received a hit area at all. What
+found them was the browser probe's metric being tightened to accept only the control and its
+descendants: the looser metric had counted an *ancestor* as a hit, which is exactly what a point just
+outside an unexpanded button lands on. A control added to the list must be icon-sized; adding a wide
+one would steal its neighbour's taps.
 
 The cost is stated rather than hidden: in an action cluster whose gap is 4px, two adjacent 4px
 insets overlap by 4px and the DOM-later control wins that band. That is accepted because the

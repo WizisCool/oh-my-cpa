@@ -390,6 +390,24 @@ export const SCENARIOS = [
           () => ({ enabled: true, healthy: true, collector: { mode: 'http_pull', captured: 500, coverage_gaps: 0 }, stats: { pending: 0 } }),
         ],
         [(url) => url.pathname.endsWith('/management/providers'), () => ({ providers: [pickerProvider], total: 1 })],
+        /* The key page's own data, so its add dialog is reachable: the dialog is the Modal-class
+           overlay this scenario covers. */
+        [(url) => url.pathname.endsWith('/management/api-keys'), () => ({
+          keys: [
+            { index: 0, key: 'omc-fixture-key-aaaaaaaaaaaaaaaa', fingerprint: 'fp-1', usage_fingerprint: 'ufp-1', length: 30, alias: 'Primary caller', alias_version: 1 },
+          ],
+          total: 1,
+        })],
+        [(url) => url.pathname.endsWith('/management/client-key-usage'), () => ({
+          window: { from: Date.now() - 86_400_000, to: Date.now() },
+          usage: [{ key_fingerprint: 'ufp-1', requests: 1284, failed: 3, total_tokens: 918_000, last_used_ms: Date.now() - 60_000 }],
+        })],
+        [(url) => url.pathname.endsWith('/management/config'), () => ({
+          scalars: {},
+          supported_keys: [],
+          revision: 'fixture-r1',
+          safe_yaml: 'api-keys:\\n  - omc-fixture-key-aaaaaaaaaaaaaaaa\\n',
+        })],
       ],
     },
     run: overlayBackDismisses,

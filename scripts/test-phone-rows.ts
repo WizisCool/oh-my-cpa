@@ -71,6 +71,23 @@ const record: Record_ = { id: 'r1', name: 'Primary', secret: 'sk-abcd', nested: 
   assert.deepEqual(fields.map((field) => field.value), ['Primary', 7]);
 }
 
+// ---- two nested paths under one parent are two fields, not one ----
+//
+// The identity is what names the field, keys it in React and finds it again in `renderedCell`, so
+// two paths sharing a first segment must not share an identity: the second column would be
+// unreachable and the first would silently stand in for it.
+{
+  const nested: Record_ = { id: 'r1', name: 'Primary', secret: 'sk-abcd', counts: { prompt: 3, completion: 9 } } as Record_;
+  const columns: PhoneRowSource<Record_>[] = [
+    { title: 'Prompt', dataIndex: ['counts', 'prompt'] },
+    { title: 'Completion', dataIndex: ['counts', 'completion'] },
+  ];
+  const fields = phoneRowFields(columns, nested, { index: 0 });
+
+  assert.deepEqual(fields.map((field) => field.key), ['counts.prompt', 'counts.completion']);
+  assert.deepEqual(fields.map((field) => field.value), [3, 9]);
+}
+
 // ---- the render function is called the way antd calls it ----
 //
 // A cell and a field must format a value identically, which holds only if the renderer receives

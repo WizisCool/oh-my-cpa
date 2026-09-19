@@ -1,4 +1,4 @@
-import { Button, Card, Popconfirm, Switch, Table, Tag, Tooltip } from 'antd';
+import { Button, Card, Popconfirm, Spin, Switch, Table, Tag, Tooltip } from 'antd';
 import { DeleteOutlined, EditOutlined, EyeOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -427,7 +427,14 @@ export function ProviderTable({
   return (
     <Card>
       {isPhone ? (
-        providers.length === 0 ? (
+        // Loading before emptiness: the empty copy is a claim about the gateway, and it is not true
+        // while the first read is still in flight. Stale rows stay on screen beneath it, which is the
+        // console's rule for a refresh rather than a first load.
+        providersLoading && providers.length === 0 ? (
+          <div className="phone-list-loading">
+            <Spin />
+          </div>
+        ) : providers.length === 0 ? (
           <p className="empty-copy">{t('pro.providers_empty')}</p>
         ) : (
           <div>

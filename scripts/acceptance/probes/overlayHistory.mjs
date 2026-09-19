@@ -50,7 +50,9 @@ async function arriveFrom(base, page, route) {
 async function settled(page) {
   return until(async () => {
     const state = await page.evaluate(OVERLAY_STATE);
-    return state.drawers === 0 ? state : false;
+    // Both classes are waited out, because both are wired to the same hook and either can be the one
+    // a Back dismissed.
+    return state.drawers === 0 && state.modals === 0 ? state : false;
   }, { label: 'the overlay to be dismissed', timeoutMs: 5_000 }).catch(async () => page.evaluate(OVERLAY_STATE));
 }
 
@@ -118,6 +120,22 @@ export async function overlayBackDismisses({ base, page, check }) {
     'the Back after an apply clears the filter rather than the drawer it left behind',
     !afterBack.route.includes('request_id='),
     `route=${afterBack.route}`,
+  );
+
+  // ---- a Modal-class overlay ----
+  //
+  // The hook is wired into dialogs as well as drawers, and a scenario that only ever opened a drawer
+  // would pass while Back did nothing for every dialog in the console.
+  await arriveFrom(base, page, '/api-keys');
+  await page.locator('.keys-page').first().waitFor({ timeout: 20_000 });
+  await page.getByRole('button', { name: /Add API Key|添加 API 密钥/ }).first().click();
+  await page.locator('.ant-modal').first().waitFor({ state: 'visible', timeout: 5_000 });
+  await page.goBack();
+  const afterModalBack = await settled(page);
+  check(
+    'a Back closes a dialog and leaves the route alone',
+    afterModalBack.modals === 0 && afterModalBack.route.startsWith(`${basePath}/api-keys`),
+    `modals=${afterModalBack.modals} route=${afterModalBack.route}`,
   );
 
   // ---- the provider editor ----

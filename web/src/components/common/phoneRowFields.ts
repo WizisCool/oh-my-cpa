@@ -103,9 +103,13 @@ export interface PhoneRowField {
 function columnIdentity(column: PhoneRowSource): string | undefined {
   if (column.key !== undefined) return String(column.key);
   if (typeof column.dataIndex === 'string') return column.dataIndex;
-  // A path array is addressed by its first segment for the purpose of *naming* the field;
-  // the value itself is still read through the whole path below.
-  if (Array.isArray(column.dataIndex) && column.dataIndex.length > 0) return String(column.dataIndex[0]);
+  // The whole path, joined, because this identity is used as a React key and to find the column
+  // again in `renderedCell`. Two columns reading `['nested', 'count']` and `['nested', 'total']`
+  // would both answer `nested` if only the first segment were taken, and the second would then be
+  // unreachable while the first silently stood in for it.
+  if (Array.isArray(column.dataIndex) && column.dataIndex.length > 0) {
+    return column.dataIndex.map(String).join('.');
+  }
   return undefined;
 }
 

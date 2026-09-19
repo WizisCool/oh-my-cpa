@@ -72,7 +72,6 @@ export const OAuthModelAliasDrawer: React.FC<OAuthModelAliasDrawerProps> = ({
   providerOptions,
 }) => {
   const t = useT();
-  useOverlayHistory({ isOpen: open, onClose });
   const { message, modal } = AntdApp.useApp();
   const queryClient = useQueryClient();
   const rowCounterRef = useRef(0);
@@ -231,6 +230,17 @@ export const OAuthModelAliasDrawer: React.FC<OAuthModelAliasDrawerProps> = ({
       onOk: onClose,
     });
   };
+
+  /**
+   * Back goes through the same guard the drawer's own Cancel does.
+   *
+   * `onClose` is the raw callback, and wiring it here would make a physical key discard an unsaved
+   * alias edit without the confirmation the button beside it shows - two ways of leaving one panel
+   * behaving differently, which is the defect this drawer's guard exists to prevent. The hook also
+   * re-arms the sentinel when the guard *refuses* the close, so declining the confirmation does not
+   * leave the next Back press to navigate the page out from under an open editor.
+   */
+  useOverlayHistory({ isOpen: open, onClose: handleAttemptClose });
 
   const columns = [
     {

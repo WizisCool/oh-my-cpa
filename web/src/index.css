@@ -669,6 +669,9 @@ a { color: inherit; }
 .type-list span { border: 1px solid var(--border); padding: 4px 7px; color: var(--muted); font-size: 12px; }
 .type-list b { color: var(--fg); font-weight: 500; }
 .empty-copy { color: var(--muted); font-size: 13px; }
+/* The phone list's first-load indicator, in the space the rows will occupy. Centred because it
+   stands in for a block of content rather than sitting beside a label. */
+.phone-list-loading { display: flex; justify-content: center; padding: 40px 0; }
 .runtime-list { margin: 8px 0 0; }
 .runtime-list div { display: flex; justify-content: space-between; gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--border-soft); }
 .runtime-list dt { color: var(--muted); font-size: 13px; }
@@ -2070,7 +2073,9 @@ a { color: inherit; }
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  /* 8px, so the touch rules' 4px insets on these 32px controls meet instead of overlapping by
+     2px. Four buttons at 32px plus three 8px gaps is 152px, which fits every phone row. */
+  gap: 8px;
 }
 
 /* 32x32px square key action buttons */
@@ -2966,18 +2971,32 @@ a { color: inherit; }
      design.md §4 is what the console's density *is*, so enlarging every 28px button would
      trade a reachability defect for a layout one.
 
-     The cost is stated rather than hidden: in an action cluster whose gap is 4px, two
-     adjacent 4px insets overlap by 4px, and the DOM-later button wins that band. That is
-     accepted here because the band is smaller than the finger contact area the inset was
-     added for, and because the surfaces with 4px clusters (provider, key and plugin rows)
-     re-space their actions when they gain a phone row layout. */
+     **The scope is controls small in both dimensions.** A control that is wide - a labelled
+     text button, or any of the console's 32px-tall buttons, which is antd's own height
+     everywhere - is aimable even when it is short, so it keeps its box. What cannot be aimed
+     at is a control with no label and no width: an icon button.
+
+     `.config-key-action` and `.ant-drawer-close` are listed beside antd's icon-only variant
+     because they are the console's own dense controls rather than antd's: they are plain
+     buttons, so the first version of this rule missed them, and the browser probe missed the
+     gap in turn because its metric accepted an *ancestor* as a hit - which is exactly what a
+     probe just outside an unexpanded button lands on. A control added here must be a real
+     icon-sized control; adding a wide one would steal its neighbour's taps.
+
+     The remaining cost is stated rather than hidden: in a cluster whose gap is under 8px, two
+     adjacent 4px insets overlap, and the DOM-later control wins that band. The clusters that
+     are still that tight are the ones whose controls are wide enough not to need an inset. */
   .ant-btn.ant-btn-icon-only,
+  .ant-drawer-close,
+  .config-key-action,
   .ant-pagination-prev,
   .ant-pagination-next,
   .ant-input-clear-icon {
     position: relative;
   }
   .ant-btn.ant-btn-icon-only::before,
+  .ant-drawer-close::before,
+  .config-key-action::before,
   .ant-pagination-prev::before,
   .ant-pagination-next::before,
   .ant-input-clear-icon::before {

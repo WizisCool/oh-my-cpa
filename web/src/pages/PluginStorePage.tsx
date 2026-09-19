@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Card,
   Pagination,
+  Spin,
   Table,
   Tag,
   Button,
@@ -204,7 +205,13 @@ export const PluginStorePage: React.FC = () => {
 
       <Card>
         {isPhone ? (
-          storePlugins.length === 0 ? (
+          /* Loading before emptiness: the empty copy is a claim about the store, and it is not true
+             while the first read is still in flight. */
+          isLoading && storePlugins.length === 0 ? (
+            <div className="phone-list-loading">
+              <Spin />
+            </div>
+          ) : storePlugins.length === 0 ? (
             <p className="empty-copy">{t('store.empty')}</p>
           ) : (
             <>

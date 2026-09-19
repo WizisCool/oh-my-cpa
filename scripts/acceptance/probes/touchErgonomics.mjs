@@ -14,6 +14,8 @@
  * written for obey them.
  */
 
+import { until } from '../harness.mjs';
+
 /** The context is genuinely coarse, or every claim below is vacuous. */
 const MEDIA = `({
   pointerCoarse: matchMedia('(pointer: coarse)').matches,
@@ -21,36 +23,120 @@ const MEDIA = `({
 })`;
 
 /**
- * The controls a finger can actually reach, probed from the document.
+ * How far a finger still hits each dense control, measured outward from its drawn box.
  *
- * Measured 4px outside each control's drawn box rather than read from the stylesheet: an
- * expanded hit area is invisible to `getBoundingClientRect`, and inferring one from a rule would
- * make this agree with a rule that does not work.
+ * A measurement rather than a boundary sample, and the difference is not academic. The first
+ * version probed a fixed 3px or 4px outside the control and asked whether the point hit it, which
+ * tests the exact edge of the hit area: the rule expands a control by 4px measured from its padding
+ * box, a 1px border makes that 3px beyond the drawn box, and a point on exactly that boundary is
+ * inside it on the top and left edges and outside it on the bottom and right ones. The result was
+ * four controls reported as unreachable while the rule was working perfectly.
+ *
+ * Reading the reach instead removes the edge question entirely - "at least 3px" is a claim about
+ * what a finger gets, and a boundary is not - and it reports the number it measured, so a failure
+ * says how much slop the control actually has.
+ *
+ * Two things keep it honest, both of which the first version got wrong:
+ *
+ *   - **Off-screen is not a pass.** A point outside the viewport used to count as a hit, so a
+ *     control 664px to the right of a 390px screen - the exact defect this adaptation exists to
+ *     remove - passed the check that exists to catch it: all of its probes were off-screen, so all
+ *     of them counted.
+ *   - **Only the control and its descendants count.** An ancestor used to count too, which is what
+ *     a point just outside the drawn box lands on when no hit area has been expanded at all - so the
+ *     check passed precisely for the controls that had not been fixed. Tightening this is what found
+ *     `.config-key-action`: the console's own dense controls are plain buttons rather than antd's
+ *     icon-only variant, so the touch rule had never reached them.
+ *
+ * It measures controls that are **small in both dimensions**, which is the scope `docs/design.md` §8
+ * states: a control that is wide - a labelled button, or any of the console's 32px-tall buttons - is
+ * aimable even when it is short, so requiring 40px of height from it would be asserting a change the
+ * design system deliberately does not make.
+ *
+ * A control that is not painted is skipped, and that is not a loophole: an affordance the reader is
+ * not being offered cannot be unreachable. It is what one measured case turned out to be - antd's
+ * clear affordance is `visibility: hidden` while its field has nothing to clear, so at those moments
+ * it is not a control at all. It is skipped only when it is genuinely not hit-testable at its own
+ * centre *and* hidden; a control that is merely covered by something else still fails, which is how
+ * the ancestor-acceptance hole above was found.
  */
+
+/**
+ * The hit slop every dense control must have beyond its drawn box, in pixels.
+ *
+ * The rule's inset is 4px measured from the padding box, and a 1px border makes that 3px beyond the
+ * drawn box - so 3 is the nominal figure and the floor is set one below it, because the measurement
+ * walks outward in whole pixels from a fractional edge: a 32px control with a 3px nominal slop
+ * measured 3px up and left and 2px down and right, which is the pixel grid rather than the rule.
+ * The floor still distinguishes the two states it has to: a control whose hit area was never
+ * expanded measures 0, and one whose expansion was shrunk to 2px measures 1.
+ */
+const MIN_HIT_SLOP = 2;
+
+/** How far outward the measurement looks before it stops caring. */
+const MAX_HIT_SLOP = 12;
+
 const REACHABILITY = (selector) => `(() => {
+  const MIN_SLOP = ${MIN_HIT_SLOP};
+  const MAX_SLOP = ${MAX_HIT_SLOP};
   const controls = Array.from(document.querySelectorAll(${JSON.stringify(selector)}));
   const unreachable = [];
   for (const control of controls) {
     const box = control.getBoundingClientRect();
     if (box.width === 0 || box.height === 0) continue;
-    if (box.height >= 40 && box.width >= 40) continue;
-    const probes = [
-      [box.left + box.width / 2, box.top - 4],
-      [box.left + box.width / 2, box.bottom + 4],
-      [box.left - 4, box.top + box.height / 2],
-      [box.right + 4, box.top + box.height / 2],
-    ];
-    const hits = probes.filter(([x, y]) => {
-      if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return true;
+    if (box.width >= 40 || box.height >= 40) continue;
+    if (getComputedStyle(control).visibility === 'hidden') continue;
+
+    const hits = (x, y) => {
       const hit = document.elementFromPoint(x, y);
-      return hit && (hit === control || control.contains(hit) || hit.contains(control));
-    });
-    if (hits.length === 0) {
+      return Boolean(hit && (hit === control || control.contains(hit)));
+    };
+    // One direction at a time, from the drawn edge outward, stopping at the first point that is not
+    // the control or that leaves the viewport. Leaving the viewport stops the measurement rather than
+    // failing it: a control against the screen's edge cannot have slop on the side that is off it,
+    // and that direction is excluded from the floor below.
+    const reach = (axis, sign) => {
+      let furthest = 0;
+      for (let step = 1; step <= MAX_SLOP; step += 1) {
+        const x = axis === 'x'
+          ? (sign < 0 ? box.left - step : box.right + step)
+          : box.left + box.width / 2;
+        const y = axis === 'y'
+          ? (sign < 0 ? box.top - step : box.bottom + step)
+          : box.top + box.height / 2;
+        if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) break;
+        if (!hits(x, y)) break;
+        furthest = step;
+      }
+      return furthest;
+    };
+
+    const measured = {
+      up: reach('y', -1),
+      down: reach('y', 1),
+      left: reach('x', -1),
+      right: reach('x', 1),
+    };
+    // A direction is only required where there is room for it on screen.
+    const required = [
+      box.top >= MIN_SLOP ? measured.up : null,
+      box.bottom + MIN_SLOP <= window.innerHeight ? measured.down : null,
+      box.left >= MIN_SLOP ? measured.left : null,
+      box.right + MIN_SLOP <= window.innerWidth ? measured.right : null,
+    ].filter((value) => value !== null);
+
+    if (required.length === 0 || Math.min(...required) < MIN_SLOP) {
       unreachable.push({
         node: control.tagName.toLowerCase() + (control.className ? '.' + String(control.className).split(/\\s+/)[0] : ''),
         label: control.getAttribute('aria-label') || control.textContent?.trim().slice(0, 20) || '',
         w: Math.round(box.width),
         h: Math.round(box.height),
+        slop: measured,
+        worstRequired: required.length === 0 ? 'off-screen' : Math.min(...required),
+        // Whether the control is hit-testable at its own centre at all: a control covered by, or
+        // not painted as part of, its own box reports zero slop for a different reason than one
+        // whose hit area was never expanded.
+        centre: hits(box.left + box.width / 2, box.top + box.height / 2),
       });
     }
   }
@@ -88,6 +174,13 @@ export async function touchErgonomics({ base, page, check }) {
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
   await page.locator('.dashboard-page').first().waitFor({ timeout: 20_000 });
 
+  // Waited for rather than read immediately: the provider rows arrive from a second query, and
+  // `.dashboard-page` is painted long before they do. Reading on the page's own readiness made this
+  // check report a missing control for a panel that simply had not answered yet.
+  await until(
+    async () => (await page.locator('.provider-jump-arrow').count()) > 0,
+    { label: "the dashboard's provider rows", timeoutMs: 10_000 },
+  ).catch(() => {});
   const arrowOpacity = await page.evaluate(OPACITY_OF('.provider-jump-arrow'));
   check(
     'a control a hover would reveal is drawn where hovering is impossible',
@@ -99,6 +192,10 @@ export async function touchErgonomics({ base, page, check }) {
   await page.goto(`${base}/usage/events`, { waitUntil: 'domcontentloaded' });
   await page.locator('.request-row').first().waitFor({ timeout: 20_000 });
 
+  await until(
+    async () => (await page.locator('.req-id-quick-copy').count()) > 0,
+    { label: 'the request row quick-copy control', timeoutMs: 10_000 },
+  ).catch(() => {});
   const quickCopyOpacity = await page.evaluate(OPACITY_OF('.req-id-quick-copy'));
   check(
     'the request id quick-copy control is drawn on a touch device',
@@ -106,10 +203,22 @@ export async function touchErgonomics({ base, page, check }) {
     `opacity=${quickCopyOpacity}`,
   );
 
-  // The filter drawer's icon controls are the case the expanded hit areas exist for: 28px squares
+  // The filter drawer's icon controls are the case the expanded hit areas exist for: 32px squares
   // in a cluster, too small to hit without them.
+  //
+  // The drawer is measured only once its box has stopped moving. A drawer read mid-slide has every
+  // control off the right edge, which the metric now reports as unreachable - correctly, but as a
+  // fact about the instant it was read rather than about the control.
   await page.getByRole('button', { name: /更多筛选|More filters/i }).first().click();
   await page.locator('.ant-drawer-content-wrapper').first().waitFor({ state: 'visible', timeout: 5_000 });
+  const drawerBox = () => page.locator('.ant-drawer-content-wrapper').first().boundingBox();
+  let previous = await drawerBox();
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    await page.waitForTimeout(50);
+    const current = await drawerBox();
+    if (current && previous && current.x === previous.x && current.width === previous.width) break;
+    previous = current;
+  }
   const unreachable = await page.evaluate(REACHABILITY('.ant-drawer-content-wrapper button'));
   check(
     'every control in the filter drawer is reachable by a finger',

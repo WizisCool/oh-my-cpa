@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import {
   Card,
   Pagination,
+  Spin,
   Table,
   Tag,
   Button,
@@ -301,7 +302,13 @@ export const PluginsPage: React.FC = () => {
 
       <Card>
         {isPhone ? (
-          plugins.length === 0 ? (
+          /* Loading before emptiness: the empty copy is a claim about the gateway, and it is not
+             true while the first read is still in flight. */
+          isLoading && plugins.length === 0 ? (
+            <div className="phone-list-loading">
+              <Spin />
+            </div>
+          ) : plugins.length === 0 ? (
             <p className="empty-copy">{t('plg.empty')}</p>
           ) : (
             <>

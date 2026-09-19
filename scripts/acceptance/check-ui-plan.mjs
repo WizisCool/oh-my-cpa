@@ -123,15 +123,18 @@ const SCENARIO_PATHS = [
     scenarios: ['phone-lists'],
   },
   // The provider console and its icon picker: the drawer/modal stacking assertion
-  // is about those two overlays specifically, and picking a mark from the picker is
-  // the page's own write path.
+  // is about those two overlays specifically, picking a mark from the picker is the
+  // page's own write path, and the table is where the phone rendering lives (ADR 0012).
+  // A rule that named only the first two would let a change to the provider phone row
+  // run no scenario that covers it - which is the silent omission this planner exists to
+  // prevent, and the reason its own test pins this mapping.
   {
     prefix: 'web/src/components/IconPickerModal',
     scenarios: ['icon-picker-stacking', 'provider-icon-pick'],
   },
   {
     prefix: 'web/src/pages/ProvidersPage',
-    scenarios: ['icon-picker-stacking', 'provider-icon-pick'],
+    scenarios: ['icon-picker-stacking', 'provider-icon-pick', 'phone-lists'],
   },
   // The provider console's own modules: the list table, the editor drawer, the
   // writes and the icon overlay. The page renders nothing but these, so a change
@@ -139,7 +142,31 @@ const SCENARIO_PATHS = [
   // drawer is one of the two overlays the stacking assertion is about.
   {
     prefix: 'web/src/components/providers/',
-    scenarios: ['icon-picker-stacking', 'provider-icon-pick'],
+    scenarios: ['icon-picker-stacking', 'provider-icon-pick', 'phone-lists'],
+  },
+  // The remaining list surfaces ADR 0012 converted. Each renders rows on a phone and a table
+  // otherwise, and `phone-lists` is the scenario that reads both renderings of each; without a
+  // rule they fall through to "an unrecognised frontend path widens the plan", which is safe but
+  // runs all 21 scenarios for a one-line change to a page a single scenario covers.
+  {
+    prefix: 'web/src/pages/PluginsPage',
+    scenarios: ['phone-lists'],
+  },
+  {
+    prefix: 'web/src/pages/PluginStorePage',
+    scenarios: ['phone-lists'],
+  },
+  {
+    prefix: 'web/src/pages/pricing/',
+    scenarios: ['phone-lists'],
+  },
+  {
+    prefix: 'web/src/pages/LogsPage',
+    scenarios: ['phone-lists'],
+  },
+  {
+    prefix: 'web/src/pages/CapabilityPlaceholderPage',
+    scenarios: ['phone-lists'],
   },
   // The dashboard: the sparkline marks its tiles draw and the daily-token calendar
   // beneath them. Both live on this page, and the page is what the scenarios load,

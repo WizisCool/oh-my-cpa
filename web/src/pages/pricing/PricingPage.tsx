@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, App as AntdApp, Button, Empty, Form, Input, InputNumber, Modal, Pagination, Popconfirm, Select, Table, Tooltip } from 'antd';
+import { Alert, App as AntdApp, Button, Empty, Form, Input, InputNumber, Modal, Pagination, Popconfirm, Select, Spin, Table, Tooltip } from 'antd';
 import {
   ReloadOutlined,
   SyncOutlined,
@@ -598,7 +598,13 @@ export const PricingPage: React.FC = () => {
 
         {/* Dense Data Table, or one row per model on a phone (ADR 0012) */}
         {isPhone ? (
-          filteredData.length === 0 ? (
+          /* Loading before emptiness: the empty copy is a claim about the catalog, and it is not
+             true while the first read is still in flight. */
+          result.isLoading && filteredData.length === 0 ? (
+            <div className="phone-list-loading">
+              <Spin />
+            </div>
+          ) : filteredData.length === 0 ? (
             <p className="empty-copy">{t('pricing.table.empty')}</p>
           ) : (
             <>
