@@ -92,6 +92,10 @@ the price table and unpriced models still load.
 ## Known limits
 
 - First sync after boot needs a complete CPA catalog and network access to
-  models.dev; a failure keeps the last complete catalog and good prices.
+  models.dev; a failure keeps the last complete catalog and good prices. The read
+  is refused whole rather than partially published — publishing only the providers
+  that answered would prune the rates of the ones that failed — and the aggregate
+  keeps each source's error type, so a gateway that lacks an endpoint stays
+  classifiable (`IsMissingCapability`) apart from one that failed to answer.
 - Cached-token prices differ per provider; a missing field in the catalog means
   that bucket is billed at zero in estimates (recorded as-is, not invented).

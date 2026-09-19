@@ -318,3 +318,85 @@ func TestListAllConfiguredModels(t *testing.T) {
 		t.Fatalf("alias catalog mapping = %v", catalog)
 	}
 }
+
+// The catalog is read from several sources in one pass, so a gateway that does not
+// have one of the endpoints has to stay classifiable as such.
+//
+// `/auth-files` is the endpoint that makes this concrete: a CPA release that
+// predates it answers 404, and the console has to read that as "this gateway cannot
+// tell us" rather than as a broken read. The catalog is still refused whole - the
+// pricing service replaces its model table from this snapshot, so publishing the
+// providers that happened to answer would prune the rates of the ones that did not
+// - and the refusal has to keep the original failures reachable for `errors.As`.
+func TestConfiguredModelCatalogKeepsItsFailuresTypeable(t *testing.T) {
+	// Everything answers, so the aggregate carries exactly the one failure under
+	// test rather than a pile of unrelated ones.
+	newGateway := func(status int) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			writer.Header().Set("Content-Type", "application/json")
+			if request.URL.Path == "/v0/management/auth-files" {
+				writer.WriteHeader(status)
+				_, _ = writer.Write([]byte(`{"error":"cannot list auth files"}`))
+				return
+			}
+			_, _ = writer.Write([]byte(`{}`))
+		}))
+	}
+
+	for _, testCase := range []struct {
+		name      string
+		status    int
+		isMissing bool
+	}{
+		{name: "the endpoint is not there", status: http.StatusNotFound, isMissing: true},
+		{name: "the gateway failed", status: http.StatusInternalServerError},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			server := newGateway(testCase.status)
+			defer server.Close()
+			client, err := NewClient(server.URL, "key", time.Second, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			catalog, err := client.ListConfiguredModelCatalog(context.Background())
+			if err == nil {
+				t.Fatal("a failed source must fail the catalog")
+			}
+			if catalog != nil {
+				t.Fatalf("a refused catalog must not publish a partial one, got %v", catalog)
+			}
+			if IsMissingCapability(err) != testCase.isMissing {
+				t.Fatalf("IsMissingCapability = %t, want %t (error %v)", IsMissingCapability(err), testCase.isMissing, err)
+			}
+			// The aggregated message is persisted as the pricing sync's last error and
+			// rendered in a one-line strip, and it has to name the source that failed.
+			if strings.Contains(err.Error(), "\n") {
+				t.Fatalf("the catalog message must stay a single line, got %q", err.Error())
+			}
+			if !strings.Contains(err.Error(), "auth-files") {
+				t.Fatalf("the message must name the source that failed, got %q", err.Error())
+			}
+		})
+	}
+
+	// A gateway that cannot be reached at all is the other half of the
+	// classification: every source fails, and none of them is a missing endpoint.
+	reachable := newGateway(http.StatusOK)
+	url := reachable.URL
+	reachable.Close()
+	client, err := NewClient(url, "key", time.Second, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog, err := client.ListConfiguredModelCatalog(context.Background())
+	if err == nil {
+		t.Fatal("an unreachable gateway must fail the catalog")
+	}
+	if catalog != nil {
+		t.Fatalf("an unreachable gateway must not publish a catalog, got %v", catalog)
+	}
+	if IsMissingCapability(err) {
+		t.Fatalf("a transport failure must not be reported as a missing capability, got %v", err)
+	}
+}

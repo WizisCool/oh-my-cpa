@@ -107,10 +107,10 @@ func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]str
 			modelSet[id] = target
 		}
 	}
-	var errs []string
+	var errs []error
 
 	if authResp, err := c.AuthFiles(ctx); err != nil {
-		errs = append(errs, "auth-files: "+err.Error())
+		errs = append(errs, fmt.Errorf("auth-files: %w", err))
 	} else {
 		// Auth-files commonly omits its models. Resolve missing lists in waves
 		// of at most four, not one HTTP call per card/render or unbounded fanout.
@@ -132,13 +132,23 @@ func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]str
 					continue
 				}
 				wg.Add(1)
-				go func(i int, name string) { defer wg.Done(); resolved[i], failures[i] = c.AuthFileModels(ctx, name) }(i, file.Name)
+				go func(i int, name string) {
+					defer wg.Done()
+					models, err := c.AuthFileModels(ctx, name)
+					if err != nil {
+						// Named here rather than at the aggregate, because this is the only
+						// place the file the failure belongs to is still in hand.
+						failures[i] = fmt.Errorf("auth-file %q models: %w", name, err)
+						return
+					}
+					resolved[i] = models
+				}(i, file.Name)
 			}
 			wg.Wait()
 		}
 		for i, models := range resolved {
 			if failures[i] != nil {
-				errs = append(errs, "auth-file models: "+failures[i].Error())
+				errs = append(errs, failures[i])
 				continue
 			}
 			for _, m := range models {
@@ -161,7 +171,7 @@ func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]str
 		if err != nil {
 			// A family an older CPA release does not have is not a catalog failure.
 			if !IsMissingCapability(err) {
-				errs = append(errs, string(family)+": "+err.Error())
+				errs = append(errs, fmt.Errorf("%s: %w", family, err))
 			}
 			continue
 		}
@@ -183,7 +193,7 @@ func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]str
 	}
 
 	if oaiResp, err := c.OpenAICompatibility(ctx); err != nil {
-		errs = append(errs, "openai-compatibility: "+err.Error())
+		errs = append(errs, fmt.Errorf("openai-compatibility: %w", err))
 	} else {
 		for _, entry := range oaiResp.Entries {
 			if entry.Disabled {
@@ -203,11 +213,38 @@ func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]str
 	}
 
 	if len(errs) > 0 {
-		return nil, fmt.Errorf("incomplete CPA model catalog: %s", strings.Join(errs, "; "))
+		// Refused whole rather than published partially: the pricing service
+		// replaces its model table from this snapshot, so a catalog missing every
+		// provider that failed to read would prune the rates of models that are
+		// still configured (see pricing.Service.refreshModels).
+		return nil, &catalogError{failures: errs}
 	}
 
 	return modelSet, nil
 }
+
+// catalogError aggregates the failures of one catalog read.
+//
+// It exists so the message stays on a single line - this text is persisted as the
+// pricing sync's last error and rendered in a one-line telemetry strip, where a
+// list of sources run together reads as one sentence - while `Unwrap() []error`
+// still lets `errors.Is` and `errors.As` reach the original failures. That is what
+// lets a caller tell a gateway that does not have the endpoint apart from one that
+// failed to answer (`IsMissingCapability`), which an aggregated string cannot
+// express however carefully it is formatted.
+type catalogError struct {
+	failures []error
+}
+
+func (e *catalogError) Error() string {
+	messages := make([]string, 0, len(e.failures))
+	for _, failure := range e.failures {
+		messages = append(messages, failure.Error())
+	}
+	return "incomplete CPA model catalog: " + strings.Join(messages, "; ")
+}
+
+func (e *catalogError) Unwrap() []error { return e.failures }
 
 // ListAllConfiguredModels is the ID-only view of the authoritative catalog.
 func (c *Client) ListAllConfiguredModels(ctx context.Context) ([]string, error) {
