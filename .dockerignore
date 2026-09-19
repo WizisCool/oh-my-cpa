@@ -16,3 +16,14 @@ internal/web/dist/*
 oh-my-cpa-data
 caddy-data
 caddy-config
+
+# A developer's own environment file, if one exists locally: it carries their master
+# key and their CPA credentials, and nothing in an image needs it. The server reads
+# configuration from the environment, which the platform supplies.
+.env
+# Test and browser-acceptance output. It is hundreds of megabytes of screenshots and
+# traces, none of which is build input, and every byte of it has to be uploaded to a
+# remote builder before the build can start.
+tmp
+# Agent session state, for the same reason.
+.pi

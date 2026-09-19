@@ -4,6 +4,9 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY web/package.json ./web/package.json
 RUN corepack enable && pnpm install --frozen-lockfile
 COPY web/ ./web/
+# vite.config.ts resolves two helpers out of scripts/ by relative path (the dev proxy
+# target and the icon-catalog generator), so the frontend stage needs them beside web/.
+COPY scripts/ ./scripts/
 RUN pnpm --dir web run build
 
 FROM golang:1.24.13-alpine AS server
