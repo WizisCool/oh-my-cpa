@@ -10,6 +10,82 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 )
 
+// The overlay maps must not record an intent the gateway refused.
+//
+// `provider_names` and `provider_websites` are what this console renders - the
+// row, the request list's provider label and the name resolver all read them - so
+// an overlay written before the CPA write leaves the console naming a credential
+// a way the gateway never accepted, and nothing tells the operator. The website
+// half was already written on the success path; this pins that the name half is
+// too, and that a refused write moves neither.
+func TestProviderUpdateWritesBothOverlaysOnlyAfterTheWrite(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+
+	// The config API-key families and openai-compatibility have separate write
+	// paths, so both are exercised rather than one standing in for the other. The
+	// refusal is an out-of-range position: the index check runs inside the gated
+	// read-modify-write, so the request never reaches CPA at all.
+	for _, testCase := range []struct {
+		family     string
+		refusedID  string
+		acceptedID string
+	}{
+		{family: "codex", refusedID: "codex-99", acceptedID: "codex-0"},
+		{family: "openai-compatibility", refusedID: "openai-compat-99", acceptedID: "openai-compat-0"},
+	} {
+		body := func(name, website string) string {
+			return fmt.Sprintf(`{"family":%q,"name":%q,"base_url":"https://relay.example.test/v1","website":%q}`,
+				testCase.family, name, website)
+		}
+
+		resp, payload := doJSON(t, fixture.client, http.MethodPut,
+			fixture.baseURL+"/omc/api/v1/management/providers/"+testCase.refusedID,
+			body("Ghost Name", "https://ghost.example.test"))
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("%s: an out-of-range index must be refused, got %d body %s", testCase.family, resp.StatusCode, payload)
+		}
+		assertNoProviderOverlay(t, fixture, testCase.family, testCase.refusedID)
+
+		// The same save against a credential that does exist records both overlays,
+		// asserted through the list the console renders rather than through storage,
+		// so the test fails if either map stops being read back.
+		resp, payload = doJSON(t, fixture.client, http.MethodPut,
+			fixture.baseURL+"/omc/api/v1/management/providers/"+testCase.acceptedID,
+			body("Named Provider", "https://named.example.test"))
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s: update status = %d body %s", testCase.family, resp.StatusCode, payload)
+		}
+		stored := websiteOfProvider(t, fixture.client, fixture.baseURL, testCase.acceptedID)
+		if stored.Name != "Named Provider" || stored.Website != "https://named.example.test" {
+			t.Fatalf("%s: an accepted write must record both overlays, got name=%q website=%q",
+				testCase.family, stored.Name, stored.Website)
+		}
+	}
+}
+
+// assertNoProviderOverlay reads the two preference documents directly, so it can
+// tell "this id was never written" from "this write was refused".
+func assertNoProviderOverlay(t *testing.T, fixture providerTestFixture, family, id string) {
+	t.Helper()
+	ctx := context.Background()
+	for _, key := range []string{repository.PreferenceProviderNames, repository.PreferenceProviderWebsites} {
+		raw, found, err := fixture.handler.repo.GetPreference(ctx, key)
+		if err != nil {
+			t.Fatalf("%s: read %s: %v", family, key, err)
+		}
+		stored := map[string]string{}
+		if found && raw != "" {
+			if err := json.Unmarshal([]byte(raw), &stored); err != nil {
+				t.Fatalf("%s: %s is not a string map: %s", family, key, raw)
+			}
+		}
+		if value, present := stored[id]; present {
+			t.Fatalf("%s: a refused write recorded %s[%s]=%q; the console would name a provider CPA never accepted",
+				family, key, id, value)
+		}
+	}
+}
+
 // A provider's operator metadata is keyed by its position in the family, so a
 // delete has to move every later entry's metadata down with it. The icon overlay
 // is written by the console through the preferences API rather than by a provider

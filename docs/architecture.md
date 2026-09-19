@@ -176,7 +176,12 @@ Properties to preserve when changing this code:
   by the console through the preferences API rather than by a provider save, so
   the server both re-keys the stored document and the console replays the same
   shift into its local cache - a cache that kept the deleted key would write it
-  back on the next icon change.
+  back on the next icon change. The name and website overlays of an update are
+  written only after the gateway accepted the write, while the icon overlay is
+  written by the console through the preferences API and so is never part of a
+  provider save: the row, the request list's provider label and the name resolver
+  read these maps, so an entry recorded ahead of a refused write would leave the
+  console naming a credential CPA never accepted.
 
 ### Provider families are data, not code paths
 

@@ -259,15 +259,15 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 		disableCoolingPtr = &t
 	}
 
-	if name != "" {
-		h.saveProviderName(ctx, id, name)
-	}
-
 	if auditErr := h.recordAudit(request, "provider.update", "provider", id, "attempt", map[string]any{"name": name}); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit failure; provider update aborted")
 		return
 	}
 
+	// The operator's own overlays are written only by the branches below, once the
+	// gateway has accepted the write. The row, the request list's provider label
+	// and the name resolver all read these maps, so an overlay recorded ahead of a
+	// refused write would leave this console naming a provider CPA never accepted.
 	switch family {
 	case openAICompatibilityFamily:
 		if err := gatedProviderListWrite(h, ctx,
@@ -328,6 +328,7 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 			writeProviderWriteError(writer, err)
 			return
 		}
+		h.saveProviderName(ctx, id, name)
 		h.applyProviderWebsite(ctx, id, website, websiteProvided)
 	default:
 		spec, isConfigFamily := lookupProviderConfigFamily(family)
@@ -352,6 +353,7 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 			writeProviderWriteError(writer, err)
 			return
 		}
+		h.saveProviderName(ctx, id, name)
 		h.applyProviderWebsite(ctx, id, website, websiteProvided)
 	}
 
