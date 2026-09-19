@@ -41,6 +41,7 @@ const SUITES = [
   { name: 'clipboard strategy', script: 'scripts/test-clipboard.ts', flags: ['--experimental-strip-types'] },
   { name: 'visible clock', script: 'scripts/test-visible-clock.ts', flags: ['--experimental-strip-types'] },
   { name: 'chart marks', script: 'scripts/test-chart-marks.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
+  { name: 'dashboard cost note', script: 'scripts/test-dashboard-cost-note.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'token heatmap', script: 'scripts/test-token-heatmap.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'token display', script: 'scripts/test-token-display.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'theme presets', script: 'scripts/test-theme-presets.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },

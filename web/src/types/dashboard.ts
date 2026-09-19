@@ -55,6 +55,29 @@ export interface DashboardMetrics {
   avg_ttft_ms: number | null;
 }
 
+/**
+ * costNoteKey names the caption the cost tile shows for a window.
+ *
+ * The server reports three states and they are not interchangeable: a window with no
+ * request at all, a window whose requests were partly unpriced, and a window whose
+ * requests all locked a price. Only the first two are caveats. Reading the last one as
+ * a caveat - which is what a two-branch check does, because "estimated" is not
+ * "partial" - labels a complete total as if no price were configured.
+ *
+ * Returns undefined when the total is complete and needs no caption.
+ */
+export function costNoteKey(costSource: string): string | undefined {
+  switch (costSource) {
+    case 'partial':
+      return 'dash.cost_partial_note';
+    case 'estimated':
+      return undefined;
+    default:
+      // 'placeholder' and 'none' both mean nothing in this window was priced.
+      return 'dash.cost_placeholder_note';
+  }
+}
+
 export interface DashboardCoverage {
   rollup_requests: number;
   detail_requests: number;

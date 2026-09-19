@@ -76,6 +76,26 @@ func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypt
 }
 
 func (h *Handler) Router() http.Handler {
+	base := h.cfg.BasePath
+	router := h.routes()
+	// chi's nested wildcard route also matches the bare mount path. Handle the
+	// canonical slash before it reaches the mounted router.
+	mounted := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if base != "/" && request.URL.Path == base {
+			http.Redirect(writer, request, base+"/", http.StatusPermanentRedirect)
+			return
+		}
+		router.ServeHTTP(writer, request)
+	})
+	return securityHeaders(mounted)
+}
+
+// routes builds the routing table.
+//
+// It is separate from Router so the demo policy test can walk the table the server
+// actually serves instead of a copy of it: the classification has to be total over
+// the real routes, and a second list would prove nothing about the first.
+func (h *Handler) routes() chi.Router {
 	router := chi.NewRouter()
 	router.Use(securityHeaders)
 	// The demo boundary has to sit above the routing table, because it classifies the
@@ -200,16 +220,7 @@ func (h *Handler) Router() http.Handler {
 		r.Head("/*", h.spa)
 		r.MethodNotAllowed(h.methodNotAllowed)
 	})
-	// chi's nested wildcard route also matches the bare mount path. Handle the
-	// canonical slash before it reaches the mounted router.
-	mounted := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if base != "/" && request.URL.Path == base {
-			http.Redirect(writer, request, base+"/", http.StatusPermanentRedirect)
-			return
-		}
-		router.ServeHTTP(writer, request)
-	})
-	return securityHeaders(mounted)
+	return router
 }
 
 type loginRequest struct {

@@ -553,9 +553,16 @@ func quotaPayloads(now time.Time) map[string]any {
 			},
 		},
 		xaiUsageURL: map[string]any{
-			"limits": []map[string]any{{
-				"limit": 200, "remaining": 143, "reset_at": weeklyReset,
-			}},
+			"config": map[string]any{
+				"creditUsagePercent": 28.5,
+				"monthlyLimit":       map[string]any{"val": 20000},
+				"used":               map[string]any{"val": 5700},
+				"currentPeriod":      map[string]any{"type": "monthly", "start": now.Add(-18 * 24 * time.Hour).Format(time.RFC3339), "end": weeklyReset},
+				"productUsage": []map[string]any{
+					{"product": "grok-4", "usagePercent": 31.2},
+					{"product": "grok-4-fast", "usagePercent": 14.8},
+				},
+			},
 		},
 		antigravityUsageURL: map[string]any{
 			"groups": []map[string]any{{
@@ -567,7 +574,13 @@ func quotaPayloads(now time.Time) map[string]any {
 			}},
 		},
 		devinUsageURL: map[string]any{
-			"quota": map[string]any{"used": 118, "total": 500, "unit": "credits", "resets_at": weeklyReset},
+			"planStatus": map[string]any{
+				"planInfo":                    map[string]any{"planName": "Team"},
+				"dailyQuotaRemainingPercent":  74.0,
+				"dailyQuotaResetAtUnix":       now.Add(6 * time.Hour).Unix(),
+				"weeklyQuotaRemainingPercent": 61.5,
+				"weeklyQuotaResetAtUnix":      now.Add(3 * 24 * time.Hour).Unix(),
+			},
 		},
 	}
 }
@@ -581,19 +594,27 @@ func quotaPayloadKeys() []string {
 	}
 }
 
-// Provider URLs the quota service is allowed to call. They are duplicated here
-// rather than imported because internal/quota already owns the list and importing
-// it would let a change there silently change what the fixture answers; the
-// values are asserted to stay in the quota allowlist by the demo test.
+// Provider URLs the quota service is allowed to call.
+//
+// They are duplicated rather than imported because internal/quota already owns the
+// list and importing it would let a change there silently change what the fixture
+// answers. The demo test asserts every one of them is still inside the quota
+// allowlist, so the duplication cannot drift into answering a URL the console would
+// never ask for - which would leave the quota page empty with no visible reason.
 const (
 	codexUsageURL        = "https://chatgpt.com/backend-api/wham/usage"
 	codexResetCreditsURL = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"
 	claudeUsageURL       = "https://api.anthropic.com/api/oauth/usage"
 	claudeProfileURL     = "https://api.anthropic.com/api/oauth/profile"
 	kimiUsageURL         = "https://api.kimi.com/coding/v1/usages"
-	xaiUsageURL          = "https://api.x.ai/v1/rate-limits"
-	antigravityUsageURL  = "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels"
-	devinUsageURL        = "https://api.devin.ai/v1/quota"
+	// The monthly billing read is the first one the quota service tries for xAI, so
+	// it is the one that has to answer; the paid-account probe behind it is never
+	// reached once this succeeds.
+	xaiUsageURL = "https://cli-chat-proxy.grok.com/v1/billing"
+	// Antigravity is queried through a list of regional hosts and the first is used,
+	// which is what makes this one the fixture's answer.
+	antigravityUsageURL = "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary"
+	devinUsageURL       = "https://server.codeium.com/exa.seat_management_pb.SeatManagementService/GetUserStatus"
 )
 
 func compatibilitySection() []map[string]any {

@@ -323,37 +323,44 @@ func (u *Upstream) serve(writer http.ResponseWriter, request *http.Request) {
 // writes and anything that would make the process reach a real provider.
 func (u *Upstream) refuse(writer http.ResponseWriter, request *http.Request, path string) bool {
 	if request.Method == http.MethodGet || request.Method == http.MethodHead {
-		// The two GET endpoints that hand back raw credential or log bytes. Both are
-		// blocked by the route policy as well; this is the layer that survives a
-		// future route being added without a classification.
-		if path == "/auth-files/download" || strings.HasPrefix(path, "/request-error-logs/") {
+		// Reads that hand back raw credential or log bytes, and the sign-in endpoints a
+		// caller reaches with a GET even though they start an OAuth exchange.
+		if path == "/auth-files/download" || strings.HasPrefix(path, "/request-error-logs/") || strings.HasSuffix(path, "-auth-url") {
 			writeFixtureJSON(writer, http.StatusForbidden, map[string]any{"error": demoRefusal})
 			return true
 		}
 		return false
 	}
-	mutating := []string{
-		"/auth-files",
-		"/reset-quota",
-		"/api-keys",
-		"/openai-compatibility",
-		"/config.yaml",
-		"/plugins",
-		"/plugin-store",
-		"/oauth-session",
-		"/oauth-callback",
-	}
-	for _, prefix := range mutating {
+	// Everything else writes through to CPA's own configuration, credential store or
+	// provider registry.
+	for _, prefix := range mutatingEndpoints {
 		if path == prefix || strings.HasPrefix(path, prefix+"/") {
 			writeFixtureJSON(writer, http.StatusForbidden, map[string]any{"error": demoRefusal})
 			return true
 		}
 	}
-	if isFamilyEndpoint(path) || strings.HasSuffix(path, "-auth-url") || strings.HasPrefix(path, "/config/") {
+	// The credential lists are addressed one path per family, and the scalar settings
+	// one path per setting, so those are matched by shape rather than by name.
+	if isFamilyEndpoint(path) || strings.HasPrefix(path, "/config/") {
 		writeFixtureJSON(writer, http.StatusForbidden, map[string]any{"error": demoRefusal})
 		return true
 	}
 	return false
+}
+
+// mutatingEndpoints are the paths whose writes the fixture refuses. Their reads are
+// deliberately not refused: the console lists credentials, provider definitions and
+// plugins from exactly these paths.
+var mutatingEndpoints = []string{
+	"/auth-files",
+	"/reset-quota",
+	"/api-keys",
+	"/openai-compatibility",
+	"/config.yaml",
+	"/plugins",
+	"/plugin-store",
+	"/oauth-session",
+	"/oauth-callback",
 }
 
 func (u *Upstream) patchAuthFileStatus(writer http.ResponseWriter, request *http.Request) {

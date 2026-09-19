@@ -36,6 +36,7 @@ import {
   isSlidingRange,
   livePollInterval,
   parseDashboardRange,
+  costNoteKey,
   type DashboardRange,
   type DashboardResponse,
 } from '../types/dashboard';
@@ -463,14 +464,10 @@ export const DashboardPage: React.FC = () => {
             <RollingNumber readout={resolveTileCostReadout(data.metrics.cost)} />
           </div>
           <div className="tile-caption">
-            {/* The backend distinguishes a true placeholder from a partial
-                estimate; keep both visible so an unpriced model never reads as
-                fully priced. */}
-            <span>
-              {data.metrics.cost_source === 'partial'
-                ? t('dash.cost_partial_note')
-                : t('dash.cost_placeholder_note')}
-            </span>
+            {/* The backend distinguishes a complete total from a partial estimate and
+                from a window with nothing priced; the caption follows that, and a
+                complete total carries none. */}
+            <span>{costNoteKey(data.metrics.cost_source) ? t(costNoteKey(data.metrics.cost_source)!) : ''}</span>
           </div>
           {/* Priced spend per bucket. Unpriced requests contribute nothing, which
               is why the tile keeps its cost_source note rather than implying the

@@ -79,20 +79,6 @@ type demoPolicyRule struct {
 // preferences, credential metadata, configuration reads, quota reads and the
 // in-process discovery sweep.
 var demoPolicy = []demoPolicyRule{
-	// Public surface: health, the session endpoints and the embedded console.
-	{http.MethodGet, "/api/healthz", demoAllow, ""},
-	{http.MethodPost, "/api/auth/login", demoAllow, ""},
-	{http.MethodGet, "/api/auth/session", demoAllow, ""},
-	{http.MethodPost, "/api/auth/logout", demoAllow, ""},
-	{http.MethodGet, "/assets/*", demoAllow, ""},
-	{http.MethodHead, "/assets/*", demoAllow, ""},
-	{http.MethodGet, "/lobe-icons/*", demoAllow, ""},
-	{http.MethodHead, "/lobe-icons/*", demoAllow, ""},
-	{http.MethodGet, "/favicon.svg", demoAllow, ""},
-	{http.MethodHead, "/favicon.svg", demoAllow, ""},
-	{http.MethodGet, "/*", demoAllow, ""},
-	{http.MethodHead, "/*", demoAllow, ""},
-
 	// Discovery runs against the in-process fixture, so it is a read of the demo's
 	// own data even though it is a POST.
 	{http.MethodPost, "/api/v1/instances/default/discover", demoAllow, ""},
@@ -204,10 +190,30 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodPost, "/api/v1/management/quota/reset", demoRefuse, "resetting a credential's quota is disabled"},
 	{http.MethodPost, "/api/v1/management/quota/clear-cooldown", demoRefuse, "changing a credential's cooldown is disabled"},
 	{http.MethodPost, "/api/v1/management/quota/redeem-credit", demoRefuse, "redeeming a reset credit is disabled: it spends a real entitlement"},
+
+	// The public surface, last on purpose. Order is the whole resolution rule here: a
+	// trailing wildcard matches every path below it, so `/spa-route` and `/assets/x`
+	// have to be reached only after every endpoint rule has had its chance. Placed
+	// first - which is where the wildcard reads most naturally - they would classify
+	// every GET in the application as public, including the credential download and
+	// the request log that must never be served.
+	{http.MethodGet, "/api/healthz", demoAllow, ""},
+	{http.MethodPost, "/api/auth/login", demoAllow, ""},
+	{http.MethodGet, "/api/auth/session", demoAllow, ""},
+	{http.MethodPost, "/api/auth/logout", demoAllow, ""},
+	{http.MethodGet, "/assets/*", demoAllow, ""},
+	{http.MethodHead, "/assets/*", demoAllow, ""},
+	{http.MethodGet, "/lobe-icons/*", demoAllow, ""},
+	{http.MethodHead, "/lobe-icons/*", demoAllow, ""},
+	{http.MethodGet, "/favicon.svg", demoAllow, ""},
+	{http.MethodHead, "/favicon.svg", demoAllow, ""},
+	{http.MethodGet, "/*", demoAllow, ""},
+	{http.MethodHead, "/*", demoAllow, ""},
 }
 
-// demoVerdictFor classifies one request. matched is false when nothing in the
-// table describes it, which the caller must treat as a refusal.
+// demoVerdictFor classifies one request. The first matching rule wins, so the table
+// is ordered from the most specific to the most general. matched is false when
+// nothing in the table describes it, which the caller must treat as a refusal.
 func demoVerdictFor(method, path string) (demoPolicyRule, bool) {
 	method = strings.ToUpper(strings.TrimSpace(method))
 	for _, rule := range demoPolicy {

@@ -2,6 +2,7 @@ package demo
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
@@ -87,6 +89,9 @@ func Seed(ctx context.Context, repo *repository.Repository, now time.Time) (Seed
 	started := time.Now()
 	stats := SeedStats{}
 	now = now.UTC()
+	if err := ensureInstance(ctx, repo, now); err != nil {
+		return SeedStats{}, err
+	}
 	prices, err := seedPrices(ctx, repo, now)
 	if err != nil {
 		return SeedStats{}, err
@@ -107,6 +112,33 @@ func Seed(ctx context.Context, repo *repository.Repository, now time.Time) (Seed
 	}
 	stats.DurationMS = time.Since(started).Milliseconds()
 	return stats, nil
+}
+
+// ensureInstance creates the CPA instance row the seeded records belong to.
+//
+// The application bootstraps the same row before seeding, with the key it encrypted
+// from the environment, so this is a no-op there. It exists so the fixture is
+// self-sufficient: a database that holds usage records without the instance they
+// reference cannot be opened at all, and a fixture that only works in one call order
+// is one that fails in a test rather than in the product.
+func ensureInstance(ctx context.Context, repo *repository.Repository, now time.Time) error {
+	if _, err := repo.GetInstance(ctx, instanceID); err == nil {
+		return nil
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("read demo instance: %w", err)
+	}
+	return repo.UpsertInstance(ctx, domain.CPAInstance{
+		ID:      instanceID,
+		Name:    fixtureInstanceName,
+		BaseURL: "http://127.0.0.1:8317",
+		Status:  "ok",
+		// Placeholder ciphertext: the columns are NOT NULL, and the application replaces
+		// this row at start-up with the key it encrypted from the environment.
+		ManagementKeyCiphertext: []byte{0},
+		ManagementKeyNonce:      []byte{0},
+		CreatedAt:               now,
+		UpdatedAt:               now,
+	})
 }
 
 // seedPrices publishes the price list the cost column is computed from, the
@@ -183,9 +215,15 @@ func pricingCatalogTargets() map[string]string {
 		if _, ok := targets[price.model]; ok {
 			continue
 		}
+		// A model the catalogue does not list is priced by hand, and its own name is
+		// the identity that price is keyed under. Leaving it out would hide the row:
+		// the pricing page shows stored prices intersected with this catalogue, which
+		// is what makes a manual rate for a relay model editable at all.
 		if canonical, ok := modelsDevCanonical[price.model]; ok {
 			targets[price.model] = canonical
+			continue
 		}
+		targets[price.model] = price.model
 	}
 	return targets
 }
