@@ -937,8 +937,8 @@ fix a defect with a new migration, never by editing `schema_migrations`
 | Rollup + retention | `ingest.Maintenance` inside the pipeline | Retried on its own interval; errors surface in ingest status |
 
 A demo deployment starts only the HTTP server: its history is the fixture, so there
-is no collector to lose and no sync loop to let prices go stale. `docs/architecture.md`
-§12 and `internal/demo` explain what replaces them.
+is no collector to lose and no sync loop to let prices go stale. §12 and
+`internal/demo` explain what replaces them.
 
 ## 11. Test layering
 
@@ -1275,7 +1275,10 @@ several container instances behind one address, each with its own fixture key, s
 cookie minted by one is invalid at the next. Refusing those reads would turn a
 working page into a sign-in card, because the console issues its first queries in
 parallel with the session check.
-`docs/ops/vercel-demo.md` is the deployment runbook.
+
+`docs/ops/vercel-demo.md` is the deployment runbook: what the repository provides,
+the account-level steps no command can perform, and the failure modes that look like
+something else.
 
 ## 13. Where to look next
 

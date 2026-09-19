@@ -61,6 +61,13 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
   // The days after today in the final column are days nothing is stored for: present, unqueried, and
   // drawn exactly like any other day with no record. The panel does not invent a separate "pending"
   // state - a reader comparing days can only act on whether there is data for one.
+  //
+  // Whether there *are* any depends on the day the run happens: the grid's final column is the current
+  // week drawn in full, so a run on the week's last day - a Sunday, which is when this was written -
+  // finds today at the end of the column and no day after it. Asserting a count of future days was
+  // therefore an assertion that fails every Sunday, and it did. What the grid owes the reader on a
+  // Sunday is the same complete final week, so the span is asserted unconditionally below and the
+  // per-day checks run over whatever days are there.
   const future = await page.evaluate((today) => {
     const cells = [...document.querySelectorAll('.heatmap-grid .heatmap-cell')];
     const after = cells.filter((cell) => cell.getAttribute('data-day') > today);
@@ -77,13 +84,24 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
       // whichever of them the cell happens to take, which is how this went unnoticed.
       futureClasses: [...new Set([...after].map((cell) => [...cell.classList].find((name) => name.startsWith('is-') && name !== 'is-interactive')))].sort(),
       futureFills: [...new Set(after.map((cell) => getComputedStyle(cell).backgroundColor))].sort(),
-      unrecordedFills: [...new Set(cells.filter((cell) => cell.classList.contains('is-unrecorded')).map((cell) => getComputedStyle(cell).backgroundColor))].sort(),
+      // The days that were asked about and had nothing: the fill a future day must *not* take,
+      // because taking it would claim a measurement of zero that was never stored.
+      zeroFills: [...new Set(cells
+        .filter((cell) => !cell.classList.contains('is-measured') && !cell.classList.contains('is-unrecorded'))
+        .map((cell) => getComputedStyle(cell).backgroundColor))].sort(),
     };
   }, HEATMAP_TODAY);
-  check('the final column is drawn in full, past today', future.count > 0, `futureCells=${future.count}`);
+  // The final week is complete either way: its last day is today when today ends the week, and a day
+  // after today when it does not. This is the invariant the count above used to stand in for.
+  const lastGridDay = shape.days[shape.days.length - 1];
+  check(
+    'the final week is drawn to its own end, never cut at today',
+    future.count > 0 || lastGridDay === HEATMAP_TODAY,
+    `futureCells=${future.count} lastGridDay=${lastGridDay} today=${HEATMAP_TODAY}`,
+  );
   check(
     'a day after today carries no pending state of its own',
-    future.count > 0 && future.pendingClasses === 0,
+    future.pendingClasses === 0,
     `future=${future.count} pendingClasses=${future.pendingClasses}`,
   );
   // Every cell is clickable now, including a day with nothing stored: its tooltip says so, which is
@@ -91,15 +109,17 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
   check('a day after today is still clickable', future.interactive === future.count, `interactive=${future.interactive} of ${future.count}`);
   check(
     'a day after today takes the unrecorded state, not a recorded zero',
-    future.futureClasses.length === 1 && future.futureClasses[0] === 'is-unrecorded',
+    future.futureClasses.every((name) => name === 'is-unrecorded'),
     `futureClasses=[${future.futureClasses.join(', ')}]`,
   );
+  // Compared against the zeros rather than against the other unrecorded cells: a future day *is* an
+  // unrecorded cell, so naming that set made the check compare a cell with itself. What is worth
+  // pinning is the distinction the two tokens exist for - a day nobody asked about must not paint
+  // like a day that was asked about and answered zero.
   check(
-    'a day after today paints the same fill as an unrecorded day earlier in the window',
-    future.futureFills.length === 1
-      && future.unrecordedFills.length > 0
-      && future.futureFills.every((fill) => future.unrecordedFills.includes(fill)),
-    `future=[${future.futureFills.join(', ')}] unrecorded=[${future.unrecordedFills.join(', ')}]`,
+    'a day after today does not paint like a day that was measured as zero',
+    future.count === 0 || (future.futureFills.length === 1 && future.futureFills.every((fill) => !future.zeroFills.includes(fill))),
+    `future=[${future.futureFills.join(', ')}] zeros=[${future.zeroFills.join(', ')}]`,
   );
 
   // The field has to reach its panel's edges, and it must never scroll: a field that only shows
