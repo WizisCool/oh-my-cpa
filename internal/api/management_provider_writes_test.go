@@ -131,7 +131,17 @@ func TestProviderUpdateHoldsOverlayInsideAdmission(t *testing.T) {
 		t.Fatal("first provider update never reached its overlay write")
 	}
 
+	secondAcquireReached := make(chan struct{})
+	var acquireOnce sync.Once
+	fixture.handler.providerWrites.beforeAcquire = func() {
+		acquireOnce.Do(func() { close(secondAcquireReached) })
+	}
 	go update("Second")
+	select {
+	case <-secondAcquireReached:
+	case <-time.After(2 * time.Second):
+		t.Fatal("second provider update never reached the provider write gate")
+	}
 	select {
 	case result := <-results:
 		releaseFirst()

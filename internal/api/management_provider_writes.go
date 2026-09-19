@@ -33,6 +33,10 @@ type providerWriteGate struct {
 	// the operation itself; the gateway call that runs after admission keeps its
 	// own client timeout.
 	acquireTimeout time.Duration
+	// beforeAcquire is a test seam run immediately before the permit wait. It lets
+	// a concurrency test prove the second writer reached the gate before asserting
+	// that it could not pass it. Production leaves it nil.
+	beforeAcquire func()
 }
 
 const (
@@ -65,6 +69,9 @@ func (g *providerWriteGate) acquire(ctx context.Context) error {
 	}
 	timer := time.NewTimer(g.acquireTimeout)
 	defer timer.Stop()
+	if g.beforeAcquire != nil {
+		g.beforeAcquire()
+	}
 	select {
 	case g.permits <- struct{}{}:
 		return nil
