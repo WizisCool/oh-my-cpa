@@ -870,6 +870,18 @@ func writeError(writer http.ResponseWriter, status int, message string) {
 	writeJSON(writer, status, map[string]string{"error": message})
 }
 
+const auditWriteFailedCode = "audit_write_failed"
+
+// writeAuditFailure gives credential reveals a stable refusal contract. The
+// operation is refused rather than retried automatically, but a caller can still
+// distinguish an unavailable audit store from a gateway or permission failure.
+func writeAuditFailure(writer http.ResponseWriter, message string) {
+	writeJSON(writer, http.StatusInternalServerError, map[string]string{
+		"error": message,
+		"code":  auditWriteFailedCode,
+	})
+}
+
 func writeErrorWithDetails(writer http.ResponseWriter, status int, message string, details []string) {
 	writeJSON(writer, status, map[string]any{"error": message, "details": details})
 }

@@ -94,6 +94,17 @@ func (h *Handler) listClientAPIKeys(writer http.ResponseWriter, request *http.Re
 		items = append(items, item)
 	}
 
+	if includeKeys {
+		// The reveal is the audit boundary: a masked response carries no credential,
+		// so it is not a credential read and must not fill the log on every poll.
+		if auditErr := h.recordAudit(request, "api_key.reveal", "client_api_key", "list", "success", map[string]any{
+			"key_count": len(items),
+		}); auditErr != nil {
+			writeAuditFailure(writer, "audit log failure; client key reveal aborted")
+			return
+		}
+	}
+
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"keys":  items,
 		"total": len(items),
