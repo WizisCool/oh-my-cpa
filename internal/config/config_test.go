@@ -76,7 +76,7 @@ func TestLoadLeavesSelfHostDefaultsAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.DemoMode {
+	if cfg.IsDemoMode {
 		t.Fatal("demo mode must be off unless it is asked for")
 	}
 	if cfg.BasePath != "/omc" {
@@ -101,7 +101,7 @@ func TestLoadLeavesSelfHostDefaultsAlone(t *testing.T) {
 
 // A platform export is a convenience for the demo only. A self-hosted process
 // that happens to inherit PORT or VERCEL_URL must ignore both.
-func TestLoadIgnoresPlatformVariablesOutsideDemoMode(t *testing.T) {
+func TestLoadIgnoresPlatformVariablesOutsideIsDemoMode(t *testing.T) {
 	clearConfigEnv(t)
 	t.Setenv("PORT", "4711")
 	t.Setenv("VERCEL_URL", "preview.example.test")
@@ -117,7 +117,7 @@ func TestLoadIgnoresPlatformVariablesOutsideDemoMode(t *testing.T) {
 	}
 }
 
-func TestLoadDemoModeIsSelfContained(t *testing.T) {
+func TestLoadIsDemoModeIsSelfContained(t *testing.T) {
 	clearConfigEnv(t)
 	t.Setenv(DemoModeEnv, "true")
 	t.Setenv("OMCPA_CPA_BASE_URL", "http://10.0.0.9:8317")
@@ -126,7 +126,7 @@ func TestLoadDemoModeIsSelfContained(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !cfg.DemoMode {
+	if !cfg.IsDemoMode {
 		t.Fatal("demo mode was not read from the environment")
 	}
 	if cfg.BasePath != "" {
@@ -149,7 +149,7 @@ func TestLoadDemoModeIsSelfContained(t *testing.T) {
 	}
 }
 
-func TestLoadDemoModeHonoursExplicitOverrides(t *testing.T) {
+func TestLoadIsDemoModeHonoursExplicitOverrides(t *testing.T) {
 	clearConfigEnv(t)
 	t.Setenv(DemoModeEnv, "true")
 	t.Setenv("OMCPA_BASE_PATH", "/omc")
@@ -169,7 +169,7 @@ func TestLoadDemoModeHonoursExplicitOverrides(t *testing.T) {
 	}
 }
 
-func TestLoadDemoModeAdoptsThePlatformPortAndOrigin(t *testing.T) {
+func TestLoadIsDemoModeAdoptsThePlatformPortAndOrigin(t *testing.T) {
 	clearConfigEnv(t)
 	t.Setenv(DemoModeEnv, "true")
 	t.Setenv("PORT", "3000")
@@ -186,7 +186,7 @@ func TestLoadDemoModeAdoptsThePlatformPortAndOrigin(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsNonBooleanDemoMode(t *testing.T) {
+func TestLoadRejectsNonBooleanIsDemoMode(t *testing.T) {
 	clearConfigEnv(t)
 	t.Setenv(DemoModeEnv, "yes")
 	if _, err := Load(); err == nil {

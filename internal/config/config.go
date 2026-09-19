@@ -27,12 +27,12 @@ type Config struct {
 	Version        string
 	RequestTimeout time.Duration
 	TLSSkipVerify  bool
-	// DemoMode turns this process into the public demonstration build: the
+	// IsDemoMode turns this process into the public demonstration build: the
 	// console is served from fixtures, so it needs no CPA, no management key and
 	// no provider credential, and the server refuses every operator surface that
 	// would touch real secret material. It is off unless OMCPA_DEMO_MODE is set,
 	// which is what keeps the self-hosted default byte-for-byte unchanged.
-	DemoMode bool
+	IsDemoMode bool
 }
 
 // DemoModeEnv is the switch that turns a self-hosted deployment into the public
@@ -217,7 +217,7 @@ func Load() (Config, error) {
 		RequestTimeout: timeout,
 		TLSSkipVerify:  tlsSkipVerify,
 		CPA:            cpa,
-		DemoMode:       demoMode,
+		IsDemoMode:     demoMode,
 	}, nil
 }
 

@@ -47,7 +47,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, err
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if cfg.DemoMode {
+	if cfg.IsDemoMode {
 		// Started before anything reads the configuration, because the fixture's
 		// loopback address and its per-process key are the demo's whole upstream: the
 		// session manager below derives from that key, and the instance the
@@ -98,7 +98,7 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 			return nil, fmt.Errorf("initialize administrator authentication: %w", err)
 		}
 	}
-	if cfg.DemoMode {
+	if cfg.IsDemoMode {
 		// A demo restarts from a clean fixture every time. The platform scales a demo
 		// instance to zero and back, and a database left behind by an earlier boot
 		// would end its history hours ago - the fifteen-minute and one-hour windows
@@ -118,7 +118,7 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 		db.Close()
 		return nil, err
 	}
-	if cfg.DemoMode {
+	if cfg.IsDemoMode {
 		// The fixture is seeded before the server accepts a request, so the first
 		// page a visitor opens already has the history a running gateway would have.
 		stats, err := demo.Seed(ctx, repo, time.Now().UTC())
@@ -307,7 +307,7 @@ func (a *App) Run(ctx context.Context) error {
 	// stops request capture or the HTTP server. A demo does not run it at all: its
 	// prices are part of the fixture, and syncing them would make the process
 	// reach models.dev, which a public demonstration must not do.
-	if !a.cfg.DemoMode {
+	if !a.cfg.IsDemoMode {
 		go func() {
 			if err := a.pricing.Run(ctx); err != nil {
 				a.logger.Warn("pricing sync loop stopped", "error", err)

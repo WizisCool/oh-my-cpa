@@ -66,7 +66,7 @@ func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypt
 		providerWrites: newProviderWriteGate(),
 		pluginLogos:    newPluginLogoFetcher(),
 	}
-	if cfg.DemoMode {
+	if cfg.IsDemoMode {
 		// Inlining a plugin's logo means fetching a URL the plugin declares. The
 		// public demo fetches nothing a plugin names, so the inliner is not installed
 		// at all and the console falls back to its own bundled mark.
@@ -251,7 +251,7 @@ func (h *Handler) login(writer http.ResponseWriter, request *http.Request) {
 		writeError(writer, http.StatusBadRequest, "management key is required")
 		return
 	}
-	if h.cfg.DemoMode {
+	if h.cfg.IsDemoMode {
 		// A public demonstration has no secret to check: the same session is issued on
 		// first sight, so a visitor who lands on the sign-in card must not be able to
 		// get stuck behind a key they were never given.
@@ -284,7 +284,7 @@ func (h *Handler) login(writer http.ResponseWriter, request *http.Request) {
 func (h *Handler) session(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.auth == nil || !h.auth.Valid(request) {
-		if h.cfg.DemoMode && h.auth != nil {
+		if h.cfg.IsDemoMode && h.auth != nil {
 			// The demonstration is open to anyone who opens the link, so the session it
 			// needs is issued on first sight rather than behind a credential a visitor
 			// would have to be told. Nothing is granted by it: the routes that would
@@ -317,7 +317,7 @@ func (h *Handler) logout(writer http.ResponseWriter, request *http.Request) {
 func (h *Handler) requireAuthentication(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if h.auth == nil || !h.auth.Valid(request) {
-			if h.cfg.DemoMode && h.auth != nil {
+			if h.cfg.IsDemoMode && h.auth != nil {
 				// The demonstration hands a session to whoever asks, so an unauthenticated
 				// request is not refused: it is served, and given the cookie it was missing.
 				//
@@ -776,7 +776,7 @@ func injectRuntimeConfig(indexHTML string, cfg config.Config) (string, error) {
 		"apiBaseUrl":   apiBase,
 		"mediaBaseUrl": mediaBase,
 		"appName":      "Oh My CPA",
-		"demo":         cfg.DemoMode,
+		"demo":         cfg.IsDemoMode,
 	}))
 	script := "<script>" + payload + "</script>"
 	replacedConfig := false

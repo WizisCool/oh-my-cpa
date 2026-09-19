@@ -35,14 +35,17 @@ Oh My CPA is a self-hosted control plane for [CLIProxyAPI](https://github.com/ro
 
 **[oh-my-cpa-demo.vercel.app](https://oh-my-cpa-demo.vercel.app)** — the console, running on fixture data.
 
-No account, no key, nothing to install: open the link and the dashboard is there. It is served from a built-in sample — a year of traffic across eight providers and fifteen models — so the panels have something real to show, and it is shown behind the same routing policy the product ships: sign-in, credential downloads, plugin execution, gateway configuration writes and anything that would leave the process are refused by the server, and the console says so when a change is not durable.
+No account, no key, nothing to install: open the link and the dashboard is there. It is served from a built-in sample — a year of traffic across eight providers and fourteen models — so the panels have something real to show, and it is shown behind the same routing policy the product ships: sign-in, credential downloads, plugin execution, gateway configuration writes and anything that would leave the process are refused by the server, and the console says so when a change is not durable.
 
 Nothing about the demo is a second implementation. It is this binary with `OMCPA_DEMO_MODE=true` and no gateway behind it, deployed as a Vercel container image (`docs/architecture.md` §12, `docs/ops/vercel-demo.md`). To run the same thing locally:
 
 ```bash
 pnpm build
-go run ./cmd/oh-my-cpa        # with OMCPA_DEMO_MODE=true
+OMCPA_DEMO_MODE=true go run ./cmd/oh-my-cpa
 ```
+
+It opens at the site root rather than `/omc`, and serves the same fixture this page
+does.
 
 ## Features
 
@@ -138,7 +141,7 @@ Open **`http://127.0.0.1:5173/omc/`**. Vite serves the UI with HMR and proxies `
 
 ### Online Demo (Vercel)
 
-The public demo runs the same binary as a Vercel container image. `Dockerfile.vercel` and `vercel.json` are the whole of the platform's configuration, and pushing to `master` updates production once the project is connected to the repository in the Vercel console. `docs/ops/vercel-demo.md` is the runbook, including the two account-level steps no command can perform.
+The public demo runs the same binary as a Vercel container image. `Dockerfile.vercel` and `vercel.json` are the whole of the platform's configuration, and pushing to `master` updates production once the project is connected to the repository in the Vercel console. `docs/ops/vercel-demo.md` is the runbook, including the one account-level step that has to be done in a browser.
 
 ### Docker (In Progress)
 

@@ -286,6 +286,14 @@ func seedRequests(ctx context.Context, repo *repository.Repository, now time.Tim
 		}
 		hour = hour.Add(time.Hour)
 	}
+	// The fifteen-minute window is the shortest the dashboard offers and the first one a
+	// visitor reads, and random placement inside the current hour can leave it empty: at
+	// an hour boundary the partial-hour share is zero, and a little past one the events
+	// that do exist were placed at random offsets that may all be older than the window.
+	// It is filled explicitly rather than left to chance, because an empty shortest
+	// window is indistinguishable from a demo that is not working.
+	events = append(events, fillRecentWindow(random, profiles, credentials, fingerprints, keys, events, now)...)
+
 	if _, err := repo.InsertUsageEvents(ctx, events); err != nil {
 		return 0, 0, 0, fmt.Errorf("seed request history: %w", err)
 	}
@@ -317,6 +325,47 @@ func seedRollups(ctx context.Context, repo *repository.Repository) error {
 		}
 	}
 	return nil
+}
+
+// recentWindow is the shortest window the dashboard offers.
+const recentWindow = 15 * time.Minute
+
+// recentWindowFloor is how many requests the shortest window always carries. Two is the
+// least that makes the window's own numbers (a success rate, a rate per minute) mean
+// anything rather than being a single sample.
+const recentWindowFloor = 4
+
+// fillRecentWindow tops the seeded history up so the most recent window is never empty.
+//
+// It reads what was already generated rather than guessing, so a boot during a busy hour
+// adds nothing: the guarantee is a floor, not a fixed shape.
+func fillRecentWindow(random *deterministic, profiles []modelProfile, credentials map[string]string, fingerprints []string, keys []gatewayKey, events []usage.Event, now time.Time) []usage.Event {
+	from := now.Add(-recentWindow)
+	existing := 0
+	for _, event := range events {
+		if event.TimestampMS >= from.UnixMilli() {
+			existing++
+		}
+	}
+	missing := recentWindowFloor - existing
+	if missing <= 0 {
+		return nil
+	}
+	added := make([]usage.Event, 0, missing)
+	for index := 0; index < missing; index++ {
+		// Spread across the window rather than clustered at its end, so the sparkline has
+		// a shape instead of one spike at the right edge.
+		offset := time.Duration(float64(recentWindow) * (float64(index) + random.nextFloat()) / float64(missing))
+		at := now.Add(-offset)
+		profile := pickProfile(random, profiles)
+		keyIndex := pickWeighted(random, keyWeights(keys))
+		event := buildEventAt(random, profile, credentials, at)
+		event.APIGroupKey = fingerprints[keyIndex]
+		event.APIGroupLabel = "api_key"
+		event.APIKeyMask = security.MaskSecret(keys[keyIndex].value)
+		added = append(added, event)
+	}
+	return added
 }
 
 // credentialAuthIndexes maps a provider to the credential that answers it, so a
@@ -385,12 +434,18 @@ func requestsPerHour(hour, now time.Time) float64 {
 	return points[len(points)-1][1]
 }
 
-// buildEvent turns one request into the record CPA would have published.
+// buildEvent turns one request into the record CPA would have published, at an instant
+// inside the hour it belongs to.
 func buildEvent(random *deterministic, profile modelProfile, credentials map[string]string, hour, now time.Time) usage.Event {
 	started := hour.Add(time.Duration(random.nextFloat() * float64(time.Hour)))
 	if started.After(now) {
 		started = now.Add(-time.Duration(random.nextFloat() * 30 * float64(time.Second)))
 	}
+	return buildEventAt(random, profile, credentials, started)
+}
+
+// buildEventAt is the same record at a chosen instant.
+func buildEventAt(random *deterministic, profile modelProfile, credentials map[string]string, started time.Time) usage.Event {
 	failed := random.nextFloat() < profile.failureRate
 
 	input := scaled(random, profile.inputMean)

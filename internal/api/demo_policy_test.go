@@ -35,7 +35,7 @@ func demoHandler(t *testing.T, basePath string) *Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return NewHandler(config.Config{BasePath: basePath, Version: "test", DemoMode: true}, repository.New(db), cipher, nil, authManager)
+	return NewHandler(config.Config{BasePath: basePath, Version: "test", IsDemoMode: true}, repository.New(db), cipher, nil, authManager)
 }
 
 // The classification table has to be total. A route that no rule describes is
@@ -80,7 +80,7 @@ func TestDemoPolicyRefusesTheDangerousSurface(t *testing.T) {
 		{http.MethodGet, "/api/v1/management/auth-files/download"},
 		{http.MethodDelete, "/api/v1/management/auth-files"},
 		{http.MethodPatch, "/api/v1/management/auth-files/model-aliases"},
-		{http.MethodGet, "/api/v1/management/request-error-logs/request-error-2026-09-19.log"},
+		{http.MethodGet, "/api/v1/management/request-error-logs/request-error-2026-01-01.log"},
 		{http.MethodGet, "/api/v1/usage/events/41/request-log"},
 		{http.MethodDelete, "/api/v1/management/logs"},
 		{http.MethodGet, "/api/v1/management/system/diagnostics"},

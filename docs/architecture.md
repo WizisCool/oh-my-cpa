@@ -46,8 +46,9 @@ browser ──▶ Go process (one binary, demo mode)
 
 There is no arrow to models.dev and none to a provider, because the demo starts
 neither the pricing sync nor any capture loop, and the fixture answers the quota
-reads from its own catalogue instead of forwarding them. The only socket it opens
-is its sink into its own fixture.
+reads from its own catalogue instead of forwarding them. It does listen: the console
+is served on the port the platform routes to. What it never does is connect anywhere
+but its own fixture.
 
 ## 2. Go package map
 
@@ -1236,17 +1237,18 @@ What the demo refuses is whatever moves credential material, starts a real sign-
 executes a plugin, writes the gateway configuration, spends a quota entitlement,
 hands back a raw request or error log, or would leave the process - provider model
 reads, the pricing catalogue sync, the diagnostic bundle. What it performs instead
-are the writes that only touch the fixture or Oh My CPA's own metadata: credential
-metadata, the enabled state, client-key names, preferences, price rows, resource
-overrides, and a quota refresh the fixture answers itself.
+are writes that stay inside this instance: credential metadata and the enabled state
+in the fixture, and client-key names, preferences, price rows, resource overrides and
+a discovery sweep in the database. A credential status edit and a preference edit are
+therefore stored in different places, and both are gone when the instance is replaced.
 
 ### The fixture is seeded through the real write path
 
-`internal/demo` builds the history a deployment would have accumulated - roughly
-forty days of a year of growth, fifteen models across eight providers, cached and
-reasoning tokens, latency and TTFT, a failure share, named caller keys and a price
-list - and writes it through `repository.InsertUsageEvents`, the same call the
-capture path uses. That is what keeps the fixture subject to the request-time price
+`internal/demo` builds the history a deployment would have accumulated - about
+fourteen thousand requests over 371 days, rising towards the present, across fourteen
+traffic models and eight providers, with cached and reasoning tokens, latency and
+TTFT, a failure share, named caller keys and a price list - and writes it through
+`repository.InsertUsageEvents`, the same call the capture path uses. That is what keeps the fixture subject to the request-time price
 lock, the display-mask rules and the schema instead of drifting from them.
 
 The consequence is that the fabricated history needs the price version it is

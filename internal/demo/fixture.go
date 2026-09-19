@@ -372,15 +372,34 @@ func pluginStoreCatalog() []pluginEntry {
 	}
 }
 
-// errorLogFiles are the request-error logs the log page lists. The names are
-// realistic because the page renders them, but downloading one is refused in
-// demo mode: the file behind it would be a raw request log.
+// errorLogFiles are the request-error logs the log page lists.
+//
+// The names are the log's own convention - it stamps each file with the moment it
+// opened - so they are derived from the same instant their `modified` time is, rather
+// than written out. A fixed name beside a moving timestamp ages: within a week the
+// list would be offering files dated months ago, which is exactly the "obviously a
+// fixture" look the demo has to avoid.
+//
+// Downloading one is refused in demo mode: the file behind it would be a raw request log.
 func errorLogFiles(now time.Time) []map[string]any {
-	return []map[string]any{
-		{"name": "request-error-2026-09-19T08-15-04Z.log", "size": 18_442, "modified": now.Add(-2 * time.Hour).Unix()},
-		{"name": "request-error-2026-09-19T02-41-57Z.log", "size": 7_930, "modified": now.Add(-8 * time.Hour).Unix()},
-		{"name": "request-error-2026-09-18T22-08-13Z.log", "size": 31_205, "modified": now.Add(-26 * time.Hour).Unix()},
+	entries := []struct {
+		ago  time.Duration
+		size int64
+	}{
+		{2 * time.Hour, 18_442},
+		{8 * time.Hour, 7_930},
+		{26 * time.Hour, 31_205},
 	}
+	files := make([]map[string]any, 0, len(entries))
+	for _, entry := range entries {
+		openedAt := now.Add(-entry.ago)
+		files = append(files, map[string]any{
+			"name":     "request-error-" + openedAt.UTC().Format("2006-01-02T15-04-05Z") + ".log",
+			"size":     entry.size,
+			"modified": openedAt.Unix(),
+		})
+	}
+	return files
 }
 
 // logTail is the CPA file log the log page tails. It reads like a gateway that

@@ -359,7 +359,7 @@ func stripBasePath(basePath, path string) string {
 // demoGuard enforces the classification table. It is installed only in demo mode,
 // so the self-hosted request path is unchanged.
 func (h *Handler) demoGuard(next http.Handler) http.Handler {
-	if !h.cfg.DemoMode {
+	if !h.cfg.IsDemoMode {
 		return next
 	}
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {

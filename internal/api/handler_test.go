@@ -330,7 +330,7 @@ func TestInjectRuntimeConfigReplacesTemplateScript(t *testing.T) {
 // visitor never sees a non-demo layout flash before it.
 func TestInjectRuntimeConfigMarksTheDemo(t *testing.T) {
 	input := `<html><head><script>if (!window.__OMCPA_CONFIG__) { window.__OMCPA_CONFIG__ = {basePath: "/omc"}; }</script></head></html>`
-	output, err := injectRuntimeConfig(input, config.Config{BasePath: "/", DemoMode: true})
+	output, err := injectRuntimeConfig(input, config.Config{BasePath: "/", IsDemoMode: true})
 	if err != nil {
 		t.Fatal(err)
 	}

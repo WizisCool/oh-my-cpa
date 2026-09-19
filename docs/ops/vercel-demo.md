@@ -35,10 +35,11 @@ stage carries a ~31 MB image. The first request after a cold start waits for the
 fixture - about four seconds - after which the instance stays warm for five minutes
 of traffic.
 
-## What has to be arranged once in the console
+## Platform setup, once per project
 
-These are the steps no command can do, because they authorize an account rather than
-configure a project:
+Three settings stand between the repository and a working demo. The first has no API:
+it authorizes an account rather than configuring a project, so it is the one step that
+has to happen in a browser. The other two can be done either way.
 
 1. **Add a GitHub login connection to the Vercel account.** Vercel only links a Git
    repository when the account has GitHub authorized, and until it is, both
@@ -46,17 +47,17 @@ configure a project:
    `You need to add a Login Connection to your GitHub account first`.
    Account settings → Login Connections → GitHub. Authorizing GitHub as a *login
    method* is what installs the app that can see this repository.
-2. **Connect the project to the repository**, either from the Vercel dashboard
+2. **Connect the project to the repository.** Either from the Vercel dashboard
    (Project → Settings → Git → Connect Git Repository) or with
    `vercel git connect --scope <team>`. Only after this does pushing a branch create
    a Preview deployment and pushing `master` update production.
-3. **Confirm the project's framework is Services.** `vercel.json` declares the
-   container under `services`, and the platform builds the container only when the
-   project is in that mode. A project created from the dashboard may need
-   Settings → Build & Development Settings → Framework Preset → Services.
-   This runbook's project was set with
-   `PATCH https://api.vercel.com/v9/projects/<project>?teamId=<team>` and
-   `{"framework":"services"}`.
+3. **Set the project's framework to Services.** `vercel.json` declares the container
+   under `services`, and the platform builds the container only when the project is in
+   that mode. A project created from the dashboard may need Settings → Build &
+   Development Settings → Framework Preset → Services. This runbook's project was set
+   with `PATCH https://api.vercel.com/v9/projects/<project>?teamId=<team>` and
+   `{"framework":"services"}`. (`vercel link --yes` and `vercel deploy` do the rest:
+   they created and deployed this project without touching the console.)
 
 Two platform defaults are worth knowing rather than changing:
 
@@ -103,6 +104,8 @@ which is what makes the health check meaningful - it proves the fixture is up.
 
 ## Cost
 
-Hobby covers this: one container function, no database, no marketplace service. The
-demo is billed on active CPU only, so an idle deployment costs nothing while it is
-scaled to zero.
+One container function, no database and no marketplace service: on the Hobby plan this
+is inside the included allowance for a demo's traffic. Vercel meters function usage
+rather than a fixed bill - invocations, provisioned memory and active CPU (the time the
+code is actually running, not the time it spends waiting) - so the figure follows how
+much the demo is used. A deployment that is scaled to zero accrues nothing.

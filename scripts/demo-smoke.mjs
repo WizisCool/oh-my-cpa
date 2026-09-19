@@ -66,7 +66,9 @@ const REFUSED = [
   { method: 'GET', path: '/api/v1/management/auth-files/download?name=codex-team-primary.json' },
   { method: 'POST', path: '/api/v1/management/auth-files?name=uploaded.json', body: { type: 'codex' } },
   { method: 'DELETE', path: '/api/v1/management/auth-files', body: { names: ['codex-team-primary.json'] } },
-  { method: 'GET', path: '/api/v1/management/request-error-logs/request-error-2026-09-19T08-15-04Z.log' },
+  // The route is refused whatever the name is, so the name here is deliberately not one the
+  // fixture lists: that is the stronger claim.
+  { method: 'GET', path: '/api/v1/management/request-error-logs/request-error-2026-01-01T00-00-00Z.log' },
   { method: 'GET', path: '/api/v1/usage/events/1/request-log' },
   { method: 'POST', path: '/api/v1/management/plugin-store/otel-bridge/install', body: {} },
   { method: 'PATCH', path: '/api/v1/management/plugins/usage-exporter/status', body: { enabled: false } },

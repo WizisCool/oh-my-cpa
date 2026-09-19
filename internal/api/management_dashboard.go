@@ -445,7 +445,7 @@ func (h *Handler) queryDashboard(ctx context.Context, window dashboardWindow, ap
 // dashboardIngestStatus reports the capture/decode/maintenance loops.
 func (h *Handler) dashboardIngestStatus(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
-	if h.cfg.DemoMode {
+	if h.cfg.IsDemoMode {
 		// The demonstration has no collector to report on, so it reports the
 		// deployment its fixture describes instead of a disabled pipeline; see
 		// internal/demo/ingest.go.
@@ -482,7 +482,7 @@ func (h *Handler) dashboardIngestStatus(writer http.ResponseWriter, request *htt
 // the browser must never pop it itself.
 func (h *Handler) refreshUsageIngest(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
-	if h.cfg.DemoMode {
+	if h.cfg.IsDemoMode {
 		// A manual sync in the demonstration is answered locally: it reports a pass
 		// that found an empty queue rather than popping one from a gateway that is
 		// not there.

@@ -246,9 +246,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     if (error.demoBlocked) demoBlockedHandler?.();
     throw new ApiError(error.message, response.status, error.data, error.demoBlocked);
   }
-  // A write that succeeded on a demo is stored in memory only. Reporting it here
-  // rather than in each form means no write can be added later that forgets to.
-  if (isDemoMode() && method !== 'GET' && method !== 'HEAD') demoNoticeHandler?.();
+  // A write that succeeded on a demo is not durable. Reporting it here rather than in
+  // each form means no write can be added later that forgets to - and the auth endpoints
+  // are excluded, because signing in is not a write: a notice beside "Signed in" would
+  // say the sign-in had not been kept, which is the opposite of what happened.
+  if (isDemoMode() && method !== 'GET' && method !== 'HEAD' && !url.startsWith(authBaseUrl)) demoNoticeHandler?.();
   if (response.status === 204) return {} as T;
   return response.json() as Promise<T>;
 }
