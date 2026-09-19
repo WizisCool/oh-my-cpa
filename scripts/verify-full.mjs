@@ -25,10 +25,11 @@ if (!await runChecks([
   { label: 'bundle-budget', command: 'node', args: ['scripts/check-bundle-budget.mjs'] },
 ])) process.exit(1);
 
-// The two browser phases are one group and run concurrently. They are independent
+// The three browser phases are one group and run concurrently. They are independent
 // processes with their own Chromium and their own service under test (the probe run
 // drives Vite and mocked routes; the acceptance run drives the built binary, the
-// fake CPA and a seeded SQLite), so neither can observe the other.
+// fake CPA and a seeded SQLite; the demo run drives the built binary in demo mode
+// with no gateway at all), so none can observe another.
 //
 // Concurrency was rejected once because the acceptance suite failed under the
 // contention. The failures were the suite's own CPU-sensitive reads - a footer read
@@ -41,4 +42,5 @@ if (!await runChecks([
 if (!await runChecks([
   { label: 'browser', command: 'pnpm', args: ['verify:browser'] },
   { label: 'probes', command: 'pnpm', args: ['verify:probes'] },
+  { label: 'demo', command: 'pnpm', args: ['verify:demo'] },
 ])) process.exit(1);

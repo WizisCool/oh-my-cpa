@@ -339,6 +339,14 @@ func (u *Upstream) refuse(writer http.ResponseWriter, request *http.Request, pat
 			return true
 		}
 	}
+	// The credential collection itself is upload and delete. Its two metadata sub-paths
+	// are deliberately not matched by the prefix above: editing a credential's note or
+	// its enabled state is a write the demonstration performs against the fixture, and
+	// refusing it here would answer a permitted call with a failure.
+	if path == "/auth-files" || path == "/auth-files/model-aliases" {
+		writeFixtureJSON(writer, http.StatusForbidden, map[string]any{"error": demoRefusal})
+		return true
+	}
 	// The credential lists are addressed one path per family, and the scalar settings
 	// one path per setting, so those are matched by shape rather than by name.
 	if isFamilyEndpoint(path) || strings.HasPrefix(path, "/config/") {
@@ -352,7 +360,6 @@ func (u *Upstream) refuse(writer http.ResponseWriter, request *http.Request, pat
 // deliberately not refused: the console lists credentials, provider definitions and
 // plugins from exactly these paths.
 var mutatingEndpoints = []string{
-	"/auth-files",
 	"/reset-quota",
 	"/api-keys",
 	"/openai-compatibility",

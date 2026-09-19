@@ -22,22 +22,24 @@ export const DemoNotice: React.FC = () => {
 
   React.useEffect(() => {
     if (!isDemoMode()) return undefined;
-    // One notice per burst: a page that saves three things at once should not stack
-    // three identical messages on top of the content the operator is reading.
-    let lastNoticeAt = 0;
-    let lastBlockedAt = 0;
+    // One notice on screen at a time, always the most recent: the two kinds share a
+    // message key, so a refusal that happened a moment ago is replaced by the result
+    // of the action the operator just took rather than stacking beside it.
+    //
+    // They keep separate windows, though. A page that fires several refused calls at
+    // once - which is what a button that would have started a sign-in does - must not
+    // silence the answer to the single write the operator performs next, and one
+    // shared window did exactly that.
     const NOTICE_INTERVAL_MS = 8000;
-    const showOnce = (now: number, last: number, text: string) => {
-      if (now - last < NOTICE_INTERVAL_MS) return last;
-      void message.warning({ content: text, key: 'omc-demo-notice', duration: 4 });
-      return now;
+    const lastShownAt = { notice: 0, blocked: 0 };
+    const show = (kind: 'notice' | 'blocked', text: string) => {
+      const now = Date.now();
+      if (now - lastShownAt[kind] < NOTICE_INTERVAL_MS) return;
+      lastShownAt[kind] = now;
+      void message.warning({ content: text, key: 'omc-demo-notice', duration: 5 });
     };
-    setDemoNoticeHandler(() => {
-      lastNoticeAt = showOnce(Date.now(), lastNoticeAt, t('demo.notice'));
-    });
-    setDemoBlockedHandler(() => {
-      lastBlockedAt = showOnce(Date.now(), lastBlockedAt, t('demo.blocked'));
-    });
+    setDemoNoticeHandler(() => show('notice', t('demo.notice')));
+    setDemoBlockedHandler(() => show('blocked', t('demo.blocked')));
     return () => {
       setDemoNoticeHandler(undefined);
       setDemoBlockedHandler(undefined);
