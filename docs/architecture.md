@@ -312,7 +312,7 @@ registers.** A plugin that declares `supports_oauth` also publishes its own logo
 and it is the only authority on what that provider looks like: the vendored
 catalog cannot be updated by installing a plugin, so guessing a brand from the
 provider key would label the operator's own credential with somebody else's mark.
-The logo is not loaded from the plugin's host, though - the deployment must not
+It is not loaded from the plugin's host, though - the deployment must not
 depend on a CDN, and the console's CSP allows images only from itself or inline -
 so the Go process inlines it (§2) and `types/pluginOAuthProviders.ts` resolves the
 plugin list into provider-key logos (including a plugin whose auths are typed by
@@ -323,7 +323,9 @@ those surfaces cannot disagree about the same provider. Only inline artwork is
 rendered: a provider no plugin owns, a logo that could not be inlined, and a value
 at a scheme the browser may not load all fall back to the catalog mark, and a
 plugin-owned row shows the plugin's mark even when an operator icon override is
-stored for that key.
+stored for that key. ADR 0013 owns the trade-offs behind all three of those choices,
+including why a plugin-declared logo URL is held to a stricter destination policy
+than an operator-typed one.
 `components/resources/` and `components/icons/PresetIcon.tsx`
 are retained from the retired triage console and are currently unreferenced; the
 backend discovery/binding model they rendered is still live behind Providers and
