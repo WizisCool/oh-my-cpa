@@ -8,6 +8,14 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
+// listPlugins is the console's view of the plugin facade.
+//
+// The entries are `management.PluginItem` values rather than a handler-local DTO, and
+// that model is the allowlist: CPA's response is unmarshalled into it, so a field CPA
+// adds later is dropped instead of forwarded, and no field in the plugin shape carries
+// a credential (unlike `auth-files`, which is projected field by field for exactly that
+// reason). The one value this handler rewrites is the logo, because the browser must not
+// be sent to the plugin's host.
 func (h *Handler) listPlugins(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
