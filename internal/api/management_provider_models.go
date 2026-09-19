@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -162,21 +161,9 @@ func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr, prot
 		}
 	}
 	client := &http.Client{
-		Timeout:   15 * time.Second,
-		Transport: transport,
-		// Refuse cross-origin redirects instead of trying to scrub known
-		// credential headers: custom provider headers can carry secrets too,
-		// and a scheme change could downgrade any credential that survived.
-		CheckRedirect: func(redirectedRequest *http.Request, via []*http.Request) error {
-			if len(via) >= MAX_MODEL_PULL_REDIRECTS {
-				return fmt.Errorf("%w: stopped after %d redirects", errModelPullRedirectRefused, MAX_MODEL_PULL_REDIRECTS)
-			}
-			origin := via[0].URL
-			if !strings.EqualFold(redirectedRequest.URL.Scheme, origin.Scheme) || !strings.EqualFold(redirectedRequest.URL.Host, origin.Host) {
-				return fmt.Errorf("%w: cross-origin redirect", errModelPullRedirectRefused)
-			}
-			return nil
-		},
+		Timeout:       15 * time.Second,
+		Transport:     transport,
+		CheckRedirect: sameOriginRedirectGuard(errModelPullRedirectRefused, MAX_MODEL_PULL_REDIRECTS),
 	}
 
 	trimmed := strings.TrimRight(rawBaseURL, "/")
@@ -222,38 +209,6 @@ func fetchEndpointModels(ctx context.Context, rawBaseURL, apiKey, proxyStr, prot
 	}
 
 	return parseModelsResponse(resp.Body)
-}
-
-// isModelPullURLAllowed keeps the operator's upstream key off public plaintext
-// links while still allowing self-hosted relays reached over loopback or
-// private addresses.
-func isModelPullURLAllowed(parsed *url.URL) bool {
-	if parsed == nil {
-		return false
-	}
-	switch strings.ToLower(parsed.Scheme) {
-	case "https":
-		return true
-	case "http":
-		return isPlaintextModelPullHostAllowed(parsed.Hostname())
-	default:
-		return false
-	}
-}
-
-func isPlaintextModelPullHostAllowed(host string) bool {
-	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
-	if host == "localhost" {
-		return true
-	}
-	if zoneIndex := strings.IndexByte(host, '%'); zoneIndex >= 0 {
-		host = host[:zoneIndex]
-	}
-	address := net.ParseIP(host)
-	if address == nil {
-		return false
-	}
-	return address.IsLoopback() || address.IsPrivate()
 }
 
 // setModelPullAuthHeaders authenticates a model-list request the way each
@@ -350,4 +305,21 @@ func parseModelsResponse(r io.Reader) ([]string, error) {
 	}
 
 	return []string{}, nil
+}
+
+// isModelPullURLAllowed keeps the operator's upstream key off public plaintext links
+// while still allowing self-hosted relays reached over loopback or private addresses:
+// the operator typed this URL for a provider they run.
+func isModelPullURLAllowed(parsed *url.URL) bool {
+	if parsed == nil {
+		return false
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "https":
+		return true
+	case "http":
+		return isPlaintextOutboundHostAllowed(parsed.Hostname())
+	default:
+		return false
+	}
 }

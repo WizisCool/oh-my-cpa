@@ -41,6 +41,9 @@ type Handler struct {
 	usage usagePipeline
 	// pricing serves model prices and the models.dev sync; nil until SetPricing.
 	pricing PricingManager
+	// pluginLogos inlines the logos plugins publish, so the browser never fetches a
+	// plugin's own host; see management_plugin_logos.go.
+	pluginLogos *pluginLogoFetcher
 
 	configMu  sync.Mutex
 	startTime time.Time
@@ -61,6 +64,7 @@ func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypt
 		startTime:      time.Now(),
 		limiter:        newLoginLimiter(),
 		providerWrites: newProviderWriteGate(),
+		pluginLogos:    newPluginLogoFetcher(),
 	}
 }
 

@@ -1,9 +1,17 @@
+import { resolveProviderIcon } from '../../types/providerIconIds';
+
 export interface ProviderMetadata {
   id: string;
   label: string;
   iconId: string;
 }
 
+/**
+ * The labels are the brands' own names, deliberately not i18n keys: a product name is a
+ * proper noun and reads identically in every catalog, and every row here (Claude, Codex,
+ * Antigravity, xAI, Kimi, Devin, Meta, Codebuddy, …) already states it as a literal. The
+ * catalogue holds UI copy, which this table has none of.
+ */
 export const CREDENTIAL_PROVIDERS: Record<string, ProviderMetadata> = {
   claude: { id: 'claude', label: 'Claude', iconId: 'Claude' },
   antigravity: { id: 'antigravity', label: 'Antigravity', iconId: 'Antigravity' },
@@ -12,6 +20,12 @@ export const CREDENTIAL_PROVIDERS: Record<string, ProviderMetadata> = {
   grok: { id: 'xai', label: 'xAI', iconId: 'XAI' },
   kimi: { id: 'kimi', label: 'Kimi', iconId: 'Kimi' },
   moonshot: { id: 'kimi', label: 'Kimi', iconId: 'Kimi' },
+  devin: { id: 'devin', label: 'Devin', iconId: 'Devin' },
+  meta: { id: 'meta', label: 'Meta', iconId: 'Meta' },
+  // The CodeBuddy plugin registers `codebuddy` as its provider key; a store build
+  // that keeps the plugin's own id instead still has to reach the same mark.
+  codebuddy: { id: 'codebuddy', label: 'Codebuddy', iconId: 'CodeBuddy' },
+  workbuddy: { id: 'codebuddy', label: 'Codebuddy', iconId: 'CodeBuddy' },
   gemini: { id: 'gemini', label: 'Gemini', iconId: 'Gemini' },
   google: { id: 'gemini', label: 'Gemini', iconId: 'Gemini' },
   vertex: { id: 'vertex', label: 'Vertex AI', iconId: 'Google' },
@@ -37,4 +51,28 @@ export function getCredentialProviderMetadata(providerKey: string): ProviderMeta
     label: capitalized,
     iconId: '', // Empty iconId renders neutral fallback icon, never OpenAI!
   };
+}
+
+/**
+ * credentialProviderIconId resolves the brand mark every provider surface renders.
+ *
+ * The named table above is display metadata (label plus mark); this is the floor
+ * under it. A provider CPA knows but the table has not named yet - a new OAuth
+ * provider, or a plugin registering one - still has a mark in the vendored icon
+ * catalog, and falling through to it is what keeps a tab or card from rendering the
+ * neutral placeholder while its brand artwork ships in the bundle.
+ *
+ * The hint is the credential or account label the caller has, and it is consulted only
+ * when the provider key itself is unknown - a generic family CPA labels for the operator
+ * (`openai-compatibility`), where the credential's own name is the only evidence of whose
+ * account it is. A key the table names always wins over the hint, so an account called
+ * "claude-prod" cannot rename the provider it belongs to.
+ *
+ * An unmatched provider resolves to no mark at all rather than to a default: the
+ * caller renders its own neutral placeholder, so an unknown provider is never
+ * mislabelled with somebody else's brand.
+ */
+export function credentialProviderIconId(providerKey: string, hint?: string): string {
+  const meta = getCredentialProviderMetadata(providerKey);
+  return meta.iconId || resolveProviderIcon(providerKey, hint ?? meta.label) || '';
 }

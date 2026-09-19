@@ -63,7 +63,12 @@ Two rules keep the boundary meaningful:
   atomic with a write (cost locking, inbox→event promotion, rollup checkpoints)
   is a repository method, not a sequence of calls from a service.
 - `internal/api` owns the allowlist. A new response field is a deliberate DTO
-  change; the allowlist tests fail otherwise.
+  change; the allowlist tests fail otherwise. Every management surface declares its own
+  response shape (`ProviderItemDTO`, `QuotaItemDTO`, `PluginItemDTO`,
+  `managementAuthFileResponse`, …) instead of forwarding the facade model it decoded CPA
+  into, so a field added there for decoding cannot reach a caller without a decision at
+  this boundary. The plugin projection is also where manifest text is bounded
+  (`management_plugin_projection.go`), because that text arrives from an installed plugin.
 
 ### Known coverage gaps
 
@@ -198,14 +203,39 @@ A family an installed CPA does not have answers `404`; that is a missing
 capability rather than an empty or broken list (`IsMissingCapability`), so a
 console release that knows a newer family still works against an older gateway.
 
-Model-list pulls carry a provider credential from the OMC process directly to
-the configured endpoint. `management_provider_models.go` therefore accepts
-HTTPS, or HTTP only for localhost, loopback, and private IP literals, and it
-refuses any redirect whose scheme or host changes. The redirect check runs before
+Two callers fetch an address the process did not construct: a model-list pull, whose
+URL the operator typed for a provider they run, and a plugin logo, whose URL an
+installed plugin's manifest declares. `internal/api/outbound_fetch.go` owns the
+redirect rule both obey - a redirect that changes scheme or host is refused before
 the next request leaves the process, so neither the provider key nor custom
-provider headers can reach a target the operator did not enter. Invalid URL
-policy answers `400 invalid_model_pull_url`; a refused redirect answers
-`502 model_pull_redirect_refused`.
+provider headers can reach a target the operator did not enter - and the two
+destination policies sit in their own callers, because the authority behind the URL
+is not the same. A model pull accepts HTTP for localhost, loopback and private
+literals, since a self-hosted relay on the operator's LAN is the normal case;
+invalid URL policy answers `400 invalid_model_pull_url` and a refused redirect
+answers `502 model_pull_redirect_refused`. A plugin logo is allowed only over
+public HTTPS, or HTTP to the machine itself, and the resolved address is checked in
+the dialer against everything that is not public internet space - the operator's
+network, the shared-address range an overlay network hands out (`100.64.0.0/10`), the
+reserved IANA blocks and a cloud metadata endpoint - so a hostname that resolves into
+any of them is refused where the connection would actually be made rather than trusted
+because the name looked public. A plugin is not trusted to choose what this process
+connects to, which is also why this fetch connects directly instead of through an
+environment proxy: through one, the dialer would be asked about the proxy's address and
+the target would be unverifiable.
+
+A plugin's logo is fetched for a different reason than a model list: not to reach
+the plugin's host from the browser, but to keep the browser away from it.
+`internal/api/management_plugin_logos.go` fetches the URL a plugin publishes,
+requires an image media type from a bound allowlist, caps the response - for a logo
+published inline as well as for one fetched - and reports it as an inline `data:`
+URL on both `logo` and `metadata.logo`. The whole plugin list shares one fetch
+deadline, because what has to stay bounded is the endpoint the console polls and not
+each request; the result is cached, failures included, so a plugin list that names an
+unreachable host does not refetch it on every poll. An exhausted budget is the one
+outcome that is not cached, since running out of time is not an answer about the
+logo. A logo that cannot be inlined is reported as absent rather than as a URL, which
+is what makes every provider surface fall back to the vendored catalog mark; see §3.
 
 ### OAuth providers are one registry
 
@@ -223,6 +253,13 @@ plugin list, and an id the registry does not know is forwarded unchanged with no
 per-provider flags. The two registries are held together by an id, so a provider
 is added in both or in neither.
 
+A provider the console's own registry names also needs a brand mark, because a
+surface that cannot draw one falls back to a neutral placeholder - which reads as
+"this provider has no identity" even though its artwork ships in the bundle. The
+catalog marks are declared in `web/src/components/common/providerMetadata.ts` and
+`web/src/types/providerIconIds.ts`; a plugin-registered provider instead brings
+the logo it publishes (§3).
+
 ## 3. Frontend shape
 
 `web/src` is a single-page app on React + TypeScript + Ant Design, with TanStack
@@ -232,8 +269,8 @@ Query for server state.
 | --- | --- |
 | `App.tsx` | Router, lazily loaded pages, theme and locale providers; the theme provider sits above `ConfigProvider` (Ant Design's tokens are a projection of the resolved palette) while `ThemeServerSync` sits inside `App`, because a refused save is reported through Ant Design's message API |
 | `api/client.ts` | The one typed HTTP client; every endpoint is declared here |
-| `types/` | Wire types, including the request-record view model split by responsibility (`usageEventQuery.ts` for the URL and filter contract, `usageEventViewPreference.ts` for the stored view, `usageEventIdentity.ts` for the credential and provider behind a row, `usageEventGrouping.ts` for how records bucket, `usageEventLabels.ts` for what a row prints, `usageEventMetrics.ts` for its numbers and `usageEventCadence.ts` for the page's timing constants), `usageEventViewActions.ts` (the view's URL and persistence rewrites), `tokenDisplay.ts` (the one layer every user-facing token number is formatted through) and `rollingNumber.ts` (the animated shape of a reading) |
-| `hooks/` | `usePreference`, `useLastIntentQueue` (React binding) over `lastIntentQueue` (the framework-free controller) and `disposableSlot` (effect-scoped resource lifetime), `useLogTail`, `useVisibleNow`, `useIsNarrowViewport` (900px, the shell), `useIsPhoneViewport` (640px, lists and control sizes), `useOverlayHistory` (React binding) over `overlayHistory` (the framework-free overlay/history policy: one sentinel per open Drawer or Modal, so the platform's Back dismisses the topmost one), `usePrefersReducedMotion` (the app-owned reduced-motion switch the canvas marks need, since neither `@antv/g2` nor `@ant-design/plots` reads the preference) |
+| `types/` | Wire types, including the request-record view model split by responsibility (`usageEventQuery.ts` for the URL and filter contract, `usageEventViewPreference.ts` for the stored view, `usageEventIdentity.ts` for the credential and provider behind a row, `usageEventGrouping.ts` for how records bucket, `usageEventLabels.ts` for what a row prints, `usageEventMetrics.ts` for its numbers and `usageEventCadence.ts` for the page's timing constants), `usageEventViewActions.ts` (the view's URL and persistence rewrites), `pluginOAuthProviders.ts` (which logo an installed plugin publishes for the OAuth provider it registers, and whether a URL may be rendered as an image at all), `tokenDisplay.ts` (the one layer every user-facing token number is formatted through) and `rollingNumber.ts` (the animated shape of a reading) |
+| `hooks/` | `usePreference`, `useLastIntentQueue` (React binding) over `lastIntentQueue` (the framework-free controller) and `disposableSlot` (effect-scoped resource lifetime), `useLogTail`, `useVisibleNow`, `useIsNarrowViewport` (900px, the shell), `useIsPhoneViewport` (640px, lists and control sizes), `useOverlayHistory` (React binding) over `overlayHistory` (the framework-free overlay/history policy: one sentinel per open Drawer or Modal, so the platform's Back dismisses the topmost one), `usePluginOAuthLogos` (the plugin list read once, projected to provider-key logos), `usePrefersReducedMotion` (the app-owned reduced-motion switch the canvas marks need, since neither `@antv/g2` nor `@ant-design/plots` reads the preference) |
 | `i18n/` | `index.tsx` owns the base `[zh, en]` dictionary and the `t()` context; `language.ts` is the reading-language registry and locale helpers; `locales/zh-Hant.ts` and `locales/ms.ts` are the complete additional catalogs |
 | `theme/` | `palette.ts` (the nine authored tokens, the seventeen-token derivation, the registered palettes and the resolution of a mode plus a selection into a palette), `themePreference.ts` (the stored preference document, its parse and its migration from the earlier bare palette id), `ThemeContext.tsx` (the preference, the system follow, the in-progress edit, and the server sync), `themeConfig.ts` (antd tokens and CSS-variable projection), `colorMath.ts` (OKLCH mixing, luminance and contrast - the one authority for every ratio in the console), `cacheScale.ts` and `heatmapRamp.ts` (the two sequential ramps' stops) |
 | `utils/` | `maskKey.ts` (the console's one caller-key mask shape, kept branch for branch with the server's `security.MaskSecret`), `externalUrl.ts` (the http/https link rule), `modelOptions.ts` (model-input filtering), `smoothScroll.ts` (the gesture/correction scroll schedule), `clipboard.ts` (the one copy path, below) |
@@ -273,6 +310,27 @@ themselves morph between revisions on the same motion token, gated by the
 reduced-motion hook above. `docs/design.md`
 §7 rules 5 and 8 own the motion they are allowed to run, and ADRs 0007 and 0008 own the
 trade-offs.
+
+**A plugin's published logo outranks the catalog mark for the provider it
+registers.** A plugin that declares `supports_oauth` may publish its own logo, and
+when it publishes usable artwork that mark is the one drawn: the plugin is the only
+authority on what its own provider looks like, and the vendored catalog cannot be
+updated by installing a plugin, so guessing a brand from the provider key would
+label the operator's own credential with somebody else's mark.
+It is not loaded from the plugin's host, though - the deployment must not
+depend on a CDN, and the console's CSP allows images only from itself or inline -
+so the Go process inlines it (§2) and `types/pluginOAuthProviders.ts` resolves the
+plugin list into provider-key logos (including a plugin whose auths are typed by
+its own id rather than by `oauth_provider`). `LobeIcon.tsx`'s `ProviderBrandIcon`
+renders it - one component for the provider tabs, the quota and credential cards,
+the request records, the provider table and the dashboard's provider rows, so
+those surfaces cannot disagree about the same provider. Only inline artwork is
+rendered: a provider no plugin owns, a logo that could not be inlined, and a value
+at a scheme the browser may not load all fall back to the catalog mark, and a
+plugin-owned row shows the plugin's mark even when an operator icon override is
+stored for that key. ADR 0013 owns the trade-offs behind all three of those choices,
+including why a plugin-declared logo URL is held to a stricter destination policy
+than an operator-typed one.
 `components/resources/` and `components/icons/PresetIcon.tsx`
 are retained from the retired triage console and are currently unreferenced; the
 backend discovery/binding model they rendered is still live behind Providers and

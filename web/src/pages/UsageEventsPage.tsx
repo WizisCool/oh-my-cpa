@@ -54,6 +54,7 @@ import {
   parseProviderIcons,
 } from '../types/providerIcons';
 import { RequestRow } from '../components/usage/RequestRow';
+import { usePluginOAuthLogos } from '../hooks/usePluginOAuthLogos';
 import { UsageEventDrawer } from '../components/usage/UsageEventDrawer';
 import { RequestFilterDrawer } from '../components/usage/RequestFilterDrawer';
 import { RequestFilterChips } from '../components/usage/RequestFilterChips';
@@ -252,6 +253,9 @@ export const UsageEventsPage: React.FC = () => {
     EMPTY_PROVIDER_ICONS,
     parseProviderIcons,
   );
+  // A plugin that registers an OAuth provider also publishes its logo, which the
+  // request row shows in place of the console's catalog mark.
+  const pluginLogos = usePluginOAuthLogos();
   const providersQuery = useQuery({
     // Distinct cache key: this page must never read (or populate) the cache
     // entry that carries plaintext key material for the providers page.
@@ -617,6 +621,7 @@ export const UsageEventsPage: React.FC = () => {
                     credentials={credentials}
                     providerIcons={providerIcons}
                     configuredProviders={configuredProviders}
+                    pluginLogos={pluginLogos}
                     onOpen={setSelected}
                     isSelected={selected === event.id}
                   />

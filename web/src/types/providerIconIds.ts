@@ -21,6 +21,8 @@ export const PROVIDER_ICON_IDS: Record<string, string> = {
   moonshot: 'Kimi',
   devin: 'Devin',
   meta: 'Meta',
+  codebuddy: 'CodeBuddy',
+  workbuddy: 'CodeBuddy',
   openai: 'OpenAI',
   gemini: 'Gemini',
   google: 'Gemini',
@@ -135,7 +137,17 @@ const COMMON_ALIASES: Record<string, string> = {
 
 const KNOWN_PROVIDER_ICONS = PROVIDER_ICON_IDS;
 
-export function getProviderDefaultIcon(family: string, name?: string, baseURL?: string): string {
+/**
+ * resolveProviderIcon resolves a provider to a brand mark, or undefined when no
+ * brand matches at all.
+ *
+ * The two callers differ on what an unmatched provider means - a request row
+ * reads as a neutral server while the icon picker starts at OpenAI - so the
+ * resolution reports the miss and lets each caller keep its own default. An
+ * unmatched provider is not "OpenAI": that mark is only correct when the name
+ * actually resolves to it.
+ */
+export function resolveProviderIcon(family: string, name?: string, baseURL?: string): string | undefined {
   const f = (family || '').toLowerCase().trim();
   const n = (name || '').toLowerCase().trim();
   const url = (baseURL || '').toLowerCase().trim();
@@ -201,5 +213,14 @@ export function getProviderDefaultIcon(family: string, name?: string, baseURL?: 
   if (f.includes('deepseek')) return 'DeepSeek';
   if (f.includes('meta')) return 'Meta';
   if (f.includes('devin')) return 'Devin';
-  return DEFAULT_PROVIDER_ICON_ID;
+  return undefined;
+}
+
+/**
+ * getProviderDefaultIcon is resolveProviderIcon with the icon picker's own
+ * default: a name the console cannot place is treated as OpenAI there, because
+ * the picker has to render some mark for the operator to correct.
+ */
+export function getProviderDefaultIcon(family: string, name?: string, baseURL?: string): string {
+  return resolveProviderIcon(family, name, baseURL) ?? DEFAULT_PROVIDER_ICON_ID;
 }

@@ -60,7 +60,7 @@ Oh My CPA is a self-hosted control plane for [CLIProxyAPI](https://github.com/ro
 - **Plugin Management**: Install, configure, and manage plugins from the plugin store.
 - **Encrypted Storage**: Sensitive credentials and raw inbox messages are encrypted at rest using AES-GCM.
 - **Audit Logging**: Sensitive operations (downloading auth files, exporting logs, editing YAML) are written to an append-only audit log.
-- **Offline Operation**: Frontend assets are bundled into the binary; no runtime CDN requests or external database servers required.
+- **Offline Operation**: Frontend assets are bundled into the binary; no runtime CDN requests or external database servers required. A plugin logo a plugin publishes elsewhere is fetched by the server and inlined, so the browser still loads only what the binary serves — in an air-gapped deployment that fetch fails and the console draws its own bundled brand mark instead.
 
 ## Architecture
 

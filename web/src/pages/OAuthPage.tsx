@@ -23,7 +23,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import { useT, type TFunc } from '../i18n';
 import { copyText } from '../utils/clipboard';
-import { LobeIcon, getProviderDefaultIcon } from '../components/LobeIcon';
+import { credentialProviderIconId } from '../components/common/providerMetadata';
+import { ProviderBrandIcon } from '../components/LobeIcon';
+import { pluginOAuthLogoFor, pluginOAuthProviderLogos } from '../types/pluginOAuthProviders';
 import {
   BUILTIN_OAUTH_IDS,
   BUILTIN_OAUTH_PROVIDERS,
@@ -130,6 +132,9 @@ export const OAuthPage: React.FC = () => {
     if (!pluginsData?.plugins) return [];
     const seen = new Set<string>(BUILTIN_OAUTH_IDS);
     const list: OAuthCard[] = [];
+    // One resolution of "which plugin logo belongs to which provider key", shared
+    // with the credential and quota pages so the three cannot disagree about it.
+    const pluginLogos = pluginOAuthProviderLogos(pluginsData.plugins);
 
     for (const plugin of pluginsData.plugins) {
       const supportsOAuth = Boolean(plugin.supports_oauth);
@@ -146,12 +151,12 @@ export const OAuthPage: React.FC = () => {
       list.push({
         id: providerKey,
         flow: 'manual-callback',
-        iconId: getProviderDefaultIcon(providerKey, title),
+        iconId: credentialProviderIconId(providerKey, title),
         title: t('oauth.plugin_title', { name: title }),
         description: plugin.description?.trim() || t('oauth.plugin_hint', { name: title }),
         loginLabel: t('oauth.plugin_login', { name: title }),
         pluginId: plugin.id,
-        pluginLogo: (plugin.logo || plugin.metadata?.logo || '').trim() || undefined,
+        pluginLogo: pluginOAuthLogoFor(pluginLogos, providerKey),
         pluginRawTitle: title,
         // A plugin declares its own callback route, so the console cannot know
         // its state binding rules; CPA's callback endpoint still validates the
@@ -608,33 +613,12 @@ export const OAuthPage: React.FC = () => {
     }
   };
 
-  // Plugin logos come straight from the plugin manifest (store logos are
-  // absolute/data URLs). A logo that fails to load degrades to the
-  // name-matched lobe icon, mirroring CPAMC's plug fallback.
-  const PluginLogo: React.FC<{ logo?: string; fallbackIconId: string }> = ({ logo, fallbackIconId }) => {
-    const [failed, setFailed] = React.useState(false);
-    if (logo && !failed) {
-      return (
-        <img
-          src={logo}
-          alt=""
-          width={28}
-          height={28}
-          style={{ borderRadius: 4, objectFit: 'contain', display: 'block' }}
-          onError={() => setFailed(true)}
-        />
-      );
-    }
-    return <LobeIcon iconId={fallbackIconId} size={28} />;
-  };
-
+  // A plugin card renders the plugin's own logo, and a built-in renders its
+  // catalog mark; ProviderBrandIcon owns that precedence (and the fall back to the
+  // catalog mark when a plugin logo cannot load) for every provider surface.
   const renderIcon = (card: OAuthCard) => (
     <div className={styles['icon-box']}>
-      {card.pluginId ? (
-        <PluginLogo key={card.pluginLogo || 'none'} logo={card.pluginLogo} fallbackIconId={card.iconId} />
-      ) : (
-        <LobeIcon iconId={card.iconId} size={28} />
-      )}
+      <ProviderBrandIcon iconId={card.iconId} logo={card.pluginId ? card.pluginLogo : undefined} size={28} />
     </div>
   );
 

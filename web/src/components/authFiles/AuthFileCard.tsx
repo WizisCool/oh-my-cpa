@@ -17,8 +17,8 @@ import {
   DeleteOutlined,
   AppstoreOutlined,
 } from '@ant-design/icons';
-import { LobeIcon, getProviderDefaultIcon } from '../LobeIcon';
-import { getCredentialProviderMetadata } from '../common/providerMetadata';
+import { credentialProviderIconId } from '../common/providerMetadata';
+import { ProviderBrandIcon } from '../LobeIcon';
 import { useT } from '../../i18n';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
 import {
@@ -34,6 +34,8 @@ const { Text, Paragraph } = Typography;
 
 export interface AuthFileCardProps {
   file: ManagementAuthFile;
+  /** Logo published by the plugin that registers this provider, when it has one. */
+  pluginLogo?: string;
   selected: boolean;
   compact?: boolean;
   busy: boolean;
@@ -47,6 +49,7 @@ export interface AuthFileCardProps {
 
 export const AuthFileCard: React.FC<AuthFileCardProps> = ({
   file,
+  pluginLogo,
   selected,
   compact,
   busy,
@@ -59,8 +62,7 @@ export const AuthFileCard: React.FC<AuthFileCardProps> = ({
 }) => {
   const t = useT();
   const provider = providerOf(file);
-  const meta = getCredentialProviderMetadata(provider);
-  const iconId = meta.iconId || getProviderDefaultIcon(provider, file.name);
+  const iconId = credentialProviderIconId(provider, file.name);
   const identity = deriveAuthFileIdentity(file);
 
   const disabled = isAuthFileDisabled(file);
@@ -148,7 +150,7 @@ export const AuthFileCard: React.FC<AuthFileCardProps> = ({
             flexShrink: 0,
           }}
         >
-          <LobeIcon iconId={iconId} size={16} />
+          <ProviderBrandIcon iconId={iconId} logo={pluginLogo} size={16} />
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
           <Tag style={{ margin: 0, fontSize: 11 }}>{file.type || file.provider || 'unknown'}</Tag>

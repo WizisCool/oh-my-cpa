@@ -4,6 +4,8 @@
  * The top-level runner owns process/browser lifecycle; this module owns the
  * domain flow and receives only the shared harness handles it needs.
  */
+import { FAKE_PLUGIN_LOGO_DATA_URL } from '../fake-cpa.mjs';
+
 export async function runAuthFilesAcceptance({
   auditPage,
   appURL,
@@ -16,6 +18,7 @@ export async function runAuthFilesAcceptance({
   measureStable,
   lobeIconSignature,
   lobeIconImageState,
+  providerMarkImage,
   path,
   root,
 }) {
@@ -86,6 +89,39 @@ export async function runAuthFilesAcceptance({
     const kimiTab = page.locator('.auth-files-page .ant-tabs-tab').filter({ hasText: /Kimi/i }).first();
     const kimiIcon = await lobeIconSignature(kimiTab);
     check('Kimi tab icon is not OpenAI', /kimi/i.test(kimiIcon) && !/openai/i.test(kimiIcon), kimiIcon);
+
+    // The brand marks that used to render as a neutral placeholder while their
+    // artwork sat unused in the bundle: a catalog brand the display table had not
+    // been taught (Devin), and a provider whose mark only its plugin can supply.
+    const devinTab = page.locator('.auth-files-page .ant-tabs-tab').filter({ hasText: /Devin/i }).first();
+    await checkEventually(
+      'Devin tab draws the Devin brand mark',
+      async () => {
+        const mark = await providerMarkImage(devinTab);
+        return Boolean(mark)
+          && mark.complete === true
+          && mark.naturalWidth > 0
+          && /devin/i.test(mark.src)
+          && !/openai/i.test(mark.src);
+      },
+      { detail: async () => JSON.stringify(await providerMarkImage(devinTab)) },
+    );
+
+    const pluginTab = page.locator('.auth-files-page .ant-tabs-tab').filter({ hasText: /Iflow/i }).first();
+    await checkEventually(
+      'a plugin-owned provider tab draws the plugin\u2019s own logo',
+      async () => {
+        const mark = await providerMarkImage(pluginTab);
+        // The fixture's own artwork, not merely "an image loaded": a catalog mark, a
+        // neighbouring plugin's logo and the console's fallback would all satisfy a
+        // weaker check while answering a different question.
+        return Boolean(mark)
+          && mark.complete === true
+          && mark.naturalWidth > 0
+          && mark.src === FAKE_PLUGIN_LOGO_DATA_URL;
+      },
+      { detail: async () => JSON.stringify(await providerMarkImage(pluginTab)) },
+    );
 
     // Verify tab hover stability
     await codexTab.hover();

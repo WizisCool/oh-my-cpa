@@ -8,6 +8,12 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
+// listPlugins is the console's view of the plugin facade.
+//
+// The entries are projected into `PluginItemDTO` rather than forwarded from the facade
+// model, like every other management surface: the shape this console serves is decided
+// here, and the one value it rewrites on the way out is the logo, because the browser
+// must not be sent to the plugin's host.
 func (h *Handler) listPlugins(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
@@ -21,9 +27,16 @@ func (h *Handler) listPlugins(writer http.ResponseWriter, request *http.Request)
 		return
 	}
 
+	// A plugin's logo is its own to declare, but the browser that draws it must not
+	// depend on the plugin's host: the mark is inlined here instead. A logo that
+	// cannot be inlined is reported as absent, which is what makes the console fall
+	// back to its own catalog mark.
+	h.pluginLogos.inline(request.Context(), plugins)
+
+	projected := projectPluginItems(plugins)
 	writeJSON(writer, http.StatusOK, map[string]any{
-		"plugins": plugins,
-		"total":   len(plugins),
+		"plugins": projected,
+		"total":   len(projected),
 	})
 }
 
@@ -159,9 +172,10 @@ func (h *Handler) listPluginStore(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
+	projected := projectStorePlugins(storePlugins)
 	writeJSON(writer, http.StatusOK, map[string]any{
-		"plugins": storePlugins,
-		"total":   len(storePlugins),
+		"plugins": projected,
+		"total":   len(projected),
 	})
 }
 

@@ -49,6 +49,10 @@ const (
 	slowRequestStartedMinutesAgo = 58
 	fastRequestNewestMinutesAgo  = 3
 	fastRequestOldestMinutesAgo  = 51
+	// The window slot whose record is answered through a plugin-registered OAuth
+	// provider. It is the second newest, so the plugin's own logo is inside the
+	// list's first virtual window, while slot 0 keeps carrying the failure share.
+	pluginProviderRecord = 1
 )
 
 // fixtureClientKey is the gateway client key the acceptance run also configures in
@@ -138,12 +142,29 @@ func seedList(ctx context.Context, repo *repository.Repository) error {
 		if fastRecords > 1 {
 			minutesAgo += (index * span) / (fastRecords - 1)
 		}
-		events = append(events, fixtureEvent(
-			fmt.Sprintf("fixture-list-%02d", index),
+		// One record in the window is an answer from a plugin-registered OAuth
+		// provider: the acceptance run's `iflow` fixture plugin and its
+		// `iflow-fixture.json` credential. It is what makes the plugin's own logo -
+		// rather than a mark guessed from the provider key - observable in the
+		// request list. It takes a slot inside the window rather than extending it,
+		// because the window's size and its 1-in-50 failure share are what the
+		// list, the success-rate bands and the audit are calibrated against.
+		isPluginProvider := index == pluginProviderRecord
+		eventKey := fmt.Sprintf("fixture-list-%02d", index)
+		if isPluginProvider {
+			eventKey = "fixture-plugin-provider"
+		}
+		event := fixtureEvent(
+			eventKey,
 			now.Add(-time.Duration(minutesAgo)*time.Minute),
 			int64(shortLatencyMS+index*7),
 			index < failingRecords,
-		))
+		)
+		if isPluginProvider {
+			event.Provider = "iflow"
+			event.AuthIndex = "auth-index-e2e-7"
+		}
+		events = append(events, event)
 	}
 	events = append(events, fixtureEvent(
 		"fixture-agent-slow",

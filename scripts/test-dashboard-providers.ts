@@ -324,6 +324,26 @@ assert.equal(pluginChannel.length, 1);
 assert.equal(pluginChannel[0].disabled, true, 'A plugin OAuth channel reads the files its plugin id names');
 console.log('✓ Credential ownership boundary verified');
 
+// A plugin that registers an OAuth provider publishes the mark for it, and that
+// mark outranks both the console's catalog default and an operator-stored icon
+// override: the console does not own a plugin provider's identity.
+const pluginLogoURL = 'https://cdn.example.test/codebuddy.svg';
+const pluginBranded = aggregateProviders({
+  authFilesByType: [{ type: 'codebuddy', count: 1, disabled: 0 }],
+  pluginOAuthIds: new Set(['codebuddy']),
+  pluginLogos: { codebuddy: pluginLogoURL },
+  customIcons: { codebuddy: 'DeepSeek' },
+});
+const brandedRow = pluginBranded.find((p) => p.id === 'codebuddy');
+assert.ok(brandedRow, 'the plugin OAuth channel must be aggregated');
+assert.equal(brandedRow.logo, pluginLogoURL, 'the plugin logo is carried on the row');
+assert.equal(brandedRow.iconId, 'DeepSeek', 'the stored icon override is still resolved as the fallback mark');
+
+// A channel no plugin owns carries no logo, so its row renders the console mark.
+const unbranded = aggregateProviders({ authFilesByType: [{ type: 'antigravity', count: 1, disabled: 0 }] });
+assert.equal(unbranded[0].logo, undefined, 'a non-plugin channel has no plugin logo');
+console.log('✓ Plugin-provided brand artwork verified');
+
 // Test 8: Summary stats calculation
 const summary = computeProviderSummary(aggregated);
 assert.equal(summary.totalProviders, 6);

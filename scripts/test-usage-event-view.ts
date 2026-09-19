@@ -1016,6 +1016,36 @@ assert.equal(fallbackOpencodeResolved.isOAuth, false);
 assert.equal(fallbackOpencodeResolved.title, 'Opencode');
 assert.equal(fallbackOpencodeResolved.subtitle, undefined);
 
+// A request answered by a plugin-registered OAuth provider carries that plugin's own
+// logo, looked up by the provider key the credential file and the record share.
+const pluginEvent = {
+  id: 14,
+  provider: 'codebuddy',
+  auth_type: 'oauth',
+  auth_index: 'auth-plugin',
+  tokens: { total: 10, input: 5, output: 5, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 },
+} as UsageEvent;
+const pluginCredFiles = indexCredentialFiles([
+  { name: 'codebuddy.json', auth_index: 'auth-plugin', provider: 'codebuddy', type: 'codebuddy' },
+]);
+const pluginLogoURL = 'https://cdn.example.test/codebuddy.svg';
+const pluginResolved = resolveProviderInfo(
+  pluginEvent,
+  pluginCredFiles,
+  {},
+  [],
+  undefined,
+  { codebuddy: pluginLogoURL },
+);
+assert.equal(pluginResolved.isOAuth, true);
+assert.equal(pluginResolved.logo, pluginLogoURL, 'the plugin logo is carried on the resolved row');
+
+// Without a plugin owning the provider there is no logo, so the row keeps the
+// console's own mark for it.
+const plainResolved = resolveProviderInfo(pluginEvent, pluginCredFiles);
+assert.equal(plainResolved.logo, undefined);
+assert.equal(oauthResolved.logo, undefined, 'a built-in provider carries no plugin logo');
+
 console.log('PASS provider info resolution: OAuth account identity, configured provider custom name/icon, fallback');
 
 // Provider-key to configured-name resolution for the request filter.

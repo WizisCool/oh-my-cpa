@@ -8,6 +8,8 @@ import type { QuotaItem } from '../types/quota';
 import { QuotaCard } from './quota/QuotaCard';
 import { ProviderFilterTabs } from '../components/common/ProviderFilterTabs';
 import { providerFilterTabs } from '../types/credentialProviders';
+import { usePluginOAuthLogos } from '../hooks/usePluginOAuthLogos';
+import { pluginOAuthLogoFor } from '../types/pluginOAuthProviders';
 import styles from './quota/QuotaPage.module.css';
 
 export const QuotaPage: React.FC = () => {
@@ -36,6 +38,10 @@ export const QuotaPage: React.FC = () => {
   const quotas: QuotaItem[] = quotaData?.quotas ?? [];
 
   const tabProviders = useMemo(() => providerFilterTabs(quotas.map((item) => item.provider)), [quotas]);
+
+  // A plugin-registered OAuth provider publishes its own logo, which wins over the
+  // console's catalog mark for that provider key.
+  const pluginLogos = usePluginOAuthLogos();
 
   const tabCounts = useMemo(() => {
     const counts: Record<string, number> = { all: quotas.length };
@@ -222,6 +228,7 @@ export const QuotaPage: React.FC = () => {
             counts={tabCounts}
             active={providerTab}
             onChange={setProviderTab}
+            pluginLogos={pluginLogos}
           />
           {filteredQuotas.length === 0 ? (
             <Empty
@@ -235,6 +242,7 @@ export const QuotaPage: React.FC = () => {
                 <QuotaCard
                   key={item.auth_index}
                   item={item}
+                  pluginLogo={pluginOAuthLogoFor(pluginLogos, item.provider)}
                   isRefreshing={refreshingIndexes.has(item.auth_index)}
                   onRefresh={(idx) => refreshMutation.mutate(idx)}
                   onClearCooldown={(idx) => clearCooldownMutation.mutate(idx)}

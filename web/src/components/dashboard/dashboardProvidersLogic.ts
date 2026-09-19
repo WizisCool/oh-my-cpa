@@ -2,6 +2,7 @@ import type { ManagementOverviewBucket, ManagementOverviewProvider, ManagementOv
 import type { ProviderItem } from '../../types/providers';
 import { getProviderDefaultIcon } from '../../types/providerIconIds';
 import { resolveProviderIcon } from '../../types/providerIcons';
+import { pluginOAuthLogoFor, type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 
 export type ProviderKind = 'oauth' | 'ai_provider';
 
@@ -20,6 +21,9 @@ export interface AggregatedProvider {
   family: string;
   /** Brand icon id resolved for LobeIcon */
   iconId: string;
+  /** Logo the plugin owning this provider publishes. Outranks `iconId`, including a
+   *  stored icon override: the console does not own a plugin provider's identity. */
+  logo?: string;
   /** Number of credentials / API keys / accounts */
   credentials: number;
   /** Total requests in window */
@@ -124,6 +128,7 @@ export interface AggregateProvidersOptions {
   customIcons?: Record<string, string>;
   authFilesByType?: ManagementOverviewTypeCount[];
   pluginOAuthIds?: Set<string>;
+  pluginLogos?: PluginOAuthLogos;
 }
 
 /**
@@ -149,9 +154,20 @@ export function aggregateProviders({
   customIcons = {},
   authFilesByType = [],
   pluginOAuthIds,
+  pluginLogos = {},
 }: AggregateProvidersOptions): AggregatedProvider[] {
   const result: AggregatedProvider[] = [];
   const claimedKeys = new Set<string>();
+
+  // The plugin that registers a provider is the authority on its artwork, so its
+  // logo is found by every key the row carries before the console uses its own mark.
+  const resolvePluginLogo = (...keys: (string | undefined)[]): string | undefined => {
+    for (const key of keys) {
+      const logo = pluginOAuthLogoFor(pluginLogos, key);
+      if (logo) return logo;
+    }
+    return undefined;
+  };
 
   // 1. Build unified traffic lookup map (windowProviders overrides overviewProviders for the window)
   const trafficMap = new Map<string, {
@@ -361,6 +377,7 @@ export function aggregateProviders({
       kind: isOAuth ? 'oauth' : 'ai_provider',
       family: cp.family,
       iconId,
+      logo: resolvePluginLogo(cp.family, cp.upstream_name, cp.name, cp.id),
       credentials,
       total: traffic.total,
       success: traffic.success,
@@ -400,6 +417,7 @@ export function aggregateProviders({
       kind: 'oauth',
       family: item.type,
       iconId,
+      logo: resolvePluginLogo(item.type, normType),
       credentials: item.count,
       total: traffic.total,
       success: traffic.success,
@@ -435,6 +453,7 @@ export function aggregateProviders({
       kind: isOAuth ? 'oauth' : 'ai_provider',
       family: normId,
       iconId,
+      logo: resolvePluginLogo(op.id, normId),
       credentials: op.credentials,
       total: traffic.total,
       success: traffic.success,

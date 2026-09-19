@@ -57,6 +57,8 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
 
 User-facing names, icons, colors, ownership, and subscription metadata belong to Oh My CPA. CPA driver names, auth indexes, base URLs, and raw provider fields remain technical details and are shown secondarily.
 
+One exception, and only for the icon: a provider a CPA plugin registers carries the logo that plugin publishes, because the plugin is the only authority on it and the console's own catalog cannot be updated by installing a plugin. The logo is fetched by the OMC process and inlined rather than loaded from the plugin's host, and the console's catalog mark is the fallback when the plugin publishes nothing usable — so an operator icon override does not apply to a plugin-owned provider. See `docs/architecture.md` §3.
+
 ## Provider disable rule
 
 A provider toggle must change the gateway, not the console. `openai-compatibility`

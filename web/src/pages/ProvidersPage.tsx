@@ -9,6 +9,7 @@ import { IconPickerModal } from '../components/IconPickerModal';
 import { resolveProviderIcon } from '../types/providerIcons';
 import { PROVIDER_FAMILIES } from '../types/providerFamilies';
 import { useProviderIconOverrides } from '../components/providers/useProviderIconOverrides';
+import { usePluginOAuthLogos } from '../hooks/usePluginOAuthLogos';
 import { useProviderList } from '../components/providers/useProviderList';
 import { useProviderManagement } from '../components/providers/useProviderManagement';
 import { ProviderEditorDrawer } from '../components/providers/ProviderEditorDrawer';
@@ -19,6 +20,9 @@ export const ProvidersPage: React.FC = () => {
   const { message } = AntdApp.useApp();
 
   const { providerIcons, writeProviderIcon, shiftCachedProviderIcons } = useProviderIconOverrides();
+  // A plugin-registered provider's own logo outranks everything the console stores
+  // for it, because the plugin owns that provider's identity.
+  const pluginLogos = usePluginOAuthLogos();
   const {
     providers,
     providersLoading,
@@ -173,6 +177,7 @@ export const ProvidersPage: React.FC = () => {
           providers={providers}
           providersLoading={providersLoading}
           providerIcons={providerIcons}
+          pluginLogos={pluginLogos}
           statusQueue={statusQueue}
           deleteProviderMutation={deleteProviderMutation}
           handleOpenEdit={handleOpenEdit}

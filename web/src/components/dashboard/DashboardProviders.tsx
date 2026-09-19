@@ -5,7 +5,8 @@ import { RightOutlined } from '@ant-design/icons';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';
-import { LobeIcon } from '../LobeIcon';
+import { ProviderBrandIcon } from '../LobeIcon';
+import { pluginOAuthProviderLogos } from '../../types/pluginOAuthProviders';
 import { usePreference } from '../../hooks/usePreference';
 import { parseProviderIcons, PROVIDER_ICONS_PREFERENCE } from '../../types/providerIcons';
 import type { ManagementOverview, ManagementOverviewProvider } from '../../types/management';
@@ -90,6 +91,10 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
     return ids;
   }, [pluginsData]);
 
+  // A plugin-registered provider's own logo replaces the mark the console would
+  // otherwise resolve for it, including an operator-stored icon override.
+  const pluginLogos = useMemo(() => pluginOAuthProviderLogos(pluginsData?.plugins), [pluginsData]);
+
   const configuredProviders = providersData?.providers || [];
   const overviewProviders: ManagementOverviewProvider[] = overview.providers || [];
   const authFilesByType = overview.credentials?.by_type || [];
@@ -105,8 +110,9 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
       customIcons,
       authFilesByType,
       pluginOAuthIds,
+      pluginLogos,
     });
-  }, [overviewProviders, windowProviders, configuredProviders, customIcons, authFilesByType, pluginOAuthIds]);
+  }, [overviewProviders, windowProviders, configuredProviders, customIcons, authFilesByType, pluginOAuthIds, pluginLogos]);
 
   const handleRowClick = (provider: AggregatedProvider) => {
     if (provider.kind === 'oauth') {
@@ -148,7 +154,12 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
                   {/* Brand Icon & Name */}
                   <div className="provider-main-col">
                     <div className="provider-brand-badge">
-                      <LobeIcon iconId={provider.iconId} size={20} className="provider-brand-icon" />
+                      <ProviderBrandIcon
+                        iconId={provider.iconId}
+                        logo={provider.logo}
+                        size={20}
+                        className="provider-brand-icon"
+                      />
                       <span
                         className={`status-pip ${provider.disabled ? 'is-disabled' : 'is-active'}`}
                         title={provider.disabled ? t('dash.providers_status_disabled') : undefined}
