@@ -400,8 +400,10 @@ The resource key resolution order and the ban on array position are fixed by
 ADR 0002: immutable upstream id, then family-scoped `auth_index`, then a
 versioned keyed HMAC of the credential material, then a fingerprint of
 non-sensitive metadata, and finally an explicit `identity_collision` marker
-rather than a silent merge. Secrets never enter a key, a fingerprint input that
-is stored, or a response DTO. (The Providers and OAuth management pages inspect
+rather than a silent merge. Secrets never enter a key or a stored fingerprint
+input, and a response DTO carries one only for the surface that edits it and only
+when it asks for it (`?include_keys=true`, ADR 0015); every other response carries
+a display mask. (The Providers and OAuth management pages inspect
 and manage CPA runtime entries directly through `/api/v1/management/providers`
 and `/api/v1/management/auth-files`, layering local preference metadata on read.)
 Auth-file edits use CPA's field patch but do not treat its `200` as proof:
@@ -692,6 +694,14 @@ parameters), not one query per row, and it is best-effort: a failure leaves
 `api_key_alias` empty and the console falls back to the mask rather than failing
 the list. The fingerprint remains the filter identity, so a rename cannot change
 what a saved filter or a drill-down link selects.
+
+Because neither a mask nor an index can stand in for the value, the key list is
+the one reader that asks the management API for it: `/management/api-keys` sends
+`ClientAPIKeyItemDTO.Key` as a display mask unless the caller opts in with
+`?include_keys=true`, which is the flag the provider list already uses. The key
+page opts in, joins the overlay by that value, and keeps its own query cache entry
+so the dashboard's key picker — which only needs the mask — cannot be served the
+values, and the key page cannot be served the masks (ADR 0015).
 
 ### Streaming status and throughput (TPS) derivation
 

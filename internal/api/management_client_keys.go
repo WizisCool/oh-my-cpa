@@ -12,8 +12,14 @@ import (
 )
 
 type ClientAPIKeyItemDTO struct {
-	Index int    `json:"index"`
-	Key   string `json:"key"`
+	Index int `json:"index"`
+	// Key is the key's display mask (`security.MaskSecret`), and the key itself only
+	// when the caller asked for it with `include_keys=true`: the key page joins this
+	// list against the configuration document it edits, and it needs the value to do
+	// that, while every other reader renders the mask. The field always carries the
+	// same shape for the same key either way, so a reader that masks what it is given
+	// reads both forms identically.
+	Key string `json:"key"`
 	// Fingerprint is the legacy keys-page identity, computed under the
 	// "client-key" purpose. It is retained so existing clients keep working.
 	Fingerprint string `json:"fingerprint"`
@@ -37,6 +43,12 @@ func (h *Handler) listClientAPIKeys(writer http.ResponseWriter, request *http.Re
 	if !ok {
 		return
 	}
+	// The raw caller keys leave the process only for the page whose contract
+	// includes editing them, which is the same opt-in the provider list uses. A
+	// response that merely reports the keys - the dashboard's picker, a future
+	// panel - needs the mask and must not be able to read a credential out of a
+	// response body.
+	includeKeys := strings.EqualFold(request.URL.Query().Get("include_keys"), "true")
 
 	keys, err := client.ClientAPIKeys(request.Context())
 	if err != nil {
@@ -55,9 +67,15 @@ func (h *Handler) listClientAPIKeys(writer http.ResponseWriter, request *http.Re
 	for i, key := range keys {
 		trimmed := strings.TrimSpace(key)
 		fingerprint := security.FingerprintOrRedacted(h.cipher, "client-key", trimmed)
+		// The mask is idempotent, so a reader that masks whatever it is given
+		// renders this field identically in both forms.
+		displayKey := trimmed
+		if !includeKeys {
+			displayKey = security.MaskSecret(trimmed)
+		}
 		item := ClientAPIKeyItemDTO{
 			Index:       i,
-			Key:         trimmed,
+			Key:         displayKey,
 			Fingerprint: fingerprint,
 			Length:      len(trimmed),
 		}
@@ -126,7 +144,9 @@ func (h *Handler) createClientAPIKey(writer http.ResponseWriter, request *http.R
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"status": "ok",
 		"index":  len(currentKeys),
-		"key":    newKey,
+		// The requester just sent this value, so the response identifies the row it
+		// added rather than echoing a secret back through a body.
+		"key": security.MaskSecret(newKey),
 	})
 }
 
