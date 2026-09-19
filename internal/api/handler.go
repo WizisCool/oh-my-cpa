@@ -54,7 +54,7 @@ type Handler struct {
 }
 
 func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypto.Cipher, logger *slog.Logger, authManager *auth.Manager) *Handler {
-	return &Handler{
+	handler := &Handler{
 		cfg:            cfg,
 		repo:           repo,
 		cipher:         cipher,
@@ -66,11 +66,22 @@ func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypt
 		providerWrites: newProviderWriteGate(),
 		pluginLogos:    newPluginLogoFetcher(),
 	}
+	if cfg.DemoMode {
+		// Inlining a plugin's logo means fetching a URL the plugin declares. The
+		// public demo fetches nothing a plugin names, so the inliner is not installed
+		// at all and the console falls back to its own bundled mark.
+		handler.pluginLogos = nil
+	}
+	return handler
 }
 
 func (h *Handler) Router() http.Handler {
 	router := chi.NewRouter()
 	router.Use(securityHeaders)
+	// The demo boundary has to sit above the routing table, because it classifies the
+	// route rather than the handler: see demo_policy.go. Outside demo mode the guard
+	// is not installed at all.
+	router.Use(h.demoGuard)
 	base := h.cfg.BasePath
 	if base == "" {
 		base = "/"
@@ -251,6 +262,18 @@ func (h *Handler) login(writer http.ResponseWriter, request *http.Request) {
 func (h *Handler) session(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.auth == nil || !h.auth.Valid(request) {
+		if h.cfg.DemoMode && h.auth != nil {
+			// The demonstration is open to anyone who opens the link, so the session it
+			// needs is issued on first sight rather than behind a credential a visitor
+			// would have to be told. Nothing is granted by it: the routes that would
+			// touch a real gateway are refused by demo_policy.go, not by this cookie.
+			if err := h.auth.Issue(writer); err != nil {
+				writeInternalError(writer, err)
+				return
+			}
+			writeJSON(writer, http.StatusOK, map[string]any{"authenticated": true, "demo": true})
+			return
+		}
 		writeJSON(writer, http.StatusOK, map[string]any{"authenticated": false})
 		return
 	}
@@ -683,7 +706,7 @@ func (h *Handler) spa(writer http.ResponseWriter, request *http.Request) {
 		writeInternalError(writer, fmt.Errorf("read embedded index: %w", err))
 		return
 	}
-	index, err := injectRuntimeConfig(string(data), h.cfg.BasePath)
+	index, err := injectRuntimeConfig(string(data), h.cfg)
 	if err != nil {
 		writeInternalError(writer, err)
 		return
@@ -696,7 +719,8 @@ func (h *Handler) spa(writer http.ResponseWriter, request *http.Request) {
 	_, _ = writer.Write([]byte(index))
 }
 
-func injectRuntimeConfig(indexHTML, basePath string) (string, error) {
+func injectRuntimeConfig(indexHTML string, cfg config.Config) (string, error) {
+	basePath := cfg.BasePath
 	if basePath == "/" {
 		basePath = ""
 	}
@@ -704,11 +728,14 @@ func injectRuntimeConfig(indexHTML, basePath string) (string, error) {
 	mediaBase := joinURLPath(basePath, "/media")
 	// The template package escapes values before putting them into the HTML
 	// script. Paths are validated by NormalizeBasePath before reaching here.
-	payload := fmt.Sprintf(`window.__OMCPA_CONFIG__ = %s;`, mustJSON(map[string]string{
+	// `demo` is injected rather than probed so the console can mark itself in the
+	// first frame, without a request that would flash a non-demo layout first.
+	payload := fmt.Sprintf(`window.__OMCPA_CONFIG__ = %s;`, mustJSON(map[string]any{
 		"basePath":     basePath,
 		"apiBaseUrl":   apiBase,
 		"mediaBaseUrl": mediaBase,
 		"appName":      "Oh My CPA",
+		"demo":         cfg.DemoMode,
 	}))
 	script := "<script>" + payload + "</script>"
 	replacedConfig := false

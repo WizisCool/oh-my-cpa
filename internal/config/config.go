@@ -196,12 +196,21 @@ func Load() (Config, error) {
 		cpa = CPAConfig{}
 	}
 
+	databasePath := filepath.Join(dataDir, "oh-my-cpa.db")
+	if demoMode {
+		// A demo database is per-boot: it is deleted and rebuilt so the history always
+		// ends at the moment the visitor arrives. The file has its own name so that a
+		// deployment which pointed the demo at a directory holding real data cannot
+		// have that data deleted with it.
+		databasePath = filepath.Join(dataDir, "oh-my-cpa-demo.db")
+	}
+
 	return Config{
 		ListenAddr:     listenAddr,
 		Usage:          usage,
 		BasePath:       basePath,
 		DataDir:        dataDir,
-		DatabasePath:   filepath.Join(dataDir, "oh-my-cpa.db"),
+		DatabasePath:   databasePath,
 		MasterKey:      masterKey,
 		PublicURL:      publicURL,
 		Version:        envOr("OMCPA_VERSION", "v0.1.0-dev"),

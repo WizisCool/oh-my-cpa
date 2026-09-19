@@ -310,7 +310,7 @@ func TestProtectedMutationRequiresSameOrigin(t *testing.T) {
 
 func TestInjectRuntimeConfigReplacesTemplateScript(t *testing.T) {
 	input := `<html><head><script>if (!window.__OMCPA_CONFIG__) { window.__OMCPA_CONFIG__ = {basePath: "/omc"}; }</script></head></html>`
-	output, err := injectRuntimeConfig(input, "/nested/omc")
+	output, err := injectRuntimeConfig(input, config.Config{BasePath: "/nested/omc"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,5 +319,25 @@ func TestInjectRuntimeConfigReplacesTemplateScript(t *testing.T) {
 	}
 	if !strings.Contains(output, `<base href="/nested/omc/">`) {
 		t.Fatalf("missing base tag: %s", output)
+	}
+	if !strings.Contains(output, `"demo":false`) {
+		t.Fatalf("a self-hosted page must declare that it is not the demo: %s", output)
+	}
+}
+
+// The console marks itself as a demonstration from the injected configuration
+// rather than from an API call, so the marker is right in the first frame and a
+// visitor never sees a non-demo layout flash before it.
+func TestInjectRuntimeConfigMarksTheDemo(t *testing.T) {
+	input := `<html><head><script>if (!window.__OMCPA_CONFIG__) { window.__OMCPA_CONFIG__ = {basePath: "/omc"}; }</script></head></html>`
+	output, err := injectRuntimeConfig(input, config.Config{BasePath: "/", DemoMode: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output, `"demo":true`) {
+		t.Fatalf("demo flag missing from the injected configuration: %s", output)
+	}
+	if !strings.Contains(output, `"basePath":""`) {
+		t.Fatalf("the demo serves at the site root: %s", output)
 	}
 }
