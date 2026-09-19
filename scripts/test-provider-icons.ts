@@ -119,13 +119,19 @@ test('pluginOAuthProviderLogos: only an enabled OAuth plugin with a usable logo 
     logo: INLINE_LOGO,
   };
 
-  // A plugin that cannot hold credentials must not decorate a provider name.
-  assert.deepEqual(
-    { ...pluginOAuthProviderLogos([{ ...base, effective_enabled: false }]) },
-    {},
-    'a plugin disabled through the global switch contributes nothing',
+  // Disabling a plugin does not delete the credentials it registered, and those keep
+  // appearing with the provider they belong to - so the mark stays available. Excluding a
+  // disabled plugin is the OAuth sign-in page's job, where its actions live.
+  assert.equal(
+    pluginOAuthLogoFor(pluginOAuthProviderLogos([{ ...base, effective_enabled: false }]), 'example'),
+    INLINE_LOGO,
+    'a plugin disabled through the global switch still names its provider',
   );
-  assert.deepEqual({ ...pluginOAuthProviderLogos([{ ...base, enabled: false }]) }, {}, 'the plugin switch is honoured too');
+  assert.equal(
+    pluginOAuthLogoFor(pluginOAuthProviderLogos([{ ...base, enabled: false }]), 'example'),
+    INLINE_LOGO,
+    'so does the plugin switch',
+  );
   // A non-OAuth plugin has no provider key of its own.
   assert.deepEqual(
     { ...pluginOAuthProviderLogos([{ ...base, supports_oauth: false, oauth_provider: undefined }]) },

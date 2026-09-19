@@ -243,12 +243,22 @@ func TestPluginsLifecycle(t *testing.T) {
 	}
 	var storeData struct {
 		Plugins []map[string]any `json:"plugins"`
+		Total   int              `json:"total"`
 	}
 	_ = json.NewDecoder(storeResp.Body).Decode(&storeData)
 	storeResp.Body.Close()
 	if len(storeData.Plugins) != 1 || storeData.Plugins[0]["id"] != "limiter" {
 		t.Fatalf("unexpected store plugins: %#v", storeData)
 	}
+	if storeData.Total != len(storeData.Plugins) {
+		t.Fatalf("store total = %d, want the projected count %d", storeData.Total, len(storeData.Plugins))
+	}
+	// The store list is projected too, so it gets the same allowlist assertion as the
+	// installed list: a field added to the facade model for decoding must not reach a
+	// caller without a decision here.
+	assertDeclaredKeys(t, "store plugin", storeData.Plugins[0], []string{
+		"id", "name", "description", "version", "author", "permissions", "installed",
+	})
 
 	// 6. Install plugin
 	installResp, err := client.Post(baseURL+"/omc/api/v1/management/plugin-store/limiter/install", "application/json", nil)
