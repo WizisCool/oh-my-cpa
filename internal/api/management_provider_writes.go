@@ -33,6 +33,10 @@ type providerWriteGate struct {
 	// the operation itself; the gateway call that runs after admission keeps its
 	// own client timeout.
 	acquireTimeout time.Duration
+	// beforeAcquire is a test seam run immediately before the permit wait. It lets
+	// a concurrency test prove the second writer reached the gate before asserting
+	// that it could not pass it. Production leaves it nil.
+	beforeAcquire func()
 }
 
 const (
@@ -45,6 +49,18 @@ const (
 	// on. It distinguishes "the console is busy, try again" from "this write
 	// failed", which have different retry behaviour.
 	providerWriteBusyCode = "write_busy"
+	// providerPartialCommitCode tells the client that CPA accepted the provider
+	// write but the local overlay could not be stored. The operation is not safe
+	// to retry blindly, because a create may already have added its row.
+	providerPartialCommitCode = "provider_commit_partial"
+	// providerPartialCommitMessage is the stable user-facing refusal for that
+	// state, shared by the response and its regression coverage.
+	providerPartialCommitMessage = "provider configuration changed, but local metadata could not be saved; reload before retrying"
+	// providerMetadataWriteTimeout bounds the local overlay write after CPA has
+	// accepted the provider list. It is independent of the client request, because
+	// abandoning that write after the gateway committed is what leaves the two
+	// sides disagreeing.
+	providerMetadataWriteTimeout = 5 * time.Second
 )
 
 var errProviderWriteBusy = errors.New("another provider configuration write is in progress")
@@ -65,6 +81,9 @@ func (g *providerWriteGate) acquire(ctx context.Context) error {
 	}
 	timer := time.NewTimer(g.acquireTimeout)
 	defer timer.Stop()
+	if g.beforeAcquire != nil {
+		g.beforeAcquire()
+	}
 	select {
 	case g.permits <- struct{}{}:
 		return nil
@@ -102,10 +121,30 @@ func newProviderWriteError(status int, message string) error {
 	return &providerWriteError{status: status, message: message}
 }
 
+// providerPartialCommitError marks the narrow window where CPA has accepted a
+// provider write but the console's local overlay could not be persisted.
+type providerPartialCommitError struct {
+	err error
+}
+
+func (e *providerPartialCommitError) Error() string {
+	return "provider configuration changed, but local metadata could not be saved: " + e.err.Error()
+}
+
+func (e *providerPartialCommitError) Unwrap() error { return e.err }
+
 // writeProviderWriteError reports the outcome of a gated write. A failure that
 // came from CPA keeps the facade's existing translation; the local refusals and
 // the busy gate answer for themselves.
 func writeProviderWriteError(writer http.ResponseWriter, err error) {
+	var partialErr *providerPartialCommitError
+	if errors.As(err, &partialErr) {
+		writeJSON(writer, http.StatusInternalServerError, map[string]string{
+			"error": providerPartialCommitMessage,
+			"code":  providerPartialCommitCode,
+		})
+		return
+	}
 	var writeErr *providerWriteError
 	if errors.As(err, &writeErr) {
 		writeError(writer, writeErr.status, writeErr.message)
@@ -132,13 +171,19 @@ func writeProviderWriteError(writer http.ResponseWriter, err error) {
 // outside the window is a snapshot another writer may already have replaced, so
 // reading first and locking later would reproduce the very lost update this
 // gate exists to prevent. `mutate` receives a pointer because appending to a
-// list is as much a modification as editing an element.
+// list is as much a modification as editing an element. `afterUpdate` runs after
+// the gateway has accepted the list but while the permit is still held, so the
+// console's local overlays can be recorded in the same admission as the write
+// they describe. The overlay write gets a short context detached from the client
+// request, so a client disconnect cannot abandon local reconciliation after CPA
+// has already committed.
 func gatedProviderListWrite[T any](
 	h *Handler,
 	ctx context.Context,
 	read func(context.Context) (T, error),
 	update func(context.Context, T) error,
 	mutate func(*T) error,
+	afterUpdate func(context.Context, T) error,
 ) error {
 	if err := h.providerWrites.acquire(ctx); err != nil {
 		return err
@@ -162,5 +207,13 @@ func gatedProviderListWrite[T any](
 	// them are stale. Dropping them here means a re-keyed or renamed credential
 	// reads correctly on the next page rather than at the end of the TTL.
 	h.providerKeyMasks.invalidate()
+	if afterUpdate != nil {
+		overlayCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), providerMetadataWriteTimeout)
+		err := afterUpdate(overlayCtx, list)
+		cancel()
+		if err != nil {
+			return &providerPartialCommitError{err: err}
+		}
+	}
 	return nil
 }

@@ -7,22 +7,24 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 )
 
 type fakePricing struct {
-	listRows   []pricing.ModelPrice
-	unpriced   []string
-	state      pricing.SyncState
-	known      bool
-	running    bool
-	acceptSync bool
-	saved      []pricing.ModelPrice
-	deleted    []string
-	started    bool
-	stateErr   error
+	listRows    []pricing.ModelPrice
+	unpriced    []string
+	state       pricing.SyncState
+	known       bool
+	running     bool
+	acceptSync  bool
+	saved       []pricing.ModelPrice
+	deleted     []string
+	started     bool
+	stateErr    error
+	notifyCount atomic.Int32
 }
 
 func (f *fakePricing) ListPrices(context.Context) ([]pricing.ModelPrice, error) {
@@ -237,4 +239,7 @@ func TestUpdatePricingSyncSchedule(t *testing.T) {
 	}
 }
 
-func (f *fakePricing) NotifyModelsChanged() { f.TriggerSync() }
+func (f *fakePricing) NotifyModelsChanged() {
+	f.notifyCount.Add(1)
+	f.TriggerSync()
+}

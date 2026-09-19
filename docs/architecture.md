@@ -198,11 +198,24 @@ Properties to preserve when changing this code:
   the server both re-keys the stored document and the console replays the same
   shift into its local cache - a cache that kept the deleted key would write it
   back on the next icon change. The name and website overlays of an update are
-  written only after the gateway accepted the write, while the icon overlay is
-  written by the console through the preferences API and so is never part of a
-  provider save: the row, the request list's provider label and the name resolver
-  read these maps, so an entry recorded ahead of a refused write would leave the
-  console naming a credential CPA never accepted.
+  written by the gated write itself, after the gateway accepted the update and
+  before the write permit is released. The row, the request list's provider label
+  and the name resolver read these maps, so an entry recorded ahead of a refused
+  write would leave the console naming a credential CPA never accepted; recording
+  it after the permit would let two accepted updates invert their overlay order.
+  If the local overlay write fails after CPA accepted the list, the gate answers
+  `500` with `code: provider_commit_partial` instead of reporting success. The
+  overlay write takes a short context detached from the client request, because a
+  disconnected client must not abandon the local half of an accepted write. The
+  refusal is deliberately not a retry instruction: a create may already have added
+  its row, so the client must reload before deciding what to do next.
+  A partial commit still notifies the pricing manager before the refusal is
+  returned, because CPA's model catalogue may already have changed even though the
+  console metadata transaction did not.
+  Icon values are authored by the console through the preferences API; a provider
+  save never sets them. A delete is the exception to that authorship split: it
+  re-keys the stored icon together with the name and website maps in the same
+  gated metadata transaction.
 
 ### Provider families are data, not code paths
 

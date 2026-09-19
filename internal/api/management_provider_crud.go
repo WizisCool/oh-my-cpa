@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -9,6 +10,20 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
+
+// notifyPricingAfterPartialCommit keeps the pricing catalogue in step with a
+// provider write that CPA accepted even though the local overlay failed. The
+// normal success path notifies once after the gated write returns; this branch
+// covers the partial-commit return before that point.
+func (h *Handler) notifyPricingAfterPartialCommit(err error) {
+	if h.pricing == nil {
+		return
+	}
+	var partialErr *providerPartialCommitError
+	if errors.As(err, &partialErr) {
+		h.pricing.NotifyModelsChanged()
+	}
+}
 
 func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
@@ -125,16 +140,17 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 		} else if apiKey != "" {
 			newEntry.APIKeyEntries = []management.APIKeyEntry{{APIKey: apiKey}}
 		}
-		entries, err := h.appendOpenAICompatibilityGated(ctx, client, newEntry)
+		_, err := h.appendOpenAICompatibilityGated(ctx, client, newEntry, func(ctx context.Context, entries []management.OpenAICompatibility) error {
+			targetID := fmt.Sprintf("%s%d", openAICompatIDPrefix, len(entries)-1)
+			createdID = targetID
+			return h.applyProviderMetadata(ctx, targetID, name, website, websiteProvided)
+		})
 		if err != nil {
+			h.notifyPricingAfterPartialCommit(err)
 			_ = h.recordAudit(request, "provider.create", "provider", family, "failure", map[string]any{"error": err.Error()})
 			writeProviderWriteError(writer, err)
 			return
 		}
-		targetID := fmt.Sprintf("%s%d", openAICompatIDPrefix, len(entries)-1)
-		createdID = targetID
-		h.saveProviderName(ctx, targetID, name)
-		h.applyProviderWebsite(ctx, targetID, website, websiteProvided)
 
 	default:
 		// Every other supported family is a config API-key list, which the registry
@@ -155,16 +171,17 @@ func (h *Handler) createManagementProvider(writer http.ResponseWriter, request *
 			Models:         models,
 			DisableCooling: disableCoolingPtr,
 		}
-		entries, err := h.appendConfigKeyProvider(ctx, client, spec, newEntry)
+		_, err := h.appendConfigKeyProvider(ctx, client, spec, newEntry, func(ctx context.Context, entries []management.ConfigAPIKey) error {
+			targetID := fmt.Sprintf("%s%d", spec.IDPrefix, len(entries)-1)
+			createdID = targetID
+			return h.applyProviderMetadata(ctx, targetID, name, website, websiteProvided)
+		})
 		if err != nil {
+			h.notifyPricingAfterPartialCommit(err)
 			_ = h.recordAudit(request, "provider.create", "provider", family, "failure", map[string]any{"error": err.Error()})
 			writeProviderWriteError(writer, err)
 			return
 		}
-		targetID := fmt.Sprintf("%s%d", spec.IDPrefix, len(entries)-1)
-		createdID = targetID
-		h.saveProviderName(ctx, targetID, name)
-		h.applyProviderWebsite(ctx, targetID, website, websiteProvided)
 	}
 
 	_ = h.recordAudit(request, "provider.create", "provider", family, "success", map[string]any{"name": name})
@@ -323,13 +340,15 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 					entry.LegacyAPIKeys = nil
 				}
 				return nil
+			},
+			func(ctx context.Context, _ []management.OpenAICompatibility) error {
+				return h.applyProviderMetadata(ctx, id, name, website, websiteProvided)
 			}); err != nil {
+			h.notifyPricingAfterPartialCommit(err)
 			_ = h.recordAudit(request, "provider.update", "provider", id, "failure", map[string]any{"error": err.Error()})
 			writeProviderWriteError(writer, err)
 			return
 		}
-		h.saveProviderName(ctx, id, name)
-		h.applyProviderWebsite(ctx, id, website, websiteProvided)
 	default:
 		spec, isConfigFamily := lookupProviderConfigFamily(family)
 		if !isConfigFamily {
@@ -348,13 +367,14 @@ func (h *Handler) updateManagementProvider(writer http.ResponseWriter, request *
 			entry.Models = models
 			entry.Headers = req.Headers
 			entry.DisableCooling = disableCoolingPtr
+		}, func(ctx context.Context, _ []management.ConfigAPIKey) error {
+			return h.applyProviderMetadata(ctx, id, name, website, websiteProvided)
 		}); err != nil {
+			h.notifyPricingAfterPartialCommit(err)
 			_ = h.recordAudit(request, "provider.update", "provider", id, "failure", map[string]any{"error": err.Error()})
 			writeProviderWriteError(writer, err)
 			return
 		}
-		h.saveProviderName(ctx, id, name)
-		h.applyProviderWebsite(ctx, id, website, websiteProvided)
 	}
 
 	_ = h.recordAudit(request, "provider.update", "provider", id, "success", map[string]any{"name": name})
@@ -389,6 +409,12 @@ func (h *Handler) deleteManagementProvider(writer http.ResponseWriter, request *
 		return
 	}
 
+	// The deleted row's own metadata is dropped, and every later row's metadata
+	// moves down with it: the overlay is keyed by the same positional id the row is
+	// addressed by, so leaving the keys alone would relabel the credentials that
+	// took the freed index. The icon overlay rides along with the name and website
+	// maps for the same reason. The callback runs inside the admitted write, so a
+	// second delete cannot re-key the maps while this one is still shifting them.
 	switch family {
 	case openAICompatibilityFamily:
 		if err := gatedProviderListWrite(h, ctx,
@@ -408,7 +434,11 @@ func (h *Handler) deleteManagementProvider(writer http.ResponseWriter, request *
 				}
 				*list = append(append([]management.OpenAICompatibility{}, (*list)[:index]...), (*list)[index+1:]...)
 				return nil
+			},
+			func(ctx context.Context, _ []management.OpenAICompatibility) error {
+				return h.shiftProviderMetadataAfterDelete(ctx, idPrefixForFamily(family), index)
 			}); err != nil {
+			h.notifyPricingAfterPartialCommit(err)
 			_ = h.recordAudit(request, "provider.delete", "provider", id, "failure", map[string]any{"error": err.Error()})
 			writeProviderWriteError(writer, err)
 			return
@@ -419,21 +449,16 @@ func (h *Handler) deleteManagementProvider(writer http.ResponseWriter, request *
 			writeError(writer, http.StatusBadRequest, "unsupported provider family")
 			return
 		}
-		if err := h.deleteConfigKeyProvider(ctx, client, spec, index); err != nil {
+		if err := h.deleteConfigKeyProvider(ctx, client, spec, index, func(ctx context.Context, _ []management.ConfigAPIKey) error {
+			return h.shiftProviderMetadataAfterDelete(ctx, idPrefixForFamily(family), index)
+		}); err != nil {
+			h.notifyPricingAfterPartialCommit(err)
 			_ = h.recordAudit(request, "provider.delete", "provider", id, "failure", map[string]any{"error": err.Error()})
 			writeProviderWriteError(writer, err)
 			return
 		}
 	}
 
-	// The deleted row's own metadata is dropped, and every later row's metadata
-	// moves down with it: the overlay is keyed by the same positional id the row
-	// is addressed by, so leaving the keys alone would relabel the credentials
-	// that took the freed index. The icon overlay rides along with the name and
-	// website maps for the same reason.
-	h.removeProviderName(ctx, id)
-	h.removeProviderWebsite(ctx, id)
-	h.shiftProviderMetadataAfterDelete(ctx, idPrefixForFamily(family), index)
 	_ = h.recordAudit(request, "provider.delete", "provider", id, "success", nil)
 
 	if h.pricing != nil {
