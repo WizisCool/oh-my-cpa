@@ -41,8 +41,13 @@ export function isRenderableLogoURL(raw: string | null | undefined): boolean {
  * pluginOAuthProviderLogos maps each plugin-registered OAuth provider to the logo
  * that plugin publishes.
  *
- * A disabled plugin is skipped: its provider cannot hold credentials, so a logo
- * for it would only decorate a name the operator cannot use.
+ * A disabled plugin still contributes: switching a plugin off does not delete the
+ * credentials it registered, and those credentials keep appearing on the credential,
+ * quota and request-record surfaces with the provider they belong to. The mark is a
+ * property of that identity, not of the plugin's current switch state, and dropping it
+ * would leave exactly those rows with a placeholder - the defect this resolver exists to
+ * prevent. The OAuth sign-in page is where a disabled plugin is excluded, because that is
+ * where the plugin's *actions* live.
  *
  * The map has no prototype, because the keys come from plugins: a provider a plugin
  * happens to call `constructor`, `toString` or `__proto__` would otherwise read the
@@ -53,7 +58,6 @@ export function pluginOAuthProviderLogos(plugins: PluginItem[] | undefined): Plu
   const logos = Object.create(null) as PluginOAuthLogos;
   for (const plugin of plugins ?? []) {
     if (!plugin.supports_oauth && !plugin.oauth_provider) continue;
-    if (!(plugin.effective_enabled ?? plugin.enabled)) continue;
 
     const logo = (plugin.logo || plugin.metadata?.logo || '').trim();
     if (!isRenderableLogoURL(logo)) continue;

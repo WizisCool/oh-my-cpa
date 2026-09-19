@@ -1,5 +1,6 @@
 import React, { memo, useEffect, useState } from 'react';
 import { LOBE_ICON_CATALOG, lobeIconSlug } from '../types/lobeIconCatalog';
+import { isRenderableLogoURL } from '../types/pluginOAuthProviders';
 import { CloudServerOutlined } from '@ant-design/icons';
 
 export { getProviderDefaultIcon } from '../types/providerIconIds';
@@ -113,8 +114,11 @@ export const ProviderBrandIcon: React.FC<ProviderBrandIconProps> = ({
     setIsLogoBroken(false);
   }, [logo]);
 
+  // Validated here as well as where the value is resolved: this component is the last
+  // place before a source reaches the DOM, and a caller that hands it a URL straight out
+  // of a manifest must not be able to make the browser load a plugin's host.
   const trimmedLogo = (logo || '').trim();
-  if (trimmedLogo && !isLogoBroken) {
+  if (trimmedLogo && !isLogoBroken && isRenderableLogoURL(trimmedLogo)) {
     return (
       <img
         src={trimmedLogo}

@@ -79,6 +79,11 @@ decoding cannot widen this API without a decision, and manifest text is bounded 
   naming rule, which otherwise says icons belong to Oh My CPA.
 - **A logo hosted on the operator's own LAN will not load**, by design (see the table above); the
   fallback is the catalog mark.
+- **A manifest may still point the fetch at a service on this machine**, and that is allowed on
+  purpose: loopback is the machine itself, which a self-hosted or locally developed plugin store
+  legitimately uses, and the request carries no credential, must answer with an image type from the
+  allowlist, and is capped and cached. Refusing it would trade that case away for little - the plugin
+  already runs in-process inside CPA, so it can reach local services directly if it wants to.
 - **Failures are cached for an hour, but a fetch that ran out of its budget is not.** The console polls
   the plugin list, so an unreachable host must not be re-fetched per poll — and running out of time is
   not an answer about the logo, so a slow poll cannot cost a plugin its mark for a whole TTL.
