@@ -179,6 +179,28 @@ func TestPluginsLifecycle(t *testing.T) {
 		t.Fatalf("metadata logo = %#v, want the same inlined value", pluginsData.Plugins[0]["metadata"])
 	}
 
+	// The response shape is this console's own, not the facade model's: every field is
+	// declared in `PluginItemDTO`, so a field added to `management.PluginItem` for
+	// decoding CPA's document cannot reach a caller without a decision here. The declared
+	// set is the allowlist and the second list is what must be present for this fixture;
+	// an optional field the fixture does not set may legitimately be omitted.
+	declaredPluginFields := []string{
+		"id", "name", "path", "description", "version", "author", "enabled", "effective_enabled",
+		"configured", "registered", "supports_oauth", "oauth_provider", "logo", "permissions",
+		"config", "metadata",
+	}
+	assertDeclaredKeys(t, "plugin", pluginsData.Plugins[0], declaredPluginFields)
+	for _, required := range []string{"id", "name", "enabled", "effective_enabled", "logo", "metadata", "permissions"} {
+		if _, exists := pluginsData.Plugins[0][required]; !exists {
+			t.Errorf("plugin is missing %q: %#v", required, pluginsData.Plugins[0])
+		}
+	}
+	if metadata, ok := pluginsData.Plugins[0]["metadata"].(map[string]any); ok {
+		assertDeclaredKeys(t, "plugin metadata", metadata, []string{"name", "version", "author", "logo"})
+	} else {
+		t.Fatalf("metadata = %#v, want an object", pluginsData.Plugins[0]["metadata"])
+	}
+
 	// 2. Set plugin status (disable)
 	patchReq, _ := http.NewRequest(http.MethodPatch, baseURL+"/omc/api/v1/management/plugins/logger/status", bytes.NewBufferString(`{"enabled":false}`))
 	patchReq.Header.Set("Content-Type", "application/json")
@@ -242,5 +264,20 @@ func TestPluginsLifecycle(t *testing.T) {
 	events, err := repo.ListAuditEvents(context.Background(), 20)
 	if err != nil || len(events) < 4 {
 		t.Fatalf("expected at least 4 audit events recorded, got %d, err: %v", len(events), err)
+	}
+}
+
+// assertDeclaredKeys fails when a response object carries a field the DTO does not
+// declare, which is the silent widening the projection exists to prevent.
+func assertDeclaredKeys(t *testing.T, what string, object map[string]any, declared []string) {
+	t.Helper()
+	allowed := make(map[string]bool, len(declared))
+	for _, key := range declared {
+		allowed[key] = true
+	}
+	for key := range object {
+		if !allowed[key] {
+			t.Errorf("%s exposed undeclared field %q: %#v", what, key, object)
+		}
 	}
 }

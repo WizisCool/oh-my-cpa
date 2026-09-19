@@ -63,7 +63,12 @@ Two rules keep the boundary meaningful:
   atomic with a write (cost locking, inbox→event promotion, rollup checkpoints)
   is a repository method, not a sequence of calls from a service.
 - `internal/api` owns the allowlist. A new response field is a deliberate DTO
-  change; the allowlist tests fail otherwise.
+  change; the allowlist tests fail otherwise. Every management surface declares its own
+  response shape (`ProviderItemDTO`, `QuotaItemDTO`, `PluginItemDTO`,
+  `managementAuthFileResponse`, …) instead of forwarding the facade model it decoded CPA
+  into, so a field added there for decoding cannot reach a caller without a decision at
+  this boundary. The plugin projection is also where manifest text is bounded
+  (`management_plugin_projection.go`), because that text arrives from an installed plugin.
 
 ### Known coverage gaps
 

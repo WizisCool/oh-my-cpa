@@ -10,12 +10,10 @@ import (
 
 // listPlugins is the console's view of the plugin facade.
 //
-// The entries are `management.PluginItem` values rather than a handler-local DTO, and
-// that model is the allowlist: CPA's response is unmarshalled into it, so a field CPA
-// adds later is dropped instead of forwarded, and no field in the plugin shape carries
-// a credential (unlike `auth-files`, which is projected field by field for exactly that
-// reason). The one value this handler rewrites is the logo, because the browser must not
-// be sent to the plugin's host.
+// The entries are projected into `PluginItemDTO` rather than forwarded from the facade
+// model, like every other management surface: the shape this console serves is decided
+// here, and the one value it rewrites on the way out is the logo, because the browser
+// must not be sent to the plugin's host.
 func (h *Handler) listPlugins(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
@@ -35,9 +33,10 @@ func (h *Handler) listPlugins(writer http.ResponseWriter, request *http.Request)
 	// back to its own catalog mark.
 	h.pluginLogos.inline(request.Context(), plugins)
 
+	projected := projectPluginItems(plugins)
 	writeJSON(writer, http.StatusOK, map[string]any{
-		"plugins": plugins,
-		"total":   len(plugins),
+		"plugins": projected,
+		"total":   len(projected),
 	})
 }
 
@@ -173,9 +172,10 @@ func (h *Handler) listPluginStore(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
+	projected := projectStorePlugins(storePlugins)
 	writeJSON(writer, http.StatusOK, map[string]any{
-		"plugins": storePlugins,
-		"total":   len(storePlugins),
+		"plugins": projected,
+		"total":   len(projected),
 	})
 }
 
