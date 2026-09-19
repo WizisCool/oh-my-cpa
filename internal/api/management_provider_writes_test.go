@@ -85,8 +85,8 @@ func TestConcurrentProviderTogglesDoNotLoseAWrite(t *testing.T) {
 // ordering gap between CPA's accepted list write and the console's local name
 // overlay.
 //
-// The first request is held inside saveProviderNames after CPA has accepted its
-// list write. A second update is then issued. With the overlay outside the write
+// The first request is held inside the provider metadata transaction after CPA
+// has accepted its list write. A second update is then issued. With the overlay outside the write
 // window, that second request can finish first and be overwritten by the paused
 // first request's overlay; with the overlay inside the window, the second request
 // cannot pass the gate until the first overlay is stored. The final name must be

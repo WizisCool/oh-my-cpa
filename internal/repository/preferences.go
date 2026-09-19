@@ -102,6 +102,48 @@ func (r *Repository) PutPreference(ctx context.Context, key, value string) error
 	return nil
 }
 
+// PutPreferences stores a set of preferences in one transaction. Callers use it
+// when several preference documents describe one operator action: a failure or
+// cancellation must leave the whole set at its previous revision rather than
+// exposing a half-applied overlay.
+func (r *Repository) PutPreferences(ctx context.Context, values map[string]string) error {
+	if r == nil || r.SQL() == nil {
+		return errors.New("repository is not initialized")
+	}
+	for key, value := range values {
+		if !validPreferenceKey(key) {
+			return fmt.Errorf("invalid preference key %q", key)
+		}
+		if len(value) > MaxPreferenceValueBytes {
+			return fmt.Errorf("preference %q exceeds %d bytes", key, MaxPreferenceValueBytes)
+		}
+	}
+	if len(values) == 0 {
+		return nil
+	}
+
+	tx, err := r.SQL().BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin preference transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	now := time.Now().UTC().UnixMilli()
+	for key, value := range values {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO ui_preferences (pref_key, pref_value, updated_at_ms)
+			VALUES (?, ?, ?)
+			ON CONFLICT(pref_key) DO UPDATE SET pref_value = excluded.pref_value, updated_at_ms = excluded.updated_at_ms`,
+			key, value, now); err != nil {
+			return fmt.Errorf("write preference %q: %w", key, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit preference transaction: %w", err)
+	}
+	return nil
+}
+
 // validPreferenceKey keeps the table a flat namespace of known UI settings
 // rather than an arbitrary blob store reachable through the API.
 func validPreferenceKey(key string) bool {

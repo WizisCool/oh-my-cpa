@@ -13,7 +13,7 @@ func (h *Handler) appendOpenAICompatibilityGated(
 	ctx context.Context,
 	client *management.Client,
 	entry management.OpenAICompatibility,
-	afterUpdate func(context.Context, []management.OpenAICompatibility),
+	afterUpdate func(context.Context, []management.OpenAICompatibility) error,
 ) ([]management.OpenAICompatibility, error) {
 	var updated []management.OpenAICompatibility
 	err := gatedProviderListWrite(h, ctx,
@@ -46,7 +46,7 @@ func (h *Handler) appendConfigKeyProvider(
 	client *management.Client,
 	spec providerConfigFamilySpec,
 	entry management.ConfigAPIKey,
-	afterUpdate func(context.Context, []management.ConfigAPIKey),
+	afterUpdate func(context.Context, []management.ConfigAPIKey) error,
 ) ([]management.ConfigAPIKey, error) {
 	var updated []management.ConfigAPIKey
 	err := gatedProviderListWrite(h, ctx,
@@ -73,7 +73,7 @@ func (h *Handler) mutateConfigKeyProvider(
 	spec providerConfigFamilySpec,
 	index int,
 	apply func(*management.ConfigAPIKey),
-	afterUpdate func(context.Context, []management.ConfigAPIKey),
+	afterUpdate func(context.Context, []management.ConfigAPIKey) error,
 ) error {
 	return gatedProviderListWrite(h, ctx,
 		func(ctx context.Context) ([]management.ConfigAPIKey, error) {
@@ -98,7 +98,7 @@ func (h *Handler) deleteConfigKeyProvider(
 	client *management.Client,
 	spec providerConfigFamilySpec,
 	index int,
-	afterUpdate func(context.Context, []management.ConfigAPIKey),
+	afterUpdate func(context.Context, []management.ConfigAPIKey) error,
 ) error {
 	return gatedProviderListWrite(h, ctx,
 		func(ctx context.Context) ([]management.ConfigAPIKey, error) {

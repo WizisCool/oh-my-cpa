@@ -173,3 +173,94 @@ func TestProviderDeleteShiftsEveryPositionalOverlay(t *testing.T) {
 		}
 	}
 }
+
+// A local overlay write can fail after CPA has accepted the provider change.
+// That is a partial commit: the response must not claim success, and its stable
+// code must stop a client from treating the operation as a blind retry.
+func TestProviderOverlayFailureReportsPartialCommit(t *testing.T) {
+	assertPartialCommit := func(t *testing.T, resp *http.Response, payload []byte, pricing *fakePricing) {
+		t.Helper()
+		if resp.StatusCode != http.StatusInternalServerError {
+			t.Fatalf("partial provider commit status = %d body %s", resp.StatusCode, payload)
+		}
+		var refusal struct {
+			Error string `json:"error"`
+			Code  string `json:"code"`
+		}
+		if err := json.Unmarshal(payload, &refusal); err != nil {
+			t.Fatalf("partial provider commit response is not JSON: %v (%s)", err, payload)
+		}
+		if refusal.Error != providerPartialCommitMessage {
+			t.Fatalf("partial provider commit error = %q, want %q", refusal.Error, providerPartialCommitMessage)
+		}
+		if refusal.Code != providerPartialCommitCode {
+			t.Fatalf("partial provider commit code = %q, want %q", refusal.Code, providerPartialCommitCode)
+		}
+		if got := pricing.notifyCount.Load(); got != 1 {
+			t.Fatalf("pricing notifications after a partial commit = %d, want 1", got)
+		}
+	}
+
+	t.Run("update", func(t *testing.T) {
+		fixture := newProviderTestFixture(t)
+		pricing := &fakePricing{}
+		fixture.handler.SetPricing(pricing)
+		if _, err := fixture.handler.repo.SQL().Exec("DROP TABLE ui_preferences"); err != nil {
+			t.Fatalf("drop ui_preferences: %v", err)
+		}
+
+		resp, payload := doJSON(t, fixture.client, http.MethodPut,
+			fixture.baseURL+"/omc/api/v1/management/providers/codex-0",
+			`{"family":"codex","name":"Partial Update","base_url":"https://partial.example.test"}`)
+		assertPartialCommit(t, resp, payload, pricing)
+
+		fixture.state.mu.Lock()
+		storedBaseURL := fixture.state.codexProviders[0]["base-url"]
+		fixture.state.mu.Unlock()
+		if storedBaseURL != "https://partial.example.test" {
+			t.Fatalf("CPA base URL = %v after a partial commit, want the accepted update", storedBaseURL)
+		}
+	})
+
+	t.Run("create", func(t *testing.T) {
+		fixture := newProviderTestFixture(t)
+		pricing := &fakePricing{}
+		fixture.handler.SetPricing(pricing)
+		if _, err := fixture.handler.repo.SQL().Exec("DROP TABLE ui_preferences"); err != nil {
+			t.Fatalf("drop ui_preferences: %v", err)
+		}
+
+		resp, payload := doJSON(t, fixture.client, http.MethodPost,
+			fixture.baseURL+"/omc/api/v1/management/providers",
+			`{"family":"openai-compatibility","name":"Partial Create","base_url":"https://partial.example.test"}`)
+		assertPartialCommit(t, resp, payload, pricing)
+
+		fixture.state.mu.Lock()
+		count := len(fixture.state.oaiProviders)
+		lastName := fixture.state.oaiProviders[count-1]["name"]
+		fixture.state.mu.Unlock()
+		if count != 2 || lastName != "Partial Create" {
+			t.Fatalf("CPA providers after a partial create = count %d last name %v, want the accepted row", count, lastName)
+		}
+	})
+
+	t.Run("delete", func(t *testing.T) {
+		fixture := newProviderTestFixture(t)
+		pricing := &fakePricing{}
+		fixture.handler.SetPricing(pricing)
+		if _, err := fixture.handler.repo.SQL().Exec("DROP TABLE ui_preferences"); err != nil {
+			t.Fatalf("drop ui_preferences: %v", err)
+		}
+
+		resp, payload := doJSON(t, fixture.client, http.MethodDelete,
+			fixture.baseURL+"/omc/api/v1/management/providers/codex-0", "")
+		assertPartialCommit(t, resp, payload, pricing)
+
+		fixture.state.mu.Lock()
+		count := len(fixture.state.codexProviders)
+		fixture.state.mu.Unlock()
+		if count != 0 {
+			t.Fatalf("CPA providers after a partial delete = %d, want 0", count)
+		}
+	})
+}

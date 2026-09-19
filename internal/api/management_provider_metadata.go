@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -11,80 +12,96 @@ import (
 )
 
 func (h *Handler) loadProviderNames(ctx context.Context) map[string]string {
-	if h.repo == nil {
+	names, err := h.loadProviderNamesStrict(ctx)
+	if err != nil {
 		return nil
 	}
-	raw, found, err := h.repo.GetPreference(ctx, repository.PreferenceProviderNames)
-	if err != nil || !found || raw == "" {
+	return names
+}
+
+func (h *Handler) loadProviderNamesStrict(ctx context.Context) (map[string]string, error) {
+	return h.loadStringPreference(ctx, repository.PreferenceProviderNames)
+}
+
+// applyProviderMetadata persists the name and website overlays for one provider
+// change in one transaction. They describe the same accepted write, so a failed
+// website write must not leave the name from a newer revision beside the old
+// website.
+func (h *Handler) applyProviderMetadata(ctx context.Context, id, name, website string, isWebsiteProvided bool) error {
+	if id == "" || (name == "" && !isWebsiteProvided) {
 		return nil
 	}
-	var res map[string]string
-	if err := json.Unmarshal([]byte(raw), &res); err != nil {
-		return nil
+	updates := make(map[string]map[string]string, 2)
+	if name != "" {
+		if h.beforeProviderNamesSave != nil {
+			h.beforeProviderNamesSave()
+		}
+		names, err := h.loadProviderNamesStrict(ctx)
+		if err != nil {
+			return fmt.Errorf("read provider names for metadata update: %w", err)
+		}
+		if names[id] != name {
+			names[id] = name
+			updates[repository.PreferenceProviderNames] = names
+		}
 	}
-	return res
-}
-
-func (h *Handler) saveProviderName(ctx context.Context, id, name string) {
-	if h.repo == nil || id == "" || name == "" {
-		return
+	if isWebsiteProvided {
+		websites, err := h.loadProviderWebsitesStrict(ctx)
+		if err != nil {
+			return fmt.Errorf("read provider websites for metadata update: %w", err)
+		}
+		if website == "" {
+			if _, present := websites[id]; present {
+				delete(websites, id)
+				updates[repository.PreferenceProviderWebsites] = websites
+			}
+		} else if websites[id] != website {
+			websites[id] = website
+			updates[repository.PreferenceProviderWebsites] = websites
+		}
 	}
-	names := h.loadProviderNames(ctx)
-	if names == nil {
-		names = make(map[string]string)
+	if err := h.saveStringPreferences(ctx, updates); err != nil {
+		return fmt.Errorf("persist provider metadata: %w", err)
 	}
-	names[id] = name
-	h.saveProviderNames(ctx, names)
-}
-
-func (h *Handler) removeProviderName(ctx context.Context, id string) {
-	if h.repo == nil || id == "" {
-		return
-	}
-	names := h.loadProviderNames(ctx)
-	if names == nil {
-		return
-	}
-	delete(names, id)
-	h.saveProviderNames(ctx, names)
-}
-
-// saveProviderNames replaces the whole name map. It exists for the operations
-// that re-key several entries at once (a delete shifts every later position), so
-// those cannot leave the stored overlay half-written.
-func (h *Handler) saveProviderNames(ctx context.Context, names map[string]string) {
-	if h.repo == nil {
-		return
-	}
-	if h.beforeProviderNamesSave != nil {
-		h.beforeProviderNamesSave()
-	}
-	encoded, err := json.Marshal(names)
-	if err == nil {
-		_ = h.repo.PutPreference(ctx, repository.PreferenceProviderNames, string(encoded))
-	}
+	return nil
 }
 
 // shiftProviderMetadataAfterDelete re-keys the operator metadata of every entry
-// that moved down one position when an entry was deleted.
-func (h *Handler) shiftProviderMetadataAfterDelete(ctx context.Context, idPrefix string, deletedIndex int) {
+// that moved down one position when an entry was deleted. The three overlay
+// documents are replaced in one transaction, so a delete cannot leave names,
+// websites, and icons describing different positions.
+func (h *Handler) shiftProviderMetadataAfterDelete(ctx context.Context, idPrefix string, deletedIndex int) error {
 	if idPrefix == "" {
-		return
+		return nil
 	}
-	if names := h.loadProviderNames(ctx); len(names) > 0 {
-		h.saveProviderNames(ctx, shiftPositionalProviderIDs(names, idPrefix, deletedIndex))
+	updates := make(map[string]map[string]string, 3)
+	names, err := h.loadProviderNamesStrict(ctx)
+	if err != nil {
+		return err
 	}
-	if websites := h.loadProviderWebsites(ctx); len(websites) > 0 {
-		h.saveProviderWebsites(ctx, shiftPositionalProviderIDs(websites, idPrefix, deletedIndex))
+	if len(names) > 0 {
+		updates[repository.PreferenceProviderNames] = shiftPositionalProviderIDs(names, idPrefix, deletedIndex)
+	}
+	websites, err := h.loadProviderWebsitesStrict(ctx)
+	if err != nil {
+		return err
+	}
+	if len(websites) > 0 {
+		updates[repository.PreferenceProviderWebsites] = shiftPositionalProviderIDs(websites, idPrefix, deletedIndex)
 	}
 	// The icon overlay is written by the console through the preferences API
 	// instead of by a provider save, but it is keyed by the same positional id,
 	// so a delete has to move it here too. Leaving it alone is what made a
 	// deleted provider's brand mark reappear on whichever credential inherited
 	// its index.
-	if icons := h.loadProviderIcons(ctx); len(icons) > 0 {
-		h.saveProviderIcons(ctx, shiftPositionalProviderIDs(icons, idPrefix, deletedIndex))
+	icons, err := h.loadProviderIconsStrict(ctx)
+	if err != nil {
+		return err
 	}
+	if len(icons) > 0 {
+		updates[repository.PreferenceProviderIcons] = shiftPositionalProviderIDs(icons, idPrefix, deletedIndex)
+	}
+	return h.saveStringPreferences(ctx, updates)
 }
 
 // idPrefixForFamily is the positional id prefix a family's rows carry.
@@ -139,70 +156,15 @@ func shiftPositionalProviderIDs(entries map[string]string, idPrefix string, dele
 // same positional provider id as provider_names, so the two move together when a
 // provider is deleted and neither can be joined to the wrong entry.
 func (h *Handler) loadProviderWebsites(ctx context.Context) map[string]string {
-	if h.repo == nil {
+	websites, err := h.loadProviderWebsitesStrict(ctx)
+	if err != nil {
 		return nil
 	}
-	raw, found, err := h.repo.GetPreference(ctx, repository.PreferenceProviderWebsites)
-	if err != nil || !found || raw == "" {
-		return nil
-	}
-	var res map[string]string
-	if err := json.Unmarshal([]byte(raw), &res); err != nil {
-		return nil
-	}
-	return res
+	return websites
 }
 
-// saveProviderWebsite writes one provider's homepage. An empty url removes the
-// entry rather than storing an empty string, so "no website" has exactly one
-// representation in storage.
-func (h *Handler) saveProviderWebsite(ctx context.Context, id, website string) {
-	if h.repo == nil || id == "" {
-		return
-	}
-	websites := h.loadProviderWebsites(ctx)
-	if websites == nil {
-		websites = make(map[string]string)
-	}
-	if website == "" {
-		if _, present := websites[id]; !present {
-			return
-		}
-		delete(websites, id)
-	} else {
-		websites[id] = website
-	}
-	h.saveProviderWebsites(ctx, websites)
-}
-
-// applyProviderWebsite stores a website only when the save request actually
-// carried the field.
-//
-// The distinction is load-bearing rather than defensive: a client that predates
-// the field sends no website at all, and reading that as "clear it" would wipe
-// operator metadata on every rename performed from such a client. An explicitly
-// present empty string is what clears it.
-func (h *Handler) applyProviderWebsite(ctx context.Context, id, website string, isProvided bool) {
-	if !isProvided {
-		return
-	}
-	h.saveProviderWebsite(ctx, id, website)
-}
-
-// saveProviderWebsites replaces the whole website map, for the operations that
-// re-key several entries at once.
-func (h *Handler) saveProviderWebsites(ctx context.Context, websites map[string]string) {
-	if h.repo == nil {
-		return
-	}
-	encoded, err := json.Marshal(websites)
-	if err == nil {
-		_ = h.repo.PutPreference(ctx, repository.PreferenceProviderWebsites, string(encoded))
-	}
-}
-
-func (h *Handler) removeProviderWebsite(ctx context.Context, id string) {
-	h.saveProviderWebsite(ctx, id, "")
+func (h *Handler) loadProviderWebsitesStrict(ctx context.Context) (map[string]string, error) {
+	return h.loadStringPreference(ctx, repository.PreferenceProviderWebsites)
 }
 
 // loadProviderIcons reads the per-provider brand-icon overlay.
@@ -213,29 +175,49 @@ func (h *Handler) removeProviderWebsite(ctx context.Context, id string) {
 // aligned with the positions it is keyed by - see
 // shiftProviderMetadataAfterDelete.
 func (h *Handler) loadProviderIcons(ctx context.Context) map[string]string {
-	if h.repo == nil {
+	icons, err := h.loadProviderIconsStrict(ctx)
+	if err != nil {
 		return nil
 	}
-	raw, found, err := h.repo.GetPreference(ctx, repository.PreferenceProviderIcons)
-	if err != nil || !found || raw == "" {
-		return nil
-	}
-	var res map[string]string
-	if err := json.Unmarshal([]byte(raw), &res); err != nil {
-		return nil
-	}
-	return res
+	return icons
 }
 
-// saveProviderIcons replaces the whole icon map, which is the only way it is
-// written here: the operation that touches it re-keys every later entry, and a
-// per-entry write could leave the map half-shifted.
-func (h *Handler) saveProviderIcons(ctx context.Context, icons map[string]string) {
+func (h *Handler) loadProviderIconsStrict(ctx context.Context) (map[string]string, error) {
+	return h.loadStringPreference(ctx, repository.PreferenceProviderIcons)
+}
+
+func (h *Handler) loadStringPreference(ctx context.Context, key string) (map[string]string, error) {
 	if h.repo == nil {
-		return
+		return nil, errors.New("repository is not initialized")
 	}
-	encoded, err := json.Marshal(icons)
-	if err == nil {
-		_ = h.repo.PutPreference(ctx, repository.PreferenceProviderIcons, string(encoded))
+	raw, found, err := h.repo.GetPreference(ctx, key)
+	if err != nil {
+		return nil, fmt.Errorf("read preference %q: %w", key, err)
 	}
+	if !found || strings.TrimSpace(raw) == "" {
+		return map[string]string{}, nil
+	}
+	values := make(map[string]string)
+	if err := json.Unmarshal([]byte(raw), &values); err != nil {
+		return nil, fmt.Errorf("decode preference %q: %w", key, err)
+	}
+	if values == nil {
+		values = make(map[string]string)
+	}
+	return values, nil
+}
+
+func (h *Handler) saveStringPreferences(ctx context.Context, values map[string]map[string]string) error {
+	if h.repo == nil {
+		return errors.New("repository is not initialized")
+	}
+	encoded := make(map[string]string, len(values))
+	for key, value := range values {
+		document, err := json.Marshal(value)
+		if err != nil {
+			return fmt.Errorf("encode preference %q: %w", key, err)
+		}
+		encoded[key] = string(document)
+	}
+	return h.repo.PutPreferences(ctx, encoded)
 }

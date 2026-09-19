@@ -203,6 +203,15 @@ Properties to preserve when changing this code:
   and the name resolver read these maps, so an entry recorded ahead of a refused
   write would leave the console naming a credential CPA never accepted; recording
   it after the permit would let two accepted updates invert their overlay order.
+  If the local overlay write fails after CPA accepted the list, the gate answers
+  `500` with `code: provider_commit_partial` instead of reporting success. The
+  overlay write takes a short context detached from the client request, because a
+  disconnected client must not abandon the local half of an accepted write. The
+  refusal is deliberately not a retry instruction: a create may already have added
+  its row, so the client must reload before deciding what to do next.
+  A partial commit still notifies the pricing manager before the refusal is
+  returned, because CPA's model catalogue may already have changed even though the
+  console metadata transaction did not.
   The icon overlay is written by the console through the preferences API and so is
   never part of a provider save.
 
