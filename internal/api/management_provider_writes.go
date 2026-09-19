@@ -155,5 +155,12 @@ func gatedProviderListWrite[T any](
 	if err := mutate(&list); err != nil {
 		return err
 	}
-	return update(ctx, list)
+	if err := update(ctx, list); err != nil {
+		return err
+	}
+	// The credential lists have changed, so the masks the request list resolves from
+	// them are stale. Dropping them here means a re-keyed or renamed credential
+	// reads correctly on the next page rather than at the end of the TTL.
+	h.providerKeyMasks.invalidate()
+	return nil
 }

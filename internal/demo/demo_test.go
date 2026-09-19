@@ -322,6 +322,75 @@ func TestSeedNeverStoresACallerKeyInTheClear(t *testing.T) {
 	}
 }
 
+// TestSeedAttributesRequestsToConfiguredCredentials keeps the demonstration able to
+// show which provider key answered. The request list resolves that from the record's
+// auth index against the credential lists the gateway reports, and both sides of that
+// join are fixtures here: a record whose index no credential claims, or a credential
+// list that reports no index, would leave every request row silent while the console
+// still looked correct.
+func TestSeedAttributesRequestsToConfiguredCredentials(t *testing.T) {
+	ctx := context.Background()
+	repo, _, _ := seededDatabase(t)
+
+	// Every auth index the compatibility fixture publishes, read the way the resolver
+	// reads it.
+	declared := make(map[string]bool)
+	for _, provider := range compatibilitySection() {
+		entries, ok := provider["api-key-entries"].([]map[string]any)
+		if !ok {
+			t.Fatalf("provider %v publishes no api-key-entries", provider["name"])
+		}
+		for _, entry := range entries {
+			index, _ := entry["auth-index"].(string)
+			if strings.TrimSpace(index) == "" {
+				t.Fatalf("provider %v publishes a key with no auth-index", provider["name"])
+			}
+			declared[index] = true
+		}
+	}
+	// The families the console manages report an index per credential too.
+	for _, family := range familyCatalog() {
+		for _, key := range family.keys {
+			if strings.TrimSpace(key.authIndex) == "" {
+				t.Fatalf("%s credential %q has no auth index", family.family, key.apiKey)
+			}
+			declared[key.authIndex] = true
+		}
+	}
+
+	// A seeded request answered through one of those credentials must name an index
+	// that credential list actually claims. The fixture stores the payload's own
+	// spelling of the auth type, which is why both are selected here.
+	rows, err := repo.SQL().QueryContext(ctx, `
+		SELECT provider, auth_type, auth_index FROM usage_events
+		WHERE auth_type IN ('apikey', 'api_key') LIMIT 20`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	attributed := 0
+	for rows.Next() {
+		var provider, authType, authIndex string
+		if err := rows.Scan(&provider, &authType, &authIndex); err != nil {
+			t.Fatal(err)
+		}
+		attributed++
+		if strings.TrimSpace(authIndex) == "" {
+			t.Fatalf("an API-key request from %s carries no auth index", provider)
+		}
+		if !declared[authIndex] {
+			t.Fatalf("API-key request from %s carries auth index %q, which no credential claims: "+
+				"the request list would print no provider key", provider, authIndex)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if attributed == 0 {
+		t.Fatal("no API-key request in the fixture can name the key that served it")
+	}
+}
+
 // A restart must not double the numbers. The platform scales a demo instance to zero,
 // so a database left behind by an earlier boot is a normal event, not an edge case -
 // and the application deletes it rather than appending to it.

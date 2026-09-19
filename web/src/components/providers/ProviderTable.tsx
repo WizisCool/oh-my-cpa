@@ -5,7 +5,6 @@ import type { ColumnsType } from 'antd/es/table';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import { getProviderDefaultIcon, LobeIcon, ProviderBrandIcon } from '../LobeIcon';
-import { maskKeyText } from '../../utils/maskKey';
 import { safeExternalURL } from '../../utils/externalUrl';
 import { resolveProviderIcon } from '../../types/providerIcons';
 import { pluginOAuthLogoFor, type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
@@ -134,27 +133,6 @@ export function ProviderTable({
                   record.name
                 )}
               </div>
-              {record.api_key && (
-                <div
-                  /* The tooltip repeats what the cell shows, so it may only ever carry the
-                     same mask: the value is edited in the drawer, behind an explicit
-                     reveal, and a `title` attribute is readable from the document (and on
-                     hover) without one. */
-                  title={maskKeyText(record.api_key)}
-                  style={{
-                    fontFamily: 'monospace',
-                    fontSize: 11,
-                    color: 'var(--meta)',
-                    marginTop: 2,
-                    maxWidth: 220,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {maskKeyText(record.api_key)}
-                </div>
-              )}
             </div>
           </div>
         );

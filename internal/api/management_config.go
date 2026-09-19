@@ -304,6 +304,9 @@ func (h *Handler) managementConfigSourcePut(writer http.ResponseWriter, request 
 	if h.pricing != nil {
 		h.pricing.NotifyModelsChanged()
 	}
+	// The saved document may have re-keyed a provider, so the masks resolved from
+	// the credential lists it contains are no longer known to be current.
+	h.providerKeyMasks.invalidate()
 	newRev := configyaml.ComputeRevision(finalYAML)
 	if auditErr := h.recordAudit(request, "config.save_source", "config", "config_source_yaml", "success", map[string]any{"revision": newRev, "size_bytes": len(finalYAML)}); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit log failure; operation aborted")

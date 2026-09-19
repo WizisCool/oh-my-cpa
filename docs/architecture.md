@@ -724,6 +724,49 @@ page opts in, joins the overlay by that value, and keeps its own query cache ent
 so the dashboard's key picker — which only needs the mask — cannot be served the
 values, and the key page cannot be served the masks (ADR 0015).
 
+### Provider key masks: which upstream key answered
+
+A request record names its provider, and an operator reading it needs one more
+fact — which of that provider's keys the request actually went through. CPA does
+not put that key in the usage payload: it publishes the credential's runtime
+`auth_index` and nothing else. The keys exist only in CPA's configuration, so the
+mask is resolved on the server while the request list is read, and returned on each
+record as `provider_key_mask`.
+
+`internal/api/usage_provider_key_masks.go` owns that resolution. It reads the
+credential lists CPA currently reports — the four config API-key families and the
+`openai-compatibility` providers — indexes them by auth index, and matches each
+record against the list its own provider label belongs to, so a family's index
+cannot be answered by a compatibility provider's entry or the other way round.
+Within the `openai-compatibility` list the match is by index alone, deliberately:
+renaming a provider in CPA changes the label on later records while the credential,
+and CPA's index for it, stay the same, so a name-scoped match would orphan history
+that is still perfectly identifiable.
+
+Four properties are load-bearing:
+
+- **It resolves against the configuration as it is read, not as it was at request
+  time.** A credential that has been rotated, deleted or disabled since the request
+  no longer claims its index, so that record prints nothing. The console cannot
+  reconstruct a key it can no longer read, and a plausible-looking mask would be a
+  fabrication rather than a display label.
+- **Nothing is guessed.** An index no entry claims, a key CPA reports without an
+  index (the compatibility list's legacy `api-keys` array), an index two entries
+  claim, and a record with no index at all are all left empty. The duplicate case is
+  resolved to nothing even when the two masks look alike, because neither an index
+  nor a mask is an identity — the same rule the resource join follows.
+- **Only an API-key credential has one.** An OAuth record names the account it used
+  instead, and its index lives in the same column, so an auth-type check stands in
+  front of the lookup. The mask is display only, is stored on no row, and is never a
+  filter value; only `security.MaskSecret` output ever leaves the process.
+- **It is best effort and bounded.** The lists are read at most once per TTL, one
+  read is shared by concurrent pages, failures are negatively cached, and the whole
+  enrichment has its own short deadline. A gateway that is down, slow or missing a
+  family leaves the masks empty and returns the request list unchanged, because a
+  display label must not be able to fail the page whose job is to show request
+  history. A provider write through this console drops the cached read, so an edit is
+  reflected immediately; an edit made outside it is reflected within the TTL.
+
 ### Streaming status and throughput (TPS) derivation
 
 CPA usage payloads include a boolean `stream` field indicating whether the request

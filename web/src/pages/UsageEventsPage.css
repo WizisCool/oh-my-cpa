@@ -744,6 +744,18 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* The upstream credential that answered the request, masked the same way the key
+   list masks a caller key: monospace so its head and tail line up between rows,
+   and the metadata colour so it reads as an annotation on the provider name
+   rather than as a second title. */
+.req-provider-key {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--meta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* Column 4: Model name with reasoning effort beneath */
 .req-col-model {

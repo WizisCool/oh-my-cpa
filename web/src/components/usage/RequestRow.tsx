@@ -6,6 +6,7 @@ import { getProviderDefaultIcon } from '../LobeIcon';
 import { ProviderBrandIcon } from '../LobeIcon';
 import { useT } from '../../i18n';
 import { copyText } from '../../utils/clipboard';
+import { maskKeyText } from '../../utils/maskKey';
 import { cacheScaleMix, formatCacheRate } from '../../theme/cacheScale';
 import type { UsageEvent } from '../../types/usageEvents';
 import {
@@ -65,6 +66,15 @@ export const RequestRow = React.memo<RequestRowProps>(
       getProviderDefaultIcon,
       pluginLogos,
     );
+
+    // Which of the provider's keys answered this request. The server resolves it
+    // from CPA's credential lists and omits it when the credential cannot be
+    // identified, so an absent value prints no line at all rather than a guess.
+    // An OAuth credential has no provider key - its row names the account - so the
+    // line is confined to API-key credentials, and the mask is re-rendered here
+    // from whatever arrived: this surface can then never print a credential even if
+    // a future response carried one.
+    const providerKeyMask = providerInfo.isOAuth ? '' : maskKeyText(event.provider_key_mask);
 
     // 2. Cache rate calculation, plus its stop on the 0–100% colour scale.
     //    The scale stops are design tokens; the badge mixes them in OKLCH via
@@ -170,6 +180,13 @@ export const RequestRow = React.memo<RequestRowProps>(
             {providerInfo.subtitle && (
               <span className="req-provider-sub" title={providerInfo.subtitle}>
                 {providerInfo.subtitle}
+              </span>
+            )}
+            {providerKeyMask && (
+              /* The tooltip repeats the cell's own mask and nothing more: the value
+                 itself is never held by this page (ADR 0015). */
+              <span className="req-provider-key" title={providerKeyMask}>
+                {providerKeyMask}
               </span>
             )}
           </div>
