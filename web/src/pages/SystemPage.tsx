@@ -24,12 +24,14 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
+import { isDemoMode } from '../types/demoMode';
 import type { SystemInfoResponse } from '../types/system';
 
 const { Text, Paragraph } = Typography;
 
 export const SystemPage: React.FC = () => {
   const t = useT();
+  const isDemo = isDemoMode();
   const { message } = AntdApp.useApp();
   const [downloading, setDownloading] = useState(false);
 
@@ -295,6 +297,8 @@ export const SystemPage: React.FC = () => {
                 type="primary"
                 icon={<DownloadOutlined />}
                 loading={downloading}
+                disabled={isDemo}
+                title={isDemo ? t('demo.blocked') : undefined}
                 onClick={handleDownloadDiagnostics}
               >
                 {t('sys.download_diag')}

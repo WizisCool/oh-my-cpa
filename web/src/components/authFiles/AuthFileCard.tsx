@@ -18,6 +18,7 @@ import {
   AppstoreOutlined,
 } from '@ant-design/icons';
 import { credentialProviderIconId } from '../common/providerMetadata';
+import { isDemoMode } from '../../types/demoMode';
 import { ProviderBrandIcon } from '../LobeIcon';
 import { useT } from '../../i18n';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
@@ -66,6 +67,10 @@ export const AuthFileCard: React.FC<AuthFileCardProps> = ({
   const identity = deriveAuthFileIdentity(file);
 
   const disabled = isAuthFileDisabled(file);
+  // Downloading credential material and deleting a credential are the two things the
+  // demonstration refuses outright; the server refuses them too, and this is what keeps
+  // the button from offering something that cannot happen.
+  const isDemo = isDemoMode();
   const problem = isAuthFileProblem(file);
   const hasWarning = hasAuthFileStatusWarning(file);
 
@@ -293,7 +298,7 @@ export const AuthFileCard: React.FC<AuthFileCardProps> = ({
           type="text"
           size="small"
           icon={<DownloadOutlined />}
-          disabled={busy || file.runtime_only}
+          disabled={busy || file.runtime_only || isDemo}
           onClick={onDownload}
           title={t('af.download_one', { name: file.name })}
           aria-label={t('af.download_one', { name: file.name })}
@@ -305,14 +310,14 @@ export const AuthFileCard: React.FC<AuthFileCardProps> = ({
           okText={t('common.delete')}
           cancelText={t('common.cancel')}
           okButtonProps={{ danger: true }}
-          disabled={busy || file.runtime_only}
+          disabled={busy || file.runtime_only || isDemo}
         >
           <Button
             type="text"
             danger
             size="small"
             icon={<DeleteOutlined />}
-            disabled={busy || file.runtime_only}
+            disabled={busy || file.runtime_only || isDemo}
             title={t('af.delete_one', { name: file.name })}
             aria-label={t('af.delete_one', { name: file.name })}
           />

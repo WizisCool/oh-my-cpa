@@ -23,6 +23,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
+import { isDemoMode } from '../types/demoMode';
 import type { StorePluginItem } from '../types/plugin';
 import { useIsPhoneViewport } from '../hooks/useIsPhoneViewport';
 import { PhoneRow } from '../components/common/PhoneRow';
@@ -33,6 +34,9 @@ const PAGE_SIZE = 20;
 
 export const PluginStorePage: React.FC = () => {
   const t = useT();
+  // Installing a plugin runs third-party code inside the gateway, so the demonstration
+  // refuses it; the button says so instead of failing on click.
+  const isDemo = isDemoMode();
   const navigate = useNavigate();
   const { message } = AntdApp.useApp();
   const queryClient = useQueryClient();
@@ -148,6 +152,8 @@ export const PluginStorePage: React.FC = () => {
           >
             <Button
               size="small"
+              disabled={isDemo}
+              title={isDemo ? t('demo.blocked') : undefined}
               type="primary"
               icon={<DownloadOutlined />}
               loading={installMutation.isPending && installMutation.variables === r.id}

@@ -54,7 +54,7 @@ type Handler struct {
 }
 
 func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypto.Cipher, logger *slog.Logger, authManager *auth.Manager) *Handler {
-	return &Handler{
+	handler := &Handler{
 		cfg:            cfg,
 		repo:           repo,
 		cipher:         cipher,
@@ -66,11 +66,42 @@ func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypt
 		providerWrites: newProviderWriteGate(),
 		pluginLogos:    newPluginLogoFetcher(),
 	}
+	if cfg.IsDemoMode {
+		// Inlining a plugin's logo means fetching a URL the plugin declares. The
+		// public demo fetches nothing a plugin names, so the inliner is not installed
+		// at all and the console falls back to its own bundled mark.
+		handler.pluginLogos = nil
+	}
+	return handler
 }
 
 func (h *Handler) Router() http.Handler {
+	base := h.cfg.BasePath
+	router := h.routes()
+	// chi's nested wildcard route also matches the bare mount path. Handle the
+	// canonical slash before it reaches the mounted router.
+	mounted := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if base != "/" && request.URL.Path == base {
+			http.Redirect(writer, request, base+"/", http.StatusPermanentRedirect)
+			return
+		}
+		router.ServeHTTP(writer, request)
+	})
+	return securityHeaders(mounted)
+}
+
+// routes builds the routing table.
+//
+// It is separate from Router so the demo policy test can walk the table the server
+// actually serves instead of a copy of it: the classification has to be total over
+// the real routes, and a second list would prove nothing about the first.
+func (h *Handler) routes() chi.Router {
 	router := chi.NewRouter()
 	router.Use(securityHeaders)
+	// The demo boundary has to sit above the routing table, because it classifies the
+	// route rather than the handler: see demo_policy.go. Outside demo mode the guard
+	// is not installed at all.
+	router.Use(h.demoGuard)
 	base := h.cfg.BasePath
 	if base == "" {
 		base = "/"
@@ -189,16 +220,7 @@ func (h *Handler) Router() http.Handler {
 		r.Head("/*", h.spa)
 		r.MethodNotAllowed(h.methodNotAllowed)
 	})
-	// chi's nested wildcard route also matches the bare mount path. Handle the
-	// canonical slash before it reaches the mounted router.
-	mounted := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if base != "/" && request.URL.Path == base {
-			http.Redirect(writer, request, base+"/", http.StatusPermanentRedirect)
-			return
-		}
-		router.ServeHTTP(writer, request)
-	})
-	return securityHeaders(mounted)
+	return router
 }
 
 type loginRequest struct {
@@ -229,6 +251,17 @@ func (h *Handler) login(writer http.ResponseWriter, request *http.Request) {
 		writeError(writer, http.StatusBadRequest, "management key is required")
 		return
 	}
+	if h.cfg.IsDemoMode {
+		// A public demonstration has no secret to check: the same session is issued on
+		// first sight, so a visitor who lands on the sign-in card must not be able to
+		// get stuck behind a key they were never given.
+		if err := h.auth.Issue(writer); err != nil {
+			writeInternalError(writer, err)
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"authenticated": true, "demo": true})
+		return
+	}
 	if !h.auth.KeyMatches(payload.Password) {
 		if h.limiter != nil {
 			h.limiter.recordFailure(ip)
@@ -251,6 +284,18 @@ func (h *Handler) login(writer http.ResponseWriter, request *http.Request) {
 func (h *Handler) session(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if h.auth == nil || !h.auth.Valid(request) {
+		if h.cfg.IsDemoMode && h.auth != nil {
+			// The demonstration is open to anyone who opens the link, so the session it
+			// needs is issued on first sight rather than behind a credential a visitor
+			// would have to be told. Nothing is granted by it: the routes that would
+			// touch a real gateway are refused by demo_policy.go, not by this cookie.
+			if err := h.auth.Issue(writer); err != nil {
+				writeInternalError(writer, err)
+				return
+			}
+			writeJSON(writer, http.StatusOK, map[string]any{"authenticated": true, "demo": true})
+			return
+		}
 		writeJSON(writer, http.StatusOK, map[string]any{"authenticated": false})
 		return
 	}
@@ -272,8 +317,27 @@ func (h *Handler) logout(writer http.ResponseWriter, request *http.Request) {
 func (h *Handler) requireAuthentication(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if h.auth == nil || !h.auth.Valid(request) {
-			writeError(writer, http.StatusUnauthorized, "authentication required")
-			return
+			if h.cfg.IsDemoMode && h.auth != nil {
+				// The demonstration hands a session to whoever asks, so an unauthenticated
+				// request is not refused: it is served, and given the cookie it was missing.
+				//
+				// This is not a relaxation of a boundary. Nothing is granted by the cookie
+				// that the auto-issued session did not already grant - demo_policy.go is what
+				// refuses the operations a demo must not perform - and refusing here would
+				// break the demonstration on the platform it is deployed to: a container
+				// scales to zero and runs as several instances behind one address, each with
+				// its own fixture key, so a cookie minted by one is invalid at the next. The
+				// first reads of a page overlap the session check that would have replaced
+				// it, and a 401 among them turns the console back into a sign-in card that
+				// nothing was wrong with.
+				if err := h.auth.Issue(writer); err != nil {
+					writeInternalError(writer, err)
+					return
+				}
+			} else {
+				writeError(writer, http.StatusUnauthorized, "authentication required")
+				return
+			}
 		}
 		if request.Method != http.MethodGet && request.Method != http.MethodHead && !sameOrigin(request) {
 			writeError(writer, http.StatusForbidden, "same-origin request required")
@@ -683,7 +747,7 @@ func (h *Handler) spa(writer http.ResponseWriter, request *http.Request) {
 		writeInternalError(writer, fmt.Errorf("read embedded index: %w", err))
 		return
 	}
-	index, err := injectRuntimeConfig(string(data), h.cfg.BasePath)
+	index, err := injectRuntimeConfig(string(data), h.cfg)
 	if err != nil {
 		writeInternalError(writer, err)
 		return
@@ -696,7 +760,8 @@ func (h *Handler) spa(writer http.ResponseWriter, request *http.Request) {
 	_, _ = writer.Write([]byte(index))
 }
 
-func injectRuntimeConfig(indexHTML, basePath string) (string, error) {
+func injectRuntimeConfig(indexHTML string, cfg config.Config) (string, error) {
+	basePath := cfg.BasePath
 	if basePath == "/" {
 		basePath = ""
 	}
@@ -704,11 +769,14 @@ func injectRuntimeConfig(indexHTML, basePath string) (string, error) {
 	mediaBase := joinURLPath(basePath, "/media")
 	// The template package escapes values before putting them into the HTML
 	// script. Paths are validated by NormalizeBasePath before reaching here.
-	payload := fmt.Sprintf(`window.__OMCPA_CONFIG__ = %s;`, mustJSON(map[string]string{
+	// `demo` is injected rather than probed so the console can mark itself in the
+	// first frame, without a request that would flash a non-demo layout first.
+	payload := fmt.Sprintf(`window.__OMCPA_CONFIG__ = %s;`, mustJSON(map[string]any{
 		"basePath":     basePath,
 		"apiBaseUrl":   apiBase,
 		"mediaBaseUrl": mediaBase,
 		"appName":      "Oh My CPA",
+		"demo":         cfg.IsDemoMode,
 	}))
 	script := "<script>" + payload + "</script>"
 	replacedConfig := false

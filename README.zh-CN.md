@@ -31,6 +31,21 @@
 
 Oh My CPA 是面向 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) (CPA) 的自托管控制面。本项目提供 Web 仪表盘、请求浏览器、凭据管理、模型定价与配置编辑，采用 Go 模块化单体架构，内嵌 React 前端产物，并使用本地 SQLite 存储，单二进制开箱即用，零外部 CDN 依赖。
 
+## 在线体验
+
+**[oh-my-cpa-demo.vercel.app](https://oh-my-cpa-demo.vercel.app)** —— 运行在内置样例数据上的控制台。
+
+无需账号、无需密钥、无需安装：打开链接即可看到仪表盘。它由一份内置样例支撑（跨 8 个提供商、14 个模型的一年流量），因此各面板展示的是结构真实的数据；同时它运行在与正式部署完全相同的路由策略之后：登录、凭据下载、插件执行、网关配置写入，以及任何会离开本进程的操作都由服务端拒绝，控制台也会在修改不会被保存时明确告知。
+
+Demo 不是第二套实现：它就是这个二进制在 `OMCPA_DEMO_MODE=true`、且后端没有任何真实网关的情况下运行，并以 Vercel 容器镜像方式部署（见 `docs/architecture.md` §12、`docs/ops/vercel-demo.md`）。想在本地运行同样的实例：
+
+```bash
+pnpm build
+OMCPA_DEMO_MODE=true go run ./cmd/oh-my-cpa
+```
+
+它会以站点根路径（而不是 `/omc`）启动，并展示与本页相同的样例数据。
+
 ## 功能特性
 
 ### 网关与 Provider 管理
@@ -60,6 +75,7 @@ Oh My CPA 是面向 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 
 - **插件管理**：支持从插件市场浏览、安装、配置与卸载扩展插件。
 - **静态加密存储**：CPA 管理密钥与原始用量消息在 SQLite 中采用 AES-GCM 加密存储。
 - **安全审计日志**：下载认证文件、导出请求日志、查看或修改 YAML 源码等敏感操作强制写入追加式审计日志。
+- **Demo 模式**：`OMCPA_DEMO_MODE`（默认 `false`）让控制台改用内置样例数据，而不是真实 CPA，因此无需管理密钥、也无需任何提供商凭据。它的存储不持久——数据库在每次启动时删除重建；同时服务端会拒绝登录流程、凭据搬运、插件执行、网关配置写入，以及任何会离开本进程的操作。请仅在演示部署中开启；公开演示见[在线体验](#在线体验)。
 - **完全离线运行**：前端产物完整内嵌进 Go 二进制，生产环境无需 Node.js 运行时或外部网络 CDN。插件在外部发布的 Logo 由服务端拉取并内联，浏览器依旧只加载二进制自身提供的资源；在完全断网的部署中该拉取会失败，控制台改用内置的品牌图标。
 
 ## 架构一览
@@ -123,6 +139,10 @@ pnpm dev
 
 ## 部署说明
 
+### 在线 Demo（Vercel）
+
+公开 Demo 以 Vercel 容器镜像方式运行同一个二进制。`Dockerfile.vercel` 与 `vercel.json` 就是该平台的全部配置；在 Vercel 控制台将项目与仓库连接后，推送到 `master` 即可自动更新生产环境。完整步骤（含唯一需要在浏览器中完成的账号级授权）见 [`docs/ops/vercel-demo.md`](docs/ops/vercel-demo.md)。
+
 ### Docker（筹备中）
 
 > 容器镜像打包与自动化发布（`ghcr.io` / Docker Hub）目前正在筹备中。
@@ -150,6 +170,7 @@ pnpm dev
 | `pnpm check:ui` | 基于 Vite 开发服务器与 mock API 的界面场景快测 |
 | `pnpm verify` | 静态门禁：工具链检查、静态代码分析与密钥扫描 |
 | `pnpm verify:full` | 全量发布门禁：构建、Bundle 预算、浏览器端到端验收与几何探针 |
+| `pnpm verify:demo` | Demo 部署的浏览器冒烟测试（设置 `OMCPA_DEMO_URL` 可校验线上部署） |
 
 ## 贡献与安全
 
@@ -162,6 +183,7 @@ pnpm dev
 - [`docs/architecture.md`](docs/architecture.md) — 模块架构图、数据流与系统不变量
 - [`docs/design.md`](docs/design.md) — 视觉设计系统与主题 Token
 - [`docs/ops/sqlite-operations.md`](docs/ops/sqlite-operations.md) — SQLite 运维、备份演练与恢复手册
+- [`docs/ops/vercel-demo.md`](docs/ops/vercel-demo.md) — 在线 Demo 的 Vercel 部署手册与人工步骤
 - [`docs/cpamc-parity.md`](docs/cpamc-parity.md) — 与官方 CPAMC 的功能对位矩阵
 - [`AGENTS.md`](AGENTS.md) — 开发者与 AI Agent 协作契约与文档同步规范
 

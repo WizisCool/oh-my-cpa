@@ -5,6 +5,11 @@
  */
 export const MS: Readonly<Record<string, string>> = {
   "app.name": "oh-my-cpa",
+  "demo.badge": "DEMO",
+  "demo.badge_tooltip": "Demo dalam talian: datanya ialah sampel terbina dalam, dan tiada gerbang atau perkhidmatan model sebenar di belakangnya.",
+  "demo.notice": "Mod demo — perubahan tidak disimpan.",
+  "demo.blocked": "Tidak tersedia dalam demo.",
+  "demo.login_hint": "Ini demo awam: log masuk untuk meneroka konsol.",
   "common.management": "Pusat pengurusan",
   "common.retry": "Cuba semula",
   "common.refresh": "Muat semula",

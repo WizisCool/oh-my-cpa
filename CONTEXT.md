@@ -53,6 +53,13 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
 - **Client Key Alias**: The operator-assigned name for one gateway client key, stored in `client_key_aliases` and keyed by `(instance_id, usage fingerprint)`. It is Oh My CPA metadata, not CPA configuration: the secret stays in CPA's document and naming a key never writes that document. The identity is the keyed fingerprint that `usage_events.api_group_key` carries (HMAC purpose `usage-api-key`), never a configuration array index and never the display mask — an index moves when CPA reorders its `api-keys` list, and a mask is not unique because it preserves only a short head and tail. Aliases are deliberately never pruned: historical requests keep their fingerprint forever, so a deleted key's records still need their name, and a rename is read-time resolution rather than a rewrite of stored usage. Duplicate names are allowed, because a name is a label rather than an identity. Where no name exists, every surface falls back to the mask.
 - **Streaming Usage Record**: Whether CPA executed a request in streaming mode, captured from CPA's `stream` field into `usage_events.stream` (`1` for streaming, `0` for non-streaming, `NULL` for historical rows where the flag was not recorded). The flag is operator-facing metadata, not the sole classifier for TTFT validity: an upstream executor can capture a genuine first-token boundary even when the client requested `stream: false`. Derived metrics therefore use the residual window `latency_ms - ttft_ms`: **TPS** uses the generation-phase rate `output / (latency - ttft)` when the window is at least `MIN_STREAMING_GENERATION_WINDOW_MS` (50 ms), and otherwise falls back to the end-to-end average `output / latency`; the recorded `stream` flag does not override that decision. A collapsed window means the proxy observed the response at completion rather than a progressive stream, so subtracting it would create timer artifacts such as 768,588 t/s. Presentation shows TTFT only when the window is measurable and shows the non-stream badge when an explicit `stream: false` record has no measurable TTFT or when the residual window collapsed. Historical records (`stream IS NULL`) use the same residual-window heuristic.
 
+## Demo mode
+
+- **Demo mode**: A deployment of the same binary that serves the console from a fixture and refuses the operations a public deployment must not perform, switched on by `OMCPA_DEMO_MODE` and off unless it is. It is not a second product and not a second frontend: every page, DTO and read path is the operator's own. What it changes is where the gateway's answers come from, which credential the session is derived from, where the database lives, and which routes answer at all - see `docs/architecture.md` §12 and ADR 0016.
+- **Demo fixture**: The in-process stand-in for CLIProxyAPI that answers the management API the console reads, on a loopback socket, with a key minted per process. It never contacts the URL it is handed: a provider quota read is resolved against its own catalogue and anything else is refused, so a demo performs no outbound request. It stands in for the *gateway*, not for the console: pages that read Oh My CPA's own stored data read the real database.
+- **Demo refusal**: A `403` from the route classification, marked with its own header and naming the reason. It is what a route the demonstration must not serve answers, and it is the boundary - a control the console hides or disables is a courtesy to the reader, never the protection.
+- **Not-persisted notice**: The statement the console makes after a write the demonstration permits. Such a write lands either in the fixture (a credential's enabled state or its metadata) or in the instance's own temporary database (a caller-key name, a preference, a price row, a resource override), and in both cases it is gone when the platform replaces the instance. Sign-in is excluded: it is not a write, and the notice beside a successful sign-in would say the opposite of what happened. It is shown because "the button worked" and "the change is durable" are different claims, and only the first is true here.
+
 ## Naming rule
 
 User-facing names, icons, colors, ownership, and subscription metadata belong to Oh My CPA. CPA driver names, auth indexes, base URLs, and raw provider fields remain technical details and are shown secondarily.
@@ -130,7 +137,11 @@ label). The key is never persisted in browser storage and is omitted from normal
 API responses; sessions are HttpOnly SameSite=Strict cookies. Rotating the CPA
 key invalidates existing sessions once Oh My CPA reloads the new key (e.g. upon
 restart or configuration reload). No key configured means the app boots but
-sign-in answers 503 until `OMCPA_CPA_MANAGEMENT_KEY` is set. Authenticated
+sign-in answers 503 until `OMCPA_CPA_MANAGEMENT_KEY` is set. Demo mode is the one
+exception, and it is not a relaxation of this rule: there the session is derived
+from the fixture's own per-process key and issued on first sight, because a public
+demonstration has no administrator whose identity it could be establishing.
+Authenticated
 secret-management surfaces (such as raw YAML source viewing or client-key
 reveals) explicitly return credentials to authorized administrators and log
 audits.

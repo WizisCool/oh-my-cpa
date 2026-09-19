@@ -48,7 +48,7 @@ func (h *Handler) listClientAPIKeys(writer http.ResponseWriter, request *http.Re
 	// response that merely reports the keys - the dashboard's picker, a future
 	// panel - needs the mask and must not be able to read a credential out of a
 	// response body.
-	includeKeys := strings.EqualFold(request.URL.Query().Get("include_keys"), "true")
+	includeKeys := h.revealKeysAllowed(request)
 
 	keys, err := client.ClientAPIKeys(request.Context())
 	if err != nil {

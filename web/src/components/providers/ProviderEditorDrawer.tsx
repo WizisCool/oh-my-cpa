@@ -14,6 +14,7 @@ import {
 import { CloseOutlined, DownOutlined, PlusOutlined, SyncOutlined, UpOutlined } from '@ant-design/icons';
 
 import { useT } from '../../i18n';
+import { isDemoMode } from '../../types/demoMode';
 import { LobeIcon, getProviderDefaultIcon } from '../LobeIcon';
 import { maskKeyText } from '../../utils/maskKey';
 import { modelOptionsFor } from '../../utils/modelOptions';
@@ -113,6 +114,9 @@ export function ProviderEditorDrawer({
   ...editor
 }: ProviderEditorDrawerProps & { familyDisplayNames: Record<string, string> }) {
   const t = useT();
+  // Pulling models calls the provider's own endpoint with the credential. The
+  // demonstration refuses it, so the control says so rather than failing on click.
+  const isDemo = isDemoMode();
   const {
     createProviderMutation,
     updateProviderMutation,
@@ -217,6 +221,8 @@ export function ProviderEditorDrawer({
             <Button
               type="primary"
               loading={createProviderMutation.isPending || updateProviderMutation.isPending}
+              disabled={isDemo}
+              title={isDemo ? t('demo.blocked') : undefined}
               onClick={handleSaveProvider}
             >
               {t('common.save')}
@@ -835,6 +841,8 @@ export function ProviderEditorDrawer({
                   <Button
                     icon={<SyncOutlined spin={isPullingModels} />}
                     loading={isPullingModels}
+                    disabled={isDemo}
+                    title={isDemo ? t('demo.blocked') : undefined}
                     onClick={handlePullModels}
                   >
                     {endpointModels.length > 0

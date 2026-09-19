@@ -14,6 +14,7 @@ import { getAppConfig } from './types/config';
 import { createThemeConfig } from './theme/themeConfig';
 import { AppLayout } from './components/common/AppLayout';
 import { AuthGate } from './components/common/AuthGate';
+import { DemoNotice } from './components/common/DemoNotice';
 
 const UsageEventsPage = React.lazy(() => import('./pages/UsageEventsPage').then(m => ({ default: m.UsageEventsPage })));
 const PricingPage = React.lazy(() => import('./pages/pricing/PricingPage').then(m => ({ default: m.PricingPage })));
@@ -82,6 +83,7 @@ const ThemedShell: React.FC = () => {
     <ConfigProvider locale={ANTD_LOCALES[lang]} theme={antdTheme}>
       <AntdApp>
         <ThemeServerSync />
+        <DemoNotice />
         <TokenDisplayProvider>
           <AppRoutes />
         </TokenDisplayProvider>

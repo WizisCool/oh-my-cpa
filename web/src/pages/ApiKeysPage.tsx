@@ -28,6 +28,7 @@ import type { Document } from 'yaml';
 import dayjs from 'dayjs';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
+import { isDemoMode } from '../types/demoMode';
 import { useOverlayHistory } from '../hooks/useOverlayHistory';
 import { copyText } from '../utils/clipboard';
 import { ApiKeysList, type ApiKeyRecord } from '../components/keys/ApiKeysList';
@@ -52,6 +53,9 @@ import styles from './ApiKeysPage.module.css';
  */
 export const ApiKeysPage: React.FC = () => {
   const t = useT();
+  // Gateway keys live in CPA's own configuration document, so adding, editing and
+  // saving the list are refused by the demonstration.
+  const isDemo = isDemoMode();
   const { message } = AntdApp.useApp();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -527,19 +531,27 @@ export const ApiKeysPage: React.FC = () => {
               onConfirm={saveKeys}
               okText={t('common.confirm')}
               cancelText={t('common.cancel')}
-              disabled={!isDirty || saveMutation.isPending}
+              disabled={!isDirty || saveMutation.isPending || isDemo}
             >
               <Button
                 size="small"
                 type="primary"
                 icon={<SaveOutlined />}
                 loading={saveMutation.isPending}
-                disabled={!isDirty}
+                disabled={!isDirty || isDemo}
+                title={isDemo ? t('demo.blocked') : undefined}
               >
                 {t('keys.save')}
               </Button>
             </Popconfirm>
-            <Button size="small" type="primary" icon={<PlusOutlined />} onClick={openAddEditor}>
+            <Button
+              size="small"
+              type="primary"
+              icon={<PlusOutlined />}
+              disabled={isDemo}
+              title={isDemo ? t('demo.blocked') : undefined}
+              onClick={openAddEditor}
+            >
               {t('cfg.api_keys_add')}
             </Button>
           </div>

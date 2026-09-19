@@ -12,6 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';
+import { isDemoMode } from '../../types/demoMode';
 import { copyText } from '../../utils/clipboard';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { formatTokens, formatTokensFull } from '../../types/tokenDisplay';
@@ -44,6 +45,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   onSelectEvent,
 }) => {
   const t = useT();
+  const isDemo = isDemoMode();
   // The drawer's token cards follow the console's unit style; the values are
   // exact counts, so the full form is what this surface prints.
   const { style: tokenStyle } = useTokenDisplayStyle();
@@ -556,7 +558,10 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                         <Button
                           aria-label={t('events.download_log')}
                           icon={<DownloadOutlined />}
-                          disabled={!event.has_request_log || !event.request_id}
+                          // A request log quotes the request itself, so the demonstration
+                          // keeps it out of reach; the server refuses the download as well.
+                          disabled={!event.has_request_log || !event.request_id || isDemo}
+                          title={isDemo ? t('demo.blocked') : undefined}
                           onClick={() => setDownloadModalOpen(true)}
                         >
                           {t('events.download_log')}

@@ -6,11 +6,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useT } from '../../i18n';
 import { BrandArtwork } from './BrandArtwork';
 import { PreferenceMenus } from './PreferenceMenus';
+import { isDemoMode } from '../../types/demoMode';
 
 export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const t = useT();
   const { message } = AntdApp.useApp();
   const queryClient = useQueryClient();
+  const isDemo = isDemoMode();
   const [status, setStatus] = React.useState<'loading' | 'authenticated' | 'unauthenticated'>('loading');
   const [error, setError] = React.useState<string>();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -96,7 +98,16 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
             <p className="auth-subtitle">{t('auth.subtitle')}</p>
           </div>
           {error && <Alert showIcon type="error" description={error} className="auth-alert" />}
-          <Form layout="vertical" onFinish={login} requiredMark={false}>
+          {/* The demonstration signs in anyone who asks, so the field is filled in for
+              them. It is still the ordinary form: what it protects is the deployment's
+              own session, and there is nothing behind it that a demo must withhold. */}
+          {isDemo && <Alert showIcon type="info" description={t('demo.login_hint')} className="auth-alert" />}
+          <Form
+            layout="vertical"
+            onFinish={login}
+            requiredMark={false}
+            initialValues={isDemo ? { password: 'omc-demo' } : undefined}
+          >
             <Form.Item
               label={t('auth.label')}
               name="password"
@@ -114,7 +125,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
               {t('auth.submit')}
             </Button>
           </Form>
-          <div className="auth-footnote">{t('auth.footnote')}</div>
+          <div className="auth-footnote">{isDemo ? t('demo.notice') : t('auth.footnote')}</div>
         </Card>
       </main>
     </div>

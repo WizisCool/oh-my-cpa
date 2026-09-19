@@ -39,6 +39,7 @@ export const DOCUMENTS = [
   { file: 'docs/design.md' },
   { file: 'docs/cpamc-parity.md' },
   { file: 'docs/ops/sqlite-operations.md' },
+  { file: 'docs/ops/vercel-demo.md' },
   { file: 'docs/plans/model-prices.md' },
   { file: 'docs/adr/0001-go-react-sqlite-modular-monolith.md', archival: true },
   { file: 'docs/adr/0002-cpa-binding-and-identity-hierarchy.md', archival: true },

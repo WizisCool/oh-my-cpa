@@ -11,6 +11,26 @@ export type { Lang } from './language';
 const DICT: Record<string, [string, string]> = {
   // ── app / shell ──────────────────────────────────────────────────────────
   'app.name': ['oh-my-cpa', 'oh-my-cpa'],
+  // The demo markers are the one place copy is deliberately not translated: they
+  // label a deployment rather than the product, and a badge that changes width with
+  // the interface language moves the controls beside it.
+  'demo.badge': ['DEMO', 'DEMO'],
+  'demo.badge_tooltip': [
+    '在线演示：数据来自内置样例，不会连接任何真实的 CPA 或模型服务。',
+    'Online demo: the data is a built-in sample, and no real gateway or model service is behind it.',
+  ],
+  'demo.notice': [
+    '演示模式 — 修改不会被保存。',
+    'Demo mode — changes are not persisted.',
+  ],
+  'demo.blocked': [
+    '演示模式不提供该操作。',
+    'Not available in the demo.',
+  ],
+  'demo.login_hint': [
+    '这是一个公开演示，直接登录即可查看控制台。',
+    'This is a public demo: sign in to look around the console.',
+  ],
   'common.management': ['管理中心', 'Management center'],
   'common.retry': ['重试', 'Retry'],
   'common.refresh': ['刷新', 'Refresh'],

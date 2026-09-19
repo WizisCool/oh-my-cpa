@@ -3,6 +3,7 @@ import { DeleteOutlined, EditOutlined, EyeOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 
 import { useT } from '../../i18n';
+import { isDemoMode } from '../../types/demoMode';
 import { getProviderDefaultIcon, LobeIcon, ProviderBrandIcon } from '../LobeIcon';
 import { maskKeyText } from '../../utils/maskKey';
 import { safeExternalURL } from '../../utils/externalUrl';
@@ -54,6 +55,9 @@ export function ProviderTable({
   setTargetProviderForIcon,
 }: ProviderTableProps) {
   const t = useT();
+  // Provider definitions live in the gateway's configuration, so creating, editing,
+  // enabling and deleting one are all refused by the demonstration.
+  const isDemo = isDemoMode();
 
   // ── Shared helpers ────────────────────────────────────────────────────────
   /**
@@ -344,6 +348,9 @@ export function ProviderTable({
             checked={resolveEnabled(record)}
             aria-busy={statusQueue.isBusy(record.id)}
             aria-label={`${t('pro.col_switch')}: ${record.name}`}
+            // Enabling or disabling a provider writes the gateway's own configuration,
+            // which the demonstration refuses.
+            disabled={isDemo}
             onChange={(checked) => statusQueue.request(record.id, checked)}
           />
         );
@@ -412,6 +419,7 @@ export function ProviderTable({
                 size="small"
                 danger
                 icon={<DeleteOutlined />}
+                disabled={isDemo}
                 loading={deleteProviderMutation.isPending && deleteProviderMutation.variables === record.id}
                 aria-label={`${t('common.delete')}: ${record.name}`}
                 style={{

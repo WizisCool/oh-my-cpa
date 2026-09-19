@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net/url"
 	"os"
@@ -25,7 +27,17 @@ type Config struct {
 	Version        string
 	RequestTimeout time.Duration
 	TLSSkipVerify  bool
+	// IsDemoMode turns this process into the public demonstration build: the
+	// console is served from fixtures, so it needs no CPA, no management key and
+	// no provider credential, and the server refuses every operator surface that
+	// would touch real secret material. It is off unless OMCPA_DEMO_MODE is set,
+	// which is what keeps the self-hosted default byte-for-byte unchanged.
+	IsDemoMode bool
 }
+
+// DemoModeEnv is the switch that turns a self-hosted deployment into the public
+// demonstration. The default is deliberately off.
+const DemoModeEnv = "OMCPA_DEMO_MODE"
 
 // UsageConfig controls the request-record pipeline that backs the dashboard and
 // every later analytics feature.
@@ -84,7 +96,19 @@ func NormalizeBasePath(raw string) (string, error) {
 }
 
 func Load() (Config, error) {
-	basePath, err := NormalizeBasePath(os.Getenv("OMCPA_BASE_PATH"))
+	demoMode, err := parseBoolEnv(DemoModeEnv, false)
+	if err != nil {
+		return Config{}, err
+	}
+
+	basePathEnv := strings.TrimSpace(os.Getenv("OMCPA_BASE_PATH"))
+	if demoMode && basePathEnv == "" {
+		// A pasted demo URL has to be the console itself. Only the demo default
+		// moves; an explicit OMCPA_BASE_PATH still wins, so a self-hosted
+		// deployment that turned the demo on keeps its own sub-path.
+		basePathEnv = "/"
+	}
+	basePath, err := NormalizeBasePath(basePathEnv)
 	if err != nil {
 		return Config{}, fmt.Errorf("OMCPA_BASE_PATH: %w", err)
 	}
@@ -92,12 +116,21 @@ func Load() (Config, error) {
 	dataDir := strings.TrimSpace(os.Getenv("OMCPA_DATA_DIR"))
 	if dataDir == "" {
 		dataDir = "./data"
+		if demoMode {
+			// Demo data is disposable by definition, and the platform that runs the
+			// public demo mounts no writable volume: /tmp is the only directory a
+			// container image may write to there.
+			dataDir = filepath.Join(os.TempDir(), "oh-my-cpa-demo")
+		}
 	}
 	dataDir = filepath.Clean(dataDir)
 
 	listenAddr := strings.TrimSpace(os.Getenv("OMCPA_LISTEN_ADDR"))
 	if listenAddr == "" {
 		listenAddr = ":8080"
+		if demoMode {
+			listenAddr = demoListenAddr()
+		}
 	}
 
 	baseURL := strings.TrimSpace(os.Getenv("OMCPA_CPA_BASE_URL"))
@@ -120,9 +153,56 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	masterKey := strings.TrimSpace(os.Getenv("OMCPA_MASTER_KEY"))
+	publicURL := strings.TrimSpace(os.Getenv("OMCPA_PUBLIC_URL"))
+	if demoMode {
+		if masterKey == "" {
+			// A demo holds no operator secret to protect, and demanding one would make
+			// the deployment refuse to boot over a value nobody needs. Rotating it per
+			// process is what makes a restarted demo start from a clean fixture again.
+			masterKey, err = randomDemoMasterKey()
+			if err != nil {
+				return Config{}, err
+			}
+		}
+		if publicURL == "" {
+			// The session cookie is only marked Secure when the deployment reports an
+			// HTTPS origin, and the platform already knows its own public host.
+			publicURL = vercelPublicURL()
+		}
+	}
+
 	usage, err := loadUsageConfig()
 	if err != nil {
 		return Config{}, err
+	}
+	if demoMode {
+		// The fixture database is the whole history, and there is no CPA queue to
+		// drain: leaving capture on would only poll an upstream that does not
+		// exist and overwrite the fixture with nothing.
+		usage.Enabled = false
+		usage.Mode = "off"
+	}
+
+	cpa := CPAConfig{
+		BaseURL:       baseURL,
+		UsageAddr:     usageAddr,
+		ManagementKey: strings.TrimSpace(os.Getenv("OMCPA_CPA_MANAGEMENT_KEY")),
+	}
+	if demoMode {
+		// The real endpoint is replaced by the in-process fixture once it is
+		// listening; see internal/demo. Clearing it here keeps the fixture the only
+		// credential a demo can carry, even if the deployment inherits a stale one.
+		cpa = CPAConfig{}
+	}
+
+	databasePath := filepath.Join(dataDir, "oh-my-cpa.db")
+	if demoMode {
+		// A demo database is per-boot: it is deleted and rebuilt so the history always
+		// ends at the moment the visitor arrives. The file has its own name so that a
+		// deployment which pointed the demo at a directory holding real data cannot
+		// have that data deleted with it.
+		databasePath = filepath.Join(dataDir, "oh-my-cpa-demo.db")
 	}
 
 	return Config{
@@ -130,18 +210,47 @@ func Load() (Config, error) {
 		Usage:          usage,
 		BasePath:       basePath,
 		DataDir:        dataDir,
-		DatabasePath:   filepath.Join(dataDir, "oh-my-cpa.db"),
-		MasterKey:      strings.TrimSpace(os.Getenv("OMCPA_MASTER_KEY")),
-		PublicURL:      strings.TrimSpace(os.Getenv("OMCPA_PUBLIC_URL")),
+		DatabasePath:   databasePath,
+		MasterKey:      masterKey,
+		PublicURL:      publicURL,
 		Version:        envOr("OMCPA_VERSION", "v0.1.0-dev"),
 		RequestTimeout: timeout,
 		TLSSkipVerify:  tlsSkipVerify,
-		CPA: CPAConfig{
-			BaseURL:       baseURL,
-			UsageAddr:     usageAddr,
-			ManagementKey: strings.TrimSpace(os.Getenv("OMCPA_CPA_MANAGEMENT_KEY")),
-		},
+		CPA:            cpa,
+		IsDemoMode:     demoMode,
 	}, nil
+}
+
+// demoListenAddr resolves the port the public demo serves on. A container
+// platform routes to a port it chooses and announces it through PORT, while a
+// local run keeps the documented default.
+func demoListenAddr() string {
+	if port := strings.TrimSpace(os.Getenv("PORT")); port != "" {
+		return ":" + port
+	}
+	return ":8080"
+}
+
+// vercelPublicURL reads the deployment's own public origin, which the platform
+// exports as VERCEL_URL without a scheme. An empty result simply means the
+// deployment is not on that platform, and the session cookie stays usable over
+// plain HTTP.
+func vercelPublicURL() string {
+	host := strings.TrimSpace(os.Getenv("VERCEL_URL"))
+	if host == "" {
+		return ""
+	}
+	return "https://" + host
+}
+
+// randomDemoMasterKey mints the per-process key that encrypts the demo's
+// disposable local state. It is never displayed, exported or persisted.
+func randomDemoMasterKey() (string, error) {
+	material := make([]byte, 32)
+	if _, err := rand.Read(material); err != nil {
+		return "", fmt.Errorf("generate demo master key: %w", err)
+	}
+	return hex.EncodeToString(material), nil
 }
 
 func deriveUsageAddr(rawBaseURL string) string {

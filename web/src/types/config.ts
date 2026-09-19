@@ -3,6 +3,12 @@ export interface AppConfig {
   apiBaseUrl: string;
   mediaBaseUrl: string;
   appName: string;
+  /**
+   * True when the server is the public demonstration. The console reads it from
+   * the page the server rendered rather than from an API call, so the demo marker
+   * is in the first frame and no non-demo layout is ever painted first.
+   */
+  demo: boolean;
 }
 
 declare global {
@@ -51,5 +57,6 @@ export function getAppConfig(): AppConfig {
     apiBaseUrl,
     mediaBaseUrl,
     appName,
+    demo: injected?.demo === true,
   };
 }

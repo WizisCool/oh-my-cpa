@@ -25,6 +25,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
+import { isDemoMode } from '../types/demoMode';
 import type { PluginItem } from '../types/plugin';
 import { PluginConfigEditor } from '../components/plugins/PluginConfigEditor';
 import { parsePluginConfig, pluginConfigsEqual } from '../components/plugins/pluginConfig';
@@ -214,6 +215,9 @@ export const PluginsPage: React.FC = () => {
             size="small"
             checked={r.enabled}
             loading={statusMutation.isPending && statusMutation.variables?.id === r.id}
+            // A plugin executes inside the gateway, so enabling or disabling one is not
+            // a setting the demonstration can honour: the server refuses it.
+            disabled={isDemo}
             onChange={(checked) => statusMutation.mutate({ id: r.id, enabled: checked })}
             aria-label={`${t('plg.col_status')}: ${r.name}`}
           />
@@ -233,6 +237,7 @@ export const PluginsPage: React.FC = () => {
           <Button
             size="small"
             icon={<SettingOutlined />}
+            disabled={isDemo}
             onClick={() => handleOpenConfig(r)}
             aria-label={`${t('plg.config_title', { name: r.name })}`}
             title={t('plg.config_title', { name: r.name })}
@@ -247,6 +252,7 @@ export const PluginsPage: React.FC = () => {
               size="small"
               danger
               icon={<DeleteOutlined />}
+              disabled={isDemo}
               loading={deleteMutation.isPending && deleteMutation.variables === r.id}
               aria-label={`${t('common.delete')}: ${r.name}`}
               title={`${t('common.delete')}: ${r.name}`}
@@ -256,6 +262,8 @@ export const PluginsPage: React.FC = () => {
       ),
     },
   ];
+
+  const isDemo = isDemoMode();
 
   return (
     <div className="terminal-page plugins-page">

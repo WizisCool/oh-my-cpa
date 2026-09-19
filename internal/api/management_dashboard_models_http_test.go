@@ -329,8 +329,16 @@ func TestDashboardModelsCallViewMergesCallPointsAcrossUpstreamModels(t *testing.
 
 	flash := "deepseek-v4.1-flash"
 	events := []usage.Event{
-		func() usage.Event { e := modelEventFor("call-a", "deepseek-flash", now.Add(-time.Minute), 100); e.ModelAlias = &flash; return e }(),
-		func() usage.Event { e := modelEventFor("call-b", "deepseek-v4.1-flash", now.Add(-2*time.Minute), 200); e.ModelAlias = &flash; return e }(),
+		func() usage.Event {
+			e := modelEventFor("call-a", "deepseek-flash", now.Add(-time.Minute), 100)
+			e.ModelAlias = &flash
+			return e
+		}(),
+		func() usage.Event {
+			e := modelEventFor("call-b", "deepseek-v4.1-flash", now.Add(-2*time.Minute), 200)
+			e.ModelAlias = &flash
+			return e
+		}(),
 		modelEventFor("call-c", "claude-sonnet-4-5", now.Add(-3*time.Minute), 400),
 	}
 	if _, err := repo.InsertUsageEvents(context.Background(), events); err != nil {

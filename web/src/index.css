@@ -351,6 +351,10 @@ a { color: inherit; }
 .app-breadcrumb li:last-child .ant-breadcrumb-link { color: var(--fg); }
 .app-breadcrumb-current { color: var(--fg); font-weight: 500; }
 .header-logout { color: var(--muted) !important; }
+/* The demonstration's marker. It borrows the credential card's own badge language -
+   accent text on the surface with a border edge - rather than introducing a hue, so it
+   reads as one more label in the shell instead of as an alert. */
+.demo-chip { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border: 1px solid var(--border); border-radius: 2px; background: var(--surface); color: var(--accent); font-size: 10px; font-weight: 600; letter-spacing: 0.06em; }
 .app-content { flex: 1 1 0; min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; background: var(--bg); }
 .app-footer { display: none; }
 

@@ -55,3 +55,12 @@ caddy-config/
 # a bare name would also match scripts/fixture/seed-usage/, which is source.
 /seed-usage
 /seed-usage.exe
+
+# Vercel's local state: the project link, which holds the project and team
+# identifiers, and the OIDC file the CLI writes for `vercel dev`. Both are
+# per-machine deployment state rather than anything the repository needs. The OIDC
+# file is named explicitly rather than matched as `.env*`, which would also hide the
+# example file that has to stay tracked.
+.vercel/
+.vercel
+.env.local

@@ -14,6 +14,7 @@ import dayjs from 'dayjs';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';
+import { isDemoMode } from '../../types/demoMode';
 import type { ModelPrice } from '../../types/pricing';
 import { PricingLeaderboard } from './PricingLeaderboard';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
@@ -51,6 +52,7 @@ type FilterTabKey = 'all' | 'modelsdev' | 'manual' | 'unpriced';
 
 export const PricingPage: React.FC = () => {
   const t = useT();
+  const isDemo = isDemoMode();
   const { message } = AntdApp.useApp();
   const queryClient = useQueryClient();
   const [search, setSearch] = React.useState('');
@@ -435,6 +437,10 @@ export const PricingPage: React.FC = () => {
             type="primary"
             icon={<SyncOutlined spin={Boolean(sync?.running)} />}
             loading={syncMutation.isPending}
+            // The catalogue sync fetches models.dev. The demonstration prices its own
+            // fixture instead, so the server refuses this and the button says so.
+            disabled={isDemo}
+            title={isDemo ? t('demo.blocked') : undefined}
             onClick={() => syncMutation.mutate()}
           >
             {t('pricing.sync_now')}

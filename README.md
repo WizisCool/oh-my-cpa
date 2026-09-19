@@ -31,6 +31,22 @@
 
 Oh My CPA is a self-hosted control plane for [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) (CPA). This project provides a web dashboard, request browser, credential management, model pricing, and configuration editing for your AI proxy gateway, running as a single Go binary with an embedded React frontend and local SQLite storage.
 
+## Live Demo
+
+**[oh-my-cpa-demo.vercel.app](https://oh-my-cpa-demo.vercel.app)** — the console, running on fixture data.
+
+No account, no key, nothing to install: open the link and the dashboard is there. It is served from a built-in sample — a year of traffic across eight providers and fourteen models — so the panels have something real to show, and it is shown behind the same routing policy the product ships: sign-in, credential downloads, plugin execution, gateway configuration writes and anything that would leave the process are refused by the server, and the console says so when a change is not durable.
+
+Nothing about the demo is a second implementation. It is this binary with `OMCPA_DEMO_MODE=true` and no gateway behind it, deployed as a Vercel container image (`docs/architecture.md` §12, `docs/ops/vercel-demo.md`). To run the same thing locally:
+
+```bash
+pnpm build
+OMCPA_DEMO_MODE=true go run ./cmd/oh-my-cpa
+```
+
+It opens at the site root rather than `/omc`, and serves the same fixture this page
+does.
+
 ## Features
 
 ### Gateway & Provider Management
@@ -123,6 +139,10 @@ Open **`http://127.0.0.1:5173/omc/`**. Vite serves the UI with HMR and proxies `
 
 ## Deployment
 
+### Online Demo (Vercel)
+
+The public demo runs the same binary as a Vercel container image. `Dockerfile.vercel` and `vercel.json` are the whole of the platform's configuration, and pushing to `master` updates production once the project is connected to the repository in the Vercel console. `docs/ops/vercel-demo.md` is the runbook, including the one account-level step that has to be done in a browser.
+
 ### Docker (In Progress)
 
 > Docker packaging and automated image releases (`ghcr.io` / Docker Hub) are currently in progress.
@@ -139,6 +159,7 @@ Open **`http://127.0.0.1:5173/omc/`**. Vite serves the UI with HMR and proxies `
 - **Single Replica**: SQLite WAL requires exclusive single-process access. Run one replica mounting the data directory; do not mount over network filesystems (NFS/CIFS).
 - **Master Key**: `OMCPA_MASTER_KEY` is required to decrypt stored credentials and payloads. Back it up securely.
 - **Network Security**: Keep CPA on a private network or loopback interface, and serve Oh My CPA over HTTPS.
+- **Demo Mode**: `OMCPA_DEMO_MODE` (default `false`) serves the console from a built-in fixture instead of a CPA, so it needs no management key and no provider credential. Its storage is not durable — the database is deleted and rebuilt on every boot — and the server refuses sign-in flows, credential movement, plugin execution, gateway configuration writes and anything that would leave the process. Turn it on only for a demonstration deployment; the public one is described under [Live Demo](#live-demo).
 
 ## Developer Commands
 
@@ -150,6 +171,7 @@ Open **`http://127.0.0.1:5173/omc/`**. Vite serves the UI with HMR and proxies `
 | `pnpm check:ui` | Fast UI scenario tests against dev server with mocked APIs |
 | `pnpm verify` | Static gate: toolchain check, static analysis, and secret scan |
 | `pnpm verify:full` | Full gate: build, bundle budgets, browser acceptance & probes |
+| `pnpm verify:demo` | Browser smoke test for the demo deployment (`OMCPA_DEMO_URL` to check a remote one) |
 
 ## Contributing & Security
 
@@ -162,6 +184,7 @@ Open **`http://127.0.0.1:5173/omc/`**. Vite serves the UI with HMR and proxies `
 - [`docs/architecture.md`](docs/architecture.md) — Module boundaries, data flows, and invariants
 - [`docs/design.md`](docs/design.md) — Visual design system and theme tokens
 - [`docs/ops/sqlite-operations.md`](docs/ops/sqlite-operations.md) — SQLite operations, backup, and restore runbook
+- [`docs/ops/vercel-demo.md`](docs/ops/vercel-demo.md) — Vercel deployment runbook for the online demo
 - [`docs/cpamc-parity.md`](docs/cpamc-parity.md) — Feature parity matrix with official CPAMC
 - [`AGENTS.md`](AGENTS.md) — Development conventions and code/doc sync contract
 

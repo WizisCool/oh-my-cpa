@@ -25,6 +25,7 @@ import {
   UndoOutlined,
 } from '@ant-design/icons';
 import { useT } from '../i18n';
+import { isDemoMode } from '../types/demoMode';
 import { copyText } from '../utils/clipboard';
 import { useTheme } from '../theme/ThemeContext';
 import { ConfigDirtyBar } from '../components/config/ConfigDirtyBar';
@@ -50,6 +51,10 @@ const { Text } = Typography;
 
 export const ConfigPage: React.FC = () => {
   const t = useT();
+  // The demonstration refuses the gateway configuration write, because it writes to
+  // CPA's own file. The editor stays usable so the page can be read and explored; only
+  // the save is withheld.
+  const isDemo = isDemoMode();
   const { message } = AntdApp.useApp();
   const { theme } = useTheme();
   const navigate = useNavigate();
@@ -232,7 +237,8 @@ export const ConfigPage: React.FC = () => {
               type="primary"
               icon={<SaveOutlined />}
               loading={saveMutation.isPending}
-              disabled={!isDirty}
+              disabled={!isDirty || isDemo}
+              title={isDemo ? t('demo.blocked') : undefined}
               onClick={saveConfig}
             >
               {t('cfg.source_save')}
@@ -244,14 +250,15 @@ export const ConfigPage: React.FC = () => {
               onConfirm={saveConfig}
               okText={t('common.confirm')}
               cancelText={t('common.cancel')}
-              disabled={!isDirty || saveMutation.isPending}
+              disabled={!isDirty || saveMutation.isPending || isDemo}
             >
               <Button
                 size="small"
                 type="primary"
                 icon={<SaveOutlined />}
                 loading={saveMutation.isPending}
-                disabled={!isDirty}
+                disabled={!isDirty || isDemo}
+                title={isDemo ? t('demo.blocked') : undefined}
               >
                 {t('cfg.source_save')}
               </Button>
@@ -458,6 +465,7 @@ export const ConfigPage: React.FC = () => {
         showErrorFeedback={showErrorFeedback}
         onSave={saveConfig}
         onDiscard={handleDiscardChanges}
+        disabled={isDemo}
       />
 
       {/* ── Conflict Modal ────────────────────────────────────────────── */}
