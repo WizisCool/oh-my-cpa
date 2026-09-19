@@ -19,22 +19,22 @@ export type PluginOAuthLogos = Record<string, string>;
 /**
  * Whether a plugin-published logo can be rendered in an `<img>`.
  *
- * The scheme is the boundary: an absolute http(s) URL or an inline `data:` image
- * renders, while a relative path would silently resolve against the console's own
- * origin and a `javascript:` value must never reach the DOM. This is deliberately
- * looser than `isSafeExternalURL`, which also guards `<a href>` targets - `data:`
- * is inert as an image source but is not a navigable destination.
+ * Only inline `data:image/*` artwork qualifies. A remote URL - http(s), scheme-relative
+ * or rooted - is refused, and the caller falls back to the console's catalog mark: the
+ * bundle's contract is that a deployment has no CDN or static-file dependency, and the
+ * console's own CSP allows images from itself or inline only (`img-src 'self' data:
+ * blob:`). The plugin's own mark is still what gets drawn - the Go process fetches a
+ * logo the plugin publishes and inlines it, so what arrives here is already inline
+ * (`internal/api/management_plugin_logos.go`).
+ *
+ * The scheme is the boundary: `data:` is inert as an image source, whereas a
+ * `javascript:` value must never reach the DOM at all. This is deliberately narrower
+ * than `isSafeExternalURL`, which guards `<a href>` destinations - a link the operator
+ * chooses to follow is not a resource the page loads by itself.
  */
 export function isRenderableLogoURL(raw: string | null | undefined): boolean {
   const trimmed = (raw ?? '').trim();
-  if (!trimmed) return false;
-  if (/^data:image\//i.test(trimmed)) return true;
-  try {
-    const parsed = new URL(trimmed);
-    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.hostname !== '';
-  } catch {
-    return false;
-  }
+  return /^data:image\//i.test(trimmed) && trimmed.includes(',');
 }
 
 /**
@@ -43,9 +43,14 @@ export function isRenderableLogoURL(raw: string | null | undefined): boolean {
  *
  * A disabled plugin is skipped: its provider cannot hold credentials, so a logo
  * for it would only decorate a name the operator cannot use.
+ *
+ * The map has no prototype, because the keys come from plugins: a provider a plugin
+ * happens to call `constructor`, `toString` or `__proto__` would otherwise read the
+ * inherited member instead of the logo it published - the lookup would answer with a
+ * function, and the plugin's own mark would silently be replaced by the fallback.
  */
 export function pluginOAuthProviderLogos(plugins: PluginItem[] | undefined): PluginOAuthLogos {
-  const logos: PluginOAuthLogos = {};
+  const logos = Object.create(null) as PluginOAuthLogos;
   for (const plugin of plugins ?? []) {
     if (!plugin.supports_oauth && !plugin.oauth_provider) continue;
     if (!(plugin.effective_enabled ?? plugin.enabled)) continue;
@@ -69,5 +74,6 @@ export function pluginOAuthLogoFor(
   providerKey: string | undefined,
 ): string | undefined {
   if (!logos) return undefined;
-  return logos[(providerKey || '').trim().toLowerCase()] || undefined;
+  const logo = logos[(providerKey || '').trim().toLowerCase()];
+  return typeof logo === 'string' && logo ? logo : undefined;
 }

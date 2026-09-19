@@ -21,6 +21,12 @@ func (h *Handler) listPlugins(writer http.ResponseWriter, request *http.Request)
 		return
 	}
 
+	// A plugin's logo is its own to declare, but the browser that draws it must not
+	// depend on the plugin's host: the mark is inlined here instead. A logo that
+	// cannot be inlined is reported as absent, which is what makes the console fall
+	// back to its own catalog mark.
+	h.pluginLogos.inline(request.Context(), plugins)
+
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"plugins": plugins,
 		"total":   len(plugins),

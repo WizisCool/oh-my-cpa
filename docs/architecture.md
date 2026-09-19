@@ -199,13 +199,24 @@ capability rather than an empty or broken list (`IsMissingCapability`), so a
 console release that knows a newer family still works against an older gateway.
 
 Model-list pulls carry a provider credential from the OMC process directly to
-the configured endpoint. `management_provider_models.go` therefore accepts
-HTTPS, or HTTP only for localhost, loopback, and private IP literals, and it
-refuses any redirect whose scheme or host changes. The redirect check runs before
-the next request leaves the process, so neither the provider key nor custom
-provider headers can reach a target the operator did not enter. Invalid URL
-policy answers `400 invalid_model_pull_url`; a refused redirect answers
+the configured endpoint, and a plugin logo is fetched from the host the plugin
+declares. Both are outbound fetches of an address the process did not construct,
+so `internal/api/outbound_fetch.go` owns one policy for them: it accepts HTTPS, or
+HTTP only for localhost, loopback, and private IP literals, and it refuses any
+redirect whose scheme or host changes. The redirect check runs before the next
+request leaves the process, so neither the provider key nor custom provider
+headers can reach a target the operator did not enter. Invalid URL policy answers
+`400 invalid_model_pull_url`; a refused redirect answers
 `502 model_pull_redirect_refused`.
+
+A plugin's logo is fetched for a different reason than a model list: not to reach
+the plugin's host from the browser, but to keep the browser away from it.
+`internal/api/management_plugin_logos.go` fetches the URL a plugin publishes,
+requires an image media type from a bound allowlist, caps the response, caches the
+result - including the failures, because the console polls the plugin list - and
+reports it as an inline `data:` URL on both `logo` and `metadata.logo`. A logo that
+cannot be inlined is reported as absent rather than as a URL, which is what makes
+every provider surface fall back to the vendored catalog mark; see §3.
 
 ### OAuth providers are one registry
 
@@ -286,15 +297,18 @@ registers.** A plugin that declares `supports_oauth` also publishes its own logo
 and it is the only authority on what that provider looks like: the vendored
 catalog cannot be updated by installing a plugin, so guessing a brand from the
 provider key would label the operator's own credential with somebody else's mark.
-`types/pluginOAuthProviders.ts` resolves the plugin list into provider-key logos
-(including a plugin whose auths are typed by its own id rather than by
-`oauth_provider`), and `LobeIcon.tsx`'s `ProviderBrandIcon` renders it - one
-component for the provider tabs, the quota and credential cards, the request
-records, the provider table and the dashboard's provider rows, so those surfaces
-cannot disagree about the same provider. The catalog mark stays the fallback for a
-provider no plugin owns and for a logo that fails to load or was published at a
-scheme the console will not fetch, and a plugin-owned row shows the plugin's mark
-even when an operator icon override is stored for that key.
+The logo is not loaded from the plugin's host, though - the deployment must not
+depend on a CDN, and the console's CSP allows images only from itself or inline -
+so the Go process inlines it (§2) and `types/pluginOAuthProviders.ts` resolves the
+plugin list into provider-key logos (including a plugin whose auths are typed by
+its own id rather than by `oauth_provider`). `LobeIcon.tsx`'s `ProviderBrandIcon`
+renders it - one component for the provider tabs, the quota and credential cards,
+the request records, the provider table and the dashboard's provider rows, so
+those surfaces cannot disagree about the same provider. Only inline artwork is
+rendered: a provider no plugin owns, a logo that could not be inlined, and a value
+at a scheme the browser may not load all fall back to the catalog mark, and a
+plugin-owned row shows the plugin's mark even when an operator icon override is
+stored for that key.
 `components/resources/` and `components/icons/PresetIcon.tsx`
 are retained from the retired triage console and are currently unreferenced; the
 backend discovery/binding model they rendered is still live behind Providers and

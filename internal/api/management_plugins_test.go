@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -43,7 +44,7 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 
 		switch {
 		case path == "/v0/management/plugins" && request.Method == http.MethodGet:
-			_, _ = writer.Write([]byte(`{"plugins":[{"id":"logger","name":"Logger","version":"1.0.0","enabled":true,"effective_enabled":true,"supports_oauth":true,"oauth_provider":"logger-oauth","logo":"https://example.com/logo.png","permissions":["read_request"]}]}`))
+			_, _ = writer.Write([]byte(`{"plugins":[{"id":"logger","name":"Logger","version":"1.0.0","enabled":true,"effective_enabled":true,"supports_oauth":true,"oauth_provider":"logger-oauth","logo":"https://example.com/logo.png","metadata":{"name":"Logger","version":"1.0.0","author":"cpa-official","logo":"https://example.com/logo.png"},"permissions":["read_request"]}]}`))
 		case strings.HasPrefix(path, "/v0/management/plugins/") && strings.HasSuffix(path, "/status"):
 			parts := strings.Split(path, "/")
 			id := parts[len(parts)-2]
@@ -114,6 +115,20 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 		Version:  "v0.1.0-test",
 		Usage:    config.UsageConfig{Enabled: false},
 	}, repo, cipher, nil, authManager)
+	// The fixture plugin publishes its logo on an external host. Stubbing the transport
+	// keeps this suite offline while still exercising the inlining the console depends
+	// on; the fetch itself is covered by management_plugin_logos_test.go.
+	handler.pluginLogos.client = &http.Client{
+		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"image/png"}},
+				Body:       io.NopCloser(strings.NewReader("png-bytes")),
+				Request:    request,
+			}, nil
+		}),
+		CheckRedirect: sameOriginRedirectGuard(errPluginLogoRedirectRefused, maxPluginLogoRedirects),
+	}
 
 	appServer := httptest.NewServer(handler.Router())
 	t.Cleanup(appServer.Close)
@@ -151,6 +166,17 @@ func TestPluginsLifecycle(t *testing.T) {
 	}
 	if pluginsData.Plugins[0]["supports_oauth"] != true || pluginsData.Plugins[0]["oauth_provider"] != "logger-oauth" {
 		t.Fatalf("expected supports_oauth and oauth_provider preserved, got: %#v", pluginsData.Plugins[0])
+	}
+	// The plugin declares its logo on an external host, and the console must not send
+	// the browser there: the field carries inline artwork instead. Its absence here
+	// would mean the tab, the cards and the request rows fall back to a catalog mark
+	// while the plugin's own mark exists.
+	logo, _ := pluginsData.Plugins[0]["logo"].(string)
+	if !strings.HasPrefix(logo, "data:image/png;base64,") {
+		t.Fatalf("plugin logo = %q, want the plugin's own mark inlined", logo)
+	}
+	if metadata, _ := pluginsData.Plugins[0]["metadata"].(map[string]any); metadata == nil || metadata["logo"] != logo {
+		t.Fatalf("metadata logo = %#v, want the same inlined value", pluginsData.Plugins[0]["metadata"])
 	}
 
 	// 2. Set plugin status (disable)
