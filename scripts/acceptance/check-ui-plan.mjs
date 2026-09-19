@@ -134,7 +134,7 @@ const SCENARIO_PATHS = [
   },
   {
     prefix: 'web/src/pages/ProvidersPage',
-    scenarios: ['icon-picker-stacking', 'provider-icon-pick', 'phone-lists'],
+    scenarios: ['icon-picker-stacking', 'provider-icon-pick', 'phone-lists', 'overlay-back'],
   },
   // The provider console's own modules: the list table, the editor drawer, the
   // writes and the icon overlay. The page renders nothing but these, so a change
@@ -142,7 +142,7 @@ const SCENARIO_PATHS = [
   // drawer is one of the two overlays the stacking assertion is about.
   {
     prefix: 'web/src/components/providers/',
-    scenarios: ['icon-picker-stacking', 'provider-icon-pick', 'phone-lists'],
+    scenarios: ['icon-picker-stacking', 'provider-icon-pick', 'phone-lists', 'overlay-back'],
   },
   // The remaining list surfaces ADR 0012 converted. Each renders rows on a phone and a table
   // otherwise, and `phone-lists` is the scenario that reads both renderings of each; without a

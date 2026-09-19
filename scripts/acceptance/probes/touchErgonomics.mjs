@@ -155,11 +155,30 @@ const SMALL_FIELDS = `(() => {
   return small;
 })()`;
 
-/** Whether a control that a hover reveals is actually drawn when no hover is possible. */
-const OPACITY_OF = (selector) => `(() => {
+/**
+ * Whether a control that a hover reveals is actually drawn, and reachable, when no hover is possible.
+ *
+ * Three readings, because opacity alone is satisfied by an element nobody can reach: a node at full
+ * opacity but `visibility: hidden` is invisible, and one that is drawn but covered by something is
+ * unusable. The claim is that the affordance is offered, so the check has to be about the reader
+ * being able to take it.
+ */
+const AFFORDANCE_STATE = (selector) => `(() => {
   const node = document.querySelector(${JSON.stringify(selector)});
   if (!node) return null;
-  return Number(getComputedStyle(node).opacity);
+  const style = getComputedStyle(node);
+  const box = node.getBoundingClientRect();
+  const centreX = box.left + box.width / 2;
+  const centreY = box.top + box.height / 2;
+  const onScreen = centreX >= 0 && centreX <= window.innerWidth && centreY >= 0 && centreY <= window.innerHeight;
+  const hit = onScreen ? document.elementFromPoint(centreX, centreY) : null;
+  return {
+    opacity: Number(style.opacity),
+    visibility: style.visibility,
+    width: Math.round(box.width),
+    height: Math.round(box.height),
+    hitTestable: onScreen ? Boolean(hit && (hit === node || node.contains(hit))) : null,
+  };
 })()`;
 
 export async function touchErgonomics({ base, page, check }) {
@@ -181,11 +200,11 @@ export async function touchErgonomics({ base, page, check }) {
     async () => (await page.locator('.provider-jump-arrow').count()) > 0,
     { label: "the dashboard's provider rows", timeoutMs: 10_000 },
   ).catch(() => {});
-  const arrowOpacity = await page.evaluate(OPACITY_OF('.provider-jump-arrow'));
+  const arrow = await page.evaluate(AFFORDANCE_STATE('.provider-jump-arrow'));
   check(
-    'a control a hover would reveal is drawn where hovering is impossible',
-    arrowOpacity !== null && arrowOpacity > 0,
-    `opacity=${arrowOpacity}`,
+    'a control a hover would reveal is drawn and reachable where hovering is impossible',
+    arrow !== null && arrow.opacity > 0 && arrow.visibility !== 'hidden',
+    JSON.stringify(arrow),
   );
 
   // ---- the request list: the id quick-copy control, the search box, the row controls ----
@@ -196,11 +215,11 @@ export async function touchErgonomics({ base, page, check }) {
     async () => (await page.locator('.req-id-quick-copy').count()) > 0,
     { label: 'the request row quick-copy control', timeoutMs: 10_000 },
   ).catch(() => {});
-  const quickCopyOpacity = await page.evaluate(OPACITY_OF('.req-id-quick-copy'));
+  const quickCopy = await page.evaluate(AFFORDANCE_STATE('.req-id-quick-copy'));
   check(
     'the request id quick-copy control is drawn on a touch device',
-    quickCopyOpacity !== null && quickCopyOpacity > 0,
-    `opacity=${quickCopyOpacity}`,
+    quickCopy !== null && quickCopy.opacity > 0 && quickCopy.visibility !== 'hidden',
+    JSON.stringify(quickCopy),
   );
 
   // The filter drawer's icon controls are the case the expanded hit areas exist for: 32px squares

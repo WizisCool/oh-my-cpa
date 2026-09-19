@@ -3009,6 +3009,10 @@ a { color: inherit; }
    logs tail shorter than their floors. The floors exist to keep the panel usable, so they
    lose to the viewport rather than pushing the page taller than the screen. */
 @media (pointer: coarse) and (max-height: 640px) {
-  .log-list, .config-monaco-shell { min-height: 240px; }
+  .log-list { min-height: 240px; }
+  /* The editor's floor is the `520px` *inside* its clamp, so overriding `min-height` alone left it
+     520px tall on a 640px-tall screen and pushed the page past the viewport anyway. The clamp's lower
+     bound is what has to move. */
+  .config-monaco-shell { height: clamp(240px, calc(100dvh - 280px), 800px); }
 }
 

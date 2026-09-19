@@ -1144,8 +1144,8 @@ are configured, the search box and every action that applies to the list as a wh
 and it wraps rather than scrolls so the controls keep their width in every reading
 language. A single line under the list states the window its counts cover.
 
-**One dataset, rendered responsively.** The list is a table on a pointer-fine viewport and
-labelled rows below 640px, and the width decides — never a control the operator has to find. The
+**One dataset, rendered responsively.** The list is a table above 640px and labelled rows at
+640px and below, and the width decides — never a control the operator has to find. The
 two renderings are derived from one column array
 (`web/src/components/common/phoneRowFields.ts`), so a column added to the table reaches the row
 and a value cannot be formatted two ways. The measurement that fixed the threshold, and the

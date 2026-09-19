@@ -85,9 +85,9 @@ function createBrowserOverlay(): OverlayHistory {
     schedule: (callback) => queueMicrotask(callback),
   };
   const history = createOverlayHistory(host);
-  // `popstate` is not cancellable, so this cannot stop the router from also seeing it; it only
-  // decides what the console does about it.
-  window.addEventListener('popstate', () => dispatchPop(history));
+  // No listener is installed here: this function runs during render, and a global listener added
+  // there is a side effect with no owner - it outlives the app unmounting and can never be released.
+  // `acquirePopListener` installs it from an effect instead.
   return history;
 }
 
@@ -96,6 +96,46 @@ let browserOverlay: OverlayHistory | undefined;
 function browserOverlaySingleton(): OverlayHistory {
   browserOverlay ??= createBrowserOverlay();
   return browserOverlay;
+}
+
+/**
+ * Installs the console's one `popstate` dispatcher for as long as any overlay hook is mounted.
+ *
+ * Two properties, each of which a simpler shape loses:
+ *
+ *   - **One listener, not one per hook.** A pop must be consumed exactly once, so a listener per hook
+ *     would call `handlePop` repeatedly - the first call answering the press and every later one
+ *     popping the stack again, which makes a single Back dismiss as many overlays as there are hooks
+ *     mounted. It is ref-counted rather than owned by the first hook, so the listener lives exactly as
+ *     long as something is using it and is released when the last user unmounts.
+ *   - **Installed from an effect.** `AppLayout` renders inside the authentication gate, so signing out
+ *     unmounts every hook at once; a listener created during render survived that and could never be
+ *     cleaned up.
+ */
+let popListenerUsers = 0;
+let releasePopListener: (() => void) | undefined;
+
+function acquirePopListener(): () => void {
+  popListenerUsers += 1;
+  if (popListenerUsers === 1) {
+    const notify = () => dispatchPop(browserOverlaySingleton());
+    // `popstate` is not cancellable, so this cannot stop the router from also seeing it; it only
+    // decides what the console does about it.
+    window.addEventListener('popstate', notify);
+    releasePopListener = () => window.removeEventListener('popstate', notify);
+  }
+  let isReleased = false;
+  return () => {
+    // Idempotent, so a StrictMode double-invoke cannot decrement twice and tear the listener down
+    // while another hook still needs it.
+    if (isReleased) return;
+    isReleased = true;
+    popListenerUsers -= 1;
+    if (popListenerUsers === 0) {
+      releasePopListener?.();
+      releasePopListener = undefined;
+    }
+  };
 }
 
 export interface UseOverlayHistoryOptions {
@@ -118,6 +158,8 @@ export function useOverlayHistory({ isOpen, onClose }: UseOverlayHistoryOptions)
   // without the effect below having to re-register on each render.
   const onCloseRef = React.useRef(onClose);
   onCloseRef.current = onClose;
+
+  React.useEffect(() => acquirePopListener(), []);
 
   React.useEffect(() => {
     if (!isOpen) {

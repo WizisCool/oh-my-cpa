@@ -212,7 +212,10 @@ export const PluginStorePage: React.FC = () => {
               <Spin />
             </div>
           ) : storePlugins.length === 0 ? (
-            <p className="empty-copy">{t('store.empty')}</p>
+            /* A blocked read is not an empty store. With no cached rows the error alert above is the
+               only true thing on the page, and claiming "no plugins" beside it asserts something the
+               console does not know - the distinction docs/design.md's checklist requires. */
+            isError && !storeData ? null : <p className="empty-copy">{t('store.empty')}</p>
           ) : (
             <>
               {pagedPlugins.map((plugin, index) => (

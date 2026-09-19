@@ -97,7 +97,7 @@ test('the shared token layer selects every surface that renders it', () => {
 test('a provider-console change selects only the provider-console scenarios', () => {
   // `phone-lists` is in both: the provider table is one of the surfaces ADR 0012 renders as rows on
   // a phone, so a change to it must run the scenario that reads both of its renderings.
-  assert.deepEqual(planFor('web/src/pages/ProvidersPage.tsx'), ['icon-picker-stacking', 'provider-icon-pick', 'phone-lists']);
+  assert.deepEqual(planFor('web/src/pages/ProvidersPage.tsx'), ['icon-picker-stacking', 'provider-icon-pick', 'overlay-back', 'phone-lists']);
   assert.deepEqual(planFor('web/src/components/IconPickerModal.tsx'), ['icon-picker-stacking', 'provider-icon-pick']);
   // The page renders the console's own modules rather than carrying them, so a
   // change to one of those has to select the same scenarios the page does - the
@@ -108,7 +108,7 @@ test('a provider-console change selects only the provider-console scenarios', ()
     'web/src/components/providers/ProviderTable.tsx',
     'web/src/components/providers/useProviderManagement.ts',
   ]) {
-    assert.deepEqual(planFor(file), ['icon-picker-stacking', 'provider-icon-pick', 'phone-lists'], file);
+    assert.deepEqual(planFor(file), ['icon-picker-stacking', 'provider-icon-pick', 'overlay-back', 'phone-lists'], file);
   }
 });
 
@@ -198,7 +198,8 @@ test('a mixed change unions the narrow plans without widening', () => {
     'dashboard-chart-motion', 'dashboard-charts', 'dashboard-heatmap', 'dashboard-heatmap-error',
     'dashboard-heatmap-mobile', 'dashboard-heatmap-pruned', 'dashboard-model-panels',
     'dashboard-model-panels-empty', 'dashboard-model-panels-failure', 'dashboard-model-panels-states',
-    'dashboard-rolling-readouts', 'icon-picker-stacking', 'phone-lists', 'provider-icon-pick',
+    'dashboard-rolling-readouts', 'icon-picker-stacking', 'overlay-back', 'phone-lists',
+    'provider-icon-pick',
   ]);
 });
 

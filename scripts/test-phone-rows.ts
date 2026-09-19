@@ -154,6 +154,23 @@ const record: Record_ = { id: 'r1', name: 'Primary', secret: 'sk-abcd', nested: 
   assert.equal(phoneRowFields(rendered, record, { index: 0 })[0].value, element);
 }
 
+// ---- an array of nodes is a node ----
+//
+// A row of tags or a mapped list is one of the commonest things a renderer returns, and it is an
+// object without `$$typeof` - so the envelope test used to turn it into `undefined`, leaving the
+// field visible in the table and absent from the phone row.
+{
+  const first = { $$typeof: Symbol.for('react.element'), type: 'span', key: null, props: { children: 'a' }, ref: null };
+  const second = { $$typeof: Symbol.for('react.element'), type: 'span', key: null, props: { children: 'b' }, ref: null };
+  const nodes = [first, second];
+  const columns: PhoneRowSource<Record_>[] = [
+    { title: 'Tags', key: 'tags', render: () => nodes as unknown as ReactNode },
+  ];
+  const fields = phoneRowFields(columns, record, { index: 0 });
+  assert.equal(fields.length, 1, 'an array of nodes is still a field');
+  assert.equal(fields[0].value, nodes, 'and it is passed through as the array React expects');
+}
+
 // ---- a function title becomes a label rather than dropping its column ----
 {
   const columns: PhoneRowSource<Record_>[] = [

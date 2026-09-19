@@ -78,14 +78,27 @@ export interface RenderedCellLike {
 /**
  * Unwraps a rendered cell into something React can draw.
  *
- * The discriminator is `$$typeof`, which every React element carries and a span envelope does
- * not: both are objects with `props`, so "has props" would classify a rendered element as an
- * envelope and print its children alone - losing the element itself.
+ * Three shapes have to be told apart, and the first two are objects:
+ *
+ *   - **An array of nodes.** A row of tags or a mapped list is one of the commonest things a renderer
+ *     returns, and it is a node in its own right. Treating every non-element object as a span
+ *     envelope turned it into `undefined`, so the table showed the value and the phone row silently
+ *     dropped the field - the divergence this module exists to prevent.
+ *   - **A rendered element**, discriminated by `$$typeof`, which every element carries and an
+ *     envelope does not. "Has props" would not do: an element has props too, so that test would
+ *     classify an element as an envelope and print its children alone.
+ *   - **antd's span envelope** (`{ children, props }`), which is unwrapped so React is not handed a
+ *     bare object.
+ *
+ * Anything else is passed through untouched rather than replaced by `undefined`: dropping content is
+ * the one outcome that must not happen silently, and React will say so itself if it cannot draw it.
  */
 function renderedNode(rendered: ReactNode | RenderedCellLike | undefined): ReactNode | undefined {
   if (rendered === null || typeof rendered !== 'object') return rendered as ReactNode | undefined;
+  if (Array.isArray(rendered)) return rendered as ReactNode;
   if ('$$typeof' in rendered) return rendered as ReactNode;
-  return (rendered as RenderedCellLike).children;
+  if ('props' in rendered || 'children' in rendered) return (rendered as RenderedCellLike).children;
+  return rendered as ReactNode;
 }
 
 /** The props antd hands a function title. The console uses none, so an empty table is passed. */

@@ -225,6 +225,12 @@ export const PricingPage: React.FC = () => {
   // past the end would render an empty table with no way back.
   const lastPhonePage = Math.max(1, Math.ceil(filteredData.length / PAGE_SIZE));
   const safePhonePage = Math.min(phonePage, lastPhonePage);
+  // A filter change starts the reader at the first page. The clamp above keeps an out-of-range page
+  // from rendering empty, but it left the *remembered* page untouched - so clearing the filter the
+  // page was chosen under jumped the reader back to a page they had left.
+  React.useEffect(() => {
+    setPhonePage(1);
+  }, [search, activeTab]);
   const pagedPrices = filteredData.slice((safePhonePage - 1) * PAGE_SIZE, safePhonePage * PAGE_SIZE);
 
   // Table Columns
@@ -378,6 +384,9 @@ export const PricingPage: React.FC = () => {
                 className={styles['action-btn']}
                 icon={<EditOutlined />}
                 onClick={() => openEdit(row)}
+                /* Named for assistive tech, not only for the pointer: the tooltip names it for a
+                   mouse, and the phone row reuses this cell, so it is the row's control too. */
+                aria-label={`${t('pricing.edit')}: ${row.model}`}
               />
             </Tooltip>
             <Popconfirm
@@ -393,6 +402,7 @@ export const PricingPage: React.FC = () => {
                   danger
                   icon={<DeleteOutlined />}
                   loading={deleteMutation.isPending && deleteMutation.variables === row.model}
+                  aria-label={`${t('pricing.remove')}: ${row.model}`}
                 />
               </Tooltip>
             </Popconfirm>

@@ -33,8 +33,10 @@ So the sentence was doing what it said — refusing a second layout — at a cos
 
 **The rule is revised from "one table, scrolled sideways" to "one dataset, rendered responsively".**
 
-A list surface now renders as a table on a pointer-fine viewport and as labelled rows below **640px**.
-The change is made by *width*, never by a control the operator has to find, and the two renderings are
+A list surface now renders as a table above **640px** and as labelled rows at 640px and below.
+The change is made by *width* alone - `useIsPhoneViewport` is a `(max-width: 640px)` query and no
+pointer query is involved, so a narrow desktop window gets rows and a wide tablet gets the table,
+which is what each of them can actually use. It is never a control the operator has to find, and the two renderings are
 derived from one description of the record:
 
 - The columns stay the single description of what a record shows — their order, their titles and their

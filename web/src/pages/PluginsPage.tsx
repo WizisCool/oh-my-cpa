@@ -309,7 +309,9 @@ export const PluginsPage: React.FC = () => {
               <Spin />
             </div>
           ) : plugins.length === 0 ? (
-            <p className="empty-copy">{t('plg.empty')}</p>
+            /* A blocked read is not an empty plugin list: with no cached rows the error alert above is
+               the only true thing on the page. */
+            isError && !pluginsData ? null : <p className="empty-copy">{t('plg.empty')}</p>
           ) : (
             <>
               {pagedPlugins.map((plugin, index) => (

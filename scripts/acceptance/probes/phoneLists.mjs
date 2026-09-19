@@ -118,17 +118,56 @@ async function openSurface(base, page, surface, viewport) {
   await page.locator(surface.rowSelector).first().waitFor({ state: 'visible', timeout: 20_000 });
 }
 
+/**
+ * The controls a reader cannot actually use, for a reason the reader would experience.
+ *
+ * Vertical extent is deliberately not part of it: a row below the fold is reachable by scrolling,
+ * which is ordinary. A control 664px to the *right* is not reachable at all, and that is the defect
+ * the phone rendering exists to remove.
+ *
+ * Three ways a control is unusable, and the first version tested only the first - so it passed for a
+ * control that was hidden, and for one something else was sitting on top of:
+ *
+ *   - **Outside the viewport horizontally.** The original measurement.
+ *   - **Not painted.** `visibility: hidden` leaves a full-size box in the layout, so a geometry check
+ *     passes while nothing is on screen. antd's clear affordance is exactly this while its field has
+ *     nothing to clear.
+ *   - **Not hit-testable at its own centre.** A bounding box says nothing about what a finger
+ *     reaches, and a control the row was supposed to make usable cannot fail this one.
+ */
 const INSIDE_VIEWPORT = (selector) => `(() => {
   const nodes = Array.from(document.querySelectorAll(${JSON.stringify(selector)}));
   const outside = [];
+  const unusable = [];
   for (const node of nodes) {
     const rect = node.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) continue;
+    const label = (node.getAttribute('aria-label') || node.textContent || '').trim().slice(0, 24);
     if (rect.left < -1 || rect.right > window.innerWidth + 1) {
-      outside.push({ text: (node.textContent || '').trim().slice(0, 24), left: Math.round(rect.left), right: Math.round(rect.right) });
+      outside.push({ text: label, left: Math.round(rect.left), right: Math.round(rect.right) });
+      continue;
+    }
+    const style = getComputedStyle(node);
+    if (style.visibility === 'hidden' || style.opacity === '0') {
+      unusable.push({ text: label, reason: 'not painted' });
+      continue;
+    }
+    // The centre test applies only where the centre is on screen. A row below the fold is reachable
+    // by scrolling - which this measurement deliberately does not treat as a defect - and
+    // elementFromPoint answers null for a point outside the viewport, so testing it there would
+    // report a control as covered by nothing.
+    const centreY = rect.top + rect.height / 2;
+    if (centreY < 0 || centreY > window.innerHeight) continue;
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, centreY);
+    if (!(hit && (hit === node || node.contains(hit)))) {
+      unusable.push({
+        text: label,
+        reason: 'covered at its own centre',
+        by: hit ? hit.tagName.toLowerCase() + '.' + String(hit.className).split(/\\s+/).slice(0, 1) : 'nothing',
+      });
     }
   }
-  return { total: nodes.length, outside, viewport: window.innerWidth };
+  return { total: nodes.length, outside, unusable, viewport: window.innerWidth };
 })()`;
 
 export async function phoneListRendering({ base, page, check }) {
@@ -147,9 +186,9 @@ export async function phoneListRendering({ base, page, check }) {
     // its controls hang off the edge is exactly the table's failure with a different class name.
     const buttons = await page.evaluate(INSIDE_VIEWPORT(`${surface.rowSelector} button`));
     check(
-      `${surface.id}: every row control is inside the phone's viewport`,
-      buttons.total > 0 && buttons.outside.length === 0,
-      `buttons=${buttons.total} outside=${JSON.stringify(buttons.outside)}`,
+      `${surface.id}: every row control is inside the phone's viewport and usable there`,
+      buttons.total > 0 && buttons.outside.length === 0 && buttons.unusable.length === 0,
+      `buttons=${buttons.total} outside=${JSON.stringify(buttons.outside)} unusable=${JSON.stringify(buttons.unusable)}`,
     );
 
     // And the page itself does not scroll sideways, which is the user-visible symptom of any
