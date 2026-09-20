@@ -52,7 +52,10 @@ const SUITES = [
   { name: 'provider icons', script: 'scripts/test-provider-icons.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },];
 
 /** Bounded so a small machine is not asked to schedule every parser at once. */
-const concurrency = Math.max(1, Number(process.env.OMCPA_LOGIC_CONCURRENCY ?? 2));
+const requestedConcurrency = Number.parseInt(process.env.OMCPA_LOGIC_CONCURRENCY ?? '2', 10);
+const concurrency = Number.isSafeInteger(requestedConcurrency) && requestedConcurrency > 0
+  ? Math.min(requestedConcurrency, SUITES.length)
+  : 2;
 
 function runSuite(suite) {
   const startedAt = Date.now();

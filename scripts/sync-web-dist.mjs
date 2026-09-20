@@ -94,7 +94,7 @@ await withRetry('create dist dir', () => mkdir(target, { recursive: true }));
 
 // Assets first, then the entry document. `cp` on a directory walks in an
 // unspecified order, so the entry document is copied on its own afterwards.
-const sourceFiles = await listFiles(source);
+const sourceFiles = (await listFiles(source)).map((file) => file.split('\\').join('/'));
 const assetsSource = join(source, 'assets');
 const hasAssets = await stat(assetsSource).then(() => true).catch(() => false);
 if (hasAssets) {

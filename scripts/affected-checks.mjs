@@ -106,7 +106,7 @@ export function planChecks(files) {
     file.endsWith('.css') ||
     /^(?:.*\.go|go\.mod|go\.sum)$/.test(file) ||
     ['web/package.json', 'web/tsconfig.json', 'package.json', 'pnpm-lock.yaml'].includes(file);
-  if (has((file) => !isPlaced(file))) {
+  if (has((file) => !isPlaced(file)) || (files.length > 0 && checks.size === 0)) {
     checks.add('type-check');
     checks.add('logic');
     checks.add('go');

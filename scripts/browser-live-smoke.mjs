@@ -259,12 +259,13 @@ async function main() {
     const uploadJson = await uploadListed.json();
     check('UI 上传后 CPA 真实出现新认证文件', fileName, uploadListed.ok() && uploadJson.total === 1);
 
-    await page.locator('.auth-file-card .ant-switch').first().click();
+    const uploadedCard = page.locator('.auth-file-card', { hasText: fileName }).first();
+    await uploadedCard.locator('.ant-switch').click();
     await page.waitForTimeout(1200);
-    const disabledText = await page.locator('main').innerText();
+    const disabledText = await uploadedCard.innerText();
     check('UI 开关真实禁用认证文件', disabledText.includes('DISABLED'), disabledText.includes('DISABLED'));
 
-    await page.locator('.auth-file-card button[aria-label^="删除"]').first().click();
+    await uploadedCard.locator('button[aria-label^="删除"]').click();
     await page.locator('.ant-popover .ant-btn-primary, .ant-popconfirm .ant-btn-primary').first().click();
     await page.waitForTimeout(1200);
     const afterDelete = await page.request.get(`${appURL}/api/v1/management/auth-files?name=${encodeURIComponent(fileName)}`);

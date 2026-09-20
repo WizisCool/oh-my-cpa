@@ -63,6 +63,11 @@ if (files.length === 0) {
 }
 
 const selected = planChecks(files);
+if (selected.length === 0) {
+  console.error('[fast] no checks selected for changed files:');
+  for (const file of files) console.error(`  ${file}`);
+  process.exit(1);
+}
 
 // Concurrent, because the checks are independent processes and the budget is what
 // decides whether a development loop can afford to run this at all. Quiet, because

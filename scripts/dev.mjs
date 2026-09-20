@@ -117,9 +117,11 @@ function stopChild(child) {
 
   return new Promise((resolve) => {
     let settled = false;
+    let timeout;
     const finish = () => {
       if (settled) return;
       settled = true;
+      clearTimeout(timeout);
       resolve();
     };
     child.once('close', finish);
@@ -140,10 +142,12 @@ function stopChild(child) {
       try { child.kill(); } catch { /* already stopped */ }
     }
 
-    const timeout = setTimeout(() => {
+    timeout = setTimeout(() => {
       try {
-        if (!isWindows && child.pid) process.kill(-child.pid, 'SIGKILL');
-        else child.kill('SIGKILL');
+        if (child.exitCode === null && child.signalCode === null) {
+          if (!isWindows && child.pid) process.kill(-child.pid, 'SIGKILL');
+          else child.kill('SIGKILL');
+        }
       } catch {
         // already stopped
       }
