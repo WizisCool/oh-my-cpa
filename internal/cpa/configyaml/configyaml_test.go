@@ -371,3 +371,48 @@ func TestRestoreSentinelsAllowsReorderAfterExplicitSecretEntry(t *testing.T) {
 		}
 	}
 }
+
+// A sequence of mappings can carry a proxy URL on every entry. Those entries have
+// no sentinel to mark them, so a guard that only looks for a sentinel - or only
+// for the proxy key at the sequence's own path - misses them, and reordering the
+// entries pairs each one with another entry's credentials.
+func TestRestoreSentinelsRefusesReorderedEntriesWithNestedProxyURLs(t *testing.T) {
+	original := `servers:
+  - name: one
+    proxy-url: "http://one-user:one-pass@one.example.test:8080"
+  - name: two
+    proxy-url: "http://two-user:two-pass@two.example.test:8080"
+`
+	swapped := `servers:
+  - name: two
+    proxy-url: "http://two.example.test:8080"
+  - name: one
+    proxy-url: "http://one.example.test:8080"
+`
+	restored, err := RestoreSentinels(swapped, original)
+	if err == nil {
+		t.Fatalf("reordered entries took credentials from the stored position: %s", restored)
+	}
+	for _, secret := range []string{"one-pass", "two-pass"} {
+		if strings.Contains(restored, secret) {
+			t.Fatalf("refused restore still returned a stored credential %q: %s", secret, restored)
+		}
+	}
+
+	// The same list, left in its original order, must still restore both URLs.
+	untouched := `servers:
+  - name: one
+    proxy-url: "http://one.example.test:8080"
+  - name: two
+    proxy-url: "http://two.example.test:8080"
+`
+	restoredInOrder, err := RestoreSentinels(untouched, original)
+	if err != nil {
+		t.Fatalf("unaligned restore of an unchanged list failed: %v", err)
+	}
+	for _, want := range []string{"one-user:one-pass@one.example.test", "two-user:two-pass@two.example.test"} {
+		if !strings.Contains(restoredInOrder, want) {
+			t.Fatalf("unchanged list lost %q: %s", want, restoredInOrder)
+		}
+	}
+}

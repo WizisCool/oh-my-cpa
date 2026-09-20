@@ -268,7 +268,11 @@ func restoreNode(subNode, srvNode *yaml.Node, currentPath []string) error {
 // the credentials of a proxy URL, which the safe view strips without leaving a
 // sentinel behind.
 func sequenceTakesStoredValues(node *yaml.Node, currentPath []string) bool {
-	return isProxyURLPath(currentPath) || nodeContainsSentinel(node)
+	// The predicate is the same one that decides whether the document needs a
+	// restore at all, so it already looks inside mapping entries: a list of
+	// servers that each carry their own proxy-url is as position-dependent as one
+	// whose values are masked with a sentinel.
+	return documentRestoresValues(node, currentPath)
 }
 
 // requireSameEntriesByPosition refuses a submitted sequence that no longer
