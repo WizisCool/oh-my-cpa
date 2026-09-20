@@ -18,12 +18,18 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 // MaxBulkSize bounds a single bulk string so a malformed or hostile stream
 // cannot exhaust memory. CPA usage records are far below this.
 const MaxBulkSize = 4 << 20
+
+// maxLineSize bounds a RESP control line. Bulk payloads are already capped by
+// MaxBulkSize; without this, a peer could keep a simple/error/array header line
+// growing until the reader is killed by memory pressure.
+const maxLineSize = 64 << 10
 
 // ErrClosed reports use of a connection that has been isClosed.
 var ErrClosed = errors.New("resp connection closed")
@@ -56,7 +62,7 @@ type Conn struct {
 	br       *bufio.Reader
 	bw       *bufio.Writer
 	mu       sync.Mutex
-	isClosed bool
+	isClosed atomic.Bool
 }
 
 // Dial connects to addr and returns an unauthenticated connection.
@@ -77,12 +83,11 @@ func Dial(ctx context.Context, addr string, timeout time.Duration) (*Conn, error
 
 // Close terminates the connection. Safe to call repeatedly.
 func (c *Conn) Close() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.isClosed {
+	if c.isClosed.Swap(true) {
 		return nil
 	}
-	c.isClosed = true
+	// Do not take mu: Do/Subscribe hold it while waiting on the network, and
+	// closing the underlying connection is what unblocks that wait.
 	return c.conn.Close()
 }
 
@@ -213,7 +218,7 @@ func (c *Conn) writeCommand(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return errors.New("resp command requires at least one argument")
 	}
-	if c.isClosed {
+	if c.isClosed.Load() {
 		return ErrClosed
 	}
 	var builder strings.Builder
@@ -246,10 +251,13 @@ func (c *Conn) withWriteDeadline(ctx context.Context, fn func() error) error {
 	done := context.AfterFunc(ctx, func() { _ = c.conn.SetWriteDeadline(time.Unix(0, 0)) })
 	defer done()
 	err := fn()
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		return ctxErr
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		return err
 	}
-	return err
+	return nil
 }
 
 func (c *Conn) applyWriteDeadline(ctx context.Context) error {
@@ -262,7 +270,7 @@ func (c *Conn) applyWriteDeadline(ctx context.Context) error {
 // readReply reads one value. Callers either hold c.mu (Do) or are the sole
 // reader of a dedicated subscription connection (ReadMessage).
 func (c *Conn) readReply(ctx context.Context) (Reply, error) {
-	if c.isClosed {
+	if c.isClosed.Load() {
 		return Reply{}, ErrClosed
 	}
 	if err := c.applyReadDeadline(ctx); err != nil {
@@ -350,11 +358,26 @@ func (c *Conn) readReplyLocked() (Reply, error) {
 }
 
 func (c *Conn) readLine() (string, error) {
-	line, err := c.br.ReadString('\n')
-	if err != nil {
+	line := make([]byte, 0, 256)
+	for {
+		part, err := c.br.ReadSlice('\n')
+		if len(line)+len(part) > maxLineSize {
+			return "", fmt.Errorf("resp: control line exceeds %d bytes", maxLineSize)
+		}
+		line = append(line, part...)
+		if err == nil {
+			break
+		}
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
 		return "", err
 	}
-	line = strings.TrimSuffix(line, "\n")
-	line = strings.TrimSuffix(line, "\r")
-	return line, nil
+	if len(line) > 0 && line[len(line)-1] == '\n' {
+		line = line[:len(line)-1]
+	}
+	if len(line) > 0 && line[len(line)-1] == '\r' {
+		line = line[:len(line)-1]
+	}
+	return string(line), nil
 }

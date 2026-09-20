@@ -352,3 +352,40 @@ func TestClosedConnectionRejectsCommands(t *testing.T) {
 		t.Fatal("command on closed connection must fail")
 	}
 }
+
+func TestCloseUnblocksInFlightDo(t *testing.T) {
+	halt := make(chan struct{})
+	t.Cleanup(func() { close(halt) })
+	server := newFakeServer(t, func(conn net.Conn, _ *bufio.Reader, _ []string) {
+		<-halt
+	})
+	client := dialTestClient(t, server.address())
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := client.Do(context.Background(), "PING")
+		done <- err
+	}()
+	<-server.commands // the server received the command and is intentionally silent
+	if err := client.Close(); err != nil {
+		t.Fatalf("close failed: %v", err)
+	}
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("an in-flight command must fail after close")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Close did not unblock the in-flight command")
+	}
+}
+
+func TestReadRejectsOversizedControlLine(t *testing.T) {
+	server := newFakeServer(t, func(conn net.Conn, _ *bufio.Reader, _ []string) {
+		writeRaw(conn, "+"+strings.Repeat("x", maxLineSize+1)+"\r\n")
+	})
+	client := dialTestClient(t, server.address())
+	if _, err := client.Do(context.Background(), "PING"); err == nil {
+		t.Fatal("oversized control line must be rejected")
+	}
+}
