@@ -151,7 +151,7 @@ pnpm dev
 > - [`deploy/compose.full.yml`](deploy/compose.full.yml)：协同部署 CPA、Oh My CPA 与 Caddy 的完整栈。
 > - [`deploy/compose.omc.yml`](deploy/compose.omc.yml)：连接已有 CPA 实例的独立 Oh My CPA 容器。
 >
-> 完整栈默认固定 CPA `v7.3.5`；如需连接其他兼容版本，可通过 `CPA_IMAGE` 覆盖。
+> 完整栈默认固定 CPA `v7.3.5`；如需连接其他兼容版本，可通过 `CPA_IMAGE` 覆盖。其 Caddy 会把控制台路由到 `OMCPA_BASE_PATH`（默认 `/omc`），其余请求交给 CPA；该变量可写成服务器接受的任一形式（`omc`、`/omc/`、`/omc`），而设为 `/` 会让控制台占用整个主机，此时 CPA 不再通过该反向代理可达。
 
 ## 运维须知
 

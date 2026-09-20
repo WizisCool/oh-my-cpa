@@ -49,10 +49,14 @@ const SUITES = [
   { name: 'oauth model aliases', script: 'scripts/test-oauth-model-alias.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'oauth providers', script: 'scripts/test-oauth-providers.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'dashboard providers', script: 'scripts/test-dashboard-providers.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'provider icons', script: 'scripts/test-provider-icons.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },];
+  { name: 'provider icons', script: 'scripts/test-provider-icons.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
+  { name: 'deploy base path', script: 'scripts/test-base-path.mjs', flags: [] },];
 
 /** Bounded so a small machine is not asked to schedule every parser at once. */
-const requestedConcurrency = Number.parseInt(process.env.OMCPA_LOGIC_CONCURRENCY ?? '2', 10);
+// Parsed with Number rather than parseInt so a malformed value falls back to the
+// default instead of being silently truncated: parseInt reads "1workers" and
+// "2.5" as 1 and 2, which would quietly run the suites with the wrong width.
+const requestedConcurrency = Number(process.env.OMCPA_LOGIC_CONCURRENCY ?? '2');
 const concurrency = Number.isSafeInteger(requestedConcurrency) && requestedConcurrency > 0
   ? Math.min(requestedConcurrency, SUITES.length)
   : 2;

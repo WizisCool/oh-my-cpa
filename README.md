@@ -151,7 +151,7 @@ The public demo runs the same binary as a Vercel container image. `Dockerfile.ve
 > - [`deploy/compose.full.yml`](deploy/compose.full.yml): Stack co-deploying CPA, Oh My CPA, and Caddy.
 > - [`deploy/compose.omc.yml`](deploy/compose.omc.yml): Standalone Oh My CPA connecting to an existing CPA instance.
 >
-> The full stack pins CPA `v7.3.5` by default; override `CPA_IMAGE` when connecting the stack to a different compatible release.
+> The full stack pins CPA `v7.3.5` by default; override `CPA_IMAGE` when connecting the stack to a different compatible release. Its Caddy routes the console under `OMCPA_BASE_PATH` (default `/omc`) and everything else to CPA, so a non-default value is accepted in any of the forms the server normalises (`omc`, `/omc/`, `/omc`) and `/` makes the console take the whole host with CPA no longer reachable through the proxy.
 
 ## Operational Notes
 
