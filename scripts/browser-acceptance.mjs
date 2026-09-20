@@ -338,15 +338,15 @@ try {
 
   await auditPage(page, responseBodies, '/dashboard', '.dashboard-page', { pageSecrets: providerSecrets });
 
-  // Success-rate verdict: the seeded window carries 1 failure in 50 (2%), which
-  // is routine upstream noise. The pip must not paint it as a warning — the
-  // reported bug was exactly this, at 98% success.
+  // Success-rate band: the seeded window carries 1 failure in 50 (2%), which is 98% success and
+  // sits above the 80% line, so the pip reads as healthy. The durable half of this check is the
+  // *negative*: a window this good must never be painted as a warning.
   const verdictPip = page.locator('.dashboard-page .legend-dot').first();
   await verdictPip.waitFor({ state: 'visible', timeout: 10000 });
   const verdictClasses = (await verdictPip.getAttribute('class')) ?? '';
   check(
     'a 98%-success window is not painted as a warning',
-    /neutral/.test(verdictClasses) && !/warn|danger/.test(verdictClasses),
+    /success/.test(verdictClasses) && !/warn|danger/.test(verdictClasses),
     `class="${verdictClasses}"`,
   );
   await runUsageEventsAcceptance({

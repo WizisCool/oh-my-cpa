@@ -196,25 +196,26 @@ token, but the All segment carries none: it is the absence of a verdict, and
 both bullets side by side would read as a third, combined outcome. Same rule as
 the success-rate bands — the state of "everything" is not a state.
 
-**Success rate is a verdict, not a distance from 100%.** A gateway that fans out
-to several upstreams always carries some noise — provider 429s, a timeout the
-next retry absorbs, a request the caller cancelled — and a pip that turns amber
-for that noise teaches its reader to ignore it. So the bands are wide, and they
-are stated in *failures* rather than successes (`98% success` is a number nobody
-reasons about; `2% of requests failed` is a decision):
+**Success rate is a verdict on one published band.** Every surface that shows a
+success rate colours it through `successRateTone`
+(`web/src/types/usageEventMetrics.ts`), so the same number cannot be green on one
+page and amber on another:
 
-| Window | Pip |
+| Rate | Verdict |
 | --- | --- |
-| no requests | `neutral` — nothing to judge |
-| no failures | `success` — a clean window |
-| too little evidence: under 20 requests *and* under 3 failures | `neutral` — a coin flip on four requests is not a trend |
-| ≤ 5% failed | `neutral` — routine upstream noise |
-| > 5% and ≤ 20% failed | `warn` — worth a look |
-| > 20% failed | `danger` — broken, whatever the sample |
+| no traffic, or an unreadable rate | `neutral` — nothing to judge |
+| ≥ 80% | `success` — serving |
+| 50% – < 80% | `warn` — degraded |
+| < 50%, including exactly 0% | `danger` — broken |
 
-The bands live in `successRateVerdict` (`web/src/types/usageEventMetrics.ts`). The
-dashboard tile reads them; the request list does not show a verdict of its own,
-for the reason below.
+The dashboard's request tile takes that tone for its pip; the provider rows take
+it as the colour of both marks that read one rate — the rate's own number and the
+meter beside it. The number carries it as well as the meter because a meter's
+fill *is* the rate: at a measured 0% it has no width, so without the number the
+worst row on the page would show no red at all and would read as an idle one. A
+window with no traffic is *unknowable* rather than bad, so it stays `neutral` and
+does not fall into the alarm step, while a measured 0% is a real outage and does.
+The request list does not show a verdict of its own, for the reason below.
 
 ### Latency is not a verdict
 

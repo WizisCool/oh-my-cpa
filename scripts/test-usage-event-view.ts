@@ -37,11 +37,9 @@ import {
   eventPageMetrics,
   formatEventDuration,
   eventCacheRate,
-  successRateVerdict,
-  SUCCESS_ROUTINE_FAILURE_PERCENT,
-  SUCCESS_ELEVATED_FAILURE_PERCENT,
-  SUCCESS_VERDICT_MIN_FAILURES,
-  SUCCESS_VERDICT_MIN_SAMPLE,
+  successRateTone,
+  SUCCESS_RATE_DEGRADED_PERCENT,
+  SUCCESS_RATE_HEALTHY_PERCENT,
   eventTokensPerSecond,
   hasMeasurableTTFT,
   isNonStreamingEvent,
@@ -1257,39 +1255,49 @@ console.log(
   'PASS column definitions: clamping, sanitization, adaptive and fixed grid template generation, measured min-width floor',
 );
 
-// successRateVerdict: the pip answers "does this window need attention", not
-// "did anything fail". Normal upstream noise must stay neutral so the amber and
-// red steps keep meaning something.
-assert.equal(successRateVerdict(0, 0), 'neutral', 'no traffic carries no verdict');
-assert.equal(successRateVerdict(500, 0), 'success', 'a clean window is green');
-// A lone failure is never a trend, however small the window: one retried
-// upstream request must not paint the page.
-assert.equal(successRateVerdict(2, 1), 'neutral', 'one failure out of two');
-assert.equal(successRateVerdict(100, 1), 'neutral', 'one failure out of a hundred');
-// The reported bug: 98% success (2% failures) used to show amber.
-assert.equal(successRateVerdict(100, 2), 'neutral', '98% success must not be amber');
-assert.equal(successRateVerdict(200, 4), 'neutral', '99%–98% band stays neutral');
+// successRateTone: the console's one published band, read by every surface that shows a success
+// rate - the dashboard's request tile and its provider rows. Three fixed colours, so the same rate
+// cannot be green in one place and amber in another.
+assert.equal(successRateTone(null), 'neutral', 'a null rate carries no verdict');
+assert.equal(successRateTone(undefined), 'neutral', 'a missing rate carries no verdict');
+assert.equal(successRateTone(Number.NaN), 'neutral', 'an unreadable rate carries no verdict');
+assert.equal(successRateTone(Number.POSITIVE_INFINITY), 'neutral', 'an infinite rate carries no verdict');
+// The healthy boundary, and both sides of it.
 assert.equal(
-  successRateVerdict(100, SUCCESS_ROUTINE_FAILURE_PERCENT),
-  'neutral',
-  'the top of the routine band is still neutral',
+  successRateTone(SUCCESS_RATE_HEALTHY_PERCENT),
+  'success',
+  'the healthy boundary itself is green',
 );
-assert.equal(successRateVerdict(100, 6), 'warn', 'above the routine band needs a look');
-assert.equal(successRateVerdict(100, 20), 'warn', 'the top of the elevated band is warn');
-assert.equal(successRateVerdict(100, 21), 'danger', 'above the elevated band is broken');
-assert.equal(successRateVerdict(5, 5), 'danger', 'a total outage is red even in a tiny window');
-// A middling rate in a window too small to mean anything stays neutral: two
-// failures out of four is 50% and tells nobody anything.
-assert.equal(successRateVerdict(4, 2), 'neutral', 'below the minimum sample');
-assert.equal(successRateVerdict(SUCCESS_VERDICT_MIN_SAMPLE, 2), 'warn', 'at the minimum sample it counts');
-assert.equal(successRateVerdict(SUCCESS_VERDICT_MIN_SAMPLE - 1, 2), 'neutral', 'one short of the minimum');
-// Defensive: nonsense inputs cannot produce a verdict.
-assert.equal(successRateVerdict(Number.NaN, 1), 'neutral');
-assert.equal(successRateVerdict(10, Number.NaN), 'success');
-assert.equal(successRateVerdict(10, -3), 'success', 'negative failures clamp to none');
-assert.equal(successRateVerdict(10, 99), 'danger', 'more failures than requests clamps to all');
-assert.ok(SUCCESS_ELEVATED_FAILURE_PERCENT > SUCCESS_ROUTINE_FAILURE_PERCENT);
+assert.equal(successRateTone(SUCCESS_RATE_HEALTHY_PERCENT + 0.01), 'success', 'just above healthy');
+assert.equal(successRateTone(100), 'success', 'a clean window is green');
+assert.equal(successRateTone(99.99), 'success', 'routine upstream noise stays green');
+assert.equal(
+  successRateTone(SUCCESS_RATE_HEALTHY_PERCENT - 0.01),
+  'warn',
+  'just below the healthy boundary is amber',
+);
+// The degraded boundary, and both sides of it.
+assert.equal(
+  successRateTone(SUCCESS_RATE_DEGRADED_PERCENT),
+  'warn',
+  'the degraded boundary itself is amber',
+);
+assert.equal(
+  successRateTone(SUCCESS_RATE_DEGRADED_PERCENT - 0.01),
+  'danger',
+  'just below the degraded boundary is red',
+);
+assert.equal(successRateTone(0), 'danger', 'a measured total outage is red, not neutral');
+// A measured zero is an outage; an absent rate is not a measurement at all. They must not paint
+// the same colour, which is what defaulting the rate to zero would do.
+assert.notEqual(successRateTone(0), successRateTone(null), 'an outage is not the same as no traffic');
+// The bands are ordered, so a rate can never fall through the scale.
+assert.ok(
+  SUCCESS_RATE_HEALTHY_PERCENT > SUCCESS_RATE_DEGRADED_PERCENT &&
+    SUCCESS_RATE_DEGRADED_PERCENT > 0,
+  'the healthy band sits above the degraded band',
+);
 
 console.log(
-  'PASS success-rate verdict: routine noise stays neutral, one failure is never a trend, small samples cannot alarm',
+  'PASS success-rate tone: three fixed bands read identically everywhere, no traffic carries no verdict',
 );
