@@ -97,7 +97,7 @@ func (r *Repository) trimQuotaSnapshots(ctx context.Context, authIndex string, k
 		WHERE auth_index = ? AND id NOT IN (
 			SELECT id FROM quota_snapshots
 			WHERE auth_index = ?
-			ORDER BY observed_at_ms DESC, id DESC
+			ORDER BY observed_at_ms DESC, created_at_ms DESC, rowid DESC
 			LIMIT ?
 		)
 	`
@@ -135,7 +135,7 @@ func (r *Repository) GetLatestQuotaSnapshots(ctx context.Context, authIndexes []
 		SELECT id, auth_index, provider, status, plan_type, plan_tier,
 		       windows_json, reset_credits_json, plan_json, observed_at_ms, created_at_ms
 		FROM (
-			SELECT *, ROW_NUMBER() OVER(PARTITION BY auth_index ORDER BY observed_at_ms DESC, id DESC) as rn
+			SELECT *, ROW_NUMBER() OVER(PARTITION BY auth_index ORDER BY observed_at_ms DESC, created_at_ms DESC, rowid DESC) as rn
 			FROM quota_snapshots
 			WHERE auth_index IN (%s)
 		)
