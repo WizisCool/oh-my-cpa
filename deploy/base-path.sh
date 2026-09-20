@@ -36,13 +36,24 @@ esac
 # Split on "/" so duplicate slashes, "." segments and a trailing slash collapse
 # the way path.Clean does on the application side. ".." is refused rather than
 # resolved, matching the application, which rejects parent traversal outright.
+#
+# Pathname expansion is disabled for the split: the value is a path, and an
+# unquoted expansion would otherwise substitute a "*" segment with the names of
+# whatever files happen to sit beside the process, while the application keeps the
+# literal character.
 canonical=
 old_ifs=$IFS
+case $- in
+*f*) set +f ;;
+*) set -f ;;
+esac
 IFS=/
 for segment in $path; do
 	case $segment in
 	'' | .) continue ;;
 	..)
+		IFS=$old_ifs
+		set -f
 		printf 'OMCPA_BASE_PATH must not contain parent traversal: %s\n' "$raw" >&2
 		exit 1
 		;;
@@ -50,5 +61,6 @@ for segment in $path; do
 	canonical=$canonical/$segment
 done
 IFS=$old_ifs
+set -f
 
 printf '%s\n' "$canonical"
