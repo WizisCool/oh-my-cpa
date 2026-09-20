@@ -128,6 +128,44 @@ func TestParseCodexUsageCamelCaseAndClamping(t *testing.T) {
 	}
 }
 
+func TestParseCodexUsageRejectsNonFiniteNumbersAndHonoursLimitReached(t *testing.T) {
+	raw := []byte(`{
+		"plan_type": "pro",
+		"rate_limit": {
+			"allowed": true,
+			"limit_reached": false,
+			"primary_window": {
+				"used_percent": "NaN",
+				"limit_window_seconds": 18000
+			}
+		},
+		"code_review_rate_limit": {
+			"allowed": false,
+			"primary_window": {
+				"used_percent": 10,
+				"limit_window_seconds": 18000
+			}
+		}
+	}`)
+
+	_, windows, _, err := ParseCodexUsage(raw, time.Now().UnixMilli())
+	if err != nil {
+		t.Fatalf("ParseCodexUsage failed: %v", err)
+	}
+	if len(windows) != 2 {
+		t.Fatalf("len(windows) = %d, want 2", len(windows))
+	}
+	if windows[0].UsedPercent != nil {
+		t.Fatalf("non-finite used_percent = %v, want it omitted", windows[0].UsedPercent)
+	}
+	if windows[1].ID != "code_review_5h" {
+		t.Fatalf("code-review window id = %q, want code_review_5h", windows[1].ID)
+	}
+	if windows[1].UsedPercent == nil || *windows[1].UsedPercent != 100 {
+		t.Fatalf("limit-reached code-review used_percent = %v, want 100", windows[1].UsedPercent)
+	}
+}
+
 func TestParseCodexResetCreditsPayload(t *testing.T) {
 	raw := []byte(`{
 		"available_count": 3,

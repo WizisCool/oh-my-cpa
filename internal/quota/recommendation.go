@@ -8,6 +8,9 @@ import "strings"
 // transport error, which outranks window arithmetic, and only a credential that
 // fails none of them is reported as idle.
 func EvaluateStatusAndRecommendation(q *NormalizedQuota, nowMS int64) {
+	if q.ActiveCooldown != nil && q.ActiveCooldown.IsActive && activeCooldownExpired(q.ActiveCooldown, nowMS) {
+		q.ActiveCooldown.IsActive = false
+	}
 	if q.ActiveCooldown != nil && q.ActiveCooldown.IsActive {
 		q.Status = "cooldown"
 		reason := "CPA 冷却保护生效中"
@@ -36,9 +39,7 @@ func EvaluateStatusAndRecommendation(q *NormalizedQuota, nowMS int64) {
 
 	if q.Error != "" {
 		errLower := strings.ToLower(q.Error)
-		if strings.Contains(errLower, "401") || strings.Contains(errLower, "403") ||
-			strings.Contains(errLower, "unauthorized") || strings.Contains(errLower, "forbidden") ||
-			strings.Contains(errLower, "auth") || strings.Contains(errLower, "invalid_api_key") {
+		if looksLikeAuthFailure(errLower) {
 			q.Status = "error"
 			q.Recommendation = QuotaRecommendation{
 				Status:   "needs_reauth",
@@ -135,4 +136,42 @@ func EvaluateStatusAndRecommendation(q *NormalizedQuota, nowMS int64) {
 		Action:   "refresh",
 		Reason:   "暂无实时配额数据，可点击刷新获取上游最新额度",
 	}
+}
+
+func looksLikeAuthFailure(text string) bool {
+	for _, marker := range []string{
+		"unauthorized",
+		"forbidden",
+		"invalid_api_key",
+		"invalid api key",
+		"authentication failed",
+		"auth failed",
+		"token expired",
+		"credential expired",
+	} {
+		if strings.Contains(text, marker) {
+			return true
+		}
+	}
+	for _, token := range strings.FieldsFunc(text, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9')
+	}) {
+		if token == "401" || token == "403" {
+			return true
+		}
+	}
+	return false
+}
+
+func activeCooldownExpired(cooldown *ActiveCooldown, nowMS int64) bool {
+	if cooldown == nil {
+		return false
+	}
+	if cooldown.RecoverAtMS != nil {
+		return *cooldown.RecoverAtMS <= nowMS
+	}
+	if cooldown.RetryAfterSeconds != nil && cooldown.CorrelatedAtMS != nil {
+		return *cooldown.CorrelatedAtMS+*cooldown.RetryAfterSeconds*1000 <= nowMS
+	}
+	return false
 }

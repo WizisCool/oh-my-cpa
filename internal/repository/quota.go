@@ -258,8 +258,8 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 
 	// Look back 6 hours for recent errors, or any future recovery time
 	recentThresholdMS := nowMS - 6*60*60*1000
-	args := make([]any, 0, len(validIndexes)+2)
-	args = append(args, nowMS, recentThresholdMS)
+	args := make([]any, 0, len(validIndexes)+3)
+	args = append(args, nowMS, nowMS, recentThresholdMS)
 	for _, authIndex := range validIndexes {
 		args = append(args, authIndex)
 	}
@@ -267,7 +267,7 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 	query := fmt.Sprintf(`
 		SELECT auth_index, quota_reason, next_retry_after_ms, next_recover_at_ms, timestamp_ms
 		FROM error_events
-		WHERE quota_exceeded = 1 AND (next_recover_at_ms > ? OR timestamp_ms >= ?) AND auth_index IN (%s)
+		WHERE quota_exceeded = 1 AND (next_recover_at_ms > ? OR next_retry_after_ms > ? OR timestamp_ms >= ?) AND auth_index IN (%s)
 		ORDER BY timestamp_ms DESC
 	`, placeholders)
 
@@ -306,9 +306,13 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 		}
 
 		if retryAfterMS.Valid && retryAfterMS.Int64 > 0 {
-			sec := (retryAfterMS.Int64 + 999) / 1000
-			retryAfterSeconds = &sec
-			if (timestampMS + retryAfterMS.Int64) > nowMS {
+			if retryAfterMS.Int64 > nowMS {
+				remainingMS := retryAfterMS.Int64 - nowMS
+				sec := remainingMS / 1000
+				if remainingMS%1000 != 0 {
+					sec++
+				}
+				retryAfterSeconds = &sec
 				isActive = true
 			}
 		}

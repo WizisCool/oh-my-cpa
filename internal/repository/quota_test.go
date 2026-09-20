@@ -133,8 +133,38 @@ func TestRepositoryBatchCorrelatedCooldowns(t *testing.T) {
 		t.Fatalf("insert expired error failed: %v", err)
 	}
 
+	// A future retry timestamp is absolute epoch milliseconds, not a duration.
+	futureRetry := nowMS + 30000
+	_, err = repo.SQL().ExecContext(ctx, `
+		INSERT INTO error_events (
+			instance_id, event_key, provider, model, auth_index, status_code, body,
+			retryable, auth_status, auth_disabled, auth_unavailable, quota_exceeded,
+			quota_reason, next_retry_after_ms, timestamp_ms, created_at_ms
+		) VALUES (
+			'default', 'err-3', 'openai', 'gpt-4o', 'auth-retry', 429, 'Rate limit reached',
+			1, 'active', 0, 0, 1, 'Rate limit exceeded', ?, ?, ?
+		)
+	`, futureRetry, nowMS-10*60*1000, nowMS-10*60*1000)
+	if err != nil {
+		t.Fatalf("insert future retry error failed: %v", err)
+	}
+
+	_, err = repo.SQL().ExecContext(ctx, `
+		INSERT INTO error_events (
+			instance_id, event_key, provider, model, auth_index, status_code, body,
+			retryable, auth_status, auth_disabled, auth_unavailable, quota_exceeded,
+			quota_reason, next_retry_after_ms, timestamp_ms, created_at_ms
+		) VALUES (
+			'default', 'err-4', 'openai', 'gpt-4o', 'auth-retry-expired', 429, 'Rate limit reached',
+			1, 'active', 0, 0, 1, 'Rate limit exceeded', ?, ?, ?
+		)
+	`, nowMS-30000, nowMS-10*60*1000, nowMS-10*60*1000)
+	if err != nil {
+		t.Fatalf("insert expired retry error failed: %v", err)
+	}
+
 	// Batch query cooldowns
-	cooldowns, err := repo.BatchCorrelatedCooldowns(ctx, []string{"auth-cooldown", "auth-expired", "auth-healthy"}, nowMS)
+	cooldowns, err := repo.BatchCorrelatedCooldowns(ctx, []string{"auth-cooldown", "auth-expired", "auth-retry", "auth-retry-expired", "auth-healthy"}, nowMS)
 	if err != nil {
 		t.Fatalf("BatchCorrelatedCooldowns failed: %v", err)
 	}
@@ -147,6 +177,16 @@ func TestRepositoryBatchCorrelatedCooldowns(t *testing.T) {
 	cd2, exists2 := cooldowns["auth-expired"]
 	if !exists2 || cd2.IsActive {
 		t.Errorf("expected auth-expired to be inactive: %+v", cd2)
+	}
+
+	cdRetry, existsRetry := cooldowns["auth-retry"]
+	if !existsRetry || !cdRetry.IsActive || cdRetry.RetryAfterSeconds == nil || *cdRetry.RetryAfterSeconds != 30 {
+		t.Errorf("expected auth-retry to be active for 30 seconds: %+v", cdRetry)
+	}
+
+	cdRetryExpired, existsRetryExpired := cooldowns["auth-retry-expired"]
+	if !existsRetryExpired || cdRetryExpired.IsActive || cdRetryExpired.RetryAfterSeconds != nil {
+		t.Errorf("expected expired retry to be inactive: %+v", cdRetryExpired)
 	}
 
 	_, exists3 := cooldowns["auth-healthy"]
