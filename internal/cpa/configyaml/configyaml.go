@@ -95,7 +95,7 @@ func SanitizeSafeYAML(rawYAML string) (string, error) {
 // If any sensitive field in submitted contains the UnchangedSentinel,
 // its original node from current is preserved.
 func RestoreSentinels(submittedYAML, serverYAML string) (string, error) {
-	if !strings.Contains(submittedYAML, UnchangedSentinel) {
+	if !strings.Contains(submittedYAML, UnchangedSentinel) && !strings.Contains(submittedYAML, "proxy-url") {
 		return submittedYAML, nil
 	}
 	var submittedRoot yaml.Node
@@ -130,7 +130,7 @@ func sanitizeMapping(node *yaml.Node, parentPath []string) {
 	for i := 0; i < len(node.Content)-1; i += 2 {
 		keyNode := node.Content[i]
 		valNode := node.Content[i+1]
-		currentPath := append(parentPath, keyNode.Value)
+		currentPath := appendPath(parentPath, keyNode.Value)
 
 		if isSensitivePath(currentPath) {
 			maskValueNode(valNode)
@@ -156,6 +156,10 @@ func sanitizeSequence(node *yaml.Node, parentPath []string) {
 			maskValueNode(item)
 		} else if item.Kind == yaml.MappingNode {
 			sanitizeMapping(item, parentPath)
+		} else if item.Kind == yaml.SequenceNode {
+			sanitizeSequence(item, parentPath)
+		} else if isProxyURLPath(parentPath) && item.Kind == yaml.ScalarNode {
+			item.Value = sanitizeProxyURL(item.Value)
 		}
 	}
 }
@@ -172,43 +176,93 @@ func restoreMapping(subNode, srvNode *yaml.Node, parentPath []string) {
 	for i := 0; i < len(subNode.Content)-1; i += 2 {
 		key := subNode.Content[i].Value
 		valNode := subNode.Content[i+1]
-		currentPath := append(parentPath, key)
+		currentPath := appendPath(parentPath, key)
 
 		srvVal, exists := srvMap[key]
 		if !exists {
 			continue
 		}
 
-		if valNode.Kind == yaml.ScalarNode && valNode.Value == UnchangedSentinel {
-			valNode.Value = srvVal.Value
-			valNode.Tag = srvVal.Tag
-			continue
-		}
+		restoreNode(valNode, srvVal, currentPath)
+	}
+}
 
-		if valNode.Kind == yaml.SequenceNode && srvVal.Kind == yaml.SequenceNode && isSensitivePath(currentPath) {
-			hasSentinel := false
-			for _, item := range valNode.Content {
-				if item.Value == UnchangedSentinel {
-					hasSentinel = true
-					break
-				}
+// restoreNode restores sentinel-protected values and proxy URLs whose sanitized
+// form is unchanged. Non-sensitive fields may legitimately contain the sentinel
+// as literal text, and copying a non-scalar server node into a scalar sentinel
+// would destroy the field's type.
+func restoreNode(subNode, srvNode *yaml.Node, currentPath []string) {
+	if subNode == nil || srvNode == nil {
+		return
+	}
+	if isProxyURLPath(currentPath) && subNode.Kind == yaml.ScalarNode && srvNode.Kind == yaml.ScalarNode &&
+		sanitizeProxyURL(subNode.Value) == sanitizeProxyURL(srvNode.Value) {
+		// The safe view removed userinfo/query from the proxy URL. If the
+		// operator left that cleaned URL untouched, restore the original node so
+		// the save cannot silently discard its credentials.
+		*subNode = *srvNode
+		return
+	}
+	if isProxyURLPath(currentPath) && subNode.Kind == yaml.SequenceNode && srvNode.Kind == yaml.SequenceNode {
+		for index, item := range subNode.Content {
+			if index >= len(srvNode.Content) {
+				break
 			}
-			if hasSentinel {
-				valNode.Content = srvVal.Content
-				continue
-			}
+			restoreNode(item, srvNode.Content[index], currentPath)
 		}
+		return
+	}
+	if isSensitivePath(currentPath) && nodeContainsSentinel(subNode) {
+		*subNode = *srvNode
+		return
+	}
 
-		if valNode.Kind == yaml.MappingNode && srvVal.Kind == yaml.MappingNode {
-			restoreMapping(valNode, srvVal, currentPath)
+	switch subNode.Kind {
+	case yaml.MappingNode:
+		if srvNode.Kind == yaml.MappingNode {
+			restoreMapping(subNode, srvNode, currentPath)
+		}
+	case yaml.SequenceNode:
+		if srvNode.Kind != yaml.SequenceNode {
+			return
+		}
+		// Sequence entries have no YAML key of their own, so the same path is
+		// carried into every item. The server node is aligned by index.
+		for index, item := range subNode.Content {
+			if index >= len(srvNode.Content) {
+				break
+			}
+			restoreNode(item, srvNode.Content[index], currentPath)
 		}
 	}
+}
+
+func nodeContainsSentinel(node *yaml.Node) bool {
+	if node == nil {
+		return false
+	}
+	if node.Kind == yaml.ScalarNode {
+		return node.Value == UnchangedSentinel
+	}
+	for _, child := range node.Content {
+		if nodeContainsSentinel(child) {
+			return true
+		}
+	}
+	return false
+}
+
+func appendPath(parentPath []string, key string) []string {
+	path := make([]string, 0, len(parentPath)+1)
+	path = append(path, parentPath...)
+	return append(path, key)
 }
 
 func maskValueNode(node *yaml.Node) {
 	if node.Kind == yaml.ScalarNode {
 		if strings.TrimSpace(node.Value) != "" {
 			node.Value = UnchangedSentinel
+			node.Tag = "!!str"
 		}
 	} else if node.Kind == yaml.SequenceNode {
 		if len(node.Content) > 0 {
@@ -217,6 +271,14 @@ func maskValueNode(node *yaml.Node) {
 				Tag:   "!!str",
 				Value: UnchangedSentinel,
 			}}
+		}
+	} else if node.Kind == yaml.MappingNode {
+		if len(node.Content) > 0 {
+			node.Kind = yaml.ScalarNode
+			node.Tag = "!!str"
+			node.Value = UnchangedSentinel
+			node.Content = nil
+			node.Style = 0
 		}
 	}
 }
@@ -245,11 +307,19 @@ func sanitizeProxyURL(raw string) string {
 		return ""
 	}
 	parsed, err := url.Parse(raw)
-	if err != nil || parsed.Host == "" {
-		return raw
+	if err == nil && parsed.Host != "" {
+		parsed.User = nil
+		parsed.RawQuery = ""
+		parsed.Fragment = ""
+		return parsed.String()
 	}
-	parsed.User = nil
-	parsed.RawQuery = ""
-	parsed.Fragment = ""
-	return parsed.String()
+	// Schemeless proxy forms such as user:pass@host:port are not a URL with a
+	// host to url.Parse, but their userinfo is still secret.
+	if at := strings.LastIndex(raw, "@"); at >= 0 {
+		raw = raw[at+1:]
+	}
+	if separator := strings.IndexAny(raw, "?#"); separator >= 0 {
+		raw = raw[:separator]
+	}
+	return raw
 }

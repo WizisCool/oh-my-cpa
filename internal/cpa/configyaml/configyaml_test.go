@@ -111,6 +111,9 @@ tls:
 	if !strings.Contains(restored, "top-secret-mgmt-key-1234") {
 		t.Fatalf("restored YAML failed to restore original secret key: %s", restored)
 	}
+	if !strings.Contains(restored, "user:pass@proxy.example.test") || !strings.Contains(restored, "?token=secret") {
+		t.Fatalf("restored YAML failed to preserve proxy credentials: %s", restored)
+	}
 	if !strings.Contains(restored, "sk-client-key-1") {
 		t.Fatalf("restored YAML failed to restore original api-keys: %s", restored)
 	}
@@ -123,5 +126,60 @@ tls:
 	}
 	if !strings.Contains(restoredChanged, "brand-new-secret-key") {
 		t.Fatalf("restored YAML did not keep user's newly provided secret: %s", restoredChanged)
+	}
+}
+
+func TestSanitizeSafeYAMLRedactsSchemelessAndNestedProxyCredentials(t *testing.T) {
+	original := `proxy-url: user:pass@proxy.example.test:8080?token=secret
+servers:
+  - proxy-url:
+      - proxy-one:pass-one@proxy-one.example.test:8080
+      - proxy-two:pass-two@proxy-two.example.test:8080
+`
+	safe, err := SanitizeSafeYAML(original)
+	if err != nil {
+		t.Fatalf("SanitizeSafeYAML failed: %v", err)
+	}
+	for _, secret := range []string{"user:pass@", "token=secret", "proxy-one:pass-one@", "proxy-two:pass-two@"} {
+		if strings.Contains(safe, secret) {
+			t.Fatalf("safe YAML leaked proxy credential %q: %s", secret, safe)
+		}
+	}
+
+	restored, err := RestoreSentinels(safe, original)
+	if err != nil {
+		t.Fatalf("RestoreSentinels failed: %v", err)
+	}
+	if !strings.Contains(restored, "user:pass@proxy.example.test") || !strings.Contains(restored, "token=secret") ||
+		!strings.Contains(restored, "proxy-one:pass-one@proxy-one.example.test") || !strings.Contains(restored, "proxy-two:pass-two@proxy-two.example.test") {
+		t.Fatalf("proxy credentials were not restored: %s", restored)
+	}
+}
+
+func TestRestoreSentinelsRecursesIntoSequencesAndLeavesLiteralSentinels(t *testing.T) {
+	original := `servers:
+  - name: primary
+    tls:
+      key: nested-private-key
+plain: "__OMCPA_UNCHANGED__"
+`
+
+	safe, err := SanitizeSafeYAML(original)
+	if err != nil {
+		t.Fatalf("SanitizeSafeYAML failed: %v", err)
+	}
+	if strings.Contains(safe, "nested-private-key") {
+		t.Fatalf("safe YAML leaked a nested TLS key: %s", safe)
+	}
+
+	restored, err := RestoreSentinels(safe, original)
+	if err != nil {
+		t.Fatalf("RestoreSentinels failed: %v", err)
+	}
+	if !strings.Contains(restored, "nested-private-key") {
+		t.Fatalf("restored YAML lost the nested TLS key: %s", restored)
+	}
+	if !strings.Contains(restored, `plain: "__OMCPA_UNCHANGED__"`) {
+		t.Fatalf("restore changed a literal sentinel in a non-sensitive field: %s", restored)
 	}
 }
