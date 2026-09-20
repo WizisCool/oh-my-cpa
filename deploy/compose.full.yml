@@ -49,6 +49,7 @@ services:
       OMCPA_CPA_MANAGEMENT_KEY: ${CPA_MANAGEMENT_KEY:?set CPA_MANAGEMENT_KEY}
       OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?set OMCPA_MASTER_KEY}
       OMCPA_PUBLIC_URL: ${OMCPA_PUBLIC_URL:?set OMCPA_PUBLIC_URL}
+      OMCPA_TRUSTED_PROXY_CIDRS: ${OMCPA_TRUSTED_PROXY_CIDRS:-172.16.0.0/12}
     volumes:
       - ${OMCPA_DATA_PATH:-../oh-my-cpa-data}:/data
     healthcheck:
@@ -71,6 +72,7 @@ services:
         condition: service_healthy
     environment:
       DOMAIN: ${DOMAIN:-localhost}
+      OMCPA_BASE_PATH: ${OMCPA_BASE_PATH:-/omc}
     ports:
       - "${HTTP_BIND:-0.0.0.0:80}:80"
       - "${HTTPS_BIND:-0.0.0.0:443}:443"

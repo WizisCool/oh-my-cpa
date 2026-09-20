@@ -396,6 +396,10 @@ stale entry is itself a failure. The budget it enforces is stated in
 
 1. `POST <base>/api/auth/login` with the CPA management key. The handler
    compares it against `OMCPA_CPA_MANAGEMENT_KEY`; there is no second password.
+   Failed attempts are throttled by the direct peer address. Forwarding headers
+   are consulted only when that peer belongs to `OMCPA_TRUSTED_PROXY_CIDRS`, and
+   the rightmost untrusted address in the chain is used, so a client-supplied
+   leftmost value cannot mint a fresh limiter bucket.
 2. On success the session manager derives an HMAC key from the management key
    and issues an HttpOnly, SameSite=Strict cookie (`Secure` when
    `OMCPA_PUBLIC_URL` is HTTPS) with a 12-hour expiry.
