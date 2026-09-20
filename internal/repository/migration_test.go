@@ -315,6 +315,13 @@ func TestBackupRestoreSmokeAndFreeSpaceCheck(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "digest mismatch") {
 		t.Fatalf("expected digest mismatch error, got: %v", err)
 	}
+	if err := os.Remove(shaFile); err != nil {
+		t.Fatal(err)
+	}
+	err = RestoreBackupSmoke(context.Background(), backupPath, cipher)
+	if err == nil || !strings.Contains(err.Error(), "read backup digest") {
+		t.Fatalf("expected missing digest error, got: %v", err)
+	}
 
 	// 3. Test backup retention: create multiple backups and verify oldest pruned
 	for i := 101; i <= 104; i++ {

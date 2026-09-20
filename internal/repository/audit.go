@@ -95,7 +95,7 @@ func (r *Repository) ListAuditEvents(ctx context.Context, limit int) ([]AuditEve
 	}
 	defer rows.Close()
 
-	var events []AuditEvent
+	events := make([]AuditEvent, 0)
 	for rows.Next() {
 		var event AuditEvent
 		var detailsRaw string
