@@ -86,6 +86,43 @@ func TestRepositoryQuotaSnapshots(t *testing.T) {
 	}
 }
 
+func TestQuotaSnapshotsUseInsertionOrderForTimestampTies(t *testing.T) {
+	ctx := context.Background()
+	repo, _ := testRepository(t)
+	observedAt := time.Now().UnixMilli()
+
+	for _, status := range []string{"first", "second", "third"} {
+		if err := repo.SaveQuotaSnapshot(ctx, QuotaSnapshotRecord{
+			AuthIndex:    "auth-tie",
+			Provider:     "codex",
+			Status:       status,
+			WindowsJSON:  "[]",
+			ObservedAtMS: observedAt,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	latest, err := repo.GetLatestQuotaSnapshots(ctx, []string{"auth-tie"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if latest["auth-tie"].Status != "third" {
+		t.Fatalf("latest tied snapshot = %q, want third", latest["auth-tie"].Status)
+	}
+
+	if err := repo.trimQuotaSnapshots(ctx, "auth-tie", 1); err != nil {
+		t.Fatal(err)
+	}
+	var kept string
+	if err := repo.SQL().QueryRowContext(ctx, `SELECT status FROM quota_snapshots WHERE auth_index = ?`, "auth-tie").Scan(&kept); err != nil {
+		t.Fatal(err)
+	}
+	if kept != "third" {
+		t.Fatalf("trim kept %q, want the newest tied row", kept)
+	}
+}
+
 func TestRepositoryBatchCorrelatedCooldowns(t *testing.T) {
 	ctx := context.Background()
 	repo, _ := testRepository(t)
@@ -163,8 +200,35 @@ func TestRepositoryBatchCorrelatedCooldowns(t *testing.T) {
 		t.Fatalf("insert expired retry error failed: %v", err)
 	}
 
+	_, err = repo.SQL().ExecContext(ctx, `
+		INSERT INTO error_events (
+			instance_id, event_key, provider, model, auth_index, status_code, body,
+			retryable, auth_status, auth_disabled, auth_unavailable, quota_exceeded,
+			quota_reason, next_recover_at_ms, timestamp_ms, created_at_ms
+		) VALUES (
+			'default', 'err-5', 'openai', 'gpt-4o', 'auth-older-active', 429, 'Rate limit reached',
+			1, 'active', 0, 0, 1, 'newest expired', ?, ?, ?
+		)
+	`, nowMS-10000, nowMS-10*60*1000, nowMS-10*60*1000)
+	if err != nil {
+		t.Fatalf("insert newest inactive error failed: %v", err)
+	}
+	_, err = repo.SQL().ExecContext(ctx, `
+		INSERT INTO error_events (
+			instance_id, event_key, provider, model, auth_index, status_code, body,
+			retryable, auth_status, auth_disabled, auth_unavailable, quota_exceeded,
+			quota_reason, next_recover_at_ms, timestamp_ms, created_at_ms
+		) VALUES (
+			'default', 'err-6', 'openai', 'gpt-4o', 'auth-older-active', 429, 'Rate limit reached',
+			1, 'active', 0, 0, 1, 'older still active', ?, ?, ?
+		)
+	`, nowMS+30000, nowMS-20*60*1000, nowMS-20*60*1000)
+	if err != nil {
+		t.Fatalf("insert older active error failed: %v", err)
+	}
+
 	// Batch query cooldowns
-	cooldowns, err := repo.BatchCorrelatedCooldowns(ctx, []string{"auth-cooldown", "auth-expired", "auth-retry", "auth-retry-expired", "auth-healthy"}, nowMS)
+	cooldowns, err := repo.BatchCorrelatedCooldowns(ctx, []string{"auth-cooldown", "auth-expired", "auth-retry", "auth-retry-expired", "auth-older-active", "auth-healthy"}, nowMS)
 	if err != nil {
 		t.Fatalf("BatchCorrelatedCooldowns failed: %v", err)
 	}
@@ -187,6 +251,11 @@ func TestRepositoryBatchCorrelatedCooldowns(t *testing.T) {
 	cdRetryExpired, existsRetryExpired := cooldowns["auth-retry-expired"]
 	if !existsRetryExpired || cdRetryExpired.IsActive || cdRetryExpired.RetryAfterSeconds != nil {
 		t.Errorf("expected expired retry to be inactive: %+v", cdRetryExpired)
+	}
+
+	cdOlderActive, existsOlderActive := cooldowns["auth-older-active"]
+	if !existsOlderActive || !cdOlderActive.IsActive || cdOlderActive.Reason != "older still active" {
+		t.Errorf("expected an older active recovery row to win over a newer inactive row: %+v", cdOlderActive)
 	}
 
 	_, exists3 := cooldowns["auth-healthy"]

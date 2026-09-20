@@ -97,7 +97,7 @@ func (r *Repository) trimQuotaSnapshots(ctx context.Context, authIndex string, k
 		WHERE auth_index = ? AND id NOT IN (
 			SELECT id FROM quota_snapshots
 			WHERE auth_index = ?
-			ORDER BY observed_at_ms DESC
+			ORDER BY observed_at_ms DESC, id DESC
 			LIMIT ?
 		)
 	`
@@ -135,7 +135,7 @@ func (r *Repository) GetLatestQuotaSnapshots(ctx context.Context, authIndexes []
 		SELECT id, auth_index, provider, status, plan_type, plan_tier,
 		       windows_json, reset_credits_json, plan_json, observed_at_ms, created_at_ms
 		FROM (
-			SELECT *, ROW_NUMBER() OVER(PARTITION BY auth_index ORDER BY observed_at_ms DESC) as rn
+			SELECT *, ROW_NUMBER() OVER(PARTITION BY auth_index ORDER BY observed_at_ms DESC, id DESC) as rn
 			FROM quota_snapshots
 			WHERE auth_index IN (%s)
 		)
@@ -277,7 +277,6 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 	}
 	defer rows.Close()
 
-	seen := make(map[string]bool)
 	for rows.Next() {
 		var authIndex string
 		var reason sql.NullString
@@ -288,11 +287,6 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 		if err := rows.Scan(&authIndex, &reason, &retryAfterMS, &recoverAtMS, &timestampMS); err != nil {
 			return result, fmt.Errorf("scan batch cooldown: %w", err)
 		}
-
-		if seen[authIndex] {
-			continue // Most recent error already evaluated
-		}
-		seen[authIndex] = true
 
 		isActive := false
 		var recoverAt *int64
@@ -329,13 +323,18 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 			reasonText = reason.String
 		}
 
-		result[authIndex] = ActiveCooldownRecord{
+		candidate := ActiveCooldownRecord{
 			AuthIndex:         authIndex,
 			IsActive:          isActive,
 			Reason:            reasonText,
 			RecoverAtMS:       recoverAt,
 			RetryAfterSeconds: retryAfterSeconds,
 			CorrelatedAtMS:    &timestampMS,
+		}
+		// Prefer an active row over an inactive newer one. If two rows are both
+		// active, the query order already gives the newest timestamp priority.
+		if existing, exists := result[authIndex]; !exists || (candidate.IsActive && !existing.IsActive) {
+			result[authIndex] = candidate
 		}
 	}
 
