@@ -1,10 +1,8 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
@@ -213,18 +211,11 @@ func (h *Handler) managementConfigSourceGet(writer http.ResponseWriter, request 
 func (h *Handler) managementConfigSourcePut(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 
-	body, err := io.ReadAll(io.LimitReader(request.Body, 2*1024*1024))
-	if err != nil {
-		writeError(writer, http.StatusBadRequest, "failed to read request body")
+	var req configSourcePutRequest
+	if err := decodeManagementJSON(writer, request, 2*1024*1024, &req); err != nil {
 		return
 	}
 	defer request.Body.Close()
-
-	var req configSourcePutRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		writeError(writer, http.StatusBadRequest, "invalid json body: "+err.Error())
-		return
-	}
 
 	if strings.TrimSpace(req.YAML) == "" {
 		writeError(writer, http.StatusBadRequest, "configuration YAML cannot be empty")

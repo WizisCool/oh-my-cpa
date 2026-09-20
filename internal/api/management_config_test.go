@@ -302,3 +302,14 @@ debug: true
 		t.Fatalf("expected new revision, got %#v", putRes)
 	}
 }
+
+func TestManagementConfigSourcePutRejectsOversizedBody(t *testing.T) {
+	fixture := &configFixtureCPA{}
+	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
+	oversized := strings.Repeat("a", 2*1024*1024+1)
+	resp, payload := doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/config/source",
+		`{"yaml":"`+oversized+`","revision":"some-revision"}`)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("oversized source body must be refused, got %d body %s", resp.StatusCode, payload)
+	}
+}
