@@ -13,6 +13,11 @@ const (
 	FiveHourSeconds = 18000
 	WeeklySeconds   = 604800
 	MonthlySeconds  = 2592000
+
+	// maxInt64Exclusive is 2^63, the first value an int64 cannot represent. It is
+	// written out because float64(math.MaxInt64) rounds up to it, so a comparison
+	// against math.MaxInt64 would let exactly 2^63 through the float64 guard.
+	maxInt64Exclusive = 9223372036854775808.0
 )
 
 // RawCodexWindow handles both snake_case and camelCase serialization.
@@ -118,7 +123,10 @@ func toInt64(value any) (int64, bool) {
 	case int:
 		return int64(v), true
 	case float64:
-		if math.IsNaN(v) || math.IsInf(v, 0) || v < math.MinInt64 || v > math.MaxInt64 {
+		// float64(math.MaxInt64) rounds up to 2^63, so the upper bound must be
+		// inclusive: a value of exactly 2^63 would otherwise pass the guard and
+		// convert to a negative int64.
+		if math.IsNaN(v) || math.IsInf(v, 0) || v < math.MinInt64 || v >= maxInt64Exclusive {
 			return 0, false
 		}
 		return int64(v), true

@@ -1,6 +1,7 @@
 package quota
 
 import (
+	"math"
 	"testing"
 	"time"
 )
@@ -221,5 +222,36 @@ func TestParseCodexResetCreditsPayload(t *testing.T) {
 	}
 	if second := info.Credits[1]; second.ID != "credit-4" {
 		t.Errorf("second credit = %+v, want credit-4 (camelCase fallback)", second)
+	}
+}
+
+// float64(math.MaxInt64) rounds up to 2^63, one past the largest int64, so the
+// upper bound has to be inclusive: a value of exactly 2^63 used to pass the guard
+// and then convert to a negative int64.
+func TestToInt64RejectsTheRoundedMaxInt64Boundary(t *testing.T) {
+	const twoToTheSixtyThree = 9223372036854775808.0
+
+	if got, ok := toInt64(twoToTheSixtyThree); ok {
+		t.Fatalf("toInt64(2^63) = %d, want it rejected", got)
+	}
+
+	largest := math.Nextafter(twoToTheSixtyThree, 0)
+	got, ok := toInt64(largest)
+	if !ok {
+		t.Fatalf("toInt64(%v) was rejected", largest)
+	}
+	if got < 0 {
+		t.Fatalf("toInt64(%v) = %d, want a positive value", largest, got)
+	}
+
+	minimum, ok := toInt64(-twoToTheSixtyThree)
+	if !ok || minimum != math.MinInt64 {
+		t.Fatalf("toInt64(-2^63) = %d, %v; want %d, true", minimum, ok, int64(math.MinInt64))
+	}
+
+	for _, value := range []any{math.NaN(), math.Inf(1), math.Inf(-1)} {
+		if got, ok := toInt64(value); ok {
+			t.Fatalf("toInt64(%v) = %d, want it rejected", value, got)
+		}
 	}
 }
