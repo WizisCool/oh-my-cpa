@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
@@ -65,7 +66,13 @@ func projectQuota(raw map[string]any) *managementQuotaObservation {
 		result.ObservedAt = boundedText(fmt.Sprint(value), managementAuthFileFieldLimit)
 	}
 	if signals, ok := raw["signals"].(map[string]any); ok {
-		for key, value := range signals {
+		keys := make([]string, 0, len(signals))
+		for key := range signals {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			value := signals[key]
 			if len(result.Signals) >= 64 {
 				break
 			}
@@ -90,7 +97,13 @@ func projectModelQuotas(raw map[string]map[string]any) map[string]managementQuot
 		return nil
 	}
 	result := make(map[string]managementQuotaObservation)
-	for model, value := range raw {
+	models := make([]string, 0, len(raw))
+	for model := range raw {
+		models = append(models, model)
+	}
+	sort.Strings(models)
+	for _, model := range models {
+		value := raw[model]
 		model = boundedText(model, managementAuthFileFieldLimit)
 		if model == "" {
 			continue

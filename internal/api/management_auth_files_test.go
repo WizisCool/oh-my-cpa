@@ -809,3 +809,38 @@ func TestNormalizeDeleteResponseTableDriven(t *testing.T) {
 		})
 	}
 }
+
+func TestAuthFileProjectionTruncatesDeterministically(t *testing.T) {
+	signals := make(map[string]any, 70)
+	for index := 0; index < 70; index++ {
+		signals[fmt.Sprintf("signal-%02d", index)] = index
+	}
+	quota := projectQuota(map[string]any{"signals": signals})
+	if quota == nil || len(quota.Signals) != 64 {
+		t.Fatalf("signals = %#v, want 64 entries", quota)
+	}
+	if _, ok := quota.Signals["signal-63"]; !ok {
+		t.Fatalf("deterministic cap lost signal-63: %#v", quota.Signals)
+	}
+	if _, ok := quota.Signals["signal-64"]; ok {
+		t.Fatalf("deterministic cap kept signal-64: %#v", quota.Signals)
+	}
+
+	modelQuotas := make(map[string]map[string]any, 500)
+	for index := 0; index < 500; index++ {
+		modelQuotas[fmt.Sprintf("model-%03d", index)] = map[string]any{"signals": map[string]any{"state": "ok"}}
+	}
+	projected := projectModelQuotas(modelQuotas)
+	if len(projected) != managementOverviewBucketCount*managementOverviewBucketCount {
+		t.Fatalf("model quotas len = %d, want %d", len(projected), managementOverviewBucketCount*managementOverviewBucketCount)
+	}
+	if _, ok := projected["model-000"]; !ok {
+		t.Fatalf("deterministic cap lost model-000: %#v", projected)
+	}
+	if _, ok := projected["model-399"]; !ok {
+		t.Fatalf("deterministic cap lost model-399: %#v", projected)
+	}
+	if _, ok := projected["model-400"]; ok {
+		t.Fatalf("deterministic cap kept model-400: %#v", projected)
+	}
+}

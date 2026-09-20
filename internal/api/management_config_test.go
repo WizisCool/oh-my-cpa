@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
@@ -171,6 +172,41 @@ func TestManagementConfigPutScalarValidation(t *testing.T) {
 	resp, _ = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/config/unknown_key", `{"value":123}`)
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("expected 400 for unknown key, got %d", resp.StatusCode)
+	}
+}
+
+func TestManagementConfigPutScalarHonoursProviderWriteGate(t *testing.T) {
+	fixture := &configFixtureCPA{}
+	var handler *Handler
+	client, baseURL, _ := startDashboardTestServer(t, fixture.serve, func(h *Handler) {
+		handler = h
+	})
+
+	handler.providerWrites.permits <- struct{}{}
+	previousTimeout := handler.providerWrites.acquireTimeout
+	handler.providerWrites.acquireTimeout = 50 * time.Millisecond
+	t.Cleanup(func() {
+		handler.providerWrites.acquireTimeout = previousTimeout
+		<-handler.providerWrites.permits
+	})
+
+	resp, payload := doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/config/debug", `{"value":true}`)
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("a refused config write must answer 503, got %d body %s", resp.StatusCode, payload)
+	}
+	var body struct {
+		Code string `json:"code"`
+	}
+	_ = json.Unmarshal(payload, &body)
+	if body.Code != providerWriteBusyCode {
+		t.Fatalf("refusal must carry code %q, got %q (%s)", providerWriteBusyCode, body.Code, payload)
+	}
+
+	fixture.mu.Lock()
+	putCount := len(fixture.putPaths)
+	fixture.mu.Unlock()
+	if putCount != 0 {
+		t.Fatalf("a refused scalar write reached CPA %d time(s)", putCount)
 	}
 }
 
