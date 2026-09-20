@@ -15,7 +15,7 @@ import {
   aggregateProviders,
   type AggregatedProvider,
 } from './dashboardProvidersLogic';
-import { ProviderSparkline } from './ProviderSparkline';
+import { successRateTone, type VerdictTone } from '../../types/usageEventMetrics';
 
 const PLAIN_NUMBER_FORMAT = new Intl.NumberFormat('en');
 
@@ -28,6 +28,20 @@ function formatRate(value: number | null | undefined): string {
   if (value === null || value === undefined) return '—';
   return `${value.toFixed(2)}%`;
 }
+
+/**
+ * The token each verdict paints with.
+ *
+ * A token rather than a resolved colour because the three bands *are* three theme tokens: the
+ * browser resolves them against the active palette, so a custom palette moves these marks with
+ * the rest of the console and no component has to know the palette at all.
+ */
+const RATE_TONE_COLOR: Record<VerdictTone, string> = {
+  success: 'var(--success)',
+  warn: 'var(--warn)',
+  danger: 'var(--danger)',
+  neutral: 'var(--meta)',
+};
 
 export interface DashboardProvidersProps {
   overview: ManagementOverview;
@@ -137,6 +151,10 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
           <div className="provider-list-items">
             {aggregated.map((provider) => {
               const isOAuth = provider.kind === 'oauth';
+              // The rate's band colour is carried by the number as well as by the meter, because a
+              // meter's fill *is* the rate: at a measured 0% it has no width, and without the number
+              // the worst row on the page would carry no red at all and would read as an idle one.
+              const rateColor = RATE_TONE_COLOR[successRateTone(provider.successRate)];
               return (
                 <div
                   className="provider-row-enhanced is-clickable"
@@ -191,20 +209,20 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
 
                   {/* Success Rate */}
                   <div className="provider-rate-col">
-                    <span className="provider-rate">{formatRate(provider.successRate)}</span>
+                    <span className="provider-rate" style={{ color: rateColor }}>
+                      {formatRate(provider.successRate)}
+                    </span>
                   </div>
 
-                  {/* Sparkline Activity & Progress Meter (100% full width) */}
+                  {/* The same rate, drawn as a meter. */}
                   <div className="provider-visual-col">
-                    <ProviderSparkline
-                      buckets={provider.buckets}
-                      total={provider.total}
-                      failures={provider.failure}
-                      successRate={provider.successRate}
-                      height={18}
-                    />
                     <div className="dashboard-meter">
-                      <span style={{ width: `${Math.max(0, Math.min(100, provider.successRate ?? 0))}%` }} />
+                      <span
+                        style={{
+                          width: `${Math.max(0, Math.min(100, provider.successRate ?? 0))}%`,
+                          background: rateColor,
+                        }}
+                      />
                     </div>
                   </div>
                 </div>

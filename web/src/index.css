@@ -490,6 +490,8 @@ a { color: inherit; }
 .dashboard-kpi > span { color: var(--muted); font-size: 13px; letter-spacing: .04em; }
 .dashboard-kpi strong { font-size: 28px; line-height: 1; }
 .dashboard-kpi small { margin-top: auto; color: var(--meta); font-size: 12px; }
+/* The meter's fill colour is supplied by the row from the success-rate token its rate falls in,
+   which is why the accent here is only the fallback for a meter drawn without a rate. */
 .dashboard-meter { height: 4px; overflow: hidden; background: var(--border); border-radius: 2px; }
 .dashboard-meter span { display: block; height: 100%; background: var(--accent); }
 .dashboard-section { margin-bottom: 32px; }
@@ -631,6 +633,9 @@ a { color: inherit; }
   color: var(--fg);
   font-variant-numeric: tabular-nums;
 }
+/* The rate's own colour is set inline from the row's band, which is why this rule carries only the
+   neutral fallback: the number is the one mark that stays readable at a measured 0%, where the
+   meter beneath it has no width to paint. */
 .provider-rate-col {
   font-size: 12.5px;
   color: var(--muted);
@@ -639,12 +644,8 @@ a { color: inherit; }
 .provider-visual-col {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  justify-content: center;
   min-width: 0;
-}
-.provider-sparkline {
-  display: block;
-  overflow: visible;
 }
 
 @media (max-width: 768px) {

@@ -125,22 +125,27 @@ func (r *Repository) QueryUsageModelBuckets(ctx context.Context, instanceID stri
 	return result, nil
 }
 
-// UsageProviderBucketRow is one provider's traffic inside one bucket of the requested grid.
-type UsageProviderBucketRow struct {
+// UsageProviderTotalsRow is one provider's traffic across the whole requested window.
+//
+// It is a *row* type rather than a finished response for the same reason the model rows are:
+// canonicalising the provider label and deciding how a zero-request provider reads is a
+// presentation decision, and keeping it out of SQL is what lets it be tested without a database.
+type UsageProviderTotalsRow struct {
 	Provider string
-	StartMS  int64
 	Requests int64
 	Failures int64
 }
 
-// QueryUsageProviderBuckets aggregates one window per provider per bucket, ordered by
-// provider and then by bucket.
-func (r *Repository) QueryUsageProviderBuckets(ctx context.Context, instanceID string, fromMS, toMS, bucketMS int64) ([]UsageProviderBucketRow, error) {
+// QueryUsageProviderTotals aggregates the requested window per provider.
+//
+// One row per provider, with no bucket: the dashboard's provider list prints a window total and a
+// rate, and reads the rate against the console's fixed bands. A per-bucket grid used to be read
+// here as well, for a sparkline each row drew; that mark is gone, so the GROUP BY that produced it
+// is gone with it. Nothing else consumed it, and a group-by over the detail table is the most
+// expensive read this endpoint makes.
+func (r *Repository) QueryUsageProviderTotals(ctx context.Context, instanceID string, fromMS, toMS int64) ([]UsageProviderTotalsRow, error) {
 	if r == nil || r.SQL() == nil {
 		return nil, errors.New("repository is not initialized")
-	}
-	if bucketMS <= 0 {
-		return nil, fmt.Errorf("invalid provider analytics bucket width %d", bucketMS)
 	}
 	if toMS < fromMS {
 		return nil, errors.New("provider analytics window is negative")
@@ -148,30 +153,28 @@ func (r *Repository) QueryUsageProviderBuckets(ctx context.Context, instanceID s
 
 	query := `
 		SELECT COALESCE(NULLIF(TRIM(provider), ''), 'unknown') AS provider_key,
-		       (timestamp_ms / ?) * ? AS aligned,
 		       COUNT(1),
 		       COALESCE(SUM(failed), 0)
 		FROM usage_events
 		WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms < ?
-		GROUP BY provider_key, aligned
-		ORDER BY provider_key ASC, aligned ASC`
-	rows, err := r.SQL().QueryContext(ctx, query, bucketMS, bucketMS, instanceID, fromMS, toMS)
+		GROUP BY provider_key
+		ORDER BY provider_key ASC`
+	rows, err := r.SQL().QueryContext(ctx, query, instanceID, fromMS, toMS)
 	if err != nil {
-		return nil, fmt.Errorf("read usage provider buckets: %w", err)
+		return nil, fmt.Errorf("read usage provider totals: %w", err)
 	}
 	defer rows.Close()
 
-	result := []UsageProviderBucketRow{}
+	result := []UsageProviderTotalsRow{}
 	for rows.Next() {
-		var row UsageProviderBucketRow
-		if errScan := rows.Scan(&row.Provider, &row.StartMS, &row.Requests, &row.Failures); errScan != nil {
-			return nil, fmt.Errorf("scan usage provider bucket: %w", errScan)
+		var row UsageProviderTotalsRow
+		if errScan := rows.Scan(&row.Provider, &row.Requests, &row.Failures); errScan != nil {
+			return nil, fmt.Errorf("scan usage provider total: %w", errScan)
 		}
 		result = append(result, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate usage provider buckets: %w", err)
+		return nil, fmt.Errorf("iterate usage provider totals: %w", err)
 	}
 	return result, nil
 }
-

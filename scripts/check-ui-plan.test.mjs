@@ -46,9 +46,10 @@ test('the four request-records concerns select only their own scenarios', () => 
 test('a dashboard change selects every dashboard scenario', () => {
   // Registry order, which is the order the plan preserves and the order `--list` prints.
   const all = [
-    'dashboard-charts', 'dashboard-chart-motion', 'dashboard-rolling-readouts', 'dashboard-model-panels',
-    'dashboard-model-panels-states', 'dashboard-model-panels-failure', 'dashboard-model-panels-empty',
-    'dashboard-heatmap', 'dashboard-heatmap-pruned', 'dashboard-heatmap-mobile', 'dashboard-heatmap-error',
+    'dashboard-charts', 'provider-rate-marks', 'dashboard-chart-motion', 'dashboard-rolling-readouts',
+    'dashboard-model-panels', 'dashboard-model-panels-states', 'dashboard-model-panels-failure',
+    'dashboard-model-panels-empty', 'dashboard-heatmap', 'dashboard-heatmap-pruned',
+    'dashboard-heatmap-mobile', 'dashboard-heatmap-error',
   ];
   assert.deepEqual(planFor('web/src/pages/DashboardPage.tsx'), all);
   assert.deepEqual(planFor('web/src/components/dashboard/TokenHeatmap.tsx'), all);
@@ -199,7 +200,7 @@ test('a mixed change unions the narrow plans without widening', () => {
     'dashboard-heatmap-mobile', 'dashboard-heatmap-pruned', 'dashboard-model-panels',
     'dashboard-model-panels-empty', 'dashboard-model-panels-failure', 'dashboard-model-panels-states',
     'dashboard-rolling-readouts', 'icon-picker-stacking', 'overlay-back', 'phone-lists',
-    'provider-icon-pick',
+    'provider-icon-pick', 'provider-rate-marks',
   ]);
 });
 

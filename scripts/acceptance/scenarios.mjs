@@ -41,6 +41,12 @@ import {
   dashboardTokenHeatmapPruned,
 } from './probes/dashboardTokenHeatmap.mjs';
 import { omcSettings } from './probes/omcSettings.mjs';
+import {
+  providerRateMarks,
+  providerRateOverview,
+  providerRateProviders,
+  providerRateTraffic,
+} from './probes/providerRateMarks.mjs';
 import { overlayBackDismisses } from './probes/overlayHistory.mjs';
 import { phoneListRendering } from './probes/phoneLists.mjs';
 import { touchErgonomics } from './probes/touchErgonomics.mjs';
@@ -138,6 +144,22 @@ export const SCENARIOS = [
       ],
     },
     run: dashboardChartMarks,
+  },
+  {
+    id: 'provider-rate-marks',
+    name: 'the provider rows paint each rate in its band, in both themes',
+    options: {
+      routes: [
+        [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
+        [(url) => url.pathname.endsWith('/dashboard/tail'), () => chartDashboard],
+        [(url) => url.pathname.endsWith('/dashboard/token-heatmap'), () => chartTokenHeatmap],
+        [(url) => url.pathname.endsWith('/dashboard/models'), () => chartDashboardModels],
+        [(url) => url.pathname.endsWith('/management/dashboard/providers'), () => providerRateTraffic],
+        [(url) => url.pathname.endsWith('/management/providers'), () => providerRateProviders],
+        [(url) => url.pathname.endsWith('/management/overview'), () => providerRateOverview],
+      ],
+    },
+    run: providerRateMarks,
   },
   {
     id: 'dashboard-chart-motion',

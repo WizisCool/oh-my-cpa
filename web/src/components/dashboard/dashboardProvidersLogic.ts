@@ -1,4 +1,4 @@
-import type { ManagementOverviewBucket, ManagementOverviewProvider, ManagementOverviewTypeCount } from '../../types/management';
+import type { ManagementOverviewProvider, ManagementOverviewTypeCount } from '../../types/management';
 import type { ProviderItem } from '../../types/providers';
 import { getProviderDefaultIcon } from '../../types/providerIconIds';
 import { resolveProviderIcon } from '../../types/providerIcons';
@@ -34,8 +34,6 @@ export interface AggregatedProvider {
   failure: number;
   /** Success rate (0 - 100), or null if no requests */
   successRate: number | null;
-  /** Time buckets of requests for sparklines / charts */
-  buckets: ManagementOverviewBucket[];
   /** Whether the channel is disabled: its own toggle is off, or the gateway
    *  holds no enabled credential for it */
   disabled: boolean;
@@ -66,7 +64,6 @@ export interface WindowProviderTraffic {
   success: number;
   failure: number;
   success_rate: number | null;
-  buckets: ManagementOverviewBucket[];
 }
 
 /**
@@ -175,7 +172,6 @@ export function aggregateProviders({
     success: number;
     failure: number;
     successRate: number | null;
-    buckets: ManagementOverviewBucket[];
   }>();
   const consumedTrafficKeys = new Set<string>();
 
@@ -188,7 +184,6 @@ export function aggregateProviders({
         success: wp.success,
         failure: wp.failure,
         successRate: wp.success_rate,
-        buckets: wp.buckets || [],
       });
     }
   } else {
@@ -199,7 +194,6 @@ export function aggregateProviders({
         success: op.success,
         failure: op.failure,
         successRate: op.success_rate,
-        buckets: op.buckets || [],
       });
     }
   }
@@ -232,7 +226,6 @@ export function aggregateProviders({
       success: 0,
       failure: 0,
       successRate: null,
-      buckets: [],
     };
   };
 
@@ -383,7 +376,6 @@ export function aggregateProviders({
       success: traffic.success,
       failure: traffic.failure,
       successRate: traffic.successRate,
-      buckets: traffic.buckets,
       disabled,
       models: cp.models,
       modelsCount: cp.models?.length,
@@ -423,7 +415,6 @@ export function aggregateProviders({
       success: traffic.success,
       failure: traffic.failure,
       successRate: traffic.successRate,
-      buckets: traffic.buckets,
       disabled: areAllCredentialsDisabled([item.type]),
       protocol: meta?.protocol || 'OAuth',
     });
@@ -459,7 +450,6 @@ export function aggregateProviders({
       success: traffic.success,
       failure: traffic.failure,
       successRate: traffic.successRate,
-      buckets: traffic.buckets,
       disabled: areAllCredentialsDisabled([op.id]),
       protocol: isOAuth ? (meta?.protocol || 'OAuth') : undefined,
     });

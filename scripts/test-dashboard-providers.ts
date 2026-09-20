@@ -36,11 +36,11 @@ console.log('✓ OAuth channel metadata, normalization and helpers verified');
 // Test 2: Exact fixture from user screenshot
 // cline (1,894), inception (1,108), antigravity (664), codebuddy (127), codex (4)
 const mockOverviewProviders: ManagementOverviewProvider[] = [
-  { id: 'cline', credentials: 1, success: 1876, failure: 18, total: 1894, success_rate: 99.05, buckets: [] },
-  { id: 'inception', credentials: 1, success: 1104, failure: 4, total: 1108, success_rate: 99.64, buckets: [] },
-  { id: 'antigravity', credentials: 2, success: 663, failure: 1, total: 664, success_rate: 99.85, buckets: [] },
-  { id: 'codebuddy', credentials: 1, success: 77, failure: 50, total: 127, success_rate: 60.63, buckets: [] },
-  { id: 'codex', credentials: 2, success: 0, failure: 4, total: 4, success_rate: 0.0, buckets: [] },
+  { id: 'cline', credentials: 1, success: 1876, failure: 18, total: 1894, success_rate: 99.05 },
+  { id: 'inception', credentials: 1, success: 1104, failure: 4, total: 1108, success_rate: 99.64 },
+  { id: 'antigravity', credentials: 2, success: 663, failure: 1, total: 664, success_rate: 99.85 },
+  { id: 'codebuddy', credentials: 1, success: 77, failure: 50, total: 127, success_rate: 60.63 },
+  { id: 'codex', credentials: 2, success: 0, failure: 4, total: 4, success_rate: 0.0 },
 ];
 
 const mockConfiguredProviders: ProviderItem[] = [
@@ -151,7 +151,7 @@ console.log('✓ Aggregation with screenshot fixture and configured provider ver
 const windowedWithDeepseek = aggregateProviders({
   overviewProviders: mockOverviewProviders,
   windowProviders: [
-    { id: 'deepseek', total: 500, success: 490, failure: 10, success_rate: 98.0, buckets: [] },
+    { id: 'deepseek', total: 500, success: 490, failure: 10, success_rate: 98.0 },
   ],
   configuredProviders: mockConfiguredProviders, // DeepSeek V3 is disabled=true
 });
@@ -166,11 +166,11 @@ console.log('✓ Duplicate DeepSeek channel prevention verified');
 const withDeletedChannelTraffic = aggregateProviders({
   overviewProviders: [
     // Deleted provider with credentials = 0
-    { id: 'deleted-old-channel', credentials: 0, success: 10, failure: 0, total: 10, success_rate: 100, buckets: [] },
+    { id: 'deleted-old-channel', credentials: 0, success: 10, failure: 0, total: 10, success_rate: 100 },
   ],
   windowProviders: [
     // Historical traffic for a provider that was deleted from CPA config
-    { id: 'deleted-old-channel', total: 100, success: 99, failure: 1, success_rate: 99.0, buckets: [] },
+    { id: 'deleted-old-channel', total: 100, success: 99, failure: 1, success_rate: 99.0 },
   ],
   configuredProviders: mockConfiguredProviders, // does NOT contain deleted-old-channel
   authFilesByType: [], // does NOT contain deleted-old-channel
@@ -186,9 +186,9 @@ console.log('✓ Deleted provider exclusion verified');
 // group itself keeps the volume order (beta before gamma).
 const orderingFixture = aggregateProviders({
   windowProviders: [
-    { id: 'beta', total: 5000, success: 5000, failure: 0, success_rate: 100, buckets: [] },
-    { id: 'alpha', total: 10, success: 10, failure: 0, success_rate: 100, buckets: [] },
-    { id: 'gamma', total: 900, success: 900, failure: 0, success_rate: 100, buckets: [] },
+    { id: 'beta', total: 5000, success: 5000, failure: 0, success_rate: 100 },
+    { id: 'alpha', total: 10, success: 10, failure: 0, success_rate: 100 },
+    { id: 'gamma', total: 900, success: 900, failure: 0, success_rate: 100 },
   ],
   configuredProviders: [
     {

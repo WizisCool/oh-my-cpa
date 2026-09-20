@@ -15,63 +15,37 @@ export function eventPageMetrics(events: UsageEvent[]) {
 export type VerdictTone = 'success' | 'warn' | 'danger' | 'neutral';
 
 /**
- * Share of failures a window may carry before it is worth looking at.
+ * The success share at or above which a rate reads as healthy.
+ */
+export const SUCCESS_RATE_HEALTHY_PERCENT = 80;
+
+/**
+ * The success share below which a rate reads as broken rather than merely degraded.
+ */
+export const SUCCESS_RATE_DEGRADED_PERCENT = 50;
+
+/**
+ * successRateTone classifies a success rate on the console's one published band.
  *
- * A gateway fanning out to several upstreams always produces some noise:
- * provider 429s, a timeout that the next retry absorbs, a request the caller
- * cancelled. At 98% success the old thresholds painted the indicator amber,
- * which trained the operator to ignore it. Upstream noise is not a verdict.
- */
-export const SUCCESS_ROUTINE_FAILURE_PERCENT = 5;
-
-/**
- * Share of failures above which the window is treated as broken rather than
- * degraded. Deliberately far from the routine band so the two never blur.
- */
-export const SUCCESS_ELEVATED_FAILURE_PERCENT = 20;
-
-/**
- * Requests a window needs before a failure rate may escalate on its own. Two
- * failures out of four is a 50% rate and tells nobody anything, so a window
- * this small stays neutral unless the failure count itself is damning.
- */
-export const SUCCESS_VERDICT_MIN_SAMPLE = 20;
-
-/**
- * Failures that make a window conclusive without a full sample. Nine failures
- * out of ten requests is an outage whatever the sample size, and a small window
- * must still be able to say so.
- */
-export const SUCCESS_VERDICT_MIN_FAILURES = 3;
-
-/**
- * successRateVerdict decides whether a window needs attention, which is not the
- * same question as whether anything failed.
+ * Every surface that shows a rate reads this: the dashboard's request tile and the provider rows.
+ * A rate therefore carries the same colour wherever it appears, and there is no second rule to
+ * disagree with this one. See docs/design.md §Status pip semantics.
  *
- * The thresholds are on the *failure* rate rather than the success rate: "98%"
- * is a number nobody reasons about, "2% of requests failed" is a decision.
+ * An *absent* rate - `null` on the wire, printed as an em dash - carries no verdict and stays
+ * neutral rather than reading as a fault: a window that served nothing has no rate to judge. A
+ * numeric 0% is the opposite case, a measured total outage, and takes the alarm end of the band.
  *
- *   no traffic                    -> neutral  (nothing to judge)
- *   no failures                   -> success  (clean window)
- *   no evidence yet               -> neutral  (below the sample floor and the
- *                                              failure floor: a coin flip on
- *                                              four requests is not a trend)
- *   within the routine band       -> neutral  (upstream noise)
- *   above the elevated band       -> danger   (broken)
- *   otherwise                     -> warn
+ *   no requests, or an unreadable rate -> neutral (nothing to judge)
+ *   at or above 80%                    -> success
+ *   at or above 50%, below 80%         -> warn
+ *   below 50%, including exactly 0%    -> danger
  */
-export function successRateVerdict(total: number, failed: number): VerdictTone {
-  const samples = Number.isFinite(total) ? Math.max(0, Math.floor(total)) : 0;
-  if (samples === 0) return 'neutral';
-  const failures = Number.isFinite(failed) ? Math.min(Math.max(0, Math.floor(failed)), samples) : 0;
-  if (failures === 0) return 'success';
-  // A verdict needs evidence: either a real sample, or enough failures that the
-  // rate cannot be a fluke.
-  if (samples < SUCCESS_VERDICT_MIN_SAMPLE && failures < SUCCESS_VERDICT_MIN_FAILURES) return 'neutral';
-  const failurePercent = (failures / samples) * 100;
-  if (failurePercent <= SUCCESS_ROUTINE_FAILURE_PERCENT) return 'neutral';
-  if (failurePercent > SUCCESS_ELEVATED_FAILURE_PERCENT) return 'danger';
-  return 'warn';
+export function successRateTone(successRate: number | null | undefined): VerdictTone {
+  if (successRate === null || successRate === undefined) return 'neutral';
+  if (!Number.isFinite(successRate)) return 'neutral';
+  if (successRate >= SUCCESS_RATE_HEALTHY_PERCENT) return 'success';
+  if (successRate >= SUCCESS_RATE_DEGRADED_PERCENT) return 'warn';
+  return 'danger';
 }
 
 export function formatEventDuration(ms: number | null | undefined): string {

@@ -21,7 +21,7 @@ import {
   resolveTokenRateFlowReadout,
 } from '../types/tokenDisplay';
 import type { RollingReadout } from '../types/rollingNumber';
-import { successRateVerdict } from '../types/usageEventMetrics';
+import { successRateTone } from '../types/usageEventMetrics';
 import { TimeRangeControl } from '../components/dashboard/TimeRangeControl';
 import { RollingNumber } from '../components/dashboard/RollingNumber';
 import { TokenHeatmap, TOKEN_HEATMAP_QUERY_KEY } from '../components/dashboard/TokenHeatmap';
@@ -89,14 +89,14 @@ const Pip: React.FC<{ tone: ChartTone }> = ({ tone }) => (
 /**
  * rateTone gives the tile's only pip something to mean.
  *
- * design.md reserves green/amber/red for real state, so one pip per verdict. The
- * bands come from `successRateVerdict` so the dashboard and the request list can
- * never disagree about the same window, and they are wide on purpose: a gateway
- * fanning out to several upstreams always carries some 429/timeout noise, and
- * painting that amber is how an indicator trains its reader to ignore it.
+ * design.md reserves green/amber/red for real state, so one pip per verdict, and the band comes
+ * from `successRateTone` - the console's single published rate rule, which the dashboard's provider
+ * rows read too. 80% or better is a gateway serving well enough not to need a look, 50-80% is
+ * degraded, below that is broken, and a window with no traffic carries no verdict at all rather
+ * than reading as a fault. See docs/design.md §Status pip semantics.
  */
-function rateTone(total: number, failed: number): ChartTone {
-  return successRateVerdict(total, failed);
+function rateTone(successRate: number | null | undefined): ChartTone {
+  return successRateTone(successRate);
 }
 
 
@@ -332,7 +332,7 @@ export const DashboardPage: React.FC = () => {
           </div>
           <div className="tile-caption">
             <span className="tile-rate">
-              <Pip tone={rateTone(data.requests.total, data.requests.failed)} />
+              <Pip tone={rateTone(data.requests.success_rate)} />
               {t('dash.success_rate_short')} <b>{formatRate(data.requests.success_rate)}</b>
             </span>
             <span className="tile-split">

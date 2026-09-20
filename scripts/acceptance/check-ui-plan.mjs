@@ -53,6 +53,7 @@ const DASHBOARD_SCENARIOS = [
   'dashboard-heatmap-mobile',
   'dashboard-heatmap-pruned',
   'dashboard-heatmap-error',
+  'provider-rate-marks',
 ];
 
 /**

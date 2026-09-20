@@ -6,7 +6,7 @@ import {
   HealthStatus,
   ResourceOverridePayload,
 } from '../types/resource';
-import { ManagementOverview, ManagementOverviewBucket } from '../types/management';
+import { ManagementOverview } from '../types/management';
 import {
   ManagementAuthFilesResponse,
   ManagementAuthFileMutationResponse,
@@ -338,8 +338,12 @@ export const api = {
   },
 
   /**
-   * getDashboardProviders reads per-provider request totals and sparkline buckets for the window
-   * selected by the dashboard range picker.
+   * getDashboardProviders reads per-provider request totals for the window selected by the
+   * dashboard range picker.
+   *
+   * A window total per provider, not a series: the provider list prints a count and a rate and
+   * draws the rate as one meter. A per-bucket grid used to travel here for a sparkline each row
+   * drew; that mark is gone, and with it the group-by the endpoint used to run for it.
    */
   async getDashboardProviders(query?: string): Promise<{
     window: DashboardWindow;
@@ -349,7 +353,6 @@ export const api = {
       success: number;
       failure: number;
       success_rate: number | null;
-      buckets: ManagementOverviewBucket[];
     }[];
     partial_errors: string[];
   }> {
