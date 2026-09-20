@@ -39,6 +39,30 @@ func TestCatalogSyncPreservesManualAndMissingMetadata(t *testing.T) {
 	}
 }
 
+func TestCatalogSyncRejectsEmptyAuthoritativeSnapshot(t *testing.T) {
+	store := &fakeStore{
+		models: []string{"openai/gpt-5"},
+		prices: []ModelPrice{{
+			Model:            "openai/gpt-5",
+			PromptPricePer1M: 2,
+			PriceMultiplier:  1,
+			Source:           SourceModelsDev,
+		}},
+	}
+	svc := NewService(store, &fakeFetcher{catalog: catalogFixture()}, nil)
+	svc.SetModelLister(&catalogLister{models: map[string]string{}})
+
+	if _, err := svc.SyncOnce(context.Background()); err == nil {
+		t.Fatal("empty catalog snapshot was accepted")
+	}
+	if len(store.models) != 1 || store.models[0] != "openai/gpt-5" {
+		t.Fatalf("empty snapshot pruned the previous catalog: %v", store.models)
+	}
+	if len(store.prices) != 1 || store.prices[0].PromptPricePer1M != 2 {
+		t.Fatalf("empty snapshot pruned the previous prices: %+v", store.prices)
+	}
+}
+
 type catalogLister struct {
 	models map[string]string
 	calls  int

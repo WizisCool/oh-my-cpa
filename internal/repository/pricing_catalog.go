@@ -35,6 +35,9 @@ func (r *Repository) ReplacePricingModels(ctx context.Context, models map[string
 	if err := r.requirePricingSchema(ctx); err != nil {
 		return 0, err
 	}
+	if len(models) == 0 {
+		return 0, fmt.Errorf("refusing to publish an empty pricing catalog snapshot")
+	}
 	tx, err := r.SQL().BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err

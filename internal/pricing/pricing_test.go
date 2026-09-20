@@ -86,6 +86,22 @@ func TestMatchModelStripsProviderPrefix(t *testing.T) {
 	if entry := catalog.MatchModel("openai/gpt-5"); entry == nil || entry.ProviderID != "openai" {
 		t.Fatalf("prefix strip failed: %+v", entry)
 	}
+	if entry := catalog.MatchModel("openai:gpt-5"); entry == nil || entry.ProviderID != "openai" {
+		t.Fatalf("colon prefix strip failed: %+v", entry)
+	}
+}
+
+func TestMatchModelPrefersExactOverNormalizedIdentity(t *testing.T) {
+	exactInput, exactOutput := 1.0, 2.0
+	normalizedInput, normalizedOutput := 9.0, 18.0
+	catalog := Catalog{Entries: []CatalogEntry{
+		{ProviderID: "relay", Model: MetadataModel{ID: "foo-bar", LastUpdated: "2026-01-01", Cost: MetadataCost{Input: &exactInput, Output: &exactOutput}}},
+		{ProviderID: "relay", Model: MetadataModel{ID: "foo_bar", LastUpdated: "2026-12-31", Cost: MetadataCost{Input: &normalizedInput, Output: &normalizedOutput}}},
+	}}
+	got := catalog.MatchModel("foo-bar")
+	if got == nil || got.Model.ID != "foo-bar" {
+		t.Fatalf("exact identity must outrank a normalized-only match, got %+v", got)
+	}
 }
 
 // Relay noise is the normal case: a bare traffic model id appears under
@@ -116,6 +132,16 @@ func TestMatchModelDemotesPlanZeroPricing(t *testing.T) {
 	got := catalog.MatchModel("glm-5.3-flash")
 	if got == nil || got.ProviderID != "zhipuai" {
 		t.Fatalf("plan-zero price must lose to the real rate, got %+v", got)
+	}
+}
+
+func TestMatchModelLeavesPlanZeroQuotaUnpriced(t *testing.T) {
+	zero := 0.0
+	catalog := Catalog{Entries: []CatalogEntry{
+		{ProviderID: "zhipuai-coding-plan", Model: MetadataModel{ID: "glm-5.3-flash", Cost: MetadataCost{Input: &zero, Output: &zero}}},
+	}}
+	if got := catalog.MatchModel("glm-5.3-flash"); got != nil {
+		t.Fatalf("a plan quota must stay unpriced, got %+v", got)
 	}
 }
 

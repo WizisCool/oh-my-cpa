@@ -142,6 +142,9 @@ func (s *Service) refreshModels(ctx context.Context) (map[string]string, int64, 
 	if err != nil {
 		return nil, 0, err
 	}
+	if len(models) == 0 {
+		return nil, 0, errors.New("refusing to publish an empty pricing catalog snapshot")
+	}
 	pruned, err := s.store.ReplacePricingModels(ctx, models)
 	return models, pruned, err
 }

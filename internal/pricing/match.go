@@ -88,10 +88,10 @@ func NormalizeModelKey(value string) string {
 	return b.String()
 }
 
-// StripProviderPrefix keeps the part after the last "/" — CPA often routes
-// "openai/gpt-5" style names while models.dev lists "gpt-5".
+// StripProviderPrefix keeps the part after the last routing separator — CPA
+// often routes "openai/gpt-5" or "openai:gpt-5" while models.dev lists "gpt-5".
 func StripProviderPrefix(value string) string {
-	if idx := strings.LastIndex(value, "/"); idx >= 0 {
+	if idx := strings.LastIndexAny(value, "/:"); idx >= 0 {
 		return value[idx+1:]
 	}
 	return value
@@ -157,21 +157,22 @@ func buildCandidates(model string, index catalogIndex) []rankedCandidate {
 	}
 	suffix := StripProviderPrefix(model)
 	type lookup struct {
-		key   string
-		score int
+		key        string
+		score      int
+		normalized bool
 	}
 	var lookups []lookup
 	if suffix != model {
 		lookups = []lookup{
-			{strings.ToLower(suffix), scoreExactSuffix},
-			{NormalizeModelKey(suffix), scoreNormalizedSuffix},
-			{strings.ToLower(model), scoreExactFull},
-			{NormalizeModelKey(model), scoreNormalizedFull},
+			{strings.ToLower(suffix), scoreExactSuffix, false},
+			{NormalizeModelKey(suffix), scoreNormalizedSuffix, true},
+			{strings.ToLower(model), scoreExactFull, false},
+			{NormalizeModelKey(model), scoreNormalizedFull, true},
 		}
 	} else {
 		lookups = []lookup{
-			{strings.ToLower(model), scoreExactSuffix},
-			{NormalizeModelKey(model), scoreNormalizedSuffix},
+			{strings.ToLower(model), scoreExactSuffix, false},
+			{NormalizeModelKey(model), scoreNormalizedSuffix, true},
 		}
 	}
 	best := make(map[string]rankedCandidate, 8)
@@ -189,11 +190,11 @@ func buildCandidates(model string, index catalogIndex) []rankedCandidate {
 			deprecated:    strings.EqualFold(strings.TrimSpace(entry.Model.Status), "deprecated"),
 			idMatchLength: idMatchLength(model, entry.Model.ID),
 		}
-		if rank, ok := officialRank[strings.ToLower(strings.TrimSpace(entry.ProviderID))]; ok {
-			candidate.officialRank = rank
-		} else if isPlanZeroProvider(entry.ProviderID) && costIsZero(entry.Model.Cost) {
+		if isPlanZeroProvider(entry.ProviderID) && costIsZero(entry.Model.Cost) {
 			// Subscription-plan catalogs list $0 quotas, not USD rates.
 			candidate.planZero = true
+		} else if rank, ok := officialRank[strings.ToLower(strings.TrimSpace(entry.ProviderID))]; ok {
+			candidate.officialRank = rank
 		}
 		key := entry.ProviderID + "\x00" + entry.Model.ID
 		if existing, ok := best[key]; !ok || candidateLess(candidate, existing) {
@@ -202,11 +203,14 @@ func buildCandidates(model string, index catalogIndex) []rankedCandidate {
 	}
 	for _, item := range lookups {
 		key := strings.ToLower(item.key)
-		for _, entry := range index.exact[key] {
-			add(entry, item.score)
-		}
-		for _, entry := range index.normalized[NormalizeModelKey(item.key)] {
-			add(entry, item.score)
+		if item.normalized {
+			for _, entry := range index.normalized[NormalizeModelKey(item.key)] {
+				add(entry, item.score)
+			}
+		} else {
+			for _, entry := range index.exact[key] {
+				add(entry, item.score)
+			}
 		}
 	}
 	result := make([]rankedCandidate, 0, len(best))
@@ -297,7 +301,7 @@ func usableCost(cost MetadataCost) bool {
 func (c Catalog) MatchModel(model string) *CatalogEntry {
 	index := buildCatalogIndex(c.Entries)
 	for _, candidate := range buildCandidates(model, index) {
-		if usableCost(candidate.entry.Model.Cost) {
+		if !candidate.planZero && usableCost(candidate.entry.Model.Cost) {
 			entry := candidate.entry
 			return &entry
 		}
