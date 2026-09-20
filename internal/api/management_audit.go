@@ -36,8 +36,6 @@ func (h *Handler) listAuditEvents(writer http.ResponseWriter, request *http.Requ
 
 func (h *Handler) exportAuditEvents(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
-	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-	writer.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="omc-audit-%d.json"`, time.Now().Unix()))
 
 	if h.repo == nil {
 		writeError(writer, http.StatusServiceUnavailable, "database is not initialized")
@@ -50,13 +48,22 @@ func (h *Handler) exportAuditEvents(writer http.ResponseWriter, request *http.Re
 		return
 	}
 
-	_ = h.recordAudit(request, "audit.export", "audit_events", "export", "success", map[string]any{"count": len(events)})
-
 	exportPayload := map[string]any{
 		"exported_at": time.Now().UTC().Format(time.RFC3339),
 		"count":       len(events),
 		"events":      events,
 	}
-
-	_ = json.NewEncoder(writer).Encode(exportPayload)
+	body, err := json.Marshal(exportPayload)
+	if err != nil {
+		writeInternalError(writer, err)
+		return
+	}
+	if auditErr := h.recordAudit(request, "audit.export", "audit_events", "export", "success", map[string]any{"count": len(events)}); auditErr != nil {
+		writeError(writer, http.StatusInternalServerError, "audit log failure; export aborted")
+		return
+	}
+	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+	writer.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="omc-audit-%d.json"`, time.Now().Unix()))
+	writer.WriteHeader(http.StatusOK)
+	_, _ = writer.Write(body)
 }

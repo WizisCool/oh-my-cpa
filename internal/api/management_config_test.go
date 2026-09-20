@@ -6,7 +6,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/configyaml"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
 
@@ -174,6 +176,41 @@ func TestManagementConfigPutScalarValidation(t *testing.T) {
 	}
 }
 
+func TestManagementConfigPutScalarHonoursProviderWriteGate(t *testing.T) {
+	fixture := &configFixtureCPA{}
+	var handler *Handler
+	client, baseURL, _ := startDashboardTestServer(t, fixture.serve, func(h *Handler) {
+		handler = h
+	})
+
+	handler.providerWrites.permits <- struct{}{}
+	previousTimeout := handler.providerWrites.acquireTimeout
+	handler.providerWrites.acquireTimeout = 50 * time.Millisecond
+	t.Cleanup(func() {
+		handler.providerWrites.acquireTimeout = previousTimeout
+		<-handler.providerWrites.permits
+	})
+
+	resp, payload := doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/config/debug", `{"value":true}`)
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("a refused config write must answer 503, got %d body %s", resp.StatusCode, payload)
+	}
+	var body struct {
+		Code string `json:"code"`
+	}
+	_ = json.Unmarshal(payload, &body)
+	if body.Code != providerWriteBusyCode {
+		t.Fatalf("refusal must carry code %q, got %q (%s)", providerWriteBusyCode, body.Code, payload)
+	}
+
+	fixture.mu.Lock()
+	putCount := len(fixture.putPaths)
+	fixture.mu.Unlock()
+	if putCount != 0 {
+		t.Fatalf("a refused scalar write reached CPA %d time(s)", putCount)
+	}
+}
+
 func TestManagementConfigSourceGetAndPut(t *testing.T) {
 	fixture := &configFixtureCPA{}
 	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
@@ -264,5 +301,70 @@ debug: true
 	_ = json.Unmarshal(payload, &putRes)
 	if putRes.Status != "ok" || putRes.Revision == "" || putRes.Revision == srcRes.Revision {
 		t.Fatalf("expected new revision, got %#v", putRes)
+	}
+}
+
+func TestManagementConfigSourcePutRejectsOversizedBody(t *testing.T) {
+	fixture := &configFixtureCPA{}
+	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
+	oversized := strings.Repeat("a", 2*1024*1024+1)
+	resp, payload := doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/config/source",
+		`{"yaml":"`+oversized+`","revision":"some-revision"}`)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("oversized source body must be refused, got %d body %s", resp.StatusCode, payload)
+	}
+}
+
+// A restore that cannot prove which stored entry a hidden value belongs to must
+// be refused before anything is written upstream, so a reordered list can never
+// publish one entry's secret onto another entry.
+func TestManagementConfigSourcePutRefusesUnprovableSequenceRestore(t *testing.T) {
+	fixture := &configFixtureCPA{}
+	fixture.yamlData = `servers:
+  - name: alpha
+    tls:
+      key: key-for-alpha
+  - name: beta
+    tls:
+      key: key-for-beta
+`
+	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
+
+	// The console edits the safe view from GET /config, which masks the keys.
+	resp, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/config")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("config GET failed: %d body %s", resp.StatusCode, payload)
+	}
+	var configRes struct {
+		SafeYAML string `json:"safe_yaml"`
+		Revision string `json:"revision"`
+	}
+	if err := json.Unmarshal(payload, &configRes); err != nil {
+		t.Fatalf("decode config response: %v", err)
+	}
+	if strings.Contains(configRes.SafeYAML, "key-for-alpha") || strings.Contains(configRes.SafeYAML, "key-for-beta") {
+		t.Fatalf("safe view leaked a stored key: %s", configRes.SafeYAML)
+	}
+
+	// The operator swaps the two entries while both still carry the sentinel.
+	swapped := strings.ReplaceAll(configRes.SafeYAML, "name: alpha", "name: __PLACEHOLDER__")
+	swapped = strings.ReplaceAll(swapped, "name: beta", "name: alpha")
+	swapped = strings.ReplaceAll(swapped, "name: __PLACEHOLDER__", "name: beta")
+	if !strings.Contains(swapped, configyaml.UnchangedSentinel) {
+		t.Fatalf("safe view did not mask the keys: %s", swapped)
+	}
+	body, _ := json.Marshal(map[string]string{"yaml": swapped, "revision": configRes.Revision})
+
+	resp, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/config/source", string(body))
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for an unprovable entry restore, got %d body %s", resp.StatusCode, payload)
+	}
+
+	fixture.mu.Lock()
+	defer fixture.mu.Unlock()
+	for _, written := range fixture.putBodies {
+		if strings.Contains(written, "key-for-alpha") || strings.Contains(written, "key-for-beta") {
+			t.Fatalf("refused save still wrote stored keys upstream: %s", written)
+		}
 	}
 }

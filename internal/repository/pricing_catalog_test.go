@@ -34,3 +34,17 @@ func TestCatalogReplacementRetiresOnlyAutomaticPrices(t *testing.T) {
 		t.Fatalf("missing tombstones %d %v", stopped, err)
 	}
 }
+
+func TestCatalogReplacementRejectsEmptyPriceModel(t *testing.T) {
+	r := usageTestRepository(t)
+	if _, err := r.ReplacePricingModels(context.Background(), map[string]string{"alias": " "}); err == nil {
+		t.Fatal("empty price_model was accepted")
+	}
+	catalog, err := r.ListPricingModels(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(catalog) != 0 {
+		t.Fatalf("rejected snapshot changed the catalog: %v", catalog)
+	}
+}

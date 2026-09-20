@@ -1,0 +1,12 @@
+# Console served on the site root: OMCPA_BASE_PATH resolves to "/".
+#
+# There is no prefix left to distinguish the console from the co-deployed CPA, so
+# this configuration sends every request to the console and needs no
+# trailing-slash redirect - a redirect against a root path would only produce
+# "//" and loop. The CPA upstream is not reachable through this proxy in root
+# mode; publish it under its own hostname if both have to be exposed.
+{$DOMAIN:localhost} {
+    handle {
+        reverse_proxy oh-my-cpa:8080
+    }
+}

@@ -210,6 +210,26 @@ func TestProviderStatusToggleRejectsNegativeIndex(t *testing.T) {
 	}
 }
 
+func TestProviderStatusToggleRefreshesPricing(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	priceSync := &fakePricing{acceptSync: true}
+	fixture.handler.SetPricing(priceSync)
+
+	fixture.state.mu.Lock()
+	fixture.state.codexProviders = []map[string]any{{"api-key": "sk-codex-first", "auth-index": "c-1"}}
+	fixture.state.mu.Unlock()
+
+	resp, payload := doJSON(t, fixture.client, http.MethodPatch,
+		fixture.baseURL+"/omc/api/v1/management/providers/status",
+		`{"family":"codex","index":0,"disabled":true}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status toggle failed: %d body %s", resp.StatusCode, payload)
+	}
+	if !priceSync.started {
+		t.Fatal("a provider status change must refresh the pricing catalog")
+	}
+}
+
 // TestProviderWritesAreBusyRefusedWhenGateIsHeld documents the refusal the
 // client retries: while another write holds the gate, a request that cannot be
 // admitted answers 503 with a machine-readable code, and no CPA write is

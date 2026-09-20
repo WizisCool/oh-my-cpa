@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -56,6 +57,12 @@ func TestIngestGapsRecordingAndRetention(t *testing.T) {
 	// Acknowledge gap 1
 	if err := repo.AcknowledgeIngestGap(ctx, gapID1); err != nil {
 		t.Fatal(err)
+	}
+	if err := repo.AcknowledgeIngestGap(ctx, 999999); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown gap acknowledgement error = %v, want ErrNotFound", err)
+	}
+	if err := repo.AcknowledgeIngestGap(ctx, 0); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("zero gap acknowledgement error = %v, want ErrNotFound", err)
 	}
 	gapsAfterAck, _ := repo.ListIngestGaps(ctx, "default", 10)
 	if gapsAfterAck[1].AcknowledgedAtMS == nil {

@@ -438,8 +438,12 @@ export function usageEventParams(query: UsageEventQuery): string {
     // decimal parser rejects.
     search.set(key, range === undefined ? String(value) : formatUsageRangeBound(value));
   };
-  if (query.from !== undefined && query.to !== undefined) {
+  if (query.from !== undefined) {
     assign('from', query.from);
+    assign('to', query.to);
+  } else if (query.to !== undefined) {
+    // The server requires `from` when `to` is present. Send it so a malformed
+    // caller gets an explicit 400 instead of silently widening the window.
     assign('to', query.to);
   } else {
     assign('preset', query.preset);
@@ -463,4 +467,3 @@ export function usageEventParams(query: UsageEventQuery): string {
   assign('since', query.since);
   return search.toString();
 }
-

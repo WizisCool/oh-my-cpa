@@ -49,10 +49,17 @@ services:
       OMCPA_CPA_MANAGEMENT_KEY: ${CPA_MANAGEMENT_KEY:?set CPA_MANAGEMENT_KEY}
       OMCPA_MASTER_KEY: ${OMCPA_MASTER_KEY:?set OMCPA_MASTER_KEY}
       OMCPA_PUBLIC_URL: ${OMCPA_PUBLIC_URL:?set OMCPA_PUBLIC_URL}
+      OMCPA_TRUSTED_PROXY_CIDRS: ${OMCPA_TRUSTED_PROXY_CIDRS:-172.16.0.0/12}
     volumes:
       - ${OMCPA_DATA_PATH:-../oh-my-cpa-data}:/data
+      # Used by the healthcheck below to build the URL the server actually serves.
+      - ./base-path.sh:/usr/local/bin/omc-base-path:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080${OMCPA_BASE_PATH:-/omc}/api/healthz | grep -q 'ok\\|degraded' || exit 1"]
+      # The raw value may be "omc" or "/omc/", which the server normalises but a
+      # raw shell URL cannot. deploy/base-path.sh performs the same normalisation
+      # the server does, so the probe addresses the path the server actually
+      # serves instead of failing on a URL like "http://127.0.0.1:8080omc/...".
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080$(sh /usr/local/bin/omc-base-path)/api/healthz | grep -q 'ok\\|degraded' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -71,13 +78,21 @@ services:
         condition: service_healthy
     environment:
       DOMAIN: ${DOMAIN:-localhost}
+      OMCPA_BASE_PATH: ${OMCPA_BASE_PATH:-/omc}
     ports:
       - "${HTTP_BIND:-0.0.0.0:80}:80"
       - "${HTTPS_BIND:-0.0.0.0:443}:443"
     volumes:
+      # Caddy substitutes {$OMCPA_BASE_PATH} before it parses the Caddyfile, so
+      # the proxy is started through the entrypoint that normalises the value
+      # first; the raw value builds a matcher that never matches a real request.
+      - ./base-path.sh:/usr/local/bin/omc-base-path:ro
+      - ./caddy-entrypoint.sh:/usr/local/bin/omc-caddy-entrypoint:ro
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./Caddyfile.root:/etc/caddy/Caddyfile.root:ro
       - ${CADDY_DATA_PATH:-../caddy-data}:/data
       - ${CADDY_CONFIG_PATH:-../caddy-config}:/config
+    entrypoint: ["/bin/sh", "/usr/local/bin/omc-caddy-entrypoint"]
     restart: unless-stopped
     networks:
       - oh-my-cpa

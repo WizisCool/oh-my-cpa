@@ -117,6 +117,24 @@ async function waitFor(url, timeoutMs = 60_000) {
   throw new Error(`timed out waiting for ${url}: ${lastError?.message ?? 'no response'}`);
 }
 
+function waitForExit(child) {
+  return new Promise((resolve) => {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      resolve();
+      return;
+    }
+    const timeout = setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    }, 5000);
+    timeout.unref();
+    child.once('close', () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+    child.kill('SIGTERM');
+  });
+}
+
 /** Starts the binary under test, or reports that an existing deployment is used. */
 async function startLocalDemo() {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'omc-demo-smoke-'));
@@ -164,9 +182,12 @@ async function startLocalDemo() {
   return {
     base,
     log: () => output.join(''),
-    stop: () => {
-      child.kill('SIGTERM');
-      fs.rmSync(temporary, { recursive: true, force: true });
+    stop: async () => {
+      await waitForExit(child);
+      // Windows keeps the executable and SQLite files mapped briefly after the
+      // process closes. Retry the cleanup instead of failing an otherwise green
+      // smoke run on that transient lock.
+      fs.rmSync(temporary, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     },
   };
 }
@@ -362,7 +383,7 @@ async function main() {
     );
   } finally {
     await browser.close();
-    demo.stop();
+    await demo.stop();
   }
 
   console.log(`\n${checks.length - failures.length}/${checks.length} checks passed`);

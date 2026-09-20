@@ -151,6 +151,20 @@ test('an unplaceable file runs the broad gates rather than nothing', () => {
   assert.ok(plan.includes('go'), `go must be selected, got ${plan.join(',')}`);
 });
 
+test('a placed file with no specific rule still runs the broad gates', () => {
+  for (const file of [
+    'web/vite.config.ts',
+    'migrations/900_example.sql',
+    'internal/config.yaml',
+    '.github/CODEOWNERS',
+  ]) {
+    const plan = planChecks([file]);
+    assert.ok(plan.includes('type-check'), `${file} must include type-check, got ${plan.join(',')}`);
+    assert.ok(plan.includes('logic'), `${file} must include logic, got ${plan.join(',')}`);
+    assert.ok(plan.includes('go'), `${file} must include go, got ${plan.join(',')}`);
+  }
+});
+
 test('no planned check for any representative path reaches the browser or a build', () => {
   const corpus = [
     'web/src/App.tsx',

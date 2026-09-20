@@ -85,3 +85,14 @@ func TestAuditEventAppendOnlyAndSanitization(t *testing.T) {
 		t.Fatal("expected error on empty target_type, got nil")
 	}
 }
+
+func TestListAuditEventsReturnsEmptySlice(t *testing.T) {
+	repo, _ := testRepository(t)
+	events, err := repo.ListAuditEvents(context.Background(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if events == nil || len(events) != 0 {
+		t.Fatalf("empty audit history = %#v, want non-nil empty slice", events)
+	}
+}

@@ -64,7 +64,7 @@ func clearConfigEnv(t *testing.T) {
 	for _, name := range []string{
 		"OMCPA_BASE_PATH", "OMCPA_DATA_DIR", "OMCPA_LISTEN_ADDR", "OMCPA_MASTER_KEY",
 		"OMCPA_PUBLIC_URL", "OMCPA_VERSION", "OMCPA_CPA_BASE_URL", "OMCPA_CPA_USAGE_ADDR",
-		"OMCPA_CPA_MANAGEMENT_KEY", DemoModeEnv, "PORT", "VERCEL_URL",
+		"OMCPA_CPA_MANAGEMENT_KEY", "OMCPA_TRUSTED_PROXY_CIDRS", DemoModeEnv, "PORT", "VERCEL_URL",
 	} {
 		t.Setenv(name, "")
 	}
@@ -96,6 +96,26 @@ func TestLoadLeavesSelfHostDefaultsAlone(t *testing.T) {
 	}
 	if !cfg.Usage.Enabled {
 		t.Fatal("self-hosted capture must stay enabled")
+	}
+	if len(cfg.TrustedProxyCIDRs) != 0 {
+		t.Fatalf("trusted proxies defaulted to %v, want none", cfg.TrustedProxyCIDRs)
+	}
+}
+
+func TestLoadParsesTrustedProxyCIDRs(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("OMCPA_TRUSTED_PROXY_CIDRS", "172.18.0.0/16, 2001:db8::/32")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.TrustedProxyCIDRs) != 2 || cfg.TrustedProxyCIDRs[0] != "172.18.0.0/16" || cfg.TrustedProxyCIDRs[1] != "2001:db8::/32" {
+		t.Fatalf("trusted proxies = %v", cfg.TrustedProxyCIDRs)
+	}
+
+	t.Setenv("OMCPA_TRUSTED_PROXY_CIDRS", "not-a-cidr")
+	if _, err := Load(); err == nil {
+		t.Fatal("invalid trusted proxy CIDR was accepted")
 	}
 }
 
@@ -161,7 +181,7 @@ func TestLoadIsDemoModeHonoursExplicitOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.BasePath != "/omc" || cfg.DataDir != "/data" || cfg.ListenAddr != "127.0.0.1:9000" {
+	if cfg.BasePath != "/omc" || cfg.DataDir != filepath.Clean("/data") || cfg.ListenAddr != "127.0.0.1:9000" {
 		t.Fatalf("explicit configuration was overridden: %#v", cfg)
 	}
 	if cfg.MasterKey != "01234567890123456789012345678901" || cfg.PublicURL != "https://demo.example.test" {

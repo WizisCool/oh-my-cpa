@@ -24,8 +24,10 @@ services:
       OMCPA_PUBLIC_URL: ${OMCPA_PUBLIC_URL:?set OMCPA_PUBLIC_URL}
     volumes:
       - ${OMCPA_DATA_PATH:-../oh-my-cpa-data}:/data
+      # Used by the healthcheck below to build the URL the server actually serves.
+      - ./base-path.sh:/usr/local/bin/omc-base-path:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080${OMCPA_BASE_PATH:-/omc}/api/healthz | grep -q 'ok\\|degraded' || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080$(sh /usr/local/bin/omc-base-path)/api/healthz | grep -q 'ok\\|degraded' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3

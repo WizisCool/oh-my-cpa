@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -45,9 +46,10 @@ type Handler struct {
 	// plugin's own host; see management_plugin_logos.go.
 	pluginLogos *pluginLogoFetcher
 
-	configMu  sync.Mutex
-	startTime time.Time
-	limiter   *loginLimiter
+	configMu       sync.Mutex
+	startTime      time.Time
+	limiter        *loginLimiter
+	trustedProxies []*net.IPNet
 	// providerWrites serialises whole-list provider configuration writes; see
 	// management_provider_writes.go for why one global permit is required.
 	providerWrites providerWriteGate
@@ -69,6 +71,7 @@ func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypt
 		auth:             authManager,
 		startTime:        time.Now(),
 		limiter:          newLoginLimiter(),
+		trustedProxies:   parseTrustedProxyNetworks(cfg.TrustedProxyCIDRs),
 		providerWrites:   newProviderWriteGate(),
 		providerKeyMasks: newProviderKeyMaskCache(),
 		pluginLogos:      newPluginLogoFetcher(),
@@ -241,7 +244,7 @@ func (h *Handler) login(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 
-	ip := resolveClientIP(request)
+	ip := resolveClientIP(request, h.trustedProxies)
 	if h.limiter != nil && h.limiter.isLocked(ip) {
 		writeError(writer, http.StatusTooManyRequests, "too many failed login attempts; please try again later")
 		return

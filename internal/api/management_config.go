@@ -1,10 +1,8 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
@@ -69,24 +67,28 @@ func (h *Handler) managementConfigPutScalar(writer http.ResponseWriter, request 
 		return
 	}
 
-	body, err := io.ReadAll(io.LimitReader(request.Body, 64*1024))
-	if err != nil {
-		writeError(writer, http.StatusBadRequest, "failed to read request body")
+	var req configPutScalarRequest
+	if err := decodeManagementJSON(writer, request, 64*1024, &req); err != nil {
 		return
 	}
 	defer request.Body.Close()
-
-	var req configPutScalarRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		writeError(writer, http.StatusBadRequest, "invalid json body: "+err.Error())
-		return
-	}
 
 	validatedVal, err := validateScalarValue(key, req.Value)
 	if err != nil {
 		writeError(writer, http.StatusBadRequest, err.Error())
 		return
 	}
+
+	// A scalar write is still a read-modify-write in CPA. Share the same write
+	// gate as the source editor so a concurrent source save cannot overwrite it
+	// (or be overwritten by it) between its revision check and its PUT.
+	if err := h.providerWrites.acquire(request.Context()); err != nil {
+		writeProviderWriteError(writer, err)
+		return
+	}
+	defer h.providerWrites.release()
+	h.configMu.Lock()
+	defer h.configMu.Unlock()
 
 	if auditErr := h.recordAudit(request, "config.save_scalar", "config", key, "attempt", nil); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit log failure; config save aborted")
@@ -209,18 +211,11 @@ func (h *Handler) managementConfigSourceGet(writer http.ResponseWriter, request 
 func (h *Handler) managementConfigSourcePut(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 
-	body, err := io.ReadAll(io.LimitReader(request.Body, 2*1024*1024))
-	if err != nil {
-		writeError(writer, http.StatusBadRequest, "failed to read request body")
+	var req configSourcePutRequest
+	if err := decodeManagementJSON(writer, request, 2*1024*1024, &req); err != nil {
 		return
 	}
 	defer request.Body.Close()
-
-	var req configSourcePutRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		writeError(writer, http.StatusBadRequest, "invalid json body: "+err.Error())
-		return
-	}
 
 	if strings.TrimSpace(req.YAML) == "" {
 		writeError(writer, http.StatusBadRequest, "configuration YAML cannot be empty")

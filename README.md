@@ -151,7 +151,7 @@ The public demo runs the same binary as a Vercel container image. `Dockerfile.ve
 > - [`deploy/compose.full.yml`](deploy/compose.full.yml): Stack co-deploying CPA, Oh My CPA, and Caddy.
 > - [`deploy/compose.omc.yml`](deploy/compose.omc.yml): Standalone Oh My CPA connecting to an existing CPA instance.
 >
-> The full stack pins CPA `v7.3.5` by default; override `CPA_IMAGE` when connecting the stack to a different compatible release.
+> The full stack pins CPA `v7.3.5` by default; override `CPA_IMAGE` when connecting the stack to a different compatible release. Its Caddy routes the console under `OMCPA_BASE_PATH` (default `/omc`) and everything else to CPA, so a non-default value is accepted in any of the forms the server normalises (`omc`, `/omc/`, `/omc`) and `/` makes the console take the whole host with CPA no longer reachable through the proxy.
 
 ## Operational Notes
 
@@ -159,6 +159,7 @@ The public demo runs the same binary as a Vercel container image. `Dockerfile.ve
 - **Single Replica**: SQLite WAL requires exclusive single-process access. Run one replica mounting the data directory; do not mount over network filesystems (NFS/CIFS).
 - **Master Key**: `OMCPA_MASTER_KEY` is required to decrypt stored credentials and payloads. Back it up securely.
 - **Network Security**: Keep CPA on a private network or loopback interface, and serve Oh My CPA over HTTPS.
+- **Reverse Proxy Headers**: Set `OMCPA_TRUSTED_PROXY_CIDRS` to the comma-separated CIDRs of reverse proxies whose forwarding headers may be trusted (the bundled Compose file trusts Docker's `172.16.0.0/12` network). Leave it unset when clients connect directly; never trust a public range.
 - **Demo Mode**: `OMCPA_DEMO_MODE` (default `false`) serves the console from a built-in fixture instead of a CPA, so it needs no management key and no provider credential. Its storage is not durable — the database is deleted and rebuilt on every boot — and the server refuses sign-in flows, credential movement, plugin execution, gateway configuration writes and anything that would leave the process. Turn it on only for a demonstration deployment; the public one is described under [Live Demo](#live-demo).
 
 ## Developer Commands

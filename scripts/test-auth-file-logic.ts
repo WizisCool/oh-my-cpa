@@ -136,6 +136,21 @@ test('Batch status execution: skips runtime-only and handles partial errors', as
   assert.equal(outcome.failed[0].name, 'f3.json');
 });
 
+test('Batch status execution clamps invalid worker counts', async () => {
+  const files: ManagementAuthFile[] = [
+    { ...baseFile, name: 'f1.json' },
+    { ...baseFile, name: 'f2.json' },
+  ];
+  const calls: string[] = [];
+  const setStatusFn = async (name: string) => {
+    calls.push(name);
+  };
+
+  await executeBatchStatus(files, true, setStatusFn, 0);
+  await executeBatchStatus(files, true, setStatusFn, Number.NaN);
+  assert.deepEqual(calls, ['f1.json', 'f2.json', 'f1.json', 'f2.json']);
+});
+
 test('Toggle calculation: handles status="disabled" string properly', () => {
   // Case 1: normal enabled file -> toggling disables it (nextDisabled = true)
   const activeFile: ManagementAuthFile = { ...baseFile, disabled: false, status: 'ok' };
@@ -163,4 +178,3 @@ test('Production chunkItems splits lists correctly for batch operations', () => 
   assert.deepEqual(chunkItems([]), []);
   assert.deepEqual(chunkItems(['single']), [['single']]);
 });
-

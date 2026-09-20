@@ -277,6 +277,33 @@ func TestPluginsLifecycle(t *testing.T) {
 	}
 }
 
+func TestPluginMutationsRequireExplicitFields(t *testing.T) {
+	client, baseURL, _, state := startPluginTestServer(t)
+
+	cases := []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{http.MethodPatch, "/omc/api/v1/management/plugins/logger/status", `{}`},
+		{http.MethodPatch, "/omc/api/v1/management/plugins/logger/status", `{"enabled":null}`},
+		{http.MethodPut, "/omc/api/v1/management/plugins/logger/config", `{}`},
+		{http.MethodPut, "/omc/api/v1/management/plugins/logger/config", `{"config":null}`},
+	}
+	for _, tc := range cases {
+		resp, payload := doJSON(t, client, tc.method, baseURL+tc.path, tc.body)
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("%s %s: status = %d body %s", tc.method, tc.path, resp.StatusCode, payload)
+		}
+	}
+
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if len(state.statusCalls) != 0 || len(state.configs) != 0 {
+		t.Fatalf("an incomplete plugin mutation reached CPA: status=%v configs=%v", state.statusCalls, state.configs)
+	}
+}
+
 // assertDeclaredKeys fails when a response object carries a field the DTO does not
 // declare, which is the silent widening the projection exists to prevent.
 func assertDeclaredKeys(t *testing.T, what string, object map[string]any, declared []string) {

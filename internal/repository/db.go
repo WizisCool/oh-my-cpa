@@ -242,9 +242,19 @@ func (db *DB) requiresMigrationBackup(ctx context.Context) bool {
 	if !isFileDatabase(db.path) {
 		return false
 	}
+	var tableExists int
+	if err := db.SQL.QueryRowContext(ctx, `SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'`).Scan(&tableExists); err != nil {
+		// Unknown schema state: fail closed and attempt a backup.
+		return true
+	}
+	if tableExists == 0 {
+		return false
+	}
 	var applied int
 	if err := db.SQL.QueryRowContext(ctx, `SELECT COUNT(1) FROM schema_migrations`).Scan(&applied); err != nil {
-		return false
+		// A table that exists but cannot be read makes the database state
+		// unknown. Do not let the migration proceed without a recoverable copy.
+		return true
 	}
 	if applied == 0 {
 		return false
@@ -361,7 +371,11 @@ func RestoreBackupSmoke(ctx context.Context, backupPath string, cipher *appcrypt
 	if err != nil {
 		return fmt.Errorf("read backup: %w", err)
 	}
-	if digestData, err := os.ReadFile(backupPath + ".sha256"); err == nil {
+	digestData, err := os.ReadFile(backupPath + ".sha256")
+	if err != nil {
+		return fmt.Errorf("read backup digest: %w", err)
+	}
+	{
 		parts := strings.Fields(string(digestData))
 		if len(parts) == 0 {
 			return errors.New("backup digest is empty")

@@ -137,17 +137,18 @@ Start the container and inspect the health endpoint:
 docker compose -f deploy/compose.full.yml start oh-my-cpa
 ```
 
-- When accessing via the public reverse proxy (such as Caddy):
+- When accessing via the public reverse proxy (such as Caddy), where `BASE_PATH` is the normalised `OMCPA_BASE_PATH` (`/omc` when unset; empty in root mode, which drops the prefix):
   ```bash
-  curl -sf https://${DOMAIN}/omc/api/healthz | jq .
+  BASE_PATH=/omc
+  curl -sf "https://${DOMAIN}${BASE_PATH}/api/healthz" | jq .
   ```
 - When accessing directly on the host (with published ports, e.g. `deploy/compose.omc.yml`):
   ```bash
-  curl -sf http://127.0.0.1:8080/omc/api/healthz | jq .
+  curl -sf "http://127.0.0.1:8080${BASE_PATH}/api/healthz" | jq .
   ```
 - Or via container exec:
   ```bash
-  docker compose -f deploy/compose.full.yml exec cpa wget -q -O - http://oh-my-cpa:8080/omc/api/healthz | jq .
+  docker compose -f deploy/compose.full.yml exec cpa wget -q -O - "http://oh-my-cpa:8080${BASE_PATH}/api/healthz" | jq .
   ```
 
 Confirm the JSON response reports `"database_status": "ok"` and `"status": "ok"` (or `"degraded"` if CPA is temporarily offline).
@@ -173,8 +174,8 @@ When upgrading Oh My CPA, the application automatically inspects and applies une
 
 1. **Automated Safety Gates**:
    - **Disk Space Verification**: Checks available disk space before starting; requires at least `database_size + 4 KiB` free space by default (or configured via `BackupConfig.MinFreeBytes`);
-   - **Pre-Migration Encrypted Backup**: For existing databases with recorded migrations in `schema_migrations`, the application executes `PRAGMA wal_checkpoint(TRUNCATE)` and writes an AES-GCM encrypted backup with a `.sha256` checksum to `OMCPA_DATA_DIR/backups` (permissions `0700/0600`);
-   - **Restore Smoke Test**: Decrypts the backup into a temporary database and verifies that schema tables are readable before proceeding; if verification fails, migration aborts with `ErrBackupRestoreFailed`;
+   - **Pre-Migration Encrypted Backup**: For existing databases with recorded migrations in `schema_migrations`, the application executes `PRAGMA wal_checkpoint(TRUNCATE)` and writes an AES-GCM encrypted backup with a `.sha256` checksum to `OMCPA_DATA_DIR/backups` (permissions `0700/0600`). The check is fail-closed: if the schema state cannot be read at all (the `sqlite_master` lookup fails, or `schema_migrations` exists but cannot be counted), the backup is taken instead of assuming a fresh database;
+   - **Restore Smoke Test**: Decrypts the backup into a temporary database and verifies that schema tables are readable before proceeding; if verification fails, or the `.sha256` sidecar cannot be read, migration aborts with `ErrBackupRestoreFailed`;
    - **Retention**: Keeps the 5 most recent migration backups by default (configurable via `repository.WithMigrationBackup`).
 2. **Expand / Contract Schema Evolution**:
    - Schema modifications strictly adhere to expand-first principles, avoiding breaking older query shapes.

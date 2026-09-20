@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path"
@@ -27,6 +28,9 @@ type Config struct {
 	Version        string
 	RequestTimeout time.Duration
 	TLSSkipVerify  bool
+	// TrustedProxyCIDRs are the direct peer networks whose forwarding headers
+	// may be used for per-client login throttling. Empty means trust none.
+	TrustedProxyCIDRs []string
 	// IsDemoMode turns this process into the public demonstration build: the
 	// console is served from fixtures, so it needs no CPA, no management key and
 	// no provider credential, and the server refuses every operator surface that
@@ -152,6 +156,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	trustedProxyCIDRs, err := parseTrustedProxyCIDRs()
+	if err != nil {
+		return Config{}, err
+	}
 
 	masterKey := strings.TrimSpace(os.Getenv("OMCPA_MASTER_KEY"))
 	publicURL := strings.TrimSpace(os.Getenv("OMCPA_PUBLIC_URL"))
@@ -206,19 +214,40 @@ func Load() (Config, error) {
 	}
 
 	return Config{
-		ListenAddr:     listenAddr,
-		Usage:          usage,
-		BasePath:       basePath,
-		DataDir:        dataDir,
-		DatabasePath:   databasePath,
-		MasterKey:      masterKey,
-		PublicURL:      publicURL,
-		Version:        envOr("OMCPA_VERSION", "v0.1.0-dev"),
-		RequestTimeout: timeout,
-		TLSSkipVerify:  tlsSkipVerify,
-		CPA:            cpa,
-		IsDemoMode:     demoMode,
+		ListenAddr:        listenAddr,
+		Usage:             usage,
+		BasePath:          basePath,
+		DataDir:           dataDir,
+		DatabasePath:      databasePath,
+		MasterKey:         masterKey,
+		PublicURL:         publicURL,
+		Version:           envOr("OMCPA_VERSION", "v0.1.0-dev"),
+		RequestTimeout:    timeout,
+		TLSSkipVerify:     tlsSkipVerify,
+		TrustedProxyCIDRs: trustedProxyCIDRs,
+		CPA:               cpa,
+		IsDemoMode:        demoMode,
 	}, nil
+}
+
+func parseTrustedProxyCIDRs() ([]string, error) {
+	raw := strings.TrimSpace(os.Getenv("OMCPA_TRUSTED_PROXY_CIDRS"))
+	if raw == "" {
+		return nil, nil
+	}
+	networks := make([]string, 0)
+	for _, entry := range strings.Split(raw, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		_, network, err := net.ParseCIDR(entry)
+		if err != nil {
+			return nil, fmt.Errorf("OMCPA_TRUSTED_PROXY_CIDRS contains %q: %w", entry, err)
+		}
+		networks = append(networks, network.String())
+	}
+	return networks, nil
 }
 
 // demoListenAddr resolves the port the public demo serves on. A container

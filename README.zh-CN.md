@@ -151,7 +151,7 @@ pnpm dev
 > - [`deploy/compose.full.yml`](deploy/compose.full.yml)：协同部署 CPA、Oh My CPA 与 Caddy 的完整栈。
 > - [`deploy/compose.omc.yml`](deploy/compose.omc.yml)：连接已有 CPA 实例的独立 Oh My CPA 容器。
 >
-> 完整栈默认固定 CPA `v7.3.5`；如需连接其他兼容版本，可通过 `CPA_IMAGE` 覆盖。
+> 完整栈默认固定 CPA `v7.3.5`；如需连接其他兼容版本，可通过 `CPA_IMAGE` 覆盖。其 Caddy 会把控制台路由到 `OMCPA_BASE_PATH`（默认 `/omc`），其余请求交给 CPA；该变量可写成服务器接受的任一形式（`omc`、`/omc/`、`/omc`），而设为 `/` 会让控制台占用整个主机，此时 CPA 不再通过该反向代理可达。
 
 ## 运维须知
 
@@ -159,6 +159,7 @@ pnpm dev
 - **单副本约束**：SQLite WAL 要求独占写入，仅允许单一实例挂载数据目录，严禁挂载于 NFS/CIFS 等网络分布式文件系统上并发运行。
 - **主密钥备份**：`OMCPA_MASTER_KEY` 用于解密已存储的凭据与用量载荷。请务必离线安全备份；若遗失，数据库加密内容将永久不可恢复。
 - **网络安全边界**：切勿将 CPA 管理端口暴露到公网。保持 CPA 在内网或本地回环中运行，并通过 HTTPS 反向代理访问 Oh My CPA。
+- **反向代理头信任**：`OMCPA_TRUSTED_PROXY_CIDRS` 用逗号分隔可信反向代理的 CIDR；仓库自带的 Compose 文件默认信任 Docker 的 `172.16.0.0/12` 网段。客户端直连时请不要设置，严禁填写公网网段。
 
 ## 开发者常用命令
 

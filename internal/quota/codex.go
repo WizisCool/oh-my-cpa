@@ -13,6 +13,11 @@ const (
 	FiveHourSeconds = 18000
 	WeeklySeconds   = 604800
 	MonthlySeconds  = 2592000
+
+	// maxInt64Exclusive is 2^63, the first value an int64 cannot represent. It is
+	// written out because float64(math.MaxInt64) rounds up to it, so a comparison
+	// against math.MaxInt64 would let exactly 2^63 through the float64 guard.
+	maxInt64Exclusive = 9223372036854775808.0
 )
 
 // RawCodexWindow handles both snake_case and camelCase serialization.
@@ -99,6 +104,9 @@ func toFloat(value any) (float64, bool) {
 	case string:
 		v = strings.TrimSpace(v)
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			if math.IsNaN(f) || math.IsInf(f, 0) {
+				return 0, false
+			}
 			return f, true
 		}
 	}
@@ -115,6 +123,12 @@ func toInt64(value any) (int64, bool) {
 	case int:
 		return int64(v), true
 	case float64:
+		// float64(math.MaxInt64) rounds up to 2^63, so the upper bound must be
+		// inclusive: a value of exactly 2^63 would otherwise pass the guard and
+		// convert to a negative int64.
+		if math.IsNaN(v) || math.IsInf(v, 0) || v < math.MinInt64 || v >= maxInt64Exclusive {
+			return 0, false
+		}
 		return int64(v), true
 	case json.Number:
 		if i, err := v.Int64(); err == nil {
@@ -136,6 +150,9 @@ func toInt64(value any) (int64, bool) {
 }
 
 func clamp(value, min, max float64) float64 {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return min
+	}
 	if value < min {
 		return min
 	}
@@ -262,7 +279,18 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 
 	windows := make([]QuotaWindow, 0)
 
-	addWindow := func(w *RawCodexWindow, id, defaultLabel, scope, model string) {
+	limitReached := func(rateLimit *RawCodexRateLimit) bool {
+		if rateLimit == nil {
+			return false
+		}
+		if rateLimit.Allowed != nil && !*rateLimit.Allowed {
+			return true
+		}
+		return (rateLimit.LimitReached != nil && *rateLimit.LimitReached) ||
+			(rateLimit.LimitReachedAlt != nil && *rateLimit.LimitReachedAlt)
+	}
+
+	addWindow := func(w *RawCodexWindow, id, defaultLabel, scope, model string, limitReached bool) {
 		if w == nil {
 			return
 		}
@@ -271,6 +299,10 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 			rawUsed = w.UsedPercentAlt
 		}
 		usedVal, hasUsed := toFloat(rawUsed)
+		if limitReached {
+			usedVal = 100
+			hasUsed = true
+		}
 
 		rawWinSec := w.LimitWindowSeconds
 		if rawWinSec == nil {
@@ -365,8 +397,8 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 			secondary = rateLimit.SecondaryWinAlt
 		}
 
-		addWindow(primary, "five_hour", "5小时用量上限 (5-Hour)", "standard", "")
-		addWindow(secondary, "weekly", "每周用量上限 (Weekly)", "standard", "")
+		addWindow(primary, "five_hour", "5小时用量上限 (5-Hour)", "standard", "", limitReached(rateLimit))
+		addWindow(secondary, "weekly", "每周用量上限 (Weekly)", "standard", "", limitReached(rateLimit))
 	}
 
 	codeReview := payload.CodeReviewRateLimit
@@ -382,8 +414,8 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 		if crSecondary == nil {
 			crSecondary = codeReview.SecondaryWinAlt
 		}
-		addWindow(crPrimary, "code_review_5h", "代码审查 5小时配额", "standard", "")
-		addWindow(crSecondary, "code_review_weekly", "代码审查 每周配额", "standard", "")
+		addWindow(crPrimary, "code_review_5h", "代码审查 5小时配额", "code_review", "", limitReached(codeReview))
+		addWindow(crSecondary, "code_review_weekly", "代码审查 每周配额", "code_review", "", limitReached(codeReview))
 	}
 
 	// Additional rate limits (e.g. GPT-5.3-Codex-Spark, o1, etc.)
@@ -416,8 +448,8 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 			if s == nil {
 				s = lim.SecondaryWinAlt
 			}
-			addWindow(p, fmt.Sprintf("addl_%d_p", i), fmt.Sprintf("%s 5小时配额", name), "model", name)
-			addWindow(s, fmt.Sprintf("addl_%d_s", i), fmt.Sprintf("%s 每周配额", name), "model", name)
+			addWindow(p, fmt.Sprintf("addl_%d_p", i), fmt.Sprintf("%s 5小时配额", name), "model", name, limitReached(lim))
+			addWindow(s, fmt.Sprintf("addl_%d_s", i), fmt.Sprintf("%s 每周配额", name), "model", name, limitReached(lim))
 		}
 	}
 

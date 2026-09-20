@@ -1,7 +1,7 @@
 {$DOMAIN:localhost} {
-    redir /omc /omc/ 308
+    redir {$OMCPA_BASE_PATH:/omc} {$OMCPA_BASE_PATH:/omc}/ 308
 
-    handle /omc/* {
+    handle {$OMCPA_BASE_PATH:/omc}/* {
         reverse_proxy oh-my-cpa:8080
     }
 

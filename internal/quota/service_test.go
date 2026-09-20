@@ -153,6 +153,28 @@ func TestRecommendationEngine(t *testing.T) {
 	if quotaAuthErr.Status != "error" || quotaAuthErr.Recommendation.Action != "reauth" || quotaAuthErr.Recommendation.Priority != "critical" {
 		t.Errorf("quotaAuthErr = %+v", quotaAuthErr)
 	}
+
+	// 4. An auth-looking substring inside an unrelated number or word must stay
+	// transient rather than telling the operator to rotate the credential.
+	for _, transient := range []string{"request id 14013 timed out", "author service timeout", "40100 bytes read before timeout"} {
+		q := &NormalizedQuota{Error: transient}
+		EvaluateStatusAndRecommendation(q, nowMS)
+		if q.Recommendation.Action != "refresh" {
+			t.Errorf("transient %q classified as %+v", transient, q.Recommendation)
+		}
+	}
+
+	// 5. An expired cooldown must not mask the current window state.
+	expiredRecover := nowMS - 1
+	remaining := 50.0
+	qExpired := &NormalizedQuota{
+		ActiveCooldown: &ActiveCooldown{IsActive: true, RecoverAtMS: &expiredRecover},
+		Windows:        []QuotaWindow{{RemainingPercent: &remaining}},
+	}
+	EvaluateStatusAndRecommendation(qExpired, nowMS)
+	if qExpired.Status != "healthy" || qExpired.ActiveCooldown.IsActive {
+		t.Errorf("expired cooldown still active: %+v", qExpired)
+	}
 }
 
 func TestRedeemCodexCreditCallsConsumeEndpoint(t *testing.T) {

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -41,7 +42,7 @@ func (h *Handler) listPlugins(writer http.ResponseWriter, request *http.Request)
 }
 
 type setPluginStatusRequest struct {
-	Enabled bool `json:"enabled"`
+	Enabled *bool `json:"enabled"`
 }
 
 func (h *Handler) setPluginStatus(writer http.ResponseWriter, request *http.Request) {
@@ -56,6 +57,10 @@ func (h *Handler) setPluginStatus(writer http.ResponseWriter, request *http.Requ
 	if err := decodeManagementJSON(writer, request, 4*1024, &req); err != nil {
 		return
 	}
+	if req.Enabled == nil {
+		writeError(writer, http.StatusBadRequest, "enabled is required")
+		return
+	}
 
 	client, ok := h.managementClientOrError(writer, request)
 	if !ok {
@@ -63,7 +68,7 @@ func (h *Handler) setPluginStatus(writer http.ResponseWriter, request *http.Requ
 	}
 
 	action := "plugin.enable"
-	if !req.Enabled {
+	if !*req.Enabled {
 		action = "plugin.disable"
 	}
 	if auditErr := h.recordAudit(request, action, "plugin", security.RedactText(pluginID), "attempt", nil); auditErr != nil {
@@ -71,7 +76,7 @@ func (h *Handler) setPluginStatus(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
-	if err := client.SetPluginStatus(request.Context(), pluginID, req.Enabled); err != nil {
+	if err := client.SetPluginStatus(request.Context(), pluginID, *req.Enabled); err != nil {
 		_ = h.recordAudit(request, action, "plugin", security.RedactText(pluginID), "failure", map[string]any{"error": err.Error()})
 		writeCPAFacadeError(writer, err)
 		return
@@ -82,7 +87,7 @@ func (h *Handler) setPluginStatus(writer http.ResponseWriter, request *http.Requ
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"status":  "ok",
 		"id":      pluginID,
-		"enabled": req.Enabled,
+		"enabled": *req.Enabled,
 	})
 }
 
@@ -119,7 +124,7 @@ func (h *Handler) deletePlugin(writer http.ResponseWriter, request *http.Request
 }
 
 type setPluginConfigRequest struct {
-	Config map[string]any `json:"config"`
+	Config json.RawMessage `json:"config"`
 }
 
 func (h *Handler) setPluginConfig(writer http.ResponseWriter, request *http.Request) {
@@ -134,6 +139,11 @@ func (h *Handler) setPluginConfig(writer http.ResponseWriter, request *http.Requ
 	if err := decodeManagementJSON(writer, request, 64*1024, &req); err != nil {
 		return
 	}
+	var config map[string]any
+	if len(req.Config) == 0 || string(req.Config) == "null" || json.Unmarshal(req.Config, &config) != nil || config == nil {
+		writeError(writer, http.StatusBadRequest, "config must be an object")
+		return
+	}
 
 	client, ok := h.managementClientOrError(writer, request)
 	if !ok {
@@ -145,7 +155,7 @@ func (h *Handler) setPluginConfig(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
-	if err := client.SetPluginConfig(request.Context(), pluginID, req.Config); err != nil {
+	if err := client.SetPluginConfig(request.Context(), pluginID, config); err != nil {
 		_ = h.recordAudit(request, "plugin.config", "plugin", security.RedactText(pluginID), "failure", map[string]any{"error": err.Error()})
 		writeCPAFacadeError(writer, err)
 		return

@@ -102,8 +102,9 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
         const entry = metaByKey.get(key) ?? metadata?.[index];
         const isStored = entry !== undefined && entry.key === key;
         const usageFingerprint = isStored ? entry.usage_fingerprint : undefined;
+        const id = usageFingerprint ? `key-${usageFingerprint}` : `key-${index}`;
         return {
-          id: `${index}-${key}`,
+          id,
           index,
           key,
           usageFingerprint,
@@ -134,9 +135,9 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
     // Only this row's revealed state is dropped: clearing every row would hide a
     // secret the operator deliberately revealed on a row they did not touch.
     setRevealedKeys((prev) => {
-      if (!(record.key in prev)) return prev;
+      if (!(record.id in prev)) return prev;
       const next = { ...prev };
-      delete next[record.key];
+      delete next[record.id];
       return next;
     });
   };
@@ -226,7 +227,7 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
    * push the controls off the line.
    */
   const keyCell = (record: ApiKeyRecord) => {
-    const isRevealed = Boolean(revealedKeys[record.key]);
+    const isRevealed = Boolean(revealedKeys[record.id]);
     return (
       <div className="config-key-box">
         <span className={`config-key-text${isRevealed ? ' is-revealed' : ' is-masked'}`}>
@@ -237,7 +238,7 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
   };
 
   const renderActions = (record: ApiKeyRecord) => {
-    const isRevealed = Boolean(revealedKeys[record.key]);
+    const isRevealed = Boolean(revealedKeys[record.id]);
     const moreButton = (
       <button
         type="button"
@@ -254,7 +255,7 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
           <button
             type="button"
             className="config-key-action"
-            onClick={() => setRevealedKeys((prev) => ({ ...prev, [record.key]: !prev[record.key] }))}
+            onClick={() => setRevealedKeys((prev) => ({ ...prev, [record.id]: !prev[record.id] }))}
             aria-label={isRevealed ? t('common.hide_secret') : t('common.reveal_secret')}
           >
             {isRevealed ? <EyeInvisibleOutlined /> : <EyeOutlined />}
