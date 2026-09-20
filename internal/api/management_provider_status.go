@@ -96,6 +96,9 @@ func (h *Handler) patchManagementProviderStatus(writer http.ResponseWriter, requ
 	}
 
 	_ = h.recordAudit(request, "provider.toggle_status", "provider", targetID, "success", map[string]any{"disabled": req.Disabled})
+	if h.pricing != nil {
+		h.pricing.NotifyModelsChanged()
+	}
 
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"status":   "ok",
