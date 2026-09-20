@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/configyaml"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
 
@@ -311,5 +312,59 @@ func TestManagementConfigSourcePutRejectsOversizedBody(t *testing.T) {
 		`{"yaml":"`+oversized+`","revision":"some-revision"}`)
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("oversized source body must be refused, got %d body %s", resp.StatusCode, payload)
+	}
+}
+
+// A restore that cannot prove which stored entry a hidden value belongs to must
+// be refused before anything is written upstream, so a reordered list can never
+// publish one entry's secret onto another entry.
+func TestManagementConfigSourcePutRefusesUnprovableSequenceRestore(t *testing.T) {
+	fixture := &configFixtureCPA{}
+	fixture.yamlData = `servers:
+  - name: alpha
+    tls:
+      key: key-for-alpha
+  - name: beta
+    tls:
+      key: key-for-beta
+`
+	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
+
+	// The console edits the safe view from GET /config, which masks the keys.
+	resp, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/config")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("config GET failed: %d body %s", resp.StatusCode, payload)
+	}
+	var configRes struct {
+		SafeYAML string `json:"safe_yaml"`
+		Revision string `json:"revision"`
+	}
+	if err := json.Unmarshal(payload, &configRes); err != nil {
+		t.Fatalf("decode config response: %v", err)
+	}
+	if strings.Contains(configRes.SafeYAML, "key-for-alpha") || strings.Contains(configRes.SafeYAML, "key-for-beta") {
+		t.Fatalf("safe view leaked a stored key: %s", configRes.SafeYAML)
+	}
+
+	// The operator swaps the two entries while both still carry the sentinel.
+	swapped := strings.ReplaceAll(configRes.SafeYAML, "name: alpha", "name: __PLACEHOLDER__")
+	swapped = strings.ReplaceAll(swapped, "name: beta", "name: alpha")
+	swapped = strings.ReplaceAll(swapped, "name: __PLACEHOLDER__", "name: beta")
+	if !strings.Contains(swapped, configyaml.UnchangedSentinel) {
+		t.Fatalf("safe view did not mask the keys: %s", swapped)
+	}
+	body, _ := json.Marshal(map[string]string{"yaml": swapped, "revision": configRes.Revision})
+
+	resp, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/config/source", string(body))
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 for an unprovable entry restore, got %d body %s", resp.StatusCode, payload)
+	}
+
+	fixture.mu.Lock()
+	defer fixture.mu.Unlock()
+	for _, written := range fixture.putBodies {
+		if strings.Contains(written, "key-for-alpha") || strings.Contains(written, "key-for-beta") {
+			t.Fatalf("refused save still wrote stored keys upstream: %s", written)
+		}
 	}
 }
