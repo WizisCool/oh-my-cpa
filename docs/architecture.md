@@ -1013,7 +1013,12 @@ probe is reported with `refresh_supported: false` rather than as a failed fetch.
 Migrations are embedded from `migrations/` and applied in filename order inside
 one transaction each. A migration against an existing on-disk database first
 writes an AES-GCM backup plus SHA-256 sidecar, restores it as a smoke test, and
-keeps the newest five. Migration 004 additionally runs a Go governance hook
+keeps the newest five. The gate that decides whether a backup is needed reads
+`schema_migrations` first, and an unreadable schema state - a failed
+`sqlite_master` lookup, or a table that exists but cannot be counted - is treated
+as "back up first" rather than as "nothing applied yet". The smoke test likewise
+refuses to pass when the sidecar digest is missing, because an unverifiable backup
+is not a recoverable one. Migration 004 additionally runs a Go governance hook
 inside its transaction to sanitize historical rows. Rollback is forward-only:
 fix a defect with a new migration, never by editing `schema_migrations`
 (`docs/ops/sqlite-operations.md`).

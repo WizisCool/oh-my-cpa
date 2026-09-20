@@ -844,3 +844,72 @@ func TestAuthFileProjectionTruncatesDeterministically(t *testing.T) {
 		t.Fatalf("deterministic cap kept model-400: %#v", projected)
 	}
 }
+
+// The projection caps signals at 64 and model quotas at 20x20. Those caps decide
+// what the console can display, so they are asserted here on the serialized
+// response: a unit test of the projection helpers cannot see a handler that stops
+// calling them, or a DTO tag that drops the bounded map.
+func TestManagementAuthFilesEndpointBoundsQuotaProjection(t *testing.T) {
+	signals := make(map[string]any, 70)
+	for index := 0; index < 70; index++ {
+		signals[fmt.Sprintf("signal-%02d", index)] = fmt.Sprintf("value-%02d", index)
+	}
+	modelQuotas := make(map[string]map[string]any, 500)
+	for index := 0; index < 500; index++ {
+		modelQuotas[fmt.Sprintf("model-%03d", index)] = map[string]any{
+			"signals": map[string]any{"state": "ok"},
+		}
+	}
+	quotaJSON, _ := json.Marshal(map[string]any{"observed_at": "2026-01-01T00:00:00Z", "signals": signals})
+	modelQuotasJSON, _ := json.Marshal(modelQuotas)
+
+	filesFixture := `{"files":[{"name":"capped.json","auth_index":"idx-cap","type":"claude","provider":"claude",` +
+		`"quota":` + string(quotaJSON) + `,"model_quotas":` + string(modelQuotasJSON) + `}]}`
+
+	client, baseURL, _ := startDashboardTestServer(t, func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/v0/management/auth-files" {
+			writer.WriteHeader(http.StatusNotFound)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(filesFixture))
+	})
+	response, raw := doJSON(t, client, http.MethodGet, baseURL+"/omc/api/v1/management/auth-files", "")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("list status = %d body = %s", response.StatusCode, raw)
+	}
+
+	var listed managementAuthFilesResponse
+	if err := json.Unmarshal(raw, &listed); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(listed.Files) != 1 {
+		t.Fatalf("files = %d, want 1", len(listed.Files))
+	}
+	file := listed.Files[0]
+	if file.Quota == nil {
+		t.Fatalf("quota missing from the response: %s", raw)
+	}
+	if len(file.Quota.Signals) != 64 {
+		t.Fatalf("signals = %d, want the 64-entry cap", len(file.Quota.Signals))
+	}
+	for _, key := range []string{"signal-63"} {
+		if _, ok := file.Quota.Signals[key]; !ok {
+			t.Fatalf("bounded signals lost %q", key)
+		}
+	}
+	for _, key := range []string{"signal-64", "signal-69"} {
+		if _, ok := file.Quota.Signals[key]; ok {
+			t.Fatalf("bounded signals kept %q beyond the cap", key)
+		}
+	}
+	if len(file.ModelQuotas) != managementOverviewBucketCount*managementOverviewBucketCount {
+		t.Fatalf("model quotas = %d, want %d", len(file.ModelQuotas), managementOverviewBucketCount*managementOverviewBucketCount)
+	}
+	if _, ok := file.ModelQuotas["model-399"]; !ok {
+		t.Fatalf("bounded model quotas lost model-399")
+	}
+	if _, ok := file.ModelQuotas["model-400"]; ok {
+		t.Fatalf("bounded model quotas kept model-400 beyond the cap")
+	}
+}

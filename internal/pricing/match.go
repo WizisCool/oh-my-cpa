@@ -157,9 +157,9 @@ func buildCandidates(model string, index catalogIndex) []rankedCandidate {
 	}
 	suffix := StripProviderPrefix(model)
 	type lookup struct {
-		key        string
-		score      int
-		normalized bool
+		key          string
+		score        int
+		isNormalized bool
 	}
 	var lookups []lookup
 	if suffix != model {
@@ -203,7 +203,7 @@ func buildCandidates(model string, index catalogIndex) []rankedCandidate {
 	}
 	for _, item := range lookups {
 		key := strings.ToLower(item.key)
-		if item.normalized {
+		if item.isNormalized {
 			for _, entry := range index.normalized[NormalizeModelKey(item.key)] {
 				add(entry, item.score)
 			}
