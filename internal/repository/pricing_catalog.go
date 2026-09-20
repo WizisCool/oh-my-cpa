@@ -54,7 +54,7 @@ func (r *Repository) ReplacePricingModels(ctx context.Context, models map[string
 	for model, target := range models {
 		model = strings.TrimSpace(model)
 		target = strings.TrimSpace(target)
-		if model == "" || len(model) > 512 || len(target) > 512 {
+		if model == "" || target == "" || len(model) > 512 || len(target) > 512 {
 			return 0, fmt.Errorf("invalid pricing catalog identity")
 		}
 		if _, err = stmt.ExecContext(ctx, model, target); err != nil {
