@@ -456,11 +456,13 @@ export const SCENARIOS = [
         [(url) => url.pathname.endsWith('/management/providers'), () => ({ providers: [pickerProvider], total: 1 })],
         /* The dashboard's provider rows, which is what its reveal-on-hover arrow lives on. Both
            halves are supplied because the panel aggregates configured providers with the window's
-           traffic: one of either produces no row at all. */
+           traffic: one of either produces no row at all. `success_rate` is a percentage, so a row
+           that served all 12 of its requests reads 100 - and therefore green, which is the row
+           this scenario means to be looking at. */
         [(url) => url.pathname.endsWith('/management/dashboard/providers'), () => ({
           window: { preset: '1h', from: Date.now() - 3_600_000, to: Date.now(), bucket_ms: 60_000 },
           providers: [
-            { id: 'codex-api-key', total: 12, success: 12, failure: 0, success_rate: 1, buckets: [] },
+            { id: 'codex-api-key', total: 12, success: 12, failure: 0, success_rate: 100 },
           ],
           partial_errors: [],
         })],
@@ -473,11 +475,11 @@ export const SCENARIOS = [
             success: 12,
             failure: 0,
             total: 12,
-            success_rate: 1,
+            success_rate: 100,
             buckets: [{ success: 12, failed: 0 }],
           }],
           credentials: { total: 1, active: 1, disabled: 0, unavailable: 0, by_type: [] },
-          traffic: { bucket_minutes: 10, window_minutes: 60, buckets: [], total_success: 12, total_failure: 0, total: 12, success_rate: 1 },
+          traffic: { bucket_minutes: 10, window_minutes: 60, buckets: [], total_success: 12, total_failure: 0, total: 12, success_rate: 100 },
           partial_errors: [],
         })],
         [(url) => url.pathname.endsWith('/management/api-keys'), () => ({
