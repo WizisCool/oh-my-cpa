@@ -82,7 +82,12 @@ export function useProviderList() {
       }
       return data;
     },
-    staleTime: 30000,
+    // This query deliberately opts into plaintext key material for the editor.
+    // Do not retain it after the page has no observer, and always re-read on a
+    // fresh mount rather than serving a cached copy of the credentials.
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: 'always',
   });
 
   const providers = providersData?.providers || [];

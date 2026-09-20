@@ -551,7 +551,7 @@ export function ProviderEditorDrawer({
                           >
                             {displayKey && (
                               <span
-                                title={displayKey}
+                                title={maskKeyText(displayKey)}
                                 style={{
                                   fontFamily: 'monospace',
                                   fontWeight: 600,
