@@ -227,6 +227,14 @@ assert.deepEqual(read('cost_min=0.000000001&cost_max=0.000000002').ranges, {
   cost: { min: '0.000000001', max: '0.000000002' },
 });
 
+// An open-ended custom range is expressed by `from` without `to`; it must
+// reach the server that way rather than falling back to a relative preset and
+// silently widening the query.
+const openEndedParams = new URLSearchParams(usageEventParams({ from: 100, result: 'all', limit: 100 }));
+assert.equal(openEndedParams.get('from'), '100');
+assert.equal(openEndedParams.has('to'), false);
+assert.equal(openEndedParams.has('preset'), false);
+
 // queryToFilterParams / filterParamsToUrl are inverses, and they are what the
 // chips and the saved view are both built from.
 const flattened = queryToFilterParams(everyQuery);

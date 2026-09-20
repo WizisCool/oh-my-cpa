@@ -27,6 +27,7 @@ assert.deepEqual(parseProviderID('openai-compat-12'), { family: 'openai-compatib
 assert.deepEqual(parseProviderID('codex-3'), { family: 'codex', index: 3 });
 assert.deepEqual(parseProviderID('claude-1'), { family: 'claude', index: 1 });
 assert.deepEqual(parseProviderID('gemini-0'), { family: 'gemini', index: 0 });
+assert.deepEqual(parseProviderID('meta-0'), { family: 'meta', index: 0 });
 assert.notEqual(
   FAMILY_BY_PROVIDER_ID_PREFIX['openai-compat'],
   'openai-compat',
@@ -66,6 +67,11 @@ assert.deepEqual(providerStatusPayload('openai-compat-2', false), {
 // Switching a provider off must never ask for it to be switched on.
 assert.equal(providerStatusPayload('claude-1', false)?.disabled, true, 'enabled=false means disabled=true');
 assert.equal(providerStatusPayload('claude-1', true)?.disabled, false, 'enabled=true means disabled=false');
+assert.deepEqual(providerStatusPayload('meta-2', false), {
+  family: 'meta',
+  index: 2,
+  disabled: true,
+});
 
 // An unaddressable id produces no request at all, rather than one against index
 // zero of a family nobody named.

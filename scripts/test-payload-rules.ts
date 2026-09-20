@@ -173,6 +173,7 @@ test('isValidJson helper handles numbers, booleans, strings, objects, arrays', (
   assert.equal(isValidJson('[1, 2]'), true);
   assert.equal(isValidJson('{not json'), false);
   assert.equal(isValidJson(''), false);
+  assert.equal(isValidJson(undefined), false);
 });
 
 test('validateAllPayloadRules accurately detects issues without premature errors', () => {

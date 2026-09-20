@@ -242,29 +242,76 @@ export function useProviderManagement({
     });
   };
 
-  const handleTestKey = (k: FormKeyItem, idx: number) => {
-    if (!k.apiKey || !k.apiKey.trim()) {
-      message.warning(t('pro.test_key_empty'));
-      return;
+  const headersPayload = () => {
+    const payload: Record<string, string> = {};
+    for (const header of formHeaders) {
+      if (header.key.trim() !== '') {
+        payload[header.key.trim()] = header.value.trim();
+      }
     }
-    const hide = message.loading(t('pro.testing_key', { n: idx + 1 }), 0);
-    setTimeout(() => {
-      hide();
-      message.success(t('pro.test_key_ok', { n: idx + 1 }));
-    }, 450);
+    return payload;
   };
 
-  const handleTestAllKeys = () => {
-    const hasAny = formKeys.some((k) => k.apiKey && k.apiKey.trim() !== '');
+  const testProviderKey = async (k: FormKeyItem): Promise<{ ok: boolean; error?: unknown }> => {
+    const apiKey = k.apiKey?.trim() || '';
+    if (!apiKey) {
+      message.warning(t('pro.test_key_empty'));
+      return { ok: false };
+    }
+    const baseURL = formBaseURL.trim();
+    if (!baseURL) {
+      message.warning(t('pro.pull_requires_base_url'));
+      return { ok: false };
+    }
+    try {
+      await api.pullProviderModels({
+        provider_id: editingProvider ? editingProvider.id : undefined,
+        family: formFamily,
+        base_url: baseURL,
+        api_key: apiKey,
+        proxy_url: k.proxyUrl?.trim() || '',
+        headers: headersPayload(),
+      });
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error };
+    }
+  };
+
+  const handleTestKey = async (k: FormKeyItem, idx: number) => {
+    const hide = message.loading(t('pro.testing_key', { n: idx + 1 }), 0);
+    const result = await testProviderKey(k);
+    hide();
+    if (result.ok) {
+      message.success(t('pro.test_key_ok', { n: idx + 1 }));
+      return;
+    }
+    if (result.error) {
+      message.error(result.error instanceof ApiError ? result.error.message : String(result.error));
+    }
+  };
+
+  const handleTestAllKeys = async () => {
+    const keys = formKeys.filter((k) => k.apiKey && k.apiKey.trim() !== '');
+    const hasAny = keys.length > 0;
     if (!hasAny) {
       message.warning(t('pro.test_key_empty'));
       return;
     }
+    if (!formBaseURL.trim()) {
+      message.warning(t('pro.pull_requires_base_url'));
+      return;
+    }
     const hide = message.loading(t('pro.testing_all'), 0);
-    setTimeout(() => {
-      hide();
-      message.success(t('pro.test_all_ok', { count: formKeys.length }));
-    }, 550);
+    const results = await Promise.all(keys.map((key) => testProviderKey(key)));
+    hide();
+    const failed = results.filter((result) => !result.ok && result.error);
+    if (failed.length === 0) {
+      message.success(t('pro.test_all_ok', { count: keys.length }));
+      return;
+    }
+    const firstError = failed[0]?.error;
+    message.error(firstError instanceof ApiError ? firstError.message : String(firstError));
   };
 
   const handleCloseProviderDrawer = () => {

@@ -82,7 +82,8 @@ export function generateDynamicId(prefix = 'dyn'): string {
   return `${prefix}_${Date.now()}_${nextDynamicId++}`;
 }
 
-export function isValidJson(str: string): boolean {
+export function isValidJson(str: string | undefined): boolean {
+  if (typeof str !== 'string') return false;
   if (!str.trim()) return false;
   try {
     JSON.parse(str);

@@ -171,9 +171,10 @@ export async function executeBatchStatus(
   const eligible = files.filter((f) => !f.runtime_only);
   const succeeded: string[] = [];
   const failed: Array<{ name: string; error: string }> = [];
+  const workerCount = Number.isFinite(concurrency) ? Math.max(1, Math.floor(concurrency)) : 5;
 
-  for (let i = 0; i < eligible.length; i += concurrency) {
-    const chunk = eligible.slice(i, i + concurrency);
+  for (let i = 0; i < eligible.length; i += workerCount) {
+    const chunk = eligible.slice(i, i + workerCount);
     const results = await Promise.allSettled(
       chunk.map(async (file) => {
         await setStatusFn(file.name, disabled, file.auth_index);

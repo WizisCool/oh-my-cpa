@@ -1763,7 +1763,12 @@ export function makeT(lang: Lang): TFunc {
     let text = key;
     if (lang === 'zh') text = entry?.[0] ?? key;
     else if (lang === 'en') text = entry?.[1] ?? key;
-    else text = loadedCatalogs.get(lang)?.[key] ?? key;
+    else {
+      // A deferred catalog can be incomplete while a deployment is rolling
+      // out. Fall back to the base dictionary rather than showing a raw key.
+      const fallbackIndex = lang === 'zh-Hant' ? 0 : 1;
+      text = loadedCatalogs.get(lang)?.[key] ?? entry?.[fallbackIndex] ?? key;
+    }
     if (vars) {
       for (const [name, value] of Object.entries(vars)) {
         text = text.split(`{${name}}`).join(String(value));
@@ -1784,8 +1789,14 @@ const LANG_KEY = 'omc-lang';
 const FALLBACK_LANG: Lang = 'zh';
 function readInitialLang(): Lang {
   if (typeof window === 'undefined') return 'zh';
-  const stored = window.localStorage.getItem(LANG_KEY);
-  return LANGUAGES.some((language) => language.id === stored) ? (stored as Lang) : 'zh';
+  try {
+    const stored = window.localStorage.getItem(LANG_KEY);
+    return LANGUAGES.some((language) => language.id === stored) ? (stored as Lang) : 'zh';
+  } catch {
+    // Storage can be blocked by the browser or a sandboxed frame. The console
+    // still has to render its default reading language.
+    return 'zh';
+  }
 }
 
 interface I18nContextValue {
@@ -1815,7 +1826,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let cancelled = false;
     loadCatalog(initialLang).then(
       () => {
-        if (!cancelled) setLangState(initialLang);
+        if (!cancelled && languageRequest.current === 0) setLangState(initialLang);
       },
       () => {
         // A stored catalog whose chunk cannot be fetched - a tab older than the deployment serving it
@@ -1823,7 +1834,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // That is the whole point: a blank page is a console with nothing on it to act from, and the
         // settings page is where a reader picks a language that is still there. The stored preference
         // is left alone, so the next load returns them to the language they chose.
-        if (!cancelled) setLangState(FALLBACK_LANG);
+        if (!cancelled && languageRequest.current === 0) setLangState(FALLBACK_LANG);
       },
     );
     return () => {
@@ -1861,7 +1872,13 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // has to read - while only the reader's own choice is stored. Writing the fallback would replace
     // the preference the next successful load is meant to restore.
     document.documentElement.lang = languageLocale(lang);
-    if (lang === requestedLang) window.localStorage.setItem(LANG_KEY, lang);
+    if (lang === requestedLang) {
+      try {
+        window.localStorage.setItem(LANG_KEY, lang);
+      } catch {
+        // A blocked storage backend must not break a language switch.
+      }
+    }
   }, [lang, requestedLang]);
 
   const value = React.useMemo<I18nContextValue>(
