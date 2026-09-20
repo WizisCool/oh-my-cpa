@@ -268,7 +268,10 @@ func (r *Repository) BatchCorrelatedCooldowns(ctx context.Context, authIndexes [
 		SELECT auth_index, quota_reason, next_retry_after_ms, next_recover_at_ms, timestamp_ms
 		FROM error_events
 		WHERE quota_exceeded = 1 AND (next_recover_at_ms > ? OR next_retry_after_ms > ? OR timestamp_ms >= ?) AND auth_index IN (%s)
-		ORDER BY timestamp_ms DESC
+		-- timestamp_ms is not unique, so tied rows would otherwise be returned in
+		-- whatever order the storage engine chose and report a different reason or
+		-- recovery time for identical data. rowid makes the newest inserted row win.
+		ORDER BY timestamp_ms DESC, rowid DESC
 	`, placeholders)
 
 	rows, err := r.SQL().QueryContext(ctx, query, args...)

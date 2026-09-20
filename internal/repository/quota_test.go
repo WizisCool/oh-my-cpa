@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -98,6 +99,11 @@ func TestQuotaSnapshotsUseInsertionOrderForTimestampTies(t *testing.T) {
 			Status:       status,
 			WindowsJSON:  "[]",
 			ObservedAtMS: observedAt,
+			// Pinned as well as the observation time: the writer would otherwise take
+			// created_at_ms from the clock, and a millisecond boundary between the
+			// three inserts would let created_at_ms decide the order on its own - the
+			// test would then pass even with the rowid tie-breaker removed.
+			CreatedAtMS: observedAt,
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -261,5 +267,59 @@ func TestRepositoryBatchCorrelatedCooldowns(t *testing.T) {
 	_, exists3 := cooldowns["auth-healthy"]
 	if exists3 {
 		t.Errorf("expected auth-healthy to have no cooldown record")
+	}
+}
+
+// Two active rows for one auth_index can share a timestamp_ms. Ordering by that
+// non-unique value alone leaves the winner to SQLite's row order, so the same
+// stored data could report a different reason or recovery time between reads.
+// The query must add a unique tie-breaker.
+func TestBatchCorrelatedCooldownsBreaksTimestampTiesDeterministically(t *testing.T) {
+	ctx := context.Background()
+	repo, _ := testRepository(t)
+
+	_, err := repo.SQL().ExecContext(ctx, `
+		INSERT INTO cpa_instances (id, name, base_url, usage_addr, management_key_ciphertext, management_key_nonce, status, created_at, updated_at)
+		VALUES ('default', 'Default', 'http://127.0.0.1:8317', '127.0.0.1:8317', x'00', x'00', 'unknown', 0, 0)
+	`)
+	if err != nil {
+		t.Fatalf("insert instance failed: %v", err)
+	}
+
+	nowMS := time.Now().UnixMilli()
+	tiedTimestamp := nowMS - 60*1000
+
+	// Both rows are active and carry the same timestamp; only the inserted order
+	// distinguishes them, and the later row is the one that must win.
+	for index, reason := range []string{"earlier tied reason", "later tied reason"} {
+		_, err = repo.SQL().ExecContext(ctx, `
+			INSERT INTO error_events (
+				instance_id, event_key, provider, model, auth_index, status_code, body,
+				retryable, auth_status, auth_disabled, auth_unavailable, quota_exceeded,
+				quota_reason, next_recover_at_ms, timestamp_ms, created_at_ms
+			) VALUES (
+				'default', ?, 'openai', 'gpt-4o', 'auth-tied', 429, 'Rate limit reached',
+				1, 'active', 0, 0, 1, ?, ?, ?, ?
+			)
+		`, fmt.Sprintf("tied-%d", index), reason, nowMS+int64(index+1)*60000, tiedTimestamp, tiedTimestamp)
+		if err != nil {
+			t.Fatalf("insert tied error %d failed: %v", index, err)
+		}
+	}
+
+	// Repeated reads must agree: the ordering cannot depend on which row SQLite
+	// happens to return first.
+	for attempt := 0; attempt < 5; attempt++ {
+		cooldowns, err := repo.BatchCorrelatedCooldowns(ctx, []string{"auth-tied"}, nowMS)
+		if err != nil {
+			t.Fatalf("BatchCorrelatedCooldowns failed: %v", err)
+		}
+		record, ok := cooldowns["auth-tied"]
+		if !ok {
+			t.Fatalf("attempt %d: no cooldown recorded for auth-tied", attempt)
+		}
+		if record.Reason != "later tied reason" {
+			t.Fatalf("attempt %d: reason = %q, want the most recently inserted tied row", attempt, record.Reason)
+		}
 	}
 }
