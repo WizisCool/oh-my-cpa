@@ -116,11 +116,21 @@ func (r *Repository) AcknowledgeIngestGap(ctx context.Context, id int64) error {
 	if r == nil || r.SQL() == nil {
 		return errors.New("repository is not initialized")
 	}
+	if id <= 0 {
+		return ErrNotFound
+	}
 	nowMS := time.Now().UnixMilli()
-	_, err := r.SQL().ExecContext(ctx, `
+	result, err := r.SQL().ExecContext(ctx, `
 		UPDATE ingest_gaps SET acknowledged_at_ms = ? WHERE id = ?`, nowMS, id)
 	if err != nil {
 		return fmt.Errorf("acknowledge ingest gap: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("acknowledge ingest gap rows: %w", err)
+	}
+	if affected == 0 {
+		return ErrNotFound
 	}
 	return nil
 }
