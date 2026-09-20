@@ -137,17 +137,18 @@ Start the container and inspect the health endpoint:
 docker compose -f deploy/compose.full.yml start oh-my-cpa
 ```
 
-- When accessing via the public reverse proxy (such as Caddy):
+- When accessing via the public reverse proxy (such as Caddy), where `BASE_PATH` is the normalised `OMCPA_BASE_PATH` (`/omc` when unset; empty in root mode, which drops the prefix):
   ```bash
-  curl -sf https://${DOMAIN}/omc/api/healthz | jq .
+  BASE_PATH=/omc
+  curl -sf "https://${DOMAIN}${BASE_PATH}/api/healthz" | jq .
   ```
 - When accessing directly on the host (with published ports, e.g. `deploy/compose.omc.yml`):
   ```bash
-  curl -sf http://127.0.0.1:8080/omc/api/healthz | jq .
+  curl -sf "http://127.0.0.1:8080${BASE_PATH}/api/healthz" | jq .
   ```
 - Or via container exec:
   ```bash
-  docker compose -f deploy/compose.full.yml exec cpa wget -q -O - http://oh-my-cpa:8080/omc/api/healthz | jq .
+  docker compose -f deploy/compose.full.yml exec cpa wget -q -O - "http://oh-my-cpa:8080${BASE_PATH}/api/healthz" | jq .
   ```
 
 Confirm the JSON response reports `"database_status": "ok"` and `"status": "ok"` (or `"degraded"` if CPA is temporarily offline).
