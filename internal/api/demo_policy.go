@@ -149,6 +149,21 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodGet, "/api/v1/management/audit/export", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/system", demoAllow, ""},
 
+	// Release observation. The index the page reads is served from the demo's own
+	// fixture, so the pages render without a gateway and without the internet. The
+	// check itself is refused: it is the one route here that would reach outside this
+	// process, and "the demonstration performs no outbound request" has to be a
+	// property of the code rather than a promise about the environment.
+	{http.MethodGet, "/api/v1/management/system/releases", demoAllow, ""},
+	{http.MethodPost, "/api/v1/management/system/check-updates", demoRefuse, "checking for updates is disabled: it would call the GitHub API"},
+
+	// Database maintenance. Reads are allowed so the page renders; both actions are
+	// refused because they rewrite the demonstration's database, and a visitor must not
+	// be able to change what the next visitor sees.
+	{http.MethodGet, "/api/v1/management/system/maintenance", demoAllow, ""},
+	{http.MethodPost, "/api/v1/management/system/maintenance/checkpoint", demoRefuse, "database maintenance is disabled in the demo"},
+	{http.MethodPost, "/api/v1/management/system/maintenance/vacuum", demoRefuse, "database maintenance is disabled in the demo"},
+
 	// Configuration and capability reads. The console renders them; nothing here
 	// writes to the gateway.
 	{http.MethodGet, "/api/v1/management/config", demoAllow, ""},

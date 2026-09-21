@@ -28,6 +28,7 @@ type Config struct {
 	Version        string
 	RequestTimeout time.Duration
 	TLSSkipVerify  bool
+	Release        ReleaseConfig
 	// TrustedProxyCIDRs are the direct peer networks whose forwarding headers
 	// may be used for per-client login throttling. Empty means trust none.
 	TrustedProxyCIDRs []string
@@ -38,6 +39,34 @@ type Config struct {
 	// which is what keeps the self-hosted default byte-for-byte unchanged.
 	IsDemoMode bool
 }
+
+// ReleaseConfig controls the release-observation surface: which published versions
+// the console reports, and whether it looks for them on its own.
+type ReleaseConfig struct {
+	// Enabled gates the background sweep only. The page's own check and the manual
+	// button keep working when it is false, because those are an operator asking a
+	// question rather than the process deciding to talk to the internet.
+	Enabled bool
+	// OMCRepository and CPARepository name the published release sources as
+	// "owner/name". Only the identifier is configurable: the host is fixed, so this
+	// cannot become a way to make the server fetch an arbitrary address.
+	OMCRepository string
+	CPARepository string
+	// Interval is the background sweep period.
+	Interval time.Duration
+}
+
+// Default release sources. The gateway default is the upstream the project is built
+// against; the console default is this project's own repository. A deployment that
+// runs a fork overrides them rather than editing code.
+const (
+	DefaultOMCRepository = "WizisCool/oh-my-cpa"
+	DefaultCPARepository = "router-for-me/CLIProxyAPI"
+	// DefaultReleaseInterval is six hours: often enough to notice a release the same
+	// day, rare enough that the unauthenticated GitHub budget of sixty requests per
+	// hour is never at risk from the sweep itself.
+	DefaultReleaseInterval = 6 * time.Hour
+)
 
 // DemoModeEnv is the switch that turns a self-hosted deployment into the public
 // demonstration. The default is deliberately off.
@@ -225,9 +254,30 @@ func Load() (Config, error) {
 		RequestTimeout:    timeout,
 		TLSSkipVerify:     tlsSkipVerify,
 		TrustedProxyCIDRs: trustedProxyCIDRs,
+		Release:           loadReleaseConfig(),
 		CPA:               cpa,
 		IsDemoMode:        demoMode,
 	}, nil
+}
+
+// loadReleaseConfig reads the release-observation settings.
+//
+// The switch is spelled as "disabled" rather than "enabled" so that the default -
+// an unset variable - is the behaviour a self-hosted deployment gets, which is to
+// check. A demo does not need this: it never starts the sweep at all.
+func loadReleaseConfig() ReleaseConfig {
+	enabled := true
+	if raw := strings.TrimSpace(os.Getenv("OMCPA_UPDATE_CHECK_ENABLED")); raw != "" {
+		if parsed, err := strconv.ParseBool(raw); err == nil {
+			enabled = parsed
+		}
+	}
+	return ReleaseConfig{
+		Enabled:       enabled,
+		OMCRepository: envOr("OMCPA_OMC_REPO", DefaultOMCRepository),
+		CPARepository: envOr("OMCPA_CPA_REPO", DefaultCPARepository),
+		Interval:      DefaultReleaseInterval,
+	}
 }
 
 func parseTrustedProxyCIDRs() ([]string, error) {

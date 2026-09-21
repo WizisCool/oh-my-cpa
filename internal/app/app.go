@@ -21,6 +21,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/demo"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/release"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage/ingest"
 )
@@ -38,6 +39,11 @@ type App struct {
 	pipeline *ingest.Pipeline
 	// pricing keeps model prices fresh from models.dev; nil-safe service.
 	pricing *pricing.Service
+	// release observes both products' published versions. It is nil in demo mode,
+	// where nothing may leave the process at all.
+	release *release.Service
+	// maintenance owns its own database connection, so it is closed with the app.
+	maintenance *repository.MaintenanceService
 	// upstream is the in-process CPA fixture. It is non-nil only in demo mode, and
 	// it is the reason a demo deployment can boot with no gateway at all.
 	upstream *demo.Upstream
@@ -153,6 +159,56 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 	if pipeline != nil && pipeline.Runner() != nil {
 		pipeline.Runner().SetRefreshHandler(pricingService.NotifyModelsChanged)
 	}
+	// Release observation. A demo does not build one at all: the fixture answers the
+	// page's version questions, and "the demonstration performs no outbound request"
+	// stays a property of the code rather than a promise about the environment.
+	var releaseService *release.Service
+	var maintenanceService *repository.MaintenanceService
+	if cfg.IsDemoMode {
+		// A demo answers this page from its own fixture. The service is the production
+		// one with only its feed source swapped, so the page renders the real
+		// comparison and the real merged log, and the demonstration still performs no
+		// outbound request.
+		releaseService, err = demo.BuildReleaseService(repo, logger, time.Now().UTC())
+		if err != nil {
+			db.Close()
+			return nil, err
+		}
+		// The fixture is read once before the first request. A demonstration that only
+		// filled its index when a visitor pressed a button would show the page's empty
+		// state on the very page the fixture exists to demonstrate - and the read is
+		// local, so populating it here costs no request.
+		releaseService.CheckAll(ctx)
+		handler.SetRelease(releaseService)
+	} else {
+		releaseService, err = release.New(release.Options{
+			Repository:    repo,
+			Logger:        logger,
+			OMCRepository: cfg.Release.OMCRepository,
+			CPARepository: cfg.Release.CPARepository,
+		})
+		if err != nil {
+			db.Close()
+			return nil, err
+		}
+		// Validators describe notes that lived in a previous process, so they are
+		// dropped before the first check: a 304 would otherwise claim "unchanged"
+		// about notes this process cannot show.
+		if err := releaseService.ForgetStoredValidators(ctx); err != nil {
+			logger.Warn("could not clear stored release validators", "error", err)
+		}
+		handler.SetRelease(releaseService)
+
+		if db != nil {
+			maintenanceService, err = repository.NewMaintenanceService(ctx, db)
+			if err != nil {
+				db.Close()
+				return nil, err
+			}
+			handler.SetMaintenance(maintenanceService)
+		}
+	}
+
 	return &App{
 		cfg:     cfg,
 		db:      db,
@@ -163,7 +219,9 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 
 		pipeline: pipeline,
 
-		pricing: pricingService,
+		pricing:     pricingService,
+		release:     releaseService,
+		maintenance: maintenanceService,
 	}, nil
 }
 
@@ -315,6 +373,24 @@ func (a *App) Run(ctx context.Context) error {
 		}()
 	}
 
+	// The release sweep is best-effort in the same way and for the same reason: a
+	// version that was not checked is stale information, not a broken deployment.
+	// OMCPA_UPDATE_CHECK_ENABLED=false switches it off while leaving the page's own
+	// check and the manual button working, because those are an operator asking a
+	// question rather than the process deciding to reach the internet.
+	// Never in a demo, and that is not implied by the service being nil-safe: the demo
+	// builds a fixture-backed service so the page renders, and a sweep over that service
+	// would still be a loop this process started on its own. The demonstration starts
+	// exactly one loop, the HTTP server.
+	if a.release != nil && a.cfg.Release.Enabled && !a.cfg.IsDemoMode {
+		go func() {
+			a.logger.Info("release check sweep started", "interval", a.cfg.Release.Interval.String())
+			if err := a.release.Run(ctx, a.cfg.Release.Interval); err != nil {
+				a.logger.Warn("release check sweep stopped", "error", err)
+			}
+		}()
+	}
+
 	select {
 	case err := <-pipelineErrors:
 		// Losing the capture loop means the dashboard stops gaining history;
@@ -346,6 +422,11 @@ func (a *App) Close() error {
 	// database it describes.
 	if a.upstream != nil {
 		_ = a.upstream.Close()
+	}
+	// The maintenance service holds a connection of its own; closing the main pool
+	// first would leave it open on a database nothing else is using.
+	if a.maintenance != nil {
+		_ = a.maintenance.Close()
 	}
 	if a.db == nil {
 		return nil
