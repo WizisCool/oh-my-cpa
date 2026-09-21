@@ -58,13 +58,36 @@ var AllowedURLPrefixes = []string{
 }
 
 // IsAllowedQuotaURL verifies that a target URL is in the strict quota allowlist.
+//
+// An entry ending in "/" names a family and matches by prefix; any other entry names
+// one endpoint and must end at a path boundary, so ".../usages" cannot admit
+// ".../usages-extra". A query or fragment is always allowed, because endpoints such
+// as the Codex subscription read are scoped by query parameter. Traversal segments
+// are refused outright: a request is normalized before it is sent, so "allowed/../other"
+// would otherwise walk an allowed prefix onto a different endpoint.
 func IsAllowedQuotaURL(targetURL string) bool {
-	parsed, err := url.Parse(strings.TrimSpace(targetURL))
+	trimmed := strings.TrimSpace(targetURL)
+	parsed, err := url.Parse(trimmed)
 	if err != nil || parsed.Scheme != "https" {
 		return false
 	}
+	for _, segment := range strings.Split(parsed.Path, "/") {
+		if segment == ".." || segment == "." {
+			return false
+		}
+	}
 	for _, prefix := range AllowedURLPrefixes {
-		if strings.HasPrefix(targetURL, prefix) {
+		if !strings.HasPrefix(trimmed, prefix) {
+			continue
+		}
+		if strings.HasSuffix(prefix, "/") {
+			return true
+		}
+		remainder := strings.TrimPrefix(trimmed, prefix)
+		// A query or fragment may follow a single-endpoint entry; a further path
+		// segment may not, which is what keeps ".../subscriptions" from admitting
+		// ".../subscriptions/extra".
+		if remainder == "" || strings.HasPrefix(remainder, "?") || strings.HasPrefix(remainder, "#") {
 			return true
 		}
 	}

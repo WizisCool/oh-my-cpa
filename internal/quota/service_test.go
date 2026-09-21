@@ -499,7 +499,7 @@ func TestCodexRenewalSkipsProbeWithoutAccountID(t *testing.T) {
 }
 
 // The subscription endpoint joins the allowlist, so the guarantee that matters is
-// that the entry cannot be used to reach another host.
+// that the entry cannot be used to reach another host or another endpoint.
 func TestCodexSubscriptionAllowlistEntryIsHostBound(t *testing.T) {
 	if !IsAllowedQuotaURL(CodexSubscriptionURL) {
 		t.Fatalf("%q is not allowed", CodexSubscriptionURL)
@@ -516,6 +516,51 @@ func TestCodexSubscriptionAllowlistEntryIsHostBound(t *testing.T) {
 	} {
 		if IsAllowedQuotaURL(badURL) {
 			t.Errorf("IsAllowedQuotaURL(%q) = true, want false", badURL)
+		}
+	}
+}
+
+// Every allowlist entry that names a single endpoint must stop at a path boundary,
+// and no entry may be walked onto a different path by a traversal segment. Each case
+// here was admitted by the previous raw-prefix comparison. Entries ending in "/"
+// (wham/, api/oauth/, coding/v1/) are families and deliberately admit sub-paths, so
+// they are not listed here.
+func TestAllowlistEntriesEndAtAPathBoundary(t *testing.T) {
+	for _, badURL := range []string{
+		CodexSubscriptionURL + "-extra",
+		CodexSubscriptionURL + "/extra",
+		DevinSeatStatusURL + "Extra",
+		DevinSeatStatusURL + "/extra",
+		AntigravityQuotaURLDaily + "Extra",
+		"https://chatgpt.com/backend-api/wham/usage/../subscriptions",
+		"https://chatgpt.com/backend-api/wham/./usage",
+		"https://api.kimi.com/coding/v1/../secrets",
+	} {
+		if IsAllowedQuotaURL(badURL) {
+			t.Errorf("IsAllowedQuotaURL(%q) = true, want false", badURL)
+		}
+	}
+
+	// The legitimate reads the quota service issues must all still pass: a family
+	// entry with a sub-path, and a single-endpoint entry with a query.
+	for _, goodURL := range []string{
+		CodexUsageURL,
+		CodexResetCreditsURL,
+		CodexRedeemCreditURL,
+		CodexSubscriptionURL + "?account_id=abc",
+		ClaudeUsageURL,
+		ClaudeProfileURL,
+		KimiUsageURL,
+		XaiBillingMonthlyURL,
+		XaiBillingWeeklyURL,
+		XaiApiMeURL,
+		AntigravityQuotaURLDaily,
+		AntigravityQuotaURLSandbox,
+		AntigravityQuotaURLCloud,
+		DevinSeatStatusURL,
+	} {
+		if !IsAllowedQuotaURL(goodURL) {
+			t.Errorf("IsAllowedQuotaURL(%q) = false, want true", goodURL)
 		}
 	}
 }
