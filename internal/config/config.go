@@ -213,6 +213,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	releaseConfig, err := loadReleaseConfig()
+	if err != nil {
+		return Config{}, err
+	}
 	if demoMode {
 		// The fixture database is the whole history, and there is no CPA queue to
 		// drain: leaving capture on would only poll an upstream that does not
@@ -254,7 +258,7 @@ func Load() (Config, error) {
 		RequestTimeout:    timeout,
 		TLSSkipVerify:     tlsSkipVerify,
 		TrustedProxyCIDRs: trustedProxyCIDRs,
-		Release:           loadReleaseConfig(),
+		Release:           releaseConfig,
 		CPA:               cpa,
 		IsDemoMode:        demoMode,
 	}, nil
@@ -262,22 +266,20 @@ func Load() (Config, error) {
 
 // loadReleaseConfig reads the release-observation settings.
 //
-// The switch is spelled as "disabled" rather than "enabled" so that the default -
-// an unset variable - is the behaviour a self-hosted deployment gets, which is to
-// check. A demo does not need this: it never starts the sweep at all.
-func loadReleaseConfig() ReleaseConfig {
-	enabled := true
-	if raw := strings.TrimSpace(os.Getenv("OMCPA_UPDATE_CHECK_ENABLED")); raw != "" {
-		if parsed, err := strconv.ParseBool(raw); err == nil {
-			enabled = parsed
-		}
+// A malformed boolean is reported rather than ignored, matching every other switch in this
+// file. Ignoring it would leave a deployment that asked to stop reaching the internet doing
+// exactly that, with nothing to indicate the setting had not been understood.
+func loadReleaseConfig() (ReleaseConfig, error) {
+	enabled, err := parseBoolEnv("OMCPA_UPDATE_CHECK_ENABLED", true)
+	if err != nil {
+		return ReleaseConfig{}, err
 	}
 	return ReleaseConfig{
 		Enabled:       enabled,
 		OMCRepository: envOr("OMCPA_OMC_REPO", DefaultOMCRepository),
 		CPARepository: envOr("OMCPA_CPA_REPO", DefaultCPARepository),
 		Interval:      DefaultReleaseInterval,
-	}
+	}, nil
 }
 
 func parseTrustedProxyCIDRs() ([]string, error) {

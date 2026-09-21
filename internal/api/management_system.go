@@ -297,20 +297,25 @@ func (h *Handler) getSystemReleases(writer http.ResponseWriter, request *http.Re
 	writeJSON(writer, http.StatusOK, dto)
 }
 
-// postSystemCheckUpdates runs a real check for both products and answers with the
-// resulting version states.
+// postSystemCheckUpdates reads the feed when `release.CheckFloor` allows it and answers with
+// the resulting version states.
 //
-// The check is not throttled, which is an operator decision recorded in the project
-// documentation: the page asks for a fresh answer when it is opened, and a manual
-// click always asks again. The cost is the unauthenticated GitHub budget of sixty
-// requests per hour for this address, and the page states that budget's state when a
-// check is refused because of it.
+// A request is spent only outside the floor: inside it the stored index answers and the
+// response says so through `served_from_cache`. The floor exists because the feed is one
+// shared per-address budget - sixty requests an hour for the unauthenticated GitHub API - and
+// a page view costs up to four requests, so an unthrottled check let page loads exhaust an
+// allowance the operator shares with everything else they run.
+//
+// The audit records what happened rather than that the request arrived: "unavailable" when no
+// release service is configured, "cached" when the floor answered, and otherwise the outcome
+// of the attempt. Recording success before the check runs would put a claim in the audit trail
+// that the code has not yet earned.
 func (h *Handler) postSystemCheckUpdates(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	ctx := request.Context()
-	_ = h.recordAudit(request, "system.check_updates", "system", "release_feed", "success", nil)
 
 	if h.release == nil {
+		_ = h.recordAudit(request, "system.check_updates", "system", "release_feed", "unavailable", nil)
 		writeError(writer, http.StatusServiceUnavailable, "release checking is not configured")
 		return
 	}
@@ -347,6 +352,12 @@ func (h *Handler) postSystemCheckUpdates(writer http.ResponseWriter, request *ht
 		CPAVersion:      h.productVersionDTO(ctx, release.ProductCPA, h.observedCPAVersion(ctx)),
 		ServedFromCache: servedFromCache,
 	}
+	result := "checked"
+	if servedFromCache {
+		result = "cached"
+	}
+	_ = h.recordAudit(request, "system.check_updates", "system", "release_feed", result, nil)
+
 	writeJSON(writer, http.StatusOK, response)
 }
 

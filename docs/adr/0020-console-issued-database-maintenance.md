@@ -104,6 +104,14 @@ guarantee, and it is presented as one.
 when it is blocked by a concurrent reader, so the counters are read and the outcome is
 derived from them.
 
+Incomplete is a third outcome and is presented as one: a partial result carries a warning,
+not the success mark with a caveat underneath. The distinction matters because the two
+claims differ - "the log was truncated" and "the log was not truncated" - and a console
+that draws the success mark has told the operator the first while meaning the second. The
+same rule governs which snapshot the page believes: the polled job state is authoritative
+only while polling, because afterwards it is the *previous* job, and letting it win would
+pin the panel to a job the operator has moved past.
+
 **Both actions are audited, and both are refused in demo mode** by the route
 classification in `internal/api/demo_policy.go`, since a visitor must not be able to
 change what the next visitor sees.
