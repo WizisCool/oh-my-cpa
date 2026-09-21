@@ -1001,6 +1001,18 @@ A provider is observed only once `internal/quota` both recognizes it
 (`DetectProvider`) and implements its probe; a credential whose provider has no
 probe is reported with `refresh_supported: false` rather than as a failed fetch.
 
+A plan's renewal instant is carried with its provenance. Codex probes the
+subscription endpoint on every refresh and records `expires_source:
+live_subscription` when it answers, so an expiry the usage payload happens to
+carry is still replaced by the fresher reading. When that probe fails, an expiry
+the usage payload already supplied is kept without a source — it is current but
+has no verified provenance — and only a plan with no expiry yet falls back to the
+credential's `id_token` claim, recorded as `credential_snapshot`, because upstream
+only ever moves that window forward and a token can be minted after the period it
+still describes. The console renders a snapshot as a `≥` bound with an unverified
+marker and never as a countdown, so a stale claim cannot read as a verified
+renewal date.
+
 ## 9. Storage
 
 | Table group | Tables | Notes |

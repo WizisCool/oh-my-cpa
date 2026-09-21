@@ -209,6 +209,33 @@ func formatResetInstant(resetAtMS int64, nowMS int64) string {
 	return fmt.Sprintf("%s (%s后恢复)", resetTime.Format("01-02 15:04"), rel)
 }
 
+// RawCodexSubscriptionPayload is the response of the subscription endpoint
+// (GET https://chatgpt.com/backend-api/subscriptions?account_id=...), which
+// reports the current billing window rather than the window frozen into the
+// credential's id_token.
+type RawCodexSubscriptionPayload struct {
+	PlanType    string `json:"plan_type"`
+	ActiveStart string `json:"active_start"`
+	ActiveUntil string `json:"active_until"`
+	ShouldRenew *bool  `json:"will_renew"`
+}
+
+// ParseCodexSubscription reads the authoritative subscription window. Only
+// active_until is consumed: upstream's separate entitlement payload also carries
+// an expires_at that trails the renewal instant, and conflating the two would
+// report a different date than the plan's own renewal.
+func ParseCodexSubscription(raw []byte) (untilMS int64, shouldRenew *bool, ok bool) {
+	var payload RawCodexSubscriptionPayload
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return 0, nil, false
+	}
+	until, parsed := parseCreditInstantToMS(payload.ActiveUntil)
+	if !parsed || until <= 0 {
+		return 0, nil, false
+	}
+	return until, payload.ShouldRenew, true
+}
+
 func resolveCodexPlanTier(planType string) (tier string, label string) {
 	norm := strings.ToLower(strings.TrimSpace(planType))
 	switch norm {
@@ -256,6 +283,9 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 			exp = exp * 1000
 		}
 		expiresAtMS = &exp
+		// No provenance is recorded here. Only the subscription endpoint may claim a
+		// live read, and the service always probes it, so labeling this value would
+		// either duplicate that claim or overstate semantics this parser cannot verify.
 		diff := time.Duration(exp-nowMS) * time.Millisecond
 		if diff > 0 {
 			expiresLabel = formatDurationShort(diff) + "后到期"

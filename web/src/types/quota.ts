@@ -29,6 +29,10 @@ export interface QuotaPlan {
   tier: 'elite' | 'premium' | 'standard' | 'free' | 'unknown';
   expires_at_ms?: number;
   expires_label?: string;
+  /** Where the expiry came from; absent on snapshots written before provenance was tracked. */
+  expires_source?: 'live_subscription' | 'credential_snapshot';
+  /** Whether upstream says the plan renews; absent when the source does not expose it. */
+  auto_renews?: boolean;
   extra_usage?: QuotaExtraUsage;
 }
 

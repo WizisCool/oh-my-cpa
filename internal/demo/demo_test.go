@@ -644,6 +644,7 @@ func TestFixtureQuotaURLsAreTheOnesTheQuotaServiceMayCall(t *testing.T) {
 	for _, target := range []string{
 		quota.CodexUsageURL,
 		quota.CodexResetCreditsURL,
+		quota.CodexSubscriptionURL,
 		quota.ClaudeUsageURL,
 		quota.ClaudeProfileURL,
 		quota.KimiUsageURL,
@@ -694,5 +695,46 @@ func TestRefreshResultReportsAnEmptyQueue(t *testing.T) {
 	}
 	if result.Captured != 0 || result.Decoded != 0 || result.Pending != 0 || result.Error != "" {
 		t.Fatalf("refresh result = %+v, want nothing captured and no error", result)
+	}
+}
+
+// The snapshot-fallback rendering exists for the case where a live subscription
+// read fails, which a real deployment reaches only by accident. The fixture has to
+// keep refusing that read for at least one credential, or the branch silently loses
+// its browser coverage. The same applies to the non-renewing marker, which needs a
+// seat upstream calls live as well.
+func TestFixtureKeepsASubscriptionReadUnavailable(t *testing.T) {
+	if len(subscriptionUnavailable) == 0 {
+		t.Fatal("the fixture answers every credential's subscription read, so the unverified-snapshot card is never rendered")
+	}
+
+	enabledCodex := make(map[string]bool)
+	for _, cred := range credentialCatalog() {
+		if cred.kind != "codex" || cred.isDisabled {
+			continue
+		}
+		enabledCodex[cred.authIndex] = true
+	}
+
+	var bound, notRenewing int
+	for authIndex := range enabledCodex {
+		if subscriptionUnavailable[authIndex] {
+			bound++
+		}
+		if subscriptionNotRenewing[authIndex] && !subscriptionUnavailable[authIndex] {
+			notRenewing++
+		}
+	}
+	// A seat that renews on schedule is what the other two are read against, so the
+	// demonstration keeps the ordinary reading too.
+	healthy := len(enabledCodex) - bound - notRenewing
+	if healthy < 1 {
+		t.Errorf("codex seats = %d, unverified = %d, non-renewing = %d; no seat is left to show an ordinary renewal", len(enabledCodex), bound, notRenewing)
+	}
+	if bound == 0 {
+		t.Error("no enabled credential lacks a live subscription read, so the quota page never shows an unverified bound")
+	}
+	if notRenewing == 0 {
+		t.Error("no enabled credential reports will_renew=false, so the non-renewing marker is never rendered")
 	}
 }

@@ -25,6 +25,21 @@ type QuotaExtraUsage struct {
 	UtilizationPercent *float64 `json:"utilization_percent,omitempty"`
 }
 
+// Plan expiry provenance. A credential's id_token only carries the subscription
+// window recorded at its last upstream subscription check, so a freshly minted
+// token can still describe an already-superseded period. Callers must therefore
+// keep a live reading distinguishable from that snapshot.
+const (
+	// PlanSourceLiveSubscription is a subscription window read from the provider's
+	// live subscription endpoint during this refresh.
+	PlanSourceLiveSubscription = "live_subscription"
+	// PlanSourceCredentialSnapshot is the window embedded in the credential's
+	// id_token. It is a lower bound of the real expiry: upstream only ever moves
+	// the window forward, so a stale snapshot can understate it but never
+	// overstate it.
+	PlanSourceCredentialSnapshot = "credential_snapshot"
+)
+
 // QuotaPlan represents the normalized subscription plan and tier.
 type QuotaPlan struct {
 	PlanType     string           `json:"plan_type"`               // e.g. "pro", "plus", "ultra", "team", "free"
@@ -33,6 +48,13 @@ type QuotaPlan struct {
 	ExpiresAtMS  *int64           `json:"expires_at_ms,omitempty"` // epoch ms
 	ExpiresLabel string           `json:"expires_label,omitempty"`
 	ExtraUsage   *QuotaExtraUsage `json:"extra_usage,omitempty"`
+
+	// ExpiresSource names where ExpiresAtMS came from; see the PlanSource
+	// constants. Empty on snapshots written before provenance was tracked.
+	ExpiresSource string `json:"expires_source,omitempty"`
+	// IsAutoRenewing reports whether upstream says the plan will renew. Nil when
+	// the source does not expose it.
+	IsAutoRenewing *bool `json:"auto_renews,omitempty"`
 }
 
 // CodexResetCredit represents an individual Codex rate limit reset credit.

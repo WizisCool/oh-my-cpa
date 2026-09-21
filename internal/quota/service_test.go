@@ -362,3 +362,240 @@ func stringContains(s, sub string) bool {
 	}
 	return false
 }
+
+const codexUsageFixture = `{
+	"plan_type": "plus",
+	"rate_limit": {
+		"allowed": true,
+		"limit_reached": false,
+		"primary_window": {"used_percent": 12, "limit_window_seconds": 18000, "reset_after_seconds": 3600},
+		"secondary_window": {"used_percent": 4, "limit_window_seconds": 604800, "reset_after_seconds": 86400}
+	}
+}`
+
+// codexAuthFileWithStaleSnapshot models the reported defect: OpenAI minted a
+// fresh id_token on 2026-09-16 that still carried the subscription window last
+// checked on 2026-07-29 (ending 2026-08-29), while the account's live
+// subscription had already rolled on to 2026-09-29.
+func codexAuthFileWithStaleSnapshot() management.AuthFile {
+	return management.AuthFile{
+		AuthIndex: "auth-codex-1",
+		Name:      "codex-ac9a73f2-example.json",
+		Type:      "codex",
+		Provider:  "codex",
+		IDToken: json.RawMessage(`{
+			"chatgpt_account_id": "dc47fe6f-9039-4023-9826-c8dcb4712c70",
+			"plan_type": "plus",
+			"chatgpt_subscription_active_start": "2026-07-29T14:02:31+00:00",
+			"chatgpt_subscription_active_until": "2026-08-29T14:02:31+00:00"
+		}`),
+	}
+}
+
+func TestCodexRenewalPrefersLiveSubscriptionOverStaleSnapshot(t *testing.T) {
+	var subscriptionURL string
+	client := &mockCPAClient{
+		apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+			switch {
+			case strings.HasPrefix(req.URL, CodexSubscriptionURL):
+				subscriptionURL = req.URL
+				return management.ApiCallResponse{
+					StatusCode: 200,
+					Body:       json.RawMessage(`{"plan_type":"plus","active_until":"2026-09-29T14:02:31Z","will_renew":true}`),
+				}, nil
+			case req.URL == CodexUsageURL:
+				return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(codexUsageFixture)}, nil
+			default:
+				return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(`{"available_count":0,"credits":[]}`)}, nil
+			}
+		},
+	}
+
+	res, err := NewService(client).RefreshCredentialQuota(context.Background(), codexAuthFileWithStaleSnapshot(), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.Plan == nil {
+		t.Fatal("plan is nil")
+	}
+
+	if !strings.Contains(subscriptionURL, "account_id=dc47fe6f-9039-4023-9826-c8dcb4712c70") {
+		t.Errorf("subscription probe URL = %q, want the credential's account id", subscriptionURL)
+	}
+
+	// The reported symptom was the 2026-08-29 snapshot surfacing as the renewal
+	// date. The live window must win.
+	want := time.Date(2026, 9, 29, 14, 2, 31, 0, time.UTC).UnixMilli()
+	if res.Plan.ExpiresAtMS == nil || *res.Plan.ExpiresAtMS != want {
+		t.Errorf("ExpiresAtMS = %v, want the live %d", res.Plan.ExpiresAtMS, want)
+	}
+	if res.Plan.ExpiresSource != PlanSourceLiveSubscription {
+		t.Errorf("ExpiresSource = %q, want %q", res.Plan.ExpiresSource, PlanSourceLiveSubscription)
+	}
+	if res.Plan.IsAutoRenewing == nil || !*res.Plan.IsAutoRenewing {
+		t.Errorf("IsAutoRenewing = %v, want true", res.Plan.IsAutoRenewing)
+	}
+}
+
+func TestCodexRenewalFallsBackToTaggedSnapshotWhenProbeFails(t *testing.T) {
+	client := &mockCPAClient{
+		apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+			switch {
+			case strings.HasPrefix(req.URL, CodexSubscriptionURL):
+				return management.ApiCallResponse{StatusCode: 503, Body: json.RawMessage(`{"error":"temporarily unavailable"}`)}, nil
+			case req.URL == CodexUsageURL:
+				return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(codexUsageFixture)}, nil
+			default:
+				return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(`{"available_count":0,"credits":[]}`)}, nil
+			}
+		},
+	}
+
+	res, err := NewService(client).RefreshCredentialQuota(context.Background(), codexAuthFileWithStaleSnapshot(), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// The snapshot is still shown, but tagged so the console renders it as a
+	// lower bound instead of a verified renewal date.
+	want := time.Date(2026, 8, 29, 14, 2, 31, 0, time.UTC).UnixMilli()
+	if res.Plan == nil || res.Plan.ExpiresAtMS == nil || *res.Plan.ExpiresAtMS != want {
+		t.Fatalf("plan = %+v, want the snapshot expiry %d", res.Plan, want)
+	}
+	if res.Plan.ExpiresSource != PlanSourceCredentialSnapshot {
+		t.Errorf("ExpiresSource = %q, want %q", res.Plan.ExpiresSource, PlanSourceCredentialSnapshot)
+	}
+}
+
+// The subscription endpoint answers 400 without account_id, so an unresolvable
+// account must skip the probe rather than issue a call that cannot succeed.
+func TestCodexRenewalSkipsProbeWithoutAccountID(t *testing.T) {
+	var probed bool
+	client := &mockCPAClient{
+		apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+			if strings.HasPrefix(req.URL, CodexSubscriptionURL) {
+				probed = true
+			}
+			if req.URL == CodexUsageURL {
+				return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(codexUsageFixture)}, nil
+			}
+			return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(`{"available_count":0,"credits":[]}`)}, nil
+		},
+	}
+
+	file := codexAuthFileWithStaleSnapshot()
+	file.IDToken = json.RawMessage(`{"plan_type":"plus","chatgpt_subscription_active_until":"2026-08-29T14:02:31+00:00"}`)
+
+	res, err := NewService(client).RefreshCredentialQuota(context.Background(), file, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if probed {
+		t.Error("subscription endpoint was called without an account id")
+	}
+	if res.Plan == nil || res.Plan.ExpiresSource != PlanSourceCredentialSnapshot {
+		t.Errorf("plan = %+v, want a tagged snapshot fallback", res.Plan)
+	}
+}
+
+// The subscription endpoint joins the allowlist, so the guarantee that matters is
+// that the entry cannot be used to reach another host.
+func TestCodexSubscriptionAllowlistEntryIsHostBound(t *testing.T) {
+	if !IsAllowedQuotaURL(CodexSubscriptionURL) {
+		t.Fatalf("%q is not allowed", CodexSubscriptionURL)
+	}
+	if !IsAllowedQuotaURL(CodexSubscriptionURL + "?account_id=dc47fe6f") {
+		t.Fatalf("%q with a query is not allowed", CodexSubscriptionURL)
+	}
+
+	for _, badURL := range []string{
+		"https://chatgpt.com.attacker.test/backend-api/subscriptions",
+		"https://chatgpt.com:8443/backend-api/subscriptions",
+		"http://chatgpt.com/backend-api/subscriptions",
+		"https://evil.test/backend-api/subscriptions",
+	} {
+		if IsAllowedQuotaURL(badURL) {
+			t.Errorf("IsAllowedQuotaURL(%q) = true, want false", badURL)
+		}
+	}
+}
+
+const codexUsageWithSubscription = `{
+	"plan_type": "plus",
+	"subscription_active_until": "2026-10-15T00:00:00Z",
+	"rate_limit": {
+		"allowed": true,
+		"limit_reached": false,
+		"primary_window": {"used_percent": 12, "limit_window_seconds": 18000, "reset_after_seconds": 3600}
+	}
+}`
+
+// The usage payload carries its own subscription field for some accounts. The
+// authoritative endpoint must still be probed: it reports the current billing
+// window, while the usage value has no verified provenance.
+func TestCodexRenewalProbesEvenWhenUsageSuppliesAnExpiry(t *testing.T) {
+	var probed bool
+	client := &mockCPAClient{
+		apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+			switch {
+			case strings.HasPrefix(req.URL, CodexSubscriptionURL):
+				probed = true
+				return management.ApiCallResponse{
+					StatusCode: 200,
+					Body:       json.RawMessage(`{"active_until":"2026-09-29T14:02:31Z","will_renew":true}`),
+				}, nil
+			case req.URL == CodexUsageURL:
+				return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(codexUsageWithSubscription)}, nil
+			default:
+				return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(`{"available_count":0,"credits":[]}`)}, nil
+			}
+		},
+	}
+
+	res, err := NewService(client).RefreshCredentialQuota(context.Background(), codexAuthFileWithStaleSnapshot(), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !probed {
+		t.Error("the subscription endpoint was skipped because the usage payload carried an expiry")
+	}
+
+	want := time.Date(2026, 9, 29, 14, 2, 31, 0, time.UTC).UnixMilli()
+	if res.Plan == nil || res.Plan.ExpiresAtMS == nil || *res.Plan.ExpiresAtMS != want {
+		t.Fatalf("plan = %+v, want the subscription endpoint's %d", res.Plan, want)
+	}
+	if res.Plan.ExpiresSource != PlanSourceLiveSubscription {
+		t.Errorf("ExpiresSource = %q, want %q", res.Plan.ExpiresSource, PlanSourceLiveSubscription)
+	}
+}
+
+// With the probe unavailable, a usage-supplied expiry is kept but must not claim a
+// live subscription read, and must not be relabelled as the id_token snapshot it
+// did not come from.
+func TestCodexRenewalKeepsUsageExpiryUnlabeledWhenProbeFails(t *testing.T) {
+	client := &mockCPAClient{
+		apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+			switch {
+			case strings.HasPrefix(req.URL, CodexSubscriptionURL):
+				return management.ApiCallResponse{StatusCode: 503, Body: json.RawMessage(`{"error":"unavailable"}`)}, nil
+			case req.URL == CodexUsageURL:
+				return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(codexUsageWithSubscription)}, nil
+			default:
+				return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(`{"available_count":0,"credits":[]}`)}, nil
+			}
+		},
+	}
+
+	res, err := NewService(client).RefreshCredentialQuota(context.Background(), codexAuthFileWithStaleSnapshot(), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC).UnixMilli()
+	if res.Plan == nil || res.Plan.ExpiresAtMS == nil || *res.Plan.ExpiresAtMS != want {
+		t.Fatalf("plan = %+v, want the usage payload's %d", res.Plan, want)
+	}
+	if res.Plan.ExpiresSource != "" {
+		t.Errorf("ExpiresSource = %q, want it unset: the value is live-read but not from the subscription endpoint", res.Plan.ExpiresSource)
+	}
+}

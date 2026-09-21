@@ -49,6 +49,17 @@ export function formatTimeWithCountdown(targetMS: number, nowMS: number, t: TFun
   return countdown ? `${date} · ${countdown}` : date;
 }
 
+/**
+ * Renewal cell for a plan whose expiry came from the credential's id_token
+ * rather than a live subscription read. Upstream only ever moves that window
+ * forward, so the recorded instant is a lower bound of the real expiry: it is
+ * marked "≥" with its provenance and never given a countdown, which would read
+ * as a verified deadline.
+ */
+export function formatSnapshotRenewalBound(targetMS: number): string {
+  return `≥ ${formatShortDateTime(targetMS)}`;
+}
+
 /** Relative "x minutes ago" / "x hours ago" for observation timestamps. */
 export function formatObservedAgo(ms: number, nowMS: number, t: TFunc): string {
   const diffSec = Math.floor((nowMS - ms) / 1000);

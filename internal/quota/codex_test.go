@@ -255,3 +255,35 @@ func TestToInt64RejectsTheRoundedMaxInt64Boundary(t *testing.T) {
 		}
 	}
 }
+
+func TestParseCodexSubscription(t *testing.T) {
+	until, shouldRenew, ok := ParseCodexSubscription([]byte(`{
+		"plan_type": "plus",
+		"active_start": "2026-08-29T14:02:31Z",
+		"active_until": "2026-09-29T14:02:31Z",
+		"will_renew": true
+	}`))
+	if !ok {
+		t.Fatal("ParseCodexSubscription rejected a well-formed payload")
+	}
+	want := time.Date(2026, 9, 29, 14, 2, 31, 0, time.UTC).UnixMilli()
+	if until != want {
+		t.Errorf("until = %d, want %d", until, want)
+	}
+	if shouldRenew == nil || !*shouldRenew {
+		t.Errorf("shouldRenew = %v, want true", shouldRenew)
+	}
+
+	// A response without a usable window must be reported as absent so the
+	// caller keeps its previous source instead of overwriting it with zero.
+	for _, raw := range []string{
+		`{"active_until": null}`,
+		`{"active_until": ""}`,
+		`{}`,
+		`not json`,
+	} {
+		if _, _, ok := ParseCodexSubscription([]byte(raw)); ok {
+			t.Errorf("ParseCodexSubscription(%s) = ok, want rejected", raw)
+		}
+	}
+}

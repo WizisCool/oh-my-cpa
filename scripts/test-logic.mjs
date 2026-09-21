@@ -44,6 +44,7 @@ const SUITES = [
   { name: 'dashboard cost note', script: 'scripts/test-dashboard-cost-note.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'token heatmap', script: 'scripts/test-token-heatmap.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'token display', script: 'scripts/test-token-display.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
+  { name: 'quota renewal display', script: 'scripts/test-quota-renewal.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'theme presets', script: 'scripts/test-theme-presets.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'plugin config', script: 'scripts/test-plugin-config.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'oauth model aliases', script: 'scripts/test-oauth-model-alias.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
