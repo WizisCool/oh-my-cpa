@@ -289,6 +289,16 @@ try {
       OMCPA_CPA_MANAGEMENT_KEY: FAKE_CPA_MANAGEMENT_KEY,
       OMCPA_CPA_USAGE_ADDR: '',
       OMCPA_USAGE_INGEST_ENABLED: 'false',
+      // The release check stays off, for the reason every other outbound integration is off
+      // here: this suite must be hermetic. Without it the app fetches published versions from
+      // `api.github.com` on start-up, which spends an allowance shared per address, makes the
+      // run depend on a third party being reachable, and - the failure that prompted this -
+      // leaves whoever runs the gate reading a rate-limit error instead of a version.
+      //
+      // The page's own behaviour is covered by the `system-information` scenarios, which
+      // intercept the route and assert what renders; nothing in this suite depends on a real
+      // feed, because it never asserted on live versions in the first place.
+      OMCPA_UPDATE_CHECK_ENABLED: 'false',
       OMCPA_PUBLIC_URL: '',
       OMCPA_VERSION: 'v0.1.0-e2e',
     },
