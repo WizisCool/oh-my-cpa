@@ -90,6 +90,14 @@ const SCENARIO_PATHS = [
       'request-list-interactions',
     ],
   },
+  // The system page renders a release's Markdown body, which is untrusted remote text. The
+  // scenario that belongs to it asserts the two things only an engine can: that no element or
+  // inline handler from the body is executed, and that the page fetches nothing from a host the
+  // body names. A change to the page, or to the Markdown renderer it imports, moves that claim.
+  {
+    prefix: 'web/src/pages/SystemPage',
+    scenarios: ['system-information', 'system-information-narrow'],
+  },
   // The overlay history layer and everything it is wired into. Named as one rule because the
   // claim is about the layer plus a representative overlay of each kind: the navigation sheet
   // from the shell, the request detail and filter drawers from the request list, and the
