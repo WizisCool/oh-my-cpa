@@ -458,9 +458,14 @@ func TestCodexRenewalFallsBackToTaggedSnapshotWhenProbeFails(t *testing.T) {
 
 	// The snapshot is still shown, but tagged so the console renders it as a
 	// lower bound instead of a verified renewal date.
+	// The snapshot label must not be left behind by a parser that described a
+	// different instant: here the plan had no expiry, so no label can survive.
 	want := time.Date(2026, 8, 29, 14, 2, 31, 0, time.UTC).UnixMilli()
 	if res.Plan == nil || res.Plan.ExpiresAtMS == nil || *res.Plan.ExpiresAtMS != want {
 		t.Fatalf("plan = %+v, want the snapshot expiry %d", res.Plan, want)
+	}
+	if res.Plan.ExpiresLabel != "" {
+		t.Errorf("ExpiresLabel = %q, want empty for a snapshot bound", res.Plan.ExpiresLabel)
 	}
 	if res.Plan.ExpiresSource != PlanSourceCredentialSnapshot {
 		t.Errorf("ExpiresSource = %q, want %q", res.Plan.ExpiresSource, PlanSourceCredentialSnapshot)
@@ -611,6 +616,11 @@ func TestCodexRenewalProbesEvenWhenUsageSuppliesAnExpiry(t *testing.T) {
 	}
 	if res.Plan.ExpiresSource != PlanSourceLiveSubscription {
 		t.Errorf("ExpiresSource = %q, want %q", res.Plan.ExpiresSource, PlanSourceLiveSubscription)
+	}
+	// The parser derived a label from the usage payload's own 2026-10-15 expiry. It
+	// describes that instant, not this one, so it must not survive the replacement.
+	if res.Plan.ExpiresLabel != "" {
+		t.Errorf("ExpiresLabel = %q, want it cleared with the instant it described", res.Plan.ExpiresLabel)
 	}
 }
 

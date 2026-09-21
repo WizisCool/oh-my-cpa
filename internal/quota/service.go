@@ -406,6 +406,10 @@ func (s *Service) fetchCodexQuota(ctx context.Context, file management.AuthFile,
 // as a snapshot, because a token minted after the window it describes still carries
 // the older window. Callers render that tag as a lower bound instead of a verified
 // renewal date, and leave an unlabeled value alone rather than claiming a source.
+//
+// ExpiresLabel is derived text for the instant it was computed from, so it is
+// cleared on every reassignment: a label left behind by the usage payload would
+// otherwise describe a different expiry than the one this plan now carries.
 func (s *Service) applyCodexSubscription(ctx context.Context, file management.AuthFile, headers map[string]string, plan *QuotaPlan) {
 	if plan == nil {
 		return
@@ -419,6 +423,7 @@ func (s *Service) applyCodexSubscription(ctx context.Context, file management.Au
 			if body, errBody := resp.NormalizedBody(); errBody == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
 				if untilMS, shouldRenew, ok := ParseCodexSubscription(body); ok {
 					plan.ExpiresAtMS = &untilMS
+					plan.ExpiresLabel = ""
 					plan.ExpiresSource = PlanSourceLiveSubscription
 					plan.IsAutoRenewing = shouldRenew
 					return
@@ -429,13 +434,15 @@ func (s *Service) applyCodexSubscription(ctx context.Context, file management.Au
 
 	// An expiry the usage payload already supplied stays as it is: it carries no
 	// verified provenance, and overwriting it with the snapshot would replace one
-	// unverified value with another while implying it came from the id_token.
+	// unverified value with another while implying it came from the id_token. Its
+	// label still matches, because the instant is untouched.
 	if plan.ExpiresAtMS != nil {
 		return
 	}
 
 	if untilMS, ok := file.CodexSubscriptionActiveUntil(); ok && untilMS > 0 {
 		plan.ExpiresAtMS = &untilMS
+		plan.ExpiresLabel = ""
 		plan.ExpiresSource = PlanSourceCredentialSnapshot
 	}
 }
