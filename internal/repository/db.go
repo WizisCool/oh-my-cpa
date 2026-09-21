@@ -510,8 +510,11 @@ func checkJSON1(ctx context.Context, tx *sql.Tx) error {
 }
 
 func migrationHook(version int) func(context.Context, *sql.Tx, *DB) error {
-	if version == 4 {
+	switch version {
+	case 4:
 		return sanitizeHistoricalDataTx
+	case 25:
+		return addReleaseCheckTruncatedTx
 	}
 	return nil
 }

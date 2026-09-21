@@ -47,6 +47,14 @@ type ReleaseConfig struct {
 	// button keep working when it is false, because those are an operator asking a
 	// question rather than the process deciding to talk to the internet.
 	Enabled bool
+	// AutoCheck gates the check the page performs when it is opened, independently of
+	// Enabled. It exists because two questions are not one: "may this process reach the
+	// internet on its own" and "may opening a page spend a request from a shared budget".
+	// A self-hosted deployment wants the first disabled and the second enabled - the page
+	// exists to answer "is there a newer version". A test suite wants both disabled, since
+	// its page visits are not a reader asking anything. The manual button keeps working in
+	// both cases, because that is an operator's explicit request.
+	AutoCheck bool
 	// OMCRepository and CPARepository name the published release sources as
 	// "owner/name". Only the identifier is configurable: the host is fixed, so this
 	// cannot become a way to make the server fetch an arbitrary address.
@@ -274,8 +282,13 @@ func loadReleaseConfig() (ReleaseConfig, error) {
 	if err != nil {
 		return ReleaseConfig{}, err
 	}
+	autoCheck, err := parseBoolEnv("OMCPA_UPDATE_CHECK_ON_PAGE_LOAD", true)
+	if err != nil {
+		return ReleaseConfig{}, err
+	}
 	return ReleaseConfig{
 		Enabled:       enabled,
+		AutoCheck:     autoCheck,
 		OMCRepository: envOr("OMCPA_OMC_REPO", DefaultOMCRepository),
 		CPARepository: envOr("OMCPA_CPA_REPO", DefaultCPARepository),
 		Interval:      DefaultReleaseInterval,

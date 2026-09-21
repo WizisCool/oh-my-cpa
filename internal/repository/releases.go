@@ -225,6 +225,12 @@ func (r *Repository) RecordReleaseCheckAttempt(ctx context.Context, product, rep
 		return err
 	}
 	now := time.Now().UnixMilli()
+	// A changed source retires the previous snapshot in the same statement. Overwriting
+	// `repository` while keeping `latest_tag` and `last_success_at_ms` would relabel the old
+	// feed's newest version as belonging to the new source, and `GetReleaseCheckStateForRepository`
+	// - which compares that column - would then accept it: the page would name a version that
+	// exists only in the feed it just stopped reading. Clearing the snapshot means the new source's
+	// first check starts from "nothing known" and any failure reports that honestly.
 	if _, err := r.SQL().ExecContext(ctx, `
 		INSERT INTO release_check_state(product, repository, running, last_attempt_at_ms, last_error, updated_at_ms)
 		VALUES (?, ?, 1, ?, '', ?)
@@ -232,6 +238,14 @@ func (r *Repository) RecordReleaseCheckAttempt(ctx context.Context, product, rep
 			repository = excluded.repository,
 			running = 1,
 			last_attempt_at_ms = excluded.last_attempt_at_ms,
+			last_error = CASE WHEN release_check_state.repository = excluded.repository
+				THEN release_check_state.last_error ELSE '' END,
+			latest_tag = CASE WHEN release_check_state.repository = excluded.repository
+				THEN release_check_state.latest_tag ELSE '' END,
+			last_success_at_ms = CASE WHEN release_check_state.repository = excluded.repository
+				THEN release_check_state.last_success_at_ms ELSE NULL END,
+			etag = CASE WHEN release_check_state.repository = excluded.repository
+				THEN release_check_state.etag ELSE '' END,
 			updated_at_ms = excluded.updated_at_ms`, product, repository, now, now); err != nil {
 		return fmt.Errorf("record release check attempt for %s: %w", product, err)
 	}

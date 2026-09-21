@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/migrations"
 )
 
@@ -315,81 +316,88 @@ func TestDataVolumesCountWhatIsStored(t *testing.T) {
 	}
 }
 
-// TestEveryReleaseColumnExistsAfterMigrationFromThePreviousSchema is a regression test for
-// a defect this change shipped and then repaired.
+// TestReleaseColumnsConvergeFromBothMigrationHistories covers the upgrade the release tables
+// actually have to survive, and the fresh-database case is the least interesting of the three.
 //
-// The release check's `truncated` flag was first added to migration 024 itself, after 024
-// had already been applied on a running deployment. SQLite applies each migration once,
-// keyed by version, so the edited file was never re-read: a fresh database gained the
-// column and an existing one did not. On the existing deployment every write of a check
-// result then failed with "no column named truncated", which the page reported as
-// "not checked yet" forever while the fetch itself kept succeeding. The repair is a new
-// migration (025), and this test asserts the outcome rather than the mechanism: after
-// migrating, every column the release queries name must exist.
-func TestEveryReleaseColumnExistsAfterMigrationFromThePreviousSchema(t *testing.T) {
-	ctx := context.Background()
-	database, err := Open(ctx, filepath.Join(t.TempDir(), "release-columns.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer database.Close()
-
-	repository := New(database)
-
-	// The columns the release code writes or reads. A query that names a column absent
-	// from the schema fails at run time against a migrated database, which is the whole
-	// shape of the original defect.
-	required := map[string][]string{
-		"release_index": {
-			"product", "repository", "tag", "name", "published_at_ms", "prerelease", "checked_at_ms",
+// The column that records a truncated walk lived inside `024_release_index.sql` for a period
+// before it was split into `025`. That produces two real histories, and the repair has to handle
+// both:
+//
+//   - a database that applied the original 024, which has the table *without* the column, so the
+//     flag must be added; and
+//   - a database created during the window, which already has the column and still has 025
+//     pending, so the add must be skipped - an unconditional `ADD COLUMN` fails there with
+//     `duplicate column name`, and a failed statement aborts the migration transaction and stops
+//     the process from starting.
+//
+// Each case is built by applying only the migrations up to 024, mutating the schema to the
+// history under test, and then running the real migrator over the result. The earlier test in this
+// file opened a fresh database and asserted the columns existed, which the initial creation
+// satisfies without exercising either upgrade at all.
+func TestReleaseColumnsConvergeFromBothMigrationHistories(t *testing.T) {
+	for _, testCase := range []struct {
+		name string
+		// preparing mutates the schema after 024 has been applied, reproducing one history.
+		preparing func(t *testing.T, database *DB)
+	}{
+		{
+			name:      "the column is absent, as the original 024 created it",
+			preparing: func(t *testing.T, database *DB) {}, // nothing to do: 024 alone leaves it out
 		},
-		"release_check_state": {
-			"product", "repository", "running", "last_attempt_at_ms", "last_success_at_ms",
-			"last_error", "latest_tag", "etag", "truncated", "updated_at_ms",
+		{
+			name: "the column is already present, as the window revision created it",
+			preparing: func(t *testing.T, database *DB) {
+				if _, err := database.SQL.Exec(
+					`ALTER TABLE release_check_state ADD COLUMN truncated INTEGER NOT NULL DEFAULT 0`); err != nil {
+					t.Fatalf("prepare the window history: %v", err)
+				}
+			},
 		},
-	}
-	for table, columns := range required {
-		present := map[string]bool{}
-		rows, err := database.SQL.QueryContext(ctx, `SELECT name FROM pragma_table_info(?)`, table)
-		if err != nil {
-			t.Fatalf("read columns of %s: %v", table, err)
-		}
-		for rows.Next() {
-			var name string
-			if err := rows.Scan(&name); err != nil {
-				rows.Close()
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			ctx := context.Background()
+			database := openDatabaseAtMigration(t, 24)
+			testCase.preparing(t, database)
+
+			// Now the pending migrations run over that schema, which is what an upgrade is.
+			if err := database.Migrate(ctx); err != nil {
+				t.Fatalf("migrating from that history failed: %v", err)
+			}
+
+			repository := New(database)
+			// The round trip the repair exists for: record a result and read it back.
+			if err := repository.ReplaceReleaseIndex(ctx, ReleaseProductCPA, "owner/name", []ReleaseRecord{{Tag: "v1.0.0"}}); err != nil {
 				t.Fatal(err)
 			}
-			present[name] = true
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			t.Fatal(err)
-		}
-		for _, column := range columns {
-			if !present[column] {
-				t.Errorf("%s is missing column %q after migration: a query naming it would fail at run time", table, column)
+			if err := repository.RecordReleaseCheckSuccess(ctx, ReleaseProductCPA, "owner/name", "v1.0.0", "etag", true); err != nil {
+				t.Fatalf("recording a successful check failed after migrating from this history: %v", err)
 			}
-		}
+			state, err := repository.GetReleaseCheckState(ctx, ReleaseProductCPA)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !state.Truncated {
+				t.Error("the truncation flag did not survive the round trip")
+			}
+			if state.LatestTag != "v1.0.0" {
+				t.Errorf("latest tag = %q, want v1.0.0", state.LatestTag)
+			}
+		})
 	}
 
-	// And the round trip the failure broke: recording a check result and reading it back.
-	if err := repository.ReplaceReleaseIndex(ctx, ReleaseProductCPA, "owner/name", []ReleaseRecord{{Tag: "v1.0.0"}}); err != nil {
-		t.Fatal(err)
-	}
-	if err := repository.RecordReleaseCheckSuccess(ctx, ReleaseProductCPA, "owner/name", "v1.0.0", "etag", true); err != nil {
-		t.Fatalf("recording a successful check failed on a migrated database: %v", err)
-	}
-	state, err := repository.GetReleaseCheckState(ctx, ReleaseProductCPA)
-	if err != nil {
-		t.Fatalf("reading the recorded check failed: %v", err)
-	}
-	if !state.Truncated {
-		t.Error("the truncation flag did not survive the round trip")
-	}
-	if state.LatestTag != "v1.0.0" {
-		t.Errorf("latest tag = %q, want v1.0.0", state.LatestTag)
-	}
+	// And a fresh database still converges, which is the case the initial creation covers.
+	t.Run("a fresh database", func(t *testing.T) {
+		ctx := context.Background()
+		database, err := Open(ctx, filepath.Join(t.TempDir(), "fresh.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer database.Close()
+		repository := New(database)
+		if err := repository.RecordReleaseCheckSuccess(ctx, ReleaseProductCPA, "owner/name", "v1.0.0", "etag", true); err != nil {
+			t.Fatalf("recording a check on a fresh database failed: %v", err)
+		}
+	})
 }
 
 // TestMigrationsAreNotEditedAfterRelease pins the rule whose violation caused the defect
@@ -409,7 +417,66 @@ func TestMigrationsAreNotEditedAfterRelease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(addition), "ADD COLUMN truncated") {
-		t.Fatal("migration 025 no longer adds the truncation column")
+	// The column is added by a Go hook rather than by the SQL, because an unconditional
+	// `ADD COLUMN` fails on a database that already has it - which is a real history here, since
+	// the column briefly lived inside 024. So the assertion is on the hook being registered and
+	// the migration being present, not on the statement text.
+	if _, err := migrations.Files.ReadFile("025_release_check_truncated.sql"); err != nil {
+		t.Fatal(err)
 	}
+	if migrationHook(25) == nil {
+		t.Fatal("migration 025 has no hook, so the truncation column would never be added")
+	}
+	// Only executable lines count: the file's comments explain the failure an unconditional
+	// statement would cause, and mentioning it there is the documentation rather than the defect.
+	for _, line := range strings.Split(string(addition), "\n") {
+		statement := strings.TrimSpace(line)
+		if statement == "" || strings.HasPrefix(statement, "--") {
+			continue
+		}
+		if strings.Contains(strings.ToUpper(statement), "ADD COLUMN") {
+			t.Fatalf("migration 025 adds the column in SQL (%q): an unconditional ADD COLUMN fails "+
+				"with 'duplicate column name' on a database created while the column lived inside 024",
+				statement)
+		}
+	}
+}
+
+// openDatabaseAtMigration opens a database with every migration up to and including `through`
+// applied, leaving the later ones pending.
+//
+// It exists so a test can reproduce the schema a deployment actually has when an upgrade begins,
+// which is the only state in which an upgrade can be tested at all. Applying every migration and
+// then asserting the result proves the fresh-database path and nothing about the upgrade.
+func openDatabaseAtMigration(t *testing.T, through int) *DB {
+	t.Helper()
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), fmt.Sprintf("through-%d.db", through))
+
+	// Opened with a backup cipher, because migrating a database that already holds applied
+	// migrations requires an encrypted backup first: the gate correctly refuses to change an
+	// existing schema without a recoverable copy, and this test is exercising exactly that path.
+	cipher, err := crypto.New("01234567890123456789012345678901")
+	if err != nil {
+		t.Fatal(err)
+	}
+	database, err := Open(ctx, path, WithMigrationBackup(cipher, filepath.Join(t.TempDir(), "backups"), 3))
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	// Roll the schema back to the requested point. Deleting the migration rows alone would leave
+	// the schema at its final shape while claiming the later migrations are pending, so the next
+	// run would exercise the "already applied" path and never the upgrade. The schema has to move
+	// with the history, which for 025 means dropping the column it adds.
+	if _, err := database.SQL.ExecContext(ctx, `DELETE FROM schema_migrations WHERE version > ?`, through); err != nil {
+		t.Fatalf("reset migration history to %d: %v", through, err)
+	}
+	if through < 25 {
+		if _, err := database.SQL.ExecContext(ctx, `ALTER TABLE release_check_state DROP COLUMN truncated`); err != nil {
+			t.Fatalf("drop the column migration 025 adds: %v", err)
+		}
+	}
+	return database
 }

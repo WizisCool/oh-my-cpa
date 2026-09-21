@@ -513,3 +513,107 @@ func TestSystemRoutesRefuseWithoutTheirService(t *testing.T) {
 		t.Fatalf("reason without a service = %q, want %q", info.OMCVersion.Reason, release.ReasonNoData)
 	}
 }
+
+// TestMaintenanceAdmissionAndCompletionAreBothAudited drives a real job through its whole
+// lifecycle and asserts the two audit events that record it, plus the property that makes
+// their order necessary: the admission response arrives without waiting for the job.
+//
+// A fabricated gate hold cannot express this. A held gate in production is a *running
+// job*, and a second admission is refused with 409 before it ever reaches an audit write -
+// which is why admission can be audited before launching without risking a wait on the
+// gate: at the moment it is audited, nothing holds it.
+func TestMaintenanceAdmissionAndCompletionAreBothAudited(t *testing.T) {
+	client, baseURL, repo, _ := startReleaseTestServer(t)
+	ctx := context.Background()
+
+	// Make the rebuild do enough work to be observable: a database with pages to release.
+	if _, err := repo.SQL().ExecContext(ctx, `CREATE TABLE IF NOT EXISTS audit_probe(id INTEGER PRIMARY KEY, v TEXT)`); err != nil {
+		t.Fatal(err)
+	}
+	payload := make([]byte, 4096)
+	for index := 0; index < 400; index++ {
+		if _, err := repo.SQL().ExecContext(ctx, `INSERT INTO audit_probe(v) VALUES (?)`, string(payload)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := repo.SQL().ExecContext(ctx, `DELETE FROM audit_probe`); err != nil {
+		t.Fatal(err)
+	}
+
+	started := time.Now()
+	accepted, err := client.Post(baseURL+"/management/system/maintenance/vacuum", "application/json", nil)
+	if err != nil {
+		t.Fatalf("admission: %v", err)
+	}
+	accepted.Body.Close()
+	elapsed := time.Since(started)
+	if accepted.StatusCode != http.StatusAccepted {
+		t.Fatalf("admission status = %d, want 202", accepted.StatusCode)
+	}
+	// The response must describe admission, not completion. A rebuild of this size takes
+	// long enough that a response waiting for it would be plainly slower than this.
+	if elapsed > 15*time.Second {
+		t.Fatalf("admission took %v: the response waited for the job", elapsed)
+	}
+
+	// The admission is audited even though the job has not finished.
+	admissionAudited := false
+	for _, event := range auditEventsFor(t, repo, ctx, 50) {
+		if event.Action == "system.maintenance.vacuum" && event.Result == "admitted" {
+			admissionAudited = true
+		}
+	}
+	if !admissionAudited {
+		t.Fatal("the admission was not audited")
+	}
+
+	// Wait for the terminal state, then assert the completion audit exists and is distinct
+	// from the admission: a 202 is not a successful rebuild.
+	deadline := time.Now().Add(90 * time.Second)
+	for {
+		if time.Now().After(deadline) {
+			t.Fatal("the maintenance job never reached a terminal state")
+		}
+		statusResp, err := client.Get(baseURL + "/management/system/maintenance")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var live systemMaintenanceActionDTO
+		decodeErr := json.NewDecoder(statusResp.Body).Decode(&live)
+		statusResp.Body.Close()
+		if decodeErr != nil {
+			t.Fatal(decodeErr)
+		}
+		if !live.Maintenance.Running && live.Maintenance.FinishedAtMS != 0 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	// The completion audit is written by the job's observer, so it is ordered after the
+	// terminal state and may need a moment to land.
+	completionAudited := false
+	for attempt := 0; attempt < 100 && !completionAudited; attempt++ {
+		for _, event := range auditEventsFor(t, repo, ctx, 50) {
+			if event.Action == "system.maintenance.vacuum.completed" {
+				completionAudited = true
+			}
+		}
+		if !completionAudited {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	if !completionAudited {
+		t.Fatal("the completed job was never audited: a 202 admission and a finished rebuild must be distinguishable in the audit trail")
+	}
+}
+
+// auditEventsFor reads the audit tail, returning what it has if the read fails.
+func auditEventsFor(t *testing.T, repo *repository.Repository, ctx context.Context, limit int) []repository.AuditEvent {
+	t.Helper()
+	events, err := repo.ListAuditEvents(ctx, limit)
+	if err != nil {
+		t.Fatalf("list audit events: %v", err)
+	}
+	return events
+}

@@ -2,17 +2,25 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 )
 
-// TestCheckpointReportsBlockedAsIncomplete is the property that keeps the page
-// honest: SQLite does not raise an error when a checkpoint is blocked, so a
-// success message derived from a nil error would tell the operator a rebuild
-// happened when nothing did.
-func TestCheckpointReportsBlockedAsIncomplete(t *testing.T) {
+// TestCheckpointReadsItsOwnResultCounters covers the in-band result: SQLite reports a blocked
+// checkpoint in the statement's result row rather than as an error, so the service must read those
+// counters to tell "the log was truncated" from "the log was not".
+//
+// It does not induce the blocked case. Arranging it needs a second connection holding a read
+// transaction that outlives the checkpoint, and under `SetMaxOpenConns(1)` with the maintenance
+// service owning its own connection that is exactly the shape the gate exists to serialize - the
+// test would be asserting against the gate rather than against the checkpoint. What is covered
+// here is that the counters are read and surfaced; the derivation from them
+// (`busy != 0` means incomplete) is a three-line branch asserted directly in
+// `TestCheckpointReportsIncompleteWhenBlocked` below.
+func TestCheckpointReadsItsOwnResultCounters(t *testing.T) {
 	database := openGatedTestDatabase(t)
 	ctx := context.Background()
 
@@ -132,10 +140,15 @@ func TestVacuumReclaimsSpaceAndKeepsData(t *testing.T) {
 	}
 }
 
-// TestInterruptedVacuumLeavesTheDatabaseUsable pins the safety claim that made a
-// plain VACUUM the chosen form of the action: it copies into a temporary database
-// and overwrites the original inside an ordinary transaction, so a cancel leaves
-// the original intact instead of a half-rewritten file.
+// TestInterruptedVacuumLeavesTheDatabaseUsable pins the safety property that made a plain VACUUM
+// the chosen form: it copies into a temporary database and overwrites the original inside an
+// ordinary transaction, so an interrupted rebuild leaves the original intact.
+//
+// The interruption here is a pre-cancelled context, which proves the refusal path and the state the
+// database is left in. It does not prove that a statement cancelled *mid-execution* leaves the file
+// intact - that needs a rebuild large enough to still be running when the cancellation arrives, and
+// the outcome would depend on timing rather than on the code. The claim this supports is therefore
+// the one it checks: a cancelled rebuild does not damage the database and releases the gate.
 func TestInterruptedVacuumLeavesTheDatabaseUsable(t *testing.T) {
 	database := openGatedTestDatabase(t)
 	ctx := context.Background()
@@ -451,4 +464,144 @@ func TestFailedGateAcquisitionStillReportsTerminalState(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("a job that could not take the gate never reported a terminal state: %+v", service.Status())
+}
+
+// TestReservationCannotBeLaunchedTwiceOrAfterRelease pins the lifecycle the reservation identity
+// exists for. `status.Running` is true on both sides of a launch, so a check on it alone cannot
+// tell a live reservation from one already started: a second Launch would find a running status
+// and start the same job again, and a Release followed by a Launch would start a job whose audit
+// had already been abandoned.
+func TestReservationCannotBeLaunchedTwiceOrAfterRelease(t *testing.T) {
+	database := openGatedTestDatabase(t)
+	ctx := context.Background()
+	if _, err := database.SQL.ExecContext(ctx, `CREATE TABLE probe(id INTEGER PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("a second launch is refused", func(t *testing.T) {
+		service := newTestMaintenanceService(t, database)
+		if _, err := service.Reserve(ctx, MaintenanceCheckpoint); err != nil {
+			t.Fatalf("reserve: %v", err)
+		}
+		if err := service.Launch(ctx); err != nil {
+			t.Fatalf("first launch: %v", err)
+		}
+		if err := service.Launch(ctx); err == nil {
+			t.Fatal("a second launch of the same reservation was accepted, so the job would run twice")
+		}
+		// Let the launched job finish so it does not overlap the next subtest.
+		deadline := time.Now().Add(30 * time.Second)
+		for time.Now().Before(deadline) {
+			if !service.Status().Running {
+				break
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	})
+
+	t.Run("a released reservation cannot be launched", func(t *testing.T) {
+		service := newTestMaintenanceService(t, database)
+		if _, err := service.Reserve(ctx, MaintenanceCheckpoint); err != nil {
+			t.Fatalf("reserve: %v", err)
+		}
+		service.Release(ctx)
+		if err := service.Launch(ctx); err == nil {
+			t.Fatal("a released reservation was launched, so an abandoned job would still run")
+		}
+	})
+}
+
+// TestReserveAndLaunchAreRefusedAfterClose pins the shutdown boundary: a job admitted by a start
+// that raced Close must not run against a connection Close has already released.
+func TestReserveAndLaunchAreRefusedAfterClose(t *testing.T) {
+	database := openGatedTestDatabase(t)
+	ctx := context.Background()
+	if _, err := database.SQL.ExecContext(ctx, `CREATE TABLE probe(id INTEGER PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("reserve after close", func(t *testing.T) {
+		service, err := NewMaintenanceService(ctx, database)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := service.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := service.Reserve(ctx, MaintenanceCheckpoint); !errors.Is(err, ErrMaintenanceClosed) {
+			t.Fatalf("reserve after close = %v, want ErrMaintenanceClosed", err)
+		}
+	})
+
+	t.Run("launch after close", func(t *testing.T) {
+		service, err := NewMaintenanceService(ctx, database)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := service.Reserve(ctx, MaintenanceCheckpoint); err != nil {
+			t.Fatalf("reserve: %v", err)
+		}
+		// Close between the reservation and the launch, which is the race a shutdown produces.
+		if err := service.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if err := service.Launch(ctx); !errors.Is(err, ErrMaintenanceClosed) {
+			t.Fatalf("launch after close = %v, want ErrMaintenanceClosed", err)
+		}
+	})
+}
+
+// TestInterpretCheckpointResultDerivesTheOutcomeFromTheCounters tests the decision rather than
+// restating it.
+//
+// The function exists so this can be asserted at all: inducing a genuinely blocked checkpoint needs
+// a reader holding a snapshot across a TRUNCATE on a single-writer database, which the maintenance
+// gate serializes by design. The three possible results are therefore supplied directly.
+func TestInterpretCheckpointResultDerivesTheOutcomeFromTheCounters(t *testing.T) {
+	for _, testCase := range []struct {
+		name         string
+		busy         int64
+		logFrames    int64
+		checkpointed int64
+		wantDetail   string
+		incomplete   bool
+	}{
+		{
+			name:         "a completed checkpoint reports its counters and is not incomplete",
+			busy:         0,
+			logFrames:    12,
+			checkpointed: 12,
+			wantDetail:   "write-ahead log frames 12, checkpointed 12",
+		},
+		{
+			// A blocked TRUNCATE moves none of the log, which is why the checkpointed count is
+			// zero while frames remain - the state the page must not present as success.
+			name:         "a blocked checkpoint is incomplete and says so",
+			busy:         1,
+			logFrames:    7,
+			checkpointed: 0,
+			wantDetail:   "write-ahead log frames 7, checkpointed 0; blocked by a concurrent reader",
+			incomplete:   true,
+		},
+		{
+			name:         "an empty log is a completed checkpoint, not a blocked one",
+			busy:         0,
+			logFrames:    0,
+			checkpointed: 0,
+			wantDetail:   "write-ahead log frames 0, checkpointed 0",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			detail, incomplete, err := interpretCheckpointResult(testCase.busy, testCase.logFrames, testCase.checkpointed)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if incomplete != testCase.incomplete {
+				t.Errorf("incomplete = %v, want %v", incomplete, testCase.incomplete)
+			}
+			if detail != testCase.wantDetail {
+				t.Errorf("detail = %q, want %q", detail, testCase.wantDetail)
+			}
+		})
+	}
 }

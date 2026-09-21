@@ -1,15 +1,19 @@
 -- Adds the truncation flag the release checker records.
 --
--- Why this is a new migration rather than part of 024: 024 was already applied on
--- existing databases when the flag was introduced, so editing 024 would have changed a
--- migration that had already run. SQLite applies a migration once, keyed by version, so
--- the edited file would never be re-read: a fresh database would get the column and an
--- existing one would not, and the queries would then fail only on the deployments that
--- had been running longest. That is the failure this migration exists to repair, and it
--- is why the rule is "forward-only" (`docs/ops/sqlite-operations.md`).
+-- The column records whether a release-feed walk stopped at its page limit with more releases
+-- available, so the page can state that the interval it shows is not fully known rather than
+-- presenting a partial range as the whole story.
 --
--- The column records whether a release-feed walk stopped at its page limit with more
--- releases available. The page states that the interval it shows is not fully known
--- rather than presenting a partial range as the whole story.
+-- Why the column is added by a Go hook rather than by an `ALTER TABLE` here: this migration has
+-- to survive two different histories. A deployment that applied the original
+-- `024_release_index.sql` has the table without the column, and an `ALTER TABLE ... ADD COLUMN`
+-- repairs it. A database created while the column briefly lived inside 024 already has it, and
+-- the same statement fails with `duplicate column name: truncated` - which would abort the whole
+-- migration transaction and stop the process from starting. SQLite has no
+-- `ADD COLUMN IF NOT EXISTS`, so the statement cannot carry the condition itself.
+--
+-- The hook therefore asks the schema whether the column exists and adds it only when it does
+-- not. It cannot be expressed here, so this file states the table the hook expects to find and
+-- carries the reasoning a reader would otherwise look for in the Go source.
 
-ALTER TABLE release_check_state ADD COLUMN truncated INTEGER NOT NULL DEFAULT 0;
+SELECT 1 FROM release_check_state LIMIT 0;

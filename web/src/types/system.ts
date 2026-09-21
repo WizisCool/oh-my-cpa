@@ -175,6 +175,13 @@ export interface SystemRuntimeInfo {
 export interface SystemInfoResponse {
   omc_version: SystemProductVersion;
   cpa_version: SystemProductVersion;
+  /**
+   * Whether this deployment allows the page to check when it is opened.
+   *
+   * The server answers it because the switch exists so page visits cannot spend requests from a
+   * shared budget; a page that checked anyway would defeat it. The manual button is unaffected.
+   */
+  update_check_on_page_load: boolean;
   uptime_seconds: number;
   database: SystemDatabaseInfo;
   cpa: SystemCPAInfo;

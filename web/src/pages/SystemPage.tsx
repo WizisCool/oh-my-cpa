@@ -449,13 +449,15 @@ export const SystemPage: React.FC = () => {
   // server refuses the route: the fixture already supplies the index, so checking there
   // would spend a request to receive a refusal.
   useEffect(() => {
-    if (!hasMountedCheckRef.current) {
-      hasMountedCheckRef.current = true;
-      if (!isDemo) {
-        void handleCheckUpdates();
-      }
+    // Waiting for the page's own response, because whether this deployment allows an automatic
+    // check is a server decision: the switch exists so that opening a page cannot spend requests
+    // from a budget shared per address, and a page that checked regardless would defeat it.
+    if (isLoading || hasMountedCheckRef.current) return;
+    hasMountedCheckRef.current = true;
+    if (!isDemo && sysInfo?.update_check_on_page_load) {
+      void handleCheckUpdates();
     }
-  }, [isDemo]);
+  }, [isDemo, isLoading, sysInfo?.update_check_on_page_load]);
 
   const handleRunCheckpoint = async () => {
     setSubmittingAction('checkpoint');

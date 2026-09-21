@@ -12,6 +12,9 @@ import (
 // It is an interface so the handler can be built without one: a deployment that does
 // not offer maintenance, and the handler tests, then have every maintenance route
 // answer "not available" rather than reaching into a database.
+// maintenanceAuditTimeout bounds the write that records a finished maintenance job.
+const maintenanceAuditTimeout = 10 * time.Second
+
 type MaintenanceManager interface {
 	Status() repository.MaintenanceStatus
 	StartCheckpoint(ctx context.Context) (repository.MaintenanceStatus, error)
@@ -83,7 +86,13 @@ func (h *Handler) recordAuditWithoutRequest(action, targetType, targetID, result
 		Result:       result,
 		Details:      details,
 	}
-	if _, err := h.repo.RecordAuditEvent(context.Background(), event); err != nil {
+	// Bounded rather than unbounded-background: this runs on the job's own goroutine after
+	// exclusivity is released, so a store that has stopped answering would otherwise keep the
+	// process's shutdown waiting on a write that is only a record of a job which already
+	// finished.
+	auditCtx, cancelAudit := context.WithTimeout(context.Background(), maintenanceAuditTimeout)
+	defer cancelAudit()
+	if _, err := h.repo.RecordAuditEvent(auditCtx, event); err != nil {
 		h.logger.Warn("could not record the maintenance outcome", "action", action, "error", err)
 	}
 }

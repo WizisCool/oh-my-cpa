@@ -37,6 +37,12 @@ type SystemInfoDTO struct {
 	OMCVersion SystemProductVersionDTO `json:"omc_version"`
 	CPAVersion SystemProductVersionDTO `json:"cpa_version"`
 
+	// UpdateCheckOnPageLoad tells the page whether it may check when it is opened. The server
+	// answers this rather than the page guessing, because the switch exists precisely so an
+	// operator can stop page visits from spending requests, and a page that checked anyway would
+	// defeat it. The manual button is unaffected and always available.
+	UpdateCheckOnPageLoad bool `json:"update_check_on_page_load"`
+
 	UptimeSeconds int64 `json:"uptime_seconds"`
 
 	Database SystemDatabaseDTO `json:"database"`
@@ -227,15 +233,16 @@ func (h *Handler) getSystemInfo(writer http.ResponseWriter, request *http.Reques
 	}
 
 	dto := SystemInfoDTO{
-		OMCVersion:    h.productVersionDTO(ctx, release.ProductOMC, h.omcVersion()),
-		CPAVersion:    h.productVersionDTO(ctx, release.ProductCPA, h.observedCPAVersion(ctx)),
-		UptimeSeconds: uptime,
-		Database:      h.databaseDTO(ctx),
-		CPA:           h.cpaDTO(ctx),
-		Collector:     h.collectorDTO(ctx),
-		DataVolumes:   h.dataVolumesDTO(ctx),
-		Maintenance:   h.maintenanceStatusDTO(),
-		Runtime:       h.runtimeDTO(),
+		OMCVersion:            h.productVersionDTO(ctx, release.ProductOMC, h.omcVersion()),
+		CPAVersion:            h.productVersionDTO(ctx, release.ProductCPA, h.observedCPAVersion(ctx)),
+		UpdateCheckOnPageLoad: h.cfg.Release.AutoCheck,
+		UptimeSeconds:         uptime,
+		Database:              h.databaseDTO(ctx),
+		CPA:                   h.cpaDTO(ctx),
+		Collector:             h.collectorDTO(ctx),
+		DataVolumes:           h.dataVolumesDTO(ctx),
+		Maintenance:           h.maintenanceStatusDTO(),
+		Runtime:               h.runtimeDTO(),
 	}
 	dto.MaintenanceAdmission = h.maintenanceAdmissionDTO(ctx)
 	writeJSON(writer, http.StatusOK, dto)

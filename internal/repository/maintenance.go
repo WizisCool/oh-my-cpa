@@ -93,6 +93,12 @@ type MaintenanceService struct {
 	// reservedBytes is the footprint captured at reservation, kept out of the published
 	// status so a reservation cannot be confused with a running job.
 	reservedBytes int64
+	// reservation counts claims of the single-flight slot and launchedReservation records the
+	// last one started. Comparing them is what distinguishes a live reservation from one already
+	// launched: `status.Running` cannot, because it is true on both sides of a launch, so a second
+	// Launch would find a running status and start the job again.
+	reservation         int64
+	launchedReservation int64
 	// observers are notified after a job reaches its terminal state. The API layer uses
 	// this to record the outcome in the audit trail, which cannot be done by the
 	// requesting handler: that request has already been answered, and its write would
@@ -244,6 +250,7 @@ func (s *MaintenanceService) Reserve(ctx context.Context, action string) (Mainte
 	}
 
 	before := s.db.FootprintBytes()
+	s.reservation++
 	s.status = MaintenanceStatus{
 		Action:          action,
 		Running:         true,
@@ -262,6 +269,9 @@ func (s *MaintenanceService) Reserve(ctx context.Context, action string) (Mainte
 func (s *MaintenanceService) Release(ctx context.Context) {
 	s.mutex.Lock()
 	s.status = MaintenanceStatus{}
+	// The reservation is retired as well, so a released one cannot be launched afterwards: a
+	// caller that released because its audit failed must not then start the job it abandoned.
+	s.launchedReservation = s.reservation
 	s.mutex.Unlock()
 }
 
@@ -269,10 +279,21 @@ func (s *MaintenanceService) Release(ctx context.Context) {
 // rather than executed, so the reservation and the work cannot come apart.
 func (s *MaintenanceService) Launch(ctx context.Context) error {
 	s.mutex.Lock()
+	if s.isClosed {
+		s.mutex.Unlock()
+		return ErrMaintenanceClosed
+	}
 	if !s.status.Running {
 		s.mutex.Unlock()
 		return errors.New("no maintenance job is reserved")
 	}
+	// The reservation is consumed, so a second launch finds nothing to start: `status.Running` is
+	// true on both sides of a launch, which is why the comparison is on the identity instead.
+	if s.reservation <= s.launchedReservation {
+		s.mutex.Unlock()
+		return errors.New("the maintenance reservation was already launched")
+	}
+	s.launchedReservation = s.reservation
 	action := s.status.Action
 	before := s.reservedBytes
 	// The wait group is incremented while the mutex is held, before the goroutine exists.
@@ -397,10 +418,21 @@ func (s *MaintenanceService) runCheckpoint(ctx context.Context) (string, bool, e
 	if err := s.work.QueryRowContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`).Scan(&busy, &logFrames, &checkpointed); err != nil {
 		return "", false, fmt.Errorf("truncate the write-ahead log: %w", err)
 	}
+	return interpretCheckpointResult(busy, logFrames, checkpointed)
+}
+
+// interpretCheckpointResult turns SQLite's three-column result into an outcome.
+//
+// It is a separate function because the decision is the part worth testing and the observation is
+// not: `PRAGMA wal_checkpoint(TRUNCATE)` returns `(busy, log, checkpointed)` and raises no error
+// when a concurrent reader blocks it, so "did this succeed" is answered by the first column rather
+// than by the absence of an error. The first column is 1 exactly when a FULL, RESTART or TRUNCATE
+// checkpoint could not complete, which is the case that must not be reported as success.
+func interpretCheckpointResult(busy, logFrames, checkpointed int64) (string, bool, error) {
 	detail := fmt.Sprintf("write-ahead log frames %d, checkpointed %d", logFrames, checkpointed)
 	if busy != 0 {
-		// A blocked checkpoint is a real answer, not an error: the WAL stays as it
-		// is until the readers that blocked it are gone.
+		// A blocked checkpoint is a real answer, not an error: the log stays as it is until the
+		// readers that blocked it are gone.
 		return detail + "; blocked by a concurrent reader", true, nil
 	}
 	return detail, false, nil

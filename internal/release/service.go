@@ -239,7 +239,13 @@ func (s *Service) check(ctx context.Context, productKey string, force bool) (Com
 	//
 	// Cancellation still reaches the feed read itself, which is the part that should stop when
 	// nobody is waiting for it.
-	bookkeeping := context.WithoutCancel(ctx)
+	//
+	// It is detached *and bounded*, which are separate requirements: detaching alone would let a
+	// store that has stopped answering hold this goroutine past shutdown, and each write below
+	// would inherit that. The deadline is short because these are small local writes, and a store
+	// that cannot complete one within it is not going to.
+	bookkeeping, cancelBookkeeping := context.WithTimeout(context.WithoutCancel(ctx), bookkeepingTimeout)
+	defer cancelBookkeeping()
 
 	if err := s.repository.RecordReleaseCheckAttempt(bookkeeping, product.Key, product.Repository); err != nil {
 		return Comparison{}, false, err
@@ -409,7 +415,11 @@ func (s *Service) latestTag(productKey string) string {
 	if !ok {
 		return ""
 	}
-	records, err := s.repository.ListReleases(context.Background(), productKey, product.Repository)
+	// Bounded like the other bookkeeping reads: an unbounded background context here would let a
+	// store that stopped answering pin the caller that asked for a version.
+	readCtx, cancelRead := context.WithTimeout(context.Background(), bookkeepingTimeout)
+	defer cancelRead()
+	records, err := s.repository.ListReleases(readCtx, productKey, product.Repository)
 	if err != nil {
 		return ""
 	}
@@ -766,6 +776,13 @@ func newestStable(records []repository.ReleaseRecord) (repository.ReleaseRecord,
 	}
 	return repository.ReleaseRecord{}, false
 }
+
+// bookkeepingTimeout bounds a check's outcome writes.
+//
+// Long enough for a few small local statements on a busy database, short enough that a store which
+// has stopped answering cannot hold the checking goroutine - and therefore its own cleanup - past
+// the process's shutdown.
+const bookkeepingTimeout = 10 * time.Second
 
 // CheckFloor is the shortest interval between two real requests to the feed.
 //

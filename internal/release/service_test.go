@@ -604,12 +604,15 @@ func TestChangingTheSourceDoesNotPresentTwoFeeds(t *testing.T) {
 // Checks are deliberately unthrottled, so two can be in flight at once, and without
 // the lock the slower one would overwrite the faster one's newer snapshot.
 func TestConcurrentChecksDoNotPublishOutOfOrder(t *testing.T) {
-	slowFirst := true
+	// An atomic, because httptest runs each request on its own goroutine: a plain bool here is
+	// written concurrently by two handlers and read under the race detector.
+	var slowFirst atomic.Bool
+	slowFirst.Store(true)
 	service, stub := newTestService(t, func(writer http.ResponseWriter, request *http.Request) {
 		// The first reader is held open long enough for a later, faster check to finish
-		// first if the service allowed them to overlap.
-		if slowFirst {
-			slowFirst = false
+		// first if the service allowed them to overlap. CompareAndSwap makes the one-time
+		// transition atomic rather than a read-then-write race.
+		if slowFirst.CompareAndSwap(true, false) {
 			time.Sleep(300 * time.Millisecond)
 			writeJSON(t, writer, []Release{{Tag: "v7.3.11", Body: "older snapshot", PublishedAt: "2026-09-21T00:00:00Z"}})
 			return
@@ -965,5 +968,87 @@ func TestACancelledCheckStillClearsItsRunningFlag(t *testing.T) {
 	}
 	if status.Checking {
 		t.Fatal("the page still reports a check in progress after the check was abandoned")
+	}
+}
+
+// TestASourceSwitchFollowedByAFailureDoesNotPresentTheOldFeed pins the scenario the earlier
+// isolation test missed.
+//
+// That test read the state before any check ran, which the repository guard already handles by
+// comparing the stored source. The dangerous sequence is longer: switch the source, then let the
+// first check against the new source FAIL. Recording the attempt rewrites `repository`, so without
+// retiring the snapshot in the same statement the row would now claim the new source while still
+// carrying the old feed's `latest_tag` - and the guard, which compares that very column, would
+// accept it. The page would then name a version that exists only in the feed it stopped reading.
+func TestASourceSwitchFollowedByAFailureDoesNotPresentTheOldFeed(t *testing.T) {
+	ctx := context.Background()
+	db, err := repository.Open(ctx, fmt.Sprintf("file:memdb_switch_fail_%d?mode=memory&cache=shared", releaseServiceCounter.Add(1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := repository.New(db)
+
+	// The first source publishes v9.9.9 and is read successfully.
+	upstream := feedSourceFunc(func(_ context.Context, repositoryName, _ string) (Feed, error) {
+		return Feed{
+			Repository: repositoryName,
+			Releases:   []Release{{Tag: "v9.9.9", Body: "upstream notes"}},
+			ETag:       `W/"upstream"`,
+		}, nil
+	})
+	first, err := New(Options{Repository: repo, CPARepository: "router-for-me/CLIProxyAPI", Client: upstream})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := first.CheckNow(ctx, ProductCPA); err != nil {
+		t.Fatal(err)
+	}
+	before, err := first.Status(ctx, ProductCPA, "v9.9.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.LatestVersion != "v9.9.9" {
+		t.Fatalf("latest before the switch = %q, want v9.9.9", before.LatestVersion)
+	}
+
+	// The operator switches to a fork whose feed fails.
+	failing := feedSourceFunc(func(context.Context, string, string) (Feed, error) {
+		return Feed{}, fmt.Errorf("the release feed answered status 503")
+	})
+	second, err := New(Options{Repository: repo, CPARepository: "someone/fork", Client: failing})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := second.CheckNow(ctx, ProductCPA); err == nil {
+		t.Fatal("a failing feed reported success")
+	}
+
+	// The old feed's version must not be attributed to the new source.
+	status, err := second.Status(ctx, ProductCPA, "v9.9.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.LatestVersion != "" {
+		t.Fatalf("after switching source and failing, latest = %q: the previous feed's version is presented under the new source's name", status.LatestVersion)
+	}
+	if status.LatestVersion == "v9.9.9" {
+		t.Fatal("the previous source's version survived the switch as if the new source had published it")
+	}
+	// The failure is still reported, which is the honest state of the new source.
+	if status.CheckError == "" {
+		t.Fatal("the failed check against the new source was not reported")
+	}
+
+	// And the stored row no longer claims a version it did not read.
+	state, err := repo.GetReleaseCheckState(ctx, ProductCPA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.LatestTag != "" {
+		t.Fatalf("stored latest tag = %q after a source switch, want it cleared", state.LatestTag)
+	}
+	if state.LastSuccessAtMS != nil {
+		t.Fatal("the previous source's success time survived the switch")
 	}
 }

@@ -289,16 +289,19 @@ try {
       OMCPA_CPA_MANAGEMENT_KEY: FAKE_CPA_MANAGEMENT_KEY,
       OMCPA_CPA_USAGE_ADDR: '',
       OMCPA_USAGE_INGEST_ENABLED: 'false',
-      // The release check stays off, for the reason every other outbound integration is off
-      // here: this suite must be hermetic. Without it the app fetches published versions from
-      // `api.github.com` on start-up, which spends an allowance shared per address, makes the
-      // run depend on a third party being reachable, and - the failure that prompted this -
-      // leaves whoever runs the gate reading a rate-limit error instead of a version.
+      // Release checking is off, for the reason every other outbound integration is off here:
+      // this suite must be hermetic. The app would otherwise fetch published versions from
+      // `api.github.com`, which spends an allowance shared per address, makes the run depend on a
+      // third party being reachable, and leaves whoever runs the gate reading a rate-limit error
+      // where a version should be.
       //
-      // The page's own behaviour is covered by the `system-information` scenarios, which
-      // intercept the route and assert what renders; nothing in this suite depends on a real
-      // feed, because it never asserted on live versions in the first place.
+      // Both switches are set, and that is the correction of an earlier mistake: disabling the
+      // sweep alone does not stop the traffic. The sweep's first run is a full interval away and
+      // never fires inside a two-minute run, while this suite does visit `/system`
+      // (`configuration-plugins.mjs`), whose page checks on open. The second switch turns that
+      // check off, which is what actually makes the run hermetic.
       OMCPA_UPDATE_CHECK_ENABLED: 'false',
+      OMCPA_UPDATE_CHECK_ON_PAGE_LOAD: 'false',
       OMCPA_PUBLIC_URL: '',
       OMCPA_VERSION: 'v0.1.0-e2e',
     },
