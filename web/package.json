@@ -23,7 +23,9 @@
     "monaco-yaml": "^5.5.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^6.28.2",
+    "remark-gfm": "^4.0.1",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
