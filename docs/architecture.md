@@ -1070,6 +1070,14 @@ without it the page shows the last known index. It can be switched off with
 check and the manual button working — those are an operator asking a question rather
 than the process deciding to reach the internet.
 
+`OMCPA_UPDATE_CHECK_ON_PAGE_LOAD=false` is separate because it answers a separate question: may
+opening a page spend a request from a budget shared per address? A self-hosted deployment wants
+that enabled — the page exists to answer "is there a newer version" — while an air-gapped install
+or a test suite wants it off, since a page visit there is not a reader asking anything. The manual
+button is unaffected by either switch. The acceptance harness sets both, and the reason is worth
+recording: disabling the sweep alone does not stop the traffic, because the sweep's first run is a
+full interval away and the suite visits the page that checks on open.
+
 ### Why a check has a floor
 
 `CheckFloor` is fifteen minutes, and every path that reads the feed passes it. The feed is
