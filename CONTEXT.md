@@ -31,6 +31,55 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
   contract may still contain the earlier `/24` or `/64` network mask; that data
   cannot be recovered and is never synthetically expanded.
 - **Unpriced Usage**: A request for which no valid price version existed at request time. It remains usage-only, is excluded from cost totals, and is never backfilled when a price is added later. Historical rows without a stored snapshot are `legacy_unpriced`.
+- **Update State**: The System Information page's answer about one product, and one of
+  four values rather than a boolean: `update_available`, `up_to_date`, `update_ahead`
+  (the build is newer than any release - ahead of publication, not an update to
+  install), or `indeterminate`. Only comparable release versions are compared, so a
+  suffixed build version such as `v0.1.0-dev` or `v0.1.0-demo` yields `indeterminate`
+  and carries a **reason**: a development build, nothing published, or a release tag
+  that is not a version. Reporting such a build as "up to date" would assert something
+  the compared data does not support.
+- **Release Record**: One published version of a product - its tag, name, publication
+  time, and whether it was published as a prerelease. Records are the index the console
+  stores. They are replaced as a unit per product each time a feed is read, so a
+  withdrawn release stops being claimed.
+- **Release Notes**: A release's own Markdown description, held only in the running
+  process's memory. They are untrusted remote text: the console never executes HTML
+  from them and never loads an image they reference, so opening the page makes no
+  request to a third party. Because they are not stored, an index without notes is a
+  normal state after a restart - the page then names the versions and links to the
+  source rather than rendering an empty change log, which would read as "nothing
+  changed".
+- **Merged Change Log**: The stable releases in the interval between the running
+  version and the newest published one, grouped by version, opened as an overlay over
+  the page rather than expanding inside a card. The interval is exclusive at the
+  bottom, because the running version's own notes describe a version already in use.
+  Prereleases are excluded: a stable operator never received them. When the running
+  version is not comparable no interval is claimed at all, and the newest release is
+  shown alone. The log states that the interval is **not fully known** only when a
+  truncated release walk can actually affect it: a walk that stopped at its page limit
+  kept the *newest* releases and dropped older ones, so the interval is still complete
+  whenever the running version is at or above the oldest release that was read. The
+  alarm is real only when the running version is older than that, because the dropped
+  releases then sit inside the interval the reader asked about.
+- **Database Footprint**: The measured sizes of the SQLite database's main file and,
+  when present, its `-wal` and `-shm` files, reported separately. A file that does not
+  exist is absent rather than zero-sized: a cleanly closed database has no WAL file,
+  which is a different measurement from an empty one.
+- **Free Pages**: Pages inside the database file that later writes reuse, reported
+  through `page_count`, `page_size` and `freelist_count`. They are never presented as
+  reclaimable or wasted disk space: the file does not shrink until it is rebuilt, and
+  the rebuild needs comparably free space while it runs.
+- **Maintenance Action**: One of the two operator-issued database operations the console
+  can run - a WAL-truncating checkpoint, or a rebuild (`VACUUM`). It runs as a
+  background job against the database file and is refused while another is in flight. A
+  checkpoint whose own result row says it was blocked is reported as **incomplete**
+  rather than successful, because SQLite reports that outcome in the statement's result
+  rather than as an error.
+- **Write Gate**: The rule that no ordinary write may overlap a Maintenance Action.
+  Writers wait for the gate rather than failing, because a failed write stops the usage
+  collector and with it the process; a queued writer may abandon the wait when its own
+  context ends. It is what makes offering the maintenance actions safe at all.
 - **Model Usage**: The dashboard's two model-level panels - a **Token Trend** and a **Model Usage**
   ring - between the six KPI tiles and the Token Activity Grid. Unlike the grid, whose span is
   fixed, both follow the Range Preset, so they answer "which models is this window spending on, and
@@ -55,7 +104,7 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
 
 ## Demo mode
 
-- **Demo mode**: A deployment of the same binary that serves the console from a fixture and refuses the operations a public deployment must not perform, switched on by `OMCPA_DEMO_MODE` and off unless it is. It is not a second product and not a second frontend: every page, DTO and read path is the operator's own. What it changes is where the gateway's answers come from, which credential the session is derived from, where the database lives, and which routes answer at all - see `docs/architecture.md` §12 and ADR 0016.
+- **Demo mode**: A deployment of the same binary that serves the console from a fixture and refuses the operations a public deployment must not perform, switched on by `OMCPA_DEMO_MODE` and off unless it is. It is not a second product and not a second frontend: every page, DTO and read path is the operator's own. What it changes is where the gateway's answers come from, which credential the session is derived from, where the database lives, and which routes answer at all - see `docs/architecture.md` §13 and ADR 0016.
 - **Demo fixture**: The in-process stand-in for CLIProxyAPI that answers the management API the console reads, on a loopback socket, with a key minted per process. It never contacts the URL it is handed: a provider quota read is resolved against its own catalogue and anything else is refused, so a demo performs no outbound request. It stands in for the *gateway*, not for the console: pages that read Oh My CPA's own stored data read the real database.
 - **Demo refusal**: A `403` from the route classification, marked with its own header and naming the reason. It is what a route the demonstration must not serve answers, and it is the boundary - a control the console hides or disables is a courtesy to the reader, never the protection.
 - **Not-persisted notice**: The statement the console makes after a write the demonstration permits. Such a write lands either in the fixture (a credential's enabled state or its metadata) or in the instance's own temporary database (a caller-key name, a preference, a price row, a resource override), and in both cases it is gone when the platform replaces the instance. Sign-in is excluded: it is not a write, and the notice beside a successful sign-in would say the opposite of what happened. It is shown because "the button worked" and "the change is durable" are different claims, and only the first is true here.

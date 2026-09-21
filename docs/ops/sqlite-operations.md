@@ -192,8 +192,32 @@ When upgrading Oh My CPA, the application automatically inspects and applies une
    - Pruning runs once per hour inside `ingest.Maintenance`, while rollups advance every `OMCPA_USAGE_AGGREGATE_INTERVAL` (default 15 seconds);
    - Pruning boundaries are gated by aggregation checkpoints, guaranteeing that detailed records are never removed before rollups have processed them.
 2. **Space Reclamation & Compaction**:
-   - Large-scale historical data deletion leaves free pages inside SQLite;
-   - Run periodic compaction during low-traffic maintenance windows on the host:
+   - Large-scale historical data deletion leaves free pages inside SQLite. The file does
+     not shrink on its own, and a large `-wal` file is normal rather than a fault: WAL is
+     reused between checkpoints rather than truncated continuously;
+   - Two actions are available, and the System Information page runs both. The console's
+     route is the safer of the two for a running deployment, because it takes the write
+     gate described in `docs/architecture.md` §11 - writers wait rather than fail, and a
+     failed write would stop the usage collector and with it the process:
+     - **WAL checkpoint** (`PRAGMA wal_checkpoint(TRUNCATE)`) moves the log's frames back
+       into the database and truncates the log. It is cheap and safe to run often. SQLite
+       reports a blocked checkpoint in the statement's own result row instead of raising
+       an error, so the page reports that outcome as *incomplete* rather than as success;
+     - **Rebuild** (`VACUUM`) releases free pages. SQLite documents that it needs as much
+       as **twice the database file** in free space while it runs, and the console measures
+       that requirement and shows it in the confirmation before the action starts. The
+       console uses a plain `VACUUM`, not `VACUUM INTO` plus a file swap: the connection
+       pool holds an open handle to the file, so replacing it underneath would need every
+       connection closed and the pool rebuilt while other goroutines still hold references
+       to it. A plain `VACUUM` copies into a temporary file and overwrites the original
+       inside an ordinary transaction, so a rebuild that is interrupted — by cancellation,
+       by its own ten-minute ceiling, or by a restart — leaves the original database intact.
+   - The same actions remain available directly through `sqlite3` when the console is not
+     reachable. Stop the application first, or accept the same waiting behaviour the gate
+     provides:
      ```bash
+     sqlite3 /path/to/data/oh-my-cpa.db "PRAGMA wal_checkpoint(TRUNCATE);"
      sqlite3 /path/to/data/oh-my-cpa.db "VACUUM;"
      ```
+   - A maintenance job does not survive a restart: the process running it is gone with it.
+     The console's job status is held in memory for this reason, and the page says so.
