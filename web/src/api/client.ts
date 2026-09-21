@@ -27,7 +27,12 @@ import { ConfigScalarsResponse, ConfigSourceResponse } from '../types/configMana
 import { ClientAPIKeyItem, ClientKeyUsageItem, ProviderItem, SaveProviderPayload } from '../types/providers';
 import { OAuthProviderItem, StartOAuthResponse, OAuthStatusResponse, OAuthCallbackResponse, OAuthCancelResponse } from '../types/oauth';
 import { QuotaOverviewResponse, CredentialQuotaDetailResponse, QuotaItem } from '../types/quota';
-import { SystemInfoResponse } from '../types/system';
+import {
+  SystemInfoResponse,
+  SystemReleasesResponse,
+  SystemProductVersion,
+  SystemMaintenanceResponse,
+} from '../types/system';
 import { PluginsResponse, PluginStoreResponse } from '../types/plugin';
 import { PricingResponse, PricingSyncState, PricingUpdatePayload } from '../types/pricing';
 
@@ -778,6 +783,35 @@ export const api = {
   async downloadSystemDiagnostics(): Promise<Blob> {
     const { apiBaseUrl } = getAppConfig();
     return downloadBlob(`${apiBaseUrl}/management/system/diagnostics`);
+  },
+
+  async getSystemReleases(product: 'omc' | 'cpa'): Promise<SystemReleasesResponse> {
+    return request<SystemReleasesResponse>(`/management/system/releases?product=${encodeURIComponent(product)}`, {
+      method: 'GET',
+    });
+  },
+
+  async checkUpdates(): Promise<{
+    omc_version: SystemProductVersion;
+    cpa_version: SystemProductVersion;
+    /** True when the floor answered from the stored index instead of reading the feed. */
+    served_from_cache: boolean;
+  }> {
+    return request<{
+      omc_version: SystemProductVersion;
+      cpa_version: SystemProductVersion;
+      served_from_cache: boolean;
+    }>('/management/system/check-updates', { method: 'POST' });
+  },
+
+  async getSystemMaintenance(): Promise<SystemMaintenanceResponse> {
+    return request<SystemMaintenanceResponse>('/management/system/maintenance', { method: 'GET' });
+  },
+
+  async runSystemMaintenance(action: 'checkpoint' | 'vacuum'): Promise<SystemMaintenanceResponse> {
+    return request<SystemMaintenanceResponse>(`/management/system/maintenance/${encodeURIComponent(action)}`, {
+      method: 'POST',
+    });
   },
 
   // Quota
