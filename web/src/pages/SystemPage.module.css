@@ -489,3 +489,13 @@
 .system-page :global(.ant-card-head) {
   align-items: flex-start;
 }
+
+/* A hover colour change is the one motion this page carries, and a reader who has asked the
+   platform to reduce motion should not have to receive it. The transition is removed rather
+   than shortened: the colour still changes on hover, it simply stops animating, which is what
+   the preference asks for - the same treatment `ApiKeysList.module.css` gives its own. */
+@media (prefers-reduced-motion: reduce) {
+  .repo-link {
+    transition: none;
+  }
+}

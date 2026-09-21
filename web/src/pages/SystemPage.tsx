@@ -27,6 +27,7 @@ import {
   CloudDownloadOutlined,
   CompressOutlined,
   ClearOutlined,
+  WarningOutlined,
 } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
@@ -379,8 +380,13 @@ export const SystemPage: React.FC = () => {
     enabled: isPollingMaintenance,
   });
 
-  const effectiveMaintenance = maintenanceData?.maintenance ?? sysInfo?.maintenance;
-  const effectiveAdmission = maintenanceData?.maintenance_admission ?? sysInfo?.maintenance_admission;
+  // The polled response is authoritative only while polling: it is the live job, and it is
+  // fresher than the page's own snapshot. Once polling stops, that response is the previous
+  // job's terminal state, and letting it win thereafter would pin the panel to a job the
+  // operator has since moved past - including after a later page refresh reported a newer one.
+  const polledMaintenance = isPollingMaintenance ? maintenanceData : undefined;
+  const effectiveMaintenance = polledMaintenance?.maintenance ?? sysInfo?.maintenance;
+  const effectiveAdmission = polledMaintenance?.maintenance_admission ?? sysInfo?.maintenance_admission;
   const isMaintenanceActive = Boolean(effectiveMaintenance?.running || submittingAction !== null);
 
   // The terminal state ends the poll, refreshes the storage numbers it just moved,
@@ -837,6 +843,11 @@ export const SystemPage: React.FC = () => {
                 <div className={styles['maintenance-box-title']}>
                   {effectiveMaintenance.error ? (
                     <CloseCircleOutlined style={{ color: 'var(--ant-color-error)' }} />
+                  ) : effectiveMaintenance.incomplete ? (
+                    // A partial result is its own outcome, not a qualified success. SQLite reports
+                    // a blocked checkpoint in the statement's result row rather than as an error,
+                    // so a green checkmark here would claim the log was truncated when it was not.
+                    <WarningOutlined style={{ color: 'var(--ant-color-warning)' }} />
                   ) : (
                     <CheckCircleOutlined style={{ color: 'var(--ant-color-success)' }} />
                   )}
@@ -846,7 +857,11 @@ export const SystemPage: React.FC = () => {
                           action: actionLabel(effectiveMaintenance.action),
                           msg: effectiveMaintenance.error,
                         })
-                      : t('sys.maintenance_success', { action: actionLabel(effectiveMaintenance.action) })}
+                      : effectiveMaintenance.incomplete
+                        ? t('sys.maintenance_incomplete_title', {
+                            action: actionLabel(effectiveMaintenance.action),
+                          })
+                        : t('sys.maintenance_success', { action: actionLabel(effectiveMaintenance.action) })}
                   </span>
                 </div>
 
