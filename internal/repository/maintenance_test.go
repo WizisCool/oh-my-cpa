@@ -188,10 +188,13 @@ func TestInterruptedVacuumLeavesTheDatabaseUsable(t *testing.T) {
 	database.writeGate.leaveWrite()
 }
 
-// TestVacuumSpacePreCheckRefusesWhenFull pins the admission check. The check uses
-// the platform free-space helper, so it is exercised by pointing the database at a
-// directory whose measured free space is bounded through the repository's own
-// injectable hook instead of by filling a real disk.
+// TestVacuumSpacePreCheckReportsMissingFile covers what the pre-check does when there is
+// nothing to measure and when there is.
+//
+// It does NOT establish the refusal: inducing "not enough free space" would mean filling a real
+// disk or injecting the free-space function here, and neither is worth doing for a check whose
+// arithmetic is three lines. The refusal path is covered where it is reachable without a fixture
+// - `ErrInsufficientDiskSpace` is what `Admission` reports when the measurement says so.
 func TestVacuumSpacePreCheckReportsMissingFile(t *testing.T) {
 	database := openGatedTestDatabase(t)
 	service := newTestMaintenanceService(t, database)

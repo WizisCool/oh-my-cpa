@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -48,21 +49,37 @@ func newTestService(t *testing.T, handler http.HandlerFunc) (*Service, *stubGitH
 type stubGitHub struct {
 	handler http.HandlerFunc
 	server  *httptest.Server
+	// mutex guards conditional. httptest serves each request on its own goroutine while the
+	// test reads the recorded requests from its own, so the recording is genuinely shared state
+	// rather than a value only one goroutine touches.
+	mutex sync.Mutex
 	// conditional records, per request in order, whether it carried a validator. That
 	// is the operator's rate-limit budget: GitHub does not charge for a 304.
 	conditional []bool
 }
 
 func (s *stubGitHub) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	s.mutex.Lock()
 	s.conditional = append(s.conditional, strings.TrimSpace(request.Header.Get("If-None-Match")) != "")
+	s.mutex.Unlock()
 	s.handler(writer, request)
 }
 
-func (s *stubGitHub) callCount() int { return len(s.conditional) }
+func (s *stubGitHub) callCount() int {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return len(s.conditional)
+}
 
-func (s *stubGitHub) requestsWithValidator() []bool { return s.conditional }
+func (s *stubGitHub) requestsWithValidator() []bool {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return append([]bool(nil), s.conditional...)
+}
 
 func (s *stubGitHub) lastValidator() bool {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	if len(s.conditional) == 0 {
 		return false
 	}
@@ -869,5 +886,72 @@ func TestAFailedAttemptIsNotReportedAsCached(t *testing.T) {
 	}
 	if read {
 		t.Fatal("a call inside the floor reported reading the feed")
+	}
+}
+
+// TestACancelledCheckStillClearsItsRunningFlag is a regression test for a defect seen in the
+// shutdown log of the browser acceptance run.
+//
+// A browser that navigated away mid-check cancelled the context, so the write that clears the
+// `running` flag failed with `context canceled` and the flag stayed set. The page reads that flag
+// to decide whether to show "checking", so a check that had stopped reported itself as still
+// running - indefinitely, until something else happened to clear it. The detached bookkeeping
+// context is what fixes it, and the assertion is on the stored state rather than on the call.
+func TestACancelledCheckStillClearsItsRunningFlag(t *testing.T) {
+	released := make(chan struct{})
+	service, _ := newTestService(t, func(writer http.ResponseWriter, request *http.Request) {
+		// Hold the feed open until the test has cancelled the caller's context, so the read
+		// fails the way a navigated-away browser makes it fail.
+		<-released
+		writer.WriteHeader(http.StatusInternalServerError)
+	})
+	ctx := context.Background()
+
+	checkCtx, cancelCheck := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() {
+		_, err := service.CheckNow(checkCtx, ProductCPA)
+		done <- err
+	}()
+
+	// Wait for the attempt to be recorded and the read to be in flight.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		state, err := service.repository.GetReleaseCheckState(ctx, ProductCPA)
+		if err == nil && state.Running {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancelCheck()
+	close(released)
+	if err := <-done; err == nil {
+		t.Fatal("a cancelled check reported success")
+	}
+
+	// The flag must be cleared even though the caller's context is gone.
+	cleared := false
+	for attempt := 0; attempt < 100 && !cleared; attempt++ {
+		state, err := service.repository.GetReleaseCheckState(ctx, ProductCPA)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !state.Running {
+			cleared = true
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !cleared {
+		t.Fatal("an abandoned check left the running flag set, so the page would report checking forever")
+	}
+
+	// And the page no longer claims a check is in progress.
+	status, err := service.Status(ctx, ProductCPA, "v7.3.5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Checking {
+		t.Fatal("the page still reports a check in progress after the check was abandoned")
 	}
 }

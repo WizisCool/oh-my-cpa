@@ -285,7 +285,7 @@ func TestReleaseCheckConfigReportsAMalformedSwitch(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !cfg.Release.Enabled {
-		t.Fatal("checking is off by default; an unset switch must mean the documented behaviour")
+		t.Fatal("checking must be ON when the switch is unset, which is the documented default")
 	}
 	if cfg.Release.Interval != DefaultReleaseInterval {
 		t.Fatalf("interval = %v, want %v", cfg.Release.Interval, DefaultReleaseInterval)

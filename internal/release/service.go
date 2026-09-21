@@ -231,7 +231,17 @@ func (s *Service) check(ctx context.Context, productKey string, force bool) (Com
 		return s.comparisonFor(ctx, productKey, ""), false, nil
 	}
 
-	if err := s.repository.RecordReleaseCheckAttempt(ctx, product.Key, product.Repository); err != nil {
+	// The bookkeeping below runs on a context detached from the caller's, and the reason is
+	// visible in the failure it prevents: a browser that navigated away mid-check cancelled the
+	// context, the `running` flag written by the attempt was never cleared by the outcome, and
+	// the page then reported "checking" for a check that had stopped. Once a check has been
+	// started its result is a fact about the stored index, not a favour to the caller who asked.
+	//
+	// Cancellation still reaches the feed read itself, which is the part that should stop when
+	// nobody is waiting for it.
+	bookkeeping := context.WithoutCancel(ctx)
+
+	if err := s.repository.RecordReleaseCheckAttempt(bookkeeping, product.Key, product.Repository); err != nil {
 		return Comparison{}, false, err
 	}
 	s.setChecking(product.Key, true)
@@ -251,7 +261,7 @@ func (s *Service) check(ctx context.Context, productKey string, force bool) (Com
 	if err != nil {
 		// Redacted on the way in: the feed is remote text and the column is shown
 		// in the console.
-		recordErr := s.repository.RecordReleaseCheckFailure(ctx, product.Key, err.Error())
+		recordErr := s.repository.RecordReleaseCheckFailure(bookkeeping, product.Key, err.Error())
 		if recordErr != nil {
 			s.logger.Warn("could not record release check failure", "product", product.Key, "error", recordErr)
 		}
@@ -261,7 +271,7 @@ func (s *Service) check(ctx context.Context, productKey string, force bool) (Com
 	if feed.NotModified {
 		// The stored index is still correct and the in-memory notes are still the
 		// ones it describes.
-		if err := s.repository.RecordReleaseCheckSuccess(ctx, product.Key, product.Repository, s.latestTag(product.Key), s.currentETag(product.Key), s.truncated(product.Key)); err != nil {
+		if err := s.repository.RecordReleaseCheckSuccess(bookkeeping, product.Key, product.Repository, s.latestTag(product.Key), s.currentETag(product.Key), s.truncated(product.Key)); err != nil {
 			return Comparison{}, true, err
 		}
 		return s.comparisonFor(ctx, product.Key, ""), true, nil
@@ -282,7 +292,7 @@ func (s *Service) check(ctx context.Context, productKey string, force bool) (Com
 		bodies[item.Tag] = item.Body
 	}
 
-	if err := s.repository.ReplaceReleaseIndex(ctx, product.Key, product.Repository, records); err != nil {
+	if err := s.repository.ReplaceReleaseIndex(bookkeeping, product.Key, product.Repository, records); err != nil {
 		return Comparison{}, true, err
 	}
 
@@ -291,7 +301,7 @@ func (s *Service) check(ctx context.Context, productKey string, force bool) (Com
 	s.setBodies(product.Key, bodies, feed.ETag, feed.PageCount <= 1)
 
 	s.setTruncated(product.Key, feed.Truncated)
-	if err := s.repository.RecordReleaseCheckSuccess(ctx, product.Key, product.Repository, latestStableTag(releases), feed.ETag, feed.Truncated); err != nil {
+	if err := s.repository.RecordReleaseCheckSuccess(bookkeeping, product.Key, product.Repository, latestStableTag(releases), feed.ETag, feed.Truncated); err != nil {
 		return Comparison{}, true, err
 	}
 	return s.comparisonFor(ctx, product.Key, ""), true, nil
