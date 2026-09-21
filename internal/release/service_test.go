@@ -842,6 +842,18 @@ func TestAFailedAttemptAlsoArmsTheFloor(t *testing.T) {
 		t.Fatalf("a failing feed was retried %d times inside the floor", got-failingRequests)
 	}
 
+	// The stored `running` flag must be cleared by the failed attempt. `Status` reports
+	// `Checking` from it, so a failure that left it set would show the page as permanently
+	// mid-check - which is what a store-write failure did before every post-attempt path was
+	// funnelled through one recording point.
+	state, err := service.repository.GetReleaseCheckState(ctx, ProductCPA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Running {
+		t.Fatal("a failed attempt left the stored running flag set, so the page reports checking forever")
+	}
+
 	// The failure is still visible to the reader: the recorded error is what the page shows,
 	// so an answer served from the store never presents the outage as health.
 	status, err := service.Status(ctx, ProductCPA, "v7.3.5")

@@ -247,6 +247,19 @@ func (s *Service) check(ctx context.Context, productKey string, force bool) (Com
 	s.setChecking(product.Key, true)
 	defer s.setChecking(product.Key, false)
 
+	// From here the attempt is recorded as running, so every exit must record an outcome. The
+	// attempt sets `running = 1`, and `Status` reports `Checking` from it, so a path that
+	// returns an error without recording one leaves the page claiming a check is in progress
+	// until a later check succeeds or the process restarts. Funnelling the store failures
+	// through `fail` is what makes that a property of the code rather than of remembering.
+	fail := func(cause error) (Comparison, bool, error) {
+		recordErr := s.repository.RecordReleaseCheckFailure(bookkeeping, product.Key, cause.Error())
+		if recordErr != nil {
+			s.logger.Warn("could not record release check failure", "product", product.Key, "error", recordErr)
+		}
+		return Comparison{}, true, cause
+	}
+
 	// A conditional request is only sent while this process still holds the notes it
 	// would be validating AND the cached snapshot came from a single page. A validator
 	// describes one representation: page one's ETag cannot speak for page two, so a 304
@@ -259,20 +272,16 @@ func (s *Service) check(ctx context.Context, productKey string, force bool) (Com
 
 	feed, err := s.client.FetchReleases(ctx, product.Repository, etag)
 	if err != nil {
-		// Redacted on the way in: the feed is remote text and the column is shown
-		// in the console.
-		recordErr := s.repository.RecordReleaseCheckFailure(bookkeeping, product.Key, err.Error())
-		if recordErr != nil {
-			s.logger.Warn("could not record release check failure", "product", product.Key, "error", recordErr)
-		}
-		return Comparison{}, true, err
+		// Redacted on the way through `fail`: the feed is remote text and the stored reason is
+		// shown in the console.
+		return fail(err)
 	}
 
 	if feed.NotModified {
 		// The stored index is still correct and the in-memory notes are still the
 		// ones it describes.
 		if err := s.repository.RecordReleaseCheckSuccess(bookkeeping, product.Key, product.Repository, s.latestTag(product.Key), s.currentETag(product.Key), s.truncated(product.Key)); err != nil {
-			return Comparison{}, true, err
+			return fail(err)
 		}
 		return s.comparisonFor(ctx, product.Key, ""), true, nil
 	}
@@ -293,7 +302,7 @@ func (s *Service) check(ctx context.Context, productKey string, force bool) (Com
 	}
 
 	if err := s.repository.ReplaceReleaseIndex(bookkeeping, product.Key, product.Repository, records); err != nil {
-		return Comparison{}, true, err
+		return fail(err)
 	}
 
 	// Notes are installed only after the index that describes them is stored, so
@@ -302,7 +311,7 @@ func (s *Service) check(ctx context.Context, productKey string, force bool) (Com
 
 	s.setTruncated(product.Key, feed.Truncated)
 	if err := s.repository.RecordReleaseCheckSuccess(bookkeeping, product.Key, product.Repository, latestStableTag(releases), feed.ETag, feed.Truncated); err != nil {
-		return Comparison{}, true, err
+		return fail(err)
 	}
 	return s.comparisonFor(ctx, product.Key, ""), true, nil
 }

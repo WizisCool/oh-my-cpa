@@ -767,8 +767,15 @@ func (h *Handler) getSystemDiagnostics(writer http.ResponseWriter, request *http
 	if !h.startTime.IsZero() {
 		uptime = time.Since(h.startTime).Seconds()
 	}
+	// One snapshot of the database, reused below. Reading it three times meant three pings and
+	// three footprint measurements for one export, and the values could disagree with each other
+	// if a job happened to run between them.
+	database := h.databaseDTO(ctx)
+	facts, factsErr := h.repo.ReadDatabaseFacts(ctx)
+	footprint := h.repo.ReadFileFootprint()
+
 	schemaVersion := int64(0)
-	if facts, err := h.repo.ReadDatabaseFacts(ctx); err == nil {
+	if factsErr == nil {
 		schemaVersion = facts.SchemaVersion
 	}
 
@@ -787,7 +794,6 @@ func (h *Handler) getSystemDiagnostics(writer http.ResponseWriter, request *http
 			"uptime_seconds": uptime,
 		},
 		"database": func() map[string]any {
-			footprint := h.repo.ReadFileFootprint()
 			// The bundle is where the page's removed detail lives. The page answers "how much
 			// disk, and in what mode" because that is what a gateway operator reads at a
 			// glance; the file's internal geometry, its free-page accounting and the
@@ -795,14 +801,14 @@ func (h *Handler) getSystemDiagnostics(writer http.ResponseWriter, request *http
 			// someone opens when they are actually diagnosing something.
 			detail := map[string]any{
 				"driver":       "sqlite",
-				"status":       h.databaseDTO(ctx).Status,
+				"status":       database.Status,
 				"total_bytes":  footprint.TotalBytes,
 				"main_bytes":   footprint.MainBytes,
 				"wal_bytes":    footprint.WALBytes,
 				"shm_bytes":    footprint.SHMBytes,
-				"journal_mode": h.databaseDTO(ctx).JournalMode,
+				"journal_mode": database.JournalMode,
 			}
-			if facts, err := h.repo.ReadDatabaseFacts(ctx); err == nil {
+			if factsErr == nil {
 				detail["schema_version"] = facts.SchemaVersion
 				detail["page_size"] = facts.PageSize
 				detail["page_count"] = facts.PageCount

@@ -1022,6 +1022,17 @@ renewal date.
 | Usage | `usage_inboxes`, `usage_events`, `error_events`, `ingest_gaps`, `usage_overview_hourly_stats`, `usage_overview_daily_stats`, `usage_aggregation_checkpoints` | Milliseconds; raw payloads encrypted |
 | Pricing | `model_prices`, `model_price_versions`, `pricing_sync_state`, `pricing_model_catalog`, `pricing_catalog_state` | Versions are append-only via triggers |
 | Operations | `audit_events`, `ui_preferences`, `quota_snapshots`, `schema_migrations` | Audit has no update or delete path — only `RecordAuditEvent` writes and read queries exist, and export itself is audited; the schema carries no enforcement trigger, so the guarantee lives in the repository API |
+The management system surface is five routes: `GET /management/system` (the page),
+`GET /management/system/releases` (one product's merged change log), `POST
+/management/system/check-updates` (a check, subject to the floor), `GET
+/management/system/maintenance` (the running or last job) and `POST
+/management/system/maintenance/{checkpoint,vacuum}`. The check answers `200` with the two
+products' states and `served_from_cache`; a maintenance POST answers `202` on admission,
+`409` when a job is already running, `507` when a rebuild cannot be admitted for space, and
+`503` once the service is shutting down. Every one of them answers `503` when the handler was
+built without the corresponding service, which is how a deployment that does not offer the
+surface behaves.
+
 | Release observation | `release_index`, `release_check_state` | Migrations 024 and 025; `truncated` is added by 025, so a database that applied 024 before it existed still gains the column. Metadata only — a release's prose body is never stored (see §10); the index is replaced as a unit per product, so a source change cannot interleave two feeds |
 
 Migrations are embedded from `migrations/` and applied in filename order inside
@@ -1118,7 +1129,7 @@ however it starts, because a first-keyword classifier cannot see past the first
 statement at all. Each of those refusals costs one wait during a rebuild; the direction
 that would be cheap is the direction that can terminate the process.
 
-Five properties of the arrangement are load-bearing:
+Seven properties of the arrangement are load-bearing:
 
 - Maintenance runs on a context marked as the holder's own (`withMaintenanceContext`),
   because a maintenance statement that passed the gate again would queue behind the
@@ -1141,8 +1152,11 @@ Five properties of the arrangement are load-bearing:
 - The gate's row wrappers forward the driver's optional column-metadata interfaces and
   assert that at compile time, because a wrapper satisfying only `driver.Rows` compiles
   while silently discarding what the driver reports about each column's type.
-- The gate is per database rather than per process, so a rebuild in one database cannot
-  stall writes to another; every pool over one file shares that file's gate.
+- The gate belongs to one `repository.DB` rather than to the process, so a rebuild in one
+  database cannot stall writes to another. Every pool derived from that same `DB` shares its
+  gate — which is what the maintenance service relies on — while two separate `Open` calls over
+  the same file keep separate gates and are therefore not mutually exclusive. That is the
+  contract the code implements, and a deployment runs one `Open`.
 - Job status lives in memory (`MaintenanceService`), not in a table. A status endpoint
   that read the database could not answer while a job held the connection — which is
   exactly when an operator asks. The service owns a context derived from the

@@ -124,9 +124,14 @@ func Open(ctx context.Context, databasePath string, options ...OpenOption) (*DB,
 	// query (notably file::memory:?cache=shared).
 	registerGatedDriver()
 	dsn := gatedDSN(databasePath)
-	// One gate per database. Every pool that opens this same file - the application pool
-	// and the maintenance service's own connection - receives this gate, so they exclude
-	// each other without excluding an unrelated database.
+	// One gate per DB. Every pool derived from this value - the application pool and the
+	// maintenance service's own connection - receives the same gate, so they exclude each
+	// other while a different database is unaffected.
+	//
+	// The boundary is the DB value rather than the file path: two separate Open calls over
+	// the same path each get their own gate and would not exclude each other. That is
+	// deliberate and cheap to rely on, because a process runs one Open; stating it here keeps
+	// the contract honest instead of implying a per-path registry that does not exist.
 	gate := &writeGate{}
 	database := openGatedPool(dsn, gate)
 	database.SetMaxOpenConns(1)

@@ -182,9 +182,19 @@ export async function systemInformationPage({ base, page, check }) {
   // Every request the page makes to a host that is not its own origin. Recorded from the
   // first navigation, so a request issued while expanding the log is captured too.
   const offOriginRequests = [];
+  // Compared by origin rather than by the console's path prefix: the dev server serves the
+  // module graph from `/src/...` and the entry from `/omc/`, so a prefix test would treat the
+  // application's own source as a third party.
+  const ownOrigin = new URL(base).origin;
   page.on('request', (request) => {
     const url = request.url();
-    if (url.startsWith(base) || url.startsWith('data:') || url.startsWith('blob:')) return;
+    if (url.startsWith('data:') || url.startsWith('blob:')) return;
+    try {
+      if (new URL(url).origin === ownOrigin) return;
+    } catch {
+      // A URL the parser rejects cannot be a host this page asked for.
+      return;
+    }
     offOriginRequests.push(url);
   });
 
@@ -383,8 +393,30 @@ export async function systemInformationNarrow({ base, page, check }) {
   await page.addInitScript(() => window.localStorage.setItem('omc-lang', 'ms'));
   await page.goto(`${base}/system`, { waitUntil: 'domcontentloaded' });
   await page.locator('.system-page').waitFor({ timeout: 20_000 });
-  // Let the version check and its rendering settle before measuring.
-  await page.waitForTimeout(1500);
+
+  // F7: the Malay catalog must actually be in force. The preference is stored, but a catalog
+  // that failed to load leaves the console reading its default language and the geometry checks
+  // would then measure Simplified Chinese while believing they measured the longest strings.
+  const documentLocale = await page.evaluate(() => document.documentElement.lang);
+  check(
+    'the narrow probe renders the Malay catalog',
+    documentLocale === 'ms-MY',
+    `documentElement.lang=${documentLocale}`,
+  );
+
+  // Wait for the product and version rows the measurement depends on, and for the initial update
+  // check to finish, rather than sleeping and hoping. A card count alone proves only that four
+  // empty containers exist.
+  //
+  // The timeout is not swallowed: a layout that never settles should fail here rather than let
+  // the geometry assertions measure an empty page and pass.
+  await until(
+    async () =>
+      (await page.locator('[data-testid="sys-product-header"]').count()) >= 2 &&
+      (await page.locator('[data-testid="sys-version-row"]').count()) >= 2 &&
+      (await page.locator('.system-page .ant-btn-loading').count()) === 0,
+    { label: 'the settled system version layout', timeoutMs: 15_000 },
+  );
 
   const result = await page.evaluate(() => {
     const doc = document.documentElement;

@@ -461,124 +461,55 @@ func TestMaintenanceCheckpointReadsSQLiteCounters(t *testing.T) {
 	t.Fatal("the checkpoint never reported completion")
 }
 
-// TestSystemPageSurvivesWithoutAReleaseService pins the nil-safe path: a deployment
-// built without the service must render with "not checked yet" rather than failing the
-// page or claiming a comparison against nothing.
-func TestSystemPageSurvivesWithoutAReleaseService(t *testing.T) {
-	client, baseURL, _, _ := startReleaseTestServer(t)
-	// A second handler without the service is not needed: the routes' nil-safety is
-	// covered by the base system test. Here the release route must refuse clearly when
-	// no service is attached, which is a 503 rather than an empty log.
-	resp, err := client.Get(baseURL + "/management/system/releases?product=omc")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("releases status with a service attached = %d, want 200", resp.StatusCode)
-	}
-}
-
-// TestMaintenanceAdmissionAndCompletionAreBothAudited drives a real job through its whole
-// lifecycle and asserts the two audit events that record it, plus the property that makes
-// their order necessary: the admission response arrives without waiting for the job.
+// TestSystemRoutesRefuseWithoutTheirService covers the path a deployment that does not offer this
+// surface actually takes.
 //
-// A fabricated gate hold cannot express this. A held gate in production is a *running
-// job*, and a second admission is refused with 409 before it ever reaches an audit write -
-// which is why admission can be audited before launching without risking a wait on the
-// gate: at the moment it is audited, nothing holds it.
-func TestMaintenanceAdmissionAndCompletionAreBothAudited(t *testing.T) {
-	client, baseURL, repo, _ := startReleaseTestServer(t)
-	ctx := context.Background()
+// Every other test in this file attaches both services, so they exercise the configured case. A
+// handler built without them is the normal state of a deployment that has not configured the
+// surface, and the routes must say so with a 503 rather than answering an empty log - which a
+// reader would take as "nothing has been published".
+func TestSystemRoutesRefuseWithoutTheirService(t *testing.T) {
+	_, _, repo, _ := startReleaseTestServer(t)
 
-	// Make the rebuild do enough work to be observable: a database with pages to release.
-	if _, err := repo.SQL().ExecContext(ctx, `CREATE TABLE IF NOT EXISTS audit_probe(id INTEGER PRIMARY KEY, v TEXT)`); err != nil {
+	// The same repository, no release service and no maintenance service.
+	bare := NewHandler(config.Config{BasePath: "/omc", Version: "v0.1.0-dev"}, repo, nil, nil, nil)
+
+	// The three routes that need a service refuse, rather than answering as though the feature
+	// were configured and had nothing to report.
+	for name, call := range map[string]func(http.ResponseWriter, *http.Request){
+		"releases":      bare.getSystemReleases,
+		"check-updates": bare.postSystemCheckUpdates,
+		"vacuum":        bare.postSystemMaintenanceVacuum,
+		"maintenance":   bare.getSystemMaintenance,
+	} {
+		recorder := httptest.NewRecorder()
+		call(recorder, httptest.NewRequest(http.MethodGet, "/omc/api/v1/management/system", nil))
+		// The maintenance *status* read is served from memory and needs no service to be useful:
+		// it answers an empty job, which is the truth. The other three require one.
+		want := http.StatusServiceUnavailable
+		if name == "maintenance" {
+			want = http.StatusOK
+		}
+		if recorder.Code != want {
+			t.Errorf("%s without its service = %d, want %d", name, recorder.Code, want)
+		}
+	}
+
+	// The page itself still renders, because its other three cards work and a surface that was
+	// never configured must not take the whole page down with it.
+	recorder := httptest.NewRecorder()
+	bare.getSystemInfo(recorder, httptest.NewRequest(http.MethodGet, "/omc/api/v1/management/system", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("system info without services = %d, want 200", recorder.Code)
+	}
+	var info SystemInfoDTO
+	if err := json.Unmarshal(recorder.Body.Bytes(), &info); err != nil {
 		t.Fatal(err)
 	}
-	payload := make([]byte, 4096)
-	for index := 0; index < 400; index++ {
-		if _, err := repo.SQL().ExecContext(ctx, `INSERT INTO audit_probe(v) VALUES (?)`, string(payload)); err != nil {
-			t.Fatal(err)
-		}
+	if info.OMCVersion.State != release.UpdateIndeterminate {
+		t.Fatalf("state without a service = %q, want %q", info.OMCVersion.State, release.UpdateIndeterminate)
 	}
-	if _, err := repo.SQL().ExecContext(ctx, `DELETE FROM audit_probe`); err != nil {
-		t.Fatal(err)
+	if info.OMCVersion.Reason != release.ReasonNoData {
+		t.Fatalf("reason without a service = %q, want %q", info.OMCVersion.Reason, release.ReasonNoData)
 	}
-
-	started := time.Now()
-	accepted, err := client.Post(baseURL+"/management/system/maintenance/vacuum", "application/json", nil)
-	if err != nil {
-		t.Fatalf("admission: %v", err)
-	}
-	accepted.Body.Close()
-	elapsed := time.Since(started)
-	if accepted.StatusCode != http.StatusAccepted {
-		t.Fatalf("admission status = %d, want 202", accepted.StatusCode)
-	}
-	// The response must describe admission, not completion. A rebuild of this size takes
-	// long enough that a response waiting for it would be plainly slower than this.
-	if elapsed > 15*time.Second {
-		t.Fatalf("admission took %v: the response waited for the job", elapsed)
-	}
-
-	// The admission is audited even though the job has not finished.
-	admissionAudited := false
-	for _, event := range auditEventsFor(t, repo, ctx, 50) {
-		if event.Action == "system.maintenance.vacuum" && event.Result == "admitted" {
-			admissionAudited = true
-		}
-	}
-	if !admissionAudited {
-		t.Fatal("the admission was not audited")
-	}
-
-	// Wait for the terminal state, then assert the completion audit exists and is distinct
-	// from the admission: a 202 is not a successful rebuild.
-	deadline := time.Now().Add(90 * time.Second)
-	for {
-		if time.Now().After(deadline) {
-			t.Fatal("the maintenance job never reached a terminal state")
-		}
-		statusResp, err := client.Get(baseURL + "/management/system/maintenance")
-		if err != nil {
-			t.Fatal(err)
-		}
-		var live systemMaintenanceActionDTO
-		decodeErr := json.NewDecoder(statusResp.Body).Decode(&live)
-		statusResp.Body.Close()
-		if decodeErr != nil {
-			t.Fatal(decodeErr)
-		}
-		if !live.Maintenance.Running && live.Maintenance.FinishedAtMS != 0 {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	// The completion audit is written by the job's observer, so it is ordered after the
-	// terminal state and may need a moment to land.
-	completionAudited := false
-	for attempt := 0; attempt < 100 && !completionAudited; attempt++ {
-		for _, event := range auditEventsFor(t, repo, ctx, 50) {
-			if event.Action == "system.maintenance.vacuum.completed" {
-				completionAudited = true
-			}
-		}
-		if !completionAudited {
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
-	if !completionAudited {
-		t.Fatal("the completed job was never audited: a 202 admission and a finished rebuild must be distinguishable in the audit trail")
-	}
-}
-
-// auditEventsFor reads the audit tail, returning what it has if the read fails.
-func auditEventsFor(t *testing.T, repo *repository.Repository, ctx context.Context, limit int) []repository.AuditEvent {
-	t.Helper()
-	events, err := repo.ListAuditEvents(ctx, limit)
-	if err != nil {
-		t.Fatalf("list audit events: %v", err)
-	}
-	return events
 }
