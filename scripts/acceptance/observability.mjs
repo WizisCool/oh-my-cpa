@@ -90,6 +90,29 @@ export async function runObservabilityAcceptance({
     },
   );
 
+  // A renewal read from the credential's id_token is a lower bound, not a verified
+  // date, so it carries the unverified marker and never a countdown; the live read
+  // for the other seats is the counter-example in the same page.
+  await checkEventually(
+    'quota renewal marks a credential-snapshot bound as unverified',
+    async () => {
+      const bound = page.locator('article[class*="quota-card"] [data-renewal-source="credential_snapshot"]');
+      if ((await bound.count()) === 0) return false;
+      return (await bound.first().innerText()).includes('≥');
+    },
+    { detail: async () => `snapshotCards=${await page.locator('[data-renewal-source="credential_snapshot"]').count()}` },
+  );
+  check(
+    'quota renewal live read is labelled as such',
+    (await page.locator('article[class*="quota-card"] [data-renewal-source="live_subscription"]').count()) > 0,
+    `liveCards=${await page.locator('[data-renewal-source="live_subscription"]').count()}`,
+  );
+  check(
+    'quota renewal marks an end-of-term seat',
+    (await page.locator('article[class*="quota-card"] [data-renewal-not-renewing]').count()) > 0,
+    `notRenewing=${await page.locator('[data-renewal-not-renewing]').count()}`,
+  );
+
   // Screenshot: Card Grid View with refreshed quota data
   await page.screenshot({ path: path.join(root, 'tmp', 'quota-cards-desktop.png') });
 

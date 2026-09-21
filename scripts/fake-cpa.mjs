@@ -32,7 +32,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       id: 'auth-e2e-1', auth_index: 'auth-index-e2e-1', name: 'fixture-auth.json', type: 'codex', provider: 'codex',
       label: 'Primary fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: false,
       email: 'owner@example.test', account_type: 'oauth', account: FAKE_ACCOUNT_SECRET,
-      id_token: { chatgpt_account_id: 'chatgpt-e2e-account', chatgpt_subscription_active_until: Math.floor((Date.now() + 24 * 86400000) / 1000), plan_type: 'pro' },
+      id_token: { chatgpt_account_id: 'chatgpt-e2e-account', chatgpt_subscription_active_until: Math.floor((Date.now() - 3 * 86400000) / 1000), plan_type: 'pro' },
       success: 12, failed: 1, recent_requests: [{ time: '2026-09-01T12:00:00Z', success: 12, failed: 1 }],
       models: [{ id: 'gpt-e2e', display_name: 'GPT E2E' }], priority: 1, weight: 1, note: 'deterministic fixture',
       prefix: 'team-a', proxy_url: '', disable_cooling: false, websockets: true, using_api: false, excluded_models: [],
@@ -61,6 +61,17 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       id: 'auth-e2e-virtual', auth_index: 'auth-index-e2e-virtual', name: 'virtual-runtime.json', type: 'codex', provider: 'codex',
       label: 'Virtual fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: true,
       success: 0, failed: 0, models: [], priority: 0, weight: 1,
+    },
+    // A second codex credential whose live subscription read this fixture refuses, so
+    // the quota card's unverified-snapshot rendering is reached by an ordinary run
+    // rather than only when a real provider read happens to fail. Its id_token window
+    // is deliberately in the past, which is the state the report described.
+    {
+      id: 'auth-e2e-8', auth_index: 'auth-index-e2e-8', name: 'codex-snapshot-only.json', type: 'codex', provider: 'codex',
+      label: 'Snapshot-only fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: false,
+      email: 'snapshot@example.test', account_type: 'oauth',
+      id_token: { chatgpt_account_id: 'chatgpt-e2e-snapshot', chatgpt_subscription_active_until: Math.floor((Date.now() - 3 * 86400000) / 1000), plan_type: 'plus' },
+      success: 1, failed: 0, models: [{ id: 'gpt-e2e', display_name: 'GPT E2E' }], priority: 1, weight: 1,
     },
     // One credential per brand-mark path the provider filters have to draw: a
     // built-in the console's catalog carries (Devin), and one owned by a plugin
@@ -364,6 +375,30 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
         body = JSON.parse(requests[requests.length - 1].body || '{}');
       } catch {}
       const targetURL = body.url || '';
+      // The subscription probe is scoped per credential. One codex credential answers
+      // it (exercising a live read) and the other reports the upstream failure, so the
+      // unverified-snapshot path is covered in the same run.
+      if (targetURL.includes('backend-api/subscriptions')) {
+        if ((body.auth_index || '') === 'auth-index-e2e-8') {
+          json(response, 200, {
+            status_code: 503,
+            header: { 'content-type': ['application/json'] },
+            body: { error: 'subscription read unavailable' },
+          });
+          return;
+        }
+        json(response, 200, {
+          status_code: 200,
+          header: { 'content-type': ['application/json'] },
+          body: {
+            plan_type: 'pro',
+            active_start: new Date(Date.now() - 21 * 86400000).toISOString(),
+            active_until: new Date(Date.now() + 21 * 86400000).toISOString(),
+            will_renew: false,
+          },
+        });
+        return;
+      }
       if (targetURL.includes('rate-limit-reset-credits/consume') || targetURL.includes('reset_credits/consume')) {
         json(response, 200, { status_code: 200, header: { 'content-type': ['application/json'] }, body: { status: 'ok' } });
         return;

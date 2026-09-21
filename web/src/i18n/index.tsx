@@ -1506,6 +1506,16 @@ const DICT: Record<string, [string, string]> = {
   'quota.empty': ['暂无认证凭据或配额数据', 'No credentials or quota data available'],
   'quota.col_plan': ['套餐', 'Plan'],
   'quota.col_renewal': ['续期时间', 'Renewal'],
+  'quota.renewal_snapshot': ['未实时核实', 'not verified live'],
+  'quota.renewal_snapshot_hint': [
+    '来自凭据 id_token 的订阅快照，上游只会将它向后推移，因此这是实际续期时间的下界；刷新时若实时订阅接口可用会自动核实。',
+    'Read from the credential id_token subscription snapshot. Upstream only moves this window forward, so it is a lower bound on the real renewal; a refresh verifies it live when the subscription endpoint answers.',
+  ],
+  'quota.renewal_not_renewing': ['不再自动续期', 'will not auto-renew'],
+  'quota.renewal_not_renewing_hint': [
+    '上游返回 will_renew=false：该订阅到期后不会自动续期，到期日即为实际失效时间。',
+    'Upstream reports will_renew=false: the subscription will not renew, so the end date is when access actually stops.',
+  ],
   'quota.col_reset_count': ['重置次数', 'Resets'],
   'quota.windows_title': ['限额信息', 'Usage limits'],
   'quota.reset_expiry_title': ['主动重置过期时间', 'Manual reset expiry'],

@@ -31,6 +31,22 @@ const demoRefusal = "demo mode: this operation is not available in the public de
 // like a deployment rather than like whatever port was free.
 const fixtureListenAddr = "127.0.0.1:8317"
 
+// subscriptionUnavailable names the demonstration credentials whose live
+// subscription read the fixture refuses, so the quota card's
+// unverified-snapshot rendering has browser coverage even though a real
+// deployment only reaches that branch when a provider read fails.
+var subscriptionUnavailable = map[string]bool{
+	"auth-codex-02": true,
+}
+
+// subscriptionNotRenewing names the demonstration credentials upstream reports as
+// not auto-renewing. Like subscriptionUnavailable it is here to keep a rendering
+// branch reachable: an end-of-term seat is otherwise only observable by waiting for
+// a real subscription to lapse.
+var subscriptionNotRenewing = map[string]bool{
+	"auth-codex-01": true,
+}
+
 // Upstream is an in-process stand-in for a CLIProxyAPI management endpoint.
 //
 // It exists so the demo can reuse every existing read path - the console talks
@@ -433,19 +449,52 @@ func (u *Upstream) serveLogs(writer http.ResponseWriter, request *http.Request) 
 // and every other provider host.
 func (u *Upstream) serveAPICall(writer http.ResponseWriter, request *http.Request) {
 	var payload struct {
-		URL string `json:"url"`
+		URL       string `json:"url"`
+		AuthIndex string `json:"auth_index"`
 	}
 	if err := decodeFixtureJSON(request, &payload); err != nil {
 		writeFixtureJSON(writer, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	target := strings.TrimSpace(payload.URL)
+	// The catalogue is keyed by endpoint, so a read carrying a scoping query (the
+	// Codex subscription probe sends account_id) still resolves to that endpoint's
+	// fixture body. Stripping the query cannot widen what is answered: the request
+	// is resolved against the catalogue and never dialled either way.
+	if index := strings.IndexAny(target, "?#"); index >= 0 {
+		target = target[:index]
+	}
+	// One demonstration credential has no live subscription read. It exists so the
+	// quota card's unverified-snapshot rendering is exercised by browser acceptance,
+	// instead of that branch being reachable only when a real provider read fails.
+	if target == codexSubscriptionURL && subscriptionUnavailable[payload.AuthIndex] {
+		// CPA reports an upstream failure inside a 200 envelope, so the fixture has to
+		// fail the same way rather than through the HTTP status.
+		writeFixtureJSON(writer, http.StatusOK, map[string]any{
+			"status_code": http.StatusServiceUnavailable,
+			"header":      map[string][]string{"Content-Type": {"application/json"}},
+			"body":        `{"error":"subscription read unavailable"}`,
+		})
+		return
+	}
 	body, ok := u.fixture.quota[target]
 	if !ok {
 		writeFixtureJSON(writer, http.StatusForbidden, map[string]any{
 			"error": "demo mode: no upstream request is performed",
 		})
 		return
+	}
+	// The renewal answer is per credential, so one page shows both the seat that
+	// renews and the seat that ends at its term.
+	if target == codexSubscriptionURL {
+		if row, isRow := body.(map[string]any); isRow {
+			marked := make(map[string]any, len(row)+1)
+			for key, value := range row {
+				marked[key] = value
+			}
+			marked["will_renew"] = !subscriptionNotRenewing[payload.AuthIndex]
+			body = marked
+		}
 	}
 	encoded, err := json.Marshal(body)
 	if err != nil {

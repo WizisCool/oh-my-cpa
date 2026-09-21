@@ -18,6 +18,7 @@ import { QuotaProgressBar } from './QuotaProgressBar';
 import {
   formatGmtOffsetLabel,
   formatObservedAgo,
+  formatSnapshotRenewalBound,
   formatTimeWithCountdown,
 } from './quotaFormat';
 import styles from './QuotaPage.module.css';
@@ -106,6 +107,11 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
   const creditSupported = item.capabilities.reset_credit_supported;
   const canRedeem = creditSupported && availableCredits > 0 && !item.disabled;
 
+  // A snapshot-sourced expiry is a lower bound on the real renewal instant, so
+  // it must not be presented as a verified date. Legacy snapshots carry no
+  // provenance and keep the previous rendering.
+  const isSnapshotBound = item.plan?.expires_source === 'credential_snapshot';
+
   const creditRows = (item.reset_credits?.credits ?? [])
     .filter((c) => c.expires_at_ms)
     .sort((a, b) => (a.expires_at_ms ?? 0) - (b.expires_at_ms ?? 0));
@@ -170,11 +176,33 @@ export const QuotaCard: React.FC<QuotaCardProps> = ({
             </span>
           )}
           {item.plan?.expires_at_ms && (
-            <span className={styles['meta-item']}>
+            <span
+              className={styles['meta-item']}
+              data-renewal-source={item.plan.expires_source ?? 'unknown'}
+            >
               <span className={styles['meta-label']}>{t('quota.col_renewal')}</span>
               <span className={styles['meta-value']}>
-                {formatTimeWithCountdown(item.plan.expires_at_ms, nowMS, t)}
+                {isSnapshotBound
+                  ? formatSnapshotRenewalBound(item.plan.expires_at_ms)
+                  : formatTimeWithCountdown(item.plan.expires_at_ms, nowMS, t)}
               </span>
+              {isSnapshotBound && (
+                <span
+                  className={styles['meta-tag']}
+                  title={t('quota.renewal_snapshot_hint')}
+                >
+                  {t('quota.renewal_snapshot')}
+                </span>
+              )}
+              {item.plan.auto_renews === false && (
+                <span
+                  className={styles['meta-tag']}
+                  data-renewal-not-renewing="true"
+                  title={t('quota.renewal_not_renewing_hint')}
+                >
+                  {t('quota.renewal_not_renewing')}
+                </span>
+              )}
             </span>
           )}
           {item.reset_credits && (

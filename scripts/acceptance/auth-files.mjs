@@ -57,7 +57,8 @@ export async function runAuthFilesAcceptance({
     await codexTab.click();
     await checkEventually(
       'auth-files provider tab filters to Codex',
-      async () => (await page.locator('.auth-files-page .ant-card').count()) === 2,
+      // Three fixture credentials are Codex: two real seats plus the runtime-only one.
+      async () => (await page.locator('.auth-files-page .ant-card').count()) === 3,
       { detail: async () => `count=${await page.locator('.auth-files-page .ant-card').count()}` },
     );
     const allTab = page.locator('.auth-files-page .ant-tabs-tab').first();

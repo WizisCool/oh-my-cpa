@@ -82,6 +82,12 @@ func credentialCatalog() []credential {
 			success: 288, failed: 4, priority: 4, weight: 2,
 		},
 		{
+			name: "codex-billing-target.json", authIndex: "auth-codex-04", kind: "codex", provider: "codex",
+			label: "Codex · billing target", email: "billing@acme-labs.example", accountType: "oauth", plan: "pro",
+			models:  []string{"gpt-5-codex", "gpt-5"},
+			success: 611, failed: 9, priority: 3, weight: 2, note: "seat the team is migrating onto",
+		},
+		{
 			name: "codex-standby.json", authIndex: "auth-codex-03", kind: "codex", provider: "codex",
 			label: "Codex · standby", email: "backup@acme-labs.example", accountType: "oauth", plan: "free",
 			models:  []string{"gpt-5"},
@@ -575,6 +581,13 @@ func quotaPayloads(now time.Time) map[string]any {
 				{"id": "credit-02", "status": "available", "reset_type": "promotional", "granted_at": now.Add(-2 * 24 * time.Hour).Format(time.RFC3339), "expires_at": now.Add(28 * 24 * time.Hour).Format(time.RFC3339)},
 			},
 		},
+		codexSubscriptionURL: map[string]any{
+			"plan_type":     "pro",
+			"active_start":  now.Add(-21 * 24 * time.Hour).UTC().Format(time.RFC3339),
+			"active_until":  now.Add(21 * 24 * time.Hour).UTC().Format(time.RFC3339),
+			"will_renew":    true,
+			"is_delinquent": false,
+		},
 		claudeUsageURL: map[string]any{
 			"five_hour":        map[string]any{"utilization": 36.4, "resets_at": resetAt},
 			"seven_day":        map[string]any{"utilization": 58.1, "resets_at": weeklyReset},
@@ -634,7 +647,7 @@ func quotaPayloads(now time.Time) map[string]any {
 // helper so the upstream and its test agree on what is covered.
 func quotaPayloadKeys() []string {
 	return []string{
-		codexUsageURL, codexResetCreditsURL, claudeUsageURL, claudeProfileURL,
+		codexUsageURL, codexResetCreditsURL, codexSubscriptionURL, claudeUsageURL, claudeProfileURL,
 		kimiUsageURL, xaiUsageURL, antigravityUsageURL, devinUsageURL,
 	}
 }
@@ -649,6 +662,7 @@ func quotaPayloadKeys() []string {
 const (
 	codexUsageURL        = "https://chatgpt.com/backend-api/wham/usage"
 	codexResetCreditsURL = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"
+	codexSubscriptionURL = "https://chatgpt.com/backend-api/subscriptions"
 	claudeUsageURL       = "https://api.anthropic.com/api/oauth/usage"
 	claudeProfileURL     = "https://api.anthropic.com/api/oauth/profile"
 	kimiUsageURL         = "https://api.kimi.com/coding/v1/usages"

@@ -108,6 +108,17 @@
   text-overflow: ellipsis;
 }
 
+/* Marks a value that is a bound rather than a verified reading, so "≥" and the
+   tag are read as one qualifier instead of two competing notes. */
+.meta-tag {
+  color: var(--meta);
+  font-size: 10px;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: help;
+  white-space: nowrap;
+}
+
 /* ── Provider filter tabs (CPAMC-style underline row) ── */
 .filter-tabs {
   display: flex;

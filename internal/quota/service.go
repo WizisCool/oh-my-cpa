@@ -17,6 +17,7 @@ import (
 // Official Upstream URLs
 const (
 	CodexUsageURL              = "https://chatgpt.com/backend-api/wham/usage"
+	CodexSubscriptionURL       = "https://chatgpt.com/backend-api/subscriptions"
 	CodexRedeemCreditURL       = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume"
 	CodexResetCreditsURL       = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"
 	ClaudeProfileURL           = "https://api.anthropic.com/api/oauth/profile"
@@ -45,6 +46,7 @@ const (
 // AllowedURLPrefixes strictly limits which upstream domains and endpoints may be called via CPA api-call.
 var AllowedURLPrefixes = []string{
 	"https://chatgpt.com/backend-api/wham/",
+	CodexSubscriptionURL,
 	"https://api.anthropic.com/api/oauth/",
 	"https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary",
 	"https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:retrieveUserQuotaSummary",
@@ -56,13 +58,36 @@ var AllowedURLPrefixes = []string{
 }
 
 // IsAllowedQuotaURL verifies that a target URL is in the strict quota allowlist.
+//
+// An entry ending in "/" names a family and matches by prefix; any other entry names
+// one endpoint and must end at a path boundary, so ".../usages" cannot admit
+// ".../usages-extra". A query or fragment is always allowed, because endpoints such
+// as the Codex subscription read are scoped by query parameter. Traversal segments
+// are refused outright: a request is normalized before it is sent, so "allowed/../other"
+// would otherwise walk an allowed prefix onto a different endpoint.
 func IsAllowedQuotaURL(targetURL string) bool {
-	parsed, err := url.Parse(strings.TrimSpace(targetURL))
+	trimmed := strings.TrimSpace(targetURL)
+	parsed, err := url.Parse(trimmed)
 	if err != nil || parsed.Scheme != "https" {
 		return false
 	}
+	for _, segment := range strings.Split(parsed.Path, "/") {
+		if segment == ".." || segment == "." {
+			return false
+		}
+	}
 	for _, prefix := range AllowedURLPrefixes {
-		if strings.HasPrefix(targetURL, prefix) {
+		if !strings.HasPrefix(trimmed, prefix) {
+			continue
+		}
+		if strings.HasSuffix(prefix, "/") {
+			return true
+		}
+		remainder := strings.TrimPrefix(trimmed, prefix)
+		// A query or fragment may follow a single-endpoint entry; a further path
+		// segment may not, which is what keeps ".../subscriptions" from admitting
+		// ".../subscriptions/extra".
+		if remainder == "" || strings.HasPrefix(remainder, "?") || strings.HasPrefix(remainder, "#") {
 			return true
 		}
 	}
@@ -364,16 +389,62 @@ func (s *Service) fetchCodexQuota(ctx context.Context, file management.AuthFile,
 		return nil, nil, nil, err
 	}
 
-	// The usage payload omits subscription expiry for most accounts, so fall
-	// back to the CPA-projected id_token claim (CPAMC's renewal source).
-	if plan != nil && plan.ExpiresAtMS == nil {
-		if untilMS, ok := file.CodexSubscriptionActiveUntil(); ok && untilMS > 0 {
-			plan.ExpiresAtMS = &untilMS
-		}
-	}
+	// Prefer the live subscription endpoint: it reports the current billing window,
+	// while the credential's id_token only carries the window recorded at its last
+	// upstream subscription check. The probe runs even when the usage payload
+	// supplied an expiry, because probing only ever replaces a less authoritative
+	// value with a fresher one.
+	s.applyCodexSubscription(ctx, file, headers, plan)
 
 	credits = s.fetchCodexResetCredits(ctx, file, headers, credits)
 	return plan, windows, credits, nil
+}
+
+// applyCodexSubscription fills in a Codex plan's renewal instant. The live
+// subscription endpoint is authoritative and wins whenever it answers; otherwise,
+// for a plan with no expiry yet, the credential's id_token claim is used and tagged
+// as a snapshot, because a token minted after the window it describes still carries
+// the older window. Callers render that tag as a lower bound instead of a verified
+// renewal date, and leave an unlabeled value alone rather than claiming a source.
+//
+// ExpiresLabel is derived text for the instant it was computed from, so it is
+// cleared on every reassignment: a label left behind by the usage payload would
+// otherwise describe a different expiry than the one this plan now carries.
+func (s *Service) applyCodexSubscription(ctx context.Context, file management.AuthFile, headers map[string]string, plan *QuotaPlan) {
+	if plan == nil {
+		return
+	}
+
+	// The endpoint answers 400 without account_id, so an unresolved account id skips
+	// the probe rather than issuing a call that cannot succeed.
+	if accountID := resolveCodexAccountID(file); accountID != "" {
+		target := CodexSubscriptionURL + "?account_id=" + url.QueryEscape(accountID)
+		if resp, err := s.SafeApiCall(ctx, file.AuthIndex, "GET", target, headers, ""); err == nil {
+			if body, errBody := resp.NormalizedBody(); errBody == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				if untilMS, shouldRenew, ok := ParseCodexSubscription(body); ok {
+					plan.ExpiresAtMS = &untilMS
+					plan.ExpiresLabel = ""
+					plan.ExpiresSource = PlanSourceLiveSubscription
+					plan.IsAutoRenewing = shouldRenew
+					return
+				}
+			}
+		}
+	}
+
+	// An expiry the usage payload already supplied stays as it is: it carries no
+	// verified provenance, and overwriting it with the snapshot would replace one
+	// unverified value with another while implying it came from the id_token. Its
+	// label still matches, because the instant is untouched.
+	if plan.ExpiresAtMS != nil {
+		return
+	}
+
+	if untilMS, ok := file.CodexSubscriptionActiveUntil(); ok && untilMS > 0 {
+		plan.ExpiresAtMS = &untilMS
+		plan.ExpiresLabel = ""
+		plan.ExpiresSource = PlanSourceCredentialSnapshot
+	}
 }
 
 // fetchCodexResetCredits queries the dedicated rate-limit-reset-credits
