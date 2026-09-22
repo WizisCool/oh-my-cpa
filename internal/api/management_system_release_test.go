@@ -9,6 +9,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -287,6 +288,18 @@ func TestReleaseEndpointRefusesAnUnknownProduct(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("unknown product status = %d, want 400", resp.StatusCode)
 	}
+	// The body is the contract, not only the status: a caller distinguishes "you asked for a
+	// product I do not serve" from "the request was malformed" by reading it, and an assertion on
+	// the status alone would pass against a refusal that said nothing or the wrong thing.
+	var refusal struct {
+		Error string `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&refusal); err != nil {
+		t.Fatalf("decode refusal: %v", err)
+	}
+	if refusal.Error != "unknown release product" {
+		t.Fatalf("refusal error = %q, want %q", refusal.Error, "unknown release product")
+	}
 }
 
 // TestMaintenanceEndpointRebuildsAndReportsMeasuredResult drives the whole write path:
@@ -391,29 +404,99 @@ func TestMaintenanceEndpointRebuildsAndReportsMeasuredResult(t *testing.T) {
 	}
 }
 
-// TestMaintenanceRefusesASecondJobWhileOneRuns pins the single-flight answer the page
-// relies on to keep its buttons coherent.
+// TestMaintenanceRefusesASecondJobWhileOneRuns asserts the route's refusal contract without a race.
+//
+// The previous version issued two real requests and accepted either 202 or 409, because a checkpoint
+// is fast enough that the second may arrive after the first finished. That assertion passes whether
+// or not the lock works - the failure it was meant to catch is invisible to it. The single-flight
+// state is a property of the service, which the repository tests cover directly, so what this test
+// owns is the handler's answer: given a service that reports a job already running, the route must
+// refuse with 409 and a body naming the reason.
 func TestMaintenanceRefusesASecondJobWhileOneRuns(t *testing.T) {
-	client, baseURL, _, _ := startReleaseTestServer(t)
+	_, _, repo, _ := startReleaseTestServer(t)
+	handler := NewHandler(config.Config{BasePath: "/omc", Version: "v0.1.0-dev"}, repo, nil, nil, nil)
+	handler.SetMaintenance(stubMaintenanceManager{
+		reserveErr: repository.ErrMaintenanceRunning,
+	})
 
-	first, err := client.Post(baseURL+"/management/system/maintenance/checkpoint", "application/json", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	first.Body.Close()
+	recorder := httptest.NewRecorder()
+	handler.postSystemMaintenanceCheckpoint(recorder, httptest.NewRequest(
+		http.MethodPost, "/omc/api/v1/management/system/maintenance/checkpoint", nil))
 
-	// A checkpoint is quick, so the second request may legitimately arrive after the
-	// first finished. Only a 409 is meaningful evidence here; anything else means the
-	// gate let it through, which is also correct.
-	second, err := client.Post(baseURL+"/management/system/maintenance/checkpoint", "application/json", nil)
-	if err != nil {
-		t.Fatal(err)
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("status = %d for a service reporting a running job, want 409", recorder.Code)
 	}
-	defer second.Body.Close()
-	if second.StatusCode != http.StatusAccepted && second.StatusCode != http.StatusConflict {
-		t.Fatalf("second maintenance status = %d, want 202 or 409", second.StatusCode)
+	var refusal struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &refusal); err != nil {
+		t.Fatalf("decode refusal: %v", err)
+	}
+	if refusal.Error != "a maintenance job is already running" {
+		t.Fatalf("refusal error = %q, want the single-flight reason", refusal.Error)
 	}
 }
+
+// TestMaintenanceRefusesAnUndersizedDisk is the other admission refusal, and it is the one an
+// operator acts on: the message names the measured requirement rather than only a status code.
+func TestMaintenanceRefusesAnUndersizedDisk(t *testing.T) {
+	_, _, repo, _ := startReleaseTestServer(t)
+	handler := NewHandler(config.Config{BasePath: "/omc", Version: "v0.1.0-dev"}, repo, nil, nil, nil)
+	handler.SetMaintenance(stubMaintenanceManager{
+		reserveErr: fmt.Errorf("%w: 1000 bytes available, 4096 required", repository.ErrInsufficientDiskSpace),
+	})
+
+	recorder := httptest.NewRecorder()
+	handler.postSystemMaintenanceVacuum(recorder, httptest.NewRequest(
+		http.MethodPost, "/omc/api/v1/management/system/maintenance/vacuum", nil))
+
+	if recorder.Code != http.StatusInsufficientStorage {
+		t.Fatalf("status = %d for an undersized disk, want 507", recorder.Code)
+	}
+	var refusal struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &refusal); err != nil {
+		t.Fatal(err)
+	}
+	// The measured numbers are the point: the operator learns how much space is needed, which a
+	// generic "could not start" would withhold.
+	if !strings.Contains(refusal.Error, "required") {
+		t.Fatalf("refusal error = %q, want it to name the measured requirement", refusal.Error)
+	}
+}
+
+// stubMaintenanceManager stands in for the service so the handler's refusals can be asserted without
+// racing a real job.
+type stubMaintenanceManager struct {
+	reserveErr error
+}
+
+func (s stubMaintenanceManager) Status() repository.MaintenanceStatus {
+	return repository.MaintenanceStatus{}
+}
+
+func (s stubMaintenanceManager) StartCheckpoint(context.Context) (repository.MaintenanceStatus, error) {
+	return repository.MaintenanceStatus{}, s.reserveErr
+}
+
+func (s stubMaintenanceManager) StartVacuum(context.Context) (repository.MaintenanceStatus, error) {
+	return repository.MaintenanceStatus{}, s.reserveErr
+}
+
+func (s stubMaintenanceManager) Admission() repository.MaintenanceAdmission {
+	return repository.MaintenanceAdmission{Allowed: true}
+}
+
+func (s stubMaintenanceManager) Reserve(context.Context, string) (repository.MaintenanceStatus, repository.MaintenanceReservation, error) {
+	return repository.MaintenanceStatus{}, 0, s.reserveErr
+}
+
+func (s stubMaintenanceManager) Launch(context.Context, repository.MaintenanceReservation) error {
+	return nil
+}
+
+func (s stubMaintenanceManager) Release(context.Context, repository.MaintenanceReservation) {}
 
 func TestMaintenanceCheckpointReadsSQLiteCounters(t *testing.T) {
 	client, baseURL, _, _ := startReleaseTestServer(t)
