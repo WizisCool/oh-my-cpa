@@ -523,9 +523,15 @@ export const SystemPage: React.FC = () => {
   // takes over the reading position.
   const closeChangelog = () => setExpandedProduct(null);
   useOverlayHistory({ isOpen: expandedProduct !== null, onClose: closeChangelog });
-  // The product whose log is shown. It is kept after the close begins so the drawer's own
-  // exit animation still has something to render, which is why `open` and this are separate.
-  const changelogProduct = expandedProduct;
+
+  // The product whose log the drawer renders, retained across the close so the exit animation has
+  // something to draw. `expandedProduct` cannot serve: it goes null the moment the close begins, so
+  // the panel would blank mid-animation and its title would fall back to the other product. A ref
+  // holds the last non-null value; the comment above `open` exists because `open` and this are
+  // deliberately different values, not the same one under two names.
+  const lastChangelogProductRef = useRef<ReleaseProduct | null>(null);
+  if (expandedProduct !== null) lastChangelogProductRef.current = expandedProduct;
+  const changelogProduct = expandedProduct ?? lastChangelogProductRef.current;
 
   if (isLoading) {
     return (
@@ -928,7 +934,7 @@ export const SystemPage: React.FC = () => {
         // rendered geometry are what settle it.
         size="min(760px, 100vw)"
         title={t('sys.changelog_title', {
-          product: expandedProduct === 'cpa' ? t('sys.cpa_version') : t('sys.omc_version'),
+          product: changelogProduct === 'cpa' ? t('sys.cpa_version') : t('sys.omc_version'),
         })}
       >
         {changelogProduct && <ProductChangelog product={changelogProduct} />}
