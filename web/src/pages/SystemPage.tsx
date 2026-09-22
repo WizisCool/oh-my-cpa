@@ -921,6 +921,11 @@ export const SystemPage: React.FC = () => {
       <Drawer
         open={expandedProduct !== null}
         onClose={closeChangelog}
+        // `size` rather than `width`: antd declares `size?: sizeType | number | string`, and a string
+        // here is applied as the panel's own `width` style - measured at exactly 760px on a desktop
+        // viewport and 390px on a phone. It also matches the two other drawers in this console, which
+        // use the same spelling. A reviewer has twice read this as an invalid prop; the type and the
+        // rendered geometry are what settle it.
         size="min(760px, 100vw)"
         title={t('sys.changelog_title', {
           product: expandedProduct === 'cpa' ? t('sys.cpa_version') : t('sys.omc_version'),
