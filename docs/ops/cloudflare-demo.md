@@ -128,9 +128,23 @@ One-time setup, in the Cloudflare console:
 2. Create the Worker `oh-my-cpa-demo`, connect it to this repository, and set the
    production branch to `master`.
 3. **Disable non-production branch builds**, so a pull request deploys nothing. The
-   demonstration follows `master` and has no preview deployments by design.
-4. Set the build command to `pnpm install --frozen-lockfile && pnpm check:demo && pnpm test:demo && pnpm build:demo`,
-   and the deploy command to `pnpm exec wrangler deploy --config deploy/cloudflare/wrangler.jsonc`.
+   demonstration follows `master` and has no preview deployments by design. Leave the
+   non-production deploy command empty and turn preview URLs off as well: a preview URL is
+   built as `<version-prefix>-<worker-name>.<account-subdomain>.workers.dev`, so enabling
+   them would publish the demonstration under the account-level subdomain that
+   `workers_dev: false` exists to keep it off.
+4. Set the build command to `pnpm build && pnpm check:demo && pnpm build:demo`, and the deploy
+   command to `pnpm exec wrangler deploy --config deploy/cloudflare/wrangler.jsonc`.
+
+   `pnpm build` is the part that is easy to leave out and cannot be: the built console's
+   `assets/` directory is gitignored, so a fresh clone has `internal/web/dist/index.html`
+   and nothing it references. `build:demo` stages what `pnpm build` produced rather than
+   building it, so without the first command the deployment serves a blank page whose
+   scripts 404. Verified in a fresh clone: `pnpm build` takes about 37s there.
+
+   `pnpm install` is not part of it because Workers Builds installs dependencies itself,
+   using the `packageManager` field and `.nvmrc` this repository already pins. No build
+   variables are needed for the same reason.
 
 The build runs on Node only. The dataset is committed, so Cloudflare never needs Go, a
 browser or a database; generation and browser verification happen in development and in
