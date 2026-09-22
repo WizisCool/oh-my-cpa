@@ -215,7 +215,10 @@ func gatewayKeyCatalog() []gatewayKey {
 	return []gatewayKey{
 		{value: "omc-demo-key-platform", alias: "platform-services", usageWeight: 5},
 		{value: "omc-demo-key-ci", alias: "ci-pipelines", usageWeight: 3},
-		{value: "omc-demo-key-laptop", alias: "junze · laptop", usageWeight: 2},
+		// The alias is rendered in the request list, and the demonstration is public, so
+		// it names a role rather than a person: an operator's own device name here would
+		// put their identity on a page anyone can open.
+		{value: "omc-demo-key-laptop", alias: "personal-laptop", usageWeight: 2},
 		{value: "omc-demo-key-eval", alias: "eval-harness", usageWeight: 1},
 	}
 }
