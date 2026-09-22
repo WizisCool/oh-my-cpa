@@ -33,11 +33,9 @@ Oh My CPA is a self-hosted control plane for [CLIProxyAPI](https://github.com/ro
 
 ## Live Demo
 
-**[oh-my-cpa-demo.vercel.app](https://oh-my-cpa-demo.vercel.app)** — the console, running on sample data.
+**[omc-demo.junze.dev](https://omc-demo.junze.dev)** — the console, running on sample data.
 
-No account, no key, nothing to install: open the link and the dashboard is there. It is served from a built-in sample — a year of traffic across eight providers and fourteen models — with the same routing policy the product ships: credential downloads, request logs, plugin execution and gateway configuration writes are refused, and the console says so.
-
-That link serves the last deployment made before the demonstration's hosting moved. The demonstration is now a Cloudflare Worker that deploys from `master`; the address changes at cutover, and `docs/ops/cloudflare-demo.md` records it.
+No account, no key, nothing to install: open the link and the dashboard is there. It is served from a built-in sample — a year of traffic across eight providers and fourteen models — with the same routing policy the product ships: credential downloads, request logs, plugin execution and gateway configuration writes are refused.
 
 The demo shows the console; it does not run the product. The frontend is the same bundle the binary embeds, and its API is answered from a dataset generated out of the real Go handlers — so every response has the shape a self-hosted install produces, but there is no gateway, database or capture pipeline behind it, and writes are refused rather than simulated. `docs/architecture.md` §13 and [ADR 0021](docs/adr/0021-the-public-demonstration-is-generated-data-behind-the-real-console.md) record why.
 

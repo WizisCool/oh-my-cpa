@@ -90,6 +90,11 @@ async function main() {
   await mkdir(STAGE, { recursive: true });
   await cp(SOURCE, STAGE, { recursive: true });
 
+  // The header rules live beside this deployment's config rather than in the built
+  // console, because they describe how this host should serve the console rather than
+  // anything about the console itself.
+  await cp(join(root, 'deploy', 'cloudflare', '_headers'), join(STAGE, '_headers'));
+
   const index = join(STAGE, 'index.html');
   const original = await readFile(index, 'utf8');
   await writeFile(index, rewriteHtml(original));

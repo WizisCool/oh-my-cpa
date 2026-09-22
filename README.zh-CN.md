@@ -33,11 +33,9 @@ Oh My CPA 是面向 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 
 
 ## 在线体验
 
-**[oh-my-cpa-demo.vercel.app](https://oh-my-cpa-demo.vercel.app)** —— 运行在内置样例数据上的控制台。
+**[omc-demo.junze.dev](https://omc-demo.junze.dev)** —— 运行在内置样例数据上的控制台。
 
 无需账号、无需密钥、无需安装：打开链接即可看到仪表盘。它由一份内置样例支撑（跨 8 个提供商、14 个模型的一年流量），因此各面板展示的是结构真实的数据；同时它运行在与正式部署完全相同的路由策略之后：凭据下载、请求日志、插件执行与网关配置写入都会被拒绝，控制台也会明确告知。
-
-该链接指向迁移前的最后一次部署。Demo 现在是一个从 `master` 自动部署的 Cloudflare Worker，切换后地址会变化，具体记录在 `docs/ops/cloudflare-demo.md`。
 
 Demo 展示的是控制台，而不是在运行产品本身：前端与二进制内嵌的是同一份构建产物，其 API 由真实 Go handler 生成的 dataset 提供 —— 因此每个响应都具备自托管部署所产生的形状，但其后没有网关、数据库或采集管道，写操作会被直接拒绝而非模拟。原因见 `docs/architecture.md` §13 与 [ADR 0021](docs/adr/0021-the-public-demonstration-is-generated-data-behind-the-real-console.md)。
 

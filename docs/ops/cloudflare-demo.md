@@ -109,6 +109,14 @@ thing to a measure of "this is the same console" that a test can make.
 
 ## Deploying
 
+The demonstration is served at **`omc-demo.junze.dev`**, as a Cloudflare custom domain.
+The `workers.dev` route is off in `wrangler.jsonc`, on purpose: that subdomain is
+account-level and derived from the account's identity, so leaving it on would publish the
+demonstration at an address carrying personal information. Both settings are stated in the
+config rather than configured once in the console, which means a deploy from a fresh clone
+reproduces the deployed state instead of quietly re-enabling the address that was turned
+off deliberately.
+
 The demonstration deploys from `master` through Cloudflare's Git integration (Workers
 Builds), which builds and deploys on push. **No repository secret is needed**: Cloudflare
 generates and manages the build's API token, which is what made this preferable to a
@@ -148,6 +156,21 @@ answered by a coincidence of path matching.
 
 Unknown API paths answer a shaped 404 rather than an empty success, because a route that
 fell through to a default would render a page carrying another page's numbers.
+
+## A third-party script on the page is expected
+
+Cloudflare injects its Real User Measurement beacon (`static.cloudflareinsights.com`)
+into the HTML of this plan, so a browser opening the demonstration requests that origin.
+It is not in this repository and not in the build output - the origin returns HTML
+without it and the edge adds it - which makes it easy to mistake for a defect when a
+network panel shows an unfamiliar host.
+
+It was accepted knowingly. The claim this project needs is about its own code, and it
+still holds: the Worker answers from the dataset and forwards nothing, so no provider is
+ever contacted. Suppressing the beacon is possible - `Cache-Control: no-transform` on the
+documents stops it, measured - and is deliberately not done, because the beacon was
+judged acceptable and a suppression the project does not want would be a claim the
+repository does not mean. ADR 0021 records the decision.
 
 ## Troubleshooting
 

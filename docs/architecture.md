@@ -1448,8 +1448,12 @@ every handler that reads one.
 
 The fixture never dials the URL it is handed: it resolves the requested provider
 endpoint against its own catalogue and refuses anything else, which is what makes
-"the demonstration performs no outbound request" a property of the code rather than
-a promise about the environment. The URLs it answers are pinned to
+"the demonstration contacts no provider" a property of the code rather than a promise
+about the environment. That property holds in both deployments - the Go demo mode and
+the Worker behind the public page - and neither forwards a request anywhere. The public
+page does carry an analytics beacon, which the hosting platform injects into HTML rather
+than anything this repository emits; ADR 0021 records that as an accepted property of the
+host. The URLs it answers are pinned to
 `internal/quota`'s allowlist by a test, so the duplication cannot drift into
 answering a request the console would never make.
 

@@ -89,6 +89,23 @@ state that no visitor could see the effect of, which is worse than an honest ref
 it must carry nothing an operator would not publish. This is enforced by the gate rather
 than by review, and it is why the caller-key aliases name roles rather than a person.
 
+**The hosting platform injects a third-party script into the page.** Cloudflare adds its
+Real User Measurement beacon to HTML on this plan, from `static.cloudflareinsights.com`,
+and it appears in no repository, no build output and no code review. It was measured on
+the deployed page rather than inferred: the origin returns HTML without it, and the
+browser requests it anyway.
+
+This is worth recording because it changes what "the demonstration contacts nobody" can
+mean. The claim this project actually needs, and still holds, is about its own code: the
+fixture resolves a provider endpoint against its own catalogue and refuses the rest, and
+the Worker answers from the dataset and forwards nothing, so no provider is ever
+contacted in either deployment. The beacon is a request a visitor's browser makes to the
+host's own analytics endpoint, carrying no credential and no request data. It was
+accepted knowingly rather than overlooked - suppressing it is possible, and was tried:
+`Cache-Control: no-transform` on the documents does stop the injection, and that was
+removed once the beacon was judged acceptable, because keeping a suppression the project
+does not want would be a claim the repository does not mean.
+
 ## Alternatives rejected
 
 **Pay for hosting that runs the container.** It would preserve the property ADR 0016
