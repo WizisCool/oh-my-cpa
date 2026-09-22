@@ -28,6 +28,7 @@ type Config struct {
 	Version        string
 	RequestTimeout time.Duration
 	TLSSkipVerify  bool
+	Release        ReleaseConfig
 	// TrustedProxyCIDRs are the direct peer networks whose forwarding headers
 	// may be used for per-client login throttling. Empty means trust none.
 	TrustedProxyCIDRs []string
@@ -38,6 +39,42 @@ type Config struct {
 	// which is what keeps the self-hosted default byte-for-byte unchanged.
 	IsDemoMode bool
 }
+
+// ReleaseConfig controls the release-observation surface: which published versions
+// the console reports, and whether it looks for them on its own.
+type ReleaseConfig struct {
+	// Enabled gates the background sweep only. The page's own check and the manual
+	// button keep working when it is false, because those are an operator asking a
+	// question rather than the process deciding to talk to the internet.
+	Enabled bool
+	// AutoCheck gates the check the page performs when it is opened, independently of
+	// Enabled. It exists because two questions are not one: "may this process reach the
+	// internet on its own" and "may opening a page spend a request from a shared budget".
+	// A self-hosted deployment wants the first disabled and the second enabled - the page
+	// exists to answer "is there a newer version". A test suite wants both disabled, since
+	// its page visits are not a reader asking anything. The manual button keeps working in
+	// both cases, because that is an operator's explicit request.
+	AutoCheck bool
+	// OMCRepository and CPARepository name the published release sources as
+	// "owner/name". Only the identifier is configurable: the host is fixed, so this
+	// cannot become a way to make the server fetch an arbitrary address.
+	OMCRepository string
+	CPARepository string
+	// Interval is the background sweep period.
+	Interval time.Duration
+}
+
+// Default release sources. The gateway default is the upstream the project is built
+// against; the console default is this project's own repository. A deployment that
+// runs a fork overrides them rather than editing code.
+const (
+	DefaultOMCRepository = "WizisCool/oh-my-cpa"
+	DefaultCPARepository = "router-for-me/CLIProxyAPI"
+	// DefaultReleaseInterval is six hours: often enough to notice a release the same
+	// day, rare enough that the unauthenticated GitHub budget of sixty requests per
+	// hour is never at risk from the sweep itself.
+	DefaultReleaseInterval = 6 * time.Hour
+)
 
 // DemoModeEnv is the switch that turns a self-hosted deployment into the public
 // demonstration. The default is deliberately off.
@@ -184,6 +221,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	releaseConfig, err := loadReleaseConfig()
+	if err != nil {
+		return Config{}, err
+	}
 	if demoMode {
 		// The fixture database is the whole history, and there is no CPA queue to
 		// drain: leaving capture on would only poll an upstream that does not
@@ -225,8 +266,32 @@ func Load() (Config, error) {
 		RequestTimeout:    timeout,
 		TLSSkipVerify:     tlsSkipVerify,
 		TrustedProxyCIDRs: trustedProxyCIDRs,
+		Release:           releaseConfig,
 		CPA:               cpa,
 		IsDemoMode:        demoMode,
+	}, nil
+}
+
+// loadReleaseConfig reads the release-observation settings.
+//
+// A malformed boolean is reported rather than ignored, matching every other switch in this
+// file. Ignoring it would leave a deployment that asked to stop reaching the internet doing
+// exactly that, with nothing to indicate the setting had not been understood.
+func loadReleaseConfig() (ReleaseConfig, error) {
+	enabled, err := parseBoolEnv("OMCPA_UPDATE_CHECK_ENABLED", true)
+	if err != nil {
+		return ReleaseConfig{}, err
+	}
+	autoCheck, err := parseBoolEnv("OMCPA_UPDATE_CHECK_ON_PAGE_LOAD", true)
+	if err != nil {
+		return ReleaseConfig{}, err
+	}
+	return ReleaseConfig{
+		Enabled:       enabled,
+		AutoCheck:     autoCheck,
+		OMCRepository: envOr("OMCPA_OMC_REPO", DefaultOMCRepository),
+		CPARepository: envOr("OMCPA_CPA_REPO", DefaultCPARepository),
+		Interval:      DefaultReleaseInterval,
 	}, nil
 }
 

@@ -1,0 +1,501 @@
+/* SystemPage.module.css - System Information Page Styles */
+
+.system-page {
+  padding-bottom: 32px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.check-status-text {
+  font-size: 12px;
+  color: var(--meta);
+  margin-left: 8px;
+}
+
+.product-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+}
+
+.product-block + .product-block {
+  margin-top: 16px;
+}
+
+.product-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.product-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.product-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.product-meta {
+  font-size: 12px;
+  color: var(--meta);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.repo-link {
+  color: var(--fg-2);
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+  transition: color var(--motion-fast) var(--ease-standard);
+}
+
+.repo-link:hover {
+  color: var(--accent);
+}
+
+.version-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+/* On a phone the running and latest versions stack. Two labels and two values in one row left
+   the newest version reading as a wrapped fragment beside the running one, and the pair is a
+   comparison rather than a line of prose - it reads better as two labelled rows than as four
+   items sharing one. */
+@media (max-width: 640px) {
+  .version-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}
+
+.version-tag {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+}
+
+.state-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.changelog-toggle {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.changelog-panel {
+  margin-top: 12px;
+  padding: 14px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm, 4px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.changelog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 12px;
+  color: var(--meta);
+}
+
+.release-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 14px;
+  border-bottom: 1px dashed var(--border-soft);
+}
+
+.release-entry:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.release-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.release-tag-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.release-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--meta);
+}
+
+.markdown-body {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+.markdown-body p {
+  margin: 0 0 8px 0;
+}
+
+.markdown-body p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0 0 8px 0;
+  padding-left: 20px;
+}
+
+.markdown-body li {
+  margin-bottom: 4px;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+  color: var(--fg);
+  font-size: 14px;
+  font-weight: 600;
+  margin: 12px 0 6px 0;
+}
+
+.markdown-body h1:first-child,
+.markdown-body h2:first-child,
+.markdown-body h3:first-child,
+.markdown-body h4:first-child {
+  margin-top: 0;
+}
+
+.markdown-body code {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  padding: 2px 5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg);
+}
+
+.markdown-body pre {
+  margin: 8px 0;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.markdown-body pre code {
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.markdown-body a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.markdown-body a:hover {
+  text-decoration: underline;
+}
+
+.image-link {
+  color: var(--accent);
+  font-size: 12px;
+  font-style: italic;
+  display: inline-block;
+}
+
+/* Storage Card Styles */
+
+.storage-headline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.storage-total-num {
+  font-family: var(--font-mono, monospace);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.file-pills {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.file-pill {
+  padding: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.file-pill-label {
+  font-size: 11px;
+  color: var(--meta);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.file-pill-val {
+  font-family: var(--font-mono, monospace);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+/* The three facts that describe the file itself. The card keeps a wide, quiet grid for
+   the file sizes above; this row is deliberately smaller because it is a summary, not a
+   table to scan. */
+.storage-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px 16px;
+}
+
+.storage-fact {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.storage-detail-label {
+  color: var(--fg-2);
+}
+
+.storage-detail-val {
+  font-family: var(--font-mono, monospace);
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.freelist-tip {
+  color: var(--meta);
+  cursor: help;
+  margin-left: 4px;
+}
+
+/* Volumes Card Styles */
+
+.volumes-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+}
+
+.volume-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 13px;
+}
+
+.volume-label {
+  color: var(--fg-2);
+}
+
+.volume-val {
+  font-family: var(--font-mono, monospace);
+  color: var(--fg);
+  font-weight: 600;
+}
+
+/* Maintenance Card Styles */
+
+.maintenance-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+/* A maintenance button may shrink and wrap its own label.
+   The labels are deliberately explicit ("Rebuild Database (VACUUM)"), and Malay renders that as
+   a long compound. On a 320px screen the button then pushed past the viewport; letting the
+   content wrap keeps the sentence intact instead of truncating a destructive action's name,
+   which is the one label an operator should never have to guess at. */
+.maintenance-actions :global(.ant-btn) {
+  height: auto;
+  min-height: 32px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.maintenance-box {
+  padding: 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.maintenance-box-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.maintenance-box-meta {
+  font-size: 12px;
+  color: var(--meta);
+  font-family: var(--font-mono, monospace);
+}
+
+.maintenance-notice {
+  font-size: 12px;
+  color: var(--meta);
+  line-height: 1.5;
+}
+
+.vacuum-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.vacuum-space-table {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.vacuum-space-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.vacuum-space-row span:last-child {
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+}
+
+/* A card head that carries its own action: the title stays on the left and the control
+   sits on the trailing edge, so the action reads as belonging to the card rather than to
+   the page. */
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* On a phone the card's action moves under its title instead of beside it.
+   Two side-by-side flex items cannot both keep their natural width in the space a 320px
+   screen leaves, and the failure was an overlap rather than an overflow: the title and the
+   button drew on top of each other, which no width comparison detects. Stacking removes the
+   competition for the row entirely. */
+@media (max-width: 640px) {
+  .card-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .product-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}
+
+/* Card titles wrap instead of overflowing their head.
+   Malay compounds a noun phrase into one long word - "Penyelenggaraan" - so a title that fits
+   one locale overflows a 390px phone in another. Allowing the wrap is what makes the same
+   layout work in every registered language rather than in the language it was designed in. */
+.system-page :global(.ant-card-head-title) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.system-page :global(.ant-card-head) {
+  align-items: flex-start;
+}
+
+/* A hover colour change is the one motion this page carries, and a reader who has asked the
+   platform to reduce motion should not have to receive it. The transition is removed rather
+   than shortened: the colour still changes on hover, it simply stops animating, which is what
+   the preference asks for - the same treatment `ApiKeysList.module.css` gives its own. */
+@media (prefers-reduced-motion: reduce) {
+  .repo-link {
+    transition: none;
+  }
+}

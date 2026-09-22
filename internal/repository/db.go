@@ -88,9 +88,11 @@ func WithBackupConfig(backup BackupConfig) OpenOption {
 type DB struct {
 	SQL *sql.DB
 
-	cipher *appcrypto.Cipher
-	backup BackupConfig
-	path   string
+	cipher    *appcrypto.Cipher
+	backup    BackupConfig
+	path      string
+	driver    string
+	writeGate *writeGate
 }
 
 // Cipher returns the application cipher associated with this connection.
@@ -115,24 +117,30 @@ func Open(ctx context.Context, databasePath string, options ...OpenOption) (*DB,
 		}
 	}
 	// busy_timeout and WAL are connection settings; the URI applies them to
-	// every pooled connection opened by modernc.org/sqlite. Preserve an
-	// existing SQLite URI query (notably file::memory:?cache=shared).
-	separator := "?"
-	if strings.Contains(databasePath, "?") {
-		separator = "&"
-	}
-	dsn := databasePath + separator + "_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)"
-	database, err := sql.Open("sqlite", dsn)
-	if err != nil {
-		return nil, fmt.Errorf("open sqlite: %w", err)
-	}
+	// every pooled connection opened by modernc.org/sqlite. The pool is opened
+	// through this package's gated driver, which is what makes a maintenance job
+	// and a writer unable to overlap - see writegate.go for why that boundary is
+	// at the driver rather than in the call sites. Preserve an existing SQLite URI
+	// query (notably file::memory:?cache=shared).
+	registerGatedDriver()
+	dsn := gatedDSN(databasePath)
+	// One gate per DB. Every pool derived from this value - the application pool and the
+	// maintenance service's own connection - receives the same gate, so they exclude each
+	// other while a different database is unaffected.
+	//
+	// The boundary is the DB value rather than the file path: two separate Open calls over
+	// the same path each get their own gate and would not exclude each other. That is
+	// deliberate and cheap to rely on, because a process runs one Open; stating it here keeps
+	// the contract honest instead of implying a per-path registry that does not exist.
+	gate := &writeGate{}
+	database := openGatedPool(dsn, gate)
 	database.SetMaxOpenConns(1)
 	database.SetMaxIdleConns(1)
 	if err := database.PingContext(ctx); err != nil {
 		database.Close()
 		return nil, fmt.Errorf("ping sqlite: %w", err)
 	}
-	wrapped := &DB{SQL: database, cipher: config.backup.Cipher, backup: config.backup, path: databasePath}
+	wrapped := &DB{SQL: database, cipher: config.backup.Cipher, backup: config.backup, path: databasePath, driver: gatedDriverName, writeGate: gate}
 	if wrapped.cipher == nil {
 		wrapped.cipher = config.cipher
 	}
@@ -502,8 +510,11 @@ func checkJSON1(ctx context.Context, tx *sql.Tx) error {
 }
 
 func migrationHook(version int) func(context.Context, *sql.Tx, *DB) error {
-	if version == 4 {
+	switch version {
+	case 4:
 		return sanitizeHistoricalDataTx
+	case 25:
+		return addReleaseCheckTruncatedTx
 	}
 	return nil
 }

@@ -145,7 +145,16 @@ var urlTokenPattern = regexp.MustCompile(`(?i)\bhttps?://[^\s"'<>]+`)
 var bearerPattern = regexp.MustCompile(`(?i)\bBearer\s+[^\s,;"'<>]+`)
 var headerSecretPattern = regexp.MustCompile(`(?im)^([ \t]*(?:authorization|proxy-authorization|cookie|set-cookie)[ \t]*:[ \t]*)[^\r\n]*`)
 var keyValueSecretPattern = regexp.MustCompile(`(?i)(["']?(?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|password|passwd|secret|authorization|proxy[_-]?authorization|cookie|account|token)["']?[ \t]*[:=][ \t]*)(?:"[^"]*"|'[^']*'|[^\s,;}&]+)`)
-var apiKeyPrefixPattern = regexp.MustCompile(`\b(?:sk|pk|ghp|gho|glpat|xox[baprs]|pat)-[A-Za-z0-9_-]{8,}\b`)
+
+// apiKeyPrefixPattern matches the vendor prefixes that make a bare token recognizable without a
+// surrounding key or header - the case where a credential arrives inside an error message and
+// nothing else marks it as one.
+//
+// The separator alternates because the real prefixes do: OpenAI and Anthropic use `sk-`, while
+// GitHub's `ghp_`/`gho_`, GitLab's `glpat-` and Slack's `xoxb-` are not all hyphenated. Matching
+// only `-` left `ghp_...` - the shape a GitHub feed error would actually carry - unredacted, which
+// no test covered because this pattern had none.
+var apiKeyPrefixPattern = regexp.MustCompile(`\b(?:sk|pk|pat|glpat)-[A-Za-z0-9_-]{8,}\b|\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{8,}\b|\bgithub_pat_[A-Za-z0-9_]{8,}\b|\bxox[baprs]-[A-Za-z0-9-]{8,}\b`)
 
 // RedactText removes common credential-bearing forms from arbitrary text.
 func RedactText(value string, knownSecrets ...string) string {

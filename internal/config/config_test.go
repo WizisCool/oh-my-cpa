@@ -65,6 +65,7 @@ func clearConfigEnv(t *testing.T) {
 		"OMCPA_BASE_PATH", "OMCPA_DATA_DIR", "OMCPA_LISTEN_ADDR", "OMCPA_MASTER_KEY",
 		"OMCPA_PUBLIC_URL", "OMCPA_VERSION", "OMCPA_CPA_BASE_URL", "OMCPA_CPA_USAGE_ADDR",
 		"OMCPA_CPA_MANAGEMENT_KEY", "OMCPA_TRUSTED_PROXY_CIDRS", DemoModeEnv, "PORT", "VERCEL_URL",
+		"OMCPA_UPDATE_CHECK_ENABLED", "OMCPA_OMC_REPO", "OMCPA_CPA_REPO",
 	} {
 		t.Setenv(name, "")
 	}
@@ -261,5 +262,49 @@ func TestUsageIdleIntervals(t *testing.T) {
 				t.Fatalf("intervals %v / %v", cfg.IdleInterval, cfg.MaxIdleInterval)
 			}
 		})
+	}
+}
+
+// TestReleaseCheckConfigReportsAMalformedSwitch holds the release settings to the same rule as
+// every other boolean in this file.
+//
+// Ignoring an unparsable value would be worse here than elsewhere: an operator who typed
+// `OMCPA_UPDATE_CHECK_ENABLED=flase` asking to stop the process reaching the internet would get
+// a deployment that keeps reaching it, with nothing to say the setting had not been understood.
+func TestReleaseCheckConfigReportsAMalformedSwitch(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("OMCPA_UPDATE_CHECK_ENABLED", "flase")
+	if _, err := Load(); err == nil {
+		t.Fatal("a malformed OMCPA_UPDATE_CHECK_ENABLED was accepted")
+	}
+
+	// The defaults and the fork overrides still resolve.
+	clearConfigEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Release.Enabled {
+		t.Fatal("checking must be ON when the switch is unset, which is the documented default")
+	}
+	if cfg.Release.Interval != DefaultReleaseInterval {
+		t.Fatalf("interval = %v, want %v", cfg.Release.Interval, DefaultReleaseInterval)
+	}
+	if cfg.Release.OMCRepository != DefaultOMCRepository || cfg.Release.CPARepository != DefaultCPARepository {
+		t.Fatalf("sources = %q / %q, want the documented defaults", cfg.Release.OMCRepository, cfg.Release.CPARepository)
+	}
+
+	clearConfigEnv(t)
+	t.Setenv("OMCPA_UPDATE_CHECK_ENABLED", "false")
+	t.Setenv("OMCPA_CPA_REPO", "someone/fork")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Release.Enabled {
+		t.Fatal("an explicit false did not stop the sweep")
+	}
+	if cfg.Release.CPARepository != "someone/fork" {
+		t.Fatalf("fork override = %q, want someone/fork", cfg.Release.CPARepository)
 	}
 }

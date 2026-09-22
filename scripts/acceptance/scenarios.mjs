@@ -51,6 +51,7 @@ import { overlayBackDismisses } from './probes/overlayHistory.mjs';
 import { phoneListRendering } from './probes/phoneLists.mjs';
 import { touchErgonomics } from './probes/touchErgonomics.mjs';
 import { iconPickerStacking, pickerProvider, providerIconPick } from './probes/providerConsole.mjs';
+import { systemInformationNarrow, systemInformationPage, systemFixtures } from './probes/systemInformation.mjs';
 import {
   alignmentFacets,
   alignmentRecords,
@@ -657,5 +658,26 @@ export const SCENARIOS = [
       ],
     },
     run: requestListInteractions,
+  },
+  {
+    id: 'system-information',
+    name: 'the system page renders untrusted release notes without reaching outside the origin',
+    options: {
+      routes: systemFixtures(),
+    },
+    run: systemInformationPage,
+  },
+  {
+    // A 320px screen, because the page's defects appeared there and at no wider size. The
+    // failure was an overlap rather than an overflow: the card title and its action drew on
+    // top of each other, and the product title was covered by its status tag. Measuring widths
+    // reported the layout as clean, so the assertion has to compare geometry instead.
+    id: 'system-information-narrow',
+    name: 'the system page keeps its card heads and product rows from overlapping at 320px',
+    options: {
+      routes: systemFixtures(),
+      viewport: { width: 320, height: 1200 },
+    },
+    run: systemInformationNarrow,
   },
 ];

@@ -32,7 +32,7 @@ through to CPA.
 
 ### Demo mode is the same process with the gateway replaced
 
-`OMCPA_DEMO_MODE=true` runs this binary against its own fixture; see §12. The shape
+`OMCPA_DEMO_MODE=true` runs this binary against its own fixture; see §13. The shape
 above still describes it, with two edges replaced and one added:
 
 ```text
@@ -73,6 +73,7 @@ cycle even though the `internal/usage` directory appears in both directions.
 | `internal/repository` | SQLite schema, migrations, queries, transactional invariants | `crypto`, `domain`, `pricing`, `security`, `usage` |
 | `internal/usage/ingest` | Collector loop, decode processor, rollup and retention maintenance | `repository`, `management`, `security`, `usage` |
 | `internal/quota` | Per-provider quota probes and normalization | `management` |
+| `internal/release` | Published-version observation: version comparison, the release feed client, and the stored index | `repository` |
 | `internal/demo` | The publication fixture: an in-process CPA stand-in, the seeded history, and the capture state the console renders | `domain`, `pricing`, `quota`, `repository`, `security`, `usage`, `usage/ingest` |
 | `internal/api` | Routes, DTO allowlists, audited sensitive reveals, audit writes, the demo policy | all of the above, `internal/web` |
 | `internal/web` | `go:embed` of the built SPA | — |
@@ -97,7 +98,7 @@ Two rules keep the boundary meaningful:
   filter section, unrelated to the provider write path: `the list is back to the
   unfiltered page` and `the queued search still lands` each failed once in repeated
   runs before the request-view policies were lifted out of the page. They were fixed
-  rather than tolerated - see §11.3 - and the diagnosis was confirmed by reproducing
+  rather than tolerated - see §12.3 - and the diagnosis was confirmed by reproducing
   them on the unmodified baseline commit, two runs in three, under a 2-CPU
   constraint. The suite now passes eight consecutive trials in the configuration the
   baseline failed, including with the probes running concurrently.
@@ -1021,6 +1022,18 @@ renewal date.
 | Usage | `usage_inboxes`, `usage_events`, `error_events`, `ingest_gaps`, `usage_overview_hourly_stats`, `usage_overview_daily_stats`, `usage_aggregation_checkpoints` | Milliseconds; raw payloads encrypted |
 | Pricing | `model_prices`, `model_price_versions`, `pricing_sync_state`, `pricing_model_catalog`, `pricing_catalog_state` | Versions are append-only via triggers |
 | Operations | `audit_events`, `ui_preferences`, `quota_snapshots`, `schema_migrations` | Audit has no update or delete path — only `RecordAuditEvent` writes and read queries exist, and export itself is audited; the schema carries no enforcement trigger, so the guarantee lives in the repository API |
+| Release observation | `release_index`, `release_check_state` | Migrations 024 and 025; `truncated` is added by 025, so a database that applied 024 before it existed still gains the column. `release_index` holds one row per published version (tag, name, publication time, prerelease flag) and is **replaced as a unit per product** by `PublishReleaseSnapshot`, because a feed that stops listing a withdrawn release must stop the console claiming it exists. `release_check_state` holds one row per product — the last attempt and success times, the redacted failure reason, the latest tag, the ETag and the truncation flag — and is written by `RecordReleaseCheckAttempt`/`PublishReleaseSnapshot`/`RecordReleaseCheckFailure`, read by `ListReleases` and `GetReleaseCheckState(ForRepository)`. A release's prose body is **never stored**: it lives in bounded process memory for the life of the process, so an index without notes still names the versions and links to the source (see §10) |
+
+The management system surface is five routes: `GET /management/system` (the page),
+`GET /management/system/releases` (one product's merged change log), `POST
+/management/system/check-updates` (a check, subject to the floor), `GET
+/management/system/maintenance` (the running or last job) and `POST
+/management/system/maintenance/{checkpoint,vacuum}`. The check answers `200` with the two
+products' states and `served_from_cache`; a maintenance POST answers `202` on admission,
+`409` when a job is already running, `507` when a rebuild cannot be admitted for space, and
+`503` once the service is shutting down. Every one of them answers `503` when the handler was
+built without the corresponding service, which is how a deployment that does not offer the
+surface behaves.
 
 Migrations are embedded from `migrations/` and applied in filename order inside
 one transaction each. A migration against an existing on-disk database first
@@ -1042,13 +1055,149 @@ fix a defect with a new migration, never by editing `schema_migrations`
 | HTTP server | `app.Run` | Fatal; shutdown drains 10s |
 | Usage pipeline | `app.Run` → `ingest.Pipeline` | Fatal; a stopped collector must not serve silently stale numbers |
 | Pricing sync | `app.Run` → `pricing.Service` | Best effort; prices go stale, capture continues |
+| Release sweep | `app.Run` → `release.Service` | Best effort; the stored index and its timestamps go stale, and the page says so. Every six hours, first run delayed by one interval so a restart loop cannot become a request loop |
 | Rollup + retention | `ingest.Maintenance` inside the pipeline | Retried on its own interval; errors surface in ingest status |
+| Database maintenance | `repository.MaintenanceService`, started by an operator request | Never started automatically; a job's outcome is recorded in memory and on the audit trail |
 
 A demo deployment starts only the HTTP server: its history is the fixture, so there
-is no collector to lose and no sync loop to let prices go stale. §12 and
+is no collector to lose and no sync loop to let prices go stale. §13 and
 `internal/demo` explain what replaces them.
 
-## 11. Test layering
+The release sweep is the only loop that talks to a host outside the deployment's own
+gateway, and it is the one loop whose absence is invisible rather than harmful:
+without it the page shows the last known index. It can be switched off with
+`OMCPA_UPDATE_CHECK_ENABLED=false`, which stops the sweep while leaving the page's own
+check and the manual button working — those are an operator asking a question rather
+than the process deciding to reach the internet.
+
+`OMCPA_UPDATE_CHECK_ON_PAGE_LOAD=false` is separate because it answers a separate question: may
+opening a page spend a request from a budget shared per address? A self-hosted deployment wants
+that enabled — the page exists to answer "is there a newer version" — while an air-gapped install
+or a test suite wants it off, since a page visit there is not a reader asking anything. The manual
+button is unaffected by either switch. The acceptance harness sets both, and the reason is worth
+recording: disabling the sweep alone does not stop the traffic, because the sweep's first run is a
+full interval away and the suite visits the page that checks on open.
+
+### What a stored failure may contain
+
+A failed check records a redacted reason: one `security.RedactText` copy serves the stored
+`last_error`, the `CheckError` the page renders, and every log line, because all three can leak and
+a raw form kept for one of them defeats the other two. The reason is a remote response, and a feed or
+a proxy can echo back a token it was sent.
+
+The redactor's vendor-prefix rule had a gap worth recording: it matched only a hyphenated separator,
+so `ghp_...` - the shape a GitHub API error actually carries, and this feature reads GitHub - passed
+through untouched. It now accepts the separators the real prefixes use, and it has positive and
+negative controls; it had no test before, which is why the gap survived.
+
+### Why a check has a floor
+
+`CheckFloor` is fifteen minutes, and every path that reads the feed passes it. The feed is
+one shared per-address budget — sixty requests an hour for the unauthenticated GitHub API —
+while the page is loaded far more often than a release is published. A check costs one
+request per product and a second only when a feed's first page is full, so an unthrottled
+page-load check spends up to four requests per view: fifteen views exhaust the allowance for
+every client behind that address. That is what happened, and it is how the floor was
+calibrated.
+
+Inside the floor a check is answered from the stored index and reports `served_from_cache`,
+so the button says the result was cached rather than claiming a check it did not perform. The
+floor is measured from the last attempt rather than the last success, because a failing feed
+is when an operator reloads most and re-learning the same error would spend the budget twice.
+The six-hour sweep is exempt by construction: it is far outside any floor.
+
+### The release check does not store release notes
+
+A release's Markdown body is held in process memory and nowhere else. The index —
+tags, names, publication times, prerelease flags — is stored, because that is what
+answers "is there a newer version" after a restart or while offline. The notes are
+not, and the page states which of the two it has: an index with no notes still names
+the versions and links to the source, while an empty log would claim nothing changed.
+
+Two details follow from that split. A `304` from a conditional request is only
+trusted while the process still holds the body the validator describes, so stored
+ETags are cleared at start-up and the first check after a restart is unconditional.
+And a failed check never clears the stored index or the last-success time: the page
+keeps the previous answer and reports the failure with its reason and the time of the
+attempt, rather than going blank or presenting stale data as current. The routine
+"last checked" readout was deliberately dropped from the cards - it was the same
+timestamp on every one of them - so staleness is now something the page states when a
+check fails rather than a number a reader has to interpret.
+
+## 11. Database maintenance and the write gate
+
+Two operator-issued actions rewrite the database: `PRAGMA wal_checkpoint(TRUNCATE)`
+and `VACUUM`. Both are offered from the System Information page and both are
+guarded by a write gate, because the failure mode without one is not a slow request:
+`internal/usage/ingest`'s flush records an ingest gap and returns an error, and
+`app.Run` treats a stopped pipeline as fatal on purpose, so a writer that lost a
+race against a rebuild would take the process down with it.
+
+SQLite's own locking cannot express the boundary. Under WAL a reader never blocks a
+writer and a writer never blocks a reader, and `busy_timeout` makes a blocked call
+retry rather than stopping a writer from starting. So `internal/repository` wraps
+its driver: a statement that is not provably a read passes a gate that maintenance
+holds exclusively, writers wait rather than fail, and a queued writer can abandon its
+wait when its own context ends.
+
+The classification is deliberately asymmetric and deliberately narrow — only `SELECT`,
+`VALUES` and `EXPLAIN` count as reads. `PRAGMA` is gated whatever its argument, because
+the family mixes reads and writes. `WITH` is gated even when the statement selects,
+because a common table expression can introduce an `UPDATE`, `DELETE` or `INSERT` and
+its first keyword does not say which. A string containing a second statement is gated
+however it starts, because a first-keyword classifier cannot see past the first
+statement at all. Each of those refusals costs one wait during a rebuild; the direction
+that would be cheap is the direction that can terminate the process.
+
+Seven properties of the arrangement are load-bearing:
+
+- Maintenance runs on a context marked as the holder's own (`withMaintenanceContext`),
+  because a maintenance statement that passed the gate again would queue behind the
+  exclusivity it already holds.
+- Maintenance uses its own database connection rather than the pool's. A writer takes
+  the gate inside its driver call, by which point `database/sql` has already handed it a
+  connection, so a waiting writer *holds* a connection while it waits; with one pooled
+  connection, maintenance needing that connection would wait for a writer that is
+  waiting for the job. This was observed as a real deadlock, and
+  `TestMaintenanceDoesNotDeadlockAgainstAWriterHoldingAConnection` reproduces it.
+- A write transaction holds the gate until it ends, not per statement: SQLite's write
+  lock outlives the statements inside a transaction. The `driver.TxOptions.ReadOnly`
+  hint does not exempt a transaction, because modernc.org/sqlite only uses it to pick
+  the `BEGIN` mode string — such a transaction can still write.
+- No request performs database work after admitting a job. The handler records
+  *admission* and returns the status the start returned; the job records its own
+  completion through an observer once it has released exclusivity. A request that wrote
+  anything afterwards would hold a connection while the job held the gate, so its `202`
+  would not arrive until the rebuild finished.
+- The gate's row wrappers forward the driver's optional column-metadata interfaces and
+  assert that at compile time, because a wrapper satisfying only `driver.Rows` compiles
+  while silently discarding what the driver reports about each column's type.
+- The gate belongs to one `repository.DB` rather than to the process, so a rebuild in one
+  database cannot stall writes to another. Every pool derived from that same `DB` shares its
+  gate — which is what the maintenance service relies on — while two separate `Open` calls over
+  the same file keep separate gates and are therefore not mutually exclusive. That is the
+  contract the code implements, and a deployment runs one `Open`.
+- Job status lives in memory (`MaintenanceService`), not in a table. A status endpoint
+  that read the database could not answer while a job held the connection — which is
+  exactly when an operator asks. The service owns a context derived from the
+  application's, so a job cannot outlive the process, and `Close` cancels and joins it
+  before releasing the connection.
+
+`VACUUM` is run as a plain `VACUUM` rather than `VACUUM INTO` plus a file swap. The
+pool holds an open handle, so replacing the file underneath it would need every
+connection closed and the pool rebuilt while other goroutines still hold references
+to it. A plain `VACUUM` copies into a temporary file and overwrites the original
+inside an ordinary transaction, so an interrupted rebuild leaves the original intact;
+`TestInterruptedVacuumLeavesTheDatabaseUsable` cancels one and then checks both the
+surviving rows and `PRAGMA integrity_check`. Its documented requirement — up to twice
+the database file in free space — is measured and shown in the confirmation before the
+action runs, as a pre-check rather than a guarantee. A checkpoint that SQLite reports
+as blocked is surfaced as an incomplete result, not as a success: `wal_checkpoint`
+returns its outcome in a row of three integers and does not raise an error when it
+cannot proceed, and a rebuild that is itself fine but cannot truncate the log reports
+that partial outcome rather than either success or failure.
+
+## 12. Test layering
 
 The suite is split by what each layer can actually prove, not by which runner is
 fashionable. The rule is **Browser Everything → Browser Only Where Browser
@@ -1265,7 +1414,7 @@ Two constraints keep the preparation step's shape:
   says nothing about the shared libraries.** That is why the OS dependencies are
   still guaranteed on every run, just by probe rather than unconditionally.
 
-## 12. Demo mode
+## 13. Demo mode
 
 A public demonstration has to show the product without a gateway behind it, without
 any credential, and without becoming a second frontend to maintain. Demo mode is
@@ -1405,7 +1554,7 @@ parallel with the session check.
 the account-level steps no command can perform, and the failure modes that look like
 something else.
 
-## 13. Where to look next
+## 14. Where to look next
 
 - Domain wording: `CONTEXT.md`
 - Deployment and its trade-offs: `docs/adr/0001-go-react-sqlite-modular-monolith.md`

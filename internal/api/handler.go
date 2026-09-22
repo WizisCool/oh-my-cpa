@@ -42,6 +42,12 @@ type Handler struct {
 	usage usagePipeline
 	// pricing serves model prices and the models.dev sync; nil until SetPricing.
 	pricing PricingManager
+	// release observes both products' published versions; nil until SetRelease. Nil
+	// means the page reports "not checked yet" rather than failing.
+	release ReleaseManager
+	// maintenance runs the database-wide maintenance actions; nil until
+	// SetMaintenance, and nil in a deployment that does not offer them.
+	maintenance MaintenanceManager
 	// pluginLogos inlines the logos plugins publish, so the browser never fetches a
 	// plugin's own host; see management_plugin_logos.go.
 	pluginLogos *pluginLogoFetcher
@@ -75,6 +81,12 @@ func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypt
 		providerWrites:   newProviderWriteGate(),
 		providerKeyMasks: newProviderKeyMaskCache(),
 		pluginLogos:      newPluginLogoFetcher(),
+	}
+	if handler.logger == nil {
+		// A handler built without a logger - which several tests do - must still be able
+		// to log. Leaving it nil turns any log line on a request path into a panic served
+		// to the caller, which is a far worse outcome than a default logger.
+		handler.logger = slog.Default()
 	}
 	if cfg.IsDemoMode {
 		// Inlining a plugin's logo means fetching a URL the plugin declares. The
@@ -199,6 +211,11 @@ func (h *Handler) routes() chi.Router {
 				v1.Get("/management/quota/{authIndex}", h.getCredentialQuotaDetail)
 				v1.Get("/management/system", h.getSystemInfo)
 				v1.Get("/management/system/diagnostics", h.getSystemDiagnostics)
+				v1.Get("/management/system/releases", h.getSystemReleases)
+				v1.Post("/management/system/check-updates", h.postSystemCheckUpdates)
+				v1.Get("/management/system/maintenance", h.getSystemMaintenance)
+				v1.Post("/management/system/maintenance/checkpoint", h.postSystemMaintenanceCheckpoint)
+				v1.Post("/management/system/maintenance/vacuum", h.postSystemMaintenanceVacuum)
 				v1.Get("/management/plugins", h.listPlugins)
 				v1.Patch("/management/plugins/{id}/status", h.setPluginStatus)
 				v1.Delete("/management/plugins/{id}", h.deletePlugin)
