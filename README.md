@@ -33,11 +33,15 @@ Oh My CPA is a self-hosted control plane for [CLIProxyAPI](https://github.com/ro
 
 ## Live Demo
 
-**[oh-my-cpa-demo.vercel.app](https://oh-my-cpa-demo.vercel.app)** — the console, running on fixture data.
+**[oh-my-cpa-demo.vercel.app](https://oh-my-cpa-demo.vercel.app)** — the console, running on sample data.
 
-No account, no key, nothing to install: open the link and the dashboard is there. It is served from a built-in sample — a year of traffic across eight providers and fourteen models — so the panels have something real to show, and it is shown behind the same routing policy the product ships: sign-in, credential downloads, plugin execution, gateway configuration writes and anything that would leave the process are refused by the server, and the console says so when a change is not durable.
+No account, no key, nothing to install: open the link and the dashboard is there. It is served from a built-in sample — a year of traffic across eight providers and fourteen models — with the same routing policy the product ships: credential downloads, request logs, plugin execution and gateway configuration writes are refused, and the console says so.
 
-Nothing about the demo is a second implementation. It is this binary with `OMCPA_DEMO_MODE=true` and no gateway behind it, deployed as a Vercel container image (`docs/architecture.md` §13, `docs/ops/vercel-demo.md`). To run the same thing locally:
+That link serves the last deployment made before the demonstration's hosting moved. The demonstration is now a Cloudflare Worker that deploys from `master`; the address changes at cutover, and `docs/ops/cloudflare-demo.md` records it.
+
+The demo shows the console; it does not run the product. The frontend is the same bundle the binary embeds, and its API is answered from a dataset generated out of the real Go handlers — so every response has the shape a self-hosted install produces, but there is no gateway, database or capture pipeline behind it, and writes are refused rather than simulated. `docs/architecture.md` §13 and [ADR 0021](docs/adr/0021-the-public-demonstration-is-generated-data-behind-the-real-console.md) record why.
+
+To run the demonstration's own data source locally — the Go binary in demo mode, which is what generates that dataset:
 
 ```bash
 pnpm build
@@ -139,9 +143,11 @@ Open **`http://127.0.0.1:5173/omc/`**. Vite serves the UI with HMR and proxies `
 
 ## Deployment
 
-### Online Demo (Vercel)
+### Online Demo (Cloudflare Workers)
 
-The public demo runs the same binary as a Vercel container image. `Dockerfile.vercel` and `vercel.json` are the whole of the platform's configuration, and pushing to `master` updates production once the project is connected to the repository in the Vercel console. `vercel.json` allows a Git deployment on `master` only, so the demo follows `master` and no branch push creates one: every deployment pushes a registry image, the registry holds 50 per repository on the Hobby plan, and it has no retention policy of its own. `pnpm prune:vcr-images` reclaims the surplus and a scheduled workflow runs it. `docs/ops/vercel-demo.md` is the runbook, including the one account-level step that has to be done in a browser.
+The public demo is the same console as static assets with its API answered by a Worker, and pushing to `master` updates it once the Worker is connected to this repository. It deploys through Cloudflare's Git integration, which manages its own build token, so the repository holds no deployment secret. The Worker's configuration is `deploy/cloudflare/wrangler.jsonc`, and `docs/ops/cloudflare-demo.md` is the runbook — including the one-time console steps.
+
+The API's data is generated from the real Go handlers rather than hand-written, so the served responses carry the shapes the product emits. `pnpm demo:generate` refreshes it, `pnpm check:demo` fails when it has fallen behind the code, and `pnpm verify:demo` drives every console route in a browser against a running deployment.
 
 ### Docker (In Progress)
 
@@ -160,7 +166,7 @@ The public demo runs the same binary as a Vercel container image. `Dockerfile.ve
 - **Master Key**: `OMCPA_MASTER_KEY` is required to decrypt stored credentials and payloads. Back it up securely.
 - **Network Security**: Keep CPA on a private network or loopback interface, and serve Oh My CPA over HTTPS.
 - **Reverse Proxy Headers**: Set `OMCPA_TRUSTED_PROXY_CIDRS` to the comma-separated CIDRs of reverse proxies whose forwarding headers may be trusted (the bundled Compose file trusts Docker's `172.16.0.0/12` network). Leave it unset when clients connect directly; never trust a public range.
-- **Demo Mode**: `OMCPA_DEMO_MODE` (default `false`) serves the console from a built-in fixture instead of a CPA, so it needs no management key and no provider credential. Its storage is not durable — the database is deleted and rebuilt on every boot — and the server refuses sign-in flows, credential movement, plugin execution, gateway configuration writes and anything that would leave the process. Turn it on only for a demonstration deployment; the public one is described under [Live Demo](#live-demo).
+- **Demo Mode**: `OMCPA_DEMO_MODE` (default `false`) serves the console from a built-in fixture instead of a CPA, so it needs no management key and no provider credential. Its storage is not durable — the database is deleted and rebuilt on every boot — and the server refuses sign-in flows, credential movement, plugin execution, gateway configuration writes and anything that would leave the process. It is what generates the public demonstration's dataset, so it stays in use even though the public deployment no longer runs it; `OMCPA_PUBLIC_URL` states that deployment's origin, because nothing announces it any more.
 - **Update Checks**: The System Information page reports the running and published versions of both Oh My CPA and your gateway. It reads release metadata from `api.github.com` only — fixed host, no operator-supplied URL — following `HTTP_PROXY`/`HTTPS_PROXY` like the price sync does. A sweep runs every six hours; opening the page and the **Check for updates** button also check, subject to a fifteen-minute floor per product — inside it the answer comes from the stored index and the message says so, because the feed is one shared per-address budget. Two switches, because they answer different questions. `OMCPA_UPDATE_CHECK_ENABLED=false` stops the sweep on an offline deployment; the page then keeps working from the last answer it stored, and a check that fails is reported with its reason and the time it was attempted. `OMCPA_UPDATE_CHECK_ON_PAGE_LOAD=false` additionally stops the check the page performs when it is opened, which is what an air-gapped or test deployment wants, since a page visit is not an operator asking a question. The **Check for updates** button works either way. `OMCPA_OMC_REPO` and `OMCPA_CPA_REPO` (`owner/name`) point the check at a fork. GitHub's unauthenticated budget is 60 requests per hour for the address making them, and the page says so when a check is refused for that reason. Release notes are held in memory rather than stored, so after a restart the page names the versions and links to the source while the notes themselves are unavailable — see `docs/architecture.md` §10.
 - **Database Maintenance**: The same page can truncate the WAL or rebuild the database, and refuses the second while the first runs. Both wait for in-flight writes rather than interrupting them, and a rebuild is declined up front when the filesystem lacks the free space SQLite documents needing (up to twice the database file). A job cannot outlive a restart. `docs/ops/sqlite-operations.md` §6 covers the same operations from the host.
 
@@ -175,7 +181,10 @@ The public demo runs the same binary as a Vercel container image. `Dockerfile.ve
 | `pnpm verify` | Static gate: toolchain check, static analysis, and secret scan |
 | `pnpm verify:full` | Full gate: build, bundle budgets, browser acceptance & probes |
 | `pnpm verify:demo` | Browser smoke test for the demo deployment (`OMCPA_DEMO_URL` to check a remote one) |
-| `pnpm prune:vcr-images` | Reclaim surplus Vercel registry images; dry run unless `--apply` is passed |
+| `pnpm verify:demo` | Browser acceptance for the demo: every console route renders (`OMCPA_DEMO_URL` to check a deployment) |
+| `pnpm demo:generate` | Regenerate the demo's dataset from the real handlers (`--check` to verify instead) |
+| `pnpm check:demo` | The demo's maintenance contract: coverage, freshness and privacy |
+| `pnpm dev:demo` | Serve the demo locally with Wrangler (after `pnpm build:demo`) |
 
 ## Contributing & Security
 
@@ -188,7 +197,7 @@ The public demo runs the same binary as a Vercel container image. `Dockerfile.ve
 - [`docs/architecture.md`](docs/architecture.md) — Module boundaries, data flows, and invariants
 - [`docs/design.md`](docs/design.md) — Visual design system and theme tokens
 - [`docs/ops/sqlite-operations.md`](docs/ops/sqlite-operations.md) — SQLite operations, backup, and restore runbook
-- [`docs/ops/vercel-demo.md`](docs/ops/vercel-demo.md) — Vercel deployment runbook for the online demo
+- [`docs/ops/cloudflare-demo.md`](docs/ops/cloudflare-demo.md) — deployment runbook for the online demo
 - [`docs/cpamc-parity.md`](docs/cpamc-parity.md) — Feature parity matrix with official CPAMC
 - [`AGENTS.md`](AGENTS.md) — Development conventions and code/doc sync contract
 

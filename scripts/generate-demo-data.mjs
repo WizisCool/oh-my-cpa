@@ -23,6 +23,7 @@
  * can reach the network or the worktree.
  */
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -36,6 +37,40 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 /** Where the generated dataset is tracked. */
 const DATA_DIR = join(root, 'deploy', 'cloudflare', 'data');
 const DATASET = join(DATA_DIR, 'responses.json');
+const PROVENANCE = join(DATA_DIR, 'provenance.json');
+
+/**
+ * The files the dataset is derived from, hashed into the provenance record.
+ *
+ * Kept in step with `scripts/check-demo.mjs`, which recomputes the same digest. A
+ * change to any of these is a change that can alter a served response, and the digest
+ * is what makes that change fail the check until somebody regenerates and reads the
+ * diff.
+ */
+const INPUTS = [
+  'internal/api/demo_export_test.go',
+  'internal/demo/fixture.go',
+  'internal/demo/seed.go',
+  'internal/demo/upstream.go',
+  'internal/api/demo_policy.go',
+  'web/src/api/client.ts',
+  'web/src/types/usageEvents.ts',
+  'deploy/cloudflare/routes.mjs',
+  'deploy/cloudflare/time.mjs',
+  'scripts/generate-demo-data.mjs',
+];
+
+/** The digest of the inputs the dataset was generated from. */
+async function digestOfInputs() {
+  const hash = createHash('sha256');
+  for (const name of INPUTS) {
+    hash.update(name);
+    hash.update('\0');
+    hash.update(await readFile(join(root, name), 'utf8'));
+    hash.update('\0');
+  }
+  return hash.digest('hex');
+}
 
 /** The export's own test, which is skipped unless it is given an output directory. */
 const EXPORT_TEST = 'TestExportDemoDataset';
@@ -67,8 +102,24 @@ async function main() {
 
   if (!check) {
     const generated = await generateInto(DATA_DIR);
-    const size = (await readFile(generated)).length;
-    console.log(`wrote ${generated} (${(size / 1024).toFixed(1)} KB)`);
+    const raw = await readFile(generated, 'utf8');
+    // The provenance record is what the freshness check compares against, so it is
+    // written by the same run that writes the data it describes.
+    const decoded = JSON.parse(raw);
+    await writeFile(
+      PROVENANCE,
+      `${JSON.stringify(
+        {
+          inputs_digest: await digestOfInputs(),
+          response_count: Object.keys(decoded.responses ?? {}).length,
+          reference_ms: decoded.reference_ms,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    console.log(`wrote ${generated} (${(raw.length / 1024).toFixed(1)} KB)`);
+    console.log(`wrote ${PROVENANCE}`);
     console.log('review the diff before committing: it is where a changed response shape shows up');
     return;
   }

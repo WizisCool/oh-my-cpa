@@ -210,11 +210,10 @@ func Load() (Config, error) {
 				return Config{}, err
 			}
 		}
-		if publicURL == "" {
-			// The session cookie is only marked Secure when the deployment reports an
-			// HTTPS origin, and the platform already knows its own public host.
-			publicURL = vercelPublicURL()
-		}
+		// The origin is stated by OMCPA_PUBLIC_URL rather than discovered, because the
+		// demonstration no longer runs on a platform that announces one. A demo without
+		// it keeps a session cookie usable over plain HTTP, which is what a local run
+		// wants; a deployment sets it.
 	}
 
 	usage, err := loadUsageConfig()
@@ -323,18 +322,6 @@ func demoListenAddr() string {
 		return ":" + port
 	}
 	return ":8080"
-}
-
-// vercelPublicURL reads the deployment's own public origin, which the platform
-// exports as VERCEL_URL without a scheme. An empty result simply means the
-// deployment is not on that platform, and the session cookie stays usable over
-// plain HTTP.
-func vercelPublicURL() string {
-	host := strings.TrimSpace(os.Getenv("VERCEL_URL"))
-	if host == "" {
-		return ""
-	}
-	return "https://" + host
 }
 
 // randomDemoMasterKey mints the per-process key that encrypts the demo's

@@ -1534,25 +1534,33 @@ describes stored data is read from the database. A manual sync is answered the s
 way: it reports a pass that found an empty queue, which is what a real deployment
 answers when nothing arrived in between.
 
-### On the platform it is deployed to
+### Where the public demonstration is deployed
 
-Vercel builds and routes to `Dockerfile.vercel` (declared in `vercel.json` as a
-container service behind a catch-all rewrite), which runs the same binary with the
-demo environment baked in: the console at the site root, data under `/tmp`, and the
-listening address following the platform's `PORT` at start-up. The only adaptation
-the platform needs is that entry point; everything else is the application's own.
+The public demonstration runs as a Cloudflare Worker: the same console as static
+assets, with its API answered from a dataset generated out of the real handlers. It is
+not a second frontend - the bundle is the one this binary embeds - and the reason it
+is generated rather than hand-written is that every served response has then been
+through the same DTO projection a self-hosted install produces.
 
-The session is issued on any unauthenticated request rather than only on the
-sign-in endpoint. That is not a boundary decision - the route policy is the
-boundary, and it refuses the same operations either way - but the platform runs
-several container instances behind one address, each with its own fixture key, so a
-cookie minted by one is invalid at the next. Refusing those reads would turn a
-working page into a sign-in card, because the console issues its first queries in
-parallel with the session check.
+`deploy/cloudflare/` holds it: `worker.mjs` answers and refuses, `routes.mjs` maps a
+request to a captured response, `time.mjs` re-bases the captured history onto the
+viewer's clock, and `data/responses.json` is the dataset. `internal/api/demo_export_test.go`
+is the generator, and `scripts/generate-demo-data.mjs` is the command that runs it.
 
-`docs/ops/vercel-demo.md` is the deployment runbook: what the repository provides,
-the account-level steps no command can perform, and the failure modes that look like
-something else.
+Two properties are load-bearing rather than incidental. Every response is re-based by
+one delta before it is served, because the console asks for a window by name and a
+frozen capture would be visibly empty within a day. And the dataset's coverage is a
+gate rather than an instruction: `scripts/check-demo.mjs` fails when a console route
+has no captured reads, when a source it derives from has changed, or when it carries a
+value that must not be public. That last check matters because the dataset is
+downloadable by anyone.
+
+The demonstration does not run the product: no gateway, no database, no capture
+pipeline and no authentication are behind it, which
+[ADR 0021](adr/0021-the-public-demonstration-is-generated-data-behind-the-real-console.md)
+records as a deliberate trade. `docs/ops/cloudflare-demo.md` is the runbook, including
+the account steps no command can perform and the failure modes that look like something
+else.
 
 ## 14. Where to look next
 

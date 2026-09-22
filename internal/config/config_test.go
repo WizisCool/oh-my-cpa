@@ -64,7 +64,7 @@ func clearConfigEnv(t *testing.T) {
 	for _, name := range []string{
 		"OMCPA_BASE_PATH", "OMCPA_DATA_DIR", "OMCPA_LISTEN_ADDR", "OMCPA_MASTER_KEY",
 		"OMCPA_PUBLIC_URL", "OMCPA_VERSION", "OMCPA_CPA_BASE_URL", "OMCPA_CPA_USAGE_ADDR",
-		"OMCPA_CPA_MANAGEMENT_KEY", "OMCPA_TRUSTED_PROXY_CIDRS", DemoModeEnv, "PORT", "VERCEL_URL",
+		"OMCPA_CPA_MANAGEMENT_KEY", "OMCPA_TRUSTED_PROXY_CIDRS", DemoModeEnv, "PORT",
 		"OMCPA_UPDATE_CHECK_ENABLED", "OMCPA_OMC_REPO", "OMCPA_CPA_REPO",
 	} {
 		t.Setenv(name, "")
@@ -121,11 +121,10 @@ func TestLoadParsesTrustedProxyCIDRs(t *testing.T) {
 }
 
 // A platform export is a convenience for the demo only. A self-hosted process
-// that happens to inherit PORT or VERCEL_URL must ignore both.
+// that happens to inherit PORT must ignore it.
 func TestLoadIgnoresPlatformVariablesOutsideIsDemoMode(t *testing.T) {
 	clearConfigEnv(t)
 	t.Setenv("PORT", "4711")
-	t.Setenv("VERCEL_URL", "preview.example.test")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -190,11 +189,10 @@ func TestLoadIsDemoModeHonoursExplicitOverrides(t *testing.T) {
 	}
 }
 
-func TestLoadIsDemoModeAdoptsThePlatformPortAndOrigin(t *testing.T) {
+func TestLoadIsDemoModeAdoptsThePlatformPort(t *testing.T) {
 	clearConfigEnv(t)
 	t.Setenv(DemoModeEnv, "true")
 	t.Setenv("PORT", "3000")
-	t.Setenv("VERCEL_URL", "omc-demo.vercel.app")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -202,8 +200,20 @@ func TestLoadIsDemoModeAdoptsThePlatformPortAndOrigin(t *testing.T) {
 	if cfg.ListenAddr != ":3000" {
 		t.Fatalf("listen addr = %q, want the announced :3000", cfg.ListenAddr)
 	}
-	if cfg.PublicURL != "https://omc-demo.vercel.app" {
-		t.Fatalf("public URL = %q, want the platform origin", cfg.PublicURL)
+}
+
+// The origin is stated rather than discovered, so a demo deployment records the one it
+// was given instead of guessing at the host's.
+func TestLoadIsDemoModeUsesTheConfiguredOrigin(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv(DemoModeEnv, "true")
+	t.Setenv("OMCPA_PUBLIC_URL", "https://demo.example.test")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.PublicURL != "https://demo.example.test" {
+		t.Fatalf("public URL = %q, want the configured origin", cfg.PublicURL)
 	}
 }
 

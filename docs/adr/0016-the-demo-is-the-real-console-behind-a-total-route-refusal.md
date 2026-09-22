@@ -1,7 +1,17 @@
 # ADR 0016: The public demo is the ordinary binary with its gateway replaced, and its boundary is a route classification
 
-- Status: Accepted
+- Status: Accepted; superseded in part by [ADR 0021](0021-the-public-demonstration-is-generated-data-behind-the-real-console.md)
 - Date: 2026-09-20
+
+> **What still holds.** The demo mode described here is live: `internal/demo` and the
+> route classification are what generate the public demonstration's dataset, and they
+> are how the self-hosted paths are tested without a gateway.
+>
+> **What changed.** The public hosting and the execution model. ADR 0021 moved the
+> demonstration to a Cloudflare Worker serving generated data, so the public page no
+> longer runs this binary and no longer simulates a visitor's writes. The decision above
+> is unchanged as the account of the fixture; `docs/ops/cloudflare-demo.md` is the
+> current runbook.
 
 ## Context
 

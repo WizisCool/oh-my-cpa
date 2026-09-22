@@ -39,7 +39,7 @@ export const DOCUMENTS = [
   { file: 'docs/design.md' },
   { file: 'docs/cpamc-parity.md' },
   { file: 'docs/ops/sqlite-operations.md' },
-  { file: 'docs/ops/vercel-demo.md' },
+  { file: 'docs/ops/cloudflare-demo.md' },
   { file: 'docs/plans/model-prices.md' },
   { file: 'docs/adr/0001-go-react-sqlite-modular-monolith.md', archival: true },
   { file: 'docs/adr/0002-cpa-binding-and-identity-hierarchy.md', archival: true },
@@ -57,6 +57,22 @@ export const RETIRED_REFERENCES = [
   { pattern: /web\/src\/pages\/TriagePage\.tsx/, reason: 'the triage page was removed when navigation aligned with gateway surfaces' },
   { pattern: /goal\.md/, reason: 'the overhaul plan was retired once every stage shipped; AGENTS.md holds the Agent contract' },
   { pattern: /docs\/performance-usage-audit\.md/, reason: 'the one-off performance audit was retired; its numbers described a single local machine' },
+  {
+    pattern: /docs\/ops\/vercel-demo\.md/,
+    reason: 'the demonstration moved off Vercel to a Cloudflare Worker; docs/ops/cloudflare-demo.md replaces it',
+  },
+  {
+    pattern: /Dockerfile\.vercel/,
+    reason: 'the demonstration no longer runs a container; it is static assets and a Worker',
+  },
+  {
+    pattern: /deploy\/vercel\//,
+    reason: 'the Vercel entrypoint was removed with the container deployment',
+  },
+  {
+    pattern: /prune-vcr-images/,
+    reason: 'the container registry and its image quota were left behind with Vercel',
+  },
 ];
 
 /**

@@ -21,7 +21,7 @@ This runbook is intended for system administrators and operators running Oh My C
 
 4. **Demo mode is outside every rule above, and the runbook is not about it**:
    - A deployment with `OMCPA_DEMO_MODE=true` uses its own file, `oh-my-cpa-demo.db`, in the same data directory, and deletes it plus its WAL siblings on every boot. Nothing in it is worth backing up, restoring or migrating, and the file has its own name so that a demo pointed at a directory holding real data cannot have that data deleted with it (`internal/demo.ResetDatabase`);
-   - The rest of this runbook describes the self-hosted database. Keep `docs/ops/vercel-demo.md` for the demo's own operations.
+   - The rest of this runbook describes the self-hosted database. Keep `docs/ops/cloudflare-demo.md` for the demo's own operations.
 
 ---
 

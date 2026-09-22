@@ -35,9 +35,13 @@ Oh My CPA 是面向 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 
 
 **[oh-my-cpa-demo.vercel.app](https://oh-my-cpa-demo.vercel.app)** —— 运行在内置样例数据上的控制台。
 
-无需账号、无需密钥、无需安装：打开链接即可看到仪表盘。它由一份内置样例支撑（跨 8 个提供商、14 个模型的一年流量），因此各面板展示的是结构真实的数据；同时它运行在与正式部署完全相同的路由策略之后：登录、凭据下载、插件执行、网关配置写入，以及任何会离开本进程的操作都由服务端拒绝，控制台也会在修改不会被保存时明确告知。
+无需账号、无需密钥、无需安装：打开链接即可看到仪表盘。它由一份内置样例支撑（跨 8 个提供商、14 个模型的一年流量），因此各面板展示的是结构真实的数据；同时它运行在与正式部署完全相同的路由策略之后：凭据下载、请求日志、插件执行与网关配置写入都会被拒绝，控制台也会明确告知。
 
-Demo 不是第二套实现：它就是这个二进制在 `OMCPA_DEMO_MODE=true`、且后端没有任何真实网关的情况下运行，并以 Vercel 容器镜像方式部署（见 `docs/architecture.md` §13、`docs/ops/vercel-demo.md`）。想在本地运行同样的实例：
+该链接指向迁移前的最后一次部署。Demo 现在是一个从 `master` 自动部署的 Cloudflare Worker，切换后地址会变化，具体记录在 `docs/ops/cloudflare-demo.md`。
+
+Demo 展示的是控制台，而不是在运行产品本身：前端与二进制内嵌的是同一份构建产物，其 API 由真实 Go handler 生成的 dataset 提供 —— 因此每个响应都具备自托管部署所产生的形状，但其后没有网关、数据库或采集管道，写操作会被直接拒绝而非模拟。原因见 `docs/architecture.md` §13 与 [ADR 0021](docs/adr/0021-the-public-demonstration-is-generated-data-behind-the-real-console.md)。
+
+想在本地运行该 dataset 的来源 —— 即用于生成它的 Go 二进制 demo 模式：
 
 ```bash
 pnpm build
@@ -75,7 +79,7 @@ OMCPA_DEMO_MODE=true go run ./cmd/oh-my-cpa
 - **插件管理**：支持从插件市场浏览、安装、配置与卸载扩展插件。
 - **静态加密存储**：CPA 管理密钥与原始用量消息在 SQLite 中采用 AES-GCM 加密存储。
 - **安全审计日志**：下载认证文件、导出请求日志、查看或修改 YAML 源码、显式查看客户端或提供商密钥等敏感操作强制写入追加式审计日志；审计写入失败时拒绝该操作。
-- **Demo 模式**：`OMCPA_DEMO_MODE`（默认 `false`）让控制台改用内置样例数据，而不是真实 CPA，因此无需管理密钥、也无需任何提供商凭据。它的存储不持久——数据库在每次启动时删除重建；同时服务端会拒绝登录流程、凭据搬运、插件执行、网关配置写入，以及任何会离开本进程的操作。请仅在演示部署中开启；公开演示见[在线体验](#在线体验)。
+- **Demo 模式**：`OMCPA_DEMO_MODE`（默认 `false`）让控制台改用内置样例数据，而不是真实 CPA，因此无需管理密钥、也无需任何提供商凭据。它的存储不持久——数据库在每次启动时删除重建；同时服务端会拒绝登录流程、凭据搬运、插件执行、网关配置写入，以及任何会离开本进程的操作。它同时也是公开 Demo 数据的生成来源，因此即便公开部署已不再运行该二进制，该模式仍在使用；`OMCPA_PUBLIC_URL` 用于声明该部署的对外源，因为已没有任何平台会自动提供它。
 - **完全离线运行**：前端产物完整内嵌进 Go 二进制，生产环境无需 Node.js 运行时或外部网络 CDN。插件在外部发布的 Logo 由服务端拉取并内联，浏览器依旧只加载二进制自身提供的资源；在完全断网的部署中该拉取会失败，控制台改用内置的品牌图标。
 - **版本检查**：「系统信息」页面展示 Oh My CPA 与网关各自的运行版本和已发布版本，并跨版本融合展示变更日志。它只从 `api.github.com` 读取发布元数据（主机固定，不接受任意 URL），并像价格同步一样遵循 `HTTP_PROXY`/`HTTPS_PROXY`。后台巡检每六小时一次；打开页面和点击「检查更新」也会检查，但受每产品十五分钟的地板限制——在地板内会直接使用已缓存的索引，并在提示中说明，因为该接口是与地址共享的配额。两个开关回答两个不同的问题：`OMCPA_UPDATE_CHECK_ENABLED=false` 关闭离线部署的后台巡检，页面仍会使用上次成功检查的结果（检查失败时会说明原因与尝试时间）；`OMCPA_UPDATE_CHECK_ON_PAGE_LOAD=false` 则进一步关闭打开页面时自动执行的检查，适合完全断网或测试环境，因为浏览页面并不是操作者主动提问。「检查更新」按钮在两种设置下都可用；`OMCPA_OMC_REPO` 与 `OMCPA_CPA_REPO`（`owner/name`）可指向 fork。GitHub 未鉴权配额为每小时 60 次（按发起方地址计），被限流时页面会说明原因。变更日志正文只保存在内存中，因此重启后页面仍会列出各版本并链接到上游，但正文需重新检查后才可见（见 `docs/architecture.md` §10）。
 - **数据库维护**：同一页面可以截断 WAL 或重建数据库，前者运行时会拒绝后者。两者都会等待正在进行的写入，而不是打断它们；当文件系统缺少 SQLite 文档所述的空间（最多为数据库文件的两倍）时，重建会在开始前被拒绝。维护任务不会跨越进程重启。在主机上执行同样的操作见 `docs/ops/sqlite-operations.md` §6。
@@ -141,9 +145,11 @@ pnpm dev
 
 ## 部署说明
 
-### 在线 Demo（Vercel）
+### 在线 Demo（Cloudflare Workers）
 
-公开 Demo 以 Vercel 容器镜像方式运行同一个二进制。`Dockerfile.vercel` 与 `vercel.json` 就是该平台的全部配置；在 Vercel 控制台将项目与仓库连接后，推送到 `master` 即可自动更新生产环境。`vercel.json` 只允许 `master` 触发 Git 部署，因此 Demo 只跟随 `master`，任何分支推送都不会产生部署：每次部署都会推送一个镜像，而 Hobby 套餐的仓库上限是 50 个镜像、注册表自身没有任何保留策略。多余镜像由 `pnpm prune:vcr-images` 回收，并有定时 workflow 执行。完整步骤（含唯一需要在浏览器中完成的账号级授权）见 [`docs/ops/vercel-demo.md`](docs/ops/vercel-demo.md)。
+公开 Demo 是同一套控制台以静态资源方式托管，其 API 由 Worker 应答；将 Worker 与本仓库连接后，推送到 `master` 即会自动更新。它通过 Cloudflare 的 Git 集成部署，该集成自行管理构建令牌，因此仓库中不保存任何部署密钥。Worker 的配置是 `deploy/cloudflare/wrangler.jsonc`，完整步骤（含一次性控制台操作）见 [`docs/ops/cloudflare-demo.md`](docs/ops/cloudflare-demo.md)。
+
+API 的数据由真实 Go handler 生成，而非手工编写，因此所提供的响应具备产品实际产生的形状。`pnpm demo:generate` 用于刷新，`pnpm check:demo` 会在其落后于代码时失败，`pnpm verify:demo` 则用真实浏览器逐一验证每个控制台路由。
 
 ### Docker（筹备中）
 
@@ -174,7 +180,10 @@ pnpm dev
 | `pnpm verify` | 静态门禁：工具链检查、静态代码分析与密钥扫描 |
 | `pnpm verify:full` | 全量发布门禁：构建、Bundle 预算、浏览器端到端验收与几何探针 |
 | `pnpm verify:demo` | Demo 部署的浏览器冒烟测试（设置 `OMCPA_DEMO_URL` 可校验线上部署） |
-| `pnpm prune:vcr-images` | 回收 Vercel 注册表中多余的镜像；默认仅预览，需加 `--apply` 才真正删除 |
+| `pnpm verify:demo` | Demo 的浏览器验收：每个控制台路由都能渲染（设 `OMCPA_DEMO_URL` 可校验线上部署） |
+| `pnpm demo:generate` | 由真实 handler 重新生成 Demo 的 dataset（加 `--check` 则只校验） |
+| `pnpm check:demo` | Demo 的维护契约：覆盖率、新鲜度与隐私 |
+| `pnpm dev:demo` | 用 Wrangler 在本地运行 Demo（需先执行 `pnpm build:demo`） |
 
 ## 贡献与安全
 
@@ -187,7 +196,7 @@ pnpm dev
 - [`docs/architecture.md`](docs/architecture.md) — 模块架构图、数据流与系统不变量
 - [`docs/design.md`](docs/design.md) — 视觉设计系统与主题 Token
 - [`docs/ops/sqlite-operations.md`](docs/ops/sqlite-operations.md) — SQLite 运维、备份演练与恢复手册
-- [`docs/ops/vercel-demo.md`](docs/ops/vercel-demo.md) — 在线 Demo 的 Vercel 部署手册与人工步骤
+- [`docs/ops/cloudflare-demo.md`](docs/ops/cloudflare-demo.md) — 在线 Demo 的部署手册与人工步骤
 - [`docs/cpamc-parity.md`](docs/cpamc-parity.md) — 与官方 CPAMC 的功能对位矩阵
 - [`AGENTS.md`](AGENTS.md) — 开发者与 AI Agent 协作契约与文档同步规范
 
