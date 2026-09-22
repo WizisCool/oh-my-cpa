@@ -1078,6 +1078,18 @@ button is unaffected by either switch. The acceptance harness sets both, and the
 recording: disabling the sweep alone does not stop the traffic, because the sweep's first run is a
 full interval away and the suite visits the page that checks on open.
 
+### What a stored failure may contain
+
+A failed check records a redacted reason: one `security.RedactText` copy serves the stored
+`last_error`, the `CheckError` the page renders, and every log line, because all three can leak and
+a raw form kept for one of them defeats the other two. The reason is a remote response, and a feed or
+a proxy can echo back a token it was sent.
+
+The redactor's vendor-prefix rule had a gap worth recording: it matched only a hyphenated separator,
+so `ghp_...` - the shape a GitHub API error actually carries, and this feature reads GitHub - passed
+through untouched. It now accepts the separators the real prefixes use, and it has positive and
+negative controls; it had no test before, which is why the gap survived.
+
 ### Why a check has a floor
 
 `CheckFloor` is fifteen minutes, and every path that reads the feed passes it. The feed is

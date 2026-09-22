@@ -67,6 +67,20 @@ they can avoid transferring a body the process already holds; whether GitHub als
 them from rate-limit accounting is not something this project relies on, and the operator's
 budget is treated as spent either way.
 
+**A snapshot is published in one transaction.** The release index and the successful check metadata
+are one fact - "this is what the feed said, and here is when and how it was read" - and committing
+them separately left a window where they could disagree: a failure or shutdown between the writes
+would present this feed's versions with the previous source's provenance. The notes and validators
+are installed in memory only after that transaction commits, so the in-memory copy can never describe
+an index the database does not have. A failure rolls both back, which a test induces with a database
+trigger so the rollback is observable.
+
+**The bookkeeping that records an outcome has its own deadline, created after the read.**
+A budget spanning the feed read measured the wrong thing: the read's own timeout is longer, so a
+legitimately slow fetch expired the context that was meant to persist its result and left the
+`running` flag set - the very failure the detached context exists to prevent. Detaching a context and
+bounding it are separate requirements, and the bound belongs to the phase it protects.
+
 **A check is subject to a floor, and failures never overwrite the answer.**
 `CheckFloor` (fifteen minutes) is the shortest interval between two real reads of the feed.
 Opening the page and the manual button still check on every use, but inside the floor the

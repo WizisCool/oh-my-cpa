@@ -60,6 +60,13 @@ writer's connection is idle as far as SQLite is concerned, because its statement
 not run and no transaction is open on it. `TestMaintenanceDoesNotDeadlockAgainstAWriterHoldingAConnection`
 reproduces the scenario.
 
+**A reservation is named, and only its holder may act on it.** `Reserve` returns a handle that
+`Launch` and `Release` require. An unnamed release was a real hazard rather than a tidiness
+concern: it is called when an admission audit fails, and an unconditional clear could erase a
+*newer* reservation a later request had just made - so a job the operator had been told was accepted
+would never start, while the page showed it as running. A release naming a superseded reservation is
+a no-op, and a second launch of the same handle is refused.
+
 **No request performs database work after admitting a job.** The starting request
 measures admission, records *that admission* in the audit trail, starts the job, and
 returns the status the start returned. It performs no further database read or write,
