@@ -691,7 +691,11 @@ func TestMaintenanceAdmissionAndCompletionAreBothAudited(t *testing.T) {
 	}
 }
 
-// auditEventsFor reads the audit tail, returning what it has if the read fails.
+// auditEventsFor reads the audit tail, stopping the test if the read fails.
+//
+// A failed read is fatal rather than an empty result on purpose: every caller is asserting that an
+// audit record exists, and returning nothing would turn "the store is broken" into "the record is
+// missing" - the same failure message for a different cause.
 func auditEventsFor(t *testing.T, repo *repository.Repository, ctx context.Context, limit int) []repository.AuditEvent {
 	t.Helper()
 	events, err := repo.ListAuditEvents(ctx, limit)
