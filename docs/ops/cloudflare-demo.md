@@ -128,6 +128,11 @@ The build runs on Node only. The dataset is committed, so Cloudflare never needs
 browser or a database; generation and browser verification happen in development and in
 GitHub's checks.
 
+Verified with `pnpm exec wrangler deploy --config deploy/cloudflare/wrangler.jsonc --dry-run`:
+597 asset files, 444 KiB total and 50 KiB gzipped. That is well inside the Workers free
+plan, whose bundle limit is 64 MiB uncompressed, and it is why the dataset being
+committed costs nothing to serve.
+
 **Rollback:** Cloudflare keeps previous versions, and rolling back restores the Worker and
 its assets together. The corresponding source change should be reverted on `master` too,
 or the next push will deploy it again. There is no database to roll back, because there

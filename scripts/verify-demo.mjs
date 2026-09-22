@@ -18,9 +18,83 @@
  * The run is a claim about what a visitor sees, so it checks rendered content and not
  * just status codes: an empty root is a 200 as far as the network is concerned.
  */
+import { spawn } from 'node:child_process';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 
-const BASE = (process.env.OMCPA_DEMO_URL ?? 'http://127.0.0.1:8787').replace(/\/$/, '');
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+/**
+ * A configured address is used as given; otherwise the check starts its own server.
+ *
+ * Starting one is what makes this runnable in the release gate, where nothing else is
+ * listening. The alternative - requiring a server to already be up - is a check that
+ * passes when someone remembers to start it and fails in CI, which is the worse failure
+ * of the two.
+ */
+const CONFIGURED_URL = process.env.OMCPA_DEMO_URL;
+const LOCAL_PORT = Number(process.env.OMCPA_DEMO_PORT ?? 8787);
+const BASE = (CONFIGURED_URL ?? `http://127.0.0.1:${LOCAL_PORT}`).replace(/\/$/, '');
+
+/** How long a freshly started server is given to answer before the run gives up. */
+const STARTUP_TIMEOUT_MS = 120_000;
+
+/**
+ * Stages the console the local server serves.
+ *
+ * The Worker reads `tmp/cloudflare-demo/assets`, which `pnpm build:demo` writes. Staging
+ * it here rather than requiring it to have been staged keeps this check runnable on its
+ * own, which is what its callers assume: an earlier version read a directory that only
+ * existed because someone had run the build by hand, so it passed locally and would have
+ * failed the first time it ran in the release gate.
+ */
+async function stageConsole() {
+  await new Promise((resolve, reject) => {
+    const build = spawn('pnpm', ['build:demo'], { cwd: root, stdio: 'inherit' });
+    build.on('exit', (code) =>
+      code === 0 ? resolve() : reject(new Error(`pnpm build:demo exited with ${code}`)),
+    );
+  });
+}
+
+/**
+ * Starts the local demonstration server and returns a function that stops it.
+ *
+ * The server is spawned as a child rather than imported, because it is a process:
+ * `wrangler dev` runs the Worker in workerd, which is what the deployment runs too, so
+ * the check exercises the real runtime rather than a Node approximation of it.
+ */
+async function startLocalServer() {
+  const child = spawn(
+    'npx',
+    ['wrangler', 'dev', '--config', 'deploy/cloudflare/wrangler.jsonc', '--port', String(LOCAL_PORT)],
+    { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  const log = [];
+  child.stdout.on('data', (chunk) => log.push(String(chunk)));
+  child.stderr.on('data', (chunk) => log.push(String(chunk)));
+
+  const stop = () => {
+    if (!child.killed) child.kill('SIGTERM');
+  };
+
+  const deadline = Date.now() + STARTUP_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`${BASE}/api/healthz`);
+      if (response.ok) return stop;
+    } catch {
+      // Not listening yet; the loop is the wait.
+    }
+    if (child.exitCode !== null) {
+      throw new Error(`the local server exited with ${child.exitCode}:\n${log.join('').slice(-2000)}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  stop();
+  throw new Error(`the local server did not answer within ${STARTUP_TIMEOUT_MS / 1000}s`);
+}
 
 /**
  * The console's routes, as the application registers them.
@@ -73,6 +147,14 @@ const NAVIGATION_TIMEOUT_MS = 30_000;
 const SETTLE_MS = 2_500;
 
 async function main() {
+  // A local server is only started when no deployment was named, and it needs the
+  // console staged before it can serve one.
+  let stopServer;
+  if (!CONFIGURED_URL) {
+    await stageConsole();
+    stopServer = await startLocalServer();
+  }
+
   const browser = await chromium.launch();
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await context.newPage();
@@ -132,6 +214,7 @@ async function main() {
   }
 
   await browser.close();
+  stopServer?.();
 
   for (const failure of failures) console.error(`  FAIL ${failure}`);
   if (failedRequests.length > 0) {

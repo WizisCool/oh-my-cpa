@@ -1,5 +1,5 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
+  "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "oh-my-cpa-demo",
   "main": "worker.mjs",
   "compatibility_date": "2026-09-01",
