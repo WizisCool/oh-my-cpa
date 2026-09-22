@@ -61,19 +61,16 @@ func knownReleaseProduct(product string) error {
 	}
 }
 
-// ReplaceReleaseIndex installs one product's release index as a unit.
-//
-// Replacing rather than merging is the point: a feed that stops listing a
-// withdrawn release must stop the console claiming that release exists. The write
-// is one transaction so the index is never observed half-replaced by the page.
-//
-// `repository` is recorded on every row, so an operator who switches the
-// configured source does not get the two feeds' versions interleaved - the read
-// side filters on it.
 // PublishReleaseSnapshot installs one product's release index and its successful check metadata in
 // a single transaction.
 //
-// The two are one fact - "this is what the feed said, and here is when and how it was read" - and
+// Replacing the index rather than merging into it is the point: a feed that stops listing a
+// withdrawn release must stop the console claiming that release exists. `repository` is recorded on
+// every row, so an operator who switches the configured source does not get the two feeds' versions
+// interleaved - the read side filters on it, and the attempt's own write retires the previous
+// source's snapshot when it changes.
+//
+// The index and the success metadata are one fact - "this is what the feed said, and here is when and how it was read" - and
 // committing them separately left a window where they could disagree. A failure or a shutdown
 // between the writes would leave the new index beside the previous source's success time and latest
 // tag, so the page would present this feed's versions with the old feed's provenance. Publishing
