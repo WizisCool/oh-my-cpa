@@ -51,6 +51,11 @@ const INPUTS = [
   'web/src/types/usageEvents.ts',
   'deploy/cloudflare/routes.mjs',
   'deploy/cloudflare/time.mjs',
+  // The Worker decides routing, refusals and what each response becomes, so a change to
+  // it changes what a visitor is served as surely as a change to the export does. It was
+  // missing from this list, which meant the two files that most directly shape a served
+  // response were the two the digest did not cover.
+  'deploy/cloudflare/worker.mjs',
   'scripts/generate-demo-data.mjs',
 ];
 

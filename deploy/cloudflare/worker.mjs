@@ -127,12 +127,6 @@ export default {
   async fetch(request, env) {
     const { pathname } = new URL(request.url);
 
-    if (pathname === '/api/healthz') {
-      return new Response(JSON.stringify({ status: 'ok', version: 'v0.1.0-demo' }), {
-        headers: JSON_HEADERS,
-      });
-    }
-
     if (!pathname.startsWith('/api/')) {
       // Not an API path, so it belongs to the static assets. Handing the request back
       // to the asset binding is what lets the SPA's routes and its chunks coexist with
@@ -142,6 +136,15 @@ export default {
 
     if (isRefused(request)) return refusedResponse();
 
+    // Every read comes from the dataset, including `/api/healthz`.
+    //
+    // That endpoint was hardcoded here first, with a minimal `{status, version}` body,
+    // on the reasoning that a health check deserves a cheaper answer than a JSON walk.
+    // It cost more than it saved: the console's header reads `cpa_connected` from that
+    // response to decide whether to show the gateway as reachable, so the field's
+    // absence made the demonstration display "CPA offline" on every page while the
+    // overview reported the gateway connected. A hand-written response beside a generated
+    // dataset is one that drifts from it, and this one drifted immediately.
     const name = responseNameFor(request);
     const entry = name ? DATASET.responses[name] : undefined;
     if (!entry) return notFoundResponse(pathname);

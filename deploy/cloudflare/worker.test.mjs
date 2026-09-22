@@ -54,6 +54,35 @@ describe('the dataset the demonstration is served from', () => {
   });
 });
 
+/**
+ * Replaces every instant with a marker, leaving the rest of the response untouched.
+ *
+ * The complement of the Worker's own re-basing rules, and deliberately written separately
+ * rather than imported: a helper that shared the implementation it is checking would agree
+ * with it about a misread field, which is exactly the mistake the re-basing made once
+ * already when it read `claude-haiku-4-5` as a date.
+ */
+function withoutInstants(value) {
+  const INSTANT_BY_NAME = /(?:^|_)at_ms$/;
+  const INSTANT_NAMED = new Set([
+    't', 'to_ms', 'as_of_ms', 'timestamp_ms', 'latest_after', 'from', 'to', 'modified',
+    'exported_at', 'time', 'last_capture_at', 'last_run_at',
+  ]);
+  const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+
+  if (Array.isArray(value)) return value.map(withoutInstants);
+  if (value !== null && typeof value === 'object') {
+    const out = {};
+    for (const [name, item] of Object.entries(value)) {
+      out[name] =
+        INSTANT_BY_NAME.test(name) || INSTANT_NAMED.has(name) ? '<instant>' : withoutInstants(item);
+    }
+    return out;
+  }
+  if (typeof value === 'string' && RFC3339.test(value)) return '<instant>';
+  return value;
+}
+
 describe('routing', () => {
   it('serves each dashboard preset from its own captured window', () => {
     // Not the same response relabelled: the picker's positions have to hold different
@@ -140,6 +169,56 @@ describe('routing', () => {
     );
     const payload = await response.json();
     assert.equal(payload.window.preset, '7d');
+  });
+
+  it('serves the health check from the dataset, not from a hand-written body', async () => {
+    // This is the bug in the other direction from the session path. `/api/healthz` was
+    // answered by a hardcoded response in the Worker, and that response omitted
+    // `cpa_connected` - the field the console's header reads to decide whether it shows
+    // the gateway as reachable. Every page then displayed "CPA offline" while the
+    // overview reported it connected. The test asserts the served body equals the
+    // captured one, which is what fails when a response is written by hand beside a
+    // dataset that already has it.
+    const { default: worker } = await import('./worker.mjs');
+    const response = await worker.fetch(new Request('https://demo.example/api/healthz'), {
+      ASSETS: { fetch: () => new Response('', { status: 200 }) },
+    });
+    const served = await response.json();
+    const captured = JSON.parse(DATASET.responses.healthz.body);
+    assert.deepEqual(served, captured);
+    assert.equal(served.cpa_connected, true, 'the header reads this to report gateway reachability');
+  });
+
+  it('serves every fixed route from its dataset entry, changing only instants', async () => {
+    // The general form of the test above: any response the Worker composes rather than
+    // serving is one that can drift from what the console was built against, and the
+    // health check proved that by drifting on the day it was written.
+    //
+    // Instants are compared separately rather than excluded, because re-basing them is
+    // the Worker's job - a test that demanded byte equality would fail on every response
+    // carrying a timestamp and would be measuring the clock, not the routing. What is
+    // asserted is that nothing else differs: no field missing, none invented, no value
+    // changed by the walk.
+    const { default: worker } = await import('./worker.mjs');
+    for (const path of [
+      '/api/auth/session',
+      '/api/v1/management/overview',
+      '/api/v1/management/system',
+      '/api/v1/preferences',
+      '/api/v1/pricing',
+      '/api/v1/usage/events',
+    ]) {
+      const response = await worker.fetch(new Request(`https://demo.example${path}`), {
+        ASSETS: { fetch: () => new Response('', { status: 200 }) },
+      });
+      assert.equal(response.status, 200, `${path} did not answer`);
+      const name = responseNameFor(request(path));
+      assert.deepEqual(
+        withoutInstants(await response.json()),
+        withoutInstants(JSON.parse(DATASET.responses[name].body)),
+        `${path} does not match its captured response`,
+      );
+    }
   });
 
   it('does not answer a path it has no data for', () => {

@@ -69,6 +69,12 @@ const FIXED_ROUTES = new Map([
   // view instead of the console - which is exactly the failure mode a missing session
   // has.
   ['/api/auth/session', 'session'],
+  // The health check, which the console's header reads for `cpa_connected` to decide
+  // whether it reports the gateway as reachable. It was answered by a hardcoded response
+  // in the Worker first, which is why it went missing here: the hand-written answer hid
+  // the fact that this table had no entry for it, and the header then read a body without
+  // the field it needed.
+  ['/api/healthz', 'healthz'],
 ]);
 
 /**
