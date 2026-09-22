@@ -86,4 +86,4 @@ jobs:
 
       - name: Report the registry state
         if: always()
-        run: npx --yes vercel vcr image ls demo --project oh-my-cpa-demo || true
+        run: npx --yes vercel@59.25.0 vcr image ls demo --project oh-my-cpa-demo || true

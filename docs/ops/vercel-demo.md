@@ -115,7 +115,10 @@ pnpm prune:vcr-images --keep-aliased  # also keep what live branch aliases point
 It names the project (`--project oh-my-cpa-demo`) on every registry call, because the
 CLI's registry subcommands refuse to run without a linked project and `.vercel/` is
 gitignored - so the same command works from a fresh clone, in CI, and from a working
-copy that happens to be linked to something else.
+copy that happens to be linked to something else. It also pins the CLI version
+(`vercel@59.25.0`): the script reads the CLI's JSON, and an unpinned CLI would mean
+parsing whatever shape the registry served that day, where a shape change deletes the
+wrong image rather than reporting an error.
 
 The default keeps **only** the production image, which means the previous production deployment
 cannot be rolled back to without a rebuild. `--keep 10` buys that back for about 120MB of the

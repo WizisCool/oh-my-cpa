@@ -47,6 +47,16 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const VERCEL_TIMEOUT_MS = 120_000;
 
 /**
+ * The CLI version this script is written against.
+ *
+ * This script reads the CLI's JSON, so an unpinned `npx vercel` would mean the shapes it parses
+ * are whatever the registry served that day - and the failure mode of a shape change is a wrong
+ * deletion rather than an error. The rest of the repository pins its tools exactly for the same
+ * reason.
+ */
+const VERCEL_CLI = 'vercel@59.25.0';
+
+/**
  * Runs the Vercel CLI and parses its JSON output.
  *
  * `--project` is always passed: the CLI's registry subcommands refuse to run without a linked
@@ -55,7 +65,7 @@ const VERCEL_TIMEOUT_MS = 120_000;
  * makes it immune to whatever a developer happens to have linked locally.
  */
 async function vercelJson(args) {
-  const { stdout } = await run('npx', ['--yes', 'vercel', ...args, '--format', 'json'], {
+  const { stdout } = await run('npx', ['--yes', VERCEL_CLI, ...args, '--format', 'json'], {
     cwd: root,
     maxBuffer: 64 * 1024 * 1024,
     timeout: VERCEL_TIMEOUT_MS,
@@ -70,7 +80,7 @@ async function vercelJson(args) {
 
 /** Runs the Vercel CLI for its effect. */
 async function vercel(args) {
-  await run('npx', ['--yes', 'vercel', ...args], {
+  await run('npx', ['--yes', VERCEL_CLI, ...args], {
     cwd: root,
     maxBuffer: 64 * 1024 * 1024,
     timeout: VERCEL_TIMEOUT_MS,
