@@ -127,12 +127,27 @@ One-time setup, in the Cloudflare console:
 1. Install the Cloudflare GitHub integration and grant it access to this repository only.
 2. Create the Worker `oh-my-cpa-demo`, connect it to this repository, and set the
    production branch to `master`.
-3. **Disable non-production branch builds**, so a pull request deploys nothing. The
-   demonstration follows `master` and has no preview deployments by design. Leave the
-   non-production deploy command empty and turn preview URLs off as well: a preview URL is
-   built as `<version-prefix>-<worker-name>.<account-subdomain>.workers.dev`, so enabling
-   them would publish the demonstration under the account-level subdomain that
-   `workers_dev: false` exists to keep it off.
+3. **Turn off preview builds**, so a pull request deploys nothing. Uncheck **Enable
+   Preview Builds** under Settings → Build → Branch control.
+
+   The **Preview command** field is required by the form even with that box unchecked, and
+   the documentation is clear that the command only runs when the box is on ("When
+   enabled, every push to a branch that is not your production branch triggers a preview
+   build. Workers Builds runs the build command, followed by the Preview command"). The
+   value is therefore inert; use something self-describing rather than the default, so a
+   reader who later wonders why no preview appears finds the reason rather than a
+   `wrangler versions upload` that looks like it should have produced one:
+
+   ```
+   echo "Preview builds are disabled for this Worker; it deploys from master only."
+   ```
+
+   Preview URLs are separately guarded by `workers_dev: false`, which disables them by
+   default. Verified on the deployed Worker: a preview URL of the form
+   `<version-prefix>-oh-my-cpa-demo.<account-subdomain>.workers.dev` answers 404, so even a
+   preview command that ran could not publish the demonstration under the account-level
+   subdomain. The two settings guard the same thing from different sides, and the checkbox
+   is the one that decides whether the command runs at all.
 4. Set the build command to `pnpm build && pnpm check:demo && pnpm build:demo`, and the deploy
    command to `pnpm exec wrangler deploy --config deploy/cloudflare/wrangler.jsonc`.
 
