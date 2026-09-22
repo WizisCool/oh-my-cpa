@@ -83,6 +83,12 @@ export function planChecks(files) {
   // reason for the fast path to start paying for Chromium.
   if (hasScript) checks.add('self-tests');
 
+  // The public demonstration's Worker and its dataset live outside `scripts/`, and its
+  // tests are what keep the served responses in step with the console. A change there
+  // selects the same self-tests a tooling change does, because that is the family the
+  // checks belong to: Node tests that need no browser and no build.
+  if (has((file) => file.startsWith('deploy/cloudflare/'))) checks.add('self-tests');
+
   // The Go gates read the embedded SPA from `internal/web/dist`, so a regenerated
   // bundle is a Go-relevant change even though the diff is one HTML file.
   if (has((file) => file.startsWith('internal/web/'))) checks.add('go');
@@ -95,6 +101,7 @@ export function planChecks(files) {
     file.startsWith('web/src/') ||
     file.startsWith('internal/') ||
     file.startsWith('scripts/') ||
+    file.startsWith('deploy/') ||
     file.startsWith('.github/') ||
     file.startsWith('docs/') ||
     file.startsWith('migrations/') ||

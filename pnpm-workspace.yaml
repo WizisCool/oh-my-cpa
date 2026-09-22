@@ -2,5 +2,7 @@ packages:
   - 'web'
 allowBuilds:
   esbuild: true
+  # The local demonstration server needs its runtime binary fetched at install time.
+  workerd: true
 overrides:
   dompurify: ^3.4.15

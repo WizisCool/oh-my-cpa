@@ -136,8 +136,11 @@ func demoExportCases() []demoExportCase {
 		{Name: "request-error-logs", Path: "/api/v1/management/request-error-logs"},
 		{Name: "audit-events", Path: "/api/v1/management/audit/events"},
 		{Name: "usage-ingest-status", Path: "/api/v1/usage/ingest-status"},
-		{Name: "usage-facets", Path: "/api/v1/usage/facets"},
-		{Name: "usage-events", Path: "/api/v1/usage/events?limit=100&result=all"},
+		// The window is closed on the reference for the same reason the dashboard's is:
+		// without it the server resolves its default against the wall clock, which is
+		// not where the seeded history sits, and the list comes back empty.
+		{Name: "usage-facets", Path: "/api/v1/usage/facets?" + demoExportWindow("24h")},
+		{Name: "usage-events", Path: "/api/v1/usage/events?" + demoExportWindow("24h") + "&limit=100&result=all"},
 		// The record drawer and the audit tail are the last two reads the console can
 		// reach; the event id is one the fixture seeds.
 		{Name: "usage-event-detail", Path: "/api/v1/usage/events/13574"},

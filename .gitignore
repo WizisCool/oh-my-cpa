@@ -63,4 +63,8 @@ caddy-config/
 # example file that has to stay tracked.
 .vercel/
 .vercel
+# The local server writes its simulated bindings here - caches, a scratch database and
+# a trace store - none of which is the repository's to keep. It is per-machine state
+# that would otherwise be committed by a command that stages a directory.
+.wrangler/
 .env.local
