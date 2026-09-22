@@ -88,6 +88,10 @@ export const EXPECTED_ABSENT_PATHS = [
   { path: 'cpa/config.yaml', reason: "the operator's CPA config is user-supplied and gitignored" },
   { path: 'data/', reason: 'runtime data directory, gitignored' },
   { path: 'tmp/', reason: 'local scratch directory, gitignored' },
+  {
+    path: 'deploy/cloudflare/.wrangler/',
+    reason: "the local demonstration server's simulated bindings are per-machine state, gitignored",
+  },
   { path: 'oh-my-cpa-data/', reason: 'runtime data directory, gitignored' },
   { path: 'internal/web/dist/index.html', reason: 'committed build stub; the rest of dist/ is gitignored' },
   { path: 'web/dist/', reason: 'build output, gitignored' },
