@@ -30,6 +30,10 @@ vercel deploy                                 # preview
 vercel deploy --prod                          # production
 ```
 
+`vercel deploy` is for a manual check. A branch push deploys nothing: `vercel.json`
+allows a Git deployment on `master` only, so the demo follows `master` and nothing
+else (see the registry section below for why).
+
 A deployment takes about two minutes: the frontend build dominates, and the runtime
 stage carries a ~31 MB image. The first request after a cold start waits for the
 fixture - about four seconds - after which the instance stays warm for five minutes
@@ -49,8 +53,8 @@ has to happen in a browser. The other two can be done either way.
    method* is what installs the app that can see this repository.
 2. **Connect the project to the repository.** Either from the Vercel dashboard
    (Project → Settings → Git → Connect Git Repository) or with
-   `vercel git connect --scope <team>`. Only after this does pushing a branch create
-   a Preview deployment and pushing `master` update production.
+   `vercel git connect --scope <team>`. Only after this does pushing `master` update
+   production.
 3. **Set the project's framework to Services.** `vercel.json` declares the container
    under `services`, and the platform builds the container only when the project is in
    that mode. A project created from the dashboard may need Settings → Build &
@@ -61,10 +65,10 @@ has to happen in a browser. The other two can be done either way.
 
 Two platform defaults are worth knowing rather than changing:
 
-- **Production is public; preview deployments are protected** by Vercel
-  Authentication, so a preview link opens for a signed-in member of the team and
-  redirects everyone else. Open previews (Settings → Deployment Protection → Vercel
-  Authentication → off) if a preview has to be reachable by anyone with the link.
+- **Production is public; anything else is protected** by Vercel Authentication, so a
+  deployment URL other than the two production aliases opens for a signed-in member of
+  the team and redirects everyone else. That is the state to leave it in, since the
+  only URL meant to be public is the demo itself.
 - **The container scales to zero.** Nothing in the demo persists, so this is
   invisible except as a cold start.
 
@@ -108,10 +112,22 @@ pnpm prune:vcr-images --keep 10       # also keep the newest 10, so a rollback h
 pnpm prune:vcr-images --keep-aliased  # also keep what live branch aliases point at
 ```
 
+It names the project (`--project oh-my-cpa-demo`) on every registry call, because the
+CLI's registry subcommands refuse to run without a linked project and `.vercel/` is
+gitignored - so the same command works from a fresh clone, in CI, and from a working
+copy that happens to be linked to something else.
+
 The default keeps **only** the production image, which means the previous production deployment
 cannot be rolled back to without a rebuild. `--keep 10` buys that back for about 120MB of the
 50-image budget, and is the setting to prefer if rollbacks matter more than the tightest possible
 registry.
+
+The project is deliberately kept at a single deployment and a single image, and the deployment
+list should show exactly one entry. The demo serves `master` and nothing else, so an older
+deployment is not a fallback - it is a URL nobody reaches, and rolling back means rebuilding
+`master` at an earlier commit. Delete surplus deployments with
+`DELETE https://api.vercel.com/v13/deployments/<uid>?teamId=<team>`, which is far quicker than
+`vercel rm` per deployment; the registry is unaffected either way, so run the prune script too.
 
 ## Checking a deployment
 

@@ -53,11 +53,13 @@ jobs:
       # a runner does not have.
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          # Pinned to the toolchain the repository builds with, so the script's Node behaviour
+          # here matches a local run.
+          node-version: 22.23.2
 
       - name: Check the token is configured
         run: |
@@ -71,9 +73,9 @@ jobs:
 
       - name: Collect registry images
         env:
-          # A manual run may ask for a dry run; a scheduled one always applies, because a
-          # collection that only reports would leave the registry to fill.
-          APPLY: ${{ github.event_name == 'workflow_dispatch' && inputs.apply || true }}
+          # A manual run may ask for a dry run; a scheduled or pushed one always applies, because
+          # a collection that only reports would leave the registry to fill.
+          APPLY: ${{ github.event_name != 'workflow_dispatch' || inputs.apply }}
           KEEP: ${{ github.event_name == 'workflow_dispatch' && inputs.keep || '0' }}
         run: |
           set -o pipefail
@@ -84,4 +86,4 @@ jobs:
 
       - name: Report the registry state
         if: always()
-        run: npx --yes vercel vcr image ls demo || true
+        run: npx --yes vercel vcr image ls demo --project oh-my-cpa-demo || true

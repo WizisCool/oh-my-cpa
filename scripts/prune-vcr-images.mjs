@@ -46,7 +46,14 @@ const run = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const VERCEL_TIMEOUT_MS = 120_000;
 
-/** Runs the Vercel CLI and parses its JSON output. */
+/**
+ * Runs the Vercel CLI and parses its JSON output.
+ *
+ * `--project` is always passed: the CLI's registry subcommands refuse to run without a linked
+ * project, the link lives in `.vercel/` which is gitignored, and a clean checkout therefore has
+ * none. Naming the project explicitly keeps the script working from a fresh clone and in CI, and
+ * makes it immune to whatever a developer happens to have linked locally.
+ */
 async function vercelJson(args) {
   const { stdout } = await run('npx', ['--yes', 'vercel', ...args, '--format', 'json'], {
     cwd: root,
@@ -72,7 +79,7 @@ async function vercel(args) {
 }
 
 function parseArgs(argv) {
-  const options = { apply: false, keep: 0, repository: 'demo', json: false, keepAliased: false };
+  const options = { apply: false, keep: 0, repository: 'demo', project: 'oh-my-cpa-demo', json: false, keepAliased: false };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--apply') options.apply = true;
@@ -82,6 +89,10 @@ function parseArgs(argv) {
       const value = Number.parseInt(argv[index + 1] ?? '', 10);
       if (!Number.isInteger(value) || value < 0) throw new Error('--keep requires a non-negative integer');
       options.keep = value;
+      index += 1;
+    } else if (arg === '--project') {
+      options.project = argv[index + 1] ?? '';
+      if (!options.project) throw new Error('--project requires a name');
       index += 1;
     } else if (arg === '--repository') {
       options.repository = argv[index + 1] ?? '';
@@ -124,8 +135,8 @@ async function liveAliasDeployments() {
 }
 
 /** Images in the registry, newest first, as `{ id, shortTags, sizeBytes, created }`. */
-async function listImages(repository) {
-  const payload = await vercelJson(['vcr', 'image', 'ls', repository]);
+async function listImages(repository, project) {
+  const payload = await vercelJson(['vcr', 'image', 'ls', repository, '--project', project]);
   const rows = Array.isArray(payload) ? payload : (payload.images ?? []);
   return rows.map((row) => ({
     id: row.id ?? row.imageId,
@@ -147,7 +158,7 @@ async function main() {
   const options = parseArgs(process.argv.slice(2));
 
   const [images, deployments, aliasedUrls] = await Promise.all([
-    listImages(options.repository),
+    listImages(options.repository, options.project),
     listDeployments(),
     liveAliasDeployments(),
   ]);
@@ -228,7 +239,7 @@ async function main() {
   let removed = 0;
   for (const decision of pruned) {
     try {
-      await vercel(['vcr', 'image', 'rm', options.repository, decision.image.id, '--yes']);
+      await vercel(['vcr', 'image', 'rm', options.repository, decision.image.id, '--project', options.project, '--yes']);
       removed += 1;
     } catch (error) {
       // A single refusal must not abandon the rest: the quota is the reason this runs, and
