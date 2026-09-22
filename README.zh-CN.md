@@ -143,7 +143,7 @@ pnpm dev
 
 ### 在线 Demo（Vercel）
 
-公开 Demo 以 Vercel 容器镜像方式运行同一个二进制。`Dockerfile.vercel` 与 `vercel.json` 就是该平台的全部配置；在 Vercel 控制台将项目与仓库连接后，推送到 `master` 即可自动更新生产环境。完整步骤（含唯一需要在浏览器中完成的账号级授权）见 [`docs/ops/vercel-demo.md`](docs/ops/vercel-demo.md)。
+公开 Demo 以 Vercel 容器镜像方式运行同一个二进制。`Dockerfile.vercel` 与 `vercel.json` 就是该平台的全部配置；在 Vercel 控制台将项目与仓库连接后，推送到 `master` 即可自动更新生产环境。`vercel.json` 只允许 `master` 触发 Git 部署，因此 Demo 只跟随 `master`，任何分支推送都不会产生部署：每次部署都会推送一个镜像，而 Hobby 套餐的仓库上限是 50 个镜像、注册表自身没有任何保留策略。多余镜像由 `pnpm prune:vcr-images` 回收，并有定时 workflow 执行。完整步骤（含唯一需要在浏览器中完成的账号级授权）见 [`docs/ops/vercel-demo.md`](docs/ops/vercel-demo.md)。
 
 ### Docker（筹备中）
 
@@ -174,6 +174,7 @@ pnpm dev
 | `pnpm verify` | 静态门禁：工具链检查、静态代码分析与密钥扫描 |
 | `pnpm verify:full` | 全量发布门禁：构建、Bundle 预算、浏览器端到端验收与几何探针 |
 | `pnpm verify:demo` | Demo 部署的浏览器冒烟测试（设置 `OMCPA_DEMO_URL` 可校验线上部署） |
+| `pnpm prune:vcr-images` | 回收 Vercel 注册表中多余的镜像；默认仅预览，需加 `--apply` 才真正删除 |
 
 ## 贡献与安全
 

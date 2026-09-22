@@ -141,7 +141,7 @@ Open **`http://127.0.0.1:5173/omc/`**. Vite serves the UI with HMR and proxies `
 
 ### Online Demo (Vercel)
 
-The public demo runs the same binary as a Vercel container image. `Dockerfile.vercel` and `vercel.json` are the whole of the platform's configuration, and pushing to `master` updates production once the project is connected to the repository in the Vercel console. `docs/ops/vercel-demo.md` is the runbook, including the one account-level step that has to be done in a browser.
+The public demo runs the same binary as a Vercel container image. `Dockerfile.vercel` and `vercel.json` are the whole of the platform's configuration, and pushing to `master` updates production once the project is connected to the repository in the Vercel console. `vercel.json` allows a Git deployment on `master` only, so the demo follows `master` and no branch push creates one: every deployment pushes a registry image, the registry holds 50 per repository on the Hobby plan, and it has no retention policy of its own. `pnpm prune:vcr-images` reclaims the surplus and a scheduled workflow runs it. `docs/ops/vercel-demo.md` is the runbook, including the one account-level step that has to be done in a browser.
 
 ### Docker (In Progress)
 
@@ -175,6 +175,7 @@ The public demo runs the same binary as a Vercel container image. `Dockerfile.ve
 | `pnpm verify` | Static gate: toolchain check, static analysis, and secret scan |
 | `pnpm verify:full` | Full gate: build, bundle budgets, browser acceptance & probes |
 | `pnpm verify:demo` | Browser smoke test for the demo deployment (`OMCPA_DEMO_URL` to check a remote one) |
+| `pnpm prune:vcr-images` | Reclaim surplus Vercel registry images; dry run unless `--apply` is passed |
 
 ## Contributing & Security
 
