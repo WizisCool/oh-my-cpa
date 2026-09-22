@@ -19,26 +19,57 @@
  * just status codes: an empty root is a 200 as far as the network is concerned.
  */
 import { spawn } from 'node:child_process';
-import { dirname, resolve } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
- * A configured address is used as given; otherwise the check starts its own server.
+ * A configured address is used as given; otherwise the check serves the
+ * demonstration itself.
  *
- * Starting one is what makes this runnable in the release gate, where nothing else is
- * listening. The alternative - requiring a server to already be up - is a check that
- * passes when someone remembers to start it and fails in CI, which is the worse failure
- * of the two.
+ * Serving it here rather than through `wrangler dev` is deliberate. Wrangler starts a
+ * workerd process to do it, and that turned this check into a step that never finished
+ * in CI: the two workerd children outlived the script, held the step open, and a job
+ * with a twenty-minute budget was cancelled with the check still running. What is under
+ * test is this repository's Worker, not Cloudflare's runtime, and importing the Worker's
+ * own `fetch` exercises exactly that - with no orphan process, no bundler and no
+ * cross-process startup to wait for.
+ *
+ * The shape being emulated is the deployed one: a static asset wins, anything under
+ * `/api` reaches the Worker, and an unknown path falls back to `index.html` so the
+ * console's own router can answer it.
  */
 const CONFIGURED_URL = process.env.OMCPA_DEMO_URL;
 const LOCAL_PORT = Number(process.env.OMCPA_DEMO_PORT ?? 8787);
 const BASE = (CONFIGURED_URL ?? `http://127.0.0.1:${LOCAL_PORT}`).replace(/\/$/, '');
 
-/** How long a freshly started server is given to answer before the run gives up. */
-const STARTUP_TIMEOUT_MS = 120_000;
+const ASSETS = join(root, 'tmp', 'cloudflare-demo', 'assets');
+
+/** The content types the staged console actually contains. */
+const CONTENT_TYPES = new Map([
+  ['.html', 'text/html; charset=utf-8'],
+  ['.js', 'text/javascript; charset=utf-8'],
+  ['.css', 'text/css; charset=utf-8'],
+  ['.svg', 'image/svg+xml'],
+  ['.json', 'application/json; charset=utf-8'],
+  ['.woff2', 'font/woff2'],
+  ['.png', 'image/png'],
+  ['.ico', 'image/x-icon'],
+  ['.map', 'application/json; charset=utf-8'],
+]);
+
+/** Resolves a request path inside the staged assets, refusing anything that escapes it. */
+function assetPathFor(pathname) {
+  const decoded = decodeURIComponent(pathname);
+  const candidate = resolve(ASSETS, `.${decoded}`);
+  // A traversal attempt would otherwise read outside the staged console.
+  if (!candidate.startsWith(ASSETS)) return undefined;
+  return candidate;
+}
 
 /**
  * Stages the console the local server serves.
@@ -47,53 +78,68 @@ const STARTUP_TIMEOUT_MS = 120_000;
  * it here rather than requiring it to have been staged keeps this check runnable on its
  * own, which is what its callers assume: an earlier version read a directory that only
  * existed because someone had run the build by hand, so it passed locally and would have
- * failed the first time it ran in the release gate.
+ * failed the first time it ran unattended.
  */
 async function stageConsole() {
-  await new Promise((resolve, reject) => {
+  await new Promise((resolveBuild, reject) => {
     const build = spawn('pnpm', ['build:demo'], { cwd: root, stdio: 'inherit' });
     build.on('exit', (code) =>
-      code === 0 ? resolve() : reject(new Error(`pnpm build:demo exited with ${code}`)),
+      code === 0 ? resolveBuild() : reject(new Error(`pnpm build:demo exited with ${code}`)),
     );
   });
 }
 
 /**
- * Starts the local demonstration server and returns a function that stops it.
+ * Stages the console and serves it, returning a function that stops the server.
  *
- * The server is spawned as a child rather than imported, because it is a process:
- * `wrangler dev` runs the Worker in workerd, which is what the deployment runs too, so
- * the check exercises the real runtime rather than a Node approximation of it.
+ * The Worker is imported rather than reimplemented: `worker.fetch` is the code the
+ * deployment runs, so a routing or re-basing mistake fails here rather than on the
+ * public page.
  */
-async function startLocalServer() {
-  const child = spawn(
-    'npx',
-    ['wrangler', 'dev', '--config', 'deploy/cloudflare/wrangler.jsonc', '--port', String(LOCAL_PORT)],
-    { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] },
-  );
-  const log = [];
-  child.stdout.on('data', (chunk) => log.push(String(chunk)));
-  child.stderr.on('data', (chunk) => log.push(String(chunk)));
+async function startLocalDemo() {
+  await stageConsole();
+  const { default: worker } = await import('../deploy/cloudflare/worker.mjs');
 
-  const stop = () => {
-    if (!child.killed) child.kill('SIGTERM');
-  };
+  const server = createServer(async (request, response) => {
+    const url = new URL(request.url, BASE);
+    const isApi = url.pathname === '/api' || url.pathname.startsWith('/api/');
 
-  const deadline = Date.now() + STARTUP_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetch(`${BASE}/api/healthz`);
-      if (response.ok) return stop;
-    } catch {
-      // Not listening yet; the loop is the wait.
+    if (isApi) {
+      const workerResponse = await worker.fetch(new Request(url, { method: request.method }), {
+        // The staging directory is the asset binding, so a defensive branch in the
+        // Worker is exercised here rather than skipped.
+        ASSETS: {
+          fetch: async () => {
+            const file = assetPathFor(url.pathname);
+            const body = file ? await readFile(file).catch(() => undefined) : undefined;
+            return body
+              ? new Response(body, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
+              : new Response('not found', { status: 404 });
+          },
+        },
+      });
+      response.writeHead(workerResponse.status, Object.fromEntries(workerResponse.headers));
+      response.end(await workerResponse.text());
+      return;
     }
-    if (child.exitCode !== null) {
-      throw new Error(`the local server exited with ${child.exitCode}:\n${log.join('').slice(-2000)}`);
+
+    // A static asset wins; otherwise the console's router answers the path, which is
+    // what the deployed `not_found_handling: single-page-application` provides.
+    const file = assetPathFor(url.pathname);
+    const body = file ? await readFile(file).catch(() => undefined) : undefined;
+    if (body) {
+      const type = CONTENT_TYPES.get(extname(file)) ?? 'application/octet-stream';
+      response.writeHead(200, { 'Content-Type': type });
+      response.end(body);
+      return;
     }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
-  stop();
-  throw new Error(`the local server did not answer within ${STARTUP_TIMEOUT_MS / 1000}s`);
+    const index = await readFile(join(ASSETS, 'index.html'));
+    response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    response.end(index);
+  });
+
+  await new Promise((resolveReady) => server.listen(LOCAL_PORT, '127.0.0.1', resolveReady));
+  return () => server.close();
 }
 
 /**
@@ -149,11 +195,7 @@ const SETTLE_MS = 2_500;
 async function main() {
   // A local server is only started when no deployment was named, and it needs the
   // console staged before it can serve one.
-  let stopServer;
-  if (!CONFIGURED_URL) {
-    await stageConsole();
-    stopServer = await startLocalServer();
-  }
+  const stopServer = CONFIGURED_URL ? undefined : await startLocalDemo();
 
   const browser = await chromium.launch();
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -214,7 +256,7 @@ async function main() {
   }
 
   await browser.close();
-  stopServer?.();
+  await stopServer?.();
 
   for (const failure of failures) console.error(`  FAIL ${failure}`);
   if (failedRequests.length > 0) {
