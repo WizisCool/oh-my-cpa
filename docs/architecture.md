@@ -1022,6 +1022,8 @@ renewal date.
 | Usage | `usage_inboxes`, `usage_events`, `error_events`, `ingest_gaps`, `usage_overview_hourly_stats`, `usage_overview_daily_stats`, `usage_aggregation_checkpoints` | Milliseconds; raw payloads encrypted |
 | Pricing | `model_prices`, `model_price_versions`, `pricing_sync_state`, `pricing_model_catalog`, `pricing_catalog_state` | Versions are append-only via triggers |
 | Operations | `audit_events`, `ui_preferences`, `quota_snapshots`, `schema_migrations` | Audit has no update or delete path — only `RecordAuditEvent` writes and read queries exist, and export itself is audited; the schema carries no enforcement trigger, so the guarantee lives in the repository API |
+| Release observation | `release_index`, `release_check_state` | Migrations 024 and 025; `truncated` is added by 025, so a database that applied 024 before it existed still gains the column. Metadata only — a release's prose body is never stored (see §10); the index is replaced as a unit per product, so a source change cannot interleave two feeds |
+
 The management system surface is five routes: `GET /management/system` (the page),
 `GET /management/system/releases` (one product's merged change log), `POST
 /management/system/check-updates` (a check, subject to the floor), `GET
@@ -1032,8 +1034,6 @@ products' states and `served_from_cache`; a maintenance POST answers `202` on ad
 `503` once the service is shutting down. Every one of them answers `503` when the handler was
 built without the corresponding service, which is how a deployment that does not offer the
 surface behaves.
-
-| Release observation | `release_index`, `release_check_state` | Migrations 024 and 025; `truncated` is added by 025, so a database that applied 024 before it existed still gains the column. Metadata only — a release's prose body is never stored (see §10); the index is replaced as a unit per product, so a source change cannot interleave two feeds |
 
 Migrations are embedded from `migrations/` and applied in filename order inside
 one transaction each. A migration against an existing on-disk database first

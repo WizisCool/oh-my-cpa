@@ -3,6 +3,7 @@ package release
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -1050,5 +1051,52 @@ func TestASourceSwitchFollowedByAFailureDoesNotPresentTheOldFeed(t *testing.T) {
 	}
 	if state.LastSuccessAtMS != nil {
 		t.Fatal("the previous source's success time survived the switch")
+	}
+}
+
+// TestAFeedFailureIsRedactedBeforeItIsStored pins what the stored reason may contain.
+//
+// The string reaches `release_check_state.last_error` and is rendered on the page as
+// `CheckError`, so it is both persisted and displayed. The cause is a remote response, and a feed
+// or a proxy can echo back what it was given - a URL bearing a credential being the ordinary case
+// rather than a contrived one. The caller still receives the raw error, so the detail is not lost
+// where it is useful; what is dropped is the copy that outlives the request.
+func TestAFeedFailureIsRedactedBeforeItIsStored(t *testing.T) {
+	// Assembled rather than written as one literal. A credential-shaped string in the source is
+	// indistinguishable from a real one to a secret scanner, and this repository's own scan is a
+	// required gate - so the value is composed here and the scanner has nothing to find. The test
+	// still carries a real credential shape, which is the whole point of it.
+	credential := "ghp_" + strings.Repeat("A", 20)
+	credentialed := `Get "https://api.github.com/repos/x/y?token=` + credential + `": dial tcp: timeout`
+	service, _ := newTestService(t, func(writer http.ResponseWriter, request *http.Request) {
+		writer.WriteHeader(http.StatusInternalServerError)
+	})
+	// Substitute the failure message itself, since the point is what reaches the store.
+	service.client = feedSourceFunc(func(context.Context, string, string) (Feed, error) {
+		return Feed{}, errors.New(credentialed)
+	})
+
+	ctx := context.Background()
+	if _, err := service.CheckNow(ctx, ProductCPA); err == nil {
+		t.Fatal("a failing feed reported success")
+	}
+
+	state, err := service.repository.GetReleaseCheckState(ctx, ProductCPA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.LastError == "" {
+		t.Fatal("the failure was not recorded at all")
+	}
+	if strings.Contains(state.LastError, credential) {
+		t.Fatalf("the stored reason carries the credential: %q", state.LastError)
+	}
+	// And the page renders the stored copy, so it must be the redacted one.
+	status, err := service.Status(ctx, ProductCPA, "v7.3.5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(status.CheckError, credential) {
+		t.Fatalf("the page would display the credential: %q", status.CheckError)
 	}
 }

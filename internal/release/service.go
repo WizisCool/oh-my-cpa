@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
 )
 
 // Product keys, matching the repository layer's stored index.
@@ -259,7 +260,12 @@ func (s *Service) check(ctx context.Context, productKey string, force bool) (Com
 	// until a later check succeeds or the process restarts. Funnelling the store failures
 	// through `fail` is what makes that a property of the code rather than of remembering.
 	fail := func(cause error) (Comparison, bool, error) {
-		recordErr := s.repository.RecordReleaseCheckFailure(bookkeeping, product.Key, cause.Error())
+		// Redacted before it is stored, because this string is persisted in `last_error` and
+		// rendered as `CheckError` on the page. The cause is a remote response, and a feed or a
+		// proxy can echo back a token it was sent - a URL bearing a credential is the ordinary
+		// case rather than a contrived one. The caller still receives the raw error, so a log line
+		// and an operator's diagnostic keep the detail the stored copy deliberately loses.
+		recordErr := s.repository.RecordReleaseCheckFailure(bookkeeping, product.Key, security.RedactText(cause.Error()))
 		if recordErr != nil {
 			s.logger.Warn("could not record release check failure", "product", product.Key, "error", recordErr)
 		}

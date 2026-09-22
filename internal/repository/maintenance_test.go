@@ -18,8 +18,8 @@ import (
 // service owning its own connection that is exactly the shape the gate exists to serialize - the
 // test would be asserting against the gate rather than against the checkpoint. What is covered
 // here is that the counters are read and surfaced; the derivation from them
-// (`busy != 0` means incomplete) is a three-line branch asserted directly in
-// `TestCheckpointReportsIncompleteWhenBlocked` below.
+// (`busy != 0` means incomplete) is asserted on its values in
+// `TestInterpretCheckpointResultDerivesTheOutcomeFromTheCounters` below.
 func TestCheckpointReadsItsOwnResultCounters(t *testing.T) {
 	database := openGatedTestDatabase(t)
 	ctx := context.Background()

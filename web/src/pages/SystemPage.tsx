@@ -452,12 +452,16 @@ export const SystemPage: React.FC = () => {
     // Waiting for the page's own response, because whether this deployment allows an automatic
     // check is a server decision: the switch exists so that opening a page cannot spend requests
     // from a budget shared per address, and a page that checked regardless would defeat it.
-    if (isLoading || hasMountedCheckRef.current) return;
+    //
+    // The decision is marked as taken only once there is a response to decide on. Setting the ref
+    // on a failed first load would consume it while `sysInfo` was undefined, so a later successful
+    // refresh could never perform the check this deployment had authorised.
+    if (!sysInfo || hasMountedCheckRef.current) return;
     hasMountedCheckRef.current = true;
-    if (!isDemo && sysInfo?.update_check_on_page_load) {
+    if (!isDemo && sysInfo.update_check_on_page_load) {
       void handleCheckUpdates();
     }
-  }, [isDemo, isLoading, sysInfo?.update_check_on_page_load]);
+  }, [isDemo, sysInfo]);
 
   const handleRunCheckpoint = async () => {
     setSubmittingAction('checkpoint');
