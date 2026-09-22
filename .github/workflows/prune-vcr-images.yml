@@ -1,0 +1,87 @@
+name: Prune Vercel container images
+
+# Reclaims registry images no deployment can use.
+#
+# Why a scheduled job rather than a platform setting: Vercel pushes one container image per
+# deployment and its registry deduplicates nothing, while the deployment retention policy does not
+# cover the registry - the two are metered separately, and an image outlives the deployment that
+# produced it. A Hobby project holds 50 images per repository, so without collection the registry
+# fills, and every later deployment then builds for three minutes before failing at its last step
+# with `repository has reached the maximum allowed number of images`. The platform documents no
+# garbage collection for registry images, so this is that collection.
+#
+# Why it is safe to run on a schedule and on push to this file: the script's default keeps the
+# production image and deletes only what nothing serves, and a failed deletion leaves the registry
+# as full as it was rather than corrupting anything. It never touches deployments, so a build in
+# flight is unaffected.
+
+on:
+  schedule:
+    # Weekly. A merge to master is the only thing that creates an image now
+    # (`git.deploymentEnabled` in `vercel.json`), so this keeps a bounded lag behind the ceiling
+    # while collecting well before it matters.
+    - cron: '17 4 * * 1'
+  push:
+    paths:
+      - 'scripts/prune-vcr-images.mjs'
+      - '.github/workflows/prune-vcr-images.yml'
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Delete the images the retention policy rejects (otherwise a dry run)'
+        type: boolean
+        default: true
+      keep:
+        description: 'Also keep the newest N images, so a rollback has a target'
+        type: string
+        default: '0'
+
+permissions:
+  contents: read
+
+concurrency:
+  # One run at a time: two collections racing could each decide an image is unreferenced.
+  group: prune-vcr-images
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    env:
+      # The script reads this directly; the Vercel CLI prefers it over any stored credential, which
+      # a runner does not have.
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check the token is configured
+        run: |
+          if [ -z "${VERCEL_TOKEN}" ]; then
+            echo "::error::VERCEL_TOKEN is not set. Create a token in the Vercel console"
+            echo "(Account Settings -> Tokens) and add it as a repository secret named VERCEL_TOKEN."
+            echo "Note: the CLI cannot create one for this account ('Cannot create tokens for this app'),"
+            echo "so the console is the only path."
+            exit 1
+          fi
+
+      - name: Collect registry images
+        env:
+          # A manual run may ask for a dry run; a scheduled one always applies, because a
+          # collection that only reports would leave the registry to fill.
+          APPLY: ${{ github.event_name == 'workflow_dispatch' && inputs.apply || true }}
+          KEEP: ${{ github.event_name == 'workflow_dispatch' && inputs.keep || '0' }}
+        run: |
+          set -o pipefail
+          args=()
+          if [ "${APPLY}" = "true" ]; then args+=(--apply); fi
+          if [ "${KEEP}" != "0" ] && [ -n "${KEEP}" ]; then args+=(--keep "${KEEP}"); fi
+          node scripts/prune-vcr-images.mjs "${args[@]}"
+
+      - name: Report the registry state
+        if: always()
+        run: npx --yes vercel vcr image ls demo || true

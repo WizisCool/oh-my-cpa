@@ -73,6 +73,46 @@ reason, the image's own defaults are overridable in the usual way
 (`OMCPA_BASE_PATH`, `OMCPA_DATA_DIR`, `OMCPA_VERSION`, `OMCPA_LISTEN_ADDR`), and
 `OMCPA_MASTER_KEY` is honoured when supplied - it is otherwise minted per process.
 
+## The container registry fills up, and the platform does not empty it
+
+Vercel pushes one container image **per deployment** and the registry deduplicates nothing. Its
+deployment retention policy does not cover the registry - the two are metered separately, and an
+image outlives the deployment that produced it, so deleting a deployment reclaims no image. A Hobby
+project holds **50 images per repository**; a repository that deploys on every push reaches that
+ceiling, and every deployment after it builds for three minutes and then fails at its last step:
+
+```
+denied: repository has reached the maximum allowed number of images
+```
+
+That is not a build failure and no configuration fixes it. Two things keep it from recurring, and
+both are in this repository rather than in the console:
+
+1. **`vercel.json` deploys `master` only.** `git.deploymentEnabled` turns preview deployments off,
+   so a branch push - including every commit of a pull request - creates no image. This is the
+   difference between one image per merge and one per push, and it is why previews are not
+   available on pull requests; check a branch locally with `pnpm verify:browser` instead.
+   A fork's pull request never deployed without authorization anyway (the project's Git Fork
+   Protection), so nothing changes for outside contributors.
+2. **`pnpm prune:vcr-images` collects what is left.** It keeps the image behind the current
+   production deployment and deletes the rest, `--apply` required, dry run by default. It is also a
+   scheduled workflow (`.github/workflows/prune-vcr-images.yml`, weekly and on demand), which needs
+   a repository secret named `VERCEL_TOKEN` - the CLI refuses to create one for this account
+   (`Cannot create tokens for this app`), so the token has to be made in the console under Account
+   Settings → Tokens.
+
+```bash
+pnpm prune:vcr-images                 # dry run: what would be reclaimed
+pnpm prune:vcr-images --apply         # reclaim it
+pnpm prune:vcr-images --keep 10       # also keep the newest 10, so a rollback has a target
+pnpm prune:vcr-images --keep-aliased  # also keep what live branch aliases point at
+```
+
+The default keeps **only** the production image, which means the previous production deployment
+cannot be rolled back to without a rebuild. `--keep 10` buys that back for about 120MB of the
+50-image budget, and is the setting to prefer if rollbacks matter more than the tightest possible
+registry.
+
 ## Checking a deployment
 
 ```bash

@@ -67,7 +67,8 @@
     "test:install-chromium": "node --test scripts/install-chromium.test.mjs",
     "check:ui": "node scripts/check-ui.mjs",
     "test:check-ui-plan": "node --test scripts/check-ui-plan.test.mjs",
-    "verify:demo": "node scripts/demo-smoke.mjs"
+    "verify:demo": "node scripts/demo-smoke.mjs",
+    "prune:vcr-images": "node scripts/prune-vcr-images.mjs"
   },
   "devDependencies": {
     "@ant-design/cli": "6.6.2",

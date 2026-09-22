@@ -14,5 +14,11 @@
         "service": "demo"
       }
     }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "*": false,
+      "master": true
+    }
+  }
 }
