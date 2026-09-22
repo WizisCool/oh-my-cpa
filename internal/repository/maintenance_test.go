@@ -657,3 +657,54 @@ func TestAStaleReleaseCannotClearANewerReservation(t *testing.T) {
 	}
 	t.Fatal("the launched job never finished")
 }
+
+// TestAReleaseAfterLaunchCannotReportTheJobAsStopped pins the second half of the release guard.
+//
+// Comparing only the handle was not enough. After a launch the handle still matches, so an
+// unconditional-on-handle release cleared `status` while the job held the write gate: `Status()`
+// stopped reporting a running job, and because `Reserve` admits whenever `status.Running` is false,
+// the next request was accepted and started a *second* job beside the first - two rebuilds against
+// one database, which is the state the single-flight slot exists to prevent.
+func TestAReleaseAfterLaunchCannotReportTheJobAsStopped(t *testing.T) {
+	database := openGatedTestDatabase(t)
+	ctx := context.Background()
+	if _, err := database.SQL.ExecContext(ctx, `CREATE TABLE probe(id INTEGER PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+	service := newTestMaintenanceService(t, database)
+
+	// Hold the gate so the launched job stays in flight while the release is attempted.
+	if err := database.writeGate.enterMaintenance(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer database.writeGate.leaveMaintenance()
+
+	_, handle, err := service.Reserve(ctx, MaintenanceCheckpoint)
+	if err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	if err := service.Launch(ctx, handle); err != nil {
+		t.Fatalf("launch: %v", err)
+	}
+
+	// Releasing the handle that was just launched must be a no-op.
+	service.Release(ctx, handle)
+	if !service.Status().Running {
+		t.Fatal("a release after launch reported the running job as stopped")
+	}
+
+	// And the slot must still be taken, so a second job cannot be admitted beside the first.
+	if _, _, err := service.Reserve(ctx, MaintenanceVacuum); !errors.Is(err, ErrMaintenanceRunning) {
+		t.Fatalf("a second reservation was admitted while a job was running: %v", err)
+	}
+
+	// Let the job finish so the test does not leave it parked.
+	database.writeGate.leaveMaintenance()
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		if !service.Status().Running {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}

@@ -278,12 +278,13 @@ func (s *MaintenanceService) Reserve(ctx context.Context, action string) (Mainte
 func (s *MaintenanceService) Release(ctx context.Context, handle MaintenanceReservation) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	// Only the reservation this handle names, and only while it is unlaunched. An unconditional
-	// clear let a stale caller erase a *newer* reservation another request had just made, so a job
-	// the operator had been told was accepted would never start - and the page would show it as
-	// running. Retirement is recorded through `launchedReservation` so the abandoned reservation
-	// cannot be launched afterwards either.
-	if MaintenanceReservation(s.reservation) != handle {
+	// Only the reservation this handle names, and only while it is unlaunched. Both halves are
+	// needed. An unconditional clear let a stale caller erase a *newer* reservation another request
+	// had just made, so a job the operator had been told was accepted would never start. Comparing
+	// the handle alone left the other direction open: after a launch the handle still matches, so
+	// releasing it would report the running job as stopped - and because `Reserve` admits on
+	// `status.Running`, the next request would be accepted and start a second job beside the first.
+	if MaintenanceReservation(s.reservation) != handle || s.reservation <= s.launchedReservation {
 		return
 	}
 	s.status = MaintenanceStatus{}

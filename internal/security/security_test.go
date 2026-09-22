@@ -303,6 +303,9 @@ func TestRedactTextCatchesBareVendorPrefixes(t *testing.T) {
 		"upstream refused sk-proj-abcdefghijklmnop",
 		"upstream refused glpat-abcdefghijklmnop",
 		"upstream refused xoxb-1234567890-abcdef",
+		// Fine-grained PATs carry an underscore-bearing payload, which the coarse rule does not
+		// cover: the shape GitHub issues today for scoped tokens.
+		"upstream refused github_pat_11ABCDEFG0abcdefghij_klmnopqrstuvwxyz1234567890ABCDEF",
 	}
 	for _, input := range redacted {
 		if got := RedactText(input); got == input {
