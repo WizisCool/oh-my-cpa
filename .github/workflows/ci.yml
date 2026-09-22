@@ -210,6 +210,15 @@ jobs:
           OMCPA_SEED_USAGE_BINARY: tmp/seed-usage-browser
         run: pnpm verify:browser:release
 
+      # The public demonstration is a separate deployment of the same console, so a
+      # change can break it while every self-hosted gate stays green. It runs after the
+      # two phases above rather than beside them: it starts a workerd process, and on a
+      # 4-CPU runner that was enough to starve the acceptance suite's CPU-sensitive
+      # reads. It stages its own console and starts its own server, so it needs nothing
+      # from the steps above.
+      - name: Run the demonstration's browser acceptance
+        run: pnpm verify:demo
+
       - name: Upload browser failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v7
