@@ -112,6 +112,13 @@ pnpm prune:vcr-images --keep 10       # also keep the newest 10, so a rollback h
 pnpm prune:vcr-images --keep-aliased  # also keep what live branch aliases point at
 ```
 
+A scheduled workflow carries one silent failure mode worth knowing: GitHub disables the
+`schedule` trigger of a public repository after 60 days without activity, and it stops firing
+without raising anything. A push to `master` re-enables it, so a repository still being
+developed is unaffected; a project that goes quiet for two months should be checked for a
+"workflow disabled" banner in the Actions tab, because the registry fills for the same reason
+it did the first time.
+
 It names the project (`--project oh-my-cpa-demo`) on every registry call, because the
 CLI's registry subcommands refuse to run without a linked project and `.vercel/` is
 gitignored - so the same command works from a fresh clone, in CI, and from a working
