@@ -70,6 +70,50 @@ func knownReleaseProduct(product string) error {
 // `repository` is recorded on every row, so an operator who switches the
 // configured source does not get the two feeds' versions interleaved - the read
 // side filters on it.
+// PublishReleaseSnapshot installs one product's release index and its successful check metadata in
+// a single transaction.
+//
+// The two are one fact - "this is what the feed said, and here is when and how it was read" - and
+// committing them separately left a window where they could disagree. A failure or a shutdown
+// between the writes would leave the new index beside the previous source's success time and latest
+// tag, so the page would present this feed's versions with the old feed's provenance. Publishing
+// them together means a reader sees the previous coherent snapshot or the new coherent one, never a
+// mixture: a failed second statement rolls the first one back with it.
+func (r *Repository) PublishReleaseSnapshot(ctx context.Context, product, repository string, releases []ReleaseRecord, latestTag, etag string, truncated bool) error {
+	if r == nil || r.SQL() == nil {
+		return errors.New("repository is not initialized")
+	}
+	if err := knownReleaseProduct(product); err != nil {
+		return err
+	}
+	tx, err := r.SQL().BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin release snapshot: %w", err)
+	}
+	succeeded := false
+	defer func() {
+		if !succeeded {
+			_ = tx.Rollback()
+		}
+	}()
+	if err := r.replaceReleaseIndexTx(ctx, tx, product, repository, releases); err != nil {
+		return err
+	}
+	if err := recordReleaseCheckSuccessTx(ctx, tx, product, repository, latestTag, etag, truncated); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit release snapshot: %w", err)
+	}
+	succeeded = true
+	return nil
+}
+
+// ReplaceReleaseIndex installs a product's release index without recording a check outcome.
+//
+// It exists for callers that are storing an index and not reporting a check - the demonstration's
+// fixture, a test, an import - and delegates to the same statement as `PublishReleaseSnapshot` so
+// the two cannot diverge.
 func (r *Repository) ReplaceReleaseIndex(ctx context.Context, product, repository string, releases []ReleaseRecord) error {
 	if r == nil || r.SQL() == nil {
 		return errors.New("repository is not initialized")
@@ -77,7 +121,6 @@ func (r *Repository) ReplaceReleaseIndex(ctx context.Context, product, repositor
 	if err := knownReleaseProduct(product); err != nil {
 		return err
 	}
-	now := time.Now().UnixMilli()
 	tx, err := r.SQL().BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin release index replace: %w", err)
@@ -88,7 +131,19 @@ func (r *Repository) ReplaceReleaseIndex(ctx context.Context, product, repositor
 			_ = tx.Rollback()
 		}
 	}()
+	if err := r.replaceReleaseIndexTx(ctx, tx, product, repository, releases); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit release index replace: %w", err)
+	}
+	succeeded = true
+	return nil
+}
 
+// replaceReleaseIndexTx replaces a product's rows inside a caller's transaction.
+func (r *Repository) replaceReleaseIndexTx(ctx context.Context, tx *sql.Tx, product, repository string, releases []ReleaseRecord) error {
+	now := time.Now().UnixMilli()
 	if _, err := tx.ExecContext(ctx, `DELETE FROM release_index WHERE product = ?`, product); err != nil {
 		return fmt.Errorf("clear release index for %s: %w", product, err)
 	}
@@ -119,10 +174,31 @@ func (r *Repository) ReplaceReleaseIndex(ctx context.Context, product, repositor
 			return fmt.Errorf("insert release %s %s: %w", product, release.Tag, err)
 		}
 	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit release index replace: %w", err)
+	return nil
+}
+
+// recordReleaseCheckSuccessTx writes a successful check outcome inside a caller's transaction.
+func recordReleaseCheckSuccessTx(ctx context.Context, tx *sql.Tx, product, repository, latestTag, etag string, truncated bool) error {
+	now := time.Now().UnixMilli()
+	truncatedValue := 0
+	if truncated {
+		truncatedValue = 1
 	}
-	succeeded = true
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO release_check_state(product, repository, running, last_attempt_at_ms, last_success_at_ms, last_error, latest_tag, etag, truncated, updated_at_ms)
+		VALUES (?, ?, 0, ?, ?, '', ?, ?, ?, ?)
+		ON CONFLICT(product) DO UPDATE SET
+			repository = excluded.repository,
+			running = 0,
+			last_attempt_at_ms = excluded.last_attempt_at_ms,
+			last_success_at_ms = excluded.last_success_at_ms,
+			last_error = '',
+			latest_tag = excluded.latest_tag,
+			etag = excluded.etag,
+			truncated = excluded.truncated,
+			updated_at_ms = excluded.updated_at_ms`, product, repository, now, now, latestTag, etag, truncatedValue, now); err != nil {
+		return fmt.Errorf("record release check success for %s: %w", product, err)
+	}
 	return nil
 }
 
@@ -265,25 +341,18 @@ func (r *Repository) RecordReleaseCheckSuccess(ctx context.Context, product, rep
 	if err := knownReleaseProduct(product); err != nil {
 		return err
 	}
-	now := time.Now().UnixMilli()
-	truncatedValue := 0
-	if truncated {
-		truncatedValue = 1
+	// Delegates to the shared statement, so a snapshot's success metadata and a standalone success
+	// write cannot drift apart.
+	tx, err := r.SQL().BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin release check success: %w", err)
 	}
-	if _, err := r.SQL().ExecContext(ctx, `
-		INSERT INTO release_check_state(product, repository, running, last_attempt_at_ms, last_success_at_ms, last_error, latest_tag, etag, truncated, updated_at_ms)
-		VALUES (?, ?, 0, ?, ?, '', ?, ?, ?, ?)
-		ON CONFLICT(product) DO UPDATE SET
-			repository = excluded.repository,
-			running = 0,
-			last_attempt_at_ms = excluded.last_attempt_at_ms,
-			last_success_at_ms = excluded.last_success_at_ms,
-			last_error = '',
-			latest_tag = excluded.latest_tag,
-			etag = excluded.etag,
-			truncated = excluded.truncated,
-			updated_at_ms = excluded.updated_at_ms`, product, repository, now, now, latestTag, etag, truncatedValue, now); err != nil {
-		return fmt.Errorf("record release check success for %s: %w", product, err)
+	if err := recordReleaseCheckSuccessTx(ctx, tx, product, repository, latestTag, etag, truncated); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit release check success: %w", err)
 	}
 	return nil
 }

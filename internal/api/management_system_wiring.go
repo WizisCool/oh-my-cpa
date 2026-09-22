@@ -20,12 +20,13 @@ type MaintenanceManager interface {
 	StartCheckpoint(ctx context.Context) (repository.MaintenanceStatus, error)
 	StartVacuum(ctx context.Context) (repository.MaintenanceStatus, error)
 	Admission() repository.MaintenanceAdmission
-	// Reserve claims the single-flight slot without running anything, so the caller can
-	// audit the admission before the job holds the write gate. Launch then starts it, and
-	// Release unwinds a reservation whose audit failed.
-	Reserve(ctx context.Context, action string) (repository.MaintenanceStatus, error)
-	Launch(ctx context.Context) error
-	Release(ctx context.Context)
+	// Reserve claims the single-flight slot without running anything, so the caller can audit the
+	// admission before the job holds the write gate. It returns a handle that Launch and Release
+	// require, so a caller can only act on the reservation it made: without it, a stale Release
+	// could clear a newer reservation and a job the operator was told was accepted would never run.
+	Reserve(ctx context.Context, action string) (repository.MaintenanceStatus, repository.MaintenanceReservation, error)
+	Launch(ctx context.Context, handle repository.MaintenanceReservation) error
+	Release(ctx context.Context, handle repository.MaintenanceReservation)
 }
 
 // SetRelease attaches the release-observation service after construction, which keeps

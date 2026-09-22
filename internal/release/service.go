@@ -68,6 +68,9 @@ type Service struct {
 	// result with its own older snapshot. A lock rather than a cooldown: the second
 	// check still runs and still fetches, it just cannot publish out of order.
 	checkLocks map[string]*sync.Mutex
+	// bookkeepingBudget overrides `bookkeepingTimeout` for tests, which need to exercise a fetch
+	// slower than the budget without waiting the budget out.
+	bookkeepingBudget time.Duration
 	// singlePageByProduct records whether the cached index came from a one-page read.
 	// A validator only describes the page it came from, so a conditional request is
 	// only safe while the cached snapshot was that single page.
@@ -245,10 +248,20 @@ func (s *Service) check(ctx context.Context, productKey string, force bool) (Com
 	// store that has stopped answering hold this goroutine past shutdown, and each write below
 	// would inherit that. The deadline is short because these are small local writes, and a store
 	// that cannot complete one within it is not going to.
-	bookkeeping, cancelBookkeeping := context.WithTimeout(context.WithoutCancel(ctx), bookkeepingTimeout)
-	defer cancelBookkeeping()
+	//
+	// A budget is created per bookkeeping phase rather than once for the whole check, and never
+	// spans the feed read. A single clock started before the read measured the wrong thing: the
+	// read's own timeout is longer than this budget, so a legitimately slow fetch expired the
+	// context meant to record its outcome and left the `running` flag it had just written set -
+	// reintroducing the exact failure the detached context exists to prevent. The phases are the
+	// attempt, the outcome, and the snapshot publication.
+	bookkeeping := func() (context.Context, context.CancelFunc) {
+		return context.WithTimeout(context.WithoutCancel(ctx), s.bookkeepingTimeout())
+	}
 
-	if err := s.repository.RecordReleaseCheckAttempt(bookkeeping, product.Key, product.Repository); err != nil {
+	attemptCtx, cancelAttempt := bookkeeping()
+	defer cancelAttempt()
+	if err := s.repository.RecordReleaseCheckAttempt(attemptCtx, product.Key, product.Repository); err != nil {
 		return Comparison{}, false, err
 	}
 	s.setChecking(product.Key, true)
@@ -260,16 +273,23 @@ func (s *Service) check(ctx context.Context, productKey string, force bool) (Com
 	// until a later check succeeds or the process restarts. Funnelling the store failures
 	// through `fail` is what makes that a property of the code rather than of remembering.
 	fail := func(cause error) (Comparison, bool, error) {
-		// Redacted before it is stored, because this string is persisted in `last_error` and
-		// rendered as `CheckError` on the page. The cause is a remote response, and a feed or a
-		// proxy can echo back a token it was sent - a URL bearing a credential is the ordinary
-		// case rather than a contrived one. The caller still receives the raw error, so a log line
-		// and an operator's diagnostic keep the detail the stored copy deliberately loses.
-		recordErr := s.repository.RecordReleaseCheckFailure(bookkeeping, product.Key, security.RedactText(cause.Error()))
+		// A fresh budget, because this runs after the fetch and whatever that took is not this
+		// write's problem.
+		failCtx, cancelFail := bookkeeping()
+		defer cancelFail()
+		// One redacted copy serves every destination, because they are all capable of leaking:
+		// the reason is persisted in `last_error`, rendered as `CheckError`, and logged by the
+		// sweep and by the handler. The cause is a remote response, and a feed or a proxy can echo
+		// back a token it was sent - a URL bearing a credential is the ordinary case rather than a
+		// contrived one. Redaction keeps the diagnostic value (host, status, reason) and drops the
+		// secret, so there is nothing a caller could usefully do with the raw form that the
+		// redacted one prevents.
+		safe := errors.New(security.RedactText(cause.Error()))
+		recordErr := s.repository.RecordReleaseCheckFailure(failCtx, product.Key, safe.Error())
 		if recordErr != nil {
 			s.logger.Warn("could not record release check failure", "product", product.Key, "error", recordErr)
 		}
-		return Comparison{}, true, cause
+		return Comparison{}, true, safe
 	}
 
 	// A conditional request is only sent while this process still holds the notes it
@@ -292,7 +312,10 @@ func (s *Service) check(ctx context.Context, productKey string, force bool) (Com
 	if feed.NotModified {
 		// The stored index is still correct and the in-memory notes are still the
 		// ones it describes.
-		if err := s.repository.RecordReleaseCheckSuccess(bookkeeping, product.Key, product.Repository, s.latestTag(product.Key), s.currentETag(product.Key), s.truncated(product.Key)); err != nil {
+		unchangedCtx, cancelUnchanged := bookkeeping()
+		err := s.repository.RecordReleaseCheckSuccess(unchangedCtx, product.Key, product.Repository, s.latestTag(product.Key), s.currentETag(product.Key), s.truncated(product.Key))
+		cancelUnchanged()
+		if err != nil {
 			return fail(err)
 		}
 		return s.comparisonFor(ctx, product.Key, ""), true, nil
@@ -313,19 +336,33 @@ func (s *Service) check(ctx context.Context, productKey string, force bool) (Com
 		bodies[item.Tag] = item.Body
 	}
 
-	if err := s.repository.ReplaceReleaseIndex(bookkeeping, product.Key, product.Repository, records); err != nil {
+	// The index and its success metadata are one fact and are published in one transaction. Committing
+	// them separately left a window where they could disagree - a shutdown between the two writes
+	// would show this feed's versions with the previous source's provenance - and a reader now sees
+	// either the previous coherent snapshot or the new one.
+	snapshotCtx, cancelSnapshot := bookkeeping()
+	err = s.repository.PublishReleaseSnapshot(
+		snapshotCtx, product.Key, product.Repository, records,
+		latestStableTag(releases), feed.ETag, feed.Truncated,
+	)
+	cancelSnapshot()
+	if err != nil {
 		return fail(err)
 	}
 
-	// Notes are installed only after the index that describes them is stored, so
-	// the two cannot disagree about which release exists.
+	// Notes and validators are installed only after that transaction commits, so the in-memory copy
+	// can never describe an index the database does not have.
 	s.setBodies(product.Key, bodies, feed.ETag, feed.PageCount <= 1)
-
 	s.setTruncated(product.Key, feed.Truncated)
-	if err := s.repository.RecordReleaseCheckSuccess(bookkeeping, product.Key, product.Repository, latestStableTag(releases), feed.ETag, feed.Truncated); err != nil {
-		return fail(err)
-	}
 	return s.comparisonFor(ctx, product.Key, ""), true, nil
+}
+
+// bookkeepingTimeout returns the budget for one bookkeeping phase.
+func (s *Service) bookkeepingTimeout() time.Duration {
+	if s.bookkeepingBudget > 0 {
+		return s.bookkeepingBudget
+	}
+	return bookkeepingTimeout
 }
 
 // withinFloor reports whether the last attempt is recent enough to answer from the store.

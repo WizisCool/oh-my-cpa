@@ -55,6 +55,14 @@ type MaintenanceStatus struct {
 	Error string
 }
 
+// MaintenanceReservation identifies one claim of the single-flight slot.
+//
+// It exists so a caller can only act on the reservation it made. Without it, `Release` was
+// unconditional and a stale caller - one whose audit write had already failed, or whose request had
+// been answered and forgotten - could clear a *newer* reservation that another request had just
+// made, so a job the operator had been told was accepted would fail to start.
+type MaintenanceReservation int64
+
 // MaintenanceService runs the two database-wide maintenance actions.
 //
 // Status lives in memory rather than in a table, and that is not an optimisation.
@@ -186,12 +194,12 @@ func (s *MaintenanceService) Status() MaintenanceStatus {
 // It is reserve-then-launch for callers that have nothing to do in between. The API layer
 // uses the two steps separately so it can audit the admission first.
 func (s *MaintenanceService) StartCheckpoint(ctx context.Context) (MaintenanceStatus, error) {
-	status, err := s.Reserve(ctx, MaintenanceCheckpoint)
+	status, handle, err := s.Reserve(ctx, MaintenanceCheckpoint)
 	if err != nil {
 		return status, err
 	}
-	if err := s.Launch(ctx); err != nil {
-		s.Release(ctx)
+	if err := s.Launch(ctx, handle); err != nil {
+		s.Release(ctx, handle)
 		return status, err
 	}
 	return status, nil
@@ -199,12 +207,12 @@ func (s *MaintenanceService) StartCheckpoint(ctx context.Context) (MaintenanceSt
 
 // StartVacuum reserves and begins a VACUUM.
 func (s *MaintenanceService) StartVacuum(ctx context.Context) (MaintenanceStatus, error) {
-	status, err := s.Reserve(ctx, MaintenanceVacuum)
+	status, handle, err := s.Reserve(ctx, MaintenanceVacuum)
 	if err != nil {
 		return status, err
 	}
-	if err := s.Launch(ctx); err != nil {
-		s.Release(ctx)
+	if err := s.Launch(ctx, handle); err != nil {
+		s.Release(ctx, handle)
 		return status, err
 	}
 	return status, nil
@@ -219,24 +227,24 @@ func (s *MaintenanceService) StartVacuum(ctx context.Context) (MaintenanceStatus
 // had finished. Auditing first also means a job that never runs (because the audit write
 // failed and the caller released the reservation) leaves no gap between what the audit
 // trail claims and what happened.
-func (s *MaintenanceService) Reserve(ctx context.Context, action string) (MaintenanceStatus, error) {
+func (s *MaintenanceService) Reserve(ctx context.Context, action string) (MaintenanceStatus, MaintenanceReservation, error) {
 	s.mutex.Lock()
 	if s.isClosed {
 		s.mutex.Unlock()
-		return MaintenanceStatus{}, ErrMaintenanceClosed
+		return MaintenanceStatus{}, 0, ErrMaintenanceClosed
 	}
 	if s.status.Running {
 		status := s.status
 		s.mutex.Unlock()
-		return status, ErrMaintenanceRunning
+		return status, 0, ErrMaintenanceRunning
 	}
 	if s.db == nil || s.db.SQL == nil {
 		s.mutex.Unlock()
-		return MaintenanceStatus{}, errors.New("database is not initialized")
+		return MaintenanceStatus{}, 0, errors.New("database is not initialized")
 	}
 	if s.work == nil {
 		s.mutex.Unlock()
-		return MaintenanceStatus{}, errors.New("the maintenance connection is not available")
+		return MaintenanceStatus{}, 0, errors.New("the maintenance connection is not available")
 	}
 	// The space check runs before the slot is claimed, so a refusal never leaves a job
 	// marked as running. It is a conservative pre-check against SQLite's documented
@@ -245,7 +253,7 @@ func (s *MaintenanceService) Reserve(ctx context.Context, action string) (Mainte
 	if action == MaintenanceVacuum {
 		if err := s.checkVacuumSpace(); err != nil {
 			s.mutex.Unlock()
-			return MaintenanceStatus{}, err
+			return MaintenanceStatus{}, 0, err
 		}
 	}
 
@@ -259,25 +267,32 @@ func (s *MaintenanceService) Reserve(ctx context.Context, action string) (Mainte
 	}
 	status := s.status
 	s.reservedBytes = before
+	handle := MaintenanceReservation(s.reservation)
 	s.mutex.Unlock()
-	return status, nil
+	return status, handle, nil
 }
 
 // Release abandons a reservation whose job will never run, which is how a failed
 // admission audit is unwound: nothing was executed, so nothing should be reported as
 // running or as having run.
-func (s *MaintenanceService) Release(ctx context.Context) {
+func (s *MaintenanceService) Release(ctx context.Context, handle MaintenanceReservation) {
 	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	// Only the reservation this handle names, and only while it is unlaunched. An unconditional
+	// clear let a stale caller erase a *newer* reservation another request had just made, so a job
+	// the operator had been told was accepted would never start - and the page would show it as
+	// running. Retirement is recorded through `launchedReservation` so the abandoned reservation
+	// cannot be launched afterwards either.
+	if MaintenanceReservation(s.reservation) != handle {
+		return
+	}
 	s.status = MaintenanceStatus{}
-	// The reservation is retired as well, so a released one cannot be launched afterwards: a
-	// caller that released because its audit failed must not then start the job it abandoned.
 	s.launchedReservation = s.reservation
-	s.mutex.Unlock()
 }
 
 // Launch starts the reserved job. A launch without a successful reservation is refused
 // rather than executed, so the reservation and the work cannot come apart.
-func (s *MaintenanceService) Launch(ctx context.Context) error {
+func (s *MaintenanceService) Launch(ctx context.Context, handle MaintenanceReservation) error {
 	s.mutex.Lock()
 	if s.isClosed {
 		s.mutex.Unlock()
@@ -287,9 +302,11 @@ func (s *MaintenanceService) Launch(ctx context.Context) error {
 		s.mutex.Unlock()
 		return errors.New("no maintenance job is reserved")
 	}
-	// The reservation is consumed, so a second launch finds nothing to start: `status.Running` is
-	// true on both sides of a launch, which is why the comparison is on the identity instead.
-	if s.reservation <= s.launchedReservation {
+	// The caller must name the reservation it made, and that reservation must be unlaunched.
+	// `status.Running` is true on both sides of a launch, so the identity is what distinguishes
+	// them: a second launch of the same handle, or a launch of a handle a later reservation has
+	// superseded, both find the comparison unequal and refuse.
+	if MaintenanceReservation(s.reservation) != handle || s.reservation <= s.launchedReservation {
 		s.mutex.Unlock()
 		return errors.New("the maintenance reservation was already launched")
 	}

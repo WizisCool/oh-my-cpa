@@ -480,13 +480,14 @@ func TestReservationCannotBeLaunchedTwiceOrAfterRelease(t *testing.T) {
 
 	t.Run("a second launch is refused", func(t *testing.T) {
 		service := newTestMaintenanceService(t, database)
-		if _, err := service.Reserve(ctx, MaintenanceCheckpoint); err != nil {
+		_, handle, err := service.Reserve(ctx, MaintenanceCheckpoint)
+		if err != nil {
 			t.Fatalf("reserve: %v", err)
 		}
-		if err := service.Launch(ctx); err != nil {
+		if err := service.Launch(ctx, handle); err != nil {
 			t.Fatalf("first launch: %v", err)
 		}
-		if err := service.Launch(ctx); err == nil {
+		if err := service.Launch(ctx, handle); err == nil {
 			t.Fatal("a second launch of the same reservation was accepted, so the job would run twice")
 		}
 		// Let the launched job finish so it does not overlap the next subtest.
@@ -501,11 +502,12 @@ func TestReservationCannotBeLaunchedTwiceOrAfterRelease(t *testing.T) {
 
 	t.Run("a released reservation cannot be launched", func(t *testing.T) {
 		service := newTestMaintenanceService(t, database)
-		if _, err := service.Reserve(ctx, MaintenanceCheckpoint); err != nil {
+		_, handle, err := service.Reserve(ctx, MaintenanceCheckpoint)
+		if err != nil {
 			t.Fatalf("reserve: %v", err)
 		}
-		service.Release(ctx)
-		if err := service.Launch(ctx); err == nil {
+		service.Release(ctx, handle)
+		if err := service.Launch(ctx, handle); err == nil {
 			t.Fatal("a released reservation was launched, so an abandoned job would still run")
 		}
 	})
@@ -528,7 +530,7 @@ func TestReserveAndLaunchAreRefusedAfterClose(t *testing.T) {
 		if err := service.Close(); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := service.Reserve(ctx, MaintenanceCheckpoint); !errors.Is(err, ErrMaintenanceClosed) {
+		if _, _, err := service.Reserve(ctx, MaintenanceCheckpoint); !errors.Is(err, ErrMaintenanceClosed) {
 			t.Fatalf("reserve after close = %v, want ErrMaintenanceClosed", err)
 		}
 	})
@@ -538,14 +540,15 @@ func TestReserveAndLaunchAreRefusedAfterClose(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := service.Reserve(ctx, MaintenanceCheckpoint); err != nil {
+		_, handle, err := service.Reserve(ctx, MaintenanceCheckpoint)
+		if err != nil {
 			t.Fatalf("reserve: %v", err)
 		}
 		// Close between the reservation and the launch, which is the race a shutdown produces.
 		if err := service.Close(); err != nil {
 			t.Fatal(err)
 		}
-		if err := service.Launch(ctx); !errors.Is(err, ErrMaintenanceClosed) {
+		if err := service.Launch(ctx, handle); !errors.Is(err, ErrMaintenanceClosed) {
 			t.Fatalf("launch after close = %v, want ErrMaintenanceClosed", err)
 		}
 	})
@@ -604,4 +607,53 @@ func TestInterpretCheckpointResultDerivesTheOutcomeFromTheCounters(t *testing.T)
 			}
 		})
 	}
+}
+
+// TestAStaleReleaseCannotClearANewerReservation pins what the reservation handle is for.
+//
+// `Release` used to be unconditional, so a caller whose audit write had failed could clear a
+// reservation a *later* request had just made - and the job the operator had been told was accepted
+// would never start, while the page showed it as running until something else reset the row. Naming
+// the reservation makes a stale release a no-op.
+func TestAStaleReleaseCannotClearANewerReservation(t *testing.T) {
+	database := openGatedTestDatabase(t)
+	ctx := context.Background()
+	if _, err := database.SQL.ExecContext(ctx, `CREATE TABLE probe(id INTEGER PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+	service := newTestMaintenanceService(t, database)
+
+	// The first caller reserves, then abandons its reservation - as a failed audit does.
+	_, abandoned, err := service.Reserve(ctx, MaintenanceCheckpoint)
+	if err != nil {
+		t.Fatalf("first reserve: %v", err)
+	}
+
+	// A second caller cannot reserve while the first is live, so the first releases, and then a
+	// newer reservation is made. Releasing through the *stale* handle afterwards must not touch it.
+	service.Release(ctx, abandoned)
+	_, current, err := service.Reserve(ctx, MaintenanceCheckpoint)
+	if err != nil {
+		t.Fatalf("second reserve: %v", err)
+	}
+
+	// The stale handle names the previous reservation, so it must be refused rather than clearing
+	// the live one.
+	service.Release(ctx, abandoned)
+	if !service.Status().Running {
+		t.Fatal("a stale release cleared a newer reservation, so the accepted job would never start")
+	}
+
+	// And the live reservation still launches.
+	if err := service.Launch(ctx, current); err != nil {
+		t.Fatalf("the live reservation could not launch after a stale release: %v", err)
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		if !service.Status().Running {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("the launched job never finished")
 }

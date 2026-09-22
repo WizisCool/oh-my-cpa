@@ -430,7 +430,7 @@ func (h *Handler) startMaintenance(writer http.ResponseWriter, request *http.Req
 	// split: the audit record is a database write, and a write issued after the job starts
 	// would wait for the write gate the job holds, so the operator's 202 would not arrive
 	// until the rebuild had finished.
-	status, err := h.maintenance.Reserve(request.Context(), internalAction)
+	status, handle, err := h.maintenance.Reserve(request.Context(), internalAction)
 	if err != nil {
 		result := "failure"
 		if errors.Is(err, repository.ErrMaintenanceRunning) {
@@ -454,13 +454,13 @@ func (h *Handler) startMaintenance(writer http.ResponseWriter, request *http.Req
 		// Fail closed. An operator action against the database that leaves no audit record
 		// is not admitted at all, and the reservation is unwound so the page does not
 		// report a job that will never run.
-		h.maintenance.Release(request.Context())
+		h.maintenance.Release(request.Context(), handle)
 		writeError(writer, http.StatusInternalServerError, "could not record the maintenance admission")
 		return
 	}
 
-	if launchErr := h.maintenance.Launch(request.Context()); launchErr != nil {
-		h.maintenance.Release(request.Context())
+	if launchErr := h.maintenance.Launch(request.Context(), handle); launchErr != nil {
+		h.maintenance.Release(request.Context(), handle)
 		writeError(writer, http.StatusInternalServerError, "could not start the maintenance job")
 		return
 	}

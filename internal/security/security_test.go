@@ -285,3 +285,43 @@ func TestMaskSecretKeepsOnlyRecognisableEdges(t *testing.T) {
 		}
 	}
 }
+
+// TestRedactTextCatchesBareVendorPrefixes covers the case where a credential arrives inside a
+// message and nothing else marks it as one - no key, no header, no URL.
+//
+// The pattern matched only a hyphenated separator, so `ghp_...` passed through unredacted. That is
+// the shape a GitHub API error would actually carry, and this feature's feed errors are persisted
+// and logged, so the gap reached both a database column and a log line. The prefixes alternate now
+// because the real ones do: `sk-` for OpenAI and Anthropic, `ghp_`/`gho_`/`ghs_` for GitHub,
+// `glpat-` for GitLab, `xoxb-` for Slack.
+func TestRedactTextCatchesBareVendorPrefixes(t *testing.T) {
+	redacted := []string{
+		"upstream refused ghp_ABCDEFGHIJKLMNOPQRST",
+		"upstream refused gho_ABCDEFGHIJKLMNOPQRST",
+		"upstream refused ghs_ABCDEFGHIJKLMNOPQRST",
+		"upstream refused sk-abcdefghijklmnopqrst",
+		"upstream refused sk-proj-abcdefghijklmnop",
+		"upstream refused glpat-abcdefghijklmnop",
+		"upstream refused xoxb-1234567890-abcdef",
+	}
+	for _, input := range redacted {
+		if got := RedactText(input); got == input {
+			t.Errorf("RedactText(%q) left the credential in place", input)
+		} else if !strings.Contains(got, RedactedValue) {
+			t.Errorf("RedactText(%q) = %q, want it to contain %q", input, got, RedactedValue)
+		}
+	}
+
+	// The negative controls: prose and ordinary URLs must survive untouched, or the pattern would
+	// be corrupting diagnostics rather than protecting them.
+	untouched := []string{
+		"normal prose about a ghp token",
+		"see https://example.test/path for details",
+		"the request failed after 3 attempts",
+	}
+	for _, input := range untouched {
+		if got := RedactText(input); got != input {
+			t.Errorf("RedactText(%q) = %q, want it unchanged", input, got)
+		}
+	}
+}

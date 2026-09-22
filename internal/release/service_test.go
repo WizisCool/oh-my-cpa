@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -1098,5 +1099,97 @@ func TestAFeedFailureIsRedactedBeforeItIsStored(t *testing.T) {
 	}
 	if strings.Contains(status.CheckError, credential) {
 		t.Fatalf("the page would display the credential: %q", status.CheckError)
+	}
+
+	// The returned error reaches the sweep's log line and the handler's, so it is a leak surface
+	// too - which is why one redacted copy serves every destination rather than only the stored
+	// one.
+	returned, err := service.CheckNow(ctx, ProductCPA)
+	if err == nil {
+		t.Fatal("a failing feed reported success on the second attempt")
+	}
+	if strings.Contains(err.Error(), credential) {
+		t.Fatalf("the returned error carries the credential and would be logged: %q", err.Error())
+	}
+	_ = returned
+}
+
+// TestASweepLogsNoCredential drives the sweep's own path, which logs the error it receives.
+func TestASweepLogsNoCredential(t *testing.T) {
+	credential := "ghp_" + strings.Repeat("B", 20)
+	var logged strings.Builder
+	service, _ := newTestService(t, func(writer http.ResponseWriter, request *http.Request) {
+		writer.WriteHeader(http.StatusInternalServerError)
+	})
+	service.client = feedSourceFunc(func(context.Context, string, string) (Feed, error) {
+		return Feed{}, fmt.Errorf("upstream refused %s", credential)
+	})
+	service.logger = slog.New(slog.NewTextHandler(&logged, nil))
+
+	service.CheckAll(context.Background())
+
+	if logged.Len() == 0 {
+		t.Fatal("the sweep logged nothing for a failed check, so this test proves nothing")
+	}
+	if strings.Contains(logged.String(), credential) {
+		t.Fatalf("the sweep logged a credential: %q", logged.String())
+	}
+}
+
+// TestASlowFetchStillRecordsItsOutcome is a regression test for the deadline's position.
+//
+// The bookkeeping context used to be created once, before the feed read, with a budget shorter than
+// that read's own timeout. A fetch slower than the budget therefore expired the context meant to
+// record its result: the `running` flag it had just written was never cleared, and the page
+// reported "checking" for a check that had stopped - the failure the detached context exists to
+// prevent, reintroduced by where the clock started.
+//
+// The budget is injectable so this does not wait ten real seconds, and the delay is real rather
+// than simulated: the point is that a slow read must not consume the write's deadline.
+func TestASlowFetchStillRecordsItsOutcome(t *testing.T) {
+	ctx := context.Background()
+	db, err := repository.Open(ctx, fmt.Sprintf("file:memdb_slow_fetch_%d?mode=memory&cache=shared", releaseServiceCounter.Add(1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	service, err := New(Options{
+		Repository:    repository.New(db),
+		CPARepository: "router-for-me/CLIProxyAPI",
+		Client: feedSourceFunc(func(context.Context, string, string) (Feed, error) {
+			// Longer than the bookkeeping budget below, which is what used to expire it.
+			time.Sleep(60 * time.Millisecond)
+			return Feed{
+				Repository: "router-for-me/CLIProxyAPI",
+				Releases:   []Release{{Tag: "v7.3.11", Body: "notes"}},
+				ETag:       `W/"slow"`,
+			}, nil
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A budget well under the fetch's duration.
+	service.bookkeepingBudget = 20 * time.Millisecond
+
+	comparison, err := service.CheckNow(ctx, ProductCPA)
+	if err != nil {
+		t.Fatalf("a slow fetch failed the check outright: %v", err)
+	}
+	if comparison.LatestVersion != "v7.3.11" {
+		t.Fatalf("latest = %q, want the release the slow fetch returned", comparison.LatestVersion)
+	}
+
+	// The outcome was recorded despite the fetch outlasting the budget.
+	state, err := service.repository.GetReleaseCheckState(ctx, ProductCPA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Running {
+		t.Fatal("a fetch slower than the bookkeeping budget left the running flag set, so the page reports checking forever")
+	}
+	if state.LatestTag != "v7.3.11" {
+		t.Fatalf("stored latest tag = %q, want v7.3.11: the snapshot write was expired by the fetch", state.LatestTag)
 	}
 }

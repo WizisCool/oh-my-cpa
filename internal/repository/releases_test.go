@@ -480,3 +480,71 @@ func openDatabaseAtMigration(t *testing.T, through int) *DB {
 	}
 	return database
 }
+
+// TestPublishReleaseSnapshotIsAtomic pins that the index and its success metadata are one fact.
+//
+// Committing them separately left a window where a reader could see this feed's versions beside
+// the previous source's success time and latest tag - the new index with the old provenance. The
+// assertion is on the observable outcome of a failed publish: the previous coherent snapshot stands
+// rather than a mixture of the two.
+func TestPublishReleaseSnapshotIsAtomic(t *testing.T) {
+	ctx := context.Background()
+	repository := releaseTestRepository(t)
+
+	// A first coherent snapshot, as a successful check against the upstream would leave it.
+	if err := repository.PublishReleaseSnapshot(ctx, ReleaseProductCPA, "router-for-me/CLIProxyAPI",
+		[]ReleaseRecord{{Tag: "v7.3.10"}}, "v7.3.10", "etag-1", false); err != nil {
+		t.Fatal(err)
+	}
+	first, err := repository.GetReleaseCheckState(ctx, ReleaseProductCPA)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A publish that fails after its first statement. The trigger refuses the success write, which is
+	// the second statement in the transaction - so the index rows have already been written when the
+	// failure arrives, which is exactly the half-visible state a split commit produced. Using the
+	// database's own mechanism makes the failure deterministic rather than a race to arrange.
+	if _, err := repository.SQL().ExecContext(ctx, `
+		CREATE TRIGGER refuse_release_success BEFORE INSERT ON release_check_state
+		BEGIN SELECT RAISE(ABORT, 'induced failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_, _ = repository.SQL().ExecContext(ctx, `DROP TRIGGER refuse_release_success`)
+	}()
+
+	err = repository.PublishReleaseSnapshot(ctx, ReleaseProductCPA, "someone/fork",
+		[]ReleaseRecord{{Tag: "v9.9.9", Name: "fork release"}}, "v9.9.9", "etag-2", true)
+	if err == nil {
+		t.Fatal("a snapshot whose success write was refused was reported as published")
+	}
+
+	// The previous snapshot must be intact and whole: same source, same latest tag, same success
+	// time, no truncation flag from the failure.
+	after, err := repository.GetReleaseCheckState(ctx, ReleaseProductCPA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Repository != first.Repository {
+		t.Errorf("source = %q after a failed publish, want the previous %q", after.Repository, first.Repository)
+	}
+	if after.LatestTag != "v7.3.10" {
+		t.Errorf("latest tag = %q after a failed publish, want the previous v7.3.10", after.LatestTag)
+	}
+	if after.Truncated {
+		t.Error("a failed publish set the truncation flag")
+	}
+	if first.LastSuccessAtMS == nil || after.LastSuccessAtMS == nil || *after.LastSuccessAtMS != *first.LastSuccessAtMS {
+		t.Errorf("success time changed across a failed publish: %v -> %v", first.LastSuccessAtMS, after.LastSuccessAtMS)
+	}
+
+	// And the index still names the previous release rather than a mixture.
+	stored, err := repository.ListReleases(ctx, ReleaseProductCPA, "router-for-me/CLIProxyAPI")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stored) != 1 || stored[0].Tag != "v7.3.10" {
+		t.Fatalf("index after a failed publish = %+v, want the previous release", stored)
+	}
+}
