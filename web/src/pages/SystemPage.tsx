@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Card,
-  Row,
-  Col,
   Button,
   Tag,
   Typography,
@@ -28,6 +26,7 @@ import {
   CompressOutlined,
   ClearOutlined,
   WarningOutlined,
+  CloseOutlined,
 } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
@@ -41,6 +40,7 @@ import type {
   SystemInfoResponse,
   SystemProductVersion,
   SystemMaintenanceResponse,
+  SystemMaintenanceStatus,
   ReleaseProduct,
 } from '../types/system';
 import styles from './SystemPage.module.css';
@@ -259,7 +259,7 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
             {version.repository} <LinkOutlined />
           </a>
         </div>
-        <div>{renderStateBadge()}</div>
+        <div className={styles['product-badge']}>{renderStateBadge()}</div>
       </div>
 
       <div className={styles['version-row']} data-testid="sys-version-row">
@@ -290,11 +290,11 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
 
       {/* No routine "last checked" readout: it is the same timestamp on every card and it
           answered a question nobody asked. What remains is the one state a reader cannot infer
-          from the card - that this process holds no notes, which is normal after a restart and
-          would otherwise look like an empty change log.
+          from the card - that no release notes were retrieved, which is normal after a restart
+          and would otherwise look like an empty change log.
           It is suppressed while a check error is shown: the notes are missing because that
-          check failed, and saying "not in memory" beside the real reason would send the reader
-          looking for a memory problem instead of a feed problem. */}
+          check failed, and a second sentence about missing notes beside the real reason would
+          send the reader looking for a retrieval problem instead of a feed problem. */}
       {!version.notes_available && !version.check_error && (
         <div className={styles['product-meta']}>
           <Text type="secondary">{t('sys.notes_not_held')}</Text>
@@ -333,12 +333,26 @@ export const SystemPage: React.FC = () => {
   const [isPollingMaintenance, setIsPollingMaintenance] = useState(false);
   const [isVacuumModalOpen, setIsVacuumModalOpen] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState<ReleaseProduct | null>(null);
+  // The completed outcome the page shows, which is deliberately not the server's last job.
+  // The server retains its terminal record for the life of the process, so rendering that
+  // directly would pin the panel to a result from a previous session - one the reader cannot
+  // clear, because every reload re-reads it. This snapshot is set only for a job this page
+  // actually observed finish, and clearing it is local and therefore permanent for the reader.
+  const [displayedOutcome, setDisplayedOutcome] = useState<SystemMaintenanceStatus | null>(null);
 
   const hasMountedCheckRef = useRef(false);
-  // The last job completion already reported, so a terminal status is announced once
-  // rather than on every poll that still reads it.
+  // The last job completion already reported, so a terminal status is handled once rather than on
+  // every effect run that still reads it. The identity is the server's job id, not the finish time:
+  // this effect re-runs when the reading language changes, because `t` is one of its dependencies,
+  // and recognising the same job there is what keeps a result the reader dismissed from being
+  // restored.
   const reportedCompletionRef = useRef<number>(0);
-  const hasInitialisedCompletionRef = useRef(false);
+  // The job this page is observing, by the server's job id. A terminal status is accepted only for
+  // it or for a job that superseded it, because the query cache can still hold an earlier job's
+  // terminal record.
+  const observedJobRef = useRef<number | null>(null);
+  // The backend process these refs describe, so a restart can be told apart from a later job.
+  const lastProcessRef = useRef<number | null>(null);
 
   // The action label shown inside a message, resolved from the action the server
   // reported rather than the one that was requested.
@@ -361,17 +375,50 @@ export const SystemPage: React.FC = () => {
     staleTime: 15000,
   });
 
-  // The page's own reading of the last job is what starts a poll: a job admitted
-  // before this page was opened would otherwise be invisible, and a job that finished
-  // while the page was open would otherwise poll forever.
+  // The process the state below belongs to. Job ids come from a counter that starts again with every
+  // process, so a restart can mint an id this page has already seen: a job from the new process would
+  // then look like one already handled and its result would never be shown. Clearing the observed and
+  // reported ids when the process changes keeps identity meaningful across a restart. This runs
+  // before the effects that read those refs, because effects fire in declaration order.
+  useEffect(() => {
+    if (lastProcessRef.current === null) {
+      lastProcessRef.current = sysInfo?.runtime.started_at_ms ?? null;
+      return;
+    }
+    const processStart = sysInfo?.runtime.started_at_ms;
+    if (processStart === undefined || processStart === lastProcessRef.current) return;
+    lastProcessRef.current = processStart;
+    observedJobRef.current = null;
+    reportedCompletionRef.current = 0;
+    setDisplayedOutcome(null);
+  }, [sysInfo?.runtime.started_at_ms]);
+
+  // A running job reported by the page's own read is adopted and polled to its end: a job
+  // admitted before this page was opened, or admitted elsewhere while it is open, is real work
+  // holding the write gate, and the reader should see its outcome when it stops.
+  //
+  // Only a *running* job is adopted. A terminal record the server still holds is a result from
+  // an earlier session, and adopting it would both show it on a fresh load and make it
+  // impossible to clear, because every reload would adopt it again.
+  //
+  // Re-adopting the job already being observed is skipped, so repeated refetches of the same
+  // running job cannot restart a poll that is already following it.
   useEffect(() => {
     const job = sysInfo?.maintenance;
-    if (!job || hasInitialisedCompletionRef.current) return;
-    hasInitialisedCompletionRef.current = true;
-    // An already-finished job from before this page loaded is history, not news.
-    reportedCompletionRef.current = job.finished_at_ms || 0;
-    if (job.running) setIsPollingMaintenance(true);
-  }, [sysInfo?.maintenance]);
+    if (!job || !job.running) return;
+    const observed = observedJobRef.current;
+    if (observed !== null && observed === job.job_id) return;
+    observedJobRef.current = job.job_id;
+    // The poll's own cache is seeded with the job just adopted, because while polling is enabled
+    // that cache is what the card reads - and it can still hold an earlier job's terminal record.
+    // Reading that record instead of this job hid a job that was genuinely holding the write gate:
+    // no in-progress banner, and maintenance controls that looked idle while they were not.
+    queryClient.setQueryData<SystemMaintenanceResponse>(['management-system-maintenance'], {
+      maintenance: job,
+      maintenance_admission: sysInfo?.maintenance_admission,
+    });
+    setIsPollingMaintenance(true);
+  }, [sysInfo?.maintenance, sysInfo?.maintenance_admission, queryClient]);
 
   const { data: maintenanceData } = useQuery<SystemMaintenanceResponse>({
     queryKey: ['management-system-maintenance'],
@@ -389,19 +436,55 @@ export const SystemPage: React.FC = () => {
   const effectiveAdmission = polledMaintenance?.maintenance_admission ?? sysInfo?.maintenance_admission;
   const isMaintenanceActive = Boolean(effectiveMaintenance?.running || submittingAction !== null);
 
+  // Establish a job as being observed by this page. A POST's 202 is the usual source, but a
+  // server snapshot that already reports it running counts too: the job may have been admitted
+  // by another tab, and the reader watching it should see its outcome when it ends.
+  //
+  // A response that is already terminal is registered the same way rather than reported here: a
+  // checkpoint can finish before the response that accepted it arrives, the accepted response is
+  // written into the maintenance cache, and the terminal effect below then classifies it exactly
+  // as it classifies a polled result - one path, so an outcome cannot be reported two ways.
+  const handleAcceptedJob = (job: SystemMaintenanceStatus) => {
+    observedJobRef.current = job.job_id;
+    setIsPollingMaintenance(job.running);
+  };
+
   // The terminal state ends the poll, refreshes the storage numbers it just moved,
   // and reports what actually happened.
   useEffect(() => {
     const job = maintenanceData?.maintenance;
     if (!job || job.running || job.finished_at_ms <= 0) return;
 
+    // A terminal status is accepted for the job this page is observing, and for a job that started
+    // later - one that superseded it, which happens when a fast job finishes and another begins
+    // inside a single poll interval, so no poll ever reported the new one as running. A record from
+    // an *earlier* job is the stale one this guard exists to ignore, and an empty observation means
+    // the record is the server's retained history rather than this reader's result, so neither is
+    // adopted here.
+    // The comparison is the job id, which the server assigns from a counter rather than the clock:
+    // two jobs can start within the same millisecond, and a synchronised clock can step backwards,
+    // either of which would make a later job look like one already handled.
+    const observed = observedJobRef.current;
+    if (observed === null) return;
+    if (job.job_id !== observed && job.job_id < observed) return;
+    // The observed job moves to the one being reported, so a later poll cannot re-report it and the
+    // banner this poll was following does not outlive the job that replaced it.
+    observedJobRef.current = job.job_id;
+
     // The poll stops on the terminal state, whether or not this page already reported it.
     // Returning early for an already-announced job would leave the poll running forever
     // against a job that is never going to change again.
     setIsPollingMaintenance(false);
-    if (job.finished_at_ms === reportedCompletionRef.current) return;
 
-    reportedCompletionRef.current = job.finished_at_ms;
+    // A job's terminal state is handled once. The guard sits *before* the outcome is set, not after
+    // it: this effect re-runs when the reading language changes, and the terminal record is still
+    // in the query cache then, so setting the outcome first would put back a result the reader had
+    // dismissed - which reads as the panel having restored itself.
+    const reported = reportedCompletionRef.current;
+    if (reported !== 0 && reported === job.job_id) return;
+    reportedCompletionRef.current = job.job_id;
+
+    setDisplayedOutcome(job);
     void queryClient.invalidateQueries({ queryKey: ['management-system-info'] });
 
     const label = actionLabel(job.action);
@@ -471,7 +554,7 @@ export const SystemPage: React.FC = () => {
       // honest reading, and the outcome arrives with the terminal status.
       queryClient.setQueryData(['management-system-maintenance'], accepted);
       message.info(t('sys.maintenance_started', { action: actionLabel('checkpoint') }));
-      if (accepted.maintenance.running) setIsPollingMaintenance(true);
+      handleAcceptedJob(accepted.maintenance);
     } catch (err: unknown) {
       const msg = err instanceof ApiError ? err.message : String(err);
       message.error(t('sys.maintenance_failed', { action: actionLabel('checkpoint'), msg }));
@@ -487,7 +570,7 @@ export const SystemPage: React.FC = () => {
       const accepted = await api.runSystemMaintenance('vacuum');
       queryClient.setQueryData(['management-system-maintenance'], accepted);
       message.info(t('sys.maintenance_started', { action: actionLabel('vacuum') }));
-      if (accepted.maintenance.running) setIsPollingMaintenance(true);
+      handleAcceptedJob(accepted.maintenance);
     } catch (err: unknown) {
       const msg = err instanceof ApiError ? err.message : String(err);
       message.error(t('sys.maintenance_failed', { action: actionLabel('vacuum'), msg }));
@@ -555,6 +638,9 @@ export const SystemPage: React.FC = () => {
             icon={<SyncOutlined spin={isFetching} />}
             disabled={isFetching}
             onClick={() => {
+              // A refresh clears a completed result the reader has moved past, and never touches a
+              // running job: that one is live server state, and the panel below keeps showing it.
+              setDisplayedOutcome(null);
               void refetch();
               void queryClient.invalidateQueries({ queryKey: ['management-system-maintenance'] });
             }}
@@ -573,353 +659,362 @@ export const SystemPage: React.FC = () => {
         />
       )}
 
-      {/* Row 1: Versions & Updates (Left) + SQLite Storage (Right) */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-        {/* Left Column: Versions & Updates */}
-        <Col xs={24} lg={12}>
-          <Card
-            title={
-              <div className={styles['card-head']} data-testid="sys-card-head">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <DashboardOutlined />
-                  <span>{t('sys.version_card')}</span>
-                </div>
-                {/* The check lives on the card it acts on: it refreshes the versions below
-                    it, and a page-level button that changed one card was a control placed
-                    away from its own effect. */}
-                <Button
-                  type="link"
-                  size="small"
-                  icon={<CloudDownloadOutlined spin={isCheckingUpdates} />}
-                  loading={isCheckingUpdates}
-                  // The demonstration refuses this route on the server, so the control is
-                  // disabled rather than offered: a button whose only outcome is a refusal
-                  // teaches the reader something untrue about the product.
-                  disabled={isDemo || isCheckingUpdates}
-                  title={isDemo ? t('demo.blocked') : undefined}
-                  onClick={() => void handleCheckUpdates()}
-                >
-                  {isCheckingUpdates ? t('sys.checking_updates') : t('sys.check_updates')}
-                </Button>
-              </div>
-            }
-            style={{ height: '100%' }}
-          >
-            {sysInfo && (
-              <>
-                <ProductBlock
-                  productTitle={t('sys.omc_version')}
-                  version={sysInfo.omc_version}
-                  onOpenChangelog={() => setExpandedProduct('omc')}
-                />
-                <ProductBlock
-                  productTitle={t('sys.cpa_version')}
-                  version={sysInfo.cpa_version}
-                  onOpenChangelog={() => setExpandedProduct('cpa')}
-                />
-              </>
-            )}
-          </Card>
-        </Col>
-
-        {/* Right Column: SQLite Storage */}
-        <Col xs={24} lg={12}>
-          <Card
-            title={
+      {/* 2x2 Grid of the 4 System Information cards */}
+      <div className={styles['system-grid']}>
+        {/* Card 1: Versions & Updates */}
+        <Card
+          className={styles['system-card']}
+          data-testid="sys-card-versions"
+          title={
+            <div className={styles['card-head']} data-testid="sys-card-head">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <DatabaseOutlined />
-                <span>{t('sys.storage_card')}</span>
+                <DashboardOutlined />
+                <span>{t('sys.version_card')}</span>
               </div>
-            }
-            style={{ height: '100%' }}
-          >
-            {sysInfo && (
-              <>
-                <div className={styles['storage-headline']}>
-                  <Text type="secondary">{t('sys.storage_total')}</Text>
-                  <span className={styles['storage-total-num']}>
-                    {formatBytes(sysInfo.database.files.total_bytes)}
-                  </span>
-                </div>
-
-                <div className={styles['file-pills']}>
-                  <div className={styles['file-pill']}>
-                    <span className={styles['file-pill-label']}>{t('sys.storage_main')}</span>
-                    <span className={styles['file-pill-val']}>
-                      {sysInfo.database.files.main_exists
-                        ? formatBytes(sysInfo.database.files.main_bytes)
-                        : t('sys.file_not_exist')}
-                    </span>
-                  </div>
-
-                  <div className={styles['file-pill']}>
-                    <span className={styles['file-pill-label']}>{t('sys.storage_wal')}</span>
-                    <span className={styles['file-pill-val']}>
-                      {sysInfo.database.files.wal_exists
-                        ? formatBytes(sysInfo.database.files.wal_bytes)
-                        : t('sys.file_not_exist')}
-                    </span>
-                  </div>
-
-                  <div className={styles['file-pill']}>
-                    <span className={styles['file-pill-label']}>{t('sys.storage_shm')}</span>
-                    <span className={styles['file-pill-val']}>
-                      {sysInfo.database.files.shm_exists
-                        ? formatBytes(sysInfo.database.files.shm_bytes)
-                        : t('sys.file_not_exist')}
-                    </span>
-                  </div>
-                </div>
-
-                {/* What the file is, rather than how it is organised internally: the
-                    observed journal mode, the schema generation, and the space in use. Page
-                    geometry, free pages and the connection's own settings are in the
-                    redacted diagnostics bundle for anyone who needs them. */}
-                <div className={styles['storage-facts']}>
-                  <div className={styles['storage-fact']}>
-                    <span className={styles['storage-detail-label']}>{t('sys.journal_mode')}</span>
-                    <Tag style={{ textTransform: 'uppercase', margin: 0 }}>
-                      {sysInfo.database.journal_mode || '—'}
-                    </Tag>
-                  </div>
-                  <div className={styles['storage-fact']}>
-                    <span className={styles['storage-detail-label']}>{t('sys.schema_version')}</span>
-                    <Tag style={{ margin: 0 }}>v{sysInfo.database.schema_version}</Tag>
-                  </div>
-                  <div className={styles['storage-fact']}>
-                    <span className={styles['storage-detail-label']}>{t('sys.used_bytes')}</span>
-                    <span className={styles['storage-detail-val']}>
-                      {formatBytes(sysInfo.database.used_bytes)}
-                    </span>
-                  </div>
-                </div>
-              </>
-            )}
-          </Card>
-        </Col>
-      </Row>
-
-      {/* Row 2: Component Topology & Health */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-        <Col xs={24} md={12}>
-          <Card
-            title={
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <CloudServerOutlined />
-                <span>{t('sys.topology_card')}</span>
-              </div>
-            }
-            style={{ height: '100%' }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* CPA Gateway */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <div style={{ fontWeight: 600 }}>{t('sys.component_cpa')}</div>
-                  <div style={{ fontSize: 12, color: 'var(--meta)', fontFamily: 'monospace' }}>
-                    {sysInfo?.cpa.endpoint_masked}
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  {sysInfo?.cpa.status === 'connected' ? (
-                    <Tag color="success" icon={<CheckCircleOutlined />}>
-                      {sysInfo.cpa.latency_ms > 0
-                        ? t('sys.cpa_latency', { ms: sysInfo.cpa.latency_ms })
-                        : t('shell.connected')}
-                    </Tag>
-                  ) : (
-                    <Tag color="error" icon={<CloseCircleOutlined />}>
-                      {t('shell.offline')}
-                    </Tag>
-                  )}
-                </div>
-              </div>
-
-              {/* SQLite DB */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontWeight: 600 }}>{t('sys.component_db')}</div>
-                  <div style={{ fontSize: 12, color: 'var(--meta)' }}>
-                    {t('sys.db_mode', {
-                      mode: (sysInfo?.database.journal_mode || '').toUpperCase() || '—',
-                    })}
-                  </div>
-                </div>
-                <div>
-                  {sysInfo?.database.status === 'ok' ? (
-                    <Tag color="success">{t('inst.db_ok')}</Tag>
-                  ) : (
-                    <Tag color="error">{t('inst.db_error')}</Tag>
-                  )}
-                </div>
-              </div>
-
-              {/* Collector */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontWeight: 600 }}>{t('sys.component_collector')}</div>
-                  <div style={{ fontSize: 12, color: 'var(--meta)' }}>
-                    {t('sys.collector_mode', {
-                      mode: sysInfo?.collector.mode || 'auto',
-                      gaps: sysInfo?.collector.gap_count || 0,
-                    })}
-                  </div>
-                </div>
-                <div>
-                  <Tag color={sysInfo?.collector.status === 'active' ? 'processing' : 'default'}>
-                    {sysInfo?.collector.status === 'active'
-                      ? t('sys.collector_status_active')
-                      : t('sys.collector_status_disabled')}
-                  </Tag>
-                </div>
-              </div>
-            </div>
-          </Card>
-        </Col>
-      </Row>
-
-      {/* Row 3: Maintenance & Diagnostics */}
-      <Row gutter={[16, 16]}>
-        <Col xs={24}>
-          <Card
-            title={
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <SafetyCertificateOutlined />
-                <span>{t('sys.maintenance_card')}</span>
-              </div>
-            }
-          >
-            {/* Actions Bar */}
-            <div className={styles['maintenance-actions']}>
-              <Tooltip title={t('sys.checkpoint_desc')}>
-                <Button
-                  icon={<ClearOutlined />}
-                  loading={
-                    submittingAction === 'checkpoint' ||
-                    (effectiveMaintenance?.running &&
-                      (effectiveMaintenance.action === 'checkpoint' || effectiveMaintenance.action === 'wal_checkpoint'))
-                  }
-                  disabled={isDemo || isMaintenanceActive}
-                  onClick={() => void handleRunCheckpoint()}
-                >
-                  {t('sys.action_checkpoint')}
-                </Button>
-              </Tooltip>
-
-              <Tooltip
-                title={
-                  effectiveAdmission && !effectiveAdmission.allowed
-                    ? t('sys.vacuum_disabled_reason', { reason: effectiveAdmission.reason })
-                    : t('sys.vacuum_desc')
-                }
-              >
-                <Button
-                  icon={<CompressOutlined />}
-                  loading={
-                    submittingAction === 'vacuum' ||
-                    (effectiveMaintenance?.running && effectiveMaintenance.action === 'vacuum')
-                  }
-                  disabled={isDemo || isMaintenanceActive || (effectiveAdmission ? !effectiveAdmission.allowed : false)}
-                  onClick={() => setIsVacuumModalOpen(true)}
-                >
-                  {t('sys.action_vacuum')}
-                </Button>
-              </Tooltip>
-
+              {/* The check lives on the card it acts on: it refreshes the versions below
+                  it, and a page-level button that changed one card was a control placed
+                  away from its own effect. */}
               <Button
-                type="primary"
-                icon={<DownloadOutlined />}
-                loading={downloadingDiag}
-                disabled={isDemo}
+                type="link"
+                size="small"
+                icon={<CloudDownloadOutlined spin={isCheckingUpdates} />}
+                loading={isCheckingUpdates}
+                // The demonstration refuses this route on the server, so the control is
+                // disabled rather than offered: a button whose only outcome is a refusal
+                // teaches the reader something untrue about the product.
+                disabled={isDemo || isCheckingUpdates}
                 title={isDemo ? t('demo.blocked') : undefined}
-                onClick={() => void handleDownloadDiagnostics()}
+                onClick={() => void handleCheckUpdates()}
               >
-                {t('sys.download_diag')}
+                {isCheckingUpdates ? t('sys.checking_updates') : t('sys.check_updates')}
               </Button>
             </div>
-
-            {/* In-progress banner */}
-            {effectiveMaintenance?.running && (
-              <Alert
-                type="info"
-                showIcon
-                icon={<Spin size="small" />}
-                style={{ marginBottom: 16 }}
-                description={t('sys.maintenance_in_progress', { action: actionLabel(effectiveMaintenance.action) })}
+          }
+        >
+          {sysInfo && (
+            <>
+              <ProductBlock
+                productTitle={t('sys.omc_version')}
+                version={sysInfo.omc_version}
+                onOpenChangelog={() => setExpandedProduct('omc')}
               />
-            )}
+              <ProductBlock
+                productTitle={t('sys.cpa_version')}
+                version={sysInfo.cpa_version}
+                onOpenChangelog={() => setExpandedProduct('cpa')}
+              />
+            </>
+          )}
+        </Card>
 
-            {/* Previous job outcome */}
-            {!effectiveMaintenance?.running && effectiveMaintenance?.action && (
-              <div className={styles['maintenance-box']}>
-                <div className={styles['maintenance-box-title']}>
-                  {effectiveMaintenance.error ? (
-                    <CloseCircleOutlined style={{ color: 'var(--ant-color-error)' }} />
-                  ) : effectiveMaintenance.incomplete ? (
-                    // A partial result is its own outcome, not a qualified success. SQLite reports
-                    // a blocked checkpoint in the statement's result row rather than as an error,
-                    // so a green checkmark here would claim the log was truncated when it was not.
-                    <WarningOutlined style={{ color: 'var(--ant-color-warning)' }} />
-                  ) : (
-                    <CheckCircleOutlined style={{ color: 'var(--ant-color-success)' }} />
-                  )}
-                  <span>
-                    {effectiveMaintenance.error
-                      ? t('sys.maintenance_failed', {
-                          action: actionLabel(effectiveMaintenance.action),
-                          msg: effectiveMaintenance.error,
-                        })
-                      : effectiveMaintenance.incomplete
-                        ? t('sys.maintenance_incomplete_title', {
-                            action: actionLabel(effectiveMaintenance.action),
-                          })
-                        : t('sys.maintenance_success', { action: actionLabel(effectiveMaintenance.action) })}
+        {/* Card 2: SQLite Storage */}
+        <Card
+          className={styles['system-card']}
+          data-testid="sys-card-storage"
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <DatabaseOutlined />
+              <span>{t('sys.storage_card')}</span>
+            </div>
+          }
+        >
+          {sysInfo && (
+            <>
+              <div className={styles['storage-headline']}>
+                <span className={styles['storage-headline-label']}>{t('sys.storage_total')}</span>
+                <span className={styles['storage-total-num']}>
+                  {formatBytes(sysInfo.database.files.total_bytes)}
+                </span>
+              </div>
+
+              <div className={styles['storage-file-list']} data-testid="sys-storage-file-list">
+                <div className={styles['storage-file-row']} data-testid="sys-storage-file-row">
+                  <span className={styles['storage-file-name']}>{t('sys.storage_main')}</span>
+                  <span className={styles['storage-file-val']}>
+                    {sysInfo.database.files.main_exists
+                      ? formatBytes(sysInfo.database.files.main_bytes)
+                      : t('sys.file_not_exist')}
                   </span>
                 </div>
 
-                <div className={styles['maintenance-box-meta']}>
-                  {t('sys.maintenance_reclaimed', {
-                    before: formatBytes(effectiveMaintenance.size_before_bytes),
-                    after: formatBytes(effectiveMaintenance.size_after_bytes),
-                    reclaimed: formatBytes(effectiveMaintenance.reclaimed_bytes),
-                  })}
+                <div className={styles['storage-file-row']} data-testid="sys-storage-file-row">
+                  <span className={styles['storage-file-name']}>{t('sys.storage_wal')}</span>
+                  <span className={styles['storage-file-val']}>
+                    {sysInfo.database.files.wal_exists
+                      ? formatBytes(sysInfo.database.files.wal_bytes)
+                      : t('sys.file_not_exist')}
+                  </span>
                 </div>
 
-                {effectiveMaintenance.detail && (
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    {effectiveMaintenance.detail}
-                  </Text>
-                )}
+                <div className={styles['storage-file-row']} data-testid="sys-storage-file-row">
+                  <span className={styles['storage-file-name']}>{t('sys.storage_shm')}</span>
+                  <span className={styles['storage-file-val']}>
+                    {sysInfo.database.files.shm_exists
+                      ? formatBytes(sysInfo.database.files.shm_bytes)
+                      : t('sys.file_not_exist')}
+                  </span>
+                </div>
+              </div>
 
-                {effectiveMaintenance.incomplete && (
-                  <Alert
-                    type="warning"
-                    showIcon
-                    style={{ marginTop: 6 }}
-                    description={t('sys.maintenance_incomplete_warning', {
-                      detail: effectiveMaintenance.detail || t('sys.maintenance_incomplete_default'),
-                    })}
-                  />
-                )}
+              {/* What the file is, rather than how it is organised internally: the
+                  observed journal mode, the schema generation, and the space in use. Page
+                  geometry, free pages and the connection's own settings are in the
+                  redacted diagnostics bundle for anyone who needs them. */}
+              <div className={styles['storage-facts-section']} data-testid="sys-storage-facts">
+                <div className={styles['storage-fact-row']} data-testid="sys-storage-fact-row">
+                  <span className={styles['storage-fact-label']}>{t('sys.journal_mode')}</span>
+                  <span className={styles['storage-fact-val']}>
+                    {(sysInfo.database.journal_mode || '—').toUpperCase()}
+                  </span>
+                </div>
+                <div className={styles['storage-fact-row']} data-testid="sys-storage-fact-row">
+                  <span className={styles['storage-fact-label']}>{t('sys.schema_version')}</span>
+                  <span className={styles['storage-fact-val']}>v{sysInfo.database.schema_version}</span>
+                </div>
+                <div className={styles['storage-fact-row']} data-testid="sys-storage-fact-row">
+                  <span className={styles['storage-fact-label']}>{t('sys.used_bytes')}</span>
+                  <span className={styles['storage-fact-val']}>
+                    {formatBytes(sysInfo.database.used_bytes)}
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
+        </Card>
 
-                {effectiveMaintenance.error && (
-                  <Alert
-                    type="error"
-                    showIcon
-                    style={{ marginTop: 6 }}
-                    description={effectiveMaintenance.error}
-                  />
+        {/* Card 3: Component Topology & Health */}
+        <Card
+          className={styles['system-card']}
+          data-testid="sys-card-health"
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <CloudServerOutlined />
+              <span>{t('sys.topology_card')}</span>
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* CPA Gateway */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontWeight: 600 }}>{t('sys.component_cpa')}</div>
+                <div style={{ fontSize: 12, color: 'var(--meta)', fontFamily: 'monospace' }}>
+                  {sysInfo?.cpa.endpoint_masked}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                {sysInfo?.cpa.status === 'connected' ? (
+                  <Tag color="success" icon={<CheckCircleOutlined />}>
+                    {sysInfo.cpa.latency_ms > 0
+                      ? t('sys.cpa_latency', { ms: sysInfo.cpa.latency_ms })
+                      : t('shell.connected')}
+                  </Tag>
+                ) : (
+                  <Tag color="error" icon={<CloseCircleOutlined />}>
+                    {t('shell.offline')}
+                  </Tag>
                 )}
               </div>
-            )}
-
-            <div className={styles['maintenance-notice']}>
-              <p>{t('sys.maintenance_restart_notice')}</p>
-              <p style={{ margin: 0 }}>{t('sys.diag_desc')}</p>
             </div>
-          </Card>
-        </Col>
-      </Row>
+
+            {/* SQLite DB */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontWeight: 600 }}>{t('sys.component_db')}</div>
+                <div style={{ fontSize: 12, color: 'var(--meta)' }}>
+                  {t('sys.db_mode', {
+                    mode: (sysInfo?.database.journal_mode || '').toUpperCase() || '—',
+                  })}
+                </div>
+              </div>
+              <div>
+                {sysInfo?.database.status === 'ok' ? (
+                  <Tag color="success">{t('inst.db_ok')}</Tag>
+                ) : (
+                  <Tag color="error">{t('inst.db_error')}</Tag>
+                )}
+              </div>
+            </div>
+
+            {/* Collector */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontWeight: 600 }}>{t('sys.component_collector')}</div>
+                <div style={{ fontSize: 12, color: 'var(--meta)' }}>
+                  {t('sys.collector_mode', {
+                    mode: sysInfo?.collector.mode || 'auto',
+                    gaps: sysInfo?.collector.gap_count || 0,
+                  })}
+                </div>
+              </div>
+              <div>
+                <Tag color={sysInfo?.collector.status === 'active' ? 'processing' : 'default'}>
+                  {sysInfo?.collector.status === 'active'
+                    ? t('sys.collector_status_active')
+                    : t('sys.collector_status_disabled')}
+                </Tag>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Card 4: Maintenance & Diagnostics */}
+        <Card
+          className={styles['system-card']}
+          data-testid="sys-card-maintenance"
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <SafetyCertificateOutlined />
+              <span>{t('sys.maintenance_card')}</span>
+            </div>
+          }
+        >
+          {/* Actions Bar */}
+          <div className={styles['maintenance-actions']}>
+            <Tooltip title={t('sys.checkpoint_desc')}>
+              <Button
+                icon={<ClearOutlined />}
+                loading={
+                  submittingAction === 'checkpoint' ||
+                  (effectiveMaintenance?.running &&
+                    (effectiveMaintenance.action === 'checkpoint' || effectiveMaintenance.action === 'wal_checkpoint'))
+                }
+                disabled={isDemo || isMaintenanceActive}
+                onClick={() => void handleRunCheckpoint()}
+              >
+                {t('sys.action_checkpoint')}
+              </Button>
+            </Tooltip>
+
+            <Tooltip
+              title={
+                effectiveAdmission && !effectiveAdmission.allowed
+                  ? t('sys.vacuum_disabled_reason', { reason: effectiveAdmission.reason })
+                  : t('sys.vacuum_desc')
+              }
+            >
+              <Button
+                icon={<CompressOutlined />}
+                loading={
+                  submittingAction === 'vacuum' ||
+                  (effectiveMaintenance?.running && effectiveMaintenance.action === 'vacuum')
+                }
+                disabled={isDemo || isMaintenanceActive || (effectiveAdmission ? !effectiveAdmission.allowed : false)}
+                onClick={() => setIsVacuumModalOpen(true)}
+              >
+                {t('sys.action_vacuum')}
+              </Button>
+            </Tooltip>
+
+            <Button
+              type="primary"
+              icon={<DownloadOutlined />}
+              loading={downloadingDiag}
+              disabled={isDemo}
+              title={isDemo ? t('demo.blocked') : undefined}
+              onClick={() => void handleDownloadDiagnostics()}
+            >
+              {t('sys.download_diag')}
+            </Button>
+          </div>
+
+          {/* The running job, from the live server status. It is always shown, including one
+              that was already running when the page was opened, and it is never dismissible:
+              the page must not let a reader hide a job that is still holding the write gate. */}
+          {effectiveMaintenance?.running && (
+            <Alert
+              type="info"
+              showIcon
+              icon={<Spin size="small" />}
+              style={{ marginBottom: 16 }}
+              description={t('sys.maintenance_in_progress', { action: actionLabel(effectiveMaintenance.action) })}
+            />
+          )}
+
+          {/* The completed outcome, rendered from this page's own snapshot rather than from the
+              server's retained last job. The server keeps that record for the life of the process,
+              so rendering it directly would resurrect a result the reader has already cleared on
+              every reload. */}
+          {!effectiveMaintenance?.running && displayedOutcome && (
+            <div className={styles['maintenance-box']} data-testid="sys-maintenance-outcome">
+              <div className={styles['maintenance-box-title']}>
+                {displayedOutcome.error ? (
+                  <CloseCircleOutlined style={{ color: 'var(--ant-color-error)' }} />
+                ) : displayedOutcome.incomplete ? (
+                  // A partial result is its own outcome, not a qualified success. SQLite reports
+                  // a blocked checkpoint in the statement's result row rather than as an error,
+                  // so a green checkmark here would claim the log was truncated when it was not.
+                  <WarningOutlined style={{ color: 'var(--ant-color-warning)' }} />
+                ) : (
+                  <CheckCircleOutlined style={{ color: 'var(--ant-color-success)' }} />
+                )}
+                <span>
+                  {displayedOutcome.error
+                    ? t('sys.maintenance_failed', {
+                        action: actionLabel(displayedOutcome.action),
+                        msg: displayedOutcome.error,
+                      })
+                    : displayedOutcome.incomplete
+                      ? t('sys.maintenance_incomplete_title', {
+                          action: actionLabel(displayedOutcome.action),
+                        })
+                      : t('sys.maintenance_success', { action: actionLabel(displayedOutcome.action) })}
+                </span>
+                <Button
+                  type="text"
+                  // The console's square row-action size, not `small`: a 28px control gains only 36px
+                  // from the coarse-pointer 4px hit inset, and the floor this console measures is
+                  // ~40px. The drawn box is what a finger has to hit here.
+                  className={styles['maintenance-box-close']}
+                  icon={<CloseOutlined />}
+                  aria-label={t('common.close')}
+                  title={t('common.close')}
+                  onClick={() => setDisplayedOutcome(null)}
+                />
+              </div>
+
+              <div className={styles['maintenance-box-meta']}>
+                {t('sys.maintenance_reclaimed', {
+                  before: formatBytes(displayedOutcome.size_before_bytes),
+                  after: formatBytes(displayedOutcome.size_after_bytes),
+                  reclaimed: formatBytes(displayedOutcome.reclaimed_bytes),
+                })}
+              </div>
+
+              {displayedOutcome.detail && (
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {displayedOutcome.detail}
+                </Text>
+              )}
+
+              {displayedOutcome.incomplete && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  style={{ marginTop: 6 }}
+                  description={t('sys.maintenance_incomplete_warning', {
+                    detail: displayedOutcome.detail || t('sys.maintenance_incomplete_default'),
+                  })}
+                />
+              )}
+
+              {displayedOutcome.error && (
+                <Alert
+                  type="error"
+                  showIcon
+                  style={{ marginTop: 6 }}
+                  description={displayedOutcome.error}
+                />
+              )}
+            </div>
+          )}
+
+          <div className={styles['maintenance-notice']}>
+            <p>{t('sys.maintenance_restart_notice')}</p>
+            <p style={{ margin: 0 }}>{t('sys.diag_desc')}</p>
+          </div>
+        </Card>
+      </div>
 
       {/* The change log drawer. Its title names the product it belongs to, because the two
           logs are identical in shape and a reader who opened one must be able to tell which

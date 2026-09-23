@@ -137,6 +137,14 @@ export interface SystemDataVolumes {
  */
 export interface SystemMaintenanceStatus {
   action: string;
+  /**
+   * Identifies one admitted job for the life of the process, monotonically.
+   *
+   * This is the identity a reader compares, never the start time: two jobs can share a
+   * millisecond and a synchronised clock can step backwards, so ordering by time could report a
+   * later job as an earlier one - or as the same job - and hide its result.
+   */
+  job_id: number;
   running: boolean;
   started_at_ms: number;
   finished_at_ms: number;

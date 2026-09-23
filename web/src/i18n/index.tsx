@@ -1534,8 +1534,8 @@ const DICT: Record<string, [string, string]> = {
 
   // ── system ───────────────────────────────────────────────────────────────
   'sys.title': ['系统信息', 'System Information'],
-  'sys.subtitle': ['两个产品的版本与更新状态、数据库占用，以及维护与诊断操作',
-    'Versions and updates for both products, the database footprint, and maintenance operations'],
+  'sys.subtitle': ['检查更新状态、数据库占用，以及维护与诊断',
+    'Update-check status, the database footprint, and maintenance and diagnostics'],
   'sys.version_card': ['版本与更新', 'Versions & Updates'],
   'sys.omc_version': ['Oh My CPA', 'Oh My CPA'],
   'sys.cpa_version': ['CLIProxyAPI', 'CLIProxyAPI'],
@@ -1558,7 +1558,7 @@ const DICT: Record<string, [string, string]> = {
     'sys.changelog_title': ['{product} 变更日志', '{product} change log'],
 'sys.view_changelog': ['变更日志 ({count})', 'Change Log ({count})'],
   'sys.notes_unavailable': ['当前进程未持有该版本变更日志（进程重启后重置）', 'Release notes not held in process memory (reset on restart)'],
-  'sys.notes_not_held': ['内存暂未缓存日志正文，可访问上游仓库查看', 'Release notes not cached in memory; visit upstream repository'],
+  'sys.notes_not_held': ['未获取到更新日志，可访问上游仓库查看', 'Release notes unavailable; visit the upstream repository'],
   'sys.range_incomplete': ['上游版本历史过多，未拉取完整区间日志', 'Release history truncated; interval log is not complete'],
   'sys.open_repo_link': ['打开 {repo} 仓库页面', 'Open {repo} repository page'],
   'sys.view_release_on_github': ['在 GitHub 查看 {tag} 发布页面', 'View {tag} release on GitHub'],
@@ -1609,7 +1609,7 @@ const DICT: Record<string, [string, string]> = {
 'sys.maintenance_incomplete_warning': ['任务已执行但未完全生效：{detail}', 'Task executed but did not fully complete: {detail}'],
   'sys.maintenance_incomplete_default': ['操作被并发读取阻塞或未完全截断', 'Operation was blocked by concurrent readers or not fully truncated'],
   'sys.maintenance_restart_notice': ['注：维护任务执行状态仅保留在进程内存中，服务重启后将自动清空。', 'Note: Maintenance job statuses are held in process memory only and reset on restart.'],
-  'sys.diag_desc': ['生成包含当前版本、数据库元数据、脱敏审计记录与运行指标的 JSON 诊断包。严禁包含任何密钥、密码、令牌或私有 Auth File 内容。操作受审计。', 'Generate a JSON diagnostic bundle containing versions, DB metadata, redacted audits, and runtime metrics. Strictly excludes keys, secrets, tokens, or auth contents. Audited.'],
+  'sys.diag_desc': ['生成包含当前版本、数据库元数据、脱敏审计记录与运行指标的 JSON 诊断包。', 'Generate a JSON diagnostic bundle containing versions, DB metadata, redacted audits, and runtime metrics.'],
   'sys.download_diag': ['下载脱敏诊断包', 'Download Diagnostics'],
   'sys.download_success': ['诊断包已成功生成并下载', 'Diagnostics bundle downloaded successfully'],
   'sys.download_failed': ['生成诊断包失败：{msg}', 'Failed to generate diagnostics: {msg}'],

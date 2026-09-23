@@ -154,7 +154,11 @@ type SystemDataVolumesDTO struct {
 }
 
 type SystemMaintenanceStatusDTO struct {
-	Action          string `json:"action"`
+	Action string `json:"action"`
+	// JobID identifies one admitted job for the life of the process, monotonically. A reader uses it
+	// to tell a later job from an earlier one, which the start time cannot promise: it is the wall
+	// clock, so two jobs can share a millisecond and a synchronised clock can step backwards.
+	JobID           int64  `json:"job_id"`
 	Running         bool   `json:"running"`
 	StartedAtMS     int64  `json:"started_at_ms"`
 	FinishedAtMS    int64  `json:"finished_at_ms"`
@@ -717,6 +721,7 @@ func (h *Handler) maintenanceStatusDTO() SystemMaintenanceStatusDTO {
 func maintenanceStatusToDTO(status repository.MaintenanceStatus) SystemMaintenanceStatusDTO {
 	return SystemMaintenanceStatusDTO{
 		Action:          status.Action,
+		JobID:           status.JobID,
 		Running:         status.Running,
 		StartedAtMS:     status.StartedAtMS,
 		FinishedAtMS:    status.FinishedAtMS,

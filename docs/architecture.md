@@ -1057,7 +1057,7 @@ fix a defect with a new migration, never by editing `schema_migrations`
 | Pricing sync | `app.Run` → `pricing.Service` | Best effort; prices go stale, capture continues |
 | Release sweep | `app.Run` → `release.Service` | Best effort; the stored index and its timestamps go stale, and the page says so. Every six hours, first run delayed by one interval so a restart loop cannot become a request loop |
 | Rollup + retention | `ingest.Maintenance` inside the pipeline | Retried on its own interval; errors surface in ingest status |
-| Database maintenance | `repository.MaintenanceService`, started by an operator request | Never started automatically; a job's outcome is recorded in memory and on the audit trail |
+| Database maintenance | `repository.MaintenanceService`, started by an operator request | Never started automatically; a job's outcome is retained in process memory and recorded on the audit trail. The retained record is served by both reads, and the console shows only a job it observed rather than that record — see §11 |
 
 A demo deployment starts only the HTTP server: its history is the fixture, so there
 is no collector to lose and no sync loop to let prices go stale. §13 and
@@ -1125,6 +1125,68 @@ timestamp on every one of them - so staleness is now something the page states w
 check fails rather than a number a reader has to interpret.
 
 ## 11. Database maintenance and the write gate
+
+### A retained job status is not the reader's result
+
+The maintenance service keeps the last job's status in process memory for the life of the
+process, and **both** reads answer with it: `GET /management/system` and `GET
+/management/system/maintenance` describe one server holding one job. That retention is what
+lets a reload after a rebuild still show its numbers, but it is not a result the reader
+asked for, and presenting it directly has a defect the retention cannot fix — the panel
+then belongs to a job from an earlier session, and reloading re-reads it, so the reader can
+never put it away.
+
+The console therefore separates the server's **retained status** from the page's own
+**displayed outcome**. The running banner is drawn from live server status and is always
+shown, including for a job that was already running when the page opened: it is the only
+evidence that a Maintenance Action holds the write gate, and it must not be dismissible. The
+completed panel is instead drawn from a local snapshot, set only when a job this page
+observed reaches its terminal state. A job is observed when the page starts it, or when a
+server snapshot reports it running and the page adopts it — so a second tab or another
+client's job is still followed to its outcome. Adoption looks at **every** snapshot rather
+than only the first one, because a job admitted elsewhere after the page was opened is
+invisible until a refetch reports it; skipping the job already being observed is what keeps
+a repeated refetch from restarting a poll that is already following it. A terminal status is
+accepted only for the job being observed, or for a job that superseded it, recognised by the
+server's `job_id` — the reservation the job was admitted under, which is monotonic within the
+process. That id is what the page compares rather than the start time, because the start time
+is the wall clock: two jobs can share a millisecond, and a synchronised clock can step
+backwards, either of which would make a later job look like one already handled and drop its
+result. A job that **started later** than the observed one is accepted as well, and becomes the
+observed job: a fast job can finish and be replaced inside a single poll interval, so the first
+sign of its replacement is that replacement's own terminal record. Without that rule the page
+would drop the newer result and keep polling for a job the server had already moved past —
+verified in the browser, where the exact-match guard reported `0` outcome panels across `23`
+polls. "Admitted later" is the accurate phrase here, not "started later": the ids are handed out
+at reservation, which precedes the launch.
+
+Adopting a running job also **seeds the poll's cache** with that job before polling is
+enabled, because while polling is enabled the card reads that cache rather than the page's own
+snapshot. A cache still holding an earlier job's terminal record otherwise hid live work: no
+in-progress banner, and maintenance actions that looked available while a job held the write
+gate. The browser probes hold the first poll open for ten seconds and assert the banner and the
+disabled actions inside that window, since after the poll answers the record is correct
+either way.
+
+Dismissing the outcome clears only that local snapshot, and both the close control and the
+page's Refresh button clear it. Since the snapshot is local, neither the server's retained
+record nor a later refetch can resurrect a result the reader has put away, while the next
+real job still produces a new one.
+
+The terminal status is handled **once per job**, and the guard sits before the outcome is set
+rather than after it. That ordering is the whole of the guarantee: the effect names the
+translation function among its dependencies, so changing the interface language re-runs it
+while the terminal record is still cached, and a guard placed after the outcome was set would
+put back a result the reader had already dismissed. The job is recognised by the server's
+`job_id` and not by its finish time, which the backend assigns from the wall clock and does
+not promise to be unique.
+
+Because the ids come from a counter that begins again with each process, the page also records
+which process those ids describe (`runtime.started_at_ms`) and clears its observed and reported
+job when that changes. A restart can otherwise mint an id the page has already handled, and the
+new process's job would look like one already dealt with — its result never shown. The probe
+asserts this **without reloading**, since a reload resets the page's own state and would hide
+the confusion being tested.
 
 Two operator-issued actions rewrite the database: `PRAGMA wal_checkpoint(TRUNCATE)`
 and `VACUUM`. Both are offered from the System Information page and both are
