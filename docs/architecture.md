@@ -1057,7 +1057,7 @@ fix a defect with a new migration, never by editing `schema_migrations`
 | Pricing sync | `app.Run` → `pricing.Service` | Best effort; prices go stale, capture continues |
 | Release sweep | `app.Run` → `release.Service` | Best effort; the stored index and its timestamps go stale, and the page says so. Every six hours, first run delayed by one interval so a restart loop cannot become a request loop |
 | Rollup + retention | `ingest.Maintenance` inside the pipeline | Retried on its own interval; errors surface in ingest status |
-| Database maintenance | `repository.MaintenanceService`, started by an operator request | Never started automatically; a job's outcome is recorded in memory and on the audit trail |
+| Database maintenance | `repository.MaintenanceService`, started by an operator request | Never started automatically; a job's outcome is retained in process memory and recorded on the audit trail. The retained record is served by both reads, and the console shows only a job it observed rather than that record — see §11 |
 
 A demo deployment starts only the HTTP server: its history is the fixture, so there
 is no collector to lose and no sync loop to let prices go stale. §13 and
@@ -1125,6 +1125,37 @@ timestamp on every one of them - so staleness is now something the page states w
 check fails rather than a number a reader has to interpret.
 
 ## 11. Database maintenance and the write gate
+
+### A retained job status is not the reader's result
+
+The maintenance service keeps the last job's status in process memory for the life of the
+process, and **both** reads answer with it: `GET /management/system` and `GET
+/management/system/maintenance` describe one server holding one job. That retention is what
+lets a reload after a rebuild still show its numbers, but it is not a result the reader
+asked for, and presenting it directly has a defect the retention cannot fix — the panel
+then belongs to a job from an earlier session, and reloading re-reads it, so the reader can
+never put it away.
+
+The console therefore separates the server's **retained status** from the page's own
+**displayed outcome**. The running banner is drawn from live server status and is always
+shown, including for a job that was already running when the page opened: it is the only
+evidence that a Maintenance Action holds the write gate, and it must not be dismissible. The
+completed panel is instead drawn from a local snapshot, set only when a job this page
+observed reaches its terminal state. A job is observed when the page starts it, or when a
+server snapshot reports it running and the page adopts it — so a second tab or another
+client's job is still followed to its outcome. Adoption looks at **every** snapshot rather
+than only the first one, because a job admitted elsewhere after the page was opened is
+invisible until a refetch reports it; skipping the job already being observed is what keeps
+a repeated refetch from restarting a poll that is already following it. A terminal status is
+accepted only for the job being observed, matched on the server's own `action` and
+`started_at_ms` (both fixed at reservation and preserved through the terminal record),
+because a query cache can still hold an earlier job's terminal record and accepting that one
+would report a finished job's numbers as this job's result, or stop a live job's poll.
+
+Dismissing the outcome clears only that local snapshot, and both the close control and the
+page's Refresh button clear it. Since the snapshot is local, neither the server's retained
+record nor a later refetch can resurrect a result the reader has put away, while the next
+real job still produces a new one.
 
 Two operator-issued actions rewrite the database: `PRAGMA wal_checkpoint(TRUNCATE)`
 and `VACUUM`. Both are offered from the System Information page and both are

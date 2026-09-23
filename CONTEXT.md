@@ -75,7 +75,14 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
   background job against the database file and is refused while another is in flight. A
   checkpoint whose own result row says it was blocked is reported as **incomplete**
   rather than successful, because SQLite reports that outcome in the statement's result
-  rather than as an error.
+  rather than as an error. The server retains the last job's status in process memory for
+  the life of the process, so that record is a **retained status** rather than news: the
+  console does not present it as the current reader's result. It shows a job it observed
+  - one already running when the page opened, or one it started - and reports that job's
+  outcome once, which the reader may dismiss; dismissing it is local, so re-reading the
+  server's retained record does not bring it back. A job still running is always shown,
+  because the panel is the reader's only evidence that a Maintenance Action holds the
+  Write Gate, and a reader must not be able to hide live work.
 - **Write Gate**: The rule that no ordinary write may overlap a Maintenance Action.
   Writers wait for the gate rather than failing, because a failed write stops the usage
   collector and with it the process; a queued writer may abandon the wait when its own

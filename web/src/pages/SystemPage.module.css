@@ -418,6 +418,14 @@
   gap: 8px;
 }
 
+/* The outcome's own close control sits on the trailing edge of its title row, so dismissing the
+   result reads as belonging to the result rather than to the card. */
+.maintenance-box-close {
+  margin-left: auto;
+  flex: 0 0 auto;
+  color: var(--meta);
+}
+
 .maintenance-box-meta {
   font-size: 12px;
   color: var(--meta);

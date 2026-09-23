@@ -26,6 +26,7 @@ import {
   CompressOutlined,
   ClearOutlined,
   WarningOutlined,
+  CloseOutlined,
 } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
@@ -39,6 +40,7 @@ import type {
   SystemInfoResponse,
   SystemProductVersion,
   SystemMaintenanceResponse,
+  SystemMaintenanceStatus,
   ReleaseProduct,
 } from '../types/system';
 import styles from './SystemPage.module.css';
@@ -331,12 +333,21 @@ export const SystemPage: React.FC = () => {
   const [isPollingMaintenance, setIsPollingMaintenance] = useState(false);
   const [isVacuumModalOpen, setIsVacuumModalOpen] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState<ReleaseProduct | null>(null);
+  // The completed outcome the page shows, which is deliberately not the server's last job.
+  // The server retains its terminal record for the life of the process, so rendering that
+  // directly would pin the panel to a result from a previous session - one the reader cannot
+  // clear, because every reload re-reads it. This snapshot is set only for a job this page
+  // actually observed finish, and clearing it is local and therefore permanent for the reader.
+  const [displayedOutcome, setDisplayedOutcome] = useState<SystemMaintenanceStatus | null>(null);
 
   const hasMountedCheckRef = useRef(false);
   // The last job completion already reported, so a terminal status is announced once
   // rather than on every poll that still reads it.
   const reportedCompletionRef = useRef<number>(0);
-  const hasInitialisedCompletionRef = useRef(false);
+  // The job this page is observing, identified by the server's own action name and start
+  // instant. A terminal status is accepted only when it matches, because the query cache can
+  // still hold an earlier job's terminal record.
+  const observedJobRef = useRef<{ action: string; startedAtMS: number } | null>(null);
 
   // The action label shown inside a message, resolved from the action the server
   // reported rather than the one that was requested.
@@ -359,16 +370,23 @@ export const SystemPage: React.FC = () => {
     staleTime: 15000,
   });
 
-  // The page's own reading of the last job is what starts a poll: a job admitted
-  // before this page was opened would otherwise be invisible, and a job that finished
-  // while the page was open would otherwise poll forever.
+  // A running job reported by the page's own read is adopted and polled to its end: a job
+  // admitted before this page was opened, or admitted elsewhere while it is open, is real work
+  // holding the write gate, and the reader should see its outcome when it stops.
+  //
+  // Only a *running* job is adopted. A terminal record the server still holds is a result from
+  // an earlier session, and adopting it would both show it on a fresh load and make it
+  // impossible to clear, because every reload would adopt it again.
+  //
+  // Re-adopting the job already being observed is skipped, so repeated refetches of the same
+  // running job cannot restart a poll that is already following it.
   useEffect(() => {
     const job = sysInfo?.maintenance;
-    if (!job || hasInitialisedCompletionRef.current) return;
-    hasInitialisedCompletionRef.current = true;
-    // An already-finished job from before this page loaded is history, not news.
-    reportedCompletionRef.current = job.finished_at_ms || 0;
-    if (job.running) setIsPollingMaintenance(true);
+    if (!job || !job.running) return;
+    const observed = observedJobRef.current;
+    if (observed && observed.action === job.action && observed.startedAtMS === job.started_at_ms) return;
+    observedJobRef.current = { action: job.action, startedAtMS: job.started_at_ms };
+    setIsPollingMaintenance(true);
   }, [sysInfo?.maintenance]);
 
   const { data: maintenanceData } = useQuery<SystemMaintenanceResponse>({
@@ -387,16 +405,36 @@ export const SystemPage: React.FC = () => {
   const effectiveAdmission = polledMaintenance?.maintenance_admission ?? sysInfo?.maintenance_admission;
   const isMaintenanceActive = Boolean(effectiveMaintenance?.running || submittingAction !== null);
 
+  // Establish a job as being observed by this page. A POST's 202 is the usual source, but a
+  // server snapshot that already reports it running counts too: the job may have been admitted
+  // by another tab, and the reader watching it should see its outcome when it ends.
+  //
+  // A response that is already terminal is registered the same way rather than reported here: a
+  // checkpoint can finish before the response that accepted it arrives, the accepted response is
+  // written into the maintenance cache, and the terminal effect below then classifies it exactly
+  // as it classifies a polled result - one path, so an outcome cannot be reported two ways.
+  const handleAcceptedJob = (job: SystemMaintenanceStatus) => {
+    observedJobRef.current = { action: job.action, startedAtMS: job.started_at_ms };
+    setIsPollingMaintenance(job.running);
+  };
+
   // The terminal state ends the poll, refreshes the storage numbers it just moved,
   // and reports what actually happened.
   useEffect(() => {
     const job = maintenanceData?.maintenance;
     if (!job || job.running || job.finished_at_ms <= 0) return;
 
+    // A terminal status is accepted only for the job this page is observing. The query cache
+    // can still hold an earlier job's terminal record, and letting that one stop the poll or
+    // set the outcome would report a finished job's numbers as this job's result.
+    const observed = observedJobRef.current;
+    if (!observed || observed.action !== job.action || observed.startedAtMS !== job.started_at_ms) return;
+
     // The poll stops on the terminal state, whether or not this page already reported it.
     // Returning early for an already-announced job would leave the poll running forever
     // against a job that is never going to change again.
     setIsPollingMaintenance(false);
+    setDisplayedOutcome(job);
     if (job.finished_at_ms === reportedCompletionRef.current) return;
 
     reportedCompletionRef.current = job.finished_at_ms;
@@ -469,7 +507,7 @@ export const SystemPage: React.FC = () => {
       // honest reading, and the outcome arrives with the terminal status.
       queryClient.setQueryData(['management-system-maintenance'], accepted);
       message.info(t('sys.maintenance_started', { action: actionLabel('checkpoint') }));
-      if (accepted.maintenance.running) setIsPollingMaintenance(true);
+      handleAcceptedJob(accepted.maintenance);
     } catch (err: unknown) {
       const msg = err instanceof ApiError ? err.message : String(err);
       message.error(t('sys.maintenance_failed', { action: actionLabel('checkpoint'), msg }));
@@ -485,7 +523,7 @@ export const SystemPage: React.FC = () => {
       const accepted = await api.runSystemMaintenance('vacuum');
       queryClient.setQueryData(['management-system-maintenance'], accepted);
       message.info(t('sys.maintenance_started', { action: actionLabel('vacuum') }));
-      if (accepted.maintenance.running) setIsPollingMaintenance(true);
+      handleAcceptedJob(accepted.maintenance);
     } catch (err: unknown) {
       const msg = err instanceof ApiError ? err.message : String(err);
       message.error(t('sys.maintenance_failed', { action: actionLabel('vacuum'), msg }));
@@ -553,6 +591,9 @@ export const SystemPage: React.FC = () => {
             icon={<SyncOutlined spin={isFetching} />}
             disabled={isFetching}
             onClick={() => {
+              // A refresh clears a completed result the reader has moved past, and never touches a
+              // running job: that one is live server state, and the panel below keeps showing it.
+              setDisplayedOutcome(null);
               void refetch();
               void queryClient.invalidateQueries({ queryKey: ['management-system-maintenance'] });
             }}
@@ -830,8 +871,10 @@ export const SystemPage: React.FC = () => {
             </Button>
           </div>
 
-          {/* In-progress banner */}
-            {effectiveMaintenance?.running && (
+          {/* The running job, from the live server status. It is always shown, including one
+              that was already running when the page was opened, and it is never dismissible:
+              the page must not let a reader hide a job that is still holding the write gate. */}
+          {effectiveMaintenance?.running && (
             <Alert
               type="info"
               showIcon
@@ -841,71 +884,85 @@ export const SystemPage: React.FC = () => {
             />
           )}
 
-          {/* Previous job outcome */}
-            {!effectiveMaintenance?.running && effectiveMaintenance?.action && (
-              <div className={styles['maintenance-box']}>
-                <div className={styles['maintenance-box-title']}>
-                  {effectiveMaintenance.error ? (
-                    <CloseCircleOutlined style={{ color: 'var(--ant-color-error)' }} />
-                  ) : effectiveMaintenance.incomplete ? (
-                    // A partial result is its own outcome, not a qualified success. SQLite reports
-                    // a blocked checkpoint in the statement's result row rather than as an error,
-                    // so a green checkmark here would claim the log was truncated when it was not.
-                    <WarningOutlined style={{ color: 'var(--ant-color-warning)' }} />
-                  ) : (
-                    <CheckCircleOutlined style={{ color: 'var(--ant-color-success)' }} />
-                  )}
-                  <span>
-                    {effectiveMaintenance.error
-                      ? t('sys.maintenance_failed', {
-                          action: actionLabel(effectiveMaintenance.action),
-                          msg: effectiveMaintenance.error,
+          {/* The completed outcome, rendered from this page's own snapshot rather than from the
+              server's retained last job. The server keeps that record for the life of the process,
+              so rendering it directly would resurrect a result the reader has already cleared on
+              every reload. */}
+          {!effectiveMaintenance?.running && displayedOutcome && (
+            <div className={styles['maintenance-box']} data-testid="sys-maintenance-outcome">
+              <div className={styles['maintenance-box-title']}>
+                {displayedOutcome.error ? (
+                  <CloseCircleOutlined style={{ color: 'var(--ant-color-error)' }} />
+                ) : displayedOutcome.incomplete ? (
+                  // A partial result is its own outcome, not a qualified success. SQLite reports
+                  // a blocked checkpoint in the statement's result row rather than as an error,
+                  // so a green checkmark here would claim the log was truncated when it was not.
+                  <WarningOutlined style={{ color: 'var(--ant-color-warning)' }} />
+                ) : (
+                  <CheckCircleOutlined style={{ color: 'var(--ant-color-success)' }} />
+                )}
+                <span>
+                  {displayedOutcome.error
+                    ? t('sys.maintenance_failed', {
+                        action: actionLabel(displayedOutcome.action),
+                        msg: displayedOutcome.error,
+                      })
+                    : displayedOutcome.incomplete
+                      ? t('sys.maintenance_incomplete_title', {
+                          action: actionLabel(displayedOutcome.action),
                         })
-                      : effectiveMaintenance.incomplete
-                        ? t('sys.maintenance_incomplete_title', {
-                            action: actionLabel(effectiveMaintenance.action),
-                          })
-                        : t('sys.maintenance_success', { action: actionLabel(effectiveMaintenance.action) })}
-                  </span>
-                </div>
-
-                <div className={styles['maintenance-box-meta']}>
-                  {t('sys.maintenance_reclaimed', {
-                    before: formatBytes(effectiveMaintenance.size_before_bytes),
-                    after: formatBytes(effectiveMaintenance.size_after_bytes),
-                    reclaimed: formatBytes(effectiveMaintenance.reclaimed_bytes),
-                  })}
-                </div>
-
-                {effectiveMaintenance.detail && (
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    {effectiveMaintenance.detail}
-                  </Text>
-                )}
-
-                {effectiveMaintenance.incomplete && (
-                  <Alert
-                    type="warning"
-                    showIcon
-                    style={{ marginTop: 6 }}
-                    description={t('sys.maintenance_incomplete_warning', {
-                      detail: effectiveMaintenance.detail || t('sys.maintenance_incomplete_default'),
-                    })}
-                  />
-                )}
-
-                {effectiveMaintenance.error && (
-                  <Alert
-                    type="error"
-                    showIcon
-                    style={{ marginTop: 6 }}
-                    description={effectiveMaintenance.error}
-                  />
-                )}
+                      : t('sys.maintenance_success', { action: actionLabel(displayedOutcome.action) })}
+                </span>
+                <Button
+                  type="text"
+                  // The console's square row-action size, not `small`: a 28px control gains only 36px
+                  // from the coarse-pointer 4px hit inset, and the floor this console measures is
+                  // ~40px. The drawn box is what a finger has to hit here.
+                  className={styles['maintenance-box-close']}
+                  icon={<CloseOutlined />}
+                  aria-label={t('common.close')}
+                  title={t('common.close')}
+                  onClick={() => setDisplayedOutcome(null)}
+                />
               </div>
-            )}
 
-            <div className={styles['maintenance-notice']}>
+              <div className={styles['maintenance-box-meta']}>
+                {t('sys.maintenance_reclaimed', {
+                  before: formatBytes(displayedOutcome.size_before_bytes),
+                  after: formatBytes(displayedOutcome.size_after_bytes),
+                  reclaimed: formatBytes(displayedOutcome.reclaimed_bytes),
+                })}
+              </div>
+
+              {displayedOutcome.detail && (
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {displayedOutcome.detail}
+                </Text>
+              )}
+
+              {displayedOutcome.incomplete && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  style={{ marginTop: 6 }}
+                  description={t('sys.maintenance_incomplete_warning', {
+                    detail: displayedOutcome.detail || t('sys.maintenance_incomplete_default'),
+                  })}
+                />
+              )}
+
+              {displayedOutcome.error && (
+                <Alert
+                  type="error"
+                  showIcon
+                  style={{ marginTop: 6 }}
+                  description={displayedOutcome.error}
+                />
+              )}
+            </div>
+          )}
+
+          <div className={styles['maintenance-notice']}>
             <p>{t('sys.maintenance_restart_notice')}</p>
             <p style={{ margin: 0 }}>{t('sys.diag_desc')}</p>
           </div>

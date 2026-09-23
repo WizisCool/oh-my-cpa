@@ -374,29 +374,262 @@ export async function systemInformationPage({ base, page, check }) {
     storageCardLayout.errors.join(' | '),
   );
 
-  // ── a maintenance job is admitted as started, and its outcome is its own ────
-  // 202 means accepted, not done. The page must say so when it is accepted and report the
-  // real result afterwards, including the partial outcome SQLite reports in-band: a
-  // checkpoint blocked by a reader raises no error and must not be shown as success.
-  await page.route('**/omc/api/v1/management/system/maintenance**', async (route) => {
-    const method = route.request().method();
-    if (method === 'POST') {
-      await route.fulfill({
-        status: 202,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          maintenance: { action: 'vacuum', running: true, started_at_ms: Date.now(), finished_at_ms: 0, size_before_bytes: 1000, size_after_bytes: 0, reclaimed_bytes: 0, incomplete: false, detail: '', error: '' },
-          maintenance_admission: { action: 'vacuum', required_bytes: 2000, available_bytes: 5_000_000, allowed: true, reason: '' },
-        }),
-      });
-      return;
+  // ── the retained terminal job is not resurrected by a reload ────────────────
+  // The server keeps its last job in process memory for the life of the process, and the page
+  // must not present that record as a result the reader can neither dismiss nor escape. The
+  // fixture reports a retained terminal job from BOTH reads, because a fixture that only ever
+  // returned an empty job could not tell "the page ignores a retained result" from "there was
+  // never a retained result".
+  const retainedJob = {
+    action: 'wal_checkpoint',
+    running: false,
+    started_at_ms: 1790015000000,
+    finished_at_ms: 1790015001200,
+    size_before_bytes: 26507456,
+    size_after_bytes: 26505000,
+    reclaimed_bytes: 2456,
+    incomplete: false,
+    detail: 'write-ahead log frames 0, checkpointed 0',
+    error: '',
+  };
+  // The base body comes from the same fixture table the rest of the scenario uses, so this route
+  // changes one field instead of restating the whole response. It is NOT read back over the
+  // network: `route.fetch()` would leave the harness's own mock and hit the dev server, which
+  // answers no API and takes the session with it.
+  const systemInfoFixture = systemFixtures()
+    .find(([matches]) => matches(new URL('http://probe/omc/api/v1/management/system')));
+  const baseSystemBody = () => systemInfoFixture[1]();
+  // What `/management/system` reports as the last job. It is a variable because the scenario
+  // needs three states from one page: a retained terminal job, a job that is still running when
+  // the page opens, and a job this page itself started.
+  let servedMaintenance = retainedJob;
+  await page.route('**/omc/api/v1/management/system', async (route) => {
+    await route.fulfill({ status: 200, json: { ...baseSystemBody(), maintenance: servedMaintenance } });
+  });
+
+  // The retained job must actually be what the page is being offered, or the assertion below
+  // would pass on a fixture that quietly served nothing.
+  const servedRetained = await page.evaluate(async () => {
+    const res = await fetch('/omc/api/v1/management/system', { headers: { Accept: 'application/json' } });
+    return (await res.json()).maintenance?.action ?? '';
+  });
+  check('the fixture serves a retained terminal job', servedRetained === 'wal_checkpoint', `action=${servedRetained}`);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('.system-page').waitFor({ timeout: 20_000 });
+  await until(
+    async () => (await page.locator('.system-page .ant-btn-loading').count()) === 0,
+    { label: 'the reloaded maintenance card settling', timeoutMs: 15_000 },
+  ).catch(() => {});
+
+  const retainedOutcomeCount = await page.locator('[data-testid="sys-maintenance-outcome"]').count();
+  check(
+    'a retained terminal job is not shown as this page\'s result',
+    retainedOutcomeCount === 0,
+    `${retainedOutcomeCount} outcome panel(s)`,
+  );
+
+  // ── a job already running when the page opens is followed to its outcome ────
+  // The other half of the rule: a retained record is ignored, but a job that is genuinely in
+  // flight must be adopted and reported, or the page would silently hide real work.
+  const runningOnLoad = {
+    action: 'wal_checkpoint',
+    running: true,
+    started_at_ms: 1790018000000,
+    finished_at_ms: 0,
+    size_before_bytes: 26507456,
+    size_after_bytes: 0,
+    reclaimed_bytes: 0,
+    incomplete: false,
+    detail: '',
+    error: '',
+  };
+  servedMaintenance = runningOnLoad;
+  // The job is reported as running for its first two reads and terminal afterwards, so the reader
+  // has a window in which the in-progress banner is genuinely on screen. A mock that finished the
+  // job on the first read would make the banner assertion a race rather than a measurement.
+  let runningOnLoadPolls = 0;
+  const runningOnLoadHandler = async (route) => {
+    runningOnLoadPolls += 1;
+    const stillRunning = runningOnLoadPolls <= 2;
+    if (!stillRunning) {
+      // One server holds one job status, so `/management/system` is moved to the same terminal
+      // record. A fixture that left it reporting the job as running would describe a deployment
+      // that cannot exist, and the page would be right to keep showing it as in progress.
+      runningOnLoad.running = false;
+      runningOnLoad.finished_at_ms = 1790018003000;
+      runningOnLoad.size_after_bytes = 26505000;
+      runningOnLoad.reclaimed_bytes = 2456;
+      runningOnLoad.detail = 'write-ahead log frames 0, checkpointed 0';
+      servedMaintenance = { ...runningOnLoad };
     }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        maintenance: { action: 'vacuum', running: false, started_at_ms: Date.now() - 5000, finished_at_ms: Date.now(), size_before_bytes: 1000, size_after_bytes: 600, reclaimed_bytes: 400, incomplete: true, detail: 'blocked by a concurrent reader', error: '' },
+        maintenance: servedMaintenance,
+        maintenance_admission: { action: 'wal_checkpoint', required_bytes: 0, available_bytes: 5_000_000, allowed: true, reason: '' },
+      }),
+    });
+  };
+  await page.route('**/omc/api/v1/management/system/maintenance**', runningOnLoadHandler);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('.system-page').waitFor({ timeout: 20_000 });
+  // The in-progress banner is the reader's evidence that a job is holding the write gate, so it
+  // must appear for a job this page never started. The match is case-insensitive because the
+  // banner names the action, and "WAL Checkpoint" is not spelled "checkpoint".
+  const bannerShown = await until(
+    async () =>
+      (await page.locator('[data-testid="sys-card-maintenance"]').innerText()).toLowerCase().includes('running')
+      || (await page.locator('[data-testid="sys-card-maintenance"]').innerText()).includes('正在执行'),
+    { label: 'the in-progress banner for a job already running', timeoutMs: 15_000 },
+  ).catch(() => false);
+  const bannerText = await page.locator('[data-testid="sys-card-maintenance"]').innerText();
+  check(
+    'a job already running when the page opens is shown as in progress',
+    Boolean(bannerShown) && /checkpoint/i.test(bannerText),
+    `banner=${Boolean(bannerShown)} card=${bannerText.slice(0, 120)}`,
+  );
+
+  await until(
+    async () => (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) > 0,
+    { label: 'the adopted job\'s outcome', timeoutMs: 15_000 },
+  ).catch(() => {});
+  const adoptedOutcome = await page.locator('[data-testid="sys-maintenance-outcome"]').innerText().catch(() => '');
+  // The reclaimed figure is the point of the panel: it is the number the reader ran the job to see,
+  // and it can only come from the job this page adopted.
+  check(
+    'the adopted job\'s outcome is reported when it finishes',
+    /2\.4\d*\s*KB/i.test(adoptedOutcome.replace(/\s+/g, ' ')) && /reclaimed|净回收/i.test(adoptedOutcome),
+    `outcome text: ${adoptedOutcome.slice(0, 160)}`,
+  );
+  await page.unroute('**/omc/api/v1/management/system/maintenance**', runningOnLoadHandler);
+
+  // ── a job that starts AFTER the page is open is followed to its outcome ─────
+  // A job admitted elsewhere - another tab, another operator - is invisible to the page until a
+  // refetch reports it, and the page's own read is how it learns. This is the case an adoption
+  // path that only looks at the first response would miss: the reader sees the in-progress banner
+  // and then nothing, because no poll was ever started for it.
+  await page.locator('[data-testid="sys-maintenance-outcome"]').getByRole('button', { name: /Close|关闭/i }).first().click().catch(() => {});
+  const laterJobPolls = [];
+  const laterJob = {
+    action: 'vacuum',
+    running: true,
+    started_at_ms: 1790030000000,
+    finished_at_ms: 0,
+    size_before_bytes: 26507456,
+    size_after_bytes: 0,
+    reclaimed_bytes: 0,
+    incomplete: false,
+    detail: '',
+    error: '',
+  };
+  let laterPollCount = 0;
+  const laterJobHandler = async (route) => {
+    laterPollCount += 1;
+    laterJobPolls.push(laterPollCount);
+    // The job is reported running for its first two reads and terminal afterwards, and
+    // `/management/system` is moved with it: one server holds one job status, so a fixture that
+    // left that read reporting a finished job would describe a deployment that cannot exist.
+    const stillRunning = laterPollCount <= 2;
+    if (!stillRunning) {
+      laterJob.running = false;
+      laterJob.finished_at_ms = 1790030005000;
+      laterJob.size_after_bytes = 26505456;
+      laterJob.reclaimed_bytes = 2000;
+      laterJob.detail = 'rebuilt under an exclusive lock';
+    }
+    servedMaintenance = { ...laterJob };
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        maintenance: servedMaintenance,
         maintenance_admission: { action: 'vacuum', required_bytes: 2000, available_bytes: 5_000_000, allowed: true, reason: '' },
+      }),
+    });
+  };
+  // The page is idle with no job; the job begins now, on the server, and only a refetch reveals it.
+  servedMaintenance = { action: '', running: false, started_at_ms: 0, finished_at_ms: 0, size_before_bytes: 0, size_after_bytes: 0, reclaimed_bytes: 0, incomplete: false, detail: '', error: '' };
+  await page.route('**/omc/api/v1/management/system/maintenance**', laterJobHandler);
+  servedMaintenance = { ...laterJob };
+  // Refresh re-reads both endpoints, which is how this page learns about the job it never started.
+  await page.locator('.system-page').getByRole('button', { name: /Refresh|刷新/i }).first().click();
+
+  await until(
+    async () => (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) > 0,
+    { label: 'the outcome of a job discovered after page load', timeoutMs: 15_000 },
+  ).catch(() => {});
+  check(
+    'a job discovered after the page is open is polled to its outcome',
+    laterJobPolls.length > 0,
+    `${laterJobPolls.length} poll(s)`,
+  );
+  const laterOutcome = await page.locator('[data-testid="sys-maintenance-outcome"]').innerText().catch(() => '');
+  check(
+    'the discovered job\'s outcome names its own action and reclaimed bytes',
+    /vacuum|重建/i.test(laterOutcome) && /1\.9\d*\s*KB/i.test(laterOutcome.replace(/\s+/g, ' ')),
+    `outcome text: ${laterOutcome.slice(0, 160)}`,
+  );
+  await page.unroute('**/omc/api/v1/management/system/maintenance**', laterJobHandler);
+
+  // ── a maintenance job is admitted as started, and its outcome is its own ────
+  // 202 means accepted, not done. The page must say so when it is accepted and report the
+  // real result afterwards, including the partial outcome SQLite reports in-band: a
+  // checkpoint blocked by a reader raises no error and must not be shown as success.
+  //
+  // The mock is stateful and reports ONE job identity across every read, which is what the
+  // server does (the action and start instant are fixed when the job is reserved). A mock that
+  // invented a new start instant per call would describe a job the page never started, and the
+  // identity check that ignores an unrelated job would correctly refuse to report its result.
+  const observed = { action: '', startedAtMS: 0 };
+  const acceptedJob = {
+    action: 'vacuum',
+    running: true,
+    started_at_ms: 0,
+    finished_at_ms: 0,
+    size_before_bytes: 1000,
+    size_after_bytes: 0,
+    reclaimed_bytes: 0,
+    incomplete: false,
+    detail: '',
+    error: '',
+  };
+  const admission = { action: 'vacuum', required_bytes: 2000, available_bytes: 5_000_000, allowed: true, reason: '' };
+  // The first GET after the POST reports the job still running, and every later one reports the
+  // partial outcome: the page has to follow the job across both, rather than read once.
+  let pollCount = 0;
+  await page.route('**/omc/api/v1/management/system/maintenance**', async (route) => {
+    if (route.request().method() === 'POST') {
+      acceptedJob.started_at_ms = 1790020000000;
+      observed.action = acceptedJob.action;
+      observed.startedAtMS = acceptedJob.started_at_ms;
+      await route.fulfill({
+        status: 202,
+        contentType: 'application/json',
+        body: JSON.stringify({ maintenance: acceptedJob, maintenance_admission: admission }),
+      });
+      return;
+    }
+    pollCount += 1;
+    const running = pollCount === 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        maintenance: running
+          ? acceptedJob
+          : {
+              ...acceptedJob,
+              running: false,
+              finished_at_ms: 1790020004000,
+              size_after_bytes: 600,
+              reclaimed_bytes: 400,
+              incomplete: true,
+              detail: 'blocked by a concurrent reader',
+            },
+        maintenance_admission: admission,
       }),
     });
   });
@@ -421,10 +654,52 @@ export async function systemInformationPage({ base, page, check }) {
         return (await warning.count()) > 0 ? true : false;
       }, { label: 'the outcome notice', timeoutMs: 8000 }).catch(() => false);
       check('an incomplete rebuild is reported as partial, not as success', warned);
+
+      // ── the observed job's result is shown, and clearing it is permanent ────
+      // The panel is the page's own record of a job it watched, so it appears for this job and
+      // stays clear once dismissed - a refetch must not bring it back.
+      await until(
+        async () => (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) > 0,
+        { label: 'the observed outcome panel', timeoutMs: 10_000 },
+      ).catch(() => {});
+      check(
+        'an observed job\'s result is shown',
+        (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) === 1,
+      );
+      check(
+        'the observed result is classified as incomplete, not successful',
+        (await page.locator('[data-testid="sys-maintenance-outcome"]').innerText()).includes('blocked by a concurrent reader'),
+      );
+
+      const closeOutcome = page.locator('[data-testid="sys-maintenance-outcome"]').getByRole('button', { name: /Close|关闭/i }).first();
+      if ((await closeOutcome.count()) === 1) {
+        await closeOutcome.click();
+        await until(
+          async () => (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) === 0,
+          { label: 'the outcome panel closing', timeoutMs: 5000 },
+        ).catch(() => {});
+        check(
+          'the observed result can be cleared',
+          (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) === 0,
+        );
+
+        // The Refresh control re-reads the server's retained record; a cleared result must not
+        // come back through it, which is the defect the reader reported.
+        await page.locator('.system-page').getByRole('button', { name: /Refresh|刷新/i }).first().click();
+        await page.waitForTimeout(1500);
+        check(
+          'a cleared result stays cleared across a refresh',
+          (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) === 0,
+          `${await page.locator('[data-testid="sys-maintenance-outcome"]').count()} outcome panel(s)`,
+        );
+      } else {
+        check('the observed result carries a close control', false, 'no close button on the outcome panel');
+      }
     }
   } else {
     check('a rebuild control is offered when admission allows it', false, 'no enabled VACUUM button');
   }
+
   // ── 2x2 grid layout and equal height within rows on desktop ───────────────
   // The four cards form a 2x2 grid where siblings in the same row share equal height.
   // Row 1: Versions & Updates (left) | SQLite Storage (right)
@@ -492,7 +767,9 @@ export async function systemInformationPage({ base, page, check }) {
     'maintenance card sits in the bottom-right cell',
     gridGeometry.isMaintenanceFourth,
     `fourth card title: ${gridGeometry.boxes?.[3]?.title}`,
-  );}
+  );
+}
+
 
 /**
  * The same page on a 320px screen, where two side-by-side rows did not fit and drew on top of
@@ -654,3 +931,4 @@ export async function systemInformationNarrow({ base, page, check }) {
   );
   check('the page does not scroll sideways at 800px', !intermediateResult.scrolls);
 }
+
