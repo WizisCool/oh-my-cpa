@@ -519,6 +519,66 @@ export async function systemInformationPage({ base, page, check }) {
   );
   await page.unroute('**/omc/api/v1/management/system/maintenance**', runningOnLoadHandler);
 
+  // ── a job superseded by a newer one is still reported ───────────────────────
+  // The server holds one job status, so a fast job that finishes and is replaced inside a single
+  // poll interval means no poll ever reports the replacement as running - the first sign of it is
+  // its terminal record. A page that accepted only the exact job it was following dropped that
+  // result and kept polling for a job that had already been replaced.
+  const watchedJob = {
+    action: 'wal_checkpoint',
+    running: true,
+    started_at_ms: 1790050000000,
+    finished_at_ms: 0,
+    size_before_bytes: 9_000_000,
+    size_after_bytes: 0,
+    reclaimed_bytes: 0,
+    incomplete: false,
+    detail: '',
+    error: '',
+  };
+  const supersedingJob = {
+    action: 'wal_checkpoint',
+    running: false,
+    started_at_ms: 1790050009000,
+    finished_at_ms: 1790050011000,
+    size_before_bytes: 9_000_000,
+    size_after_bytes: 8_999_000,
+    reclaimed_bytes: 1000,
+    incomplete: false,
+    detail: 'the replacement job',
+    error: '',
+  };
+  servedMaintenance = { ...watchedJob };
+  let supersedePolls = 0;
+  const supersedeHandler = async (route) => {
+    supersedePolls += 1;
+    const job = supersedePolls === 1 ? watchedJob : supersedingJob;
+    servedMaintenance = { ...job };
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        maintenance: job,
+        maintenance_admission: { action: 'wal_checkpoint', required_bytes: 0, available_bytes: 5_000_000, allowed: true, reason: '' },
+      }),
+    });
+  };
+  await page.route('**/omc/api/v1/management/system/maintenance**', supersedeHandler);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('.system-page').waitFor({ timeout: 20_000 });
+  await until(
+    async () => (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) > 0,
+    { label: 'the superseding job\'s outcome', timeoutMs: 15_000 },
+  ).catch(() => {});
+  const supersededOutcome = await page.locator('[data-testid="sys-maintenance-outcome"]').innerText().catch(() => '');
+  check(
+    'a job superseded by a newer one is reported rather than dropped',
+    supersededOutcome.includes('the replacement job'),
+    `polls=${supersedePolls} outcome text: ${supersededOutcome.slice(0, 160)}`,
+  );
+  await page.unroute('**/omc/api/v1/management/system/maintenance**', supersedeHandler);
+
   // ── a job that starts AFTER the page is open is followed to its outcome ─────
   // A job admitted elsewhere - another tab, another operator - is invisible to the page until a
   // refetch reports it, and the page's own read is how it learns. This is the case an adoption

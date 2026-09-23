@@ -1150,7 +1150,12 @@ a repeated refetch from restarting a poll that is already following it. A termin
 accepted only for the job being observed, matched on the server's own `action` and
 `started_at_ms` (both fixed at reservation and preserved through the terminal record),
 because a query cache can still hold an earlier job's terminal record and accepting that one
-would report a finished job's numbers as this job's result, or stop a live job's poll.
+would report a finished job's numbers as this job's result, or stop a live job's poll. A job
+that **started later** than the observed one is accepted as well, and becomes the observed
+job: a fast job can finish and be replaced inside a single poll interval, so the first sign of
+its replacement is that replacement's own terminal record. Without that rule the page would
+drop the newer result and keep polling for a job the server had already moved past — verified
+in the browser, where the exact-match guard reported `0` outcome panels across `23` polls.
 
 Dismissing the outcome clears only that local snapshot, and both the close control and the
 page's Refresh button clear it. Since the snapshot is local, neither the server's retained

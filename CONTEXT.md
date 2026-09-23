@@ -78,9 +78,12 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
   rather than as an error. The server retains the last job's status in process memory for
   the life of the process, so that record is a **retained status** rather than news: the
   console does not present it as the current reader's result. It shows a job it observed
-  (one already running when the page opened, or one it started) and reports that job's
-  outcome once, which the reader may dismiss; dismissing it is local, so re-reading the
-  server's retained record does not bring it back. A job still running is always shown,
+  (one already running when the page opened, one it started, or one admitted elsewhere that a
+  later read reported as running) and reports that job's outcome once, which the reader may
+  dismiss; dismissing it is local, so re-reading the server's retained record does not bring it
+  back. A job that finishes and is replaced within one poll interval is followed too: the first
+  sign of the replacement is its own terminal record, and dropping it would leave the page
+  polling for a job the server had already moved past. A job still running is always shown,
   because the panel is the reader's only evidence that a Maintenance Action holds the
   Write Gate, and a reader must not be able to hide live work.
 - **Write Gate**: The rule that no ordinary write may overlap a Maintenance Action.

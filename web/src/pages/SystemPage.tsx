@@ -427,11 +427,20 @@ export const SystemPage: React.FC = () => {
     const job = maintenanceData?.maintenance;
     if (!job || job.running || job.finished_at_ms <= 0) return;
 
-    // A terminal status is accepted only for the job this page is observing. The query cache
-    // can still hold an earlier job's terminal record, and letting that one stop the poll or
-    // set the outcome would report a finished job's numbers as this job's result.
+    // A terminal status is accepted for the job this page is observing, and for a job that started
+    // later - one that superseded it, which happens when a fast job finishes and another begins
+    // inside a single poll interval, so no poll ever reported the new one as running. A record from
+    // an *earlier* job is the stale one this guard exists to ignore, and an empty observation means
+    // the record is the server's retained history rather than this reader's result, so neither is
+    // adopted here.
     const observed = observedJobRef.current;
-    if (!observed || observed.action !== job.action || observed.startedAtMS !== job.started_at_ms) return;
+    if (!observed) return;
+    const isObservedJob = observed.action === job.action && observed.startedAtMS === job.started_at_ms;
+    const supersedesObservedJob = job.started_at_ms > observed.startedAtMS;
+    if (!isObservedJob && !supersedesObservedJob) return;
+    // The observed job moves to the one being reported, so a later poll cannot re-report it and the
+    // banner this poll was following does not outlive the job that replaced it.
+    observedJobRef.current = { action: job.action, startedAtMS: job.started_at_ms };
 
     // The poll stops on the terminal state, whether or not this page already reported it.
     // Returning early for an already-announced job would leave the poll running forever
