@@ -351,6 +351,8 @@ export const SystemPage: React.FC = () => {
   // it or for a job that superseded it, because the query cache can still hold an earlier job's
   // terminal record.
   const observedJobRef = useRef<number | null>(null);
+  // The backend process these refs describe, so a restart can be told apart from a later job.
+  const lastProcessRef = useRef<number | null>(null);
 
   // The action label shown inside a message, resolved from the action the server
   // reported rather than the one that was requested.
@@ -372,6 +374,24 @@ export const SystemPage: React.FC = () => {
     queryFn: api.getSystemInfo,
     staleTime: 15000,
   });
+
+  // The process the state below belongs to. Job ids come from a counter that starts again with every
+  // process, so a restart can mint an id this page has already seen: a job from the new process would
+  // then look like one already handled and its result would never be shown. Clearing the observed and
+  // reported ids when the process changes keeps identity meaningful across a restart. This runs
+  // before the effects that read those refs, because effects fire in declaration order.
+  useEffect(() => {
+    if (lastProcessRef.current === null) {
+      lastProcessRef.current = sysInfo?.runtime.started_at_ms ?? null;
+      return;
+    }
+    const processStart = sysInfo?.runtime.started_at_ms;
+    if (processStart === undefined || processStart === lastProcessRef.current) return;
+    lastProcessRef.current = processStart;
+    observedJobRef.current = null;
+    reportedCompletionRef.current = 0;
+    setDisplayedOutcome(null);
+  }, [sysInfo?.runtime.started_at_ms]);
 
   // A running job reported by the page's own read is adopted and polled to its end: a job
   // admitted before this page was opened, or admitted elsewhere while it is open, is real work

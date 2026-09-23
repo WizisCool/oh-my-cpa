@@ -406,8 +406,13 @@ export async function systemInformationPage({ base, page, check }) {
   // needs three states from one page: a retained terminal job, a job that is still running when
   // the page opens, and a job this page itself started.
   let servedMaintenance = retainedJob;
+  // The backend process the fixture reports. It is a variable because a restart mints job ids from
+  // the beginning again, which is the case the page has to survive without a reload.
+  let servedProcessStart = 1790013000000;
   await page.route('**/omc/api/v1/management/system', async (route) => {
-    await route.fulfill({ status: 200, json: { ...baseSystemBody(), maintenance: servedMaintenance } });
+    const body = baseSystemBody();
+    body.runtime = { ...body.runtime, started_at_ms: servedProcessStart };
+    await route.fulfill({ status: 200, json: { ...body, maintenance: servedMaintenance } });
   });
 
   // The retained job must actually be what the page is being offered, or the assertion below
@@ -719,15 +724,18 @@ export async function systemInformationPage({ base, page, check }) {
   // Measured inside the window before the slow poll answers. The window is the point: with no
   // seeded cache the card reads the earlier job's terminal record, so the banner appears only once
   // that poll lands - some ten seconds later - and a wait that tolerated that would prove nothing.
+  // Scoped to the info alert rather than the card's whole text, for the same reason as the assertion
+  // above: the card's static copy contains words this check would otherwise match, so measuring the
+  // card as a whole could report a banner that was never rendered.
+  const staleCacheAlert = page.locator('[data-testid="sys-card-maintenance"] .ant-alert-info');
   const runningBannerShown = await until(
-    async () =>
-      /running|正在执行/i.test(await page.locator('[data-testid="sys-card-maintenance"]').innerText()),
+    async () => (await staleCacheAlert.count()) > 0,
     { label: 'the in-progress banner for a job the page just adopted', timeoutMs: 3000 },
   ).catch(() => false);
   check(
     'a running job is shown as in progress even though the poll cache held a terminal record',
     Boolean(runningBannerShown),
-    `card=${(await page.locator('[data-testid="sys-card-maintenance"]').innerText()).slice(0, 120)}`,
+    `alert=${(await staleCacheAlert.first().innerText().catch(() => '')).slice(0, 120)}`,
   );
   // The write gate is the reason the banner matters: while a job runs, the actions must not look
   // available. A stale record made them clickable.
@@ -753,6 +761,70 @@ export async function systemInformationPage({ base, page, check }) {
     (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) === 1,
   );
   await page.unroute('**/omc/api/v1/management/system/maintenance**', slowPollHandler);
+
+  // ── a backend restart does not make the new process's job look handled ──────
+  // Job ids come from a counter that starts again with each process, so a restart can mint an id
+  // this page has already seen. Nothing here reloads the page: a reload would reset the page's own
+  // state and hide the very confusion being tested - the page must notice the process changed and
+  // treat the new process's job as new work.
+  const postRestartJob = {
+    action: 'wal_checkpoint',
+    // Deliberately the id the page has just finished reporting - the slow-poll job's, which is the
+    // most recent one at this point. A restarted process handing out its ids from one again can
+    // collide exactly like this, and a page that compared ids alone would treat the new job as one
+    // it had already dealt with.
+    job_id: 6,
+    running: true,
+    started_at_ms: 1790070000000,
+    finished_at_ms: 0,
+    size_before_bytes: 9_000_000,
+    size_after_bytes: 0,
+    reclaimed_bytes: 0,
+    incomplete: false,
+    detail: '',
+    error: '',
+  };
+  let postRestartPolls = 0;
+  const postRestartHandler = async (route) => {
+    postRestartPolls += 1;
+    const running = postRestartPolls <= 2;
+    const job = running
+      ? postRestartJob
+      : {
+          ...postRestartJob,
+          running: false,
+          finished_at_ms: 1790070003000,
+          size_after_bytes: 8_998_000,
+          reclaimed_bytes: 2000,
+          detail: 'the job the restarted process ran',
+        };
+    servedMaintenance = { ...job };
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        maintenance: job,
+        maintenance_admission: { action: 'wal_checkpoint', required_bytes: 0, available_bytes: 5_000_000, allowed: true, reason: '' },
+      }),
+    });
+  };
+  await page.route('**/omc/api/v1/management/system/maintenance**', postRestartHandler);
+  // The process restarts: a new start instant, and the job it admits reuses an id.
+  servedProcessStart = 1790070000000;
+  servedMaintenance = { ...postRestartJob };
+  await page.locator('.system-page').getByRole('button', { name: /Refresh|刷新/i }).first().click();
+
+  await until(
+    async () => (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) > 0,
+    { label: 'the restarted process\'s job outcome', timeoutMs: 15_000 },
+  ).catch(() => {});
+  const postRestartOutcome = await page.locator('[data-testid="sys-maintenance-outcome"]').innerText().catch(() => '');
+  check(
+    'a job from a restarted process is reported even though its id was used before',
+    postRestartOutcome.includes('the job the restarted process ran'),
+    `polls=${postRestartPolls} outcome text: ${postRestartOutcome.slice(0, 160)}`,
+  );
+  await page.unroute('**/omc/api/v1/management/system/maintenance**', postRestartHandler);
 
   // ── a maintenance job is admitted as started, and its outcome is its own ────
   // 202 means accepted, not done. The page must say so when it is accepted and report the

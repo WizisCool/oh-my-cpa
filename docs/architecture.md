@@ -1157,7 +1157,8 @@ observed job: a fast job can finish and be replaced inside a single poll interva
 sign of its replacement is that replacement's own terminal record. Without that rule the page
 would drop the newer result and keep polling for a job the server had already moved past —
 verified in the browser, where the exact-match guard reported `0` outcome panels across `23`
-polls.
+polls. "Admitted later" is the accurate phrase here, not "started later": the ids are handed out
+at reservation, which precedes the launch.
 
 Adopting a running job also **seeds the poll's cache** with that job before polling is
 enabled, because while polling is enabled the card reads that cache rather than the page's own
@@ -1177,8 +1178,15 @@ rather than after it. That ordering is the whole of the guarantee: the effect na
 translation function among its dependencies, so changing the interface language re-runs it
 while the terminal record is still cached, and a guard placed after the outcome was set would
 put back a result the reader had already dismissed. The job is recognised by the server's
-action and start instant rather than by its finish time, which the backend assigns from the
-wall clock and does not promise to be unique.
+`job_id` and not by its finish time, which the backend assigns from the wall clock and does
+not promise to be unique.
+
+Because the ids come from a counter that begins again with each process, the page also records
+which process those ids describe (`runtime.started_at_ms`) and clears its observed and reported
+job when that changes. A restart can otherwise mint an id the page has already handled, and the
+new process's job would look like one already dealt with — its result never shown. The probe
+asserts this **without reloading**, since a reload resets the page's own state and would hide
+the confusion being tested.
 
 Two operator-issued actions rewrite the database: `PRAGMA wal_checkpoint(TRUNCATE)`
 and `VACUUM`. Both are offered from the System Information page and both are
