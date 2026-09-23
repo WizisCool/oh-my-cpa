@@ -341,9 +341,12 @@ export const SystemPage: React.FC = () => {
   const [displayedOutcome, setDisplayedOutcome] = useState<SystemMaintenanceStatus | null>(null);
 
   const hasMountedCheckRef = useRef(false);
-  // The last job completion already reported, so a terminal status is announced once
-  // rather than on every poll that still reads it.
-  const reportedCompletionRef = useRef<number>(0);
+  // The last job completion already reported, so a terminal status is handled once rather than on
+  // every effect run that still reads it. It is the job's identity - the server's action and start
+  // instant - rather than `finished_at_ms`: this effect re-runs when the reading language changes,
+  // because `t` is one of its dependencies, and recognising the same job there is what keeps a
+  // result the reader dismissed from being restored.
+  const reportedCompletionRef = useRef<{ action: string; startedAtMS: number } | null>(null);
   // The job this page is observing, identified by the server's own action name and start
   // instant. A terminal status is accepted only when it matches, because the query cache can
   // still hold an earlier job's terminal record.
@@ -434,10 +437,16 @@ export const SystemPage: React.FC = () => {
     // Returning early for an already-announced job would leave the poll running forever
     // against a job that is never going to change again.
     setIsPollingMaintenance(false);
-    setDisplayedOutcome(job);
-    if (job.finished_at_ms === reportedCompletionRef.current) return;
 
-    reportedCompletionRef.current = job.finished_at_ms;
+    // A job's terminal state is handled once. The guard sits *before* the outcome is set, not after
+    // it: this effect re-runs when the reading language changes, and the terminal record is still
+    // in the query cache then, so setting the outcome first would put back a result the reader had
+    // dismissed - which reads as the panel having restored itself.
+    const reported = reportedCompletionRef.current;
+    if (reported && reported.action === job.action && reported.startedAtMS === job.started_at_ms) return;
+    reportedCompletionRef.current = { action: job.action, startedAtMS: job.started_at_ms };
+
+    setDisplayedOutcome(job);
     void queryClient.invalidateQueries({ queryKey: ['management-system-info'] });
 
     const label = actionLabel(job.action);

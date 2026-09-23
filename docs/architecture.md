@@ -1157,6 +1157,14 @@ page's Refresh button clear it. Since the snapshot is local, neither the server'
 record nor a later refetch can resurrect a result the reader has put away, while the next
 real job still produces a new one.
 
+The terminal status is handled **once per job**, and the guard sits before the outcome is set
+rather than after it. That ordering is the whole of the guarantee: the effect names the
+translation function among its dependencies, so changing the interface language re-runs it
+while the terminal record is still cached, and a guard placed after the outcome was set would
+put back a result the reader had already dismissed. The job is recognised by the server's
+action and start instant rather than by its finish time, which the backend assigns from the
+wall clock and does not promise to be unique.
+
 Two operator-issued actions rewrite the database: `PRAGMA wal_checkpoint(TRUNCATE)`
 and `VACUUM`. Both are offered from the System Information page and both are
 guarded by a write gate, because the failure mode without one is not a slow request:

@@ -415,12 +415,25 @@ export async function systemInformationPage({ base, page, check }) {
   });
   check('the fixture serves a retained terminal job', servedRetained === 'wal_checkpoint', `action=${servedRetained}`);
 
+  // Started before the navigation it belongs to, so the response cannot be missed by a race.
+  const reloadedSystemRead = page.waitForResponse(
+    (res) => res.request().method() === 'GET' && new URL(res.url()).pathname.endsWith('/management/system'),
+    { timeout: 20_000 },
+  );
+
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.locator('.system-page').waitFor({ timeout: 20_000 });
+  // The assertion below is a *negative* one, and a negative assertion against a page that has not
+  // read its data yet reports zero for the wrong reason. So the page's own read of the retained
+  // job is awaited, and then the card is awaited rendering it. Neither wait is swallowed: a page
+  // that never settles must fail here rather than let this check pass on an empty page.
+  await reloadedSystemRead;
   await until(
-    async () => (await page.locator('.system-page .ant-btn-loading').count()) === 0,
-    { label: 'the reloaded maintenance card settling', timeoutMs: 15_000 },
-  ).catch(() => {});
+    async () =>
+      (await page.locator('[data-testid="sys-storage-file-row"]').count()) === 3 &&
+      (await page.locator('[data-testid="sys-card-maintenance"] .ant-btn').count()) > 0,
+    { label: 'the reloaded page rendering the response that carries the retained job', timeoutMs: 15_000 },
+  );
 
   const retainedOutcomeCount = await page.locator('[data-testid="sys-maintenance-outcome"]').count();
   check(
@@ -605,6 +618,11 @@ export async function systemInformationPage({ base, page, check }) {
       acceptedJob.started_at_ms = 1790020000000;
       observed.action = acceptedJob.action;
       observed.startedAtMS = acceptedJob.started_at_ms;
+      // The page's own read is moved with the job. One server holds one job status, so a fixture
+      // that left `/management/system` reporting the previous job while the poll reported this one
+      // would describe a deployment that cannot exist - and it would let the refresh assertion
+      // below pass against a server that never agreed with the job the page was following.
+      servedMaintenance = { ...acceptedJob };
       await route.fulfill({
         status: 202,
         contentType: 'application/json',
@@ -614,23 +632,22 @@ export async function systemInformationPage({ base, page, check }) {
     }
     pollCount += 1;
     const running = pollCount === 1;
+    const job = running
+      ? acceptedJob
+      : {
+          ...acceptedJob,
+          running: false,
+          finished_at_ms: 1790020004000,
+          size_after_bytes: 600,
+          reclaimed_bytes: 400,
+          incomplete: true,
+          detail: 'blocked by a concurrent reader',
+        };
+    servedMaintenance = { ...job };
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({
-        maintenance: running
-          ? acceptedJob
-          : {
-              ...acceptedJob,
-              running: false,
-              finished_at_ms: 1790020004000,
-              size_after_bytes: 600,
-              reclaimed_bytes: 400,
-              incomplete: true,
-              detail: 'blocked by a concurrent reader',
-            },
-        maintenance_admission: admission,
-      }),
+      body: JSON.stringify({ maintenance: job, maintenance_admission: admission }),
     });
   });
 
@@ -692,6 +709,35 @@ export async function systemInformationPage({ base, page, check }) {
           (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) === 0,
           `${await page.locator('[data-testid="sys-maintenance-outcome"]').count()} outcome panel(s)`,
         );
+
+        // ── and across a reading-language change ──────────────────────────────
+        // The terminal effect names `t` among its dependencies, so changing the interface language
+        // re-runs it while the terminal record is still in the query cache. A guard placed after
+        // the outcome is set would put the dismissed panel back, which reads as the result having
+        // restored itself. The language control is the console's own header menu, so this drives
+        // the same path a reader does rather than calling internals.
+        const beforeSwitch = await page.locator('[data-testid="sys-card-maintenance"]').innerText();
+        await page.locator('.language-trigger-code').first().click();
+        const languageItem = page
+          .locator('.ant-dropdown:visible .ant-dropdown-menu-item')
+          .filter({ hasText: '简体中文' })
+          .first();
+        if ((await languageItem.count()) === 1) {
+          await languageItem.click();
+          // Awaited rather than slept on: the card's own text is the evidence that the new catalog
+          // actually took effect, which is what makes the effect re-run this check is about.
+          await until(
+            async () => (await page.locator('[data-testid="sys-card-maintenance"]').innerText()) !== beforeSwitch,
+            { label: 'the interface language changing', timeoutMs: 10_000 },
+          );
+          check(
+            'a cleared result stays cleared across a language change',
+            (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) === 0,
+            `${await page.locator('[data-testid="sys-maintenance-outcome"]').count()} outcome panel(s)`,
+          );
+        } else {
+          check('the language menu offers a second reading', false, 'no 简体中文 item in the header menu');
+        }
       } else {
         check('the observed result carries a close control', false, 'no close button on the outcome panel');
       }
