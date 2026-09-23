@@ -321,6 +321,59 @@ export async function systemInformationPage({ base, page, check }) {
     'no per-file breakdown was rendered',
   );
 
+  const fileRowCount = await page.locator('[data-testid="sys-storage-file-row"]').count();
+  check('storage card renders 3 file breakdown rows', fileRowCount === 3, `found ${fileRowCount}`);
+
+  const factRowCount = await page.locator('[data-testid="sys-storage-fact-row"]').count();
+  check('storage card renders 3 secondary fact rows', factRowCount === 3, `found ${factRowCount}`);
+
+  // Assert storage card internal row alignment and bounds
+  const storageCardLayout = await page.evaluate(() => {
+    const card = document.querySelector('[data-testid="sys-card-storage"]');
+    if (!card) return { found: false, errors: ['no storage card found'] };
+
+    const cardBox = card.getBoundingClientRect();
+    const errors = [];
+
+    const fileRows = Array.from(card.querySelectorAll('[data-testid="sys-storage-file-row"]'));
+    for (const row of fileRows) {
+      const children = Array.from(row.children);
+      if (children.length >= 2) {
+        const leftBox = children[0].getBoundingClientRect();
+        const rightBox = children[1].getBoundingClientRect();
+        if (leftBox.right > rightBox.left + 1) {
+          errors.push(`file row label and value overlap: "${children[0].textContent}" over "${children[1].textContent}"`);
+        }
+        if (rightBox.right > cardBox.right + 2) {
+          errors.push(`file row value overflows card: "${children[1].textContent}"`);
+        }
+      }
+    }
+
+    const factRows = Array.from(card.querySelectorAll('[data-testid="sys-storage-fact-row"]'));
+    for (const row of factRows) {
+      const children = Array.from(row.children);
+      if (children.length >= 2) {
+        const leftBox = children[0].getBoundingClientRect();
+        const rightBox = children[1].getBoundingClientRect();
+        if (leftBox.right > rightBox.left + 1) {
+          errors.push(`fact row label and value overlap: "${children[0].textContent}" over "${children[1].textContent}"`);
+        }
+        if (rightBox.right > cardBox.right + 2) {
+          errors.push(`fact row value overflows card: "${children[1].textContent}"`);
+        }
+      }
+    }
+
+    return { found: true, errors };
+  });
+
+  check(
+    'storage card rows have aligned labels and values with no overlap or card overflow',
+    storageCardLayout.found && storageCardLayout.errors.length === 0,
+    storageCardLayout.errors.join(' | '),
+  );
+
   // ── a maintenance job is admitted as started, and its outcome is its own ────
   // 202 means accepted, not done. The page must say so when it is accepted and report the
   // real result afterwards, including the partial outcome SQLite reports in-band: a
@@ -372,7 +425,74 @@ export async function systemInformationPage({ base, page, check }) {
   } else {
     check('a rebuild control is offered when admission allows it', false, 'no enabled VACUUM button');
   }
-}
+  // ── 2x2 grid layout and equal height within rows on desktop ───────────────
+  // The four cards form a 2x2 grid where siblings in the same row share equal height.
+  // Row 1: Versions & Updates (left) | SQLite Storage (right)
+  // Row 2: Component Topology & Health (left) | Maintenance & Diagnostics (right)
+  const gridGeometry = await page.evaluate(() => {
+    const cards = Array.from(document.querySelectorAll('.system-page .ant-card'));
+    if (cards.length !== 4) return { error: `expected 4 cards, found ${cards.length}` };
+
+    const boxes = cards.map((c) => {
+      const r = c.getBoundingClientRect();
+      const title = c.querySelector('.ant-card-head-title')?.textContent?.trim() || '';
+      return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right), width: Math.round(r.width), height: Math.round(r.height), title };
+    });
+
+    const [c1, c2, c3, c4] = boxes;
+    // Row 1 cards (c1, c2) should share top and bottom edge (equal height within row).
+    const row1TopDiff = Math.abs(c1.top - c2.top);
+    const row1BottomDiff = Math.abs(c1.bottom - c2.bottom);
+    const row1HeightDiff = Math.abs(c1.height - c2.height);
+
+    // Row 2 cards (c3, c4) should share top and bottom edge (equal height within row).
+    const row2TopDiff = Math.abs(c3.top - c4.top);
+    const row2BottomDiff = Math.abs(c3.bottom - c4.bottom);
+    const row2HeightDiff = Math.abs(c3.height - c4.height);
+
+    // Column alignment: c1 and c3 on left column, c2 and c4 on right column.
+    const colLeftDiff = Math.abs(c1.left - c3.left);
+    const colRightDiff = Math.abs(c2.left - c4.left);
+    const widthDiff = Math.abs(c1.width - c2.width);
+
+    // Maintenance card must be at bottom right (c4).
+    const isMaintenanceFourth = /Maintenance|Penyelenggaraan|维护|維護/i.test(c4.title);
+
+    return {
+      row1TopDiff,
+      row1BottomDiff,
+      row1HeightDiff,
+      row2TopDiff,
+      row2BottomDiff,
+      row2HeightDiff,
+      colLeftDiff,
+      colRightDiff,
+      widthDiff,
+      isMaintenanceFourth,
+      boxes,
+    };
+  });
+
+  check(
+    'desktop cards in row 1 are equal height and aligned',
+    gridGeometry.row1TopDiff <= 2 && gridGeometry.row1BottomDiff <= 2,
+    `row1: topDiff=${gridGeometry.row1TopDiff}px, bottomDiff=${gridGeometry.row1BottomDiff}px`,
+  );
+  check(
+    'desktop cards in row 2 are equal height and aligned',
+    gridGeometry.row2TopDiff <= 2 && gridGeometry.row2BottomDiff <= 2,
+    `row2: topDiff=${gridGeometry.row2TopDiff}px, bottomDiff=${gridGeometry.row2BottomDiff}px`,
+  );
+  check(
+    'desktop columns have equal widths and matching left edges',
+    gridGeometry.colLeftDiff <= 2 && gridGeometry.colRightDiff <= 2 && gridGeometry.widthDiff <= 2,
+    `colLeftDiff=${gridGeometry.colLeftDiff}px, colRightDiff=${gridGeometry.colRightDiff}px, widthDiff=${gridGeometry.widthDiff}px`,
+  );
+  check(
+    'maintenance card sits in the bottom-right cell',
+    gridGeometry.isMaintenanceFourth,
+    `fourth card title: ${gridGeometry.boxes?.[3]?.title}`,
+  );}
 
 /**
  * The same page on a 320px screen, where two side-by-side rows did not fit and drew on top of
@@ -427,7 +547,7 @@ export async function systemInformationNarrow({ base, page, check }) {
     // build time, so a selector naming one matches nothing and the whole probe passes on an
     // empty set. That is how this check was initially vacuous.
     const rows = document.querySelectorAll(
-      '[data-testid="sys-card-head"], [data-testid="sys-product-header"], [data-testid="sys-version-row"]',
+      '[data-testid="sys-card-head"], [data-testid="sys-product-header"], [data-testid="sys-version-row"], [data-testid="sys-storage-file-row"], [data-testid="sys-storage-fact-row"]',
     );
     const collapsed = [];
     for (const row of rows) {
@@ -487,4 +607,50 @@ export async function systemInformationNarrow({ base, page, check }) {
   );
   check('the page does not scroll sideways at 320px', !result.scrolls);
   check('every card still renders at 320px', result.cards === 4, `${result.cards} cards`);
+
+  // Mobile stacking: on 320px narrow screens, cards should stack vertically in a single column
+  // where each card starts strictly below the previous one.
+  const mobileStacking = await page.evaluate(() => {
+    const cards = Array.from(document.querySelectorAll('.system-page .ant-card'));
+    const boxes = cards.map((c) => {
+      const r = c.getBoundingClientRect();
+      return { top: Math.round(r.top), bottom: Math.round(r.bottom) };
+    });
+    const correctlyStacked = boxes.every((box, i) => {
+      if (i === 0) return true;
+      return box.top >= boxes[i - 1].bottom - 1;
+    });
+    return { correctlyStacked, boxes };
+  });
+
+  check(
+    'cards stack vertically in a single column at 320px',
+    mobileStacking.correctlyStacked,
+    `boxes: ${JSON.stringify(mobileStacking.boxes)}`,
+  );
+
+  // ── Intermediate viewport (800px): below 900px breakpoint, single column ──
+  await page.setViewportSize({ width: 800, height: 1000 });
+  await page.waitForTimeout(100);
+
+  const intermediateResult = await page.evaluate(() => {
+    const cards = Array.from(document.querySelectorAll('.system-page .ant-card'));
+    const boxes = cards.map((c) => {
+      const r = c.getBoundingClientRect();
+      return { top: Math.round(r.top), bottom: Math.round(r.bottom), width: Math.round(r.width) };
+    });
+    const correctlyStacked = boxes.every((box, i) => {
+      if (i === 0) return true;
+      return box.top >= boxes[i - 1].bottom - 1;
+    });
+    const scrolls = document.documentElement.scrollWidth > document.documentElement.clientWidth + 1;
+    return { correctlyStacked, scrolls, boxes };
+  });
+
+  check(
+    'cards stack vertically in a single column at 800px (below 900px breakpoint)',
+    intermediateResult.correctlyStacked,
+    `boxes: ${JSON.stringify(intermediateResult.boxes)}`,
+  );
+  check('the page does not scroll sideways at 800px', !intermediateResult.scrolls);
 }

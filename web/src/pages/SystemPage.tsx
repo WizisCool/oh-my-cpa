@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Card,
-  Row,
-  Col,
   Button,
   Tag,
   Typography,
@@ -259,7 +257,7 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
             {version.repository} <LinkOutlined />
           </a>
         </div>
-        <div>{renderStateBadge()}</div>
+        <div className={styles['product-badge']}>{renderStateBadge()}</div>
       </div>
 
       <div className={styles['version-row']} data-testid="sys-version-row">
@@ -290,11 +288,11 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
 
       {/* No routine "last checked" readout: it is the same timestamp on every card and it
           answered a question nobody asked. What remains is the one state a reader cannot infer
-          from the card - that this process holds no notes, which is normal after a restart and
-          would otherwise look like an empty change log.
+          from the card - that no release notes were retrieved, which is normal after a restart
+          and would otherwise look like an empty change log.
           It is suppressed while a check error is shown: the notes are missing because that
-          check failed, and saying "not in memory" beside the real reason would send the reader
-          looking for a memory problem instead of a feed problem. */}
+          check failed, and a second sentence about missing notes beside the real reason would
+          send the reader looking for a retrieval problem instead of a feed problem. */}
       {!version.notes_available && !version.check_error && (
         <div className={styles['product-meta']}>
           <Text type="secondary">{t('sys.notes_not_held')}</Text>
@@ -573,283 +571,277 @@ export const SystemPage: React.FC = () => {
         />
       )}
 
-      {/* Row 1: Versions & Updates (Left) + SQLite Storage (Right) */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-        {/* Left Column: Versions & Updates */}
-        <Col xs={24} lg={12}>
-          <Card
-            title={
-              <div className={styles['card-head']} data-testid="sys-card-head">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <DashboardOutlined />
-                  <span>{t('sys.version_card')}</span>
-                </div>
-                {/* The check lives on the card it acts on: it refreshes the versions below
-                    it, and a page-level button that changed one card was a control placed
-                    away from its own effect. */}
-                <Button
-                  type="link"
-                  size="small"
-                  icon={<CloudDownloadOutlined spin={isCheckingUpdates} />}
-                  loading={isCheckingUpdates}
-                  // The demonstration refuses this route on the server, so the control is
-                  // disabled rather than offered: a button whose only outcome is a refusal
-                  // teaches the reader something untrue about the product.
-                  disabled={isDemo || isCheckingUpdates}
-                  title={isDemo ? t('demo.blocked') : undefined}
-                  onClick={() => void handleCheckUpdates()}
-                >
-                  {isCheckingUpdates ? t('sys.checking_updates') : t('sys.check_updates')}
-                </Button>
-              </div>
-            }
-            style={{ height: '100%' }}
-          >
-            {sysInfo && (
-              <>
-                <ProductBlock
-                  productTitle={t('sys.omc_version')}
-                  version={sysInfo.omc_version}
-                  onOpenChangelog={() => setExpandedProduct('omc')}
-                />
-                <ProductBlock
-                  productTitle={t('sys.cpa_version')}
-                  version={sysInfo.cpa_version}
-                  onOpenChangelog={() => setExpandedProduct('cpa')}
-                />
-              </>
-            )}
-          </Card>
-        </Col>
-
-        {/* Right Column: SQLite Storage */}
-        <Col xs={24} lg={12}>
-          <Card
-            title={
+      {/* 2x2 Grid of the 4 System Information cards */}
+      <div className={styles['system-grid']}>
+        {/* Card 1: Versions & Updates */}
+        <Card
+          className={styles['system-card']}
+          data-testid="sys-card-versions"
+          title={
+            <div className={styles['card-head']} data-testid="sys-card-head">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <DatabaseOutlined />
-                <span>{t('sys.storage_card')}</span>
+                <DashboardOutlined />
+                <span>{t('sys.version_card')}</span>
               </div>
-            }
-            style={{ height: '100%' }}
-          >
-            {sysInfo && (
-              <>
-                <div className={styles['storage-headline']}>
-                  <Text type="secondary">{t('sys.storage_total')}</Text>
-                  <span className={styles['storage-total-num']}>
-                    {formatBytes(sysInfo.database.files.total_bytes)}
+              {/* The check lives on the card it acts on: it refreshes the versions below
+                  it, and a page-level button that changed one card was a control placed
+                  away from its own effect. */}
+              <Button
+                type="link"
+                size="small"
+                icon={<CloudDownloadOutlined spin={isCheckingUpdates} />}
+                loading={isCheckingUpdates}
+                // The demonstration refuses this route on the server, so the control is
+                // disabled rather than offered: a button whose only outcome is a refusal
+                // teaches the reader something untrue about the product.
+                disabled={isDemo || isCheckingUpdates}
+                title={isDemo ? t('demo.blocked') : undefined}
+                onClick={() => void handleCheckUpdates()}
+              >
+                {isCheckingUpdates ? t('sys.checking_updates') : t('sys.check_updates')}
+              </Button>
+            </div>
+          }
+        >
+          {sysInfo && (
+            <>
+              <ProductBlock
+                productTitle={t('sys.omc_version')}
+                version={sysInfo.omc_version}
+                onOpenChangelog={() => setExpandedProduct('omc')}
+              />
+              <ProductBlock
+                productTitle={t('sys.cpa_version')}
+                version={sysInfo.cpa_version}
+                onOpenChangelog={() => setExpandedProduct('cpa')}
+              />
+            </>
+          )}
+        </Card>
+
+        {/* Card 2: SQLite Storage */}
+        <Card
+          className={styles['system-card']}
+          data-testid="sys-card-storage"
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <DatabaseOutlined />
+              <span>{t('sys.storage_card')}</span>
+            </div>
+          }
+        >
+          {sysInfo && (
+            <>
+              <div className={styles['storage-headline']}>
+                <span className={styles['storage-headline-label']}>{t('sys.storage_total')}</span>
+                <span className={styles['storage-total-num']}>
+                  {formatBytes(sysInfo.database.files.total_bytes)}
+                </span>
+              </div>
+
+              <div className={styles['storage-file-list']} data-testid="sys-storage-file-list">
+                <div className={styles['storage-file-row']} data-testid="sys-storage-file-row">
+                  <span className={styles['storage-file-name']}>{t('sys.storage_main')}</span>
+                  <span className={styles['storage-file-val']}>
+                    {sysInfo.database.files.main_exists
+                      ? formatBytes(sysInfo.database.files.main_bytes)
+                      : t('sys.file_not_exist')}
                   </span>
                 </div>
 
-                <div className={styles['file-pills']}>
-                  <div className={styles['file-pill']}>
-                    <span className={styles['file-pill-label']}>{t('sys.storage_main')}</span>
-                    <span className={styles['file-pill-val']}>
-                      {sysInfo.database.files.main_exists
-                        ? formatBytes(sysInfo.database.files.main_bytes)
-                        : t('sys.file_not_exist')}
-                    </span>
-                  </div>
-
-                  <div className={styles['file-pill']}>
-                    <span className={styles['file-pill-label']}>{t('sys.storage_wal')}</span>
-                    <span className={styles['file-pill-val']}>
-                      {sysInfo.database.files.wal_exists
-                        ? formatBytes(sysInfo.database.files.wal_bytes)
-                        : t('sys.file_not_exist')}
-                    </span>
-                  </div>
-
-                  <div className={styles['file-pill']}>
-                    <span className={styles['file-pill-label']}>{t('sys.storage_shm')}</span>
-                    <span className={styles['file-pill-val']}>
-                      {sysInfo.database.files.shm_exists
-                        ? formatBytes(sysInfo.database.files.shm_bytes)
-                        : t('sys.file_not_exist')}
-                    </span>
-                  </div>
+                <div className={styles['storage-file-row']} data-testid="sys-storage-file-row">
+                  <span className={styles['storage-file-name']}>{t('sys.storage_wal')}</span>
+                  <span className={styles['storage-file-val']}>
+                    {sysInfo.database.files.wal_exists
+                      ? formatBytes(sysInfo.database.files.wal_bytes)
+                      : t('sys.file_not_exist')}
+                  </span>
                 </div>
 
-                {/* What the file is, rather than how it is organised internally: the
-                    observed journal mode, the schema generation, and the space in use. Page
-                    geometry, free pages and the connection's own settings are in the
-                    redacted diagnostics bundle for anyone who needs them. */}
-                <div className={styles['storage-facts']}>
-                  <div className={styles['storage-fact']}>
-                    <span className={styles['storage-detail-label']}>{t('sys.journal_mode')}</span>
-                    <Tag style={{ textTransform: 'uppercase', margin: 0 }}>
-                      {sysInfo.database.journal_mode || '—'}
-                    </Tag>
-                  </div>
-                  <div className={styles['storage-fact']}>
-                    <span className={styles['storage-detail-label']}>{t('sys.schema_version')}</span>
-                    <Tag style={{ margin: 0 }}>v{sysInfo.database.schema_version}</Tag>
-                  </div>
-                  <div className={styles['storage-fact']}>
-                    <span className={styles['storage-detail-label']}>{t('sys.used_bytes')}</span>
-                    <span className={styles['storage-detail-val']}>
-                      {formatBytes(sysInfo.database.used_bytes)}
-                    </span>
-                  </div>
-                </div>
-              </>
-            )}
-          </Card>
-        </Col>
-      </Row>
-
-      {/* Row 2: Component Topology & Health */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-        <Col xs={24} md={12}>
-          <Card
-            title={
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <CloudServerOutlined />
-                <span>{t('sys.topology_card')}</span>
-              </div>
-            }
-            style={{ height: '100%' }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* CPA Gateway */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <div style={{ fontWeight: 600 }}>{t('sys.component_cpa')}</div>
-                  <div style={{ fontSize: 12, color: 'var(--meta)', fontFamily: 'monospace' }}>
-                    {sysInfo?.cpa.endpoint_masked}
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  {sysInfo?.cpa.status === 'connected' ? (
-                    <Tag color="success" icon={<CheckCircleOutlined />}>
-                      {sysInfo.cpa.latency_ms > 0
-                        ? t('sys.cpa_latency', { ms: sysInfo.cpa.latency_ms })
-                        : t('shell.connected')}
-                    </Tag>
-                  ) : (
-                    <Tag color="error" icon={<CloseCircleOutlined />}>
-                      {t('shell.offline')}
-                    </Tag>
-                  )}
+                <div className={styles['storage-file-row']} data-testid="sys-storage-file-row">
+                  <span className={styles['storage-file-name']}>{t('sys.storage_shm')}</span>
+                  <span className={styles['storage-file-val']}>
+                    {sysInfo.database.files.shm_exists
+                      ? formatBytes(sysInfo.database.files.shm_bytes)
+                      : t('sys.file_not_exist')}
+                  </span>
                 </div>
               </div>
 
-              {/* SQLite DB */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontWeight: 600 }}>{t('sys.component_db')}</div>
-                  <div style={{ fontSize: 12, color: 'var(--meta)' }}>
-                    {t('sys.db_mode', {
-                      mode: (sysInfo?.database.journal_mode || '').toUpperCase() || '—',
-                    })}
-                  </div>
+              {/* What the file is, rather than how it is organised internally: the
+                  observed journal mode, the schema generation, and the space in use. Page
+                  geometry, free pages and the connection's own settings are in the
+                  redacted diagnostics bundle for anyone who needs them. */}
+              <div className={styles['storage-facts-section']} data-testid="sys-storage-facts">
+                <div className={styles['storage-fact-row']} data-testid="sys-storage-fact-row">
+                  <span className={styles['storage-fact-label']}>{t('sys.journal_mode')}</span>
+                  <span className={styles['storage-fact-val']}>
+                    {(sysInfo.database.journal_mode || '—').toUpperCase()}
+                  </span>
                 </div>
-                <div>
-                  {sysInfo?.database.status === 'ok' ? (
-                    <Tag color="success">{t('inst.db_ok')}</Tag>
-                  ) : (
-                    <Tag color="error">{t('inst.db_error')}</Tag>
-                  )}
+                <div className={styles['storage-fact-row']} data-testid="sys-storage-fact-row">
+                  <span className={styles['storage-fact-label']}>{t('sys.schema_version')}</span>
+                  <span className={styles['storage-fact-val']}>v{sysInfo.database.schema_version}</span>
+                </div>
+                <div className={styles['storage-fact-row']} data-testid="sys-storage-fact-row">
+                  <span className={styles['storage-fact-label']}>{t('sys.used_bytes')}</span>
+                  <span className={styles['storage-fact-val']}>
+                    {formatBytes(sysInfo.database.used_bytes)}
+                  </span>
                 </div>
               </div>
+            </>
+          )}
+        </Card>
 
-              {/* Collector */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontWeight: 600 }}>{t('sys.component_collector')}</div>
-                  <div style={{ fontSize: 12, color: 'var(--meta)' }}>
-                    {t('sys.collector_mode', {
-                      mode: sysInfo?.collector.mode || 'auto',
-                      gaps: sysInfo?.collector.gap_count || 0,
-                    })}
-                  </div>
+        {/* Card 3: Component Topology & Health */}
+        <Card
+          className={styles['system-card']}
+          data-testid="sys-card-health"
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <CloudServerOutlined />
+              <span>{t('sys.topology_card')}</span>
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* CPA Gateway */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontWeight: 600 }}>{t('sys.component_cpa')}</div>
+                <div style={{ fontSize: 12, color: 'var(--meta)', fontFamily: 'monospace' }}>
+                  {sysInfo?.cpa.endpoint_masked}
                 </div>
-                <div>
-                  <Tag color={sysInfo?.collector.status === 'active' ? 'processing' : 'default'}>
-                    {sysInfo?.collector.status === 'active'
-                      ? t('sys.collector_status_active')
-                      : t('sys.collector_status_disabled')}
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                {sysInfo?.cpa.status === 'connected' ? (
+                  <Tag color="success" icon={<CheckCircleOutlined />}>
+                    {sysInfo.cpa.latency_ms > 0
+                      ? t('sys.cpa_latency', { ms: sysInfo.cpa.latency_ms })
+                      : t('shell.connected')}
                   </Tag>
+                ) : (
+                  <Tag color="error" icon={<CloseCircleOutlined />}>
+                    {t('shell.offline')}
+                  </Tag>
+                )}
+              </div>
+            </div>
+
+            {/* SQLite DB */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontWeight: 600 }}>{t('sys.component_db')}</div>
+                <div style={{ fontSize: 12, color: 'var(--meta)' }}>
+                  {t('sys.db_mode', {
+                    mode: (sysInfo?.database.journal_mode || '').toUpperCase() || '—',
+                  })}
                 </div>
               </div>
-            </div>
-          </Card>
-        </Col>
-      </Row>
-
-      {/* Row 3: Maintenance & Diagnostics */}
-      <Row gutter={[16, 16]}>
-        <Col xs={24}>
-          <Card
-            title={
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <SafetyCertificateOutlined />
-                <span>{t('sys.maintenance_card')}</span>
+              <div>
+                {sysInfo?.database.status === 'ok' ? (
+                  <Tag color="success">{t('inst.db_ok')}</Tag>
+                ) : (
+                  <Tag color="error">{t('inst.db_error')}</Tag>
+                )}
               </div>
-            }
-          >
-            {/* Actions Bar */}
-            <div className={styles['maintenance-actions']}>
-              <Tooltip title={t('sys.checkpoint_desc')}>
-                <Button
-                  icon={<ClearOutlined />}
-                  loading={
-                    submittingAction === 'checkpoint' ||
-                    (effectiveMaintenance?.running &&
-                      (effectiveMaintenance.action === 'checkpoint' || effectiveMaintenance.action === 'wal_checkpoint'))
-                  }
-                  disabled={isDemo || isMaintenanceActive}
-                  onClick={() => void handleRunCheckpoint()}
-                >
-                  {t('sys.action_checkpoint')}
-                </Button>
-              </Tooltip>
-
-              <Tooltip
-                title={
-                  effectiveAdmission && !effectiveAdmission.allowed
-                    ? t('sys.vacuum_disabled_reason', { reason: effectiveAdmission.reason })
-                    : t('sys.vacuum_desc')
-                }
-              >
-                <Button
-                  icon={<CompressOutlined />}
-                  loading={
-                    submittingAction === 'vacuum' ||
-                    (effectiveMaintenance?.running && effectiveMaintenance.action === 'vacuum')
-                  }
-                  disabled={isDemo || isMaintenanceActive || (effectiveAdmission ? !effectiveAdmission.allowed : false)}
-                  onClick={() => setIsVacuumModalOpen(true)}
-                >
-                  {t('sys.action_vacuum')}
-                </Button>
-              </Tooltip>
-
-              <Button
-                type="primary"
-                icon={<DownloadOutlined />}
-                loading={downloadingDiag}
-                disabled={isDemo}
-                title={isDemo ? t('demo.blocked') : undefined}
-                onClick={() => void handleDownloadDiagnostics()}
-              >
-                {t('sys.download_diag')}
-              </Button>
             </div>
 
-            {/* In-progress banner */}
-            {effectiveMaintenance?.running && (
-              <Alert
-                type="info"
-                showIcon
-                icon={<Spin size="small" />}
-                style={{ marginBottom: 16 }}
-                description={t('sys.maintenance_in_progress', { action: actionLabel(effectiveMaintenance.action) })}
-              />
-            )}
+            {/* Collector */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontWeight: 600 }}>{t('sys.component_collector')}</div>
+                <div style={{ fontSize: 12, color: 'var(--meta)' }}>
+                  {t('sys.collector_mode', {
+                    mode: sysInfo?.collector.mode || 'auto',
+                    gaps: sysInfo?.collector.gap_count || 0,
+                  })}
+                </div>
+              </div>
+              <div>
+                <Tag color={sysInfo?.collector.status === 'active' ? 'processing' : 'default'}>
+                  {sysInfo?.collector.status === 'active'
+                    ? t('sys.collector_status_active')
+                    : t('sys.collector_status_disabled')}
+                </Tag>
+              </div>
+            </div>
+          </div>
+        </Card>
 
-            {/* Previous job outcome */}
+        {/* Card 4: Maintenance & Diagnostics */}
+        <Card
+          className={styles['system-card']}
+          data-testid="sys-card-maintenance"
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <SafetyCertificateOutlined />
+              <span>{t('sys.maintenance_card')}</span>
+            </div>
+          }
+        >
+          {/* Actions Bar */}
+          <div className={styles['maintenance-actions']}>
+            <Tooltip title={t('sys.checkpoint_desc')}>
+              <Button
+                icon={<ClearOutlined />}
+                loading={
+                  submittingAction === 'checkpoint' ||
+                  (effectiveMaintenance?.running &&
+                    (effectiveMaintenance.action === 'checkpoint' || effectiveMaintenance.action === 'wal_checkpoint'))
+                }
+                disabled={isDemo || isMaintenanceActive}
+                onClick={() => void handleRunCheckpoint()}
+              >
+                {t('sys.action_checkpoint')}
+              </Button>
+            </Tooltip>
+
+            <Tooltip
+              title={
+                effectiveAdmission && !effectiveAdmission.allowed
+                  ? t('sys.vacuum_disabled_reason', { reason: effectiveAdmission.reason })
+                  : t('sys.vacuum_desc')
+              }
+            >
+              <Button
+                icon={<CompressOutlined />}
+                loading={
+                  submittingAction === 'vacuum' ||
+                  (effectiveMaintenance?.running && effectiveMaintenance.action === 'vacuum')
+                }
+                disabled={isDemo || isMaintenanceActive || (effectiveAdmission ? !effectiveAdmission.allowed : false)}
+                onClick={() => setIsVacuumModalOpen(true)}
+              >
+                {t('sys.action_vacuum')}
+              </Button>
+            </Tooltip>
+
+            <Button
+              type="primary"
+              icon={<DownloadOutlined />}
+              loading={downloadingDiag}
+              disabled={isDemo}
+              title={isDemo ? t('demo.blocked') : undefined}
+              onClick={() => void handleDownloadDiagnostics()}
+            >
+              {t('sys.download_diag')}
+            </Button>
+          </div>
+
+          {/* In-progress banner */}
+            {effectiveMaintenance?.running && (
+            <Alert
+              type="info"
+              showIcon
+              icon={<Spin size="small" />}
+              style={{ marginBottom: 16 }}
+              description={t('sys.maintenance_in_progress', { action: actionLabel(effectiveMaintenance.action) })}
+            />
+          )}
+
+          {/* Previous job outcome */}
             {!effectiveMaintenance?.running && effectiveMaintenance?.action && (
               <div className={styles['maintenance-box']}>
                 <div className={styles['maintenance-box-title']}>
@@ -914,12 +906,11 @@ export const SystemPage: React.FC = () => {
             )}
 
             <div className={styles['maintenance-notice']}>
-              <p>{t('sys.maintenance_restart_notice')}</p>
-              <p style={{ margin: 0 }}>{t('sys.diag_desc')}</p>
-            </div>
-          </Card>
-        </Col>
-      </Row>
+            <p>{t('sys.maintenance_restart_notice')}</p>
+            <p style={{ margin: 0 }}>{t('sys.diag_desc')}</p>
+          </div>
+        </Card>
+      </div>
 
       {/* The change log drawer. Its title names the product it belongs to, because the two
           logs are identical in shape and a reader who opened one must be able to tell which
