@@ -389,8 +389,16 @@ export const SystemPage: React.FC = () => {
     const observed = observedJobRef.current;
     if (observed && observed.action === job.action && observed.startedAtMS === job.started_at_ms) return;
     observedJobRef.current = { action: job.action, startedAtMS: job.started_at_ms };
+    // The poll's own cache is seeded with the job just adopted, because while polling is enabled
+    // that cache is what the card reads - and it can still hold an earlier job's terminal record.
+    // Reading that record instead of this job hid a job that was genuinely holding the write gate:
+    // no in-progress banner, and maintenance controls that looked idle while they were not.
+    queryClient.setQueryData<SystemMaintenanceResponse>(['management-system-maintenance'], {
+      maintenance: job,
+      maintenance_admission: sysInfo?.maintenance_admission,
+    });
     setIsPollingMaintenance(true);
-  }, [sysInfo?.maintenance]);
+  }, [sysInfo?.maintenance, sysInfo?.maintenance_admission, queryClient]);
 
   const { data: maintenanceData } = useQuery<SystemMaintenanceResponse>({
     queryKey: ['management-system-maintenance'],

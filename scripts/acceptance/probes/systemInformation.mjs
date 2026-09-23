@@ -490,19 +490,19 @@ export async function systemInformationPage({ base, page, check }) {
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.locator('.system-page').waitFor({ timeout: 20_000 });
   // The in-progress banner is the reader's evidence that a job is holding the write gate, so it
-  // must appear for a job this page never started. The match is case-insensitive because the
-  // banner names the action, and "WAL Checkpoint" is not spelled "checkpoint".
+  // must appear for a job this page never started. Scoped to the info alert rather than the card's
+  // whole text: the card's static copy also contains words this check greps for, so measuring the
+  // card as a whole could report a banner that was never rendered.
+  const runningAlert = page.locator('[data-testid="sys-card-maintenance"] .ant-alert-info');
   const bannerShown = await until(
-    async () =>
-      (await page.locator('[data-testid="sys-card-maintenance"]').innerText()).toLowerCase().includes('running')
-      || (await page.locator('[data-testid="sys-card-maintenance"]').innerText()).includes('正在执行'),
+    async () => (await runningAlert.count()) > 0,
     { label: 'the in-progress banner for a job already running', timeoutMs: 15_000 },
   ).catch(() => false);
-  const bannerText = await page.locator('[data-testid="sys-card-maintenance"]').innerText();
+  const bannerText = (await runningAlert.first().innerText().catch(() => '')) || '';
   check(
     'a job already running when the page opens is shown as in progress',
-    Boolean(bannerShown) && /checkpoint/i.test(bannerText),
-    `banner=${Boolean(bannerShown)} card=${bannerText.slice(0, 120)}`,
+    Boolean(bannerShown) && /checkpoint|回收/i.test(bannerText),
+    `banner=${Boolean(bannerShown)} alert=${bannerText.slice(0, 120)}`,
   );
 
   await until(
@@ -647,15 +647,110 @@ export async function systemInformationPage({ base, page, check }) {
   );
   await page.unroute('**/omc/api/v1/management/system/maintenance**', laterJobHandler);
 
+  // ── a running job is shown even when the poll cache is stale ───────────────
+  // The card reads the poll's cache while polling is enabled, and that cache can still hold an
+  // earlier job's terminal record - the previous block leaves exactly that behind. A page that
+  // showed that record instead of the job it had just adopted hid real work: no in-progress
+  // banner, and maintenance controls that looked idle while a job held the write gate.
+  const freshRunningJob = {
+    action: 'wal_checkpoint',
+    running: true,
+    started_at_ms: 1790060000000,
+    finished_at_ms: 0,
+    size_before_bytes: 9_000_000,
+    size_after_bytes: 0,
+    reclaimed_bytes: 0,
+    incomplete: false,
+    detail: '',
+    error: '',
+  };
+  // A poll that is deliberately slow. The window before it answers is the one that matters: while
+  // polling is enabled the card reads the poll's cache, so only a seeded cache can report the
+  // running job then. Only the first poll is slow; every later one reports the job finished, so the
+  // page settles and the checks after this block see an idle card.
+  let slowPolls = 0;
+  const slowPollHandler = async (route) => {
+    slowPolls += 1;
+    if (slowPolls === 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10_000));
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          maintenance: freshRunningJob,
+          maintenance_admission: { action: 'wal_checkpoint', required_bytes: 0, available_bytes: 5_000_000, allowed: true, reason: '' },
+        }),
+      });
+      return;
+    }
+    const finishedJob = {
+      ...freshRunningJob,
+      running: false,
+      finished_at_ms: 1790060005000,
+      size_after_bytes: 8_999_900,
+      reclaimed_bytes: 100,
+    };
+    servedMaintenance = { ...finishedJob };
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        maintenance: finishedJob,
+        maintenance_admission: { action: 'wal_checkpoint', required_bytes: 0, available_bytes: 5_000_000, allowed: true, reason: '' },
+      }),
+    });
+  };
+  await page.route('**/omc/api/v1/management/system/maintenance**', slowPollHandler);
+  servedMaintenance = { ...freshRunningJob };
+  await page.locator('.system-page').getByRole('button', { name: /Refresh|刷新/i }).first().click();
+
+  // Measured inside the window before the slow poll answers. The window is the point: with no
+  // seeded cache the card reads the earlier job's terminal record, so the banner appears only once
+  // that poll lands - some ten seconds later - and a wait that tolerated that would prove nothing.
+  const runningBannerShown = await until(
+    async () =>
+      /running|正在执行/i.test(await page.locator('[data-testid="sys-card-maintenance"]').innerText()),
+    { label: 'the in-progress banner for a job the page just adopted', timeoutMs: 3000 },
+  ).catch(() => false);
+  check(
+    'a running job is shown as in progress even though the poll cache held a terminal record',
+    Boolean(runningBannerShown),
+    `card=${(await page.locator('[data-testid="sys-card-maintenance"]').innerText()).slice(0, 120)}`,
+  );
+  // The write gate is the reason the banner matters: while a job runs, the actions must not look
+  // available. A stale record made them clickable.
+  const vacuumDisabledWhileRunning = await page
+    .locator('[data-testid="sys-card-maintenance"]')
+    .getByRole('button', { name: /VACUUM|重建/i })
+    .first()
+    .isDisabled()
+    .catch(() => false);
+  check(
+    'maintenance actions are disabled while that job runs',
+    vacuumDisabledWhileRunning,
+    `VACUUM disabled=${vacuumDisabledWhileRunning}`,
+  );
+  // Let the delayed job finish, which is what settles this block: the poll stops and the card goes
+  // back to idle for the checks that follow.
+  await until(
+    async () => (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) > 0,
+    { label: 'the slow job reaching its outcome', timeoutMs: 30_000 },
+  ).catch(() => {});
+  check(
+    'the job behind the slow poll is still followed to its outcome',
+    (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) === 1,
+  );
+  await page.unroute('**/omc/api/v1/management/system/maintenance**', slowPollHandler);
+
   // ── a maintenance job is admitted as started, and its outcome is its own ────
   // 202 means accepted, not done. The page must say so when it is accepted and report the
   // real result afterwards, including the partial outcome SQLite reports in-band: a
   // checkpoint blocked by a reader raises no error and must not be shown as success.
   //
   // The mock is stateful and reports ONE job identity across every read, which is what the
-  // server does (the action and start instant are fixed when the job is reserved). A mock that
-  // invented a new start instant per call would describe a job the page never started, and the
-  // identity check that ignores an unrelated job would correctly refuse to report its result.
+  // server does (the action and start instant are fixed when the job is reserved). The identity
+  // rule it exercises is direction-aware: a record starting *later* than the observed job is
+  // accepted as superseding it, while one starting *earlier* is refused as the stale record.
   const observed = { action: '', startedAtMS: 0 };
   const acceptedJob = {
     action: 'vacuum',

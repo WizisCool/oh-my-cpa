@@ -1157,6 +1157,14 @@ its replacement is that replacement's own terminal record. Without that rule the
 drop the newer result and keep polling for a job the server had already moved past — verified
 in the browser, where the exact-match guard reported `0` outcome panels across `23` polls.
 
+Adopting a running job also **seeds the poll's cache** with that job before polling is
+enabled, because while polling is enabled the card reads that cache rather than the page's own
+snapshot. A cache still holding an earlier job's terminal record otherwise hid live work: no
+in-progress banner, and maintenance actions that looked available while a job held the write
+gate. The browser probes hold the first poll open for ten seconds and assert the banner and the
+disabled actions inside that window, since after the poll answers the record is correct
+either way.
+
 Dismissing the outcome clears only that local snapshot, and both the close control and the
 page's Refresh button clear it. Since the snapshot is local, neither the server's retained
 record nor a later refetch can resurrect a result the reader has put away, while the next
