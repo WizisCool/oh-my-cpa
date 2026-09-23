@@ -748,23 +748,26 @@ Oh My CPA draws from OpenCode's minimalist, high-density, engineer-first console
    - Lists of models, credentials, configuration items, etc., favor open rows over nested outer Card wrappers.
    - Rows are separated by subtle 1px hairline dividers (`border-bottom: 1px solid var(--border-soft)`).
    - Clear structure: entity name and identifier on the left, technical metadata / provider in the middle, and direct interactive controls on the right (e.g. switch toggles, action buttons).
-2. **Task-Dependent Density**
+2. **Unified Credential Workspace Density**
+   - OAuth sign-in, credential management and quota reading share one open-row collection rather than three card pages. Above 640px each record aligns identity, management metadata, quota and actions; compact mode may collapse quota to condition, plan and one primary window with an explicit full-detail action, while expanded mode keeps every returned window, dated credit, cooldown and diagnostic inline.
+   - The measured floors are eight complete compact records and three complete ordinary expanded quota records at 1440×900, with six model/group windows rendered in full and no horizontal overflow at 320px.
+3. **Task-Dependent Density**
    - Monitoring and high-frequency telemetry (Dashboard, Live Logs, Request Records): High density, compact, tabular monospace alignment.
    - Configuration and system operations (Config, Pricing, System Settings): More generous whitespace, 32–48px section spacing, and full-width 1px dividers.
-3. **Honest Card Boundaries**
+4. **Honest Card Boundaries**
    - Cards are reserved for: core KPIs, key entity summaries, and peer comparisons.
    - Never wrap a single isolated input or switch into an individual card box to avoid visual clutter.
-4. **Peer Comparison Panel**
+5. **Peer Comparison Panel**
    - Multi-column horizontal comparison card pattern: clean outer grid + 1px hairline borders + inner dividers (primary comparison metrics on top, secondary sources and provider logos below).
-5. **Contextual Next Actions**
+6. **Contextual Next Actions**
    - Allow a single concise line describing the current target or guiding the next step (e.g. underlined links like `Learn more.` or `Documentation`).
    - Avoid marketing boilerplate or lengthy guides inside UI cards.
-6. **Top Context Slot**
+7. **Top Context Slot**
    - The left side hosts the signature `›_` prompt logo, expandable to an instance context selector when multi-instance support lands;
    - The right side houses four fixed-width actions: refresh, the theme mode control, the language menu, and sign out. **The mode control cycles and the language control is a menu**, and that asymmetry is deliberate. The theme was a menu while the console carried six palettes and a toggle could only answer "the other one"; the palettes now belong to the modes and are chosen on the OMC Settings page, where each candidate repaints the whole console as it is picked, so the header's remaining question is light or dark - with follow-the-system as the third state, one icon per state (a sun, a moon, a desktop). The control's tooltip is its own name and deliberately not a sentence about its state; the states are named in words on the settings page's own row. The language stays a menu because four languages, one of which the reader may not read, is exactly the case a list answers: it names every choice by its **endonym** - its own name in its own script, never a translation. The settings page's language picker lists the same endonyms.
    - **Every header action keeps one width in every reading language.** Labels are the one thing whose length changes with the language, so sign out is an icon button named by its tooltip, and the language trigger holds its code in a fixed slot. A control that resizes moves the actions beside it, which is a real defect rather than a cosmetic one: the pointer is already on one of them.
    - Connection status and version are the side rail foot's, not the header's: this slot carries actions. Never display fabricated avatars, dummy balances, or mock workspace selectors before real capabilities exist.
-7. **Form Workbench & Setting Group Panels**
+8. **Form Workbench & Setting Group Panels**
    - **Full-width Toolbar & Viewport Anchoring**: The top action toolbar and its 1px bottom border span 100% of the viewport, with right-side actions (search / refresh / save) pinned to the far right (vertically aligned with the global header actions) to eliminate awkward empty gaps. The form workbench below maintains a three-track grid: 216px sticky section navigation + 920px reading width + 216px balancing gutter (used solely to center content on wide viewports), establishing an anchored layout that keeps forms focused and legible.
    - **Setting Group Panels**: Related settings converge into **Setting Group Panels** (uniform 1px hairline border, `--surface` background, and 4px terminal radius) rather than an endless flat list of inputs or fragmented cards. Three specialized structures are used:
      1. **Form Grid**: Labels and descriptions on top, controls below; related short fields (such as Host and Port, retry counts and delays) sit side by side; short number inputs are bounded to 120px and selects to 260px;

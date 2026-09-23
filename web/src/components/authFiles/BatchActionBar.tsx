@@ -17,6 +17,7 @@ interface BatchActionBarProps {
   onEnable: () => void;
   onDisable: () => void;
   onDelete: () => void;
+  hiddenCount?: number;
 }
 
 export const BatchActionBar: React.FC<BatchActionBarProps> = ({
@@ -28,6 +29,7 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
   onEnable,
   onDisable,
   onDelete,
+  hiddenCount = 0,
 }) => {
   const t = useT();
 
@@ -58,6 +60,11 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
         <Typography.Text strong>
           {t('af.selected_n', { n: selectedCount })}
         </Typography.Text>
+        {hiddenCount > 0 && (
+          <Typography.Text type="secondary">
+            {t('omc.hidden_selection', { n: hiddenCount })}
+          </Typography.Text>
+        )}
         {selectablePageCount > 0 && (
           <Button
             size="small"
@@ -100,7 +107,9 @@ export const BatchActionBar: React.FC<BatchActionBarProps> = ({
         </Button>
         <Popconfirm
           title={t('af.delete_selected_title')}
-          description={t('af.delete_selected_desc')}
+          description={hiddenCount > 0
+            ? `${t('af.delete_selected_desc')} ${t('omc.delete_hidden_scope', { hidden: hiddenCount, total: selectedCount })}`
+            : t('af.delete_selected_desc')}
           okText={t('common.delete')}
           cancelText={t('common.cancel')}
           okButtonProps={{ danger: true }}

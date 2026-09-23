@@ -95,6 +95,25 @@ test('the shared token layer selects every surface that renders it', () => {
   );
 });
 
+test('the unified OAuth workspace selects its density scenario and overlay history', () => {
+  assert.deepEqual(
+    planFor('web/src/pages/oauthManagement/OAuthManagementPage.tsx'),
+    ['oauth-management', 'overlay-back'],
+  );
+  assert.deepEqual(
+    planFor('web/src/components/authFiles/AuthFileDetailDrawer.tsx'),
+    ['oauth-management', 'overlay-back'],
+  );
+  assert.deepEqual(
+    planFor('web/src/pages/quota/CredentialQuotaBody.tsx'),
+    ['oauth-management', 'overlay-back'],
+  );
+  assert.deepEqual(
+    planFor('web/src/pages/LegacyOAuthManagementRedirect.tsx'),
+    ['oauth-management', 'overlay-back'],
+  );
+});
+
 test('a provider-console change selects only the provider-console scenarios', () => {
   // `phone-lists` is in both: the provider table is one of the surfaces ADR 0012 renders as rows on
   // a phone, so a change to it must run the scenario that reads both of its renderings.

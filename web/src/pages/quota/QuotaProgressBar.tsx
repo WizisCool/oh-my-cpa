@@ -2,7 +2,7 @@ import React from 'react';
 import { Progress } from 'antd';
 import { useT } from '../../i18n';
 import { formatTimeWithCountdown } from './quotaFormat';
-import styles from './QuotaPage.module.css';
+import styles from './QuotaPresentation.module.css';
 
 interface QuotaProgressBarProps {
   nowMS: number;
@@ -13,6 +13,7 @@ interface QuotaProgressBarProps {
   remainingPercent?: number | null;
   resetAtMS?: number | null;
   resetLabel?: string;
+  resetAccuracy?: 'exact' | 'derived' | 'approximate';
   height?: number;
   showPercent?: boolean;
 }
@@ -26,6 +27,7 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
   remainingPercent,
   resetAtMS,
   resetLabel,
+  resetAccuracy = 'exact',
   height = 8,
   showPercent = true,
 }) => {
@@ -66,9 +68,9 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
   const computedResetText = (() => {
     if (resetAtMS) {
       if (resetAtMS - nowMS <= 0) return t('quota.recovered');
-      return formatTimeWithCountdown(resetAtMS, nowMS, t);
+      return `${resetAccuracy === 'exact' ? '' : '~'}${formatTimeWithCountdown(resetAtMS, nowMS, t)}`;
     }
-    return resetLabel || '';
+    return resetLabel ? `${resetAccuracy === 'exact' ? '' : '~'}${resetLabel}` : '';
   })();
 
   const displayPercent = hasData ? `${Math.round(clampedRemaining)}%` : '--';
@@ -85,7 +87,10 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
             {displayPercent}
           </span>
         )}
-        <span className={styles['progress-reset']} title={computedResetText || undefined}>
+        <span
+          className={styles['progress-reset']}
+          title={resetAccuracy === 'exact' ? computedResetText || undefined : t('quota.reset_estimated_hint')}
+        >
           {computedResetText}
         </span>
       </div>

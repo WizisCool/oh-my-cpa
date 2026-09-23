@@ -50,6 +50,7 @@ import {
 import { overlayBackDismisses } from './probes/overlayHistory.mjs';
 import { phoneListRendering } from './probes/phoneLists.mjs';
 import { touchErgonomics } from './probes/touchErgonomics.mjs';
+import { oauthManagement, oauthManagementFixtures } from './probes/oauthManagement.mjs';
 import { iconPickerStacking, pickerProvider, providerIconPick } from './probes/providerConsole.mjs';
 import { systemInformationNarrow, systemInformationPage, systemFixtures } from './probes/systemInformation.mjs';
 import {
@@ -101,6 +102,14 @@ export const SCENARIOS = [
       ],
     },
     run: columnAlignment,
+  },
+  {
+    id: 'oauth-management',
+    name: 'unified OAuth workspace density, connection intent and phone reflow',
+    options: {
+      routes: oauthManagementFixtures.routes,
+    },
+    run: oauthManagement,
   },
   {
     id: 'icon-picker-stacking',
@@ -413,6 +422,7 @@ export const SCENARIOS = [
           () => ({ enabled: true, healthy: true, collector: { mode: 'http_pull', captured: 500, coverage_gaps: 0 }, stats: { pending: 0 } }),
         ],
         [(url) => url.pathname.endsWith('/management/providers'), () => ({ providers: [pickerProvider], total: 1 })],
+        ...oauthManagementFixtures.routes,
         /* The key page's own data, so its add dialog is reachable: the dialog is the Modal-class
            overlay this scenario covers. */
         [(url) => url.pathname.endsWith('/management/api-keys'), () => ({

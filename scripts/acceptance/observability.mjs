@@ -22,26 +22,26 @@ export async function runObservabilityAcceptance({
   lobeIconSignature,
   providerMarkImage,
 }) {
-  await auditPage(page, responseBodies, '/oauth', '.oauth-page', { pageSecrets: providerSecrets });
-  await auditPage(page, responseBodies, '/quota', '.quota-page', { pageSecrets: providerSecrets });
+  await auditPage(page, responseBodies, '/oauth', '.oauth-management-page', { pageSecrets: providerSecrets });
+  await auditPage(page, responseBodies, '/quota', '.oauth-management-page', { pageSecrets: providerSecrets });
   // Quota Cards Flow & Screenshots (cards-only page)
-  await page.goto(`${appURL}/quota`, { waitUntil: 'domcontentloaded' });
-  await page.locator('.quota-page').first().waitFor({ state: 'visible', timeout: 15000 });
+  await page.goto(`${appURL}/oauth-management?density=expanded&focus=quota`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.oauth-management-page').first().waitFor({ state: 'visible', timeout: 15000 });
 
   // Verify card grid renders one card per credential
   await checkEventually(
     'quota page renders credential cards',
-    async () => (await page.locator('article[class*="quota-card"]').count()) > 0,
-    { detail: async () => `quotaCards=${await page.locator('article[class*="quota-card"]').count()}` },
+    async () => (await page.locator('[data-quota-body]').count()) > 0,
+    { detail: async () => `quotaCards=${await page.locator('[data-quota-body]').count()}` },
   );
 
   // Verify quota tab brand icons are not OpenAI
-  const quotaAntigravityIcon = await lobeIconSignature(page.locator('.quota-page .ant-tabs-tab').filter({ hasText: /Antigravity/i }));
+  const quotaAntigravityIcon = await lobeIconSignature(page.locator('.oauth-management-page .ant-tabs-tab').filter({ hasText: /Antigravity/i }));
   check('quota page Antigravity tab icon is not OpenAI', /antigravity/i.test(quotaAntigravityIcon) && !/openai/i.test(quotaAntigravityIcon), quotaAntigravityIcon);
 
   // A catalog brand the display table was not taught, and a provider whose mark
   // only its plugin can supply: both used to render a neutral placeholder here.
-  const quotaDevinTab = page.locator('.quota-page .ant-tabs-tab').filter({ hasText: /Devin/i }).first();
+  const quotaDevinTab = page.locator('.oauth-management-page .ant-tabs-tab').filter({ hasText: /Devin/i }).first();
   await checkEventually(
     'quota page Devin tab draws the Devin brand mark',
     async () => {
@@ -55,7 +55,7 @@ export async function runObservabilityAcceptance({
     { detail: async () => JSON.stringify(await providerMarkImage(quotaDevinTab)) },
   );
 
-  const quotaPluginTab = page.locator('.quota-page .ant-tabs-tab').filter({ hasText: /Iflow/i }).first();
+  const quotaPluginTab = page.locator('.oauth-management-page .ant-tabs-tab').filter({ hasText: /Iflow/i }).first();
   await checkEventually(
     'quota page uses the plugin\u2019s own logo for a plugin-owned provider',
     async () => {
@@ -68,19 +68,29 @@ export async function runObservabilityAcceptance({
     { detail: async () => JSON.stringify(await providerMarkImage(quotaPluginTab)) },
   );
 
-  // Click header refresh to trigger live quota refresh (cards have their own refresh buttons)
-  const refreshAllBtn = page.locator('.terminal-page-head').getByRole('button', { name: /刷新|Refresh/i });
-  if (await refreshAllBtn.isVisible()) {
-    await refreshAllBtn.click();
-  }
+  // Explicit live probes are the toolbar action; opening the page and read-only
+  // reloads must not issue them.
+  const refreshAllBtn = page.getByRole('button', { name: /刷新配额|Refresh quota/i }).first();
+  await refreshAllBtn.waitFor({ state: 'visible', timeout: 10000 });
+  await refreshAllBtn.click();
+  await page.getByTestId('quota-operation-report').waitFor({ state: 'visible', timeout: 90000 });
 
   // Verify progress bars are visible with positive fill width after live refresh
   await checkEventually(
     'quota page renders progress bars',
-    async () => (await page.locator('.quota-page .ant-progress').count()) > 0,
-    { detail: async () => `count=${await page.locator('.quota-page .ant-progress').count()}` },
+    async () => (await page.locator('[data-quota-body] .ant-progress').count()) > 0,
+    { detail: async () => `count=${await page.locator('[data-quota-body] .ant-progress').count()}`, timeoutMs: 60000 },
   );
-  const firstProgressBg = page.locator('.quota-page .ant-progress-track').first();
+  await checkEventually(
+    'expanded density exposes six model/group windows after a live refresh',
+    async () => page.evaluate(() => [...document.querySelectorAll('[data-quota-window-count="6"]')]
+      .some((body) => body.getAttribute('data-quota-density') === 'expanded')),
+    {
+      detail: async () => `sixWindowBodies=${await page.locator('[data-quota-window-count="6"]').count()}`,
+      timeoutMs: 120000,
+    },
+  );
+  const firstProgressBg = page.locator('[data-quota-body] .ant-progress-track').first();
   await checkEventually(
     'quota progress bar fill has positive width',
     async () => (await firstProgressBg.evaluate((el) => parseFloat(window.getComputedStyle(el).width))) > 0,
@@ -96,7 +106,7 @@ export async function runObservabilityAcceptance({
   await checkEventually(
     'quota renewal marks a credential-snapshot bound as unverified',
     async () => {
-      const bound = page.locator('article[class*="quota-card"] [data-renewal-source="credential_snapshot"]');
+      const bound = page.locator('[data-quota-body] [data-renewal-source="credential_snapshot"]');
       if ((await bound.count()) === 0) return false;
       return (await bound.first().innerText()).includes('≥');
     },
@@ -104,12 +114,12 @@ export async function runObservabilityAcceptance({
   );
   check(
     'quota renewal live read is labelled as such',
-    (await page.locator('article[class*="quota-card"] [data-renewal-source="live_subscription"]').count()) > 0,
+    (await page.locator('[data-quota-body] [data-renewal-source="live_subscription"]').count()) > 0,
     `liveCards=${await page.locator('[data-renewal-source="live_subscription"]').count()}`,
   );
   check(
     'quota renewal marks an end-of-term seat',
-    (await page.locator('article[class*="quota-card"] [data-renewal-not-renewing]').count()) > 0,
+    (await page.locator('[data-quota-body] [data-renewal-not-renewing]').count()) > 0,
     `notRenewing=${await page.locator('[data-renewal-not-renewing]').count()}`,
   );
 

@@ -153,10 +153,33 @@ const SCENARIO_PATHS = [
     prefix: 'web/src/components/providers/',
     scenarios: ['icon-picker-stacking', 'provider-icon-pick', 'phone-lists', 'overlay-back'],
   },
+  // The unified OAuth workspace owns its density, connection drawer, quota body,
+  // task panels and phone reflow. Its scenario is the measured equivalent of the
+  // three retired pages' UI claims; overlay-back covers the shared history layer.
+  {
+    prefix: 'web/src/pages/oauthManagement/',
+    scenarios: ['oauth-management', 'overlay-back'],
+  },
+  {
+    prefix: 'web/src/pages/oauthProviderLogic',
+    scenarios: ['oauth-management', 'overlay-back'],
+  },
+  {
+    prefix: 'web/src/pages/LegacyOAuthManagementRedirect',
+    scenarios: ['oauth-management', 'overlay-back'],
+  },
+  {
+    prefix: 'web/src/components/authFiles/',
+    scenarios: ['oauth-management', 'overlay-back'],
+  },
+  {
+    prefix: 'web/src/pages/quota/',
+    scenarios: ['oauth-management', 'overlay-back'],
+  },
   // The remaining list surfaces ADR 0012 converted. Each renders rows on a phone and a table
   // otherwise, and `phone-lists` is the scenario that reads both renderings of each; without a
   // rule they fall through to "an unrecognised frontend path widens the plan", which is safe but
-  // runs all 21 scenarios for a one-line change to a page a single scenario covers.
+  // runs every scenario for a one-line change to a page a single scenario covers.
   {
     prefix: 'web/src/pages/PluginsPage',
     scenarios: ['phone-lists'],

@@ -24,9 +24,8 @@ const DashboardPage = React.lazy(() => import('./pages/DashboardPage').then(m =>
 const QuickStartPage = React.lazy(() => import('./pages/QuickStartPage').then(m => ({ default: m.QuickStartPage })));
 const LogsPage = React.lazy(() => import('./pages/LogsPage').then(m => ({ default: m.LogsPage })));
 const ConfigPage = React.lazy(() => import('./pages/ConfigPage').then(m => ({ default: m.ConfigPage })));
-const AuthFilesPage = React.lazy(() => import('./pages/AuthFilesPage').then(m => ({ default: m.AuthFilesPage })));
-const OAuthPage = React.lazy(() => import('./pages/OAuthPage').then(m => ({ default: m.OAuthPage })));
-const QuotaPage = React.lazy(() => import('./pages/QuotaPage').then(m => ({ default: m.QuotaPage })));
+const OAuthManagementPage = React.lazy(() => import('./pages/oauthManagement/OAuthManagementPage').then(m => ({ default: m.OAuthManagementPage })));
+const LegacyOAuthManagementRedirect = React.lazy(() => import('./pages/LegacyOAuthManagementRedirect').then(m => ({ default: m.LegacyOAuthManagementRedirect })));
 const SystemPage = React.lazy(() => import('./pages/SystemPage').then(m => ({ default: m.SystemPage })));
 const PluginsPage = React.lazy(() => import('./pages/PluginsPage').then(m => ({ default: m.PluginsPage })));
 const PluginStorePage = React.lazy(() => import('./pages/PluginStorePage').then(m => ({ default: m.PluginStorePage })));
@@ -104,9 +103,10 @@ const AppRoutes: React.FC = () => {
         { path: 'quick-start', element: <QuickStartPage /> },
         { path: 'ai-providers', element: <ProvidersPage /> },
         { path: 'api-keys', element: <ApiKeysPage /> },
-        { path: 'auth-files', element: <AuthFilesPage /> },
-        { path: 'oauth', element: <OAuthPage /> },
-        { path: 'quota', element: <QuotaPage /> },
+        { path: 'oauth-management', element: <OAuthManagementPage /> },
+        { path: 'auth-files', element: <LegacyOAuthManagementRedirect from="/auth-files" /> },
+        { path: 'oauth', element: <LegacyOAuthManagementRedirect from="/oauth" /> },
+        { path: 'quota', element: <LegacyOAuthManagementRedirect from="/quota" /> },
         { path: 'logs', element: <LogsPage /> },
         { path: 'usage/events', element: <UsageEventsPage /> },
         { path: 'pricing', element: <PricingPage /> },

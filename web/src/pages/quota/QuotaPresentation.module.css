@@ -1,0 +1,320 @@
+/* ── Cards Grid ── */
+/* ── Plan summary strip: plan | renewal time | reset count ── */
+.meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 16px;
+  row-gap: 4px;
+  font-size: 11px;
+}
+
+.meta-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+}
+
+.meta-label {
+  color: var(--meta);
+  flex-shrink: 0;
+}
+
+.meta-value {
+  color: var(--fg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Marks a value that is a bound rather than a verified reading, so "≥" and the
+   tag are read as one qualifier instead of two competing notes. */
+.meta-tag {
+  color: var(--meta);
+  font-size: 10px;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: help;
+  white-space: nowrap;
+}
+
+/* ── Provider filter tabs (CPAMC-style underline row) ── */
+/* ── Card sections (reset credits / limits) ── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.section-title {
+  font-size: 11px;
+  color: var(--meta);
+  letter-spacing: 0.2px;
+}
+
+.reset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reset-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 10px;
+  font-size: 11px;
+  background: var(--hover-inset);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+}
+
+.windows-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.window-divider {
+  height: 1px;
+  /* --border-soft equals --surface in dark mode, which would hide the line */
+  background: var(--border);
+  margin: 2px 0;
+}
+
+.no-window {
+  font-size: 11px;
+  color: var(--meta);
+  padding: 8px 0;
+  text-align: center;
+}
+
+/* ── Progress Bar ── */
+.progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.progress-label-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.progress-label {
+  color: var(--fg-2);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.progress-sub-label {
+  color: var(--meta);
+  margin-left: 6px;
+}
+
+.progress-value {
+  flex: none;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+
+.progress-reset {
+  flex: 1;
+  text-align: right;
+  color: var(--meta);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Cooldown / notice banner in Card ── */
+.rec-banner {
+  background: var(--hover-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  padding: 8px 10px;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rec-banner-danger {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+}
+
+.rec-text {
+  color: var(--fg-2);
+  line-height: 1.4;
+  flex: 1;
+}
+
+.banner-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.rec-sub-danger {
+  font-size: 10px;
+  color: var(--danger);
+  margin-top: 2px;
+}
+
+/* ── Card Footer ── */
+.card-meta-time {
+  font-size: 11px;
+  color: var(--meta);
+  font-family: var(--font-mono);
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Shared body used by the standalone quota card and the unified workspace record. */
+.quota-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.quota-body-compact {
+  gap: 8px;
+}
+
+.quota-status-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.quota-diagnostic-alert {
+  font-size: 11px;
+}
+
+.quota-show-all {
+  align-self: flex-start;
+  padding-inline: 0;
+}
+
+.quota-diagnostics {
+  border-top: 1px solid var(--border-soft);
+  padding-top: 8px;
+  font-size: 11px;
+  color: var(--meta);
+}
+
+.quota-diagnostics summary {
+  cursor: pointer;
+  color: var(--fg-2);
+}
+
+.diagnostic-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 5px;
+  overflow-wrap: anywhere;
+}
+
+.quota-body-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 10px;
+  margin-top: auto;
+}
+
+@media (max-width: 640px) {
+  .quota-body-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .card-actions {
+    flex-wrap: wrap;
+  }
+}
+
+
+.quota-compact-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.quota-compact-plan {
+  color: var(--fg-2);
+  font-size: 11px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quota-compact-time {
+  color: var(--meta);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  margin-left: auto;
+}
+
+
+
+.quota-status-time {
+  color: var(--meta);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  margin-left: auto;
+}
+
+.quota-compact-window {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--meta);
+  font-size: 10px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.quota-compact-window span:first-child {
+  color: var(--fg-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quota-compact-window strong {
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.quota-compact-window span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

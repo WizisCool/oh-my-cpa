@@ -300,6 +300,29 @@ catalog marks are declared in `web/src/components/common/providerMetadata.ts` an
 `web/src/types/providerIconIds.ts`; a plugin-registered provider instead brings
 the logo it publishes (§3).
 
+### OAuth management is one credential-centred workspace
+
+`/oauth-management` is the only OAuth navigation destination. Its collection is
+projected from the auth-file list, so imported, runtime-only, plugin-backed,
+unknown-provider and non-login-capable entries all stay visible. Quota is joined
+only when both the auth file and quota response carry one unique nonempty
+`auth_index`; missing, duplicate and quota-only race states remain diagnostics on
+the same surface, and no write is authorized from an ambiguous target. The pure
+projection lives in `web/src/pages/oauthManagement/oauthWorkspaceLogic.ts`.
+
+Authorization sessions live above the Connect Drawer in
+`useOAuthSessions`, keyed by provider id, so minimizing or closing the task panel
+does not stop polling, duplicate a checker or cancel an upstream session. The
+drawer presents one serialized status checker per attempt. Credential detail,
+configuration and models share one guarded Drawer; provider aliases remain
+provider-scoped. `CredentialQuotaBody` is the single quota renderer used by the
+workspace and its detail panel, so compact and expanded records cannot disagree
+about plan, windows, credits, cooldown or observation age.
+
+The old `/oauth`, `/auth-files` and `/quota` routes are retained only as
+parameter-safe replacement redirects. They preserve documented filter and
+connection intent while dropping callback, state, session and code material.
+
 ## 3. Frontend shape
 
 `web/src` is a single-page app on React + TypeScript + Ant Design, with TanStack
@@ -362,7 +385,7 @@ depend on a CDN, and the console's CSP allows images only from itself or inline 
 so the Go process inlines it (§2) and `types/pluginOAuthProviders.ts` resolves the
 plugin list into provider-key logos (including a plugin whose auths are typed by
 its own id rather than by `oauth_provider`). `LobeIcon.tsx`'s `ProviderBrandIcon`
-renders it - one component for the provider tabs, the quota and credential cards,
+renders it - one component for the provider tabs, the unified credential records,
 the request records, the provider table and the dashboard's provider rows, so
 those surfaces cannot disagree about the same provider. Only inline artwork is
 rendered: a provider no plugin owns, a logo that could not be inlined, and a value
@@ -450,9 +473,10 @@ non-sensitive metadata, and finally an explicit `identity_collision` marker
 rather than a silent merge. Secrets never enter a key or a stored fingerprint
 input, and a response DTO carries one only for the surface that edits it and only
 when it asks for it (`?include_keys=true`, ADR 0015); every other response carries
-a display mask. (The Providers and OAuth management pages inspect
-and manage CPA runtime entries directly through `/api/v1/management/providers`
-and `/api/v1/management/auth-files`, layering local preference metadata on read.)
+a display mask. (The Providers list and the unified OAuth management workspace
+inspect and manage CPA runtime entries directly through
+`/api/v1/management/providers` and `/api/v1/management/auth-files`, layering
+local preference metadata on read.)
 Auth-file edits use CPA's field patch but do not treat its `200` as proof:
 the facade reads the runtime entry and a server-side projection of the
 downloaded JSON back before returning success. The projection exposes only
@@ -1272,8 +1296,8 @@ claim, and it stays in Chromium only when the claim is about the engine.
 | Mechanical repository gates | `pnpm test:docs`, `pnpm test:i18n`, `pnpm test:css-modules`, `pnpm test:dev-target`, `pnpm test:affected-checks`, `pnpm test:sync-web-dist`, `pnpm test:install-chromium`, `pnpm test:check-ui-plan` | Path references, translation keys, CSS class references, the dev proxy target, the embedded-distribution sync, the Chromium installer's decision, the fast-path planner and the UI scenario planner. |
 | **UI fast path** (development only) | `pnpm check:ui` | The subset of browser claims a change can affect, against the **dev server** with mocked routes. No `pnpm build`, no Go binary, no fake CPA. This is the only layer where `React.StrictMode`'s double-invoke happens, so it is the only place a hook that disposes what it should re-create can be observed. |
 | Cross-stack smoke | `pnpm verify:browser:smoke` | The thin path a pull request needs: `/omc` redirect, sign-in rejection and success, the dashboard and request list rendering their seeded rows, no console or page error. |
-| Cross-stack P0 gates | `pnpm verify:browser:p0` | Pull-request release gates over the request-record/live-tail suite and the auth-file/OAuth scheduling-field suite, using the same built binary and deterministic fixture. |
-| Cross-stack acceptance | `pnpm verify:browser` | The whole stack against the fake CPA: auth, every route's render and secret boundary, key aliases, provider enable/disable and its concurrent path, live-tail polling, quota, OAuth. |
+| Cross-stack P0 gates | `pnpm verify:browser:p0` | Pull-request release gates over the request-record/live-tail suite and the OAuth management scheduling-field suite, using the same built binary and deterministic fixture. |
+| Cross-stack acceptance | `pnpm verify:browser` | The whole stack against the fake CPA: auth, every route's render and secret boundary, key aliases, provider enable/disable and its concurrent path, live-tail polling, and the unified OAuth management workspace. |
 | Browser-only probes | `pnpm verify:probes` | The same claims as the UI fast path, but against the built SPA for release. Drawer/modal stacking and hit-testing, column geometry and truncation, the responsive alignment override, dashboard trend mark paint, refresh sequencing under a held response, the platform's Back dismissing each overlay class, the phone rendering of each list surface against its table, and the touch rules on a deliberately coarse-and-hoverless context. |
 | Demo smoke | `pnpm verify:demo` | The demonstration as a deployment: the binary in demo mode with no gateway anywhere in its environment, every console page rendering its own fixture data with no failed request and no script error, the refusals reached with `fetch` rather than through the page, and one permitted edit reporting that it is not durable. `verify:browser` cannot cover this, because it drives the self-hosted path against a fake gateway. |
 
@@ -1325,9 +1349,9 @@ Two properties of this split are load bearing.
 `CROSS-STACK` - and every assertion that left the browser names the test that
 replaced it. An assertion may move; it may not disappear silently.
 `scripts/browser-acceptance.mjs` is now the lifecycle/orchestration entrypoint.
-Release domains live in focused modules under `scripts/acceptance/`: auth files,
-key management, usage events and live-tail behavior, providers, observability,
-configuration and plugins, theme and brand artwork, and OAuth flows. Each module
+Release domains live in focused modules under `scripts/acceptance/`: OAuth
+management, key management, usage events and live-tail behavior, providers,
+observability, configuration and plugins, and theme and brand artwork. Each module
 receives the shared browser harness it needs and owns one product surface rather
 than becoming another catch-all script.
 

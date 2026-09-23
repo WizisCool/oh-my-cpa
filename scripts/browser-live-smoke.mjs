@@ -182,30 +182,30 @@ async function main() {
   const tilesAfterPresets = await page.locator('.dashboard-tile').count();
   await page.waitForTimeout(6000);
   check('相对区间自动轮询 tail 端点', `tailPolls=${tailPolls}`, tailPolls >= 2);
-  for (const item of ['认证文件', '仪表盘']) {
+  for (const item of ['OAuth 管理', '仪表盘']) {
     await page.locator('.app-sider .app-menu').getByText(item, { exact: true }).first().click({ timeout: 5000 })
-      .catch(async () => { await page.goto(`${appURL}/${item === '认证文件' ? 'auth-files' : 'dashboard'}`); });
+      .catch(async () => { await page.goto(`${appURL}/${item === 'OAuth 管理' ? 'oauth-management' : 'dashboard'}`); });
     await page.waitForTimeout(700);
   }
   const blankFrames = await page.evaluate(() => window.__blankFrames);
   check('切换区间与路由时不出现空帧', `blankFrames=${blankFrames} tiles=${tilesAfterPresets}`,
     blankFrames === 0 && tilesAfterPresets === 6);
 
-  await page.locator('.app-sider .app-menu').getByText('Auth Files', { exact: true }).click({ timeout: 5000 }).catch(async () => {
-    await page.goto(`${appURL}/auth-files`, { waitUntil: 'networkidle' });
+  await page.locator('.app-sider .app-menu').getByText(/OAuth 管理|OAuth Management/, { exact: false }).click({ timeout: 5000 }).catch(async () => {
+    await page.goto(`${appURL}/oauth-management`, { waitUntil: 'networkidle' });
   });
-  await page.waitForURL('**/auth-files', { timeout: 15000 });
-  await page.waitForSelector('.auth-files-page', { timeout: 15000 });
+  await page.waitForURL('**/oauth-management', { timeout: 15000 });
+  await page.waitForSelector('.oauth-management-page', { timeout: 15000 });
   const authFilesResponse = await page.request.get(`${appURL}/api/v1/management/auth-files`);
   const authFiles = await authFilesResponse.json();
   const authText = await page.locator('main').innerText();
-  check('Auth Files 使用真实列表', `total=${authFiles.total}`, authFilesResponse.ok() && authText.includes(`${authFiles.total} 个认证条目`));
+  check('OAuth 管理使用真实列表', `total=${authFiles.total}`, authFilesResponse.ok() && (authText.includes(`共 ${authFiles.total} 个`) || authText.includes(`Total ${authFiles.total}`)));
   if (authFiles.total === 0) {
     const emptyShown = authText.includes('没有可展示的认证文件');
-    check('空 Auth Files 显示真实空态', emptyShown ? 'empty state' : authText.slice(0, 80), emptyShown);
+    check('空 OAuth 管理显示真实空态', emptyShown ? 'empty state' : authText.slice(0, 80), emptyShown);
   } else {
     const first = authFiles.files.find((file) => file.name)?.name || '';
-    check('Auth Files 渲染真实条目', first, authText.includes(first));
+    check('OAuth 管理渲染真实条目', first, authText.includes(first));
   }
 
   // Logs: the tail must be real when CPA writes a log file, and must explain

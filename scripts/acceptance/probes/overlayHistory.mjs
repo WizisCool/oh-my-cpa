@@ -85,6 +85,32 @@ export async function overlayBackDismisses({ base, page, check }) {
     `drawers=${state.drawers} route=${state.route} startedAt=${new URL(dashboardURL).pathname}`,
   );
 
+  // ---- the unified OAuth Connect drawer ----
+  await arriveFrom(base, page, '/oauth-management');
+  await page.locator('.oauth-management-page').first().waitFor({ timeout: 20_000 });
+  await page.getByRole('button', { name: /Connect account|连接账号/i }).first().click();
+  await page.locator('[data-testid="oauth-connect-panel"]').waitFor({ state: 'visible', timeout: 5_000 });
+  state = await routeAfterBack(base, page);
+  check(
+    'a Back minimizes the OAuth Connect drawer and leaves the workspace route alone',
+    state.drawers === 0 && state.route === `${basePath}/oauth-management`,
+    `drawers=${state.drawers} route=${state.route}`,
+  );
+
+  // The old provider-specific link opens the same drawer after a parameter-safe
+  // replace. Back must close it once and must not reopen it from the consumed
+  // action query value.
+  await arriveFrom(base, page, '/oauth?provider=codex');
+  await page.locator('[data-testid="oauth-connect-panel"]').waitFor({ state: 'visible', timeout: 10_000 });
+  state = await routeAfterBack(base, page);
+  check(
+    'a provider-specific legacy link closes once without reopening from its query',
+    state.drawers === 0
+      && state.route === `${basePath}/oauth-management?provider=codex`
+      && !state.route.includes('action=connect'),
+    `drawers=${state.drawers} route=${state.route}`,
+  );
+
   // ---- the request detail drawer ----
   await arriveFrom(base, page, '/usage/events');
   await waitForRequests(page);
