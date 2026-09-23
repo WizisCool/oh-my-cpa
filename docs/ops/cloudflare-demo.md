@@ -68,6 +68,19 @@ rule is not pedantry: `Date.parse` reads `claude-haiku-4-5` as the 4th of May an
 as a date in 2001, so a lenient parser rewrote the model catalogue into models named after
 dates.
 
+The two shifts compose, so the export has to leave the dataset in **one** frame first: the
+seed's. It therefore moves only the instants that were stamped from the wall clock while it
+was answering, and leaves the ones the seed already anchors - window bounds, bucket
+timestamps, the heatmap's day grid - where they are. A field whose name alone cannot decide
+that needs the export to look at the response's shape instead, and one does: a dashboard
+tail's `live.as_of_ms` is the window's own end rather than a stamp, so it is written from
+`window.to` after the shift. Shifting it as a stamp instead moves it a whole wall-clock delta
+away from the window it belongs to, and since the console treats a mark that precedes its
+window as a stale answer (`applyTail`), every tail in the served demonstration was being
+discarded. `internal/api/demo_export_test.go` asserts that pair on the exported dataset,
+because the console simply keeps its full response when a tail is dropped - nothing visible
+fails.
+
 ## Keeping it current is a gate, not a habit
 
 The dataset describes the API, so a changed response shape leaves the served copy behind

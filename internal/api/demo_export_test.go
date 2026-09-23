@@ -322,7 +322,7 @@ func TestExportDemoDataset(t *testing.T) {
 			normalised[name] = response
 			continue
 		}
-		encoded, err := json.Marshal(demoExportRebase(decoded, deltaMS, requestIDs))
+		encoded, err := json.Marshal(demoExportMirrorTailAsOfMS(demoExportRebase(decoded, deltaMS, requestIDs)))
 		if err != nil {
 			t.Fatalf("re-base %s: %v", name, err)
 		}
@@ -504,6 +504,42 @@ func demoExportRebase(value any, deltaMS int64, requestIDs map[string]int) any {
 // A shift preserves every interval the console renders, which is what makes the re-based
 // history internally consistent. The Worker applies the same delta again at serve time, so
 // the two shifts compose and the viewer sees a history ending now.
+// demoExportMirrorTailAsOfMS restores a dashboard tail's own equality after the re-base.
+//
+// The tail handler sets `live.as_of_ms` to the window's own end (`AsOfMS: window.ToMS`), and those
+// two have to move together: the console's `applyTail` compares them
+// (`patch.live.as_of_ms < base.window.to`) and discards a tail whose mark precedes the window it
+// describes. The re-base moves them apart - the window bounds are seed-anchored and deliberately
+// not shifted, while `as_of_ms` is a stamped instant that is - so the served demonstration was
+// dropping every tail patch as stale.
+//
+// Writing the window's end into the mark is what the handler itself does, so this restores the
+// handler's invariant rather than inventing one. It keys off the response's shape (a tail is the
+// only read carrying both a `live` mark and a `window`) rather than off the field name, because
+// the heatmap's `as_of_ms` is the read instant rather than a window bound and must keep its shift.
+// It runs after the re-base, so the value it writes is not shifted a second time.
+func demoExportMirrorTailAsOfMS(decoded any) any {
+	root, ok := decoded.(map[string]any)
+	if !ok {
+		return decoded
+	}
+	live, ok := root["live"].(map[string]any)
+	if !ok {
+		return decoded
+	}
+	window, ok := root["window"].(map[string]any)
+	if !ok {
+		return decoded
+	}
+	if _, ok := live["as_of_ms"]; !ok {
+		return decoded
+	}
+	if to, ok := window["to"]; ok {
+		live["as_of_ms"] = to
+	}
+	return decoded
+}
+
 func demoExportShiftMillis(item any, deltaMS int64) any {
 	millis, ok := demoExportNumericMillis(item)
 	if !ok {
@@ -868,6 +904,60 @@ func demoExportPatternMatches(route, pattern string) bool {
 // nothing failed: a series collapsed onto one instant, and a calendar cell whose boundary
 // contradicted its own label. The assertions are about STRUCTURE rather than about
 // particular instants, so they hold whatever the reference is.
+// TestDemoExportTailsAgreeWithTheirWindow pins the dashboard tail's own equality in the exported
+// dataset.
+//
+// The tail handler marks `live.as_of_ms` with the window's end (`AsOfMS: window.ToMS`), and the
+// console discards a tail whose mark precedes the window it describes
+// (`applyTail`: `patch.live.as_of_ms < base.window.to`). The re-base moves the two apart - window
+// bounds are seed-anchored and deliberately unshifted, while `as_of_ms` is a stamped instant that
+// is shifted - so the served demonstration was treating every tail as stale and dropping it. This
+// is invisible from the console, which simply keeps the full response, which is why it is asserted
+// on the dataset rather than left to the demo smoke.
+func TestDemoExportTailsAgreeWithTheirWindow(t *testing.T) {
+	outDir := strings.TrimSpace(os.Getenv("OMCPA_DEMO_EXPORT_DIR"))
+	if outDir == "" {
+		t.Skip("set OMCPA_DEMO_EXPORT_DIR to check the exported dataset")
+	}
+	raw, err := os.ReadFile(filepath.Join(outDir, "responses.json"))
+	if err != nil {
+		t.Fatalf("read exported dataset: %v", err)
+	}
+	var exported demoExportResponses
+	if err := json.Unmarshal(raw, &exported); err != nil {
+		t.Fatalf("decode exported dataset: %v", err)
+	}
+
+	checked := 0
+	for name, entry := range exported.Responses {
+		var payload struct {
+			Live struct {
+				AsOfMS *int64 `json:"as_of_ms"`
+			} `json:"live"`
+			Window struct {
+				To *int64 `json:"to"`
+			} `json:"window"`
+		}
+		if err := json.Unmarshal([]byte(entry.Body), &payload); err != nil {
+			continue
+		}
+		// Only a tail carries both, and that shape is what identifies one: keying off the field name
+		// alone would also catch the heatmap, whose `as_of_ms` is the read instant rather than a
+		// window bound and is meant to differ from it.
+		if payload.Live.AsOfMS == nil || payload.Window.To == nil {
+			continue
+		}
+		checked++
+		if *payload.Live.AsOfMS < *payload.Window.To {
+			t.Errorf("%s: live.as_of_ms (%d) precedes window.to (%d); the console drops this tail as stale",
+				name, *payload.Live.AsOfMS, *payload.Window.To)
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no tail-shaped response was checked, so this assertion proved nothing")
+	}
+}
+
 func TestDemoExportKeepsSeriesAndDayGridsIntact(t *testing.T) {
 	outDir := strings.TrimSpace(os.Getenv("OMCPA_DEMO_EXPORT_DIR"))
 	if outDir == "" {
