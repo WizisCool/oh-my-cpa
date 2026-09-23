@@ -928,8 +928,32 @@ func TestDemoExportTailsAgreeWithTheirWindow(t *testing.T) {
 		t.Fatalf("decode exported dataset: %v", err)
 	}
 
-	checked := 0
-	for name, entry := range exported.Responses {
+	// Named rather than pattern-matched: a substring test for "tail" also matches
+	// `usage-event-detail`, and a test that decides which responses it is about by accident is how
+	// an assertion like this passes while measuring the wrong thing.
+	tails := []string{
+		"dashboard-tail-15m",
+		"dashboard-tail-1h",
+		"dashboard-tail-6h",
+		"dashboard-tail-24h",
+		"dashboard-tail-7d",
+		"dashboard-tail-30d",
+		"dashboard-tail-90d",
+	}
+	for _, name := range tails {
+		entry, ok := exported.Responses[name]
+		if !ok {
+			t.Errorf("%s is missing from the dataset", name)
+			continue
+		}
+		// Every declared tail is required to be a successful JSON response carrying both fields.
+		// Skipping a body this test cannot decode would let it report the six tails that parse
+		// while a seventh is absent or an error - and a dropped answer is the failure mode here,
+		// so a silent skip is the one thing it must not do.
+		if entry.Status != http.StatusOK {
+			t.Errorf("%s: status %d, want 200", name, entry.Status)
+			continue
+		}
 		var payload struct {
 			Live struct {
 				AsOfMS *int64 `json:"as_of_ms"`
@@ -939,22 +963,20 @@ func TestDemoExportTailsAgreeWithTheirWindow(t *testing.T) {
 			} `json:"window"`
 		}
 		if err := json.Unmarshal([]byte(entry.Body), &payload); err != nil {
+			t.Errorf("%s: body is not JSON: %v", name, err)
 			continue
 		}
-		// Only a tail carries both, and that shape is what identifies one: keying off the field name
-		// alone would also catch the heatmap, whose `as_of_ms` is the read instant rather than a
-		// window bound and is meant to differ from it.
 		if payload.Live.AsOfMS == nil || payload.Window.To == nil {
+			t.Errorf("%s: missing live.as_of_ms or window.to", name)
 			continue
 		}
-		checked++
-		if *payload.Live.AsOfMS < *payload.Window.To {
-			t.Errorf("%s: live.as_of_ms (%d) precedes window.to (%d); the console drops this tail as stale",
+		// Equality is the handler's own promise (`AsOfMS: window.ToMS`), so both directions are
+		// wrong: a mark before the window is dropped as stale, and one after it describes a span
+		// the window does not cover.
+		if *payload.Live.AsOfMS != *payload.Window.To {
+			t.Errorf("%s: live.as_of_ms (%d) != window.to (%d); the console expects the tail's mark to be the window's end",
 				name, *payload.Live.AsOfMS, *payload.Window.To)
 		}
-	}
-	if checked == 0 {
-		t.Fatal("no tail-shaped response was checked, so this assertion proved nothing")
 	}
 }
 
