@@ -116,22 +116,41 @@ type modelRoute struct {
 // compatibilityCatalog covers the two shapes a real deployment mixes: a large
 // first-party API and a self-hosted relay.
 func compatibilityCatalog() []compatibilityProvider {
+	// A request served through this list is attributed by the auth index its key carries,
+	// so a provider named here has to declare the keys that will answer for it. The models
+	// are the ones the fixture carries traffic for - a record naming a provider whose key
+	// list is empty would render as an unattributed request.
 	return []compatibilityProvider{
 		{
 			name: "DeepSeek", baseURL: "https://api.deepseek.com/v1", prefix: "ds", priority: 3,
 			models: []modelRoute{
-				{name: "deepseek-chat", displayName: "DeepSeek Chat"},
-				{name: "deepseek-reasoner", displayName: "DeepSeek Reasoner"},
+				{name: "deepseek-v4-flash", displayName: "DeepSeek V4 Flash"},
+				{name: "deepseek-pro-latest", displayName: "DeepSeek Pro Latest"},
 			},
 			keys: []string{"relay-deepseek-primary", "relay-deepseek-secondary"},
 		},
 		{
 			name: "DashScope (Qwen)", baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", prefix: "qwen", priority: 2,
 			models: []modelRoute{
-				{name: "qwen3-max", displayName: "Qwen3 Max"},
-				{name: "qwen3-coder-plus", displayName: "Qwen3 Coder Plus"},
+				{name: "qwen3.8-omni-flash", displayName: "Qwen3.8 Omni Flash"},
+				{name: "qwen3.8-max", displayName: "Qwen3.8 Max"},
 			},
 			keys: []string{"relay-dashscope-primary"},
+		},
+		{
+			name: "MiniMax", baseURL: "https://api.minimax.io/v1", prefix: "minimax", priority: 4,
+			models: []modelRoute{
+				{name: "minimax-m3", displayName: "MiniMax M3"},
+			},
+			keys: []string{"relay-minimax-primary"},
+		},
+		{
+			name: "Xiaomi MiMo", baseURL: "https://api.mimo.xiaomi.com/v1", prefix: "mimo", priority: 5,
+			models: []modelRoute{
+				{name: "mimo-v2.5", displayName: "MiMo V2.5"},
+				{name: "mimo-v2.5-pro", displayName: "MiMo V2.5 Pro"},
+			},
+			keys: []string{"relay-mimo-primary"},
 		},
 	}
 }
@@ -255,53 +274,61 @@ type modelProfile struct {
 
 func modelCatalog() []modelProfile {
 	return []modelProfile{
-		{name: "gpt-5-codex", provider: "codex", weight: 26, authType: "oauth", endpoint: "/v1/responses",
-			inputMean: 14200, outputMean: 1850, reasonShare: 0.55, cacheRead: 0.62, cacheCreate: 0.08,
-			latencyMS: 8400, ttftRatio: 0.16, failureRate: 0.012},
-		{name: "gpt-5.1-codex", provider: "codex", weight: 14, authType: "oauth", endpoint: "/v1/responses",
-			inputMean: 16800, outputMean: 2140, reasonShare: 0.6, cacheRead: 0.66, cacheCreate: 0.09,
-			latencyMS: 9600, ttftRatio: 0.15, failureRate: 0.014},
-		{name: "gpt-5", provider: "codex", weight: 9, authType: "oauth", endpoint: "/v1/responses",
-			inputMean: 7400, outputMean: 1250, reasonShare: 0.4, cacheRead: 0.41, cacheCreate: 0.05,
-			latencyMS: 6100, ttftRatio: 0.2, failureRate: 0.01},
-		{name: "claude-sonnet-4-5-20250929", provider: "claude", weight: 17, authType: "oauth", endpoint: "/v1/messages",
-			inputMean: 12600, outputMean: 2320, reasonShare: 0.3, cacheRead: 0.58, cacheCreate: 0.14,
-			latencyMS: 7200, ttftRatio: 0.22, failureRate: 0.016},
-		{name: "claude-opus-4-1", provider: "claude", weight: 4, authType: "oauth", endpoint: "/v1/messages",
-			inputMean: 18400, outputMean: 3050, reasonShare: 0.35, cacheRead: 0.52, cacheCreate: 0.16,
-			latencyMS: 12400, ttftRatio: 0.24, failureRate: 0.02},
-		{name: "claude-haiku-4-5", provider: "claude", weight: 6, authType: "oauth", endpoint: "/v1/messages",
-			inputMean: 4200, outputMean: 830, reasonShare: 0.15, cacheRead: 0.47, cacheCreate: 0.06,
-			latencyMS: 2100, ttftRatio: 0.28, failureRate: 0.008},
-		{name: "gemini-2.5-pro", provider: "gemini", weight: 7, authType: "oauth", endpoint: "/v1beta/models",
-			inputMean: 22400, outputMean: 1680, reasonShare: 0.4, cacheRead: 0.5, cacheCreate: 0.04,
-			latencyMS: 9100, ttftRatio: 0.26, failureRate: 0.013},
-		{name: "gemini-2.5-flash", provider: "gemini", weight: 5, authType: "oauth", endpoint: "/v1beta/models",
-			inputMean: 5600, outputMean: 690, reasonShare: 0.1, cacheRead: 0.44, cacheCreate: 0.03,
-			latencyMS: 1500, ttftRatio: 0.34, failureRate: 0.006},
-		{name: "gemini-3-pro-preview", provider: "antigravity", weight: 2, authType: "oauth", endpoint: "/v1beta/models",
-			inputMean: 19800, outputMean: 1540, reasonShare: 0.45, cacheRead: 0.48, cacheCreate: 0.04,
-			latencyMS: 10200, ttftRatio: 0.24, failureRate: 0.018},
-		{name: "kimi-k2-0905", provider: "kimi", weight: 3, authType: "oauth", endpoint: "/v1/chat/completions",
-			inputMean: 9800, outputMean: 1420, reasonShare: 0.35, cacheRead: 0.36, cacheCreate: 0.02,
-			latencyMS: 4600, ttftRatio: 0.3, failureRate: 0.011},
-		{name: "grok-4", provider: "xai", weight: 2, authType: "oauth", endpoint: "/v1/chat/completions",
-			inputMean: 11200, outputMean: 1760, reasonShare: 0.4, cacheRead: 0.33, cacheCreate: 0.02,
-			latencyMS: 6800, ttftRatio: 0.27, failureRate: 0.015},
-		// A record served through the openai-compatibility list carries the label CPA
-		// writes for such a provider, which is derived from the provider's own name in
-		// the same way the gateway derives it. That label is what the request list's
-		// "which key answered" lookup is guarded by, so the demonstration has a record
-		// it can actually resolve.
-		{name: "deepseek-chat", provider: compatibilityRecordLabel("DeepSeek"), weight: 3, authType: "api_key", endpoint: "/v1/chat/completions",
-			inputMean: 8800, outputMean: 1180, reasonShare: 0.2, cacheRead: 0.55, cacheCreate: 0.02,
-			latencyMS: 3400, ttftRatio: 0.32, failureRate: 0.009},
-		{name: "deepseek-reasoner", provider: compatibilityRecordLabel("DeepSeek"), weight: 1, authType: "api_key", endpoint: "/v1/chat/completions",
-			inputMean: 10400, outputMean: 1980, reasonShare: 0.85, cacheRead: 0.5, cacheCreate: 0.02,
-			latencyMS: 15800, ttftRatio: 0.4, failureRate: 0.017},
-		{name: "qwen3-max", provider: compatibilityRecordLabel("DashScope (Qwen)"), weight: 1, authType: "api_key", endpoint: "/v1/chat/completions",
-			inputMean: 7200, outputMean: 1080, reasonShare: 0.25, cacheRead: 0.3, cacheCreate: 0.02,
-			latencyMS: 4100, ttftRatio: 0.31, failureRate: 0.01},
+		// The catalogue is drawn from what carries the most traffic today, checked against
+		// OpenRouter's published ranking and OpenCode Go's list of curated coding models
+		// rather than from memory. A demonstration whose "frontier" names are two
+		// generations old undermines the thing it is showing: an operator reading the
+		// model breakdown is reading a claim about what people run now.
+		//
+		// The weights are the ranking's order of magnitude, so the busiest line is the
+		// busiest model rather than whichever name happens to sit first.
+		{name: "glm-5.3-flash", provider: "zai", weight: 22, authType: "oauth", endpoint: "/v1/chat/completions",
+			inputMean: 15900, outputMean: 2140, reasonShare: 0.5, cacheRead: 0.6, cacheCreate: 0.07,
+			latencyMS: 3200, ttftRatio: 0.18, failureRate: 0.011},
+		{name: "gpt-5.6-luna", provider: "codex", weight: 20, authType: "oauth", endpoint: "/v1/responses",
+			inputMean: 14600, outputMean: 1820, reasonShare: 0.45, cacheRead: 0.63, cacheCreate: 0.08,
+			latencyMS: 7800, ttftRatio: 0.17, failureRate: 0.012},
+		{name: "deepseek-v4-flash", provider: compatibilityRecordLabel("DeepSeek"), weight: 17, authType: "api_key", endpoint: "/v1/chat/completions",
+			inputMean: 9400, outputMean: 1260, reasonShare: 0.25, cacheRead: 0.58, cacheCreate: 0.02,
+			latencyMS: 2900, ttftRatio: 0.31, failureRate: 0.008},
+		{name: "mimo-v2.5", provider: compatibilityRecordLabel("Xiaomi MiMo"), weight: 12, authType: "api_key", endpoint: "/v1/chat/completions",
+			inputMean: 11800, outputMean: 1540, reasonShare: 0.35, cacheRead: 0.52, cacheCreate: 0.02,
+			latencyMS: 3600, ttftRatio: 0.28, failureRate: 0.01},
+		{name: "kimi-k3", provider: "kimi", weight: 9, authType: "oauth", endpoint: "/v1/chat/completions",
+			inputMean: 12600, outputMean: 1780, reasonShare: 0.4, cacheRead: 0.44, cacheCreate: 0.03,
+			latencyMS: 5200, ttftRatio: 0.26, failureRate: 0.011},
+		{name: "claude-opus-5.5", provider: "claude", weight: 7, authType: "oauth", endpoint: "/v1/messages",
+			inputMean: 18600, outputMean: 3120, reasonShare: 0.4, cacheRead: 0.54, cacheCreate: 0.15,
+			latencyMS: 11800, ttftRatio: 0.23, failureRate: 0.018},
+		{name: "claude-sonnet-5", provider: "claude", weight: 6, authType: "oauth", endpoint: "/v1/messages",
+			inputMean: 13100, outputMean: 2380, reasonShare: 0.3, cacheRead: 0.59, cacheCreate: 0.13,
+			latencyMS: 6900, ttftRatio: 0.21, failureRate: 0.014},
+		{name: "gpt-6-sol", provider: "codex", weight: 5, authType: "oauth", endpoint: "/v1/responses",
+			inputMean: 16200, outputMean: 2060, reasonShare: 0.55, cacheRead: 0.61, cacheCreate: 0.09,
+			latencyMS: 8900, ttftRatio: 0.16, failureRate: 0.013},
+		{name: "grok-4.7", provider: "xai", weight: 4, authType: "oauth", endpoint: "/v1/chat/completions",
+			inputMean: 12400, outputMean: 1690, reasonShare: 0.45, cacheRead: 0.38, cacheCreate: 0.02,
+			latencyMS: 6400, ttftRatio: 0.27, failureRate: 0.015},
+		{name: "minimax-m3", provider: compatibilityRecordLabel("MiniMax"), weight: 3, authType: "api_key", endpoint: "/v1/chat/completions",
+			inputMean: 10200, outputMean: 1430, reasonShare: 0.3, cacheRead: 0.46, cacheCreate: 0.02,
+			latencyMS: 4100, ttftRatio: 0.29, failureRate: 0.009},
+		{name: "qwen3.8-omni-flash", provider: compatibilityRecordLabel("DashScope (Qwen)"), weight: 3, authType: "api_key", endpoint: "/v1/chat/completions",
+			inputMean: 8100, outputMean: 1120, reasonShare: 0.25, cacheRead: 0.4, cacheCreate: 0.02,
+			latencyMS: 2600, ttftRatio: 0.32, failureRate: 0.008},
+		// The two Gemini rows keep a credential-based provider because the OAuth surfaces -
+		// the quota panel and the sign-in list - need credentials of their own to render,
+		// and a catalogue of API keys alone would leave those pages empty.
+		{name: "gemini-3.8-flash", provider: "antigravity", weight: 3, authType: "oauth", endpoint: "/v1beta/models",
+			inputMean: 14200, outputMean: 1380, reasonShare: 0.3, cacheRead: 0.49, cacheCreate: 0.04,
+			latencyMS: 2700, ttftRatio: 0.28, failureRate: 0.009},
+		{name: "gemini-3.7-flash", provider: "gemini", weight: 2, authType: "oauth", endpoint: "/v1beta/models",
+			inputMean: 6800, outputMean: 840, reasonShare: 0.15, cacheRead: 0.45, cacheCreate: 0.03,
+			latencyMS: 1800, ttftRatio: 0.33, failureRate: 0.007},
+		// A reasoning model on a subscription, so the request list shows a long-thinking
+		// row beside the fast ones and the cost column has a high-priced entry to report.
+		{name: "gpt-6-astra", provider: "codex", weight: 1, authType: "oauth", endpoint: "/v1/responses",
+			inputMean: 21400, outputMean: 3860, reasonShare: 0.7, cacheRead: 0.57, cacheCreate: 0.11,
+			latencyMS: 16400, ttftRatio: 0.2, failureRate: 0.016},
 	}
 }
 
@@ -310,18 +337,28 @@ func modelCatalog() []modelProfile {
 // relay and self-hosted models whose operator sets their own rate, and the ones
 // whose name here is already its catalogue identity.
 var modelsDevCanonical = map[string]string{
-	"gpt-5-codex":                "gpt-5-codex",
-	"gpt-5.1-codex":              "gpt-5.1-codex",
-	"gpt-5":                      "gpt-5",
-	"gpt-5-mini":                 "gpt-5-mini",
-	"claude-sonnet-4-5-20250929": "claude-sonnet-4-5",
-	"claude-opus-4-1":            "claude-opus-4-1",
-	"claude-haiku-4-5":           "claude-haiku-4-5",
-	"gemini-2.5-pro":             "gemini-2.5-pro",
-	"gemini-2.5-flash":           "gemini-2.5-flash",
-	"gemini-3-pro-preview":       "gemini-3-pro-preview",
-	"kimi-k2-0905":               "kimi-k2",
-	"grok-4":                     "grok-4",
+	// The frontier models the public catalogue tracks. Everything absent from this map is
+	// priced by hand, which is what the relay and open-weights rows are: an operator
+	// points a compatible provider at a model and sets its rate themselves.
+	//
+	// Both halves have to be populated, and the pricing page has a tab for each. Marking
+	// every row as synced would claim an operator's own rates came from the public
+	// catalogue, and marking none of them would leave the sync tab with nothing to show
+	// and its bookkeeping reporting a match count of zero.
+	"gpt-5.6-luna":     "gpt-5.6-luna",
+	"gpt-6-luna":       "gpt-6-luna",
+	"gpt-6-sol":        "gpt-6-sol",
+	"gpt-6-astra":      "gpt-6-astra",
+	"claude-opus-5.5":  "claude-opus-5.5",
+	"claude-sonnet-5":  "claude-sonnet-5",
+	"grok-4.7":         "grok-4.7",
+	"kimi-k3":          "kimi-k3",
+	"gemini-3.8-flash": "gemini-3.8-flash",
+	"gemini-3.7-flash": "gemini-3.7-flash",
+	// Two open-weights models that the catalogue also tracks, so the synced tab holds a
+	// mix of hosted and free models rather than only the subscription ones.
+	"glm-5.3":          "glm-5.3-flash",
+	"qwen3.8-max-0902": "qwen3.8-max",
 }
 
 // priceRow is one model's price, in USD per million tokens.
@@ -336,23 +373,29 @@ type priceRow struct {
 // priceCatalog is published as manual rows: the demo has no models.dev sync, so
 // these are the prices the dashboard's cost column is computed from.
 func priceCatalog() []priceRow {
+	// Every rate here was read from the live catalogue rather than recalled, and every
+	// model the fixture carries traffic for appears here: a request that cannot be priced
+	// renders as an unpriced row, and the seed asserts that none of them is.
 	return []priceRow{
-		{model: "gpt-5-codex", prompt: 1.25, completion: 10, cacheRead: 0.125, cacheWrite: 1.25},
-		{model: "gpt-5.1-codex", prompt: 1.25, completion: 10, cacheRead: 0.125, cacheWrite: 1.25},
-		{model: "gpt-5", prompt: 1.25, completion: 10, cacheRead: 0.125, cacheWrite: 1.25},
-		{model: "gpt-5-mini", prompt: 0.25, completion: 2, cacheRead: 0.025, cacheWrite: 0.25},
-		{model: "claude-sonnet-4-5-20250929", prompt: 3, completion: 15, cacheRead: 0.3, cacheWrite: 3.75},
-		{model: "claude-opus-4-1", prompt: 15, completion: 75, cacheRead: 1.5, cacheWrite: 18.75},
-		{model: "claude-haiku-4-5", prompt: 1, completion: 5, cacheRead: 0.1, cacheWrite: 1.25},
-		{model: "gemini-2.5-pro", prompt: 1.25, completion: 10, cacheRead: 0.31, cacheWrite: 4.5},
-		{model: "gemini-2.5-flash", prompt: 0.3, completion: 2.5, cacheRead: 0.075, cacheWrite: 1},
-		{model: "gemini-3-pro-preview", prompt: 2, completion: 12, cacheRead: 0.5, cacheWrite: 4.5},
-		{model: "kimi-k2-0905", prompt: 0.6, completion: 2.5, cacheRead: 0.15, cacheWrite: 0.6},
-		{model: "grok-4", prompt: 3, completion: 15, cacheRead: 0.75, cacheWrite: 3},
-		{model: "deepseek-chat", prompt: 0.28, completion: 0.42, cacheRead: 0.028, cacheWrite: 0.28},
-		{model: "deepseek-reasoner", prompt: 0.28, completion: 0.42, cacheRead: 0.028, cacheWrite: 0.28},
-		{model: "qwen3-max", prompt: 1.2, completion: 6, cacheRead: 0.24, cacheWrite: 1.2},
-		{model: "qwen3-coder-plus", prompt: 1, completion: 5, cacheRead: 0.2, cacheWrite: 1},
+		// Open-weights models, which is where most of the traffic is.
+		{model: "glm-5.3-flash", prompt: 0.15, completion: 0.5, cacheRead: 0.05, cacheWrite: 0.15},
+		{model: "glm-5.3", prompt: 0.84, completion: 2.64, cacheRead: 0.156, cacheWrite: 0.84},
+		{model: "deepseek-v4-flash", prompt: 0.0886, completion: 0.1772, cacheRead: 0.0177, cacheWrite: 0.0886},
+		{model: "mimo-v2.5", prompt: 0.14, completion: 0.28, cacheRead: 0.0028, cacheWrite: 0.14},
+		{model: "kimi-k3", prompt: 3, completion: 15, cacheRead: 0.3, cacheWrite: 3},
+		{model: "minimax-m3", prompt: 0.3, completion: 1.2, cacheRead: 0.06, cacheWrite: 0.3},
+		{model: "qwen3.8-omni-flash", prompt: 0.15, completion: 0.47, cacheRead: 0.016, cacheWrite: 0.15},
+		{model: "qwen3.8-max-0902", prompt: 2, completion: 6, cacheRead: 0.25, cacheWrite: 2.5},
+		// Subscription-backed frontier models.
+		{model: "gpt-5.6-luna", prompt: 0.2, completion: 1.2, cacheRead: 0.02, cacheWrite: 0.25},
+		{model: "gpt-6-luna", prompt: 0.1, completion: 0.5, cacheRead: 0.01, cacheWrite: 0.125},
+		{model: "gpt-6-sol", prompt: 2, completion: 10, cacheRead: 0.2, cacheWrite: 2.5},
+		{model: "gpt-6-astra", prompt: 10, completion: 50, cacheRead: 1, cacheWrite: 12.5},
+		{model: "claude-opus-5.5", prompt: 4, completion: 20, cacheRead: 0.2, cacheWrite: 5},
+		{model: "claude-sonnet-5", prompt: 2, completion: 10, cacheRead: 0.2, cacheWrite: 2.5},
+		{model: "grok-4.7", prompt: 1.6, completion: 4.8, cacheRead: 0.4, cacheWrite: 1.6},
+		{model: "gemini-3.8-flash", prompt: 0.75, completion: 3.75, cacheRead: 0.075, cacheWrite: 0.0417},
+		{model: "gemini-3.7-flash", prompt: 0.75, completion: 3.75, cacheRead: 0.075, cacheWrite: 0.0417},
 	}
 }
 

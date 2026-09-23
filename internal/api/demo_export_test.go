@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -78,6 +79,10 @@ type demoExportCase struct {
 	// Route names the router pattern this case serves, for a parameterised route. It
 	// is empty for a literal route, where the pattern is the path itself.
 	Route string
+	// From declares that this case's path depends on a response captured earlier, which is
+	// how a read that needs a real identifier stays correct when the history is reseeded.
+	// It receives the cases already captured, keyed by name.
+	From func(captured map[string]demoExportResponse) (string, error)
 }
 
 // Pattern is the route pattern a case covers.
@@ -141,9 +146,12 @@ func demoExportCases() []demoExportCase {
 		// not where the seeded history sits, and the list comes back empty.
 		{Name: "usage-facets", Path: "/api/v1/usage/facets?" + demoExportWindow("24h")},
 		{Name: "usage-events", Path: "/api/v1/usage/events?" + demoExportWindow("24h") + "&limit=100&result=all"},
-		// The record drawer and the audit tail are the last two reads the console can
-		// reach; the event id is one the fixture seeds.
-		{Name: "usage-event-detail", Path: "/api/v1/usage/events/13574"},
+		// The record drawer asks for one event by id, and that id has to come from the list
+		// above rather than be written here. A literal id was correct until the history was
+		// reseeded, at which point it named nothing and the export captured the 404 as the
+		// drawer's data - which passed every test, because a captured 404 is still a
+		// captured response. Deriving it means reseeding cannot break it.
+		{Name: "usage-event-detail", Route: "/api/v1/usage/events/{id}", From: demoExportFirstEventPath},
 		{Name: "audit-export", Path: "/api/v1/management/audit/export"},
 	}
 	// The dashboard's window picker. Each position is a distinct response and the
@@ -199,6 +207,29 @@ var demoExportRouteGaps = map[string]string{
 	"/api/v1/management/auth-files/safe-fields": "the fixture refuses the download the projection reads, by design and under test",
 }
 
+// demoExportFirstEventPath builds the detail path for the first event the list carried.
+//
+// The console reaches the drawer from a row, so any id the list holds is one it can ask
+// for; taking the first is enough and keeps the choice reproducible.
+func demoExportFirstEventPath(captured map[string]demoExportResponse) (string, error) {
+	list, ok := captured["usage-events"]
+	if !ok {
+		return "", errors.New("the event list must be captured before its detail")
+	}
+	var payload struct {
+		Items []struct {
+			ID int64 `json:"id"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal([]byte(list.Body), &payload); err != nil {
+		return "", fmt.Errorf("decode the event list: %w", err)
+	}
+	if len(payload.Items) == 0 {
+		return "", errors.New("the event list is empty, so no detail can be captured")
+	}
+	return fmt.Sprintf("/api/v1/usage/events/%d", payload.Items[0].ID), nil
+}
+
 // demoExportPresetSpans is how far back each dashboard preset reaches. It mirrors the
 // spans the server accepts, and the export requests the same windows by their bounds
 // so the aggregate does not depend on when the export ran.
@@ -245,6 +276,16 @@ func TestExportDemoDataset(t *testing.T) {
 
 	responses := make(map[string]demoExportResponse)
 	for _, one := range demoExportCases() {
+		// A case whose path depends on an earlier capture is resolved against what has
+		// been captured so far, so the dependency is explicit in the case list rather
+		// than in the order the list happens to be written in.
+		if one.From != nil {
+			resolved, err := one.From(responses)
+			if err != nil {
+				t.Fatalf("%s: %v", one.Name, err)
+			}
+			one.Path = resolved
+		}
 		responses[one.Name] = demoExportFetch(t, server.URL, one)
 	}
 
@@ -253,7 +294,17 @@ func TestExportDemoDataset(t *testing.T) {
 	// the span internally consistent and makes the export reproducible.
 	_ = exportedAt
 	// One table across every response, so the same generated id becomes the same
-	// stand-in wherever it appears.
+	// stand-in wherever it appears, and one delta for the whole dataset, so every
+	// interval inside it survives the move and the panels that have to agree still do.
+	//
+	// The delta is rounded to whole seconds, and that is what makes the export
+	// reproducible rather than nearly reproducible. Serving seventy-nine responses takes
+	// a couple of seconds, so the raw difference between the reference and the moment the
+	// requests were made is a few milliseconds different every run - and every instant in
+	// the dataset inherits that difference, which is a diff that looks like drift in
+	// fifty-four responses. Rounding discards only precision no panel draws: the finest
+	// bucket the console renders is a minute wide.
+	deltaMS := (seededAt.Sub(exportedAt).Milliseconds() / 1000) * 1000
 	requestIDs := make(map[string]int)
 	normalised := make(map[string]demoExportResponse, len(responses))
 	names := make([]string, 0, len(responses))
@@ -271,7 +322,7 @@ func TestExportDemoDataset(t *testing.T) {
 			normalised[name] = response
 			continue
 		}
-		encoded, err := json.Marshal(demoExportRebase(decoded, demoExportReference.UnixMilli(), requestIDs))
+		encoded, err := json.Marshal(demoExportRebase(decoded, deltaMS, requestIDs))
 		if err != nil {
 			t.Fatalf("re-base %s: %v", name, err)
 		}
@@ -324,23 +375,30 @@ type demoExportResponses struct {
 // token counts, prices, IDs and schema versions are numbers too, and shifting one of
 // them would corrupt the data quietly.
 var demoExportShiftedMillisKeys = map[string]bool{
+	// The evidence for this list is an experiment rather than a reading of the handlers:
+	// two exports were taken with shifting disabled and diffed, and only the fields below
+	// varied. Everything else in the dataset - the seeded history's bucket timestamps
+	// (`t`), its window bounds (`from`/`to`), the event rows' `timestamp_ms`, the
+	// heatmap's day boundaries - was already deterministic, because the seed is anchored
+	// at a fixed instant.
+	//
+	// That distinction is the bug this list exists to encode. An earlier revision shifted
+	// every field it considered a timestamp, which replaced forty-nine distinct bucket
+	// timestamps with one value and collapsed the dashboard's token trend into a vertical
+	// line; it also zeroed the heatmap's day boundaries, freezing that grid at the capture
+	// date. Both rendered in the demonstration and neither failed a test.
 	"occurred_at_ms":        true,
 	"probed_at_ms":          true,
 	"observed_at_ms":        true,
 	"created_at_ms":         true,
 	"updated_at_ms":         true,
 	"as_of_ms":              true,
-	"to_ms":                 true,
 	"checked_at_ms":         true,
 	"attempted_at_ms":       true,
 	"catalog_updated_at_ms": true,
 	"latest_after":          true,
-	"timestamp_ms":          true,
-	"from":                  true,
-	"to":                    true,
-	"t":                     true,
-	// Seconds rather than milliseconds: the error-log listing reports file times
-	// through the platform's own stat call.
+	// Seconds rather than milliseconds: the error-log listing reports file times through
+	// the platform's own stat call.
 	"modified": true,
 }
 
@@ -399,7 +457,7 @@ func demoExportScrub(text string) string {
 // demoExportRebase moves the instants the handler stamped onto the export's reference
 // instant, and leaves the seeded history where it is. Two exports of the same history
 // therefore agree.
-func demoExportRebase(value any, referenceMS int64, requestIDs map[string]int) any {
+func demoExportRebase(value any, deltaMS int64, requestIDs map[string]int) any {
 	switch typed := value.(type) {
 	case map[string]any:
 		for key, item := range typed {
@@ -408,46 +466,71 @@ func demoExportRebase(value any, referenceMS int64, requestIDs map[string]int) a
 				typed[key] = 0
 			case key == demoExportRequestID:
 				typed[key] = demoExportStableRequestID(requestIDs, item)
+			case demoExportDayBoundaryKeys[key]:
+				typed[key] = demoExportNormaliseDayBoundary(typed, key, item)
 			case demoExportShiftedMillisKeys[key]:
-				typed[key] = demoExportStampMillis(item, referenceMS)
+				typed[key] = demoExportShiftMillis(item, deltaMS)
 			case demoExportShiftedTextKeys[key]:
-				typed[key] = demoExportStampText(item, referenceMS)
+				typed[key] = demoExportShiftText(item, deltaMS)
 			default:
-				typed[key] = demoExportRebase(item, referenceMS, requestIDs)
+				typed[key] = demoExportRebase(item, deltaMS, requestIDs)
 			}
 		}
 		return typed
 	case []any:
 		for index, item := range typed {
-			typed[index] = demoExportRebase(item, referenceMS, requestIDs)
+			typed[index] = demoExportRebase(item, deltaMS, requestIDs)
 		}
 		return typed
 	case string:
-		return demoExportStampText(typed, referenceMS)
+		return demoExportShiftText(typed, deltaMS)
 	default:
 		return value
 	}
 }
 
-// demoExportStampMillis replaces a wall-clock instant with the reference, keeping the
-// unit the field already used so the response shape does not change.
-func demoExportStampMillis(item any, referenceMS int64) any {
-	switch item.(type) {
-	case float64, json.Number:
-		if millis, ok := demoExportNumericMillis(item); ok {
-			// A field reported in seconds rather than milliseconds is one whose
-			// magnitude is three orders smaller.
-			if math.Abs(millis) < 1e11 {
-				return float64(referenceMS / 1000)
-			}
-		}
-		return float64(referenceMS)
-	default:
+// demoExportShiftMillis moves an instant by the export's delta, keeping the unit the
+// field already used so the response shape does not change.
+//
+// It SHIFTS rather than replacing the value with a constant, and the difference is the
+// whole point. Replacing every instant with the reference looks equivalent for a field
+// that records when something was asked ("this page was read at T") but destroys a field
+// that records a series: a dashboard response carries forty-nine bucket timestamps, and
+// collapsing them onto one instant made the token trend plot forty-nine points at a
+// single x position - a vertical line - while the heatmap's day boundaries collapsed to
+// zero and the grid froze at the capture date. Both were visible in the demonstration and
+// neither was caught by a test, because the values were still plausible numbers.
+//
+// A shift preserves every interval the console renders, which is what makes the re-based
+// history internally consistent. The Worker applies the same delta again at serve time, so
+// the two shifts compose and the viewer sees a history ending now.
+func demoExportShiftMillis(item any, deltaMS int64) any {
+	millis, ok := demoExportNumericMillis(item)
+	if !ok {
 		return item
 	}
+	// A field reported in seconds rather than milliseconds is one whose magnitude is
+	// three orders smaller, so it takes the delta in its own unit.
+	if math.Abs(millis) < 1e11 {
+		return math.Floor(millis + float64(deltaMS)/1000)
+	}
+	// Truncated to the MINUTE, and that resolution comes from the arithmetic rather than
+	// from taste. These instants are stamped while the export is answering - an audit row
+	// per read, a probe per capability, the tail's own "as of" mark - so each is captured a
+	// little later than the run began, and the shifted value arrives as the reference plus
+	// however long the run had been going. Truncating to the second left that elapsed time
+	// in: two exports disagreed by five seconds in seven responses.
+	//
+	// A minute absorbs it, but it has to be the NEAREST minute rather than the one below.
+	// The reference is minute-aligned and the stamped values land within seconds of it, so
+	// rounding puts every one of them on the reference - whereas truncating sends a value a
+	// few milliseconds below it into the previous minute, which is a whole minute of
+	// difference between two exports of identical history. Observed, not anticipated: that
+	// was the last field to disagree.
+	return math.Round((millis+float64(deltaMS))/60000) * 60000
 }
 
-// demoExportStampText replaces a wall-clock instant written as text, leaving anything
+// demoExportShiftText moves an instant written as text by the delta, leaving anything
 // that is not an instant alone.
 func demoExportStampText(item any, referenceMS int64) any {
 	text, ok := item.(string)
@@ -460,6 +543,47 @@ func demoExportStampText(item any, referenceMS int64) any {
 	}
 	// A log line carries its instants in prose, so they are rewritten in place.
 	return demoExportLogInstant.ReplaceAllString(text, stamped)
+}
+
+// demoExportDayBoundaryKeys are the heatmap's calendar-cell boundaries.
+//
+// They are left as the handler produced them, with one exception, and the reasoning is
+// worth stating because the obvious alternatives are both wrong. Shifting them by the
+// dataset's delta destroys a timezone offset - a Kuala Lumpur day runs 16:00Z to 15:59Z,
+// and snapping that to a UTC day made a cell's boundary disagree with its own label.
+// Snapping them to any grid we choose has the same problem. What the console actually
+// reads from this response is the `day` string; the numbers beside it are unused, so the
+// safest thing is to leave them exactly as captured.
+//
+// The exception is the one cell that is still in progress. Its end boundary is literally
+// the moment the export ran, so it moves by seconds between runs and would make the whole
+// dataset fail its own reproducibility check over a field nothing displays. It is marked
+// with the same zero the cells beyond it already use, which says "this day is not
+// complete" rather than inventing an end for it.
+var demoExportDayBoundaryKeys = map[string]bool{
+	"from_ms": true,
+	"to_ms":   true,
+}
+
+// demoExportNormaliseDayBoundary blanks the end boundary of an incomplete day.
+func demoExportNormaliseDayBoundary(owner map[string]any, key string, item any) any {
+	if key != "to_ms" {
+		return item
+	}
+	millis, ok := demoExportNumericMillis(item)
+	if !ok || millis == 0 {
+		return item
+	}
+	from, ok := demoExportNumericMillis(owner["from_ms"])
+	if !ok || from == 0 {
+		return item
+	}
+	const dayMS = 86400000.0
+	if millis-from < dayMS {
+		// An incomplete day: its end is the moment of the export, not a boundary.
+		return float64(0)
+	}
+	return item
 }
 
 // demoExportNumericMillis reads an epoch instant held as a JSON number.
@@ -734,6 +858,105 @@ func demoExportPatternMatches(route, pattern string) bool {
 	}
 	prefix, _, found := strings.Cut(route, "{")
 	return found && strings.HasPrefix(pattern, prefix)
+}
+
+// TestDemoExportKeepsSeriesAndDayGridsIntact guards the two defects that reached the
+// public demonstration and were visible only in a browser.
+//
+// Both came from the same mistake - treating every timestamp as the moment the export
+// answered - and both produced values that were still plausible numbers, which is why
+// nothing failed: a series collapsed onto one instant, and a calendar cell whose boundary
+// contradicted its own label. The assertions are about STRUCTURE rather than about
+// particular instants, so they hold whatever the reference is.
+func TestDemoExportKeepsSeriesAndDayGridsIntact(t *testing.T) {
+	outDir := strings.TrimSpace(os.Getenv("OMCPA_DEMO_EXPORT_DIR"))
+	if outDir == "" {
+		t.Skip("set OMCPA_DEMO_EXPORT_DIR to check the exported dataset")
+	}
+	raw, err := os.ReadFile(filepath.Join(outDir, "responses.json"))
+	if err != nil {
+		t.Fatalf("read exported dataset: %v", err)
+	}
+	var exported demoExportResponses
+	if err := json.Unmarshal(raw, &exported); err != nil {
+		t.Fatalf("decode exported dataset: %v", err)
+	}
+
+	// A plotted series has to advance. One distinct `t` across a whole window is a vertical
+	// line on the dashboard's token trend, which is what the demonstration drew.
+	for _, name := range []string{"dashboard-models-call-24h", "dashboard-models-model-24h"} {
+		body := exported.Responses[name].Body
+		if body == "" {
+			t.Fatalf("%s is missing from the dataset", name)
+		}
+		var payload struct {
+			Models []struct {
+				Series []struct {
+					T int64 `json:"t"`
+				} `json:"series"`
+			} `json:"models"`
+		}
+		if err := json.Unmarshal([]byte(body), &payload); err != nil {
+			t.Fatalf("%s is not the expected shape: %v", name, err)
+		}
+		if len(payload.Models) == 0 {
+			t.Fatalf("%s has no models", name)
+		}
+		series := payload.Models[0].Series
+		if len(series) < 2 {
+			t.Fatalf("%s: the first model has %d series points, too few to plot", name, len(series))
+		}
+		distinct := make(map[int64]bool, len(series))
+		for _, point := range series {
+			distinct[point.T] = true
+		}
+		if len(distinct) != len(series) {
+			t.Fatalf("%s: %d series points share only %d distinct timestamps; the trend renders as a vertical line",
+				name, len(series), len(distinct))
+		}
+	}
+
+	// A calendar cell's boundary and its label describe the same day, or one of them is
+	// wrong. This is the contradiction the day-aligned shift introduced.
+	for _, name := range []string{"dashboard-token-heatmap-utc", "dashboard-token-heatmap-kuala-lumpur"} {
+		var payload struct {
+			Days []struct {
+				Day    string `json:"day"`
+				FromMS int64  `json:"from_ms"`
+			} `json:"days"`
+		}
+		if err := json.Unmarshal([]byte(exported.Responses[name].Body), &payload); err != nil {
+			t.Fatalf("%s is not the expected shape: %v", name, err)
+		}
+		if len(payload.Days) == 0 {
+			t.Fatalf("%s has no days", name)
+		}
+		checked := 0
+		for _, day := range payload.Days {
+			if day.FromMS == 0 {
+				// The sentinel for a cell outside the measured range.
+				continue
+			}
+			checked++
+			// The boundary is where the VIEWER'S day starts, so it is only equal to the
+			// label's date in UTC. For any other zone it is offset by that zone - a Kuala
+			// Lumpur day begins at 16:00Z on the previous date. What has to hold either way
+			// is that the boundary is a real instant that lands within a day of its label,
+			// which is what catches a boundary that was overwritten or zeroed.
+			got := time.UnixMilli(day.FromMS).UTC()
+			label, err := time.Parse("2006-01-02", day.Day)
+			if err != nil {
+				t.Fatalf("%s: cell label %q is not a date: %v", name, day.Day, err)
+			}
+			if offset := got.Sub(label); offset < -26*time.Hour || offset > 26*time.Hour {
+				t.Fatalf("%s: a cell labelled %s has its boundary %s away, at %s",
+					name, day.Day, offset.Round(time.Hour), got.Format(time.RFC3339))
+			}
+		}
+		if checked == 0 {
+			t.Fatalf("%s: every day boundary is zero, so the grid has no measured range", name)
+		}
+	}
 }
 
 // The exported response must never carry an error, because an error captured at

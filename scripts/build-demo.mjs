@@ -21,7 +21,7 @@
  *    `internal/web/dist` instead of running its own build, and `--from-built` lets a
  *    verification pass reuse one production build instead of racing it.
  */
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -52,10 +52,6 @@ const CONFIG_MARKER = '__OMCPA_CONFIG__';
 
 /**
  * Rewrites a built HTML file for a static host.
- *
- * Only HTML is rewritten. The JavaScript and CSS are left exactly as the product
- * builds them, because anything that edited them would make this a second frontend -
- * and the demonstration's value is that it is the same one.
  */
 function rewriteHtml(html) {
   let output = html;
@@ -81,6 +77,58 @@ function rewriteHtml(html) {
   return output;
 }
 
+/**
+ * The relative references Vite bakes into the built modules and stylesheets.
+ *
+ * They are relative for the same reason the HTML's are - a self-hosted install may sit
+ * under `/omc`, so `./` resolves correctly there - and they break in exactly the same way
+ * on a deep link served from the site root. The demonstration therefore has to rewrite
+ * them too, and this was learned the hard way: rewriting only the HTML left the provider
+ * icons broken in the request list, because the icon path is a template literal inside a
+ * JavaScript chunk (`./lobe-icons/${name}-color.svg`), which resolves against the current
+ * route. The console's own theme fonts are referenced the same way from its CSS.
+ *
+ * The rewrite is a literal replacement of the leading `./` rather than a parser pass,
+ * because what it is fixing is a path convention rather than a syntax: every occurrence
+ * in the built output refers to something served from the site root, and there is no
+ * construct in these files where `./` means a directory the browser is already in.
+ */
+const RELATIVE_REFERENCES = [
+  { pattern: /\.\/lobe-icons\//g, replacement: '/lobe-icons/' },
+  { pattern: /\.\/([A-Za-z0-9_-]+\.woff2)/g, replacement: '/assets/$1' },
+];
+
+/** Rewrites the leading `./` in a built module or stylesheet. */
+function rewriteModuleReferences(source) {
+  let output = source;
+  for (const { pattern, replacement } of RELATIVE_REFERENCES) {
+    output = output.replace(pattern, replacement);
+  }
+  return output;
+}
+
+/**
+ * Applies the module rewrite to every staged JavaScript and CSS file.
+ *
+ * The walk is over the staged directory rather than a list of file names, because the
+ * names are content-hashed: a list would go stale on the next build and would fail by
+ * silently skipping the file it named.
+ */
+async function rewriteStagedModules(stage) {
+  const assets = join(stage, 'assets');
+  let rewritten = 0;
+  for (const name of await readdir(assets)) {
+    if (!name.endsWith('.js') && !name.endsWith('.css')) continue;
+    const path = join(assets, name);
+    const source = await readFile(path, 'utf8');
+    const output = rewriteModuleReferences(source);
+    if (output === source) continue;
+    await writeFile(path, output);
+    rewritten += 1;
+  }
+  return rewritten;
+}
+
 async function main() {
   if (!existsSync(SOURCE)) {
     throw new Error(`no built console at ${SOURCE}; run pnpm build first`);
@@ -99,7 +147,14 @@ async function main() {
   const original = await readFile(index, 'utf8');
   await writeFile(index, rewriteHtml(original));
 
-  console.log(`staged the demonstration console at ${STAGE}`);
+  const rewritten = await rewriteStagedModules(STAGE);
+  if (rewritten === 0) {
+    // A build with no relative references would mean this rewrite is dead code, which is
+    // worth knowing rather than assuming: it would mean the convention changed upstream.
+    throw new Error('no staged module referenced an asset relatively; is this rewrite still needed?');
+  }
+
+  console.log(`staged the demonstration console at ${STAGE} (${rewritten} module(s) rewritten)`);
 }
 
 try {
