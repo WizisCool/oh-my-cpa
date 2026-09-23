@@ -57,6 +57,9 @@ const INPUTS = [
   // response were the two the digest did not cover.
   'deploy/cloudflare/worker.mjs',
   'scripts/generate-demo-data.mjs',
+  // The packaging step decides what the served assets reference, so a change to it
+  // changes the demonstration as surely as a change to the Worker does.
+  'scripts/build-demo.mjs',
 ];
 
 /**
