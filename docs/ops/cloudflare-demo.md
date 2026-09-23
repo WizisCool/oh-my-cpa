@@ -201,6 +201,25 @@ documents stops it, measured - and is deliberately not done, because the beacon 
 judged acceptable and a suppression the project does not want would be a claim the
 repository does not mean. ADR 0021 records the decision.
 
+## The demonstration used to run on Vercel
+
+It no longer does, and the retirement is complete rather than pending: the project, its
+deployments, its aliases and its container-registry repository are deleted, and
+`oh-my-cpa-demo.vercel.app` answers 404. Nothing in the repository refers to it except
+this section and the ADR that records why the move happened.
+
+Two things are worth knowing if you find traces of it.
+
+The **GitHub deployments panel still lists 47 entries** created by `vercel[bot]`. They
+are GitHub's own audit record of what the deleted integration did, every one of them in
+a terminal state, and they are history rather than residue - deleting them would erase
+an accurate account of what happened without removing anything that runs.
+
+The **credential the CLI stored had expired**, and re-authenticating needed one
+interactive step. That is why this section exists: a future cleanup that reports "the
+API says the project is gone" may be reporting an expired token rather than an absent
+project, and the two look identical from an empty response.
+
 ## Troubleshooting
 
 **A page renders but its panel is empty.** Its read has no dataset entry, or the entry
