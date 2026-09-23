@@ -1147,15 +1147,17 @@ client's job is still followed to its outcome. Adoption looks at **every** snaps
 than only the first one, because a job admitted elsewhere after the page was opened is
 invisible until a refetch reports it; skipping the job already being observed is what keeps
 a repeated refetch from restarting a poll that is already following it. A terminal status is
-accepted only for the job being observed, matched on the server's own `action` and
-`started_at_ms` (both fixed at reservation and preserved through the terminal record),
-because a query cache can still hold an earlier job's terminal record and accepting that one
-would report a finished job's numbers as this job's result, or stop a live job's poll. A job
-that **started later** than the observed one is accepted as well, and becomes the observed
-job: a fast job can finish and be replaced inside a single poll interval, so the first sign of
-its replacement is that replacement's own terminal record. Without that rule the page would
-drop the newer result and keep polling for a job the server had already moved past — verified
-in the browser, where the exact-match guard reported `0` outcome panels across `23` polls.
+accepted only for the job being observed, or for a job that superseded it, recognised by the
+server's `job_id` — the reservation the job was admitted under, which is monotonic within the
+process. That id is what the page compares rather than the start time, because the start time
+is the wall clock: two jobs can share a millisecond, and a synchronised clock can step
+backwards, either of which would make a later job look like one already handled and drop its
+result. A job that **started later** than the observed one is accepted as well, and becomes the
+observed job: a fast job can finish and be replaced inside a single poll interval, so the first
+sign of its replacement is that replacement's own terminal record. Without that rule the page
+would drop the newer result and keep polling for a job the server had already moved past —
+verified in the browser, where the exact-match guard reported `0` outcome panels across `23`
+polls.
 
 Adopting a running job also **seeds the poll's cache** with that job before polling is
 enabled, because while polling is enabled the card reads that cache rather than the page's own

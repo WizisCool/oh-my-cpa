@@ -342,15 +342,15 @@ export const SystemPage: React.FC = () => {
 
   const hasMountedCheckRef = useRef(false);
   // The last job completion already reported, so a terminal status is handled once rather than on
-  // every effect run that still reads it. It is the job's identity - the server's action and start
-  // instant - rather than `finished_at_ms`: this effect re-runs when the reading language changes,
-  // because `t` is one of its dependencies, and recognising the same job there is what keeps a
-  // result the reader dismissed from being restored.
-  const reportedCompletionRef = useRef<{ action: string; startedAtMS: number } | null>(null);
-  // The job this page is observing, identified by the server's own action name and start
-  // instant. A terminal status is accepted only when it matches, because the query cache can
-  // still hold an earlier job's terminal record.
-  const observedJobRef = useRef<{ action: string; startedAtMS: number } | null>(null);
+  // every effect run that still reads it. The identity is the server's job id, not the finish time:
+  // this effect re-runs when the reading language changes, because `t` is one of its dependencies,
+  // and recognising the same job there is what keeps a result the reader dismissed from being
+  // restored.
+  const reportedCompletionRef = useRef<number>(0);
+  // The job this page is observing, by the server's job id. A terminal status is accepted only for
+  // it or for a job that superseded it, because the query cache can still hold an earlier job's
+  // terminal record.
+  const observedJobRef = useRef<number | null>(null);
 
   // The action label shown inside a message, resolved from the action the server
   // reported rather than the one that was requested.
@@ -387,8 +387,8 @@ export const SystemPage: React.FC = () => {
     const job = sysInfo?.maintenance;
     if (!job || !job.running) return;
     const observed = observedJobRef.current;
-    if (observed && observed.action === job.action && observed.startedAtMS === job.started_at_ms) return;
-    observedJobRef.current = { action: job.action, startedAtMS: job.started_at_ms };
+    if (observed !== null && observed === job.job_id) return;
+    observedJobRef.current = job.job_id;
     // The poll's own cache is seeded with the job just adopted, because while polling is enabled
     // that cache is what the card reads - and it can still hold an earlier job's terminal record.
     // Reading that record instead of this job hid a job that was genuinely holding the write gate:
@@ -425,7 +425,7 @@ export const SystemPage: React.FC = () => {
   // written into the maintenance cache, and the terminal effect below then classifies it exactly
   // as it classifies a polled result - one path, so an outcome cannot be reported two ways.
   const handleAcceptedJob = (job: SystemMaintenanceStatus) => {
-    observedJobRef.current = { action: job.action, startedAtMS: job.started_at_ms };
+    observedJobRef.current = job.job_id;
     setIsPollingMaintenance(job.running);
   };
 
@@ -441,14 +441,15 @@ export const SystemPage: React.FC = () => {
     // an *earlier* job is the stale one this guard exists to ignore, and an empty observation means
     // the record is the server's retained history rather than this reader's result, so neither is
     // adopted here.
+    // The comparison is the job id, which the server assigns from a counter rather than the clock:
+    // two jobs can start within the same millisecond, and a synchronised clock can step backwards,
+    // either of which would make a later job look like one already handled.
     const observed = observedJobRef.current;
-    if (!observed) return;
-    const isObservedJob = observed.action === job.action && observed.startedAtMS === job.started_at_ms;
-    const supersedesObservedJob = job.started_at_ms > observed.startedAtMS;
-    if (!isObservedJob && !supersedesObservedJob) return;
+    if (observed === null) return;
+    if (job.job_id !== observed && job.job_id < observed) return;
     // The observed job moves to the one being reported, so a later poll cannot re-report it and the
     // banner this poll was following does not outlive the job that replaced it.
-    observedJobRef.current = { action: job.action, startedAtMS: job.started_at_ms };
+    observedJobRef.current = job.job_id;
 
     // The poll stops on the terminal state, whether or not this page already reported it.
     // Returning early for an already-announced job would leave the poll running forever
@@ -460,8 +461,8 @@ export const SystemPage: React.FC = () => {
     // in the query cache then, so setting the outcome first would put back a result the reader had
     // dismissed - which reads as the panel having restored itself.
     const reported = reportedCompletionRef.current;
-    if (reported && reported.action === job.action && reported.startedAtMS === job.started_at_ms) return;
-    reportedCompletionRef.current = { action: job.action, startedAtMS: job.started_at_ms };
+    if (reported !== 0 && reported === job.job_id) return;
+    reportedCompletionRef.current = job.job_id;
 
     setDisplayedOutcome(job);
     void queryClient.invalidateQueries({ queryKey: ['management-system-info'] });

@@ -51,6 +51,46 @@ func TestCheckpointReadsItsOwnResultCounters(t *testing.T) {
 	}
 }
 
+// TestMaintenanceJobIDIsAssignedAndSurvivesCompletion pins the identity a reader orders jobs by.
+//
+// The page compares job ids rather than start times, because the start time is the wall clock: two
+// jobs can be stamped with the same millisecond, and a synchronised clock can step backwards. Either
+// would make a later job look like one already handled, and its result would be dropped. The id is
+// the reservation the job was admitted under, so it is monotonic and never reused, and it has to
+// survive from the running status into the terminal one or the reader cannot recognise the job it
+// was following.
+func TestMaintenanceJobIDIsAssignedAndSurvivesCompletion(t *testing.T) {
+	database := openGatedTestDatabase(t)
+	ctx := context.Background()
+	if _, err := database.SQL.ExecContext(ctx, `CREATE TABLE probe(id INTEGER PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+
+	service := newTestMaintenanceService(t, database)
+	reserved, err := service.StartCheckpoint(ctx)
+	if err != nil {
+		t.Fatalf("start checkpoint: %v", err)
+	}
+	if reserved.JobID == 0 {
+		t.Fatal("the reserved job carries no id")
+	}
+
+	terminal := waitForMaintenance(t, service)
+	if terminal.JobID != reserved.JobID {
+		t.Fatalf("terminal job id = %d, want the reserved id %d", terminal.JobID, reserved.JobID)
+	}
+
+	// A second job must be given a strictly greater id, since that ordering is what tells a later
+	// job from an earlier one.
+	second, err := service.StartCheckpoint(ctx)
+	if err != nil {
+		t.Fatalf("start second checkpoint: %v", err)
+	}
+	if second.JobID <= reserved.JobID {
+		t.Fatalf("second job id = %d, want greater than %d", second.JobID, reserved.JobID)
+	}
+}
+
 // TestMaintenanceRefusesASecondConcurrentJob pins the single-flight behaviour that
 // lets the page show one job at a time.
 func TestMaintenanceRefusesASecondConcurrentJob(t *testing.T) {

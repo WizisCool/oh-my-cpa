@@ -30,6 +30,11 @@ const maintenanceJobTimeout = 10 * time.Minute
 type MaintenanceStatus struct {
 	// Action is the running or last-finished action, empty when none has run.
 	Action string
+	// JobID identifies this job among the ones this process has admitted: it is the reservation the
+	// job was admitted under, so it is monotonic and never reused. That is what lets a reader tell a
+	// later job from an earlier one without trusting the wall clock, which can repeat a millisecond
+	// or step backwards under time synchronisation.
+	JobID int64
 	// Running is true while a job holds the database exclusively.
 	Running bool
 	// StartedAtMS is when the running (or last) job started.
@@ -261,6 +266,7 @@ func (s *MaintenanceService) Reserve(ctx context.Context, action string) (Mainte
 	s.reservation++
 	s.status = MaintenanceStatus{
 		Action:          action,
+		JobID:           s.reservation,
 		Running:         true,
 		StartedAtMS:     time.Now().UnixMilli(),
 		SizeBeforeBytes: before,
@@ -341,7 +347,8 @@ func (s *MaintenanceService) run(action string, before int64) {
 	jobCtx = withMaintenanceContext(jobCtx)
 
 	startedAt := s.currentStartedAt()
-	result, holdsGate := s.execute(action, jobCtx, before, startedAt)
+	jobID := s.currentJobID()
+	result, holdsGate := s.execute(action, jobCtx, before, startedAt, jobID)
 
 	// Exclusivity is released BEFORE the terminal state is published, and the order is not
 	// cosmetic. An observer of a finished job may write to the database - the audit trail
@@ -359,10 +366,11 @@ func (s *MaintenanceService) run(action string, before int64) {
 // execute runs one maintenance statement under the exclusive gate and returns the status
 // to publish. It reports whether the gate was acquired, so the caller can release it
 // before announcing the result.
-func (s *MaintenanceService) execute(action string, jobCtx context.Context, before, startedAt int64) (MaintenanceStatus, bool) {
+func (s *MaintenanceService) execute(action string, jobCtx context.Context, before, startedAt, jobID int64) (MaintenanceStatus, bool) {
 	if err := s.db.writeGate.enterMaintenance(jobCtx); err != nil {
 		return MaintenanceStatus{
 			Action:          action,
+			JobID:           jobID,
 			StartedAtMS:     startedAt,
 			FinishedAtMS:    time.Now().UnixMilli(),
 			SizeBeforeBytes: before,
@@ -386,6 +394,7 @@ func (s *MaintenanceService) execute(action string, jobCtx context.Context, befo
 	after := s.db.FootprintBytes()
 	result := MaintenanceStatus{
 		Action:          action,
+		JobID:           jobID,
 		StartedAtMS:     startedAt,
 		FinishedAtMS:    time.Now().UnixMilli(),
 		SizeBeforeBytes: before,
@@ -406,6 +415,13 @@ func (s *MaintenanceService) currentStartedAt() int64 {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return s.status.StartedAtMS
+}
+
+// currentJobID returns the identity of the job being run, or zero when none is reserved.
+func (s *MaintenanceService) currentJobID() int64 {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.status.JobID
 }
 
 func (s *MaintenanceService) finish(result MaintenanceStatus) {

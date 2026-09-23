@@ -108,6 +108,8 @@ export function systemFixtures() {
         },
         maintenance: {
           action: '',
+          // No job has ever run in the fixture's steady state, which is what job id 0 means.
+          job_id: 0,
           running: false,
           started_at_ms: 0,
           finished_at_ms: 0,
@@ -382,6 +384,7 @@ export async function systemInformationPage({ base, page, check }) {
   // never a retained result".
   const retainedJob = {
     action: 'wal_checkpoint',
+    job_id: 1,
     running: false,
     started_at_ms: 1790015000000,
     finished_at_ms: 1790015001200,
@@ -447,6 +450,7 @@ export async function systemInformationPage({ base, page, check }) {
   // flight must be adopted and reported, or the page would silently hide real work.
   const runningOnLoad = {
     action: 'wal_checkpoint',
+    job_id: 2,
     running: true,
     started_at_ms: 1790018000000,
     finished_at_ms: 0,
@@ -526,6 +530,7 @@ export async function systemInformationPage({ base, page, check }) {
   // result and kept polling for a job that had already been replaced.
   const watchedJob = {
     action: 'wal_checkpoint',
+    job_id: 3,
     running: true,
     started_at_ms: 1790050000000,
     finished_at_ms: 0,
@@ -538,8 +543,13 @@ export async function systemInformationPage({ base, page, check }) {
   };
   const supersedingJob = {
     action: 'wal_checkpoint',
+    // A later id, which is what makes it the replacement rather than a stale record - and the start
+    // time is deliberately EARLIER than the watched job's, which is what a clock stepping backwards
+    // under time synchronisation produces. Ordering by that timestamp would call this record stale
+    // and drop its result; the id says what it is.
+    job_id: 4,
     running: false,
-    started_at_ms: 1790050009000,
+    started_at_ms: 1790049999000,
     finished_at_ms: 1790050011000,
     size_before_bytes: 9_000_000,
     size_after_bytes: 8_999_000,
@@ -588,6 +598,7 @@ export async function systemInformationPage({ base, page, check }) {
   const laterJobPolls = [];
   const laterJob = {
     action: 'vacuum',
+    job_id: 5,
     running: true,
     started_at_ms: 1790030000000,
     finished_at_ms: 0,
@@ -624,7 +635,7 @@ export async function systemInformationPage({ base, page, check }) {
     });
   };
   // The page is idle with no job; the job begins now, on the server, and only a refetch reveals it.
-  servedMaintenance = { action: '', running: false, started_at_ms: 0, finished_at_ms: 0, size_before_bytes: 0, size_after_bytes: 0, reclaimed_bytes: 0, incomplete: false, detail: '', error: '' };
+  servedMaintenance = { action: '', job_id: 0, running: false, started_at_ms: 0, finished_at_ms: 0, size_before_bytes: 0, size_after_bytes: 0, reclaimed_bytes: 0, incomplete: false, detail: '', error: '' };
   await page.route('**/omc/api/v1/management/system/maintenance**', laterJobHandler);
   servedMaintenance = { ...laterJob };
   // Refresh re-reads both endpoints, which is how this page learns about the job it never started.
@@ -654,6 +665,7 @@ export async function systemInformationPage({ base, page, check }) {
   // banner, and maintenance controls that looked idle while a job held the write gate.
   const freshRunningJob = {
     action: 'wal_checkpoint',
+    job_id: 6,
     running: true,
     started_at_ms: 1790060000000,
     finished_at_ms: 0,
@@ -748,12 +760,15 @@ export async function systemInformationPage({ base, page, check }) {
   // checkpoint blocked by a reader raises no error and must not be shown as success.
   //
   // The mock is stateful and reports ONE job identity across every read, which is what the
-  // server does (the action and start instant are fixed when the job is reserved). The identity
-  // rule it exercises is direction-aware: a record starting *later* than the observed job is
-  // accepted as superseding it, while one starting *earlier* is refused as the stale record.
-  const observed = { action: '', startedAtMS: 0 };
+  // server does (the action, the job id and the start instant are all fixed when the job is
+  // reserved). The identity rule it exercises is direction-aware: a record whose job id is
+  // *higher* than the observed job's is accepted as superseding it, while a lower one is refused
+  // as the stale record. The id is what is compared, not the timestamp, because the server assigns
+  // it from a counter: two jobs can start in the same millisecond and a synchronised clock can
+  // step backwards, either of which would make a later job look like one already handled.
   const acceptedJob = {
     action: 'vacuum',
+    job_id: 7,
     running: true,
     started_at_ms: 0,
     finished_at_ms: 0,
@@ -771,8 +786,6 @@ export async function systemInformationPage({ base, page, check }) {
   await page.route('**/omc/api/v1/management/system/maintenance**', async (route) => {
     if (route.request().method() === 'POST') {
       acceptedJob.started_at_ms = 1790020000000;
-      observed.action = acceptedJob.action;
-      observed.startedAtMS = acceptedJob.started_at_ms;
       // The page's own read is moved with the job. One server holds one job status, so a fixture
       // that left `/management/system` reporting the previous job while the poll reported this one
       // would describe a deployment that cannot exist - and it would let the refresh assertion
