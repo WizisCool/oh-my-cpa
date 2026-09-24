@@ -285,11 +285,14 @@
   white-space: nowrap;
 }
 
+/* A banked credit is a held entitlement, not a degraded state: the amber health token would
+   make a healthy row read as a warning beside the quota tag. Accent keeps it legible as an
+   affordance (the button beside it opens a confirmation) without borrowing health semantics. */
 .credit {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: var(--warn);
+  color: var(--accent);
   font-family: var(--font-mono);
   font-size: 10px;
   background: var(--hover-inset);
@@ -302,7 +305,7 @@
   height: 20px !important;
   padding: 0 4px !important;
   font-size: 10px !important;
-  color: var(--warn) !important;
+  color: var(--accent) !important;
 }
 
 .btn-redeem:hover {

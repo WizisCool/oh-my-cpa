@@ -502,7 +502,12 @@ export function useOAuthWorkspaceActions(
   const clearCooldown = React.useCallback(async (record: OAuthWorkspaceRecord) => {
     if (!record.canClearCooldown || !record.authIndex) return;
     const reserved = reserveTargets([`quota:${record.authIndex}`]);
-    if (reserved.length === 0) return;
+    if (reserved.length === 0) {
+      // A batch refresh or another quota action can hold this target. Returning silently
+      // would leave a confirmed menu action looking like it did nothing.
+      message.warning(t('omc.operation_conflict'));
+      return;
+    }
     markQuotaBusy([record.authIndex], true);
     try {
       await api.clearCredentialCooldown(record.authIndex);
@@ -520,18 +525,25 @@ export function useOAuthWorkspaceActions(
   }, [markQuotaBusy, message, queryClient, releaseTargets, reserveTargets, t]);
 
   const redeemCredit = React.useCallback(async (record: OAuthWorkspaceRecord) => {
-    if (!record.canRedeemCredit || !record.authIndex) return;
-    const reserved = reserveTargets([`quota:${record.authIndex}`]);
-    if (reserved.length === 0) return;
-    markQuotaBusy([record.authIndex], true);
+    // Redemption spends an entitlement, so the target is re-resolved from the latest
+    // records: the row's own projection may predate a refresh that took the credit away
+    // or left it ambiguous.
+    const latest = recordsRef.current.find((candidate) => candidate.key === record.key);
+    if (!latest || !latest.canRedeemCredit || !latest.authIndex) return;
+    const reserved = reserveTargets([`quota:${latest.authIndex}`]);
+    if (reserved.length === 0) {
+      message.warning(t('omc.operation_conflict'));
+      return;
+    }
+    markQuotaBusy([latest.authIndex], true);
     try {
-      await api.redeemCodexResetCredit(record.authIndex);
+      await api.redeemCodexResetCredit(latest.authIndex);
       message.success(t('quota.redeem_credit_success'));
       await queryClient.invalidateQueries({ queryKey: ['management-quota'] });
     } catch (error) {
       message.error(t('quota.redeem_credit_failed', { msg: errorMessage(error, t) }));
     } finally {
-      markQuotaBusy([record.authIndex], false);
+      markQuotaBusy([latest.authIndex], false);
       releaseTargets(reserved);
     }
   }, [markQuotaBusy, message, queryClient, releaseTargets, reserveTargets, t]);

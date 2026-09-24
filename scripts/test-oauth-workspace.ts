@@ -18,7 +18,8 @@ import {
 } from '../web/src/pages/oauthManagement/oauthWorkspaceLogic.ts';
 import type { OAuthProviderChoice } from '../web/src/pages/oauthProviderLogic.ts';
 import { pickCompactQuotaWindows, orderQuotaWindows, quotaWindowKindOf } from '../web/src/pages/quota/quotaWindowSelection.ts';
-import { formatShortDateTime, quotaResetCountdown, quotaResetText } from '../web/src/pages/quota/quotaFormat.ts';
+import { formatShortDateTime, quotaResetCountdown, quotaResetText, resetAccuracyMarker } from '../web/src/pages/quota/quotaFormat.ts';
+import { matchesStatusFilter } from '../web/src/components/authFiles/authFileLogic.ts';
 import type { TFunc } from '../web/src/i18n/index.ts';
 
 /** Stands in for the dictionary: the countdown assertions only need the arguments back. */
@@ -337,7 +338,36 @@ test('a compact row never shows the same window twice', () => {
   const five = { id: 'five', label: 'Five hour', kind: 'five_hour', scope: 'standard' } as const;
   const week = { id: 'week', label: 'Weekly', kind: 'weekly', scope: 'standard' } as const;
   const picked = pickCompactQuotaWindows([five, five, week]);
-  assert.deepEqual(picked.map((window) => window.id), ['five', 'week']);
+  assert.deepEqual(
+    picked.map((window) => window.id),
+    ['five', 'week'],
+    'the same window reported twice spends one of the row’s two lines on a repeat',
+  );
+});
+
+test('two readings of one window id are one window', () => {
+  const picked = pickCompactQuotaWindows([
+    { id: 'weekly', label: 'Weekly', kind: 'weekly', scope: 'standard', remaining_percent: 80 },
+    { id: 'weekly', label: 'Weekly', kind: 'weekly', scope: 'standard', remaining_percent: 75 },
+    { id: 'five_hour', label: 'Five hour', kind: 'five_hour', scope: 'standard' },
+  ]);
+  assert.deepEqual(
+    picked.map((window) => window.id),
+    ['five_hour', 'weekly'],
+    'deduplication is by id, not by object identity or by kind',
+  );
+});
+
+test('distinct windows that share a kind keep both of the row’s lines', () => {
+  const picked = pickCompactQuotaWindows([
+    { id: 'a-week', label: 'Family A · Weekly', kind: 'weekly', scope: 'group' },
+    { id: 'b-week', label: 'Family A · Weekly (secondary)', kind: 'weekly', scope: 'group' },
+  ]);
+  assert.deepEqual(
+    picked.map((window) => window.id),
+    ['a-week', 'b-week'],
+    'a kind is not an identity: two distinct limits both belong in the row',
+  );
 });
 
 test('a daily limit leads its own weekly limit', () => {
@@ -357,6 +387,9 @@ test('a daily limit leads its own weekly limit', () => {
 test('a countdown marks an instant the provider did not state exactly', () => {
   const now = 1_700_000_000_000;
   const inTwoHours = now + 2 * 3_600_000;
+  assert.equal(resetAccuracyMarker('exact'), '');
+  assert.equal(resetAccuracyMarker('derived'), '~');
+  assert.equal(resetAccuracyMarker(undefined), '');
   assert.equal(
     quotaResetCountdown({ reset_at_ms: inTwoHours, reset_accuracy: 'exact' }, now, echoT),
     'quota.in_hours:2',
@@ -458,4 +491,37 @@ test('the redemption offer respects capability, disablement and identity ambigui
     choices,
   );
   assert.deepEqual(ambiguousIndex.records.map((record) => record.canRedeemCredit), [false, false]);
+});
+
+test('the list summary and the status filter agree on what is healthy', () => {
+  // The page counts "Active" and filters "enabled" over the same records. Both must read the
+  // shared predicates, or a row could be counted active and filtered out of the enabled list.
+  const statusMessage = 'token expired';
+  const cases: Array<[string, ManagementAuthFile, string[]]> = [
+    ['a plainly enabled file', file({ type: 'codex', provider: 'codex' }), ['all', 'enabled']],
+    ['a disabled file', file({ disabled: true }), ['all', 'disabled']],
+    ['an unavailable file', file({ unavailable: true }), ['all', 'problem']],
+    ['a file whose status is error', file({ status: 'error' }), ['all', 'problem']],
+    ['a file carrying a warning message', file({ status_message: statusMessage }), ['all', 'problem']],
+    ['a file whose message is a healthy one', file({ status_message: 'healthy' }), ['all', 'enabled']],
+  ];
+  for (const [label, authFile, expected] of cases) {
+    const projection = buildOAuthWorkspaceProjection([authFile], [], choices);
+    const record = projection.records[0];
+    for (const filter of ['all', 'enabled', 'disabled', 'problem'] as const) {
+      const matched = filterOAuthWorkspaceRecords([record], '', 'all', filter, 'all').length === 1;
+      assert.equal(
+        matched,
+        expected.includes(filter),
+        `${label}: filter "${filter}" ${matched ? 'matched' : 'did not match'}`,
+      );
+    }
+    // The summary strip is built from the same two predicates, so it can only agree.
+    const countedActive = !record.file.disabled && matchesStatusFilter(record.file, 'enabled');
+    assert.equal(
+      countedActive,
+      expected.includes('enabled'),
+      `${label}: the Active count and the enabled filter disagree`,
+    );
+  }
 });

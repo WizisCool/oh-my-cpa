@@ -73,11 +73,18 @@ export function pickCompactQuotaWindows(windows: QuotaWindow[]): QuotaWindow[] {
   if (!primary) return [];
   const familyKey = quotaWindowGroupKey(primary);
   const family: QuotaWindow[] = [];
+  const seenIds = new Set<string>();
   for (const window of windows) {
     if (quotaWindowGroupKey(window) !== familyKey) continue;
     // A provider can repeat a bucket, and a row must not spend one of its two lines on a
-    // duplicate of the other.
-    if (family.includes(window)) continue;
+    // duplicate of the other. Two readings of the same window id are one window - deduped by
+    // id, not by object - while distinct windows that share a kind or a group keep both lines.
+    if (window.id) {
+      if (seenIds.has(window.id)) continue;
+      seenIds.add(window.id);
+    } else if (family.includes(window)) {
+      continue;
+    }
     family.push(window);
   }
   return [...family]

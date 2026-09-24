@@ -1,7 +1,7 @@
 import React from 'react';
 import { Progress } from 'antd';
 import { useT } from '../../i18n';
-import { formatTimeWithCountdown, quotaRemainingPercent, quotaWindowLabel } from './quotaFormat';
+import { formatTimeWithCountdown, quotaRemainingPercent, quotaWindowLabel, resetAccuracyMarker } from './quotaFormat';
 import { quotaRemainingStroke } from './quotaThresholds';
 import styles from './QuotaPresentation.module.css';
 
@@ -42,13 +42,17 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
 
   const resolvedLabel = quotaWindowLabel(kind, label, t);
 
-  // Reset cell: "09/05 19:43 · in 4 hours"; backend-provided label as fallback
+  // Reset cell: "09/05 19:43 · in 4 hours"; backend-provided label as fallback. A passed
+  // instant is only "recovered" when upstream stated it exactly: the row beside this cell
+  // makes the same distinction, and a derived instant supports no such claim.
+  const resetMarker = resetAccuracyMarker(resetAccuracy);
   const computedResetText = (() => {
     if (resetAtMS) {
-      if (resetAtMS - nowMS <= 0) return t('quota.recovered');
-      return `${resetAccuracy === 'exact' ? '' : '~'}${formatTimeWithCountdown(resetAtMS, nowMS, t)}`;
+      if (resetAtMS - nowMS > 0) return `${resetMarker}${formatTimeWithCountdown(resetAtMS, nowMS, t)}`;
+      if (!resetMarker) return t('quota.recovered');
+      return resetLabel ? `${resetMarker}${resetLabel}` : '';
     }
-    return resetLabel ? `${resetAccuracy === 'exact' ? '' : '~'}${resetLabel}` : '';
+    return resetLabel ? `${resetMarker}${resetLabel}` : '';
   })();
 
   const displayPercent = hasData ? `${clampedRemaining}%` : '--';

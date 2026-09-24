@@ -85,6 +85,14 @@ export function quotaRemainingText(window: { remaining_percent?: number; used_pe
 }
 
 /**
+ * The marker a reset reading carries when upstream did not state the instant exactly.
+ * One helper, so the row, the Drawer cell and the tooltip cannot disagree about it.
+ */
+export function resetAccuracyMarker(resetAccuracy?: string): string {
+  return resetAccuracy && resetAccuracy !== 'exact' ? '~' : '';
+}
+
+/**
  * The short reset line under a list row's bar: the countdown alone, because the row has no
  * width for a date as well. The exact instant stays in the cell's tooltip.
  *
@@ -97,7 +105,7 @@ export function quotaResetCountdown(
   nowMS: number,
   t: TFunc,
 ): string {
-  const approximate = window.reset_accuracy && window.reset_accuracy !== 'exact' ? '~' : '';
+  const approximate = resetAccuracyMarker(window.reset_accuracy);
   if (!window.reset_at_ms) return window.reset_label ? `${approximate}${window.reset_label}` : '';
   const countdown = formatCountdown(window.reset_at_ms, nowMS, t);
   if (countdown) return `${approximate}${countdown}`;
@@ -124,7 +132,7 @@ export function quotaResetText(
   nowMS: number,
   t: TFunc,
 ): string {
-  const approximate = window.reset_accuracy && window.reset_accuracy !== 'exact' ? '~' : '';
+  const approximate = resetAccuracyMarker(window.reset_accuracy);
   if (window.reset_at_ms) return `${approximate}${formatTimeWithCountdown(window.reset_at_ms, nowMS, t)}`;
   return window.reset_label ? `${approximate}${window.reset_label}` : '';
 }

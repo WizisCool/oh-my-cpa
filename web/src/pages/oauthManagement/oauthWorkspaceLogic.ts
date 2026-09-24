@@ -1,4 +1,4 @@
-import { providerOf, type AuthFileSortKey, type AuthFileStatusFilter } from '../../components/authFiles/authFileLogic';
+import { matchesStatusFilter, providerOf, type AuthFileSortKey, type AuthFileStatusFilter } from '../../components/authFiles/authFileLogic';
 import { getCredentialProviderMetadata } from '../../components/common/providerMetadata';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
 import type { PluginItem } from '../../types/plugin';
@@ -346,6 +346,9 @@ export function matchesQuotaFilter(
   return record.quotaCondition === filter;
 }
 
+// Reuses `authFileLogic`'s predicates rather than restating them: the summary strip counts
+// with the same functions, and a second copy of "healthy" would let the Active count
+// disagree with the rows the enabled filter returns.
 export function filterOAuthWorkspaceRecords(
   records: OAuthWorkspaceRecord[],
   query: string,
@@ -356,17 +359,7 @@ export function filterOAuthWorkspaceRecords(
   const needle = query.trim().toLowerCase();
   return records.filter((record) => {
     if (provider !== 'all' && record.displayProvider !== provider) return false;
-    if (status !== 'all') {
-      const file = record.file;
-      const disabled = file.disabled || normalizedKey(file.status) === 'disabled';
-      const healthy = !disabled
-        && !file.unavailable
-        && normalizedKey(file.status) !== 'error'
-        && !(file.status_message && !['ok', 'healthy', 'ready', 'success', 'available', 'active'].includes(normalizedKey(file.status_message)));
-      if (status === 'disabled' && !disabled) return false;
-      if (status === 'enabled' && !healthy) return false;
-      if (status === 'problem' && (disabled || healthy)) return false;
-    }
+    if (!matchesStatusFilter(record.file, status)) return false;
     if (!matchesQuotaFilter(record, quotaFilter)) return false;
     if (!needle) return true;
     const values = [

@@ -64,7 +64,7 @@ export const CompactQuotaView: React.FC<CompactQuotaViewProps> = ({
         {planText && <span className={styles.plan}>{planText}</span>}
         {availableCredits > 0 && (
           <span className={styles.credit} title={t('omc.quota_credit_available_hint')}>
-            <ThunderboltOutlined style={{ color: 'var(--warn)' }} /> {t('omc.quota_credit_available', { n: availableCredits })}
+            <ThunderboltOutlined /> {t('omc.quota_credit_available', { n: availableCredits })}
           </span>
         )}
         {canRedeemCredit && onRedeemCredit && (
