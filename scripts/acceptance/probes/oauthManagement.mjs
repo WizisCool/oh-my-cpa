@@ -169,33 +169,44 @@ export async function oauthManagement({ base, page, check }) {
   await page.keyboard.press('Escape');
 
   const creditRow = page.locator('[data-testid="oauth-credential-record"][data-auth-index="auth-12"]');
-  const inlineRedeem = creditRow.getByRole('button', { name: /Reset quota|重置额度/i });
   check(
-    'a credential with a reset credit and no applicable one still offers the reset action',
-    await inlineRedeem.isEnabled(),
-    `reset quota button enabled=${await inlineRedeem.isEnabled()}`,
+    'a row reports the banked reset credits it holds',
+    (await creditRow.getByText(/Available 2|可用 2 个/).count()) > 0,
   );
-  await inlineRedeem.click();
+  check(
+    'the row itself offers no reset-credit action',
+    (await creditRow.getByRole('button', { name: /Reset quota|重置额度/i }).count()) === 0,
+    'spending a credit is irreversible and belongs in the Drawer beside the expiries it consumes',
+  );
+  await creditRow.getByRole('button', { name: /More actions|更多操作/i }).click();
+  check(
+    'the row menu offers no reset-credit action either',
+    (await page.locator('.ant-dropdown-menu').getByRole('menuitem', { name: /Reset quota|重置额度/i }).count()) === 0,
+  );
+  await page.keyboard.press('Escape');
+
+  await creditRow.getByRole('button', { name: /^Details:/ }).click();
+  await page.locator('.ant-drawer-open [data-quota-density="expanded"]').waitFor();
+  const drawerRedeem = page.locator('.ant-drawer-open').getByRole('button', { name: /Reset quota|重置额度/i });
+  check('the Drawer carries the reset-credit action', (await drawerRedeem.count()) === 1);
+
+  await drawerRedeem.click();
   const redeemConfirm = page.locator('.ant-popconfirm');
   await redeemConfirm.waitFor();
   check('the reset action asks for confirmation before spending a credit', await redeemConfirm.isVisible());
   await redeemConfirm.getByRole('button', { name: /Cancel|取消/i }).click();
   await redeemConfirm.waitFor({ state: 'hidden' });
+  check('cancelling spends nothing', redeemPosts.length === 0, `posts=${redeemPosts.length}`);
 
-  await creditRow.getByRole('button', { name: /^Details:/ }).click();
-  await page.locator('.ant-drawer-open [data-quota-density="expanded"]').waitFor();
-  check('quota details retain the confirmed reset-credit action',
-    (await page.locator('.ant-drawer-open').getByRole('button', { name: /Reset quota|重置额度/i }).count()) === 1);
-  await page.locator('.ant-drawer-open .ant-drawer-close').click();
-  await page.locator('.ant-drawer-open').waitFor({ state: 'hidden' });
-  check('no redemption request leaves the browser without a confirmation', redeemPosts.length === 0, `posts=${redeemPosts.length}`);
-
-  await inlineRedeem.click();
+  await drawerRedeem.click();
   const confirmed = page.locator('.ant-popconfirm');
   await confirmed.waitFor();
   await confirmed.getByRole('button', { name: /Confirm|确定/i }).click();
   await page.getByText(/Credit redeemed successfully|积分重置成功/).waitFor({ timeout: 10_000 });
-  check('confirming issues exactly one redemption request', redeemPosts.length === 1, `posts=${redeemPosts.length}`);
+  check('confirming in the Drawer issues exactly one redemption request', redeemPosts.length === 1, `posts=${redeemPosts.length}`);
+
+  await page.locator('.ant-drawer-open .ant-drawer-close').click();
+  await page.locator('.ant-drawer-open').waitFor({ state: 'hidden' });
 
   await page.goto(`${base}/oauth-management`, { waitUntil: 'domcontentloaded' });
   await page.locator('[data-testid="oauth-credential-record"]').first().waitFor({ state: 'visible', timeout: 20_000 });

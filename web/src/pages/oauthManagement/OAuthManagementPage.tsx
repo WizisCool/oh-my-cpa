@@ -450,9 +450,6 @@ export const OAuthManagementPage: React.FC = () => {
           <CompactQuotaView
             item={record.quota}
             nowMS={visibleNow}
-            isDemo={isDemo}
-            onRedeemCredit={() => void actions.redeemCredit(record)}
-            canRedeemCredit={record.canRedeemCredit}
           />
         );
       }
@@ -864,8 +861,6 @@ export const OAuthManagementPage: React.FC = () => {
                   isRefreshingQuota={Boolean(record.authIndex && actions.busyQuotaIndexes.has(record.authIndex))}
                   onClearCooldown={() => void actions.clearCooldown(record)}
                   canClearCooldown={record.canClearCooldown}
-                  onRedeemCredit={() => void actions.redeemCredit(record)}
-                  canRedeemCredit={record.canRedeemCredit}
                   quotaContent={quotaBodyForRecord(record, true)}
                   identityDiagnostic={!record.hasUniqueFileName ? (
                     <Alert

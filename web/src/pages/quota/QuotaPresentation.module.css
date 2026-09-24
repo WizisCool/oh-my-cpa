@@ -301,17 +301,6 @@
   padding: 1px 5px;
 }
 
-.btn-redeem {
-  height: 20px !important;
-  padding: 0 4px !important;
-  font-size: 10px !important;
-  color: var(--accent) !important;
-}
-
-.btn-redeem:hover {
-  color: var(--fg) !important;
-}
-
 .observed {
   margin-left: auto;
   color: var(--meta);

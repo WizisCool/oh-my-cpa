@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Popconfirm, Progress } from 'antd';
+import { Progress } from 'antd';
 import { ThunderboltOutlined } from '@ant-design/icons';
 import { useT } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
@@ -19,9 +19,6 @@ import styles from './QuotaPresentation.module.css';
 interface CompactQuotaViewProps {
   item: QuotaItem;
   nowMS: number;
-  isDemo: boolean;
-  onRedeemCredit?: () => void;
-  canRedeemCredit?: boolean;
 }
 
 /**
@@ -30,20 +27,19 @@ interface CompactQuotaViewProps {
  * A row and a Drawer answer different questions, so they are two components rather than one
  * with a density switch. The row carries the credential's own model family - the first
  * group the provider reports, the one named after the credential - as its five-hour and
- * weekly windows, side by side, each with its share, its bar and when it resets. Its only
- * control is an inline redemption, offered while the credential holds a reset credit;
- * everything else the row answers for is a reading, and the row's Details action and its
- * menu are the way into the rest. Everything else, including the other model families an
- * endpoint like Antigravity publishes, credit expiries, cooldowns and raw diagnostics, is
- * in the Drawer's quota tab, which renders the complete native reading through
+ * weekly windows, side by side, each with its share, its bar and when it resets, plus how
+ * many banked reset credits the account holds as a reading.
+ *
+ * It carries no control of its own. Spending a reset credit is irreversible, so it belongs
+ * to the Drawer's Quota tab, where the credit expiries it consumes are on screen beside the
+ * confirmation; a row is a reading, and the row's Details action and its menu are the way in.
+ * Every other family an endpoint like Antigravity publishes, the credit expiries, cooldowns
+ * and raw diagnostics are in that same tab, which renders the complete native reading through
  * `CredentialQuotaBody`.
  */
 export const CompactQuotaView: React.FC<CompactQuotaViewProps> = ({
   item,
   nowMS,
-  isDemo,
-  onRedeemCredit,
-  canRedeemCredit = false,
 }) => {
   const t = useT();
   const windows = pickCompactQuotaWindows(orderQuotaWindows(item.windows ?? []));
@@ -66,27 +62,6 @@ export const CompactQuotaView: React.FC<CompactQuotaViewProps> = ({
           <span className={styles.credit} title={t('omc.quota_credit_available_hint')}>
             <ThunderboltOutlined /> {t('omc.quota_credit_available', { n: availableCredits })}
           </span>
-        )}
-        {canRedeemCredit && onRedeemCredit && (
-          <Popconfirm
-            title={t('quota.redeem_credit_confirm_title')}
-            description={t('quota.redeem_credit_confirm_desc')}
-            onConfirm={onRedeemCredit}
-            okText={t('common.confirm')}
-            cancelText={t('common.cancel')}
-            okButtonProps={{ danger: true }}
-          >
-            <Button
-              size="small"
-              type="link"
-              className={styles['btn-redeem']}
-              icon={<ThunderboltOutlined />}
-              disabled={isDemo}
-              title={isDemo ? t('demo.blocked') : undefined}
-            >
-              {t('quota.btn_reset_quota')}
-            </Button>
-          </Popconfirm>
         )}
         <span className={styles.observed}>{formatObservedAgo(item.observed_at_ms, nowMS, t)}</span>
       </div>

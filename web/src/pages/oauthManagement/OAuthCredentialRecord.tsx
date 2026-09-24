@@ -9,7 +9,6 @@ import {
   ProfileOutlined,
   StopOutlined,
   SyncOutlined,
-  ThunderboltOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
 import { credentialProviderIconId } from '../../components/common/providerMetadata';
@@ -47,8 +46,6 @@ interface OAuthCredentialRecordProps {
   isRefreshingQuota?: boolean;
   onClearCooldown?: () => void;
   canClearCooldown?: boolean;
-  onRedeemCredit?: () => void;
-  canRedeemCredit?: boolean;
   quotaContent?: React.ReactNode;
   identityDiagnostic?: React.ReactNode;
   reauthAction?: React.ReactNode;
@@ -74,8 +71,6 @@ export const OAuthCredentialRecord: React.FC<OAuthCredentialRecordProps> = ({
   isRefreshingQuota = false,
   onClearCooldown,
   canClearCooldown = false,
-  onRedeemCredit,
-  canRedeemCredit = false,
   quotaContent,
   identityDiagnostic,
   reauthAction,
@@ -242,12 +237,6 @@ export const OAuthCredentialRecord: React.FC<OAuthCredentialRecordProps> = ({
                 label: t('quota.clear_cooldown'),
                 disabled: busy || isDemo || !canClearCooldown,
               },
-              {
-                key: 'redeem-credit',
-                icon: <ThunderboltOutlined />,
-                label: t('quota.btn_reset_quota'),
-                disabled: busy || isDemo || !canRedeemCredit,
-              },
               { type: 'divider' as const },
               {
                 key: 'download',
@@ -278,17 +267,6 @@ export const OAuthCredentialRecord: React.FC<OAuthCredentialRecordProps> = ({
               }
               if (key === 'clear-cooldown') {
                 onClearCooldown?.();
-                return;
-              }
-              if (key === 'redeem-credit') {
-                modal.confirm({
-                  title: t('quota.redeem_credit_confirm_title'),
-                  content: t('quota.redeem_credit_confirm_desc'),
-                  okText: t('common.confirm'),
-                  cancelText: t('common.cancel'),
-                  okButtonProps: { danger: true },
-                  onOk: onRedeemCredit,
-                });
                 return;
               }
               if (key === 'download') {
