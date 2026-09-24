@@ -50,6 +50,12 @@ interface AuthFileDetailDrawerProps {
   onDownload: (file: ManagementAuthFile) => void;
   quotaContent?: React.ReactNode;
   initialSection?: 'overview' | 'configuration' | 'models';
+  /**
+   * Whether the safe fields may be written. The write is keyed by file name, so a
+   * credential whose name does not identify one entry cannot be edited safely: the
+   * request would land on whichever entry CPA resolves the name to.
+   */
+  canEdit?: boolean;
 }
 
 interface FormValues {
@@ -124,6 +130,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   onDownload,
   quotaContent,
   initialSection = 'overview',
+  canEdit = false,
 }) => {
   const t = useT();
   const isDemo = isDemoMode();
@@ -268,7 +275,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
   });
 
   const handleFinish = (values: FormValues) => {
-    if (!file || file.runtime_only || isPendingRef.current || saveMutation.isPending) return;
+    if (!file || file.runtime_only || !canEdit || isPendingRef.current || saveMutation.isPending) return;
     isPendingRef.current = true;
 
     const patch: Record<string, unknown> = {};
@@ -534,7 +541,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                         layout="vertical"
                         onValuesChange={handleValuesChange}
                         onFinish={handleFinish}
-                        disabled={saveMutation.isPending || file.runtime_only}
+                        disabled={saveMutation.isPending || file.runtime_only || !canEdit}
                       >
                         <div className={styles['field-grid']}>
                           <Form.Item
@@ -639,7 +646,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                             htmlType="submit"
                             icon={<SaveOutlined />}
                             loading={saveMutation.isPending}
-                            disabled={!isDirty || file.runtime_only}
+                            disabled={!isDirty || file.runtime_only || !canEdit}
                           >
                             {t('af.save_fields')}
                           </Button>

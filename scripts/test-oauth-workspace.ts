@@ -577,3 +577,12 @@ test('a limit outside the plan’s windows is not folded into them', () => {
     ['weekly'],
   );
 });
+
+test('a target nobody could refresh is reported, not counted as clean', () => {
+  // A conflict is resolved before the run, so it must not be filed with the credentials that
+  // were never eligible: a run whose every target was held elsewhere refreshed nothing, and
+  // `skipped` is the count the clean acknowledgement is built from.
+  const surfaceFor = (failed: number, unknown: number) => quotaRefreshOutcomeSurface({ failed, unknown });
+  assert.equal(surfaceFor(0, 3), 'report', 'a fully conflicted run is not an acknowledgement');
+  assert.equal(surfaceFor(0, 0), 'toast');
+});

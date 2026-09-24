@@ -441,7 +441,10 @@ export function useOAuthWorkspaceActions(
     const details = [...skipped, ...conflicting.map((index) => ({ name: index, reason: t('omc.operation_conflict') }))];
     let succeeded = 0;
     let failed = 0;
-    let unknown = 0;
+    // A target held by another operation was not refreshed either. Counting it as skipped
+    // would let a run that refreshed nothing report a clean acknowledgement, so it is
+    // unrefreshed: the run reports in the page, with the conflict named per target.
+    let unknown = conflicting.length;
     markQuotaBusy(targetIndexes, true);
     try {
       for (const chunk of chunkItems(targetIndexes, 10)) {

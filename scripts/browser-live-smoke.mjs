@@ -250,23 +250,28 @@ async function main() {
   await page.goto(`${appURL}/dashboard`, { waitUntil: 'networkidle' });
 
   if (process.env.OMCPA_WRITE_TEST === '1') {
+    // The write path runs on the unified workspace: the credential cards this used to drive
+    // were retired, so the old selectors would wait out their timeout and the upload, toggle
+    // and delete assertions would never run.
     const fileName = `browser-acceptance-${Date.now()}.json`;
     const uploadPath = path.join(os.tmpdir(), fileName);
     fs.writeFileSync(uploadPath, JSON.stringify({ type: 'gemini-api-key', api_key: 'browser-acceptance-placeholder' }));
+    await page.goto(`${appURL}/oauth-management`, { waitUntil: 'networkidle' });
     await page.setInputFiles('input[type="file"]', uploadPath);
-    await page.waitForSelector('.auth-file-card', { timeout: 15000 });
+    const uploadedCard = page.locator(`[data-testid="oauth-credential-record"][data-file-name="${fileName}"]`);
+    await uploadedCard.waitFor({ timeout: 15000 });
     const uploadListed = await page.request.get(`${appURL}/api/v1/management/auth-files?name=${encodeURIComponent(fileName)}`);
     const uploadJson = await uploadListed.json();
     check('UI 上传后 CPA 真实出现新认证文件', fileName, uploadListed.ok() && uploadJson.total === 1);
 
-    const uploadedCard = page.locator('.auth-file-card', { hasText: fileName }).first();
     await uploadedCard.locator('.ant-switch').click();
     await page.waitForTimeout(1200);
     const disabledText = await uploadedCard.innerText();
-    check('UI 开关真实禁用认证文件', disabledText.includes('DISABLED'), disabledText.includes('DISABLED'));
+    check('UI 开关真实禁用认证文件', disabledText, /已禁用|disabled/i.test(disabledText));
 
-    await uploadedCard.locator('button[aria-label^="删除"]').click();
-    await page.locator('.ant-popover .ant-btn-primary, .ant-popconfirm .ant-btn-primary').first().click();
+    await uploadedCard.getByRole('button', { name: /更多操作|More actions/i }).click();
+    await page.getByRole('menuitem', { name: /^删除凭据$|^Delete credential$/i }).click();
+    await page.locator('.ant-modal-confirm').getByRole('button', { name: /^删除$|^Delete$/i }).click();
     await page.waitForTimeout(1200);
     const afterDelete = await page.request.get(`${appURL}/api/v1/management/auth-files?name=${encodeURIComponent(fileName)}`);
     const afterDeleteJson = await afterDelete.json();

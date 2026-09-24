@@ -730,7 +730,7 @@ export const OAuthManagementPage: React.FC = () => {
             <Select<AuthFileStatusFilter>
               value={queryState.status}
               onChange={(status) => setSearch({ status: status === 'all' ? null : status, page: null })}
-              aria-label={t('af.status_all')}
+              aria-label={t('af.detail_status')}
               style={{ width: 140 }}
               options={[
                 { value: 'all', label: t('af.status_all') },
@@ -745,7 +745,7 @@ export const OAuthManagementPage: React.FC = () => {
             <Select<OAuthWorkspaceQuotaFilter>
               value={queryState.quota}
               onChange={(quota) => setSearch({ quota: quota === 'all' ? null : quota, page: null })}
-              aria-label={t('omc.quota_filter_attention')}
+              aria-label={t('omc.tab_quota')}
               style={{ width: 160 }}
               options={[
                 { value: 'all', label: t('common.all') },
@@ -939,6 +939,7 @@ export const OAuthManagementPage: React.FC = () => {
           if (latest) actions.download(latest);
         }}
         initialSection={drawerSection}
+        canEdit={Boolean(selectedRecord?.canEditFile)}
         quotaContent={selectedRecord ? quotaBodyForRecord(selectedRecord, false) : undefined}
       />
 
