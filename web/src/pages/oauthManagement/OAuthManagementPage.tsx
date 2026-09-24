@@ -730,7 +730,7 @@ export const OAuthManagementPage: React.FC = () => {
             <Select<AuthFileStatusFilter>
               value={queryState.status}
               onChange={(status) => setSearch({ status: status === 'all' ? null : status, page: null })}
-              aria-label={t('af.status_all')}
+              aria-label={t('af.detail_status')}
               style={{ width: 140 }}
               options={[
                 { value: 'all', label: t('af.status_all') },
@@ -745,7 +745,7 @@ export const OAuthManagementPage: React.FC = () => {
             <Select<OAuthWorkspaceQuotaFilter>
               value={queryState.quota}
               onChange={(quota) => setSearch({ quota: quota === 'all' ? null : quota, page: null })}
-              aria-label={t('omc.quota_filter_attention')}
+              aria-label={t('omc.tab_quota')}
               style={{ width: 160 }}
               options={[
                 { value: 'all', label: t('common.all') },
@@ -795,13 +795,16 @@ export const OAuthManagementPage: React.FC = () => {
           className={styles['quota-operation-report']}
           data-testid="quota-operation-report"
           closable={{ onClose: actions.clearQuotaReport }}
-          type={actions.quotaReport.failed > 0 || actions.quotaReport.unknown > 0 ? 'warning' : 'success'}
+          type="warning"
           showIcon
           title={t('omc.quota_refresh_report', {
             succeeded: actions.quotaReport.succeeded,
             failed: actions.quotaReport.failed + actions.quotaReport.unknown,
             skipped: actions.quotaReport.skipped,
           })}
+          // Only a run with a failure reaches this report, and the per-target reason is the
+          // point of it, so the detail is on screen rather than behind a disclosure. The
+          // scroll keeps a long list of failures bounded.
           description={actions.quotaReport.details.length > 0 ? (
             <div className="operation-detail-scroll">
               {actions.quotaReport.details.map((item, index) => (
@@ -936,6 +939,7 @@ export const OAuthManagementPage: React.FC = () => {
           if (latest) actions.download(latest);
         }}
         initialSection={drawerSection}
+        canEdit={Boolean(selectedRecord?.canEditFile)}
         quotaContent={selectedRecord ? quotaBodyForRecord(selectedRecord, false) : undefined}
       />
 

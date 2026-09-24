@@ -241,13 +241,13 @@ export const OAuthCredentialRecord: React.FC<OAuthCredentialRecordProps> = ({
               {
                 key: 'download',
                 icon: <DownloadOutlined />,
-                label: t('af.download_one', { name: file.name }),
+                label: t('af.download_credential'),
                 disabled: busy || file.runtime_only || isDemo || !canTargetFile,
               },
               {
                 key: 'delete',
                 icon: <DeleteOutlined />,
-                label: t('af.delete_one', { name: file.name }),
+                label: t('af.delete_credential'),
                 danger: true,
                 disabled: busy || file.runtime_only || isDemo || !canTargetFile,
               },

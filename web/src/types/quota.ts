@@ -4,7 +4,12 @@ export interface QuotaWindow {
   id: string;
   label: string;
   kind?: 'five_hour' | 'weekly' | 'daily' | 'monthly' | 'credit_usage' | 'model_scoped' | 'custom';
-  scope: 'standard' | 'model' | 'group';
+  /**
+   * Which set of limits a window belongs to. `standard` is the credential's plan, `model` and
+   * `group` are the per-model and per-family limits the provider publishes beside it, and
+   * `code_review` is a separate allowance the provider meters outside the plan's windows.
+   */
+  scope: 'standard' | 'model' | 'group' | 'code_review';
   model?: string;
   used?: number;
   limit?: number;

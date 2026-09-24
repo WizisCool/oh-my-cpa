@@ -36,11 +36,22 @@ function windowRank(kind?: string): number {
   return 4;
 }
 
-/** The unit a window belongs to: one model group, one model, or the credential's own plan. */
+/**
+ * The unit a window belongs to: one model group, one model's own limit, or the credential's
+ * plan.
+ *
+ * A model-scoped window is keyed by the model it meters rather than by its label: the label
+ * carries the period, so the same model limited over five hours and over a week would
+ * otherwise be two families, and the row and the Drawer would be picking from different sets.
+ * Every scope that is not the credential's own plan is its own family, including a limit
+ * reported outside the plan's windows (a code-review allowance is not part of the five-hour
+ * and weekly limits it sits beside).
+ */
 export function quotaWindowGroupKey(window: QuotaWindow): string {
   if (window.scope === 'group') return `group:${window.label.split(' · ')[0]}`;
-  if (window.scope === 'model') return `model:${window.label}`;
-  return 'standard';
+  if (window.scope === 'model') return `model:${window.model || window.label}`;
+  if (window.scope === 'standard') return 'standard';
+  return `${window.scope}:${window.id}`;
 }
 
 /** Source order, one group at a time, and within a group the shorter window first. */

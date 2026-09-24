@@ -110,7 +110,11 @@ export const CompactQuotaView: React.FC<CompactQuotaViewProps> = ({
         </div>
       ) : (
         <div className={styles.empty}>
-          {item.disabled ? t('quota.credential_disabled') : t('quota.no_window_data')}
+          {item.disabled
+              ? t('quota.credential_disabled')
+              : item.capabilities?.refresh_supported === false
+                ? t('quota.no_live_probe')
+                : t('quota.not_observed_yet')}
         </div>
       )}
     </div>
