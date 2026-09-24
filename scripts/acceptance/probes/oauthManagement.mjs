@@ -305,7 +305,10 @@ export function oauthManagementProbeRoutes() {
         && url.searchParams.get('state') === 'probe-blip',
       () => {
         statusReads += 1;
-        return statusReads === 1 ? { status: 502, json: { error: 'gateway unavailable' } } : { status: 'ok' };
+        // The probe's own check and the poll armed three seconds after the start response
+        // can arrive in either order, and both are failures of this fixture: only the read
+        // after them answers success, so the completion is always the surviving poll's.
+        return statusReads <= 2 ? { status: 502, json: { error: 'gateway unavailable' } } : { status: 'ok' };
       },
     ],
     ...oauthManagementFixtures.routes,
