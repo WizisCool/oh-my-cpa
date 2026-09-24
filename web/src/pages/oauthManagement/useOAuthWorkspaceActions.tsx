@@ -407,9 +407,21 @@ export function useOAuthWorkspaceActions(
     queryClient.setQueryData(['management-quota'], (previous: unknown) => {
       if (!previous || typeof previous !== 'object' || !('quotas' in previous)) return previous;
       const current = previous as { quotas: Array<{ auth_index: string }>; [key: string]: unknown };
-      const byIndex = new Map(current.quotas.map((item) => [item.auth_index, item]));
-      returned.forEach((item) => byIndex.set(item.auth_index, item));
-      return { ...current, quotas: Array.from(byIndex.values()) };
+      // Rewrite in place and append what the cache did not have. Rebuilding from a
+      // Map keyed by auth_index would delete the duplicate and empty observations an
+      // operator is reading: those are exactly the rows whose ambiguity diagnostics
+      // (`ambiguous-quota-index`, quota-only) must survive the refresh.
+      const returnedByIndex = new Map(
+        returned.filter((item) => item.auth_index).map((item) => [item.auth_index, item]),
+      );
+      const cachedIndexes = new Set(current.quotas.map((item) => item.auth_index));
+      const quotas = current.quotas.map(
+        (item) => (item.auth_index && returnedByIndex.get(item.auth_index)) || item,
+      );
+      returnedByIndex.forEach((item, index) => {
+        if (!cachedIndexes.has(index)) quotas.push(item);
+      });
+      return { ...current, quotas };
     });
   }, [queryClient]);
 

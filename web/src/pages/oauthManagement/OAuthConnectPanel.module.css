@@ -323,6 +323,13 @@
   color: var(--muted);
 }
 
+/* A status read that failed before CPA answered: the attempt is still waiting, so the
+   note is attached to that state rather than replacing it. */
+.waiting-note {
+  font-size: 11px;
+  color: var(--warn);
+}
+
 .status-success-box {
   display: flex;
   align-items: center;

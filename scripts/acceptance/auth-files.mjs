@@ -144,15 +144,15 @@ export async function runAuthFilesAcceptance({
     check('duplicate auth indexes remain visible as distinct credential records', (await duplicateIndexRows.count()) === 2);
     check(
       'duplicate auth indexes are reported as ambiguous rather than joined or written',
-      (await duplicateIndexRows.filter({ hasText: /auth index 重复|Duplicate auth index/i }).count()) === 2
+      (await duplicateIndexRows.filter({ hasText: /认证索引重复|Duplicate auth index/i }).count()) === 2
         && (await duplicateIndexRows.locator('[data-quota-body]').count()) === 0,
-      `ambiguous=${await duplicateIndexRows.filter({ hasText: /auth index 重复|Duplicate auth index/i }).count()} bodies=${await duplicateIndexRows.locator('[data-quota-body]').count()}`,
+      `ambiguous=${await duplicateIndexRows.filter({ hasText: /认证索引重复|Duplicate auth index/i }).count()} bodies=${await duplicateIndexRows.locator('[data-quota-body]').count()}`,
     );
     const missingIndexRow = page.locator('[data-testid="oauth-credential-record"]').filter({ hasText: 'runtime-no-index.json' });
     check(
       'a missing auth index stays visible without fabricating quota ownership',
       (await missingIndexRow.count()) === 1
-        && (await missingIndexRow.getByText(/auth index/i).count()) > 0
+        && (await missingIndexRow.getByText(/缺少认证索引|Missing auth index/i).count()) > 0
         && (await missingIndexRow.locator('[data-quota-body]').count()) === 0,
     );
 

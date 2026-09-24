@@ -312,7 +312,11 @@ projection lives in `web/src/pages/oauthManagement/oauthWorkspaceLogic.ts`.
 
 Authorization sessions live above the Connect Drawer in
 `useOAuthSessions`, keyed by provider id, so minimizing or closing the task panel
-does not stop polling, duplicate a checker or cancel an upstream session. The
+does not stop polling, duplicate a checker or cancel an upstream session. A status
+read that fails before CPA answers is a note on a still-waiting attempt rather than
+a terminal state: the panel keeps its cancel action and the armed poll keeps running,
+because only CPA's own `error` status ends an attempt. Every site that arms the poll
+timer clears the previous one first, which is what holds the one-checker rule. The
 drawer presents one serialized status checker per attempt. Credential detail,
 configuration and models share one guarded Drawer; provider aliases remain
 provider-scoped. `CredentialQuotaBody` is the single quota renderer used by the

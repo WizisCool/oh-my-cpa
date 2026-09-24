@@ -50,7 +50,7 @@ import {
 import { overlayBackDismisses } from './probes/overlayHistory.mjs';
 import { phoneListRendering } from './probes/phoneLists.mjs';
 import { touchErgonomics } from './probes/touchErgonomics.mjs';
-import { oauthManagement, oauthManagementFixtures } from './probes/oauthManagement.mjs';
+import { oauthManagement, oauthManagementFixtures, oauthManagementProbeRoutes } from './probes/oauthManagement.mjs';
 import { iconPickerStacking, pickerProvider, providerIconPick } from './probes/providerConsole.mjs';
 import { systemInformationNarrow, systemInformationPage, systemFixtures } from './probes/systemInformation.mjs';
 import {
@@ -107,7 +107,7 @@ export const SCENARIOS = [
     id: 'oauth-management',
     name: 'unified OAuth workspace density, connection intent and phone reflow',
     options: {
-      routes: oauthManagementFixtures.routes,
+      routes: oauthManagementProbeRoutes(),
     },
     run: oauthManagement,
   },

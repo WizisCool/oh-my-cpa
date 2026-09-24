@@ -22,9 +22,24 @@ async function selectProvider(page, providerId, title) {
   await page.locator(`[data-oauth-start="${providerId}"]`).waitFor({ state: 'visible', timeout: 5000 });
 }
 
+/**
+ * Dismisses the Connect drawer the way the operator does.
+ *
+ * The dismissal is verified and retried once. A status poll, or the credential refresh a
+ * completed callback triggers, can re-render the panel between Playwright's hit test and
+ * its event; a click lost that way would otherwise be reported as a minimized session
+ * that never minimized. A drawer that genuinely refuses to close still fails here.
+ */
 async function minimizeConnect(page) {
-  await page.locator('.ant-drawer-open .ant-drawer-close').click();
-  await page.locator('.ant-drawer-open').waitFor({ state: 'hidden', timeout: 5000 });
+  const drawer = page.locator('.ant-drawer-open');
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const close = drawer.locator('.ant-drawer-close');
+    if (await close.count() === 0) break;
+    await close.click({ timeout: 5000 }).catch(() => {});
+    const hidden = await drawer.waitFor({ state: 'hidden', timeout: 5000 }).then(() => true).catch(() => false);
+    if (hidden) return;
+  }
+  await drawer.waitFor({ state: 'hidden', timeout: 5000 });
 }
 
 export async function runOAuthFlowAcceptance({

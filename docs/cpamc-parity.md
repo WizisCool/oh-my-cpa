@@ -56,7 +56,7 @@ Status definitions: `Covered` = Fully implemented with live endpoints and UI; `I
 
 ## Current State and Roadmap
 
-Implemented surfaces: Dashboard, Quick Start, AI Providers, Key Management, OAuth Management, Logs, Usage Events, Pricing, Config, Plugins, Plugin Store, and System—totalling 12 live routed pages, plus the parameter-safe legacy OAuth/auth-file/quota redirects and the root fallback. No pages remain as placeholder capability mocks.
+Implemented surfaces: Dashboard, Quick Start, AI Providers, Key Management, OAuth Management, Logs, Usage Events, Pricing, Config, OMC Settings, Plugins, Plugin Store, and System—totalling 13 live routed pages, plus the parameter-safe legacy OAuth/auth-file/quota redirects and the root fallback. No pages remain as placeholder capability mocks.
 
 Capability probes (`GET /api/v1/management/capabilities/{key}`) are retained strictly for backwards compatibility checks with older CPA releases to distinguish "API available/missing" from "unwired UI", and are never used to fake feature completion.
 

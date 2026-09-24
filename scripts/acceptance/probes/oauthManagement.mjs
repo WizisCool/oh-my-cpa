@@ -172,6 +172,49 @@ export async function oauthManagement({ base, page, check }) {
   );
   await page.keyboard.press('Escape');
 
+  // A status read that never reaches CPA must not end the attempt: the operator may
+  // still be completing sign-in, and a terminal panel offers only a Retry that opens a
+  // second upstream session. These fixtures answer this attempt's first status read
+  // with 502 and its second with success, so the poll armed before the failure has to
+  // land the completion on its own.
+  const startsBeforeBlip = oauthStarts.length;
+  await page.getByRole('button', { name: /Connect account|连接账号/i }).click();
+  const blipPanel = page.locator('[data-testid="oauth-connect-panel"]');
+  await blipPanel.waitFor({ state: 'visible', timeout: 10_000 });
+  // The panel keeps the provider a previous block selected, so the provider is chosen
+  // through the same selector the operator uses rather than through the tile grid.
+  await blipPanel.locator('#oauth-connect-provider').click();
+  await page.getByTitle('Meta Muse OAuth', { exact: true }).last().click();
+  await page.locator('[data-oauth-start="meta"]').click();
+  await blipPanel.locator('[data-oauth-user-code]').waitFor({ state: 'visible', timeout: 10_000 });
+  check(
+    'the device attempt opens exactly one authorization session',
+    oauthStarts.length === startsBeforeBlip + 1,
+    `starts=${oauthStarts.length - startsBeforeBlip}`,
+  );
+
+  await blipPanel.getByRole('button', { name: /Check Authorization Status|检查授权状态/i }).click();
+  await blipPanel.locator('[data-oauth-status-read-failure]').waitFor({ state: 'visible', timeout: 10_000 });
+  const cancelWhileUnread = await blipPanel.getByRole('button', { name: /Cancel Authorization|取消授权/i }).count();
+  const retryWhileUnread = await blipPanel.getByRole('button', { name: /^Retry$|^重试$/ }).count();
+  check(
+    'a status read that fails before CPA answers leaves the attempt waiting and cancellable',
+    cancelWhileUnread === 1 && retryWhileUnread === 0,
+    `cancel=${cancelWhileUnread} retry=${retryWhileUnread}`,
+  );
+
+  const blipCompleted = await blipPanel
+    .getByRole('button', { name: /Sign in another account|登录其他账号/i })
+    .waitFor({ state: 'visible', timeout: 15_000 })
+    .then(() => true)
+    .catch(() => false);
+  check(
+    'the poll armed before the failed read still completes the attempt',
+    blipCompleted,
+    `completed=${blipCompleted}`,
+  );
+  await page.keyboard.press('Escape');
+
   for (const width of [375, 320]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto(`${base}/oauth-management?density=compact`, { waitUntil: 'domcontentloaded' });
@@ -228,3 +271,43 @@ export const oauthManagementFixtures = {
     [(url) => url.pathname.endsWith('/management/oauth/status'), () => ({ status: 'wait', message: 'waiting' })],
   ],
 };
+
+/**
+ * The probe scenario's routes: the shared fixtures plus one attempt whose first
+ * status read fails before CPA answers.
+ *
+ * The counter lives in this closure rather than in the shared fixture table because
+ * the overlay scenario spreads that table too, and a blip consumed by a different
+ * scenario would make this probe assert nothing.
+ */
+export function oauthManagementProbeRoutes() {
+  let statusReads = 0;
+  return [
+    [
+      (url, method) => method === 'POST' && url.pathname.endsWith('/management/oauth/start'),
+      (url, method, request) => {
+        const provider = JSON.parse(request.postData() ?? '{}').provider;
+        if (provider !== 'meta') {
+          return { url: 'https://auth.example.test/authorize', state: 'probe-state', session_id: 'probe-state', provider, flow: 'redirect' };
+        }
+        return {
+          url: 'https://auth.example.test/device',
+          state: 'probe-blip',
+          session_id: 'probe-blip',
+          provider,
+          flow: 'device',
+          user_code: 'PROBE-CODE-1',
+        };
+      },
+    ],
+    [
+      (url, method) => method === 'GET' && url.pathname.endsWith('/management/oauth/status')
+        && url.searchParams.get('state') === 'probe-blip',
+      () => {
+        statusReads += 1;
+        return statusReads === 1 ? { status: 502, json: { error: 'gateway unavailable' } } : { status: 'ok' };
+      },
+    ],
+    ...oauthManagementFixtures.routes,
+  ];
+}

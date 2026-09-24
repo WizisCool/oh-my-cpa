@@ -323,6 +323,11 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                       <div className={styles['waiting-copy']}>
                         <span className={styles['waiting-title']}>{t('oauth.status_waiting_badge')}</span>
                         <span className={styles['waiting-desc']}>{t('oauth.status_waiting')}</span>
+                        {session?.error && (
+                          <span className={styles['waiting-note']} data-oauth-status-read-failure>
+                            {t('oauth.status_unread', { msg: session.error })}
+                          </span>
+                        )}
                       </div>
                     </div>
                   )}

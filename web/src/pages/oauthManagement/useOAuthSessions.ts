@@ -44,6 +44,16 @@ export interface OAuthSessionsController {
 const STATUS_POLL_INTERVAL_MS = 3000;
 const SUCCESS_RESET_DELAY_MS = 10_000;
 
+/**
+ * Whether a status read leaves the attempt alive and the poll armed.
+ *
+ * `unread` is not a failure of the attempt: the read never reached CPA's answer, so
+ * the only honest response is to try again while the session stays waiting.
+ */
+function isPollingOutcome(outcome: 'ok' | 'error' | 'wait' | 'unread'): boolean {
+  return outcome === 'wait' || outcome === 'unread';
+}
+
 function emptySession(): OAuthSessionState {
   return {
     status: 'idle',
@@ -75,6 +85,7 @@ export function useOAuthSessions(
   const startInFlightRef = React.useRef<Record<string, boolean>>({});
   const disposedRef = React.useRef(false);
   const statusTimersRef = React.useRef<Record<string, number>>({});
+  const statusReadFailuresRef = React.useRef<Record<string, string>>({});
   const successTimersRef = React.useRef<Record<string, number>>({});
   const checkQueuesRef = React.useRef<Record<string, Promise<void>>>({});
   const completedRef = React.useRef(onCompleted);
@@ -128,6 +139,7 @@ export function useOAuthSessions(
 
   const reset = React.useCallback((providerId: string) => {
     clearProviderTimers(providerId);
+    delete statusReadFailuresRef.current[providerId];
     generationRef.current[providerId] = (generationRef.current[providerId] ?? 0) + 1;
     setStates((previous) => ({ ...previous, [providerId]: emptySession() }));
   }, [clearProviderTimers]);
@@ -174,10 +186,16 @@ export function useOAuthSessions(
     token: string,
     generation: number,
     surfaceErrors: boolean,
-  ): Promise<'ok' | 'error' | 'wait'> => {
+  ): Promise<'ok' | 'error' | 'wait' | 'unread'> => {
     try {
       const response = await api.getOAuthStatus(token || undefined);
       if (disposedRef.current || generationRef.current[providerId] !== generation) return 'wait';
+      // Written only when the previous read had failed, so a healthy poll stays free
+      // of state writes while a recovered one drops the note it left behind.
+      if (statusReadFailuresRef.current[providerId]) {
+        delete statusReadFailuresRef.current[providerId];
+        updateProviderState(providerId, { error: undefined });
+      }
       const status = normalizeOAuthStatus(response.status);
       if (status === 'ok') {
         complete(providerId, generation);
@@ -203,16 +221,13 @@ export function useOAuthSessions(
     } catch (error: unknown) {
       if (disposedRef.current || generationRef.current[providerId] !== generation) return 'wait';
       const errorMessage = error instanceof ApiError ? error.message : String(error);
-      clearStatusTimer(providerId);
-      updateProviderState(providerId, {
-        status: 'error',
-        starting: false,
-        polling: false,
-        checkingDevice: false,
-        error: errorMessage,
-      });
-      if (surfaceErrors) message.error(t('oauth.status_error_badge', { msg: errorMessage }));
-      return 'error';
+      // A read that failed says nothing about the attempt: CPA may still hold it and
+      // the browser may still be on the vendor's consent screen. Ending the attempt
+      // here would strand a live session behind a Retry that opens a second one, so
+      // the failure becomes a note on a still-waiting attempt and the poll continues.
+      statusReadFailuresRef.current[providerId] = errorMessage;
+      updateProviderState(providerId, { checkingDevice: false, error: errorMessage });
+      return 'unread';
     }
   }, [clearStatusTimer, complete, message, t, updateProviderState]);
 
@@ -223,7 +238,11 @@ export function useOAuthSessions(
       if (generationRef.current[providerId] !== generation) return;
       const outcome = await enqueueCheck(providerId, () => performStatusCheck(providerId, token, generation, true));
       if (disposedRef.current) return;
-      if (outcome === 'wait' && generationRef.current[providerId] === generation) {
+      if (isPollingOutcome(outcome) && generationRef.current[providerId] === generation) {
+        // The timer that ran this pass has already fired, and a callback submission
+        // for the same generation may have armed its own while this check was in
+        // flight. Clearing first is what keeps one loop rather than two.
+        clearStatusTimer(providerId);
         statusTimersRef.current[providerId] = window.setTimeout(() => {
           void tick();
         }, STATUS_POLL_INTERVAL_MS);
@@ -242,6 +261,7 @@ export function useOAuthSessions(
     startInFlightRef.current[providerId] = true;
 
     clearProviderTimers(providerId);
+    delete statusReadFailuresRef.current[providerId];
     const generation = (generationRef.current[providerId] ?? 0) + 1;
     generationRef.current[providerId] = generation;
     updateProviderState(providerId, {
@@ -305,7 +325,7 @@ export function useOAuthSessions(
       updateProviderState(providerId, { cancelling: false, status: 'waiting' });
       const outcome = await enqueueCheck(providerId, () => performStatusCheck(providerId, token, generation, true));
       if (disposedRef.current) return;
-      if (outcome === 'wait' && generationRef.current[providerId] === generation) {
+      if (isPollingOutcome(outcome) && generationRef.current[providerId] === generation) {
         updateProviderState(providerId, { polling: true });
         scheduleStatusPoll(providerId, token, generation);
       }
@@ -369,7 +389,7 @@ export function useOAuthSessions(
       const token = (current.state ?? '').trim();
       if (token) {
         const outcome = await enqueueCheck(providerId, () => performStatusCheck(providerId, token, generation, false));
-        if (outcome === 'wait' && generationRef.current[providerId] === generation) {
+        if (isPollingOutcome(outcome) && generationRef.current[providerId] === generation) {
           updateProviderState(providerId, { polling: true });
           scheduleStatusPoll(providerId, token, generation);
         }

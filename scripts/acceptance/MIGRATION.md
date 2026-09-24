@@ -122,6 +122,7 @@ trusting that a name change was a deletion.
 | Every route renders with no document overflow | `BROWSER` | Layout, not presence. A route can render and still overflow. |
 | OAuth management compact/expanded floors, six-window completeness, Connect non-start and 320/375px reflow | `BROWSER` | Density and geometry are measured from rendered rows; the old three-page UI claims now have one canonical replacement. |
 | Legacy OAuth/auth-file/quota URLs preserve only documented intent and consume one-shot actions before the overlay history entry | `BROWSER` | Redirect parameters and Back/Forward behaviour are browser history facts. |
+| A status read that fails before CPA answers leaves the attempt waiting, cancellable and still polled | `BROWSER` | The failure is a real gateway response and the completion depends on a timer that must survive it; only a browser shows the panel state, the surviving timer and the request count together. |
 | The filter drawer is on screen at 768px and 390px, including mid-slide | `BROWSER` | Geometry. The failure mode is an off-screen panel, invisible to any DOM assertion. |
 | The custom time dialog stays on screen at both widths | `BROWSER` | Same, for a second surface that only exists while open. |
 | Request rows ellipsize instead of expanding their column | `BROWSER` | `scrollWidth > clientWidth` is a paint fact. |
