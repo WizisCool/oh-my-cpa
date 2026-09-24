@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /**
- * OAuth/quota/observability release acceptance: quota-card rendering, live
+ * OAuth/quota/observability release acceptance: quota overview and detail rendering, live
  * refresh, responsive light-mode screenshots, and the protected log/config
  * surfaces.
  */
@@ -24,7 +24,7 @@ export async function runObservabilityAcceptance({
 }) {
   await auditPage(page, responseBodies, '/oauth', '.oauth-management-page', { pageSecrets: providerSecrets });
   await auditPage(page, responseBodies, '/quota', '.oauth-management-page', { pageSecrets: providerSecrets });
-  // Quota Cards Flow & Screenshots (cards-only page)
+  // Quota overview and task-panel journey.
   await page.goto(`${appURL}/oauth-management?density=expanded&focus=quota`, { waitUntil: 'domcontentloaded' });
   await page.locator('.oauth-management-page').first().waitFor({ state: 'visible', timeout: 15000 });
 
@@ -75,6 +75,17 @@ export async function runObservabilityAcceptance({
   await refreshAllBtn.click();
   await page.getByTestId('quota-operation-report').waitFor({ state: 'visible', timeout: 90000 });
 
+  const openQuota = async (name) => {
+    await page.locator(`[data-testid="oauth-credential-record"][data-file-name="${name}"]`)
+      .getByRole('button', { name: /^(Details|详情):/i }).click();
+    await page.locator('.ant-drawer-open [data-quota-density="expanded"]').waitFor();
+  };
+  const closeQuota = async () => {
+    await page.locator('.ant-drawer-open .ant-drawer-close').click();
+    await page.locator('.ant-drawer-open').waitFor({ state: 'hidden' });
+  };
+  await openQuota('antigravity-fixture.json');
+
   // Verify progress bars are visible with positive fill width after live refresh
   await checkEventually(
     'quota page renders progress bars',
@@ -82,7 +93,7 @@ export async function runObservabilityAcceptance({
     { detail: async () => `count=${await page.locator('[data-quota-body] .ant-progress').count()}`, timeoutMs: 60000 },
   );
   await checkEventually(
-    'expanded density exposes six model/group windows after a live refresh',
+    'Quota tab exposes six model/group windows after a live refresh',
     async () => page.evaluate(() => [...document.querySelectorAll('[data-quota-window-count="6"]')]
       .some((body) => body.getAttribute('data-quota-density') === 'expanded')),
     {
@@ -100,6 +111,9 @@ export async function runObservabilityAcceptance({
     },
   );
 
+  await closeQuota();
+  await openQuota('codex-snapshot-only.json');
+
   // A renewal read from the credential's id_token is a lower bound, not a verified
   // date, so it carries the unverified marker and never a countdown; the live read
   // for the other seats is the counter-example in the same page.
@@ -112,6 +126,10 @@ export async function runObservabilityAcceptance({
     },
     { detail: async () => `snapshotCards=${await page.locator('[data-renewal-source="credential_snapshot"]').count()}` },
   );
+  await closeQuota();
+  // The live seat read belongs to the first codex credential; `codex-snapshot-only.json` is the
+  // one the fixture refuses a live subscription read for.
+  await openQuota('fixture-auth.json');
   check(
     'quota renewal live read is labelled as such',
     (await page.locator('[data-quota-body] [data-renewal-source="live_subscription"]').count()) > 0,
@@ -123,8 +141,11 @@ export async function runObservabilityAcceptance({
     `notRenewing=${await page.locator('[data-renewal-not-renewing]').count()}`,
   );
 
-  // Screenshot: Card Grid View with refreshed quota data
-  await page.screenshot({ path: path.join(root, 'tmp', 'quota-cards-desktop.png') });
+  // Capture the complete quota task after the drawer settles.
+  await settleLayout(page);
+  await page.screenshot({ path: path.join(root, 'tmp', 'quota-details-desktop.png') });
+
+  await closeQuota();
 
   // Mobile & Light mode view for Quota page
   await page.setViewportSize({ width: 390, height: 844 });

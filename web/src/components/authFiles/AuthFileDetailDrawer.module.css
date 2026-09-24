@@ -120,3 +120,15 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.credential-metadata {
+  margin-top: 20px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 12px;
+}
+
+.credential-metadata > summary {
+  cursor: pointer;
+  margin-bottom: 12px;
+  color: var(--fg-2);
+}

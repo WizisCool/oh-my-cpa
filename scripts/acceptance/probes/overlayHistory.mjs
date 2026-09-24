@@ -88,7 +88,7 @@ export async function overlayBackDismisses({ base, page, check }) {
   // ---- the unified OAuth Connect drawer ----
   await arriveFrom(base, page, '/oauth-management');
   await page.locator('.oauth-management-page').first().waitFor({ timeout: 20_000 });
-  await page.getByRole('button', { name: /Connect account|连接账号/i }).first().click();
+  await page.getByRole('button', { name: /OAuth sign-in|OAuth 登录/i }).first().click();
   await page.locator('[data-testid="oauth-connect-panel"]').waitFor({ state: 'visible', timeout: 5_000 });
   state = await routeAfterBack(base, page);
   check(

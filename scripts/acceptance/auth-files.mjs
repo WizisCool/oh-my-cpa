@@ -129,7 +129,8 @@ export async function runAuthFilesAcceptance({
       joinAudit.mismatches.length === 0 && joinAudit.bodies === joinAudit.globalBodies,
       JSON.stringify(joinAudit),
     );
-    const expandedBody = page.locator('[data-quota-density="expanded"]').first();
+    await page.getByTestId('oauth-credential-record').filter({ has: page.locator('[data-quota-body]') }).first().getByRole('button', { name: /^(Details|详情):/i }).click();
+    const expandedBody = page.locator('.ant-drawer-open [data-quota-density="expanded"]').first();
     await expandedBody.waitFor({ state: 'visible', timeout: 10000 });
     const expandedAudit = await expandedBody.evaluate((body) => ({
       declared: Number(body.getAttribute('data-quota-window-count') || '0'),
@@ -140,6 +141,9 @@ export async function runAuthFilesAcceptance({
       expandedAudit.rendered === expandedAudit.declared,
       JSON.stringify(expandedAudit),
     );
+    await page.locator('.ant-drawer-open .ant-drawer-close').click();
+    await page.locator('.ant-drawer-open').waitFor({ state: 'hidden' });
+
     const duplicateIndexRows = page.locator('[data-testid="oauth-credential-record"]').filter({ hasText: /duplicate-provider-/ });
     check('duplicate auth indexes remain visible as distinct credential records', (await duplicateIndexRows.count()) === 2);
     check(
@@ -265,9 +269,10 @@ export async function runAuthFilesAcceptance({
     // selection bar are dropped: both are presence checks on controls whose real
     // behaviour (the model list, the batch action) is not asserted here at all, so
     // they cost a navigation and a click without adding evidence.
-    const editBtn = page.locator('.oauth-management-page button').filter({ hasText: /编辑|Edit/i }).first();
-    await editBtn.waitFor({ state: 'visible', timeout: 5000 });
-    await editBtn.click();
+    const editMenuBtn = page.locator('.oauth-management-page').getByRole('button', { name: /^(更多操作|More actions):/i }).first();
+    await editMenuBtn.waitFor({ state: 'visible', timeout: 5000 });
+    await editMenuBtn.click();
+    await page.getByRole('menuitem', { name: /^(编辑|Edit)/i }).first().click();
     const drawer = page.locator('.ant-drawer');
     await drawer.waitFor({ state: 'visible', timeout: 5000 });
     check('auth-files drawer opens', await drawer.isVisible());
@@ -322,8 +327,13 @@ export async function runAuthFilesAcceptance({
 
     // 7. Drawer save submits patch and updates UI
     const xaiCard = page.locator('[data-testid="oauth-credential-record"]').filter({ hasText: 'xai-fixture.json' }).first();
-    const xaiEditBtn = xaiCard.locator('button').filter({ hasText: /编辑|Edit/i });
-    await xaiEditBtn.click();
+    // Editing a credential is a row-menu action: the row keeps one visible action beside
+    // its switch, so opening the editor goes through the same menu the operator uses.
+    const openXaiEdit = async () => {
+      await xaiCard.getByRole('button', { name: /^(更多操作|More actions):/i }).click();
+      await page.getByRole('menuitem', { name: /^(编辑|Edit)/i }).first().click();
+    };
+    await openXaiEdit();
     const saveDrawer = page.locator('.ant-drawer');
     await saveDrawer.waitFor({ state: 'visible', timeout: 5000 });
     const noteInput = saveDrawer.locator('#note');
@@ -338,7 +348,7 @@ export async function runAuthFilesAcceptance({
     // Priority and weight must survive a write, a server-side readback and the
     // list refresh. The fake CPA stores the patch, so this exercises the same
     // draw-close-reopen path as a real credential rather than only the toast.
-    await xaiEditBtn.click();
+    await openXaiEdit();
     await saveDrawer.waitFor({ state: 'visible', timeout: 5000 });
     await saveDrawer.locator('#priority').fill('42');
     await saveDrawer.locator('#weight').fill('7');
@@ -350,7 +360,7 @@ export async function runAuthFilesAcceptance({
       async () => (await xaiCard.getByText(/(P:42|Priority 42|优先级 42|優先級 42|Keutamaan 42)/).count()) === 1 && (await xaiCard.getByText(/(W:7|Weight 7|权重 7|權重 7|Pemberat 7)/).count()) === 1,
       { detail: async () => `priority=${await xaiCard.getByText(/Priority|优先级|優先級|P:/).count()} weight=${await xaiCard.getByText(/Weight|权重|權重|W:/).count()}` },
     );
-    await xaiEditBtn.click();
+    await openXaiEdit();
     await saveDrawer.waitFor({ state: 'visible', timeout: 5000 });
     check('auth-files reopened drawer shows persisted priority', (await saveDrawer.locator('#priority').inputValue()) === '42');
     check('auth-files reopened drawer shows persisted weight', (await saveDrawer.locator('#weight').inputValue()) === '7');

@@ -8,13 +8,57 @@
   align-items: flex-start;
   gap: 16px;
   flex-wrap: wrap;
+  margin-bottom: 16px;
 }
 
-.summary {
+.head-title-group {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.summary-strip {
+  display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--fg-2);
+}
+
+.summary-total {
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-weight: 550;
+}
+
+.summary-divider {
+  color: var(--meta);
+}
+
+.summary-healthy,
+.summary-disabled,
+.summary-problem,
+.summary-attention {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.summary-healthy { color: var(--success); }
+.summary-disabled { color: var(--meta); }
+.summary-problem { color: var(--danger); }
+.summary-attention { color: var(--warn); }
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: currentColor;
 }
 
 .actions {
@@ -29,11 +73,11 @@
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  margin: 16px 0;
+  margin: 14px 0;
 }
 
 .search {
-  flex: 1 1 220px;
+  flex: 1 1 240px;
   min-width: 200px;
 }
 
@@ -78,11 +122,84 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: var(--bg);
 }
 
-.records-expanded,
-.records-compact {
-  gap: 0;
+.records > :last-child > article {
+  border-bottom: 0;
+}
+
+.table-header {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.2fr) 95px minmax(105px, 0.45fr) minmax(310px, 1.4fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.th-identity {
+  padding-left: 28px;
+}
+
+.th-status,
+.th-management,
+.th-quota {
+  min-width: 0;
+}
+
+.th-actions {
+  text-align: right;
+  padding-right: 4px;
+}
+
+.filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.advanced-filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.filter-field-label {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--meta);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
 }
 
 .quota-operation-report {
@@ -100,31 +217,26 @@
   margin-top: 24px;
   display: flex;
   justify-content: flex-end;
-}
-
-/* Connect panel */
-.connect-copy h3 {
-  margin: 0;
-  font-size: 16px;
-}
-
-.connect-copy :global(.ant-typography) {
-  margin: 4px 0 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--fg-2);
   font-size: 12px;
 }
 
-.auth-url-box,
-.filter-toggle {
-  display: none;
+.pagination > span:first-child {
+  margin-right: auto;
 }
 
-.toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: 0;
+.toolbar > :global(.ant-dropdown-button) {
+  width: auto;
   flex: 0 0 auto;
-  flex-wrap: nowrap;
+}
+
+@media (max-width: 1200px) {
+  .table-header {
+    display: none;
+  }
 }
 
 @media (max-width: 900px) {
@@ -134,11 +246,6 @@
 
   .actions {
     width: 100%;
-  }
-
-  .records-expanded,
-  .records-compact {
-    grid-template-columns: 1fr;
   }
 }
 
@@ -163,6 +270,13 @@
     width: auto;
   }
 
+  .advanced-filters > .filter-field,
+  .advanced-filters > .filter-field > :global(.ant-select) {
+    flex: 1 1 100%;
+    width: 100% !important;
+    min-width: 0;
+  }
+
   .toolbar > :global(.ant-select),
   .toolbar > :global(.ant-segmented),
   .toolbar-actions {
@@ -171,6 +285,8 @@
 
   .toolbar-actions {
     flex-wrap: wrap;
+    margin-left: 0;
+    width: 100%;
   }
 
   .toolbar-actions > * {
@@ -184,5 +300,9 @@
   .session-strip {
     align-items: flex-start;
   }
-}
 
+  .toolbar > :global(.ant-dropdown-button) {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}

@@ -1,7 +1,8 @@
 import React from 'react';
 import { Progress } from 'antd';
 import { useT } from '../../i18n';
-import { formatTimeWithCountdown } from './quotaFormat';
+import { formatTimeWithCountdown, quotaRemainingPercent, quotaWindowLabel } from './quotaFormat';
+import { quotaRemainingStroke } from './quotaThresholds';
 import styles from './QuotaPresentation.module.css';
 
 interface QuotaProgressBarProps {
@@ -34,35 +35,12 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
   const t = useT();
 
   // A credential may report only usage; derive the remaining share from it
-  // rather than showing no bar at all.
-  let remaining = remainingPercent;
-  if (remaining == null && usedPercent != null) {
-    remaining = Math.max(0, Math.min(100, 100 - usedPercent));
-  }
+  // rather than showing no bar at all. The colour rule is shared with the list row's bars.
+  const clampedRemaining = quotaRemainingPercent({ remaining_percent: remainingPercent ?? undefined, used_percent: usedPercent ?? undefined });
+  const hasData = clampedRemaining != null;
+  const strokeColor = quotaRemainingStroke(clampedRemaining);
 
-  const hasData = remaining != null;
-  const clampedRemaining = hasData ? Math.max(0, Math.min(100, remaining!)) : 0;
-
-  // CPAMC-style three buckets: plenty green, getting low yellow, nearly gone red
-  let strokeColor = 'var(--muted)';
-  if (hasData) {
-    if (clampedRemaining >= 70) {
-      strokeColor = 'var(--success)';
-    } else if (clampedRemaining >= 25) {
-      strokeColor = 'var(--warn)';
-    } else {
-      strokeColor = 'var(--danger)';
-    }
-  }
-
-  const resolvedLabel = (() => {
-    if (kind === 'five_hour') return t('quota.window_five_hour');
-    if (kind === 'weekly') return t('quota.window_weekly');
-    if (kind === 'daily') return t('quota.window_daily');
-    if (kind === 'monthly') return t('quota.window_monthly');
-    if (kind === 'credit_usage') return t('quota.window_credit_usage');
-    return label || '';
-  })();
+  const resolvedLabel = quotaWindowLabel(kind, label, t);
 
   // Reset cell: "09/05 19:43 · in 4 hours"; backend-provided label as fallback
   const computedResetText = (() => {
@@ -73,7 +51,7 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
     return resetLabel ? `${resetAccuracy === 'exact' ? '' : '~'}${resetLabel}` : '';
   })();
 
-  const displayPercent = hasData ? `${Math.round(clampedRemaining)}%` : '--';
+  const displayPercent = hasData ? `${clampedRemaining}%` : '--';
 
   return (
     <div className={styles['progress-wrap']}>
@@ -100,7 +78,7 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
         title={hasData ? `${resolvedLabel}: ${displayPercent}` : undefined}
       >
         <Progress
-          percent={hasData ? clampedRemaining : 0}
+          percent={clampedRemaining ?? 0}
           showInfo={false}
           strokeColor={strokeColor}
           strokeWidth={height}

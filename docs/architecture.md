@@ -320,8 +320,14 @@ timer clears the previous one first, which is what holds the one-checker rule. T
 drawer presents one serialized status checker per attempt. Credential detail,
 configuration and models share one guarded Drawer; provider aliases remain
 provider-scoped. `CredentialQuotaBody` is the single quota renderer used by the
-workspace and its detail panel, so compact and expanded records cannot disagree
-about plan, windows, credits, cooldown or observation age.
+workspace and its detail panel. The list always renders a compact quota summary;
+the Quota tab always renders the full quota body. Configuration and Models are
+separate tabs with query eligibility bound to the selected tab. The configuration
+form remains mounted so drafts survive tab switches; its dirty-close guard applies
+to the entire Drawer. Credential identity includes the auth index when resetting
+form sessions and caching models. Historical density URL values and preference
+fields remain readable compatibility data, but do not change the overview layout.
+
 
 The old `/oauth`, `/auth-files` and `/quota` routes are retained only as
 parameter-safe replacement redirects. They preserve documented filter and

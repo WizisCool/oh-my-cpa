@@ -119,3 +119,10 @@ credential. Additional CPA tests cover persisted metadata weight, cooldown
 recovery, token-expiry demotion, and session-affinity lookup. Oh My CPA's
 ingest-to-persistence round trip separately asserts that the emitted
 `auth_index`/`auth_type` reach both list and detail projections unchanged.
+
+### OAuth workspace presentation
+
+Credential management uses one overview list at `/oauth-management`. Its credential
+Drawer separates complete quota information, safe configuration and models into
+three tabs. This changes presentation, not provider/action coverage; exact auth-index
+matching, independent OAuth sessions and contextual provider aliases are retained.

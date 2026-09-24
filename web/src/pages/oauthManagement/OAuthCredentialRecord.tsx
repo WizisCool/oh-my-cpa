@@ -1,5 +1,5 @@
 import React from 'react';
-import { App as AntdApp, Button, Checkbox, Dropdown, Space, Switch, Tag, Tooltip, Typography } from 'antd';
+import { App as AntdApp, Button, Checkbox, Dropdown, Switch, Tag, Tooltip, Typography } from 'antd';
 import {
   AppstoreOutlined,
   DeleteOutlined,
@@ -7,6 +7,9 @@ import {
   EditOutlined,
   MoreOutlined,
   ProfileOutlined,
+  StopOutlined,
+  SyncOutlined,
+  ThunderboltOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
 import { credentialProviderIconId } from '../../components/common/providerMetadata';
@@ -30,7 +33,6 @@ interface OAuthCredentialRecordProps {
   displayProvider: string;
   pluginLogo?: string;
   selected: boolean;
-  compact: boolean;
   busy: boolean;
   canTargetFile: boolean;
   onSelect: (checked: boolean) => void;
@@ -40,6 +42,13 @@ interface OAuthCredentialRecordProps {
   onEdit: () => void;
   onShowModels: () => void;
   onShowDetails: () => void;
+  onRefreshQuota?: () => void;
+  canRefreshQuota?: boolean;
+  isRefreshingQuota?: boolean;
+  onClearCooldown?: () => void;
+  canClearCooldown?: boolean;
+  onRedeemCredit?: () => void;
+  canRedeemCredit?: boolean;
   quotaContent?: React.ReactNode;
   identityDiagnostic?: React.ReactNode;
   reauthAction?: React.ReactNode;
@@ -51,7 +60,6 @@ export const OAuthCredentialRecord: React.FC<OAuthCredentialRecordProps> = ({
   displayProvider,
   pluginLogo,
   selected,
-  compact,
   busy,
   canTargetFile,
   onSelect,
@@ -61,6 +69,13 @@ export const OAuthCredentialRecord: React.FC<OAuthCredentialRecordProps> = ({
   onEdit,
   onShowModels,
   onShowDetails,
+  onRefreshQuota,
+  canRefreshQuota = false,
+  isRefreshingQuota = false,
+  onClearCooldown,
+  canClearCooldown = false,
+  onRedeemCredit,
+  canRedeemCredit = false,
   quotaContent,
   identityDiagnostic,
   reauthAction,
@@ -82,36 +97,15 @@ export const OAuthCredentialRecord: React.FC<OAuthCredentialRecordProps> = ({
         ? { color: 'warning', label: t('af.status_problem') }
         : { color: 'success', label: t('af.enabled') };
 
-  const actionButton = (
-    label: string,
-    icon: React.ReactNode,
-    onClick: () => void,
-    options?: { danger?: boolean; disabled?: boolean },
-  ) => (
-    <Tooltip title={label}>
-      <Button
-        type="text"
-        size="small"
-        danger={options?.danger}
-        icon={icon}
-        disabled={options?.disabled}
-        onClick={onClick}
-        aria-label={`${label}: ${file.name}`}
-        className={styles['record-action']}
-      >
-        {!compact && label}
-      </Button>
-    </Tooltip>
-  );
-
   return (
     <article
-      className={`${styles.record} ${compact ? styles['record-compact'] : styles['record-expanded']}`}
+      className={`${styles.record} ${styles['record-compact']} ${selected ? styles['record-selected'] : ''} ${disabled ? styles['record-disabled'] : ''}`}
       data-testid="oauth-credential-record"
       data-identity={identityKey}
       data-file-name={file.name}
       data-auth-index={file.auth_index ?? ''}
     >
+      {/* 1. Identity & Routing */}
       <div className={styles['record-identity']}>
         {!file.runtime_only && (
           <Checkbox
@@ -119,76 +113,55 @@ export const OAuthCredentialRecord: React.FC<OAuthCredentialRecordProps> = ({
             disabled={busy || !canTargetFile}
             onChange={(event) => onSelect(event.target.checked)}
             aria-label={t('af.select_one', { name: file.name })}
+            className={styles['record-checkbox']}
           />
         )}
-        <div className={styles['record-icon']}>
+        <div className={styles['record-icon']} title={displayProvider}>
           <ProviderBrandIcon iconId={iconId} logo={pluginLogo} size={18} />
         </div>
         <div className={styles['record-copy']}>
-          <Text strong className={styles['record-primary']} title={identity.primary}>
-            {identity.primary}
-          </Text>
-          <Text type="secondary" className={styles['record-secondary']} title={identity.secondary || file.name}>
-            {identity.secondary || file.name}
-          </Text>
-          <span className={styles['record-identity-meta']}>
-            {!iconId && <Tag>{displayProvider}</Tag>}
+          <div className={styles['record-title-row']}>
+            <Text strong className={styles['record-primary']} title={identity.primary}>
+              {identity.primary}
+            </Text>
+            {hasWarning && file.status_message && (
+              <Tooltip title={file.status_message}>
+                <span className={styles['record-warning']}>
+                  <WarningOutlined /> {file.status_message}
+                </span>
+              </Tooltip>
+            )}
+          </div>
+          <div className={styles['record-secondary-row']}>
+            {identity.secondary && identity.secondary !== identity.primary && (
+              <span className={styles['record-secondary']} title={identity.secondary}>
+                {identity.secondary}
+              </span>
+            )}
             <span
-              className={`${styles['record-status']} ${styles[`status-${status.color || 'neutral'}`]}`}
-            >
-              {status.label}
-            </span>
-            {file.runtime_only && <Tag>{t('af.status_virtual_badge')}</Tag>}
-            <Text
-              type="secondary"
               className={styles['record-auth-index']}
-              title={`${t('af.detail_auth_index')} ${file.auth_index || '—'}`}
+              title={`${t('af.detail_auth_index')}: ${file.auth_index || '—'}`}
             >
-              {compact ? (file.auth_index || '—') : `${t('af.detail_auth_index')}: ${file.auth_index || '—'}`}
-            </Text>
-          </span>
+              {file.auth_index || '—'}
+            </span>
+            {file.runtime_only && <Tag className={styles['virtual-tag']}>{t('af.status_virtual_badge')}</Tag>}
+            {file.priority !== undefined && (
+              <Tag className={styles['routing-tag']}>{t('omc.priority_value', { n: file.priority })}</Tag>
+            )}
+            {file.weight !== undefined && (
+              <Tag className={styles['routing-tag']}>{t('omc.weight_value', { n: file.weight })}</Tag>
+            )}
+            {file.note && (
+              <Tooltip title={file.note}>
+                <span className={styles['record-note']}>{file.note}</span>
+              </Tooltip>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className={styles['record-management']}>
-        <Space size={6} wrap={false} className={styles['record-metrics']}>
-          <Text className={styles['metric-success']}>
-            {compact ? `✓ ${file.success}` : t('dash.success_n', { n: file.success })}
-          </Text>
-          <Text type="secondary">·</Text>
-          <Text className={file.failed > 0 ? styles['metric-failed'] : styles['metric-muted']}>
-            {compact ? `✕ ${file.failed}` : t('dash.failure_n', { n: file.failed })}
-          </Text>
-        </Space>
-        <div className={styles['record-routing']}>
-          {file.priority !== undefined && file.priority !== 0 && (
-            <Tag>{t('omc.priority_value', { n: file.priority })}</Tag>
-          )}
-          {file.weight !== undefined && file.weight !== 1 && (
-            <Tag>{t('omc.weight_value', { n: file.weight })}</Tag>
-          )}
-          {file.note && (
-            <Tooltip title={file.note}>
-              <span className={styles['record-note']}>{file.note}</span>
-            </Tooltip>
-          )}
-        </div>
-        {hasWarning && file.status_message && (
-          <Tooltip title={file.status_message}>
-            <Text type="warning" className={styles['record-warning']}>
-              <WarningOutlined /> {file.status_message}
-            </Text>
-          </Tooltip>
-        )}
-        {identityDiagnostic}
-        {reauthAction && <div className={styles['record-reauth']}>{reauthAction}</div>}
-      </div>
-
-      <div className={styles['record-quota']}>
-        {quotaContent}
-      </div>
-
-      <div className={styles['record-actions']}>
+      {/* 2. Status Column */}
+      <div className={styles['record-status']}>
         <Switch
           size="small"
           checked={!disabled}
@@ -196,13 +169,86 @@ export const OAuthCredentialRecord: React.FC<OAuthCredentialRecordProps> = ({
           onChange={onToggle}
           aria-label={t('af.status_toggle_label', { name: file.name })}
         />
-        {actionButton(t('common.details'), <ProfileOutlined />, onShowDetails, { disabled: busy })}
-        {actionButton(t('af.models_btn'), <AppstoreOutlined />, onShowModels, { disabled: busy || file.runtime_only })}
-        {actionButton(t('common.edit'), <EditOutlined />, onEdit, { disabled: busy || !canTargetFile })}
+        <Tag className={`${styles['status-tag']} ${styles[`status-tag-${status.color || 'neutral'}`]}`}>
+          {status.label}
+        </Tag>
+      </div>
+
+      {/* 3. Traffic Metrics */}
+      <div className={styles['record-management']}>
+        <div className={styles['traffic-cell']}>
+          <div className={styles['traffic-primary']}>
+            <span className={styles['metric-success']} aria-label={t('dash.success_n', { n: file.success })}>
+              {t('dash.success_n', { n: file.success })}
+            </span>
+          </div>
+          <div className={styles['traffic-secondary']}>
+            <span
+              className={file.failed > 0 ? styles['metric-failed'] : styles['metric-muted']}
+              aria-label={t('dash.failure_n', { n: file.failed })}
+            >
+              {t('dash.failure_n', { n: file.failed })}
+            </span>
+          </div>
+        </div>
+        {identityDiagnostic}
+        {reauthAction && <div className={styles['record-reauth']}>{reauthAction}</div>}
+      </div>
+
+      {/* 3. Quota & Usage Windows */}
+      <div className={styles['record-quota']}>
+        {quotaContent}
+      </div>
+
+      {/* 5. Controls & Actions */}
+      <div className={styles['record-actions']}>
+        <Tooltip title={t('common.details')}>
+          <Button
+            size="small"
+            icon={<ProfileOutlined />}
+            disabled={busy}
+            onClick={onShowDetails}
+            aria-label={`${t('common.details')}: ${file.name}`}
+            className={styles['btn-details']}
+          >
+            <span className={styles['btn-details-text']}>{t('common.details')}</span>
+          </Button>
+        </Tooltip>
         <Dropdown
           trigger={['click']}
           menu={{
             items: [
+              {
+                key: 'models',
+                icon: <AppstoreOutlined />,
+                label: t('af.models_btn'),
+                disabled: busy || file.runtime_only,
+              },
+              {
+                key: 'edit',
+                icon: <EditOutlined />,
+                label: t('common.edit'),
+                disabled: busy || !canTargetFile,
+              },
+              {
+                key: 'refresh-quota',
+                icon: <SyncOutlined spin={isRefreshingQuota} />,
+                label: t('quota.btn_refresh_quota'),
+                disabled: busy || isRefreshingQuota || isDemo || !canRefreshQuota,
+              },
+              {
+                key: 'clear-cooldown',
+                icon: <StopOutlined />,
+                label: t('quota.clear_cooldown'),
+                disabled: busy || isDemo || !canClearCooldown,
+              },
+              {
+                key: 'redeem-credit',
+                icon: <ThunderboltOutlined />,
+                label: t('quota.btn_reset_quota'),
+                disabled: busy || isDemo || !canRedeemCredit,
+              },
+              { type: 'divider' as const },
               {
                 key: 'download',
                 icon: <DownloadOutlined />,
@@ -218,6 +264,33 @@ export const OAuthCredentialRecord: React.FC<OAuthCredentialRecordProps> = ({
               },
             ],
             onClick: ({ key }) => {
+              if (key === 'models') {
+                onShowModels();
+                return;
+              }
+              if (key === 'edit') {
+                onEdit();
+                return;
+              }
+              if (key === 'refresh-quota') {
+                onRefreshQuota?.();
+                return;
+              }
+              if (key === 'clear-cooldown') {
+                onClearCooldown?.();
+                return;
+              }
+              if (key === 'redeem-credit') {
+                modal.confirm({
+                  title: t('quota.redeem_credit_confirm_title'),
+                  content: t('quota.redeem_credit_confirm_desc'),
+                  okText: t('common.confirm'),
+                  cancelText: t('common.cancel'),
+                  okButtonProps: { danger: true },
+                  onOk: onRedeemCredit,
+                });
+                return;
+              }
               if (key === 'download') {
                 onDownload();
                 return;
@@ -235,15 +308,15 @@ export const OAuthCredentialRecord: React.FC<OAuthCredentialRecordProps> = ({
             },
           }}
         >
-          <Button
-            type="text"
-            size="small"
-            icon={<MoreOutlined />}
-            aria-label={`${t('keys.actions_more')}: ${file.name}`}
-            className={styles['record-action']}
-          >
-            {!compact && t('keys.actions_more')}
-          </Button>
+          <Tooltip title={t('keys.actions_more')}>
+            <Button
+              type="text"
+              size="small"
+              icon={<MoreOutlined />}
+              aria-label={`${t('keys.actions_more')}: ${file.name}`}
+              className={styles['record-action-more']}
+            />
+          </Tooltip>
         </Dropdown>
       </div>
     </article>

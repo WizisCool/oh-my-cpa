@@ -9,7 +9,7 @@ import { FAKE_PLUGIN_LOGO_DATA_URL } from '../fake-cpa.mjs';
  */
 
 async function openConnect(page) {
-  await page.getByRole('button', { name: /Connect account|连接账号/i }).first().click();
+  await page.getByRole('button', { name: /OAuth sign-in|OAuth 登录/i }).first().click();
   await page.locator('[data-testid="oauth-connect-panel"]').waitFor({ state: 'visible', timeout: 5000 });
 }
 

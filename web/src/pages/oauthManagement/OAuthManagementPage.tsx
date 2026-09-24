@@ -8,22 +8,17 @@ import {
   Empty,
   Input,
   Pagination,
-  Segmented,
   Select,
   Space,
   Spin,
-  Tag,
 } from 'antd';
 import {
-  BarsOutlined,
   BranchesOutlined,
   DownOutlined,
   FilterOutlined,
   LoginOutlined,
-  ReloadOutlined,
   SearchOutlined,
   SyncOutlined,
-  TableOutlined,
   UploadOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -31,7 +26,6 @@ import { api } from '../../api/client';
 import { useT } from '../../i18n';
 import { useDebouncedSearch } from '../../components/usage/useDebouncedSearch';
 import { usePreference } from '../../hooks/usePreference';
-import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { useVisibleNow } from '../../hooks/useVisibleNow';
 import { isDemoMode } from '../../types/demoMode';
 import { pluginOAuthLogoFor, pluginOAuthProviderLogos } from '../../types/pluginOAuthProviders';
@@ -47,6 +41,7 @@ import { BatchActionBar } from '../../components/authFiles/BatchActionBar';
 import { OAuthModelAliasDrawer } from '../../components/authFiles/OAuthModelAliasDrawer';
 import { ProviderFilterTabs } from '../../components/common/ProviderFilterTabs';
 import { oauthProviderChoices } from '../oauthProviderLogic';
+import { CompactQuotaView } from '../quota/CompactQuotaView';
 import { CredentialQuotaBody } from '../quota/CredentialQuotaBody';
 import { OAuthConnectPanel } from './OAuthConnectPanel';
 import { OAuthCredentialRecord } from './OAuthCredentialRecord';
@@ -62,32 +57,26 @@ import {
   updateWorkspaceSearch,
   workspaceProviderCounts,
   workspaceProviderOptions,
-  type OAuthWorkspaceDensity,
   type OAuthWorkspaceQuotaFilter,
   type OAuthWorkspaceRecord,
 } from './oauthWorkspaceLogic';
 import styles from './OAuthManagementPage.module.css';
 
 interface OAuthManagementViewPreference {
-  density: OAuthWorkspaceDensity;
   pageSize: 12 | 24 | 48;
 }
 
 const DEFAULT_VIEW_PREFERENCE: OAuthManagementViewPreference = {
-  density: 'expanded',
   pageSize: 12,
 };
 
 function parseViewPreference(raw: unknown): OAuthManagementViewPreference | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const record = raw as Record<string, unknown>;
-  const density = record.density === 'compact' || record.density === 'expanded'
-    ? record.density
-    : DEFAULT_VIEW_PREFERENCE.density;
   const pageSize = record.pageSize === 12 || record.pageSize === 24 || record.pageSize === 48
     ? record.pageSize
     : DEFAULT_VIEW_PREFERENCE.pageSize;
-  return { density, pageSize };
+  return { pageSize };
 }
 
 interface CompletionPending {
@@ -114,8 +103,7 @@ export const OAuthManagementPage: React.FC = () => {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const visibleNow = useVisibleNow();
-  const isPhoneViewport = useIsPhoneViewport();
-  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = React.useState(false);
+  const [isFiltersOpen, setIsFiltersOpen] = React.useState(false);
   const isDemo = isDemoMode();
   const viewPreference = usePreference<OAuthManagementViewPreference>(
     'oauth_management_view_v1',
@@ -123,6 +111,12 @@ export const OAuthManagementPage: React.FC = () => {
     parseViewPreference,
   );
   const queryState = React.useMemo(() => parseOAuthWorkspaceQuery(searchParams), [searchParams]);
+  React.useEffect(() => {
+    if (queryState.status !== 'all' || queryState.quota !== 'all' || queryState.sort !== 'name-asc') {
+      setIsFiltersOpen(true);
+    }
+  }, [queryState.status, queryState.quota, queryState.sort]);
+
 
   const filesQuery = useQuery({
     queryKey: ['management-auth-files'],
@@ -181,7 +175,6 @@ export const OAuthManagementPage: React.FC = () => {
     [queryState.provider, queryState.query, queryState.quota, queryState.sort, queryState.status, records],
   );
 
-  const density = queryState.density ?? viewPreference.value.density;
   const pageSize = searchParams.has('page_size') ? queryState.pageSize : viewPreference.value.pageSize;
   const maxPage = Math.max(1, Math.ceil(visibleRecords.length / pageSize));
   const page = Math.min(queryState.page, maxPage);
@@ -356,18 +349,11 @@ export const OAuthManagementPage: React.FC = () => {
   }, [selectedIdentity, selectedRecord]);
 
   const [isAliasOpen, setIsAliasOpen] = React.useState(false);
-  const [expandedQuotaKeys, setExpandedQuotaKeys] = React.useState<Set<string>>(new Set());
-  const densityAnchorRef = React.useRef<{ key: string; offset: number }>();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const onTargetGone = React.useCallback((recordKey: string) => {
     setSelectedIdentity((current) => (current?.key === recordKey ? undefined : current));
-    setExpandedQuotaKeys((current) => {
-      if (!current.has(recordKey)) return current;
-      const next = new Set(current);
-      next.delete(recordKey);
-      return next;
-    });
+
   }, []);
   const actions = useOAuthWorkspaceActions(records, selectedKeys, setSelectedKeys, onTargetGone);
 
@@ -380,10 +366,9 @@ export const OAuthManagementPage: React.FC = () => {
   }, [filesQuery, pluginsQuery, quotaQuery]);
 
   const totalCount = records.length;
-  const enabledCount = records.filter((record) => isAuthFileHealthy(record.file)).length;
   const disabledCount = records.filter((record) => isAuthFileDisabled(record.file)).length;
-  const problemCount = records.filter((record) => isAuthFileProblem(record.file)).length;
-  const quotaAttentionCount = records.filter((record) => record.isQuotaAttention).length;
+  const attentionCount = records.filter((record) => !isAuthFileDisabled(record.file) && (record.isQuotaAttention || isAuthFileProblem(record.file))).length;
+  const healthyCount = records.filter((record) => isAuthFileHealthy(record.file) && !record.isQuotaAttention).length;
   const knownTotal = filesQuery.isPending ? '—' : totalCount;
 
   const providerTabs = React.useMemo(
@@ -397,30 +382,6 @@ export const OAuthManagementPage: React.FC = () => {
     () => new Set(visibleRecords.filter((record) => record.canRefreshQuota).map((record) => record.authIndex)).size,
     [visibleRecords],
   );
-
-  const changeDensity = (next: OAuthWorkspaceDensity) => {
-    const first = pagedRecords[0];
-    if (first) {
-      const node = document.querySelector(`[data-identity="${CSS.escape(first.key)}"]`);
-      if (node) densityAnchorRef.current = { key: first.key, offset: node.getBoundingClientRect().top };
-    }
-    setSearch({ density: next });
-    void viewPreference.set({ density: next, pageSize: pageSize as 12 | 24 | 48 });
-  };
-
-  React.useEffect(() => {
-    const anchor = densityAnchorRef.current;
-    if (!anchor) return;
-    const node = document.querySelector(`[data-identity="${CSS.escape(anchor.key)}"]`);
-    if (!node) {
-      densityAnchorRef.current = undefined;
-      return;
-    }
-    const nextOffset = node.getBoundingClientRect().top;
-    const scrollContainer = node.closest<HTMLElement>('.app-content') ?? document.scrollingElement;
-    scrollContainer?.scrollBy({ top: nextOffset - anchor.offset, behavior: 'auto' });
-    densityAnchorRef.current = undefined;
-  }, [density]);
 
   const displayProviderForAuthorization = React.useCallback((providerId: string) => (
     records.find((record) => record.authorizationProviderId === providerId)?.displayProvider ?? providerId
@@ -481,22 +442,29 @@ export const OAuthManagementPage: React.FC = () => {
       choice: choices.find((choice) => choice.id === providerId),
     }));
 
-  const quotaBodyForRecord = (record: OAuthWorkspaceRecord, embedded = false): React.ReactNode => {
+  const quotaBodyForRecord = (record: OAuthWorkspaceRecord, forRow = false): React.ReactNode => {
     if (record.quota) {
+      const isRefreshing = Boolean(record.authIndex && actions.busyQuotaIndexes.has(record.authIndex));
+      if (forRow) {
+        return (
+          <CompactQuotaView
+            item={record.quota}
+            nowMS={visibleNow}
+            isDemo={isDemo}
+            onRedeemCredit={() => void actions.redeemCredit(record)}
+            canRedeemCredit={record.canRedeemCredit}
+          />
+        );
+      }
       return (
         <CredentialQuotaBody
           item={record.quota}
           nowMS={visibleNow}
-          density={density === 'expanded' || expandedQuotaKeys.has(record.key) ? 'expanded' : 'compact'}
           isDemo={isDemo}
-          isRefreshing={Boolean(record.authIndex && actions.busyQuotaIndexes.has(record.authIndex))}
+          isRefreshing={isRefreshing}
           onRefresh={() => void actions.refreshQuotaForRecord(record)}
           onClearCooldown={() => void actions.clearCooldown(record)}
           onRedeemCredit={() => void actions.redeemCredit(record)}
-          onShowAll={() => {
-            setExpandedQuotaKeys((current) => new Set(current).add(record.key));
-          }}
-          embedded={embedded}
         />
       );
     }
@@ -522,16 +490,35 @@ export const OAuthManagementPage: React.FC = () => {
   return (
     <div className={`terminal-page oauth-management-page ${styles.page}`}>
       <header className={styles.head}>
-        <div>
+        <div className={styles['head-title-group']}>
           <h1 className="terminal-title">{t('nav.auth_files')}</h1>
-          <div className={styles.summary}>
-            <Tag>{t('af.meta_total', { n: knownTotal })}</Tag>
-            <Tag color="success">{t('af.meta_active', { n: filesQuery.isPending ? '—' : enabledCount })}</Tag>
-            <Tag>{t('af.meta_disabled', { n: filesQuery.isPending ? '—' : disabledCount })}</Tag>
-            <Tag color={problemCount > 0 ? 'error' : undefined}>{t('af.meta_problem', { n: filesQuery.isPending ? '—' : problemCount })}</Tag>
-            <Tag color={quotaAttentionCount > 0 ? 'warning' : undefined}>
-              {t('omc.quota_filter_attention')} {quotaQuery.isPending ? '—' : quotaAttentionCount}
-            </Tag>
+          <div className={styles['summary-strip']}>
+            <span className={styles['summary-total']}>
+              {t('af.meta_total', { n: knownTotal })}
+            </span>
+            <span className={styles['summary-divider']}>·</span>
+            <span className={styles['summary-healthy']}>
+              <span className={styles['status-dot']} />
+              {t('af.meta_active', { n: filesQuery.isPending ? '—' : healthyCount })}
+            </span>
+            {(filesQuery.isPending || disabledCount > 0) && (
+              <>
+                <span className={styles['summary-divider']}>·</span>
+                <span className={styles['summary-disabled']}>
+                  <span className={styles['status-dot']} />
+                  {t('af.meta_disabled', { n: filesQuery.isPending ? '—' : disabledCount })}
+                </span>
+              </>
+            )}
+            {(filesQuery.isPending || attentionCount > 0) && (
+              <>
+                <span className={styles['summary-divider']}>·</span>
+                <span className={styles['summary-attention']}>
+                  <span className={styles['status-dot']} />
+                  {t('omc.quota_filter_attention')} {filesQuery.isPending ? '—' : attentionCount}
+                </span>
+              </>
+            )}
           </div>
         </div>
         <div className={styles.actions}>
@@ -564,13 +551,6 @@ export const OAuthManagementPage: React.FC = () => {
             data-testid="oauth-management-model-alias-open"
           >
             {t('af.alias_open')}
-          </Button>
-          <Button
-            icon={<ReloadOutlined />}
-            loading={filesQuery.isFetching || quotaQuery.isFetching || pluginsQuery.isFetching}
-            onClick={reloadWorkspace}
-          >
-            {t('common.refresh')}
           </Button>
         </div>
       </header>
@@ -640,20 +620,20 @@ export const OAuthManagementPage: React.FC = () => {
         || projection.duplicateFileNames.length > 0
         || projection.missingAuthIndexCount > 0
         || projection.quotaOnly.length > 0) && (
-        <Alert
-          className={styles['diagnostic-bar']}
-          type="warning"
-          showIcon
-          title={t('af.status_problem')}
-          description={t('omc.sync_diagnostics_desc', {
-            duplicateIndexes: projection.duplicateAuthIndexes.length,
-            duplicateFiles: projection.duplicateFileNames.length,
-            missingIndexes: projection.missingAuthIndexCount,
-            quotaOnly: projection.quotaOnly.length,
-          })}
-          action={<Button size="small" onClick={reloadWorkspace}>{t('common.retry')}</Button>}
-        />
-      )}
+          <Alert
+            className={styles['diagnostic-bar']}
+            type="warning"
+            showIcon
+            title={t('af.status_problem')}
+            description={t('omc.sync_diagnostics_desc', {
+              duplicateIndexes: projection.duplicateAuthIndexes.length,
+              duplicateFiles: projection.duplicateFileNames.length,
+              missingIndexes: projection.missingAuthIndexCount,
+              quotaOnly: projection.quotaOnly.length,
+            })}
+            action={<Button size="small" onClick={reloadWorkspace}>{t('common.retry')}</Button>}
+          />
+        )}
 
       {filesQuery.isError && (
         <Alert
@@ -686,7 +666,7 @@ export const OAuthManagementPage: React.FC = () => {
       )}
 
       <ProviderFilterTabs
-        providers={providerTabs}
+        providers={providerTabs.filter((provider) => provider === 'all' || provider === queryState.provider || (providerCounts[provider] ?? 0) > 0)}
         counts={providerCounts}
         active={queryState.provider}
         onChange={(provider) => setSearch({ provider: provider === 'all' ? null : provider, page: null })}
@@ -719,83 +699,15 @@ export const OAuthManagementPage: React.FC = () => {
             onChange={(event) => setSearchValue(event.target.value)}
           />
         </div>
-        {isPhoneViewport && (
-          <Button
-            className={styles['filter-toggle']}
-            icon={<FilterOutlined />}
-            onClick={() => setIsMobileFiltersOpen((open) => !open)}
-          >
-            {t('events.more_filters')}
-          </Button>
-        )}
-        {(!isPhoneViewport || isMobileFiltersOpen) && (
-          <>
-        <Select<AuthFileStatusFilter>
-          value={queryState.status}
-          onChange={(status) => setSearch({ status: status === 'all' ? null : status, page: null })}
-          style={{ width: 150 }}
-          options={[
-            { value: 'all', label: t('af.status_all') },
-            { value: 'enabled', label: t('af.enabled') },
-            { value: 'disabled', label: t('af.disabled') },
-            { value: 'problem', label: t('af.status_problem') },
-          ]}
-        />
-        <Select<OAuthWorkspaceQuotaFilter>
-          value={queryState.quota}
-          onChange={(quota) => setSearch({ quota: quota === 'all' ? null : quota, page: null })}
-          style={{ width: 170 }}
-          options={[
-            { value: 'all', label: t('common.all') },
-            { value: 'attention', label: t('omc.quota_filter_attention') },
-            { value: 'healthy', label: t('quota.status_normal') },
-            { value: 'warning', label: t('quota.status_warning') },
-            { value: 'exhausted', label: t('quota.status_exceeded') },
-            { value: 'cooldown', label: t('quota.status_cooldown') },
-            { value: 'stale', label: t('quota.status_stale') },
-            { value: 'error', label: t('quota.status_error') },
-            { value: 'unobserved', label: t('omc.quota_unobserved') },
-            { value: 'unsupported', label: t('omc.quota_unsupported') },
-          ]}
-        />
-        <Select<AuthFileSortKey>
-          value={queryState.sort}
-          onChange={(sort) => setSearch({ sort: sort === 'name-asc' ? null : sort, page: null })}
-          style={{ width: 180 }}
-          options={[
-            { value: 'name-asc', label: t('af.sort_name_asc') },
-            { value: 'name-desc', label: t('af.sort_name_desc') },
-            { value: 'requests-desc', label: t('af.sort_requests') },
-            { value: 'priority-desc', label: t('af.sort_priority') },
-            { value: 'weight-desc', label: t('af.sort_weight') },
-          ]}
-        />
-        <Segmented
-          value={density}
-          onChange={(value) => {
-            changeDensity(value as OAuthWorkspaceDensity);
-          }}
-          options={[
-            { value: 'expanded', icon: <TableOutlined />, title: t('omc.density_expanded') },
-            { value: 'compact', icon: <BarsOutlined />, title: t('omc.density_compact') },
-          ]}
-        />
-        <Select
-          value={pageSize}
-          onChange={(size) => {
-            const next = size as 12 | 24 | 48;
-            setSearch({ page_size: next, page: null });
-            void viewPreference.set({ density, pageSize: next });
-          }}
-          style={{ width: 110 }}
-          options={[12, 24, 48].map((size) => ({ value: size, label: t('af.page_size_n', { n: size }) }))}
-        />
-        <div className={styles['toolbar-actions']}>
-        <Button icon={<SearchOutlined />} onClick={() => {
-          setResetSearchToken((value) => value + 1);
-          setSearch({ q: null, status: null, quota: null, sort: null, page: null });
-        }}>
-          {t('omc.reset_filters')}
+        <Button
+          className={styles['filter-toggle']}
+          icon={<FilterOutlined />}
+          aria-expanded={isFiltersOpen}
+          aria-controls="oauth-collection-filters"
+          type={isFiltersOpen || queryState.status !== 'all' || queryState.quota !== 'all' || queryState.sort !== 'name-asc' ? 'primary' : 'default'}
+          onClick={() => setIsFiltersOpen((open) => !open)}
+        >
+          {t('events.more_filters')}
         </Button>
         <Dropdown.Button
           icon={<DownOutlined />}
@@ -813,10 +725,73 @@ export const OAuthManagementPage: React.FC = () => {
         >
           <SyncOutlined /> {t('omc.refresh_quota_count', { n: eligibleFilteredRefreshCount })}
         </Dropdown.Button>
-        </div>
-          </>
-        )}
       </div>
+      {isFiltersOpen && (
+        <div id="oauth-collection-filters" className={styles['advanced-filters']}>
+          <div className={styles['filter-field']}>
+            <span className={styles['filter-field-label']}>{t('af.detail_status')}</span>
+            <Select<AuthFileStatusFilter>
+              value={queryState.status}
+              onChange={(status) => setSearch({ status: status === 'all' ? null : status, page: null })}
+              aria-label={t('af.status_all')}
+              style={{ width: 140 }}
+              options={[
+                { value: 'all', label: t('af.status_all') },
+                { value: 'enabled', label: t('af.enabled') },
+                { value: 'disabled', label: t('af.disabled') },
+                { value: 'problem', label: t('af.status_problem') },
+              ]}
+            />
+          </div>
+          <div className={styles['filter-field']}>
+            <span className={styles['filter-field-label']}>{t('omc.tab_quota')}</span>
+            <Select<OAuthWorkspaceQuotaFilter>
+              value={queryState.quota}
+              onChange={(quota) => setSearch({ quota: quota === 'all' ? null : quota, page: null })}
+              aria-label={t('omc.quota_filter_attention')}
+              style={{ width: 160 }}
+              options={[
+                { value: 'all', label: t('common.all') },
+                { value: 'attention', label: t('omc.quota_filter_attention') },
+                { value: 'healthy', label: t('quota.status_normal') },
+                { value: 'warning', label: t('quota.status_warning') },
+                { value: 'exhausted', label: t('quota.status_exceeded') },
+                { value: 'cooldown', label: t('quota.status_cooldown') },
+                { value: 'stale', label: t('quota.status_stale') },
+                { value: 'error', label: t('quota.status_error') },
+                { value: 'unobserved', label: t('omc.quota_unobserved') },
+                { value: 'unsupported', label: t('omc.quota_unsupported') },
+              ]}
+            />
+          </div>
+          <div className={styles['filter-field']}>
+            <span className={styles['filter-field-label']}>{t('af.sort_label')}</span>
+            <Select<AuthFileSortKey>
+              value={queryState.sort}
+              onChange={(sort) => setSearch({ sort: sort === 'name-asc' ? null : sort, page: null })}
+              style={{ width: 160 }}
+              options={[
+                { value: 'name-asc', label: t('af.sort_name_asc') },
+                { value: 'name-desc', label: t('af.sort_name_desc') },
+                { value: 'requests-desc', label: t('af.sort_requests') },
+                { value: 'priority-desc', label: t('af.sort_priority') },
+                { value: 'weight-desc', label: t('af.sort_weight') },
+              ]}
+            />
+          </div>
+          <div className={styles['toolbar-actions']}>
+            <Button
+              icon={<SearchOutlined />}
+              onClick={() => {
+                setResetSearchToken((value) => value + 1);
+                setSearch({ q: null, status: null, quota: null, sort: null, page: null });
+              }}
+            >
+              {t('omc.reset_filters')}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {actions.quotaReport && (
         <Alert
@@ -851,7 +826,16 @@ export const OAuthManagementPage: React.FC = () => {
         </div>
       ) : (
         <>
-          <div className={`terminal-panel ${styles.records} ${density === 'compact' ? styles['records-compact'] : styles['records-expanded']}`}>
+          <div className={`terminal-panel ${styles.records}`}>
+            <div className={styles['table-header']} aria-hidden="true">
+              <div className={styles['th-identity']}>
+                <span>{t('omc.col_credential')}</span>
+              </div>
+              <div className={styles['th-status']}>{t('af.detail_status')}</div>
+              <div className={styles['th-management']}>{t('omc.col_traffic')}</div>
+              <div className={styles['th-quota']}>{t('omc.col_quota_window')}</div>
+              <div className={styles['th-actions']}>{t('keys.col_actions')}</div>
+            </div>
             {pagedRecords.map((record) => (
               <div key={record.key} data-quota-focus-anchor={record.quota ? record.authIndex : undefined}>
                 <OAuthCredentialRecord
@@ -860,7 +844,6 @@ export const OAuthManagementPage: React.FC = () => {
                   displayProvider={record.displayProvider}
                   pluginLogo={pluginOAuthLogoFor(pluginLogos, record.displayProvider)}
                   selected={selectedKeySet.has(record.key)}
-                  compact={density === 'compact' && !expandedQuotaKeys.has(record.key)}
                   busy={actions.isRecordBusy(record)}
                   canTargetFile={record.canSelectForFileBatch}
                   onSelect={(checked) => {
@@ -876,6 +859,13 @@ export const OAuthManagementPage: React.FC = () => {
                   onEdit={() => openCredential(record, 'configuration')}
                   onShowModels={() => openCredential(record, 'models')}
                   onShowDetails={() => openCredential(record, 'overview')}
+                  onRefreshQuota={() => void actions.refreshQuotaForRecord(record)}
+                  canRefreshQuota={record.canRefreshQuota}
+                  isRefreshingQuota={Boolean(record.authIndex && actions.busyQuotaIndexes.has(record.authIndex))}
+                  onClearCooldown={() => void actions.clearCooldown(record)}
+                  canClearCooldown={record.canClearCooldown}
+                  onRedeemCredit={() => void actions.redeemCredit(record)}
+                  canRedeemCredit={record.canRedeemCredit}
                   quotaContent={quotaBodyForRecord(record, true)}
                   identityDiagnostic={!record.hasUniqueFileName ? (
                     <Alert
@@ -893,8 +883,20 @@ export const OAuthManagementPage: React.FC = () => {
               </div>
             ))}
           </div>
-          {visibleRecords.length > pageSize && (
-            <div className={styles.pagination}>
+          <div className={styles.pagination}>
+            <span>{t('omc.result_count', { n: visibleRecords.length, total: records.length })}</span>
+            <Select
+              value={pageSize}
+              onChange={(size) => {
+                const next = size as 12 | 24 | 48;
+                setSearch({ page_size: next, page: null });
+                void viewPreference.set({ pageSize: next });
+              }}
+              style={{ width: 110 }}
+              options={[12, 24, 48].map((size) => ({ value: size, label: t('af.page_size_n', { n: size }) }))}
+            />
+
+            {visibleRecords.length > pageSize && (
               <Pagination
                 current={page}
                 pageSize={pageSize}
@@ -903,8 +905,8 @@ export const OAuthManagementPage: React.FC = () => {
                 showQuickJumper
                 onChange={(nextPage) => setSearch({ page: nextPage === 1 ? null : nextPage })}
               />
-            </div>
-          )}
+            )}
+          </div>
         </>
       )}
 

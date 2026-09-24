@@ -107,6 +107,7 @@ export const SCENARIOS = [
     id: 'oauth-management',
     name: 'unified OAuth workspace density, connection intent and phone reflow',
     options: {
+      viewport: { width: 1440, height: 900 },
       routes: oauthManagementProbeRoutes(),
     },
     run: oauthManagement,
