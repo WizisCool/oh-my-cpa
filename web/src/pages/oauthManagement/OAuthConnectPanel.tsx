@@ -328,6 +328,13 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                             {t('oauth.status_unread', { msg: session.error })}
                           </span>
                         )}
+                        {/* A cancelled attempt stays waiting, so this is the only state that can
+                            show why the cancellation did not take effect. */}
+                        {session?.cancelError && (
+                          <span className={styles['waiting-note']} data-oauth-cancel-failure>
+                            {t('oauth.cancel_failed', { msg: session.cancelError })}
+                          </span>
+                        )}
                       </div>
                     </div>
                   )}
@@ -358,11 +365,6 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
                           <span className={styles['error-desc']}>
                             {t('oauth.status_error_badge', { msg: session?.error || '' })}
                           </span>
-                          {session?.cancelError && (
-                            <span className={styles['error-desc']}>
-                              {t('oauth.cancel_failed', { msg: session.cancelError })}
-                            </span>
-                          )}
                         </div>
                       </div>
                       <div>
