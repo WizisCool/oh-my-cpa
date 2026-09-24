@@ -131,13 +131,13 @@ main();`;
           <Button
             type="primary"
             icon={<LoginOutlined />}
-            onClick={() => navigate('/oauth')}
+            onClick={() => navigate('/oauth-management?action=connect')}
           >
             {t('qs.step2_btn_oauth')}
           </Button>
           <Button
             icon={<ArrowRightOutlined />}
-            onClick={() => navigate('/auth-files')}
+            onClick={() => navigate('/oauth-management')}
           >
             {t('qs.step2_btn_auth')}
           </Button>

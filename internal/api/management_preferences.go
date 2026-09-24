@@ -18,16 +18,17 @@ import (
 // here before a browser can write it — otherwise this becomes an arbitrary
 // blob store reachable through the session.
 var knownPreferences = map[string]bool{
-	repository.PreferenceDashboardRange:     true,
-	repository.PreferenceLogFilters:         true,
-	repository.PreferenceProviderIcons:      true,
-	repository.PreferenceProviderNames:      true,
-	repository.PreferenceProviderWebsites:   true,
-	repository.PreferenceUsageEventsView:    true,
-	repository.PreferenceUsageEventsColumns: true,
-	repository.PreferenceTokenStyle:         true,
-	repository.PreferenceModelView:          true,
-	repository.PreferenceTheme:              true,
+	repository.PreferenceDashboardRange:      true,
+	repository.PreferenceLogFilters:          true,
+	repository.PreferenceProviderIcons:       true,
+	repository.PreferenceProviderNames:       true,
+	repository.PreferenceProviderWebsites:    true,
+	repository.PreferenceUsageEventsView:     true,
+	repository.PreferenceUsageEventsColumns:  true,
+	repository.PreferenceOAuthManagementView: true,
+	repository.PreferenceTokenStyle:          true,
+	repository.PreferenceModelView:           true,
+	repository.PreferenceTheme:               true,
 }
 
 // preferenceValue is a stored JSON document kept exactly as the client sent it.

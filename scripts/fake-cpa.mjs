@@ -87,6 +87,21 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       label: 'iFlow fixture', status: 'ok', disabled: false, unavailable: false, runtime_only: false,
       account_type: 'oauth', success: 1, failed: 0, models: [], priority: 1, weight: 1,
     },
+    {
+      id: 'auth-e2e-duplicate-a', auth_index: 'duplicate-index', name: 'duplicate-provider-a.json',
+      type: 'mystery-provider', provider: 'mystery-provider', label: 'Duplicate index A', status: 'ok',
+      disabled: false, unavailable: false, runtime_only: false, success: 0, failed: 0, models: [], priority: 1, weight: 1,
+    },
+    {
+      id: 'auth-e2e-duplicate-b', auth_index: 'duplicate-index', name: 'duplicate-provider-b.json',
+      type: 'mystery-provider', provider: 'mystery-provider', label: 'Duplicate index B', status: 'ok',
+      disabled: false, unavailable: false, runtime_only: false, success: 0, failed: 0, models: [], priority: 1, weight: 1,
+    },
+    {
+      id: 'auth-e2e-no-index', name: 'runtime-no-index.json', type: 'mystery-provider', provider: 'mystery-provider',
+      label: 'Runtime without index', status: 'ok', disabled: false, unavailable: false, runtime_only: true,
+      success: 0, failed: 0, models: [], priority: 0, weight: 1,
+    },
   ];
   let authFiles = JSON.parse(JSON.stringify(initialAuthFiles));
   let oauthModelAliases = {
@@ -464,6 +479,10 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
               { displayName: 'Claude and GPT models', buckets: [
                 { bucketId: 'aerolith-week', displayName: 'Weekly Limit', window: 'weekly', remainingFraction: 1.0, resetTime: new Date(Date.now() + 7 * 86400000).toISOString() },
                 { bucketId: 'aerolith-5h', displayName: 'Five Hour Limit', window: '5h', remainingFraction: 1.0, resetTime: new Date(Date.now() + 5 * 3600000).toISOString() },
+              ] },
+              { displayName: 'Additional model group', buckets: [
+                { bucketId: 'additional-week', displayName: 'Weekly Limit', window: 'weekly', remainingFraction: 0.8, resetTime: new Date(Date.now() + 6 * 86400000).toISOString() },
+                { bucketId: 'additional-5h', displayName: 'Five Hour Limit', window: '5h', remainingFraction: 0.9, resetTime: new Date(Date.now() + 4 * 3600000).toISOString() },
               ] },
             ],
           },

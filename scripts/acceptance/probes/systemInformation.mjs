@@ -213,8 +213,15 @@ export async function systemInformationPage({ base, page, check }) {
   );
 
   // ── the running and published versions are both readable ───────────────────
+  // Both readouts come from the system route, so the assertion waits for the read rather
+  // than for the panel around it: the panel mounts first, and a loaded machine loses that
+  // race often enough to have failed this check intermittently.
+  const versionsShown = await until(
+    async () => (await page.locator('.system-page').innerText()).includes('7.3.5'),
+    { label: 'the running gateway version readout', timeoutMs: 10_000 },
+  ).then(() => true).catch(() => false);
   const pageText = await page.locator('.system-page').innerText();
-  check('the page states the running gateway version', pageText.includes('7.3.5'), pageText.slice(0, 200));
+  check('the page states the running gateway version', versionsShown, pageText.slice(0, 200));
   check('the page states the published gateway version', pageText.includes('v7.3.7'));
 
   // ── the change log renders the untrusted body ──────────────────────────────

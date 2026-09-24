@@ -7,7 +7,7 @@
   "representativeSmoke": [
     "unauthenticated and failed sign-in",
     "session expiration after cookie removal",
-    "auth files, logs, config, instances, resources and capability routes",
+    "OAuth management, logs, config, instances, resources and capability routes",
     "/omc redirect and SPA routing",
     "console, page error and same-origin request failure capture",
     "ordinary response, DOM and browser persistent storage secret search"

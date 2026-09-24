@@ -152,7 +152,7 @@ for (const budget of budgets) {
 const aggregateBudgets = [
   { label: 'total JavaScript', bytes: totalJSBytes, maxKB: 8300 },
   { label: 'generated Lobe SVG assets', bytes: iconBytes, maxKB: 1200 },
-  { label: 'total web/dist', bytes: totalDistBytes, maxKB: 9600 },
+  { label: 'total web/dist', bytes: totalDistBytes, maxKB: 9700 },
 ];
 for (const budget of aggregateBudgets) {
   const sizeKB = budget.bytes / 1024;

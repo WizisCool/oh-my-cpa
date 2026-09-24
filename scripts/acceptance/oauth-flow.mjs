@@ -1,116 +1,171 @@
+import { FAKE_PLUGIN_LOGO_DATA_URL } from '../fake-cpa.mjs';
+
 /**
- * OAuth flow release acceptance: built-in callback replay and plugin-discovered
- * provider polling against the deterministic fake CPA.
+ * OAuth release acceptance against the deterministic fake CPA.
+ *
+ * The authorization controller lives above the Connect drawer, so this flow also
+ * proves that minimizing the drawer preserves an attempt instead of restarting or
+ * cancelling it.
  */
+
+async function openConnect(page) {
+  await page.getByRole('button', { name: /OAuth sign-in|OAuth 登录/i }).first().click();
+  await page.locator('[data-testid="oauth-connect-panel"]').waitFor({ state: 'visible', timeout: 5000 });
+}
+
+async function selectProvider(page, providerId, title) {
+  const select = page.locator('#oauth-connect-provider');
+  await select.click();
+  const option = page.getByTitle(title, { exact: true }).last();
+  await option.waitFor({ state: 'visible', timeout: 5000 });
+  await option.click();
+  await page.locator(`[data-oauth-start="${providerId}"]`).waitFor({ state: 'visible', timeout: 5000 });
+}
+
+/**
+ * Dismisses the Connect drawer the way the operator does.
+ *
+ * The dismissal is verified and retried once. A status poll, or the credential refresh a
+ * completed callback triggers, can re-render the panel between Playwright's hit test and
+ * its event; a click lost that way would otherwise be reported as a minimized session
+ * that never minimized. A drawer that genuinely refuses to close still fails here.
+ */
+async function minimizeConnect(page) {
+  const drawer = page.locator('.ant-drawer-open');
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const close = drawer.locator('.ant-drawer-close');
+    if (await close.count() === 0) break;
+    await close.click({ timeout: 5000 }).catch(() => {});
+    const hidden = await drawer.waitFor({ state: 'hidden', timeout: 5000 }).then(() => true).catch(() => false);
+    if (hidden) return;
+  }
+  await drawer.waitFor({ state: 'hidden', timeout: 5000 });
+}
+
 export async function runOAuthFlowAcceptance({
   appURL,
   page,
   check,
 }) {
-  // OAuth end-to-end against the deterministic fake: start a flow, confirm
-  // the card polls `waiting`, submit a callback whose session already
-  // completed on the CPA side (409), and assert the card converges to the
-  // success state instead of painting an error over saved credentials.
-  await page.goto(`${appURL}/oauth`, { waitUntil: 'domcontentloaded' });
-  await page.locator('.oauth-page').first().waitFor({ state: 'visible', timeout: 15000 });
+  const oauthStarts = [];
+  const oauthCancels = [];
+  page.on('request', (request) => {
+    if (request.url().includes('/api/v1/management/oauth/start')) oauthStarts.push(request.url());
+    if (request.url().includes('/api/v1/management/oauth/session') && request.method() === 'DELETE') {
+      oauthCancels.push(request.url());
+    }
+  });
+
+  await page.goto(`${appURL}/oauth-management`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.oauth-management-page').first().waitFor({ state: 'visible', timeout: 15000 });
+
+  // Codex is a redirect flow. Its callback is replay-safe: a duplicate submission
+  // answers 409, the controller re-reads status, and the already-saved session
+  // converges to success instead of showing a false failure.
+  await openConnect(page);
+  await selectProvider(page, 'codex', 'Codex OAuth');
   const codexStart = page.locator('[data-oauth-start="codex"]');
-  await codexStart.waitFor({ state: 'visible', timeout: 15000 });
   await codexStart.click();
-  // The auth URL box (or the waiting status) proves the flow started and
-  // the 3s status poller is running.
-  const codexCard = page.locator('[data-oauth-card="codex"]');
-  const waitingState = codexCard.getByText(/等待|waiting/i).first();
+  const codexPanel = page.locator('[data-oauth-card="codex"]');
+  const waitingState = codexPanel.getByText(/等待|waiting/i).first();
   await waitingState.waitFor({ state: 'visible', timeout: 15000 });
-  const waitingText = await waitingState.innerText();
-  check(
-    'oauth start shows waiting state while polling',
-    /等待|waiting/i.test(waitingText) && !/授权成功|认证成功|success|失败|error/i.test(waitingText),
-    `text=${waitingText}`,
-  );
-  const callbackInput = codexCard.locator('[data-oauth-callback-input]');
+  const callbackInput = codexPanel.locator('[data-oauth-callback-input]');
   await callbackInput.waitFor({ state: 'visible', timeout: 15000 });
   await callbackInput.fill('http://127.0.0.1:8317/codex/callback?code=e2e-replayed&state=already-done');
-  await codexCard.locator('[data-oauth-callback-submit]').click();
-  // Idempotent success: the pre-completed session resolves to the
-  // success badge, never to the callback error copy.
-  const successBadge = codexCard.getByText(/授权成功|认证成功|success/i).first();
+  await codexPanel.locator('[data-oauth-callback-submit]').click();
+  const successBadge = codexPanel.getByText(/授权成功|认证成功|success/i).first();
   await successBadge.waitFor({ state: 'visible', timeout: 20000 });
-  const successText = await successBadge.innerText();
+  const replayErrors = await codexPanel.getByText(/提交失败|Callback submission failed|授权失败|Authorization failed/i).count();
   check(
-    'oauth replay callback converges to success',
-    /授权成功|认证成功|success/i.test(successText) && !/提交失败|failed/i.test(successText),
-    `text=${successText}`,
-  );
-  const replayError = await codexCard.getByText(/提交失败|failed to submit/i).count();
-  check('oauth replay callback shows no error', replayError === 0, `errorBadges=${replayError}`);
-
-  // Plugin-discovered OAuth: a CPA plugin advertising supports_oauth with an
-  // oauth_provider joins the page with the same start/poll flow, and shows
-  // the plugin's own logo (data-URI in the fixture, no network needed).
-  const pluginCard = page.locator('[data-oauth-card="iflow"]');
-  await pluginCard.waitFor({ state: 'visible', timeout: 15000 });
-  check('oauth page renders plugin-discovered provider card', (await pluginCard.getByText(/CPA 插件|CPA Plugin/).count()) > 0);
-  const pluginLogoSrc = await pluginCard.locator('img').first().getAttribute('src');
-  check('plugin oauth card shows plugin logo', Boolean(pluginLogoSrc?.startsWith('data:image/svg+xml')), `src=${pluginLogoSrc ?? 'none'}`);
-  const pluginStart = page.locator('[data-oauth-start="iflow"]');
-  await pluginStart.click();
-  const pluginWaitingState = pluginCard.getByText(/等待|waiting/i).first();
-  await pluginWaitingState.waitFor({ state: 'visible', timeout: 15000 });
-  const pluginWaitingText = await pluginWaitingState.innerText();
-  check(
-    'plugin oauth start polls waiting state',
-    /等待|waiting/i.test(pluginWaitingText) && !/授权成功|认证成功|success|失败|error/i.test(pluginWaitingText),
-    `text=${pluginWaitingText}`,
+    'oauth replay callback converges to success without a submission error',
+    !/提交失败|failed/i.test(await successBadge.innerText()) && replayErrors === 0,
+    `errors=${replayErrors}`,
   );
 
-  // Devin: the redirect lands on a loopback callback the browser cannot reach,
-  // so the pasted URL is the only thing carrying the code. A URL from another
-  // attempt must be refused before anything is submitted, because CPA would
-  // otherwise attribute the code to the wrong session.
-  const devinCard = page.locator('[data-oauth-card="devin"]');
-  await devinCard.waitFor({ state: 'visible', timeout: 15000 });
-  check('oauth page renders the Devin card', (await devinCard.getByText(/Devin/i).count()) > 0);
+  // Minimize the successful panel, then reopen it. The drawer is presentation
+  // only: the confirmed result must still be there and Start must have become the
+  // explicit "sign in another account" action rather than a duplicate attempt.
+  await minimizeConnect(page);
+  await openConnect(page);
+  await selectProvider(page, 'codex', 'Codex OAuth');
+  check(
+    'minimizing and reopening preserves the confirmed authorization result',
+    await page.locator('[data-oauth-card="codex"]').getByText(/授权成功|认证成功|success/i).first().isVisible(),
+  );
+  check(
+    'the confirmed provider offers an explicit new-account action instead of auto-restarting',
+    /another|其他/.test(await page.locator('[data-oauth-start="codex"]').innerText()),
+  );
+  await minimizeConnect(page);
+
+  // Plugin-discovered OAuth: a CPA plugin advertising supports_oauth joins the
+  // same picker with its declared provider id and plugin-published logo.
+  await openConnect(page);
+  await selectProvider(page, 'iflow', 'iFlow Alliance Auth OAuth');
+  const pluginLogo = await page.locator(`[data-oauth-card="iflow"] img`).first().getAttribute('src');
+  check('connect picker draws the plugin-published logo', pluginLogo === FAKE_PLUGIN_LOGO_DATA_URL, `src=${pluginLogo ?? 'none'}`);
+  check(
+    'connect panel identifies iFlow as a CPA plugin provider',
+    (await page.locator('[data-oauth-card="iflow"]').getByText(/CPA 插件|CPA Plugin/i).count()) > 0,
+  );
+  await page.locator('[data-oauth-start="iflow"]').click();
+  const pluginPanel = page.locator('[data-oauth-card="iflow"]');
+  await pluginPanel.getByText(/等待|waiting/i).first().waitFor({ state: 'visible', timeout: 15000 });
+  await minimizeConnect(page);
+  await openConnect(page);
+  await selectProvider(page, 'iflow', 'iFlow Alliance Auth OAuth');
+  const resumedPluginText = await page.locator('[data-oauth-card="iflow"]').innerText();
+  check(
+    'reopening a minimized plugin session preserves its waiting attempt without restart or cancel',
+    /等待|waiting/i.test(resumedPluginText)
+      && !/授权成功|认证成功|success|授权失败|Authorization failed|error/i.test(resumedPluginText)
+      && oauthStarts.length === 2
+      && oauthCancels.length === 0,
+    `start=${oauthStarts.length} cancel=${oauthCancels.length} text=${resumedPluginText.slice(0, 100)}`,
+  );
+  await minimizeConnect(page);
+
+  // Devin: the redirect lands on a loopback callback the browser cannot reach, so
+  // the pasted URL is the only thing carrying the code. A stale state must be
+  // refused before anything is submitted.
+  await openConnect(page);
+  await selectProvider(page, 'devin', 'Devin OAuth');
   await page.locator('[data-oauth-start="devin"]').click();
-  const devinWaiting = devinCard.getByText(/等待|waiting/i).first();
-  await devinWaiting.waitFor({ state: 'visible', timeout: 15000 });
-  const devinCallbackInput = devinCard.locator('[data-oauth-callback-input]');
-  await devinCallbackInput.waitFor({ state: 'visible', timeout: 15000 });
+  const devinPanel = page.locator('[data-oauth-card="devin"]');
+  await devinPanel.getByText(/等待|waiting/i).first().waitFor({ state: 'visible', timeout: 15000 });
+  const devinCallbackInput = devinPanel.locator('[data-oauth-callback-input]');
   await devinCallbackInput.fill('http://127.0.0.1:8317/devin/callback?code=e2e&state=stale-attempt');
-  await devinCard.locator('[data-oauth-callback-submit]').click();
-  // The refusal is a toast, which antd renders at the document root rather than
-  // inside the card.
+  await devinPanel.locator('[data-oauth-callback-submit]').click();
   const devinMismatch = page.getByText(/不属于本次|does not belong/i).first();
   await devinMismatch.waitFor({ state: 'visible', timeout: 10000 });
-  check(
-    'devin refuses a callback from another attempt',
-    !/授权成功|认证成功|success/i.test(await devinCard.innerText()),
-    'a stale paste must not reach the success state',
-  );
+  check('devin refuses a callback from another attempt', !/授权成功|认证成功|success/i.test(await devinPanel.innerText()));
   await devinCallbackInput.fill('http://127.0.0.1:8317/devin/callback?code=e2e&state=e2e-state');
-  await devinCard.locator('[data-oauth-callback-submit]').click();
-  const devinSubmitted = devinCard.getByText(/回调已提交|Callback submitted/i).first();
-  await devinSubmitted.waitFor({ state: 'visible', timeout: 15000 });
+  await devinPanel.locator('[data-oauth-callback-submit]').click();
+  await devinPanel.getByText(/回调已提交|Callback submitted/i).first().waitFor({ state: 'visible', timeout: 15000 });
+  const devinSubmittedText = await devinPanel.innerText();
   check(
     'devin accepts the current attempt callback',
-    /回调已提交|Callback submitted/i.test(await devinSubmitted.innerText()),
-    `text=${await devinSubmitted.innerText()}`,
+    /回调已提交|Callback submitted/i.test(devinSubmittedText)
+      && !/不属于本次|does not belong|提交失败|submission failed/i.test(devinSubmittedText),
+    devinSubmittedText.slice(0, 160),
   );
+  await minimizeConnect(page);
 
-  // Meta Muse is a device grant: the card shows the code CPA issued, and no
-  // paste box at all.
-  const metaCard = page.locator('[data-oauth-card="meta"]');
-  await metaCard.waitFor({ state: 'visible', timeout: 15000 });
-  check('oauth page renders the Meta Muse card', (await metaCard.getByText(/Meta Muse/i).count()) > 0);
+  // Meta Muse is a device grant: the panel shows CPA's short code, no paste box,
+  // and the explicit status check.
+  await openConnect(page);
+  await selectProvider(page, 'meta', 'Meta Muse OAuth');
   await page.locator('[data-oauth-start="meta"]').click();
-  const metaUserCode = metaCard.locator('[data-oauth-user-code]');
+  const metaPanel = page.locator('[data-oauth-card="meta"]');
+  const metaUserCode = metaPanel.locator('[data-oauth-user-code]');
   await metaUserCode.waitFor({ state: 'visible', timeout: 15000 });
+  check('meta device grant shows the code to confirm', (await metaUserCode.innerText()).trim() === 'E2E-CODE-1');
+  check('meta device grant offers no callback paste', (await metaPanel.locator('[data-oauth-callback-input]').count()) === 0);
+  const sessionPills = page.getByTestId('oauth-session-pill');
   check(
-    'meta device grant shows the code to confirm',
-    (await metaUserCode.innerText()).trim() === 'E2E-CODE-1',
-    `code=${await metaUserCode.innerText()}`,
-  );
-  check(
-    'meta device grant offers no callback paste',
-    (await metaCard.locator('[data-oauth-callback-input]').count()) === 0,
+    'concurrent provider sessions are exposed by provider identity in the workspace strip',
+    (await sessionPills.filter({ hasText: /iFlow/i }).count()) === 1
+      && (await sessionPills.filter({ hasText: /Meta Museo|Meta Muse/i }).count()) === 1,
+    `sessions=${await sessionPills.count()}`,
   );
 }

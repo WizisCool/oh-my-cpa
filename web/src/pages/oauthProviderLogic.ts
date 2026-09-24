@@ -1,3 +1,8 @@
+import { credentialProviderIconId } from '../components/common/providerMetadata';
+import type { TFunc } from '../i18n';
+import type { PluginItem } from '../types/plugin';
+import { pluginOAuthLogoFor, pluginOAuthProviderLogos } from '../types/pluginOAuthProviders';
+
 /**
  * The OAuth provider contract for the console: which authorizations exist, how
  * each one has to be rendered, and how a pasted redirect is judged.
@@ -280,4 +285,79 @@ export const BUILTIN_OAUTH_IDS = new Set<string>(BUILTIN_OAUTH_PROVIDERS.map((pr
 export function lookupOAuthProvider(id: string): OAuthProviderDefinition | undefined {
   const normalized = (id || '').trim().toLowerCase();
   return BUILTIN_OAUTH_PROVIDERS.find((provider) => provider.id === normalized);
+}
+
+
+export interface OAuthProviderChoice {
+  id: string;
+  flow: OAuthFlowKind;
+  iconId: string;
+  title: string;
+  description: string;
+  loginLabel: string;
+  /** Set only for CPA plugin providers. */
+  pluginId?: string;
+  pluginLogo?: string;
+  requiresExplicitCancel?: boolean;
+  callback?: OAuthCallbackRules;
+}
+
+export function builtinOAuthProviderChoices(t: TFunc): OAuthProviderChoice[] {
+  return BUILTIN_OAUTH_PROVIDERS.map((provider) => ({
+    id: provider.id,
+    flow: provider.flow,
+    iconId: provider.iconId,
+    title: t(`oauth.${provider.keyBase}_title`),
+    description: t(`oauth.${provider.keyBase}_hint`),
+    loginLabel: t(`oauth.${provider.keyBase}_login`),
+    requiresExplicitCancel: provider.requiresExplicitCancel,
+    callback: provider.callback,
+  }));
+}
+
+/**
+ * Builds the connectable set from declared plugin metadata only. A disabled plugin
+ * keeps owning any credentials it previously created, but it cannot start a new
+ * authorization until its effective-enabled state says it may.
+ */
+export function pluginOAuthProviderChoices(
+  plugins: PluginItem[] | undefined,
+  t: TFunc,
+): OAuthProviderChoice[] {
+  const seen = new Set<string>(BUILTIN_OAUTH_IDS);
+  const logos = pluginOAuthProviderLogos(plugins);
+  const choices: OAuthProviderChoice[] = [];
+  for (const plugin of plugins ?? []) {
+    const supportsOAuth = Boolean(plugin.supports_oauth);
+    const providerId = (plugin.oauth_provider || (supportsOAuth ? plugin.id : '')).trim().toLowerCase();
+    const isEnabled = plugin.effective_enabled ?? plugin.enabled;
+    if (!supportsOAuth || !isEnabled || !providerId || seen.has(providerId) || !OAUTH_PROVIDER_PATTERN.test(providerId)) {
+      continue;
+    }
+    seen.add(providerId);
+    const title = plugin.metadata?.name?.trim() || plugin.name?.trim() || plugin.id;
+    choices.push({
+      id: providerId,
+      flow: 'manual-callback',
+      iconId: credentialProviderIconId(providerId, title),
+      title: t('oauth.plugin_title', { name: title }),
+      description: t('oauth.plugin_hint', { name: title }),
+      loginLabel: t('oauth.plugin_login', { name: title }),
+      pluginId: plugin.id,
+      pluginLogo: pluginOAuthLogoFor(logos, providerId),
+      callback: {
+        // Plugin redirect targets vary. The generic rule keeps the paste explicit
+        // and lets CPA judge it, rather than guessing a vendor callback shape.
+        errorKeys: {
+          invalid: 'oauth.callback_invalid_url',
+          missingState: 'oauth.missing_state',
+        },
+      },
+    });
+  }
+  return choices;
+}
+
+export function oauthProviderChoices(plugins: PluginItem[] | undefined, t: TFunc): OAuthProviderChoice[] {
+  return [...builtinOAuthProviderChoices(t), ...pluginOAuthProviderChoices(plugins, t)];
 }

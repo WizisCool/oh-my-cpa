@@ -1,0 +1,391 @@
+.meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 16px;
+  row-gap: 4px;
+  font-size: 11px;
+}
+
+.meta-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+}
+
+.meta-label {
+  color: var(--meta);
+  flex-shrink: 0;
+}
+
+.meta-value {
+  color: var(--fg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meta-tag {
+  color: var(--meta);
+  font-size: 10px;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: help;
+  white-space: nowrap;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.section-title {
+  font-size: 11px;
+  color: var(--meta);
+  letter-spacing: 0.2px;
+}
+
+.reset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reset-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 10px;
+  font-size: 11px;
+  background: var(--hover-inset);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+}
+
+.windows-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.window-divider {
+  height: 1px;
+  /* --border-soft equals --surface in dark mode, which would hide the line */
+  background: var(--border);
+  margin: 2px 0;
+}
+
+.no-window {
+  font-size: 11px;
+  color: var(--meta);
+  padding: 8px 0;
+  text-align: center;
+}
+
+.progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.progress-label-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.progress-label {
+  color: var(--fg-2);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.progress-sub-label {
+  color: var(--meta);
+  margin-left: 6px;
+}
+
+.progress-value {
+  flex: none;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+
+.progress-reset {
+  flex: 1;
+  text-align: right;
+  color: var(--meta);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rec-banner {
+  background: var(--hover-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  padding: 8px 10px;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rec-banner-danger {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+}
+
+.rec-text {
+  color: var(--fg-2);
+  line-height: 1.4;
+  flex: 1;
+}
+
+.banner-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.rec-sub-danger {
+  font-size: 10px;
+  color: var(--danger);
+  margin-top: 2px;
+}
+
+.card-meta-time {
+  font-size: 11px;
+  color: var(--meta);
+  font-family: var(--font-mono);
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.quota-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.quota-status-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.quota-diagnostic-alert {
+  font-size: 11px;
+}
+
+.quota-diagnostics {
+  border-top: 1px solid var(--border-soft);
+  padding-top: 8px;
+  font-size: 11px;
+  color: var(--meta);
+}
+
+.quota-diagnostics summary {
+  cursor: pointer;
+  color: var(--fg-2);
+}
+
+.diagnostic-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 5px;
+  overflow-wrap: anywhere;
+}
+
+.quota-body-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 10px;
+  margin-top: auto;
+}
+
+@media (max-width: 640px) {
+  .quota-body-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .card-actions {
+    flex-wrap: wrap;
+  }
+}
+
+
+.progress-label,
+.progress-reset {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.compact {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  justify-content: center;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.head :global(.ant-tag) {
+  margin: 0 !important;
+  font-size: 11px !important;
+  line-height: 18px !important;
+  padding: 0 6px !important;
+  border-radius: var(--radius-xs) !important;
+  font-weight: 550 !important;
+}
+
+.plan {
+  color: var(--fg-2);
+  background: var(--hover-inset);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-xs);
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 550;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A banked credit is a held entitlement, not a degraded state: the amber health token would
+   make a healthy row read as a warning beside the quota tag. Accent keeps it legible as an
+   affordance (the button beside it opens a confirmation) without borrowing health semantics. */
+.credit {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: var(--hover-inset);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-xs);
+  padding: 1px 5px;
+}
+
+.observed {
+  margin-left: auto;
+  color: var(--meta);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.windows {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 6px 16px;
+  min-width: 0;
+}
+
+.window {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.window-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.window-label {
+  color: var(--fg-2);
+  font-size: 11px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.window-value {
+  flex: none;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.bar,
+.bar :global(.ant-progress-line) {
+  line-height: 0;
+  font-size: 0;
+}
+
+.bar :global(.ant-progress-outer) {
+  padding-inline-end: 0 !important;
+}
+
+.bar :global(.ant-progress-inner) {
+  background-color: var(--border-soft) !important;
+  border-radius: 2px !important;
+}
+
+.window-reset {
+  color: var(--meta);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px dashed var(--border-soft);
+  border-radius: var(--radius-xs);
+  color: var(--meta);
+  font-size: 11px;
+  background: var(--hover-inset);
+  min-height: 38px;
+}
+

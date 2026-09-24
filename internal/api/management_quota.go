@@ -526,7 +526,7 @@ func (h *Handler) redeemCodexResetCredit(writer http.ResponseWriter, request *ht
 	}
 
 	svc := quota.NewService(client)
-	if err := svc.RedeemCodexCredit(ctx, authIndex); err != nil {
+	if err := svc.RedeemCodexCredit(ctx, *foundFile); err != nil {
 		_ = h.recordAudit(request, "quota.redeem_credit", "quota", authIndex, "failure", map[string]any{"error": err.Error()})
 		writeError(writer, http.StatusBadGateway, fmt.Sprintf("redeem reset credit failed: %v", err))
 		return

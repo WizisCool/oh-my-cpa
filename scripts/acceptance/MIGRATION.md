@@ -120,6 +120,10 @@ trusting that a name change was a deletion.
 | --- | --- | --- |
 | `/omc` redirects, sign-in rejects a wrong key, a valid key creates a session | `CROSS-STACK` | The auth boundary. Cookie attributes, redirect status and the `Secure` derivation are browser/HTTP facts. |
 | Every route renders with no document overflow | `BROWSER` | Layout, not presence. A route can render and still overflow. |
+| OAuth management overview density, six-window Quota tab completeness, Connect non-start and 320/375px reflow | `BROWSER` | Density and geometry are measured from rendered rows; the old three-page UI claims now have one canonical replacement. |
+| The overview row bars its own family's five-hour and weekly windows, names a kindless window from its period, keeps its secondary actions in the row menu, and reaches the full reading through one Details action | `BROWSER` | Which windows a row can afford, whether it truncates and how many rows the 1440×900 overview shows are measured from the rendered rows. |
+| Legacy OAuth/auth-file/quota URLs preserve only documented intent and consume one-shot actions before the overlay history entry | `BROWSER` | Redirect parameters and Back/Forward behaviour are browser history facts. |
+| A status read that fails before CPA answers leaves the attempt waiting, cancellable and still polled | `BROWSER` | The failure is a real gateway response and the completion depends on a timer that must survive it; only a browser shows the panel state, the surviving timer and the request count together. |
 | The filter drawer is on screen at 768px and 390px, including mid-slide | `BROWSER` | Geometry. The failure mode is an off-screen panel, invisible to any DOM assertion. |
 | The custom time dialog stays on screen at both widths | `BROWSER` | Same, for a second surface that only exists while open. |
 | Request rows ellipsize instead of expanding their column | `BROWSER` | `scrollWidth > clientWidth` is a paint fact. |
@@ -140,3 +144,14 @@ trusting that a name change was a deletion.
 | Console, page and request errors are empty | `BROWSER` | Runtime health. |
 | Secret material never reaches the DOM, storage or a response body | `CROSS-STACK` | A security predicate over the real stack. |
 | The session expires when the cookie is cleared | `BROWSER` | Cookie lifecycle. |
+
+## OAuth workspace UI acceptance refinement
+
+The OAuth workspace probe pins its desktop viewport to 1440×900 explicitly; the
+probe runner default is 1440×1000 and cannot establish the smaller-viewport density
+contract. The user-approved presentation is an overview list with a tabbed credential
+Drawer. The probe verifies full quota details, model/group labels and ordering,
+dirty drafts across tabs, explicit zero priority and default weight, and phone
+list/Drawer overflow. It also verifies sequential 10/10/3 refreshes for 23 targets
+in a 48-record collection, partial failures and missing results, and two minimized
+provider sessions without concurrent same-session status reads.

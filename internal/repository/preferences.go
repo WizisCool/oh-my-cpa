@@ -13,13 +13,14 @@ import (
 // settings. Named here so the API and every page agree on the key instead of
 // each hardcoding its own string.
 const (
-	PreferenceDashboardRange     = "dashboard_range"
-	PreferenceLogFilters         = "log_filters"
-	PreferenceProviderIcons      = "provider_icons"
-	PreferenceProviderNames      = "provider_names"
-	PreferenceProviderWebsites   = "provider_websites"
-	PreferenceUsageEventsView    = "usage_events_view"
-	PreferenceUsageEventsColumns = "usage_events_columns"
+	PreferenceDashboardRange      = "dashboard_range"
+	PreferenceLogFilters          = "log_filters"
+	PreferenceProviderIcons       = "provider_icons"
+	PreferenceProviderNames       = "provider_names"
+	PreferenceProviderWebsites    = "provider_websites"
+	PreferenceUsageEventsView     = "usage_events_view"
+	PreferenceUsageEventsColumns  = "usage_events_columns"
+	PreferenceOAuthManagementView = "oauth_management_view_v1"
 
 	// PreferenceTokenStyle, PreferenceModelView and PreferenceTheme are Oh My CPA's own
 	// display settings: how token counts are abbreviated across the console, how the

@@ -22,6 +22,9 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 
 	var cpaResetCalledWith string
 	var cpaApiCallCalledWith string
+	var cpaConsumeMethod string
+	var cpaConsumeHeader map[string]string
+	var cpaConsumeBody string
 
 	cpaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Header.Get("Authorization") != "Bearer "+managementKey {
@@ -67,17 +70,26 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 
 		case "/v0/management/api-call":
 			var payload struct {
-				AuthIndex string `json:"auth_index"`
-				URL       string `json:"url"`
+				AuthIndex string            `json:"auth_index"`
+				URL       string            `json:"url"`
+				Method    string            `json:"method"`
+				Header    map[string]string `json:"header"`
+				Data      string            `json:"data"`
 			}
 			_ = json.NewDecoder(request.Body).Decode(&payload)
 			_ = cpaApiCallCalledWith
 			cpaApiCallCalledWith = payload.URL
 
-			if strings.Contains(payload.URL, "rate_limits/reset_credits/consume") {
+			// The consume check must precede the details check and name the real path:
+			// the two endpoints share a prefix, so a typo here silently routes the redeem
+			// call into the details response and the test passes without exercising it.
+			if strings.HasSuffix(payload.URL, "/rate-limit-reset-credits/consume") {
+				cpaConsumeMethod = payload.Method
+				cpaConsumeHeader = payload.Header
+				cpaConsumeBody = payload.Data
 				_, _ = writer.Write([]byte(`{
 					"status_code": 200,
-					"body": {"status": "ok"}
+					"body": {"code": "reset"}
 				}`))
 			} else if strings.Contains(payload.URL, "rate-limit-reset-credits") {
 				_, _ = writer.Write([]byte(`{
@@ -283,6 +295,18 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 
 	if redeemResp.StatusCode != http.StatusOK {
 		t.Fatalf("redeem-credit status = %d, want 200", redeemResp.StatusCode)
+	}
+	if cpaConsumeMethod != http.MethodPost {
+		t.Errorf("consume method = %q, want POST", cpaConsumeMethod)
+	}
+	if cpaConsumeHeader["Authorization"] != "Bearer $TOKEN$" {
+		t.Errorf("consume Authorization = %q, want the CPA credential marker", cpaConsumeHeader["Authorization"])
+	}
+	if cpaConsumeHeader["Chatgpt-Account-Id"] != "acct-e2e" {
+		t.Errorf("consume Chatgpt-Account-Id = %q, want acct-e2e", cpaConsumeHeader["Chatgpt-Account-Id"])
+	}
+	if !strings.Contains(cpaConsumeBody, "redeem_request_id") {
+		t.Errorf("consume body = %q, want a redeem_request_id", cpaConsumeBody)
 	}
 
 	// 5. GET /api/v1/management/quota/{authIndex}

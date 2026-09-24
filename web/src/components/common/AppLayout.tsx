@@ -6,8 +6,6 @@ import {
   ControlOutlined,
   DashboardOutlined,
   DollarOutlined,
-  FieldTimeOutlined,
-  FileProtectOutlined,
   HistoryOutlined,
   InfoCircleOutlined,
   KeyOutlined,
@@ -63,11 +61,8 @@ const navGroups: NavGroup[] = [
     items: [
       { key: '/ai-providers', labelKey: 'nav.providers', icon: <CloudServerOutlined /> },
       { key: '/api-keys', labelKey: 'nav.api_keys', icon: <KeyOutlined /> },
-      // The three OAuth surfaces read as one flow: authenticate, then manage the
-      // credentials it produced, then watch what they are allowed to consume.
-      { key: '/oauth', labelKey: 'nav.oauth', icon: <LoginOutlined /> },
-      { key: '/auth-files', labelKey: 'nav.auth_files', icon: <FileProtectOutlined /> },
-      { key: '/quota', labelKey: 'nav.quota', icon: <FieldTimeOutlined /> },
+      // Authentication, credential management and quota are one credential-centred workspace.
+      { key: '/oauth-management', labelKey: 'nav.auth_files', icon: <LoginOutlined /> },
     ],
   },
   {

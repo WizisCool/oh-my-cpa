@@ -1,8 +1,9 @@
 import React from 'react';
 import { Progress } from 'antd';
 import { useT } from '../../i18n';
-import { formatTimeWithCountdown } from './quotaFormat';
-import styles from './QuotaPage.module.css';
+import { formatTimeWithCountdown, quotaRemainingPercent, quotaWindowLabel, resetAccuracyMarker } from './quotaFormat';
+import { quotaRemainingStroke } from './quotaThresholds';
+import styles from './QuotaPresentation.module.css';
 
 interface QuotaProgressBarProps {
   nowMS: number;
@@ -13,6 +14,7 @@ interface QuotaProgressBarProps {
   remainingPercent?: number | null;
   resetAtMS?: number | null;
   resetLabel?: string;
+  resetAccuracy?: 'exact' | 'derived' | 'approximate';
   height?: number;
   showPercent?: boolean;
 }
@@ -26,52 +28,34 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
   remainingPercent,
   resetAtMS,
   resetLabel,
+  resetAccuracy = 'exact',
   height = 8,
   showPercent = true,
 }) => {
   const t = useT();
 
   // A credential may report only usage; derive the remaining share from it
-  // rather than showing no bar at all.
-  let remaining = remainingPercent;
-  if (remaining == null && usedPercent != null) {
-    remaining = Math.max(0, Math.min(100, 100 - usedPercent));
-  }
+  // rather than showing no bar at all. The colour rule is shared with the list row's bars.
+  const clampedRemaining = quotaRemainingPercent({ remaining_percent: remainingPercent ?? undefined, used_percent: usedPercent ?? undefined });
+  const hasData = clampedRemaining != null;
+  const strokeColor = quotaRemainingStroke(clampedRemaining);
 
-  const hasData = remaining != null;
-  const clampedRemaining = hasData ? Math.max(0, Math.min(100, remaining!)) : 0;
+  const resolvedLabel = quotaWindowLabel(kind, label, t);
 
-  // CPAMC-style three buckets: plenty green, getting low yellow, nearly gone red
-  let strokeColor = 'var(--muted)';
-  if (hasData) {
-    if (clampedRemaining >= 70) {
-      strokeColor = 'var(--success)';
-    } else if (clampedRemaining >= 25) {
-      strokeColor = 'var(--warn)';
-    } else {
-      strokeColor = 'var(--danger)';
-    }
-  }
-
-  const resolvedLabel = (() => {
-    if (kind === 'five_hour') return t('quota.window_five_hour');
-    if (kind === 'weekly') return t('quota.window_weekly');
-    if (kind === 'daily') return t('quota.window_daily');
-    if (kind === 'monthly') return t('quota.window_monthly');
-    if (kind === 'credit_usage') return t('quota.window_credit_usage');
-    return label || '';
-  })();
-
-  // Reset cell: "09/05 19:43 · in 4 hours"; backend-provided label as fallback
+  // Reset cell: "09/05 19:43 · in 4 hours"; backend-provided label as fallback. A passed
+  // instant is only "recovered" when upstream stated it exactly: the row beside this cell
+  // makes the same distinction, and a derived instant supports no such claim.
+  const resetMarker = resetAccuracyMarker(resetAccuracy);
   const computedResetText = (() => {
     if (resetAtMS) {
-      if (resetAtMS - nowMS <= 0) return t('quota.recovered');
-      return formatTimeWithCountdown(resetAtMS, nowMS, t);
+      if (resetAtMS - nowMS > 0) return `${resetMarker}${formatTimeWithCountdown(resetAtMS, nowMS, t)}`;
+      if (!resetMarker) return t('quota.recovered');
+      return resetLabel ? `${resetMarker}${resetLabel}` : '';
     }
-    return resetLabel || '';
+    return resetLabel ? `${resetMarker}${resetLabel}` : '';
   })();
 
-  const displayPercent = hasData ? `${Math.round(clampedRemaining)}%` : '--';
+  const displayPercent = hasData ? `${clampedRemaining}%` : '--';
 
   return (
     <div className={styles['progress-wrap']}>
@@ -85,7 +69,10 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
             {displayPercent}
           </span>
         )}
-        <span className={styles['progress-reset']} title={computedResetText || undefined}>
+        <span
+          className={styles['progress-reset']}
+          title={resetAccuracy === 'exact' ? computedResetText || undefined : t('quota.reset_estimated_hint')}
+        >
           {computedResetText}
         </span>
       </div>
@@ -95,7 +82,7 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
         title={hasData ? `${resolvedLabel}: ${displayPercent}` : undefined}
       >
         <Progress
-          percent={hasData ? clampedRemaining : 0}
+          percent={clampedRemaining ?? 0}
           showInfo={false}
           strokeColor={strokeColor}
           strokeWidth={height}

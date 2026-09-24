@@ -66,6 +66,12 @@ func TestPreferencesRoundTripThroughTheDatabase(t *testing.T) {
 		t.Fatalf("usage events columns status = %d body %s", response.StatusCode, payload)
 	}
 
+	// The unified OAuth workspace persists only its reading density and page size;
+	// filters and task identity remain URL or memory state.
+	if response, payload = doJSON(t, client, http.MethodPut, base+"/oauth_management_view_v1", `{"density":"compact","pageSize":24}`); response.StatusCode != http.StatusOK {
+		t.Fatalf("OAuth management view status = %d body %s", response.StatusCode, payload)
+	}
+
 	// The theme is stored as one document: the mode, the palette each mode uses, and any palette
 	// the operator authored. The server keeps it verbatim - it is the console's shape, and the
 	// console is the only thing that reads it.
@@ -83,6 +89,7 @@ func TestPreferencesRoundTripThroughTheDatabase(t *testing.T) {
 		!strings.Contains(string(payload), `"provider_icons":{"openai-compat-0":"DeepSeek","relay":"OpenAI"}`) ||
 		!strings.Contains(string(payload), `"usage_events_view":{"preset":"24h","result":"failed","grouping":"provider","advanced":true}`) ||
 		!strings.Contains(string(payload), `"usage_events_columns":{"time":120,"provider":220,"tps":90}`) ||
+		!strings.Contains(string(payload), `"oauth_management_view_v1":{"density":"compact","pageSize":24}`) ||
 		!strings.Contains(string(payload), `"omc_theme":`+themeDocument) {
 		t.Fatalf("stored values did not come back verbatim: %s", payload)
 	}
@@ -104,5 +111,8 @@ func TestPreferencesRoundTripThroughTheDatabase(t *testing.T) {
 	}
 	if _, found, err = repo.GetPreference(context.Background(), repository.PreferenceUsageEventsColumns); err != nil || !found {
 		t.Fatalf("usage events columns not persisted: found=%v err=%v", found, err)
+	}
+	if _, found, err = repo.GetPreference(context.Background(), repository.PreferenceOAuthManagementView); err != nil || !found {
+		t.Fatalf("OAuth management view not persisted: found=%v err=%v", found, err)
 	}
 }

@@ -4,8 +4,52 @@
   gap: 16px;
 }
 
+.drawer-section {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--hover-inset);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.section-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: normal;
+}
+
+.section-body {
+  padding: 14px;
+}
+
 .identity-alert {
   margin-top: 12px;
+}
+
+.overview-table {
+  border-radius: var(--radius-sm);
+}
+
+.overview-quota {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--hover-inset);
 }
 
 .field-grid {
@@ -18,50 +62,73 @@
   grid-column: 1 / -1;
 }
 
+.switch-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  background: var(--hover-inset);
+}
+
+.switch-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 28px;
+}
+
+.switch-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.switch-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
 .form-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+  margin-top: 8px;
+}
+
+.models-scroll {
+  max-height: 280px;
+  overflow-y: auto;
 }
 
 .drawer-footer {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  padding-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
 }
 
-.models-scroll {
-  max-height: 240px;
-  overflow-y: auto;
-}
-
-.switch-field {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 32px;
-}
-
-.switch-copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.switch-hint {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-/* 720px is the drawer's own width, not the device's: the credential fields sit two to a row and
-   a row needs about this much of the drawer before either column loses the room to hold a label
-   and its input. The drawer is clamped to the viewport, so on a phone this fires too. */
 @media (max-width: 720px) {
   .field-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+.credential-metadata {
+  margin-top: 20px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 12px;
+}
+
+.credential-metadata > summary {
+  cursor: pointer;
+  margin-bottom: 12px;
+  color: var(--fg-2);
 }

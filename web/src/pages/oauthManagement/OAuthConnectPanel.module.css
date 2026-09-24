@@ -1,0 +1,425 @@
+.connect-drawer :global(.ant-drawer-body) {
+  overflow-x: hidden;
+  padding-bottom: 24px;
+}
+
+.connect-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.field-label {
+  display: block;
+  color: var(--fg-2);
+  font-size: 12px;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.selector-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.provider-grid-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.grid-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.grid-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.grid-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--meta);
+}
+
+.provider-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.provider-tile {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--motion-fast), border-color var(--motion-fast);
+  width: 100%;
+}
+
+.provider-tile:hover {
+  background: var(--hover-inset);
+  border-color: var(--border);
+}
+
+.provider-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.tile-icon {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--hover-inset);
+}
+
+.tile-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tile-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tile-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.tile-desc {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.connect-identity {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.connect-icon {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--hover-inset);
+}
+
+.connect-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.connect-title-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.connect-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.connect-desc {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--fg-2);
+  line-height: 1.4;
+}
+
+.connect-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.session-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 14px;
+}
+
+.step-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.step-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-on);
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.step-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.step-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.auth-url-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.auth-url-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  background: var(--hover-inset);
+}
+
+.url-textarea {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.callback-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.device-code-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 4px 0;
+}
+
+.device-code {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--fg);
+}
+
+.device-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.session-status-card {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 12px 14px;
+}
+
+.status-waiting-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.waiting-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.waiting-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.waiting-desc {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* A status read that failed before CPA answered: the attempt is still waiting, so the
+   note is attached to that state rather than replacing it. */
+.waiting-note {
+  font-size: 11px;
+  color: var(--warn);
+}
+
+.status-success-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.success-icon {
+  font-size: 22px;
+  color: var(--success);
+  flex: none;
+}
+
+.success-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.success-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--success);
+}
+
+.success-desc {
+  font-size: 11px;
+  color: var(--fg-2);
+}
+
+.success-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.status-error-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.error-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.error-icon {
+  color: var(--danger);
+}
+
+.error-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.error-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.error-desc {
+  font-size: 11px;
+  color: var(--danger);
+}
+
+@media (max-width: 640px) {
+  .provider-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .connect-actions {
+    justify-content: stretch;
+  }
+
+  .connect-actions > * {
+    flex: 1 1 auto;
+  }
+}
+
+
+.plugin-tag {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--surface);
+}

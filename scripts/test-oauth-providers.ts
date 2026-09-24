@@ -5,7 +5,9 @@ import {
   BUILTIN_OAUTH_PROVIDERS,
   OAUTH_PROVIDER_PATTERN,
   XAI_CALLBACK_URL,
+  builtinOAuthProviderChoices,
   lookupOAuthProvider,
+  pluginOAuthProviderChoices,
   normalizeOAuthFlow,
   normalizeOAuthStatus,
   resolveXaiCallback,
@@ -159,4 +161,60 @@ test('resolveXaiCallback: a partial callback keeps the state it arrived with', (
     'state-1',
     'a callback without its own state borrows the live one',
   );
+});
+
+
+test('provider choices keep built-ins, plugin ids and disabled discovery separate', () => {
+  const t = ((key: string) => key) as Parameters<typeof builtinOAuthProviderChoices>[0];
+  const builtins = builtinOAuthProviderChoices(t);
+  assert.equal(builtins.find((provider) => provider.id === 'anthropic')?.title, 'oauth.anthropic_title');
+  assert.equal(builtins.some((provider) => provider.id === 'codex'), true);
+
+  const choices = pluginOAuthProviderChoices([
+    {
+      id: 'iflow-auth',
+      name: 'iFlow Alliance Auth',
+      description: '',
+      version: '',
+      author: '',
+      enabled: true,
+      effective_enabled: true,
+      registered: true,
+      supports_oauth: true,
+      oauth_provider: 'iflow',
+      logo: 'data:image/svg+xml,fixture',
+      permissions: [],
+    },
+    {
+      id: 'disabled-auth',
+      name: 'Disabled Auth',
+      description: '',
+      version: '',
+      author: '',
+      enabled: false,
+      effective_enabled: false,
+      registered: true,
+      supports_oauth: true,
+      oauth_provider: 'disabled',
+      permissions: [],
+    },
+    {
+      id: 'codex',
+      name: 'Duplicate built-in',
+      description: '',
+      version: '',
+      author: '',
+      enabled: true,
+      effective_enabled: true,
+      registered: true,
+      supports_oauth: true,
+      oauth_provider: 'codex',
+      permissions: [],
+    },
+  ], t);
+
+  assert.deepEqual(choices.map((choice) => choice.id), ['iflow']);
+  assert.equal(choices[0].pluginId, 'iflow-auth');
+  assert.equal(choices[0].pluginLogo, 'data:image/svg+xml,fixture');
+  assert.equal(choices[0].callback?.errorKeys.missingState, 'oauth.missing_state');
 });
