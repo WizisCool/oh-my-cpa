@@ -42,10 +42,13 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
     .filter((credit) => credit.expires_at_ms)
     .sort((left, right) => (left.expires_at_ms ?? 0) - (right.expires_at_ms ?? 0));
   const isSnapshotBound = item.plan?.expires_source === 'credential_snapshot';
+  // Upstream's applicable count is not the UI gate: it refines which credits apply right
+  // now, and the consume response states the outcome. The bank of credits decides whether
+  // the redemption request is offered at all.
   const canRedeem = Boolean(
     onRedeemCredit
       && item.capabilities?.reset_credit_supported
-      && applicableCredits > 0
+      && availableCredits > 0
       && !item.disabled,
   );
   const rawSignals = {

@@ -668,9 +668,16 @@ func (s *Service) fetchDevinQuota(ctx context.Context, file management.AuthFile,
 }
 
 // RedeemCodexCredit consumes an available rate limit reset credit for a Codex credential.
-func (s *Service) RedeemCodexCredit(ctx context.Context, authIndex string) error {
+//
+// The consume route carries the same ChatGPT account id as the read probes, so spending a
+// credit stays scoped to the credential it was read from.
+func (s *Service) RedeemCodexCredit(ctx context.Context, file management.AuthFile) error {
 	if s.client == nil {
 		return errors.New("CPA client is not configured")
+	}
+	authIndex := strings.TrimSpace(file.AuthIndex)
+	if authIndex == "" {
+		return errors.New("auth_index is required")
 	}
 	redeemID := uuid.New().String()
 	body := fmt.Sprintf(`{"redeem_request_id":%q}`, redeemID)
@@ -679,6 +686,9 @@ func (s *Service) RedeemCodexCredit(ctx context.Context, authIndex string) error
 		"Accept":       "application/json",
 		"User-Agent":   CodexUserAgent,
 	})
+	if accountID := resolveCodexAccountID(file); accountID != "" {
+		headers["Chatgpt-Account-Id"] = accountID
+	}
 
 	resp, err := s.SafeApiCall(ctx, authIndex, "POST", CodexRedeemCreditURL, headers, body)
 	if err != nil {

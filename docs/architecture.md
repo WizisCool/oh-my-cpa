@@ -1048,6 +1048,12 @@ still describes. The console renders a snapshot as a `≥` bound with an unverif
 marker and never as a countdown, so a stale claim cannot read as a verified
 renewal date.
 
+Codex reset-credit redemption is offered whenever the credential's available credit
+count is positive; upstream's `applicable_available_count` is not the gate, and the
+consume response is what states the outcome. The redemption POST carries the same
+`Chatgpt-Account-Id` the read probes send, so the redemption is scoped to the same
+account as the reading it was decided from.
+
 ## 9. Storage
 
 | Table group | Tables | Notes |

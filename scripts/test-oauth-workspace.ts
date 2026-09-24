@@ -17,6 +17,12 @@ import {
   workspaceProviderOptions,
 } from '../web/src/pages/oauthManagement/oauthWorkspaceLogic.ts';
 import type { OAuthProviderChoice } from '../web/src/pages/oauthProviderLogic.ts';
+import { pickCompactQuotaWindows, orderQuotaWindows, quotaWindowKindOf } from '../web/src/pages/quota/quotaWindowSelection.ts';
+import { formatShortDateTime, quotaResetCountdown, quotaResetText } from '../web/src/pages/quota/quotaFormat.ts';
+import type { TFunc } from '../web/src/i18n/index.ts';
+
+/** Stands in for the dictionary: the countdown assertions only need the arguments back. */
+const echoT: TFunc = (key, vars) => (vars ? `${key}:${Object.values(vars).join('/')}` : key);
 
 const choices: OAuthProviderChoice[] = [
   { id: 'anthropic', title: 'Claude', description: '', iconId: 'Claude', flow: 'manual-callback', loginLabel: '' },
@@ -298,4 +304,158 @@ test('the all sentinel does not erase a literal search for the word all', () => 
   const updated = updateWorkspaceSearch(new URLSearchParams('provider=codex&q=old'), { q: 'all', page: null });
   assert.equal(updated.get('q'), 'all');
   assert.equal(updated.get('provider'), 'codex');
+});
+
+test('a compact row carries the five-hour and weekly limits of one group', () => {
+  const picked = pickCompactQuotaWindows([
+    { id: 'a-five', label: 'Gemini Models · Five Hour Limit Remaining', kind: 'five_hour', scope: 'group' },
+    { id: 'a-week', label: 'Gemini Models · Weekly Limit Remaining', kind: 'weekly', scope: 'group' },
+    { id: 'b-five', label: 'Claude Models · Five Hour Limit Remaining', kind: 'five_hour', scope: 'group' },
+  ]);
+  assert.deepEqual(picked.map((window) => window.id), ['a-five', 'a-week']);
+});
+
+test('a compact row fills its lines from whatever the provider returned', () => {
+  assert.deepEqual(
+    pickCompactQuotaWindows([{ id: 'week', label: 'Weekly', kind: 'weekly', scope: 'standard' }]).map((window) => window.id),
+    ['week'],
+    'a provider with one window shows that window rather than an empty line',
+  );
+  assert.deepEqual(
+    pickCompactQuotaWindows([
+      { id: 'day', label: 'Daily', kind: 'daily', scope: 'standard' },
+      { id: 'month', label: 'Monthly', kind: 'monthly', scope: 'standard' },
+      { id: 'other', label: 'Other', kind: 'custom', scope: 'standard' },
+    ]).map((window) => window.id),
+    ['day', 'month'],
+    'a provider with neither kind is still represented by its own first windows',
+  );
+  assert.deepEqual(pickCompactQuotaWindows([]), []);
+});
+
+test('a compact row never shows the same window twice', () => {
+  const five = { id: 'five', label: 'Five hour', kind: 'five_hour', scope: 'standard' } as const;
+  const week = { id: 'week', label: 'Weekly', kind: 'weekly', scope: 'standard' } as const;
+  const picked = pickCompactQuotaWindows([five, five, week]);
+  assert.deepEqual(picked.map((window) => window.id), ['five', 'week']);
+});
+
+test('a daily limit leads its own weekly limit', () => {
+  const daily = { id: 'devin_daily', label: 'daily', kind: 'daily', scope: 'standard' } as const;
+  const weekly = { id: 'devin_weekly', label: 'weekly', kind: 'weekly', scope: 'standard' } as const;
+  assert.deepEqual(
+    orderQuotaWindows([weekly, daily]).map((window) => window.id),
+    ['devin_daily', 'devin_weekly'],
+    'the shorter limit binds first even when the provider lists the weekly one first',
+  );
+  assert.deepEqual(
+    pickCompactQuotaWindows(orderQuotaWindows([weekly, daily])).map((window) => window.id),
+    ['devin_daily', 'devin_weekly'],
+  );
+});
+
+test('a countdown marks an instant the provider did not state exactly', () => {
+  const now = 1_700_000_000_000;
+  const inTwoHours = now + 2 * 3_600_000;
+  assert.equal(
+    quotaResetCountdown({ reset_at_ms: inTwoHours, reset_accuracy: 'exact' }, now, echoT),
+    'quota.in_hours:2',
+    'an exact instant reads as a plain countdown',
+  );
+  assert.equal(
+    quotaResetCountdown({ reset_at_ms: inTwoHours, reset_accuracy: 'derived' }, now, echoT),
+    '~quota.in_hours:2',
+    'a derived instant keeps its marker rather than reading as a verified deadline',
+  );
+  assert.equal(
+    quotaResetCountdown({ reset_at_ms: now - 60_000, reset_accuracy: 'exact' }, now, echoT),
+    'quota.recovered',
+  );
+  assert.equal(
+    quotaResetCountdown({ reset_at_ms: now - 60_000, reset_accuracy: 'derived', reset_label: '已恢复' }, now, echoT),
+    '~已恢复',
+    'a passed derived instant defers to what upstream stated instead of claiming recovery',
+  );
+  assert.equal(
+    quotaResetCountdown({ reset_at_ms: now - 60_000, reset_accuracy: 'approximate' }, now, echoT),
+    '',
+    'nothing is claimed when upstream stated neither recovery nor a label',
+  );
+  assert.equal(
+    quotaResetText({ reset_at_ms: inTwoHours, reset_accuracy: 'derived' }, now, echoT),
+    `~${formatShortDateTime(inTwoHours)} · quota.in_hours:2`,
+    'the tooltip keeps the marker too, so the two readings cannot disagree',
+  );
+});
+
+test('a window without a kind is named from the period it covers', () => {
+  const groupWindow = (periodHours: number) => ({ id: `w-${periodHours}`, label: 'Gemini Models · Five Hour Limit Remaining', scope: 'group' as const, period_hours: periodHours });
+  assert.equal(quotaWindowKindOf(groupWindow(5)), 'five_hour');
+  assert.equal(quotaWindowKindOf(groupWindow(24)), 'daily');
+  assert.equal(quotaWindowKindOf(groupWindow(168)), 'weekly');
+  assert.equal(quotaWindowKindOf(groupWindow(720)), 'monthly');
+  assert.equal(quotaWindowKindOf(groupWindow(2)), undefined, 'an unknown period stays unnamed rather than being forced into a bucket');
+  assert.equal(quotaWindowKindOf({ ...groupWindow(2), kind: 'custom' }), 'custom', 'an explicit kind always wins');
+});
+
+test('a grouped row is picked by period, not by the order the provider listed', () => {
+  const weekly = { id: 'g-week', label: 'Gemini Models · Weekly Limit Remaining', scope: 'group' as const, period_hours: 168 };
+  const fiveHour = { id: 'g-five', label: 'Gemini Models · Five Hour Limit Remaining', scope: 'group' as const, period_hours: 5 };
+  const otherFamily = { id: 'c-five', label: 'Claude and GPT models · Five Hour Limit Remaining', scope: 'group' as const, period_hours: 5 };
+  assert.deepEqual(
+    pickCompactQuotaWindows([weekly, fiveHour, otherFamily]).map((window) => window.id),
+    ['g-five', 'g-week'],
+  );
+});
+
+const creditInfo = (available: number, applicable: number): QuotaItem['reset_credits'] => ({
+  available_count: available,
+  applicable_available_count: applicable,
+});
+
+test('redeeming is offered whenever the account holds a reset credit', () => {
+  const projection = buildOAuthWorkspaceProjection(
+    [file({ type: 'codex', provider: 'codex' })],
+    [quota({ reset_credits: creditInfo(2, 0) })],
+    choices,
+  );
+  assert.equal(
+    projection.records[0].canRedeemCredit,
+    true,
+    'an applicable count of zero gates nothing: Codex resets voluntarily and reports the outcome itself',
+  );
+});
+
+test('applicability alone never offers a redemption the account cannot spend', () => {
+  const projection = buildOAuthWorkspaceProjection(
+    [file({ type: 'codex', provider: 'codex' })],
+    [quota({ reset_credits: creditInfo(0, 3) })],
+    choices,
+  );
+  assert.equal(projection.records[0].canRedeemCredit, false);
+});
+
+test('the redemption offer respects capability, disablement and identity ambiguity', () => {
+  const noCreditSupport = buildOAuthWorkspaceProjection(
+    [file({ type: 'claude', provider: 'claude' })],
+    [quota({ capabilities: { refresh_supported: true, clear_cooldown_supported: true, reset_credit_supported: false }, reset_credits: creditInfo(1, 1) })],
+    choices,
+  );
+  assert.equal(noCreditSupport.records[0].canRedeemCredit, false);
+
+  const disabledFile = buildOAuthWorkspaceProjection(
+    [file({ type: 'codex', provider: 'codex', disabled: true })],
+    [quota({ reset_credits: creditInfo(1, 1) })],
+    choices,
+  );
+  assert.equal(disabledFile.records[0].canRedeemCredit, false);
+
+  const ambiguousIndex = buildOAuthWorkspaceProjection(
+    [file({ name: 'one.json', auth_index: 'duplicate' }), file({ name: 'two.json', auth_index: 'duplicate' })],
+    // The quota carries spendable credits so this case fails if identity protection
+    // is; a quota without them would disable both records for the wrong reason.
+    [quota({ auth_index: 'duplicate', reset_credits: creditInfo(2, 2) })],
+    choices,
+  );
+  assert.deepEqual(ambiguousIndex.records.map((record) => record.canRedeemCredit), [false, false]);
 });

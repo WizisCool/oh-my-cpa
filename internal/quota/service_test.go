@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
 
@@ -179,21 +181,35 @@ func TestRecommendationEngine(t *testing.T) {
 
 func TestRedeemCodexCreditCallsConsumeEndpoint(t *testing.T) {
 	var calledURL string
+	var calledMethod string
+	var calledAuthIndex string
 	var calledBody string
+	var calledHeaders map[string]string
 
 	client := &mockCPAClient{
 		apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
 			calledURL = req.URL
+			calledMethod = req.Method
+			calledAuthIndex = req.AuthIndex
 			calledBody = req.Data
+			calledHeaders = req.Header
 			return management.ApiCallResponse{
 				StatusCode: 200,
-				Body:       json.RawMessage(`{"status":"ok"}`),
+				Body:       json.RawMessage(`{"code":"reset"}`),
 			}, nil
 		},
 	}
 
 	svc := NewService(client)
-	err := svc.RedeemCodexCredit(context.Background(), "auth-codex")
+	err := svc.RedeemCodexCredit(context.Background(), management.AuthFile{
+		AuthIndex: "auth-codex",
+		Name:      "codex.json",
+		Type:      "codex",
+		Provider:  "codex",
+		// The consume route must carry the credential's own ChatGPT account, exactly like
+		// the read probes, so a credit is spent under the account it was read from.
+		IDToken: json.RawMessage(`{"chatgpt_account_id":"acct-openai-123"}`),
+	})
 	if err != nil {
 		t.Fatalf("RedeemCodexCredit error: %v", err)
 	}
@@ -201,8 +217,53 @@ func TestRedeemCodexCreditCallsConsumeEndpoint(t *testing.T) {
 	if calledURL != CodexRedeemCreditURL {
 		t.Errorf("calledURL = %q, want %q", calledURL, CodexRedeemCreditURL)
 	}
-	if !containsStr(calledBody, "redeem_request_id") {
-		t.Errorf("calledBody missing redeem_request_id: %s", calledBody)
+	if calledMethod != http.MethodPost {
+		t.Errorf("calledMethod = %q, want POST", calledMethod)
+	}
+	if calledAuthIndex != "auth-codex" {
+		t.Errorf("calledAuthIndex = %q, want auth-codex", calledAuthIndex)
+	}
+	if calledHeaders["Chatgpt-Account-Id"] != "acct-openai-123" {
+		t.Errorf("Chatgpt-Account-Id = %q, want acct-openai-123", calledHeaders["Chatgpt-Account-Id"])
+	}
+	if calledHeaders["Authorization"] != management.QuotaTokenPlaceholder {
+		t.Errorf("Authorization = %q, want the CPA credential marker", calledHeaders["Authorization"])
+	}
+
+	var body struct {
+		RedeemRequestID string `json:"redeem_request_id"`
+	}
+	if err := json.Unmarshal([]byte(calledBody), &body); err != nil {
+		t.Fatalf("consume body is not JSON: %q", calledBody)
+	}
+	if _, err := uuid.Parse(body.RedeemRequestID); err != nil {
+		t.Errorf("redeem_request_id = %q, want a UUID: %v", body.RedeemRequestID, err)
+	}
+}
+
+// A credential whose account id cannot be resolved still redeems: the account header
+// keeps the redemption aligned with the quota reads, it is not a precondition.
+func TestRedeemCodexCreditOmitsAccountHeaderWhenUnresolved(t *testing.T) {
+	var calledHeaders map[string]string
+
+	client := &mockCPAClient{
+		apiCallFunc: func(ctx context.Context, req management.ApiCallRequest) (management.ApiCallResponse, error) {
+			calledHeaders = req.Header
+			return management.ApiCallResponse{StatusCode: 200, Body: json.RawMessage(`{"code":"reset"}`)}, nil
+		},
+	}
+
+	err := NewService(client).RedeemCodexCredit(context.Background(), management.AuthFile{
+		AuthIndex: "auth-codex",
+		Name:      "codex.json",
+		Type:      "codex",
+		Provider:  "codex",
+	})
+	if err != nil {
+		t.Fatalf("RedeemCodexCredit error: %v", err)
+	}
+	if _, ok := calledHeaders["Chatgpt-Account-Id"]; ok {
+		t.Errorf("Chatgpt-Account-Id = %q, want it omitted", calledHeaders["Chatgpt-Account-Id"])
 	}
 }
 
@@ -348,19 +409,6 @@ func TestServiceAllProvidersContract(t *testing.T) {
 	if calledHeaders[XaiBillingMonthlyURL]["Authorization"] != "Bearer $TOKEN$" {
 		t.Errorf("expected CPA credential marker on xai call, got %q", calledHeaders[XaiBillingMonthlyURL]["Authorization"])
 	}
-}
-
-func containsStr(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || len(sub) == 0 || (len(s) > 0 && len(sub) > 0 && stringContains(s, sub)))
-}
-
-func stringContains(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }
 
 const codexUsageFixture = `{

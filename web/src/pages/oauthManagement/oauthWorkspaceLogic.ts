@@ -297,12 +297,15 @@ export function buildOAuthWorkspaceProjection(
           && quota.capabilities?.clear_cooldown_supported
           && quota.active_cooldown?.is_active,
       ),
+      // The bank of credits decides whether redeeming is offered. Upstream's
+      // `applicable_available_count` is not the gate: it refines which credits would apply
+      // right now, while the consume response is what states the outcome.
       canRedeemCredit: Boolean(
         quota
           && uniqueIndex
           && !file.disabled
           && quota.capabilities?.reset_credit_supported
-          && (quota.reset_credits?.applicable_available_count ?? 0) > 0,
+          && (quota.reset_credits?.available_count ?? 0) > 0,
       ),
     };
   });
