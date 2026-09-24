@@ -681,7 +681,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
               title={isDemo ? t('demo.blocked') : undefined}
               onClick={() => onDownload(file)}
             >
-              {t('af.download_one', { name: file.name })}
+              {t('af.download_credential')}
             </Button>
           </div>
         </div>

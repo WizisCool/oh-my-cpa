@@ -10,6 +10,7 @@ import {
 } from '../../components/authFiles/authFileLogic';
 import {
   buildQuotaRefreshTargets,
+  quotaRefreshOutcomeSurface,
   type OAuthWorkspaceRecord,
 } from './oauthWorkspaceLogic';
 
@@ -431,7 +432,6 @@ export function useOAuthWorkspaceActions(
     skipped: Array<{ name: string; reason: string }>,
   ) => {
     if (planIndexes.length === 0) {
-      setQuotaReport({ scope, succeeded: 0, failed: 0, skipped: skipped.length, unknown: 0, details: skipped });
       message.info(t('omc.quota_refresh_none'));
       return;
     }
@@ -467,11 +467,18 @@ export function useOAuthWorkspaceActions(
           chunk.forEach((index) => details.push({ name: index, reason }));
         }
       }
-      setQuotaReport({ scope, succeeded, failed, skipped: details.length - failed - unknown, unknown, details });
-      if (failed === 0 && unknown === 0 && details.length === 0) {
-        message.success(t('omc.quota_refresh_success', { n: succeeded }));
+      // One surface reports the outcome, chosen by whether it needs inspecting. A clean run -
+      // including one that skipped targets which were never eligible - is an acknowledgement,
+      // so it arrives as a toast and leaves no block behind. A failure keeps the in-page
+      // report, because a toast cannot carry the per-target reason and would have to be
+      // dismissed before the reason could be read.
+      const skippedCount = details.length - failed - unknown;
+      const outcome = { scope, succeeded, failed, skipped: skippedCount, unknown, details };
+      if (quotaRefreshOutcomeSurface(outcome) === 'report') {
+        setQuotaReport(outcome);
       } else {
-        message.warning(t('omc.quota_refresh_partial', { succeeded, failed: failed + unknown }));
+        setQuotaReport(undefined);
+        message.success(t('omc.quota_refresh_report_clean', { succeeded, skipped: skippedCount }));
       }
       await queryClient.invalidateQueries({ queryKey: ['management-quota'] });
     } finally {

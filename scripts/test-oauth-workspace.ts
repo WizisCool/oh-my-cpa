@@ -12,15 +12,16 @@ import {
   matchesQuotaFilter,
   parseOAuthWorkspaceQuery,
   resolveAuthorizationProviderId,
+  quotaRefreshOutcomeSurface,
   sortOAuthWorkspaceRecords,
   updateWorkspaceSearch,
   workspaceProviderOptions,
 } from '../web/src/pages/oauthManagement/oauthWorkspaceLogic.ts';
 import type { OAuthProviderChoice } from '../web/src/pages/oauthProviderLogic.ts';
-import { pickCompactQuotaWindows, orderQuotaWindows, quotaWindowKindOf } from '../web/src/pages/quota/quotaWindowSelection.ts';
+import { pickCompactQuotaWindows, orderQuotaWindows, quotaWindowGroupKey, quotaWindowKindOf } from '../web/src/pages/quota/quotaWindowSelection.ts';
 import { formatShortDateTime, quotaResetCountdown, quotaResetText, resetAccuracyMarker } from '../web/src/pages/quota/quotaFormat.ts';
 import { matchesStatusFilter } from '../web/src/components/authFiles/authFileLogic.ts';
-import type { TFunc } from '../web/src/i18n/index.ts';
+import type { TFunc } from '../web/src/i18n/index.tsx';
 
 /** Stands in for the dictionary: the countdown assertions only need the arguments back. */
 const echoT: TFunc = (key, vars) => (vars ? `${key}:${Object.values(vars).join('/')}` : key);
@@ -524,4 +525,55 @@ test('the list summary and the status filter agree on what is healthy', () => {
       `${label}: the Active count and the enabled filter disagree`,
     );
   }
+});
+
+test('a refresh reports on one surface, chosen by whether it needs inspecting', () => {
+  assert.equal(
+    quotaRefreshOutcomeSurface({ failed: 0, unknown: 0 }),
+    'toast',
+    'a run whose targets all answered is an acknowledgement, not a block above the list',
+  );
+  assert.equal(
+    quotaRefreshOutcomeSurface({ failed: 1, unknown: 0 }),
+    'report',
+    'a failure needs its per-target reason, which only the in-page report can carry',
+  );
+  assert.equal(
+    quotaRefreshOutcomeSurface({ failed: 0, unknown: 2 }),
+    'report',
+    'a target the response never mentioned is as inspectable as a failure',
+  );
+});
+
+test('one model’s limits form one family whatever period each covers', () => {
+  // The label carries the period, so keying the family by label would split one model into
+  // two and let the row and the Drawer pick from different sets.
+  const fiveHour = {
+    id: 'addl_0_p', label: 'gpt-reserve 5小时配额', kind: 'model_scoped', scope: 'model', model: 'gpt-reserve',
+  } as const;
+  const weekly = {
+    id: 'addl_0_s', label: 'gpt-reserve 每周配额', kind: 'model_scoped', scope: 'model', model: 'gpt-reserve',
+  } as const;
+  assert.equal(quotaWindowGroupKey(fiveHour), quotaWindowGroupKey(weekly));
+  assert.notEqual(
+    quotaWindowGroupKey(weekly),
+    quotaWindowGroupKey({ ...weekly, id: 'addl_1_s', model: 'o-series' }),
+    'two models are still two families',
+  );
+});
+
+test('a limit outside the plan’s windows is not folded into them', () => {
+  const standard = { id: 'weekly', label: 'Weekly', kind: 'weekly', scope: 'standard' } as const;
+  const codeReview = { id: 'code_review_weekly', label: '代码审查 每周配额', scope: 'code_review' } as const;
+  assert.equal(quotaWindowGroupKey(standard), 'standard');
+  assert.notEqual(
+    quotaWindowGroupKey(codeReview),
+    quotaWindowGroupKey(standard),
+    'a code-review allowance is not one of the credential’s five-hour or weekly limits',
+  );
+  // The row carries the credential's own plan, not the allowance beside it.
+  assert.deepEqual(
+    pickCompactQuotaWindows(orderQuotaWindows([standard, codeReview])).map((window) => window.id),
+    ['weekly'],
+  );
 });

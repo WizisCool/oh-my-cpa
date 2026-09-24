@@ -287,3 +287,89 @@ func TestParseCodexSubscription(t *testing.T) {
 		}
 	}
 }
+
+// A model-scoped limit is named from the period upstream metered. Codex moves the same
+// reserve limit between windows, so a label that hardcodes "5小时" would contradict the
+// payload: the live account reported `gpt-reserve` under a weekly primary window.
+func TestParseCodexUsageNamesModelLimitsByTheirOwnPeriod(t *testing.T) {
+	raw := []byte(`{
+		"plan_type": "plus",
+		"rate_limit": {
+			"primary_window": {"used_percent": 0, "limit_window_seconds": 18000, "reset_after_seconds": 3600}
+		},
+		"additional_rate_limits": [
+			{
+				"limit_name": "gpt-reserve",
+				"rate_limit": {
+					"primary_window": {"used_percent": 0, "limit_window_seconds": 604800, "reset_after_seconds": 86400}
+				}
+			},
+			{
+				"limit_name": "o-series",
+				"rate_limit": {
+					"primary_window": {"used_percent": 10, "limit_window_seconds": 18000, "reset_after_seconds": 3600}
+				}
+			}
+		],
+		"code_review_rate_limit": {
+			"primary_window": {"used_percent": 5, "limit_window_seconds": 18000}
+		}
+	}`)
+
+	_, windows, _, err := ParseCodexUsage(raw, time.Now().UnixMilli())
+	if err != nil {
+		t.Fatalf("ParseCodexUsage failed: %v", err)
+	}
+
+	labels := make(map[string]string)
+	for _, window := range windows {
+		labels[window.ID] = window.Label
+	}
+
+	if got := labels["addl_0_p"]; got != "gpt-reserve 每周配额" {
+		t.Errorf("weekly reserve label = %q, want %q", got, "gpt-reserve 每周配额")
+	}
+	if got := labels["addl_1_p"]; got != "o-series 5小时配额" {
+		t.Errorf("five-hour model label = %q, want %q", got, "o-series 5小时配额")
+	}
+	if got := labels["code_review_5h"]; got != "代码审查 5小时配额" {
+		t.Errorf("code-review label = %q, want %q", got, "代码审查 5小时配额")
+	}
+	if got := labels["five_hour"]; got != "5小时用量上限 (5-Hour)" {
+		t.Errorf("standard five-hour label = %q, want the standard wording", got)
+	}
+}
+
+// A window whose size the payload omits cannot be named from its period, so the label the
+// caller supplied for that slot stands: an empty or truncated label would lose the only
+// description the window has.
+func TestParseCodexUsageKeepsSlotLabelWhenWindowSizeIsMissing(t *testing.T) {
+	raw := []byte(`{
+		"plan_type": "plus",
+		"code_review_rate_limit": {
+			"primary_window": {"used_percent": 5},
+			"secondary_window": {"used_percent": 9}
+		},
+		"additional_rate_limits": [
+			{"limit_name": "o-series", "rate_limit": {"primary_window": {"used_percent": 3}}}
+		]
+	}`)
+
+	_, windows, _, err := ParseCodexUsage(raw, time.Now().UnixMilli())
+	if err != nil {
+		t.Fatalf("ParseCodexUsage failed: %v", err)
+	}
+	labels := make(map[string]string)
+	for _, window := range windows {
+		labels[window.ID] = window.Label
+	}
+	if labels["code_review_5h"] != "代码审查 5小时配额" {
+		t.Errorf("code-review five-hour label = %q, want the slot wording back", labels["code_review_5h"])
+	}
+	if labels["code_review_weekly"] != "代码审查 每周配额" {
+		t.Errorf("code-review weekly label = %q, want the slot wording back", labels["code_review_weekly"])
+	}
+	if labels["addl_0_p"] != "o-series" {
+		t.Errorf("model label = %q, want the model name alone rather than a guessed slot", labels["addl_0_p"])
+	}
+}

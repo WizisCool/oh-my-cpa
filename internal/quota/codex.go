@@ -11,6 +11,7 @@ import (
 
 const (
 	FiveHourSeconds = 18000
+	DailySeconds    = 86400
 	WeeklySeconds   = 604800
 	MonthlySeconds  = 2592000
 
@@ -167,6 +168,27 @@ func parseWindowDurationHours(seconds float64) float64 {
 		return 0
 	}
 	return math.Round((seconds/3600.0)*10) / 10
+}
+
+// windowPeriodName names a window from the period it covers. A provider may move the same
+// metered limit to a different window - Codex reports its reserve limit with a weekly
+// primary window - so a label that hardcodes the slot would describe a period the payload
+// contradicts.
+func windowPeriodName(seconds float64) string {
+	switch {
+	case seconds <= 0:
+		return ""
+	case seconds >= FiveHourSeconds-600 && seconds <= FiveHourSeconds+600:
+		return "5小时"
+	case seconds >= DailySeconds-3600 && seconds <= DailySeconds+3600:
+		return "每日"
+	case seconds >= WeeklySeconds-3600 && seconds <= WeeklySeconds+3600:
+		return "每周"
+	case seconds >= MonthlySeconds-86400 && seconds <= MonthlySeconds+86400:
+		return "每月"
+	default:
+		return fmt.Sprintf("%g小时", parseWindowDurationHours(seconds))
+	}
 }
 
 func formatDurationShort(duration time.Duration) string {
@@ -386,6 +408,22 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 			}
 		} else if scope == "model" {
 			kind = "model_scoped"
+			// The limit is named after the model, and the period comes from what upstream
+			// metered: the same model can be limited over five hours or over a week.
+			if period := windowPeriodName(winSec); period != "" {
+				label = fmt.Sprintf("%s %s配额", defaultLabel, period)
+			}
+		} else if scope == "code_review" {
+			// When the payload omits the window size the period cannot be read, so the slot
+			// named by the id is the only description left; the label keeps that wording
+			// rather than losing its period entirely.
+			if period := windowPeriodName(winSec); period != "" {
+				label = fmt.Sprintf("%s %s配额", defaultLabel, period)
+			} else if strings.HasSuffix(id, "_5h") {
+				label = fmt.Sprintf("%s 5小时配额", defaultLabel)
+			} else {
+				label = fmt.Sprintf("%s 每周配额", defaultLabel)
+			}
 		}
 
 		var usedPercent *float64
@@ -444,8 +482,8 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 		if crSecondary == nil {
 			crSecondary = codeReview.SecondaryWinAlt
 		}
-		addWindow(crPrimary, "code_review_5h", "代码审查 5小时配额", "code_review", "", limitReached(codeReview))
-		addWindow(crSecondary, "code_review_weekly", "代码审查 每周配额", "code_review", "", limitReached(codeReview))
+		addWindow(crPrimary, "code_review_5h", "代码审查", "code_review", "", limitReached(codeReview))
+		addWindow(crSecondary, "code_review_weekly", "代码审查", "code_review", "", limitReached(codeReview))
 	}
 
 	// Additional rate limits (e.g. GPT-5.3-Codex-Spark, o1, etc.)
@@ -478,8 +516,8 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 			if s == nil {
 				s = lim.SecondaryWinAlt
 			}
-			addWindow(p, fmt.Sprintf("addl_%d_p", i), fmt.Sprintf("%s 5小时配额", name), "model", name, limitReached(lim))
-			addWindow(s, fmt.Sprintf("addl_%d_s", i), fmt.Sprintf("%s 每周配额", name), "model", name, limitReached(lim))
+			addWindow(p, fmt.Sprintf("addl_%d_p", i), name, "model", name, limitReached(lim))
+			addWindow(s, fmt.Sprintf("addl_%d_s", i), name, "model", name, limitReached(lim))
 		}
 	}
 

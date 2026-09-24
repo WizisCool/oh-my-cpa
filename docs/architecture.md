@@ -328,6 +328,15 @@ to the entire Drawer. Credential identity includes the auth index when resetting
 form sessions and caching models. Historical density URL values and preference
 fields remain readable compatibility data, but do not change the overview layout.
 
+A quota refresh reports its outcome on exactly one surface, chosen by whether the
+outcome needs inspecting. A run without a failing target - including one that
+skipped credentials which were never eligible - is acknowledged by a toast and
+leaves nothing behind, so it cannot push the credential list down. A run with a
+failed or unknown target keeps the in-page operation report, which carries the
+per-target reason that a toast cannot hold. Destructive and export actions on a
+credential name their target in the confirmation, not in the menu label, which
+stays short for any file-name length.
+
 
 The old `/oauth`, `/auth-files` and `/quota` routes are retained only as
 parameter-safe replacement redirects. They preserve documented filter and

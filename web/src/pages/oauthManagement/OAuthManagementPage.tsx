@@ -795,13 +795,16 @@ export const OAuthManagementPage: React.FC = () => {
           className={styles['quota-operation-report']}
           data-testid="quota-operation-report"
           closable={{ onClose: actions.clearQuotaReport }}
-          type={actions.quotaReport.failed > 0 || actions.quotaReport.unknown > 0 ? 'warning' : 'success'}
+          type="warning"
           showIcon
           title={t('omc.quota_refresh_report', {
             succeeded: actions.quotaReport.succeeded,
             failed: actions.quotaReport.failed + actions.quotaReport.unknown,
             skipped: actions.quotaReport.skipped,
           })}
+          // Only a run with a failure reaches this report, and the per-target reason is the
+          // point of it, so the detail is on screen rather than behind a disclosure. The
+          // scroll keeps a long list of failures bounded.
           description={actions.quotaReport.details.length > 0 ? (
             <div className="operation-detail-scroll">
               {actions.quotaReport.details.map((item, index) => (

@@ -144,7 +144,7 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
             <span className={styles['meta-item']}>
               <span className={styles['meta-label']}>{t('quota.col_reset_count')}</span>
               <span className={styles['meta-value']}>{availableCredits}</span>
-              {applicableCredits !== availableCredits && (
+              {applicableCredits > 0 && applicableCredits !== availableCredits && (
                 <span className={styles['meta-tag']} title={t('omc.quota_credit_applicable_hint')}>
                   {t('omc.quota_credit_applicable', { n: applicableCredits })}
                 </span>
@@ -204,7 +204,11 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
             renderWindowRows(windows)
           ) : (
             <div className={styles['no-window']}>
-              {item.disabled ? t('quota.credential_disabled') : t('quota.no_window_data')}
+              {item.disabled
+              ? t('quota.credential_disabled')
+              : item.capabilities?.refresh_supported === false
+                ? t('quota.no_live_probe')
+                : t('quota.not_observed_yet')}
             </div>
           )}
         </div>
