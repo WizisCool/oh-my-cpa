@@ -432,6 +432,9 @@ export function useOAuthWorkspaceActions(
     skipped: Array<{ name: string; reason: string }>,
   ) => {
     if (planIndexes.length === 0) {
+      // The previous run's report has to go, or the toast saying nothing was eligible appears
+      // beside a report describing the run before it - two surfaces, two outcomes, one click.
+      setQuotaReport(undefined);
       message.info(t('omc.quota_refresh_none'));
       return;
     }

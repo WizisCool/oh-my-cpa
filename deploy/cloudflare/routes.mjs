@@ -91,6 +91,9 @@ const PRESET_ROUTES = new Map([
   ['/api/v1/management/client-key-usage', (preset) => `client-key-usage-${preset}`],
 ]);
 
+/** A request record's detail, for whichever record the console opened. */
+const REQUEST_EVENT_DETAIL = '/api/v1/usage/events/{id}';
+
 /** Routes that take a parameter the console chooses, with the value it sends. */
 const PARAMETERISED_ROUTES = [
   // The heatmap answers in the viewer's own zone, so the timezone is part of the ask.
@@ -119,7 +122,12 @@ const PARAMETERISED_ROUTES = [
   { path: '/api/v1/management/oauth/status', resolve: () => 'oauth-status' },
   { path: '/api/v1/management/logs', resolve: () => 'logs' },
   { path: '/api/v1/management/quota/auth-codex-01', resolve: () => 'quota-codex' },
-  { path: '/api/v1/usage/events/13574', resolve: () => 'usage-event-detail' },
+  // Any request record the list shows. The dataset holds one capture, and the detail it
+  // contains is shaped the same for every record, so answering the one capture for any id
+  // is what keeps a visitor's click working: keyed to the captured id alone, every other
+  // row answered "the demonstration does not answer /api/v1/usage/events/…" - an English
+  // sentence about a route, shown to a visitor who clicked a request.
+  { path: REQUEST_EVENT_DETAIL, pattern: /^\/api\/v1\/usage\/events\/(\d+)$/, resolve: () => 'usage-event-detail' },
 ];
 
 /**
@@ -136,7 +144,9 @@ export function responseNameFor(request) {
   const byPreset = PRESET_ROUTES.get(path);
   if (byPreset) return byPreset(presetOf(url));
 
-  const parameterised = PARAMETERISED_ROUTES.find((route) => route.path === path);
+  const parameterised = PARAMETERISED_ROUTES.find((route) =>
+    route.pattern ? route.pattern.test(path) : route.path === path,
+  );
   if (parameterised) return parameterised.resolve(url);
 
   return FIXED_ROUTES.get(path);

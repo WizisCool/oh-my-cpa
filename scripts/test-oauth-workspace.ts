@@ -586,3 +586,18 @@ test('a target nobody could refresh is reported, not counted as clean', () => {
   assert.equal(surfaceFor(0, 3), 'report', 'a fully conflicted run is not an acknowledgement');
   assert.equal(surfaceFor(0, 0), 'toast');
 });
+
+test('an allowance outside the plan is one family, not one per window', () => {
+  // Keyed by id as well, the code-review allowance's five-hour and weekly windows became two
+  // families of one window each, so a credential whose only limits were those would show one
+  // of them and hide the other.
+  const fiveHour = { id: 'code_review_5h', label: '代码审查 5小时配额', scope: 'code_review' } as const;
+  const weekly = { id: 'code_review_weekly', label: '代码审查 每周配额', scope: 'code_review' } as const;
+  assert.equal(quotaWindowGroupKey(fiveHour), quotaWindowGroupKey(weekly));
+  assert.notEqual(quotaWindowGroupKey(weekly), quotaWindowGroupKey({ id: 'weekly', label: 'Weekly', scope: 'standard' }));
+  assert.deepEqual(
+    pickCompactQuotaWindows(orderQuotaWindows([fiveHour, weekly])).map((window) => window.id),
+    ['code_review_5h', 'code_review_weekly'],
+    'both of an allowance’s windows belong in the row when the allowance is all it has',
+  );
+});

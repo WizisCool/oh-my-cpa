@@ -106,11 +106,90 @@ function labelPreset(payload, preset) {
  * between them - a window's bounds against its buckets, an event against the range it
  * is listed in - are what keep the panels consistent with each other.
  */
+/**
+ * The identity fields a request record's detail has to carry from the row it was opened from.
+ *
+ * The dataset holds one captured detail, and it is served for whichever record a visitor
+ * opens. Without this the drawer showed a different request than the row that was clicked -
+ * a mismatched request id, model and provider, which is the demonstration contradicting the
+ * list on the same screen.
+ */
+const EVENT_IDENTITY_FIELDS = [
+  'id',
+  'event_key',
+  'request_id',
+  'timestamp_ms',
+  'model',
+  'provider',
+  'auth_index',
+  'auth_type',
+  'executor_type',
+  'api_group_key',
+  'api_group_label',
+  'api_key_mask',
+  'api_key_alias',
+  'failed',
+  'has_request_log',
+];
+
+/** The code a caller reads when it asks for a record the dataset does not hold. */
+const RECORD_UNKNOWN_CODE = 'demo_record_unknown';
+
+/** The path of a request record's detail, and the id it names. */
+const EVENT_DETAIL_PATH = /^\/api\/v1\/usage\/events\/(\d+)$/;
+
+/**
+ * Rewrites a served detail so it describes the record that was asked for.
+ *
+ * The identity comes from the list capture, which is the same data the row was rendered
+ * from, so the two cannot disagree. The measured fields - latency, tokens, cost - stay the
+ * capture's: they are what the record looks like, and inventing them per id would be a
+ * number this fixture cannot support.
+ */
+function matchEventIdentity(decoded, pathname, dataset) {
+  const match = EVENT_DETAIL_PATH.exec(pathname);
+  if (!match) return decoded;
+  const wanted = Number(match[1]);
+  let rows;
+  try {
+    rows = JSON.parse(dataset.responses['usage-events'].body).items ?? [];
+  } catch {
+    return decoded;
+  }
+  const row = rows.find((item) => item.id === wanted);
+  const event = decoded?.event;
+  if (!event) return decoded;
+  if (!row) {
+    // A record the dataset does not hold. Answering it with the captured record's detail
+    // would describe a request the visitor never asked for, so the drawer is told there is
+    // nothing here instead - and with a status that says so, because a 200 carrying an error
+    // body would be read as a successful detail that happens to have no event in it.
+    return undefined;
+  }
+  for (const field of EVENT_IDENTITY_FIELDS) {
+    if (row[field] !== undefined) event[field] = row[field];
+  }
+  return decoded;
+}
+
 function serve(entry, nowMs, url) {
   const deltaMs = nowMs - REFERENCE_MS;
   let body = entry.body;
   try {
-    const decoded = rebase(JSON.parse(entry.body), deltaMs);
+    // The identity is substituted on the capture and then re-based with it, rather than
+    // after: the row's `timestamp_ms` is on the capture's calendar like every other
+    // instant in the response, so copying it in afterwards left the detail dated months
+    // away from the list row it was opened from.
+    const identity = matchEventIdentity(JSON.parse(entry.body), url.pathname, DATASET);
+    if (identity === undefined) {
+      // The record this path names is not in the dataset, which is a 404 rather than a
+      // degraded answer: there is nothing to show and no capture to fall back to.
+      return new Response(
+        JSON.stringify({ error: 'this record is not part of the demonstration', code: RECORD_UNKNOWN_CODE }),
+        { status: 404, headers: { ...JSON_HEADERS, 'Content-Type': entry.content_type } },
+      );
+    }
+    const decoded = rebase(identity, deltaMs);
     const preset = url.searchParams.has('preset') ? presetOf(url) : '';
     body = JSON.stringify(labelPreset(decoded, preset));
   } catch {

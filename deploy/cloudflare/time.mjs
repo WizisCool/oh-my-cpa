@@ -31,6 +31,11 @@ const INSTANT_BY_NAME = /(?:^|_)at_ms$/;
  */
 const INSTANT_NAMED = new Set([
   't',
+  // The token-activity grid's own anchors. A cell's `day` is a label the console matches on,
+  // and these two say where the grid starts and ends, so all three have to move together or
+  // the grid describes a year that is not the one its data is on.
+  'as_of_ms',
+  'first_stored_ms',
   'to_ms',
   'as_of_ms',
   'timestamp_ms',
@@ -75,6 +80,36 @@ const THOUSAND = 1000;
 // two are three orders of magnitude apart and one threshold separates them safely.
 const MILLIS_THRESHOLD = 1e11;
 
+/**
+ * One calendar cell, moved as a unit.
+ *
+ * The key is what the console matches a cell on, prints and links to, and the two instants
+ * beside it are that day's bounds. Moved by different amounts - the key by a rounded whole
+ * number of days and the bounds by the raw delta - they end up describing different days,
+ * which is what a viewer behind UTC saw: a label on one date with a range on another. The
+ * whole-day offset is computed from the delta and applied to all three.
+ */
+function rebaseCalendarCell(cell, deltaMs) {
+  const wholeDays = Math.trunc(deltaMs / 86_400_000) * 86_400_000;
+  const moved = { ...cell };
+  const key = cell.day;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(key)) {
+    const at = Date.parse(`${key}T00:00:00Z`);
+    if (!Number.isNaN(at)) {
+      moved.day = new Date(at + wholeDays).toISOString().slice(0, 10);
+    }
+  }
+  for (const name of ['from_ms', 'to_ms']) {
+    const value = cell[name];
+    // A bound the capture left empty stays empty: it says the day is not part of the
+    // recorded history rather than that it began at the epoch.
+    if (typeof value === 'number' && Number.isFinite(value) && value !== 0) {
+      moved[name] = value + wholeDays;
+    }
+  }
+  return moved;
+}
+
 /** Parses a string only when it is entirely an instant. */
 function parseInstant(text) {
   if (!RFC3339.test(text)) return undefined;
@@ -118,6 +153,9 @@ export function rebase(value, deltaMs) {
     return value.map((item) => rebase(item, deltaMs));
   }
   if (value !== null && typeof value === 'object') {
+    if (typeof value.day === 'string') {
+      return rebaseCalendarCell(value, deltaMs);
+    }
     const moved = {};
     for (const [name, item] of Object.entries(value)) {
       if (INSTANT_BY_NAME.test(name) || INSTANT_NAMED.has(name)) {

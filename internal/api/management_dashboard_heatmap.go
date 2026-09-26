@@ -106,7 +106,7 @@ func (h *Handler) dashboardTokenHeatmap(writer http.ResponseWriter, request *htt
 	ctx, cancel := context.WithTimeout(request.Context(), h.queryTimeout())
 	defer cancel()
 
-	asOf := time.Now().UTC()
+	asOf := h.now().UTC()
 	// The calendar grid and the query are deliberately two lists. The grid is the shape the
 	// operator reads: whole weeks, with the current week drawn in full. The query is only the
 	// days that can have traffic, and today's range stops at the read instant - so the shape

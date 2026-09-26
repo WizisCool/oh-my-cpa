@@ -83,6 +83,17 @@ function withoutInstants(value) {
   return value;
 }
 
+/**
+ * The request list the console renders, served the way the page reads it.
+ *
+ * Rows are compared against a detail opened from one of them, so both sides have to go
+ * through the Worker's own re-base rather than through the dataset's raw values.
+ */
+async function listedEvents(worker, env) {
+  const response = await worker.fetch(request('/api/v1/usage/events'), env);
+  return (await response.json()).items;
+}
+
 describe('routing', () => {
   it('serves each dashboard preset from its own captured window', () => {
     // Not the same response relabelled: the picker's positions have to hold different
@@ -124,6 +135,60 @@ describe('routing', () => {
       );
       assert.ok(DATASET.responses[name], `${zone} resolved to a missing response`);
     }
+  });
+
+  it('answers a request record for whichever record the console opened', async () => {
+    // Keyed to the captured id alone, every other row in the list answered "the
+    // demonstration does not answer /api/v1/usage/events/…" - an English sentence about
+    // a route, shown to a visitor who had just clicked a request.
+    const { default: worker } = await import('./worker.mjs');
+    const env = { ASSETS: { fetch: () => new Response('', { status: 200 }) } };
+    const rows = JSON.parse(DATASET.responses['usage-events'].body).items;
+    assert.ok(rows.length > 1, 'the list capture has to hold more than one record');
+    for (const row of [rows[0], rows[rows.length - 1]]) {
+      const response = await worker.fetch(request(`/api/v1/usage/events/${row.id}`), env);
+      assert.equal(response.status, 200, `id ${row.id} was not answered`);
+      const event = (await response.json()).event;
+      // The drawer renders these, so a detail that named a different record than the row
+      // that was clicked is the demonstration contradicting its own list on one screen.
+      assert.equal(event.id, row.id);
+      assert.equal(event.request_id, row.request_id);
+      assert.equal(event.model, row.model);
+      assert.equal(event.provider, row.provider);
+      // The embedded timestamp is on the capture's calendar like every other instant, so the
+      // identity has to be copied in before the re-base rather than after it: copied in
+      // afterwards it stayed on the capture's date, months away from the row that was
+      // clicked. The assertion is against the list the drawer was opened from, because that
+      // is the surface the two have to agree with.
+      const listed = (await listedEvents(worker, env)).find((item) => item.id === row.id);
+      assert.ok(listed, `id ${row.id} is not in the served list`);
+      const drift = Math.abs(event.timestamp_ms - listed.timestamp_ms);
+      assert.ok(drift < 60_000, `id ${row.id}: detail and list are ${drift}ms apart`);
+    }
+  });
+
+  it('answers a record the dataset does not hold without inventing one', async () => {
+    // Turning it into the captured record's detail would describe a request the visitor
+    // never clicked, which is worse than saying there is nothing here.
+    const { default: worker } = await import('./worker.mjs');
+    const env = { ASSETS: { fetch: () => new Response('', { status: 200 }) } };
+    const rows = JSON.parse(DATASET.responses['usage-events'].body).items;
+    const absent = Math.max(...rows.map((row) => row.id)) + 5000;
+    const response = await worker.fetch(request(`/api/v1/usage/events/${absent}`), env);
+    // The status is part of the answer: a 200 with an error body is read as a successful
+    // detail that happens to be missing its event.
+    assert.equal(response.status, 404);
+    const served = await response.json();
+    assert.equal(served.event, undefined, 'an unknown id was answered with a record');
+    assert.equal(served.code, 'demo_record_unknown');
+  });
+
+  it('still refuses a request log, which quotes request content', async () => {
+    const { default: worker } = await import('./worker.mjs');
+    const env = { ASSETS: { fetch: () => new Response('', { status: 200 }) } };
+    const rows = JSON.parse(DATASET.responses['usage-events'].body).items;
+    const response = await worker.fetch(request(`/api/v1/usage/events/${rows[0].id}/request-log`), env);
+    assert.equal(response.status, 403);
   });
 
   it('answers every fixed route the console reads', () => {

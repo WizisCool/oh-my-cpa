@@ -277,7 +277,7 @@ func seedRequests(ctx context.Context, repo *repository.Repository, now time.Tim
 		if hour.Equal(now.Truncate(time.Hour)) {
 			fraction = float64(now.Minute()*60+now.Second()) / 3600
 		}
-		count := int(random.nextFloat()*2*requestsPerHour(hour, now)*trafficShape(hour)*fraction + 0.5)
+		count := drawRequestCount(random, requestsPerHour(hour, now)*trafficShape(hour)*daySwing(hour)*fraction)
 		for index := 0; index < count; index++ {
 			profile := pickProfile(random, profiles)
 			keyIndex := pickWeighted(random, keyWeights(keys))
@@ -370,6 +370,68 @@ func fillRecentWindow(random *deterministic, profiles []modelProfile, credential
 		added = append(added, event)
 	}
 	return added
+}
+
+// drawRequestCount turns one hour's expected number of requests into the count it
+// actually carried.
+//
+// The expected rate is small for the early history - the curve starts at a few requests
+// an hour - and the obvious `int(mean + 0.5)` rounds every one of those hours to zero.
+// That is not a low-traffic day, it is an empty one, and it showed up as a token-activity
+// grid whose first third was blank while the rest was full: a fixture that reads as
+// broken rather than as quiet. Drawing the integer part and then the fraction keeps the
+// mean exactly and leaves a quiet hour quiet without emptying the day around it.
+//
+// The draw is skewed rather than uniform, because traffic arrives in bursts: an agent
+// run, a deploy, a batch job. A uniform draw gives every hour within a factor of two of
+// its neighbour, which is what made the token trend repeat an identical sawtooth every
+// day. The skew lets one hour in ten carry several times its mean while the quiet hours
+// stay near zero.
+func drawRequestCount(random *deterministic, mean float64) int {
+	if mean <= 0 {
+		return 0
+	}
+	drawn := mean
+	// One hour in eight carries several times its share, which is what an agent run, a
+	// deploy or a batch job looks like. The rest is divided by the expected excess so the
+	// mean survives the skew: scaling only the bursts up would quietly raise the rate, and
+	// subtracting a flat correction afterwards (which is what this did first) rounds to
+	// nothing at the quiet end of the curve and drains the history instead.
+	const burstShare = 0.125
+	// The mean multiplier a burst carries, so the correction below is a subtraction of the
+	// same number: using half of it here left the whole curve 22% above its anchor.
+	const burstMean = 3.5
+	if random.nextFloat() < burstShare {
+		drawn = mean * burstMean * 2 * random.nextFloat()
+	} else {
+		drawn = mean * (1 - burstShare*burstMean) / (1 - burstShare)
+	}
+	// The integer part first and then the fraction, so a quiet hour stays quiet without
+	// rounding a whole day of them to nothing.
+	whole := int(drawn)
+	if random.nextFloat() < drawn-float64(whole) {
+		whole++
+	}
+	if whole < 0 {
+		return 0
+	}
+	return whole
+}
+
+// daySwing varies one day's traffic against the trend it sits on.
+//
+// Without it the rate curve and the working-day shape decide every day exactly, so the
+// history is a smooth envelope with an identical sawtooth inside it. A real deployment
+// has quiet Mondays and busy Wednesdays for reasons no curve knows: the swing multiplies
+// a whole day by a stable factor drawn from its own date, so rewatching the same day
+// gives the same number and the export stays reproducible.
+func daySwing(day time.Time) float64 {
+	// Hashed from the calendar date alone, so every hour of that day agrees.
+	key := uint64(day.Year())*10000 + uint64(day.Month())*100 + uint64(day.Day())
+	// A cheap integer hash: multiply by an odd constant and take the high bits, which
+	// spreads consecutive dates apart rather than clustering them.
+	mixed := (key * 0x9E3779B97F4A7C15) >> 56
+	return 0.6 + float64(mixed)/255*0.9
 }
 
 // credentialAuthIndexes maps a provider to the credential that answers it, so a

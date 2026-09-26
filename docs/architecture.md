@@ -1665,11 +1665,24 @@ is the generator, and `scripts/generate-demo-data.mjs` is the command that runs 
 
 Two properties are load-bearing rather than incidental. Every response is re-based by
 one delta before it is served, because the console asks for a window by name and a
-frozen capture would be visibly empty within a day. And the dataset's coverage is a
+frozen capture would be visibly empty within a day. A calendar cell in the
+token-activity grid moves as one unit under that delta - its `day` key, its start and
+its end by the same whole-day offset - because the key is what a cell is matched,
+labelled and linked by, while the two instants beside it are the day's own bounds: moved
+by different amounts they describe different days. The grid itself is captured on the
+seeded history's calendar rather than on the export machine's, since it is the one read
+whose window is derived from a clock rather than taken from the request. And the dataset's coverage is a
 gate rather than an instruction: `scripts/check-demo.mjs` fails when a console route
 has no captured reads, when a source it derives from has changed, or when it carries a
 value that must not be public. That last check matters because the dataset is
 downloadable by anyone.
+
+A refusal is reported once. The server answers it with English prose meant for a log
+("demo mode - uploading a credential is disabled"), and the console raises its own
+localized notice for the refusal; echoing the server's sentence as well put two messages
+on screen for one action, in two languages, reading as two different failures. The API
+layer substitutes the console's sentence for a refused call, so whichever caller reports
+it reports the same one.
 
 The demonstration does not run the product: no gateway, no database, no capture
 pipeline and no authentication are behind it, which

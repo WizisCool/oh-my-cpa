@@ -373,3 +373,26 @@ func TestParseCodexUsageKeepsSlotLabelWhenWindowSizeIsMissing(t *testing.T) {
 		t.Errorf("model label = %q, want the model name alone rather than a guessed slot", labels["addl_0_p"])
 	}
 }
+
+// A window shorter than an hour is named in minutes. Rounded to hours it reads as "0小时",
+// which is not a period at all - and a provider that meters a short window would have it
+// described as no window.
+func TestWindowPeriodNameKeepsShortWindowsReadable(t *testing.T) {
+	for _, one := range []struct {
+		seconds float64
+		want    string
+	}{
+		{seconds: 90, want: "2分钟"},
+		{seconds: 600, want: "10分钟"},
+		{seconds: 1800, want: "30分钟"},
+		{seconds: FiveHourSeconds, want: "5小时"},
+		{seconds: DailySeconds, want: "每日"},
+		{seconds: WeeklySeconds, want: "每周"},
+		{seconds: MonthlySeconds, want: "每月"},
+		{seconds: 0, want: ""},
+	} {
+		if got := windowPeriodName(one.seconds); got != one.want {
+			t.Errorf("windowPeriodName(%v) = %q, want %q", one.seconds, got, one.want)
+		}
+	}
+}

@@ -186,6 +186,10 @@ func windowPeriodName(seconds float64) string {
 		return "每周"
 	case seconds >= MonthlySeconds-86400 && seconds <= MonthlySeconds+86400:
 		return "每月"
+	case seconds < 3600:
+		// Below an hour the hour figure rounds to zero, and "0小时" is not a period: a
+		// provider that meters a short window would have it described as no window at all.
+		return fmt.Sprintf("%g分钟", math.Round(seconds/60))
 	default:
 		return fmt.Sprintf("%g小时", parseWindowDurationHours(seconds))
 	}

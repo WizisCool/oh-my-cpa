@@ -88,14 +88,25 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | undefined)
  */
 type DemoEventHandler = () => void;
 let demoNoticeHandler: DemoEventHandler | undefined;
-let demoBlockedHandler: DemoEventHandler | undefined;
 
 export function setDemoNoticeHandler(handler: DemoEventHandler | undefined): void {
   demoNoticeHandler = handler;
 }
 
-export function setDemoBlockedHandler(handler: DemoEventHandler | undefined): void {
-  demoBlockedHandler = handler;
+/**
+ * The sentence a refused call carries, in the reader's own language.
+ *
+ * The server answers a refusal with English prose meant for a log and a CLI
+ * ("demo mode - uploading a credential is disabled"). Echoing that into the console
+ * put a second message beside the demo's own localized notice, so one refusal read as
+ * two different failures in two languages. The refusal is therefore reported once, by
+ * the notice, and the message a caller may still surface is the console's copy for it.
+ */
+type DemoRefusalLabel = string;
+let demoRefusalLabel: DemoRefusalLabel | undefined;
+
+export function setDemoRefusalLabel(label: DemoRefusalLabel | undefined): void {
+  demoRefusalLabel = label;
 }
 
 function apiRoot(): string {
@@ -137,7 +148,12 @@ async function readError(response: Response): Promise<{ data: unknown; message: 
     const text = await response.text().catch(() => '');
     if (text) message += `: ${text.slice(0, 100)}`;
   }
-  return { data: errorData, message, demoBlocked: headerBlocked || codeBlocked };
+  const demoBlocked = headerBlocked || codeBlocked;
+  return {
+    data: errorData,
+    message: demoBlocked && demoRefusalLabel ? demoRefusalLabel : message,
+    demoBlocked,
+  };
 }
 
 /**
@@ -213,7 +229,6 @@ async function downloadBlob(url: string): Promise<Blob> {
   if (!response.ok) {
     const error = await readError(response);
     if (response.status === 401) unauthorizedHandler?.();
-    if (error.demoBlocked) demoBlockedHandler?.();
     throw new ApiError(error.message, response.status, error.data, error.demoBlocked);
   }
   return response.blob();
@@ -248,7 +263,6 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (!response.ok) {
     const error = await readError(response);
     if (response.status === 401) unauthorizedHandler?.();
-    if (error.demoBlocked) demoBlockedHandler?.();
     throw new ApiError(error.message, response.status, error.data, error.demoBlocked);
   }
   // A write that succeeded on a demo is not durable. Reporting it here rather than in
