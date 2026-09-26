@@ -51,6 +51,9 @@ type Handler struct {
 	// pluginLogos inlines the logos plugins publish, so the browser never fetches a
 	// plugin's own host; see management_plugin_logos.go.
 	pluginLogos *pluginLogoFetcher
+	// nowFn overrides the clock for the one surface whose window is not the caller's to
+	// set. Nil means the wall clock; only the demo dataset export sets it.
+	nowFn func() time.Time
 
 	configMu       sync.Mutex
 	startTime      time.Time
@@ -65,6 +68,21 @@ type Handler struct {
 	// providerKeyMasks caches the auth index to provider key mask mapping the
 	// request list needs; see usage_provider_key_masks.go.
 	providerKeyMasks *providerKeyMaskCache
+}
+
+// now is the handler's view of the clock.
+//
+// Most reads take explicit bounds and are anchored by their caller, but the token-activity
+// grid is a rolling year that ends "today", so the clock is the only thing that can anchor
+// it. The demonstration's dataset is seeded at a fixed instant rather than at the export
+// machine's wall clock, so without this seam the exported grid described the export
+// machine's year while every day it queried, and every value it found, sat nine months
+// earlier - the grid rendered a quarter full, which is what a broken fixture looks like.
+func (h *Handler) now() time.Time {
+	if h.nowFn != nil {
+		return h.nowFn()
+	}
+	return time.Now()
 }
 
 func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypto.Cipher, logger *slog.Logger, authManager *auth.Manager) *Handler {

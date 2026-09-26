@@ -374,6 +374,10 @@ type demoExportResponses struct {
 // The set is explicit rather than "any number that looks like a timestamp": latency,
 // token counts, prices, IDs and schema versions are numbers too, and shifting one of
 // them would corrupt the data quietly.
+// `as_of_ms` is deliberately absent: it is a stamped read instant everywhere it appears, and
+// for the heatmap it is also the end of the rolling year whose day keys are captured on the
+// reference. Shifting it moved the anchor off the calendar its own cells were on, and the
+// served grid then described a year ending nine months before the data it was drawing.
 var demoExportShiftedMillisKeys = map[string]bool{
 	// The evidence for this list is an experiment rather than a reading of the handlers:
 	// two exports were taken with shifting disabled and diffed, and only the fields below
@@ -392,7 +396,6 @@ var demoExportShiftedMillisKeys = map[string]bool{
 	"observed_at_ms":        true,
 	"created_at_ms":         true,
 	"updated_at_ms":         true,
-	"as_of_ms":              true,
 	"checked_at_ms":         true,
 	"attempted_at_ms":       true,
 	"catalog_updated_at_ms": true,
@@ -773,6 +776,14 @@ func demoExportRouter(t *testing.T) (http.Handler, time.Time) {
 	)
 	handler.SetPricing(pricingService)
 	handler.SetRelease(releaseService)
+	// The token-activity grid is the one response whose calendar is the history's rather than
+	// the run's: it is a rolling year ending "today" and it derives that window from the
+	// clock instead of taking one from the request, so it is the one surface the reference
+	// does not otherwise reach. Built on the export machine's clock it described a year the
+	// seeded history was not on, and the two calendars overlap by only the hundred days
+	// between them - the exported grid carried data for a quarter of its span and read as a
+	// broken fixture. Pinning it here is what puts the grid and the history on one calendar.
+	handler.nowFn = func() time.Time { return demoExportReference }
 	return handler.routes(), demoExportReference
 }
 

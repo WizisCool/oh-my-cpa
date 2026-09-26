@@ -738,3 +738,52 @@ func TestFixtureKeepsASubscriptionReadUnavailable(t *testing.T) {
 		t.Error("no enabled credential reports will_renew=false, so the non-renewing marker is never rendered")
 	}
 }
+
+// The early history is the quietest part of the curve, and it still has to read as a
+// deployment that carried traffic.
+//
+// The expected rate there is a few requests an hour, and rounding that to a whole number
+// per hour emptied most of those hours: the token-activity grid drew a blank first third
+// beside a full remainder, which reads as a broken fixture rather than a quiet quarter. The
+// assertion is on days rather than on hours because a day is what a reader sees.
+func TestSeedKeepsTheOldestHistoryReadable(t *testing.T) {
+	ctx := context.Background()
+	repo, now, _ := seededDatabase(t)
+
+	// The oldest month the grid draws, sampled as whole days.
+	start := now.AddDate(0, 0, -historyDays+1)
+	end := start.AddDate(0, 0, 30)
+	analytics, err := repo.QueryUsageAnalytics(ctx, instanceID, start.UnixMilli(), end.UnixMilli(),
+		24*time.Hour.Milliseconds())
+	if err != nil {
+		t.Fatal(err)
+	}
+	days := 0
+	for _, bucket := range analytics.Buckets {
+		if bucket.Requests > 0 {
+			days++
+		}
+	}
+	events := analytics.Totals.Requests
+	if days < 25 {
+		t.Errorf("the oldest month carries traffic on %d of its first 31 days, want most of them: %d requests", days, events)
+	}
+}
+
+// The count draw is a draw, so it is asserted on its mean rather than on one sample: the
+// burst multiplier is what makes an hour carry several times its share, and a correction
+// that only touched the bursts would drift the whole rate curve upwards.
+func TestDrawRequestCountKeepsItsMean(t *testing.T) {
+	for _, mean := range []float64{0.3, 1.0, 2.0, 7.0, 18.0} {
+		random := newDeterministic(0xD1CE)
+		const draws = 20000
+		total := 0
+		for index := 0; index < draws; index++ {
+			total += drawRequestCount(random, mean)
+		}
+		average := float64(total) / draws
+		if average < mean*0.9 || average > mean*1.18 {
+			t.Errorf("mean %v drew an average of %.2f over %d hours, want it within a tenth", mean, average, draws)
+		}
+	}
+}

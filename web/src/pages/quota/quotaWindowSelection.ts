@@ -45,13 +45,15 @@ function windowRank(kind?: string): number {
  * otherwise be two families, and the row and the Drawer would be picking from different sets.
  * Every scope that is not the credential's own plan is its own family, including a limit
  * reported outside the plan's windows (a code-review allowance is not part of the five-hour
- * and weekly limits it sits beside).
+ * and weekly limits it sits beside). Keying a scope by its window id as well would make the
+ * code-review allowance's two windows two families of one window each, so a credential whose
+ * only limits were those would show one of them and hide the other.
  */
 export function quotaWindowGroupKey(window: QuotaWindow): string {
   if (window.scope === 'group') return `group:${window.label.split(' · ')[0]}`;
   if (window.scope === 'model') return `model:${window.model || window.label}`;
   if (window.scope === 'standard') return 'standard';
-  return `${window.scope}:${window.id}`;
+  return window.scope;
 }
 
 /** Source order, one group at a time, and within a group the shorter window first. */
