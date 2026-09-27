@@ -995,6 +995,14 @@ func (h *Handler) recordAudit(request *http.Request, action, targetType, targetI
 	}
 	summary := requestSourceSummary(request)
 	reqID := getOrGenerateRequestID(request)
+	if clientID := clientRequestID(request); clientID != "" {
+		withClient := make(map[string]any, len(details)+1)
+		for key, value := range details {
+			withClient[key] = value
+		}
+		withClient["client_request_id"] = clientID
+		details = withClient
+	}
 	_, err := h.repo.RecordAuditEvent(request.Context(), repository.AuditEvent{
 		Action:        action,
 		TargetType:    targetType,
@@ -1020,31 +1028,47 @@ func (h *Handler) recordAudit(request *http.Request, action, targetType, targetI
 	return nil
 }
 
-// assignRequestID gives every request one id before any handler runs, and answers it
-// back as X-Request-ID.
+type requestIDKey struct{}
+
+// assignRequestID gives every request one server-generated id before any handler runs,
+// and answers it back as X-Request-ID.
 //
 // A write audits its attempt and its outcome as two rows, and the trail pairs them by
-// request id. Generating the id per audit call instead gave the two rows different ids,
-// so every write read as an unfinished attempt next to an unrelated success.
+// request id. Generating the id per audit call gave the two rows different ids, so every
+// write read as an unfinished attempt next to an unrelated success. The id is never the
+// caller's own X-Request-ID: a caller that sent one value on two requests would pair an
+// attempt with another request's outcome and hide it. A caller's id is kept on the audit
+// row as `client_request_id` instead (see recordAudit).
 func assignRequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		id := strings.TrimSpace(request.Header.Get("X-Request-ID"))
-		if id == "" || len([]rune(id)) > 128 {
-			id = uuid.NewString()
-			request.Header.Set("X-Request-ID", id)
-		}
-		writer.Header().Set("X-Request-ID", security.RedactText(id))
-		next.ServeHTTP(writer, request)
+		id := uuid.NewString()
+		writer.Header().Set("X-Request-ID", id)
+		next.ServeHTTP(writer, request.WithContext(context.WithValue(request.Context(), requestIDKey{}, id)))
 	})
 }
 
+// getOrGenerateRequestID returns the id assignRequestID gave the request. A handler
+// reached without the middleware (a direct call in a test) gets a fresh id.
 func getOrGenerateRequestID(request *http.Request) string {
 	if request != nil {
-		if id := strings.TrimSpace(request.Header.Get("X-Request-ID")); id != "" && len([]rune(id)) <= 128 {
-			return security.RedactText(id)
+		if id, ok := request.Context().Value(requestIDKey{}).(string); ok && id != "" {
+			return id
 		}
 	}
 	return uuid.NewString()
+}
+
+// clientRequestID is the caller's own X-Request-ID, redacted and bounded, for correlation
+// with the caller's logs; empty when it sent none or an oversized one.
+func clientRequestID(request *http.Request) string {
+	if request == nil {
+		return ""
+	}
+	id := strings.TrimSpace(request.Header.Get("X-Request-ID"))
+	if id == "" || len([]rune(id)) > 128 {
+		return ""
+	}
+	return security.RedactText(id)
 }
 
 func requestSourceSummary(request *http.Request) string {

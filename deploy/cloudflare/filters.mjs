@@ -55,12 +55,21 @@ export function filterAuditEvents(decoded, url) {
   return { ...decoded, events: params.has('before') ? [] : events, next_cursor: '' };
 }
 
-/** A resumed read returns only what follows the sequence the console last saw. */
+/**
+ * A resumed read returns only what follows the sequence the console last saw, and a limit
+ * keeps the newest records and reports the skip - the server's own rule.
+ */
 export function filterServiceLogs(decoded, url) {
   if (!decoded || !Array.isArray(decoded.records)) return decoded;
   const after = Number(url.searchParams.get('after') ?? 0);
-  if (!Number.isFinite(after) || after <= 0) return decoded;
-  return { ...decoded, records: decoded.records.filter((record) => record.seq > after), gap: false };
+  const limit = Number(url.searchParams.get('limit') ?? 0);
+  let records = Number.isFinite(after) && after > 0 ? decoded.records.filter((record) => record.seq > after) : decoded.records;
+  let gap = false;
+  if (Number.isInteger(limit) && limit > 0 && records.length > limit) {
+    records = records.slice(records.length - limit);
+    gap = true;
+  }
+  return { ...decoded, records, gap };
 }
 
 const FILTERS = new Map([

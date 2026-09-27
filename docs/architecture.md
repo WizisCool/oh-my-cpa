@@ -486,17 +486,19 @@ not poll.
   keyset cursor the previous page returned as `next_cursor`. `fold` (default on) hides
   an `attempt` row once an outcome exists for the same request id and action; rows
   written before request ids were stable per request are paired by action, target and
-  an outcome within one minute (`auditFoldWindowMS`), and only when they are older than
-  the moment migration 027 was applied, which is when ids became stable. `idx_audit_events_request_action`
+  an outcome within one minute (`auditFoldWindowMS`), and only when both rows are older
+  than the moment migration 027 was applied, which is when ids became stable. `idx_audit_events_request_action`
   (migration 027) serves that lookup. `GET /api/v1/management/audit/export` takes the
   same filters, returns every row including attempts unless `fold=1`, stops at
   `repository.AuditPageMax` rows with `truncated` set, and is itself audited and
   withheld when that record cannot be written.
 
-Every request is given one id on arrival (`assignRequestID`, which keeps a caller's
-`X-Request-ID` of up to 128 characters, generates one otherwise, and answers it back
-in the response header). A write's attempt and outcome rows therefore share it; before
-this each audit call generated its own id and no pair could be matched.
+Every request is given one server-generated id on arrival (`assignRequestID`, which
+answers it back as `X-Request-ID`). A write's attempt and outcome rows therefore share
+it; before this each audit call generated its own id and no pair could be matched. A
+caller's own `X-Request-ID` is never the pairing key - one value sent on two requests
+would pair an attempt with another request's outcome - and is recorded on the audit
+row as `client_request_id` for correlation instead.
 
 ## 3. Frontend shape
 

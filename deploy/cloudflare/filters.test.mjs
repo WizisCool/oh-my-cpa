@@ -39,5 +39,8 @@ describe('the demonstration service log', () => {
     const url = (query) => new URL(`https://demo.test/api/v1/management/service-logs${query}`);
     assert.equal(filterServiceLogs(page, url('')).records.length, 3);
     assert.deepEqual(filterServiceLogs(page, url('?after=2')).records, [{ seq: 3 }]);
+    const limited = filterServiceLogs(page, url('?limit=1'));
+    assert.deepEqual(limited.records, [{ seq: 3 }]);
+    assert.equal(limited.gap, true);
   });
 });

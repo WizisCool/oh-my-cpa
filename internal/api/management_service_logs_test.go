@@ -104,4 +104,22 @@ func TestAssignRequestIDGivesOneIDPerRequest(t *testing.T) {
 	if recorder.Header().Get("X-Request-ID") != first {
 		t.Fatalf("response id = %q, want %q", recorder.Header().Get("X-Request-ID"), first)
 	}
+
+	// A caller's own id is correlation, not the pairing key: two requests that reuse one
+	// value must still get distinct ids, or one's outcome would fold the other's attempt.
+	var ids []string
+	reusing := assignRequestID(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		ids = append(ids, getOrGenerateRequestID(request))
+		if clientRequestID(request) != "caller-7" {
+			t.Fatalf("client id = %q, want it kept for correlation", clientRequestID(request))
+		}
+	}))
+	for i := 0; i < 2; i++ {
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/management/providers", nil)
+		request.Header.Set("X-Request-ID", "caller-7")
+		reusing.ServeHTTP(httptest.NewRecorder(), request)
+	}
+	if len(ids) != 2 || ids[0] == ids[1] || ids[0] == "caller-7" {
+		t.Fatalf("ids for two requests reusing one client id = %v, want two distinct server ids", ids)
+	}
 }

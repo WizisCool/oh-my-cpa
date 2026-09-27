@@ -28,8 +28,10 @@ export interface ServiceLogTail {
  * useServiceLogTail follows Oh My CPA's own log.
  *
  * The position is the server's sequence number, which only grows for the life of the
- * process, so resuming is exact: no overlap to de-duplicate, and a restart shows up as a
- * sequence lower than the one held, which is treated as a fresh start.
+ * process, so resuming is exact: no overlap to de-duplicate. A restart starts the sequence
+ * again, so a position is only meaningful together with the capture it came from: the
+ * capture's start time is held beside it, and an answer from a different capture is
+ * discarded and replaced by a fresh read rather than merged.
  */
 export function useServiceLogTail(enabled: boolean): ServiceLogTail {
   const [records, setRecords] = React.useState<ServiceLogRecord[]>([]);
@@ -40,6 +42,8 @@ export function useServiceLogTail(enabled: boolean): ServiceLogTail {
   const [paused, setPaused] = React.useState(false);
 
   const lastSeq = React.useRef(0);
+  /** The start time of the capture `lastSeq` belongs to; undefined before the first read. */
+  const captureStartedAt = React.useRef<number | undefined>(undefined);
   const generation = React.useRef(0);
   const inFlight = React.useRef(false);
 
@@ -54,13 +58,24 @@ export function useServiceLogTail(enabled: boolean): ServiceLogTail {
         setPhase('off');
         return;
       }
-      const restarted = (page.latest_seq ?? 0) < lastSeq.current;
-      const fresh = page.records.filter((record) => record.seq > (restarted ? 0 : lastSeq.current));
+      if (!reset && captureStartedAt.current !== undefined && page.started_at_ms !== captureStartedAt.current) {
+        // The server restarted between reads: this page resumed from a position in a
+        // capture that no longer exists. Start over from the new capture instead, as a
+        // new generation so any answer still in flight from the old one is dropped.
+        generation.current += 1;
+        lastSeq.current = 0;
+        captureStartedAt.current = undefined;
+        inFlight.current = false;
+        void fetchPage(true);
+        return;
+      }
+      captureStartedAt.current = page.started_at_ms;
+      const fresh = page.records.filter((record) => record.seq > (reset ? 0 : lastSeq.current));
       lastSeq.current = page.latest_seq ?? lastSeq.current;
       setMeta({ capacity: page.capacity, started_at_ms: page.started_at_ms });
       if (page.gap && !reset) setHasGap(true);
       setRecords((previous) => {
-        const base = reset || restarted ? [] : previous;
+        const base = reset ? [] : previous;
         const merged = base.concat(fresh);
         return merged.length > MAX_SERVICE_LOG_RECORDS ? merged.slice(merged.length - MAX_SERVICE_LOG_RECORDS) : merged;
       });
@@ -79,6 +94,7 @@ export function useServiceLogTail(enabled: boolean): ServiceLogTail {
     generation.current += 1;
     inFlight.current = false;
     lastSeq.current = 0;
+    captureStartedAt.current = undefined;
     setHasGap(false);
     setPhase('pending');
     void fetchPage(true);
