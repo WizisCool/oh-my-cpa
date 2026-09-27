@@ -22,7 +22,7 @@ import {
   SearchOutlined,
 } from '../icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, ApiError } from '../../api/client';
+import { api, ApiError, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import type {
@@ -161,8 +161,12 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
     setActiveSection(initialSection);
   }, [file?.name, file?.auth_index, initialSection, open]);
 
+  // The drawer mounts its content on first open, so the form has nothing to reset before then -
+  // and resetting an unmounted form is what antd warns about on every page load.
+  const hasOpenedRef = useRef(false);
   useEffect(() => {
     if (file && open) {
+      hasOpenedRef.current = true;
       sessionCounterRef.current += 1;
       const sid = sessionCounterRef.current;
       currentSessionRef.current = sid;
@@ -173,7 +177,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
       setIsDirty(false);
     } else {
       currentSessionRef.current = 0;
-      form.resetFields();
+      if (hasOpenedRef.current) form.resetFields();
       setBaseline({});
       setIsDirty(false);
     }
@@ -218,7 +222,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
     },
     onError: (err: unknown) => {
       isPendingRef.current = false;
-      const msg = err instanceof ApiError ? err.message : String(err);
+      const msg = describeError(err);
       message.error(msg);
     },
   });

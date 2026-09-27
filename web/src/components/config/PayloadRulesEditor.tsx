@@ -237,7 +237,7 @@ export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
         onCancel={() => setAdvModalState(null)}
         okText={t('common.confirm')}
         cancelText={t('common.cancel')}
-        destroyOnClose
+        destroyOnHidden
         width={600}
       >
         {advDraft && (

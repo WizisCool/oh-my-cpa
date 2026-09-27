@@ -231,3 +231,26 @@ export function matchesStatusClass(status: number | undefined, wanted: LogStatus
   if (wanted === 'client') return status >= 400 && status < 500;
   return status >= 500;
 }
+
+/** One record of Oh My CPA's own service log, already redacted by the server. */
+export interface ServiceLogRecord {
+  seq: number;
+  logged_at_ms: number;
+  level: 'debug' | 'info' | 'warn' | 'error';
+  message: string;
+  attrs?: { key: string; value: string }[];
+}
+
+export interface ServiceLogPage {
+  /** False when this server keeps no copy of its log; the page then says so instead of polling. */
+  capturing: boolean;
+  records: ServiceLogRecord[];
+  latest_seq?: number;
+  oldest_seq?: number;
+  /** Records after the reader's position were evicted or skipped before this read. */
+  gap?: boolean;
+  capacity?: number;
+  started_at_ms?: number;
+}
+
+export const SERVICE_LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const;

@@ -7,9 +7,9 @@ import {
   Popconfirm,
   Table,
   Tooltip,
-  Typography,
 } from 'antd';
 import type { MenuProps } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import {
   CopyOutlined,
   DeleteOutlined,
@@ -20,26 +20,26 @@ import {
   MoreOutlined,
   PlusOutlined,
   SearchOutlined,
-  TagOutlined,
 } from '../icons';
 import { useT } from '../../i18n';
 import { maskKeyText } from '../../utils/maskKey';
 import { copyText } from '../../utils/clipboard';
+import { formatTimeAgo } from '../../utils/format';
+import { formatTokens } from '../../types/tokenDisplay';
+import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
+import { useVisibleNow } from '../../hooks/useVisibleNow';
 import type { ClientAPIKeyItem, ClientKeyUsageItem } from '../../types/providers';
-import type { ColumnsType } from 'antd/es/table';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { PhoneRow } from '../common/PhoneRow';
 import { phoneRowFields } from '../common/phoneRowFields';
 import styles from './ApiKeysList.module.css';
 
-const { Text } = Typography;
-
-/** One rendered row: a key from the `api-keys` draft plus the identity and
+/** One rendered row: a key from CPA's client-key list plus the identity and
  *  traffic Oh My CPA knows about it. A key has no state of its own to report —
  *  CPA accepts it by presence in that list (see ADR 0010). */
 export interface ApiKeyRecord {
   id: string;
-  /** Position in the `api-keys` array; the value edit writes back to this index. */
+  /** Position in the client-key array; an edit writes back to this index. */
   index: number;
   key: string;
   usageFingerprint?: string;
@@ -49,17 +49,19 @@ export interface ApiKeyRecord {
 }
 
 export interface ApiKeysListProps {
-  /** The key list in the current draft. */
+  /** The keys CPA holds, in the order of its configuration document. */
   apiKeys: string[];
-  /** Local in-flight / draft aliases. */
-  pendingAliases?: Record<string, string>;
   /** The stored keys and their aliases. */
   metadata?: ClientAPIKeyItem[];
   /** Keyed by usage fingerprint. */
   usage?: Record<string, ClientKeyUsageItem>;
   formatTime: (ms: number) => string;
-  /** The page's search box, applied to the name and the key text. */
+  /** The list's search box, applied to the name and the key text. */
   searchQuery: string;
+  /** True while a write is in flight: the row actions that write wait for it. */
+  isBusy?: boolean;
+  /** The demonstration refuses every write, so the controls that write say so. */
+  isReadOnly?: boolean;
   onAdd: () => void;
   /** Opens the row's editor: one dialog for its name and its secret. */
   onEdit: (index: number) => void;
@@ -69,11 +71,12 @@ export interface ApiKeysListProps {
 
 export const ApiKeysList: React.FC<ApiKeysListProps> = ({
   apiKeys,
-  pendingAliases = {},
   metadata,
   usage,
   formatTime,
   searchQuery,
+  isBusy = false,
+  isReadOnly = false,
   onAdd,
   onEdit,
   onDelete,
@@ -81,6 +84,8 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
 }) => {
   const t = useT();
   const { message } = AntdApp.useApp();
+  const { style: tokenStyle } = useTokenDisplayStyle();
+  const nowMS = useVisibleNow();
 
   const [revealedKeys, setRevealedKeys] = React.useState<Record<string, boolean>>({});
   /** The row whose delete confirmation is open. It survives the dropdown closing
@@ -90,34 +95,28 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
 
   const metaByKey = React.useMemo(() => {
     const map = new Map<string, ClientAPIKeyItem>();
-    for (const item of metadata ?? []) {
-      map.set(item.key, item);
-    }
+    for (const item of metadata ?? []) map.set(item.key, item);
     return map;
   }, [metadata]);
 
   const dataSource: ApiKeyRecord[] = React.useMemo(
     () =>
       apiKeys.map((key, index) => {
-        const entry = metaByKey.get(key) ?? metadata?.[index];
-        const isStored = entry !== undefined && entry.key === key;
-        const usageFingerprint = isStored ? entry.usage_fingerprint : undefined;
-        const id = usageFingerprint ? `key-${usageFingerprint}` : `key-${index}`;
+        const entry = metaByKey.get(key);
+        const usageFingerprint = entry?.usage_fingerprint;
         return {
-          id,
+          id: usageFingerprint ? `key-${usageFingerprint}` : `key-${index}`,
           index,
           key,
           usageFingerprint,
-          alias: pendingAliases[key] ?? (isStored ? entry.alias : undefined),
-          aliasVersion: isStored ? entry.alias_version : 0,
+          alias: entry?.alias || undefined,
+          aliasVersion: entry?.alias_version ?? 0,
           usage: usageFingerprint ? usage?.[usageFingerprint] : undefined,
         };
       }),
-    [apiKeys, metaByKey, metadata, pendingAliases, usage],
+    [apiKeys, metaByKey, usage],
   );
 
-  // Read here rather than beside the row branch below: it is a hook, so it cannot sit after the
-  // empty-state return, and the branch that uses it is the return statement itself.
   const isPhone = useIsPhoneViewport();
 
   const filteredData = React.useMemo(() => {
@@ -161,10 +160,7 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
       // seeing.
       disabled: !record.usageFingerprint,
       label: (
-        <span
-          className={styles['menu-label']}
-          title={record.usageFingerprint ? undefined : t('keys.not_linked')}
-        >
+        <span title={record.usageFingerprint ? undefined : t('keys.not_linked')}>
           {t('keys.view_requests')}
         </span>
       ),
@@ -175,6 +171,7 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
       key: 'delete',
       danger: true,
       icon: <DeleteOutlined />,
+      disabled: isReadOnly || isBusy,
       label: t('cfg.api_keys_delete'),
       onClick: () => setPendingDeleteId(record.id),
     },
@@ -183,62 +180,108 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
   /**
    * The name cell, which is also the rename affordance.
    *
-   * One function rather than one per rendering: the table's cell and the phone row's headline
-   * are the same control, and a rename that works in one place and not the other is the kind of
-   * divergence a second copy would produce eventually.
+   * One function for both renderings: the table's cell and the phone row's headline are the same
+   * control, and a rename that works in one place and not the other is the divergence a second
+   * copy would produce eventually.
    */
   const nameCell = (record: ApiKeyRecord) => (
-    <div className={styles['name-cell']}>
+    <button
+      type="button"
+      className={styles['name-button']}
+      onClick={() => onEdit(record.index)}
+      disabled={isReadOnly}
+      title={t('keys.rename_title')}
+      // Named for what it does rather than "Edit", which is the row action's name: two
+      // controls in one row must not be indistinguishable to a screen reader.
+      aria-label={`${t('keys.rename_title')}: ${record.alias ?? t('keys.unnamed')}`}
+    >
+      <span className={styles['name-mark']} aria-hidden="true">
+        <KeyOutlined />
+      </span>
       {record.alias ? (
-        /* A real button, like the unnamed state beside it: the name cell is a rename
-           affordance, so it has to be reachable without a pointer. antd's icon carries its own
-           aria-label, which is why the name is stated outright here instead of being assembled
-           from the contents. */
-        <button
-          type="button"
-          className={styles['name-wrapper']}
-          onClick={() => onEdit(record.index)}
-          title={t('keys.rename_title')}
-          aria-label={`${t('cfg.api_keys_edit')}: ${record.alias}`}
-        >
-          <Text strong className={styles['name-text']}>
-            {record.alias}
-          </Text>
-          <EditOutlined className={styles['name-edit-icon']} />
-        </button>
+        <span className={styles['name-text']}>{record.alias}</span>
       ) : (
-        <button
-          type="button"
-          onClick={() => onEdit(record.index)}
-          className={styles['unnamed-btn']}
-          title={t('keys.rename_title')}
-        >
-          <TagOutlined /> {t('keys.unnamed')}
-        </button>
+        <span className={styles['name-unnamed']}>{t('keys.unnamed')}</span>
       )}
-    </div>
+      <EditOutlined className={styles['name-edit-icon']} />
+    </button>
   );
 
   /**
-   * The mask, and the secret once revealed.
+   * The mask - or the secret once revealed - with the two actions that touch the secret beside it.
    *
-   * The box is a fixed width and the two states are the same shape, so revealing moves
-   * nothing - which is what makes it usable on a phone row, where a value that reflowed would
-   * push the controls off the line.
+   * The text box is a fixed width and the two states are the same shape, so revealing moves
+   * nothing: not the column, not the controls beside it, not the row on a phone.
    */
   const keyCell = (record: ApiKeyRecord) => {
     const isRevealed = Boolean(revealedKeys[record.id]);
     return (
-      <div className="config-key-box">
-        <span className={`config-key-text${isRevealed ? ' is-revealed' : ' is-masked'}`}>
-          {isRevealed ? record.key : maskKeyText(record.key)}
+      <div className="config-key-field">
+        <div className="config-key-box">
+          <span className={`config-key-text${isRevealed ? ' is-revealed' : ' is-masked'}`}>
+            {isRevealed ? record.key : maskKeyText(record.key)}
+          </span>
+        </div>
+        <Tooltip title={isRevealed ? t('common.hide_secret') : t('common.reveal_secret')}>
+          <button
+            type="button"
+            className="config-key-action is-quiet"
+            onClick={() => setRevealedKeys((prev) => ({ ...prev, [record.id]: !prev[record.id] }))}
+            aria-label={isRevealed ? t('common.hide_secret') : t('common.reveal_secret')}
+            aria-pressed={isRevealed}
+          >
+            {isRevealed ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+          </button>
+        </Tooltip>
+        <Tooltip title={t('cfg.api_keys_copy')}>
+          <button
+            type="button"
+            className="config-key-action is-quiet"
+            onClick={() => void handleCopy(record.key)}
+            aria-label={t('cfg.api_keys_copy')}
+          >
+            <CopyOutlined />
+          </button>
+        </Tooltip>
+      </div>
+    );
+  };
+
+  const usageCell = (record: ApiKeyRecord) => {
+    if (!record.usage) {
+      return (
+        <Tooltip title={t('keys.not_linked')}>
+          <span className={styles['muted']}>—</span>
+        </Tooltip>
+      );
+    }
+    const { requests, failed, total_tokens: tokens } = record.usage;
+    return (
+      <div className={styles['usage']}>
+        <span className={styles['usage-requests']}>{requests.toLocaleString()}</span>
+        <span className={styles['usage-detail']}>
+          {t('keys.usage_tokens', { n: formatTokens(tokens, tokenStyle) })}
+          {failed > 0 && (
+            <span className={styles['usage-failed']}>{t('keys.usage_failed', { n: failed.toLocaleString() })}</span>
+          )}
         </span>
       </div>
     );
   };
 
+  const lastUsedCell = (record: ApiKeyRecord) => {
+    const lastUsed = record.usage?.last_used_ms ?? 0;
+    if (lastUsed <= 0) return <span className={styles['muted']}>—</span>;
+    return (
+      <Tooltip title={formatTime(lastUsed)}>
+        <time className={styles['last-used']} dateTime={new Date(lastUsed).toISOString()}>
+          {formatTimeAgo(lastUsed, nowMS, t)}
+        </time>
+      </Tooltip>
+    );
+  };
+
   const renderActions = (record: ApiKeyRecord) => {
-    const isRevealed = Boolean(revealedKeys[record.id]);
     const moreButton = (
       <button
         type="button"
@@ -251,32 +294,13 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
     );
     return (
       <div className="keys-row-actions">
-        <Tooltip title={isRevealed ? t('common.hide_secret') : t('common.reveal_secret')}>
-          <button
-            type="button"
-            className="config-key-action"
-            onClick={() => setRevealedKeys((prev) => ({ ...prev, [record.id]: !prev[record.id] }))}
-            aria-label={isRevealed ? t('common.hide_secret') : t('common.reveal_secret')}
-          >
-            {isRevealed ? <EyeInvisibleOutlined /> : <EyeOutlined />}
-          </button>
-        </Tooltip>
-        <Tooltip title={t('cfg.api_keys_copy')}>
-          <button
-            type="button"
-            className="config-key-action"
-            onClick={() => void handleCopy(record.key)}
-            aria-label={t('cfg.api_keys_copy')}
-          >
-            <CopyOutlined />
-          </button>
-        </Tooltip>
         {/* One editor for both of a key's editable parts: its name and its value. */}
-        <Tooltip title={t('cfg.api_keys_edit')}>
+        <Tooltip title={isReadOnly ? t('demo.blocked') : t('cfg.api_keys_edit')}>
           <button
             type="button"
             className="config-key-action"
             onClick={() => onEdit(record.index)}
+            disabled={isReadOnly}
             aria-label={`${t('cfg.api_keys_edit')}: ${record.alias ?? t('keys.unnamed')}`}
           >
             <EditOutlined />
@@ -287,7 +311,7 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
             open
             title={t('cfg.api_keys_delete_confirm')}
             description={t('keys.delete_confirm_desc')}
-            okText={t('common.confirm')}
+            okText={t('cfg.api_keys_delete')}
             cancelText={t('common.cancel')}
             okButtonProps={{ danger: true }}
             onConfirm={() => {
@@ -318,75 +342,59 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
    *
    * The table renders them, and `phoneRowFields` derives the phone row's fields from the same
    * array - so a column added here reaches both renderings, and a column's label and value
-   * cannot differ between them.
-   *
-   * Built on every render rather than memoised, and deliberately: it closes over the reveal map
-   * and the callbacks above, all of which are rebuilt per render, so a dependency array for it
-   * would change every time and the memo would never hit. The array is a handful of literals,
-   * and antd already received a fresh one per render before this existed.
-   *
-   * It sits above the empty-state early return because hooks cannot come after one, and the
-   * phone-row branch below is what reads the viewport.
+   * cannot differ between them. Built per render: it closes over the reveal map and callbacks
+   * above, which change every render, so a memo would never hit.
    */
   const columns: ColumnsType<ApiKeyRecord> = [
-      {
-        title: t('keys.col_name'),
-        key: 'name',
-        render: (_: unknown, record: ApiKeyRecord) => nameCell(record),
-      },
-      {
-        title: t('keys.col_key'),
-        key: 'key',
-        width: 420,
-        render: (_: unknown, record: ApiKeyRecord) => keyCell(record),
-      },
-      {
-        title: t('keys.col_requests'),
-        key: 'requests',
-        width: 110,
-        align: 'right' as const,
-        render: (_: unknown, record: ApiKeyRecord) =>
-          record.usage ? (
-            <Text className="mono-num">{record.usage.requests.toLocaleString()}</Text>
-          ) : (
-            <Tooltip title={t('keys.not_linked')}>
-              <Text type="secondary">—</Text>
-            </Tooltip>
-          ),
-      },
-      {
-        title: t('keys.col_last_used'),
-        key: 'lastUsed',
-        width: 170,
-        align: 'right' as const,
-        render: (_: unknown, record: ApiKeyRecord) =>
-          record.usage && record.usage.last_used_ms > 0 ? (
-            <time dateTime={new Date(record.usage.last_used_ms).toISOString()}>
-              <Text type="secondary" className="mono-num">
-                {formatTime(record.usage.last_used_ms)}
-              </Text>
-            </time>
-          ) : (
-            <Text type="secondary">—</Text>
-          ),
-      },
-      {
-        title: t('keys.col_actions'),
-        key: 'actions',
-        width: 190,
-        align: 'right' as const,
-        render: (_: unknown, record: ApiKeyRecord) => renderActions(record),
-      },
+    {
+      title: t('keys.col_name'),
+      key: 'name',
+      render: (_: unknown, record: ApiKeyRecord) => nameCell(record),
+    },
+    {
+      title: t('keys.col_key'),
+      key: 'key',
+      width: 400,
+      render: (_: unknown, record: ApiKeyRecord) => keyCell(record),
+    },
+    {
+      title: t('keys.col_requests_window'),
+      key: 'requests',
+      width: 150,
+      align: 'right' as const,
+      render: (_: unknown, record: ApiKeyRecord) => usageCell(record),
+    },
+    {
+      title: t('keys.col_last_used'),
+      key: 'lastUsed',
+      width: 130,
+      align: 'right' as const,
+      render: (_: unknown, record: ApiKeyRecord) => lastUsedCell(record),
+    },
+    {
+      title: t('keys.col_actions'),
+      key: 'actions',
+      width: 104,
+      align: 'right' as const,
+      render: (_: unknown, record: ApiKeyRecord) => renderActions(record),
+    },
   ];
-
 
   if (apiKeys.length === 0) {
     return (
       <div className={styles['empty-box']}>
-        <KeyOutlined className={styles['empty-icon']} />
+        <span className={styles['empty-mark']} aria-hidden="true">
+          <KeyOutlined />
+        </span>
         <div className={styles['empty-title']}>{t('keys.empty_title')}</div>
         <div className={styles['empty-desc']}>{t('keys.empty_desc')}</div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={onAdd}>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={onAdd}
+          disabled={isReadOnly}
+          title={isReadOnly ? t('demo.blocked') : undefined}
+        >
           {t('keys.empty_cta')}
         </Button>
       </div>
@@ -416,9 +424,9 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
           ))}
         </div>
       ) : (
-        /* Sideways scrolling stays the convention where the table is still a table: it happens
-           inside the card, so the page's content column stays where the reader left it. */
-        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        /* Sideways scrolling stays inside the card, so the page's content column stays where the
+           reader left it. */
+        <div className="table-scroll">
           <Table<ApiKeyRecord>
             className="config-api-keys-table"
             size="small"
@@ -430,10 +438,6 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
           />
         </div>
       )}
-
-      <p className={styles['scope-note']}>
-        {t('keys.usage_scope', { range: t('keys.usage_range') })}
-      </p>
     </>
   );
 };

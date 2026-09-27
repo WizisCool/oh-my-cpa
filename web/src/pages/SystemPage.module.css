@@ -23,18 +23,6 @@
   flex-direction: column;
 }
 
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.check-status-text {
-  font-size: 12px;
-  color: var(--meta);
-  margin-left: 8px;
-}
-
 .product-block {
   display: flex;
   flex-direction: column;
@@ -135,13 +123,6 @@
 .version-tag {
   font-family: var(--font-mono, monospace);
   font-size: 12px;
-}
-
-.state-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
 }
 
 .changelog-toggle {
@@ -316,65 +297,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.storage-file-list {
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 20px;
-}
-
-.storage-file-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border-soft);
-  font-size: 13px;
-  gap: 12px;
-}
-
-.storage-file-name {
-  color: var(--fg-2);
-}
-
-.storage-file-val {
-  font-family: var(--font-mono, monospace);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--fg);
-  font-variant-numeric: tabular-nums;
-}
-
-.storage-facts-section {
-  display: flex;
-  flex-direction: column;
-}
-
-.storage-fact-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border-soft);
-  font-size: 12px;
-  gap: 12px;
-}
-
-.storage-fact-row:last-child {
-  border-bottom: none;
-}
-
-.storage-fact-label {
-  color: var(--meta);
-}
-
-.storage-fact-val {
-  font-family: var(--font-mono, monospace);
-  font-size: 12px;
-  color: var(--fg-2);
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-
 /* Maintenance Card Styles */
 
 .maintenance-actions {
@@ -431,14 +353,6 @@
   color: var(--meta);
   font-family: var(--font-mono, monospace);
   word-break: break-word;
-}
-
-.maintenance-notice {
-  font-size: 12px;
-  color: var(--meta);
-  line-height: 1.5;
-  margin-top: auto;
-  padding-top: 12px;
 }
 
 .vacuum-modal-content {
@@ -526,4 +440,92 @@
   .repo-link {
     transition: none;
   }
+}
+
+/* ── shared readings ─────────────────────────────────────────────────────── */
+
+.version-label {
+  margin-right: 6px;
+}
+
+.check-alert {
+  font-size: 12px;
+}
+
+.release-tag {
+  margin: 0 !important;
+  font-weight: 600;
+}
+
+.release-name {
+  font-size: 13px;
+}
+
+.release-notes-missing {
+  color: var(--meta);
+  font-size: 12px;
+}
+
+.storage-files {
+  margin-bottom: 16px;
+}
+
+/* The component rows: what the component is on the left, its state on the right. */
+.component-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.component-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.component-row:first-child {
+  padding-top: 0;
+}
+
+.component-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.component-identity {
+  min-width: 0;
+}
+
+.component-name {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.component-meta {
+  margin-top: 2px;
+  color: var(--meta);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.outcome-success { color: var(--success); }
+.outcome-warn { color: var(--warn); }
+.outcome-danger { color: var(--danger); }
+
+.maintenance-running {
+  margin-bottom: 16px;
+}
+
+.maintenance-detail {
+  font-size: 12px;
+}
+
+.maintenance-outcome-alert {
+  margin-top: 6px;
+}
+
+.vacuum-desc {
+  margin: 0 !important;
 }

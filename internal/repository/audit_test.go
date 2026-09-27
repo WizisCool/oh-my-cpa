@@ -96,3 +96,65 @@ func TestListAuditEventsReturnsEmptySlice(t *testing.T) {
 		t.Fatalf("empty audit history = %#v, want non-nil empty slice", events)
 	}
 }
+
+func TestQueryAuditEventsFiltersFoldsAndPages(t *testing.T) {
+	repo, _ := testRepository(t)
+	ctx := context.Background()
+	base := time.Date(2026, 9, 20, 9, 0, 0, 0, time.UTC).UnixMilli()
+	rows := []AuditEvent{
+		{Action: "auth.login", TargetType: "auth", TargetID: "operator", Result: "success", RequestID: "r1"},
+		{Action: "provider.update", TargetType: "provider", TargetID: "anthropic", Result: "attempt", RequestID: "r2"},
+		{Action: "provider.update", TargetType: "provider", TargetID: "anthropic", Result: "success", RequestID: "r2"},
+		{Action: "provider.delete", TargetType: "provider", TargetID: "gemini", Result: "attempt", RequestID: "r3"},
+		{Action: "api_key.create", TargetType: "client_api_key", TargetID: "list", Result: "failure", RequestID: "r4"},
+		// `apixkey` must not match the `api_key` category: `_` is literal.
+		{Action: "apixkey.create", TargetType: "other", TargetID: "x", Result: "success", RequestID: "r5"},
+		// A pre-fix pair: the attempt and its outcome carry different request ids.
+		{Action: "quota.clear_cooldown", TargetType: "quota", TargetID: "q1", Result: "attempt", RequestID: "r6a"},
+		{Action: "quota.clear_cooldown", TargetType: "quota", TargetID: "q1", Result: "success", RequestID: "r6b"},
+	}
+	for i, row := range rows {
+		row.OccurredAtMS = base + int64(i)*1000
+		if _, err := repo.RecordAuditEvent(ctx, row); err != nil {
+			t.Fatalf("record %d: %v", i, err)
+		}
+	}
+
+	actions := func(query AuditQuery) []string {
+		t.Helper()
+		page, err := repo.QueryAuditEvents(ctx, query)
+		if err != nil {
+			t.Fatalf("query %#v: %v", query, err)
+		}
+		out := make([]string, 0, len(page.Events))
+		for _, event := range page.Events {
+			out = append(out, event.Action+":"+event.Result)
+		}
+		return out
+	}
+	expect := func(name string, got []string, want ...string) {
+		t.Helper()
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Fatalf("%s = %v, want %v", name, got, want)
+		}
+	}
+
+	expect("folded", actions(AuditQuery{FoldAttempts: true}),
+		"quota.clear_cooldown:success", "apixkey.create:success", "api_key.create:failure", "provider.delete:attempt", "provider.update:success", "auth.login:success")
+	expect("category", actions(AuditQuery{Categories: []string{"api_key", "auth"}}),
+		"api_key.create:failure", "auth.login:success")
+	expect("failed", actions(AuditQuery{Outcome: AuditOutcomeFailed}), "api_key.create:failure")
+	expect("search", actions(AuditQuery{Search: "GEMINI"}), "provider.delete:attempt")
+
+	first, err := repo.QueryAuditEvents(ctx, AuditQuery{Limit: 4, Categories: []string{"auth", "provider", "api_key", "apixkey"}})
+	if err != nil || len(first.Events) != 4 || first.Next == nil {
+		t.Fatalf("first page = %#v, %v; want four rows and a cursor", first, err)
+	}
+	second, err := repo.QueryAuditEvents(ctx, AuditQuery{Limit: 4, Before: *first.Next, Categories: []string{"auth", "provider", "api_key", "apixkey"}})
+	if err != nil || len(second.Events) != 2 || second.Next != nil {
+		t.Fatalf("second page = %#v, %v; want the last two rows and no cursor", second, err)
+	}
+	if second.Events[0].Action != "provider.update" || second.Events[1].Action != "auth.login" {
+		t.Fatalf("second page continues at %s, want provider.update then auth.login", second.Events[0].Action)
+	}
+}

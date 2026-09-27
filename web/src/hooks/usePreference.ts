@@ -1,7 +1,7 @@
 import React from 'react';
 import { App as AntdApp } from 'antd';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, ApiError } from '../api/client';
+import { api, describeError } from '../api/client';
 
 export interface Preference<T> {
   value: T;
@@ -77,7 +77,7 @@ export function usePreference<T>(
       .then(() => api.putPreference(key, next))
       .catch((err: unknown) => {
         ok = false;
-        message.error(err instanceof ApiError ? err.message : String(err));
+        message.error(describeError(err));
         // Put the control back where it was. Without this the optimistic value
         // stays in the cache while the server still holds the old one, and
         // because these preferences never auto-refetch (`staleTime: Infinity`)

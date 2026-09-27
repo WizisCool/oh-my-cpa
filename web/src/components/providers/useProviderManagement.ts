@@ -3,7 +3,7 @@ import React, { useState, useRef } from 'react';
 import { App as AntdApp } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { api, ApiError, apiErrorCode, isRetryableWriteFailure } from '../../api/client';
+import { api, ApiError, apiErrorCode, isRetryableWriteFailure, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import { useLastIntentQueue, LastIntentTimeoutError } from '../../hooks/useLastIntentQueue';
 import { getProviderDefaultIcon } from '../LobeIcon';
@@ -135,7 +135,7 @@ export function useProviderManagement({
       }
     } catch (err) {
       if (seq !== modelFetchSeqRef.current) return;
-      const msg = err instanceof ApiError ? err.message : String(err);
+      const msg = describeError(err);
       message.error(msg);
     } finally {
       if (seq === modelFetchSeqRef.current) {
@@ -311,7 +311,7 @@ export function useProviderManagement({
       return;
     }
     const firstError = failed[0]?.error;
-    message.error(firstError instanceof ApiError ? firstError.message : String(firstError));
+    message.error(describeError(firstError));
   };
 
   const handleCloseProviderDrawer = () => {
@@ -425,7 +425,7 @@ export function useProviderManagement({
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
     },
     onError: (err: unknown) => {
-      const msg = err instanceof ApiError ? err.message : String(err);
+      const msg = describeError(err);
       message.error(msg);
     },
   });
@@ -440,7 +440,7 @@ export function useProviderManagement({
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
     },
     onError: (err: unknown) => {
-      const msg = err instanceof ApiError ? err.message : String(err);
+      const msg = describeError(err);
       message.error(msg);
     },
   });
@@ -453,7 +453,7 @@ export function useProviderManagement({
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
     },
     onError: (err: unknown) => {
-      const msg = err instanceof ApiError ? err.message : String(err);
+      const msg = describeError(err);
       message.error(msg);
     },
   });

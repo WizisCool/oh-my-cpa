@@ -68,6 +68,7 @@ type SeedStats struct {
 	Requests   int
 	Prices     int
 	Aliases    int
+	Audits     int
 	OldestMS   int64
 	NewestMS   int64
 	DurationMS int64
@@ -107,6 +108,11 @@ func Seed(ctx context.Context, repo *repository.Repository, now time.Time) (Seed
 		return SeedStats{}, err
 	}
 	stats.Aliases = aliases
+	audits, err := seedAudit(ctx, repo, now)
+	if err != nil {
+		return SeedStats{}, err
+	}
+	stats.Audits = audits
 	if err := seedRollups(ctx, repo); err != nil {
 		return SeedStats{}, err
 	}

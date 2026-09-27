@@ -1,123 +1,169 @@
-/* ApiKeysList.module.css — Gateway client key list
+/* ApiKeysList.module.css — Gateway client key list.
    Terminal-flat console: 1px borders, no shadows. Class names are kebab-case and
-   read through styles['kebab-case'].
-*/
+   read through styles['kebab-case']. */
 
-/* Name cell: the alias is the primary identifier, so it is the control that
-   names the key (design.md: naming is a first-class action, not a setting). */
-.name-cell {
+/* The name cell is the rename affordance (design.md: naming is a first-class action), drawn as
+   the key's identity - a mark and the name - rather than as a form control. */
+.name-button {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   max-width: 100%;
-}
-
-.name-wrapper {
-  display: inline-flex;
-  /* The element is a button, so the user agent's own background has to go; the
-     focus ring comes from the console-wide `:focus-visible` rule and the font
-     from the global `button { font: inherit }`, so neither is repeated here. */
-  background: transparent;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
+  min-width: 0;
+  padding: 4px 8px 4px 4px;
   border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
   transition: border-color var(--motion-fast) ease-out, background var(--motion-fast) ease-out;
 }
 
-.name-wrapper:hover {
-  background: var(--surface);
+.name-button:not(:disabled):hover {
   border-color: var(--border);
+  background: var(--hover);
+}
+
+.name-button:disabled {
+  cursor: default;
+}
+
+.name-mark {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .name-text {
-  font-weight: 600;
-  color: var(--fg);
+  min-width: 0;
   overflow: hidden;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* Unnamed is a state, stated in the muted ink - not a dashed placeholder chip that reads as a
+   control of its own. */
+.name-unnamed {
+  color: var(--muted);
+  font-style: italic;
+}
+
 .name-edit-icon {
+  flex-shrink: 0;
+  color: var(--meta);
   font-size: 11px;
-  color: var(--muted);
-  transition: color var(--motion-fast) ease-out;
+  opacity: 0;
+  transition: opacity var(--motion-fast) ease-out;
 }
 
-.name-wrapper:hover .name-edit-icon {
-  color: var(--fg);
+.name-button:not(:disabled):hover .name-edit-icon,
+.name-button:focus-visible .name-edit-icon {
+  opacity: 1;
 }
 
-.unnamed-btn {
-  background: transparent;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--muted);
-  font-size: 11px;
-  padding: 2px 8px;
-  cursor: pointer;
+/* A finger has no hover, so the rename glyph is always drawn where no pointer can reveal it. */
+@media (hover: none) {
+  .name-edit-icon {
+    opacity: .7;
+  }
+}
+
+.usage {
   display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  transition: color var(--motion-fast) ease-out, border-color var(--motion-fast) ease-out;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  line-height: 1.3;
 }
 
-.unnamed-btn:hover {
+.usage-requests {
   color: var(--fg);
-  border-color: var(--muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
-/* Overflow menu label. The item that cannot act still says why, rather than
-   disappearing: the missing usage identity is worth seeing. */
-.menu-label {
-  display: inline-block;
-}
-
-/* Counts describe this console's stored records in one window, not the key's
-   whole life; saying so prevents "12 requests" from reading as a lifetime total. */
-.scope-note {
-  margin: 0;
-  padding: 10px 0 0;
-  font-size: 11px;
-  line-height: 1.5;
+.usage-detail {
+  display: inline-flex;
+  gap: 8px;
   color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* In the table the column is right-aligned, so the two lines align on their right edge; on a phone
+   the value sits under its label and reads from the left. */
+:global(.config-api-keys-table) .usage {
+  align-items: flex-end;
+}
+
+/* A failure count is danger only when it is above zero; zero is not drawn at all. */
+.usage-failed {
+  color: var(--danger);
+}
+
+.last-used {
+  color: var(--fg-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--meta);
 }
 
 /* Empty State */
 .empty-box {
-  padding: 32px 0;
-  text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
+  padding: 40px 0 32px;
+  text-align: center;
 }
 
-.empty-icon {
-  font-size: 32px;
+.empty-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
   color: var(--muted);
-  opacity: 0.7;
+  font-size: 20px;
 }
 
 .empty-title {
+  color: var(--fg);
   font-size: 14px;
   font-weight: 600;
-  color: var(--fg);
 }
 
 .empty-desc {
-  font-size: 12px;
-  color: var(--muted);
   max-width: 420px;
-  line-height: 1.5;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .name-wrapper,
-  .name-edit-icon,
-  .unnamed-btn {
+  .name-button,
+  .name-edit-icon {
     transition: none;
   }
 }

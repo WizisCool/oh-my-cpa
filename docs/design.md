@@ -531,6 +531,20 @@ would overshoot *below* the axis between points, drawing a line where the data s
 curve cannot leave the range spanned by its own neighbours, so the floor stays the floor. The probe
 asserts this from painted pixels: no series-coloured ink appears below the axis rule.
 
+**A series is drawn only where it has traffic.** Each line covers its non-zero buckets plus the zero
+bucket on either side of a run, so every rise and fall still lands on the floor; a long quiet stretch is
+left undrawn. Drawing every series across the whole window stacked six lines on the floor's one row of
+pixels, so the floor took the colour of whichever series was painted last - a hue the legend did not
+show for most of the window - and a quiet model's small rise vanished into the stack. The top-ranked
+group is painted last, so where lines cross, the one the legend lists first is on top. The tooltip names
+each item by its own series key, never by position, because a series with no point at the hovered bucket
+would shift every name after it.
+
+**Chart canvases are supersampled.** Every dashboard chart is drawn at no less than 2x the CSS size
+(`web/src/charts/chartRender.ts`): on a 1x display a 1.75px line rasterised straight onto the pixel grid
+stepped visibly on every steep section. The browser scales the bitmap down, so the geometry is unchanged
+and only its edges are averaged.
+
 **No y-axis.** The reading is the shape of each line against its own baseline - which models rose, and
 when - and the numbers are in the tooltip and in the usage list beside it. An axis would take the width
 the lines need to add a scale nothing on the card refers to. The plot floor and the x labels stay: the
@@ -716,7 +730,10 @@ sider         236px (58px collapsed), 1px right border
 ```
 
 Elevation: **zero shadows** on layout, card, drawer, modal, popover, dropdown.
-`--focus-ring: 0 0 0 2px var(--accent)` is the only ring.
+`--focus-ring: 0 0 0 2px var(--accent)` is the only ring, and it is never drawn on a text field: a browser
+matches `:focus-visible` on every focused `input`/`textarea`, and those sit inside controls (Input with an
+affix, Select, pickers, number fields) that already mark focus on their outer box with the accent border
+and halo. Ringing the inner field too drew a second rectangle inside the control.
 
 ## 5. Layout skeleton
 
@@ -796,6 +813,40 @@ Oh My CPA draws from OpenCode's minimalist, high-density, engineer-first console
      - ProComponents (`FooterToolbar`, `ProFormList`) bundle massive dependencies (`rc-field-form`) and heavy enterprise patterns;
      - Adding them would introduce megabytes of bundle weight, conflicting with the single-binary zero-CDN offline mandate and introducing incompatible drop shadows;
      - Dedicated native components integrate seamlessly with the YAML AST state stream, resulting in minimal bundle size, instant responsiveness, and high customization.
+
+### Page chrome
+
+Every route opens with the same head, built by `PageHeader` (`web/src/components/common/`), so a
+reader moving between pages never sees the refresh control jump or resize:
+
+- **Title block left, actions right.** One `h1` (`.terminal-title`), and under it only a line that
+  carries live data (the OAuth workspace's counts). A sentence describing what the page is for restates
+  the navigation label beside it and is not drawn.
+- **No echo copy.** A footnote restating a column's window, a hint under a field restating its label, a
+  notice explaining how the console stores something: each is documentation pasted into the surface.
+  What stays is a consequence the operator must see before acting - a removal that cannot be undone, a
+  changed secret that revokes clients - and it sits on the confirmation, where the action happens.
+- **Actions at the default control height (32px)**, wrapping as a group. The primary action, when
+  there is one, is the *last* action so it sits at the page's right edge; refresh comes first.
+- **One refresh control** (`RefreshButton`): the header's own rotate glyph, labelled "Refresh" or
+  icon-only with a tooltip where the row is crowded. A read in flight *spins the glyph* instead of
+  setting antd's `loading`, which swallows clicks and swaps the glyph for a spinner of another shape.
+  `SyncOutlined` is reserved for synchronisation jobs (the pricing catalogue, a quota refresh).
+- **Stacked blocks share one rhythm.** A page of alerts, panels and lists uses `.terminal-page-stack`
+  (16px between blocks, 24px under the head) rather than per-block margins.
+- **State is a pip and a word** (`StatusLabel`: success / warn / danger / accent / neutral), not a
+  filled tag. A column of coloured boxes carried no information the word did not.
+- **Row actions are quiet 28px squares** (`.row-actions` / `.row-action-btn`), 8px apart so the
+  touch rules' hit insets meet rather than overlap. The glyph takes the accent on hover, and a
+  destructive action shows the danger colour only on hover - a column of red bins read as a column
+  of errors. Destructive actions confirm in a `Popconfirm` whose OK button is the danger one.
+- **Card heads** use `PanelTitle`: a muted glyph, the title, and the one control that acts on that
+  card alone.
+- **Table headers never wrap.** A squeezed column wraps its cells, not its name.
+- **Lists render through `ResponsiveList`**: a table on a wide viewport, labelled rows below 640px,
+  one empty state (antd's simple `Empty`), and no paginator for a single page.
+- **Code is shown in a `CodeFrame`**: a head naming the language with the copy action, then the code
+  in the console's own mono stack - never the browser's default `monospace`.
 
 ### Time range control
 
@@ -1495,6 +1546,7 @@ remembered. ADR 0012 records the threshold, its measurement and its alternatives
       per-component hex, and stays ≥ 4.5:1 against its own badge fill
 - [ ] No shadows, no gradients, 4px radius
 - [ ] Mono font inherited (never set a new font-family)
+- [ ] The page opens with `PageHeader`; a refresh is `RefreshButton`; a state is `StatusLabel`; a list is `ResponsiveList`
 - [ ] One page title; subtitles only with live data; no duplicated translations
 - [ ] Nav position marked by 2px `--fg` left tick rule, not a filled block or semantic color
 - [ ] Settings and management favor open section lists over heavy card wrappers

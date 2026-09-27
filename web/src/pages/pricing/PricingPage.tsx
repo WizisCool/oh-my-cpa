@@ -1,7 +1,6 @@
 import React from 'react';
-import { Alert, App as AntdApp, Button, Empty, Form, Input, InputNumber, Modal, Pagination, Popconfirm, Select, Spin, Table, Tooltip } from 'antd';
+import { Alert, App as AntdApp, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Tooltip } from 'antd';
 import {
-  ReloadOutlined,
   SyncOutlined,
   PlusOutlined,
   EditOutlined,
@@ -12,15 +11,15 @@ import {
 } from '../../components/icons';
 import dayjs from 'dayjs';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, ApiError } from '../../api/client';
+import { api, ApiError, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import type { ModelPrice } from '../../types/pricing';
 import { PricingLeaderboard } from './PricingLeaderboard';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
-import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
-import { PhoneRow } from '../../components/common/PhoneRow';
-import { phoneRowFields, renderedCell } from '../../components/common/phoneRowFields';
+import { PageHeader } from '../../components/common/PageHeader';
+import { RefreshButton } from '../../components/common/RefreshButton';
+import { ResponsiveList } from '../../components/common/ResponsiveList';
 
 /** One page of the price list, shared by both renderings so a page means the same thing at
  *  either width. */
@@ -30,6 +29,19 @@ import styles from './PricingPage.module.css';
 /** Per-1M rates share one cell format: plain number with up to 6 decimal places. */
 function formatRate(value: number): string {
   return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+}
+
+/**
+ * One per-1M rate cell. A model with no price yet reads as a dash rather than $0.00, and a real
+ * zero is dimmed so a free rate does not look like a priced one at a glance.
+ */
+function renderRate(value: number, row: ModelPrice, { zeroAsDash = false }: { zeroAsDash?: boolean } = {}): React.ReactNode {
+  if (row.updated_at_ms === 0 || (zeroAsDash && value === 0)) return <span className={styles['price-dimmed']}>—</span>;
+  return (
+    <span className={`${styles['price-number']} ${value === 0 ? styles['price-dimmed'] : ''}`}>
+      ${formatRate(value)}
+    </span>
+  );
 }
 
 /** Form values for the manual price editor; every rate is USD per 1M tokens. */
@@ -90,7 +102,7 @@ export const PricingPage: React.FC = () => {
       invalidate();
     },
     onError: (err) => {
-      message.error(t('pricing.save_failed', { msg: err instanceof ApiError ? err.message : String(err) }));
+      message.error(t('pricing.save_failed', { msg: describeError(err) }));
     },
   });
 
@@ -98,7 +110,7 @@ export const PricingPage: React.FC = () => {
     mutationFn: (model: string) => api.deletePricingModel(model),
     onSuccess: invalidate,
     onError: (err) => {
-      message.error(t('pricing.delete_failed', { msg: err instanceof ApiError ? err.message : String(err) }));
+      message.error(t('pricing.delete_failed', { msg: describeError(err) }));
     },
   });
 
@@ -113,7 +125,7 @@ export const PricingPage: React.FC = () => {
         message.info(t('pricing.sync_conflict'));
         invalidate();
       } else {
-        message.error(t('pricing.sync_failed', { msg: err instanceof ApiError ? err.message : String(err) }));
+        message.error(t('pricing.sync_failed', { msg: describeError(err) }));
       }
     },
   });
@@ -125,7 +137,7 @@ export const PricingPage: React.FC = () => {
       invalidate();
     },
     onError: (err) => {
-      message.error(err instanceof ApiError ? err.message : String(err));
+      message.error(describeError(err));
     },
   });
 
@@ -221,19 +233,6 @@ export const PricingPage: React.FC = () => {
     });
   }, [models, unpricedList, search, activeTab]);
 
-  const isPhone = useIsPhoneViewport();
-  const [phonePage, setPhonePage] = React.useState(1);
-  // Clamped rather than trusted: the list is filtered by the search box and the tabs, so a page
-  // past the end would render an empty table with no way back.
-  const lastPhonePage = Math.max(1, Math.ceil(filteredData.length / PAGE_SIZE));
-  const safePhonePage = Math.min(phonePage, lastPhonePage);
-  // A filter change starts the reader at the first page. The clamp above keeps an out-of-range page
-  // from rendering empty, but it left the *remembered* page untouched - so clearing the filter the
-  // page was chosen under jumped the reader back to a page they had left.
-  React.useEffect(() => {
-    setPhonePage(1);
-  }, [search, activeTab]);
-  const pagedPrices = filteredData.slice((safePhonePage - 1) * PAGE_SIZE, safePhonePage * PAGE_SIZE);
 
   // Table Columns
   const columns = [
@@ -253,59 +252,37 @@ export const PricingPage: React.FC = () => {
       dataIndex: 'prompt_price_per_1m',
       key: 'prompt',
       align: 'right' as const,
-      render: (val: number, row: ModelPrice) =>
-        row.updated_at_ms === 0 ? (
-          <span className={styles['price-dimmed']}>—</span>
-        ) : (
-          <span className={`${styles['price-number']} ${val === 0 ? styles['price-dimmed'] : ''}`}>
-            ${formatRate(val)}
-          </span>
-        ),
+      width: 112,
+      render: (val: number, row: ModelPrice) => renderRate(val, row),
     },
     {
       title: t('pricing.col.completion'),
       dataIndex: 'completion_price_per_1m',
       key: 'completion',
       align: 'right' as const,
-      render: (val: number, row: ModelPrice) =>
-        row.updated_at_ms === 0 ? (
-          <span className={styles['price-dimmed']}>—</span>
-        ) : (
-          <span className={`${styles['price-number']} ${val === 0 ? styles['price-dimmed'] : ''}`}>
-            ${formatRate(val)}
-          </span>
-        ),
+      width: 112,
+      render: (val: number, row: ModelPrice) => renderRate(val, row),
     },
     {
       title: t('pricing.col.cache_read'),
       dataIndex: 'cache_read_price_per_1m',
       key: 'cacheRead',
       align: 'right' as const,
-      render: (val: number, row: ModelPrice) =>
-        row.updated_at_ms === 0 ? (
-          <span className={styles['price-dimmed']}>—</span>
-        ) : (
-          <span className={`${styles['price-number']} ${val === 0 ? styles['price-dimmed'] : ''}`}>
-            ${formatRate(val)}
-          </span>
-        ),
+      width: 112,
+      render: (val: number, row: ModelPrice) => renderRate(val, row),
     },
     {
       title: t('pricing.col.cache_write'),
       dataIndex: 'cache_write_price_per_1m',
       key: 'cacheWrite',
       align: 'right' as const,
-      render: (val: number, row: ModelPrice) =>
-        row.updated_at_ms === 0 ? (
-          <span className={styles['price-dimmed']}>—</span>
-        ) : (
-          <span className={`${styles['price-number']} ${val === 0 ? styles['price-dimmed'] : ''}`}>
-            {val === 0 ? '—' : `$${formatRate(val)}`}
-          </span>
-        ),
+      width: 112,
+      // Cache writes are billed by only some providers, so a zero here is "not charged separately"
+      // rather than a free rate: it reads as a dash instead of $0.00.
+      render: (val: number, row: ModelPrice) => renderRate(val, row, { zeroAsDash: true }),
     },
     {
-      title: <span style={{ whiteSpace: 'nowrap' }}>{t('pricing.col.multiplier')}</span>,
+      title: t('pricing.col.multiplier'),
       dataIndex: 'price_multiplier',
       key: 'multiplier',
       align: 'center' as const,
@@ -326,27 +303,17 @@ export const PricingPage: React.FC = () => {
       width: 120,
       render: (source: string, row: ModelPrice) =>
         row.updated_at_ms === 0 ? (
-          <span
-            style={{
-              fontSize: 11,
-              fontFamily: 'monospace',
-              color: 'var(--warn)',
-              padding: '2px 6px',
-              borderRadius: 4,
-              background: 'color-mix(in srgb, var(--warn) 12%, var(--surface))',
-              border: '1px solid color-mix(in srgb, var(--warn) 30%, var(--border))',
-            }}
-          >
+          <span className={`${styles['source-badge']} ${styles['source-unpriced']}`}>
             {t('pricing.source.unpriced')}
           </span>
         ) : source === 'manual' ? (
           <span className={`${styles['source-badge']} ${styles['source-manual']}`}>
-            <EditOutlined style={{ fontSize: 10 }} />
+            <EditOutlined className={styles['source-icon']} />
             {t('pricing.source.manual')}
           </span>
         ) : (
           <span className={`${styles['source-badge']} ${styles['source-models-dev']}`}>
-            <ThunderboltOutlined style={{ fontSize: 10 }} />
+            <ThunderboltOutlined className={styles['source-icon']} />
             {t('pricing.source.modelsdev')}
           </span>
         ),
@@ -374,16 +341,15 @@ export const PricingPage: React.FC = () => {
             type="primary"
             icon={<PlusOutlined />}
             onClick={() => openAdd(row.model)}
-            style={{ fontSize: 12, height: 26, borderRadius: 'var(--radius-sm, 4px)' }}
           >
             {t('pricing.add')}
           </Button>
         ) : (
-          <div className={styles['action-group']}>
+          <div className="row-actions">
             <Tooltip title={t('pricing.edit')}>
               <Button
                 size="small"
-                className={styles['action-btn']}
+                className="row-action-btn"
                 icon={<EditOutlined />}
                 onClick={() => openEdit(row)}
                 /* Named for assistive tech, not only for the pointer: the tooltip names it for a
@@ -400,7 +366,7 @@ export const PricingPage: React.FC = () => {
               <Tooltip title={t('pricing.remove')}>
                 <Button
                   size="small"
-                  className={`${styles['action-btn']} ${styles['action-btn-danger']}`}
+                  className="row-action-btn"
                   danger
                   icon={<DeleteOutlined />}
                   loading={deleteMutation.isPending && deleteMutation.variables === row.model}
@@ -414,39 +380,27 @@ export const PricingPage: React.FC = () => {
   ];
 
   return (
-    <div className={`terminal-page ${styles['pricing-page']}`} data-testid="pricing-page">
-      {/* 1. Header Block */}
-      <header className="terminal-page-head">
-        <div>
-          <h1 className="terminal-title">{t('pricing.title')}</h1>
-          <p className="terminal-subtitle">
-            {models.length > 0
-              ? t('pricing.subtitle_count', { count: models.length })
-              : t('pricing.desc')}
-          </p>
-        </div>
-        <div className={styles['header-actions']}>
-          <Button
-            icon={<ReloadOutlined spin={result.isFetching} />}
-            disabled={result.isFetching}
-            onClick={invalidate}
-          >
-            {t('common.refresh')}
-          </Button>
-          <Button
-            type="primary"
-            icon={<SyncOutlined spin={Boolean(sync?.running)} />}
-            loading={syncMutation.isPending}
-            // The catalogue sync fetches models.dev. The demonstration prices its own
-            // fixture instead, so the server refuses this and the button says so.
-            disabled={isDemo}
-            title={isDemo ? t('demo.blocked') : undefined}
-            onClick={() => syncMutation.mutate()}
-          >
-            {t('pricing.sync_now')}
-          </Button>
-        </div>
-      </header>
+    <div className="terminal-page terminal-page-stack" data-testid="pricing-page">
+      <PageHeader
+        title={t('pricing.title')}
+        actions={(
+          <>
+            <RefreshButton isRefreshing={result.isFetching} onRefresh={invalidate} />
+            <Button
+              type="primary"
+              icon={<SyncOutlined spin={Boolean(sync?.running)} />}
+              loading={syncMutation.isPending}
+              // The catalogue sync fetches models.dev. The demonstration prices its own
+              // fixture instead, so the server refuses this and the button says so.
+              disabled={isDemo}
+              title={isDemo ? t('demo.blocked') : undefined}
+              onClick={() => syncMutation.mutate()}
+            >
+              {t('pricing.sync_now')}
+            </Button>
+          </>
+        )}
+      />
 
       {/* 2. Error Alert if any */}
       {result.isError && (
@@ -533,18 +487,17 @@ export const PricingPage: React.FC = () => {
         <div className={styles['unpriced-ribbon']}>
           <div className={styles['unpriced-head']}>
             <span className={styles['unpriced-title']}>
-              <WarningOutlined style={{ color: 'var(--warn)' }} />
+              <WarningOutlined className={styles['unpriced-icon']} />
               {t('pricing.unpriced.title')} ({unpricedList.length})
-              <span className={styles['unpriced-hint']}>{t('pricing.unpriced.hint')}</span>
             </span>
           </div>
           <div className={styles['unpriced-chips']}>
             {unpricedList.map((model) => (
               <Tooltip key={model} title={t('pricing.unpriced.add')}>
-                <div className={styles['unpriced-chip']} onClick={() => openAdd(model)}>
+                <button type="button" className={styles['unpriced-chip']} onClick={() => openAdd(model)}>
                   <span className={styles['unpriced-chip-plus']}>+</span>
                   <span>{model}</span>
-                </div>
+                </button>
               </Tooltip>
             ))}
           </div>
@@ -598,7 +551,7 @@ export const PricingPage: React.FC = () => {
             <Input
               className={styles['search-box']}
               placeholder={t('pricing.search_placeholder')}
-              prefix={<SearchOutlined style={{ color: 'var(--meta)' }} />}
+              prefix={<SearchOutlined className={styles['search-icon']} />}
               value={search}
               allowClear
               onChange={(e) => setSearch(e.target.value)}
@@ -613,55 +566,19 @@ export const PricingPage: React.FC = () => {
         </div>
 
         {/* Dense Data Table, or one row per model on a phone (ADR 0012) */}
-        {isPhone ? (
-          /* Loading before emptiness: the empty copy is a claim about the catalog, and it is not
-             true while the first read is still in flight. */
-          result.isLoading && filteredData.length === 0 ? (
-            <div className="phone-list-loading">
-              <Spin />
-            </div>
-          ) : filteredData.length === 0 ? (
-            <p className="empty-copy">{t('pricing.table.empty')}</p>
-          ) : (
-            <>
-              {pagedPrices.map((price, index) => (
-                <PhoneRow
-                  key={price.model}
-                  identity={renderedCell(columns, 'model', price, index)}
-                  fields={phoneRowFields(columns, price, { skip: ['model', 'actions'], index })}
-                  actions={renderedCell(columns, 'actions', price, index)}
-                />
-              ))}
-              {filteredData.length > PAGE_SIZE && (
-                <Pagination
-                  size="small"
-                  simple
-                  current={safePhonePage}
-                  pageSize={PAGE_SIZE}
-                  total={filteredData.length}
-                  onChange={setPhonePage}
-                />
-              )}
-            </>
-          )
-        ) : (
-          <Table<ModelPrice>
-            rowKey="model"
-            size="small"
-            loading={result.isLoading}
-            columns={columns}
-            dataSource={filteredData}
-            pagination={{ pageSize: PAGE_SIZE, showSizeChanger: false, hideOnSinglePage: true }}
-            locale={{
-              emptyText: (
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description={t('pricing.table.empty')}
-                />
-              ),
-            }}
-          />
-        )}
+        <ResponsiveList<ModelPrice>
+          columns={columns}
+          dataSource={filteredData}
+          rowKey="model"
+          isLoading={result.isLoading}
+          emptyText={t('pricing.table.empty')}
+          pageSize={PAGE_SIZE}
+          // A filter change starts the reader at the first page, so clearing the filter a page was
+          // chosen under does not jump the reader back to a page they had left.
+          pageResetKey={`${search}\u0000${activeTab}`}
+          phone={{ identity: 'model', actions: ['actions'] }}
+          tableProps={{ size: 'small' }}
+        />
 
         {/* Workbench Footer Status */}
         <div className={styles['workbench-footer']}>
@@ -706,7 +623,7 @@ export const PricingPage: React.FC = () => {
             >
               {t(`pricing.source.${editor.editing.source}`)}
             </span>
-            <span style={{ color: 'var(--muted)', fontSize: 12 }}>
+            <span className={styles['editor-updated']}>
               {t('pricing.editor.updated_at', {
                 time: editor.editing.updated_at_ms
                   ? dayjs(editor.editing.updated_at_ms).format('YYYY-MM-DD HH:mm')
@@ -720,7 +637,7 @@ export const PricingPage: React.FC = () => {
           <Alert
             type="info"
             showIcon
-            style={{ marginBottom: 16 }}
+            className={styles['editor-note']}
             title={t('pricing.editor.convert_note')}
           />
         ) : null}
@@ -737,7 +654,7 @@ export const PricingPage: React.FC = () => {
               allowClear
               placeholder={t('pricing.editor.model_placeholder')}
               options={availableModels.map((model) => ({ label: model, value: model }))}
-              style={{ width: '100%', fontFamily: 'monospace' }}
+              className={styles['editor-full']}
             />
           </Form.Item>
 
@@ -753,7 +670,7 @@ export const PricingPage: React.FC = () => {
                 step={0.000001}
                 controls={false}
                 stringMode
-                style={{ width: '100%' }}
+                className={styles['editor-full']}
                 suffix="$ / 1M"
               />
             </Form.Item>
@@ -768,7 +685,7 @@ export const PricingPage: React.FC = () => {
                 step={0.000001}
                 controls={false}
                 stringMode
-                style={{ width: '100%' }}
+                className={styles['editor-full']}
                 suffix="$ / 1M"
               />
             </Form.Item>
@@ -782,7 +699,7 @@ export const PricingPage: React.FC = () => {
                 step={0.000001}
                 controls={false}
                 stringMode
-                style={{ width: '100%' }}
+                className={styles['editor-full']}
                 suffix="$ / 1M"
               />
             </Form.Item>
@@ -796,7 +713,7 @@ export const PricingPage: React.FC = () => {
                 step={0.000001}
                 controls={false}
                 stringMode
-                style={{ width: '100%' }}
+                className={styles['editor-full']}
                 suffix="$ / 1M"
               />
             </Form.Item>
@@ -808,7 +725,7 @@ export const PricingPage: React.FC = () => {
             initialValue={1}
             rules={[{ required: true, message: t('pricing.editor.required') }]}
           >
-            <InputNumber min={0.01} step={0.01} controls={false} style={{ width: '100%' }} suffix="×" />
+            <InputNumber min={0.01} step={0.01} controls={false} className={styles['editor-full']} suffix="×" />
           </Form.Item>
 
           {/* Live Estimation Sample Preview */}

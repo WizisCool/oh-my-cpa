@@ -20,6 +20,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/applog"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/auth"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/config"
 	appcrypto "github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
@@ -141,6 +142,7 @@ func demoExportCases() []demoExportCase {
 		{Name: "quota-codex", Path: "/api/v1/management/quota/auth-codex-01"},
 		{Name: "logs", Path: "/api/v1/management/logs?limit=200"},
 		{Name: "logs-status", Path: "/api/v1/management/logs/status"},
+		{Name: "service-logs", Path: "/api/v1/management/service-logs"},
 		{Name: "request-error-logs", Path: "/api/v1/management/request-error-logs"},
 		{Name: "audit-events", Path: "/api/v1/management/audit/events"},
 		{Name: "usage-ingest-status", Path: "/api/v1/usage/ingest-status"},
@@ -474,6 +476,9 @@ func demoExportRebase(value any, deltaMS int64, requestIDs map[string]int) any {
 				typed[key] = demoExportStableRequestID(requestIDs, item)
 			case demoExportDayBoundaryKeys[key]:
 				typed[key] = demoExportNormaliseDayBoundary(typed, key, item)
+			case key == "occurred_at_ms" && demoExportIsSeededInstant(item):
+				// A seeded audit row is already on the reference's calendar; only a
+				// row the export itself stamped needs moving onto it.
 			case demoExportShiftedMillisKeys[key]:
 				typed[key] = demoExportShiftMillis(item, deltaMS)
 			case demoExportShiftedTextKeys[key]:
@@ -570,6 +575,14 @@ func demoExportShiftMillis(item any, deltaMS int64) any {
 	// difference between two exports of identical history. Observed, not anticipated: that
 	// was the last field to disagree.
 	return math.Round((millis+float64(deltaMS))/60000) * 60000
+}
+
+// demoExportIsSeededInstant reports an instant at or before the reference. The
+// export always runs after the reference instant, so anything it stamps is later,
+// while the fixture's history is anchored at or before it.
+func demoExportIsSeededInstant(item any) bool {
+	millis, ok := demoExportNumericMillis(item)
+	return ok && millis <= float64(demoExportReference.UnixMilli())
 }
 
 // demoExportShiftText moves an instant written as text by the delta, leaving anything
@@ -779,6 +792,11 @@ func demoExportRouter(t *testing.T) (http.Handler, time.Time) {
 	)
 	handler.SetPricing(pricingService)
 	handler.SetRelease(releaseService)
+	// The service log is the fixture's rather than this process's: the export's own
+	// log names loopback ports and runs at the wall clock, so it would differ on
+	// every run and describe the export rather than a deployment.
+	handler.serviceLog = applog.NewBuffer(applog.DefaultCapacity)
+	demo.SeedServiceLog(handler.serviceLog, now)
 	// The token-activity grid is the one response whose calendar is the history's rather than
 	// the run's: it is a rolling year ending "today" and it derives that window from the
 	// clock instead of taking one from the request, so it is the one surface the reference

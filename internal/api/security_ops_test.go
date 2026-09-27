@@ -149,12 +149,11 @@ func TestAuditEventsEndpoints(t *testing.T) {
 	}
 	var listData struct {
 		Events []repository.AuditEvent `json:"events"`
-		Total  int                     `json:"total"`
 	}
 	_ = json.NewDecoder(listResp.Body).Decode(&listData)
 	listResp.Body.Close()
-	if listData.Total < 1 {
-		t.Errorf("expected at least 1 audit event, got %d", listData.Total)
+	if len(listData.Events) < 1 {
+		t.Errorf("expected at least 1 audit event, got %d", len(listData.Events))
 	}
 
 	// 2. Export audit events

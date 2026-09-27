@@ -12,7 +12,6 @@ import {
   App as AntdApp,
 } from 'antd';
 import {
-  SyncOutlined,
   DownloadOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
@@ -31,7 +30,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import XMarkdown from '@ant-design/x-markdown';
-import { api, ApiError } from '../api/client';
+import { api, describeError } from '../api/client';
 import { useT } from '../i18n';
 import { isDemoMode } from '../types/demoMode';
 import { useOverlayHistory } from '../hooks/useOverlayHistory';
@@ -42,24 +41,17 @@ import type {
   SystemMaintenanceStatus,
   ReleaseProduct,
 } from '../types/system';
+import { PageHeader } from '../components/common/PageHeader';
+import { RefreshButton } from '../components/common/RefreshButton';
+import { PanelTitle } from '../components/common/PanelTitle';
+import { FactList } from '../components/common/FactList';
+import { PageLoading } from '../components/common/PageLoading';
+import { StatusLabel } from '../components/common/StatusLabel';
+import { formatBytes } from '../utils/format';
+import { saveBlob } from '../utils/download';
 import styles from './SystemPage.module.css';
 
 const { Text, Paragraph } = Typography;
-
-/** Formats byte numbers into clean human-readable units. */
-function formatBytes(bytes: number | null | undefined): string {
-  if (bytes === null || bytes === undefined || isNaN(bytes)) return '—';
-  if (bytes === 0) return '0 B';
-  if (bytes < 0) return `-${formatBytes(-bytes)}`;
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  const clampedI = Math.min(i, units.length - 1);
-  const val = bytes / Math.pow(1024, clampedI);
-  return `${val.toFixed(val >= 10 || clampedI === 0 ? 1 : 2)} ${units[clampedI]}`;
-}
-
-
-
 
 /** The merged change log for one product, rendered as a drawer's content. */
 interface ProductChangelogProps {
@@ -77,16 +69,10 @@ const ProductChangelog: React.FC<ProductChangelogProps> = ({ product }) => {
     staleTime: 60000,
   });
 
-  if (isLoading) {
-    return (
-      <div style={{ textAlign: 'center', padding: '16px 0' }}>
-        <Spin size="small" />
-      </div>
-    );
-  }
+  if (isLoading) return <PageLoading variant="block" />;
 
   if (isError) {
-    const msg = error instanceof ApiError ? error.message : String(error);
+    const msg = describeError(error);
     return <Alert type="error" showIcon description={msg} />;
   }
 
@@ -129,14 +115,12 @@ const ProductChangelog: React.FC<ProductChangelogProps> = ({ product }) => {
         <div key={release.tag} className={styles['release-entry']}>
           <div className={styles['release-title-row']}>
             <div className={styles['release-tag-group']}>
-              <Tag color="default" style={{ fontFamily: 'var(--font-mono, monospace)', fontWeight: 600 }}>
-                {release.tag}
-              </Tag>
+              <Tag className={styles['release-tag']}>{release.tag}</Tag>
               {release.in_range && (
                 <Tag color="processing">{t('sys.changelog_in_range')}</Tag>
               )}
               {release.name && release.name !== release.tag && (
-                <Text strong style={{ fontSize: 13 }}>{release.name}</Text>
+                <Text strong className={styles['release-name']}>{release.name}</Text>
               )}
             </div>
             <div className={styles['release-meta']}>
@@ -157,9 +141,7 @@ const ProductChangelog: React.FC<ProductChangelogProps> = ({ product }) => {
           </div>
 
           {!release.body_available || !release.body ? (
-            <div style={{ fontSize: 12, color: 'var(--meta)' }}>
-              {t('sys.notes_unavailable')}
-            </div>
+            <div className={styles['release-notes-missing']}>{t('sys.notes_unavailable')}</div>
           ) : (
             <div className={styles['markdown-body']}>
               <XMarkdown
@@ -211,19 +193,14 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
     switch (version.state) {
       case 'update_available':
         return (
-          <Tag color="blue">
+          <StatusLabel tone="accent">
             {t('sys.update_available', { version: version.latest_version || '' })}
-          </Tag>
+          </StatusLabel>
         );
       case 'up_to_date':
-        return (
-          <span className={styles['state-badge']}>
-            <CheckCircleOutlined style={{ color: 'var(--ant-color-success)' }} />
-            <Text type="secondary" style={{ fontSize: 12 }}>{t('sys.is_latest')}</Text>
-          </span>
-        );
+        return <StatusLabel tone="success">{t('sys.is_latest')}</StatusLabel>;
       case 'update_ahead':
-        return <Tag color="purple">{t('sys.update_ahead')}</Tag>;
+        return <StatusLabel tone="neutral">{t('sys.update_ahead')}</StatusLabel>;
       case 'indeterminate':
       default: {
         let reasonLabel = t('sys.indeterminate');
@@ -236,7 +213,7 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
         } else if (version.reason === 'not_checked_yet') {
           reasonLabel = t('sys.reason_not_checked');
         }
-        return <Tag>{reasonLabel}</Tag>;
+        return <StatusLabel tone="neutral">{reasonLabel}</StatusLabel>;
       }
     }
   };
@@ -262,12 +239,12 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
 
       <div className={styles['version-row']} data-testid="sys-version-row">
         <div>
-          <Text type="secondary" style={{ marginRight: 6 }}>{t('sys.current_version')}:</Text>
+          <Text type="secondary" className={styles['version-label']}>{t('sys.current_version')}:</Text>
           <Tag className={styles['version-tag']}>{version.running_version || t('sys.version_unknown')}</Tag>
         </div>
         {version.latest_version && (
           <div>
-            <Text type="secondary" style={{ marginRight: 6 }}>{t('sys.latest_version')}:</Text>
+            <Text type="secondary" className={styles['version-label']}>{t('sys.latest_version')}:</Text>
             <span className={styles['version-tag']}>{version.latest_version}</span>
           </div>
         )}
@@ -303,7 +280,7 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
         <Alert
           type="warning"
           showIcon
-          style={{ fontSize: 12 }}
+          className={styles['check-alert']}
           description={t('sys.last_check_failed', {
             time: version.attempted_at_ms ? dayjs(version.attempted_at_ms).format('YYYY-MM-DD HH:mm:ss') : '—',
             msg: version.check_error,
@@ -516,7 +493,7 @@ export const SystemPage: React.FC = () => {
       await queryClient.invalidateQueries({ queryKey: ['management-system-info'] });
       await queryClient.invalidateQueries({ queryKey: ['management-system-releases'] });
     } catch (err: unknown) {
-      const msg = err instanceof ApiError ? err.message : String(err);
+      const msg = describeError(err);
       message.error(t('sys.last_check_failed', { time: dayjs().format('HH:mm:ss'), msg }));
       await queryClient.invalidateQueries({ queryKey: ['management-system-info'] });
     } finally {
@@ -554,7 +531,7 @@ export const SystemPage: React.FC = () => {
       message.info(t('sys.maintenance_started', { action: actionLabel('checkpoint') }));
       handleAcceptedJob(accepted.maintenance);
     } catch (err: unknown) {
-      const msg = err instanceof ApiError ? err.message : String(err);
+      const msg = describeError(err);
       message.error(t('sys.maintenance_failed', { action: actionLabel('checkpoint'), msg }));
     } finally {
       setSubmittingAction(null);
@@ -570,7 +547,7 @@ export const SystemPage: React.FC = () => {
       message.info(t('sys.maintenance_started', { action: actionLabel('vacuum') }));
       handleAcceptedJob(accepted.maintenance);
     } catch (err: unknown) {
-      const msg = err instanceof ApiError ? err.message : String(err);
+      const msg = describeError(err);
       message.error(t('sys.maintenance_failed', { action: actionLabel('vacuum'), msg }));
     } finally {
       setSubmittingAction(null);
@@ -581,17 +558,10 @@ export const SystemPage: React.FC = () => {
     setDownloadingDiag(true);
     try {
       const blob = await api.downloadSystemDiagnostics();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `omc-diagnostics-${Date.now()}.json`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      saveBlob(blob, `omc-diagnostics-${Date.now()}.json`);
       message.success(t('sys.download_success'));
     } catch (err: unknown) {
-      const msg = err instanceof ApiError ? err.message : String(err);
+      const msg = describeError(err);
       message.error(t('sys.download_failed', { msg }));
     } finally {
       setDownloadingDiag(false);
@@ -616,46 +586,31 @@ export const SystemPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="terminal-page system-page" style={{ textAlign: 'center', padding: 80 }}>
-        <Spin size="large" />
+      <div className="terminal-page system-page">
+        <PageLoading />
       </div>
     );
   }
 
   return (
-    <div className={`terminal-page system-page ${styles['system-page']}`}>
-      <div className="terminal-page-head">
-        <div>
-          <h1 className="terminal-title">{t('sys.title')}</h1>
-          <p className="terminal-subtitle">{t('sys.subtitle')}</p>
-        </div>
-
-        <div className={styles['header-actions']}>
-          <Button
-            size="small"
-            icon={<SyncOutlined spin={isFetching} />}
-            disabled={isFetching}
-            onClick={() => {
+    <div className={`terminal-page terminal-page-stack system-page ${styles['system-page']}`}>
+      <PageHeader
+        title={t('sys.title')}
+        actions={(
+          <RefreshButton
+            isRefreshing={isFetching}
+            onRefresh={() => {
               // A refresh clears a completed result the reader has moved past, and never touches a
               // running job: that one is live server state, and the panel below keeps showing it.
               setDisplayedOutcome(null);
               void refetch();
               void queryClient.invalidateQueries({ queryKey: ['management-system-maintenance'] });
             }}
-          >
-            {t('common.refresh')}
-          </Button>
-        </div>
-      </div>
+          />
+        )}
+      />
 
-      {isError && (
-        <Alert
-          type="error"
-          showIcon
-          style={{ marginBottom: 16 }}
-          description={error instanceof ApiError ? error.message : String(error)}
-        />
-      )}
+      {isError && <Alert type="error" showIcon description={describeError(error)} />}
 
       {/* 2x2 Grid of the 4 System Information cards */}
       <div className={styles['system-grid']}>
@@ -665,17 +620,14 @@ export const SystemPage: React.FC = () => {
           data-testid="sys-card-versions"
           title={
             <div className={styles['card-head']} data-testid="sys-card-head">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <DashboardOutlined />
-                <span>{t('sys.version_card')}</span>
-              </div>
+              <PanelTitle icon={<DashboardOutlined />}>{t('sys.version_card')}</PanelTitle>
               {/* The check lives on the card it acts on: it refreshes the versions below
                   it, and a page-level button that changed one card was a control placed
                   away from its own effect. */}
               <Button
                 type="link"
                 size="small"
-                icon={<CloudDownloadOutlined spin={isCheckingUpdates} />}
+                icon={<CloudDownloadOutlined />}
                 loading={isCheckingUpdates}
                 // The demonstration refuses this route on the server, so the control is
                 // disabled rather than offered: a button whose only outcome is a refusal
@@ -709,12 +661,7 @@ export const SystemPage: React.FC = () => {
         <Card
           className={styles['system-card']}
           data-testid="sys-card-storage"
-          title={
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <DatabaseOutlined />
-              <span>{t('sys.storage_card')}</span>
-            </div>
-          }
+          title={<PanelTitle icon={<DatabaseOutlined />}>{t('sys.storage_card')}</PanelTitle>}
         >
           {sysInfo && (
             <>
@@ -725,57 +672,34 @@ export const SystemPage: React.FC = () => {
                 </span>
               </div>
 
-              <div className={styles['storage-file-list']} data-testid="sys-storage-file-list">
-                <div className={styles['storage-file-row']} data-testid="sys-storage-file-row">
-                  <span className={styles['storage-file-name']}>{t('sys.storage_main')}</span>
-                  <span className={styles['storage-file-val']}>
-                    {sysInfo.database.files.main_exists
-                      ? formatBytes(sysInfo.database.files.main_bytes)
-                      : t('sys.file_not_exist')}
-                  </span>
-                </div>
-
-                <div className={styles['storage-file-row']} data-testid="sys-storage-file-row">
-                  <span className={styles['storage-file-name']}>{t('sys.storage_wal')}</span>
-                  <span className={styles['storage-file-val']}>
-                    {sysInfo.database.files.wal_exists
-                      ? formatBytes(sysInfo.database.files.wal_bytes)
-                      : t('sys.file_not_exist')}
-                  </span>
-                </div>
-
-                <div className={styles['storage-file-row']} data-testid="sys-storage-file-row">
-                  <span className={styles['storage-file-name']}>{t('sys.storage_shm')}</span>
-                  <span className={styles['storage-file-val']}>
-                    {sysInfo.database.files.shm_exists
-                      ? formatBytes(sysInfo.database.files.shm_bytes)
-                      : t('sys.file_not_exist')}
-                  </span>
-                </div>
-              </div>
+              <FactList
+                className={styles['storage-files']}
+                testId="sys-storage-file-list"
+                facts={([
+                  ['main', t('sys.storage_main'), sysInfo.database.files.main_exists, sysInfo.database.files.main_bytes],
+                  ['wal', t('sys.storage_wal'), sysInfo.database.files.wal_exists, sysInfo.database.files.wal_bytes],
+                  ['shm', t('sys.storage_shm'), sysInfo.database.files.shm_exists, sysInfo.database.files.shm_bytes],
+                ] as const).map(([key, label, exists, bytes]) => ({
+                  key,
+                  label,
+                  value: exists ? formatBytes(bytes) : t('sys.file_not_exist'),
+                  testId: 'sys-storage-file-row',
+                }))}
+              />
 
               {/* What the file is, rather than how it is organised internally: the
                   observed journal mode, the schema generation, and the space in use. Page
                   geometry, free pages and the connection's own settings are in the
                   redacted diagnostics bundle for anyone who needs them. */}
-              <div className={styles['storage-facts-section']} data-testid="sys-storage-facts">
-                <div className={styles['storage-fact-row']} data-testid="sys-storage-fact-row">
-                  <span className={styles['storage-fact-label']}>{t('sys.journal_mode')}</span>
-                  <span className={styles['storage-fact-val']}>
-                    {(sysInfo.database.journal_mode || '—').toUpperCase()}
-                  </span>
-                </div>
-                <div className={styles['storage-fact-row']} data-testid="sys-storage-fact-row">
-                  <span className={styles['storage-fact-label']}>{t('sys.schema_version')}</span>
-                  <span className={styles['storage-fact-val']}>v{sysInfo.database.schema_version}</span>
-                </div>
-                <div className={styles['storage-fact-row']} data-testid="sys-storage-fact-row">
-                  <span className={styles['storage-fact-label']}>{t('sys.used_bytes')}</span>
-                  <span className={styles['storage-fact-val']}>
-                    {formatBytes(sysInfo.database.used_bytes)}
-                  </span>
-                </div>
-              </div>
+              <FactList
+                emphasis="quiet"
+                testId="sys-storage-facts"
+                facts={[
+                  { key: 'journal', label: t('sys.journal_mode'), value: (sysInfo.database.journal_mode || '—').toUpperCase(), testId: 'sys-storage-fact-row' },
+                  { key: 'schema', label: t('sys.schema_version'), value: `v${sysInfo.database.schema_version}`, testId: 'sys-storage-fact-row' },
+                  { key: 'used', label: t('sys.used_bytes'), value: formatBytes(sysInfo.database.used_bytes), testId: 'sys-storage-fact-row' },
+                ]}
+              />
             </>
           )}
         </Card>
@@ -784,74 +708,56 @@ export const SystemPage: React.FC = () => {
         <Card
           className={styles['system-card']}
           data-testid="sys-card-health"
-          title={
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <CloudServerOutlined />
-              <span>{t('sys.topology_card')}</span>
-            </div>
-          }
+          title={<PanelTitle icon={<CloudServerOutlined />}>{t('sys.topology_card')}</PanelTitle>}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {/* CPA Gateway */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <div style={{ fontWeight: 600 }}>{t('sys.component_cpa')}</div>
-                <div style={{ fontSize: 12, color: 'var(--meta)', fontFamily: 'monospace' }}>
-                  {sysInfo?.cpa.endpoint_masked}
-                </div>
+          <div className={styles['component-list']}>
+            <div className={styles['component-row']}>
+              <div className={styles['component-identity']}>
+                <div className={styles['component-name']}>{t('sys.component_cpa')}</div>
+                <div className={styles['component-meta']}>{sysInfo?.cpa.endpoint_masked}</div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                {sysInfo?.cpa.status === 'connected' ? (
-                  <Tag color="success" icon={<CheckCircleOutlined />}>
-                    {sysInfo.cpa.latency_ms > 0
-                      ? t('sys.cpa_latency', { ms: sysInfo.cpa.latency_ms })
-                      : t('shell.connected')}
-                  </Tag>
-                ) : (
-                  <Tag color="error" icon={<CloseCircleOutlined />}>
-                    {t('shell.offline')}
-                  </Tag>
-                )}
-              </div>
+              {sysInfo?.cpa.status === 'connected' ? (
+                <StatusLabel tone="success">
+                  {sysInfo.cpa.latency_ms > 0
+                    ? t('sys.cpa_latency', { ms: sysInfo.cpa.latency_ms })
+                    : t('shell.connected')}
+                </StatusLabel>
+              ) : (
+                <StatusLabel tone="danger">{t('shell.offline')}</StatusLabel>
+              )}
             </div>
 
-            {/* SQLite DB */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontWeight: 600 }}>{t('sys.component_db')}</div>
-                <div style={{ fontSize: 12, color: 'var(--meta)' }}>
+            <div className={styles['component-row']}>
+              <div className={styles['component-identity']}>
+                <div className={styles['component-name']}>{t('sys.component_db')}</div>
+                <div className={styles['component-meta']}>
                   {t('sys.db_mode', {
                     mode: (sysInfo?.database.journal_mode || '').toUpperCase() || '—',
                   })}
                 </div>
               </div>
-              <div>
-                {sysInfo?.database.status === 'ok' ? (
-                  <Tag color="success">{t('inst.db_ok')}</Tag>
-                ) : (
-                  <Tag color="error">{t('inst.db_error')}</Tag>
-                )}
-              </div>
+              {sysInfo?.database.status === 'ok' ? (
+                <StatusLabel tone="success">{t('inst.db_ok')}</StatusLabel>
+              ) : (
+                <StatusLabel tone="danger">{t('inst.db_error')}</StatusLabel>
+              )}
             </div>
 
-            {/* Collector */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontWeight: 600 }}>{t('sys.component_collector')}</div>
-                <div style={{ fontSize: 12, color: 'var(--meta)' }}>
+            <div className={styles['component-row']}>
+              <div className={styles['component-identity']}>
+                <div className={styles['component-name']}>{t('sys.component_collector')}</div>
+                <div className={styles['component-meta']}>
                   {t('sys.collector_mode', {
                     mode: sysInfo?.collector.mode || 'auto',
                     gaps: sysInfo?.collector.gap_count || 0,
                   })}
                 </div>
               </div>
-              <div>
-                <Tag color={sysInfo?.collector.status === 'active' ? 'processing' : 'default'}>
-                  {sysInfo?.collector.status === 'active'
-                    ? t('sys.collector_status_active')
-                    : t('sys.collector_status_disabled')}
-                </Tag>
-              </div>
+              <StatusLabel tone={sysInfo?.collector.status === 'active' ? 'success' : 'neutral'}>
+                {sysInfo?.collector.status === 'active'
+                  ? t('sys.collector_status_active')
+                  : t('sys.collector_status_disabled')}
+              </StatusLabel>
             </div>
           </div>
         </Card>
@@ -860,12 +766,7 @@ export const SystemPage: React.FC = () => {
         <Card
           className={styles['system-card']}
           data-testid="sys-card-maintenance"
-          title={
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <SafetyCertificateOutlined />
-              <span>{t('sys.maintenance_card')}</span>
-            </div>
-          }
+          title={<PanelTitle icon={<SafetyCertificateOutlined />}>{t('sys.maintenance_card')}</PanelTitle>}
         >
           {/* Actions Bar */}
           <div className={styles['maintenance-actions']}>
@@ -924,7 +825,7 @@ export const SystemPage: React.FC = () => {
               type="info"
               showIcon
               icon={<Spin size="small" />}
-              style={{ marginBottom: 16 }}
+              className={styles['maintenance-running']}
               description={t('sys.maintenance_in_progress', { action: actionLabel(effectiveMaintenance.action) })}
             />
           )}
@@ -937,14 +838,14 @@ export const SystemPage: React.FC = () => {
             <div className={styles['maintenance-box']} data-testid="sys-maintenance-outcome">
               <div className={styles['maintenance-box-title']}>
                 {displayedOutcome.error ? (
-                  <CloseCircleOutlined style={{ color: 'var(--ant-color-error)' }} />
+                  <CloseCircleOutlined className={styles['outcome-danger']} />
                 ) : displayedOutcome.incomplete ? (
                   // A partial result is its own outcome, not a qualified success. SQLite reports
                   // a blocked checkpoint in the statement's result row rather than as an error,
                   // so a green checkmark here would claim the log was truncated when it was not.
-                  <WarningOutlined style={{ color: 'var(--ant-color-warning)' }} />
+                  <WarningOutlined className={styles['outcome-warn']} />
                 ) : (
-                  <CheckCircleOutlined style={{ color: 'var(--ant-color-success)' }} />
+                  <CheckCircleOutlined className={styles['outcome-success']} />
                 )}
                 <span>
                   {displayedOutcome.error
@@ -980,7 +881,7 @@ export const SystemPage: React.FC = () => {
               </div>
 
               {displayedOutcome.detail && (
-                <Text type="secondary" style={{ fontSize: 12 }}>
+                <Text type="secondary" className={styles['maintenance-detail']}>
                   {displayedOutcome.detail}
                 </Text>
               )}
@@ -989,7 +890,7 @@ export const SystemPage: React.FC = () => {
                 <Alert
                   type="warning"
                   showIcon
-                  style={{ marginTop: 6 }}
+                  className={styles['maintenance-outcome-alert']}
                   description={t('sys.maintenance_incomplete_warning', {
                     detail: displayedOutcome.detail || t('sys.maintenance_incomplete_default'),
                   })}
@@ -1000,17 +901,13 @@ export const SystemPage: React.FC = () => {
                 <Alert
                   type="error"
                   showIcon
-                  style={{ marginTop: 6 }}
+                  className={styles['maintenance-outcome-alert']}
                   description={displayedOutcome.error}
                 />
               )}
             </div>
           )}
 
-          <div className={styles['maintenance-notice']}>
-            <p>{t('sys.maintenance_restart_notice')}</p>
-            <p style={{ margin: 0 }}>{t('sys.diag_desc')}</p>
-          </div>
         </Card>
       </div>
 
@@ -1044,7 +941,7 @@ export const SystemPage: React.FC = () => {
         cancelText={t('common.cancel')}
       >
         <div className={styles['vacuum-modal-content']}>
-          <Paragraph type="secondary" style={{ margin: 0 }}>
+          <Paragraph type="secondary" className={styles['vacuum-desc']}>
             {t('sys.vacuum_confirm_desc')}
           </Paragraph>
 

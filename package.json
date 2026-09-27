@@ -33,7 +33,7 @@
     "test:check-ui-plan": "node --test scripts/check-ui-plan.test.mjs",
     "test:config-states": "node --experimental-strip-types scripts/test-config-states.ts",
     "test:css-modules": "node --test scripts/check-css-modules.test.mjs",
-    "test:demo": "node --test deploy/cloudflare/worker.test.mjs",
+    "test:demo": "node --test deploy/cloudflare/worker.test.mjs deploy/cloudflare/filters.test.mjs",
     "test:dev-target": "node --test scripts/api-target.test.mjs",
     "test:docs": "node --test scripts/check-docs.test.mjs",
     "test:fast": "node scripts/verify-fast.mjs",

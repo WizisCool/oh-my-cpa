@@ -19,6 +19,7 @@ records why that trade was taken and what it costs.
 | Data | `deploy/cloudflare/data/responses.json` | 79 captured responses, generated from the real handlers |
 | Routing | `deploy/cloudflare/routes.mjs` | Which request is answered by which captured response |
 | Time | `deploy/cloudflare/time.mjs` | Moves the captured history onto the viewer's clock |
+| Filters | `deploy/cloudflare/filters.mjs` | Applies the audit trail's category, outcome, search and folding rules, and the service log's `after` position, to the one captured page, so those filters work in the demonstration |
 
 Requests to a static asset never invoke the Worker; requests under `/api` always do.
 `wrangler.jsonc` configures both, and `run_worker_first` names `/api` explicitly rather

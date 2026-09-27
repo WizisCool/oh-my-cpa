@@ -412,7 +412,6 @@ export const PlaygroundPage: React.FC = () => {
           onPasteFile={files => {
             if (!isRunning && !isDemo) attachments.add(files);
           }}
-          note={t('pg.cost_note')}
         />
       </WorkspaceLayout>
     </XProvider>

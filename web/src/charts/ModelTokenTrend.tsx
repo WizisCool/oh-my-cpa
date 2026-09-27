@@ -4,6 +4,7 @@ import dayjs from 'dayjs';
 import { useTheme } from '../theme/ThemeContext';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import { resolveChartAnimation } from './chartMotion';
+import { useChartPlugins } from './chartRender';
 import { seriesColorRange, seriesDomainKey } from './chartTheme';
 import { MONO_FONT_STACK } from '../theme/themeConfig';
 import { formatTokens as formatTokensStyled, formatTokensFull } from '../types/tokenDisplay';
@@ -69,16 +70,34 @@ export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, folded
   // One row per group per bucket. The trellis is built here rather than asking the library to melt
   // six series: the groups already share one bucket grid, so the long form is a flat map and the
   // colour key travels with every point.
+  //
+  // **A series is drawn only where it has traffic**, plus the zero bucket on each side of a run so
+  // its rise and fall still land on the floor. A long quiet stretch is left undrawn (a null point
+  // breaks the line) rather than drawn as a zero: six series sharing the floor were six lines
+  // stacked on one row of pixels, so the floor took the colour of whichever was drawn last - a hue
+  // the legend did not show for most of the window - and a quiet model's small rise disappeared
+  // into that stack. The axis rule already states zero.
+  //
+  // **The top-ranked group is drawn last**, so where two lines cross, the one the legend lists first
+  // is the one on top.
   const data = React.useMemo(() => {
-    const rows: Array<{ series: string; bucket: string; at: number; tokens: number }> = [];
-    for (const group of groups) {
+    const rows: Array<{ series: string; bucket: string; at: number; tokens: number | null }> = [];
+    for (let rank = groups.length - 1; rank >= 0; rank -= 1) {
+      const group = groups[rank];
       const key = seriesDomainKey(group);
-      for (const point of group.series) {
-        rows.push({ series: key, bucket: String(point.t), at: point.t, tokens: point.tokens });
-      }
+      const points = group.series;
+      points.forEach((point, index) => {
+        const isActive = point.tokens > 0
+          || (points[index - 1]?.tokens ?? 0) > 0
+          || (points[index + 1]?.tokens ?? 0) > 0;
+        rows.push({ series: key, bucket: String(point.t), at: point.t, tokens: isActive ? point.tokens : null });
+      });
     }
     return rows;
   }, [groups]);
+
+  // Supersampled: see `chartRender.ts` for why the canvas is drawn at no less than 2x.
+  const { plugins, onReady } = useChartPlugins();
 
   // The bucket axis, in order. The domain is every bucket of the window grid - taken from the
   // longest series, which is all of them, since the groups share one grid - so a bucket in which
@@ -249,8 +268,10 @@ export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, folded
         paddingBottom={32}
         paddingLeft={40}
         paddingRight={40}
-        style={{ lineWidth: 1.6 }}
-        state={{ active: { lineWidth: 2.4 } }}
+        plugins={plugins}
+        onReady={onReady}
+        style={{ lineWidth: 1.75, lineJoin: 'round', lineCap: 'round' }}
+        state={{ active: { lineWidth: 2.5 } }}
         // The tooltip is configured on the *interaction*, not on the mark: G2 reads `render` from the
         // interaction's options, so a renderer placed in the mark's own `tooltip` spec is ignored and the
         // library's default template is used instead - which prints the raw domain value as each item's
@@ -263,9 +284,17 @@ export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, folded
             crosshairs: true,
             render: (
               _event: unknown,
-              context: { items?: Array<{ color?: string; value?: number }>; title?: string },
+              context: { items?: Array<{ color?: string; value?: number | null; name?: string }>; title?: string },
             ) => {
-              const items = context?.items ?? [];
+              // Named by each item's own series key rather than by its position: the rows are drawn
+              // in reverse rank, and a series with no traffic at the hovered bucket has no point there,
+              // so position no longer lines up with the legend. The readout is re-sorted into the
+              // legend's order and a quiet series is listed at zero rather than left out.
+              const byKey = new Map((context?.items ?? []).map((item) => [String(item.name ?? ''), item]));
+              const items = domain.map((key, rank) => {
+                const item = byKey.get(key);
+                return { key, color: item?.color ?? range[rank], value: item?.value ?? 0 };
+              });
               if (items.length === 0) return '';
               // The bucket arrives as the group's title - a string of epoch milliseconds - not on each
               // item, so it is parsed from there. Falling back to "now" would print a time the mark is
@@ -273,7 +302,7 @@ export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, folded
               const bucketMS = Number(context?.title);
               const time = Number.isFinite(bucketMS) ? dayjs(bucketMS).format('MM-DD HH:mm') : '';
               const rows = items.map((item, index) => {
-                const name = groupLabels[index] ?? '';
+                const name = groupLabels[index] ?? labelOf(item.key);
                 const shape = `<span class="omc-tip-swatch" style="background:${item.color ?? 'transparent'}"></span>`;
                 // The shared token layer's compact form: a tooltip that scans like the legend it
                 // annotates, with the exact count in the accessible name below.

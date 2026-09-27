@@ -2,7 +2,7 @@ import React from 'react';
 import { ThoughtChain } from '@ant-design/x';
 import type { ThoughtChainItemType } from '@ant-design/x';
 import { ClockCircleOutlined, WarningOutlined } from '../../components/icons';
-import { CopyButton } from '../../components/workspace/CopyButton';
+import { CopyButton } from '../../components/common/CopyButton';
 import { CodeBlock, ModelMarkdown } from '../../components/workspace/ModelMarkdown';
 import { ReasoningBlock } from '../../components/workspace/ReasoningBlock';
 import workspace from '../../components/workspace/Workspace.module.css';

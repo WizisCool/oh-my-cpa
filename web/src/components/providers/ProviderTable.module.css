@@ -1,0 +1,103 @@
+.provider-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* The brand mark doubles as the icon picker's trigger, so it is drawn as a tile a pointer can
+   aim at and a keyboard can reach. */
+.provider-mark {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-standard);
+}
+
+.provider-mark:hover {
+  border-color: var(--accent);
+}
+
+.provider-name {
+  min-width: 0;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.provider-name a {
+  color: var(--accent);
+}
+
+.protocol-tag {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 5px;
+  margin: 0 !important;
+  padding: 2px 8px !important;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+/* The family's brand colour arrives as `--family-color`; the tint and the edge are mixed over the
+   page so the tag sits on the active palette's surface in either mode. */
+.protocol-tag-branded {
+  border-color: color-mix(in srgb, var(--family-color) 40%, var(--bg)) !important;
+  background: color-mix(in srgb, var(--family-color) 10%, var(--bg)) !important;
+  color: var(--family-color) !important;
+}
+
+.endpoint {
+  max-width: 260px;
+  overflow: hidden;
+  color: var(--fg);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prefix-chip {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--accent);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.muted {
+  color: var(--meta);
+  font-size: 13px;
+}
+
+.count-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  max-width: 200px;
+}
+
+.count-pill {
+  display: inline-block;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--fg-2);
+  font-size: 11px;
+  line-height: 20px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}

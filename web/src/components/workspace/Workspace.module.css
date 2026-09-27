@@ -483,30 +483,6 @@
 
 .code-block {
   margin: 0 0 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  overflow: hidden;
-}
-
-.code-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  height: 32px;
-  padding: 0 4px 0 12px;
-  border-bottom: 1px solid var(--border-soft);
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.code-head :global(.ant-btn) {
-  color: var(--muted);
-}
-
-.code-lang {
-  text-transform: lowercase;
 }
 
 /* The syntax theme is the palette's ink, not a colour family of its own: keys and keywords take

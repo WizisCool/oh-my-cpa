@@ -279,8 +279,7 @@ export const ConfigPage: React.FC = () => {
         <Alert
           type="error"
           showIcon
-          closable
-          onClose={() => setSaveError(null)}
+          closable={{ onClose: () => setSaveError(null) }}
           description={saveError}
           style={{ marginBottom: 16 }}
         />

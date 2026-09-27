@@ -22,6 +22,7 @@
  * demonstration's promise that opening it causes no outbound request is a property of
  * this code rather than a claim about the environment.
  */
+import { applyQueryFilters } from './filters.mjs';
 import { DATASET, REFERENCE_MS, presetOf, responseNameFor } from './routes.mjs';
 import { rebase } from './time.mjs';
 /** Marker the console reads to render its own demonstration notices. */
@@ -189,7 +190,7 @@ function serve(entry, nowMs, url) {
         { status: 404, headers: { ...JSON_HEADERS, 'Content-Type': entry.content_type } },
       );
     }
-    const decoded = rebase(identity, deltaMs);
+    const decoded = rebase(applyQueryFilters(identity, url), deltaMs);
     const preset = url.searchParams.has('preset') ? presetOf(url) : '';
     body = JSON.stringify(labelPreset(decoded, preset));
   } catch {

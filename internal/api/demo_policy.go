@@ -147,6 +147,7 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodGet, "/api/v1/management/dashboard/providers", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/logs", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/logs/status", demoAllow, ""},
+	{http.MethodGet, "/api/v1/management/service-logs", demoAllow, ""},
 	// The error-log file list. Its download is refused below; naming the file is not.
 	{http.MethodGet, "/api/v1/management/request-error-logs", demoAllow, ""},
 	// The gateway key list. Creating and deleting keys are refused below; reading them is

@@ -1,7 +1,9 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Alert, Button, Card, Empty, Select, Skeleton, Space, Tooltip, Typography } from 'antd';
-import { HistoryOutlined, KeyOutlined, QuestionCircleOutlined, ReloadOutlined, RightOutlined } from '../components/icons';
+import { Alert, Button, Card, Empty, Select, Skeleton, Tooltip, Typography } from 'antd';
+import { HistoryOutlined, KeyOutlined, QuestionCircleOutlined, RightOutlined } from '../components/icons';
+import { PageHeader } from '../components/common/PageHeader';
+import { RefreshButton } from '../components/common/RefreshButton';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { api, ApiError } from '../api/client';
@@ -41,7 +43,7 @@ import {
   type DashboardResponse,
 } from '../types/dashboard';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 const PLAIN_NUMBER_FORMAT = new Intl.NumberFormat('en');
 
@@ -231,37 +233,30 @@ export const DashboardPage: React.FC = () => {
 
   if (!data) {
     if (isError) {
-    return (
-      <div className="terminal-page">
-        <div className="terminal-page-head">
-          <div>
-            <Title level={2} className="terminal-title">{t('nav.dashboard')}</Title>
-          </div>
-          <Button icon={<ReloadOutlined />} onClick={() => refetch()}>{t('common.retry')}</Button>
+      return (
+        <div className="terminal-page dashboard-page">
+          <PageHeader
+            title={t('nav.dashboard')}
+            actions={<RefreshButton label={t('common.retry')} onRefresh={() => void refetch()} />}
+          />
+          <Alert
+            type="error"
+            showIcon
+            description={`${t('dash.error_title')} — ${error instanceof ApiError ? error.message : t('dash.error_desc')}`}
+          />
         </div>
-        <Alert
-          type="error"
-          showIcon
-          description={`${t('dash.error_title')} — ${error instanceof ApiError ? error.message : t('dash.error_desc')}`}
-        />
-      </div>
-    );
+      );
     }
     // First load: keep the real page frame and fill the tiles with a shimmer,
     // so nothing swaps in abruptly once data arrives.
     return (
       <div className="terminal-page dashboard-page">
-        <div className="terminal-page-head">
-          <div>
-            <Title level={2} className="terminal-title">{t('nav.dashboard')}</Title>
-            <Text type="secondary" className="terminal-subtitle">{t('dash.loading')}</Text>
-          </div>
-        </div>
+        <PageHeader title={t('nav.dashboard')} subtitle={t('dash.loading')} />
         <div className="dashboard-grid">
           {[0, 1].map((index) => (
             <Card key={`wide-${index}`} className="dashboard-tile is-wide" styles={{ body: { padding: 20 } }}>
               <Skeleton title={{ width: '40%' }} paragraph={{ rows: 1, width: ['70%'] }} />
-              <div className="tile-skeleton" style={{ marginTop: 12 }}>
+              <div className="tile-skeleton">
                 <Skeleton title={false} paragraph={{ rows: 2, width: ['70%', '55%'] }} />
               </div>
             </Card>
@@ -278,36 +273,29 @@ export const DashboardPage: React.FC = () => {
 
   return (
     <div className="terminal-page dashboard-page">
-      <div className="terminal-page-head">
-        <div>
-          <Title level={2} className="terminal-title">{t('nav.dashboard')}</Title>
-        </div>
-        <Space size={8} wrap>
-          <TimeRangeControl range={range} onChange={applyRange} />
-          {clientKeyOptions.length > 0 && (
-            <Select
-              size="small"
-              allowClear
-              placeholder={t('dash.filter_by_key')}
-              style={{ minWidth: 160, maxWidth: 240 }}
-              value={selectedApiKey}
-              onChange={(val) => setSelectedApiKey(val)}
-              options={clientKeyOptions}
-              prefix={<KeyOutlined style={{ color: 'var(--muted)' }} />}
-            />
-          )}
-          <Button
-            size="small"
-            icon={<HistoryOutlined />}
-            onClick={handleDrillDown}
-          >
-            {t('nav.usage_events')}
-          </Button>
-          <Tooltip title={t('header.refresh_all')}>
-            <Button size="small" icon={<ReloadOutlined />} loading={isFetching} onClick={refreshAll} />
-          </Tooltip>
-        </Space>
-      </div>
+      <PageHeader
+        title={t('nav.dashboard')}
+        actions={(
+          <>
+            <TimeRangeControl range={range} onChange={applyRange} />
+            {clientKeyOptions.length > 0 && (
+              <Select
+                allowClear
+                className="dashboard-key-filter"
+                placeholder={t('dash.filter_by_key')}
+                value={selectedApiKey}
+                onChange={(val) => setSelectedApiKey(val)}
+                options={clientKeyOptions}
+                prefix={<KeyOutlined className="dashboard-key-filter-icon" />}
+              />
+            )}
+            <Button icon={<HistoryOutlined />} onClick={handleDrillDown}>
+              {t('nav.usage_events')}
+            </Button>
+            <RefreshButton isIconOnly label={t('header.refresh_all')} isRefreshing={isFetching} onRefresh={refreshAll} />
+          </>
+        )}
+      />
 
       {data.partial_errors.length > 0 && (
         <Alert className="dashboard-alert" type="warning" showIcon description={`${t('dash.partial_title')} — ${data.partial_errors.join(' · ')}`} />
@@ -315,14 +303,14 @@ export const DashboardPage: React.FC = () => {
 
       <div className="dashboard-grid">
         <Card className="dashboard-tile is-wide" styles={{ body: { padding: 20 } }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="tile-head">
             <div className="tile-label">{t('dash.total_requests')}</div>
             <Button
               type="link"
               size="small"
+              className="tile-link"
               icon={<RightOutlined />}
               onClick={handleDrillDown}
-              style={{ padding: 0, height: 'auto', fontSize: 12 }}
             >
               {t('nav.usage_events')}
             </Button>
@@ -514,7 +502,6 @@ export const DashboardPage: React.FC = () => {
       )}
 
       <div className="dashboard-footnote">
-        <span>{t('dash.source_note')}</span>
         <span>{t('dash.window_minutes', { n: data.window.minutes })}</span>
       </div>
     </div>

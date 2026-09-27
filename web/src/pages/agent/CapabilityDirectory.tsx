@@ -2,7 +2,7 @@ import React from 'react';
 import { Alert, Input } from 'antd';
 import { clsx } from 'clsx';
 import { SearchOutlined } from '../../components/icons';
-import { CopyButton } from '../../components/workspace/CopyButton';
+import { CopyButton } from '../../components/common/CopyButton';
 import workspace from '../../components/workspace/Workspace.module.css';
 import { useI18n } from '../../i18n';
 import { groupCapabilities } from './state';

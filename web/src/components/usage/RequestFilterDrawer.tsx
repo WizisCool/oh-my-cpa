@@ -200,8 +200,10 @@ export const RequestFilterDrawer: React.FC<RequestFilterDrawerProps> = ({
    * reversed. Showing only the first kind silently swallowed the reversed-range
    * message, which was the one that explained why Apply was disabled.
    */
+  // Keyed by the control's id: the rows are rendered from the facet and field lists, and the id is
+  // the one value already unique across them.
   const row = (labelKey: string, labelFor: string, control: React.ReactNode, errorKeys?: string[]) => (
-    <div className="req-filter-row">
+    <div className="req-filter-row" key={labelFor}>
       <label className="req-filter-label" htmlFor={labelFor}>
         {t(labelKey)}
       </label>

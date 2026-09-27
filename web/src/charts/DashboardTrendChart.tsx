@@ -4,6 +4,7 @@ import dayjs from 'dayjs';
 import { useTheme } from '../theme/ThemeContext';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import { resolveChartAnimation } from './chartMotion';
+import { useChartPlugins } from './chartRender';
 import { sparkColor, type ChartTone } from './chartTheme';
 import type { DashboardSeriesPoint } from '../types/dashboard';
 
@@ -63,6 +64,7 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
   const isReducedMotion = usePrefersReducedMotion();
   const animate = resolveChartAnimation(isReducedMotion);
   const [activeIndex, setActiveIndex] = React.useState<number | null>(null);
+  const { plugins, onReady } = useChartPlugins();
 
   const values = React.useMemo(() => points.map((point) => Math.max(0, pick(point) ?? 0)), [points, pick]);
   const color = sparkColor(theme.palette, tone);
@@ -100,8 +102,10 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
       legend: false,
       tooltip: false,
       animate,
+      plugins,
+      onReady,
     }),
-    [chartData, height, color, animate],
+    [chartData, height, color, animate, plugins, onReady],
   );
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {

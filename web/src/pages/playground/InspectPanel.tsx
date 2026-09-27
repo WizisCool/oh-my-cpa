@@ -1,7 +1,7 @@
 import React from 'react';
 import { Alert, Button, Tabs } from 'antd';
 import { HistoryOutlined } from '../../components/icons';
-import { CopyButton } from '../../components/workspace/CopyButton';
+import { CopyButton } from '../../components/common/CopyButton';
 import { CodeBlock } from '../../components/workspace/ModelMarkdown';
 import workspace from '../../components/workspace/Workspace.module.css';
 import { useI18n } from '../../i18n';

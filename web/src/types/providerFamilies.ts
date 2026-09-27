@@ -20,9 +20,9 @@ export interface ProviderFamilyMeta {
   /**
    * Brand colour for the family tag, as a 6-digit hex value.
    *
-   * The renderer derives the tag's border and fill by appending hex alpha
-   * (`${color}66` / `${color}18`), so the hex form is a requirement rather than a
-   * style preference: a `var(--token)` here would produce invalid CSS. These are
+   * The renderer hands it to the stylesheet as `--family-color`, which mixes the
+   * tag's border and fill from it over the page (`color-mix`), so the tint follows
+   * the active palette's surface. These are
    * provider brand identities, not theme palette entries - like the brand colours
    * in `web/src/types/resource.ts`, they do not move with a preset, while the
    * theme's semantic colours (health, accent, surfaces) do.
