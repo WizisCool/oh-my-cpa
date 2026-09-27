@@ -16,7 +16,7 @@ Thank you for your interest in contributing to Oh My CPA! We welcome bug reports
 
 ### Prerequisites
 
-- **Go**: 1.24+ (pinned to `1.24.13` in CI)
+- **Go**: 1.25+ (pinned to `1.27.1` in CI)
 - **Node.js**: 22+ (pinned to `22.23.2`)
 - **pnpm**: 11+ (pinned to `11.19.0`)
 - **Air**: (optional, for Go hot reloading): `go install github.com/air-verse/air@latest`

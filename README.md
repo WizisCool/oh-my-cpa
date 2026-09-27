@@ -100,7 +100,7 @@ Browser ──▶ Reverse Proxy (Caddy / Nginx) ──▶ Oh My CPA (:8080)
 ### Prerequisites
 
 - Running [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) instance with its plaintext management key (`remote-management.secret-key`, or `management.secret-key` in a CPA v8-layout file)
-- Go 1.24+ (build toolchain pins `1.24.13`)
+- Go 1.25+ (build toolchain pins `1.27.1`)
 - Node.js 22+ & pnpm 11+
 
 ### Run from Source

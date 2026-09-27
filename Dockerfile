@@ -9,7 +9,7 @@ COPY web/ ./web/
 COPY scripts/ ./scripts/
 RUN pnpm --dir web run build
 
-FROM golang:1.24.13-alpine AS server
+FROM golang:1.27.1-alpine AS server
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
