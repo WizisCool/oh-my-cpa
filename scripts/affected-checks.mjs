@@ -59,7 +59,10 @@ export function planChecks(files) {
     checks.add('type-check');
   }
 
-  if (hasWebCode || hasTestSuite || hasTestInfrastructure) checks.add('logic');
+  // The config layout suite reads CPA's relocation table from the Go source, so a
+  // change to that table is a frontend-logic change too.
+  const hasSharedLayoutTable = has((file) => file === 'internal/cpa/configyaml/layout_rules.go');
+  if (hasWebCode || hasTestSuite || hasTestInfrastructure || hasSharedLayoutTable) checks.add('logic');
   if (hasWebCode) checks.add('i18n');
   if (has((file) => file.endsWith('.tsx'))) checks.add('antd-lint');
   if (has((file) => file.endsWith('.css'))) checks.add('css-modules');

@@ -26,7 +26,15 @@ export interface ConfigFieldDefinition {
   sectionId: ConfigSectionId;
   labelKey: string;
   descKey: string;
+  /** The legacy (CPA v7) path; configLayout re-places it for a v8 document. */
   yamlPath: string[];
+  /**
+   * Set only on a field re-placed for a v8 document: the legacy spelling that is
+   * read while no v8 value exists and removed whenever the field is written.
+   */
+  legacyYamlPath?: string[];
+  /** 'sequence' when the legacy spelling only counts as a list. */
+  legacyKind?: string;
   type: ConfigFieldType;
   scalarEndpointKey?: string;
   defaultValue?: unknown;
@@ -663,9 +671,13 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     sectionId: 'streaming',
     labelKey: 'cfg.f_nonstream_keepalive',
     descKey: 'cfg.f_nonstream_keepalive_desc',
-    yamlPath: ['streaming', 'nonstream-keepalive-interval'],
-    type: 'string',
-    placeholderKey: '0s',
+    // A root setting in the v7 layout, not part of `streaming`, and a whole number
+    // of seconds: CPA rejects a duration string such as "30s".
+    yamlPath: ['nonstream-keepalive-interval'],
+    type: 'number',
+    min: 0,
+    unitKey: 'cfg.unit_seconds',
+    defaultValue: 0,
     keywords: ['stream', 'nonstream', 'keepalive'],
   },
 
@@ -703,9 +715,11 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     sectionId: 'advanced',
     labelKey: 'cfg.f_sig_cache',
     descKey: 'cfg.f_sig_cache_desc',
-    yamlPath: ['antigravity', 'signature-cache-enabled'],
+    // CPA's v7 spelling is a flat root key; the `antigravity` section holds only
+    // its sensitive words and connection pool. CPA treats an absent value as on.
+    yamlPath: ['antigravity-signature-cache-enabled'],
     type: 'switch',
-    defaultValue: false,
+    defaultValue: true,
     keywords: ['signature', 'cache', 'antigravity'],
   },
   {
@@ -713,7 +727,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     sectionId: 'advanced',
     labelKey: 'cfg.f_sig_strict',
     descKey: 'cfg.f_sig_strict_desc',
-    yamlPath: ['antigravity', 'signature-bypass-strict'],
+    yamlPath: ['antigravity-signature-bypass-strict'],
     type: 'switch',
     defaultValue: false,
     keywords: ['signature', 'strict', 'bypass'],

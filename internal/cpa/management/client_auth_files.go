@@ -32,7 +32,7 @@ func (c *Client) ResetQuota(ctx context.Context, authIndex string) error {
 		return errors.New("auth_index is required")
 	}
 	payload := map[string]string{"auth_index": authIndex}
-	return c.doJSONBody(ctx, http.MethodPost, "/reset-quota", payload, nil)
+	return c.doOperationJSON(ctx, OperationCooldownReset, http.MethodPost, payload, nil)
 }
 
 // PatchAuthFileStatus changes only the disabled state of a named auth file.

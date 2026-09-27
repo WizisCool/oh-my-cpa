@@ -96,10 +96,16 @@ func (c *Client) DoJSONWithMeta(ctx context.Context, method, endpoint string, ou
 }
 
 func (c *Client) newRequest(ctx context.Context, method, endpoint string, body io.Reader, contentType string) (*http.Request, error) {
+	return c.newRequestAt(ctx, method, APIGenerationV0, endpoint, body, contentType)
+}
+
+// newRequestAt addresses one API generation. Endpoints are fixed strings from
+// this package, so the generation is the only part of the path a caller picks.
+func (c *Client) newRequestAt(ctx context.Context, method string, generation APIGeneration, endpoint string, body io.Reader, contentType string) (*http.Request, error) {
 	if c == nil {
 		return nil, errors.New("CPA client is not initialized")
 	}
-	request, err := http.NewRequestWithContext(ctx, method, c.baseURL+"/v0/management"+endpoint, body)
+	request, err := http.NewRequestWithContext(ctx, method, c.baseURL+"/"+string(generation)+"/management"+endpoint, body)
 	if err != nil {
 		return nil, fmt.Errorf("create CPA request: %w", err)
 	}

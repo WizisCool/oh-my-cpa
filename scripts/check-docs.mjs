@@ -38,6 +38,7 @@ export const DOCUMENTS = [
   { file: 'docs/architecture.md' },
   { file: 'docs/design.md' },
   { file: 'docs/cpamc-parity.md' },
+  { file: 'docs/cpa-v8-compat.md' },
   { file: 'docs/ops/sqlite-operations.md' },
   { file: 'docs/ops/cloudflare-demo.md' },
   { file: 'docs/plans/model-prices.md' },

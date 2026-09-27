@@ -6,7 +6,8 @@ import { parseDocument, type Document } from 'yaml';
 
 import { api, ApiError, apiErrorCode } from '../../api/client';
 import { useT } from '../../i18n';
-import { updateFieldWithBaseline, isConfigSemanticallyEqual } from './configDirty';
+import { getFieldSemanticValue, updateFieldWithBaseline, isConfigSemanticallyEqual } from './configDirty';
+import { describeLayoutRefusal, payloadComparisonPaths, resolveConfigFields, resolvePayloadPlacement } from './configLayout';
 import { ALL_CONFIG_FIELDS, type ConfigFieldDefinition, type ConfigSectionId } from '../../types/configSchema';
 import type { ConfigScalarsResponse } from '../../types/configManagement';
 import type { PayloadValidationIssue } from './payloadRules';
@@ -83,6 +84,18 @@ export function useConfigDraft() {
     }
   }, [configQuery.data?.safe_yaml, configQuery.data?.revision, viewMode]);
 
+  // Field placement follows the loaded document's layout (see configLayout). The
+  // renderers keep handing over the schema's own definitions; they are swapped for
+  // the placed ones by id at the two points that touch the document.
+  const layout = configQuery.data?.layout;
+  const resolvedFields = React.useMemo(() => resolveConfigFields(ALL_CONFIG_FIELDS, layout), [layout]);
+  const resolvedFieldsById = React.useMemo(
+    () => new Map(resolvedFields.map((field) => [field.id, field])),
+    [resolvedFields],
+  );
+  const payloadPlacement = React.useMemo(() => resolvePayloadPlacement(layout), [layout]);
+  const payloadPaths = React.useMemo(() => payloadComparisonPaths(payloadPlacement), [payloadPlacement]);
+
   // Mirrored into refs so the hydration effect and saveConfig can read the current
   // values without being re-created on every keystroke.
   rawYamlRef.current = rawYaml;
@@ -103,11 +116,11 @@ export function useConfigDraft() {
         }
       }
 
-      updateFieldWithBaseline(currentDoc, serverDocRef.current, field, value);
+      updateFieldWithBaseline(currentDoc, serverDocRef.current, resolvedFieldsById.get(field.id) ?? field, value);
 
       // If after update, currentDoc is semantically identical to serverDoc across all fields and payload,
       // revert rawYaml completely back to serverYaml so no formatting artifacts trigger dirty!
-      if (serverDocRef.current && isConfigSemanticallyEqual(currentDoc, serverDocRef.current, ALL_CONFIG_FIELDS)) {
+      if (serverDocRef.current && isConfigSemanticallyEqual(currentDoc, serverDocRef.current, resolvedFields, payloadPaths)) {
         setRawYaml(serverYaml);
         docRef.current = parseDocument(serverYaml);
       } else {
@@ -115,7 +128,7 @@ export function useConfigDraft() {
         setRawYaml(nextYaml);
       }
     },
-    [rawYaml, serverYaml, message, t],
+    [rawYaml, serverYaml, message, t, resolvedFields, resolvedFieldsById, payloadPaths],
   );
 
   const getFieldValue = React.useCallback(
@@ -127,16 +140,11 @@ export function useConfigDraft() {
           return field.defaultValue;
         }
       }
-      const val = docRef.current.getIn(field.yamlPath);
-      if (val === undefined || val === null) {
-        return field.defaultValue;
-      }
-      if (typeof val === 'object' && 'toJSON' in val && typeof (val as { toJSON: () => unknown }).toJSON === 'function') {
-        return (val as { toJSON: () => unknown }).toJSON();
-      }
-      return val;
+      return getFieldSemanticValue(docRef.current, resolvedFieldsById.get(field.id) ?? field);
     },
-    [rawYaml],
+    // rawYaml is a dependency on purpose: the document lives in a ref, so the
+    // reader has to be re-created for its consumers to re-render.
+    [rawYaml, resolvedFieldsById],
   );
 
 
@@ -170,11 +178,15 @@ export function useConfigDraft() {
       // refused while a provider change is being written. The server's message for
       // that is English prose; the banner comes from the dictionary instead, like
       // every other user-visible string.
-      const msg = apiErrorCode(err) === 'write_busy'
+      const code = apiErrorCode(err);
+      const layoutRefusal = describeLayoutRefusal(code, err instanceof ApiError ? err.data : null, t);
+      const msg = code === 'write_busy'
         ? t('cfg.save_busy')
-        : err instanceof ApiError
-          ? err.message
-          : String(err);
+        : layoutRefusal
+          ? layoutRefusal
+          : err instanceof ApiError
+            ? err.message
+            : String(err);
       setSaveError(msg);
       message.error(msg);
     },
@@ -355,6 +367,10 @@ export function useConfigDraft() {
   };
 
   return {
+    layout,
+    resolvedFields,
+    payloadPlacement,
+    payloadPaths,
     editorRef,
     viewMode,
     setViewMode,

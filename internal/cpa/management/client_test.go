@@ -202,6 +202,11 @@ func TestClientDoesNotLeakKeyInHTTPError(t *testing.T) {
 func TestClientApiCall(t *testing.T) {
 	const key = "management-secret"
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		// A v7 gateway: the v8 capability probe finds no route.
+		if strings.HasPrefix(request.URL.Path, "/v8/") {
+			http.NotFound(writer, request)
+			return
+		}
 		if request.URL.Path != "/v0/management/api-call" {
 			t.Fatalf("request path = %q", request.URL.Path)
 		}

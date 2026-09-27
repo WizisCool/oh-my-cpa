@@ -14,7 +14,7 @@ browser ──▶ reverse proxy or Vite ──▶ Go process (one binary)
                                         ├─ usage collector  ──▶ CPA
                                         └─ pricing sync loop ──▶ models.dev
 
-Go process ──▶ CPA management API (/v0/management) ──▶ upstream providers
+Go process ──▶ CPA management API (/v0/management; /v8/management on v8) ──▶ upstream providers
 Go process ──▶ CPA RESP usage channel
 ```
 
@@ -67,10 +67,10 @@ cycle even though the `internal/usage` directory appears in both directions.
 | `internal/usage` | Decode CPA usage/error payloads into typed events | `security` |
 | `internal/usage/resp` | Minimal RESP client for CPA's subscribe/LPOP subset | — |
 | `internal/pricing` | Catalog snapshot, model matching, sync service, money math | — |
-| `internal/cpa/management` | Typed CPA `/v0/management` client and RESP stream wrapper | `internal/usage/resp` |
+| `internal/cpa/management` | Typed CPA Management API client (`/v0/management`, plus the grouped `/v8/management` routes where the gateway has them) and RESP stream wrapper | `internal/usage/resp` |
 | `internal/cpa/gateway` | Fixed-endpoint CPA inference client for the Playground and Agent: client-key auth, model directory, bounded SSE parsing, and bounded tool-call assembly for the Agent loop | — |
 | `internal/cpa/discovery` | Normalize CPA resources into the local identity model | `management`, `crypto`, `domain`, `security` |
-| `internal/cpa/configyaml` | YAML document editing that preserves comments and unknown keys | — |
+| `internal/cpa/configyaml` | YAML document editing that preserves comments and unknown keys; CPA v8 layout detection, CPA's relocation table, and the checks for settings a v8 gateway would drop | — |
 | `internal/repository` | SQLite schema, migrations, queries, transactional invariants | `crypto`, `domain`, `pricing`, `security`, `usage` |
 | `internal/usage/ingest` | Collector loop, decode processor, rollup and retention maintenance | `repository`, `management`, `security`, `usage` |
 | `internal/quota` | Per-provider quota probes and normalization | `management` |
@@ -308,6 +308,32 @@ Properties to preserve when changing this code:
   re-keys the stored icon together with the name and website maps in the same
   gated metadata transaction.
 
+### CPA v7 and v8 gateways
+
+One build serves both CPA generations (ADR 0028; the full record, mapping and
+measurements are in `docs/cpa-v8-compat.md`). Two facts are observed per gateway and
+per document, never inferred from a version string:
+
+- The **Management API generation**: `Client.SupportsManagementV8` reads
+  `/v8/management/config/config-version` and requires the value `8`. The answer is cached
+  per base URL (`API_SUPPORT_TTL`) and dropped when a v8 route answers "missing".
+- The **configuration layout** of the stored file (`configyaml.DetectLayout`: `legacy`,
+  `v8` or `mixed`).
+
+`GET /management/config` returns both as `layout`, with CPA's relocation table
+(`configyaml.LayoutRules`). The console places every field through
+`web/src/components/config/configLayout.ts`: a legacy file keeps v7 paths on either
+gateway, while a v8 or mixed file is edited at v8 paths with the legacy spelling read as a
+fallback and removed on write. The configuration source writer refuses, before CPA sees
+it, a document CPA v8 would accept and partly ignore (`checkConfigLayout`:
+`config_legacy_keys_shadowed`, `config_provider_groups_replaced`). OMC never performs a
+v8 configuration write, because any such write migrates and rewrites the operator's file.
+
+Operations that v8 serves on the same handler as v0 are listed once in
+`OPERATION_ROUTES` (`internal/cpa/management/api_generation.go`); the client calls the v8
+route on a v8 gateway and falls back to v0 when that route is missing. Everything else,
+including all configuration writes, stays on v0.
+
 ### Provider families are data, not code paths
 
 CPA stores `claude`, `codex`, `gemini` and `meta` credentials as four lists with
@@ -448,7 +474,7 @@ Query for server state.
 | `utils/` | `maskKey.ts` (the console's one caller-key mask shape, kept branch for branch with the server's `security.MaskSecret`), `externalUrl.ts` (the http/https link rule), `modelOptions.ts` (model-input filtering), `smoothScroll.ts` (the gesture/correction scroll schedule), `clipboard.ts` (the one copy path, below) |
 | `components/common/` | What more than one page renders: the shell (`AppLayout`, `HeaderNav`, `AuthGate`, `PreferenceMenus`), and the phone row a list becomes below 640px - `PhoneRow.tsx` (headline, summary, labelled fields, controls) over `phoneRowFields.ts` (derives a row's fields, and one column's rendered cell, from the *table's own* column array, so a list has one description of a record at both widths and a column cannot silently disappear on a phone; see ADR 0012) |
 | `components/workspace/` | The conversation workspace the Playground and the Agent share: `WorkspaceLayout` (head with title, target and actions; main column; resizable side panel that becomes a Back-aware Drawer below 900px), `useResizablePanel` (pointer and keyboard resizing that writes the width to the DOM during a drag and commits it once), `ConversationList` (Ant Design X's `Bubble.List` with its native reverse-scroll anchoring and the "back to latest" control), `Composer` (X's `Sender` with the send path running through its own `SendButton`, so Enter and the button stay one gate), `ModelMarkdown` (safe `@ant-design/x-markdown` rendering with allowlisted code highlighting), `ReasoningBlock` (X's `Think`), `TargetPicker` (key and call point as one joined control), `CopyButton` and `useXLocale` |
-| `components/`, `pages/` | Feature UI; one page per route, no page owns another. A page composes its surface rather than carrying it: `pages/UsageEventsPage.tsx` renders `components/usage/`'s toolbar, header and rows and takes its state from that directory's hooks, `pages/ProvidersPage.tsx` renders `components/providers/`'s table and editor, and `pages/ConfigPage.tsx` renders `components/config/`'s renderers. The framework-free policies of a surface stay beside it: `components/usage/` carries `searchDebounce.ts`, `pollingPolicy.ts`, `timeRangePolicy.ts`, `syncPresentation.ts` and `chipDisplay.ts`, and `components/config/` carries `payloadRules.ts` and `configDirty.ts` |
+| `components/`, `pages/` | Feature UI; one page per route, no page owns another. A page composes its surface rather than carrying it: `pages/UsageEventsPage.tsx` renders `components/usage/`'s toolbar, header and rows and takes its state from that directory's hooks, `pages/ProvidersPage.tsx` renders `components/providers/`'s table and editor, and `pages/ConfigPage.tsx` renders `components/config/`'s renderers. The framework-free policies of a surface stay beside it: `components/usage/` carries `searchDebounce.ts`, `pollingPolicy.ts`, `timeRangePolicy.ts`, `syncPresentation.ts` and `chipDisplay.ts`, and `components/config/` carries `payloadRules.ts`, `configDirty.ts` and `configLayout.ts` |
 
 Every copy control goes through `utils/clipboard.ts` rather than calling the
 Clipboard API itself. That API exists only in a secure context, and a plain-HTTP
@@ -650,8 +676,9 @@ deadline.
 `internal/usage/ingest.Runner` picks its transport in `auto` mode by probing
 `AUTH` only — never by popping, because a probe that consumed a record would
 destroy it. Subscription is preferred; repeated `SUBSCRIBE` failures degrade to
-RESP `LPOP`, and an unreachable RESP endpoint degrades to HTTP
-`/v0/management/usage-queue`. Empty pulls back off through `pullPacer` (1s → 2s →
+RESP `LPOP`, and an unreachable RESP endpoint degrades to the HTTP usage queue
+(`/v0/management/usage-queue`, or `/v8/management/observability/usage/queue` on a
+v8 gateway). Empty pulls back off through `pullPacer` (1s → 2s →
 4s → 8s → 10s, then capped) while a full batch drains with no delay. A wrong
 management key triggers a long cooldown instead of retrying, because CPA bans a
 client IP after repeated failures.
@@ -1883,3 +1910,4 @@ model reads are generated through the real facade; inference is explicitly refus
 - Visual system: `docs/design.md`
 - Backup, restore, and migration gates: `docs/ops/sqlite-operations.md`
 - Feature parity status against CPAMC: `docs/cpamc-parity.md`
+- CPA v7/v8 compatibility, relocation table and measurements: `docs/cpa-v8-compat.md`

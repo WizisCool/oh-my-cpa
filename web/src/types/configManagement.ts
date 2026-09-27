@@ -14,11 +14,28 @@ export interface ConfigScalars {
   usage_statistics_enabled: boolean;
 }
 
+/** One CPA v8 relocation: a legacy dotted path and its v8 dotted path. */
+export interface ConfigLayoutRule {
+  legacy: string;
+  current: string;
+  /** 'sequence' when the legacy spelling only counts as a list (root api-keys). */
+  legacy_kind?: string;
+}
+
+export interface ConfigLayoutInfo {
+  /** The gateway's Management API: 'v8' also serves v0; 'unknown' when the probe got no answer. */
+  management_api: 'v8' | 'v0' | 'unknown';
+  layout: 'legacy' | 'v8' | 'mixed';
+  has_provider_groups: boolean;
+  rules: ConfigLayoutRule[];
+}
+
 export interface ConfigScalarsResponse {
   scalars: ConfigScalars;
   supported_keys: string[];
   revision: string;
   safe_yaml?: string;
+  layout?: ConfigLayoutInfo;
 }
 
 export interface ConfigSourceResponse {

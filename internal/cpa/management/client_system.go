@@ -30,7 +30,7 @@ type ApiCallResponse struct {
 	Body       json.RawMessage     `json:"body"`
 }
 
-// ApiCall forwards an authenticated HTTP probe to CPA's /api-call endpoint.
+// ApiCall forwards an authenticated HTTP probe through CPA's api-call operation.
 func (c *Client) ApiCall(ctx context.Context, req ApiCallRequest) (ApiCallResponse, error) {
 	if c == nil {
 		return ApiCallResponse{}, errors.New("CPA client is not initialized")
@@ -59,7 +59,7 @@ func (c *Client) ApiCall(ctx context.Context, req ApiCallRequest) (ApiCallRespon
 	}
 
 	var resp ApiCallResponse
-	if err := c.doJSONBody(ctx, http.MethodPost, "/api-call", payload, &resp); err != nil {
+	if err := c.doOperationJSON(ctx, OperationAPICall, http.MethodPost, payload, &resp); err != nil {
 		return ApiCallResponse{}, err
 	}
 	return resp, nil
@@ -89,7 +89,7 @@ func (c *Client) LatestVersion(ctx context.Context) (string, ResponseMeta, error
 	var response struct {
 		Version string `json:"latest-version"`
 	}
-	meta, err := c.DoJSONWithMeta(ctx, http.MethodGet, "/latest-version", &response)
+	meta, err := c.doOperation(ctx, operationCall{operation: OperationLatestVersion, method: http.MethodGet}, &response)
 	return strings.TrimSpace(response.Version), meta, err
 }
 
@@ -106,6 +106,11 @@ type ProbeResult struct {
 // to check if upstream supports it, measuring latency and status code without
 // buffering large payloads.
 func (c *Client) ProbeEndpoint(ctx context.Context, endpoint string) ProbeResult {
+	return c.ProbeEndpointAt(ctx, APIGenerationV0, endpoint)
+}
+
+// ProbeEndpointAt is ProbeEndpoint under a chosen API generation.
+func (c *Client) ProbeEndpointAt(ctx context.Context, generation APIGeneration, endpoint string) ProbeResult {
 	start := time.Now()
 	if c == nil {
 		return ProbeResult{
@@ -115,7 +120,7 @@ func (c *Client) ProbeEndpoint(ctx context.Context, endpoint string) ProbeResult
 			LatencyMs: 0,
 		}
 	}
-	req, err := c.newRequest(ctx, http.MethodGet, endpoint, nil, "")
+	req, err := c.newRequestAt(ctx, http.MethodGet, generation, endpoint, nil, "")
 	if err != nil {
 		return ProbeResult{
 			Endpoint:  endpoint,

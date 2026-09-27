@@ -258,6 +258,9 @@ export function renderGroupPanel(view: ConfigSectionContext, grp: ConfigGroupDef
     getFieldValue,
     validateTrigger,
     setPayloadIssues,
+    resolvedFields,
+    payloadPlacement,
+    payloadPaths,
     configuredKeyCount,
     navigate,
     t,
@@ -317,10 +320,11 @@ export function renderGroupPanel(view: ConfigSectionContext, grp: ConfigGroupDef
           <div className="settings-group-body">
             <PayloadRulesEditor
               doc={docRef.current}
+              placement={payloadPlacement}
               onDocChange={() => {
                 if (docRef.current) {
                   // Check semantic equality with serverDocRef before setting rawYaml
-                  if (serverDocRef.current && isConfigSemanticallyEqual(docRef.current, serverDocRef.current, ALL_CONFIG_FIELDS)) {
+                  if (serverDocRef.current && isConfigSemanticallyEqual(docRef.current, serverDocRef.current, resolvedFields, payloadPaths)) {
                     setRawYaml(serverYaml);
                     docRef.current = parseDocument(serverYaml);
                   } else {

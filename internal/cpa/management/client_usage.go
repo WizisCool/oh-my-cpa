@@ -26,7 +26,7 @@ type RecentRequest struct {
 
 func (c *Client) APIKeyUsage(ctx context.Context) (APIKeyUsageResponse, ResponseMeta, error) {
 	var response APIKeyUsageResponse
-	meta, err := c.DoJSONWithMeta(ctx, http.MethodGet, "/api-key-usage", &response)
+	meta, err := c.doOperation(ctx, operationCall{operation: OperationAPIKeyUsage, method: http.MethodGet}, &response)
 	if err != nil {
 		return nil, meta, err
 	}
@@ -44,9 +44,8 @@ func (c *Client) UsageQueue(ctx context.Context, count int) ([]json.RawMessage, 
 	if count <= 0 {
 		count = 1
 	}
-	endpoint := fmt.Sprintf("/usage-queue?count=%d", count)
 	var response []json.RawMessage
-	meta, err := c.DoJSONWithMeta(ctx, http.MethodGet, endpoint, &response)
+	meta, err := c.doOperation(ctx, operationCall{operation: OperationUsageQueue, method: http.MethodGet, suffix: fmt.Sprintf("?count=%d", count)}, &response)
 	if err != nil {
 		return nil, meta, err
 	}

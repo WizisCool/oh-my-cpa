@@ -23,6 +23,11 @@ type logsFixtureCPA struct {
 }
 
 func (f *logsFixtureCPA) serve(writer http.ResponseWriter, request *http.Request) {
+	// A v7 gateway: the v8 capability probe finds no route and is not a log read.
+	if strings.HasPrefix(request.URL.Path, "/v8/") {
+		http.NotFound(writer, request)
+		return
+	}
 	path := strings.TrimPrefix(request.URL.Path, "/v0/management")
 	f.mu.Lock()
 	f.queries = append(f.queries, path+"?"+request.URL.RawQuery)

@@ -400,9 +400,30 @@ export function serializeFilterRules(rules: PayloadFilterRule[]): Record<string,
 }
 
 // ── Synchronize with Document AST ───────────────────────────────────────────
-export function readPayloadCategory(doc: Document | null, category: PayloadCategoryKey): unknown {
+
+/**
+ * Where the payload section lives. A v8 document keeps it under
+ * `requests.payload`; `legacyPath` is then the v7 spelling, read while a category
+ * has no v8 value (CPA honours it until then) and removed when that category is
+ * written. See configLayout.
+ */
+export interface PayloadPlacement {
+  path: string[];
+  legacyPath?: string[];
+}
+
+export const LEGACY_PAYLOAD_PLACEMENT: PayloadPlacement = { path: ['payload'] };
+
+export function readPayloadCategory(
+  doc: Document | null,
+  category: PayloadCategoryKey,
+  placement: PayloadPlacement = LEGACY_PAYLOAD_PLACEMENT
+): unknown {
   if (!doc) return undefined;
-  const payloadNode = doc.getIn(['payload', category]);
+  let payloadNode = doc.getIn([...placement.path, category]);
+  if ((payloadNode === undefined || payloadNode === null) && placement.legacyPath) {
+    payloadNode = doc.getIn([...placement.legacyPath, category]);
+  }
   if (payloadNode && typeof (payloadNode as { toJSON?: () => unknown }).toJSON === 'function') {
     return (payloadNode as { toJSON: () => unknown }).toJSON();
   }
@@ -412,33 +433,51 @@ export function readPayloadCategory(doc: Document | null, category: PayloadCateg
 export function writePayloadCategory(
   doc: Document,
   category: PayloadCategoryKey,
-  serializedValue: unknown[]
+  serializedValue: unknown[],
+  placement: PayloadPlacement = LEGACY_PAYLOAD_PLACEMENT
 ): void {
-  // Every write below goes through `setIn`/`deleteIn`, and both throw when an
-  // intermediate node is not a collection. A fresh CPA config has no `payload` key at
-  // all, and `payload:` left empty is just as common, so the map has to be made
-  // writable first. A throw here leaves the React event handler before it reaches the
-  // change callback: the document is never updated, nothing reads as dirty, the save
-  // bar never appears, and payload rules cannot be saved at all.
+  // deleteIn throws when a map on the way is missing, so each side is only
+  // touched while its section is a map.
+  if (placement.legacyPath && isMap(doc.getIn(placement.legacyPath, true))) {
+    doc.deleteIn([...placement.legacyPath, category]);
+    pruneEmptyMaps(doc, placement.legacyPath);
+  }
+  if (serializedValue.length === 0) {
+    if (isMap(doc.getIn(placement.path, true))) {
+      doc.deleteIn([...placement.path, category]);
+    }
+    // The maps go too once their last entry is gone, so a document the operator
+    // never configured is not written back with an empty `payload: {}`.
+    pruneEmptyMaps(doc, placement.path);
+    return;
+  }
+  // Every write below goes through `setIn`, and it throws when an intermediate
+  // node is not a collection. A fresh CPA config has no payload key at all, and
+  // `payload:` left empty is just as common, so each level has to be made
+  // writable first. A throw here leaves the React event handler before it reaches
+  // the change callback: the document is never updated, nothing reads as dirty,
+  // the save bar never appears, and payload rules cannot be saved at all.
   //
   // Made with `createNode`, not `doc.set('payload', {})`. That renders as
-  // `payload: {}` and reads back as an empty object, so it looks right, but it stores
-  // a plain object rather than a YAMLMap - and the next write through it throws.
-  if (!isMap(doc.get('payload', true))) {
-    if (serializedValue.length === 0) return;
-    doc.set('payload', doc.createNode({}));
-  }
-
-  if (serializedValue.length === 0) {
-    doc.deleteIn(['payload', category]);
-    const payloadNode = doc.get('payload', true);
-    // The map goes too once its last category is gone, so a document the operator
-    // never configured is not written back with an empty `payload: {}`.
-    if (isMap(payloadNode) && payloadNode.items.length === 0) {
-      doc.delete('payload');
+  // `payload: {}` and reads back as an empty object, so it looks right, but it
+  // stores a plain object rather than a YAMLMap - and the next write through it
+  // throws.
+  for (let depth = 1; depth <= placement.path.length; depth += 1) {
+    const levelPath = placement.path.slice(0, depth);
+    if (!isMap(doc.getIn(levelPath, true))) {
+      doc.setIn(levelPath, doc.createNode({}));
     }
-  } else {
-    doc.setIn(['payload', category], serializedValue);
+  }
+  doc.setIn([...placement.path, category], serializedValue);
+}
+
+/** Deletes the maps along a path that no longer hold anything, deepest first. */
+function pruneEmptyMaps(doc: Document, path: string[]): void {
+  for (let depth = path.length; depth > 0; depth -= 1) {
+    const levelPath = path.slice(0, depth);
+    const node = doc.getIn(levelPath, true);
+    if (!isMap(node) || node.items.length > 0) return;
+    doc.deleteIn(levelPath);
   }
 }
 

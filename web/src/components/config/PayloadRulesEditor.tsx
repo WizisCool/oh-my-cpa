@@ -8,6 +8,7 @@ import {
   generateDynamicId,
   type PayloadKVCondition,
   type PayloadModelItem,
+  type PayloadPlacement,
   type PayloadValidationIssue,
 } from './payloadRules';
 import {
@@ -23,6 +24,8 @@ export type { PayloadValidationIssue };
 
 export interface PayloadRulesEditorProps {
   doc: Document | null;
+  /** Where the payload section lives in this document; the legacy spelling by default. */
+  placement?: PayloadPlacement;
   onDocChange: () => void;
   onValidationChange?: (issues: PayloadValidationIssue[]) => void;
   validateTrigger?: number;
@@ -30,13 +33,14 @@ export interface PayloadRulesEditorProps {
 
 export const PayloadRulesEditor: React.FC<PayloadRulesEditorProps> = ({
   doc,
+  placement,
   onDocChange,
   onValidationChange,
   validateTrigger,
 }) => {
   // The draft is where every panel's state and every mutation lives; the panels
   // themselves are rendered by `payloadRuleSections`, each given this draft.
-  const draft = usePayloadRulesDraft({ doc, onDocChange, onValidationChange, validateTrigger });
+  const draft = usePayloadRulesDraft({ doc, placement, onDocChange, onValidationChange, validateTrigger });
   const {
     activePanels,
     setActivePanels,

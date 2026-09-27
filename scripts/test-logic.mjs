@@ -31,6 +31,8 @@ const SUITES = [
   { name: 'payload rules', script: 'scripts/test-payload-rules.ts', flags: ['--experimental-strip-types'] },
   { name: 'config dirty', script: 'scripts/test-dirty.ts', flags: ['--experimental-strip-types'] },
   { name: 'config states', script: 'scripts/test-config-states.ts', flags: ['--experimental-strip-types'] },
+  { name: 'config layout', script: 'scripts/test-config-layout.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
+  { name: 'log lines', script: 'scripts/test-log-lines.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'auth file logic', script: 'scripts/test-auth-file-logic.ts', flags: ['--experimental-strip-types'] },
   { name: 'usage event view', script: 'scripts/test-usage-event-view.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'usage events view policy', script: 'scripts/test-usage-events-view-policy.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },

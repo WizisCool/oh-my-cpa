@@ -99,7 +99,7 @@ OMCPA_DEMO_MODE=true go run ./cmd/oh-my-cpa
 
 ### 前置条件
 
-- 已启动的 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 实例及其明文管理密钥（`remote-management.secret-key`）
+- 已启动的 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 实例及其明文管理密钥（`remote-management.secret-key`；CPA v8 布局的配置文件中为 `management.secret-key`）
 - Go 1.24+（构建工具链锁定 `1.24.13`）
 - Node.js 22+ & pnpm 11+
 
@@ -157,7 +157,7 @@ API 的数据由真实 Go handler 生成，而非手工编写，因此所提供�
 > - [`deploy/compose.full.yml`](deploy/compose.full.yml)：协同部署 CPA、Oh My CPA 与 Caddy 的完整栈。
 > - [`deploy/compose.omc.yml`](deploy/compose.omc.yml)：连接已有 CPA 实例的独立 Oh My CPA 容器。
 >
-> 完整栈默认固定 CPA `v7.3.5`；如需连接其他兼容版本，可通过 `CPA_IMAGE` 覆盖。其 Caddy 会把控制台路由到 `OMCPA_BASE_PATH`（默认 `/omc`），其余请求交给 CPA；该变量可写成服务器接受的任一形式（`omc`、`/omc/`、`/omc`），而设为 `/` 会让控制台占用整个主机，此时 CPA 不再通过该反向代理可达。
+> 完整栈默认固定 CPA `v8.0.2`；如需连接其他兼容版本，可通过 `CPA_IMAGE` 覆盖。同一构建同时支持 CPA v7 与 v8 网关，并按 `config.yaml` 当前的布局编辑它，因此不会触发 CPA v8 的整文件迁移（见 `docs/cpa-v8-compat.md`）。其 Caddy 会把控制台路由到 `OMCPA_BASE_PATH`（默认 `/omc`），其余请求交给 CPA；该变量可写成服务器接受的任一形式（`omc`、`/omc/`、`/omc`），而设为 `/` 会让控制台占用整个主机，此时 CPA 不再通过该反向代理可达。
 
 ## 运维须知
 
@@ -222,6 +222,7 @@ CPA_BASE_URL 与 CPA_API_KEY 占位符，图片内容需要替换为本地图片
 - [`docs/ops/sqlite-operations.md`](docs/ops/sqlite-operations.md) — SQLite 运维、备份演练与恢复手册
 - [`docs/ops/cloudflare-demo.md`](docs/ops/cloudflare-demo.md) — 在线 Demo 的部署手册与人工步骤
 - [`docs/cpamc-parity.md`](docs/cpamc-parity.md) — 与官方 CPAMC 的功能对位矩阵
+- [`docs/cpa-v8-compat.md`](docs/cpa-v8-compat.md) — CPA v7/v8 兼容：配置字段迁移对照表、探测机制与实测记录
 - [`AGENTS.md`](AGENTS.md) — 开发者与 AI Agent 协作契约与文档同步规范
 
 ## 开源协议

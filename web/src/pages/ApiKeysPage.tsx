@@ -26,13 +26,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseDocument } from 'yaml';
 import type { Document } from 'yaml';
 import dayjs from 'dayjs';
-import { api, ApiError } from '../api/client';
+import { api, ApiError, apiErrorCode } from '../api/client';
 import { useT } from '../i18n';
 import { isDemoMode } from '../types/demoMode';
 import { useOverlayHistory } from '../hooks/useOverlayHistory';
 import { copyText } from '../utils/clipboard';
 import { ApiKeysList, type ApiKeyRecord } from '../components/keys/ApiKeysList';
 import { updateFieldWithBaseline, isConfigSemanticallyEqual, getFieldSemanticValue } from '../components/config/configDirty';
+import { describeLayoutRefusal, payloadComparisonPaths, resolveConfigFields, resolvePayloadPlacement } from '../components/config/configLayout';
 import { ALL_CONFIG_FIELDS } from '../types/configSchema';
 import type { ConfigScalarsResponse } from '../types/configManagement';
 import type { ClientKeyUsageItem } from '../types/providers';
@@ -102,9 +103,14 @@ export const ApiKeysPage: React.FC = () => {
   const serverYamlRef = React.useRef('');
   const saveInFlightRef = React.useRef(false);
 
+  // Client keys live at access.api-keys in a v8 document, where the root api-keys
+  // key holds the upstream provider groups instead; configLayout places the field.
+  const layout = configQuery.data?.layout;
+  const resolvedFields = React.useMemo(() => resolveConfigFields(ALL_CONFIG_FIELDS, layout), [layout]);
+  const payloadPaths = React.useMemo(() => payloadComparisonPaths(resolvePayloadPlacement(layout)), [layout]);
   const apiKeysField = React.useMemo(
-    () => ALL_CONFIG_FIELDS.find((field) => field.id === 'apiKeys'),
-    [],
+    () => resolvedFields.find((field) => field.id === 'apiKeys'),
+    [resolvedFields],
   );
 
   React.useEffect(() => {
@@ -191,7 +197,9 @@ export const ApiKeysPage: React.FC = () => {
         setConflictRevision(String((err.data as Record<string, unknown>)?.current_revision || ''));
         return;
       }
-      const msg = err instanceof ApiError ? err.message : String(err);
+      const msg =
+        describeLayoutRefusal(apiErrorCode(err), err instanceof ApiError ? err.data : null, t) ??
+        (err instanceof ApiError ? err.message : String(err));
       setSaveError(msg);
       message.error(msg);
     },
@@ -237,7 +245,7 @@ export const ApiKeysPage: React.FC = () => {
       updateFieldWithBaseline(currentDoc, serverDocRef.current, apiKeysField, next);
       if (
         serverDocRef.current &&
-        isConfigSemanticallyEqual(currentDoc, serverDocRef.current, ALL_CONFIG_FIELDS)
+        isConfigSemanticallyEqual(currentDoc, serverDocRef.current, resolvedFields, payloadPaths)
       ) {
         setRawYaml(serverYaml);
         docRef.current = parseDocument(serverYaml);
@@ -245,7 +253,7 @@ export const ApiKeysPage: React.FC = () => {
       }
       setRawYaml(currentDoc.toString());
     },
-    [apiKeysField, rawYaml, serverYaml, message, t],
+    [apiKeysField, rawYaml, serverYaml, message, t, resolvedFields, payloadPaths],
   );
 
   const closeEditor = React.useCallback(() => {

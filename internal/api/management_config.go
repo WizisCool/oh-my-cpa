@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -51,7 +52,59 @@ func (h *Handler) managementConfigGet(writer http.ResponseWriter, request *http.
 		"supported_keys": management.KnownScalarKeys(),
 		"revision":       rev,
 		"safe_yaml":      safeYAML,
+		"layout":         buildConfigLayoutDTO(request.Context(), client, rawYAML),
 	})
+}
+
+// configLayoutDTO tells the editor where each setting lives in this document.
+//
+// Placement follows the document, not the gateway: a legacy file keeps its
+// spelling on either generation (CPA v8 reads it unchanged), while a v8 or mixed
+// file is only meaningful to a v8 gateway and must be edited at v8 locations. The
+// management API generation is reported alongside as the capability bit; it
+// decides whether the save guard applies. Rules are the same table the guard
+// checks, so the browser never carries a second copy of it.
+type configLayoutDTO struct {
+	ManagementAPI     string                  `json:"management_api"`
+	Layout            configyaml.ConfigLayout `json:"layout"`
+	HasProviderGroups bool                    `json:"has_provider_groups"`
+	Rules             []configyaml.LayoutRule `json:"rules"`
+}
+
+func buildConfigLayoutDTO(ctx context.Context, client *management.Client, rawYAML string) configLayoutDTO {
+	dto := configLayoutDTO{ManagementAPI: managementAPIUnknown, Layout: configyaml.LayoutLegacy, Rules: configyaml.LayoutRules()}
+	if hasV8, err := client.SupportsManagementV8(ctx); err == nil {
+		dto.ManagementAPI = string(management.APIGenerationV0)
+		if hasV8 {
+			dto.ManagementAPI = string(management.APIGenerationV8)
+		}
+	}
+	if report, err := configyaml.DetectLayout(rawYAML); err == nil {
+		dto.Layout = report.Layout
+		dto.HasProviderGroups = report.HasProviderGroups
+	}
+	return dto
+}
+
+// managementAPIUnknown reports a probe that got no definite answer.
+const managementAPIUnknown = "unknown"
+
+// checkConfigLayout refuses a document CPA v8 would accept and then partly
+// ignore. It applies unless the gateway is known to lack the v8 API: a v7
+// gateway reads only legacy spellings, so nothing there is shadowed, while an
+// undecided probe is treated as v8 because the cost of a false refusal is a
+// message and the cost of a missed one is a silently lost setting.
+func checkConfigLayout(ctx context.Context, client *management.Client, storedYAML, submittedYAML string) (code string, shadowed []configyaml.LayoutRule) {
+	if hasV8, err := client.SupportsManagementV8(ctx); err == nil && !hasV8 {
+		return "", []configyaml.LayoutRule{}
+	}
+	if replaced, err := configyaml.ReplacesProviderGroups(storedYAML, submittedYAML); err == nil && replaced {
+		return "config_provider_groups_replaced", []configyaml.LayoutRule{}
+	}
+	if shadowed, err := configyaml.ShadowedLegacyPaths(submittedYAML); err == nil && len(shadowed) > 0 {
+		return "config_legacy_keys_shadowed", shadowed
+	}
+	return "", []configyaml.LayoutRule{}
 }
 
 func (h *Handler) managementConfigPutScalar(writer http.ResponseWriter, request *http.Request) {
@@ -230,6 +283,15 @@ func (h *Handler) managementConfigSourcePut(writer http.ResponseWriter, request 
 	finalYAML, err := configyaml.RestoreSentinels(req.YAML, currentYAML)
 	if err != nil {
 		writeError(writer, http.StatusBadRequest, "failed to process configuration sentinels: "+err.Error())
+		return
+	}
+
+	if code, shadowed := checkConfigLayout(request.Context(), client, currentYAML, finalYAML); code != "" {
+		writeJSON(writer, http.StatusUnprocessableEntity, map[string]any{
+			"error":    "CPA v8 would ignore part of this configuration",
+			"code":     code,
+			"shadowed": shadowed,
+		})
 		return
 	}
 

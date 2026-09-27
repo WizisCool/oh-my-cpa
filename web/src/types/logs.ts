@@ -29,8 +29,11 @@ export const LOG_LEVELS: readonly LogLevel[] = ['trace', 'debug', 'info', 'warn'
  */
 export const MAX_LOG_BUFFER_LINES = 10000;
 
-/** MANAGEMENT_PATH_FRAGMENT marks the lines this console itself produces. */
-export const MANAGEMENT_PATH_FRAGMENT = '/v0/management';
+/**
+ * MANAGEMENT_PATH_FRAGMENTS mark the lines this console itself produces. A CPA v8
+ * gateway serves this console's reads on /v8/management, so both trees count.
+ */
+export const MANAGEMENT_PATH_FRAGMENTS = ['/v0/management', '/v8/management'];
 
 const LINE_PREFIX =
   /^\[(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?)\]\s+\[([^\]]*)\]\s+\[([a-zA-Z]+)\s*\]\s*(?:\[([^\]]*)\]\s*)?(.*)$/;
@@ -117,7 +120,7 @@ function inferLevelWord(line: string): string | undefined {
 }
 
 export function isManagementLine(line: string): boolean {
-  return line.includes(MANAGEMENT_PATH_FRAGMENT);
+  return MANAGEMENT_PATH_FRAGMENTS.some((fragment) => line.includes(fragment));
 }
 
 /**

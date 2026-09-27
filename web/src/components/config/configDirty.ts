@@ -1,4 +1,4 @@
-import type { Document } from 'yaml';
+import { isSeq, type Document } from 'yaml';
 import type { ConfigFieldDefinition } from '../../types/configSchema';
 
 /**
@@ -14,7 +14,12 @@ export function getFieldSemanticValue(
   field: ConfigFieldDefinition
 ): unknown {
   if (!doc) return field.defaultValue;
-  const node = doc.getIn(field.yamlPath);
+  let node = doc.getIn(field.yamlPath);
+  if ((node === undefined || node === null) && field.legacyYamlPath) {
+    // CPA v8 honours a legacy spelling while its v8 location is empty, so that
+    // is the value the gateway is running with.
+    node = readLegacyNode(doc, field);
+  }
   if (node === undefined || node === null) {
     return field.defaultValue;
   }
@@ -78,40 +83,12 @@ export function updateFieldWithBaseline(
     ? getFieldSemanticValue(serverDoc, field)
     : field.defaultValue;
 
-  const serverOriginallyHadField = serverDoc
-    ? serverDoc.hasIn(field.yamlPath)
-    : false;
-
-  const isMatchingServer = areValuesSemanticallyEqual(newValue, serverBaselineValue);
-
-  if (isMatchingServer) {
-    if (serverOriginallyHadField && serverDoc) {
-      const originalNode = serverDoc.getIn(field.yamlPath, true);
-      if (originalNode !== undefined) {
-        currentDoc.setIn(field.yamlPath, originalNode);
-        return;
-      }
-    } else {
-      currentDoc.deleteIn(field.yamlPath);
-
-      if (field.yamlPath.length > 1) {
-        const parentPath = field.yamlPath.slice(0, -1);
-        const parentOriginallyExisted = serverDoc ? serverDoc.hasIn(parentPath) : false;
-        if (!parentOriginallyExisted) {
-          const parentNode = currentDoc.getIn(parentPath);
-          if (
-            typeof parentNode === 'object' &&
-            parentNode !== null &&
-            'items' in parentNode &&
-            Array.isArray((parentNode as { items: unknown[] }).items) &&
-            (parentNode as { items: unknown[] }).items.length === 0
-          ) {
-            currentDoc.deleteIn(parentPath);
-          }
-        }
-      }
-      return;
+  if (areValuesSemanticallyEqual(newValue, serverBaselineValue)) {
+    restorePathFromServer(currentDoc, serverDoc, field.yamlPath);
+    if (field.legacyYamlPath) {
+      restorePathFromServer(currentDoc, serverDoc, field.legacyYamlPath);
     }
+    return;
   }
 
   // A cleared value still has to be representable in YAML: an empty string would
@@ -124,10 +101,69 @@ export function updateFieldWithBaseline(
       currentDoc.setIn(field.yamlPath, field.defaultValue ?? 0);
     } else {
       currentDoc.deleteIn(field.yamlPath);
+      pruneEmptyAncestors(currentDoc, serverDoc, field.yamlPath);
     }
   } else {
     currentDoc.setIn(field.yamlPath, newValue);
   }
+  // The legacy spelling goes with every write to the v8 location. Left behind,
+  // CPA v8 would ignore it and delete it on its next save anyway; removing it
+  // here keeps the document saying one thing.
+  if (field.legacyYamlPath && readLegacyNode(currentDoc, field) !== undefined) {
+    currentDoc.deleteIn(field.legacyYamlPath);
+    pruneEmptyAncestors(currentDoc, serverDoc, field.legacyYamlPath);
+  }
+}
+
+/**
+ * Puts one path back the way the server has it: the server's own node when it had
+ * one, so scalar style and comments survive, otherwise nothing at all.
+ */
+function restorePathFromServer(currentDoc: Document, serverDoc: Document | null, path: string[]): void {
+  if (serverDoc?.hasIn(path)) {
+    const originalNode = serverDoc.getIn(path, true);
+    if (originalNode !== undefined) {
+      currentDoc.setIn(path, originalNode);
+      return;
+    }
+  }
+  if (currentDoc.hasIn(path)) {
+    currentDoc.deleteIn(path);
+  }
+  pruneEmptyAncestors(currentDoc, serverDoc, path);
+}
+
+/**
+ * Removes the maps a deletion emptied, nearest first, as long as the server did
+ * not have them: a v8 location is up to three maps deep, and the editor must not
+ * leave `observability: {logs: {}}` in a document the operator never configured.
+ */
+function pruneEmptyAncestors(currentDoc: Document, serverDoc: Document | null, path: string[]): void {
+  for (let depth = path.length - 1; depth > 0; depth -= 1) {
+    const parentPath = path.slice(0, depth);
+    if (serverDoc ? serverDoc.hasIn(parentPath) : false) return;
+    const parentNode = currentDoc.getIn(parentPath);
+    if (
+      typeof parentNode === 'object' &&
+      parentNode !== null &&
+      'items' in parentNode &&
+      Array.isArray((parentNode as { items: unknown[] }).items) &&
+      (parentNode as { items: unknown[] }).items.length === 0
+    ) {
+      currentDoc.deleteIn(parentPath);
+    } else {
+      return;
+    }
+  }
+}
+
+/** Reads the legacy spelling, applying its shape condition (a list for api-keys). */
+function readLegacyNode(doc: Document, field: ConfigFieldDefinition): unknown {
+  if (!field.legacyYamlPath) return undefined;
+  const node = doc.getIn(field.legacyYamlPath);
+  // A parsed list is a YAMLSeq; one written by setIn in this session is a plain array.
+  if (field.legacyKind === 'sequence' && !isSeq(node) && !Array.isArray(node)) return undefined;
+  return node ?? undefined;
 }
 
 /**
@@ -140,7 +176,8 @@ export function updateFieldWithBaseline(
 export function isConfigSemanticallyEqual(
   currentDoc: Document | null,
   serverDoc: Document | null,
-  fields: ConfigFieldDefinition[]
+  fields: ConfigFieldDefinition[],
+  payloadPaths: string[][] = [['payload']]
 ): boolean {
   if (!currentDoc || !serverDoc) return false;
 
@@ -152,18 +189,18 @@ export function isConfigSemanticallyEqual(
     }
   }
 
-  const currentPayload = currentDoc.get('payload');
-  const serverPayload = serverDoc.get('payload');
-  const currentPayloadJson = currentPayload && typeof (currentPayload as { toJSON?: () => unknown }).toJSON === 'function'
-    ? (currentPayload as { toJSON: () => unknown }).toJSON()
-    : currentPayload;
-  const serverPayloadJson = serverPayload && typeof (serverPayload as { toJSON?: () => unknown }).toJSON === 'function'
-    ? (serverPayload as { toJSON: () => unknown }).toJSON()
-    : serverPayload;
-
-  if (JSON.stringify(currentPayloadJson ?? null) !== JSON.stringify(serverPayloadJson ?? null)) {
-    return false;
+  for (const payloadPath of payloadPaths) {
+    if (JSON.stringify(toPlain(currentDoc.getIn(payloadPath))) !== JSON.stringify(toPlain(serverDoc.getIn(payloadPath)))) {
+      return false;
+    }
   }
 
   return true;
+}
+
+function toPlain(node: unknown): unknown {
+  if (node && typeof (node as { toJSON?: () => unknown }).toJSON === 'function') {
+    return (node as { toJSON: () => unknown }).toJSON();
+  }
+  return node ?? null;
 }

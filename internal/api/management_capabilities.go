@@ -7,11 +7,14 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
 
 type capabilityEndpointCheck struct {
 	Name     string
 	Endpoint string
+	// Generation is the API base the endpoint is probed under; empty means v0.
+	Generation management.APIGeneration
 }
 
 // capabilityCheckCatalog maps known UI capability keys to their safe, read-only
@@ -46,6 +49,12 @@ var capabilityCheckCatalog = map[string][]capabilityEndpointCheck{
 	},
 	"plugin-store": {
 		{Name: "plugin_store", Endpoint: "/plugin-store"},
+	},
+	// The grouped /v8/management tree (CPA v8.0.0+). Its absence is not a fault:
+	// every operation OMC routes to v8 falls back to /v0/management, which all
+	// releases serve.
+	"management-v8": {
+		{Name: "config_v8", Endpoint: management.MANAGEMENT_V8_PROBE_ENDPOINT, Generation: management.APIGenerationV8},
 	},
 	"system": {
 		{Name: "latest_version", Endpoint: "/latest-version"},
@@ -95,10 +104,14 @@ func (h *Handler) managementCapabilityProbe(writer http.ResponseWriter, request 
 		wg.Add(1)
 		go func(idx int, check capabilityEndpointCheck) {
 			defer wg.Done()
-			probe := client.ProbeEndpoint(ctx, check.Endpoint)
+			generation := check.Generation
+			if generation == "" {
+				generation = management.APIGenerationV0
+			}
+			probe := client.ProbeEndpointAt(ctx, generation, check.Endpoint)
 			results[idx] = CapabilityCheckItem{
 				Name:       check.Name,
-				Endpoint:   "/v0/management" + check.Endpoint,
+				Endpoint:   "/" + string(generation) + "/management" + check.Endpoint,
 				Status:     probe.Status,
 				HTTPStatus: probe.StatusCode,
 				LatencyMs:  probe.LatencyMs,
