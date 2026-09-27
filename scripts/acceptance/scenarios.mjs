@@ -43,6 +43,7 @@ import {
   dashboardTokenHeatmapPruned,
 } from './probes/dashboardTokenHeatmap.mjs';
 import { omcSettings } from './probes/omcSettings.mjs';
+import { logsFixtures, logsSources, logsSourcesNarrow } from './probes/logsPage.mjs';
 import {
   providerRateMarks,
   providerRateOverview,
@@ -77,6 +78,9 @@ import {
  * serves the release gate (which runs all of them) and the development fast path
  * (which runs the relevant subset) without either owning the other's reporting.
  */
+/** The audit queries the logs scenario's page sent, read back by the scenario's own checks. */
+const logsAuditRequests = [];
+
 export const SCENARIOS = [
   { id: 'agent', name: 'Agent data notice, reasoning effort, confirmed tools, remembered target and server conversation recovery', options: { routes: agentFixtures() }, run: agentWorkspace },
   { id: 'agent-live', name: 'Agent shows a sent message at once and keeps its reasoning', options: { routes: agentFixtures() }, run: agentLive },
@@ -678,6 +682,18 @@ export const SCENARIOS = [
       ],
     },
     run: requestListInteractions,
+  },
+  {
+    id: 'logs-sources',
+    name: 'the logs page keeps the gateway, service and audit sources apart, and reads the audit trail as sentences',
+    options: { routes: logsFixtures(logsAuditRequests) },
+    run: (context) => logsSources({ ...context, auditRequests: logsAuditRequests }),
+  },
+  {
+    id: 'logs-sources-narrow',
+    name: 'the audit trail fits a phone',
+    options: { routes: logsFixtures([]), viewport: { width: 360, height: 800 } },
+    run: logsSourcesNarrow,
   },
   {
     id: 'system-information',

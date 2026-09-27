@@ -130,6 +130,19 @@ import { fileURLToPath } from 'node:url';
  *     next page-sized addition of copy will still have to argue for itself.
  *   - Every other limit is untouched: none of them is near its maximum, and raising one that is
  *     not binding removes a check rather than relaxing it.
+ *
+ * ## The logs-and-audit re-baseline (2026-09-28)
+ *
+ * A clean build measured entry 222.21 kB against the 222 limit; every other budget passed with
+ * its margin intact. The cause is again localized copy in the base dictionary: the Logs page's
+ * service-log and audit-trail keys - 101 of them, one sentence per audited action plus the
+ * categories and result words - serialize to 7448 bytes of source. The same branch removed
+ * about 6.3 kB of copy (retired placeholder pages and echo subtitles), which is why the entry
+ * moved by far less than the keys it gained.
+ *
+ *   - `main entry` 222 -> 232, leaving 9.8 kB (4.4%): the proportion the earlier re-baselines
+ *     left, and still the tightest budget in this file.
+ *   - Every other limit is untouched.
  */
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const distDir = path.join(root, 'web', 'dist');
@@ -172,7 +185,7 @@ const iconBytes = totalDirectorySize(iconDir);
 const totalDistBytes = totalDirectorySize(distDir);
 
 const budgets = [
-  { label: 'main entry', matches: (name) => name === entryFile, maxKB: 222, required: true },
+  { label: 'main entry', matches: (name) => name === entryFile, maxKB: 232, required: true },
   { label: 'Lobe icon JS', pattern: /^LobeIcon-.*\.js$/, maxKB: 96, required: true },
   { label: 'vendor antd', pattern: /^vendor-antd-.*\.js$/, maxKB: 1250, required: true },
   { label: 'vendor charts', pattern: /^vendor-charts-.*\.js$/, maxKB: 1600, required: true },

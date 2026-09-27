@@ -116,3 +116,183 @@ func (r *Repository) ListAuditEvents(ctx context.Context, limit int) ([]AuditEve
 	}
 	return events, nil
 }
+
+// AuditQuery narrows one page of the audit trail.
+type AuditQuery struct {
+	// Limit is the page size; 1..AuditPageMax, defaulting to 50.
+	Limit int
+	// Before is the keyset cursor of the last row already shown; zero starts at
+	// the newest row.
+	Before AuditCursor
+	// Categories keeps actions whose first segment is one of these (`provider`
+	// keeps `provider.update`). Empty keeps every action.
+	Categories []string
+	// Outcome keeps only rows of one result class: AuditOutcomeFailed or
+	// AuditOutcomeSucceeded. Empty keeps every result.
+	Outcome string
+	// Search is a case-insensitive substring of the action, target or request id.
+	Search string
+	// SinceMS keeps rows at or after this instant; zero keeps everything.
+	SinceMS int64
+	// FoldAttempts hides an `attempt` row once the same request has recorded the
+	// action's outcome, so a write reads as one entry. An attempt with no outcome
+	// stays visible: that is an operation the trail never saw finish.
+	FoldAttempts bool
+}
+
+// AuditCursor is the (time, id) position of a row in the trail's newest-first
+// order. The id alone is not enough because a caller may backdate OccurredAtMS.
+type AuditCursor struct {
+	OccurredAtMS int64
+	ID           int64
+}
+
+// AuditPage is one page of the trail, newest first.
+type AuditPage struct {
+	Events []AuditEvent
+	// Next is the cursor for the following page; nil when this page is the last.
+	Next *AuditCursor
+}
+
+const (
+	// auditFoldWindowMS bounds how long after an attempt an outcome may land and
+	// still be read as its outcome when the two rows carry different request ids.
+	auditFoldWindowMS = 60_000
+	// auditStableRequestIDMigration is the schema version that shipped with one
+	// request id per request; its applied_at marks where exact pairing begins.
+	auditStableRequestIDMigration = 27
+
+	// AuditPageMax bounds one page, and therefore one export.
+	AuditPageMax = 5000
+
+	AuditOutcomeFailed    = "failed"
+	AuditOutcomeSucceeded = "succeeded"
+)
+
+// Result classes. Everything not named here (`attempt`, and the Agent's
+// `prepared`/`decision`) is neither and matches no outcome filter.
+var (
+	auditFailedResults    = []string{"failure", "error", "rejected", "denied", "uncertain", "partial"}
+	auditSucceededResults = []string{"success", "checked", "cached", "admitted"}
+)
+
+// QueryAuditEvents returns one filtered page of the trail, newest first.
+func (r *Repository) QueryAuditEvents(ctx context.Context, query AuditQuery) (AuditPage, error) {
+	if r == nil || r.SQL() == nil {
+		return AuditPage{}, errors.New("repository is not initialized")
+	}
+	limit := query.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > AuditPageMax {
+		limit = AuditPageMax
+	}
+
+	where := make([]string, 0, 6)
+	args := make([]any, 0, 16)
+	if query.Before.ID > 0 {
+		where = append(where, "(e.occurred_at_ms < ? OR (e.occurred_at_ms = ? AND e.id < ?))")
+		args = append(args, query.Before.OccurredAtMS, query.Before.OccurredAtMS, query.Before.ID)
+	}
+	if query.SinceMS > 0 {
+		where = append(where, "e.occurred_at_ms >= ?")
+		args = append(args, query.SinceMS)
+	}
+	if len(query.Categories) > 0 {
+		clauses := make([]string, 0, len(query.Categories))
+		for _, category := range query.Categories {
+			// Categories are validated identifiers, but the prefix match still
+			// escapes LIKE's wildcards so `_` in `api_key` matches only itself.
+			clauses = append(clauses, `(e.action = ? OR e.action LIKE ? ESCAPE '\')`)
+			args = append(args, category, escapeLikePattern(category)+".%")
+		}
+		where = append(where, "("+strings.Join(clauses, " OR ")+")")
+	}
+	switch query.Outcome {
+	case AuditOutcomeFailed:
+		where = append(where, "e.result IN ("+placeholders(len(auditFailedResults))+")")
+		args = appendStrings(args, auditFailedResults)
+	case AuditOutcomeSucceeded:
+		where = append(where, "e.result IN ("+placeholders(len(auditSucceededResults))+")")
+		args = appendStrings(args, auditSucceededResults)
+	}
+	if search := strings.TrimSpace(query.Search); search != "" {
+		pattern := "%" + escapeLikePattern(strings.ToLower(search)) + "%"
+		where = append(where, `(lower(e.action) LIKE ? ESCAPE '\' OR lower(e.target_type) LIKE ? ESCAPE '\' OR lower(e.target_id) LIKE ? ESCAPE '\' OR lower(e.request_id) LIKE ? ESCAPE '\')`)
+		args = append(args, pattern, pattern, pattern, pattern)
+	}
+	if query.FoldAttempts {
+		// The request-id pairing is exact. The second arm pairs rows written before
+		// request ids were stable per request: an outcome for the same action and
+		// target that followed within auditFoldWindowMS is the same operation. It is
+		// bounded to rows older than migration 027, which shipped with stable ids, so
+		// a later attempt that never finished is never hidden by an unrelated retry.
+		where = append(where, `NOT (e.result = 'attempt' AND (
+			(e.request_id <> '' AND EXISTS (
+				SELECT 1 FROM audit_events o
+				WHERE o.request_id = e.request_id AND o.action = e.action AND o.result <> 'attempt'))
+			OR (e.occurred_at_ms < COALESCE((SELECT applied_at FROM schema_migrations WHERE version = ?), 0) * 1000
+				AND EXISTS (
+					SELECT 1 FROM audit_events o
+					WHERE o.action = e.action AND o.target_id = e.target_id AND o.result <> 'attempt'
+					  AND o.occurred_at_ms BETWEEN e.occurred_at_ms AND e.occurred_at_ms + ?))))`)
+		args = append(args, auditStableRequestIDMigration, auditFoldWindowMS)
+	}
+
+	statement := `
+		SELECT e.id, e.occurred_at_ms, e.action, e.target_type, e.target_id, e.result,
+		       e.request_id, e.source_summary, e.details_json
+		FROM audit_events e`
+	if len(where) > 0 {
+		statement += "\n\t\tWHERE " + strings.Join(where, "\n\t\t  AND ")
+	}
+	statement += "\n\t\tORDER BY e.occurred_at_ms DESC, e.id DESC\n\t\tLIMIT ?"
+	// One extra row answers "is there another page" without a count query.
+	args = append(args, limit+1)
+
+	rows, err := r.SQL().QueryContext(ctx, statement, args...)
+	if err != nil {
+		return AuditPage{}, fmt.Errorf("query audit events: %w", err)
+	}
+	defer rows.Close()
+
+	events := make([]AuditEvent, 0, limit)
+	for rows.Next() {
+		var event AuditEvent
+		var detailsRaw string
+		if err := rows.Scan(
+			&event.ID, &event.OccurredAtMS, &event.Action, &event.TargetType,
+			&event.TargetID, &event.Result, &event.RequestID, &event.SourceSummary,
+			&detailsRaw,
+		); err != nil {
+			return AuditPage{}, fmt.Errorf("scan audit event: %w", err)
+		}
+		if detailsRaw != "" && detailsRaw != "{}" {
+			_ = json.Unmarshal([]byte(detailsRaw), &event.Details)
+		}
+		events = append(events, event)
+	}
+	if err := rows.Err(); err != nil {
+		return AuditPage{}, err
+	}
+
+	page := AuditPage{Events: events}
+	if len(events) > limit {
+		page.Events = events[:limit]
+		last := page.Events[limit-1]
+		page.Next = &AuditCursor{OccurredAtMS: last.OccurredAtMS, ID: last.ID}
+	}
+	return page, nil
+}
+
+func placeholders(count int) string {
+	return strings.TrimSuffix(strings.Repeat("?,", count), ",")
+}
+
+func appendStrings(args []any, values []string) []any {
+	for _, value := range values {
+		args = append(args, value)
+	}
+	return args
+}

@@ -21,7 +21,8 @@ import {
 import { DashboardResponse, DashboardTailResponse, DashboardWindow } from '../types/dashboard';
 import { DashboardTokenHeatmap } from '../types/tokenHeatmap';
 import { DashboardModelsResponse } from '../types/dashboardModels';
-import { ErrorLogFile } from '../types/logs';
+import { ErrorLogFile, type ServiceLogPage } from '../types/logs';
+import { AUDIT_PAGE_SIZE, auditSearchParams, type AuditEvent, type AuditFilters, type AuditPage } from '../types/audit';
 import { ConfigScalarsResponse, ConfigSourceResponse } from '../types/configManagement';
 import { ClientAPIKeyItem, ClientKeyUsageItem, ProviderItem, SaveProviderPayload } from '../types/providers';
 import { GatewayModelItem } from '../types/gatewayModels';
@@ -597,6 +598,33 @@ export const api = {
     /** getLogsStatus answers why a tail is empty: CPA only logs to file on demand. */
   async getLogsStatus(): Promise<LogsStatus> {
     return request<LogsStatus>('/management/logs/status', { method: 'GET' });
+  },
+
+  /** getServiceLogs reads Oh My CPA's own recent log records, resuming after `after`. */
+  async getServiceLogs(params: { after?: number; limit?: number }): Promise<ServiceLogPage> {
+    const search = new URLSearchParams();
+    if (params.after) search.set('after', String(params.after));
+    if (params.limit) search.set('limit', String(params.limit));
+    const query = search.toString();
+    return request<ServiceLogPage>(`/management/service-logs${query ? `?${query}` : ''}`, { method: 'GET' });
+  },
+
+  async getAuditEvents(filters: AuditFilters, before?: string): Promise<AuditPage> {
+    const search = auditSearchParams(filters);
+    if (before) search.set('before', before);
+    search.set('limit', String(AUDIT_PAGE_SIZE));
+    const data = await request<{ events?: AuditEvent[]; next_cursor?: string }>(
+      `/management/audit/events?${search.toString()}`,
+      { method: 'GET' },
+    );
+    return { events: data.events ?? [], nextCursor: data.next_cursor || undefined };
+  },
+
+  /** exportAuditEvents downloads the filtered trail; the server records the export itself. */
+  async exportAuditEvents(filters: AuditFilters): Promise<Blob> {
+    const { apiBaseUrl } = getAppConfig();
+    const query = auditSearchParams(filters).toString();
+    return downloadBlob(`${apiBaseUrl}/management/audit/export${query ? `?${query}` : ''}`);
   },
 
   async clearLogs(): Promise<void> {

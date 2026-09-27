@@ -201,7 +201,27 @@ const SCENARIO_PATHS = [
   },
   {
     prefix: 'web/src/pages/LogsPage',
-    scenarios: ['phone-lists'],
+    scenarios: ['phone-lists', 'logs-sources', 'logs-sources-narrow'],
+  },
+  {
+    prefix: 'web/src/components/logs/',
+    scenarios: ['phone-lists', 'logs-sources', 'logs-sources-narrow'],
+  },
+  {
+    prefix: 'web/src/hooks/useServiceLogTail',
+    scenarios: ['logs-sources'],
+  },
+  {
+    prefix: 'web/src/hooks/useLogTail',
+    scenarios: ['logs-sources', 'phone-lists'],
+  },
+  {
+    prefix: 'web/src/types/audit',
+    scenarios: ['logs-sources', 'logs-sources-narrow'],
+  },
+  {
+    prefix: 'web/src/types/logs',
+    scenarios: ['logs-sources', 'phone-lists'],
   },
   // The dashboard: the sparkline marks its tiles draw and the daily-token calendar
   // beneath them. Both live on this page, and the page is what the scenarios load,

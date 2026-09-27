@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/app"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/applog"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/config"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/mcpbridge"
 )
@@ -24,7 +25,10 @@ func main() {
 		return
 	}
 
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	// Stderr stays the durable log; the tee keeps a bounded, redacted copy the console
+	// reads as the OMC service log.
+	serviceLog := applog.NewBuffer(applog.DefaultCapacity)
+	logger := slog.New(applog.NewHandler(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}), serviceLog))
 	// Route package-level slog calls (including API error reporting) here.
 	slog.SetDefault(logger)
 	// A local .env is a developer convenience only: real environment variables

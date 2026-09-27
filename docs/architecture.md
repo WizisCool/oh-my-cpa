@@ -63,6 +63,7 @@ cycle even though the `internal/usage` directory appears in both directions.
 | `internal/domain` | Durable entities (`CPAInstance`, resources) | — |
 | `internal/crypto` | AES-GCM envelope for secrets at rest | — |
 | `internal/security` | Redaction, keyed-HMAC fingerprints, display masks | — |
+| `internal/applog` | The OMC service log: an `slog` handler that tees every record the stderr handler accepts into a bounded, redacted in-memory ring the console reads | `security` |
 | `internal/auth` | Admin session cookie: sign, verify, rotate | — |
 | `internal/usage` | Decode CPA usage/error payloads into typed events | `security` |
 | `internal/usage/resp` | Minimal RESP client for CPA's subscribe/LPOP subset | — |
@@ -458,6 +459,45 @@ The old `/oauth`, `/auth-files` and `/quota` routes are retained only as
 parameter-safe replacement redirects. They preserve documented filter and
 connection intent while dropping callback, state, session and code material.
 
+### Logs: three records, kept apart
+
+The Logs page (`/logs`, with `?source=service` or `?source=audit`) reads three records
+that answer different questions, and mounts only the one being read so the others do
+not poll.
+
+- **Gateway log** — CPA's own log file and request error files, proxied through the
+  typed management client (`/management/logs`, `/management/logs/status`,
+  `/management/request-error-logs`). The console tails it; it owns none of it.
+- **Service log** — Oh My CPA's own process log. `cmd/oh-my-cpa` builds the logger as
+  `applog.NewHandler(jsonStderrHandler, buffer)`, so stderr remains the durable log a
+  deployment collects, and `NewHandler` in `internal/api` finds the buffer through
+  `applog.BufferOf`. The buffer keeps the latest `applog.DefaultCapacity` records,
+  numbers them with a sequence that only grows for the life of the process, and is
+  served by `GET /api/v1/management/service-logs?after=<seq>&limit=`. A reader that fell
+  more than a page behind jumps to the newest records and is told `gap: true` rather
+  than replaying a backlog. Values pass through `security.RedactText`, any field whose
+  name marks a credential (every `*key` name included) is replaced outright, and
+  message and field sizes are bounded, so one enormous error cannot grow the ring. A
+  process built without the tee answers `capturing: false`.
+- **Audit trail** — `audit_events`, served by `GET /api/v1/management/audit/events`
+  with `category` (action prefixes, validated identifiers), `outcome`
+  (`succeeded` / `failed`), `q` (a substring of action, target or request id),
+  `since_ms`, `limit` (at most 200) and `before`, an opaque `<occurred_at_ms>_<id>`
+  keyset cursor the previous page returned as `next_cursor`. `fold` (default on) hides
+  an `attempt` row once an outcome exists for the same request id and action; rows
+  written before request ids were stable per request are paired by action, target and
+  an outcome within one minute (`auditFoldWindowMS`), and only when they are older than
+  the moment migration 027 was applied, which is when ids became stable. `idx_audit_events_request_action`
+  (migration 027) serves that lookup. `GET /api/v1/management/audit/export` takes the
+  same filters, returns every row including attempts unless `fold=1`, stops at
+  `repository.AuditPageMax` rows with `truncated` set, and is itself audited and
+  withheld when that record cannot be written.
+
+Every request is given one id on arrival (`assignRequestID`, which keeps a caller's
+`X-Request-ID` of up to 128 characters, generates one otherwise, and answers it back
+in the response header). A write's attempt and outcome rows therefore share it; before
+this each audit call generated its own id and no pair could be matched.
+
 ## 3. Frontend shape
 
 `web/src` is a single-page app on React + TypeScript + Ant Design, with TanStack
@@ -468,12 +508,13 @@ Query for server state.
 | `App.tsx` | Router, lazily loaded pages, theme and locale providers; the theme provider sits above `ConfigProvider` (Ant Design's tokens are a projection of the resolved palette) while `ThemeServerSync` sits inside `App`, because a refused save is reported through Ant Design's message API |
 | `api/client.ts` | The one typed HTTP client and the shared session/error plumbing; every ordinary endpoint is declared here. The playground's `pages/playground/api.ts` wraps `requestResponse` and XStream for its fixed SSE route, without duplicating auth or retry policy |
 | `types/` | Wire types, including the request-record view model split by responsibility (`usageEventQuery.ts` for the URL and filter contract, `usageEventViewPreference.ts` for the stored view, `usageEventIdentity.ts` for the credential and provider behind a row, `usageEventGrouping.ts` for how records bucket, `usageEventLabels.ts` for what a row prints, `usageEventMetrics.ts` for its numbers and `usageEventCadence.ts` for the page's timing constants), `usageEventViewActions.ts` (the view's URL and persistence rewrites), `pluginOAuthProviders.ts` (which logo an installed plugin publishes for the OAuth provider it registers, and whether a URL may be rendered as an image at all), `tokenDisplay.ts` (the one layer every user-facing token number is formatted through) and `rollingNumber.ts` (the animated shape of a reading) |
-| `hooks/` | `usePreference`, `useLastIntentQueue` (React binding) over `lastIntentQueue` (the framework-free controller) and `disposableSlot` (effect-scoped resource lifetime), `useLogTail`, `useVisibleNow`, `useIsNarrowViewport` (900px, the shell), `useIsPhoneViewport` (640px, lists and control sizes), `useOverlayHistory` (React binding) over `overlayHistory` (the framework-free overlay/history policy: one sentinel per open Drawer or Modal, so the platform's Back dismisses the topmost one), `usePluginOAuthLogos` (the plugin list read once, projected to provider-key logos), `usePrefersReducedMotion` (the app-owned reduced-motion switch the canvas marks need, since neither `@antv/g2` nor `@ant-design/plots` reads the preference) |
+| `hooks/` | `usePreference`, `useLastIntentQueue` (React binding) over `lastIntentQueue` (the framework-free controller) and `disposableSlot` (effect-scoped resource lifetime), `useLogTail` (CPA's gateway tail, positioned by CPA's cursor), `useServiceLogTail` (the service log, positioned by its sequence number), `useVisibleNow`, `useIsNarrowViewport` (900px, the shell), `useIsPhoneViewport` (640px, lists and control sizes), `useOverlayHistory` (React binding) over `overlayHistory` (the framework-free overlay/history policy: one sentinel per open Drawer or Modal, so the platform's Back dismisses the topmost one), `usePluginOAuthLogos` (the plugin list read once, projected to provider-key logos), `usePrefersReducedMotion` (the app-owned reduced-motion switch the canvas marks need, since neither `@antv/g2` nor `@ant-design/plots` reads the preference) |
 | `i18n/` | `index.tsx` owns the base `[zh, en]` dictionary and the `t()` context; `language.ts` is the reading-language registry and locale helpers; `locales/zh-Hant.ts` and `locales/ms.ts` are the complete additional catalogs |
 | `theme/` | `palette.ts` (the nine authored tokens, the seventeen-token derivation, the registered palettes and the resolution of a mode plus a selection into a palette), `themePreference.ts` (the stored preference document, its parse and its migration from the earlier bare palette id), `ThemeContext.tsx` (the preference, the system follow, the in-progress edit, and the server sync), `themeConfig.ts` (antd tokens and CSS-variable projection), `colorMath.ts` (OKLCH mixing, luminance and contrast - the one authority for every ratio in the console), `cacheScale.ts` and `heatmapRamp.ts` (the two sequential ramps' stops) |
 | `utils/` | `maskKey.ts` (the console's one caller-key mask shape, kept branch for branch with the server's `security.MaskSecret`), `externalUrl.ts` (the http/https link rule), `modelOptions.ts` (model-input filtering), `smoothScroll.ts` (the gesture/correction scroll schedule), `clipboard.ts` (the one copy path, below), `download.ts` (`saveBlob`, the one download path: it attaches the anchor and releases the object URL on a delay, because revoking it in the click's own task cancels the save in Firefox and Safari), `format.ts` (`formatBytes`) |
 | `components/common/` | What more than one page renders: the shell (`AppLayout`, `HeaderNav`, `AuthGate`, `PreferenceMenus`); the page chrome every route opens with - `PageHeader` (title, subtitle or live summary, right-aligned actions), `RefreshButton` (the one refresh glyph and size, spinning rather than locking while a read is in flight), `PanelTitle` (a card's glyph, title and its one control), `StatusLabel` (a state as pip + word), `FactList` (label/value rows), `PageLoading` and `CodeFrame` with `CopyButton` (a code block and its copy action, shared by the transcripts and the setup snippets); and the list a surface renders at both widths - `ResponsiveList.tsx` (table on a wide viewport, rows below 640px, with loading-before-empty, blocked-is-not-empty and clamped paging decided once) over `PhoneRow.tsx` (headline, summary, labelled fields, controls) and `phoneRowFields.ts` (derives a row's fields, and one column's rendered cell, from the *table's own* column array, so a list has one description of a record at both widths and a column cannot silently disappear on a phone; see ADR 0012) |
 | `components/workspace/` | The conversation workspace the Playground and the Agent share: `WorkspaceLayout` (head with title, target and actions; main column; resizable side panel that becomes a Back-aware Drawer below 900px), `useResizablePanel` (pointer and keyboard resizing that writes the width to the DOM during a drag and commits it once), `ConversationList` (Ant Design X's `Bubble.List` with its native reverse-scroll anchoring and the "back to latest" control), `Composer` (X's `Sender` with the send path running through its own `SendButton`, so Enter and the button stay one gate), `ModelMarkdown` (safe `@ant-design/x-markdown` rendering with allowlisted code highlighting inside the shared `CodeFrame`), `ReasoningBlock` (X's `Think`), `TargetPicker` (key and call point as one joined control) and `useXLocale` |
+| `components/logs/` | The Logs page's three sources: `CpaLogPanel` (the gateway tail and error files), `ServiceLogPanel` (the service log), `AuditTrail` (the audit timeline, with `auditText.ts` turning an action and a result into the sentence and word a reader sees), and `LogList`, the scrolling tail both log sources render into - it follows the newest line until the reader scrolls away and mounts only the newest chunk. Wire types and pure helpers live in `types/logs.ts` and `types/audit.ts` |
 | `components/`, `pages/` | Feature UI; one page per route, no page owns another. A page composes its surface rather than carrying it: `pages/UsageEventsPage.tsx` renders `components/usage/`'s toolbar, header and rows and takes its state from that directory's hooks, `pages/ProvidersPage.tsx` renders `components/providers/`'s table and editor, and `pages/ConfigPage.tsx` renders `components/config/`'s renderers. The framework-free policies of a surface stay beside it: `components/usage/` carries `searchDebounce.ts`, `pollingPolicy.ts`, `timeRangePolicy.ts`, `syncPresentation.ts` and `chipDisplay.ts`, and `components/config/` carries `payloadRules.ts`, `configDirty.ts` and `configLayout.ts` |
 
 A failure's sentence goes through `describeError` (`api/client.ts`) rather than each
@@ -1229,7 +1270,7 @@ account as the reading it was decided from.
 | Usage | `usage_inboxes`, `usage_events`, `error_events`, `ingest_gaps`, `usage_overview_hourly_stats`, `usage_overview_daily_stats`, `usage_aggregation_checkpoints` | Milliseconds; raw payloads encrypted |
 | Pricing | `model_prices`, `model_price_versions`, `pricing_sync_state`, `pricing_model_catalog`, `pricing_catalog_state` | Versions are append-only via triggers |
 | Agent | `agent_documents` | Encrypted latest Agent session and capability operations (migration 026). Sessions are capped and trimmed by whole turns; terminal operations are retained 7 days and purged lazily during Agent requests |
-| Operations | `audit_events`, `ui_preferences`, `quota_snapshots`, `schema_migrations` | Audit has no update or delete path — only `RecordAuditEvent` writes and read queries exist, and export itself is audited; the schema carries no enforcement trigger, so the guarantee lives in the repository API |
+| Operations | `audit_events`, `ui_preferences`, `quota_snapshots`, `schema_migrations` | Audit has no update or delete path — only `RecordAuditEvent` writes and read queries (`ListAuditEvents`, `QueryAuditEvents`) exist, and export itself is audited; the schema carries no enforcement trigger, so the guarantee lives in the repository API. Migration 027 adds `idx_audit_events_request_action`, which the trail's attempt folding looks up |
 | Release observation | `release_index`, `release_check_state` | Migrations 024 and 025; `truncated` is added by 025, so a database that applied 024 before it existed still gains the column. `release_index` holds one row per published version (tag, name, publication time, prerelease flag) and is **replaced as a unit per product** by `PublishReleaseSnapshot`, because a feed that stops listing a withdrawn release must stop the console claiming it exists. `release_check_state` holds one row per product — the last attempt and success times, the redacted failure reason, the latest tag, the ETag and the truncation flag — and is written by `RecordReleaseCheckAttempt`/`PublishReleaseSnapshot`/`RecordReleaseCheckFailure`, read by `ListReleases` and `GetReleaseCheckState(ForRepository)`. A release's prose body is **never stored**: it lives in bounded process memory for the life of the process, so an index without notes still names the versions and links to the source (see §10) |
 
 The management system surface is five routes: `GET /management/system` (the page),

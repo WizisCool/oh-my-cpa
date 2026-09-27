@@ -20,6 +20,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/applog"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/auth"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/config"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/discovery"
@@ -39,7 +40,10 @@ type Handler struct {
 	cipher          *appcrypto.Cipher
 	discoverer      *discovery.Discoverer
 	logger          *slog.Logger
-	auth            *auth.Manager
+	// serviceLog is the bounded copy of this process's own log the console reads;
+	// nil when the logger was not built with the applog tee.
+	serviceLog *applog.Buffer
+	auth       *auth.Manager
 	// usage reports the background capture pipeline; nil when ingestion is off.
 	usage usagePipeline
 	// pricing serves model prices and the models.dev sync; nil until SetPricing.
@@ -95,6 +99,7 @@ func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypt
 		cipher:           cipher,
 		discoverer:       discovery.NewDiscoverer(cipher),
 		logger:           logger,
+		serviceLog:       applog.BufferOf(logger),
 		auth:             authManager,
 		startTime:        time.Now(),
 		limiter:          newLoginLimiter(),
@@ -141,6 +146,7 @@ func (h *Handler) Router() http.Handler {
 func (h *Handler) routes() chi.Router {
 	router := chi.NewRouter()
 	router.Use(securityHeaders)
+	router.Use(assignRequestID)
 	// The demo boundary has to sit above the routing table, because it classifies the
 	// route rather than the handler: see demo_policy.go. Outside demo mode the guard
 	// is not installed at all.
@@ -184,6 +190,7 @@ func (h *Handler) routes() chi.Router {
 				v1.Get("/management/logs", h.managementLogs)
 				v1.Delete("/management/logs", h.clearManagementLogs)
 				v1.Get("/management/logs/status", h.managementLogsStatus)
+				v1.Get("/management/service-logs", h.serviceLogs)
 				v1.Get("/management/request-error-logs", h.requestErrorLogs)
 				v1.Get("/management/request-error-logs/{name}", h.downloadRequestErrorLog)
 				v1.Get("/preferences", h.listPreferences)
@@ -1011,6 +1018,24 @@ func (h *Handler) recordAudit(request *http.Request, action, targetType, targetI
 		return err
 	}
 	return nil
+}
+
+// assignRequestID gives every request one id before any handler runs, and answers it
+// back as X-Request-ID.
+//
+// A write audits its attempt and its outcome as two rows, and the trail pairs them by
+// request id. Generating the id per audit call instead gave the two rows different ids,
+// so every write read as an unfinished attempt next to an unrelated success.
+func assignRequestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		id := strings.TrimSpace(request.Header.Get("X-Request-ID"))
+		if id == "" || len([]rune(id)) > 128 {
+			id = uuid.NewString()
+			request.Header.Set("X-Request-ID", id)
+		}
+		writer.Header().Set("X-Request-ID", security.RedactText(id))
+		next.ServeHTTP(writer, request)
+	})
 }
 
 func getOrGenerateRequestID(request *http.Request) string {

@@ -215,7 +215,7 @@ async function main() {
   await page.waitForTimeout(2500);
   const logsState = await page.evaluate(() => ({
     rows: document.querySelectorAll('.log-row').length,
-    alert: document.querySelector('.logs-alert .ant-alert-message')?.innerText ?? '',
+    alert: document.querySelector('.logs-alert')?.innerText ?? '',
     counts: document.querySelector('.logs-counts')?.innerText ?? '',
     managementHiddenByDefault: document.querySelector('.logs-toolbar .ant-checkbox-input')?.checked ?? false,
   }));

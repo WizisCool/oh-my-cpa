@@ -60,6 +60,7 @@ const FIXED_ROUTES = new Map([
   ['/api/v1/management/oauth/providers', 'oauth-providers'],
   ['/api/v1/management/quota', 'quota'],
   ['/api/v1/management/logs/status', 'logs-status'],
+  ['/api/v1/management/service-logs', 'service-logs'],
   ['/api/v1/management/request-error-logs', 'request-error-logs'],
   ['/api/v1/management/audit/events', 'audit-events'],
   ['/api/v1/management/audit/export', 'audit-export'],

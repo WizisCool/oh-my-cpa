@@ -1640,6 +1640,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .logs-jump { position: absolute; right: 14px; bottom: 14px; }
 .log-files { min-height: 220px; }
 .log-files-state { color: var(--muted); font-size: 12px; padding: 24px 0; }
+.log-state { padding: 24px 12px; color: var(--muted); font-size: 12px; }
+
 
 @media (max-width: 900px) {
   .logs-search { width: 148px; }
