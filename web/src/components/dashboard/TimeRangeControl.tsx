@@ -156,7 +156,7 @@ export const TimeRangeControl: React.FC<TimeRangeControlProps> = ({ range, onCha
         if (next) begin();
       }}
     >
-      <Button size="small" className="range-trigger">
+      <Button className="range-trigger">
         {label}
         <CaretDownOutlined className="range-trigger-caret" />
       </Button>

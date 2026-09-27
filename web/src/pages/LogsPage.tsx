@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, App as AntdApp, Button, Checkbox, Empty, Input, Segmented, Space, Table, Tabs, Tooltip, Typography } from 'antd';
+import { Alert, App as AntdApp, Button, Checkbox, Empty, Input, Popconfirm, Segmented, Tabs, Tooltip, Typography } from 'antd';
 import {
   ClearOutlined,
   DownloadOutlined,
@@ -11,13 +11,14 @@ import {
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import type { ColumnsType } from 'antd/es/table';
-import { api, apiErrorCode, ApiError } from '../api/client';
+import { api, apiErrorCode, ApiError, describeError } from '../api/client';
 import { useT } from '../i18n';
 import { isDemoMode } from '../types/demoMode';
 import { useLogTail } from '../hooks/useLogTail';
-import { useIsPhoneViewport } from '../hooks/useIsPhoneViewport';
-import { PhoneRow } from '../components/common/PhoneRow';
-import { phoneRowFields, renderedCell } from '../components/common/phoneRowFields';
+import { PageHeader } from '../components/common/PageHeader';
+import { RefreshButton } from '../components/common/RefreshButton';
+import { ResponsiveList } from '../components/common/ResponsiveList';
+import { saveBlob } from '../utils/download';
 import { usePreference } from '../hooks/usePreference';
 import {
   DEFAULT_LOG_FILTERS,
@@ -106,9 +107,6 @@ const ErrorLogFiles: React.FC = () => {
     placeholderData: keepPreviousData,
   });
 
-  // Read above the early returns, because a hook cannot come after one.
-  const isPhone = useIsPhoneViewport();
-
   if (query.isPending) return <div className="log-files-state">{t('logs.loading')}</div>;
   if (query.isError) {
     const code = apiErrorCode(query.error);
@@ -155,15 +153,9 @@ const ErrorLogFiles: React.FC = () => {
               title={isDemo ? t('demo.blocked') : undefined}
               onClick={async () => {
                 try {
-                  const blob = await api.downloadRequestErrorLog(file.name);
-                  const url = URL.createObjectURL(blob);
-                  const anchor = document.createElement('a');
-                  anchor.href = url;
-                  anchor.download = file.name;
-                  anchor.click();
-                  URL.revokeObjectURL(url);
+                  saveBlob(await api.downloadRequestErrorLog(file.name), file.name);
                 } catch (err: unknown) {
-                  message.error(err instanceof Error ? err.message : String(err));
+                  message.error(describeError(err));
                 }
               }}
             />
@@ -172,30 +164,16 @@ const ErrorLogFiles: React.FC = () => {
   ];
 
   // Below 640px one file per row (ADR 0012): the file name is the headline, the size and the
-  // modified time are labelled fields, and the download control gets its own line. The columns are
-  // one description of a file, so the table and the row cannot disagree about what one shows.
-  if (isPhone) {
-    return (
-      <div>
-        {query.data.files.map((file, index) => (
-          <PhoneRow
-            key={file.name}
-            identity={renderedCell(columns, 'name', file, index)}
-            fields={phoneRowFields(columns, file, { skip: ['name', 'actions'], index })}
-            actions={renderedCell(columns, 'actions', file, index)}
-          />
-        ))}
-      </div>
-    );
-  }
-
+  // modified time are labelled fields, and the download control gets its own line.
   return (
-    <Table<ErrorLogFile>
-      size="small"
-      rowKey="name"
-      dataSource={query.data.files}
-      pagination={false}
+    <ResponsiveList
       columns={columns}
+      dataSource={query.data.files}
+      rowKey="name"
+      isLoading={false}
+      emptyText={t('logs.errors_empty')}
+      phone={{ identity: 'name', actions: ['actions'] }}
+      tableProps={{ size: 'small' }}
     />
   );
 };
@@ -211,7 +189,6 @@ export const LogsPage: React.FC = () => {
   );
   const [search, setSearch] = React.useState('');
   const [visibleCount, setVisibleCount] = React.useState(RENDER_CHUNK);
-  const [confirmClear, setConfirmClear] = React.useState(false);
   const [tab, setTab] = React.useState<'tail' | 'errors'>('tail');
   // `pinned` is state, not a ref: the "back to the newest line" affordance has
   // to appear the moment the reader scrolls away, and a ref cannot re-render.
@@ -256,13 +233,11 @@ export const LogsPage: React.FC = () => {
   const truncate = useMutation({
     mutationFn: api.clearLogs,
     onSuccess: () => {
-      setConfirmClear(false);
       message.success(t('logs.clear_success'));
       tail.reload();
     },
     onError: (err: unknown) => {
-      setConfirmClear(false);
-      const msg = err instanceof ApiError ? err.message : String(err);
+      const msg = describeError(err);
       message.error(t('logs.clear_failed', { err: msg }));
     },
   });
@@ -287,52 +262,44 @@ export const LogsPage: React.FC = () => {
 
   return (
     <div className="terminal-page logs-page">
-      <div className="terminal-page-head">
-        <div>
-          <h1 className="terminal-title">{t('nav.logs')}</h1>
-        </div>
-        <Space size={6} wrap>
-          <Input
-            size="small"
-            allowClear
-            className="logs-search"
-            prefix={<SearchOutlined />}
-            placeholder={t('logs.search_placeholder')}
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-          <Tooltip title={tail.paused ? t('logs.resume') : t('logs.pause')}>
-            <Button
-              size="small"
-              icon={tail.paused ? <PlayCircleOutlined /> : <PauseCircleOutlined />}
-              disabled={blocked}
-              onClick={() => tail.setPaused(!tail.paused)}
-              aria-label={tail.paused ? t('logs.resume') : t('logs.pause')}
+      <PageHeader
+        title={t('nav.logs')}
+        actions={(
+          <>
+            <Input
+              allowClear
+              className="logs-search"
+              prefix={<SearchOutlined />}
+              placeholder={t('logs.search_placeholder')}
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
             />
-          </Tooltip>
-          <Tooltip title={t('logs.reload')}>
-            <Button size="small" icon={<ReloadOutlined />} onClick={tail.reload} aria-label={t('logs.reload')} />
-          </Tooltip>
-          {confirmClear ? (
-            <Space size={6}>
-              <Button size="small" danger type="primary" loading={truncate.isPending} onClick={() => truncate.mutate()}>
-                {t('logs.clear_confirm')}
-              </Button>
-              <Button size="small" onClick={() => setConfirmClear(false)}>{t('common.cancel')}</Button>
-            </Space>
-          ) : (
-            <Tooltip title={isDemo ? t('demo.blocked') : t('logs.clear_hint')}>
+            <Tooltip title={tail.paused ? t('logs.resume') : t('logs.pause')}>
               <Button
-                size="small"
-                icon={<ClearOutlined />}
-                disabled={isDemo}
-                onClick={() => setConfirmClear(true)}
-                aria-label={t('logs.clear')}
+                icon={tail.paused ? <PlayCircleOutlined /> : <PauseCircleOutlined />}
+                disabled={blocked}
+                onClick={() => tail.setPaused(!tail.paused)}
+                aria-label={tail.paused ? t('logs.resume') : t('logs.pause')}
               />
             </Tooltip>
-          )}
-        </Space>
-      </div>
+            <RefreshButton isIconOnly label={t('logs.reload')} onRefresh={tail.reload} />
+            {/* Truncating the file is irreversible, so it asks first - in the same popover every
+                other destructive action in the console uses. */}
+            <Popconfirm
+              title={t('logs.clear_hint')}
+              okText={t('logs.clear_confirm')}
+              cancelText={t('common.cancel')}
+              okButtonProps={{ danger: true, loading: truncate.isPending }}
+              onConfirm={() => truncate.mutate()}
+              disabled={isDemo}
+            >
+              <Tooltip title={isDemo ? t('demo.blocked') : t('logs.clear')}>
+                <Button icon={<ClearOutlined />} disabled={isDemo} aria-label={t('logs.clear')} />
+              </Tooltip>
+            </Popconfirm>
+          </>
+        )}
+      />
 
       <div className="logs-toolbar">
         <Checkbox

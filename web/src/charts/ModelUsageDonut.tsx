@@ -3,6 +3,7 @@ import { Pie } from '@ant-design/charts';
 import { useTheme } from '../theme/ThemeContext';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import { resolveChartAnimation } from './chartMotion';
+import { useChartPlugins } from './chartRender';
 import { seriesColorRange, seriesDomainKey, seriesTrackColor } from './chartTheme';
 import { formatModelShare, formatModelTokens, type DashboardModelUsage } from '../types/dashboardModels';
 import { formatTokens, formatTokensFull } from '../types/tokenDisplay';
@@ -47,6 +48,7 @@ export const ModelUsageDonut: React.FC<ModelUsageDonutProps> = ({
 }) => {
   const { theme } = useTheme();
   const isReducedMotion = usePrefersReducedMotion();
+  const { plugins, onReady } = useChartPlugins();
   const animate = resolveChartAnimation(isReducedMotion);
   const { style: tokenStyle } = useTokenDisplayStyle();
   const colors = theme.palette;
@@ -88,6 +90,8 @@ export const ModelUsageDonut: React.FC<ModelUsageDonutProps> = ({
       <div className="model-ring-frame">
         {data.length > 0 && (
           <Pie
+            plugins={plugins}
+            onReady={onReady}
             data={data}
             angleField="tokens"
             colorField="series"

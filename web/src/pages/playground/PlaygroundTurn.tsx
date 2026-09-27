@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button, Tooltip } from 'antd';
 import { BugOutlined, ClockCircleOutlined, DatabaseOutlined, FieldTimeOutlined, HistoryOutlined, ReloadOutlined, ThunderboltOutlined } from '../../components/icons';
-import { CopyButton } from '../../components/workspace/CopyButton';
+import { CopyButton } from '../../components/common/CopyButton';
 import { ModelMarkdown } from '../../components/workspace/ModelMarkdown';
 import { ReasoningBlock } from '../../components/workspace/ReasoningBlock';
 import workspace from '../../components/workspace/Workspace.module.css';

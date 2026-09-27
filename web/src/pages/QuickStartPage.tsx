@@ -1,57 +1,87 @@
-import React, { useState } from 'react';
-import {
-  Card,
-  Row,
-  Col,
-  Button,
-  Typography,
-  Tabs,
-  App as AntdApp,
-} from 'antd';
+import React from 'react';
+import { Button, Tabs } from 'antd';
 import {
   CloudServerOutlined,
   LoginOutlined,
   KeyOutlined,
   CodeOutlined,
-  CopyOutlined,
-  CheckOutlined,
   ArrowRightOutlined,
 } from '../components/icons';
 import { useNavigate } from 'react-router-dom';
 import { useT } from '../i18n';
-import { copyText } from '../utils/clipboard';
-const { Text, Paragraph } = Typography;
+import { PageHeader } from '../components/common/PageHeader';
+import { CodeFrame } from '../components/common/CodeFrame';
+import { CopyButton } from '../components/common/CopyButton';
+import styles from './QuickStartPage.module.css';
+
+interface QuickStartStepProps {
+  index: number;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  children?: React.ReactNode;
+}
+
+/**
+ * One setup step: its number on a rail, then what to do and the control that does it.
+ *
+ * The rail carries the order, so the titles name the task alone - a title that also said
+ * "Step 2" printed the number twice.
+ */
+function QuickStartStep({ index, icon, title, description, children }: QuickStartStepProps) {
+  return (
+    <li className={styles['step']}>
+      <span className={styles['step-index']} aria-hidden="true">{index}</span>
+      <section className={styles['step-body']}>
+        <h2 className={styles['step-title']}>
+          <span className={styles['step-icon']}>{icon}</span>
+          {title}
+        </h2>
+        <p className={styles['step-desc']}>{description}</p>
+        {children}
+      </section>
+    </li>
+  );
+}
+
+function EndpointRow({ label, url }: { label: string; url: string }) {
+  return (
+    <div className={styles['endpoint']}>
+      <span className={styles['endpoint-label']}>{label}</span>
+      <div className={styles['endpoint-value']}>
+        <code>{url}</code>
+        <CopyButton text={url} label={label} />
+      </div>
+    </div>
+  );
+}
 
 export const QuickStartPage: React.FC = () => {
   const t = useT();
   const navigate = useNavigate();
-  const { message } = AntdApp.useApp();
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:8080';
-  const proxyBase = `${origin}/v1`;
-
-  const handleCopy = async (text: string, key: string) => {
-    if (!(await copyText(text))) {
-      message.error(t('common.copy_failed'));
-      return;
-    }
-    setCopiedKey(key);
-    message.success(t('qs.copied'));
-    setTimeout(() => setCopiedKey(null), 2000);
-  };
+  const proxyBase = `${window.location.origin}/v1`;
 
   const authHeader = ['-H', '"' + ['Authorization', 'Bearer <YOUR_CLIENT_KEY>'].join(': ') + '"'].join(' ');
-  const curlSnippet = `# Test chat completions via Oh My CPA gateway
+  const snippets = [
+    {
+      key: 'curl',
+      label: t('qs.tab_curl'),
+      language: 'bash',
+      code: `# Test chat completions via Oh My CPA gateway
 curl -X POST "${proxyBase}/chat/completions" \\
   -H "Content-Type: application/json" \\
   ${authHeader} \\
   -d '{
     "model": "gpt-4o",
     "messages": [{"role": "user", "content": "Hello via Oh My CPA!"}]
-  }'`;
-
-  const pythonSnippet = `from openai import OpenAI
+  }'`,
+    },
+    {
+      key: 'python',
+      label: t('qs.tab_python'),
+      language: 'python',
+      code: `from openai import OpenAI
 
 # Configure client pointing to Oh My CPA gateway
 client = OpenAI(
@@ -64,9 +94,13 @@ response = client.chat.completions.create(
     messages=[{"role": "user", "content": "Hello from Python!"}],
 )
 
-print(response.choices[0].message.content)`;
-
-  const nodeSnippet = `import OpenAI from 'openai';
+print(response.choices[0].message.content)`,
+    },
+    {
+      key: 'nodejs',
+      label: t('qs.tab_nodejs'),
+      language: 'javascript',
+      code: `import OpenAI from 'openai';
 
 // Configure client pointing to Oh My CPA gateway
 const client = new OpenAI({
@@ -83,221 +117,58 @@ async function main() {
   console.log(response.choices[0].message.content);
 }
 
-main();`;
+main();`,
+    },
+  ];
 
   return (
     <div className="terminal-page quick-start-page">
-      <div className="terminal-page-head">
-        <div>
-          <h1 className="terminal-title">{t('qs.title')}</h1>
-          <p className="terminal-subtitle">{t('qs.subtitle')}</p>
-        </div>
-      </div>
+      <PageHeader title={t('qs.title')} />
 
-      <Card
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <CloudServerOutlined style={{ color: 'var(--ant-color-primary)' }} />
-            <span>{t('qs.step1_title')}</span>
+      <ol className={styles['steps']}>
+        <QuickStartStep index={1} icon={<CloudServerOutlined />} title={t('qs.step1_title')} description={t('qs.step1_desc')}>
+          <div className={styles['step-actions']}>
+            <Button type="primary" icon={<ArrowRightOutlined />} onClick={() => navigate('/ai-providers')}>
+              {t('qs.step1_btn')}
+            </Button>
           </div>
-        }
-        style={{ marginBottom: 16 }}
-      >
-        <Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 16 }}>
-          {t('qs.step1_desc')}
-        </Paragraph>
-        <Button
-          type="primary"
-          icon={<ArrowRightOutlined />}
-          onClick={() => navigate('/ai-providers')}
-        >
-          {t('qs.step1_btn')}
-        </Button>
-      </Card>
+        </QuickStartStep>
 
-      <Card
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <LoginOutlined style={{ color: 'var(--ant-color-primary)' }} />
-            <span>{t('qs.step2_title')}</span>
+        <QuickStartStep index={2} icon={<LoginOutlined />} title={t('qs.step2_title')} description={t('qs.step2_desc')}>
+          <div className={styles['step-actions']}>
+            <Button type="primary" icon={<LoginOutlined />} onClick={() => navigate('/oauth-management?action=connect')}>
+              {t('qs.step2_btn_oauth')}
+            </Button>
+            <Button icon={<ArrowRightOutlined />} onClick={() => navigate('/oauth-management')}>
+              {t('qs.step2_btn_auth')}
+            </Button>
           </div>
-        }
-        style={{ marginBottom: 16 }}
-      >
-        <Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 16 }}>
-          {t('qs.step2_desc')}
-        </Paragraph>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <Button
-            type="primary"
-            icon={<LoginOutlined />}
-            onClick={() => navigate('/oauth-management?action=connect')}
-          >
-            {t('qs.step2_btn_oauth')}
-          </Button>
-          <Button
-            icon={<ArrowRightOutlined />}
-            onClick={() => navigate('/oauth-management')}
-          >
-            {t('qs.step2_btn_auth')}
-          </Button>
-        </div>
-      </Card>
+        </QuickStartStep>
 
-      <Card
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <KeyOutlined style={{ color: 'var(--ant-color-primary)' }} />
-            <span>{t('qs.step3_title')}</span>
+        <QuickStartStep index={3} icon={<KeyOutlined />} title={t('qs.step3_title')} description={t('qs.step3_desc')}>
+          <div className={styles['step-actions']}>
+            <Button type="primary" icon={<KeyOutlined />} onClick={() => navigate('/api-keys')}>
+              {t('qs.step3_btn')}
+            </Button>
           </div>
-        }
-        style={{ marginBottom: 16 }}
-      >
-        <Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 16 }}>
-          {t('qs.step3_desc')}
-        </Paragraph>
-        <Button
-          type="primary"
-          icon={<KeyOutlined />}
-          onClick={() => navigate('/api-keys')}
-        >
-          {t('qs.step3_btn')}
-        </Button>
-      </Card>
+        </QuickStartStep>
 
-      <Card
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <CodeOutlined style={{ color: 'var(--ant-color-primary)' }} />
-            <span>{t('qs.step4_title')}</span>
+        <QuickStartStep index={4} icon={<CodeOutlined />} title={t('qs.step4_title')} description={t('qs.step4_desc')}>
+          <div className={styles['endpoints']}>
+            <EndpointRow label={t('qs.endpoint_chat')} url={`${proxyBase}/chat/completions`} />
+            <EndpointRow label={t('qs.endpoint_models')} url={`${proxyBase}/models`} />
           </div>
-        }
-      >
-        <Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 16 }}>
-          {t('qs.step4_desc')}
-        </Paragraph>
-
-          <div style={{ background: 'var(--card-bg, rgba(0,0,0,0.02))', padding: 16, borderRadius: 6, marginBottom: 20 }}>
-          <Row gutter={[16, 12]}>
-            <Col xs={24} md={12}>
-              <Text type="secondary" style={{ fontSize: 12 }}>{t('qs.endpoint_chat')}:</Text>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                <code style={{ fontFamily: 'monospace', fontSize: 12, flex: 1, wordBreak: 'break-all' }}>
-                  {proxyBase}/chat/completions
-                </code>
-                <Button
-                  size="small"
-                  icon={copiedKey === 'chat' ? <CheckOutlined /> : <CopyOutlined />}
-                  onClick={() => void handleCopy(`${proxyBase}/chat/completions`, 'chat')}
-                />
-              </div>
-            </Col>
-            <Col xs={24} md={12}>
-              <Text type="secondary" style={{ fontSize: 12 }}>{t('qs.endpoint_models')}:</Text>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                <code style={{ fontFamily: 'monospace', fontSize: 12, flex: 1, wordBreak: 'break-all' }}>
-                  {proxyBase}/models
-                </code>
-                <Button
-                  size="small"
-                  icon={copiedKey === 'models' ? <CheckOutlined /> : <CopyOutlined />}
-                  onClick={() => void handleCopy(`${proxyBase}/models`, 'models')}
-                />
-              </div>
-            </Col>
-          </Row>
-        </div>
-
           <Tabs
-          defaultActiveKey="curl"
-          items={[
-            {
-              key: 'curl',
-              label: t('qs.tab_curl'),
-              children: (
-                <div style={{ position: 'relative' }}>
-                  <pre style={{
-                    padding: 16,
-                    borderRadius: 6,
-                    background: 'var(--code-bg, #1a1a1a)',
-                    color: '#e6e6e6',
-                    fontSize: 12,
-                    fontFamily: 'monospace',
-                    overflowX: 'auto',
-                    margin: 0,
-                  }}>
-                    {curlSnippet}
-                  </pre>
-                  <Button
-                    size="small"
-                    style={{ position: 'absolute', top: 12, right: 12 }}
-                    icon={copiedKey === 'curl_code' ? <CheckOutlined /> : <CopyOutlined />}
-                    onClick={() => void handleCopy(curlSnippet, 'curl_code')}
-                  >
-                    {t('qs.copy')}
-                  </Button>
-                </div>
-              ),
-            },
-            {
-              key: 'python',
-              label: t('qs.tab_python'),
-              children: (
-                <div style={{ position: 'relative' }}>
-                  <pre style={{
-                    padding: 16,
-                    borderRadius: 6,
-                    background: 'var(--code-bg, #1a1a1a)',
-                    color: '#e6e6e6',
-                    fontSize: 12,
-                    fontFamily: 'monospace',
-                    overflowX: 'auto',
-                    margin: 0,
-                  }}>
-                    {pythonSnippet}
-                  </pre>
-                  <Button
-                    size="small"
-                    style={{ position: 'absolute', top: 12, right: 12 }}
-                    icon={copiedKey === 'py_code' ? <CheckOutlined /> : <CopyOutlined />}
-                    onClick={() => void handleCopy(pythonSnippet, 'py_code')}
-                  >
-                    {t('qs.copy')}
-                  </Button>
-                </div>
-              ),
-            },
-            {
-              key: 'nodejs',
-              label: t('qs.tab_nodejs'),
-              children: (
-                <div style={{ position: 'relative' }}>
-                  <pre style={{
-                    padding: 16,
-                    borderRadius: 6,
-                    background: 'var(--code-bg, #1a1a1a)',
-                    color: '#e6e6e6',
-                    fontSize: 12,
-                    fontFamily: 'monospace',
-                    overflowX: 'auto',
-                    margin: 0,
-                  }}>
-                    {nodeSnippet}
-                  </pre>
-                  <Button
-                    size="small"
-                    style={{ position: 'absolute', top: 12, right: 12 }}
-                    icon={copiedKey === 'node_code' ? <CheckOutlined /> : <CopyOutlined />}
-                    onClick={() => void handleCopy(nodeSnippet, 'node_code')}
-                  >
-                    {t('qs.copy')}
-                  </Button>
-                </div>
-              ),
-            },
-          ]}
-        />
-      </Card>
+            className={styles['snippets']}
+            defaultActiveKey="curl"
+            items={snippets.map((snippet) => ({
+              key: snippet.key,
+              label: snippet.label,
+              children: <CodeFrame code={snippet.code} label={snippet.language} />,
+            }))}
+          />
+        </QuickStartStep>
+      </ol>
     </div>
   );
 };

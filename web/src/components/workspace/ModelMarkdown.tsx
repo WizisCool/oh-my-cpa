@@ -3,7 +3,7 @@ import XMarkdown from '@ant-design/x-markdown';
 import { CodeHighlighter } from '@ant-design/x';
 import { clsx } from 'clsx';
 import { safeMarkdownComponents } from '../common/safeMarkdownComponents';
-import { CopyButton } from './CopyButton';
+import { CodeFrame } from '../common/CodeFrame';
 import styles from './Workspace.module.css';
 
 /**
@@ -62,11 +62,7 @@ export function CodeBlock({ lang, children, streamStatus }: CodeProps) {
   const name = (lang ?? '').trim().toLowerCase();
   const language = streamStatus === 'loading' ? undefined : LANGUAGE_ALIASES[name];
   return (
-    <div className={styles['code-block']}>
-      <div className={styles['code-head']}>
-        <span className={styles['code-lang']}>{name || 'text'}</span>
-        <CopyButton text={code} size="small" />
-      </div>
+    <CodeFrame code={code} label={name || 'text'} className={styles['code-block']}>
       {language ? (
         <CodeHighlighter lang={language} header={false} highlightProps={HIGHLIGHT_PROPS} className={styles['code-body']}>
           {code}
@@ -74,7 +70,7 @@ export function CodeBlock({ lang, children, streamStatus }: CodeProps) {
       ) : (
         <pre className={styles['code-body']}><code>{code}</code></pre>
       )}
-    </div>
+    </CodeFrame>
   );
 }
 

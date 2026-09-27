@@ -1,5 +1,5 @@
 import React from 'react';
-import { api, ApiError, apiErrorCode } from '../api/client';
+import { api, ApiError, apiErrorCode, describeError } from '../api/client';
 import { mergeLogLines, MAX_LOG_BUFFER_LINES } from '../types/logs';
 
 /**
@@ -97,7 +97,7 @@ export function useLogTail(enabled: boolean): LogTail {
         setPhase('offline');
       } else {
         setPhase('error');
-        setMessage(err instanceof Error ? err.message : String(err));
+        setMessage(describeError(err));
       }
     } finally {
       inFlight.current = false;

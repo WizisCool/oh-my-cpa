@@ -85,7 +85,7 @@ export const QuotaProgressBar: React.FC<QuotaProgressBarProps> = ({
           percent={clampedRemaining ?? 0}
           showInfo={false}
           strokeColor={strokeColor}
-          strokeWidth={height}
+          size={{ height }}
           style={{ margin: 0, padding: 0, display: 'block' }}
           aria-label={resolvedLabel || t('quota.col_windows')}
         />

@@ -21,6 +21,8 @@ import { modelOptionsFor } from '../../utils/modelOptions';
 import { PROVIDER_FAMILIES } from '../../types/providerFamilies';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import type { useProviderManagement } from './useProviderManagement';
+import { EditorSection } from './EditorSection';
+import styles from './ProviderEditorDrawer.module.css';
 
 type ProviderManagement = ReturnType<typeof useProviderManagement>;
 
@@ -197,16 +199,10 @@ export function ProviderEditorDrawer({
       <Drawer
         title={
           <div>
-            <div style={{ fontSize: 12, color: 'var(--meta)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              {editingProvider ? t('common.edit') : t('pro.add_provider')}
-            </div>
-            <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--fg)', marginTop: 2 }}>
+            <div className={styles['drawer-title']}>
               {editingProvider
                 ? `${t('common.edit')} · ${familyDisplayNames[formFamily] || formFamily}`
                 : `${t('pro.add_provider')} · ${familyDisplayNames[formFamily] || formFamily}`}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-              {t('pro.manage_resource_subtitle', { path: `/ai-providers/${formFamily}` })}
             </div>
           </div>
         }
@@ -214,7 +210,7 @@ export function ProviderEditorDrawer({
         onClose={handleCloseProviderDrawer}
         size="large"
         footer={
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, padding: '4px 0' }}>
+          <div className={styles['drawer-footer']}>
             <Button onClick={handleCloseProviderDrawer}>
               {t('common.cancel')}
             </Button>
@@ -232,31 +228,9 @@ export function ProviderEditorDrawer({
       >
         <Form layout="vertical">
           {/* Provider Icon Card */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 14,
-              marginBottom: 16,
-              padding: '12px 14px',
-              background: 'var(--surface)',
-              borderRadius: 6,
-              border: '1px solid var(--border)',
-            }}
-          >
+          <div className={styles['icon-card']}>
             <div
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: 8,
-                border: '1px solid var(--border)',
-                background: 'var(--bg)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                flexShrink: 0,
-              }}
+              className={styles['icon-tile']}
               onClick={() => {
                 setTargetProviderForIcon(null);
                 setIconPickerOpen(true);
@@ -265,15 +239,11 @@ export function ProviderEditorDrawer({
             >
               <LobeIcon iconId={formIcon} size={30} />
             </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 12, color: 'var(--meta)', marginBottom: 2 }}>
-                {t('pro.field_icon')}
-              </div>
-              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--fg)' }}>
-                {formIcon}
-              </div>
+            <div className={styles['icon-meta']}>
+              <div className={styles['icon-label']}>{t('pro.field_icon')}</div>
+              <div className={styles['icon-name']}>{formIcon}</div>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div className={styles['icon-actions']}>
               <Button
                 size="small"
                 onClick={() => {
@@ -337,7 +307,7 @@ export function ProviderEditorDrawer({
             label={
               <span>
                 {t('pro.field_base_url')}{' '}
-                <span style={{ fontSize: 12, color: 'var(--meta)', fontWeight: 400 }}>
+                <span className={styles['label-hint']}>
                   · {t('pro.field_base_url_desc')}
                 </span>
               </span>
@@ -364,7 +334,7 @@ export function ProviderEditorDrawer({
             label={
               <span>
                 {t('pro.field_website')}{' '}
-                <span style={{ fontSize: 12, color: 'var(--meta)', fontWeight: 400 }}>
+                <span className={styles['label-hint']}>
                   · {t('pro.field_website_desc')}
                 </span>
               </span>
@@ -398,7 +368,7 @@ export function ProviderEditorDrawer({
                   value={formPriority}
                   onChange={(val) => setFormPriority(val)}
                   placeholder="e.g. 1"
-                  style={{ width: '100%' }}
+                  className={styles['full-width']}
                 />
               </Form.Item>
             </Col>
@@ -431,78 +401,43 @@ export function ProviderEditorDrawer({
           </Form.Item>
 
           {/* Flags: Disabled & Disable Cooling */}
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ marginBottom: 12 }}>
+          <div className={styles['flag-list']}>
+            <div className={styles['flag']}>
               <Checkbox
                 checked={formDisabled}
                 onChange={(e) => setFormDisabled(e.target.checked)}
               >
-                <span style={{ fontWeight: 500 }}>{t('pro.field_disabled')}</span>
+                <span className={styles['flag-label']}>{t('pro.field_disabled')}</span>
               </Checkbox>
-              <div style={{ fontSize: 12, color: 'var(--meta)', marginLeft: 24, marginTop: 2 }}>
+              <div className={styles['flag-desc']}>
                 {t('pro.field_disabled_desc')}
               </div>
             </div>
 
-            <div>
+            <div className={styles['flag']}>
               <Checkbox
                 checked={formDisableCooling}
                 onChange={(e) => setFormDisableCooling(e.target.checked)}
               >
-                <span style={{ fontWeight: 500 }}>{t('pro.field_disable_cooling')}</span>
+                <span className={styles['flag-label']}>{t('pro.field_disable_cooling')}</span>
               </Checkbox>
-              <div style={{ fontSize: 12, color: 'var(--meta)', marginLeft: 24, marginTop: 2 }}>
+              <div className={styles['flag-desc']}>
                 {t('pro.field_disable_cooling_desc')}
               </div>
             </div>
           </div>
 
           {/* Section: API Key Entries */}
-          <div
-            style={{
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              background: 'var(--surface)',
-              marginBottom: 16,
-              overflow: 'hidden',
-            }}
+          <EditorSection
+            title={t('pro.section_keys')}
+            count={formKeys.length}
+            isOpen={keysSectionOpen}
+            onToggle={() => setKeysSectionOpen((prev) => !prev)}
           >
-            {/* Section Header */}
-            <div
-              style={{
-                padding: '12px 16px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                cursor: 'pointer',
-                userSelect: 'none',
-              }}
-              onClick={() => setKeysSectionOpen((prev) => !prev)}
-            >
-              <div style={{ fontWeight: 600, fontSize: 14 }}>
-                {t('pro.section_keys')}{' '}
-                <span style={{ color: 'var(--meta)', fontWeight: 400, marginLeft: 6 }}>
-                  {formKeys.length}
-                </span>
-              </div>
-              <div style={{ color: 'var(--meta)', fontSize: 12 }}>
-                {keysSectionOpen ? <UpOutlined /> : <DownOutlined />}
-              </div>
-            </div>
-
-            {keysSectionOpen && (
-              <div style={{ padding: '0 16px 16px 16px' }}>
                 {/* Top Action Row */}
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: 12,
-                  }}
-                >
+                <div className={styles['section-actions']}>
                   <Button
-                    style={{ borderStyle: 'dashed' }}
+                    type="dashed"
                     icon={<PlusOutlined />}
                     onClick={handleKeyAdd}
                   >
@@ -514,75 +449,42 @@ export function ProviderEditorDrawer({
                 </div>
 
                 {/* Key Cards List */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div className={styles['item-list']}>
                   {formKeys.map((k, idx) => {
                     const isExpanded = expandedKeyIds.has(k.id);
                     const displayKey = (k.apiKey || '').trim();
 
                     return (
-                      <div
-                        key={k.id}
-                        style={{
-                          border: '1px solid var(--border)',
-                          borderRadius: 6,
-                          background: 'var(--bg)',
-                          overflow: 'hidden',
-                        }}
-                      >
-                        {/* Key Item Header */}
-                        <div
-                          style={{
-                            padding: '10px 14px',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            cursor: 'pointer',
-                            userSelect: 'none',
-                          }}
-                          onClick={() => toggleKeyExpanded(k.id)}
-                        >
-                          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--fg)' }}>
-                            {t('pro.key_label', { n: idx + 1 })}
-                          </div>
-
-                          <div
-                            style={{ display: 'flex', alignItems: 'center', gap: 12 }}
-                            onClick={(e) => e.stopPropagation()}
+                      <div key={k.id} className={styles['item-card']}>
+                        {/* Key Item Header: the title and the masked key are one toggle, so a
+                            keyboard reaches it and a screen reader hears its state. */}
+                        <div className={styles['item-head']}>
+                          <button
+                            type="button"
+                            className={styles['item-toggle']}
+                            aria-expanded={isExpanded}
+                            onClick={() => toggleKeyExpanded(k.id)}
                           >
+                            <span className={styles['item-title']}>{t('pro.key_label', { n: idx + 1 })}</span>
                             {displayKey && (
-                              <span
-                                title={maskKeyText(displayKey)}
-                                style={{
-                                  fontFamily: 'monospace',
-                                  fontWeight: 600,
-                                  fontSize: 13,
-                                  color: 'var(--fg)',
-                                  letterSpacing: '0.5px',
-                                  maxWidth: 220,
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                  display: 'inline-block',
-                                  verticalAlign: 'middle',
-                                }}
-                              >
+                              <span className={styles['item-key']} title={maskKeyText(displayKey)}>
                                 {maskKeyText(displayKey)}
                               </span>
                             )}
-                            <Button
-                              type="link"
-                              size="small"
-                              style={{ padding: '0 4px', height: 'auto', fontSize: 13 }}
-                              onClick={() => handleTestKey(k, idx)}
-                            >
+                          </button>
+
+                          <div className={styles['item-actions']}>
+                            <Button type="link" size="small" onClick={() => handleTestKey(k, idx)}>
                               {t('pro.test_single')}
                             </Button>
-                            <span
-                              style={{ cursor: 'pointer', color: 'var(--meta)', display: 'inline-flex' }}
+                            <Button
+                              type="text"
+                              size="small"
+                              icon={isExpanded ? <UpOutlined /> : <DownOutlined />}
+                              aria-label={t('pro.key_label', { n: idx + 1 })}
+                              aria-expanded={isExpanded}
                               onClick={() => toggleKeyExpanded(k.id)}
-                            >
-                              {isExpanded ? <UpOutlined /> : <DownOutlined />}
-                            </span>
+                            />
                             {formKeys.length > 1 && (
                               <Popconfirm
                                 title={t('pro.delete_key_confirm')}
@@ -596,14 +498,14 @@ export function ProviderEditorDrawer({
                                 }}
                                 okText={t('common.confirm')}
                                 cancelText={t('common.cancel')}
+                                okButtonProps={{ danger: true }}
                               >
-                                <CloseOutlined
-                                  style={{
-                                    cursor: 'pointer',
-                                    color: 'var(--danger)',
-                                    fontSize: 12,
-                                    marginLeft: 2,
-                                  }}
+                                <Button
+                                  type="text"
+                                  size="small"
+                                  danger
+                                  icon={<CloseOutlined />}
+                                  aria-label={`${t('common.delete')}: ${t('pro.key_label', { n: idx + 1 })}`}
                                 />
                               </Popconfirm>
                             )}
@@ -612,18 +514,10 @@ export function ProviderEditorDrawer({
 
                         {/* Key Item Body (when expanded) */}
                         {isExpanded && (
-                          <div
-                            style={{
-                              padding: '14px 16px',
-                              borderTop: '1px solid var(--border)',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: 14,
-                            }}
-                          >
+                          <div className={styles['item-body']}>
                             {/* API Key */}
                             <div>
-                              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6, color: 'var(--fg)' }}>
+                              <div className={styles['item-field-label']}>
                                 {t('pro.api_key_label')}
                               </div>
                               <Input.Password
@@ -636,13 +530,13 @@ export function ProviderEditorDrawer({
                                   )
                                 }
                                 placeholder={t('pro.field_key_ph_create')}
-                                style={{ width: '100%' }}
+                                className={styles['full-width']}
                               />
                             </div>
 
                             {/* Proxy URL */}
                             <div>
-                              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6, color: 'var(--fg)' }}>
+                              <div className={styles['item-field-label']}>
                                 {t('pro.proxy_url_label')}
                               </div>
                               <Input
@@ -655,13 +549,13 @@ export function ProviderEditorDrawer({
                                   )
                                 }
                                 placeholder="http://127.0.0.1:7890"
-                                style={{ width: '100%' }}
+                                className={styles['full-width']}
                               />
                             </div>
 
                             {/* Schedule Weight */}
                             <div>
-                              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6, color: 'var(--fg)' }}>
+                              <div className={styles['item-field-label']}>
                                 {t('pro.weight_label')}
                               </div>
                               <InputNumber
@@ -675,10 +569,10 @@ export function ProviderEditorDrawer({
                                 }
                                 min={0}
                                 max={1000000}
-                                style={{ width: '100%' }}
+                                className={styles['full-width']}
                                 placeholder="1"
                               />
-                              <div style={{ fontSize: 12, color: 'var(--meta)', marginTop: 4 }}>
+                              <div className={styles['field-hint']}>
                                 {t('pro.weight_desc')}
                               </div>
                             </div>
@@ -688,50 +582,19 @@ export function ProviderEditorDrawer({
                     );
                   })}
                 </div>
-              </div>
-            )}
-          </div>
+          </EditorSection>
 
           {/* Section: Custom Headers */}
-          <div
-            style={{
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              background: 'var(--surface)',
-              marginBottom: 16,
-              overflow: 'hidden',
-            }}
+          <EditorSection
+            title={t('pro.section_headers')}
+            count={formHeaders.length > 0 ? formHeaders.length : undefined}
+            isOpen={headersSectionOpen}
+            onToggle={() => setHeadersSectionOpen((prev) => !prev)}
           >
-            <div
-              style={{
-                padding: '12px 16px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                cursor: 'pointer',
-                userSelect: 'none',
-              }}
-              onClick={() => setHeadersSectionOpen((prev) => !prev)}
-            >
-              <div style={{ fontWeight: 600, fontSize: 14 }}>
-                {t('pro.section_headers')}{' '}
                 {formHeaders.length > 0 && (
-                  <span style={{ color: 'var(--meta)', fontWeight: 400, marginLeft: 6 }}>
-                    {formHeaders.length}
-                  </span>
-                )}
-              </div>
-              <div style={{ color: 'var(--meta)', fontSize: 12 }}>
-                {headersSectionOpen ? <UpOutlined /> : <DownOutlined />}
-              </div>
-            </div>
-
-            {headersSectionOpen && (
-              <div style={{ padding: '0 16px 16px 16px' }}>
-                {formHeaders.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                  <div className={styles['header-list']}>
                     {formHeaders.map((h) => (
-                      <div key={h.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <div key={h.id} className={styles['header-row']}>
                         <Input
                           value={h.key}
                           onChange={(e) =>
@@ -742,7 +605,7 @@ export function ProviderEditorDrawer({
                             )
                           }
                           placeholder="X-Custom-Header"
-                          style={{ flex: 1, fontFamily: 'monospace' }}
+                          className={styles['header-input']}
                         />
                         <Input
                           value={h.value}
@@ -754,13 +617,14 @@ export function ProviderEditorDrawer({
                             )
                           }
                           placeholder="value"
-                          style={{ flex: 1 }}
+                          className={styles['header-input']}
                         />
                         <Button
                           size="small"
                           type="text"
                           danger
                           icon={<CloseOutlined />}
+                          aria-label={`${t('common.delete')}: ${h.key || t('pro.section_headers')}`}
                           onClick={() =>
                             setFormHeaders((prev) => prev.filter((item) => item.id !== h.id))
                           }
@@ -770,7 +634,7 @@ export function ProviderEditorDrawer({
                   </div>
                 )}
                 <Button
-                  style={{ borderStyle: 'dashed' }}
+                  type="dashed"
                   icon={<PlusOutlined />}
                   onClick={() =>
                     setFormHeaders((prev) => [
@@ -781,59 +645,20 @@ export function ProviderEditorDrawer({
                 >
                   {t('pro.add_header_entry')}
                 </Button>
-              </div>
-            )}
-          </div>
+          </EditorSection>
 
           {/* Section: Custom Models */}
-          <div
-            style={{
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              background: 'var(--surface)',
-              marginBottom: 20,
-              overflow: 'hidden',
-            }}
+          <EditorSection
+            title={t('pro.section_models')}
+            count={formModels.length > 0 ? formModels.length : undefined}
+            isOpen={modelsSectionOpen}
+            onToggle={() => setModelsSectionOpen((prev) => !prev)}
           >
-            {/* Header row */}
-            <div
-              style={{
-                padding: '12px 16px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                cursor: 'pointer',
-                userSelect: 'none',
-              }}
-              onClick={() => setModelsSectionOpen((prev) => !prev)}
-            >
-              <div style={{ fontWeight: 600, fontSize: 14 }}>
-                {t('pro.section_models')}{' '}
-                {formModels.length > 0 && (
-                  <span style={{ color: 'var(--meta)', fontWeight: 400, marginLeft: 6 }}>
-                    {formModels.length}
-                  </span>
-                )}
-              </div>
-              <div style={{ color: 'var(--meta)', fontSize: 12 }}>
-                {modelsSectionOpen ? <UpOutlined /> : <DownOutlined />}
-              </div>
-            </div>
-
-            {modelsSectionOpen && (
-              <div style={{ padding: '0 16px 16px 16px' }}>
                 {/* Action Row: Fetch model list on right */}
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: 12,
-                  }}
-                >
-                  <div style={{ fontSize: 12, color: 'var(--meta)' }}>
+                <div className={styles['section-actions']}>
+                  <div className={styles['section-note']}>
                     {endpointModels.length > 0 && (
-                      <span style={{ color: 'var(--accent)', fontWeight: 500 }}>
+                      <span className={styles['section-note-accent']}>
                         {t('pro.model_list_fetched', { n: endpointModels.length })}
                       </span>
                     )}
@@ -853,32 +678,16 @@ export function ProviderEditorDrawer({
 
                 {/* Column Titles */}
                 {formModels.length > 0 && (
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: 8,
-                      padding: '0 12px 6px 12px',
-                      fontSize: 12,
-                      color: 'var(--meta)',
-                      fontWeight: 500,
-                    }}
-                  >
-                    <div style={{ flex: 1 }}>{t('pro.actual_request_model')}</div>
-                    <div style={{ flex: 1 }}>{t('pro.alias_optional')}</div>
-                    <div style={{ width: 56 }} />
+                  <div className={styles['model-columns']}>
+                    <div>{t('pro.actual_request_model')}</div>
+                    <div>{t('pro.alias_optional')}</div>
+                    <div className={styles['model-columns-spacer']} />
                   </div>
                 )}
 
                 {/* Configured Models List */}
                 {formModels.length > 0 && (
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 12,
-                      marginBottom: 12,
-                    }}
-                  >
+                  <div className={`${styles['item-list']} ${styles['item-list-spaced']}`}>
                     {formModels.map((m) => {
                       const isExpanded = expandedModelIds.has(m.id);
                       const otherSelected = new Set(
@@ -899,27 +708,9 @@ export function ProviderEditorDrawer({
                       ).map((name) => ({ label: name, value: name }));
 
                       return (
-                        <div
-                          key={m.id}
-                          id={`model-card-${m.id}`}
-                          style={{
-                            border: '1px solid var(--border)',
-                            borderRadius: 6,
-                            background: 'var(--bg)',
-                            overflow: 'hidden',
-                            scrollMarginBottom: 24,
-                          }}
-                        >
+                        <div key={m.id} id={`model-card-${m.id}`} className={`${styles['item-card']} ${styles['model-card']}`}>
                           {/* Model Card Header */}
-                          <div
-                            style={{
-                              padding: '10px 12px',
-                              display: 'flex',
-                              gap: 8,
-                              alignItems: 'center',
-                              background: 'rgba(255, 255, 255, 0.02)',
-                            }}
-                          >
+                          <div className={styles['model-head']}>
                             <AutoComplete
                               value={m.name}
                               options={modelOptions}
@@ -950,18 +741,15 @@ export function ProviderEditorDrawer({
                                   )
                                 );
                               }}
-                              style={{ flex: 1 }}
+                              className={styles['model-input']}
                             >
                               <Input
                                 placeholder={t('pro.actual_request_model')}
                                 suffix={
                                   endpointModels.length > 0 ? (
-                                    <DownOutlined
-                                      style={{ fontSize: 11, color: 'var(--meta)' }}
-                                    />
+                                    <DownOutlined className={styles['model-suffix']} />
                                   ) : undefined
                                 }
-                                style={{ fontFamily: 'monospace' }}
                               />
                             </AutoComplete>
                             <Input
@@ -974,12 +762,14 @@ export function ProviderEditorDrawer({
                                 )
                               }
                               placeholder={t('pro.alias_optional')}
-                              style={{ flex: 1 }}
+                              className={styles['model-input']}
                             />
                             <Button
                               type="text"
                               size="small"
                               icon={isExpanded ? <UpOutlined /> : <DownOutlined />}
+                              aria-label={m.name || t('pro.actual_request_model')}
+                              aria-expanded={isExpanded}
                               onClick={() => toggleModelExpanded(m.id)}
                             />
                             <Button
@@ -987,6 +777,7 @@ export function ProviderEditorDrawer({
                               type="text"
                               danger
                               icon={<CloseOutlined />}
+                              aria-label={`${t('common.delete')}: ${m.name || t('pro.actual_request_model')}`}
                               onClick={() => {
                                 setFormModels((prev) => prev.filter((item) => item.id !== m.id));
                                 setExpandedModelIds((prev) => {
@@ -1000,47 +791,25 @@ export function ProviderEditorDrawer({
 
                           {/* Model Card Body (expanded) */}
                           {isExpanded && (
-                            <div
-                              style={{
-                                padding: '14px 16px',
-                                borderTop: '1px solid var(--border)',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: 14,
-                              }}
-                            >
+                            <div className={styles['item-body']}>
                               {/* Option: Allow Image Endpoint */}
                               <div>
                                 <Checkbox
                                   checked={m.image || false}
                                   onChange={(e) => updateModelImage(m.id, e.target.checked)}
                                 >
-                                  <span style={{ fontWeight: 500 }}>
+                                  <span className={styles['flag-label']}>
                                     {t('pro.allow_image_endpoint')}
                                   </span>
                                 </Checkbox>
-                                <div
-                                  style={{
-                                    fontSize: 12,
-                                    color: 'var(--meta)',
-                                    marginLeft: 24,
-                                    marginTop: 2,
-                                  }}
-                                >
+                                <div className={styles['flag-desc']}>
                                   {t('pro.allow_image_endpoint_desc')}
                                 </div>
                               </div>
 
                               {/* Option: Allowed Thinking Levels */}
                               <div>
-                                <div
-                                  style={{
-                                    fontWeight: 500,
-                                    fontSize: 13,
-                                    marginBottom: 8,
-                                    color: 'var(--fg)',
-                                  }}
-                                >
+                                <div className={styles['item-field-label']}>
                                   {t('pro.allowed_thinking_levels')}
                                 </div>
                                 <Row gutter={[10, 10]}>
@@ -1059,41 +828,13 @@ export function ProviderEditorDrawer({
                                               toggleThinkingLevel(m.id, opt.value);
                                             }
                                           }}
-                                          style={{
-                                            border: isChecked
-                                              ? '1px solid var(--accent, #1677ff)'
-                                              : '1px solid var(--border)',
-                                            borderRadius: 6,
-                                            padding: '8px 12px',
-                                            background: isChecked
-                                              ? 'rgba(22, 119, 255, 0.08)'
-                                              : 'var(--surface)',
-                                            cursor: 'pointer',
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                            transition: 'border-color var(--motion-fast), background var(--motion-fast)',
-                                            userSelect: 'none',
-                                          }}
+                                          aria-pressed={isChecked}
+                                          className={`${styles['level-option']} ${isChecked ? styles['level-option-checked'] : ''}`}
                                         >
-                                          <Checkbox
-                                            checked={isChecked}
-                                            tabIndex={-1}
-                                            style={{ pointerEvents: 'none' }}
-                                          >
-                                            <span style={{ fontWeight: isChecked ? 600 : 400 }}>
-                                              {t(opt.labelKey)}
-                                            </span>
+                                          <Checkbox checked={isChecked} tabIndex={-1} className={styles['level-check']}>
+                                            <span className={styles['level-label']}>{t(opt.labelKey)}</span>
                                           </Checkbox>
-                                          <span
-                                            style={{
-                                              fontSize: 11,
-                                              fontFamily: 'monospace',
-                                              color: 'var(--meta)',
-                                            }}
-                                          >
-                                            {opt.value}
-                                          </span>
+                                          <span className={styles['level-value']}>{opt.value}</span>
                                         </div>
                                       </Col>
                                     );
@@ -1108,16 +849,10 @@ export function ProviderEditorDrawer({
                   </div>
                 )}
 
-                <Button
-                  style={{ borderStyle: 'dashed' }}
-                  icon={<PlusOutlined />}
-                  onClick={handleAddModel}
-                >
+                <Button type="dashed" icon={<PlusOutlined />} onClick={handleAddModel}>
                   {t('pro.add_model_entry')}
                 </Button>
-              </div>
-            )}
-          </div>
+          </EditorSection>
         </Form>
       </Drawer>
   );

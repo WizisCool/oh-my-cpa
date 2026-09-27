@@ -61,6 +61,7 @@ import {
   type OAuthWorkspaceRecord,
 } from './oauthWorkspaceLogic';
 import styles from './OAuthManagementPage.module.css';
+import { PageHeader } from '../../components/common/PageHeader';
 
 interface OAuthManagementViewPreference {
   pageSize: 12 | 24 | 48;
@@ -486,71 +487,72 @@ export const OAuthManagementPage: React.FC = () => {
 
   return (
     <div className={`terminal-page oauth-management-page ${styles.page}`}>
-      <header className={styles.head}>
-        <div className={styles['head-title-group']}>
-          <h1 className="terminal-title">{t('nav.auth_files')}</h1>
-          <div className={styles['summary-strip']}>
-            <span className={styles['summary-total']}>
-              {t('af.meta_total', { n: knownTotal })}
-            </span>
-            <span className={styles['summary-divider']}>·</span>
-            <span className={styles['summary-healthy']}>
-              <span className={styles['status-dot']} />
-              {t('af.meta_active', { n: filesQuery.isPending ? '—' : healthyCount })}
-            </span>
-            {(filesQuery.isPending || disabledCount > 0) && (
-              <>
-                <span className={styles['summary-divider']}>·</span>
-                <span className={styles['summary-disabled']}>
-                  <span className={styles['status-dot']} />
-                  {t('af.meta_disabled', { n: filesQuery.isPending ? '—' : disabledCount })}
-                </span>
-              </>
-            )}
-            {(filesQuery.isPending || attentionCount > 0) && (
-              <>
-                <span className={styles['summary-divider']}>·</span>
-                <span className={styles['summary-attention']}>
-                  <span className={styles['status-dot']} />
-                  {t('omc.quota_filter_attention')} {filesQuery.isPending ? '—' : attentionCount}
-                </span>
-              </>
-            )}
-          </div>
+      <PageHeader
+        title={t('nav.auth_files')}
+        actions={(
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,application/json"
+              multiple
+              hidden
+              onChange={(event) => {
+                const files = Array.from(event.target.files ?? []);
+                event.target.value = '';
+                actions.upload(files);
+              }}
+            />
+            <Button
+              icon={<UploadOutlined />}
+              disabled={isDemo || actions.isOperating}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {t('af.upload')}
+            </Button>
+            <Button
+              icon={<BranchesOutlined />}
+              disabled={actions.isOperating}
+              onClick={() => setIsAliasOpen(true)}
+              data-testid="oauth-management-model-alias-open"
+            >
+              {t('af.alias_open')}
+            </Button>
+            <Button type="primary" icon={<LoginOutlined />} onClick={openConnect}>
+              {t('omc.connect_account')}
+            </Button>
+          </>
+        )}
+      >
+        <div className={styles['summary-strip']}>
+          <span className={styles['summary-total']}>
+            {t('af.meta_total', { n: knownTotal })}
+          </span>
+          <span className={styles['summary-divider']}>·</span>
+          <span className={styles['summary-healthy']}>
+            <span className={styles['status-dot']} />
+            {t('af.meta_active', { n: filesQuery.isPending ? '—' : healthyCount })}
+          </span>
+          {(filesQuery.isPending || disabledCount > 0) && (
+            <>
+              <span className={styles['summary-divider']}>·</span>
+              <span className={styles['summary-disabled']}>
+                <span className={styles['status-dot']} />
+                {t('af.meta_disabled', { n: filesQuery.isPending ? '—' : disabledCount })}
+              </span>
+            </>
+          )}
+          {(filesQuery.isPending || attentionCount > 0) && (
+            <>
+              <span className={styles['summary-divider']}>·</span>
+              <span className={styles['summary-attention']}>
+                <span className={styles['status-dot']} />
+                {t('omc.quota_filter_attention')} {filesQuery.isPending ? '—' : attentionCount}
+              </span>
+            </>
+          )}
         </div>
-        <div className={styles.actions}>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json,application/json"
-            multiple
-            hidden
-            onChange={(event) => {
-              const files = Array.from(event.target.files ?? []);
-              event.target.value = '';
-              actions.upload(files);
-            }}
-          />
-          <Button type="primary" icon={<LoginOutlined />} onClick={openConnect}>
-            {t('omc.connect_account')}
-          </Button>
-          <Button
-            icon={<UploadOutlined />}
-            disabled={isDemo || actions.isOperating}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            {t('af.upload')}
-          </Button>
-          <Button
-            icon={<BranchesOutlined />}
-            disabled={actions.isOperating}
-            onClick={() => setIsAliasOpen(true)}
-            data-testid="oauth-management-model-alias-open"
-          >
-            {t('af.alias_open')}
-          </Button>
-        </div>
-      </header>
+      </PageHeader>
 
       {sessionEntries.length > 0 && (
         <div className={styles['session-strip']} aria-live="polite">
@@ -706,22 +708,31 @@ export const OAuthManagementPage: React.FC = () => {
         >
           {t('events.more_filters')}
         </Button>
-        <Dropdown.Button
-          icon={<DownOutlined />}
-          disabled={visibleRecords.length === 0}
-          menu={{
-            items: [
-              { key: 'page', label: t('omc.refresh_scope_page', { n: pagedRecords.filter((record) => record.canRefreshQuota).length }) },
-              { key: 'filtered', label: t('omc.refresh_scope_filtered', { n: eligibleFilteredRefreshCount }) },
-              { key: 'all', label: t('omc.refresh_scope_all', { n: new Set(records.filter((record) => record.canRefreshQuota).map((record) => record.authIndex)).size }) },
-            ],
-            onClick: ({ key }) => void actions.refreshQuota(key as 'page' | 'filtered' | 'all', visibleRecords, pagedRecords, records),
-          }}
-          onClick={() => void actions.refreshQuota('filtered', visibleRecords, pagedRecords, records)}
-          loading={actions.busyQuotaIndexes.size > 0}
-        >
-          <SyncOutlined /> {t('omc.refresh_quota_count', { n: eligibleFilteredRefreshCount })}
-        </Dropdown.Button>
+        {/* The main segment refreshes the filtered set, which is what the list is showing; the
+            caret offers the other scopes. */}
+        <Space.Compact>
+          <Button
+            icon={<SyncOutlined />}
+            disabled={visibleRecords.length === 0}
+            loading={actions.busyQuotaIndexes.size > 0}
+            onClick={() => void actions.refreshQuota('filtered', visibleRecords, pagedRecords, records)}
+          >
+            {t('omc.refresh_quota_count', { n: eligibleFilteredRefreshCount })}
+          </Button>
+          <Dropdown
+            disabled={visibleRecords.length === 0}
+            menu={{
+              items: [
+                { key: 'page', label: t('omc.refresh_scope_page', { n: pagedRecords.filter((record) => record.canRefreshQuota).length }) },
+                { key: 'filtered', label: t('omc.refresh_scope_filtered', { n: eligibleFilteredRefreshCount }) },
+                { key: 'all', label: t('omc.refresh_scope_all', { n: new Set(records.filter((record) => record.canRefreshQuota).map((record) => record.authIndex)).size }) },
+              ],
+              onClick: ({ key }) => void actions.refreshQuota(key as 'page' | 'filtered' | 'all', visibleRecords, pagedRecords, records),
+            }}
+          >
+            <Button icon={<DownOutlined />} disabled={visibleRecords.length === 0} aria-label={t('common.more')} />
+          </Dropdown>
+        </Space.Compact>
       </div>
       {isFiltersOpen && (
         <div id="oauth-collection-filters" className={styles['advanced-filters']}>

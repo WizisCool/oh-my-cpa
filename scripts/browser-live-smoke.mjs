@@ -329,15 +329,18 @@ async function main() {
   check('配置源码按需加载并支持脏状态保护与重载', `len=${yamlLen} dirtyTag=${dirtyTag} cleanTag=${cleanTag}`,
     yamlLen > 1000 && dirtyTag.includes('已修改') && cleanTag.includes('已同步'));
 
-  // Check /plugins capability placeholder page
-  await page.goto(`${appURL}/plugins`, { waitUntil: 'networkidle' });
-  await page.waitForSelector('.capability-status-banner', { timeout: 10000 });
-  const pluginsProbe = await page.evaluate(() => ({
-    statusTag: document.querySelector('.capability-status-tag')?.innerText || '',
-    checkRows: Array.from(document.querySelectorAll('.capability-content tr.ant-table-row')).map((r) => r.innerText),
-  }));
-  check('插件管理占位页显示真实接口探测结果', `tag=${pluginsProbe.statusTag} rows=${pluginsProbe.checkRows.length}`,
-    pluginsProbe.statusTag.includes('接口就绪') && pluginsProbe.checkRows.length === 1 && pluginsProbe.checkRows[0].includes('可用'));
+  // The plugin manager renders the gateway's own plugin list (or its empty state).
+  await page.goto(`${appURL}/plugins`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.plugins-page .ant-table, .plugins-page .ant-empty').first().waitFor({ timeout: 10000 });
+  const pluginRows = await page.locator('.plugins-page .ant-table-row').count();
+  const pluginsResponse = await page.request.get(`${appURL}/api/v1/management/plugins`);
+  const pluginsBody = pluginsResponse.ok() ? await pluginsResponse.json() : undefined;
+  // A body without a plugin array is a broken answer, not an empty list.
+  const pluginsListed = Array.isArray(pluginsBody?.plugins) ? pluginsBody.plugins.length : -1;
+  const pluginsEmptyShown = (await page.locator('.plugins-page .ant-empty').count()) > 0;
+  // The list pages at 20, so a longer list shows its first page.
+  const pluginsMatch = pluginsListed === 0 ? pluginsEmptyShown : pluginRows === Math.min(pluginsListed, 20);
+  check('插件管理页渲染 CPA 插件列表', `rows=${pluginRows} listed=${pluginsListed}`, pluginsListed >= 0 && pluginsMatch);
 
   // Probe API rejection of unknown key
   const unknownProbe = await page.request.get(`${appURL}/api/v1/management/capabilities/unknown-key`);

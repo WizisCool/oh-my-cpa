@@ -515,10 +515,13 @@ export async function dashboardModelPanels({ base, page, check }) {
       for (let x = 0; x < probe.width; x += 1) if (data[(y * probe.width + x) * 4 + 3] > 20) ink += 1;
       if (ink > axisInk) { axisInk = ink; axisRow = y; }
     }
-    // Below the rule, plus a one-pixel allowance for the stroke's own width: a 1.6px line centred on the
-    // axis legitimately covers a pixel under it.
+    // Below the rule, plus an allowance for the stroke's own half-width: a line centred on the axis
+    // legitimately covers the pixels just under it. The chart canvas is supersampled (at least 2x, see
+    // `chartRender.ts`), so the allowance is two CSS pixels expressed in the canvas's own pixels -
+    // a fixed count of device pixels would shrink to one CSS pixel at 2x and flag the stroke itself.
+    const pixelRatio = canvas.width / Math.max(1, canvas.getBoundingClientRect().width);
     let below = 0;
-    for (let y = axisRow + 2; y < probe.height; y += 1) {
+    for (let y = axisRow + Math.ceil(2 * pixelRatio) + 1; y < probe.height; y += 1) {
       for (let x = 0; x < probe.width; x += 1) {
         if (isSeries((y * probe.width + x) * 4)) below += 1;
       }

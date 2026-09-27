@@ -1,7 +1,9 @@
 import React, { useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Alert, App as AntdApp, Button } from 'antd';
-import { PlusOutlined, SyncOutlined } from '../components/icons';
+import { PlusOutlined } from '../components/icons';
+import { PageHeader } from '../components/common/PageHeader';
+import { RefreshButton } from '../components/common/RefreshButton';
 
 import { useT } from '../i18n';
 import { getProviderDefaultIcon } from '../components/LobeIcon';
@@ -14,6 +16,7 @@ import { useProviderList } from '../components/providers/useProviderList';
 import { useProviderManagement } from '../components/providers/useProviderManagement';
 import { ProviderEditorDrawer } from '../components/providers/ProviderEditorDrawer';
 import { ProviderTable } from '../components/providers/ProviderTable';
+import { describeError } from '../api/client';
 
 export const ProvidersPage: React.FC = () => {
   const t = useT();
@@ -141,50 +144,36 @@ export const ProvidersPage: React.FC = () => {
   );
 
   return (
-    <div className="terminal-page providers-page">
-      <div className="terminal-page-head">
-        <div>
-          <h1 className="terminal-title">{t('pro.title')}</h1>
-          <p className="terminal-subtitle">{t('pro.subtitle')}</p>
-        </div>
-
-        <Button
-          size="small"
-          icon={<SyncOutlined spin={providersFetching} />}
-          onClick={() => void refetchProviders()}
-        >
-          {t('common.refresh')}
-        </Button>
-      </div>
-
-      <div>
-        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenCreate}>
-            {t('pro.add_provider')}
-          </Button>
-        </div>
-
-        {providersError && (
-          <Alert
-            type="error"
-            showIcon
-            style={{ marginBottom: 16 }}
-            description={`${t('common.save_failed', { msg: providersErr instanceof Error ? providersErr.message : String(providersErr) })}`}
-          />
+    <div className="terminal-page terminal-page-stack providers-page">
+      <PageHeader
+        title={t('pro.title')}
+        actions={(
+          <>
+            <RefreshButton onRefresh={() => void refetchProviders()} isRefreshing={providersFetching} />
+            {/* Creating a provider writes the gateway's configuration, which the demonstration
+                refuses; the drawer still opens so the form can be read. */}
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenCreate}>
+              {t('pro.add_provider')}
+            </Button>
+          </>
         )}
+      />
 
-        <ProviderTable
-          providers={providers}
-          providersLoading={providersLoading}
-          providerIcons={providerIcons}
-          pluginLogos={pluginLogos}
-          statusQueue={statusQueue}
-          deleteProviderMutation={deleteProviderMutation}
-          handleOpenEdit={handleOpenEdit}
-          setIconPickerOpen={setIconPickerOpen}
-          setTargetProviderForIcon={setTargetProviderForIcon}
-        />
-      </div>
+      {providersError && (
+        <Alert type="error" showIcon description={t('common.load_failed', { msg: describeError(providersErr) })} />
+      )}
+
+      <ProviderTable
+        providers={providers}
+        providersLoading={providersLoading}
+        providerIcons={providerIcons}
+        pluginLogos={pluginLogos}
+        statusQueue={statusQueue}
+        deleteProviderMutation={deleteProviderMutation}
+        handleOpenEdit={handleOpenEdit}
+        setIconPickerOpen={setIconPickerOpen}
+        setTargetProviderForIcon={setTargetProviderForIcon}
+      />
 
       {/* Provider Rich Drawer */}
       <ProviderEditorDrawer

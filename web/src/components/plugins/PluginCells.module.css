@@ -1,0 +1,68 @@
+.plugin-identity {
+  min-width: 0;
+}
+
+.plugin-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.plugin-name :global(.anticon) {
+  color: var(--muted);
+}
+
+.plugin-id {
+  margin-top: 2px;
+  color: var(--meta);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.plugin-description {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.plugin-version {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.version-chip {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 12px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.plugin-author {
+  color: var(--meta);
+  font-size: 11px;
+}
+
+.plugin-muted {
+  color: var(--meta);
+}
+
+.plugin-permissions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.permission-tag {
+  margin: 0 !important;
+  font-size: 11px;
+}

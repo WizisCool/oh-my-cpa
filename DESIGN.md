@@ -276,6 +276,8 @@ The console is operated from a phone as well as a desktop, and the phone is trea
 
 **The One Content Column Rule.** `.terminal-page` owns the console's 1440px content column, and no page-level class may declare a `max-width` of its own: a rule of equal specificity wins by source order (CSS module styles load after the stylesheet), so `max-width: 100%` on a page root silently drops the cap and that surface renders wider than every other one. Width comes from the column; a list's inset comes from its card's 20px body padding. Where a surface deliberately reads narrower, the reason sits next to the rule that makes it so.
 
+**The One Page Chrome Rule.** Every route opens with `PageHeader`: one title, a line under it only when that line carries live data (no echo subtitles, footnotes or field hints that restate what is on screen), and right-aligned actions at the default 32px height with the primary action last. Refresh is always `RefreshButton` (the header's rotate glyph, spinning while a read is in flight rather than locking); a state is `StatusLabel` (pip + word, never a filled tag); row actions are quiet 28px squares that take the accent - or the danger colour, for a destructive one - only on hover; a list is `ResponsiveList`. Stacked blocks share the `.terminal-page-stack` rhythm (16px, 24px under the head). See `docs/design.md` §5 "Page chrome".
+
 ## Elevation & Depth
 
 Oh My CPA is an uncompromisingly flat design system. Drop shadows (`box-shadow`) are globally suppressed across all components, panels, modals, dropdowns, and cards (`box-shadow: none`).

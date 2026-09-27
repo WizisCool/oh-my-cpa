@@ -111,6 +111,8 @@
      down from the popover" is --bg in dark and --surface in light, so the two
      modes disagree and the components should not have to know. */
   --hover-inset: var(--bg);
+  /* The hover fill for a row or a quiet control that sits on the page or a card. */
+  --hover: #272729;
   /* Motion budget from docs/design.md §7: chrome only, no entrance choreography. These are the
      same two numbers Ant Design's own motion tokens carry in `themeConfig.ts`
      (`motionDurationFast`, and `motionDurationMid`/`Slow`), and `test-theme-presets` pins the pair -
@@ -144,6 +146,7 @@
   --border: #e5e5ea;
   --border-soft: #f1f1f4;
   --hover-inset: #f2f2f2;
+  --hover: #f3f3f3;
   --success: #059669;
   --warn: #b45309;
   --danger: #dc2626;
@@ -232,6 +235,9 @@ a { color: inherit; }
 .ant-form-item .ant-form-item-label > label { font-size: 13px; color: var(--muted); letter-spacing: .04em; }
 .ant-descriptions-item-label { font-size: 13px; color: var(--muted) !important; }
 .ant-table-wrapper .ant-table-thead > tr > th {
+  /* A header names its column in one line: a squeezed column wraps its cells, never its name,
+     which is how "前缀" came to read one glyph per line. */
+  white-space: nowrap;
   font-size: 12px;
   letter-spacing: .08em;
   text-transform: uppercase;
@@ -262,6 +268,123 @@ a { color: inherit; }
   flex-wrap: wrap;
   margin-bottom: 24px;
 }
+/* The head's two halves. The title block may shrink; the actions keep their own width and wrap
+   as a group, so a long title in one language never pushes a button off the page. */
+.terminal-page-heading { min-width: 0; }
+.terminal-page-heading .terminal-title { margin: 0; }
+.terminal-page-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* A page built from stacked blocks - alerts, panels, a list - spaces them by one rhythm instead of
+   each block carrying its own margin. The head keeps the design's 24px to the first block: 8px of
+   its own on top of the 16px gap. */
+.terminal-page-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.terminal-page-stack > .terminal-page-head { margin-bottom: 8px; }
+.terminal-page-stack > * { min-width: 0; }
+.terminal-page-stack > .ant-alert { margin: 0; }
+
+/* A card's own head (`PanelTitle`): glyph, title and the one control that acts on that card. */
+.panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.panel-title-main { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.panel-title-icon { display: inline-flex; color: var(--muted); }
+.panel-title-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panel-title-extra { display: inline-flex; align-items: center; gap: 8px; font-weight: 400; }
+
+/* A state as pip + word (`StatusLabel`). The word keeps the reading ink; the pip alone carries tone. */
+.status-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-2);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.status-label-pip {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--meta);
+}
+.status-label.is-success .status-label-pip { background: var(--success); }
+.status-label.is-warn .status-label-pip { background: var(--warn); }
+.status-label.is-danger .status-label-pip { background: var(--danger); }
+.status-label.is-accent .status-label-pip { background: var(--accent); }
+.status-label.is-neutral { color: var(--muted); }
+
+/* A label/value list (`FactList`). */
+.fact-list { margin: 0; }
+.fact-list-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.fact-list-row:last-child { border-bottom: 0; }
+.fact-list dt { color: var(--muted); font-size: 13px; }
+.fact-list dd {
+  min-width: 0;
+  max-width: 65%;
+  margin: 0;
+  font-size: 13px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.fact-list.is-strong dd { color: var(--fg); font-weight: 600; }
+.fact-list.is-quiet dd { color: var(--fg-2); }
+
+/* A wide table scrolls sideways inside its card, never the page (docs/design.md §3). */
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.responsive-list .ant-pagination { margin-top: 12px; }
+/* A phone row inside a card takes the card's own inset rather than adding its own on top: the
+   two stacked to 36px a side, which on a 390px screen is a tenth of the width spent on margin. */
+.ant-card-body [data-testid="phone-row"] { padding-inline: 0; }
+@media (max-width: 640px) {
+  .ant-card .ant-card-body { padding: 16px; }
+}
+
+/* A row's action cluster: square 28px icon buttons, 8px apart so the touch rules' 4px hit insets
+   meet rather than overlap. The glyph stays quiet until hovered, and a destructive action shows
+   its colour only on hover - a column of red bins read as a column of errors. `!important` because
+   antd's variant colours are injected after this sheet at the same specificity. */
+.row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.ant-btn.row-action-btn {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  border-color: var(--border) !important;
+  background: var(--surface) !important;
+  color: var(--muted) !important;
+}
+.ant-btn.row-action-btn:not(:disabled):hover { border-color: var(--accent) !important; color: var(--accent) !important; }
+.ant-btn.row-action-btn.ant-btn-dangerous:not(:disabled):hover { border-color: var(--danger) !important; color: var(--danger) !important; }
+.ant-btn.row-action-btn:disabled { color: var(--meta) !important; opacity: .6; }
+/* A switch and the word for its state, side by side in one cell. */
+.switch-status-cell { display: inline-flex; align-items: center; gap: 8px; }
+
+/* A route or a block that has not answered yet: the indicator sits where the content will land. */
+.page-loading { display: flex; justify-content: center; align-items: center; min-height: 40vh; padding: 60px 0; }
+
 .terminal-eyebrow {
   color: var(--muted);
   font-size: 10px;
@@ -282,7 +405,14 @@ a { color: inherit; }
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-thumb { background: var(--border); border-radius: var(--radius-sm); }
 *::-webkit-scrollbar-track { background: transparent; }
-:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent) !important; border-radius: var(--radius-sm); }
+/* The console's one focus ring, for everything a keyboard reaches - except a text field. A text
+   field sits inside a control that draws its own focus on the *outer* box (antd's accent border
+   and halo on an Input, a Select, a picker or a number field), and a browser matches
+   `:focus-visible` on every focused text field, mouse or keyboard alike. Ringing the inner field
+   as well drew a second, smaller rectangle inside the control - its corners showing beside the
+   prefix glyph and the caret of every Select. */
+:focus-visible:not(input):not(textarea) { outline: none; box-shadow: 0 0 0 2px var(--accent) !important; border-radius: var(--radius-sm); }
+input:focus-visible, textarea:focus-visible { outline: none; }
 
 .app-shell { height: 100vh; height: 100dvh; overflow: hidden; background: var(--bg); }
 .app-body { height: 100%; min-width: 0; overflow: hidden; }
@@ -661,10 +791,6 @@ a { color: inherit; }
 .runtime-list div { display: flex; justify-content: space-between; gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--border-soft); }
 .runtime-list dt { color: var(--muted); font-size: 13px; }
 .runtime-list dd { max-width: 65%; margin: 0; color: var(--fg); font-size: 13px; text-align: right; overflow-wrap: anywhere; }
-.capability-content { display: flex; flex-direction: column; gap: 16px; }
-.capability-status-banner { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm, 4px); }
-.capability-status-tag { font-size: 13px; padding: 2px 8px; font-weight: 500; }
-.capability-probe-time { font-size: 12px; font-family: var(--font-mono); }
 
 @media (max-width: 900px) {
   .terminal-page { padding: 24px 16px 40px; }
@@ -678,7 +804,6 @@ a { color: inherit; }
      is the one piece of orientation a phone can still use, and it is the *last* item. The
      group is what the sheet's Highlight already carries when the reader went through it. */
   .app-breadcrumb li:not(:last-child) { display: none; }
-  .capability-state { padding: 20px; }
 }
 
 /* ── dashboard tiles: six cards in two rows, flat by design.md ─────────────── */
@@ -696,6 +821,11 @@ a { color: inherit; }
   min-width: 0;
 }
 .dashboard-tile.is-wide { grid-column: span 2; }
+.tile-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ant-btn.tile-link { height: auto; padding: 0; font-size: 12px; }
+.tile-skeleton { margin-top: 12px; }
+.dashboard-key-filter { min-width: 180px; max-width: 240px; }
+.dashboard-key-filter-icon { color: var(--muted); }
 .dashboard-tile .ant-card-body { padding: 20px; }
 .tile-label {
   display: flex;
@@ -1975,10 +2105,26 @@ a { color: inherit; }
   background: transparent;
 }
 
+.config-api-keys-table .ant-table-tbody > tr > td {
+  background: transparent !important;
+  border-bottom: 1px solid var(--border-soft);
+  padding: 12px 16px;
+}
+
+.config-api-keys-table .ant-table-tbody > tr:hover > td {
+  background: var(--hover) !important;
+}
+
+.config-api-keys-table .ant-table-tbody > tr:last-child > td {
+  border-bottom: none;
+}
+
+/* The key editor: the secret first, because it is what the dialog exists for, then the
+   console-only name. */
 .keys-key-editor {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   margin-top: 16px;
 }
 
@@ -1991,9 +2137,14 @@ a { color: inherit; }
   font-weight: 600;
 }
 
+.keys-key-editor-label:not(:first-child) {
+  margin-top: 12px;
+}
+
 .keys-key-editor-hint {
+  margin: 0;
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 .keys-key-editor-actions {
@@ -2002,14 +2153,14 @@ a { color: inherit; }
   gap: 8px;
 }
 
-.config-api-keys-table .ant-table-tbody > tr > td {
-  background: transparent !important;
-  border-bottom: 1px solid var(--border-soft);
-  padding: 10px 18px;
-}
-
-.config-api-keys-table .ant-table-tbody > tr:last-child > td {
-  border-bottom: none;
+/* The secret and the two actions that touch it, as one unit: a code chip and two quiet
+   glyphs, 8px apart so the touch rules' hit insets meet rather than overlap. Nothing here
+   clips, because a clipped parent would cut those insets off. */
+.config-key-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
 }
 
 /* A fixed width rather than a maximum: this box is what stops the reveal toggle
@@ -2017,56 +2168,62 @@ a { color: inherit; }
    not depend on how long the value inside it happens to be. A key longer than the
    box scrolls inside it. */
 .config-key-box {
-  width: 380px;
-  max-width: 100%;
-  height: 32px;
   display: inline-flex;
+  flex-shrink: 1;
   align-items: center;
-  padding: 0 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  width: 280px;
+  max-width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0 10px;
   overflow-x: auto;
   overflow-y: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
   white-space: nowrap;
   box-sizing: border-box;
+  scrollbar-width: none;
+}
+
+.config-key-box::-webkit-scrollbar {
+  display: none;
 }
 
 .config-key-text {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--fg);
-  letter-spacing: 0.5px;
+  letter-spacing: .02em;
   user-select: all;
 }
 
 /* The mask and the secret are the same shape and length, so the ink is what says
-   which one is on screen: masked keys carry the metadata colour the design system
-   names for them, and a revealed secret takes the console's full-contrast ink. */
+   which one is on screen: a mask reads in the secondary ink, a revealed secret takes the
+   console's full-contrast ink. */
 .config-key-text.is-masked {
-  color: var(--meta);
+  color: var(--fg-2);
 }
 
 .config-key-text.is-revealed {
   color: var(--fg);
 }
 
-/* The row's action cluster: the two actions that touch the secret stay inline as
-   32x32 squares, everything else lives behind the overflow trigger. */
+/* The row's action cluster: edit inline, everything else behind the overflow trigger. */
 .keys-row-actions {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  /* 8px, so the touch rules' 4px insets on these 32px controls meet instead of overlapping by
-     2px. Four buttons at 32px plus three 8px gaps is 152px, which fits every phone row. */
+  /* 8px, so the touch rules' 4px insets on these controls meet instead of overlapping. */
   gap: 8px;
 }
 
-/* 32x32px square key action buttons */
+/* Square key action buttons: a 1px frame on the row's own actions, none on the glyphs that sit
+   beside the secret, which read as part of the key rather than as separate controls. */
 .config-key-action {
-  width: 32px !important;
-  height: 32px !important;
-  min-width: 32px !important;
+  width: 30px !important;
+  height: 30px !important;
+  min-width: 30px !important;
   padding: 0 !important;
   display: inline-flex !important;
   align-items: center !important;
@@ -2076,12 +2233,32 @@ a { color: inherit; }
   background: var(--surface) !important;
   color: var(--muted) !important;
   cursor: pointer;
+  transition: color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard);
 }
 
-.config-key-action:hover {
-  color: var(--fg) !important;
-  border-color: var(--muted) !important;
+.config-key-action.is-quiet {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  border-color: transparent !important;
+  background: transparent !important;
+}
+
+.config-key-action:not(:disabled):hover {
+  color: var(--accent) !important;
+  border-color: var(--accent) !important;
   background: var(--bg) !important;
+}
+
+.config-key-action.is-quiet:not(:disabled):hover {
+  border-color: transparent !important;
+  background: var(--hover) !important;
+}
+
+.config-key-action:disabled {
+  color: var(--meta) !important;
+  cursor: not-allowed;
+  opacity: .6;
 }
 
 @media (max-width: 1719px) {

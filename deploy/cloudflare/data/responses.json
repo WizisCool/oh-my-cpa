@@ -24,7 +24,7 @@
     "audit-export": {
       "status": 200,
       "content_type": "application/json; charset=utf-8",
-      "body": "{\"count\":1,\"events\":[{\"action\":\"config.reveal_source\",\"details\":{\"revision\":\"c72131db0a20b19906d1cd6a99d48d8860a7b9a59bec6613afa9fe06f08afb64\",\"size_bytes\":0},\"id\":1,\"occurred_at_ms\":1767225600000,\"request_id\":\"req_demo00000001\",\"result\":\"success\",\"source_summary\":\"ip=127.0.0.0/24 ua=Go-http-client/1.1\",\"target_id\":\"config_source_yaml\",\"target_type\":\"config\"}],\"exported_at\":\"2026-01-01T00:00:01Z\"}"
+      "body": "{\"count\":1,\"events\":[{\"action\":\"config.reveal_source\",\"details\":{\"revision\":\"c72131db0a20b19906d1cd6a99d48d8860a7b9a59bec6613afa9fe06f08afb64\",\"size_bytes\":0},\"id\":1,\"occurred_at_ms\":1767225600000,\"request_id\":\"req_demo00000001\",\"result\":\"success\",\"source_summary\":\"ip=127.0.0.0/24 ua=Go-http-client/1.1\",\"target_id\":\"config_source_yaml\",\"target_type\":\"config\"}],\"exported_at\":\"2026-01-01T00:00:00Z\"}"
     },
     "auth-files": {
       "status": 200,
@@ -409,7 +409,7 @@
     "usage-ingest-status": {
       "status": 200,
       "content_type": "application/json; charset=utf-8",
-      "body": "{\"collector\":{\"captured\":15174,\"control_frames\":0,\"coverage_gaps\":0,\"last_capture_at\":\"2025-12-31T23:59:57Z\",\"mode\":\"subscribe\",\"running\":true},\"decoder\":{\"decoded\":15174,\"discarded\":0,\"running\":true},\"enabled\":true,\"healthy\":true,\"maintenance\":{\"daily_aggregated\":15174,\"hourly_aggregated\":15174,\"last_run_at\":\"2025-12-31T23:59:52Z\",\"purged\":0,\"running\":true},\"stats\":{\"CheckpointDaily\":15174,\"CheckpointHourly\":15174,\"Discarded\":0,\"ErrorEvents\":0,\"Events\":15174,\"FirstEventMS\":1735172378372,\"LastEventMS\":1767225486141,\"Pending\":0,\"Processed\":0}}"
+      "body": "{\"collector\":{\"captured\":15174,\"control_frames\":0,\"coverage_gaps\":0,\"last_capture_at\":\"2025-12-31T23:59:56Z\",\"mode\":\"subscribe\",\"running\":true},\"decoder\":{\"decoded\":15174,\"discarded\":0,\"running\":true},\"enabled\":true,\"healthy\":true,\"maintenance\":{\"daily_aggregated\":15174,\"hourly_aggregated\":15174,\"last_run_at\":\"2025-12-31T23:59:51Z\",\"purged\":0,\"running\":true},\"stats\":{\"CheckpointDaily\":15174,\"CheckpointHourly\":15174,\"Discarded\":0,\"ErrorEvents\":0,\"Events\":15174,\"FirstEventMS\":1735172378372,\"LastEventMS\":1767225486141,\"Pending\":0,\"Processed\":0}}"
     }
   }
 }

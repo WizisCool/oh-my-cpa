@@ -60,17 +60,8 @@ export function formatSnapshotRenewalBound(targetMS: number): string {
   return `≥ ${formatShortDateTime(targetMS)}`;
 }
 
-/** Relative "x minutes ago" / "x hours ago" for observation timestamps. */
-export function formatObservedAgo(ms: number, nowMS: number, t: TFunc): string {
-  const diffSec = Math.floor((nowMS - ms) / 1000);
-  if (diffSec < 60) return t('quota.just_now');
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin} ${t('quota.mins_ago')}`;
-  const diffHours = Math.floor(diffMin / 60);
-  if (diffHours < 24) return `${diffHours} ${t('quota.hours_ago')}`;
-  const diffDays = Math.floor(diffHours / 24);
-  return t('quota.days_ago', { n: diffDays });
-}
+/** Relative "x minutes ago" for observation timestamps; the console's one relative-age reading. */
+export { formatTimeAgo as formatObservedAgo } from '../../utils/format';
 
 /** The share a window has left, clamped to 0-100, derived from usage when needed. */
 export function quotaRemainingPercent(window: { remaining_percent?: number; used_percent?: number }): number | undefined {

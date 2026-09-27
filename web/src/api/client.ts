@@ -22,7 +22,6 @@ import { DashboardResponse, DashboardTailResponse, DashboardWindow } from '../ty
 import { DashboardTokenHeatmap } from '../types/tokenHeatmap';
 import { DashboardModelsResponse } from '../types/dashboardModels';
 import { ErrorLogFile } from '../types/logs';
-import { CapabilityProbeReport } from '../types/capability';
 import { ConfigScalarsResponse, ConfigSourceResponse } from '../types/configManagement';
 import { ClientAPIKeyItem, ClientKeyUsageItem, ProviderItem, SaveProviderPayload } from '../types/providers';
 import { GatewayModelItem } from '../types/gatewayModels';
@@ -171,6 +170,18 @@ export function apiErrorCode(err: unknown): string {
     if (typeof code === 'string') return code;
   }
   return '';
+}
+
+/**
+ * The sentence a failure carries, for a toast or an alert.
+ *
+ * An `ApiError`'s message is already the server's own (or the console's localized demo refusal),
+ * and any other `Error` is a transport failure whose message is the useful part - `String(error)`
+ * would prefix it with "Error: ", which is noise in a reading language that is not English.
+ */
+export function describeError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return err === undefined || err === null ? '' : String(err);
 }
 
 /**
@@ -409,10 +420,6 @@ export const api = {
     if (params.after) search.set('after', String(params.after));
     search.set('limit', String(params.limit ?? DEFAULT_LOG_PAGE));
     return request<LogsResponse>(`/management/logs?${search.toString()}`, { method: 'GET' });
-  },
-
-  async getCapability(key: string): Promise<CapabilityProbeReport> {
-    return request<CapabilityProbeReport>(`/management/capabilities/${encodeURIComponent(key)}`, { method: 'GET' });
   },
 
   async getConfigScalars(): Promise<ConfigScalarsResponse> {

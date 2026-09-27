@@ -14,7 +14,6 @@ import {
 import {
   FullscreenExitOutlined,
   FullscreenOutlined,
-  ReloadOutlined,
   VerticalAlignTopOutlined,
 } from '../components/icons';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
@@ -63,6 +62,7 @@ import { RequestPagination } from '../components/usage/RequestPagination';
 import { RequestStreamHeader } from '../components/usage/RequestStreamHeader';
 import { RequestToolbar } from '../components/usage/RequestToolbar';
 import './UsageEventsPage.css';
+import { RefreshButton } from '../components/common/RefreshButton';
 
 export const UsageEventsPage: React.FC = () => {
   const t = useT();
@@ -515,14 +515,11 @@ export const UsageEventsPage: React.FC = () => {
                 onClick={handleToggleExpand}
               />
             </Tooltip>
-            <Button
-              aria-label={t('common.refresh')}
-              icon={<ReloadOutlined spin={isSyncing || result.isFetching} />}
+            <RefreshButton
+              isRefreshing={isSyncing || result.isFetching}
               disabled={isSyncing}
-              onClick={handleManualRefresh}
-            >
-              {t('common.refresh')}
-            </Button>
+              onRefresh={handleManualRefresh}
+            />
           </div>
         </header>
         {rejectedParams.length > 0 && (

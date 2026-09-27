@@ -98,7 +98,7 @@ export const CompactQuotaView: React.FC<CompactQuotaViewProps> = ({
                     percent={remaining ?? 0}
                     showInfo={false}
                     strokeColor={quotaRemainingStroke(remaining)}
-                    strokeWidth={4}
+                    size={{ height: 4 }}
                   />
                 </div>
                 <span className={styles['window-reset']} title={quotaResetText(window, nowMS, t)}>

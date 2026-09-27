@@ -1,7 +1,7 @@
 import React from 'react';
 import { App as AntdApp } from 'antd';
 import { useQueryClient } from '@tanstack/react-query';
-import { api, ApiError } from '../../api/client';
+import { api, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import {
   normalizeOAuthFlow,
@@ -220,7 +220,7 @@ export function useOAuthSessions(
       return 'wait';
     } catch (error: unknown) {
       if (disposedRef.current || generationRef.current[providerId] !== generation) return 'wait';
-      const errorMessage = error instanceof ApiError ? error.message : String(error);
+      const errorMessage = describeError(error);
       // A read that failed says nothing about the attempt: CPA may still hold it and
       // the browser may still be on the vendor's consent screen. Ending the attempt
       // here would strand a live session behind a Retry that opens a second one, so
@@ -288,7 +288,7 @@ export function useOAuthSessions(
       if (token) scheduleStatusPoll(providerId, token, generation);
     } catch (error: unknown) {
       if (generationRef.current[providerId] !== generation) return;
-      const errorMessage = error instanceof ApiError ? error.message : String(error);
+      const errorMessage = describeError(error);
       updateProviderState(providerId, {
         status: 'error',
         starting: false,
@@ -331,7 +331,7 @@ export function useOAuthSessions(
       }
     } catch (error: unknown) {
       if (disposedRef.current || generationRef.current[providerId] !== generation) return;
-      const errorMessage = error instanceof ApiError ? error.message : String(error);
+      const errorMessage = describeError(error);
       updateProviderState(providerId, { cancelling: false, cancelError: errorMessage, polling: Boolean(token) });
       if (token) scheduleStatusPoll(providerId, token, generation);
       message.error(t('oauth.cancel_failed', { msg: errorMessage }));
@@ -402,7 +402,7 @@ export function useOAuthSessions(
         if (outcome === 'ok') return;
       }
       if (disposedRef.current || generationRef.current[providerId] !== generation) return;
-      const errorMessage = error instanceof ApiError ? error.message : String(error);
+      const errorMessage = describeError(error);
       updateProviderState(providerId, {
         callbackSubmitting: false,
         callbackStatus: 'error',

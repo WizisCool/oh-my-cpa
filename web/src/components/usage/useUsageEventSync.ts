@@ -3,7 +3,7 @@ import React from 'react';
 import { App as AntdApp } from 'antd';
 import { useMutation, useQuery } from '@tanstack/react-query';
 
-import { api, ApiError } from '../../api/client';
+import { api, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import { EVENT_AUTO_REFRESH_MS, EVENT_SYNC_NOTICE_MS } from '../../types/usageEventCadence';
 import { eventWindowQuery } from '../../types/usageEventQuery';
@@ -178,7 +178,7 @@ export function useUsageEventSync({
         else message.warning(text, 6);
       },
       onError: (error: unknown) => {
-        const msg = error instanceof ApiError ? error.message : String(error);
+        const msg = describeError(error);
         message.error(t('events.sync_failed', { msg }));
       },
     });

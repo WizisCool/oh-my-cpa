@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, ColorPicker, Segmented, Select, Typography } from 'antd';
+import { Button, ColorPicker, Segmented, Select } from 'antd';
 import { PlusOutlined } from '../components/icons';
 import { isChineseLanguage, useT, useI18n, LANGUAGES } from '../i18n';
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport';
@@ -22,8 +22,8 @@ import { LanguageFlag } from '../components/common/LanguageFlag';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
 import type { TokenNumberStyle } from '../types/tokenDisplay';
 import { TOKEN_NUMBER_STYLES } from '../types/tokenDisplay';
+import { PageHeader } from '../components/common/PageHeader';
 
-const { Title } = Typography;
 
 const MODE_LABEL_KEYS: Record<ThemeModePreference, string> = {
   light: 'omc.theme_mode_light',
@@ -113,9 +113,7 @@ export const OmcSettingsPage: React.FC = () => {
 
   return (
     <div className="terminal-page omc-settings-page">
-      <div className="terminal-page-head">
-        <Title level={2} className="terminal-title">{t('omc.title')}</Title>
-      </div>
+      <PageHeader title={t('omc.title')} />
 
       <div className="settings-group omc-settings-group">
         <div className="settings-group-head">

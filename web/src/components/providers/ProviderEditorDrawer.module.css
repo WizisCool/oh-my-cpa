@@ -1,0 +1,363 @@
+/* ── drawer head and foot ────────────────────────────────────────────────── */
+
+.drawer-title {
+  color: var(--fg);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+/* ── brand mark ──────────────────────────────────────────────────────────── */
+
+.icon-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.icon-tile {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-standard);
+}
+
+.icon-tile:hover {
+  border-color: var(--accent);
+}
+
+.icon-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.icon-label {
+  margin-bottom: 2px;
+  color: var(--meta);
+  font-size: 12px;
+}
+
+.icon-name {
+  overflow: hidden;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icon-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ── fields ──────────────────────────────────────────────────────────────── */
+
+.label-hint {
+  color: var(--meta);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.field-hint {
+  margin-top: 4px;
+  color: var(--meta);
+  font-size: 12px;
+}
+
+.flag-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.flag {
+  min-width: 0;
+}
+
+.flag-label {
+  font-weight: 500;
+}
+
+/* Aligned under the checkbox's label rather than its box. */
+.flag-desc {
+  margin: 2px 0 0 24px;
+  color: var(--meta);
+  font-size: 12px;
+}
+
+/* ── collapsible groups (`EditorSection`) ───────────────────────────────── */
+
+.section {
+  margin-bottom: 16px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 12px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-standard);
+}
+
+.section-head:hover {
+  background: var(--hover);
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.section-count {
+  margin-left: 8px;
+  color: var(--meta);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.section-chevron {
+  display: inline-flex;
+  color: var(--meta);
+  font-size: 12px;
+}
+
+.section-body {
+  padding: 0 16px 16px;
+}
+
+.section-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.section-note {
+  color: var(--meta);
+  font-size: 12px;
+}
+
+.section-note-accent {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* ── entries inside a group ─────────────────────────────────────────────── */
+
+.item-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.item-list-spaced {
+  margin-bottom: 12px;
+}
+
+.item-card {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px 6px 0;
+}
+
+.item-toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 4px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.item-title {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.item-key {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg-2);
+  font-size: 12.5px;
+  letter-spacing: .02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.item-field-label {
+  margin-bottom: 6px;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* ── custom headers ─────────────────────────────────────────────────────── */
+
+.header-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── models ─────────────────────────────────────────────────────────────── */
+
+.model-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 64px;
+  gap: 8px;
+  padding: 0 12px 6px;
+  color: var(--meta);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.model-columns-spacer {
+  width: 64px;
+}
+
+/* A card scrolled into view on add stops short of the drawer's footer. */
+.model-card {
+  scroll-margin-bottom: 24px;
+}
+
+.model-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--surface);
+}
+
+.model-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.model-suffix {
+  color: var(--meta);
+  font-size: 11px;
+}
+
+/* A thinking level is a toggle drawn as a tile: the accent edge and a tint mixed from the accent
+   over the card mark it selected in either mode, where a fixed rgba only worked on dark. */
+.level-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard);
+  user-select: none;
+}
+
+.level-option:hover {
+  border-color: var(--muted);
+}
+
+.level-option-checked {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
+.level-option-checked .level-label {
+  font-weight: 600;
+}
+
+/* The checkbox mirrors the tile's state; the tile takes the click. */
+.level-check {
+  pointer-events: none;
+}
+
+.level-label {
+  font-weight: 400;
+}
+
+.level-value {
+  color: var(--meta);
+  font-size: 11px;
+}

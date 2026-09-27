@@ -342,7 +342,7 @@ export const AppLayout: React.FC = () => {
           placement="left"
           open={isMobileNavOpen}
           onClose={() => setIsMobileNavOpen(false)}
-          width="min(320px, 86vw)"
+          size="min(320px, 86vw)"
           closable={false}
           className="mobile-nav-drawer"
           styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column' } }}

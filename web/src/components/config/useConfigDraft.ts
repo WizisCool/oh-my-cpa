@@ -4,7 +4,7 @@ import { App as AntdApp } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseDocument, type Document } from 'yaml';
 
-import { api, ApiError, apiErrorCode } from '../../api/client';
+import { api, ApiError, apiErrorCode, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import { getFieldSemanticValue, updateFieldWithBaseline, isConfigSemanticallyEqual } from './configDirty';
 import { describeLayoutRefusal, payloadComparisonPaths, resolveConfigFields, resolvePayloadPlacement } from './configLayout';
@@ -356,7 +356,7 @@ export function useConfigDraft() {
         setSaveError(null);
         setViewMode('source');
       } catch (err) {
-        const msg = err instanceof ApiError ? err.message : String(err);
+        const msg = describeError(err);
         message.error(t('cfg.source_load_failed', { msg }));
       }
     } else {

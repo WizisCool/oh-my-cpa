@@ -203,10 +203,6 @@ const SCENARIO_PATHS = [
     prefix: 'web/src/pages/LogsPage',
     scenarios: ['phone-lists'],
   },
-  {
-    prefix: 'web/src/pages/CapabilityPlaceholderPage',
-    scenarios: ['phone-lists'],
-  },
   // The dashboard: the sparkline marks its tiles draw and the daily-token calendar
   // beneath them. Both live on this page, and the page is what the scenarios load,
   // so a page change can move either one.
