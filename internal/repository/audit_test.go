@@ -157,4 +157,19 @@ func TestQueryAuditEventsFiltersFoldsAndPages(t *testing.T) {
 	if second.Events[0].Action != "provider.update" || second.Events[1].Action != "auth.login" {
 		t.Fatalf("second page continues at %s, want provider.update then auth.login", second.Events[0].Action)
 	}
+
+	// After the upgrade the window no longer pairs rows: an attempt whose request
+	// recorded no outcome stays visible even when the same target succeeded again.
+	later := time.Now().Add(time.Hour).UnixMilli()
+	for i, row := range []AuditEvent{
+		{Action: "provider.toggle_status", TargetType: "provider", TargetID: "p1", Result: "attempt", RequestID: "r7"},
+		{Action: "provider.toggle_status", TargetType: "provider", TargetID: "p1", Result: "success", RequestID: "r8"},
+	} {
+		row.OccurredAtMS = later + int64(i)*1000
+		if _, err := repo.RecordAuditEvent(ctx, row); err != nil {
+			t.Fatalf("record later %d: %v", i, err)
+		}
+	}
+	expect("after the upgrade", actions(AuditQuery{FoldAttempts: true, Categories: []string{"provider"}}),
+		"provider.toggle_status:success", "provider.toggle_status:attempt", "provider.delete:attempt", "provider.update:success")
 }

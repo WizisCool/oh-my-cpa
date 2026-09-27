@@ -486,7 +486,8 @@ not poll.
   keyset cursor the previous page returned as `next_cursor`. `fold` (default on) hides
   an `attempt` row once an outcome exists for the same request id and action; rows
   written before request ids were stable per request are paired by action, target and
-  an outcome within one minute (`auditFoldWindowMS`). `idx_audit_events_request_action`
+  an outcome within one minute (`auditFoldWindowMS`), and only when they are older than
+  the moment migration 027 was applied, which is when ids became stable. `idx_audit_events_request_action`
   (migration 027) serves that lookup. `GET /api/v1/management/audit/export` takes the
   same filters, returns every row including attempts unless `fold=1`, stops at
   `repository.AuditPageMax` rows with `truncated` set, and is itself audited and

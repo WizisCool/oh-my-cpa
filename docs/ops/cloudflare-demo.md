@@ -16,7 +16,7 @@ records why that trade was taken and what it costs.
 | --- | --- | --- |
 | Console | Cloudflare Static Assets, from `tmp/cloudflare-demo/assets` | The built SPA, with the demonstration's runtime configuration injected and its asset URLs made root-relative |
 | API | `deploy/cloudflare/worker.mjs` | Reads the dataset, re-bases its timestamps and answers; refuses everything that would leave the demonstration |
-| Data | `deploy/cloudflare/data/responses.json` | 79 captured responses, generated from the real handlers |
+| Data | `deploy/cloudflare/data/responses.json` | 83 captured responses, generated from the real handlers |
 | Routing | `deploy/cloudflare/routes.mjs` | Which request is answered by which captured response |
 | Time | `deploy/cloudflare/time.mjs` | Moves the captured history onto the viewer's clock |
 | Filters | `deploy/cloudflare/filters.mjs` | Applies the audit trail's category, outcome, search and folding rules, and the service log's `after` position, to the one captured page, so those filters work in the demonstration |

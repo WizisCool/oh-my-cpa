@@ -333,7 +333,14 @@ async function main() {
   await page.goto(`${appURL}/plugins`, { waitUntil: 'domcontentloaded' });
   await page.locator('.plugins-page .ant-table, .plugins-page .ant-empty').first().waitFor({ timeout: 10000 });
   const pluginRows = await page.locator('.plugins-page .ant-table-row').count();
-  check('插件管理页渲染 CPA 插件列表', `rows=${pluginRows}`, pluginRows >= 0);
+  const pluginsResponse = await page.request.get(`${appURL}/api/v1/management/plugins`);
+  const pluginsBody = pluginsResponse.ok() ? await pluginsResponse.json() : undefined;
+  // A body without a plugin array is a broken answer, not an empty list.
+  const pluginsListed = Array.isArray(pluginsBody?.plugins) ? pluginsBody.plugins.length : -1;
+  const pluginsEmptyShown = (await page.locator('.plugins-page .ant-empty').count()) > 0;
+  // The list pages at 20, so a longer list shows its first page.
+  const pluginsMatch = pluginsListed === 0 ? pluginsEmptyShown : pluginRows === Math.min(pluginsListed, 20);
+  check('插件管理页渲染 CPA 插件列表', `rows=${pluginRows} listed=${pluginsListed}`, pluginsListed >= 0 && pluginsMatch);
 
   // Probe API rejection of unknown key
   const unknownProbe = await page.request.get(`${appURL}/api/v1/management/capabilities/unknown-key`);

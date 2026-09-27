@@ -158,6 +158,9 @@ const (
 	// auditFoldWindowMS bounds how long after an attempt an outcome may land and
 	// still be read as its outcome when the two rows carry different request ids.
 	auditFoldWindowMS = 60_000
+	// auditStableRequestIDMigration is the schema version that shipped with one
+	// request id per request; its applied_at marks where exact pairing begins.
+	auditStableRequestIDMigration = 27
 
 	// AuditPageMax bounds one page, and therefore one export.
 	AuditPageMax = 5000
@@ -222,16 +225,19 @@ func (r *Repository) QueryAuditEvents(ctx context.Context, query AuditQuery) (Au
 	if query.FoldAttempts {
 		// The request-id pairing is exact. The second arm pairs rows written before
 		// request ids were stable per request: an outcome for the same action and
-		// target that followed within auditFoldWindowMS is the same operation.
+		// target that followed within auditFoldWindowMS is the same operation. It is
+		// bounded to rows older than migration 027, which shipped with stable ids, so
+		// a later attempt that never finished is never hidden by an unrelated retry.
 		where = append(where, `NOT (e.result = 'attempt' AND (
 			(e.request_id <> '' AND EXISTS (
 				SELECT 1 FROM audit_events o
 				WHERE o.request_id = e.request_id AND o.action = e.action AND o.result <> 'attempt'))
-			OR EXISTS (
-				SELECT 1 FROM audit_events o
-				WHERE o.action = e.action AND o.target_id = e.target_id AND o.result <> 'attempt'
-				  AND o.occurred_at_ms BETWEEN e.occurred_at_ms AND e.occurred_at_ms + ?)))`)
-		args = append(args, auditFoldWindowMS)
+			OR (e.occurred_at_ms < COALESCE((SELECT applied_at FROM schema_migrations WHERE version = ?), 0) * 1000
+				AND EXISTS (
+					SELECT 1 FROM audit_events o
+					WHERE o.action = e.action AND o.target_id = e.target_id AND o.result <> 'attempt'
+					  AND o.occurred_at_ms BETWEEN e.occurred_at_ms AND e.occurred_at_ms + ?))))`)
+		args = append(args, auditStableRequestIDMigration, auditFoldWindowMS)
 	}
 
 	statement := `
