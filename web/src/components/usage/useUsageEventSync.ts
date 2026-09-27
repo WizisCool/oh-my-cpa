@@ -64,18 +64,20 @@ export function useUsageEventSync({
    * ten-second tick - the most expensive query on the page - to answer a question
    * whose answer barely moves. Facets describe which values exist in a window, so
    * they only need re-reading when the window is *redefined* (a new preset or
-   * range, or any other change to the query) or the operator asks for a refresh.
+   * range) or the operator asks for a refresh. A filter change is neither: the
+   * facet read carries no filter, so it must not cost another ten scans.
    *
    * The window itself is sent unresolved, like the list's (see
    * `eventWindowQuery`), so a preset reads as the same parameters on every visit.
-   * The revision is therefore stamped with the moment the view was defined: a
+   * The revision is therefore stamped with the moment the window was defined: a
    * preset re-entered later is a new cache entry rather than the five-minute-old
    * dropdown of its previous visit, and a manual refresh moves the stamp so the
    * counts the operator just asked for are recomputed.
    */
   const [facetWindowRevision, setFacetWindowRevision] = React.useState(0);
-  const facetWindow = React.useMemo(() => eventWindowQuery(query), [query]);
-  const facetRevision = React.useMemo(() => Date.now(), [query, facetWindowRevision]);
+  const { preset, from, to } = query;
+  const facetWindow = React.useMemo(() => eventWindowQuery({ preset, from, to }), [preset, from, to]);
+  const facetRevision = React.useMemo(() => Date.now(), [facetWindow, facetWindowRevision]);
 
   const ingest = useQuery({
     queryKey: ['usage-ingest-status'],

@@ -43,6 +43,15 @@ export async function filterPanelSection(context) {
   // reached the URL without rendering a chip leaves the operator unable to remove
   // it.
 
+  // Facets describe the window, and the facet read carries no filter, so adding
+  // and removing a filter must be answered from the cached facets rather than by
+  // another ten grouped scans. Counted across the whole add-and-remove below.
+  const facetReads = [];
+  const countFacetRead = (request) => {
+    if (new URL(request.url()).pathname.endsWith('/usage/facets')) facetReads.push(request.url());
+  };
+  page.on('request', countFacetRead);
+
   await modelFacet.click();
   const firstModelOption = page.locator('.ant-select-dropdown:visible .ant-select-item-option').first();
   const firstModel = (await firstModelOption.innerText()).replace(/\s*\(\d+\)\s*$/, '').trim();
@@ -67,6 +76,8 @@ export async function filterPanelSection(context) {
     { detail: () => `url=${filterSuffix()}` },
   );
   check('removing the only filter hides the chip strip', (await page.locator('.req-filter-chip').count()) === 0);
+  page.off('request', countFacetRead);
+  check('a filter change does not re-read the facets', facetReads.length === 0, `facetReads=${facetReads.length}`);
 
   // The advanced drawer is a draft: Apply commits once, Cancel discards. The
   // staging itself is the claim - a range field that committed per keystroke would

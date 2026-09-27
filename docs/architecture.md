@@ -1113,9 +1113,12 @@ exist in a window, so they change only when the window is redefined (a new prese
 or absolute range) or the operator refreshes explicitly — not on each list poll.
 That manual refresh is the same sync described in §6: the page waits for the pull
 and the decode barrier, then re-reads the list, the facets and the pipeline status.
-The revision is part of the facet query key, not only of the window it computes,
-because an absolute range resolves to the same two timestamps on every render and
-a naive revision would leave the cached entry inside its `staleTime`.
+The window is sent unresolved (see "Who resolves the request list's window"), so a
+preset is the same parameters on every visit. The facet query key therefore also
+carries a revision stamped when the window is defined and on each manual refresh,
+and nothing else: a filter change keeps the cached entry, because the facet read
+carries no filter, while a re-entered preset or a refresh is never answered from an
+entry still inside its `staleTime`.
 `scripts/browser-probes.mjs` asserts this directly: a manual refresh issues
 a `POST` to `/usage/ingest/refresh` *and the list and facet reads wait for it*.
 Request counts alone cannot establish that ordering — a page that fired all three
