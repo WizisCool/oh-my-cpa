@@ -1,6 +1,6 @@
 # AGENTS.md — Oh My CPA Project-Level Agent Contract
 
-> This file is automatically loaded by coding agents (such as Pi, Claude Code, etc.) at the start of a session (a local `AGENTS.override.md` supersedes it).
+> This file is automatically loaded by coding agents (such as Pi, Claude Code, etc.) at the start of a session (a local `AGENTS.override.md` supersedes it). The root `CLAUDE.md` is a symlink to this file, so every agent reads one contract; edit `AGENTS.md`, never the link.
 >
 > **First Principle: Keep context documentation synchronized with code.** Do not defer documentation updates to "the next cleanup task"—documentation drift is a defect in the current change and must be resolved within the same change.
 

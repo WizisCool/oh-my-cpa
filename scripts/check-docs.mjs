@@ -103,7 +103,7 @@ export const EXPECTED_ABSENT_PATHS = [
 ];
 
 const ROOT_FILES = new Set([
-  'AGENTS.md', 'CONTEXT.md', 'DESIGN.md', 'PRODUCT.md', 'README.md', 'README.zh-CN.md',
+  'AGENTS.md', 'CLAUDE.md', 'CONTEXT.md', 'DESIGN.md', 'PRODUCT.md', 'README.md', 'README.zh-CN.md',
   'CONTRIBUTING.md', 'SECURITY.md',
   'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'go.mod', 'go.sum',
   'Dockerfile', '.env', '.env.example', '.air.toml', '.editorconfig', '.gitattributes',
