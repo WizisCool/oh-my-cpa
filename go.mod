@@ -1,13 +1,13 @@
 module github.com/oh-my-cpa/oh-my-cpa
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/go-chi/chi/v5 v5.2.4
 	github.com/google/jsonschema-go v0.4.2
 	github.com/google/uuid v1.6.0
 	github.com/modelcontextprotocol/go-sdk v1.3.1
-	golang.org/x/image v0.35.0
+	golang.org/x/image v0.41.0
 	golang.org/x/sys v0.36.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.39.1
