@@ -31,6 +31,7 @@ import {
 import {
   EVENT_FILTER_KEYS,
   eventWindow,
+  eventWindowQuery,
   type EventFilterKey,
 } from '../types/usageEventQuery';
 import { createProviderNameResolver, indexCredentialFiles } from '../types/usageEventIdentity';
@@ -114,7 +115,9 @@ export const UsageEventsPage: React.FC = () => {
     refresh,
     handleManualRefresh,
   } = useUsageEventSync({ query, isAutoRefresh, isFetchingRef });
-  const activeWindow = React.useMemo(() => eventWindow(query, Date.now()), [query, refresh]);
+  // The header's estimate of the window, re-read on every poll. It is display only:
+  // the reads below send the window unresolved, so the server decides what "now" is.
+  const displayWindow = React.useMemo(() => eventWindow(query, Date.now()), [query, refresh]);
 
 
   // viewScope identifies the view the reader is looking at: the filters and
@@ -180,7 +183,15 @@ export const UsageEventsPage: React.FC = () => {
   //
   // A held page always contains the rows the reader was looking at, so the
   // boundary is derivable on any page, not just the first.
-  const queryString = usageEventParams({ ...query, ...activeWindow, cursor, since: liveEdge.heldBoundaryID });
+  //
+  // The window travels as the reader chose it; `eventWindowQuery` explains why a
+  // bound resolved on the browser's clock must never reach the server.
+  const queryString = usageEventParams({
+    ...query,
+    ...eventWindowQuery(query),
+    cursor,
+    since: liveEdge.heldBoundaryID,
+  });
   const result = useQuery({
     queryKey: ['usage-events', queryString, refresh],
     queryFn: () => api.getUsageEvents(queryString),
@@ -430,7 +441,7 @@ export const UsageEventsPage: React.FC = () => {
           <div>
             <h1 className="terminal-title">{t('events.title')}</h1>
             <p className="request-window">
-              {dayjs(activeWindow.from).format('MM-DD HH:mm')} — {dayjs(activeWindow.to).format('MM-DD HH:mm')}
+              {dayjs(displayWindow.from).format('MM-DD HH:mm')} — {dayjs(displayWindow.to).format('MM-DD HH:mm')}
             </p>
           </div>
           <div className="request-actions">

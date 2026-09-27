@@ -279,9 +279,27 @@ export function activeFilterCount(filterValues: Partial<Record<EventFilterKey, s
 }
 
 /**
- * eventWindow freezes the window across cursor navigation so paging cannot walk
- * across a boundary that is still moving. An open-ended custom range keeps
- * following the clock, which is what makes it worth polling.
+ * eventWindowQuery is the window as the reader chose it, left for the server to
+ * resolve: a preset by name, an open-ended range by its start alone, and a closed
+ * range by both bounds.
+ *
+ * Every read of stored records sends this rather than resolved timestamps, because
+ * "now" belongs to the server. Records carry CPA's timestamps, which share the
+ * server's clock and not the browser's; an end resolved in a browser whose clock
+ * runs behind excluded every record newer than that clock, so a request that had
+ * just completed stayed off the list - through any number of refreshes - until the
+ * browser's clock caught up with it.
+ */
+export function eventWindowQuery(query: UsageEventQuery): Pick<UsageEventQuery, 'preset' | 'from' | 'to'> {
+  if (query.from === undefined) return { preset: query.preset };
+  return query.to === undefined ? { from: query.from } : { from: query.from, to: query.to };
+}
+
+/**
+ * eventWindow estimates the window's bounds on the browser's clock, for display
+ * only. Reads send `eventWindowQuery` instead; see it for why the two differ. An
+ * open-ended custom range keeps following the clock, which is what makes it worth
+ * polling.
  */
 export function eventWindow(query: UsageEventQuery, now: number) {
   return query.from !== undefined

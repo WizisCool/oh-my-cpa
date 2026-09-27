@@ -6,7 +6,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';
 import { EVENT_AUTO_REFRESH_MS, EVENT_SYNC_NOTICE_MS } from '../../types/usageEventCadence';
-import { eventWindow } from '../../types/usageEventQuery';
+import { eventWindowQuery } from '../../types/usageEventQuery';
 import type { UsageEventQuery } from '../../types/usageEvents';
 import { shouldPoll } from './pollingPolicy';
 import { shouldAnnounceStuckSync, syncOutcomeMessage, syncShortfallReason } from './syncPresentation';
@@ -58,28 +58,24 @@ export function useUsageEventSync({
   const [refresh, setRefresh] = React.useState(0);
 
   /**
-   * Facets are read on their own window, not on the list's poll counter.
+   * Facets are read on their own revision, not on the list's poll counter.
    *
-   * `activeWindow` advances on every poll, so keying the facet query on it made
-   * each ten-second tick re-issue ten grouped scans - the most expensive query
-   * on the page - to answer a question whose answer barely moves. Facets describe
-   * which values exist in a window, so they only need re-reading when the window
-   * is *redefined* (a new preset or absolute range) or the operator asks for a
-   * refresh. `facetWindowRevision` is exactly those two events, and the resolved
-   * timestamps still live in the query key, so a genuinely new window is a
-   * genuinely new cache entry.
+   * Keying the facet query on every poll re-issued ten grouped scans each
+   * ten-second tick - the most expensive query on the page - to answer a question
+   * whose answer barely moves. Facets describe which values exist in a window, so
+   * they only need re-reading when the window is *redefined* (a new preset or
+   * range, or any other change to the query) or the operator asks for a refresh.
+   *
+   * The window itself is sent unresolved, like the list's (see
+   * `eventWindowQuery`), so a preset reads as the same parameters on every visit.
+   * The revision is therefore stamped with the moment the view was defined: a
+   * preset re-entered later is a new cache entry rather than the five-minute-old
+   * dropdown of its previous visit, and a manual refresh moves the stamp so the
+   * counts the operator just asked for are recomputed.
    */
   const [facetWindowRevision, setFacetWindowRevision] = React.useState(0);
-  const facetWindow = React.useMemo(
-    () => eventWindow(query, Date.now()),
-    [query, facetWindowRevision],
-  );
-  // The revision is part of the key, not only of the params it computes. An
-  // absolute range resolves to the same two timestamps on every render, so a
-  // revision that only moved the memo would leave the facet entry inside its
-  // five-minute staleTime and the dropdowns would keep the counts the operator
-  // just asked to have recomputed.
-  const facetRevision = facetWindowRevision;
+  const facetWindow = React.useMemo(() => eventWindowQuery(query), [query]);
+  const facetRevision = React.useMemo(() => Date.now(), [query, facetWindowRevision]);
 
   const ingest = useQuery({
     queryKey: ['usage-ingest-status'],

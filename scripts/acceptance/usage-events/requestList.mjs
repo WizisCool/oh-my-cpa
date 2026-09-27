@@ -8,6 +8,7 @@ import { FAKE_PROVIDER_SECRET } from '../../fake-cpa.mjs';
 
 export async function requestListSection(context) {
   const {
+    appURL,
     page,
     check,
     smokeOnly,
@@ -30,6 +31,41 @@ export async function requestListSection(context) {
   const footerText = await page.locator('.request-pagination span').first().innerText();
   check('request list renders seeded records', visibleRows >= 2, `visibleRows=${visibleRows}`);
   check('the whole seeded page is loaded', /50/.test(footerText), `footer="${footerText}"`);
+
+  // A browser whose clock runs behind the server's must still see the newest
+  // records. The list used to resolve its window's end on the browser's clock, so
+  // every record newer than that clock was filtered out and stayed out through any
+  // number of refreshes. The seeder stamps records on the server's clock, the
+  // newest a few minutes ago, so a half-hour lag hid most of them.
+  const skewMs = 30 * 60_000;
+  const skewedPage = await page.context().newPage();
+  try {
+    await skewedPage.addInitScript((offset) => {
+      const readClock = Date.now.bind(Date);
+      Date.now = () => readClock() - offset;
+    }, skewMs);
+    const listRead = skewedPage.waitForResponse(
+      (response) => new URL(response.url()).pathname.endsWith('/api/v1/usage/events') && response.ok(),
+      { timeout: 15_000 },
+    );
+    await skewedPage.goto(`${appURL}/usage/events?preset=1h`, { waitUntil: 'domcontentloaded' });
+    const response = await listRead;
+    const sent = new URL(response.url()).searchParams;
+    check(
+      'a preset read leaves the window end to the server',
+      sent.get('preset') === '1h' && !sent.has('from') && !sent.has('to'),
+      `query=${sent.toString()}`,
+    );
+    const body = await response.json();
+    const newestMs = Math.max(0, ...(body.items ?? []).map((item) => item.timestamp_ms));
+    check(
+      'a browser clock running behind the server still lists the newest records',
+      newestMs > Date.now() - skewMs,
+      `newest=${new Date(newestMs).toISOString()} items=${body.items?.length ?? 0}`,
+    );
+  } finally {
+    await skewedPage.close();
+  }
 
   if (smokeOnly) {
     check('browser console has no errors in the smoke path', consoleErrors.length === 0, consoleErrors.join(' | '));

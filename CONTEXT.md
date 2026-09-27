@@ -312,6 +312,13 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   through that day. An **open-ended range** (expressed by leaving the end empty)
   keeps its start fixed while its end tracks the current time, so it is polled
   like a preset and grows as it runs.
+- **Window resolution**: A preset and an open-ended range end at the server's
+  "now", never the browser's. Every read of stored records sends the window as
+  chosen (a preset name, or the picked bounds) and the server resolves it, because
+  records are stamped on the server's clock: an end computed in a browser whose
+  clock runs behind hides every record newer than that clock, and no refresh
+  brings them back. The console may still estimate the bounds locally to print
+  them.
 - **Preference**: Console state stored server-side rather than in the browser,
   so it follows the deployment across devices, browsers, incognito windows, and
   cleared browser storage rather than binding to a single client instance.

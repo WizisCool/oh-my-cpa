@@ -6,6 +6,7 @@ import {
   filterParamsToUrl,
   queryToFilterParams,
   eventWindow,
+  eventWindowQuery,
   mergeFacetOptions,
   activeFilterCount,
   EVENT_FILTER_KEYS,
@@ -91,6 +92,27 @@ assert.equal(read('from=20&to=10').from, undefined);
 assert.equal(read('from=-1&to=10').from, undefined);
 assert.deepEqual(eventWindow(read('from=100&to=200'), 999), { from: 100, to: 200 });
 assert.deepEqual(eventWindow(read('preset=15m'), 1_000_000), { from: 100_000, to: 1_000_000 });
+
+// Reads send the window as chosen and leave "now" to the server. Records carry the
+// server's clock, so an end resolved on a browser clock that runs behind hid every
+// record newer than it - a request that had just completed stayed off the list
+// through any number of refreshes. Only a bound the reader picked may travel.
+assert.deepEqual(eventWindowQuery(read('preset=15m')), { preset: '15m' });
+assert.deepEqual(eventWindowQuery(read('from=100')), { from: 100 });
+assert.deepEqual(eventWindowQuery(read('from=100&to=200')), { from: 100, to: 200 });
+for (const [input, expected] of [
+  ['preset=1h', 'preset=1h'],
+  ['from=100', 'from=100'],
+  ['from=100&to=200', 'from=100&to=200'],
+] as const) {
+  const chosen = read(input);
+  const sent = new URLSearchParams(usageEventParams({ ...chosen, ...eventWindowQuery(chosen) }));
+  const windowParams = ['preset', 'from', 'to']
+    .filter((key) => sent.has(key))
+    .map((key) => `${key}=${sent.get(key)}`)
+    .join('&');
+  assert.equal(windowParams, expected, `the ${input} window reaches the server unresolved`);
+}
 
 // A drill-down link still writes one value per dimension, and it must still be
 // read back as the filter the dashboard meant.
