@@ -819,7 +819,7 @@ export const MS: Readonly<Record<string, string>> = {
   "keys.empty_title": "Tiada Kunci Klien",
   "keys.empty_desc": "Tiada kunci API klien dikonfigurasikan lagi. Cipta kunci untuk membolehkan alatan hiliran mengakses perkhidmatan AI melalui proksi ini.",
   "keys.empty_cta": "Tambah kunci pertama",
-  "keys.delete_confirm_desc": "Menyimpan akan mengalihkannya daripada api-keys CPA. Konsol ini tidak menyimpan salinan nilai kunci, jadi ia tidak boleh dipulihkan; salin dahulu jika mahu menyimpannya.",
+  "keys.delete_confirm_desc": "Menyimpan akan mengalihkannya daripada senarai kunci klien CPA. Konsol ini tidak menyimpan salinan nilai kunci, jadi ia tidak boleh dipulihkan; salin dahulu jika mahu menyimpannya.",
   "cfg.source_save_confirm": "Simpan dan gunakan konfigurasi?",
   "cfg.source_save_confirm_desc": "Kemas kini akan ditulis terus ke CPA menjalankan konfigurasi. YAML yang tidak sah akan gagal.",
   "cfg.source_reload": "Muat Semula Sumber",

@@ -819,7 +819,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "keys.empty_title": "暫無客戶端金鑰",
   "keys.empty_desc": "目前閘道尚未設定客戶端 API 金鑰。建立金鑰後，下游工具即可透過本代理存取 AI 服務。",
   "keys.empty_cta": "新增第一個金鑰",
-  "keys.delete_confirm_desc": "儲存後將從 CPA 的 api-keys 中移除；本主控台不保存該金鑰值，刪除後無法復原。如需保留請先複製。",
+  "keys.delete_confirm_desc": "儲存後將從 CPA 的用戶端金鑰清單中移除；本主控台不保存該金鑰值，刪除後無法復原。如需保留請先複製。",
   "cfg.source_save_confirm": "儲存設定並應用？",
   "cfg.source_save_confirm_desc": "更新將直接寫入 CPA 執行設定，格式錯誤將導致啟動失敗。",
   "cfg.source_reload": "重新載入",

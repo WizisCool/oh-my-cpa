@@ -935,7 +935,7 @@ const DICT: Record<string, [string, string]> = {
   'keys.empty_title': ['暂无客户端密钥', 'No Client Keys'],
   'keys.empty_desc': ['当前网关尚未配置客户端 API 密钥。创建密钥后，下游工具即可通过本代理访问 AI 服务。', 'No client API keys are configured yet. Create a key to allow downstream tools to access AI services through this proxy.'],
   'keys.empty_cta': ['添加第一个密钥', 'Add your first key'],
-  'keys.delete_confirm_desc': ['保存后将从 CPA 的 api-keys 中移除；本控制台不保存该密钥值，删除后无法恢复。如需保留请先复制。', "Saving removes it from CPA's api-keys. This console stores no copy of the value, so it cannot be recovered; copy it first if you want to keep it."],
+  'keys.delete_confirm_desc': ['保存后将从 CPA 的客户端密钥列表中移除；本控制台不保存该密钥值，删除后无法恢复。如需保留请先复制。', "Saving removes it from CPA's client-key list. This console stores no copy of the value, so it cannot be recovered; copy it first if you want to keep it."],
   'cfg.source_save_confirm': ['保存配置并应用？', 'Save and apply config?'],
   'cfg.source_save_confirm_desc': ['更新将直接写入 CPA 运行配置，格式错误将导致启动失败。', 'Updates will be written directly to CPA running config. Invalid YAML will fail.'],
   'cfg.source_reload': ['重新加载', 'Reload Source'],

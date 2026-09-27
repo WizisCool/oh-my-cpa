@@ -253,3 +253,12 @@ func TestSanitizeMasksV8SecretLocations(t *testing.T) {
 		t.Fatalf("a save must restore the hidden v8 values:\n%s", restored)
 	}
 }
+
+// An unparseable stored file is repaired by saving a valid one over it, so it
+// never blocks a save.
+func TestReplacesProviderGroupsAllowsRepairingAnUnparseableFile(t *testing.T) {
+	replaced, err := ReplacesProviderGroups("api-keys: [unclosed\n", "api-keys:\n  - client-key\n")
+	if err != nil || replaced {
+		t.Fatalf("got %v %v, want a permitted save", replaced, err)
+	}
+}

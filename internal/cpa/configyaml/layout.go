@@ -165,7 +165,13 @@ func ShadowedLegacyPaths(rawYAML string) ([]LayoutRule, error) {
 // access.api-keys.
 func ReplacesProviderGroups(storedYAML, submittedYAML string) (bool, error) {
 	stored, err := DetectLayout(storedYAML)
-	if err != nil || !stored.HasProviderGroups {
+	if err != nil {
+		// An unparseable stored file holds no provider groups CPA can be using,
+		// since CPA cannot load it either. Saving a valid document over it is how
+		// an operator repairs it, so this is not a refusal.
+		return false, nil //nolint:nilerr // deliberate: see above
+	}
+	if !stored.HasProviderGroups {
 		return false, nil
 	}
 	root, err := parseRootMapping(submittedYAML)
