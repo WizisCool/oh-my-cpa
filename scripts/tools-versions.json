@@ -1,26 +1,26 @@
 {
   "go": {
-    "version": "1.24.13",
+    "version": "1.27.1",
     "archives": {
       "darwin-amd64": {
-        "url": "https://go.dev/dl/go1.24.13.darwin-amd64.tar.gz",
-        "sha256": "6cc6549b06725220b342b740497ffd24e0ebdcef75781a77931ca199f46ad781"
+        "url": "https://go.dev/dl/go1.27.1.darwin-amd64.tar.gz",
+        "sha256": "8f8f52c6649542cf027bbc9b9c68d1ec042f9f34808a40413f0b8b3f66f3caa4"
       },
       "darwin-arm64": {
-        "url": "https://go.dev/dl/go1.24.13.darwin-arm64.tar.gz",
-        "sha256": "f282d882c3353485e2fc6c634606d85caf36e855167d59b996dbeae19fa7629a"
+        "url": "https://go.dev/dl/go1.27.1.darwin-arm64.tar.gz",
+        "sha256": "ee215d57e0ec269c60cc9ceca68e6bda321ba9ee5afe24f4b0988703c2d87d12"
       },
       "linux-amd64": {
-        "url": "https://go.dev/dl/go1.24.13.linux-amd64.tar.gz",
-        "sha256": "1fc94b57134d51669c72173ad5d49fd62afb0f1db9bf3f798fd98ee423f8d730"
+        "url": "https://go.dev/dl/go1.27.1.linux-amd64.tar.gz",
+        "sha256": "63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445"
       },
       "linux-arm64": {
-        "url": "https://go.dev/dl/go1.24.13.linux-arm64.tar.gz",
-        "sha256": "74d97be1cc3a474129590c67ebf748a96e72d9f3a2b6fef3ed3275de591d49b3"
+        "url": "https://go.dev/dl/go1.27.1.linux-arm64.tar.gz",
+        "sha256": "3450b45a3f9ee8568792736a5c5e70a1f2e9b36c35a8f74958c03e51d7d92bec"
       },
       "windows-amd64": {
-        "url": "https://go.dev/dl/go1.24.13.windows-amd64.zip",
-        "sha256": "40b16bc8f00540a2cb02dff4de72b73e966fdd8d65f95e33d8e4080b48a2459a"
+        "url": "https://go.dev/dl/go1.27.1.windows-amd64.zip",
+        "sha256": "a3911b5e0e1b1053f25ed0675f4c1c6aad1e2bfcf253df2b9be4caabd2edd95d"
       }
     }
   },
