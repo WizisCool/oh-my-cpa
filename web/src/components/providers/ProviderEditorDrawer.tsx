@@ -11,7 +11,7 @@ import {
   Row,
   Select,
 } from 'antd';
-import { CloseOutlined, DownOutlined, PlusOutlined, SyncOutlined, UpOutlined } from '@ant-design/icons';
+import { CloseOutlined, DownOutlined, PlusOutlined, SyncOutlined, UpOutlined } from '../icons';
 
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';

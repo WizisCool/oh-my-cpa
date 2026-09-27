@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { Button, Collapse, Input, Modal, Select, Tag } from 'antd';
-import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
+import { DeleteOutlined, PlusOutlined } from '../icons';
 import type { Document } from 'yaml';
 
 import {

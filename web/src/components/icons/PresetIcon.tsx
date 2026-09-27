@@ -9,7 +9,7 @@ import {
   FireOutlined,
   SlidersOutlined,
   GlobalOutlined,
-} from '@ant-design/icons';
+} from './index';
 
 interface PresetIconProps {
   name?: string | null;

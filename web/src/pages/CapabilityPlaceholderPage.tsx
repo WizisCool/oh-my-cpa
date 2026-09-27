@@ -1,6 +1,6 @@
 import React from 'react';
 import { Alert, Button, Card, Skeleton, Table, Tag, Typography } from 'antd';
-import { ReloadOutlined } from '@ant-design/icons';
+import { ReloadOutlined } from '../components/icons';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { api, apiErrorCode } from '../api/client';

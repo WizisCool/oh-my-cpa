@@ -8,7 +8,7 @@ import {
   MoreOutlined,
   LinkOutlined,
   KeyOutlined,
-} from '@ant-design/icons';
+} from '../icons';
 import { useT } from '../../i18n';
 import { copyText } from '../../utils/clipboard';
 import { DiscoveredResource } from '../../types/resource';

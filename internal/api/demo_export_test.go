@@ -113,7 +113,10 @@ func demoExportCases() []demoExportCase {
 		{Name: "config-source", Path: "/api/v1/management/config/source"},
 		{Name: "providers", Path: "/api/v1/management/providers"},
 		{Name: "providers-with-keys", Path: "/api/v1/management/providers?include_keys=true"},
+		{Name: "agent-session", Path: "/api/v1/agent/session"},
+		{Name: "capabilities", Path: "/api/v1/capabilities"},
 		{Name: "api-keys", Path: "/api/v1/management/api-keys"},
+		{Name: "playground-models", Route: "/api/v1/playground/models", From: demoExportPlaygroundModelsPath},
 		{Name: "api-keys-with-keys", Path: "/api/v1/management/api-keys?include_keys=true"},
 		{Name: "client-key-aliases", Path: "/api/v1/management/client-key-aliases"},
 		{Name: "pricing", Path: "/api/v1/pricing"},
@@ -1115,4 +1118,17 @@ func TestDemoExportCasesAllSucceed(t *testing.T) {
 	if len(failed) > 0 {
 		t.Fatalf("exported responses that are not 200:\n  %s", strings.Join(failed, "\n  "))
 	}
+}
+
+func demoExportPlaygroundModelsPath(captured map[string]demoExportResponse) (string, error) {
+	var payload struct {
+		Keys []ClientAPIKeyItemDTO `json:"keys"`
+	}
+	if err := json.Unmarshal([]byte(captured["api-keys"].Body), &payload); err != nil {
+		return "", err
+	}
+	if len(payload.Keys) == 0 || payload.Keys[0].UsageFingerprint == "" {
+		return "", errors.New("client keys must be exported before playground models")
+	}
+	return "/api/v1/playground/models?client_key_fingerprint=" + payload.Keys[0].UsageFingerprint, nil
 }

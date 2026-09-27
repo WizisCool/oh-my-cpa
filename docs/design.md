@@ -692,8 +692,9 @@ declare its own `max-width`: a rule of equal specificity wins by source order
 `max-width: 100%` silently drops the 1440px cap and runs the full width of the
 content area — measured at 1684px on a 1920px viewport, i.e. 244px wider than
 every other surface. Where a page genuinely needs a different column it states
-the reason next to the rule (the configuration workbench is the one such case:
-a 920px reading column between a nav track and a balancing gutter).
+the reason next to the rule. Two surfaces do: the configuration workbench (a 920px
+reading column between a nav track and a balancing gutter) and the conversation workspaces
+(a frame anchored to the viewport around a 760px reading column, §5).
 - **Lists do not change the column.** A list sits inside the page's Card and keeps
 that card's 20px inset; the table's width follows from the card, not from the
 viewport or from a column count. Measured at a 1920px viewport: card 1376,
@@ -832,6 +833,149 @@ shortest preset **is** live. It is fifteen minutes at one bucket per minute, so
 the pacing rule lands on its five-second floor by itself; five minutes was too
 narrow to read as a trend and an hour too coarse to feel like it was moving.
 
+### Conversation workspaces
+
+The Playground (`/playground`) and the Agent (`/agent`) are one workspace with two bodies. The
+frame, the transcript, the composer, the reasoning disclosure, the code blocks and the side panel
+live in `web/src/components/workspace` and both pages compose them, so two surfaces one click
+apart cannot drift into two resizers, two composers or two ways of drawing an answer.
+
+```text
+┌─ Playground ──────────── [key ▾│ model ▾] ⟳ [+ New conversation] ◧ ┐  head, 1px rule
+│                                                        │ Parameters │ Diagnostics │
+│          ┌──────── reading column, 760px ────────┐     │ GENERATION        ↺ Reset │
+│          │                 ┌ user message ─────┐ │     │ System prompt             │
+│          │                 └───────────────────┘ │     │ Temperature  ──●── [0.7]  │
+│          │ model · ● Complete                    │     │ …                         │
+│          │ ◌ Thought process ›                   │     │ REQUEST                   │
+│          │ answer (Markdown, tables, code)       │     │ User-Agent, custom body   │
+│          │ ⏱ 420 ms  ⏲ 3,120 ms  ⛁ 1.6K   ⧉ ↺ ⌕ │     │                           │
+│          └───────────────────────────────────────┘     │                           │
+│          ┌ composer ─────────────────────────────┐     │                           │
+│          │ message…                         [↑]  │     │                           │
+│          └───────────────────────────────────────┘     │                           │
+│            the cost or privacy boundary, one line      │                           │
+└────────────────────────────────────────────────────────┴───────────────────────────┘
+```
+
+**The frame spans the content area, and the conversation centres its own column.** Like the
+configuration workbench, the head's rule and the panel's edge are anchored to the viewport; capping
+the frame at the page column would float the panel mid-screen on a wide display. Inside the main
+column the transcript, the notices and the composer share one reading width
+(`--workspace-column`, 760px): long enough for a code block, short enough to read prose without
+losing the line. The scroll box itself stays full width so its scrollbar sits at the pane's edge.
+
+**The target is one joined control.** Key and model are one decision - the model list is whatever
+the gateway serves to that key - so they are drawn as one field. A key is named by its alias, and
+by its mask only when it has none (§7, "Naming is a first-class action"); the open list shows both,
+which is where two similar names are told apart. Below the 900px breakpoint the target moves onto
+its own row of the head rather than into a menu: which model a message will reach is never hidden.
+
+**The panel is resizable and it is a Drawer on a phone.** The separator is a keyboard-operable ARIA
+window splitter (arrows step it, Home and End jump to its bounds, a double click restores the
+default), and a drag writes the width to the panel directly and commits it once on release, so
+dragging does not re-render the transcript. The panel never takes more than half the viewport.
+Below 900px it becomes a Drawer joined to the platform Back gesture through `useOverlayHistory`. No
+breakpoint is added.
+
+**The transcript is anchored by the browser.** Ant Design X's list lays its scroll box out in
+reverse, so a growing answer holds the bottom without script, and a reader who scrolls up keeps
+their place while content arrives below. Scrolling away raises a "back to latest" control, which
+travels smoothly unless the reader asked for reduced motion. Sending returns the reader to the
+newest message.
+
+**A message's anatomy.** The operator's message is a filled `--surface` block with a 1px border,
+aligned to the end of the column. An answer is borderless and uses the full column: a head naming
+the model and a status pip, the reasoning as X's `Think` disclosure (open while reasoning streams,
+closed for an answer that already finished, the reader's own after that; its title shimmer is off,
+§7 rule 3), the Markdown answer, and a foot. The foot states measurements - first content, duration,
+tokens, TPS - with missing observations left out rather than shown as zero, and carries its actions
+as muted icon buttons with accessible names. Copy acknowledges itself by turning its glyph into a
+check mark; only a failed copy raises a toast.
+
+**Model output is drawn in the console's type, not the library's.** `@ant-design/x-markdown`'s own
+element styles are switched off. Tables sit in a bordered frame with a `--surface` header row and
+hairline rows, and a column the author right-aligned keeps that alignment in its header. A fenced
+block has a head naming its language with a copy action, and is highlighted only for an allowlisted
+set of languages and only once its fence has closed: an unknown or still-streaming fence is plain
+monospaced text. The syntax theme is the palette's ink - keys and keywords `--accent`, text `--fg`,
+literals `--fg-2`, punctuation `--muted`, comments `--meta` - and deliberately does not borrow the
+semantic hues, because a string is not a success. Raw HTML is escaped, links open outside the
+console, and an image is rendered as a link rather than fetched.
+
+**The composer is one gate.** Enter and the send button reach the same submission, and the send
+button is disabled whenever sending is not possible, with the reason on its tooltip when the page
+has one to give. While a
+turn runs the send button becomes a stop button. Beneath the composer one line states the boundary
+the operator is about to cross: the Playground's spends the key's entitlement, the Agent's names
+what must be allowed before a message can leave.
+
+**Streaming is published on a cadence.** Both run loops coalesce deltas onto 40ms and every settled
+turn keeps its object identity, so the memoised transcript re-renders the answer that is growing
+and skips every one above it.
+
+#### Playground
+
+The panel has two tabs. **Parameters** holds the generation settings, each of which is either set or
+left to the model: an unset number shows "Default" and a muted slider resting at a neutral point,
+never a value the request will not carry, and a set temperature or top-p has a control to return it
+to the default. The custom request body is checked as it is typed; an invalid body is flagged beside the
+field and disables sending. **Turn diagnostics** shows the selected turn - its measurements as a
+two-column grid, its immutable request and its bounded response events as code blocks, the cURL
+command as a labelled copy action, and a link to the candidate request records, stated as a
+candidate list. Inspecting a turn from its foot opens this tab. Images are pasted into the composer
+and shown as thumbnails with a remove control; nothing is uploaded, and a restored turn whose image
+was too large to keep shows a placeholder and cannot be retried. An empty conversation carries the
+wordmark and, once chosen, the call point it will reach.
+
+#### Agent
+
+The panel is the capability directory: the registry itself - the same list the model is offered -
+grouped read / write / destructive in that fixed order, each group marked with a pip (`--meta`,
+`--warn`, `--danger`). It is an open list, one hairline row per capability with its description
+clamped to two lines and expanded on selection, because a card per entry made the borders louder
+than the names.
+
+**A turn is drawn in the order it happened.** A model may reason, say something, call
+capabilities, reason again and answer, so a turn is a sequence of segments - reasoning, answer text,
+capability calls - rather than fixed slots for each kind. The server records the sequence as the
+turn's parts, and the browser rebuilds the same parts from the stream, so the live turn and the
+stored one are identical. Each stretch of reasoning is its own `Think` disclosure where it occurred;
+capability calls made in one model round are one X `ThoughtChain`. A turn resumed after an approval
+grows in place below its earlier segments rather than appearing as a second answer, and copying the
+answer takes every text segment, without the reasoning.
+
+Each step of a chain names the capability, states its status in words, and digests its result to top-level
+scalars and collection sizes, with the whole document one disclosure away as a code block. The
+chain's own marks cover running, succeeded, failed and rejected; a call waiting on the operator or
+one whose outcome is partial, expired or unconfirmed carries a `--warn` attention glyph instead of
+being drawn as loading or failed.
+
+A prepared operation is decided on its own card directly beneath the chain that proposed it,
+because the decision belongs next to the call that asked for it. An open card carries the caution hue on its frame - the danger
+hue for a destructive capability - and returns to an ordinary record once decided. It leads with
+the target, lays a form-shaped change out as label/value rows (anything deeper stays JSON), and for
+a destructive capability asks for the target identifier to be typed; the challenge is never
+prefilled. Private input and the OAuth hand-off appear on the card when the capability needs them.
+While a conversation waits on a decision the composer's send becomes a labelled Resume action.
+
+Sending needs no separate grant. The line beneath the composer states that a message, and the OMC
+data the agent reads to answer it, go to the selected CPA model and its upstream (ADR 0027); sending
+is the act that line describes. The composer's foot carries the reasoning effort as a quiet text
+button naming the current level, with a menu of the named levels and "use model default", which
+leaves the field out of the request. The operator's message enters the transcript the moment it is
+sent and the composer clears; a message the server refuses before accepting it returns to an empty
+composer. The model's reasoning streams into the live turn as the same `Think` disclosure the
+Playground uses, open while it is being written, and stays with the stored turn, kept apart from
+the answer. The key, model and effort are the operator's choice and are remembered across reloads;
+New conversation replaces the transcript and nothing else. Failure is stated
+as a sentence with its code beneath it, and a run the operator stopped reads as stopped rather than
+failed. A live run carries an activity line - what it is waiting for, which capability it called,
+and for how long - because a spinner cannot tell working from stuck; its pip pulses as an
+indeterminate loop, frozen under reduced motion. The empty conversation offers example questions as
+keyboard-reachable buttons that fill the composer; X's `Prompts` renders click-only elements and is
+not used for that reason.
+
 ## 6. antd theme wiring (themeConfig.ts)
 
 Non-obvious decisions, keep these when editing:
@@ -930,9 +1074,14 @@ attached, and it is scoped to the dashboard by rules 5 and 8.
 on four things: a duration that is not a `--motion-*` token (or a `var()` fallback, which is never
 applied and is how a wrong value hid for months), a transition on a layout property or on `all`, a
 keyframe animation with no `prefers-reduced-motion` counterpart, and a hover transitioning colour
-outside `fast`. The layout animations that a disclosure genuinely needs are listed in the checker's
-`EXCEPTIONS` table with the reason each is one, and an exception that stops matching a rule is itself
-a failure — the list cannot rot into things that were once true. `scripts/check-motion.test.mjs`
+outside `fast`. The exceptions are listed in the checker's `EXCEPTIONS` table with the reason each is
+one, and an exception that stops matching a rule is itself a failure — the list cannot rot into
+things that were once true. Two kinds exist. A `layout` exception waives rule 1 for a disclosure,
+where a reflow is the point and the alternative is an accordion that snaps open. A `duration`
+exception waives the token requirement for an indeterminate loop, whose period is how long one cycle
+takes rather than a transition between two states: the two background-refresh bars and the icon
+spinner. §7 handles those by freezing them under reduced motion rather than by shortening them.
+`scripts/check-motion.test.mjs`
 exercises every rule in both directions on a fixture tree and asserts the repository itself is clean.
 Enforcing the reduced-motion rule immediately paid for itself: antd animates its floating panels in
 with a zoom under reduced motion as well, and the panel has to be pinned to its settled state rather

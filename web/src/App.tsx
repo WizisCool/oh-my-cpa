@@ -21,6 +21,8 @@ const PricingPage = React.lazy(() => import('./pages/pricing/PricingPage').then(
 const ProvidersPage = React.lazy(() => import('./pages/ProvidersPage').then(m => ({ default: m.ProvidersPage })));
 const ApiKeysPage = React.lazy(() => import('./pages/ApiKeysPage').then(m => ({ default: m.ApiKeysPage })));
 const DashboardPage = React.lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
+const AgentPage = React.lazy(() => import('./pages/agent/AgentPage').then(module => ({ default: module.AgentPage })));
+const PlaygroundPage = React.lazy(() => import('./pages/playground/PlaygroundPage').then(module => ({ default: module.PlaygroundPage })));
 const QuickStartPage = React.lazy(() => import('./pages/QuickStartPage').then(m => ({ default: m.QuickStartPage })));
 const LogsPage = React.lazy(() => import('./pages/LogsPage').then(m => ({ default: m.LogsPage })));
 const ConfigPage = React.lazy(() => import('./pages/ConfigPage').then(m => ({ default: m.ConfigPage })));
@@ -100,6 +102,8 @@ const AppRoutes: React.FC = () => {
       children: [
         { index: true, element: <Navigate to="/dashboard" replace /> },
         { path: 'dashboard', element: <DashboardPage /> },
+        { path: 'playground', element: <PlaygroundPage /> },
+        { path: 'agent', element: <AgentPage /> },
         { path: 'quick-start', element: <QuickStartPage /> },
         { path: 'ai-providers', element: <ProvidersPage /> },
         { path: 'api-keys', element: <ApiKeysPage /> },

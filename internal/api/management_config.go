@@ -1,7 +1,6 @@
 package api
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -9,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/configyaml"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/operations"
 )
 
 type configPutScalarRequest struct {
@@ -62,7 +62,7 @@ func (h *Handler) managementConfigPutScalar(writer http.ResponseWriter, request 
 		return
 	}
 
-	client, ok := h.managementClientOrError(writer, request)
+	_, ok := h.managementClientOrError(writer, request)
 	if !ok {
 		return
 	}
@@ -79,24 +79,17 @@ func (h *Handler) managementConfigPutScalar(writer http.ResponseWriter, request 
 		return
 	}
 
-	// A scalar write is still a read-modify-write in CPA. Share the same write
-	// gate as the source editor so a concurrent source save cannot overwrite it
-	// (or be overwritten by it) between its revision check and its PUT.
-	if err := h.providerWrites.acquire(request.Context()); err != nil {
-		writeProviderWriteError(writer, err)
-		return
-	}
-	defer h.providerWrites.release()
-	h.configMu.Lock()
-	defer h.configMu.Unlock()
-
 	if auditErr := h.recordAudit(request, "config.save_scalar", "config", key, "attempt", nil); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit log failure; config save aborted")
 		return
 	}
-	if err := client.UpdateConfigScalar(request.Context(), key, validatedVal); err != nil {
+	if err := h.operationsService().SetScalar(request.Context(), key, validatedVal, ""); err != nil {
 		_ = h.recordAudit(request, "config.save_scalar", "config", key, "failure", map[string]any{"error": err.Error()})
-		writeCPAFacadeError(writer, err)
+		if err.Error() == "write_busy" {
+			writeProviderWriteError(writer, errProviderWriteBusy)
+		} else {
+			writeCPAFacadeError(writer, err)
+		}
 		return
 	}
 	if h.pricing != nil {
@@ -115,53 +108,7 @@ func (h *Handler) managementConfigPutScalar(writer http.ResponseWriter, request 
 }
 
 func validateScalarValue(key string, value any) (any, error) {
-	switch key {
-	case "debug", "request_log", "logging_to_file", "usage_statistics_enabled", "ws_auth", "force_model_prefix":
-		if b, ok := value.(bool); ok {
-			return b, nil
-		}
-		return nil, errors.New("value must be a boolean for key " + key)
-
-	case "proxy_url":
-		if s, ok := value.(string); ok {
-			return strings.TrimSpace(s), nil
-		}
-		return nil, errors.New("value must be a string for proxy_url")
-
-	case "request_retry", "max_retry_interval", "max_retry_credentials", "logs_max_total_size_mb", "error_logs_max_files":
-		switch num := value.(type) {
-		case float64:
-			if num < 0 {
-				return nil, errors.New("value must be non-negative for key " + key)
-			}
-			return int64(num), nil
-		case int64:
-			if num < 0 {
-				return nil, errors.New("value must be non-negative for key " + key)
-			}
-			return num, nil
-		case int:
-			if num < 0 {
-				return nil, errors.New("value must be non-negative for key " + key)
-			}
-			return int64(num), nil
-		default:
-			return nil, errors.New("value must be an integer for key " + key)
-		}
-
-	case "routing_strategy":
-		if s, ok := value.(string); ok {
-			trimmed := strings.ToLower(strings.TrimSpace(s))
-			if trimmed == "round-robin" || trimmed == "round_robin" || trimmed == "least-load" || trimmed == "least_load" || trimmed == "random" {
-				return trimmed, nil
-			}
-			return nil, errors.New("invalid routing strategy: must be round-robin, least-load, or random")
-		}
-		return nil, errors.New("value must be a string for routing_strategy")
-
-	default:
-		return nil, errors.New("unknown or unsupported config scalar key: " + key)
-	}
+	return operations.ValidateScalarValue(key, value)
 }
 
 // managementConfigSourceGet returns the raw config.yaml.

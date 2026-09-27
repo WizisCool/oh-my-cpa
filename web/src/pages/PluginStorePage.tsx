@@ -18,7 +18,7 @@ import {
   WarningOutlined,
   ApiOutlined,
   ArrowLeftOutlined,
-} from '@ant-design/icons';
+} from '../components/icons';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';

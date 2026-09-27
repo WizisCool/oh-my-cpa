@@ -167,6 +167,31 @@ API 的数据由真实 Go handler 生成，而非手工编写，因此所提供�
 - **网络安全边界**：切勿将 CPA 管理端口暴露到公网。保持 CPA 在内网或本地回环中运行，并通过 HTTPS 反向代理访问 Oh My CPA。
 - **反向代理头信任**：`OMCPA_TRUSTED_PROXY_CIDRS` 用逗号分隔可信反向代理的 CIDR；仓库自带的 Compose 文件默认信任 Docker 的 `172.16.0.0/12` 网段。客户端直连时请不要设置，严禁填写公网网段。
 
+### 操练场
+
+从“运行 → 操练场”进入，选择现有客户端密钥和 `/v1/models` 返回的 CPA 调用点，即可调试文本、图片和多轮对话。
+密钥列表仅显示名称与掩码，真实密钥由 OMC 服务端使用，模型执行和路由仍由 CPA 负责。
+没有密钥时先到密钥管理创建；不需要新增环境变量或数据库迁移。
+
+页面使用现有管理员会话访问 `GET <base>/api/v1/playground/models` 和
+`POST <base>/api/v1/playground/chat`。真实调用计入所选密钥用量，
+停止不保证退还已消耗配额。最近一次对话、参数与所附图片会作为一项服务端偏好保存，刷新后可从原处继续；
+新建对话会丢弃已保存的对话轮次，体积过大而无法保存的图片内容不会被存入。保存的调试目标是密钥的用量指纹而非密钥本身，
+已删除的密钥或已下线的调用点不会被重新选中。CPA 与上游仍适用各自的日志策略。图片支持 PNG/JPEG/WebP，每轮最多四张，每张不超过
+5 MiB 和 4000 万像素，含历史的完整请求不超过 32 MiB。
+
+参数面板可设置系统提示词、推理强度、Temperature、Top P、最大输出 Token、User-Agent 与自定义请求体（JSON）。
+User-Agent 默认使用当前构建自身的版本号，并作为请求头发送，使上游能识别调用方构建版本。
+自定义请求体优先级最高：其中的键会覆盖面板参数，面板未建模的参数原样透传；
+但最终请求体在发送前仍会校验，因此自定义请求体无法绕过图片与参数限制。
+本页读取流式回答，因此非流式请求体会被拒绝。
+
+调试面板提供请求快照、安全响应事件、耗时和已报告的 Token 用量。cURL 使用
+CPA_BASE_URL 与 CPA_API_KEY 占位符，图片内容需要替换为本地图片的 Data URL。
+反向代理应关闭响应缓冲，读取超时须大于 15 秒心跳间隔；单次流最多运行十分钟，
+上游首响应和空闲超时均为 120 秒，普通管理接口超时保持不变。公共演示仅展示页面和
+模型目录，不执行真实推理。
+
 ## 开发者常用命令
 
 | 命令 | 用途 |
@@ -193,6 +218,7 @@ API 的数据由真实 Go handler 生成，而非手工编写，因此所提供�
 - [`CONTEXT.md`](CONTEXT.md) — 核心领域术语、时间窗口与价格快照规则
 - [`docs/architecture.md`](docs/architecture.md) — 模块架构图、数据流与系统不变量
 - [`docs/design.md`](docs/design.md) — 视觉设计系统与主题 Token
+- [`docs/agent-capabilities.md`](docs/agent-capabilities.md) — 智能体能力契约、权限、确认流程与 MCP 桥接
 - [`docs/ops/sqlite-operations.md`](docs/ops/sqlite-operations.md) — SQLite 运维、备份演练与恢复手册
 - [`docs/ops/cloudflare-demo.md`](docs/ops/cloudflare-demo.md) — 在线 Demo 的部署手册与人工步骤
 - [`docs/cpamc-parity.md`](docs/cpamc-parity.md) — 与官方 CPAMC 的功能对位矩阵

@@ -38,6 +38,9 @@ export function presetOf(url) {
  * gets the surface's data rather than a 404.
  */
 const FIXED_ROUTES = new Map([
+  ['/api/v1/agent/session', 'agent-session'],
+  ['/api/v1/capabilities', 'capabilities'],
+  ['/api/v1/playground/models', 'playground-models'],
   ['/api/v1/resources', 'resources'],
   ['/api/v1/preferences', 'preferences'],
   ['/api/v1/pricing', 'pricing'],

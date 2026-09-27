@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Alert, App as AntdApp, Button } from 'antd';
-import { PlusOutlined, SyncOutlined } from '@ant-design/icons';
+import { PlusOutlined, SyncOutlined } from '../components/icons';
 
 import { useT } from '../i18n';
 import { getProviderDefaultIcon } from '../components/LobeIcon';

@@ -193,6 +193,11 @@ func gatedProviderListWrite[T any](
 	// restarted.
 	defer h.providerWrites.release()
 
+	if check, ok := ctx.Value(providerPreconditionKey{}).(func(context.Context) error); ok {
+		if err := check(ctx); err != nil {
+			return err
+		}
+	}
 	list, err := read(ctx)
 	if err != nil {
 		return err
@@ -217,3 +222,6 @@ func gatedProviderListWrite[T any](
 	}
 	return nil
 }
+
+// A typed operation can pin resource identity inside the existing write window.
+type providerPreconditionKey struct{}

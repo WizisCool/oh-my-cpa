@@ -1,5 +1,5 @@
 import { Button, Card, Popconfirm, Spin, Switch, Table, Tag, Tooltip } from 'antd';
-import { DeleteOutlined, EditOutlined, EyeOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, EyeOutlined } from '../icons';
 import type { ColumnsType } from 'antd/es/table';
 
 import { useT } from '../../i18n';

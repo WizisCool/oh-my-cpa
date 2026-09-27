@@ -21,7 +21,7 @@ import {
   PlusOutlined,
   SearchOutlined,
   TagOutlined,
-} from '@ant-design/icons';
+} from '../icons';
 import { useT } from '../../i18n';
 import { maskKeyText } from '../../utils/maskKey';
 import { copyText } from '../../utils/clipboard';

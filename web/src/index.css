@@ -1365,6 +1365,34 @@ a { color: inherit; }
   from { transform: translateX(-100%); }
   to { transform: translateX(100%); }
 }
+/* Icon shims (`web/src/components/icons`).
+
+   The console renders Lucide icons through forwarders that carry Ant Design's `anticon`
+   class names, because first-party CSS already selects on `.anticon`
+   (`.req-back-to-top-btn .anticon`, `.request-source-chain > .anticon`, ...) and antd's own
+   components still emit it.
+
+   Both declarations below used to arrive as a side effect: `@ant-design/icons` injects them
+   when one of its components mounts, and no first-party module imports it any more. The base
+   rule is what aligns a Lucide glyph with the text beside it; without it the icon falls back
+   to `vertical-align: baseline` and its box model differs from what the console's CSS and
+   antd's own components expect. */
+.anticon {
+  display: inline-flex;
+  align-items: center;
+  color: inherit;
+  line-height: 0;
+  vertical-align: -0.125em;
+}
+/* One rotation per 900ms, matching the indeterminate bar above: a spinner's period is
+   not a state transition, so §7 freezes it under reduced motion rather than shortening
+   it. */
+.anticon-spin {
+  animation: omc-icon-spin 900ms linear infinite;
+}
+@keyframes omc-icon-spin {
+  to { transform: rotate(360deg); }
+}
 .tile-skeleton.ant-skeleton { width: 100%; }
 @media (prefers-reduced-motion: reduce) {
   /* antd animates a floating panel in with a zoom (`antZoomBigIn`) and does so under reduced motion
@@ -1385,6 +1413,8 @@ a { color: inherit; }
   /* Keep the in-flight signal, drop the movement. */
   .data-progress::after { animation: none; opacity: 0.6; }
   .heatmap-progress::after { animation: none; width: 100%; opacity: 0.6; }
+  /* The static glyph still reads as "refreshing"; only its rotation is dropped. */
+  .anticon-spin { animation: none; }
   /* Keep the acknowledgement, drop the movement: the ring still marks the cell under the pointer. */
   .heatmap-cell-mark { transition: none; }
   .heatmap-cell.is-interactive:hover .heatmap-cell-mark { transform: none; }
@@ -2970,3 +3000,5 @@ a { color: inherit; }
   .config-monaco-shell { height: clamp(240px, calc(100dvh - 280px), 800px); }
 }
 
+/* A conversation workspace (Playground, Agent) owns its scroll columns within the shell. */
+.workspace-route { height: 100%; min-height: 0; }

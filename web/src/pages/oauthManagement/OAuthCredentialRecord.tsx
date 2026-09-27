@@ -10,7 +10,7 @@ import {
   StopOutlined,
   SyncOutlined,
   WarningOutlined,
-} from '@ant-design/icons';
+} from '../../components/icons';
 import { credentialProviderIconId } from '../../components/common/providerMetadata';
 import { ProviderBrandIcon } from '../../components/LobeIcon';
 import { useT } from '../../i18n';

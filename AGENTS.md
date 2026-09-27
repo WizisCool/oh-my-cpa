@@ -36,6 +36,7 @@ Treat the table below as a hard constraint. Whenever a change touches a "Trigger
 | `docs/ops/cloudflare-demo.md` | Deployment runbook for the public online demo (Cloudflare Worker + generated dataset) | Changes to the demo's deployment, its platform configuration, its dataset's shape, or the console steps it needs |
 | `deploy/cloudflare/data/` | The dataset the public demonstration is served from | **Any** change to a console page's data, a route's response shape, or a read the console makes: regenerate with `pnpm demo:generate`, read the diff, and commit the data in the same change. `pnpm check:demo` fails until you do |
 | `docs/plans/model-prices.md` | Pricing design, matching rules, known limitations | Pricing match chain, sync rules, pricing schema changes |
+| `docs/agent-capabilities.md` | Agent capability contract: declaration fields, permission and confirmation rules, secret/OAuth handoff, adapters, testing | Adding, changing or removing an agent capability; changing permission, risk or confirmation policy; changing the MCP bridge. When a new OMC feature is suitable for agent use, register it in the same change instead of adapting it later |
 
 ### Documentation Maintenance Checklist (Execute Before Declaring Complete)
 

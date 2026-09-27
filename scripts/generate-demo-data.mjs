@@ -23,6 +23,7 @@
  * can reach the network or the worktree.
  */
 import { execFile } from 'node:child_process';
+import { INPUTS as demoInputs } from './demo-inputs.mjs';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -39,34 +40,9 @@ const DATA_DIR = join(root, 'deploy', 'cloudflare', 'data');
 const DATASET = join(DATA_DIR, 'responses.json');
 const PROVENANCE = join(DATA_DIR, 'provenance.json');
 
-/**
- * The files the dataset is derived from, hashed into the provenance record.
- *
- * Kept in step with `scripts/check-demo.mjs`, which recomputes the same digest. A
- * change to any of these is a change that can alter a served response, and the digest
- * is what makes that change fail the check until somebody regenerates and reads the
- * diff.
- */
-const INPUTS = [
-  'internal/api/demo_export_test.go',
-  'internal/demo/fixture.go',
-  'internal/demo/seed.go',
-  'internal/demo/upstream.go',
-  'internal/api/demo_policy.go',
-  'web/src/api/client.ts',
-  'web/src/types/usageEvents.ts',
-  'deploy/cloudflare/routes.mjs',
-  'deploy/cloudflare/time.mjs',
-  // The Worker decides routing, refusals and what each response becomes, so a change to
-  // it changes what a visitor is served as surely as a change to the export does. It was
-  // missing from this list, which meant the two files that most directly shape a served
-  // response were the two the digest did not cover.
-  'deploy/cloudflare/worker.mjs',
-  'scripts/generate-demo-data.mjs',
-  // The packaging step decides what the served assets reference, so a change to it
-  // changes the demonstration as surely as a change to the Worker does.
-  'scripts/build-demo.mjs',
-];
+// The digest inputs live in one module so this generator and the check cannot drift.
+const INPUTS = demoInputs;
+
 
 /** The digest of the inputs the dataset was generated from. */
 async function digestOfInputs() {

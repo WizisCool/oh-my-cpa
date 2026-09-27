@@ -250,3 +250,32 @@ change - which is exactly what the gate is for.
 **The local server will not start.** Delete `deploy/cloudflare/.wrangler` (it is ignored
 per-machine state) and run `pnpm install` again, which fetches the runtime binary the
 local server needs.
+
+## Agent-capability data and refusal
+
+The `/agent` route ships in the demonstration as the real page over generated data: the
+capability catalogue and the empty Agent session are exported from the real handlers
+(`/api/v1/capabilities`, `/api/v1/agent/session`), so a visitor sees the declared
+capabilities, their permissions and their descriptions. Nothing else is simulated — the
+Worker refuses capability invocation, session reset, Agent runs, operation decisions,
+secret submission and OAuth start, and the page disables sending in demo mode. No
+conversation, model call, pending operation or approval is fabricated, and no capability
+result is presented as if it had been produced.
+
+Because the catalogue is part of the dataset's coverage, adding, renaming or re-describing
+a capability changes a served response: regenerate and inspect the dataset whenever the
+registry or its safety metadata changes.
+
+## Playground data and refusal
+
+The playground's model directory is generated from the loopback CPA fixture through the
+real OMC facade. The export derives its client-key fingerprint from the already-captured
+masked key list; no literal fingerprint is maintained in the generator. The Worker maps
+`/api/v1/playground/models` to the generated `playground-models` response. The console
+route `/playground` is included in both demo coverage and browser acceptance.
+
+`POST /api/v1/playground/chat` is refused by the Go route policy and the Worker's existing
+non-read refusal. The UI disables sending in demo mode. It does not claim durable preference storage: the Worker
+still refuses non-read API calls, so a selected key and call point last only for that page session. No sample
+answer is represented as a real model call, and no new outbound destination or console
+configuration is needed. Regenerate and inspect the dataset whenever this surface changes.

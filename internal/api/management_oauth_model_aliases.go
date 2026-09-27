@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -43,6 +44,51 @@ func (h *Handler) listManagementOAuthModelAliases(writer http.ResponseWriter, re
 	writeJSON(writer, http.StatusOK, map[string]any{"aliases": projected})
 }
 
+// errOAuthModelAliasMismatch reports a write CPA accepted but did not read back as requested.
+var errOAuthModelAliasMismatch = errors.New("CPA did not persist the OAuth model aliases")
+
+// applyManagementOAuthModelAliases replaces one provider's global mapping and verifies the readback.
+// CPA stores every provider's mapping in one document, so the whole-configuration write gate covers it.
+func (h *Handler) applyManagementOAuthModelAliases(ctx context.Context, client *management.Client, provider string, aliases []managementOAuthModelAlias, beforeWrite func(context.Context) error) ([]managementOAuthModelAlias, error) {
+	if err := h.providerWrites.acquire(ctx); err != nil {
+		return nil, errors.New("write_busy")
+	}
+	defer h.providerWrites.release()
+	if beforeWrite != nil {
+		if err := beforeWrite(ctx); err != nil {
+			return nil, err
+		}
+	}
+	if err := client.PatchOAuthModelAliases(ctx, provider, managementOAuthModelAliasesToCPA(aliases)); err != nil {
+		// Deleting an already-absent provider reaches the same desired state; a
+		// missing endpoint has an empty body and is still reported as unsupported.
+		if len(aliases) != 0 || !managementOAuthModelAliasChannelMissing(err) {
+			return nil, err
+		}
+	}
+	serverAliases, err := client.OAuthModelAliases(ctx)
+	if err != nil {
+		return nil, err
+	}
+	projected, err := projectManagementOAuthModelAliases(serverAliases)
+	if err != nil {
+		return nil, err
+	}
+	current, exists := projected[provider]
+	if len(aliases) == 0 {
+		if exists {
+			return nil, errOAuthModelAliasMismatch
+		}
+		current = []managementOAuthModelAlias{}
+	} else if !exists || !managementOAuthModelAliasesEqual(current, aliases) {
+		return nil, errOAuthModelAliasMismatch
+	}
+	if h.pricing != nil {
+		h.pricing.NotifyModelsChanged()
+	}
+	return current, nil
+}
+
 func (h *Handler) patchManagementOAuthModelAliases(writer http.ResponseWriter, request *http.Request) {
 	var payload struct {
 		Provider string                       `json:"provider"`
@@ -73,42 +119,15 @@ func (h *Handler) patchManagementOAuthModelAliases(writer http.ResponseWriter, r
 		writeError(writer, http.StatusInternalServerError, "audit log failure; model alias update aborted")
 		return
 	}
-	if err := client.PatchOAuthModelAliases(request.Context(), provider, managementOAuthModelAliasesToCPA(aliases)); err != nil {
-		// Deleting an already-absent provider reaches the same desired state; a
-		// missing endpoint has an empty body and is still reported as unsupported.
-		if len(aliases) != 0 || !managementOAuthModelAliasChannelMissing(err) {
-			_ = h.recordAudit(request, "oauth_model_alias.update", "oauth_provider", provider, "failure", map[string]any{"error": err.Error()})
-			writeCPAFacadeError(writer, err)
+	current, err := h.applyManagementOAuthModelAliases(request.Context(), client, provider, aliases, nil)
+	if err != nil {
+		_ = h.recordAudit(request, "oauth_model_alias.update", "oauth_provider", provider, "failure", map[string]any{"error": err.Error()})
+		if errors.Is(err, errOAuthModelAliasMismatch) {
+			writeError(writer, http.StatusBadGateway, err.Error())
 			return
 		}
-	}
-	serverAliases, err := client.OAuthModelAliases(request.Context())
-	if err != nil {
-		_ = h.recordAudit(request, "oauth_model_alias.update", "oauth_provider", provider, "failure", map[string]any{"error": "readback failed"})
 		writeCPAFacadeError(writer, err)
 		return
-	}
-	projected, err := projectManagementOAuthModelAliases(serverAliases)
-	if err != nil {
-		_ = h.recordAudit(request, "oauth_model_alias.update", "oauth_provider", provider, "failure", map[string]any{"error": "readback projection failed"})
-		writeError(writer, http.StatusBadGateway, err.Error())
-		return
-	}
-	current, exists := projected[provider]
-	if len(aliases) == 0 {
-		if exists {
-			_ = h.recordAudit(request, "oauth_model_alias.update", "oauth_provider", provider, "failure", map[string]any{"error": "provider still present after deletion"})
-			writeError(writer, http.StatusBadGateway, "CPA did not persist the model alias deletion")
-			return
-		}
-		current = []managementOAuthModelAlias{}
-	} else if !exists || !managementOAuthModelAliasesEqual(current, aliases) {
-		_ = h.recordAudit(request, "oauth_model_alias.update", "oauth_provider", provider, "failure", map[string]any{"error": "readback mismatch"})
-		writeError(writer, http.StatusBadGateway, "CPA did not persist the OAuth model aliases")
-		return
-	}
-	if h.pricing != nil {
-		h.pricing.NotifyModelsChanged()
 	}
 	if auditErr := h.recordAudit(request, "oauth_model_alias.update", "oauth_provider", provider, "success", map[string]any{"count": len(current), "verified": true}); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit log failure after model alias update")

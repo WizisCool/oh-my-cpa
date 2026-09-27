@@ -243,3 +243,28 @@ func (f *fakePricing) NotifyModelsChanged() {
 	f.notifyCount.Add(1)
 	f.TriggerSync()
 }
+
+func (f *fakePricing) SaveManualPricesChecked(ctx context.Context, rows []pricing.ModelPrice, check func([]pricing.ModelPrice) error) error {
+	current, err := f.ListPrices(ctx)
+	if err != nil {
+		return err
+	}
+	if check != nil {
+		if err := check(current); err != nil {
+			return err
+		}
+	}
+	return f.SaveManualPrices(ctx, rows)
+}
+func (f *fakePricing) DeletePriceChecked(ctx context.Context, model string, check func([]pricing.ModelPrice) error) (bool, error) {
+	current, err := f.ListPrices(ctx)
+	if err != nil {
+		return false, err
+	}
+	if check != nil {
+		if err := check(current); err != nil {
+			return false, err
+		}
+	}
+	return f.DeletePrice(ctx, model)
+}

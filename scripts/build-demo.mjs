@@ -45,6 +45,9 @@ const RUNTIME_CONFIG = {
   mediaBaseUrl: '/media',
   appName: 'Oh My CPA',
   demo: true,
+  // The demonstration's own build version, so a page that names the running build does not
+  // fall back to the source default and claim to be a release it is not.
+  version: 'v0.1.0-demo',
 };
 
 /** The marker the Go server writes, which this replaces. */

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Alert, Button, Card, Empty, Select, Skeleton, Space, Tooltip, Typography } from 'antd';
-import { HistoryOutlined, KeyOutlined, QuestionCircleOutlined, ReloadOutlined, RightOutlined } from '@ant-design/icons';
+import { HistoryOutlined, KeyOutlined, QuestionCircleOutlined, ReloadOutlined, RightOutlined } from '../components/icons';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { api, ApiError } from '../api/client';

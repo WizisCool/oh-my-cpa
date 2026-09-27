@@ -7,7 +7,7 @@ import {
   DownloadOutlined,
   DownOutlined,
   UpOutlined,
-} from '@ant-design/icons';
+} from '../icons';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { api } from '../../api/client';

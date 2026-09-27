@@ -1,7 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Popconfirm, Space } from 'antd';
-import { CheckOutlined, CloseOutlined } from '@ant-design/icons';
+import { CheckOutlined, CloseOutlined } from '../icons';
 import { useT } from '../../i18n';
 
 export interface ConfigDirtyBarProps {

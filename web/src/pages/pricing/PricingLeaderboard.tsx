@@ -1,6 +1,6 @@
 import React from 'react';
 import { Segmented } from 'antd';
-import { BarChartOutlined, DownOutlined, UpOutlined } from '@ant-design/icons';
+import { BarChartOutlined, DownOutlined, UpOutlined } from '../../components/icons';
 import { useT } from '../../i18n';
 import type { ModelPrice } from '../../types/pricing';
 import styles from './PricingLeaderboard.module.css';

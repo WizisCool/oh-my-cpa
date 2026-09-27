@@ -7,7 +7,7 @@ import {
   PlayCircleOutlined,
   ReloadOutlined,
   SearchOutlined,
-} from '@ant-design/icons';
+} from '../components/icons';
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import type { ColumnsType } from 'antd/es/table';

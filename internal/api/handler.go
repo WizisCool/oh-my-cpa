@@ -32,12 +32,14 @@ import (
 )
 
 type Handler struct {
-	cfg        config.Config
-	repo       *repository.Repository
-	cipher     *appcrypto.Cipher
-	discoverer *discovery.Discoverer
-	logger     *slog.Logger
-	auth       *auth.Manager
+	agent           agentState
+	playgroundSlots chan struct{}
+	cfg             config.Config
+	repo            *repository.Repository
+	cipher          *appcrypto.Cipher
+	discoverer      *discovery.Discoverer
+	logger          *slog.Logger
+	auth            *auth.Manager
 	// usage reports the background capture pipeline; nil when ingestion is off.
 	usage usagePipeline
 	// pricing serves model prices and the models.dev sync; nil until SetPricing.
@@ -87,6 +89,7 @@ func (h *Handler) now() time.Time {
 
 func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypto.Cipher, logger *slog.Logger, authManager *auth.Manager) *Handler {
 	handler := &Handler{
+		playgroundSlots:  make(chan struct{}, 4),
 		cfg:              cfg,
 		repo:             repo,
 		cipher:           cipher,
@@ -157,7 +160,18 @@ func (h *Handler) routes() chi.Router {
 				authRouter.MethodNotAllowed(h.methodNotAllowed)
 			})
 			apiRouter.Route("/v1", func(v1 chi.Router) {
-				v1.Use(h.requireAuthentication)
+				v1.Use(h.requireConsoleOrCapability)
+				v1.Get("/capabilities", h.listCapabilities)
+				v1.Post("/capabilities/invoke", h.invokeCapability)
+				v1.Get("/capabilities/operations/{id}", h.getCapabilityOperation)
+				v1.Get("/agent/session", h.currentAgent)
+				v1.Post("/agent/session/reset", h.resetAgent)
+				v1.Post("/agent/run", h.runAgent)
+				v1.Get("/agent/operations/{id}", h.getCapabilityOperation)
+				v1.Post("/agent/operations/{id}/decision", h.decideAgentOperation)
+				v1.Post("/agent/operations/{id}/oauth", h.startAgentOAuth)
+				v1.Get("/playground/models", h.listPlaygroundModels)
+				v1.Post("/playground/chat", h.chatPlayground)
 				v1.Post("/instances/default/discover", h.discoverDefault)
 				v1.Get("/resources", h.listResources)
 				v1.Patch("/resources/{id}/override", h.updateResourceOverride)
@@ -822,6 +836,10 @@ func injectRuntimeConfig(indexHTML string, cfg config.Config) (string, error) {
 		"mediaBaseUrl": mediaBase,
 		"appName":      "Oh My CPA",
 		"demo":         cfg.IsDemoMode,
+		// The running build's own version, so the playground's User-Agent placeholder
+		// and its copied cURL name the version this deployment actually is instead of
+		// a second copy of the number maintained in TypeScript.
+		"version": cfg.Version,
 	}))
 	script := "<script>" + payload + "</script>"
 	replacedConfig := false

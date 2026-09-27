@@ -1,3 +1,5 @@
+import { agentWorkspace, agentFailureCopy, agentStream, agentNarrow, agentLive, agentFixtures } from './probes/agent.mjs';
+import { playground, playgroundFixtures, playgroundNarrow } from './probes/playground.mjs';
 /**
  * The browser probe scenarios, as a registry rather than a script.
  *
@@ -76,6 +78,13 @@ import {
  * (which runs the relevant subset) without either owning the other's reporting.
  */
 export const SCENARIOS = [
+  { id: 'agent', name: 'Agent data notice, reasoning effort, confirmed tools, remembered target and server conversation recovery', options: { routes: agentFixtures() }, run: agentWorkspace },
+  { id: 'agent-live', name: 'Agent shows a sent message at once and keeps its reasoning', options: { routes: agentFixtures() }, run: agentLive },
+  { id: 'agent-failure', name: 'Agent reports a failure as a sentence, not a code', options: { routes: agentFixtures() }, run: agentFailureCopy },
+  { id: 'agent-stream', name: 'Agent coalesces a token burst into bounded repaints', options: { routes: agentFixtures() }, run: agentStream },
+  { id: 'agent-narrow', name: 'Agent keeps its target visible and its directory follows native Back on phones', options: { routes: agentFixtures(), viewport: { width: 320, height: 850 } }, run: agentNarrow },
+  { id: 'playground', name: 'ephemeral multimodal playground streams and inspects safe requests', options: { routes: playgroundFixtures() }, run: playground },
+  { id: 'playground-narrow', name: 'playground settings follow native Back and fit a phone', options: { routes: playgroundFixtures(), viewport: { width: 320, height: 850 } }, run: playgroundNarrow },
   {
     id: 'omc-settings',
     name: 'OMC settings and the unit style it governs',

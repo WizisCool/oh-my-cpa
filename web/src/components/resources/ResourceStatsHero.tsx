@@ -5,7 +5,7 @@ import {
   FilterOutlined,
   ThunderboltFilled,
   SyncOutlined,
-} from '@ant-design/icons';
+} from '../icons';
 import { useT } from '../../i18n';
 
 const { Title, Paragraph, Text } = Typography;

@@ -1,6 +1,6 @@
 
 import { Button, Input, Segmented, Select } from 'antd';
-import { FilterOutlined, SearchOutlined } from '@ant-design/icons';
+import { FilterOutlined, SearchOutlined } from '../icons';
 
 import { useT } from '../../i18n';
 import type { EventFilterKey } from '../../types/usageEventQuery';

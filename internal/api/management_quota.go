@@ -34,164 +34,12 @@ func (h *Handler) getQuotaOverview(writer http.ResponseWriter, request *http.Req
 		return
 	}
 
-	ctx := request.Context()
-	filesResp, err := client.AuthFiles(ctx)
+	overview, err := h.buildQuotaOverview(request.Context(), client)
 	if err != nil {
 		writeCPAFacadeError(writer, err)
 		return
 	}
-
-	authIndexes := make([]string, 0, len(filesResp.Files))
-	fileMap := make(map[string]management.AuthFile)
-	for _, file := range filesResp.Files {
-		authIndex := strings.TrimSpace(file.AuthIndex)
-		if authIndex == "" {
-			continue
-		}
-		authIndexes = append(authIndexes, authIndex)
-		fileMap[authIndex] = file
-	}
-
-	nowMS := time.Now().UnixMilli()
-	var latestSnapshots map[string]repository.QuotaSnapshotRecord
-	var activeCooldowns map[string]repository.ActiveCooldownRecord
-
-	if h.repo != nil && len(authIndexes) > 0 {
-		if snapshots, err := h.repo.GetLatestQuotaSnapshots(ctx, authIndexes); err == nil {
-			latestSnapshots = snapshots
-		}
-		if cooldowns, err := h.repo.BatchCorrelatedCooldowns(ctx, authIndexes, nowMS); err == nil {
-			activeCooldowns = cooldowns
-		}
-	}
-
-	items := make([]QuotaItemDTO, 0, len(authIndexes))
-	var soonestRecoveryMS *int64
-
-	var healthyCount, warningCount, exhaustedCount, cooldownCount, attentionCount int
-
-	for _, authIndex := range authIndexes {
-		file := fileMap[authIndex]
-		stdProvider := quota.DetectProvider(file.Type, file.Provider)
-		caps := quota.CapabilitiesForProvider(stdProvider)
-
-		normalized := quota.NormalizedQuota{
-			AuthIndex:    authIndex,
-			Name:         file.Name,
-			Type:         file.Type,
-			Provider:     stdProvider,
-			Disabled:     file.Disabled,
-			ObservedAtMS: nowMS,
-			Capabilities: caps,
-			Windows:      []quota.QuotaWindow{},
-		}
-
-		if file.Quota != nil {
-			if signals, ok := file.Quota["signals"].(map[string]any); ok {
-				rawSigs := make(map[string]string)
-				for k, v := range signals {
-					rawSigs[k] = fmt.Sprint(v)
-				}
-				normalized.RawSignals = rawSigs
-			}
-		}
-
-		if cooldown, ok := activeCooldowns[authIndex]; ok && cooldown.IsActive {
-			normalized.ActiveCooldown = &quota.ActiveCooldown{
-				IsActive:          true,
-				Reason:            cooldown.Reason,
-				RecoverAtMS:       cooldown.RecoverAtMS,
-				RetryAfterSeconds: cooldown.RetryAfterSeconds,
-				CorrelatedAtMS:    cooldown.CorrelatedAtMS,
-			}
-			if cooldown.RecoverAtMS != nil && *cooldown.RecoverAtMS > nowMS {
-				if soonestRecoveryMS == nil || *cooldown.RecoverAtMS < *soonestRecoveryMS {
-					soonestRecoveryMS = cooldown.RecoverAtMS
-				}
-			}
-		}
-
-		if snapshot, ok := latestSnapshots[authIndex]; ok {
-			normalized.ObservedAtMS = snapshot.ObservedAtMS
-			if plan := planFromSnapshot(snapshot); plan != nil {
-				normalized.Plan = plan
-			}
-			if snapshot.WindowsJSON != "" && snapshot.WindowsJSON != "[]" {
-				var windows []quota.QuotaWindow
-				if err := json.Unmarshal([]byte(snapshot.WindowsJSON), &windows); err == nil {
-					normalized.Windows = windows
-					// Check windows for soonest recovery
-					for _, w := range windows {
-						if w.ResetAtMS != nil && *w.ResetAtMS > nowMS {
-							if soonestRecoveryMS == nil || *w.ResetAtMS < *soonestRecoveryMS {
-								soonestRecoveryMS = w.ResetAtMS
-							}
-						}
-					}
-				}
-			}
-			if snapshot.ResetCreditsJSON != "" {
-				var credits quota.CodexResetCreditsInfo
-				if err := json.Unmarshal([]byte(snapshot.ResetCreditsJSON), &credits); err == nil {
-					normalized.ResetCredits = &credits
-				}
-			}
-		}
-
-		quota.EvaluateStatusAndRecommendation(&normalized, nowMS)
-
-		switch normalized.Status {
-		case "healthy":
-			healthyCount++
-		case "warning":
-			warningCount++
-			attentionCount++
-		case "exhausted":
-			exhaustedCount++
-			attentionCount++
-		case "cooldown":
-			cooldownCount++
-			attentionCount++
-		case "error":
-			attentionCount++
-		}
-
-		dto := QuotaItemDTO{
-			NormalizedQuota: normalized,
-			Quota:           projectQuota(file.Quota),
-			ModelQuotas:     projectModelQuotas(file.ModelQuotas),
-		}
-		if normalized.ActiveCooldown != nil && normalized.ActiveCooldown.IsActive {
-			dto.QuotaExceeded = true
-			dto.QuotaReason = normalized.ActiveCooldown.Reason
-			dto.NextRecoverAtMS = normalized.ActiveCooldown.RecoverAtMS
-			if normalized.ActiveCooldown.RetryAfterSeconds != nil {
-				ms := *normalized.ActiveCooldown.RetryAfterSeconds * 1000
-				dto.NextRetryAfterMS = &ms
-			}
-		} else if normalized.Status == "exhausted" {
-			dto.QuotaExceeded = true
-			dto.QuotaReason = "配额已耗尽"
-		}
-
-		items = append(items, dto)
-	}
-
-	summary := quota.QuotaOverviewSummary{
-		TotalCredentials:  len(items),
-		HealthyCount:      healthyCount,
-		WarningCount:      warningCount,
-		ExhaustedCount:    exhaustedCount,
-		CooldownCount:     cooldownCount,
-		AttentionCount:    attentionCount,
-		SoonestRecoveryMS: soonestRecoveryMS,
-	}
-
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"summary": summary,
-		"quotas":  items,
-		"total":   len(items),
-	})
+	writeJSON(writer, http.StatusOK, overview)
 }
 
 type refreshQuotaRequest struct {
@@ -429,46 +277,19 @@ func (h *Handler) clearCredentialCooldownWithAction(writer http.ResponseWriter, 
 		return
 	}
 
-	ctx := request.Context()
-	filesResp, err := client.AuthFiles(ctx)
-	if err != nil {
-		writeCPAFacadeError(writer, err)
+	if err := h.providerWrites.acquire(request.Context()); err != nil {
+		writeProviderWriteError(writer, err)
 		return
 	}
-	var found bool
-	for _, f := range filesResp.Files {
-		if strings.TrimSpace(f.AuthIndex) == authIndex {
-			found = true
-			break
-		}
-	}
-	if !found {
-		writeError(writer, http.StatusNotFound, fmt.Sprintf("credential %q not found", authIndex))
-		return
-	}
-
-	if auditErr := h.recordAudit(request, action, "quota", authIndex, "attempt", nil); auditErr != nil {
-		writeError(writer, http.StatusInternalServerError, "audit failure; clear cooldown aborted")
-		return
-	}
-
-	if err := client.ResetQuota(request.Context(), authIndex); err != nil {
-		_ = h.recordAudit(request, action, "quota", authIndex, "failure", map[string]any{"error": err.Error()})
-		writeCPAFacadeError(writer, err)
-		return
-	}
-
-	// Durably clear local cooldown evidence from database
-	if h.repo != nil {
-		_ = h.repo.ClearCooldownEvidence(request.Context(), authIndex)
-	}
-
-	_ = h.recordAudit(request, action, "quota", authIndex, "success", nil)
-
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"status":     "ok",
-		"auth_index": authIndex,
+	defer h.providerWrites.release()
+	result, err := h.clearQuotaCooldown(request.Context(), client, authIndex, action, func(action, targetType, targetID, result string, details map[string]any) error {
+		return h.recordAudit(request, action, targetType, targetID, result, details)
 	})
+	if err != nil {
+		writeProviderWriteError(writer, err)
+		return
+	}
+	writeJSON(writer, 200, result)
 }
 
 func (h *Handler) clearCredentialCooldown(writer http.ResponseWriter, request *http.Request) {
@@ -497,55 +318,19 @@ func (h *Handler) redeemCodexResetCredit(writer http.ResponseWriter, request *ht
 		return
 	}
 
-	ctx := request.Context()
-	filesResp, err := client.AuthFiles(ctx)
-	if err != nil {
-		writeCPAFacadeError(writer, err)
+	if err := h.providerWrites.acquire(request.Context()); err != nil {
+		writeProviderWriteError(writer, err)
 		return
 	}
-
-	var foundFile *management.AuthFile
-	for _, f := range filesResp.Files {
-		if strings.TrimSpace(f.AuthIndex) == authIndex {
-			foundFile = &f
-			break
-		}
-	}
-	if foundFile == nil {
-		writeError(writer, http.StatusNotFound, fmt.Sprintf("credential %q not found", authIndex))
-		return
-	}
-	if quota.DetectProvider(foundFile.Type, foundFile.Provider) != "codex" {
-		writeError(writer, http.StatusBadRequest, "rate limit reset credit is only supported for Codex credentials")
-		return
-	}
-
-	if auditErr := h.recordAudit(request, "quota.redeem_credit", "quota", authIndex, "attempt", nil); auditErr != nil {
-		writeError(writer, http.StatusInternalServerError, "audit failure; redeem credit aborted")
-		return
-	}
-
-	svc := quota.NewService(client)
-	if err := svc.RedeemCodexCredit(ctx, *foundFile); err != nil {
-		_ = h.recordAudit(request, "quota.redeem_credit", "quota", authIndex, "failure", map[string]any{"error": err.Error()})
-		writeError(writer, http.StatusBadGateway, fmt.Sprintf("redeem reset credit failed: %v", err))
-		return
-	}
-
-	// Re-read usage right away so the redeemed credit is reflected before the
-	// next scheduled poll.
-	prior := h.loadPriorNormalizedQuota(ctx, authIndex)
-	refreshed, _ := svc.RefreshCredentialQuota(ctx, *foundFile, prior)
-	if refreshed != nil && h.repo != nil && refreshed.Status != "error" && refreshed.Status != "stale" {
-		_ = h.persistNormalizedQuotaSnapshot(ctx, refreshed)
-	}
-
-	_ = h.recordAudit(request, "quota.redeem_credit", "quota", authIndex, "success", nil)
-
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"status": "ok",
-		"quota":  refreshed,
+	defer h.providerWrites.release()
+	result, err := h.redeemQuotaCredit(request.Context(), client, authIndex, func(action, targetType, targetID, result string, details map[string]any) error {
+		return h.recordAudit(request, action, targetType, targetID, result, details)
 	})
+	if err != nil {
+		writeProviderWriteError(writer, err)
+		return
+	}
+	writeJSON(writer, 200, result)
 }
 
 func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *http.Request) {
@@ -643,4 +428,165 @@ func (h *Handler) getCredentialQuotaDetail(writer http.ResponseWriter, request *
 		"history":      history,
 		"model_quotas": projectModelQuotas(targetFile.ModelQuotas),
 	})
+}
+
+type quotaOverviewData struct {
+	Summary quota.QuotaOverviewSummary `json:"summary"`
+	Quotas  []QuotaItemDTO             `json:"quotas"`
+	Total   int                        `json:"total"`
+}
+
+func (h *Handler) buildQuotaOverview(ctx context.Context, client *management.Client) (quotaOverviewData, error) {
+	filesResp, err := client.AuthFiles(ctx)
+	if err != nil {
+		return quotaOverviewData{}, err
+	}
+
+	authIndexes := make([]string, 0, len(filesResp.Files))
+	fileMap := make(map[string]management.AuthFile)
+	for _, file := range filesResp.Files {
+		authIndex := strings.TrimSpace(file.AuthIndex)
+		if authIndex == "" {
+			continue
+		}
+		authIndexes = append(authIndexes, authIndex)
+		fileMap[authIndex] = file
+	}
+
+	nowMS := time.Now().UnixMilli()
+	var latestSnapshots map[string]repository.QuotaSnapshotRecord
+	var activeCooldowns map[string]repository.ActiveCooldownRecord
+
+	if h.repo != nil && len(authIndexes) > 0 {
+		if snapshots, err := h.repo.GetLatestQuotaSnapshots(ctx, authIndexes); err == nil {
+			latestSnapshots = snapshots
+		}
+		if cooldowns, err := h.repo.BatchCorrelatedCooldowns(ctx, authIndexes, nowMS); err == nil {
+			activeCooldowns = cooldowns
+		}
+	}
+
+	items := make([]QuotaItemDTO, 0, len(authIndexes))
+	var soonestRecoveryMS *int64
+
+	var healthyCount, warningCount, exhaustedCount, cooldownCount, attentionCount int
+
+	for _, authIndex := range authIndexes {
+		file := fileMap[authIndex]
+		stdProvider := quota.DetectProvider(file.Type, file.Provider)
+		caps := quota.CapabilitiesForProvider(stdProvider)
+
+		normalized := quota.NormalizedQuota{
+			AuthIndex:    authIndex,
+			Name:         file.Name,
+			Type:         file.Type,
+			Provider:     stdProvider,
+			Disabled:     file.Disabled,
+			ObservedAtMS: nowMS,
+			Capabilities: caps,
+			Windows:      []quota.QuotaWindow{},
+		}
+
+		if file.Quota != nil {
+			if signals, ok := file.Quota["signals"].(map[string]any); ok {
+				rawSigs := make(map[string]string)
+				for k, v := range signals {
+					rawSigs[k] = fmt.Sprint(v)
+				}
+				normalized.RawSignals = rawSigs
+			}
+		}
+
+		if cooldown, ok := activeCooldowns[authIndex]; ok && cooldown.IsActive {
+			normalized.ActiveCooldown = &quota.ActiveCooldown{
+				IsActive:          true,
+				Reason:            cooldown.Reason,
+				RecoverAtMS:       cooldown.RecoverAtMS,
+				RetryAfterSeconds: cooldown.RetryAfterSeconds,
+				CorrelatedAtMS:    cooldown.CorrelatedAtMS,
+			}
+			if cooldown.RecoverAtMS != nil && *cooldown.RecoverAtMS > nowMS {
+				if soonestRecoveryMS == nil || *cooldown.RecoverAtMS < *soonestRecoveryMS {
+					soonestRecoveryMS = cooldown.RecoverAtMS
+				}
+			}
+		}
+
+		if snapshot, ok := latestSnapshots[authIndex]; ok {
+			normalized.ObservedAtMS = snapshot.ObservedAtMS
+			if plan := planFromSnapshot(snapshot); plan != nil {
+				normalized.Plan = plan
+			}
+			if snapshot.WindowsJSON != "" && snapshot.WindowsJSON != "[]" {
+				var windows []quota.QuotaWindow
+				if err := json.Unmarshal([]byte(snapshot.WindowsJSON), &windows); err == nil {
+					normalized.Windows = windows
+					// Check windows for soonest recovery
+					for _, w := range windows {
+						if w.ResetAtMS != nil && *w.ResetAtMS > nowMS {
+							if soonestRecoveryMS == nil || *w.ResetAtMS < *soonestRecoveryMS {
+								soonestRecoveryMS = w.ResetAtMS
+							}
+						}
+					}
+				}
+			}
+			if snapshot.ResetCreditsJSON != "" {
+				var credits quota.CodexResetCreditsInfo
+				if err := json.Unmarshal([]byte(snapshot.ResetCreditsJSON), &credits); err == nil {
+					normalized.ResetCredits = &credits
+				}
+			}
+		}
+
+		quota.EvaluateStatusAndRecommendation(&normalized, nowMS)
+
+		switch normalized.Status {
+		case "healthy":
+			healthyCount++
+		case "warning":
+			warningCount++
+			attentionCount++
+		case "exhausted":
+			exhaustedCount++
+			attentionCount++
+		case "cooldown":
+			cooldownCount++
+			attentionCount++
+		case "error":
+			attentionCount++
+		}
+
+		dto := QuotaItemDTO{
+			NormalizedQuota: normalized,
+			Quota:           projectQuota(file.Quota),
+			ModelQuotas:     projectModelQuotas(file.ModelQuotas),
+		}
+		if normalized.ActiveCooldown != nil && normalized.ActiveCooldown.IsActive {
+			dto.QuotaExceeded = true
+			dto.QuotaReason = normalized.ActiveCooldown.Reason
+			dto.NextRecoverAtMS = normalized.ActiveCooldown.RecoverAtMS
+			if normalized.ActiveCooldown.RetryAfterSeconds != nil {
+				ms := *normalized.ActiveCooldown.RetryAfterSeconds * 1000
+				dto.NextRetryAfterMS = &ms
+			}
+		} else if normalized.Status == "exhausted" {
+			dto.QuotaExceeded = true
+			dto.QuotaReason = "配额已耗尽"
+		}
+
+		items = append(items, dto)
+	}
+
+	summary := quota.QuotaOverviewSummary{
+		TotalCredentials:  len(items),
+		HealthyCount:      healthyCount,
+		WarningCount:      warningCount,
+		ExhaustedCount:    exhaustedCount,
+		CooldownCount:     cooldownCount,
+		AttentionCount:    attentionCount,
+		SoonestRecoveryMS: soonestRecoveryMS,
+	}
+
+	return quotaOverviewData{summary, items, len(items)}, nil
 }

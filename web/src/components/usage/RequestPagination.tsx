@@ -1,6 +1,6 @@
 
 import { Button, Select, Tooltip } from 'antd';
-import { LeftOutlined, RightOutlined } from '@ant-design/icons';
+import { LeftOutlined, RightOutlined } from '../icons';
 
 import { useT } from '../../i18n';
 

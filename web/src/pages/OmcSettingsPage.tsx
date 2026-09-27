@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, ColorPicker, Segmented, Select, Typography } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { PlusOutlined } from '../components/icons';
 import { isChineseLanguage, useT, useI18n, LANGUAGES } from '../i18n';
 import { useIsNarrowViewport } from '../hooks/useIsNarrowViewport';
 import { useTheme } from '../theme/ThemeContext';

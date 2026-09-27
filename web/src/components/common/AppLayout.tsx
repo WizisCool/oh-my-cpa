@@ -3,6 +3,7 @@ import { App as AntdApp, Layout, Menu, Drawer, Tooltip, Button, Breadcrumb, Spin
 import {
   ApiOutlined,
   CloudServerOutlined,
+  CodeSandboxOutlined,
   ControlOutlined,
   DashboardOutlined,
   DollarOutlined,
@@ -13,10 +14,11 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   ProfileOutlined,
+  RobotOutlined,
   SettingOutlined,
   ShopOutlined,
   ThunderboltOutlined,
-} from '@ant-design/icons';
+} from '../icons';
 import type { MenuProps } from 'antd';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { HeaderNav } from './HeaderNav';
@@ -46,12 +48,23 @@ interface NavGroup {
 
 // Groups mirror the navigation model: Operate / Gateway / Observe / Control,
 // plus the Oh My CPA layer.
+/**
+ * Routes that own their scroll columns rather than scrolling the content area.
+ *
+ * A conversation workspace pins its composer to the bottom of the viewport and scrolls the
+ * transcript and the side panel independently, which only works when the route fills the
+ * content area's height instead of growing it.
+ */
+const WORKSPACE_ROUTES = new Set(['/playground', '/agent']);
+
 const navGroups: NavGroup[] = [
   {
     key: 'operate',
     labelKey: 'nav.group.operate',
     items: [
       { key: '/dashboard', labelKey: 'nav.dashboard', icon: <DashboardOutlined /> },
+      { key: '/agent', labelKey: 'nav.agent', icon: <RobotOutlined /> },
+      { key: '/playground', labelKey: 'nav.playground', icon: <CodeSandboxOutlined /> },
       { key: '/quick-start', labelKey: 'nav.quick_start', icon: <ThunderboltOutlined /> },
     ],
   },
@@ -312,7 +325,7 @@ export const AppLayout: React.FC = () => {
           <DataProgress />
           {/* Keyed by pathname so each view cross-fades in instead of hard
               swapping, and the scroll position resets with the new page. */}
-          <div key={location.pathname} className="route-transition">
+          <div key={location.pathname} className={`route-transition${WORKSPACE_ROUTES.has(location.pathname) ? ' workspace-route' : ''}`}>
             <React.Suspense fallback={<div style={{ padding: 60, textAlign: 'center' }}><Spin size="large" /></div>}>
               <Outlet />
             </React.Suspense>

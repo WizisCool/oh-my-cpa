@@ -268,6 +268,28 @@ func recentRequests(now time.Time, success, failed int64) []map[string]any {
 }
 
 func (u *Upstream) serve(writer http.ResponseWriter, request *http.Request) {
+	// The read-only client catalogue exercises the same path as a real gateway.
+	if request.Method == http.MethodGet && request.URL.Path == "/v1/models" {
+		for _, key := range gatewayKeyValues() {
+			if request.Header.Get("Authorization") == "Bearer "+key {
+				models := []map[string]string{}
+				seen := map[string]bool{}
+				for _, credential := range credentialCatalog() {
+					for _, model := range credential.models {
+						if !seen[model] {
+							seen[model] = true
+							models = append(models, map[string]string{"id": model})
+						}
+					}
+				}
+				writeFixtureJSON(writer, http.StatusOK, map[string]any{"data": models})
+				return
+			}
+		}
+		writeFixtureJSON(writer, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
 	if request.Header.Get("Authorization") != "Bearer "+u.managementKey {
 		writeFixtureJSON(writer, http.StatusUnauthorized, map[string]any{"error": "unauthorized"})
 		return

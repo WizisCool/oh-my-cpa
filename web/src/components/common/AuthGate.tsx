@@ -1,6 +1,6 @@
 import React from 'react';
 import { Alert, App as AntdApp, Button, Card, Form, Input, Skeleton } from 'antd';
-import { LockOutlined } from '@ant-design/icons';
+import { LockOutlined } from '../icons';
 import { api, ApiError, setUnauthorizedHandler } from '../../api/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useT } from '../../i18n';

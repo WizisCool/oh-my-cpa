@@ -365,3 +365,30 @@ The geometric form language is compact, rectangular, and tightly controlled:
 - **Don't** hard-swap an active screen to a blank white canvas during navigation or background polling.
 - **Don't** display duplicated translations side-by-side in the interface.
 - **Don't** pack single settings or isolated input fields into individual card boxes.
+
+## Conversation workspaces
+
+The Playground and the Agent share one frame from `web/src/components/workspace`: a head carrying
+the title, the key-and-model target as one joined control and the page actions; a main column whose
+transcript, notices and composer share a centred 760px reading column; and a resizable side panel
+(a keyboard-operable splitter, never wider than half the viewport) that becomes a Back-aware Drawer
+below 900px, where the target moves onto its own head row. The frame spans the content area, like
+the configuration workbench.
+
+- **Transcript**: Ant Design X `Bubble.List` with native reverse-scroll anchoring and a "back to
+  latest" control. The operator's message is a bordered `--surface` block; an answer is borderless
+  with a model-and-status head, X `Think` for reasoning (no title shimmer), Markdown in the
+  console's own styles, and a foot of measurements plus muted icon actions.
+- **Model output**: tables in a hairline frame; fenced code with a language head and copy action,
+  highlighted only for allowlisted languages after the fence closes, in a palette-ink syntax theme
+  that never borrows the semantic hues. Raw HTML is escaped and images are links.
+- **Composer**: X `Sender` with Enter and the send button as one gate, a stop button while running,
+  and one line beneath naming the cost or privacy boundary.
+- **Playground panel**: Parameters (unset values read "Default"; sliders rest muted) and Turn
+  diagnostics (metrics grid, request and response code blocks, labelled cURL copy).
+- **Agent**: a capability directory as an open list grouped read / write / destructive with pips;
+  a turn drawn in the order it happened - reasoning, text and capability calls as segments, the calls
+  of one round as an X `ThoughtChain` with warn-toned attention marks for pending or unconfirmed
+  steps; approval cards framed in the caution (or danger) hue until decided; the data notice as the
+  line beneath the composer (no consent checkbox); the reasoning effort as a quiet text button in the
+  composer's foot; reasoning shown live and kept with the turn; the sent message shown at once.

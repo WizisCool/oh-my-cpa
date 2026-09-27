@@ -23,6 +23,7 @@
  * Run `pnpm demo:generate` to accept an intended change.
  */
 import { createHash } from 'node:crypto';
+import { INPUTS as demoInputs } from './demo-inputs.mjs';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -33,34 +34,9 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DATASET = join(root, 'deploy', 'cloudflare', 'data', 'responses.json');
 const PROVENANCE = join(root, 'deploy', 'cloudflare', 'data', 'provenance.json');
 
-/**
- * The files the dataset is derived from.
- *
- * A change to any of them can change a served response, so each one invalidates the
- * committed copy. The list is deliberately the shape of the dependency rather than
- * every file that could be involved: a digest over the whole repository would fail on
- * a documentation edit and train everyone to regenerate without reading.
- */
-const INPUTS = [
-  'internal/api/demo_export_test.go',
-  'internal/demo/fixture.go',
-  'internal/demo/seed.go',
-  'internal/demo/upstream.go',
-  'internal/api/demo_policy.go',
-  'web/src/api/client.ts',
-  'web/src/types/usageEvents.ts',
-  'deploy/cloudflare/routes.mjs',
-  'deploy/cloudflare/time.mjs',
-  // The Worker decides routing, refusals and what each response becomes, so a change to
-  // it changes what a visitor is served as surely as a change to the export does. It was
-  // missing from this list, which meant the two files that most directly shape a served
-  // response were the two the digest did not cover.
-  'deploy/cloudflare/worker.mjs',
-  'scripts/generate-demo-data.mjs',
-  // The packaging step decides what the served assets reference, so a change to it
-  // changes the demonstration as surely as a change to the Worker does.
-  'scripts/build-demo.mjs',
-];
+// The digest inputs live in one module so the generator and this check cannot drift.
+const INPUTS = demoInputs;
+
 
 /**
  * The console's routes, which the browser check drives. Duplicated from App.tsx for the
@@ -70,6 +46,8 @@ const INPUTS = [
 const CONSOLE_ROUTES = [
   '/dashboard',
   '/quick-start',
+  '/playground',
+  '/agent',
   '/ai-providers',
   '/api-keys',
   '/oauth-management',
@@ -92,6 +70,8 @@ const CONSOLE_ROUTES = [
 const ROUTE_READS = {
   '/dashboard': ['overview', 'dashboard-24h', 'dashboard-tail-24h', 'dashboard-models-call-24h', 'dashboard-models-model-24h', 'dashboard-token-heatmap-utc'],
   '/quick-start': ['overview', 'providers', 'api-keys'],
+  '/playground': ['api-keys', 'playground-models'],
+  '/agent': ['api-keys', 'capabilities', 'agent-session'],
   '/ai-providers': ['providers', 'dashboard-providers-24h'],
   '/api-keys': ['api-keys', 'client-key-aliases'],
   '/oauth-management': ['auth-files', 'auth-files-model-aliases', 'plugins', 'quota'],

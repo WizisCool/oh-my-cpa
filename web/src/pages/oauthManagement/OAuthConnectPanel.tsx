@@ -17,7 +17,7 @@ import {
   LinkOutlined,
   ReloadOutlined,
   StopOutlined,
-} from '@ant-design/icons';
+} from '../../components/icons';
 import { useT } from '../../i18n';
 import { copyText } from '../../utils/clipboard';
 import { isDemoMode } from '../../types/demoMode';

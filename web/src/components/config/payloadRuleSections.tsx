@@ -1,5 +1,5 @@
 import { Button, Input, InputNumber, Popconfirm, Select, Typography } from 'antd';
-import { DeleteOutlined, PlusOutlined, SettingOutlined } from '@ant-design/icons';
+import { DeleteOutlined, PlusOutlined, SettingOutlined } from '../icons';
 
 import {
   generateDynamicId,

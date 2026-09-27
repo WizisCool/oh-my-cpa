@@ -9,6 +9,12 @@ export interface AppConfig {
    * is in the first frame and no non-demo layout is ever painted first.
    */
   demo: boolean;
+  /**
+   * The running build's version, as the server reports it (`OMCPA_VERSION`).
+   * The playground reads it to name the default User-Agent, so the panel and the
+   * wire cannot disagree about which build is being identified.
+   */
+  version?: string;
 }
 
 declare global {
@@ -58,5 +64,6 @@ export function getAppConfig(): AppConfig {
     mediaBaseUrl,
     appName,
     demo: injected?.demo === true,
+    ...(typeof injected?.version === 'string' && injected.version.trim() ? { version: injected.version.trim() } : {}),
   };
 }

@@ -27,11 +27,10 @@ import {
   ClearOutlined,
   WarningOutlined,
   CloseOutlined,
-} from '@ant-design/icons';
+} from '../components/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import XMarkdown from '@ant-design/x-markdown';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
 import { isDemoMode } from '../types/demoMode';
@@ -163,16 +162,17 @@ const ProductChangelog: React.FC<ProductChangelogProps> = ({ product }) => {
             </div>
           ) : (
             <div className={styles['markdown-body']}>
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                skipHtml
+              <XMarkdown
+                content={release.body}
+                escapeRawHtml
+                openLinksInNewTab
                 components={{
-                  a: ({ href, children }) => (
-                    <a href={href} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                  a: ({ href, children, domNode: _d, streamStatus: _s, ...props }: any) => (
+                    <a href={href} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} {...props}>
                       {children}
                     </a>
                   ),
-                  img: ({ src, alt }) => (
+                  img: ({ src, alt, domNode: _d, streamStatus: _s }: any) => (
                     <a
                       href={src}
                       target="_blank"
@@ -184,9 +184,7 @@ const ProductChangelog: React.FC<ProductChangelogProps> = ({ product }) => {
                     </a>
                   ),
                 }}
-              >
-                {release.body}
-              </ReactMarkdown>
+              />
             </div>
           )}
         </div>

@@ -15,6 +15,8 @@ import (
 // PricingManager is the handler-facing view of the pricing service. The concrete
 // *pricing.Service is wired once at startup; tests inject a fake here.
 type PricingManager interface {
+	SaveManualPricesChecked(context.Context, []pricing.ModelPrice, func([]pricing.ModelPrice) error) error
+	DeletePriceChecked(context.Context, string, func([]pricing.ModelPrice) error) (bool, error)
 	ListPrices(ctx context.Context) ([]pricing.ModelPrice, error)
 	SaveManualPrices(ctx context.Context, rows []pricing.ModelPrice) error
 	DeletePrice(ctx context.Context, model string) (bool, error)

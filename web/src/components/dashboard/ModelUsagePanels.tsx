@@ -1,6 +1,6 @@
 import React from 'react';
 import { Alert, Button, Card, Segmented, Skeleton, Tooltip } from 'antd';
-import { ReloadOutlined } from '@ant-design/icons';
+import { ReloadOutlined } from '../icons';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';

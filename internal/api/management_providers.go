@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -201,7 +202,33 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 	// responses those pages receive.
 	includeKeys := h.revealKeysAllowed(request)
 
-	ctx := request.Context()
+	items := h.readProviderItems(request.Context(), client)
+
+	if !includeKeys {
+		// The sanitized projection keeps the configured/absent signal but
+		// strips plaintext key material and its per-entry detail.
+		for index := range items {
+			items[index].APIKey = ""
+			items[index].KeyEntries = nil
+		}
+	} else {
+		// The reveal is the audit boundary: a masked response carries no credential,
+		// so it is not a credential read and must not fill the log on every poll.
+		if auditErr := h.recordAudit(request, "provider.reveal_keys", "provider", "list", "success", map[string]any{
+			"provider_count": len(items),
+			"key_count":      revealedProviderKeyCount(items),
+		}); auditErr != nil {
+			writeAuditFailure(writer, "audit log failure; provider key reveal aborted")
+			return
+		}
+	}
+	writeJSON(writer, http.StatusOK, map[string]any{
+		"providers": items,
+		"total":     len(items),
+	})
+}
+
+func (h *Handler) readProviderItems(ctx context.Context, client *management.Client) []ProviderItemDTO {
 	items := make([]ProviderItemDTO, 0)
 	customNames := h.loadProviderNames(ctx)
 	customWebsites := h.loadProviderWebsites(ctx)
@@ -297,26 +324,5 @@ func (h *Handler) listManagementProviders(writer http.ResponseWriter, request *h
 		}
 	}
 
-	if !includeKeys {
-		// The sanitized projection keeps the configured/absent signal but
-		// strips plaintext key material and its per-entry detail.
-		for index := range items {
-			items[index].APIKey = ""
-			items[index].KeyEntries = nil
-		}
-	} else {
-		// The reveal is the audit boundary: a masked response carries no credential,
-		// so it is not a credential read and must not fill the log on every poll.
-		if auditErr := h.recordAudit(request, "provider.reveal_keys", "provider", "list", "success", map[string]any{
-			"provider_count": len(items),
-			"key_count":      revealedProviderKeyCount(items),
-		}); auditErr != nil {
-			writeAuditFailure(writer, "audit log failure; provider key reveal aborted")
-			return
-		}
-	}
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"providers": items,
-		"total":     len(items),
-	})
+	return items
 }

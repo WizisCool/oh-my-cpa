@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,7 +14,54 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
 
+// errAuthFileFieldsNotVerified reports a field write whose persisted state could not be confirmed.
+var errAuthFileFieldsNotVerified = errors.New("field update could not be verified")
+
+// applyManagementAuthFileFields patches one auth file's safe metadata and verifies the
+// runtime projection before reporting success. CPA answers a PATCH as soon as it is
+// accepted, so a dropped priority, weight or note would otherwise be reported as saved.
+func (h *Handler) applyManagementAuthFileFields(ctx context.Context, client *management.Client, name, authIndex string, fields map[string]any) (map[string]any, error) {
+	if _, err := client.PatchAuthFileFields(ctx, name, fields); err != nil {
+		return nil, err
+	}
+	if h.pricing != nil {
+		h.pricing.NotifyModelsChanged()
+	}
+	safeFields := managementAuthFileSafeFields{Name: name}
+	hasSafeReadback := managementAuthFileNeedsSafeReadback(fields)
+	if hasSafeReadback {
+		var readbackErr error
+		safeFields, readbackErr = h.readManagementAuthFileSafeFields(ctx, client, name, authIndex)
+		if readbackErr != nil {
+			return nil, errAuthFileFieldsNotVerified
+		}
+	}
+	files, err := client.AuthFiles(ctx)
+	if err != nil {
+		return nil, errAuthFileFieldsNotVerified
+	}
+	file, ok := findManagementAuthFile(files.Files, name, authIndex)
+	if !ok {
+		return nil, errAuthFileFieldsNotVerified
+	}
+	if mismatch := managementAuthFileFieldMismatch(fields, file, safeFields); mismatch != "" {
+		return nil, fmt.Errorf("%w: CPA did not persist %s", errAuthFileFieldsNotVerified, mismatch)
+	}
+	payload := map[string]any{"status": "ok", "file": projectManagementAuthFile(file)}
+	// A zero-valued projection would tell the drawer that untouched safe fields are
+	// empty, so only a verified readback may be published.
+	if hasSafeReadback {
+		payload["fields"] = safeFields
+	}
+	return payload, nil
+}
+
 func (h *Handler) patchManagementAuthFileFields(writer http.ResponseWriter, request *http.Request) {
+	if err := h.providerWrites.acquire(request.Context()); err != nil {
+		writeError(writer, http.StatusServiceUnavailable, "management write busy")
+		return
+	}
+	defer h.providerWrites.release()
 	var raw map[string]json.RawMessage
 	if err := decodeManagementJSON(writer, request, managementAuthFileRequestLimit, &raw); err != nil {
 		return
@@ -64,57 +112,19 @@ func (h *Handler) patchManagementAuthFileFields(writer http.ResponseWriter, requ
 		writeError(writer, http.StatusInternalServerError, "audit log failure; field update aborted")
 		return
 	}
-	if _, err := client.PatchAuthFileFields(request.Context(), validatedName, fields); err != nil {
+	payload, err := h.applyManagementAuthFileFields(request.Context(), client, validatedName, authIndex, fields)
+	if err != nil {
 		_ = h.recordAudit(request, "auth_file.fields_update", "auth_file", validatedName, "failure", map[string]any{"error": err.Error()})
-		writeCPAFacadeError(writer, err)
-		return
-	}
-	if h.pricing != nil {
-		h.pricing.NotifyModelsChanged()
-	}
-	// A successful PATCH only says the gateway accepted the request. Read the
-	// persisted file and the runtime projection back before answering, so a
-	// dropped priority, weight or note cannot be reported as saved.
-	safeFields := managementAuthFileSafeFields{Name: validatedName}
-	hasSafeReadback := managementAuthFileNeedsSafeReadback(fields)
-	if hasSafeReadback {
-		var readbackErr error
-		safeFields, readbackErr = h.readManagementAuthFileSafeFields(request.Context(), client, validatedName, authIndex)
-		if readbackErr != nil {
-			_ = h.recordAudit(request, "auth_file.fields_update", "auth_file", validatedName, "failure", map[string]any{"error": "readback failed"})
-			writeError(writer, http.StatusBadGateway, "field update could not be verified")
+		if errors.Is(err, errAuthFileFieldsNotVerified) {
+			writeError(writer, http.StatusBadGateway, err.Error())
 			return
 		}
-	}
-	files, err := client.AuthFiles(request.Context())
-	if err != nil {
-		_ = h.recordAudit(request, "auth_file.fields_update", "auth_file", validatedName, "failure", map[string]any{"error": "runtime readback failed"})
-		writeError(writer, http.StatusBadGateway, "field update could not be verified")
-		return
-	}
-	file, ok := findManagementAuthFile(files.Files, validatedName, authIndex)
-	if !ok {
-		_ = h.recordAudit(request, "auth_file.fields_update", "auth_file", validatedName, "failure", map[string]any{"error": "record missing after update"})
-		writeError(writer, http.StatusBadGateway, "field update could not be verified")
-		return
-	}
-	if mismatch := managementAuthFileFieldMismatch(fields, file, safeFields); mismatch != "" {
-		_ = h.recordAudit(request, "auth_file.fields_update", "auth_file", validatedName, "failure", map[string]any{"error": mismatch})
-		writeError(writer, http.StatusBadGateway, "CPA did not persist "+mismatch)
+		writeCPAFacadeError(writer, err)
 		return
 	}
 	if auditErr := h.recordAudit(request, "auth_file.fields_update", "auth_file", validatedName, "success", map[string]any{"fields": sortedMapKeys(fields), "verified": true}); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit log failure after field update")
 		return
-	}
-	payload := map[string]any{
-		"status": "ok",
-		"file":   projectManagementAuthFile(file),
-	}
-	// A zero-valued projection would tell the drawer that untouched safe fields
-	// are empty, so only a verified readback may be published.
-	if hasSafeReadback {
-		payload["fields"] = safeFields
 	}
 	writeJSON(writer, http.StatusOK, payload)
 }

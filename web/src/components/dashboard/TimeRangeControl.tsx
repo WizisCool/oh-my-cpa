@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, DatePicker, Popover, Tabs } from 'antd';
-import { CaretDownOutlined } from '@ant-design/icons';
+import { CaretDownOutlined } from '../icons';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useT } from '../../i18n';
 import { DASHBOARD_PRESETS, type DashboardPreset, type DashboardRange } from '../../types/dashboard';

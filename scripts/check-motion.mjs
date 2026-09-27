@@ -85,10 +85,24 @@ const EXCEPTIONS = [
   },
   {
     kind: 'duration',
+    file: 'pages/agent/AgentPage.module.css',
+    selector: '.activity-mark',
+    property: 'animation',
+    why: 'The running-turn pip pulses while the model works; 1200ms is the pulse period, not a state transition between two states, and §7 handles it by freezing it under reduced motion rather than by shortening it.',
+  },
+  {
+    kind: 'duration',
     file: 'index.css',
     selector: '.heatmap-progress::after',
     property: 'animation',
     why: 'Same treatment as the app-wide progress bar, for the heatmap panel\u2019s own re-read.',
+  },
+  {
+    kind: 'duration',
+    file: 'index.css',
+    selector: '.anticon-spin',
+    property: 'animation',
+    why: 'A spinning refresh icon is the same kind of indeterminate loop as the two bars above: 900ms is one rotation, not a transition between two states, and §7 freezes it under reduced motion rather than shortening it.',
   },
   {
     kind: 'layout',

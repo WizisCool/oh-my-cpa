@@ -26,6 +26,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
  * (Node's ESM resolver needs an explicit extension where a bundler does not).
  */
 const SUITES = [
+  { name: 'playground', script: 'scripts/test-playground.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
+  { name: 'agent workspace', script: 'scripts/test-agent-workspace.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
   { name: 'payload rules', script: 'scripts/test-payload-rules.ts', flags: ['--experimental-strip-types'] },
   { name: 'config dirty', script: 'scripts/test-dirty.ts', flags: ['--experimental-strip-types'] },
   { name: 'config states', script: 'scripts/test-config-states.ts', flags: ['--experimental-strip-types'] },

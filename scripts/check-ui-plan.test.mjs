@@ -243,3 +243,7 @@ test('no scenario id is selected by a path that cannot affect it', () => {
   assert.equal(rows.has('dashboard-charts'), false);
   assert.equal(rows.has('icon-picker-stacking'), false);
 });
+
+test('playground source selects its desktop and phone acceptance', () => {
+  assert.deepEqual(planFor('web/src/pages/playground/PlaygroundPage.tsx'), ['playground', 'playground-narrow']);
+});

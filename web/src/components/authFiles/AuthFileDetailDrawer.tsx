@@ -20,7 +20,7 @@ import {
   ExclamationCircleOutlined,
   CopyOutlined,
   SearchOutlined,
-} from '@ant-design/icons';
+} from '../icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';

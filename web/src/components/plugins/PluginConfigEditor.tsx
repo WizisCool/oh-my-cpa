@@ -1,6 +1,6 @@
 import React from 'react';
 import { Alert, Button, Input, Tag, Typography } from 'antd';
-import { CheckOutlined, FormatPainterOutlined } from '@ant-design/icons';
+import { CheckOutlined, FormatPainterOutlined } from '../icons';
 import { useT } from '../../i18n';
 import { parsePluginConfig, pluginConfigSummary } from './pluginConfig';
 import styles from './PluginConfigEditor.module.css';

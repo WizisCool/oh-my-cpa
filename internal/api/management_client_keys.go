@@ -138,13 +138,13 @@ func (h *Handler) createClientAPIKey(writer http.ResponseWriter, request *http.R
 		return
 	}
 
-	updated := append(currentKeys, newKey)
 	if auditErr := h.recordAudit(request, "api_key.create", "client_api_key", fmt.Sprintf("index:%d", len(currentKeys)), "attempt", nil); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit failure; key creation aborted")
 		return
 	}
 
-	if err := client.UpdateClientAPIKeys(request.Context(), updated); err != nil {
+	createdIndex, err := h.operationsService().CreateKey(request.Context(), newKey, "")
+	if err != nil {
 		_ = h.recordAudit(request, "api_key.create", "client_api_key", fmt.Sprintf("index:%d", len(currentKeys)), "failure", map[string]any{"error": err.Error()})
 		writeCPAFacadeError(writer, err)
 		return
@@ -154,7 +154,7 @@ func (h *Handler) createClientAPIKey(writer http.ResponseWriter, request *http.R
 
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"status": "ok",
-		"index":  len(currentKeys),
+		"index":  createdIndex,
 		// The requester just sent this value, so the response identifies the row it
 		// added rather than echoing a secret back through a body.
 		"key": security.MaskSecret(newKey),
@@ -186,11 +186,10 @@ func (h *Handler) deleteClientAPIKey(writer http.ResponseWriter, request *http.R
 		return
 	}
 
-	updated := make([]string, 0, len(currentKeys)-1)
-	for i, key := range currentKeys {
-		if i != index {
-			updated = append(updated, key)
-		}
+	fingerprint, err := h.repo.UsageClientKeyFingerprint(strings.TrimSpace(currentKeys[index]))
+	if err != nil {
+		writeInternalError(writer, err)
+		return
 	}
 
 	if auditErr := h.recordAudit(request, "api_key.delete", "client_api_key", fmt.Sprintf("index:%d", index), "attempt", nil); auditErr != nil {
@@ -198,7 +197,7 @@ func (h *Handler) deleteClientAPIKey(writer http.ResponseWriter, request *http.R
 		return
 	}
 
-	if err := client.UpdateClientAPIKeys(request.Context(), updated); err != nil {
+	if err := h.operationsService().DeleteKey(request.Context(), index, fingerprint, ""); err != nil {
 		_ = h.recordAudit(request, "api_key.delete", "client_api_key", fmt.Sprintf("index:%d", index), "failure", map[string]any{"error": err.Error()})
 		writeCPAFacadeError(writer, err)
 		return

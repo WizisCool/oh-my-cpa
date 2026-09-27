@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal, Input, Tag, Empty, theme } from 'antd';
-import { SearchOutlined } from '@ant-design/icons';
+import { SearchOutlined } from './icons';
 import { LOBE_ICON_CATALOG, type LobeIconCatalogEntry } from '../types/lobeIconCatalog';
 import { LobeIcon } from './LobeIcon';
 import { useT } from '../i18n';

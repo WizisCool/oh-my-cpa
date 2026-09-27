@@ -1,7 +1,7 @@
 import React, { memo, useEffect, useState } from 'react';
 import { LOBE_ICON_CATALOG, lobeIconSlug } from '../types/lobeIconCatalog';
 import { isRenderableLogoURL } from '../types/pluginOAuthProviders';
-import { CloudServerOutlined } from '@ant-design/icons';
+import { CloudServerOutlined } from './icons';
 
 export { getProviderDefaultIcon } from '../types/providerIconIds';
 

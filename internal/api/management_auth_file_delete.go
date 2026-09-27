@@ -9,6 +9,11 @@ import (
 )
 
 func (h *Handler) deleteManagementAuthFiles(writer http.ResponseWriter, request *http.Request) {
+	if err := h.providerWrites.acquire(request.Context()); err != nil {
+		writeError(writer, http.StatusServiceUnavailable, "management write busy")
+		return
+	}
+	defer h.providerWrites.release()
 	request.Body = http.MaxBytesReader(writer, request.Body, managementAuthFileRequestLimit)
 	names := make([]string, 0)
 	if queryNames := request.URL.Query()["name"]; len(queryNames) > 0 {

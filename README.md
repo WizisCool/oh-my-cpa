@@ -55,6 +55,8 @@ does.
 - **AI Providers**: Configure and monitor endpoints for Codex, Claude, Gemini, Meta Muse, DeepSeek, and OpenAI-compatible services. Each config API-key family (claude, codex, gemini, meta) is managed the same way: credentials, models, priority/weight, proxy, and a gateway-level enable switch.
 - **Protocol-Level Toggling**: Enable or disable providers with real gateway exclusion (`excluded-models: ['*']`), preventing requests from routing to inactive credentials.
 - **Model Catalog Pulling**: Fetch model lists directly from upstream providers to keep available models up to date. Pulls require HTTPS except for localhost, loopback, or private IP literals; cross-origin redirects are refused.
+- **Model Playground**: Test connected models with text and images, streamed multi-turn answers, generation parameters and safe request diagnostics. Select an existing client key without exposing it to the browser; CPA handles normal routing.
+- **Agent**: A separate `/agent` workspace where a model callable through CPA answers questions and performs OMC operations through declared capabilities: usage and request analysis, providers, OAuth, quota, client keys, configuration, pricing, and system state. Read tools run directly; changes are prepared server-side and require operator confirmation in the console, with destructive actions requiring the target identifier to be typed. Secrets, tokens, and OAuth authorization never enter the model context.
 - **Client Key Management**: Create, view, and delete gateway API keys. Assign aliases so client keys appear by name in request records and filters.
 - **OAuth Management**: One credential-centred workspace for sign-in, auth-file management, safe-field configuration, model lists, provider aliases, and quota reading/actions. Sign in from the console for Codex, Claude, Antigravity, xAI, Kimi, Devin and Meta Muse; a redirect flow whose callback your browser cannot reach is completed by pasting the final URL back, and a device-code flow shows the code to confirm. The collection keeps every auth-file entry visible and joins quota only by a unique exact auth index. The overview shows credential state and a primary quota window. Open the credential Drawer for separate Quota, Configuration and Models tabs; Quota shows every window, credit expiry, cooldown and diagnostic.
 
@@ -165,8 +167,42 @@ The API's data is generated from the real Go handlers rather than hand-written, 
 - **Network Security**: Keep CPA on a private network or loopback interface, and serve Oh My CPA over HTTPS.
 - **Reverse Proxy Headers**: Set `OMCPA_TRUSTED_PROXY_CIDRS` to the comma-separated CIDRs of reverse proxies whose forwarding headers may be trusted (the bundled Compose file trusts Docker's `172.16.0.0/12` network). Leave it unset when clients connect directly; never trust a public range.
 - **Demo Mode**: `OMCPA_DEMO_MODE` (default `false`) serves the console from a built-in fixture instead of a CPA, so it needs no management key and no provider credential. Its storage is not durable — the database is deleted and rebuilt on every boot — and the server refuses sign-in flows, credential movement, plugin execution, gateway configuration writes and anything that would leave the process. It is what generates the public demonstration's dataset, so it stays in use even though the public deployment no longer runs it; `OMCPA_PUBLIC_URL` states that deployment's origin, because nothing announces it any more.
+- **Agent & MCP**: `/agent` sends the conversation and capability results to the CPA model selected on the page and its upstream provider; the page states this beneath the message box, and the choice of key, model and reasoning effort is remembered as a server-side preference. External agents connect through `oh-my-cpa mcp`, a stdio MCP server over the same capability registry. It reads `OMCPA_SERVER_URL` (the console URL, including any base path) and `OMCPA_CPA_MANAGEMENT_KEY` (the same management key that signs into the console); plain HTTP is accepted only for loopback addresses, redirects are refused, and the bridge itself opens no data directory. There is no separate external credential: holding the management key is administrator-equivalent, so an external agent can prepare an operation and read its status but cannot approve it, submit secrets, or complete OAuth. See `docs/agent-capabilities.md`.
 - **Update Checks**: The System Information page reports the running and published versions of both Oh My CPA and your gateway. It reads release metadata from `api.github.com` only — fixed host, no operator-supplied URL — following `HTTP_PROXY`/`HTTPS_PROXY` like the price sync does. A sweep runs every six hours; opening the page and the **Check for updates** button also check, subject to a fifteen-minute floor per product — inside it the answer comes from the stored index and the message says so, because the feed is one shared per-address budget. Two switches, because they answer different questions. `OMCPA_UPDATE_CHECK_ENABLED=false` stops the sweep on an offline deployment; the page then keeps working from the last answer it stored, and a check that fails is reported with its reason and the time it was attempted. `OMCPA_UPDATE_CHECK_ON_PAGE_LOAD=false` additionally stops the check the page performs when it is opened, which is what an air-gapped or test deployment wants, since a page visit is not an operator asking a question. The **Check for updates** button works either way. `OMCPA_OMC_REPO` and `OMCPA_CPA_REPO` (`owner/name`) point the check at a fork. GitHub's unauthenticated budget is 60 requests per hour for the address making them, and the page says so when a check is refused for that reason. Release notes are held in memory rather than stored, so after a restart the page names the versions and links to the source while the notes themselves are unavailable — see `docs/architecture.md` §10.
 - **Database Maintenance**: The same page can truncate the WAL or rebuild the database, and refuses the second while the first runs. Both wait for in-flight writes rather than interrupting them, and a rebuild is declined up front when the filesystem lacks the free space SQLite documents needing (up to twice the database file). A job cannot outlive a restart. `docs/ops/sqlite-operations.md` §6 covers the same operations from the host.
+
+### Model playground operations
+
+Open **Operate → Playground** under the configured base path. Select an existing client
+key and a call point from the live `/v1/models` directory; if no key exists, create one in
+Key management first. The page reads
+`GET <base>/api/v1/playground/models` and sends explicit turns through
+`POST <base>/api/v1/playground/chat`; both require the normal administrator session.
+No additional environment variable or database migration is required.
+
+Real requests consume quota under the selected key. Stop cancels the connection but does
+not guarantee a refund. The single latest conversation, its parameters and its attached
+images are stored as a server-side preference so a reload resumes where you left off;
+starting a new conversation discards the stored turns, and image payloads too large to store
+are redacted rather than saved. The stored target is the key's usage fingerprint, never the key
+itself, and a key or call point that no longer exists is not reselected. CPA and upstream logging
+policies still apply.
+PNG/JPEG/WebP inputs allow four images per turn, 5 MiB and 40 megapixels per image, and a
+32 MiB request including history. Capability is not guessed from the model name.
+
+The parameter panel takes a system prompt, reasoning effort, temperature, top-p, maximum
+output tokens, a User-Agent, and a custom JSON request body. The User-Agent defaults to this
+build's own version and is sent as a header, so an upstream sees which build called it. The
+custom request body has the highest priority: its keys override the panel's parameters and
+any parameter the panel does not model passes through unchanged, but the resulting request is
+validated before it is sent, so an override cannot bypass the image and parameter limits. A
+non-streaming body is rejected, as this page reads a streamed answer.
+
+Keep reverse-proxy streaming unbuffered and its read timeout above the 15-second heartbeat
+interval. The dedicated stream can last ten minutes, with a 120-second upstream first-response
+or idle timeout. Ordinary API timeouts are unchanged. Request diagnostics never return
+credentials; copied cURL needs CPA_BASE_URL, CPA_API_KEY and replacement image data URLs.
+The public demonstration shows the page and model directory but refuses inference.
 
 ## Developer Commands
 
@@ -194,6 +230,7 @@ The API's data is generated from the real Go handlers rather than hand-written, 
 - [`CONTEXT.md`](CONTEXT.md) — Domain model, time windows, and price snapshot rules
 - [`docs/architecture.md`](docs/architecture.md) — Module boundaries, data flows, and invariants
 - [`docs/design.md`](docs/design.md) — Visual design system and theme tokens
+- [`docs/agent-capabilities.md`](docs/agent-capabilities.md) — Agent capability contract, permissions, confirmation and the MCP bridge
 - [`docs/ops/sqlite-operations.md`](docs/ops/sqlite-operations.md) — SQLite operations, backup, and restore runbook
 - [`docs/ops/cloudflare-demo.md`](docs/ops/cloudflare-demo.md) — deployment runbook for the online demo
 - [`docs/cpamc-parity.md`](docs/cpamc-parity.md) — Feature parity matrix with official CPAMC

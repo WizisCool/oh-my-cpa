@@ -43,6 +43,7 @@ import {
   eventTokensPerSecond,
   hasMeasurableTTFT,
   isNonStreamingEvent,
+  MIN_STREAMING_GENERATION_WINDOW_MS,
 } from '../web/src/types/usageEventMetrics.ts';
 import {
   eventProviderIdentity,
@@ -1131,6 +1132,20 @@ const tpsNoTTFT = eventTokensPerSecond({
 });
 assert.equal(tpsNoTTFT.formatted, '200.00 t/s');
 assert.equal(tpsNoTTFT.hasTTFT, false);
+
+// The 50ms generation-window floor, asserted on both sides of the boundary. This is the rule
+// that stops a collapsed first-token measurement from being divided into: at 49ms the residual
+// is not a generation window and the end-to-end average is reported instead, at 50ms it is.
+// The reported 4913 tok/s defect lived exactly here, so the boundary is pinned rather than
+// left to whichever value a fixture happened to use.
+const boundaryTokens = { total: 200, input: 100, output: 100, reasoning: 0, cached: 0, cache_read: 0, cache_creation: 0 };
+const belowFloor = eventTokensPerSecond({ generate: true, stream: true, latency_ms: 1049, ttft_ms: 1000, tokens: boundaryTokens });
+assert.equal(belowFloor.hasTTFT, false, 'a 49ms residual is not a generation window');
+assert.equal(belowFloor.formatted, '95.33 t/s', 'the end-to-end average: 100 * 1000 / 1049');
+const atFloor = eventTokensPerSecond({ generate: true, stream: true, latency_ms: 1050, ttft_ms: 1000, tokens: boundaryTokens });
+assert.equal(atFloor.hasTTFT, true, 'a 50ms residual is a generation window');
+assert.equal(atFloor.formatted, '2000.00 t/s', 'the generation-phase rate: 100 * 1000 / 50');
+assert.equal(MIN_STREAMING_GENERATION_WINDOW_MS, 50, 'the floor the cases above assume');
 
 // Invalid TTFT (ttft >= latency) falls back safely to total latency rather than division by zero / negative
 const tpsInvalidTTFT = eventTokensPerSecond({

@@ -10,9 +10,20 @@ import (
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/app"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/config"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/mcpbridge"
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		if err := mcpbridge.Run(ctx, os.Getenv("OMCPA_SERVER_URL"), os.Getenv("OMCPA_CPA_MANAGEMENT_KEY")); err != nil {
+			slog.Error("MCP bridge stopped", "error", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	// Route package-level slog calls (including API error reporting) here.
 	slog.SetDefault(logger)

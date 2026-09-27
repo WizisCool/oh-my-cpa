@@ -114,6 +114,17 @@ var demoPolicy = []demoPolicyRule{
 
 	// Oh My CPA's own metadata. None of these reaches CPA or the network.
 	{http.MethodGet, "/api/v1/resources", demoAllow, ""},
+	{http.MethodGet, "/api/v1/capabilities", demoAllow, ""},
+	{http.MethodPost, "/api/v1/capabilities/invoke", demoRefuse, "agent execution and authorization are unavailable in the demonstration"},
+	{http.MethodGet, "/api/v1/capabilities/operations/{id}", demoRefuse, "agent execution and authorization are unavailable in the demonstration"},
+	{http.MethodGet, "/api/v1/agent/session", demoAllow, ""},
+	{http.MethodPost, "/api/v1/agent/session/reset", demoRefuse, "agent execution and authorization are unavailable in the demonstration"},
+	{http.MethodPost, "/api/v1/agent/run", demoRefuse, "agent execution and authorization are unavailable in the demonstration"},
+	{http.MethodGet, "/api/v1/agent/operations/{id}", demoRefuse, "agent execution and authorization are unavailable in the demonstration"},
+	{http.MethodPost, "/api/v1/agent/operations/{id}/oauth", demoRefuse, "OAuth authorization is unavailable in the demonstration"},
+	{http.MethodPost, "/api/v1/agent/operations/{id}/decision", demoRefuse, "agent execution and authorization are unavailable in the demonstration"},
+	{http.MethodGet, "/api/v1/playground/models", demoAllow, ""},
+	{http.MethodPost, "/api/v1/playground/chat", demoRefuse, "model inference spends provider entitlement"},
 	{http.MethodPatch, "/api/v1/resources/{id}/override", demoAllow, ""},
 	{http.MethodGet, "/api/v1/preferences", demoAllow, ""},
 	{http.MethodPut, "/api/v1/preferences/{key}", demoAllow, ""},

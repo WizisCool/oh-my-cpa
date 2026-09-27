@@ -36,6 +36,7 @@ const { check, checkEventually, failures, checks } = createChecker();
  * exists for, so every entry asserts on content rather than on a status code.
  */
 const PAGES = [
+  { route: 'playground', label: 'playground', selector: '[data-testid="playground-page"]', min: 1 },
   { route: 'dashboard', label: 'dashboard', selector: '.dashboard-tile', min: 4 },
   { route: 'quick-start', label: 'quick start', selector: '.ant-card', min: 3 },
   { route: 'ai-providers', label: 'providers', selector: '.ant-table-row', min: 2 },

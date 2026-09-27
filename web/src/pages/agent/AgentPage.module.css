@@ -1,0 +1,362 @@
+/* The Agent's own surfaces; the frame, transcript and composer are the shared workspace's
+   (`components/workspace/Workspace.module.css`). */
+
+.action-label {
+  white-space: nowrap;
+}
+
+/* ── empty state ───────────────────────────────────────────────────────────── */
+
+.examples {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.examples-label {
+  color: var(--meta);
+  font-size: 10px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+/* ── capability chain ──────────────────────────────────────────────────────── */
+
+.chain {
+  font-size: 12px;
+}
+
+.chain :global(.ant-thought-chain-node-header) {
+  min-height: 24px;
+}
+
+.chain :global(.ant-thought-chain-node-title) {
+  font-size: 12px;
+  color: var(--fg);
+}
+
+.chain :global(.ant-thought-chain-node-description) {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.chain :global(.ant-thought-chain-node-content-box) {
+  margin-top: 6px;
+}
+
+.trace-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.trace-name {
+  color: var(--fg);
+  font-size: 12px;
+}
+
+.trace-status {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.trace-status[data-tone='warning'] { color: var(--warn); }
+.trace-status[data-tone='error'] { color: var(--danger); }
+
+.trace-digest {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.trace-attention {
+  color: var(--warn);
+}
+
+/* ── failure ───────────────────────────────────────────────────────────────── */
+
+.failure {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.failure[data-tone='warning'] {
+  border-left-color: var(--warn);
+}
+
+.failure code {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* ── running activity ──────────────────────────────────────────────────────── */
+
+.activity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  color: var(--fg-2);
+  font-size: 12px;
+}
+
+.activity-mark {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: agent-activity 1200ms ease-in-out infinite;
+}
+
+.activity-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes agent-activity {
+  0%, 100% { opacity: .3; }
+  50% { opacity: 1; }
+}
+
+/* ── approval card ─────────────────────────────────────────────────────────── */
+
+.operation {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+/* An open decision is the one thing on the page that is waiting for the reader, so it carries the
+   caution hue on its frame; a decided one returns to an ordinary record. */
+.is-pending {
+  border-color: var(--warn);
+}
+
+.is-destructive.is-pending {
+  border-color: var(--danger);
+}
+
+.operation-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.operation-icon {
+  color: var(--muted);
+}
+
+.is-pending .operation-icon {
+  color: var(--warn);
+}
+
+.is-destructive.is-pending .operation-icon {
+  color: var(--danger);
+}
+
+.operation-title {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.operation-capability {
+  color: var(--fg-2);
+}
+
+.operation-fields {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.operation-field-row {
+  display: contents;
+}
+
+.operation-field-row dt {
+  color: var(--muted);
+}
+
+.operation-field-row dd {
+  margin: 0;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+.operation-decision {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.operation-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.oauth {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.oauth-code {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  letter-spacing: .08em;
+}
+
+/* ── capability directory ──────────────────────────────────────────────────── */
+
+.directory-head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.count {
+  color: var(--meta);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.search-icon {
+  color: var(--muted);
+}
+
+.directory-note {
+  margin: 0;
+  padding: 16px 20px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.group + .group {
+  border-top: 1px solid var(--border-soft);
+}
+
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 14px 20px 6px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.capabilities {
+  margin: 0;
+  padding: 0 0 8px;
+  list-style: none;
+}
+
+.capability {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 0 12px 0 20px;
+  transition: background-color var(--motion-fast);
+}
+
+.capability:hover {
+  background: var(--hover);
+}
+
+.capability-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.capability-name {
+  color: var(--fg);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.capability-description {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.is-expanded {
+  display: block;
+  color: var(--fg-2);
+}
+
+.capability :global(.ant-btn) {
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+@media (hover: none) {
+  .capability:hover {
+    background: transparent;
+  }
+}
+
+@media (max-width: 640px) {
+  .action-label {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-mark {
+    animation: none;
+    opacity: .8;
+  }
+}

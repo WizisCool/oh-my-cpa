@@ -152,6 +152,8 @@ async function startLocalDemo() {
 const ROUTES = [
   '/dashboard',
   '/quick-start',
+  '/playground',
+  '/agent',
   '/ai-providers',
   '/api-keys',
   '/oauth-management',
@@ -175,6 +177,11 @@ const ROUTES = [
 const EXPECTED = {
   '/dashboard': '仪表盘',
   '/quick-start': '快速开始',
+  '/playground': '操练场',
+  '/agent': '智能体',
+  // The capability directory renders from `/capabilities`, which the demonstration
+  // answers from the dataset. Waiting for one of its entries proves the agent route
+  // read the registry rather than merely mounting its shell over an empty aside.
   '/ai-providers': 'AI 提供商',
   '/api-keys': '密钥管理',
   '/oauth-management': 'OAuth 管理',
@@ -182,6 +189,11 @@ const EXPECTED = {
   '/usage/events': '请求记录',
   '/pricing': '费用与用量',
   '/system': '系统信息',
+};
+
+/** Per-route content that must be present beyond the heading, when the route has any. */
+const EXPECTED_DETAIL = {
+  '/agent': 'providers_list',
 };
 
 /** A generous ceiling: a cold start on a deployed demonstration is the slow case. */
@@ -250,6 +262,10 @@ async function main() {
     const expected = EXPECTED[route];
     if (expected && !state.text.includes(expected)) {
       failures.push(`${route}: rendered without its own heading (${expected})`);
+    }
+    const detail = EXPECTED_DETAIL[route];
+    if (detail && !state.text.includes(detail)) {
+      failures.push(`${route}: rendered without ${detail}`);
     }
   }
 

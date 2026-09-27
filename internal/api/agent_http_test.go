@@ -1,0 +1,147 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"strings"
+	"testing"
+
+	"github.com/oh-my-cpa/oh-my-cpa/internal/agent"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/auth"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/capability"
+)
+
+func TestAgentHTTPManagementKeyAndCapabilityBoundary(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	response, body := getJSON(t, fixture.client, fixture.baseURL+"/omc/api/v1/capabilities")
+	if response.StatusCode != 200 || !strings.Contains(string(body), "usage_aggregate") {
+		t.Fatalf("catalog %d %s", response.StatusCode, body)
+	}
+	response, body = getJSON(t, fixture.client, fixture.baseURL+"/omc/api/v1/agent/session")
+	if response.StatusCode != 200 || !strings.Contains(string(body), `"turns":[]`) {
+		t.Fatalf("session %d %s", response.StatusCode, body)
+	}
+	external := &http.Client{}
+	call := func(method, path, payload, key string) (int, []byte) {
+		request, _ := http.NewRequest(method, fixture.baseURL+"/omc/api/v1"+path, strings.NewReader(payload))
+		request.Header.Set("Authorization", "Bearer "+key)
+		response, err := external.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer response.Body.Close()
+		body, _ := io.ReadAll(response.Body)
+		return response.StatusCode, body
+	}
+	status, _ := call("GET", "/capabilities", "", "incorrect")
+	if status != 401 {
+		t.Fatal("invalid management key accepted")
+	}
+	status, body = call("GET", "/capabilities", "", "management-secret-value")
+	if status != 200 || !strings.Contains(string(body), "keys_list") {
+		t.Fatalf("catalog %d %s", status, body)
+	}
+	for _, path := range []string{"/management/client-api-keys", "/agent/session"} {
+		status, _ = call("GET", path, "", "management-secret-value")
+		if status != 401 {
+			t.Fatalf("bearer accepted outside capability API: %s %d", path, status)
+		}
+	}
+	status, body = call("POST", "/capabilities/invoke", `{"name":"keys_list","arguments":{}}`, "management-secret-value")
+	if status != 200 || !strings.Contains(string(body), `"status":"success"`) {
+		t.Fatalf("read %d %s", status, body)
+	}
+	fixture.state.mu.Lock()
+	keys := append([]string{}, fixture.state.clientKeys...)
+	fixture.state.mu.Unlock()
+	for _, key := range append(keys, "management-secret-value") {
+		if strings.Contains(string(body), key) {
+			t.Fatal("key leaked")
+		}
+	}
+	status, body = call("POST", "/capabilities/invoke", `{"name":"keys_create","arguments":{}}`, "management-secret-value")
+	if status != 200 || !strings.Contains(string(body), `"status":"pending"`) {
+		t.Fatalf("prepare %d %s", status, body)
+	}
+	var receipt capability.Result
+	if err := json.Unmarshal(body, &receipt); err != nil {
+		t.Fatal(err)
+	}
+	status, _ = call("POST", "/agent/operations/"+receipt.OperationID+"/decision", `{"approve":true,"secret":"not-allowed"}`, "management-secret-value")
+	if status != 401 {
+		t.Fatal("MCP bearer approved its own operation")
+	}
+	previousIdentity := fixture.handler.auth.CapabilityIdentity()
+	rotated, err := auth.New("rotated-management-value", "/omc", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.handler.auth = rotated
+	status, _ = call("GET", "/capabilities", "", "management-secret-value")
+	if status != 401 {
+		t.Fatal("old management key accepted")
+	}
+	if fixture.handler.agent.executor.Authorize(context.Background(), previousIdentity, "keys_create") {
+		t.Fatal("old authority operation survived rotation")
+	}
+}
+
+// TestAgentCatalogueFitsTheSchemaBudget guards the cost of declaring the whole registry.
+//
+// The catalogue is sent on every model call of every turn, and the runtime refuses a turn whose
+// tool declarations exceed `agent.MAX_TOOL_SCHEMA_BYTES` rather than silently dropping
+// capabilities. That means a capability added with a large schema fails at run time, in front of
+// an operator, unless this assertion catches it here first.
+func TestAgentCatalogueFitsTheSchemaBudget(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	if err := fixture.handler.ensureAgent(); err != nil {
+		t.Fatal(err)
+	}
+	definitions := fixture.handler.agent.executor.Registry.List(agent.PRINCIPAL)
+	if len(definitions) < 20 {
+		t.Fatalf("registry looks truncated: %d definitions", len(definitions))
+	}
+	raw, err := json.Marshal(agent.ToolDeclarations(definitions))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(raw) > agent.MAX_TOOL_SCHEMA_BYTES {
+		t.Fatalf("tool catalogue is %d bytes against a %d budget; trim a description deliberately and say why", len(raw), agent.MAX_TOOL_SCHEMA_BYTES)
+	}
+}
+
+func TestAgentApprovalRequiresBrowserOrigin(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	response, _ := doJSON(t, fixture.client, "POST", fixture.baseURL+"/omc/api/v1/agent/operations/unknown/decision", `{"approve":true}`)
+	if response.StatusCode != 403 {
+		t.Fatalf("originless approval: %d", response.StatusCode)
+	}
+	if err := fixture.handler.ensureAgent(); err != nil {
+		t.Fatal(err)
+	}
+	result, err := fixture.handler.agent.executor.Invoke(context.Background(), capability.Principal{ID: "administrator", Adapter: "agent", IsAdmin: true}, "keys_create", json.RawMessage(`{}`), "")
+	if err != nil || result.Status != "pending" {
+		t.Fatalf("prepare %v %+v", err, result)
+	}
+	request, _ := http.NewRequest("POST", fixture.baseURL+"/omc/api/v1/agent/operations/"+result.OperationID+"/decision", strings.NewReader(`{"approve":true,"secret":"agent-private-key-marker"}`))
+	request.Header.Set("Origin", fixture.baseURL)
+	response, err = fixture.client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(response.Body)
+	response.Body.Close()
+	if response.StatusCode != 200 || strings.Contains(string(body), "agent-private-key-marker") || !strings.Contains(string(body), `"status":"success"`) {
+		t.Fatalf("approval %d %s", response.StatusCode, body)
+	}
+	events, err := fixture.handler.repo.ListAuditEvents(context.Background(), 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(events)
+	if strings.Contains(string(raw), "agent-private-key-marker") {
+		t.Fatal("audit secret leak")
+	}
+}

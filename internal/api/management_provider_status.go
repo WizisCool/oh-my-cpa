@@ -10,9 +10,10 @@ import (
 )
 
 type patchProviderStatusRequest struct {
-	Family   string `json:"family"`
-	Index    int    `json:"index"`
-	Disabled bool   `json:"disabled"`
+	beforeWrite func(context.Context) error
+	Family      string `json:"family"`
+	Index       int    `json:"index"`
+	Disabled    bool   `json:"disabled"`
 	// ExpectedAuthIndex and ExpectedName are optional preconditions. Providers
 	// are addressed positionally, and the client now retries a transient failure,
 	// so between two attempts another session could delete a provider and shift
@@ -125,6 +126,11 @@ func (h *Handler) writeProviderStatus(ctx context.Context, client *management.Cl
 				return client.UpdateOpenAICompatibility(ctx, list.Entries)
 			},
 			func(list *management.OpenAICompatibilityResponse) error {
+				if req.beforeWrite != nil {
+					if err := req.beforeWrite(ctx); err != nil {
+						return err
+					}
+				}
 				if req.Index >= len(list.Entries) {
 					return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
 				}
@@ -155,6 +161,11 @@ func (h *Handler) writeConfigKeyProviderStatus(ctx context.Context, client *mana
 			return client.UpdateConfigAPIKeys(ctx, spec.Family, list)
 		},
 		func(list *[]management.ConfigAPIKey) error {
+			if req.beforeWrite != nil {
+				if err := req.beforeWrite(ctx); err != nil {
+					return err
+				}
+			}
 			if req.Index >= len(*list) {
 				return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
 			}

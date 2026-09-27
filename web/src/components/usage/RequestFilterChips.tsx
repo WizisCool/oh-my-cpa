@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from 'antd';
-import { CloseOutlined } from '@ant-design/icons';
+import { CloseOutlined } from '../icons';
 import { useT } from '../../i18n';
 import type { EventFilterKey } from '../../types/usageEventQuery';
 import { activeFilterCount } from '../../types/usageEventQuery';

@@ -91,7 +91,11 @@ export default defineConfig(({ command }) => ({
           ) {
             return 'vendor-react';
           }
-          if (id.includes('node_modules/@ant-design/icons') || id.includes('node_modules/antd')) {
+          if (
+            id.includes('node_modules/@ant-design/icons') ||
+            id.includes('node_modules/lucide-react') ||
+            id.includes('node_modules/antd')
+          ) {
             return 'vendor-antd';
           }
           if (id.includes('node_modules/@tanstack/react-query')) {

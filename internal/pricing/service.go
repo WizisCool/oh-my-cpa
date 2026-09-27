@@ -63,6 +63,7 @@ type SyncResult struct {
 // setup. Catalog changes are coalesced, manual rows win, and failed discovery
 // keeps the last complete catalog and good prices.
 type Service struct {
+	priceWrites           sync.Mutex
 	store                 Store
 	fetcher               Fetcher
 	modelLister           ModelLister
@@ -145,7 +146,9 @@ func (s *Service) refreshModels(ctx context.Context) (map[string]string, int64, 
 	if len(models) == 0 {
 		return nil, 0, errors.New("refusing to publish an empty pricing catalog snapshot")
 	}
+	s.priceWrites.Lock()
 	pruned, err := s.store.ReplacePricingModels(ctx, models)
+	s.priceWrites.Unlock()
 	return models, pruned, err
 }
 
@@ -395,7 +398,10 @@ func (s *Service) syncOnce(ctx context.Context, refreshPrices bool) (result Sync
 		rows = append(rows, price)
 		result.Matched++
 	}
-	if err = s.store.UpsertModelPrices(ctx, rows); err != nil {
+	s.priceWrites.Lock()
+	err = s.store.UpsertModelPrices(ctx, rows)
+	s.priceWrites.Unlock()
+	if err != nil {
 		return result, err
 	}
 	result.Updated = int64(len(rows))
@@ -506,8 +512,24 @@ func (s *Service) SyncStateView(ctx context.Context) (SyncState, bool, error) {
 // SaveManualPrices validates operator-edited rows and persists them as manual
 // source. Manual rows are never touched by later models.dev syncs.
 func (s *Service) SaveManualPrices(ctx context.Context, rows []ModelPrice) error {
+	return s.SaveManualPricesChecked(ctx, rows, nil)
+}
+
+// SaveManualPricesChecked makes approval preconditions atomic with all local price writes.
+func (s *Service) SaveManualPricesChecked(ctx context.Context, rows []ModelPrice, check func([]ModelPrice) error) error {
 	if s == nil || s.store == nil {
 		return errors.New("pricing service is not initialized")
+	}
+	s.priceWrites.Lock()
+	defer s.priceWrites.Unlock()
+	if check != nil {
+		current, err := s.ListPrices(ctx)
+		if err != nil {
+			return err
+		}
+		if err := check(current); err != nil {
+			return err
+		}
 	}
 	if len(rows) == 0 {
 		return nil
@@ -533,8 +555,24 @@ func (s *Service) SaveManualPrices(ctx context.Context, rows []ModelPrice) error
 // DeletePrice removes one operator-managed row; the next sync may recreate it
 // as an auto row when models.dev still matches the model.
 func (s *Service) DeletePrice(ctx context.Context, model string) (bool, error) {
+	return s.DeletePriceChecked(ctx, model, nil)
+}
+
+// DeletePriceChecked shares the write lock with normal edits and background sync.
+func (s *Service) DeletePriceChecked(ctx context.Context, model string, check func([]ModelPrice) error) (bool, error) {
 	if s == nil || s.store == nil {
 		return false, errors.New("pricing service is not initialized")
+	}
+	s.priceWrites.Lock()
+	defer s.priceWrites.Unlock()
+	if check != nil {
+		current, err := s.ListPrices(ctx)
+		if err != nil {
+			return false, err
+		}
+		if err := check(current); err != nil {
+			return false, err
+		}
 	}
 	deleted, err := s.store.DeleteModelPrice(ctx, model)
 	if err == nil && deleted {

@@ -25,6 +25,7 @@ import { ErrorLogFile } from '../types/logs';
 import { CapabilityProbeReport } from '../types/capability';
 import { ConfigScalarsResponse, ConfigSourceResponse } from '../types/configManagement';
 import { ClientAPIKeyItem, ClientKeyUsageItem, ProviderItem, SaveProviderPayload } from '../types/providers';
+import { GatewayModelItem } from '../types/gatewayModels';
 import { OAuthProviderItem, StartOAuthResponse, OAuthStatusResponse, OAuthCallbackResponse, OAuthCancelResponse } from '../types/oauth';
 import { QuotaOverviewResponse, CredentialQuotaDetailResponse, QuotaItem } from '../types/quota';
 import {
@@ -234,7 +235,7 @@ async function downloadBlob(url: string): Promise<Blob> {
   return response.blob();
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+export async function requestResponse(path: string, options: RequestInit = {}): Promise<Response> {
   const { apiBaseUrl } = getAppConfig();
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   const authBaseUrl = `${apiRoot()}/api/auth`;
@@ -270,6 +271,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   // are excluded, because signing in is not a write: a notice beside "Signed in" would
   // say the sign-in had not been kept, which is the opposite of what happened.
   if (isDemoMode() && method !== 'GET' && method !== 'HEAD' && !url.startsWith(authBaseUrl)) demoNoticeHandler?.();
+  return response;
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const response = await requestResponse(path, options);
   if (response.status === 204) return {} as T;
   return response.json() as Promise<T>;
 }
@@ -456,6 +462,20 @@ export const api = {
     return request<{ keys: ClientAPIKeyItem[]; total: number }>(
       `/management/api-keys${includeKeys ? '?include_keys=true' : ''}`,
       { method: 'GET' },
+    );
+  },
+
+  /**
+   * The callable model directory for one client key.
+   *
+   * One endpoint, two workspaces: the Playground picks a model to request and the Agent picks a
+   * model to reason with, but both read the same gateway directory, so the declaration lives
+   * here rather than in either page's module.
+   */
+  async getGatewayModels(fingerprint: string, signal?: AbortSignal): Promise<{ models: GatewayModelItem[] }> {
+    return request<{ models: GatewayModelItem[] }>(
+      `/playground/models?client_key_fingerprint=${encodeURIComponent(fingerprint)}`,
+      { method: 'GET', signal },
     );
   },
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Progress } from 'antd';
-import { ThunderboltOutlined } from '@ant-design/icons';
+import { ThunderboltOutlined } from '../../components/icons';
 import { useT } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
 import {

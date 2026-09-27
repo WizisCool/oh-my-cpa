@@ -20,7 +20,7 @@ import {
   SearchOutlined,
   SyncOutlined,
   UploadOutlined,
-} from '@ant-design/icons';
+} from '../../components/icons';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';

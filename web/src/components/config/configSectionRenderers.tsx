@@ -7,7 +7,7 @@ import {
   KeyOutlined,
   NodeIndexOutlined,
   ProfileOutlined,
-} from '@ant-design/icons';
+} from '../icons';
 import { parseDocument, type Document } from 'yaml';
 
 import { PayloadRulesEditor } from './PayloadRulesEditor';

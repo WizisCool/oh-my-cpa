@@ -21,7 +21,7 @@ import {
   TagOutlined,
   UndoOutlined,
   WarningOutlined,
-} from '@ant-design/icons';
+} from '../components/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseDocument } from 'yaml';
 import type { Document } from 'yaml';

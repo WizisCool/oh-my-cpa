@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/operations"
 )
 
 const (
@@ -141,14 +142,18 @@ func (h *Handler) patchManagementAuthFileStatus(writer http.ResponseWriter, requ
 		writeError(writer, http.StatusBadRequest, "auth_index is too long")
 		return
 	}
-	client, ok := h.managementClientOrError(writer, request)
-	if !ok {
+	if _, ok := h.managementClientOrError(writer, request); !ok {
 		return
 	}
-	if _, err := client.PatchAuthFileStatus(request.Context(), name, strings.TrimSpace(payload.AuthIndex), *payload.Disabled); err != nil {
+	if err := h.recordAudit(request, "auth_file.status_update", "auth_file", name, "attempt", nil); err != nil {
+		writeInternalError(writer, err)
+		return
+	}
+	if err := h.operationsService().SetCredentialStatus(request.Context(), operations.CredentialTarget{Name: name, AuthIndex: strings.TrimSpace(payload.AuthIndex)}, *payload.Disabled, ""); err != nil {
 		writeCPAFacadeError(writer, err)
 		return
 	}
+
 	writeJSON(writer, http.StatusOK, map[string]any{"status": "ok", "disabled": *payload.Disabled})
 }
 

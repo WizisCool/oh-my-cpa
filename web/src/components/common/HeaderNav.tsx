@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, Tooltip } from 'antd';
-import { LogoutOutlined, ReloadOutlined } from '@ant-design/icons';
+import { LogoutOutlined, ReloadOutlined } from '../icons';
 import { PreferenceMenus } from './PreferenceMenus';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';

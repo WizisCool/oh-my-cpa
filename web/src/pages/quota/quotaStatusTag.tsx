@@ -5,7 +5,7 @@ import {
   CloseCircleOutlined,
   StopOutlined,
   WarningOutlined,
-} from '@ant-design/icons';
+} from '../../components/icons';
 import type { TFunc } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
 

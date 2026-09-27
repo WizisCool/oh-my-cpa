@@ -16,7 +16,7 @@ import {
   FullscreenOutlined,
   ReloadOutlined,
   VerticalAlignTopOutlined,
-} from '@ant-design/icons';
+} from '../components/icons';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { api } from '../api/client';

@@ -90,6 +90,7 @@ func TestDemoPolicyRefusesTheDangerousSurface(t *testing.T) {
 		{http.MethodPut, "/api/v1/management/plugins/usage-exporter/config"},
 		{http.MethodPut, "/api/v1/management/config/source"},
 		{http.MethodPut, "/api/v1/management/config/debug"},
+		{http.MethodPost, "/api/v1/playground/chat"},
 		{http.MethodPost, "/api/v1/management/api-keys"},
 		{http.MethodDelete, "/api/v1/management/api-keys/0"},
 		{http.MethodPost, "/api/v1/management/quota/reset"},
@@ -150,6 +151,7 @@ func TestDemoPolicyKeepsTheReadingSurface(t *testing.T) {
 		{http.MethodGet, "/api/v1/management/client-key-aliases"},
 		{http.MethodGet, "/api/v1/pricing"},
 		{http.MethodGet, "/api/v1/resources"},
+		{http.MethodGet, "/api/v1/playground/models"},
 		// Writes the demonstration can perform on its own fixture or on Oh My CPA's
 		// own metadata.
 		{http.MethodPatch, "/api/v1/management/auth-files/status"},
@@ -258,6 +260,7 @@ func TestDemoGuardRefusesOverHTTP(t *testing.T) {
 	for _, call := range []struct {
 		method, path, body string
 	}{
+		{http.MethodPost, "/omc/api/v1/playground/chat", `{}`},
 		{http.MethodPost, "/omc/api/v1/management/oauth/start", `{"provider":"codex"}`},
 		{http.MethodPost, "/omc/api/v1/management/auth-files", `{"type":"codex"}`},
 		{http.MethodGet, "/omc/api/v1/management/auth-files/download?name=x.json", ""},

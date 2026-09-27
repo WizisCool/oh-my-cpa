@@ -29,13 +29,13 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 /**
  * Longer than any probe expects to wait, short enough to fail the run rather than hang CI.
  *
- * Measured rather than guessed: the suite takes ~135s on an idle machine and was observed at
- * 149-151s when `verify:full` runs it alongside the browser acceptance and the static gates, so
- * the previous 150s ceiling sat inside the spread and failed the gate at random. The watchdog
- * exists to stop a hang, not to enforce a speed budget, so the margin is wide enough that only a
- * stuck run reaches it.
+ * Measured rather than guessed: with the conversation-workspace scenarios the suite was observed at
+ * 290-301s when `verify:full` runs it alongside the browser acceptance, and a 300s ceiling sat inside
+ * that spread and failed the gate at random - the same failure an earlier 150s ceiling produced
+ * when the suite measured ~150s. The watchdog exists to stop a hang, not to enforce a speed budget,
+ * so the margin is wide enough that only a stuck run reaches it.
  */
-const DEFAULT_WATCHDOG_MS = 300_000;
+const DEFAULT_WATCHDOG_MS = 480_000;
 
 export const probeRoot = root;
 

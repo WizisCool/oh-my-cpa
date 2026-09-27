@@ -64,6 +64,13 @@ const DASHBOARD_SCENARIOS = [
  * directory can be named without listing its files.
  */
 const SCENARIO_PATHS = [
+  { prefix: 'web/src/pages/agent/', scenarios: ['agent', 'agent-live', 'agent-failure', 'agent-stream', 'agent-narrow'] },
+  { prefix: 'web/src/pages/playground/', scenarios: ['playground', 'playground-narrow'] },
+  // The conversation frame both workspaces are composed from.
+  {
+    prefix: 'web/src/components/workspace/',
+    scenarios: ['agent', 'agent-live', 'agent-failure', 'agent-stream', 'agent-narrow', 'playground', 'playground-narrow'],
+  },
   // The request-records page, its row/column rendering and its stylesheet. Column
   // geometry, the virtualized list, the refresh sequence and the search box all live
   // in this one page, so they move together.

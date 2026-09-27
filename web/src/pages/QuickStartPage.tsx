@@ -16,7 +16,7 @@ import {
   CopyOutlined,
   CheckOutlined,
   ArrowRightOutlined,
-} from '@ant-design/icons';
+} from '../components/icons';
 import { useNavigate } from 'react-router-dom';
 import { useT } from '../i18n';
 import { copyText } from '../utils/clipboard';

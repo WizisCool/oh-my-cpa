@@ -1,6 +1,6 @@
 import React from 'react';
 import { Alert, Button, Popconfirm, Tag } from 'antd';
-import { SyncOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { SyncOutlined, ThunderboltOutlined } from '../../components/icons';
 import { useT } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
 import { formatGmtOffsetLabel, formatObservedAgo, formatSnapshotRenewalBound, formatTimeWithCountdown } from './quotaFormat';

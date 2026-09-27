@@ -5,7 +5,7 @@ import {
   StopOutlined,
   DeleteOutlined,
   CloseOutlined,
-} from '@ant-design/icons';
+} from '../icons';
 import { useT } from '../../i18n';
 
 interface BatchActionBarProps {

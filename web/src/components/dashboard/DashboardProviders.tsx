@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Empty, Tag } from 'antd';
-import { RightOutlined } from '@ant-design/icons';
+import { RightOutlined } from '../icons';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';

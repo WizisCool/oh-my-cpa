@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, DatePicker, Dropdown, Modal } from 'antd';
-import { ClockCircleOutlined } from '@ant-design/icons';
+import { ClockCircleOutlined } from '../icons';
 import dayjs from 'dayjs';
 import { useT } from '../../i18n';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';

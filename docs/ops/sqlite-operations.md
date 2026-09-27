@@ -191,7 +191,11 @@ When upgrading Oh My CPA, the application automatically inspects and applies une
    - Configured via `OMCPA_USAGE_RETENTION_DAYS` (default 400 days, `0` for indefinite retention) to control raw usage payloads and event details. The default follows the dashboard's token heatmap, which covers a rolling year: a shorter horizon would leave the window's own beginning unreadable, and 400 rather than 365 leaves slack so neither a leap year nor an offset boundary can push the oldest day out;
    - Pruning runs once per hour inside `ingest.Maintenance`, while rollups advance every `OMCPA_USAGE_AGGREGATE_INTERVAL` (default 15 seconds);
    - Pruning boundaries are gated by aggregation checkpoints, guaranteeing that detailed records are never removed before rollups have processed them.
-2. **Space Reclamation & Compaction**:
+3. **Agent Documents (`agent_documents`, migration 026)**:
+   - The encrypted latest Agent session and its capability operations live here; the session ciphertext is written with the same `OMCPA_MASTER_KEY` envelope as other protected payloads, so the key must exist to resume a conversation or read a pending operation;
+   - The session is capped and trimmed by whole turns, and a terminal operation is retained for 7 days. Purging is lazy - it happens during Agent requests under a one-minute throttle - so the Agent adds no background loop and there is no separate maintenance job to schedule;
+   - Restoring this table from a backup restores conversation and operation history, but approval requires a new decision: an operation that was `executing` when the process stopped is reported as `uncertain` rather than replayed.
+4. **Space Reclamation & Compaction**:
    - Large-scale historical data deletion leaves free pages inside SQLite. The file does
      not shrink on its own, and a large `-wal` file is normal rather than a fault: WAL is
      reused between checkpoints rather than truncated continuously;

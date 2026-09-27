@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, Dropdown, Tooltip, type MenuProps } from 'antd';
-import { DesktopOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons';
+import { DesktopOutlined, MoonOutlined, SunOutlined } from '../icons';
 import { LanguageFlag } from './LanguageFlag';
 import { LANGUAGES, useI18n, useT } from '../../i18n';
 import { useTheme } from '../../theme/ThemeContext';

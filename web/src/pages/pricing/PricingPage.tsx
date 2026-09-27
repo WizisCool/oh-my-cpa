@@ -9,7 +9,7 @@ import {
   SearchOutlined,
   ThunderboltOutlined,
   WarningOutlined,
-} from '@ant-design/icons';
+} from '../../components/icons';
 import dayjs from 'dayjs';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';

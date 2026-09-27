@@ -173,3 +173,13 @@ func isHTTPS(publicURL string) bool {
 	}
 	return strings.EqualFold(parsed.Scheme, "https")
 }
+
+// CapabilityIdentity binds pending external operations to the configured authority without retaining its credential.
+func (m *Manager) CapabilityIdentity() string {
+	if m == nil {
+		return ""
+	}
+	mac := hmac.New(sha256.New, m.secret)
+	mac.Write([]byte("oh-my-cpa capability authority"))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tooltip, App as AntdApp } from 'antd';
-import { BlockOutlined, BulbOutlined, CopyOutlined, RightOutlined } from '@ant-design/icons';
+import { BlockOutlined, BulbOutlined, CopyOutlined, RightOutlined } from '../icons';
 import dayjs from 'dayjs';
 import { getProviderDefaultIcon } from '../LobeIcon';
 import { ProviderBrandIcon } from '../LobeIcon';

@@ -31,12 +31,23 @@ const (
 	PreferenceTokenStyle = "omc_token_style"
 	PreferenceModelView  = "omc_models_view"
 	PreferenceTheme      = "omc_theme"
+
+	// PreferencePlaygroundSession persists the single latest playground session:
+	// the target key's usage fingerprint and call point, the generation parameters
+	// and the latest conversation's bounded turns. It never stores the key secret,
+	// and starting a new conversation clears the stored turns.
+	PreferencePlaygroundSession = "playground_session"
+
+	// PreferenceAgentTarget remembers the Agent's selector: the key's usage fingerprint, the call
+	// point and the reasoning effort. It is the operator's current choice, kept apart from the
+	// stored conversation's target, which records what a turn actually ran with.
+	PreferenceAgentTarget = "agent_target"
 )
 
 // MaxPreferenceValueBytes bounds a stored value. Preferences are small UI
-// state; anything larger is a client bug or an attempt to use this table as a
-// data dump.
-const MaxPreferenceValueBytes = 32 * 1024
+// state or playground session states; anything larger is a client bug or an attempt
+// to use this table as an unbounded data dump.
+const MaxPreferenceValueBytes = 1024 * 1024
 
 // GetPreference returns the stored JSON for one key. The boolean is false when
 // nothing has been saved yet, which is a normal state, not an error: the first

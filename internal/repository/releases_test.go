@@ -473,6 +473,11 @@ func openDatabaseAtMigration(t *testing.T, through int) *DB {
 	if _, err := database.SQL.ExecContext(ctx, `DELETE FROM schema_migrations WHERE version > ?`, through); err != nil {
 		t.Fatalf("reset migration history to %d: %v", through, err)
 	}
+	if through < 26 {
+		if _, err := database.SQL.ExecContext(ctx, `DROP TABLE agent_documents;`); err != nil {
+			t.Fatalf("drop migration 026 tables: %v", err)
+		}
+	}
 	if through < 25 {
 		if _, err := database.SQL.ExecContext(ctx, `ALTER TABLE release_check_state DROP COLUMN truncated`); err != nil {
 			t.Fatalf("drop the column migration 025 adds: %v", err)

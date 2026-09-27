@@ -68,6 +68,7 @@ cycle even though the `internal/usage` directory appears in both directions.
 | `internal/usage/resp` | Minimal RESP client for CPA's subscribe/LPOP subset | — |
 | `internal/pricing` | Catalog snapshot, model matching, sync service, money math | — |
 | `internal/cpa/management` | Typed CPA `/v0/management` client and RESP stream wrapper | `internal/usage/resp` |
+| `internal/cpa/gateway` | Fixed-endpoint CPA inference client for the Playground and Agent: client-key auth, model directory, bounded SSE parsing, and bounded tool-call assembly for the Agent loop | — |
 | `internal/cpa/discovery` | Normalize CPA resources into the local identity model | `management`, `crypto`, `domain`, `security` |
 | `internal/cpa/configyaml` | YAML document editing that preserves comments and unknown keys | — |
 | `internal/repository` | SQLite schema, migrations, queries, transactional invariants | `crypto`, `domain`, `pricing`, `security`, `usage` |
@@ -75,7 +76,11 @@ cycle even though the `internal/usage` directory appears in both directions.
 | `internal/quota` | Per-provider quota probes and normalization | `management` |
 | `internal/release` | Published-version observation: version comparison, the release feed client, and the stored index | `repository` |
 | `internal/demo` | The publication fixture: an in-process CPA stand-in, the seeded history, and the capture state the console renders | `domain`, `pricing`, `quota`, `repository`, `security`, `usage`, `usage/ingest` |
-| `internal/api` | Routes, DTO allowlists, audited sensitive reveals, audit writes, the demo policy | all of the above, `internal/web` |
+| `internal/capability` | Agent capability declarations, JSON Schema validation, permission/risk rules, pending-operation store, executor audit | `repository`, `crypto` |
+| `internal/operations` | Shared management operations (usage analysis, requests, providers, OAuth, quota, keys, config, pricing, system) used by both console handlers and capabilities | `capability`, `cpa/management`, `pricing`, `quota`, `repository` |
+| `internal/agent` | Server-side Agent runtime: conversation persistence, the tool catalogue it declares to the model, budgets, model loop, resumption | `capability`, `cpa/gateway`, `repository` |
+| `internal/mcpbridge` | stdio MCP transport over the capability HTTP endpoints; no business logic or approval policy | `capability` |
+| `internal/api` | Routes, DTO allowlists, audited sensitive reveals, audit writes, the demo policy, capability/Agent endpoints | all of the above, `internal/web` |
 | `internal/web` | `go:embed` of the built SPA | — |
 | `internal/app` | Wiring, background loops, graceful shutdown | all of the above |
 
@@ -91,6 +96,91 @@ Two rules keep the boundary meaningful:
   into, so a field added there for decoding cannot reach a caller without a decision at
   this boundary. The plugin projection is also where manifest text is bounded
   (`management_plugin_projection.go`), because that text arrives from an installed plugin.
+
+
+### Agent runtime, capability registry and the MCP bridge
+
+The Agent is not a second management implementation. Every capability it can call is a
+declaration in `internal/capability` whose handler calls a shared method in
+`internal/operations`; the console's HTTP handlers call those same methods, so write
+gates, revision checks, and CPA readback cannot drift between the two entry points.
+`internal/agent` owns only the model loop: it builds the system prompt, history, and
+tool schemas, streams the model reply, executes each call through
+`capability.Executor`, and persists the result before continuing. It never touches the
+database, configuration file, or CPA client directly, and the request it sends upstream
+is assembled server-side - a client cannot inject tool results, approvals, or history.
+
+The workspace above that loop is `web/src/pages/agent`, built on the shared conversation frame in
+`web/src/components/workspace`: the registry is browsable as a capability directory
+(`CapabilityDirectory.tsx`), the run's transport is one hook (`useAgentRun.ts`), the transcript
+is a memoised turn list (`AgentTurn.tsx`) that draws capability calls as an Ant Design X
+`ThoughtChain`, and a prepared operation is decided on its own card (`OperationCard.tsx`). The
+presentation rules - status vocabulary, chain status, failure copy, result digest, change preview -
+are pure functions in `state.ts` with their own suite.
+
+A run request carries the message, the target and an optional `reasoning_effort`, validated by
+the rule the playground uses and forwarded upstream; the conversation records the effort a turn
+started with, and a resumption continues with it. The model's reasoning (`reasoning_content`, or
+`reasoning`) is streamed as `thought` events and never enters the messages later rounds are built
+from. The turn records its output as ordered `parts` - reasoning, text and capability calls, in
+arrival order, with a new part for each model round - and text and reasoning events carry their
+`round`, so the browser rebuilds exactly the stored parts from the stream. There is no consent
+flag: the page states where the data goes (ADR 0027). Resetting a conversation keeps its key,
+model and effort. The selector itself is the `agent_target` preference, so a choice made before
+anything is sent survives a reload; a conversation waiting on an approval restores its own target
+instead, because only that target can resume it. The split exists because a streamed answer re-renders the
+conversation on a cadence, and the rules being pure is what lets `scripts/test-agent-workspace.ts`
+assert them without a browser.
+
+`internal/capability.Executor` is the authority gate. Reads execute immediately; a
+capability marked high risk returns a server-generated pending operation with a
+structured preview and target revision; approval happens only in the browser and is
+re-validated against the capability version, the caller's authority, and the current
+revision while the write gate is held. An unverified or interrupted write is reported
+as `uncertain` rather than retried. Secrets and OAuth authorization never enter tool
+arguments or model-visible results: the console posts them directly while approving the
+operation.
+
+External agents use the same registry through `oh-my-cpa mcp`, a stdio MCP server. The
+subcommand is dispatched before configuration, database, and CPA client initialization,
+so the bridge process opens no data directory; it forwards capability discovery and
+invocation to OMC's `/api/v1/capabilities` endpoints, authenticating with the CPA
+management key as a bearer token. Non-loopback URLs must be HTTPS, redirects are
+refused, and responses are bounded. The bridge cannot approve operations, submit
+secrets, or complete OAuth - it returns the operation id and the console link instead.
+
+#### What the model loop spends, and where
+
+Each turn is bounded in three currencies, because they fail differently and an operator
+reading `budget_exceeded` needs to know which one ran out:
+
+| Bound | Limit | Counts |
+| --- | --- | --- |
+| `agent.MAX_TURN_ROUNDS` | 8 | Model calls in one turn |
+| `agent.MAX_TURN_CALLS` | 24 | Capability invocations in one turn |
+| `agent.MAX_CONTEXT_BYTES` | 128 KiB | One assembled request, including its tool declarations |
+| `agent.MAX_TOOL_SCHEMA_BYTES` | 32 KiB | The catalogue's share of that request |
+
+Three properties hold across the loop:
+
+- **The tool catalogue is declared from the first round.** Every registered capability
+  reaches the model on round one with its description and inferred schema. Discovery is not
+  a step: deferring the catalogue behind a search costs a full model round trip per action,
+  and it makes a request the agent cannot serve look like a capability it does not hold.
+- **A fingerprint is resolved once per turn.** Resolution reads CPA's client-key list; the
+  turn holds the resulting client in a per-turn map, because the conversation's target
+  cannot change inside a turn. The console also caches the fingerprint-to-key join in
+  memory for a short window (`agentState.catalog`), which is what keeps a `providers_list`
+  call from re-reading a list CPA is concurrently mutating; the cache is dropped on the same
+  lazy maintenance pass that purges expired documents.
+- **History is trimmed by whole complete turns.** Only turns with status `success`
+  contribute history, newest first, and tool/result pairs are never split.
+
+The latest Agent session and pending or terminal operations live in `agent_documents`
+(migration 026), encrypted with `OMCPA_MASTER_KEY`. Session content is trimmed to
+older complete turns and capped; terminal operations are retained for 7 days. Purging
+is lazy: it runs during Agent requests, so the server starts no additional background
+loop for the Agent.
 
 ### Known coverage gaps
 
@@ -350,13 +440,14 @@ Query for server state.
 | Area | Contents |
 | --- | --- |
 | `App.tsx` | Router, lazily loaded pages, theme and locale providers; the theme provider sits above `ConfigProvider` (Ant Design's tokens are a projection of the resolved palette) while `ThemeServerSync` sits inside `App`, because a refused save is reported through Ant Design's message API |
-| `api/client.ts` | The one typed HTTP client; every endpoint is declared here |
+| `api/client.ts` | The one typed HTTP client and the shared session/error plumbing; every ordinary endpoint is declared here. The playground's `pages/playground/api.ts` wraps `requestResponse` and XStream for its fixed SSE route, without duplicating auth or retry policy |
 | `types/` | Wire types, including the request-record view model split by responsibility (`usageEventQuery.ts` for the URL and filter contract, `usageEventViewPreference.ts` for the stored view, `usageEventIdentity.ts` for the credential and provider behind a row, `usageEventGrouping.ts` for how records bucket, `usageEventLabels.ts` for what a row prints, `usageEventMetrics.ts` for its numbers and `usageEventCadence.ts` for the page's timing constants), `usageEventViewActions.ts` (the view's URL and persistence rewrites), `pluginOAuthProviders.ts` (which logo an installed plugin publishes for the OAuth provider it registers, and whether a URL may be rendered as an image at all), `tokenDisplay.ts` (the one layer every user-facing token number is formatted through) and `rollingNumber.ts` (the animated shape of a reading) |
 | `hooks/` | `usePreference`, `useLastIntentQueue` (React binding) over `lastIntentQueue` (the framework-free controller) and `disposableSlot` (effect-scoped resource lifetime), `useLogTail`, `useVisibleNow`, `useIsNarrowViewport` (900px, the shell), `useIsPhoneViewport` (640px, lists and control sizes), `useOverlayHistory` (React binding) over `overlayHistory` (the framework-free overlay/history policy: one sentinel per open Drawer or Modal, so the platform's Back dismisses the topmost one), `usePluginOAuthLogos` (the plugin list read once, projected to provider-key logos), `usePrefersReducedMotion` (the app-owned reduced-motion switch the canvas marks need, since neither `@antv/g2` nor `@ant-design/plots` reads the preference) |
 | `i18n/` | `index.tsx` owns the base `[zh, en]` dictionary and the `t()` context; `language.ts` is the reading-language registry and locale helpers; `locales/zh-Hant.ts` and `locales/ms.ts` are the complete additional catalogs |
 | `theme/` | `palette.ts` (the nine authored tokens, the seventeen-token derivation, the registered palettes and the resolution of a mode plus a selection into a palette), `themePreference.ts` (the stored preference document, its parse and its migration from the earlier bare palette id), `ThemeContext.tsx` (the preference, the system follow, the in-progress edit, and the server sync), `themeConfig.ts` (antd tokens and CSS-variable projection), `colorMath.ts` (OKLCH mixing, luminance and contrast - the one authority for every ratio in the console), `cacheScale.ts` and `heatmapRamp.ts` (the two sequential ramps' stops) |
 | `utils/` | `maskKey.ts` (the console's one caller-key mask shape, kept branch for branch with the server's `security.MaskSecret`), `externalUrl.ts` (the http/https link rule), `modelOptions.ts` (model-input filtering), `smoothScroll.ts` (the gesture/correction scroll schedule), `clipboard.ts` (the one copy path, below) |
 | `components/common/` | What more than one page renders: the shell (`AppLayout`, `HeaderNav`, `AuthGate`, `PreferenceMenus`), and the phone row a list becomes below 640px - `PhoneRow.tsx` (headline, summary, labelled fields, controls) over `phoneRowFields.ts` (derives a row's fields, and one column's rendered cell, from the *table's own* column array, so a list has one description of a record at both widths and a column cannot silently disappear on a phone; see ADR 0012) |
+| `components/workspace/` | The conversation workspace the Playground and the Agent share: `WorkspaceLayout` (head with title, target and actions; main column; resizable side panel that becomes a Back-aware Drawer below 900px), `useResizablePanel` (pointer and keyboard resizing that writes the width to the DOM during a drag and commits it once), `ConversationList` (Ant Design X's `Bubble.List` with its native reverse-scroll anchoring and the "back to latest" control), `Composer` (X's `Sender` with the send path running through its own `SendButton`, so Enter and the button stay one gate), `ModelMarkdown` (safe `@ant-design/x-markdown` rendering with allowlisted code highlighting), `ReasoningBlock` (X's `Think`), `TargetPicker` (key and call point as one joined control), `CopyButton` and `useXLocale` |
 | `components/`, `pages/` | Feature UI; one page per route, no page owns another. A page composes its surface rather than carrying it: `pages/UsageEventsPage.tsx` renders `components/usage/`'s toolbar, header and rows and takes its state from that directory's hooks, `pages/ProvidersPage.tsx` renders `components/providers/`'s table and editor, and `pages/ConfigPage.tsx` renders `components/config/`'s renderers. The framework-free policies of a surface stay beside it: `components/usage/` carries `searchDebounce.ts`, `pollingPolicy.ts`, `timeRangePolicy.ts`, `syncPresentation.ts` and `chipDisplay.ts`, and `components/config/` carries `payloadRules.ts` and `configDirty.ts` |
 
 Every copy control goes through `utils/clipboard.ts` rather than calling the
@@ -393,6 +484,13 @@ reduced-motion hook above. `docs/design.md`
 §7 rules 5 and 8 own the motion they are allowed to run, and ADRs 0007 and 0008 own the
 trade-offs.
 
+Icons come from `lucide-react`, through the wrapper layer in
+`web/src/components/icons/index.tsx` rather than by direct import, so the console keeps the Ant
+Design icon names and the `anticon` classes its CSS already selects on. Those wrappers are thin
+forwarders, so the icon set is tree-shaken to the icons actually referenced; ADR 0025 records the
+switch away from `@ant-design/icons` and the two stylesheet declarations the console took over so
+its icons no longer depend on another package's runtime injection.
+
 **A plugin's published logo outranks the catalog mark for the provider it
 registers.** A plugin that declares `supports_oauth` may publish its own logo, and
 when it publishes usable artwork that mark is the one drawn: the plugin is the only
@@ -419,6 +517,16 @@ destination policy than an operator-typed one.
 are retained from the retired triage console and are currently unreferenced; the
 backend discovery/binding model they rendered is still live behind Providers and
 OAuth management.
+
+`components/icons/index.tsx` is the console's icon layer, and is referenced by every
+surface that draws an icon: it wraps Lucide components in the Ant Design icon names the
+rest of the codebase imports (`<ApiOutlined />`, `<SyncOutlined spin />`) instead of
+letting components import an icon library directly. It keeps the `anticon` class names and
+the `spin` prop, because first-party CSS and antd's own components select on them, and
+`web/src/index.css` owns the two declarations that used to arrive from that library's
+runtime-injected stylesheet (the base box model and the spin keyframes). ADR 0025 records
+the move; the console has no direct dependency on `@ant-design/icons`, while antd keeps
+its own transitive one.
 
 CSS class names are kebab-case everywhere, including `*.module.css` exports,
 which are consumed as `styles['kebab-case']`. That is not cosmetic: `tsc` types a
@@ -1071,6 +1179,7 @@ account as the reading it was decided from.
 | Instances & identity | `cpa_instances`, `discovered_resources`, `resource_overrides`, `connections`, `cpa_bindings` | Encrypted management key; bindings survive upstream removal. `connections` is provisioned by migration 006 for the Connection entity but no code reads or writes it yet — treat it as reserved, not as a live table |
 | Usage | `usage_inboxes`, `usage_events`, `error_events`, `ingest_gaps`, `usage_overview_hourly_stats`, `usage_overview_daily_stats`, `usage_aggregation_checkpoints` | Milliseconds; raw payloads encrypted |
 | Pricing | `model_prices`, `model_price_versions`, `pricing_sync_state`, `pricing_model_catalog`, `pricing_catalog_state` | Versions are append-only via triggers |
+| Agent | `agent_documents` | Encrypted latest Agent session and capability operations (migration 026). Sessions are capped and trimmed by whole turns; terminal operations are retained 7 days and purged lazily during Agent requests |
 | Operations | `audit_events`, `ui_preferences`, `quota_snapshots`, `schema_migrations` | Audit has no update or delete path — only `RecordAuditEvent` writes and read queries exist, and export itself is audited; the schema carries no enforcement trigger, so the guarantee lives in the repository API |
 | Release observation | `release_index`, `release_check_state` | Migrations 024 and 025; `truncated` is added by 025, so a database that applied 024 before it existed still gains the column. `release_index` holds one row per published version (tag, name, publication time, prerelease flag) and is **replaced as a unit per product** by `PublishReleaseSnapshot`, because a feed that stops listing a withdrawn release must stop the console claiming it exists. `release_check_state` holds one row per product — the last attempt and success times, the redacted failure reason, the latest tag, the ETag and the truncation flag — and is written by `RecordReleaseCheckAttempt`/`PublishReleaseSnapshot`/`RecordReleaseCheckFailure`, read by `ListReleases` and `GetReleaseCheckState(ForRepository)`. A release's prose body is **never stored**: it lives in bounded process memory for the life of the process, so an index without notes still names the versions and links to the source (see §10) |
 
@@ -1691,7 +1800,81 @@ records as a deliberate trade. `docs/ops/cloudflare-demo.md` is the runbook, inc
 the account steps no command can perform and the failure modes that look like something
 else.
 
-## 14. Where to look next
+## 14. Model playground
+
+The lazy `web/src/pages/playground/PlaygroundPage.tsx` route is composed on the shared
+conversation frame (`web/src/components/workspace`), so its transcript, composer, reasoning
+disclosure, code blocks and side panel are the Agent's. The page itself owns the request: the
+streaming loop (`usePlaygroundRun.ts`, which publishes the live turn on a 40ms cadence and keeps
+every settled turn's object identity so the memoised transcript re-parses only the answer that
+changed), the pasted-image tray (`useImageAttachments.ts`), the parameters panel and the turn
+inspector. Pure request rules - building the request, reading the custom body, the stored
+session's shape - live in `state.ts`.
+
+The single latest session is persisted server-side in `ui_preferences` as `playground_session`,
+allowing operators to resume the target, parameters and conversation across devices and reloads.
+It is written when a turn settles and after parameter edits pause, never while a turn streams.
+Starting a new conversation discards stored turns. Large image payloads are redacted before
+persistence to conserve storage budget. Neither conversation nor prompts enter client-side
+`localStorage` or `sessionStorage`. Markdown rendering uses `@ant-design/x-markdown` with raw HTML
+escaped and external images suppressed.
+
+`internal/api/playground.go` adds session-authenticated `GET /playground/models` and
+`POST /playground/chat` beneath the configured API base. The former resolves a
+`client_key_fingerprint` query against the current CPA client-key list using the
+`usage-api-key` fingerprint purpose. The latter accepts the same identity, a model,
+optional system prompt, typed messages, and optional temperature, top_p, max_tokens and reasoning_effort.
+Unknown input fields are refused. System messages are built from the separate prompt;
+user and assistant messages carry only text and inline image content blocks.
+
+`internal/cpa/gateway` is the inference client, separate from the management client. It
+supports only the configured origin's `/v1/models` and `/v1/chat/completions`, sets the
+resolved client key server-side, and refuses redirects. Model IDs come from the live
+client directory, not pricing or historical traffic. Each entry carries the OpenAI
+`id` plus an explicit `call_point` (the same client-visible identifier CPA returns);
+the selector uses that call point. Vision capability is unknown.
+The facade emits `meta`, `delta`, `thought`, `usage`, `done` and `error` SSE events. Errors contain
+safe codes, upstream HTTP status and allowlisted parameter names rather than upstream
+bodies. Missing usage stays missing. CPA ingestion remains unchanged.
+
+Admission is process-wide and non-queueing: four calls include request validation and
+credential resolution. JSON bodies are limited to 32 MiB including history; each user
+message has at most four PNG/JPEG/WebP images, each at most 5 MiB and 40 megapixels.
+Only Base64 data URLs are accepted. Image headers are decoded without allocating pixels.
+Messages are limited to 256 including the optional system message. Responses are bounded
+to 8 MiB, individual SSE lines to 1 MiB. The browser retains at most 500 diagnostic events
+or 1 MiB while continuing to render the answer. No automatic paid-request retry exists.
+
+This route overrides the server's ordinary 30-second write deadline per flush, retaining
+a 30-second slow-reader budget. Upstream first-response and idle budgets are 120 seconds,
+total lifetime is ten minutes, and downstream heartbeats run every 15 seconds. Cancel or
+unmount aborts the fetch and upstream context. The heartbeat writer is joined before
+returning the handler. Existing management routes retain their original deadlines.
+
+The upstream body is composed once (`gateway.BuildPayload`) and then validated as the body it
+will be (`gateway.ValidatePayload`): the console's own `model`/`messages`/`stream` defaults
+first, the turn's parameter fields next, and `custom_body` last so an operator's override wins
+every collision. Validating the composed body rather than the typed request is what stops an
+override from replacing `messages` with content the image checks never approved; parameters the
+console does not model pass through untouched. `user_agent` is a transport header rather than a
+body field, so it is resolved here (the operator's value, else `Oh-My-CPA/<build version>`) and
+refused when it is not a header value; a non-streaming body is refused by name, because this
+route projects allowlisted SSE events. TPS in the turn footer comes from the same
+`eventTokensPerSecond` helper the request records use, so the two cannot disagree.
+
+Request inspection substitutes image summaries at any depth (a valid custom body may replace
+`messages` with the string-content form) and omits `user_agent` from the body preview, since it
+travels as a header; cURL uses environment placeholders, sets that header explicitly, and
+requires local image substitution. The model named by the turn label and by related-request
+links is the effective one, so a turn is never labelled with a model it did not call. Related
+request links filter by the exact client-key identity and a model-name search within a numeric
+time window; they are candidate links, not a claimed event ID. ADR
+0022 records the entitlement and privacy boundary; ADR 0023 recorded the selection-only preference
+and is superseded by ADR 0024, which records the single latest session that replaced it. Gateway unit tests, facade tests,
+`scripts/test-playground.ts`, and desktop/phone probes cover this flow. Public-demo
+model reads are generated through the real facade; inference is explicitly refused.
+
+## 15. Where to look next
 
 - Domain wording: `CONTEXT.md`
 - Deployment and its trade-offs: `docs/adr/0001-go-react-sqlite-modular-monolith.md`

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tabs, Space } from 'antd';
-import { AppstoreOutlined } from '@ant-design/icons';
+import { AppstoreOutlined } from '../icons';
 import { credentialProviderIconId, getCredentialProviderMetadata } from './providerMetadata';
 import { ProviderBrandIcon } from '../LobeIcon';
 import { pluginOAuthLogoFor, type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
