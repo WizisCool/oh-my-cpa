@@ -477,12 +477,15 @@ export function ProviderEditorDrawer({
                             <Button type="link" size="small" onClick={() => handleTestKey(k, idx)}>
                               {t('pro.test_single')}
                             </Button>
+                            {/* A pointer affordance only: the header button is the toggle a
+                                keyboard and a screen reader use, and a second one would be
+                                announced twice. */}
                             <Button
                               type="text"
                               size="small"
                               icon={isExpanded ? <UpOutlined /> : <DownOutlined />}
-                              aria-label={t('pro.key_label', { n: idx + 1 })}
-                              aria-expanded={isExpanded}
+                              aria-hidden="true"
+                              tabIndex={-1}
                               onClick={() => toggleKeyExpanded(k.id)}
                             />
                             {formKeys.length > 1 && (

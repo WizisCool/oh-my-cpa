@@ -154,10 +154,11 @@ export const ApiKeysPage: React.FC = () => {
    * Names the given keys through the alias endpoint, once CPA holds them.
    *
    * A name is keyed by the server's usage fingerprint, which exists only for a key CPA has
-   * accepted - so a new key is written first and named second, from a fresh read.
+   * accepted - so a new key is written first and named second, from a fresh read. Resolves to
+   * whether every name landed.
    */
-  const applyAliases = React.useCallback(async (aliases: Record<string, string>) => {
-    if (Object.keys(aliases).length === 0) return;
+  const applyAliases = React.useCallback(async (aliases: Record<string, string>): Promise<boolean> => {
+    if (Object.keys(aliases).length === 0) return true;
     try {
       const fresh = await api.getClientAPIKeys(true);
       for (const item of fresh.keys) {
@@ -166,20 +167,20 @@ export const ApiKeysPage: React.FC = () => {
           await api.setClientKeyAlias(item.usage_fingerprint, name, item.alias_version);
         }
       }
+      return true;
     } catch (err: unknown) {
       message.error(describeError(err) || t('keys.alias_save_failed'));
+      return false;
     }
   }, [message, t]);
 
   const saveMutation = useMutation({
-    mutationFn: ({ yamlToSave, revision }: { yamlToSave: string; revision: string; aliases: Record<string, string> }) => {
+    mutationFn: ({ yamlToSave, revision }: { yamlToSave: string; revision: string }) => {
       setSaveError(null);
       return api.updateConfigSource(yamlToSave, revision);
     },
-    onSuccess: async (_data, variables) => {
+    onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['management-config'] });
-      await applyAliases(variables.aliases);
-      await invalidateKeyReaders();
     },
     onError: (err: unknown) => {
       if (
@@ -201,30 +202,38 @@ export const ApiKeysPage: React.FC = () => {
   });
 
   /**
-   * Writes a new key list to CPA, computed against the document CPA holds now.
+   * Writes a new key list to CPA, computed against the document CPA holds now, then names the
+   * keys it was given names for.
    *
-   * Resolves to whether the write landed, so the dialog that asked for it stays open - with the
-   * operator's input intact - when it did not.
+   * `failed` means nothing was written, so the dialog that asked stays open with the operator's
+   * input intact. `unnamed` means the list landed but a name did not: the key exists in CPA now,
+   * so asking for the same write again would only collide with it.
    */
   const commitKeys = React.useCallback(
-    async (next: string[], aliases: Record<string, string> = {}): Promise<boolean> => {
-      if (!apiKeysField || !serverDoc || saveMutation.isPending) return false;
+    async (next: string[], aliases: Record<string, string> = {}): Promise<'saved' | 'unnamed' | 'failed'> => {
+      if (saveMutation.isPending) {
+        message.warning(t('keys.applying'));
+        return 'failed';
+      }
+      if (!apiKeysField || !serverDoc) return 'failed';
       let draft: Document;
       try {
         draft = parseDocument(serverYaml);
       } catch {
         message.error(t('cfg.yaml_syntax_error'));
-        return false;
+        return 'failed';
       }
       updateFieldWithBaseline(draft, serverDoc, apiKeysField, next);
       try {
-        await saveMutation.mutateAsync({ yamlToSave: draft.toString(), revision: serverRevision, aliases });
-        return true;
+        await saveMutation.mutateAsync({ yamlToSave: draft.toString(), revision: serverRevision });
       } catch {
-        return false;
+        return 'failed';
       }
+      const isNamed = await applyAliases(aliases);
+      await invalidateKeyReaders();
+      return isNamed ? 'saved' : 'unnamed';
     },
-    [apiKeysField, serverDoc, serverYaml, serverRevision, saveMutation, message, t],
+    [apiKeysField, serverDoc, serverYaml, serverRevision, saveMutation, applyAliases, invalidateKeyReaders, message, t],
   );
 
   const closeEditor = React.useCallback(() => {
@@ -326,7 +335,14 @@ export const ApiKeysPage: React.FC = () => {
       else next.push(trimmedKey);
       // A new value is a different key to CPA, so its name is bound to it after the write.
       const aliases: Record<string, string> = trimmedAlias ? { [trimmedKey]: trimmedAlias } : {};
-      if (!(await commitKeys(next, aliases))) return;
+      const outcome = await commitKeys(next, aliases);
+      if (outcome === 'failed') return;
+      if (outcome === 'unnamed') {
+        // The key is in CPA now; only its name is missing. The dialog becomes an edit of that
+        // key, so pressing Save again retries the name alone.
+        setEditor({ isOpen: true, index: next.indexOf(trimmedKey), originalKey: trimmedKey });
+        return;
+      }
       message.success(editor.index === null ? t('keys.created') : t('keys.saved'));
       closeEditor();
     } finally {
@@ -336,7 +352,7 @@ export const ApiKeysPage: React.FC = () => {
 
   const handleDeleteRecord = React.useCallback(
     async (record: ApiKeyRecord) => {
-      if (await commitKeys(currentApiKeys.filter((_, position) => position !== record.index))) {
+      if ((await commitKeys(currentApiKeys.filter((_, position) => position !== record.index))) !== 'failed') {
         message.success(t('keys.deleted'));
       }
     },
