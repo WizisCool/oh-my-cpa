@@ -331,6 +331,14 @@ and the places it deliberately differs from the hand-tuned values it replaced.
   clock runs behind hides every record newer than that clock, and no refresh
   brings them back. The console may still estimate the bounds locally to print
   them.
+- **Quota Window**: One metered period of a provider credential's quota (for
+  Codex, the 5-hour and weekly windows), each carrying its own used share. A
+  provider flag that marks a whole rate limit as reached (Codex
+  `limit_reached` / `allowed: false`) does not say which window tripped, so it
+  never overrides a window's own reading: it pins to 100% only a window that
+  reports no usage, or, when every window reports usage below 100 because
+  upstream rounds, the most used one. Pinning every window would show the weekly
+  quota as spent whenever the 5-hour window runs out.
 - **Preference**: Console state stored server-side rather than in the browser,
   so it follows the deployment across devices, browsers, incognito windows, and
   cleared browser storage rather than binding to a single client instance.
