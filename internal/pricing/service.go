@@ -17,9 +17,18 @@ type ModelLister interface {
 	ListConfiguredModels(context.Context) ([]string, error)
 }
 
-var ErrModelNotInCatalog = errors.New("model is not in the current CPA catalog")
+var (
+	ErrModelNotInCatalog = errors.New("model is not in the current CPA catalog")
+	// ErrUpstreamNotFound refuses a link to an id the stored OpenRouter snapshot
+	// does not list, rather than leaving the model without a price.
+	ErrUpstreamNotFound = errors.New("model is not in the OpenRouter price list")
+	// ErrNoAutomaticMatch refuses a switch to automatic pricing when nothing
+	// matches: the switch would otherwise silently unprice the model.
+	ErrNoAutomaticMatch = errors.New("no OpenRouter model matches this model automatically")
+	ErrInvalidMode      = errors.New("mode must be auto, linked or custom")
+)
 
-// SyncState is the durable outcome of the last models.dev sync.
+// SyncState is the durable outcome of the last OpenRouter sync.
 type SyncState struct {
 	Source                string `json:"source"`
 	LastError             string `json:"last_error"`
@@ -32,26 +41,38 @@ type SyncState struct {
 	NextSyncAtMS          *int64 `json:"next_sync_at_ms,omitempty"`
 }
 
+// ModeChange is one operator decision about how a model is priced. Price carries
+// the rates for ModeCustom; UpstreamID names the pinned model for ModeLinked.
+type ModeChange struct {
+	Model      string
+	Mode       string
+	UpstreamID string
+	Price      ModelPrice
+	Multiplier float64
+}
+
 // Store is the persistence boundary; repository implements it.
 type Store interface {
 	ListModelPrices(context.Context) ([]ModelPrice, error)
 	UpsertModelPrices(context.Context, []ModelPrice) error
 	DeleteModelPrice(context.Context, string) (bool, error)
+	ApplyModelPrice(context.Context, ModelPrice, string) error
+	ListModelLinks(context.Context) (map[string]string, error)
 	ListPricingModels(context.Context) (map[string]string, error)
-	ReplacePricingModels(context.Context, map[string]string) (int64, error)
+	ReplacePricingModels(context.Context, map[string]string, ...CatalogProvider) (int64, error)
+	ReplaceUpstreamCatalog(context.Context, []UpstreamModel) error
+	ListUpstreamCatalog(context.Context) ([]UpstreamModel, error)
 	GetPricingSyncState(context.Context, string) (SyncState, error)
 	SavePricingSyncState(context.Context, SyncState) error
 	UpdatePricingSyncSchedule(context.Context, string, int64) error
-}
-
-// Fetcher decodes the fixed models.dev catalog.
-type Fetcher interface {
-	Fetch(context.Context) (Catalog, error)
+	ListChannelMultipliers(context.Context) ([]ChannelMultiplier, error)
+	UpsertChannelMultiplier(context.Context, ChannelMultiplier) error
+	DeleteChannelMultiplier(context.Context, string) (bool, error)
 }
 
 // SyncResult summarizes one sync run for logs, API and audit. Pruned counts
-// auto rows retired because their model left the current CPA catalog; manual rows
-// are never pruned.
+// automatic rows retired because their model left the current CPA catalog;
+// custom rows are never pruned.
 type SyncResult struct {
 	Matched   int64
 	Unmatched int64
@@ -59,9 +80,13 @@ type SyncResult struct {
 	Pruned    int64
 }
 
+// catalogCacheTTL lets catalog-only reconciliation reuse a recent download: a
+// burst of CPA configuration changes must not become a burst of fetches.
+const catalogCacheTTL = 15 * time.Minute
+
 // Service keeps the current CPA catalog and its prices fresh with zero operator
-// setup. Catalog changes are coalesced, manual rows win, and failed discovery
-// keeps the last complete catalog and good prices.
+// setup. Catalog changes are coalesced, custom rows win, links are honoured, and
+// failed discovery keeps the last complete catalog and good prices.
 type Service struct {
 	priceWrites           sync.Mutex
 	store                 Store
@@ -81,6 +106,7 @@ type Service struct {
 	rootCtx       context.Context
 	workers       sync.WaitGroup
 	syncMu        sync.Mutex
+	catalogMu     sync.Mutex
 	cachedCatalog *Catalog
 	cachedAt      time.Time
 }
@@ -90,7 +116,7 @@ func NewService(store Store, fetcher Fetcher, logger *slog.Logger) *Service {
 		logger = slog.Default()
 	}
 	if fetcher == nil {
-		fetcher = NewMetadataClient()
+		fetcher = NewOpenRouterClient()
 	}
 	return &Service{
 		store:                 store,
@@ -124,8 +150,15 @@ func (s *Service) refreshModels(ctx context.Context) (map[string]string, int64, 
 		return models, 0, err
 	}
 	var models map[string]string
+	var providers []CatalogProvider
 	var err error
 	if rich, ok := lister.(interface {
+		ListConfiguredModelSnapshot(context.Context) (ModelCatalogSnapshot, error)
+	}); ok {
+		var snapshot ModelCatalogSnapshot
+		snapshot, err = rich.ListConfiguredModelSnapshot(ctx)
+		models, providers = snapshot.Models, snapshot.Providers
+	} else if rich, ok := lister.(interface {
 		ListConfiguredModelCatalog(context.Context) (map[string]string, error)
 	}); ok {
 		models, err = rich.ListConfiguredModelCatalog(ctx)
@@ -147,7 +180,7 @@ func (s *Service) refreshModels(ctx context.Context) (map[string]string, int64, 
 		return nil, 0, errors.New("refusing to publish an empty pricing catalog snapshot")
 	}
 	s.priceWrites.Lock()
-	pruned, err := s.store.ReplacePricingModels(ctx, models)
+	pruned, err := s.store.ReplacePricingModels(ctx, models, providers...)
 	s.priceWrites.Unlock()
 	return models, pruned, err
 }
@@ -175,7 +208,7 @@ func (s *Service) SetAutoSyncInterval(ctx context.Context, hours int64) error {
 	if hours < 0 || hours > 168 {
 		return fmt.Errorf("invalid auto sync interval: %d hours (must be 0-168)", hours)
 	}
-	if err := s.store.UpdatePricingSyncSchedule(ctx, SourceModelsDev, hours); err != nil {
+	if err := s.store.UpdatePricingSyncSchedule(ctx, SourceOpenRouter, hours); err != nil {
 		return err
 	}
 	s.mu.Lock()
@@ -268,7 +301,7 @@ func (s *Service) Run(ctx context.Context) error {
 	s.rootCtx = ctx
 	s.mu.Unlock()
 	defer func() { s.mu.Lock(); s.stopped = true; s.mu.Unlock(); s.workers.Wait() }()
-	if state, err := s.store.GetPricingSyncState(ctx, SourceModelsDev); err == nil {
+	if state, err := s.store.GetPricingSyncState(ctx, SourceOpenRouter); err == nil {
 		s.mu.Lock()
 		s.autoSyncIntervalHours = state.AutoSyncIntervalHours
 		if state.AutoSyncIntervalHours > 0 {
@@ -319,6 +352,59 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 }
 
+// currentCatalog returns the freshest snapshot available without the network
+// when allowed: the in-memory download, then the stored snapshot. A refresh, or
+// a process that has never stored one, downloads.
+func (s *Service) currentCatalog(ctx context.Context, refresh bool) (Catalog, error) {
+	if !refresh {
+		if catalog, ok := s.localCatalog(ctx); ok {
+			return catalog, nil
+		}
+	}
+	// The mutex guards the cache fields only and is never held across the
+	// download: an operator's link must not wait for a slow sync's fetch.
+	catalog, err := s.fetcher.Fetch(ctx)
+	if err != nil {
+		return Catalog{}, err
+	}
+	if catalog.index == nil {
+		catalog = NewCatalog(catalog.Models, catalog.FetchedAt)
+	}
+	if err := s.store.ReplaceUpstreamCatalog(ctx, catalog.Models); err != nil {
+		return Catalog{}, err
+	}
+	s.catalogMu.Lock()
+	s.cachedCatalog, s.cachedAt = &catalog, s.clock()
+	s.catalogMu.Unlock()
+	return catalog, nil
+}
+
+// localCatalog is the in-memory download while it is fresh, else the stored
+// snapshot; it never touches the network.
+func (s *Service) localCatalog(ctx context.Context) (Catalog, bool) {
+	s.catalogMu.Lock()
+	defer s.catalogMu.Unlock()
+	if s.cachedCatalog != nil && s.clock().Sub(s.cachedAt) < catalogCacheTTL {
+		return *s.cachedCatalog, true
+	}
+	stored, err := s.store.ListUpstreamCatalog(ctx)
+	if err != nil || len(stored) == 0 {
+		return Catalog{}, false
+	}
+	catalog := NewCatalog(stored, s.clock())
+	s.cachedCatalog, s.cachedAt = &catalog, s.clock()
+	return catalog, true
+}
+
+// StoredCatalog is the snapshot the console's model picker reads: never the
+// network, so the picker works offline and costs OpenRouter nothing.
+func (s *Service) StoredCatalog(ctx context.Context) ([]UpstreamModel, error) {
+	if s == nil || s.store == nil {
+		return nil, errors.New("pricing service is not initialized")
+	}
+	return s.store.ListUpstreamCatalog(ctx)
+}
+
 // SyncOnce refreshes prices explicitly. All sync paths serialize here.
 func (s *Service) SyncOnce(ctx context.Context) (SyncResult, error) { return s.syncOnce(ctx, true) }
 func (s *Service) syncOnce(ctx context.Context, refreshPrices bool) (result SyncResult, err error) {
@@ -337,7 +423,57 @@ func (s *Service) syncOnce(ctx context.Context, refreshPrices bool) (result Sync
 		return result, err
 	}
 	result.Pruned = pruned
+	needCatalog := refreshPrices
+	if !needCatalog {
+		existing, err := s.store.ListModelPrices(ctx)
+		if err != nil {
+			return result, err
+		}
+		priced := make(map[string]struct{}, len(existing))
+		for _, row := range existing {
+			priced[row.Model] = struct{}{}
+		}
+		for model := range models {
+			if _, ok := priced[model]; !ok {
+				needCatalog = true
+				break
+			}
+		}
+	}
+	var catalog Catalog
+	if needCatalog {
+		// The download happens outside the write lock: an operator edit must not
+		// wait on the network.
+		catalog, err = s.currentCatalog(ctx, refreshPrices)
+		if err != nil {
+			return result, err
+		}
+	}
+	// Prices and links are re-read under the write lock, so a link an operator set
+	// while the catalog was downloading is honoured rather than overwritten.
+	s.priceWrites.Lock()
+	result, err = s.reconcilePrices(ctx, models, catalog, refreshPrices, pruned)
+	s.priceWrites.Unlock()
+	if err != nil {
+		return result, err
+	}
+	// Local reconciliation cannot confirm recovery from a failed upstream refresh.
+	if refreshPrices {
+		now := s.clock().UnixMilli()
+		state := SyncState{Source: SourceOpenRouter, LastSuccessAtMS: &now, LastMatched: result.Matched, LastUnmatched: result.Unmatched}
+		err = s.store.SavePricingSyncState(ctx, state)
+	}
+	return result, err
+}
+
+// reconcilePrices runs with priceWrites held.
+func (s *Service) reconcilePrices(ctx context.Context, models map[string]string, catalog Catalog, refreshPrices bool, pruned int64) (SyncResult, error) {
+	result := SyncResult{Pruned: pruned}
 	existing, err := s.store.ListModelPrices(ctx)
+	if err != nil {
+		return result, err
+	}
+	links, err := s.store.ListModelLinks(ctx)
 	if err != nil {
 		return result, err
 	}
@@ -345,44 +481,22 @@ func (s *Service) syncOnce(ctx context.Context, refreshPrices bool) (result Sync
 	for _, p := range existing {
 		prices[p.Model] = p
 	}
-	needCatalog := refreshPrices
-	for model := range models {
-		if _, ok := prices[model]; !ok {
-			needCatalog = true
-		}
-	}
-	var catalog Catalog
-	if needCatalog {
-		if !refreshPrices && s.cachedCatalog != nil && s.clock().Sub(s.cachedAt) < 15*time.Minute {
-			catalog = *s.cachedCatalog
-		} else {
-			catalog, err = s.fetcher.Fetch(ctx)
-			if err != nil {
-				return result, err
-			}
-			s.cachedCatalog = &catalog
-			s.cachedAt = s.clock()
-		}
-	}
-	rows := make([]ModelPrice, 0, len(models))
 	names := make([]string, 0, len(models))
 	for model := range models {
 		names = append(names, model)
 	}
 	sort.Strings(names)
+	rows := make([]ModelPrice, 0, len(names))
+	syncedAt := s.clock().UnixMilli()
 	for _, model := range names {
 		previous, hasPrice := prices[model]
 		if hasPrice && (previous.Source == SourceManual || !refreshPrices) {
 			result.Matched++
 			continue
 		}
-		target := models[model]
-		var entry *CatalogEntry
-		if target != "" {
-			entry = catalog.MatchModel(target)
-		}
-		if entry == nil {
-			// A temporary metadata omission is not a instruction to erase a known rate.
+		upstream, kind, found := resolveUpstream(catalog, model, models[model], links[model])
+		if !found {
+			// A temporary omission upstream is not an instruction to erase a known rate.
 			if hasPrice {
 				result.Matched++
 			} else {
@@ -390,52 +504,49 @@ func (s *Service) syncOnce(ctx context.Context, refreshPrices bool) (result Sync
 			}
 			continue
 		}
-		price := ModelPrice{Model: model, PromptPricePer1M: derefOrZero(entry.Model.Cost.Input), CompletionPer1M: derefOrZero(entry.Model.Cost.Output),
-			CacheReadPer1M: derefOrZero(entry.Model.Cost.CacheRead), CacheWritePer1M: derefOrZero(entry.Model.Cost.CacheWrite), PriceMultiplier: 1, Source: SourceModelsDev, SyncedAtMS: s.clock().UnixMilli()}
+		multiplier := 1.0
 		if hasPrice && previous.PriceMultiplier > 0 {
-			price.PriceMultiplier = previous.PriceMultiplier
+			multiplier = previous.PriceMultiplier
 		}
-		rows = append(rows, price)
+		rows = append(rows, upstream.PriceFor(model, kind, multiplier, syncedAt))
 		result.Matched++
 	}
-	s.priceWrites.Lock()
-	err = s.store.UpsertModelPrices(ctx, rows)
-	s.priceWrites.Unlock()
-	if err != nil {
+	if err := s.store.UpsertModelPrices(ctx, rows); err != nil {
 		return result, err
 	}
 	result.Updated = int64(len(rows))
-	state := SyncState{Source: SourceModelsDev, LastMatched: result.Matched, LastUnmatched: result.Unmatched}
-	// Catalog-only reconciliation must not postpone the displayed price refresh.
-	if refreshPrices {
-		now := s.clock().UnixMilli()
-		state.LastSuccessAtMS = &now
+	return result, nil
+}
+
+// resolveUpstream applies an operator's link before any automatic match: a
+// pinned model is followed even when the matcher would choose another.
+func resolveUpstream(catalog Catalog, model, target, link string) (UpstreamModel, string, bool) {
+	if len(catalog.Models) == 0 {
+		return UpstreamModel{}, "", false
 	}
-	err = s.store.SavePricingSyncState(ctx, state)
-	return result, err
+	if link != "" {
+		upstream, ok := catalog.Lookup(link)
+		return upstream, MatchLinked, ok
+	}
+	if target == "" {
+		return UpstreamModel{}, "", false
+	}
+	match, ok := catalog.MatchModel(target)
+	return match.Model, match.Kind, ok
 }
 
 func (s *Service) recordFailure(ctx context.Context, syncErr error) {
-	state, err := s.store.GetPricingSyncState(ctx, SourceModelsDev)
+	state, err := s.store.GetPricingSyncState(ctx, SourceOpenRouter)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) && !errors.Is(err, context.Canceled) {
 		return
 	}
-	state.Source = SourceModelsDev
+	state.Source = SourceOpenRouter
 	state.LastError = syncErr.Error()
 	_ = s.store.SavePricingSyncState(ctx, state)
 }
 
-func derefOrZero(value *float64) float64 {
-	if value == nil {
-		return 0
-	}
-	if *value < 0 {
-		return 0
-	}
-	return *value
-}
-
-// ListPrices exposes the price table for the management API.
+// ListPrices exposes the price table of the current CPA catalog, each row
+// carrying its derived mode.
 func (s *Service) ListPrices(ctx context.Context) ([]ModelPrice, error) {
 	rows, err := s.store.ListModelPrices(ctx)
 	if err != nil {
@@ -445,9 +556,15 @@ func (s *Service) ListPrices(ctx context.Context) ([]ModelPrice, error) {
 	if err != nil {
 		return nil, err
 	}
+	links, err := s.store.ListModelLinks(ctx)
+	if err != nil {
+		return nil, err
+	}
 	current := make([]ModelPrice, 0, len(rows))
 	for _, p := range rows {
 		if _, ok := models[p.Model]; ok {
+			_, linked := links[p.Model]
+			p.Mode = DeriveMode(p.Source, linked)
 			current = append(current, p)
 		}
 	}
@@ -457,7 +574,6 @@ func (s *Service) ListPrices(ctx context.Context) ([]ModelPrice, error) {
 // UsedUnpricedModels lists only current CPA models without a price. Historical
 // usage does not create an operator maintenance obligation.
 func (s *Service) UsedUnpricedModels(ctx context.Context, limit int) ([]string, error) {
-
 	models, err := s.store.ListPricingModels(ctx)
 	if err != nil {
 		return nil, err
@@ -478,6 +594,69 @@ func (s *Service) UsedUnpricedModels(ctx context.Context, limit int) ([]string, 
 		result = append(result, model)
 	}
 	sort.Strings(result)
+	if limit > 0 && len(result) > limit {
+		result = result[:limit]
+	}
+	return result, nil
+}
+
+// AutomaticMatch is what auto mode would price a model at, from the stored
+// snapshot only; ok is false when nothing matches automatically.
+func (s *Service) AutomaticMatch(ctx context.Context, model string) (Match, bool, error) {
+	if s == nil || s.store == nil {
+		return Match{}, false, errors.New("pricing service is not initialized")
+	}
+	models, err := s.store.ListPricingModels(ctx)
+	if err != nil {
+		return Match{}, false, err
+	}
+	target, ok := models[model]
+	if !ok {
+		target = model
+	}
+	if target == "" {
+		return Match{}, false, nil
+	}
+	catalog, ok := s.localCatalog(ctx)
+	if !ok {
+		return Match{}, false, nil
+	}
+	match, found := catalog.MatchModel(target)
+	return match, found, nil
+}
+
+// Suggestions offers the OpenRouter models a CPA model most resembles, from the
+// stored snapshot only. A model that matches automatically needs no suggestion,
+// so its first entry is the automatic match.
+func (s *Service) Suggestions(ctx context.Context, model string, limit int) ([]UpstreamModel, error) {
+	if s == nil || s.store == nil {
+		return nil, errors.New("pricing service is not initialized")
+	}
+	models, err := s.store.ListPricingModels(ctx)
+	if err != nil {
+		return nil, err
+	}
+	target := models[model]
+	if target == "" {
+		target = model
+	}
+	catalog, ok := s.localCatalog(ctx)
+	if !ok {
+		return nil, nil
+	}
+	var result []UpstreamModel
+	if match, ok := catalog.MatchModel(target); ok {
+		result = append(result, match.Model)
+	}
+	for _, candidate := range catalog.Suggest(target, limit+1) {
+		if len(result) >= limit {
+			break
+		}
+		if len(result) > 0 && result[0].ID == candidate.ID {
+			continue
+		}
+		result = append(result, candidate)
+	}
 	return result, nil
 }
 
@@ -488,14 +667,14 @@ func (s *Service) SyncStateView(ctx context.Context) (SyncState, bool, error) {
 	cachedHours := s.autoSyncIntervalHours
 	s.mu.Unlock()
 
-	state, err := s.store.GetPricingSyncState(ctx, SourceModelsDev)
+	state, err := s.store.GetPricingSyncState(ctx, SourceOpenRouter)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			hours := cachedHours
 			if hours <= 0 && cachedHours == 0 {
 				hours = 24
 			}
-			return SyncState{Source: SourceModelsDev, AutoSyncIntervalHours: hours}, false, nil
+			return SyncState{Source: SourceOpenRouter, AutoSyncIntervalHours: hours}, false, nil
 		}
 		return SyncState{}, false, err
 	}
@@ -509,51 +688,93 @@ func (s *Service) SyncStateView(ctx context.Context) (SyncState, bool, error) {
 	return state, true, nil
 }
 
-// SaveManualPrices validates operator-edited rows and persists them as manual
-// source. Manual rows are never touched by later models.dev syncs.
-func (s *Service) SaveManualPrices(ctx context.Context, rows []ModelPrice) error {
-	return s.SaveManualPricesChecked(ctx, rows, nil)
+// SetModelMode applies one operator decision. Every mode change is a single
+// write, so it mints exactly one price version: custom stores the operator's
+// rates, linked pins an OpenRouter model and prices it now, auto drops any pin
+// and prices from the automatic match. A switch that would leave the model
+// without a price is refused instead.
+func (s *Service) SetModelMode(ctx context.Context, change ModeChange) (ModelPrice, error) {
+	return s.SetModelModeChecked(ctx, change, nil)
 }
 
-// SaveManualPricesChecked makes approval preconditions atomic with all local price writes.
-func (s *Service) SaveManualPricesChecked(ctx context.Context, rows []ModelPrice, check func([]ModelPrice) error) error {
+// SetModelModeChecked makes approval preconditions atomic with the write.
+func (s *Service) SetModelModeChecked(ctx context.Context, change ModeChange, check func([]ModelPrice) error) (ModelPrice, error) {
 	if s == nil || s.store == nil {
-		return errors.New("pricing service is not initialized")
+		return ModelPrice{}, errors.New("pricing service is not initialized")
 	}
+	change.Model = strings.TrimSpace(change.Model)
+	change.UpstreamID = strings.TrimSpace(change.UpstreamID)
 	s.priceWrites.Lock()
 	defer s.priceWrites.Unlock()
 	if check != nil {
 		current, err := s.ListPrices(ctx)
 		if err != nil {
-			return err
+			return ModelPrice{}, err
 		}
 		if err := check(current); err != nil {
-			return err
+			return ModelPrice{}, err
 		}
-	}
-	if len(rows) == 0 {
-		return nil
 	}
 	models, err := s.store.ListPricingModels(ctx)
 	if err != nil {
-		return err
+		return ModelPrice{}, err
 	}
-	for i := range rows {
-		rows[i].Model = strings.TrimSpace(rows[i].Model)
-		if _, ok := models[rows[i].Model]; !ok {
-			return fmt.Errorf("%w: %q", ErrModelNotInCatalog, rows[i].Model)
-		}
-		rows[i].Source = SourceManual
-		rows[i].SyncedAtMS = 0
-		if err := rows[i].Validate(); err != nil {
-			return fmt.Errorf("model %q: %w", rows[i].Model, err)
-		}
+	target, inCatalog := models[change.Model]
+	if !inCatalog {
+		return ModelPrice{}, fmt.Errorf("%w: %q", ErrModelNotInCatalog, change.Model)
 	}
-	return s.store.UpsertModelPrices(ctx, rows)
+	multiplier := change.Multiplier
+	if multiplier == 0 {
+		multiplier = 1
+	}
+	var row ModelPrice
+	link := ""
+	switch change.Mode {
+	case ModeCustom:
+		row = change.Price
+		row.Model = change.Model
+		row.Source = SourceManual
+		row.SyncedAtMS = 0
+		row.UpstreamID = strings.TrimSpace(row.UpstreamID)
+		row.MatchKind = ""
+		row.PriceMultiplier = multiplier
+		row.Tiers = CanonicalTiers(row.Tiers)
+	case ModeLinked, ModeAuto:
+		// Only the local snapshot: the write lock is held, and a link can only name
+		// a model the picker showed from that same snapshot.
+		catalog, ok := s.localCatalog(ctx)
+		if !ok {
+			return ModelPrice{}, fmt.Errorf("%w: the price list has not been downloaded yet", ErrUpstreamNotFound)
+		}
+		if change.Mode == ModeLinked {
+			upstream, ok := catalog.Lookup(change.UpstreamID)
+			if !ok {
+				return ModelPrice{}, fmt.Errorf("%w: %q", ErrUpstreamNotFound, change.UpstreamID)
+			}
+			row = upstream.PriceFor(change.Model, MatchLinked, multiplier, s.clock().UnixMilli())
+			link = upstream.ID
+		} else {
+			match, ok := catalog.MatchModel(target)
+			if target == "" || !ok {
+				return ModelPrice{}, fmt.Errorf("%w: %q", ErrNoAutomaticMatch, change.Model)
+			}
+			row = match.Model.PriceFor(change.Model, match.Kind, multiplier, s.clock().UnixMilli())
+		}
+	default:
+		return ModelPrice{}, ErrInvalidMode
+	}
+	if err := row.ValidateWrite(); err != nil {
+		return ModelPrice{}, fmt.Errorf("model %q: %w", change.Model, err)
+	}
+	if err := s.store.ApplyModelPrice(ctx, row, link); err != nil {
+		return ModelPrice{}, err
+	}
+	row.Mode = change.Mode
+	return row, nil
 }
 
-// DeletePrice removes one operator-managed row; the next sync may recreate it
-// as an auto row when models.dev still matches the model.
+// DeletePrice retires one price and its pin; the next sync may recreate an
+// automatic price when OpenRouter still matches the model.
 func (s *Service) DeletePrice(ctx context.Context, model string) (bool, error) {
 	return s.DeletePriceChecked(ctx, model, nil)
 }
@@ -579,4 +800,66 @@ func (s *Service) DeletePriceChecked(ctx context.Context, model string, check fu
 		s.NotifyModelsChanged()
 	}
 	return deleted, err
+}
+
+// ListChannels returns every channel multiplier.
+func (s *Service) ListChannels(ctx context.Context) ([]ChannelMultiplier, error) {
+	if s == nil || s.store == nil {
+		return nil, errors.New("pricing service is not initialized")
+	}
+	return s.store.ListChannelMultipliers(ctx)
+}
+
+// SetChannel stores one channel multiplier; it governs requests stamped from
+// now on and never reprices recorded ones.
+func (s *Service) SetChannel(ctx context.Context, channel ChannelMultiplier) (ChannelMultiplier, error) {
+	return s.SetChannelChecked(ctx, channel, nil)
+}
+
+// SetChannelChecked makes approval preconditions atomic with the write.
+func (s *Service) SetChannelChecked(ctx context.Context, channel ChannelMultiplier, check func([]ChannelMultiplier) error) (ChannelMultiplier, error) {
+	if s == nil || s.store == nil {
+		return ChannelMultiplier{}, errors.New("pricing service is not initialized")
+	}
+	if err := channel.Validate(); err != nil {
+		return ChannelMultiplier{}, err
+	}
+	s.priceWrites.Lock()
+	defer s.priceWrites.Unlock()
+	if err := s.checkChannels(ctx, check); err != nil {
+		return ChannelMultiplier{}, err
+	}
+	if err := s.store.UpsertChannelMultiplier(ctx, channel); err != nil {
+		return ChannelMultiplier{}, err
+	}
+	return channel, nil
+}
+
+// DeleteChannel returns a channel to 1x for requests stamped from now on.
+func (s *Service) DeleteChannel(ctx context.Context, channel string) (bool, error) {
+	return s.DeleteChannelChecked(ctx, channel, nil)
+}
+
+// DeleteChannelChecked shares the write lock and the approval precondition.
+func (s *Service) DeleteChannelChecked(ctx context.Context, channel string, check func([]ChannelMultiplier) error) (bool, error) {
+	if s == nil || s.store == nil {
+		return false, errors.New("pricing service is not initialized")
+	}
+	s.priceWrites.Lock()
+	defer s.priceWrites.Unlock()
+	if err := s.checkChannels(ctx, check); err != nil {
+		return false, err
+	}
+	return s.store.DeleteChannelMultiplier(ctx, strings.TrimSpace(channel))
+}
+
+func (s *Service) checkChannels(ctx context.Context, check func([]ChannelMultiplier) error) error {
+	if check == nil {
+		return nil
+	}
+	current, err := s.store.ListChannelMultipliers(ctx)
+	if err != nil {
+		return err
+	}
+	return check(current)
 }

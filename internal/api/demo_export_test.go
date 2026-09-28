@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -121,6 +122,8 @@ func demoExportCases() []demoExportCase {
 		{Name: "api-keys-with-keys", Path: "/api/v1/management/api-keys?include_keys=true"},
 		{Name: "client-key-aliases", Path: "/api/v1/management/client-key-aliases"},
 		{Name: "pricing", Path: "/api/v1/pricing"},
+		{Name: "pricing-attention", Path: "/api/v1/pricing/attention"},
+		{Name: "pricing-catalog", Path: "/api/v1/pricing/catalog"},
 		{Name: "plugins", Path: "/api/v1/management/plugins"},
 		{Name: "plugins-settings", Path: "/api/v1/management/plugins/settings"},
 		// Each installed plugin's settings document, for the editor the list opens. The
@@ -164,6 +167,12 @@ func demoExportCases() []demoExportCase {
 		// captured response. Deriving it means reseeding cannot break it.
 		{Name: "usage-event-detail", Route: "/api/v1/usage/events/{id}", From: demoExportFirstEventPath},
 		{Name: "audit-export", Path: "/api/v1/management/audit/export"},
+	}
+	// The price editor reads one model at a time, and the price book opens it for any
+	// row, so every model the book lists has its own captured read.
+	for _, model := range demo.PricingCatalogModels() {
+		cases = append(cases, demoExportCase{Name: "pricing-model-" + model, Route: "/api/v1/pricing/models/{model}",
+			Path: "/api/v1/pricing/models/" + url.PathEscape(model)})
 	}
 	// The dashboard's window picker. Each position is a distinct response and the
 	// console offers all of them, so exporting only the default would leave the rest

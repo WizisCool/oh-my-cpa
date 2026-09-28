@@ -2,9 +2,14 @@ package repository
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 )
 
 // ListPricingModels returns the last complete CPA catalog, never traffic history.
@@ -30,8 +35,9 @@ func (r *Repository) ListPricingModels(ctx context.Context) (map[string]string, 
 
 // ReplacePricingModels publishes a complete snapshot atomically. Removed or
 // retargeted automatic prices are retired with version tombstones in the same
-// transaction; manual overrides stay archived and are hidden by the catalog.
-func (r *Repository) ReplacePricingModels(ctx context.Context, models map[string]string) (int64, error) {
+// transaction; custom prices and pins stay archived and are hidden by the
+// catalog, so a model that returns resumes them.
+func (r *Repository) ReplacePricingModels(ctx context.Context, models map[string]string, providers ...pricing.CatalogProvider) (int64, error) {
 	if err := r.requirePricingSchema(ctx); err != nil {
 		return 0, err
 	}
@@ -54,17 +60,23 @@ func (r *Repository) ReplacePricingModels(ctx context.Context, models map[string
 	for model, target := range models {
 		model = strings.TrimSpace(model)
 		target = strings.TrimSpace(target)
-		if model == "" || target == "" || len(model) > 512 || len(target) > 512 {
+		// An empty target is CPA's ambiguous-alias sentinel, not a missing model.
+		// Persist it so unrelated models still sync without guessing an alias price.
+		if model == "" || len(model) > 512 || len(target) > 512 {
 			return 0, fmt.Errorf("invalid pricing catalog identity")
 		}
 		if _, err = stmt.ExecContext(ctx, model, target); err != nil {
 			return 0, err
 		}
 	}
-	result, err := tx.ExecContext(ctx, `DELETE FROM model_prices WHERE source='modelsdev' AND (
+	// A model that left the catalog loses its automatic price. A model whose
+	// alias target changed loses it too, unless an operator pinned it: the pin,
+	// not the alias, decides what a linked model costs.
+	result, err := tx.ExecContext(ctx, `DELETE FROM model_prices WHERE source<>'manual' AND (
  NOT EXISTS(SELECT 1 FROM next_pricing_catalog n WHERE n.model=model_prices.model)
- OR EXISTS(SELECT 1 FROM pricing_model_catalog old JOIN next_pricing_catalog n ON n.model=old.model
- WHERE old.model=model_prices.model AND old.price_model<>n.price_model))`)
+ OR (NOT EXISTS(SELECT 1 FROM pricing_model_links l WHERE l.model=model_prices.model)
+ AND EXISTS(SELECT 1 FROM pricing_model_catalog old JOIN next_pricing_catalog n ON n.model=old.model
+ WHERE old.model=model_prices.model AND old.price_model<>n.price_model)))`)
 	if err != nil {
 		return 0, fmt.Errorf("retire automatic prices: %w", err)
 	}
@@ -72,8 +84,70 @@ func (r *Repository) ReplacePricingModels(ctx context.Context, models map[string
 	if _, err = tx.ExecContext(ctx, `DELETE FROM pricing_model_catalog; INSERT INTO pricing_model_catalog SELECT * FROM next_pricing_catalog;`); err != nil {
 		return 0, err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE pricing_catalog_state SET updated_at_ms=? WHERE id=1`, time.Now().UnixMilli()); err != nil {
+	if providers == nil {
+		providers = []pricing.CatalogProvider{}
+	}
+	providerJSON, err := json.Marshal(providers)
+	if err != nil {
+		return 0, err
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE pricing_catalog_state SET updated_at_ms=?,providers_json=? WHERE id=1`, time.Now().UnixMilli(), string(providerJSON)); err != nil {
 		return 0, err
 	}
 	return pruned, tx.Commit()
+}
+
+// ListPricingProviders is a local read of the last complete discovery sweep.
+func (r *Repository) ListPricingProviders(ctx context.Context) ([]pricing.CatalogProvider, error) {
+	if err := r.requirePricingSchema(ctx); err != nil {
+		return nil, err
+	}
+	var encoded string
+	if err := r.SQL().QueryRowContext(ctx, `SELECT providers_json FROM pricing_catalog_state WHERE id=1`).Scan(&encoded); err != nil {
+		return nil, err
+	}
+	providers := []pricing.CatalogProvider{}
+	if err := json.Unmarshal([]byte(encoded), &providers); err != nil {
+		return nil, err
+	}
+	return providers, nil
+}
+
+// PutProviderPreferencesAfterDelete moves membership and identity overlays together;
+// otherwise an old positional group can display the next provider's new name.
+func (r *Repository) PutProviderPreferencesAfterDelete(ctx context.Context, values map[string]string, idPrefix string, deletedIndex int) error {
+	if err := r.requirePricingSchema(ctx); err != nil {
+		return err
+	}
+	return r.putPreferences(ctx, values, func(tx *sql.Tx) error {
+		var encoded string
+		if err := tx.QueryRowContext(ctx, `SELECT providers_json FROM pricing_catalog_state WHERE id=1`).Scan(&encoded); err != nil {
+			return err
+		}
+		var providers []pricing.CatalogProvider
+		if err := json.Unmarshal([]byte(encoded), &providers); err != nil {
+			return err
+		}
+		shifted := make([]pricing.CatalogProvider, 0, len(providers))
+		for _, provider := range providers {
+			if strings.HasPrefix(provider.ID, idPrefix) {
+				index, err := strconv.Atoi(strings.TrimPrefix(provider.ID, idPrefix))
+				if err == nil {
+					if index == deletedIndex {
+						continue
+					}
+					if index > deletedIndex {
+						provider.ID = fmt.Sprintf("%s%d", idPrefix, index-1)
+					}
+				}
+			}
+			shifted = append(shifted, provider)
+		}
+		document, err := json.Marshal(shifted)
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `UPDATE pricing_catalog_state SET providers_json=? WHERE id=1`, string(document))
+		return err
+	})
 }

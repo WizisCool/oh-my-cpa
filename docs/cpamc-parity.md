@@ -133,3 +133,7 @@ Credential management uses one overview list at `/oauth-management`. Its credent
 Drawer separates complete quota information, safe configuration and models into
 three tabs. This changes presentation, not provider/action coverage; exact auth-index
 matching, independent OAuth sessions and contextual provider aliases are retained.
+
+### Cost & Usage workbench
+
+The price book groups models by actual configured API-key and OAuth providers, reuses their names/icons, and offers provider and price-mode filters, separator-tolerant search and 20-row pagination. Provider groups sort by routing priority; model names use stable case-aware natural ordering. Shared model memberships edit one global price, and unpriced models offer suggestions in place. The OpenRouter picker paginates its entire searchable catalog.

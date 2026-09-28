@@ -12,7 +12,7 @@ browser ──▶ reverse proxy or Vite ──▶ Go process (one binary)
                                         ├─ embedded React SPA (internal/web/dist)
                                         ├─ SQLite (WAL, one connection)
                                         ├─ usage collector  ──▶ CPA
-                                        └─ pricing sync loop ──▶ models.dev
+                                        └─ pricing sync loop ──▶ openrouter.ai
 
 Go process ──▶ CPA management API (/v0/management; /v8/management on v8) ──▶ upstream providers
 Go process ──▶ CPA RESP usage channel
@@ -44,7 +44,7 @@ browser ──▶ Go process (one binary, demo mode)
               └─ usage collector: not started; pricing sync: not started
 ```
 
-There is no arrow to models.dev and none to a provider, because the demo starts
+There is no arrow to openrouter.ai and none to a provider, because the demo starts
 neither the pricing sync nor any capture loop, and the fixture answers the quota
 reads from its own catalogue instead of forwarding them. It does listen: the console
 is served on the port the platform routes to. What it never does is connect anywhere
@@ -67,7 +67,7 @@ cycle even though the `internal/usage` directory appears in both directions.
 | `internal/auth` | Admin session cookie: sign, verify, rotate | — |
 | `internal/usage` | Decode CPA usage/error payloads into typed events | `security` |
 | `internal/usage/resp` | Minimal RESP client for CPA's subscribe/LPOP subset | — |
-| `internal/pricing` | Catalog snapshot, model matching, sync service, money math | — |
+| `internal/pricing` | OpenRouter fetch and decode, model matching, tiered quotes, sync service, modes and channel multipliers | — |
 | `internal/cpa/management` | Typed CPA Management API client (`/v0/management`, plus the grouped `/v8/management` routes where the gateway has them) and RESP stream wrapper | `internal/usage/resp` |
 | `internal/cpa/gateway` | Fixed-endpoint CPA inference client for the Playground and Agent: client-key auth, model directory, bounded SSE parsing, and bounded tool-call assembly for the Agent loop | — |
 | `internal/cpa/discovery` | Normalize CPA resources into the local identity model | `management`, `crypto`, `domain`, `security` |
@@ -1226,30 +1226,43 @@ raw header or widen what was deliberately minimised.
 ## 7. Pricing flow
 
 The catalog, the editable current price, and the immutable version history are
-three separate things (ADR 0003):
+separate things (ADR 0003); OpenRouter is the only automatic source, and a price
+carries tiers and is scaled per channel (ADR 0030). The design, matching chain
+and limits are in `docs/plans/model-prices.md`.
+
+The CPA discovery sweep returns both alias targets and non-secret provider membership. Migration 029 adds `pricing_catalog_state.providers_json`; the repository publishes that metadata in the same transaction as `pricing_model_catalog`, and pricing access requires migration 029. Empty price targets represent ambiguous aliases and are valid catalog entries but cannot auto-match. Provider metadata carries only the endpoint hostname for existing brand-icon resolution, never URL credentials, paths or query strings. The pricing response projects provider display-name/icon overlays locally; no per-model or per-credential network requests are made by the workbench. The existing `pricing_list` capability also returns membership for the models in its current page.
+
+The price book groups by actual configured API-key/OAuth providers, orders groups by routing priority then name, and renders at most 20 model memberships per page across all groups. Provider marks appear only in group headings, with individual models rendered as text. Search and filters reset pagination on both viewport layouts. The shared `ResponsiveList` also controls and clamps desktop and phone page state consistently.
+
 
 ```text
-CPA catalog read ──▶ pricing_model_catalog   (last complete snapshot)
+CPA catalog read ──▶ pricing_model_catalog      (last complete snapshot)
                           │
-models.dev api.json ──▶ pricing.Service ──▶ model_prices      (current projection)
-                          │                      │ triggers
-                          │                      ▼
-                          │              model_price_versions (immutable, time-effective)
+openrouter.ai/api/v1/models ──▶ pricing_upstream_catalog (last complete download)
+                          │
                           ▼
-                    manual rows win; a delete writes an unavailable tombstone
+                   pricing.Service ──▶ model_prices ──triggers──▶ model_price_versions
+                   (auto match, pins in                           (immutable, time-effective)
+                    pricing_model_links;
+                    custom rows win)
+operator ──▶ pricing_channels ──triggers──▶ pricing_channel_versions (immutable)
 ```
 
-`usage_events` stores the price version id and integer USD nanos chosen in the
-event's own insert transaction, using the request timestamp. Historical totals
-never join the mutable `model_prices` table, so a later edit cannot rewrite an
-invoice. A request with no effective version is stored with pricing status
-`unpriced` (`legacy_unpriced` for rows that predate migration 019), cost absent,
-and is never backfilled.
+`usage_events` stores, in the event's own insert transaction and by the request
+timestamp, the price version id, the channel version id (absent means 1×), the
+index of the tier the request qualified for, and integer USD nanos computed by
+`pricing.Quote`. Historical totals never join the mutable tables, so a later edit
+cannot rewrite an invoice. A request with no effective price version is stored
+with pricing status `unpriced` (`legacy_unpriced` for rows that predate migration
+019), cost absent, and is never backfilled. The request detail recomputes a
+breakdown from the locked versions for display; the stored amount stays
+authoritative.
 
-Matching (`internal/pricing/match.go`) ranks catalog candidates with a fixed
-tie-break chain instead of refusing ambiguous ones; an entry without explicit
-input/output rates is never selected, because a missing rate must not become
-zero.
+A sync downloads outside the write lock, then re-reads prices and pins under it,
+so an operator's pin set during the download is honoured. Catalog reconciliation
+every five minutes prices a model CPA starts serving from the stored snapshot,
+without reaching the network. Every surface that shows a cost opens the same
+price editor in place (`web/src/components/pricing/`).
 
 ## 8. Quota flow
 
@@ -1289,7 +1302,7 @@ account as the reading it was decided from.
 | --- | --- | --- |
 | Instances & identity | `cpa_instances`, `discovered_resources`, `resource_overrides`, `connections`, `cpa_bindings` | Encrypted management key; bindings survive upstream removal. `connections` is provisioned by migration 006 for the Connection entity but no code reads or writes it yet — treat it as reserved, not as a live table |
 | Usage | `usage_inboxes`, `usage_events`, `error_events`, `ingest_gaps`, `usage_overview_hourly_stats`, `usage_overview_daily_stats`, `usage_aggregation_checkpoints` | Milliseconds; raw payloads encrypted |
-| Pricing | `model_prices`, `model_price_versions`, `pricing_sync_state`, `pricing_model_catalog`, `pricing_catalog_state` | Versions are append-only via triggers |
+| Pricing | `model_prices`, `model_price_versions`, `pricing_sync_state`, `pricing_model_catalog`, `pricing_catalog_state`, `pricing_model_links`, `pricing_upstream_catalog`, `pricing_channels`, `pricing_channel_versions` | Price and channel versions are append-only via triggers; migration 028 added tiers, links, the stored OpenRouter snapshot and channels, and `usage_events.channel_version_id`/`price_tier`. Migration 029 added `pricing_catalog_state.providers_json`; the pricing repository refuses to run before migration 29 |
 | Agent | `agent_documents` | Encrypted latest Agent session and capability operations (migration 026). Sessions are capped and trimmed by whole turns; terminal operations are retained 7 days and purged lazily during Agent requests |
 | Operations | `audit_events`, `ui_preferences`, `quota_snapshots`, `schema_migrations` | Audit has no update or delete path — only `RecordAuditEvent` writes and read queries (`ListAuditEvents`, `QueryAuditEvents`) exist, and export itself is audited; the schema carries no enforcement trigger, so the guarantee lives in the repository API. Migration 027 adds `idx_audit_events_request_action`, which the trail's attempt folding looks up |
 | Release observation | `release_index`, `release_check_state` | Migrations 024 and 025; `truncated` is added by 025, so a database that applied 024 before it existed still gains the column. `release_index` holds one row per published version (tag, name, publication time, prerelease flag) and is **replaced as a unit per product** by `PublishReleaseSnapshot`, because a feed that stops listing a withdrawn release must stop the console claiming it exists. `release_check_state` holds one row per product — the last attempt and success times, the redacted failure reason, the latest tag, the ETag and the truncation flag — and is written by `RecordReleaseCheckAttempt`/`PublishReleaseSnapshot`/`RecordReleaseCheckFailure`, read by `ListReleases` and `GetReleaseCheckState(ForRepository)`. A release's prose body is **never stored**: it lives in bounded process memory for the life of the process, so an index without notes still names the versions and links to the source (see §10) |
@@ -1846,14 +1859,20 @@ lock, the display-mask rules and the schema instead of drifting from them.
 The consequence is that the fabricated history needs the price version it is
 pretending existed: the price lock resolves a version by the request's own
 timestamp, and the trigger that shadows every price write stamps the moment of the
-write. `Repository.SeedModelPriceHistoryBackfill` is the one caller that writes a
-version at an explicit time, and it exists so the fixture can stay under the real
-lock rather than writing a cost column directly.
+write. `Repository.SeedModelPriceHistoryBackfill` and its channel counterpart are the
+only callers that write a version at an explicit time, and they exist so the fixture
+can stay under the real lock rather than writing a cost column directly.
 
 The price list is seeded with the catalogue the pricing page resolves against,
 because a real deployment fills that catalogue from the gateway's own model list
 during a sync and the demo deliberately runs none. Without it the page would
-intersect its stored prices with an empty catalogue and render nothing.
+intersect its stored prices with an empty catalogue and render nothing. The prices
+themselves come from a trimmed copy of OpenRouter's real list
+(`internal/demo/openrouter_snapshot.json`), decoded and matched by the production
+code, beside one pinned model, hand-set rates for the relay models, one channel
+multiplier and one catalogue model left unpriced in the grouped price book.
+`Repository.SeedChannelHistoryBackfill` does for the channel multiplier what the
+price backfill does for prices.
 
 Seeding is also why the demo database is rebuilt on every boot. A platform that
 scales to zero brings the process back hours later; a database left behind would end

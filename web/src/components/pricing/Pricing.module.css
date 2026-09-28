@@ -1,0 +1,457 @@
+/* ── Shared pricing surfaces: the editor drawer, tier marks, cost breakdown ── */
+
+.drawer :global(.ant-drawer-body) {
+  padding: 20px 24px;
+}
+
+.drawer-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.drawer-model {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.drawer-body {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.drawer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.drawer-footer-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.drawer-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.section h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mode-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mode-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.field-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.required {
+  margin-left: 2px;
+  color: var(--danger);
+}
+
+.match-kind {
+  margin-left: auto;
+  flex: none;
+  color: var(--meta);
+  font-size: 11px;
+}
+
+/* ── One OpenRouter model ── */
+.upstream-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+}
+
+.upstream-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.upstream-identity {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.upstream-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.upstream-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.rate-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.rate-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rate-cell dt {
+  color: var(--meta);
+  font-size: 11px;
+}
+
+.rate-cell dd {
+  margin: 0;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.tier-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tier-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  color: var(--fg-2);
+  font-size: 11px;
+  white-space: nowrap;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm, 4px);
+}
+
+/* ── The OpenRouter picker ── */
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.picker-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+}
+
+.picker-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 10px;
+  color: var(--fg-2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  transition: background-color var(--motion-fast) var(--ease-standard);
+}
+
+.picker-option:last-child {
+  border-bottom: 0;
+}
+
+.picker-option:hover {
+  background: var(--hover);
+}
+
+.picker-option:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.picker-option-selected {
+  color: var(--fg);
+  box-shadow: inset 2px 0 0 var(--fg);
+  background: var(--selected-inset, var(--hover));
+}
+
+.picker-option-id {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picker-suggested {
+  flex: none;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.picker-option-rates {
+  flex: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Custom rates ── */
+.rate-inputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+
+.rate-input,
+.tier-field,
+.multiplier-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  color: var(--fg-2);
+  font-size: 12px;
+}
+
+.rate-input :global(.ant-input-number),
+.tier-field :global(.ant-input-number),
+.tier-field :global(.ant-picker) {
+  width: 100%;
+}
+
+.multiplier-field :global(.ant-input-number) {
+  width: 160px;
+}
+
+.rate-reference {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--meta);
+  font-size: 11px;
+}
+
+.rate-delta {
+  font-variant-numeric: tabular-nums;
+}
+
+.rate-up {
+  color: var(--warn);
+}
+
+.rate-down {
+  color: var(--success);
+}
+
+.tier-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.tier-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+}
+
+.tier-row-invalid {
+  border-color: var(--danger);
+}
+
+.tier-conditions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.tier-rates {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+/* ── Preview and history ── */
+.preview-table,
+.breakdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.preview-table th,
+.preview-table td,
+.breakdown-table th,
+.breakdown-table td {
+  padding: 6px 8px;
+  text-align: right;
+  font-weight: 400;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.preview-table th:first-child,
+.breakdown-table th:first-child {
+  text-align: left;
+  color: var(--fg-2);
+}
+
+.preview-table thead th,
+.breakdown-table thead th {
+  color: var(--meta);
+  font-size: 11px;
+}
+
+.preview-new {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.history {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.history-item time {
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.history-retired time {
+  color: var(--muted);
+}
+
+.history-source {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.history-rates {
+  flex-basis: 100%;
+}
+
+/* ── A request's cost breakdown ── */
+.breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.breakdown-tier {
+  margin: 0;
+  color: var(--fg-2);
+  font-size: 12px;
+}
+
+.breakdown-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--fg-2);
+}
+
+.breakdown-total strong {
+  color: var(--fg);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.breakdown-source {
+  margin: 0;
+  color: var(--meta);
+  font-size: 12px;
+}
+
+.breakdown-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .rate-grid,
+  .tier-rates {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rate-inputs,
+  .tier-conditions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

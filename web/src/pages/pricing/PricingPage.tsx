@@ -1,118 +1,106 @@
 import React from 'react';
-import { Alert, App as AntdApp, Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Tooltip } from 'antd';
-import {
-  SyncOutlined,
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  SearchOutlined,
-  ThunderboltOutlined,
-  WarningOutlined,
-} from '../../components/icons';
+import { Alert, App as AntdApp, Button, Input, Pagination, Popover, Segmented, Select, Tooltip } from 'antd';
 import dayjs from 'dayjs';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { EditOutlined, LinkOutlined, SearchOutlined, SyncOutlined } from '../../components/icons';
 import { api, ApiError, describeError } from '../../api/client';
-import { useT } from '../../i18n';
+import { useT, type TFunc } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
-import type { ModelPrice } from '../../types/pricing';
-import { PricingLeaderboard } from './PricingLeaderboard';
-import { useOverlayHistory } from '../../hooks/useOverlayHistory';
+import { formatTimeAgo } from '../../utils/format';
+import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { PageHeader } from '../../components/common/PageHeader';
 import { RefreshButton } from '../../components/common/RefreshButton';
 import { ResponsiveList } from '../../components/common/ResponsiveList';
-
-/** One page of the price list, shared by both renderings so a page means the same thing at
- *  either width. */
-const PAGE_SIZE = 50;
+import { StatusLabel, type StatusTone } from '../../components/common/StatusLabel';
+import { FactList } from '../../components/common/FactList';
+import type { PricedModel, PricingMode, PricingResponse, PricingUsage, UnpricedModel, UpstreamModel } from '../../types/pricing';
+import { formatMultiplier, formatRatePer1M, matchesModelSearch, modeOf } from '../../types/pricingDisplay';
+import { useOpenPriceEditor } from '../../components/pricing/PricingEditorContext';
+import { PRICING_QUERY_KEYS } from '../../components/pricing/pricingQueries';
+import { TierBadges } from '../../components/pricing/PricingParts';
+import { ProviderBrandIcon } from '../../components/LobeIcon';
+import { pluginOAuthProviderLogos, pluginOAuthLogoFor } from '../../types/pluginOAuthProviders';
+import { groupPricingModels, pagePricingGroups } from '../../types/pricingGroups';
+import { pricingModelIdentity, pricingProviderIdentity } from '../../components/pricing/pricingIdentity';
+import { pricingErrorText } from '../../components/pricing/pricingErrors';
+import { ChannelMultipliersPanel } from './ChannelMultipliersPanel';
+import { UsageCell } from './UsageCell';
 import styles from './PricingPage.module.css';
 
-/** Per-1M rates share one cell format: plain number with up to 6 decimal places. */
-function formatRate(value: number): string {
-  return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+/** One page of the price list, shared by both renderings so a page means the same thing at either width. */
+const PAGE_SIZE = 20;
+
+type PricingTab = 'models' | 'channels';
+type ModelFilter = 'all' | PricingMode | 'unpriced';
+
+/** A row of the book: a priced model, or a current model with no price yet. */
+type BookRow =
+  | (PricedModel & { rowKind: 'priced' })
+  | { rowKind: 'unpriced'; model: string; usage_30d: PricingUsage; suggestions: UpstreamModel[] };
+
+function rowMode(row: BookRow): ModelFilter {
+  return row.rowKind === 'unpriced' ? 'unpriced' : modeOf(row);
+}
+
+const MODE_TONES: Record<ModelFilter, StatusTone> = {
+  all: 'neutral',
+  auto: 'success',
+  linked: 'success',
+  custom: 'accent',
+  unpriced: 'warn',
+};
+
+function syncTone(data: PricingResponse | undefined): StatusTone {
+  if (!data) return 'neutral';
+  if (data.sync.running) return 'accent';
+  if (data.sync.state.last_error) return 'danger';
+  return data.sync.state.last_success_at_ms ? 'success' : 'warn';
+}
+
+function syncSummary(t: TFunc, data: PricingResponse | undefined): string {
+  if (!data) return t('pricing.sync.source_name');
+  if (data.sync.running) return t('pricing.sync.running');
+  if (data.sync.state.last_error) return t('pricing.sync.failed_short');
+  const success = data.sync.state.last_success_at_ms;
+  return success ? t('pricing.sync.synced_ago', { time: formatTimeAgo(success, Date.now(), t) }) : t('pricing.sync.never');
 }
 
 /**
- * One per-1M rate cell. A model with no price yet reads as a dash rather than $0.00, and a real
- * zero is dimmed so a free rate does not look like a priced one at a glance.
+ * The price book. OpenRouter prices every model it can match without the operator doing anything;
+ * this page is where the rest is decided - the models that need a price, the ones an operator
+ * pinned or priced by hand, and the multipliers for channels that do not bill list price.
  */
-function renderRate(value: number, row: ModelPrice, { zeroAsDash = false }: { zeroAsDash?: boolean } = {}): React.ReactNode {
-  if (row.updated_at_ms === 0 || (zeroAsDash && value === 0)) return <span className={styles['price-dimmed']}>—</span>;
-  return (
-    <span className={`${styles['price-number']} ${value === 0 ? styles['price-dimmed'] : ''}`}>
-      ${formatRate(value)}
-    </span>
-  );
-}
-
-/** Form values for the manual price editor; every rate is USD per 1M tokens. */
-interface PriceFormValues {
-  model: string;
-  prompt?: number | string;
-  completion?: number | string;
-  cacheRead?: number | string;
-  cacheWrite?: number | string;
-  multiplier?: number | string;
-}
-
-interface EditorState {
-  open: boolean;
-  editing: ModelPrice | null;
-}
-
-const CLOSED_EDITOR: EditorState = { open: false, editing: null };
-type FilterTabKey = 'all' | 'modelsdev' | 'manual' | 'unpriced';
-
 export const PricingPage: React.FC = () => {
   const t = useT();
   const isDemo = isDemoMode();
   const { message } = AntdApp.useApp();
   const queryClient = useQueryClient();
+  const openEditor = useOpenPriceEditor();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab: PricingTab = searchParams.get('tab') === 'channels' ? 'channels' : 'models';
   const [search, setSearch] = React.useState('');
-  const [activeTab, setActiveTab] = React.useState<FilterTabKey>('all');
-  const [editor, setEditor] = React.useState<EditorState>(CLOSED_EDITOR);
-  useOverlayHistory({ isOpen: editor.open, onClose: () => setEditor(CLOSED_EDITOR) });
-  const [form] = Form.useForm<PriceFormValues>();
-
-  const watchedPrompt = Number(Form.useWatch('prompt', form) ?? 0) || 0;
-  const watchedCompletion = Number(Form.useWatch('completion', form) ?? 0) || 0;
-  const watchedMultiplier = Number(Form.useWatch('multiplier', form) ?? 1) || 1;
+  const [filter, setFilter] = React.useState<ModelFilter>('all');
+  const [providerFilter, setProviderFilter] = React.useState('all');
+  const [page, setPage] = React.useState(1);
+  const isPhone = useIsPhoneViewport();
+  const listRef = React.useRef<HTMLElement>(null);
+  const plugins = useQuery({ queryKey: ['management-plugins'], queryFn: api.getPlugins, staleTime: 30_000 });
+  const pluginLogos = React.useMemo(() => pluginOAuthProviderLogos(plugins.data?.plugins), [plugins.data?.plugins]);
+  React.useEffect(() => { setPage(1); }, [search, filter, providerFilter]);
 
   const result = useQuery({
-    queryKey: ['pricing'],
+    queryKey: PRICING_QUERY_KEYS.book,
     queryFn: api.getPricing,
     staleTime: 30_000,
     refetchInterval: (query) => (query.state.data?.sync.running ? 2_500 : false),
   });
+  const data = result.data;
 
   const invalidate = () => {
-    void queryClient.invalidateQueries({ queryKey: ['pricing'] });
+    void queryClient.invalidateQueries({ queryKey: PRICING_QUERY_KEYS.book });
+    void queryClient.invalidateQueries({ queryKey: PRICING_QUERY_KEYS.attention });
   };
-
-  const saveMutation = useMutation({
-    // `updated_at_ms` is omitted rather than sent: the server stamps its own clock
-    // on every write, so a value from the browser would be ignored anyway and is
-    // better not transmitted at all.
-    mutationFn: async (rows: Array<Omit<ModelPrice, 'updated_at_ms'>>) => {
-      await api.updatePricingModels({ models: rows });
-    },
-    onSuccess: () => {
-      message.success(t('pricing.saved'));
-      setEditor(CLOSED_EDITOR);
-      form.resetFields();
-      invalidate();
-    },
-    onError: (err) => {
-      message.error(t('pricing.save_failed', { msg: describeError(err) }));
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (model: string) => api.deletePricingModel(model),
-    onSuccess: invalidate,
-    onError: (err) => {
-      message.error(t('pricing.delete_failed', { msg: describeError(err) }));
-    },
-  });
 
   const syncMutation = useMutation({
     mutationFn: () => api.startPricingSync(),
@@ -130,617 +118,358 @@ export const PricingPage: React.FC = () => {
     },
   });
 
-  const updateScheduleMutation = useMutation({
+  const scheduleMutation = useMutation({
     mutationFn: (intervalHours: number) => api.updatePricingSyncSchedule(intervalHours),
     onSuccess: () => {
       message.success(t('pricing.sync.schedule_updated'));
       invalidate();
     },
-    onError: (err) => {
-      message.error(describeError(err));
-    },
+    onError: (err) => message.error(describeError(err)),
   });
 
-  const models = result.data?.models ?? [];
-  const unpricedList = result.data?.unpriced ?? [];
-  const availableModels = React.useMemo(
-    () => [...new Set([...models.map((row) => row.model), ...unpricedList])].sort(),
-    [models, unpricedList],
-  );
-  const sync = result.data?.sync;
-  const state = sync?.state;
+  // Adopting a suggestion is a link, saved in one click from its model row without opening the editor.
+  const adoptMutation = useMutation({
+    mutationFn: ({ model, upstream }: { model: string; upstream: UpstreamModel }) =>
+      api.updatePricingModel(model, { mode: 'linked', upstream_id: upstream.id }),
+    onSuccess: (_, { model, upstream }) => {
+      message.success(t('pricing.adopted', { model, id: upstream.id }));
+      invalidate();
+    },
+    onError: (err) => message.error(t('pricing.save_failed', { msg: pricingErrorText(t, err) })),
+  });
 
-  const modelsDevCount = models.filter((m) => m.source === 'modelsdev').length;
-  const manualCount = models.filter((m) => m.source === 'manual').length;
-  const unpricedCount = unpricedList.length;
+  const rows = React.useMemo<BookRow[]>(() => {
+    if (!data) return [];
+    const priced = data.models.map((model): BookRow => ({ ...model, rowKind: 'priced' }));
+    const unpriced = data.unpriced.map((item: UnpricedModel): BookRow => ({ rowKind: 'unpriced', ...item }));
+    return [...priced, ...unpriced];
+  }, [data]);
 
-  const openAdd = (model = '') => {
-    form.setFieldsValue({
-      model,
-      prompt: undefined,
-      completion: undefined,
-      cacheRead: undefined,
-      cacheWrite: undefined,
-      multiplier: 1,
-    });
-    setEditor({ open: true, editing: null });
-  };
+  const counts = React.useMemo(() => {
+    const result: Record<ModelFilter, number> = { all: rows.length, auto: 0, linked: 0, custom: 0, unpriced: 0 };
+    rows.forEach((row) => { result[rowMode(row)] += 1; });
+    return result;
+  }, [rows]);
 
-  const openEdit = (row: ModelPrice) => {
-    form.setFieldsValue({
-      model: row.model,
-      prompt: row.prompt_price_per_1m,
-      completion: row.completion_price_per_1m,
-      cacheRead: row.cache_read_price_per_1m,
-      cacheWrite: row.cache_write_price_per_1m,
-      multiplier: row.price_multiplier,
-    });
-    setEditor({ open: true, editing: row });
-  };
-
-  const submitEditor = () => {
-    void form
-      .validateFields()
-      .then((values) => {
-        const parseRate = (val: unknown) => {
-          if (val === undefined || val === null || val === '') return 0;
-          const num = Number(val);
-          return Number.isFinite(num) && num >= 0 ? num : 0;
-        };
-        const row: Omit<ModelPrice, 'updated_at_ms'> = {
-          model: values.model.trim(),
-          prompt_price_per_1m: parseRate(values.prompt),
-          completion_price_per_1m: parseRate(values.completion),
-          cache_read_price_per_1m: parseRate(values.cacheRead),
-          cache_write_price_per_1m: parseRate(values.cacheWrite),
-          price_multiplier: parseRate(values.multiplier) || 1,
-          source: 'manual',
-          synced_at_ms: 0,
-        };
-        saveMutation.mutate([row]);
-      })
-      .catch(() => undefined);
-  };
-
-  // Filter datasource
-  const filteredData = React.useMemo(() => {
+  const visibleRows = React.useMemo(() => {
     const query = search.trim().toLowerCase();
-
-    if (activeTab === 'unpriced') {
-      return unpricedList
-        .filter((model) => (query ? model.toLowerCase().includes(query) : true))
-        .map(
-          (model): ModelPrice => ({
-            model,
-            prompt_price_per_1m: 0,
-            completion_price_per_1m: 0,
-            cache_read_price_per_1m: 0,
-            cache_write_price_per_1m: 0,
-            price_multiplier: 1,
-            source: 'manual',
-            synced_at_ms: 0,
-            updated_at_ms: 0,
-          }),
-        );
-    }
-
-    return models.filter((row) => {
-      const matchSearch = query ? row.model.toLowerCase().includes(query) : true;
-      if (!matchSearch) return false;
-      if (activeTab === 'modelsdev') return row.source === 'modelsdev';
-      if (activeTab === 'manual') return row.source === 'manual';
-      return true;
+    return rows.filter((row) => {
+      if (filter !== 'all' && rowMode(row) !== filter) return false;
+      if (!query) return true;
+      const upstream = row.rowKind === 'priced' ? row.upstream_id : '';
+      return matchesModelSearch(query, row.model, upstream);
     });
-  }, [models, unpricedList, search, activeTab]);
+  }, [rows, search, filter]);
+
+  const allGroups = React.useMemo(() => groupPricingModels(rows, data?.providers ?? []), [rows, data?.providers]);
+  const groups = React.useMemo(() => groupPricingModels(visibleRows, data?.providers ?? []), [visibleRows, data?.providers]);
+  const filteredGroups = groups.filter((group) => providerFilter === 'all' || group.id === providerFilter);
+  const totalRows = filteredGroups.reduce((total, group) => total + group.rows.length, 0);
+  const safePage = Math.min(page, Math.max(1, Math.ceil(totalRows / PAGE_SIZE)));
+  const pageGroups = pagePricingGroups(filteredGroups, safePage, PAGE_SIZE);
+  const changePage = (nextPage: number) => {
+    setPage(nextPage);
+    if (listRef.current && listRef.current.getBoundingClientRect().top < 0) listRef.current.scrollIntoView({ block: 'start' });
+  };
+  const pagination = { current: safePage, pageSize: PAGE_SIZE, total: totalRows, showSizeChanger: false, hideOnSinglePage: true, onChange: changePage };
 
 
-  // Table Columns
-  const columns = [
+  const selectTab = (next: PricingTab) => setSearchParams((current) => {
+    const params = new URLSearchParams(current);
+    if (next === 'models') params.delete('tab');
+    else params.set('tab', next);
+    return params;
+  }, { replace: true });
+
+  const priceColumns = [
     {
       title: t('pricing.col.model'),
-      dataIndex: 'model',
       key: 'model',
-      ellipsis: true,
-      render: (model: string) => (
+      render: (_: unknown, row: BookRow) => (
         <div className={styles['model-cell']}>
-          <span>{model}</span>
+          <div className={styles['model-text']}>
+            <span className={styles['model-name']} title={row.model}>{pricingModelIdentity(row.model).label}</span>
+            {row.rowKind === 'priced' ? (
+              <span className={styles['model-sub']}>
+                {row.upstream_id || (row.source === 'modelsdev' ? t('pricing.source.modelsdev') : t('pricing.source.manual'))}
+              </span>
+            ) : null}
+            {row.rowKind === 'priced' && <TierBadges tiers={row.tiers} />}
+            {row.rowKind === 'unpriced' && row.suggestions[0] && (
+              <div className={styles['suggestion']}>
+                <span className={styles['model-sub']} title={row.suggestions[0].id}>
+                  {t('pricing.attention.suggestion', { id: row.suggestions[0].id })}
+                </span>
+                <Button
+                  size="small"
+                  type="link"
+                  icon={<LinkOutlined />}
+                  loading={adoptMutation.isPending && adoptMutation.variables?.model === row.model}
+                  onClick={() => adoptMutation.mutate({ model: row.model, upstream: row.suggestions[0] })}
+                  data-testid="pricing-row-adopt"
+                >
+                  {t('pricing.attention.adopt')}
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       ),
     },
     {
-      title: t('pricing.col.prompt'),
-      dataIndex: 'prompt_price_per_1m',
-      key: 'prompt',
+      title: t('pricing.col.input'),
+      key: 'input',
       align: 'right' as const,
-      width: 112,
-      render: (val: number, row: ModelPrice) => renderRate(val, row),
+      width: 104,
+      render: (_: unknown, row: BookRow) => (row.rowKind === 'priced'
+        ? <span className={styles.rate}>{formatRatePer1M(row.prompt_price_per_1m)}</span>
+        : <span className={styles.dimmed}>—</span>),
     },
     {
-      title: t('pricing.col.completion'),
-      dataIndex: 'completion_price_per_1m',
-      key: 'completion',
+      title: t('pricing.col.output'),
+      key: 'output',
       align: 'right' as const,
-      width: 112,
-      render: (val: number, row: ModelPrice) => renderRate(val, row),
+      width: 104,
+      render: (_: unknown, row: BookRow) => (row.rowKind === 'priced'
+        ? <span className={styles.rate}>{formatRatePer1M(row.completion_price_per_1m)}</span>
+        : <span className={styles.dimmed}>—</span>),
     },
     {
-      title: t('pricing.col.cache_read'),
-      dataIndex: 'cache_read_price_per_1m',
-      key: 'cacheRead',
+      title: t('pricing.col.cache'),
+      key: 'cache',
       align: 'right' as const,
-      width: 112,
-      render: (val: number, row: ModelPrice) => renderRate(val, row),
-    },
-    {
-      title: t('pricing.col.cache_write'),
-      dataIndex: 'cache_write_price_per_1m',
-      key: 'cacheWrite',
-      align: 'right' as const,
-      width: 112,
-      // Cache writes are billed by only some providers, so a zero here is "not charged separately"
-      // rather than a free rate: it reads as a dash instead of $0.00.
-      render: (val: number, row: ModelPrice) => renderRate(val, row, { zeroAsDash: true }),
-    },
-    {
-      title: t('pricing.col.multiplier'),
-      dataIndex: 'price_multiplier',
-      key: 'multiplier',
-      align: 'center' as const,
-      width: 115,
-      render: (val: number, row: ModelPrice) =>
-        row.updated_at_ms === 0 ? (
-          <span className={styles['price-dimmed']}>—</span>
-        ) : val === 1 ? (
-          <span className={styles['price-dimmed']}>1.0×</span>
-        ) : (
-          <span className={styles['multiplier-badge']}>×{val}</span>
-        ),
-    },
-    {
-      title: t('pricing.col.source'),
-      dataIndex: 'source',
-      key: 'source',
-      width: 120,
-      render: (source: string, row: ModelPrice) =>
-        row.updated_at_ms === 0 ? (
-          <span className={`${styles['source-badge']} ${styles['source-unpriced']}`}>
-            {t('pricing.source.unpriced')}
-          </span>
-        ) : source === 'manual' ? (
-          <span className={`${styles['source-badge']} ${styles['source-manual']}`}>
-            <EditOutlined className={styles['source-icon']} />
-            {t('pricing.source.manual')}
-          </span>
-        ) : (
-          <span className={`${styles['source-badge']} ${styles['source-models-dev']}`}>
-            <ThunderboltOutlined className={styles['source-icon']} />
-            {t('pricing.source.modelsdev')}
-          </span>
-        ),
-    },
-    {
-      title: t('pricing.col.updated'),
-      dataIndex: 'updated_at_ms',
-      key: 'updated',
-      width: 120,
-      render: (val: number) => (
-        <span className={styles['price-dimmed']}>
-          {val ? dayjs(val).format('MM-DD HH:mm') : '—'}
+      width: 150,
+      render: (_: unknown, row: BookRow) => (row.rowKind === 'priced' ? (
+        <span className={styles.rate}>
+          {formatRatePer1M(row.cache_read_price_per_1m)}
+          <span className={styles.dimmed}> / </span>
+          {formatRatePer1M(row.cache_write_price_per_1m)}
         </span>
-      ),
+      ) : <span className={styles.dimmed}>—</span>),
+    },
+    {
+      title: t('pricing.col.pricing'),
+      key: 'mode',
+      width: 150,
+      render: (_: unknown, row: BookRow) => {
+        const mode = rowMode(row);
+        return (
+          <div className={styles['mode-cell']}>
+            <Tooltip title={mode === 'unpriced' ? t('pricing.unpriced_note') : undefined}>
+            <StatusLabel tone={MODE_TONES[mode]}>
+              {row.rowKind === 'priced' && row.source === 'modelsdev' ? t('pricing.mode.legacy') : t(`pricing.mode.${mode}`)}
+            </StatusLabel>
+            </Tooltip>
+            {row.rowKind === 'priced' && (mode === 'auto' && row.match_kind && row.match_kind !== 'exact' || row.price_multiplier !== 1) && (
+              <span className={styles['model-sub']}>
+                {[
+                  mode === 'auto' && row.match_kind && row.match_kind !== 'exact' ? t(`pricing.match.${row.match_kind}`) : '',
+                  row.price_multiplier !== 1 ? formatMultiplier(row.price_multiplier) : '',
+                ].filter(Boolean).join(' · ')}
+              </span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      title: t('pricing.col.usage'),
+      key: 'usage',
+      align: 'right' as const,
+      width: 150,
+      render: (_: unknown, row: BookRow) => <UsageCell usage={row.usage_30d} />,
     },
     {
       title: t('common.actions'),
       key: 'actions',
-      width: 100,
+      width: 64,
       align: 'right' as const,
-      render: (_: unknown, row: ModelPrice) =>
-        row.updated_at_ms === 0 ? (
-          <Button
-            size="small"
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => openAdd(row.model)}
-          >
-            {t('pricing.add')}
-          </Button>
-        ) : (
-          <div className="row-actions">
-            <Tooltip title={t('pricing.edit')}>
-              <Button
-                size="small"
-                className="row-action-btn"
-                icon={<EditOutlined />}
-                onClick={() => openEdit(row)}
-                /* Named for assistive tech, not only for the pointer: the tooltip names it for a
-                   mouse, and the phone row reuses this cell, so it is the row's control too. */
-                aria-label={`${t('pricing.edit')}: ${row.model}`}
-              />
-            </Tooltip>
-            <Popconfirm
-              title={t('pricing.delete_confirm', { model: row.model })}
-              onConfirm={() => deleteMutation.mutate(row.model)}
-              okText={t('common.confirm')}
-              cancelText={t('common.cancel')}
-            >
-              <Tooltip title={t('pricing.remove')}>
-                <Button
-                  size="small"
-                  className="row-action-btn"
-                  danger
-                  icon={<DeleteOutlined />}
-                  loading={deleteMutation.isPending && deleteMutation.variables === row.model}
-                  aria-label={`${t('pricing.remove')}: ${row.model}`}
-                />
-              </Tooltip>
-            </Popconfirm>
-          </div>
-        ),
+      render: (_: unknown, row: BookRow) => (
+        <div className="row-actions">
+          <Tooltip title={row.rowKind === 'priced' ? t('pricing.edit') : t('pricing.set_price')}>
+            <Button
+              size="small"
+              className="row-action-btn"
+              icon={<EditOutlined />}
+              onClick={() => openEditor?.(row.model)}
+              aria-label={`${row.rowKind === 'priced' ? t('pricing.edit') : t('pricing.set_price')}: ${row.model}`}
+              data-testid="pricing-row-edit"
+            />
+          </Tooltip>
+        </div>
+      ),
     },
   ];
+
+  const modelTotal = rows.length;
+  const pricedTotal = data?.models.length ?? 0;
+  const subtitle = data
+    ? t('pricing.coverage', { priced: pricedTotal, total: modelTotal })
+    : undefined;
+
+  const syncPopover = (
+    <div className={styles['sync-popover']} data-testid="pricing-sync-popover">
+      <FactList
+        emphasis="quiet"
+        facts={[
+          { key: 'source', label: t('pricing.sync.source'), value: t('pricing.sync.source_value', { n: data?.upstream_count ?? 0 }) },
+          {
+            key: 'last',
+            label: t('pricing.sync.last_success_label'),
+            value: data?.sync.state.last_success_at_ms ? dayjs(data.sync.state.last_success_at_ms).format('YYYY-MM-DD HH:mm') : t('pricing.sync.never'),
+          },
+          { key: 'matched', label: t('pricing.sync.matched_label'), value: `${data?.sync.state.last_matched ?? 0} / ${(data?.sync.state.last_matched ?? 0) + (data?.sync.state.last_unmatched ?? 0)}` },
+          ...(data?.sync.state.next_sync_at_ms && data.sync.state.auto_sync_interval_hours !== 0
+            ? [{ key: 'next', label: t('pricing.sync.next_label'), value: dayjs(data.sync.state.next_sync_at_ms).format('MM-DD HH:mm') }]
+            : []),
+        ]}
+      />
+      {data?.sync.state.last_error && (
+        <Alert type="error" showIcon title={t('pricing.sync.error', { error: data.sync.state.last_error })} />
+      )}
+      <label className={styles['sync-schedule']}>
+        <span>{t('pricing.sync.auto_label')}</span>
+        <Select
+          size="small"
+          value={data?.sync.state.auto_sync_interval_hours ?? 24}
+          onChange={(value) => scheduleMutation.mutate(value)}
+          loading={scheduleMutation.isPending}
+          options={[
+            { label: t('pricing.sync.off'), value: 0 },
+            { label: t('pricing.sync.every_1h'), value: 1 },
+            { label: t('pricing.sync.every_6h'), value: 6 },
+            { label: t('pricing.sync.every_12h'), value: 12 },
+            { label: t('pricing.sync.every_24h'), value: 24 },
+          ]}
+        />
+      </label>
+      <Button
+        block
+        icon={<SyncOutlined spin={Boolean(data?.sync.running)} />}
+        loading={syncMutation.isPending}
+        // The sync reaches OpenRouter. The demonstration prices its own fixture instead, so the
+        // server refuses this and the button says so.
+        disabled={isDemo || Boolean(data?.sync.running)}
+        title={isDemo ? t('demo.blocked') : undefined}
+        onClick={() => syncMutation.mutate()}
+      >
+        {t('pricing.sync_now')}
+      </Button>
+    </div>
+  );
 
   return (
     <div className="terminal-page terminal-page-stack" data-testid="pricing-page">
       <PageHeader
         title={t('pricing.title')}
+        subtitle={subtitle}
         actions={(
           <>
+            <Segmented
+              value={tab}
+              onChange={(value) => selectTab(value as PricingTab)}
+              options={[
+                { value: 'models', label: t('pricing.tab.models') },
+                { value: 'channels', label: t('pricing.tab.channels') },
+              ]}
+            />
             <RefreshButton isRefreshing={result.isFetching} onRefresh={invalidate} />
-            <Button
-              type="primary"
-              icon={<SyncOutlined spin={Boolean(sync?.running)} />}
-              loading={syncMutation.isPending}
-              // The catalogue sync fetches models.dev. The demonstration prices its own
-              // fixture instead, so the server refuses this and the button says so.
-              disabled={isDemo}
-              title={isDemo ? t('demo.blocked') : undefined}
-              onClick={() => syncMutation.mutate()}
-            >
-              {t('pricing.sync_now')}
-            </Button>
+            <Popover content={syncPopover} trigger="click" placement="bottomRight" title={t('pricing.sync.title')}>
+              <Button className={styles['sync-button']} data-testid="pricing-sync-status">
+                <StatusLabel tone={syncTone(data)}>{syncSummary(t, data)}</StatusLabel>
+              </Button>
+            </Popover>
           </>
         )}
       />
 
-      {/* 2. Error Alert if any */}
       {result.isError && (
         <Alert
           type="error"
           showIcon
           title={t('pricing.load_error')}
-          description={result.error instanceof Error ? result.error.message : undefined}
+          description={describeError(result.error)}
           action={<Button onClick={invalidate}>{t('common.retry')}</Button>}
         />
       )}
 
-      {/* 3. Integrated Top Sync Telemetry Strip */}
-      <div className={styles['telemetry-strip']}>
-        <div className={styles['telemetry-left']}>
-          <span className={styles['telemetry-status']}>
-            <span
-              className={`${styles['status-pip']} ${
-                sync?.running
-                  ? styles['pip-running']
-                  : state?.last_error
-                  ? styles['pip-danger']
-                  : styles['pip-success']
-              }`}
+      {tab === 'models' ? (
+        <section className={styles.workbench} data-testid="pricing-model-list" ref={listRef}>
+          <div className={styles.toolbar}>
+            <Segmented<ModelFilter>
+              value={filter}
+              onChange={setFilter}
+              options={(['all', 'auto', 'linked', 'custom', 'unpriced'] as const)
+                .filter((value) => value === 'all' || value === filter || counts[value] > 0)
+                .map((value) => ({
+                  value,
+                  label: (
+                    <span className={styles['filter-option']}>
+                      {value === 'all' ? t('common.all') : t(`pricing.mode.${value}`)}
+                      <span className={styles['filter-count']}>{counts[value]}</span>
+                    </span>
+                  ),
+                }))}
             />
-            <span>
-              {sync?.running
-                ? t('pricing.sync.running')
-                : state?.last_error
-                ? `${t('pricing.sync.error', { error: state.last_error })}`
-                : t('pricing.sync.title')}
-            </span>
-          </span>
-          <div className={styles['telemetry-divider']} />
-          <div className={styles['telemetry-metrics']}>
-            <span className={styles['telemetry-item']}>
-              {t('pricing.sync.manual', { n: manualCount })}
-            </span>
-            <div className={styles['telemetry-divider']} />
-            <span className={styles['telemetry-item']}>
-              {t('pricing.sync.last_success', {
-                time: state?.last_success_at_ms
-                  ? dayjs(state.last_success_at_ms).format('YYYY-MM-DD HH:mm')
-                  : t('pricing.sync.never'),
-              })}
-            </span>
-            <div className={styles['telemetry-divider']} />
-            <span className={styles['telemetry-item']}>
-              {t('pricing.sync.matched', { n: state?.last_matched ?? 0 })}
-            </span>
-            <span className={styles['telemetry-item']}>
-              {t('pricing.sync.unmatched', { n: state?.last_unmatched ?? 0 })}
-            </span>
-          </div>
-        </div>
-        <div className={styles['telemetry-right']}>
-          <span className={styles['auto-sync-label']}>{t('pricing.sync.auto_label')}:</span>
-          <Select
-            size="small"
-            className={styles['auto-sync-select']}
-            value={state?.auto_sync_interval_hours ?? 24}
-            onChange={(val) => updateScheduleMutation.mutate(val)}
-            loading={updateScheduleMutation.isPending}
-            options={[
-              { label: t('pricing.sync.off'), value: 0 },
-              { label: t('pricing.sync.every_1h'), value: 1 },
-              { label: t('pricing.sync.every_6h'), value: 6 },
-              { label: t('pricing.sync.every_12h'), value: 12 },
-              { label: t('pricing.sync.every_24h'), value: 24 },
-            ]}
-          />
-          {state?.auto_sync_interval_hours !== 0 && state?.next_sync_at_ms && (
-            <span className={styles['next-sync-text']}>
-              {t('pricing.sync.next', {
-                time: dayjs(state.next_sync_at_ms).format('MM-DD HH:mm'),
-              })}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* 4. Unpriced Models Alert Ribbon (if any detected) */}
-      {unpricedList.length > 0 && (
-        <div className={styles['unpriced-ribbon']}>
-          <div className={styles['unpriced-head']}>
-            <span className={styles['unpriced-title']}>
-              <WarningOutlined className={styles['unpriced-icon']} />
-              {t('pricing.unpriced.title')} ({unpricedList.length})
-            </span>
-          </div>
-          <div className={styles['unpriced-chips']}>
-            {unpricedList.map((model) => (
-              <Tooltip key={model} title={t('pricing.unpriced.add')}>
-                <button type="button" className={styles['unpriced-chip']} onClick={() => openAdd(model)}>
-                  <span className={styles['unpriced-chip-plus']}>+</span>
-                  <span>{model}</span>
-                </button>
-              </Tooltip>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 5. Master Console Workbench Container */}
-      <div className={styles.workbench}>
-        {/* Integrated Toolbar */}
-        <div className={styles['workbench-toolbar']}>
-          <div className={styles['toolbar-left']}>
-            {/* Filter Segmented Tabs */}
-            <div className={styles['filter-tabs']}>
-              <button
-                type="button"
-                className={`${styles['filter-tab']} ${activeTab === 'all' ? styles['filter-tab-active'] : ''}`}
-                onClick={() => setActiveTab('all')}
-              >
-                {t('pricing.tab.all')}
-                <span className={styles['filter-count']}>{models.length}</span>
-              </button>
-              <button
-                type="button"
-                className={`${styles['filter-tab']} ${activeTab === 'modelsdev' ? styles['filter-tab-active'] : ''}`}
-                onClick={() => setActiveTab('modelsdev')}
-              >
-                {t('pricing.source.modelsdev')}
-                <span className={styles['filter-count']}>{modelsDevCount}</span>
-              </button>
-              <button
-                type="button"
-                className={`${styles['filter-tab']} ${activeTab === 'manual' ? styles['filter-tab-active'] : ''}`}
-                onClick={() => setActiveTab('manual')}
-              >
-                {t('pricing.source.manual')}
-                <span className={styles['filter-count']}>{manualCount}</span>
-              </button>
-              {unpricedCount > 0 && (
-                <button
-                  type="button"
-                  className={`${styles['filter-tab']} ${activeTab === 'unpriced' ? styles['filter-tab-active'] : ''}`}
-                  onClick={() => setActiveTab('unpriced')}
-                >
-                  {t('pricing.tab.unpriced')}
-                  <span className={styles['filter-count']}>{unpricedCount}</span>
-                </button>
-              )}
-            </div>
-
-            {/* Monospace Search Input */}
+            <Select
+              className={styles['provider-filter']}
+              value={providerFilter}
+              onChange={setProviderFilter}
+              aria-label={t('pricing.provider.filter')}
+              options={[
+                { value: 'all', label: t('pricing.provider.all') },
+                ...allGroups.map((group) => ({ value: group.id, label: group.provider ? pricingProviderIdentity(group.provider).label : t('pricing.provider.unassigned') })),
+              ]}
+            />
             <Input
-              className={styles['search-box']}
+              data-testid="pricing-search"
+              className={styles.search}
               placeholder={t('pricing.search_placeholder')}
-              prefix={<SearchOutlined className={styles['search-icon']} />}
+              aria-label={t('pricing.search_placeholder')}
+              prefix={<SearchOutlined aria-hidden="true" />}
               value={search}
               allowClear
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(event) => setSearch(event.target.value)}
             />
           </div>
-
-          <div className={styles['toolbar-right']}>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => openAdd()}>
-              {t('pricing.add')}
-            </Button>
-          </div>
-        </div>
-
-        {/* Dense Data Table, or one row per model on a phone (ADR 0012) */}
-        <ResponsiveList<ModelPrice>
-          columns={columns}
-          dataSource={filteredData}
-          rowKey="model"
-          isLoading={result.isLoading}
-          emptyText={t('pricing.table.empty')}
-          pageSize={PAGE_SIZE}
-          // A filter change starts the reader at the first page, so clearing the filter a page was
-          // chosen under does not jump the reader back to a page they had left.
-          pageResetKey={`${search}\u0000${activeTab}`}
-          phone={{ identity: 'model', actions: ['actions'] }}
-          tableProps={{ size: 'small' }}
-        />
-
-        {/* Workbench Footer Status */}
-        <div className={styles['workbench-footer']}>
-          <span>
-            {t('pricing.footer_count', { current: filteredData.length, total: models.length })}
-          </span>
-          {sync?.running && (
-            <span className={styles['sync-running-text']}>
-              <SyncOutlined spin />
-              {t('pricing.sync.running')}
-            </span>
+          {pageGroups.length === 0 && (
+            <ResponsiveList<BookRow>
+              columns={priceColumns} dataSource={[]} rowKey="model"
+              isLoading={result.isLoading} isBlocked={result.isError && !data}
+              emptyText={rows.length === 0 ? t('pricing.table.empty') : t('pricing.table.empty_filter')}
+              phone={{ identity: 'model', actions: ['actions'] }} tableProps={{ size: 'small' }}
+            />
           )}
-        </div>
-      </div>
-
-      {/* 6. Opencode Style Model Capacity Leaderboard */}
-      <PricingLeaderboard models={models} />
-
-      {/* 7. Price Editor Modal */}
-      <Modal
-        open={editor.open}
-        title={
-          editor.editing
-            ? t('pricing.editor.edit_title', { model: editor.editing.model })
-            : t('pricing.editor.new_title')
-        }
-        width={520}
-        okText={t('common.save')}
-        cancelText={t('common.cancel')}
-        confirmLoading={saveMutation.isPending}
-        onOk={submitEditor}
-        onCancel={() => setEditor(CLOSED_EDITOR)}
-        destroyOnHidden
-        forceRender
-      >
-        {editor.editing ? (
-          <div className={styles['editor-meta']}>
-            <span
-              className={`${styles['source-badge']} ${
-                editor.editing.source === 'manual' ? styles['source-manual'] : styles['source-models-dev']
-              }`}
-            >
-              {t(`pricing.source.${editor.editing.source}`)}
-            </span>
-            <span className={styles['editor-updated']}>
-              {t('pricing.editor.updated_at', {
-                time: editor.editing.updated_at_ms
-                  ? dayjs(editor.editing.updated_at_ms).format('YYYY-MM-DD HH:mm')
-                  : '—',
-              })}
-            </span>
-          </div>
-        ) : null}
-
-        {editor.editing && editor.editing.source !== 'manual' ? (
-          <Alert
-            type="info"
-            showIcon
-            className={styles['editor-note']}
-            title={t('pricing.editor.convert_note')}
-          />
-        ) : null}
-
-        <Form form={form} layout="vertical">
-          <Form.Item
-            name="model"
-            label={t('pricing.editor.model')}
-            rules={[{ required: true, message: t('pricing.editor.model_required') }]}
-          >
-            <Select
-              disabled={Boolean(editor.editing)}
-              showSearch={{ optionFilterProp: 'label' }}
-              allowClear
-              placeholder={t('pricing.editor.model_placeholder')}
-              options={availableModels.map((model) => ({ label: model, value: model }))}
-              className={styles['editor-full']}
-            />
-          </Form.Item>
-
-          <div className={styles['editor-grid']}>
-            <Form.Item
-              name="prompt"
-              label={t('pricing.editor.prompt')}
-              rules={[{ required: true, message: t('pricing.editor.required') }]}
-            >
-              <InputNumber
-                placeholder="0.00"
-                min={0}
-                step={0.000001}
-                controls={false}
-                stringMode
-                className={styles['editor-full']}
-                suffix="$ / 1M"
-              />
-            </Form.Item>
-            <Form.Item
-              name="completion"
-              label={t('pricing.editor.completion')}
-              rules={[{ required: true, message: t('pricing.editor.required') }]}
-            >
-              <InputNumber
-                placeholder="0.00"
-                min={0}
-                step={0.000001}
-                controls={false}
-                stringMode
-                className={styles['editor-full']}
-                suffix="$ / 1M"
-              />
-            </Form.Item>
-            <Form.Item
-              name="cacheRead"
-              label={t('pricing.editor.cache_read')}
-            >
-              <InputNumber
-                placeholder="0.00"
-                min={0}
-                step={0.000001}
-                controls={false}
-                stringMode
-                className={styles['editor-full']}
-                suffix="$ / 1M"
-              />
-            </Form.Item>
-            <Form.Item
-              name="cacheWrite"
-              label={t('pricing.editor.cache_write')}
-            >
-              <InputNumber
-                placeholder="0.00"
-                min={0}
-                step={0.000001}
-                controls={false}
-                stringMode
-                className={styles['editor-full']}
-                suffix="$ / 1M"
-              />
-            </Form.Item>
-          </div>
-
-          <Form.Item
-            name="multiplier"
-            label={t('pricing.editor.multiplier')}
-            initialValue={1}
-            rules={[{ required: true, message: t('pricing.editor.required') }]}
-          >
-            <InputNumber min={0.01} step={0.01} controls={false} className={styles['editor-full']} suffix="×" />
-          </Form.Item>
-
-          {/* Live Estimation Sample Preview */}
-          <div className={styles['live-estimate-box']}>
-            <div className={styles['live-estimate-title']}>{t('pricing.editor.live_sample_title')}</div>
-            <div className={styles['live-estimate-value']}>
-              ${(((watchedPrompt * 0.1) + (watchedCompletion * 0.02)) * watchedMultiplier).toFixed(6)}
-            </div>
-          </div>
-        </Form>
-      </Modal>
+          {pageGroups.map((group) => {
+            const identity = group.provider ? pricingProviderIdentity(group.provider) : null;
+            return (
+              <section key={group.id} className={styles['provider-group']} data-testid="pricing-provider-group" aria-label={identity?.label ?? t('pricing.provider.unassigned')}>
+                <header className={styles['provider-heading']}>
+                  {group.provider && <ProviderBrandIcon iconId={identity?.iconId} logo={pluginOAuthLogoFor(pluginLogos, group.provider.family) ?? pluginOAuthLogoFor(pluginLogos, group.provider.name)} size={20} />}
+                  <h2>{identity?.label ?? t('pricing.provider.unassigned')}</h2>
+                  {group.provider && <span className={styles.dimmed}>{group.provider.is_oauth ? t('pricing.provider.oauth') : t('pricing.provider.api')} · {t('omc.priority_value', { n: group.provider.priority })}</span>}
+                </header>
+                <ResponsiveList<BookRow>
+                  columns={priceColumns} dataSource={group.rows} rowKey="model"
+                  isLoading={result.isLoading} isBlocked={result.isError && !data}
+                  emptyText={t('pricing.table.empty_filter')}
+                  phone={{ identity: 'model', actions: ['actions'] }} tableProps={{ size: 'small' }}
+                />
+              </section>
+            );
+          })}
+          {totalRows > 0 && (
+            <nav className={styles['pagination-bar']} aria-label={t('pricing.pagination.label')} data-testid="pricing-pagination">
+              <span className={styles['pagination-range']} aria-live="polite" aria-atomic="true">
+                {t('pricing.pagination.range', { start: (safePage - 1) * PAGE_SIZE + 1, end: Math.min(safePage * PAGE_SIZE, totalRows), total: totalRows })}
+              </span>
+              <Pagination {...pagination} size="small" showLessItems simple={isPhone ? { readOnly: true } : false} />
+            </nav>
+          )}
+        </section>
+      ) : (
+        <ChannelMultipliersPanel providers={data?.providers ?? []} pluginLogos={pluginLogos} channels={data?.channels ?? []} isLoading={result.isLoading} isBlocked={result.isError && !data} />
+      )}
     </div>
   );
 };
-
-
-
-

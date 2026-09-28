@@ -206,6 +206,9 @@ describe('routing', () => {
       '/api/v1/management/plugin-store',
       '/api/v1/management/config',
       '/api/v1/pricing',
+      '/api/v1/pricing/attention',
+      '/api/v1/pricing/catalog',
+      '/api/v1/pricing/models/claude-opus-5.5',
       '/api/v1/preferences',
       '/api/v1/resources',
       '/api/v1/playground/models',
@@ -230,6 +233,12 @@ describe('routing', () => {
     // Another plugin's document would be the wrong settings shown under this plugin's name.
     assert.equal(responseNameFor(request('/api/v1/management/plugins/usage-exporter/config')), 'plugin-config-usage-exporter');
     assert.equal(responseNameFor(request('/api/v1/management/plugins/not-installed/config')), undefined);
+  });
+
+  it('answers a price editor read only for a model the dataset holds', () => {
+    // Another model's price history would be the wrong history shown under this name.
+    assert.equal(responseNameFor(request('/api/v1/pricing/models/gpt-5.4-mini-high')), 'pricing-model-gpt-5.4-mini-high');
+    assert.equal(responseNameFor(request('/api/v1/pricing/models/not-a-served-model')), undefined);
   });
 
   it('serves the playground directory and refuses inference', async () => {

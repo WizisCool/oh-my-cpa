@@ -29,6 +29,7 @@ import {
 } from '../../types/usageEventMetrics';
 import { requestGroupName } from '../../types/usageEventLabels';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
+import { CostBreakdownView } from '../pricing/CostBreakdownView';
 
 export interface UsageEventDrawerProps {
   eventId: number | null;
@@ -486,19 +487,8 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                       ]),
                     )}
                     {section(
-                      t('events.col_cost'),
-                      fields([
-                        [
-                          t('events.col_cost'),
-                          event.cost_usd != null ? (
-                            <strong style={{ color: 'var(--fg)', fontVariantNumeric: 'tabular-nums' }}>
-                              ${event.cost_usd.toFixed(6)}
-                            </strong>
-                          ) : (
-                            <span className="terminal-muted">{t('events.cost_unpriced')}</span>
-                          ),
-                        ],
-                      ]),
+                      t('cost.title'),
+                      <CostBreakdownView breakdown={result.data?.cost_breakdown} model={event.model} costUsd={event.cost_usd} />,
                     )}
                     <p className="request-detail-note">{t('events.token_note')}</p>
                   </>

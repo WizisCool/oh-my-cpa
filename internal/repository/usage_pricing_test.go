@@ -124,7 +124,7 @@ func TestAutoPriceCannotOverwriteManual(t *testing.T) {
 	if err := r.UpsertModelPrices(ctx, []pricing.ModelPrice{p}); err != nil {
 		t.Fatal(err)
 	}
-	p.Source = pricing.SourceModelsDev
+	p.Source = pricing.SourceOpenRouter
 	p.PromptPricePer1M = 1
 	if err := r.UpsertModelPrices(ctx, []pricing.ModelPrice{p}); err != nil {
 		t.Fatal(err)

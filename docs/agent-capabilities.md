@@ -105,6 +105,14 @@ Rules that are not optional:
 - A write whose result fails output validation is also `uncertain`, because the change
   may already have been applied.
 
+Pricing is the worked example of a revision-bound write. `pricing_set` decides how
+one model is priced (`auto`, `linked` to an OpenRouter id, or `custom` rates with
+optional tiers) and `pricing_channel_set` sets one channel multiplier; both are `high`
+risk and are bound to the revision of the current price list or channel list, so an
+edit made in the console between preparation and approval returns `resource_conflict`.
+`pricing_delete` and `pricing_channel_delete` are destructive and challenge for the
+model or channel name. None of them reprices a recorded request (ADR 0030).
+
 ### Secrets and OAuth
 
 - Secrets never enter tool arguments. A capability that needs one declares
@@ -169,3 +177,7 @@ non-loopback URLs must be HTTPS, redirects are refused, and responses are bounde
 Because the management key is administrator-equivalent, an external process holding it
 can also log in to the console. Use MCP only with agents and hosts you would trust with
 the console itself, and rotate the key if that trust changes.
+
+### Pricing provider membership
+
+`pricing_list` includes `providers` for the models in its bounded current page. Each membership carries the configured provider id, family, snapshot name, channel, priority, OAuth marker, a hostname-only endpoint hint and exact model identities. This read uses the stored complete CPA catalog and never retrieves credential secrets. Provider-specific presentation does not create separate prices: `pricing_set` still edits the global model identity, with its existing revision and confirmation policy.

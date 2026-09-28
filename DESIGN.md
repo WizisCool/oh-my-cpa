@@ -276,7 +276,7 @@ The console is operated from a phone as well as a desktop, and the phone is trea
 
 **The One Content Column Rule.** `.terminal-page` owns the console's 1440px content column, and no page-level class may declare a `max-width` of its own: a rule of equal specificity wins by source order (CSS module styles load after the stylesheet), so `max-width: 100%` on a page root silently drops the cap and that surface renders wider than every other one. Width comes from the column; a list's inset comes from its card's 20px body padding. Where a surface deliberately reads narrower, the reason sits next to the rule that makes it so.
 
-**The One Page Chrome Rule.** Every route opens with `PageHeader`: one title, a line under it only when that line carries live data (no echo subtitles, footnotes or field hints that restate what is on screen), and right-aligned actions at the default 32px height with the primary action last. Refresh is always `RefreshButton` (the header's rotate glyph, spinning while a read is in flight rather than locking); a state is `StatusLabel` (pip + word, never a filled tag); row actions are quiet 28px squares that take the accent - or the danger colour, for a destructive one - only on hover; a list is `ResponsiveList`. Stacked blocks share the `.terminal-page-stack` rhythm (16px, 24px under the head). See `docs/design.md` §5 "Page chrome".
+**The One Page Chrome Rule.** Every route opens with `PageHeader`: one title, a line under it only when that line carries live data (no echo subtitles, footnotes or field hints that restate what is on screen), and right-aligned actions at the default 32px height with the primary action last. Refresh is always `RefreshButton` (the header's rotate glyph, spinning while a read is in flight rather than locking); a state is `StatusLabel` (pip + word, never a filled tag); row actions are quiet 28px squares that take the accent - or the danger colour, for a destructive one - only on hover; a list is `ResponsiveList`, which scrolls a wide table sideways only so the wheel over a list still scrolls the page. Stacked blocks share the `.terminal-page-stack` rhythm (16px, 24px under the head). See `docs/design.md` §5 "Page chrome".
 
 ## Elevation & Depth
 
@@ -394,3 +394,7 @@ the configuration workbench.
   steps; approval cards framed in the caution (or danger) hue until decided; the data notice as the
   line beneath the composer (no consent checkbox); the reasoning effort as a quiet text button in the
   composer's foot; reasoning shown live and kept with the turn; the sent message shown at once.
+
+### Cost & Usage provider grouping
+
+The price book uses the existing console tokens and table/phone-row primitives. Provider headings carry the shared provider mark and display name, authentication kind and routing priority; model rows carry text identities and inline pricing actions. One global 20-row page bounds the rendered memberships across groups. A single sticky footer shows the visible entry range and page navigation; phones use a read-only compact page indicator with 40px previous/next targets. Search and provider/mode filters remain above the list, with the sync control in the page header. The upstream model picker uses bounded 12-row pages. No new palette, typography, spacing or motion tokens are introduced.

@@ -133,8 +133,13 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodDelete, "/api/v1/management/client-key-aliases/{fingerprint}", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/client-key-usage", demoAllow, ""},
 	{http.MethodGet, "/api/v1/pricing", demoAllow, ""},
-	{http.MethodPut, "/api/v1/pricing/models", demoAllow, ""},
+	{http.MethodGet, "/api/v1/pricing/attention", demoAllow, ""},
+	{http.MethodGet, "/api/v1/pricing/catalog", demoAllow, ""},
+	{http.MethodGet, "/api/v1/pricing/models/{model}", demoAllow, ""},
+	{http.MethodPut, "/api/v1/pricing/models/{model}", demoAllow, ""},
 	{http.MethodDelete, "/api/v1/pricing/models/{model}", demoAllow, ""},
+	{http.MethodPut, "/api/v1/pricing/channels/{channel}", demoAllow, ""},
+	{http.MethodDelete, "/api/v1/pricing/channels/{channel}", demoAllow, ""},
 	{http.MethodPut, "/api/v1/pricing/sync-schedule", demoAllow, ""},
 
 	// Observation of the fixture: the dashboard, the request records and the log
@@ -231,7 +236,7 @@ var demoPolicy = []demoPolicyRule{
 
 	// Anything that would reach outside this process.
 	{http.MethodPost, "/api/v1/management/providers/pull-models", demoRefuse, "reading models from a provider is disabled: it would call the provider"},
-	{http.MethodPost, "/api/v1/pricing/sync", demoRefuse, "syncing the price catalogue is disabled: it would call models.dev"},
+	{http.MethodPost, "/api/v1/pricing/sync", demoRefuse, "syncing the price catalogue is disabled: it would call openrouter.ai"},
 	{http.MethodGet, "/api/v1/management/system/diagnostics", demoRefuse, "generating a diagnostic bundle is disabled"},
 
 	// Plugin execution.

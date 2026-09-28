@@ -86,6 +86,7 @@ const SCENARIO_PATHS = [
       'search-dev-server',
       'request-list-interactions',
       'overlay-back',
+      'pricing-request-list',
     ],
   },
   {
@@ -197,7 +198,17 @@ const SCENARIO_PATHS = [
   },
   {
     prefix: 'web/src/pages/pricing/',
-    scenarios: ['phone-lists'],
+    scenarios: ['phone-lists', 'pricing-book'],
+  },
+  // The shared pricing layer: the editor drawer every cost surface opens, and the breakdown the
+  // request drawer shows. The request list is the surface that opens it without the book.
+  {
+    prefix: 'web/src/components/pricing/',
+    scenarios: ['pricing-book', 'pricing-request-list'],
+  },
+  {
+    prefix: 'web/src/types/pricing',
+    scenarios: ['phone-lists', 'pricing-book', 'pricing-request-list'],
   },
   {
     prefix: 'web/src/pages/LogsPage',

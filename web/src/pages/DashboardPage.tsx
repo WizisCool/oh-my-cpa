@@ -8,6 +8,7 @@ import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-quer
 import dayjs from 'dayjs';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
+import { PRICING_QUERY_KEYS } from '../components/pricing/pricingQueries';
 import { usePreference } from '../hooks/usePreference';
 import { type ChartTone } from '../charts/chartTheme';
 import { type DashboardTrendChartProps } from '../charts/DashboardTrendChart';
@@ -105,6 +106,13 @@ function rateTone(successRate: number | null | undefined): ChartTone {
 export const DashboardPage: React.FC = () => {
   const t = useT();
   const navigate = useNavigate();
+  // Shared with the navigation's attention mark, so the dashboard adds no request of its own.
+  const { data: pricingAttention } = useQuery({
+    queryKey: PRICING_QUERY_KEYS.attention,
+    queryFn: api.getPricingAttention,
+    staleTime: 60_000,
+  });
+  const unpricedModels = pricingAttention?.unpriced?.length ?? 0;
   // The console's token unit style: one setting shared with the model panels and
   // the request records, so every token readout on this page follows it.
   const { style: tokenStyle } = useTokenDisplayStyle();
@@ -454,8 +462,14 @@ export const DashboardPage: React.FC = () => {
           <div className="tile-caption">
             {/* The backend distinguishes a complete total from a partial estimate and
                 from a window with nothing priced; the caption follows that, and a
-                complete total carries none. */}
+                complete total carries none. When models are unpriced right now, the
+                caption leads to the price book, where the operator can set their prices. */}
             <span>{costNoteKey(data.metrics.cost_source) ? t(costNoteKey(data.metrics.cost_source)!) : ''}</span>
+            {unpricedModels > 0 && data.metrics.cost_source !== 'estimated' && (
+              <Button type="link" size="small" className="tile-caption-link" onClick={() => navigate('/pricing')} data-testid="dashboard-unpriced-link">
+                {t('dash.cost_unpriced_models', { n: unpricedModels })}
+              </Button>
+            )}
           </div>
           {/* Priced spend per bucket. Unpriced requests contribute nothing, which
               is why the tile keeps its cost_source note rather than implying the

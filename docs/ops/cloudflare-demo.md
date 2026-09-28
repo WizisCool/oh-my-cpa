@@ -280,3 +280,7 @@ non-read refusal. The UI disables sending in demo mode. It does not claim durabl
 still refuses non-read API calls, so a selected key and call point last only for that page session. No sample
 answer is represented as a real model call, and no new outbound destination or console
 configuration is needed. Regenerate and inspect the dataset whenever this surface changes.
+
+### Pricing provider fixture
+
+The generated pricing response includes the same non-secret provider membership snapshot as the Go application: configured API-key provider ids, grouped active OAuth providers, channel labels, priorities and exact model memberships. `internal/demo/seed.go` derives it from the existing fixture catalogs. Provider identity changes or pricing response changes require regenerating and reviewing the dataset with `pnpm demo:generate`; the Worker serves that generated response without live CPA discovery.

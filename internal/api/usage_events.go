@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -548,13 +549,25 @@ func (h *Handler) getUsageEvent(writer http.ResponseWriter, request *http.Reques
 	item := projectUsageEvent(row)
 	applyProviderKeyMask(&item, h.resolveProviderKeyMasks(request, []usageEventResponse{item}))
 	response := map[string]any{"event": projectUsageEventDetail(row, item.ProviderKeyMask)}
+	var partialErrors []string
 	if row.AuthIndex != "" {
 		correlated, corrErr := h.repo.CorrelatedErrorEvents(request.Context(), row.AuthIndex, row.TimestampMS, 2*60*1000)
 		if corrErr != nil {
-			response["partial_errors"] = []string{"correlated errors unavailable"}
+			partialErrors = append(partialErrors, "correlated errors unavailable")
 		} else {
 			response["related_errors"] = correlated
 		}
+	}
+	// The breakdown explains the stored amount from the versions it locked; it is
+	// an explanation, so losing it degrades the drawer rather than failing it.
+	if breakdown, costErr := h.repo.GetUsageEventCostBreakdown(request.Context(), row.ID); costErr != nil {
+		slog.Warn("request cost breakdown unavailable", "id", row.ID, "error", costErr)
+		partialErrors = append(partialErrors, "cost breakdown unavailable")
+	} else {
+		response["cost_breakdown"] = breakdown
+	}
+	if len(partialErrors) > 0 {
+		response["partial_errors"] = partialErrors
 	}
 	writeJSON(writer, http.StatusOK, response)
 }

@@ -1,439 +1,233 @@
-/* ── Pricing Page: Terminal Console Workbench ──────────────────────────── */
+/* ── The price book ── */
 
-/* ── Top Sync Telemetry Strip ── */
-.telemetry-strip {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-  padding: 10px 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);
-  font-size: 12px;
-}
-
-.telemetry-left {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.telemetry-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-weight: 500;
-}
-
-.status-pip {
-  width: 7px;
-  height: 7px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-
-.pip-success {
-  background: var(--success);
-}
-
-.pip-warn {
-  background: var(--warn);
-}
-
-.pip-danger {
-  background: var(--danger);
-}
-
-.pip-running {
-  background: var(--accent);
-}
-
-.telemetry-metrics {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
+.dimmed {
   color: var(--muted);
 }
 
-.telemetry-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.telemetry-item strong {
-  font-family: inherit;
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
+.rate {
   color: var(--fg);
-}
-
-.telemetry-divider {
-  width: 1px;
-  height: 12px;
-  background: var(--border);
-}
-
-.telemetry-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--muted);
-}
-
-.auto-sync-label {
-  font-size: 12px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.auto-sync-select {
-  width: 115px;
-}
-
-.next-sync-text {
-  font-size: 11px;
-  color: var(--muted);
-  white-space: nowrap;
-  font-family: inherit;
   font-variant-numeric: tabular-nums;
-  padding: 2px 6px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);
+  white-space: nowrap;
 }
 
-/* ── Unpriced Models Alert Ribbon ── */
-.unpriced-ribbon {
+/* The sync state sits in the header as one quiet control that opens the details. */
+.sync-button {
+  padding-inline: 10px;
+}
+
+.sync-popover {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px 16px;
-  background: color-mix(in srgb, var(--warn) 8%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--border));
-  border-radius: var(--radius-sm, 4px);
+  gap: 12px;
+  width: 300px;
+  max-width: calc(100vw - 48px);
 }
 
-.unpriced-head {
+.sync-schedule {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--fg);
+  gap: 12px;
+  color: var(--fg-2);
+  font-size: 12px;
 }
 
-.unpriced-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
+.sync-schedule :global(.ant-select) {
+  width: 140px;
 }
 
-
-.unpriced-chips {
+/* Suggestions stay with their model so the book only renders each row once. */
+.suggestion {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 2px;
-}
-
-.unpriced-chip {
-  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 8px;
-  background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--warn) 50%, var(--border));
-  border-radius: var(--radius-sm, 4px);
-  font-size: 12px;
-  color: var(--fg);
-  cursor: pointer;
-  transition: background var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
+  gap: 4px 8px;
 }
 
-.unpriced-chip:hover {
-  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.unpriced-chip-plus {
-  color: var(--accent);
-  font-weight: bold;
-}
-
-/* ── The Master Console Workbench ── */
+/* ── The model list ── */
 .workbench {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-/* ── Integrated Workbench Toolbar ── */
-.workbench-toolbar {
+.toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
-}
-
-.toolbar-left {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
   gap: 12px;
 }
 
-.toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-left: auto;
+.search {
+  width: 260px;
+  max-width: 100%;
 }
 
-/* ── Filter Segmented Tabs ── */
-/* Wrapping rather than shrinking, at every width. The four tabs are wider than a phone's
-   toolbar track, and a flex item may shrink below its content by default - which broke the
-   two-character labels of the Chinese console in half and rendered "manual" and "unpriced" as
-   two stacked characters. A tab is an indivisible label, so the container wraps instead. */
-.filter-tabs {
+.filter-option {
   display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  background: var(--surface);
-  padding: 3px;
-  border-radius: var(--radius-sm, 4px);
-  border: 1px solid var(--border);
-}
-
-.filter-tab {
-  display: inline-flex;
-  flex: 0 0 auto;
-  white-space: nowrap;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
-  font-size: 12px;
-  border-radius: var(--radius-sm, 4px);
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  transition: color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
-  line-height: 1.4;
-}
-
-.filter-tab:hover {
-  color: var(--fg);
-}
-
-.filter-tab-active {
-  background: var(--bg);
-  color: var(--fg);
-  font-weight: 500;
 }
 
 .filter-count {
-  font-size: 10px;
-  padding: 1px 5px;
-  border-radius: var(--radius-sm, 4px);
-  background: var(--border);
-  color: var(--fg-2);
+  color: var(--meta);
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
 
-.filter-tab-active .filter-count {
-  background: color-mix(in srgb, var(--accent) 25%, var(--border));
-  color: var(--accent);
-}
-
-/* ── Search Box ── */
-.search-box {
-  width: 240px;
-}
-
-.search-box input {
-  font-size: 12px;
-}
-
-/* ── Unit Badge ── */
-.unit-tag {
-  font-size: 11px;
-  padding: 2px 8px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);
-  color: var(--muted);
-}
-
-/* ── Table Cell Styles ── */
 .model-cell {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--fg);
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
 }
 
-.price-number {
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  color: var(--fg);
-}
-
-.price-dimmed {
-  color: var(--meta);
-}
-
-.multiplier-badge {
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: var(--radius-sm, 4px);
-  background: color-mix(in srgb, var(--warn) 15%, var(--bg));
-  border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--border));
-  color: var(--warn);
-}
-
-.source-badge {
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm, 4px);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.source-models-dev {
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
-  color: var(--accent);
-}
-
-.source-manual {
-  background: color-mix(in srgb, var(--warn) 12%, var(--bg));
-  border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--border));
-  color: var(--warn);
-}
-
-/* ── Workbench Footer ── */
-.workbench-footer {
+.model-text {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 10px 16px;
-  border-top: 1px solid var(--border);
-  font-size: 12px;
-  color: var(--muted);
-  background: var(--bg);
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
 }
 
-.sync-running-text {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--accent);
-  font-weight: 500;
-}
-
-/* ── Modal Price Editor ── */
-.editor-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-  padding: 8px 12px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);
-  font-size: 12px;
-}
-
-.editor-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 16px;
-}
-
-.live-estimate-box {
-  margin-top: 12px;
-  padding: 10px 14px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);
-}
-
-.live-estimate-title {
-  font-size: 11px;
-  color: var(--muted);
-  margin-bottom: 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.live-estimate-value {
-  font-size: 13px;
+.model-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
   font-weight: 600;
-  color: var(--success);
 }
 
-@media (max-width: 768px) {
-  .workbench-toolbar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .toolbar-right {
-    margin-left: 0;
-    justify-content: space-between;
-  }
-  .search-box {
+.model-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--meta);
+  font-size: 11px;
+}
+
+.mode-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.usage {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.usage .dimmed {
+  font-size: 11px;
+}
+
+/* ── Channel multipliers ── */
+.channels-formula {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.channel-editor {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.channel-multiplier {
+  width: 96px;
+  flex: none;
+}
+
+.channel-note {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .search {
     width: 100%;
   }
-  .editor-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
-.source-unpriced {
-  background: color-mix(in srgb, var(--warn) 12%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--border));
-  color: var(--warn);
+.provider-filter {
+  min-width: 180px;
+  max-width: 100%;
 }
 
-.source-icon {
-  font-size: 10px;
+.provider-group {
+  min-width: 0;
 }
 
-.unpriced-icon {
-  color: var(--warn);
-}
-
-.search-icon {
-  color: var(--meta);
-}
-
-.editor-updated {
-  color: var(--muted);
+.provider-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-soft);
   font-size: 12px;
 }
 
-.editor-note {
-  margin-bottom: 16px;
+.provider-heading h2 {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
 }
 
-.editor-full {
-  width: 100%;
+/* One opaque footer keeps navigation reachable without overlaying a second set of controls. */
+.pagination-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  min-height: 52px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.pagination-range {
+  color: var(--fg-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pagination-bar :global(.ant-pagination) {
+  margin: 0;
+  margin-inline-start: auto;
+}
+
+@media (max-width: 640px) {
+  .pagination-bar :global(.ant-pagination-prev),
+  .pagination-bar :global(.ant-pagination-next) {
+    min-width: 40px;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .pagination-bar :global(.ant-pagination-item-link) {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .pagination-bar :global(.ant-pagination-simple-pager) {
+    height: 40px;
+    line-height: 40px;
+  }
 }

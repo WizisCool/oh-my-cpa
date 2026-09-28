@@ -322,6 +322,27 @@ func TestListAllConfiguredModels(t *testing.T) {
 	if catalog["gpt-5-alias"] != "gpt-5" || catalog["gpt-5"] != "gpt-5" {
 		t.Fatalf("alias catalog mapping = %v", catalog)
 	}
+	snapshot, err := client.ListConfiguredModelSnapshot(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundConfig, foundOAuth := false, false
+	for _, provider := range snapshot.Providers {
+		if provider.ID == "codex-0" {
+			foundConfig = provider.Family == "codex" && strings.Join(provider.Models, ",") == "gpt-5,gpt-5-alias"
+		}
+		if provider.IsOAuth {
+			foundOAuth = strings.Join(provider.Models, ",") == "claude-3-7-sonnet"
+		}
+		for _, model := range provider.Models {
+			if strings.HasPrefix(model, "disabled-") {
+				t.Fatalf("disabled membership: %+v", provider)
+			}
+		}
+	}
+	if !foundConfig || !foundOAuth {
+		t.Fatalf("provider membership: %+v", snapshot.Providers)
+	}
 }
 
 // The catalog is read from several sources in one pass, so a gateway that does not
@@ -403,5 +424,17 @@ func TestConfiguredModelCatalogKeepsItsFailuresTypeable(t *testing.T) {
 	}
 	if IsMissingCapability(err) {
 		t.Fatalf("a transport failure must not be reported as a missing capability, got %v", err)
+	}
+}
+
+func TestPricingEndpointHostDoesNotCarryCredentials(t *testing.T) {
+	for _, testCase := range []struct{ input, want string }{
+		{"https://ignored:ignored@api.deepseek.example.test:8443/v1?token=ignored", "api.deepseek.example.test"},
+		{"https://api.example.test/v1", "api.example.test"},
+		{"not a URL", ""}, {"file:///secret", ""},
+	} {
+		if host := pricingEndpointHost(testCase.input); host != testCase.want {
+			t.Fatalf("host = %q, want %q", host, testCase.want)
+		}
 	}
 }

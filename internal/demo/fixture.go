@@ -1,8 +1,10 @@
 package demo
 
 import (
+	_ "embed"
 	"encoding/base64"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -333,36 +335,29 @@ func modelCatalog() []modelProfile {
 	}
 }
 
-// modelsDevCanonical maps a model the gateway serves to the identity the public
-// price catalogue lists it under. A model that is absent is priced by hand: the
-// relay and self-hosted models whose operator sets their own rate, and the ones
-// whose name here is already its catalogue identity.
-var modelsDevCanonical = map[string]string{
-	// The frontier models the public catalogue tracks. Everything absent from this map is
-	// priced by hand, which is what the relay and open-weights rows are: an operator
-	// points a compatible provider at a model and sets its rate themselves.
-	//
-	// Both halves have to be populated, and the pricing page has a tab for each. Marking
-	// every row as synced would claim an operator's own rates came from the public
-	// catalogue, and marking none of them would leave the sync tab with nothing to show
-	// and its bookkeeping reporting a match count of zero.
-	"gpt-5.6-luna":     "gpt-5.6-luna",
-	"gpt-6-luna":       "gpt-6-luna",
-	"gpt-6-sol":        "gpt-6-sol",
-	"gpt-6-astra":      "gpt-6-astra",
-	"claude-opus-5.5":  "claude-opus-5.5",
-	"claude-sonnet-5":  "claude-sonnet-5",
-	"grok-4.7":         "grok-4.7",
-	"kimi-k3":          "kimi-k3",
-	"gemini-3.8-flash": "gemini-3.8-flash",
-	"gemini-3.7-flash": "gemini-3.7-flash",
-	// Two open-weights models that the catalogue also tracks, so the synced tab holds a
-	// mix of hosted and free models rather than only the subscription ones.
-	"glm-5.3":          "glm-5.3-flash",
-	"qwen3.8-max-0902": "qwen3.8-max",
+// openRouterSnapshot is a trimmed copy of OpenRouter's real model list, the one the
+// demo's price book, model picker and automatic matches are read from. It is data
+// captured from the live source rather than rates written by hand, so the demo's
+// automatic prices are what a synced deployment would show, and it is decoded by the
+// same decoder a sync uses.
+//
+//go:embed openrouter_snapshot.json
+var openRouterSnapshot []byte
+
+// linkedModels are served models an operator pinned to a chosen OpenRouter model.
+// DeepSeek's endpoint serves the July snapshot, which the automatic match would not
+// pick over the undated id, so the price follows the pin.
+var linkedModels = map[string]string{
+	"deepseek-v4-flash": "deepseek/deepseek-v4-flash-0731",
 }
 
-// priceRow is one model's price, in USD per million tokens.
+// unpricedCatalogModels are models the gateway offers that no price covers yet. They
+// carry no traffic, which is the case the attention inbox exists for: a model an
+// operator just configured, whose name only resembles an OpenRouter entry, so it is
+// offered as a suggestion rather than matched.
+var unpricedCatalogModels = []string{"gpt-5.4-mini-high"}
+
+// priceRow is one hand-set price, in USD per million tokens.
 type priceRow struct {
 	model      string
 	prompt     float64
@@ -371,33 +366,42 @@ type priceRow struct {
 	cacheWrite float64
 }
 
-// priceCatalog is published as manual rows: the demo has no models.dev sync, so
-// these are the prices the dashboard's cost column is computed from.
-func priceCatalog() []priceRow {
-	// Every rate here was read from the live catalogue rather than recalled, and every
-	// model the fixture carries traffic for appears here: a request that cannot be priced
-	// renders as an unpriced row, and the seed asserts that none of them is.
+// customPriceCatalog is the rates an operator set by hand: the relay and
+// self-hosted models whose operator decides their own price. Every other served
+// model is priced from the OpenRouter snapshot.
+func customPriceCatalog() []priceRow {
 	return []priceRow{
-		// Open-weights models, which is where most of the traffic is.
-		{model: "glm-5.3-flash", prompt: 0.15, completion: 0.5, cacheRead: 0.05, cacheWrite: 0.15},
-		{model: "glm-5.3", prompt: 0.84, completion: 2.64, cacheRead: 0.156, cacheWrite: 0.84},
-		{model: "deepseek-v4-flash", prompt: 0.0886, completion: 0.1772, cacheRead: 0.0177, cacheWrite: 0.0886},
 		{model: "mimo-v2.5", prompt: 0.14, completion: 0.28, cacheRead: 0.0028, cacheWrite: 0.14},
-		{model: "kimi-k3", prompt: 3, completion: 15, cacheRead: 0.3, cacheWrite: 3},
 		{model: "minimax-m3", prompt: 0.3, completion: 1.2, cacheRead: 0.06, cacheWrite: 0.3},
 		{model: "qwen3.8-omni-flash", prompt: 0.15, completion: 0.47, cacheRead: 0.016, cacheWrite: 0.15},
-		{model: "qwen3.8-max-0902", prompt: 2, completion: 6, cacheRead: 0.25, cacheWrite: 2.5},
-		// Subscription-backed frontier models.
-		{model: "gpt-5.6-luna", prompt: 0.2, completion: 1.2, cacheRead: 0.02, cacheWrite: 0.25},
-		{model: "gpt-6-luna", prompt: 0.1, completion: 0.5, cacheRead: 0.01, cacheWrite: 0.125},
-		{model: "gpt-6-sol", prompt: 2, completion: 10, cacheRead: 0.2, cacheWrite: 2.5},
-		{model: "gpt-6-astra", prompt: 10, completion: 50, cacheRead: 1, cacheWrite: 12.5},
-		{model: "claude-opus-5.5", prompt: 4, completion: 20, cacheRead: 0.2, cacheWrite: 5},
-		{model: "claude-sonnet-5", prompt: 2, completion: 10, cacheRead: 0.2, cacheWrite: 2.5},
-		{model: "grok-4.7", prompt: 1.6, completion: 4.8, cacheRead: 0.4, cacheWrite: 1.6},
-		{model: "gemini-3.8-flash", prompt: 0.75, completion: 3.75, cacheRead: 0.075, cacheWrite: 0.0417},
-		{model: "gemini-3.7-flash", prompt: 0.75, completion: 3.75, cacheRead: 0.075, cacheWrite: 0.0417},
 	}
+}
+
+// channelCatalog is the channel multipliers the fixture configures: the Qwen
+// endpoint is billed under a coding-plan discount, so every request it answers
+// costs half its list price.
+func channelCatalog() []channelRow {
+	return []channelRow{
+		{channel: compatibilityRecordLabel("DashScope (Qwen)"), multiplier: 0.5, note: "Coding-plan discount on the Qwen endpoint"},
+	}
+}
+
+type channelRow struct {
+	channel    string
+	multiplier float64
+	note       string
+}
+
+// PricingCatalogModels names every model the demo's price book lists, priced or
+// not, in order. The dataset export captures one editor read per model.
+func PricingCatalogModels() []string {
+	targets := pricingCatalogTargets()
+	models := make([]string, 0, len(targets))
+	for model := range targets {
+		models = append(models, model)
+	}
+	sort.Strings(models)
+	return models
 }
 
 // pluginEntry is one installed CPA plugin, in the shape CPA's plugin host reports it.

@@ -1,54 +1,54 @@
 package pricing
 
 import (
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 	"unicode"
 )
 
-// Model family → ordered first-party models.dev provider ids, most
-// authoritative first. models.dev publishes relays and aggregates under their
-// own provider ids (302ai, aihubmix, ...), so "the provider that shares the
-// model prefix" must come from this table, not from the id. Lists verified
-// against the live catalog; they follow cpa-usage-keeper's ordering.
-func officialProvidersByFamily(family string) []string {
+// firstPartyAuthors maps a model family to the OpenRouter author namespaces that
+// publish it first-hand, most authoritative first. OpenRouter namespaces a model
+// by its maker, so this only decides between makers that list the same slug.
+func firstPartyAuthors(family string) []string {
 	switch family {
 	case "openai":
-		return []string{"openai", "azure", "azure-cognitive-services"}
+		return []string{"openai"}
 	case "anthropic":
-		return []string{"anthropic", "google-vertex-anthropic"}
-	case "deepseek":
-		return []string{"deepseek", "siliconflow-cn", "siliconflow"}
-	case "glm":
-		return []string{"zai", "zhipuai", "zai-coding-plan", "zhipuai-coding-plan"}
-	case "qwen":
-		return []string{"alibaba-cn", "alibaba", "aliyun-bailian"}
+		return []string{"anthropic"}
 	case "google":
-		return []string{"google", "google-vertex"}
+		return []string{"google"}
 	case "xai":
-		return []string{"xai"}
-	case "minimax":
-		return []string{"minimax-cn", "minimax", "minimax-cn-coding-plan", "minimax-coding-plan"}
+		return []string{"x-ai"}
+	case "glm":
+		return []string{"z-ai", "thudm"}
+	case "qwen":
+		return []string{"qwen"}
 	case "moonshot":
-		return []string{"moonshotai-cn", "moonshotai", "kimi-for-coding"}
-	case "doubao":
-		return []string{"doubao"}
-	case "mistral":
-		return []string{"mistral"}
-	case "cohere":
-		return []string{"cohere"}
-	case "llama":
-		return []string{"llama"}
+		return []string{"moonshotai"}
+	case "deepseek":
+		return []string{"deepseek"}
+	case "minimax":
+		return []string{"minimax"}
 	case "xiaomi":
 		return []string{"xiaomi"}
+	case "mistral":
+		return []string{"mistralai"}
+	case "llama":
+		return []string{"meta-llama", "meta"}
+	case "cohere":
+		return []string{"cohere"}
+	case "doubao":
+		return []string{"bytedance-seed", "bytedance"}
 	default:
 		return nil
 	}
 }
 
-// modelFamilyOf maps a model id prefix to a catalog family. Covers the
-// manufacturer prefixes that actually appear in traffic; unknown prefixes have
-// no official provider and fall back to relay ranking.
+// modelFamilyOf maps a model id prefix to a family. Unknown prefixes have no
+// first-party author and are ranked on match precision alone.
 func modelFamilyOf(model string) string {
 	identity := NormalizeModelKey(StripProviderPrefix(model))
 	prefixes := []struct {
@@ -57,8 +57,8 @@ func modelFamilyOf(model string) string {
 	}{
 		{"gpt", "openai"}, {"chatgpt", "openai"}, {"o1", "openai"}, {"o3", "openai"}, {"o4", "openai"},
 		{"claude", "anthropic"}, {"deepseek", "deepseek"}, {"glm", "glm"}, {"qwen", "qwen"},
-		{"gemini", "google"}, {"grok", "xai"}, {"minimax", "minimax"}, {"moonshot", "moonshot"},
-		{"kimi", "moonshot"}, {"doubao", "doubao"}, {"mimo", "xiaomi"}, {"command", "cohere"},
+		{"gemini", "google"}, {"gemma", "google"}, {"grok", "xai"}, {"minimax", "minimax"}, {"moonshot", "moonshot"},
+		{"kimi", "moonshot"}, {"doubao", "doubao"}, {"seed", "doubao"}, {"mimo", "xiaomi"}, {"command", "cohere"},
 		{"llama", "llama"},
 	}
 	for _, item := range prefixes {
@@ -74,22 +74,30 @@ func modelFamilyOf(model string) string {
 	return ""
 }
 
-// NormalizeModelKey lowercases and keeps only letters and digits, so separators
-// and regional decorations ("GLM-5.3 Flash" vs "glm-5.3-flash") cannot hide an
-// identical model identity.
+// NormalizeModelKey ignores case and separators but preserves numeric component
+// boundaries: version 5.1 and 51 must never inherit each other's prices.
 func NormalizeModelKey(value string) string {
-	var b strings.Builder
-	b.Grow(len(value))
-	for _, r := range value {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			b.WriteRune(unicode.ToLower(r))
+	var key strings.Builder
+	key.Grow(len(value))
+	hasSeparator, wasDigit := false, false
+	for _, character := range value {
+		if !unicode.IsLetter(character) && !unicode.IsDigit(character) {
+			hasSeparator = true
+			continue
 		}
+		isDigit := unicode.IsDigit(character)
+		if hasSeparator && wasDigit && isDigit {
+			key.WriteByte('.')
+		}
+		key.WriteRune(unicode.ToLower(character))
+		wasDigit, hasSeparator = isDigit, false
 	}
-	return b.String()
+	return key.String()
 }
 
-// StripProviderPrefix keeps the part after the last routing separator — CPA
-// often routes "openai/gpt-5" or "openai:gpt-5" while models.dev lists "gpt-5".
+// StripProviderPrefix keeps the part after the last routing separator of a CPA
+// model name — CPA often routes "openai/gpt-5" or "openai:gpt-5". It is for CPA
+// names only: an OpenRouter id's ':' introduces a variant, not a model.
 func StripProviderPrefix(value string) string {
 	if idx := strings.LastIndexAny(value, "/:"); idx >= 0 {
 		return value[idx+1:]
@@ -97,214 +105,293 @@ func StripProviderPrefix(value string) string {
 	return value
 }
 
-type catalogIndex struct {
-	exact      map[string][]CatalogEntry
-	normalized map[string][]CatalogEntry
+// upstreamSlug is an OpenRouter id without its author namespace.
+func upstreamSlug(id string) string {
+	_, slug, found := strings.Cut(strings.TrimPrefix(id, "~"), "/")
+	if !found {
+		return id
+	}
+	return slug
 }
 
-func buildCatalogIndex(entries []CatalogEntry) catalogIndex {
-	index := catalogIndex{
-		exact:      make(map[string][]CatalogEntry, len(entries)*3),
-		normalized: make(map[string][]CatalogEntry, len(entries)*3),
-	}
-	register := func(target map[string][]CatalogEntry, entry CatalogEntry, values ...string) {
-		seen := make(map[string]struct{}, len(values))
-		for _, value := range values {
-			key := strings.ToLower(strings.TrimSpace(value))
-			if key == "" {
-				continue
-			}
-			if _, exists := seen[key]; exists {
-				continue
-			}
-			seen[key] = struct{}{}
-			target[key] = append(target[key], entry)
-		}
-	}
-	for _, entry := range entries {
-		id, name := entry.Model.ID, entry.Model.Name
-		register(index.exact, entry, id, name, StripProviderPrefix(id), StripProviderPrefix(name))
-		register(index.normalized, entry,
-			NormalizeModelKey(id), NormalizeModelKey(name),
-			NormalizeModelKey(StripProviderPrefix(id)), NormalizeModelKey(StripProviderPrefix(name)))
-	}
-	return index
-}
-
-// matchScore ranks how directly a catalog entry answered the lookup. Higher is
-// more specific; a CPA prefix must not steer provider inference, so the
-// stripped id always outranks the full routed name.
-const (
-	scoreExactSuffix      = 100
-	scoreExactFull        = 96
-	scoreNormalizedSuffix = 92
-	scoreNormalizedFull   = 88
+var (
+	reasoningSuffix   = regexp.MustCompile(`(?i)(?:[-_ ](?:reasoning[-_ ])?(?:none|minimal|low|medium|high|xhigh|thinking)|\((?:none|minimal|low|medium|high|xhigh|thinking)\))$`)
+	dateSuffixCompact = regexp.MustCompile(`-(\d{4})(\d{2})(\d{2})$`)
+	dateSuffixDashed  = regexp.MustCompile(`-(\d{4})-(\d{2})-(\d{2})$`)
+	dateSuffixMonthYr = regexp.MustCompile(`-(\d{2})-(\d{4})$`)
+	dateSuffixMonthDy = regexp.MustCompile(`-(\d{2})(\d{2})$`)
 )
 
-type rankedCandidate struct {
-	entry         CatalogEntry
-	score         int
-	idMatchLength int
-	officialRank  int // index into the family list; -1 when the provider is a relay
-	planZero      bool
-	deprecated    bool
+// stripDateSuffix removes one trailing release date. A four-digit suffix is only
+// a date when it reads as a real month and day, so Qwen's YYMM "2507" survives.
+func stripDateSuffix(value string) string {
+	isDate := func(month, day string) bool {
+		m, _ := strconv.Atoi(month)
+		d, _ := strconv.Atoi(day)
+		return m >= 1 && m <= 12 && d >= 1 && d <= 31
+	}
+	if match := dateSuffixCompact.FindStringSubmatch(value); match != nil && isDate(match[2], match[3]) {
+		return value[:len(value)-len(match[0])]
+	}
+	if match := dateSuffixDashed.FindStringSubmatch(value); match != nil && isDate(match[2], match[3]) {
+		return value[:len(value)-len(match[0])]
+	}
+	if match := dateSuffixMonthYr.FindStringSubmatch(value); match != nil && isDate(match[1], "1") {
+		return value[:len(value)-len(match[0])]
+	}
+	if match := dateSuffixMonthDy.FindStringSubmatch(value); match != nil && isDate(match[1], match[2]) {
+		return value[:len(value)-len(match[0])]
+	}
+	return value
 }
 
-func buildCandidates(model string, index catalogIndex) []rankedCandidate {
+// Catalog is one decoded OpenRouter snapshot with its lookup index.
+type Catalog struct {
+	FetchedAt time.Time
+	Models    []UpstreamModel
+	index     *catalogIndex
+}
+
+type indexedEntry struct {
+	model UpstreamModel
+	kind  string
+}
+
+type catalogIndex struct {
+	byID       map[string]UpstreamModel
+	exact      map[string][]indexedEntry
+	normalized map[string][]indexedEntry
+	dated      map[string][]indexedEntry
+}
+
+// NewCatalog indexes a snapshot once; lookups are then map reads.
+func NewCatalog(models []UpstreamModel, fetchedAt time.Time) Catalog {
+	index := &catalogIndex{
+		byID:       make(map[string]UpstreamModel, len(models)),
+		exact:      make(map[string][]indexedEntry, len(models)*2),
+		normalized: make(map[string][]indexedEntry, len(models)*2),
+		dated:      make(map[string][]indexedEntry, len(models)),
+	}
+	add := func(target map[string][]indexedEntry, key string, entry indexedEntry) {
+		if key == "" {
+			return
+		}
+		for _, existing := range target[key] {
+			if existing.model.ID == entry.model.ID {
+				return
+			}
+		}
+		target[key] = append(target[key], entry)
+	}
+	for _, model := range models {
+		index.byID[strings.ToLower(model.ID)] = model
+		slug := upstreamSlug(model.ID)
+		canonical := upstreamSlug(model.CanonicalSlug)
+		exactKind, canonicalKind, normalizedKind, datedKind := MatchExact, MatchCanonical, MatchNormalized, MatchDateStripped
+		if model.IsAlias() {
+			exactKind, canonicalKind, normalizedKind, datedKind = MatchAlias, MatchAlias, MatchAlias, MatchAlias
+		}
+		add(index.exact, strings.ToLower(slug), indexedEntry{model, exactKind})
+		if model.CanonicalSlug != "" {
+			add(index.exact, strings.ToLower(canonical), indexedEntry{model, canonicalKind})
+			add(index.normalized, NormalizeModelKey(canonical), indexedEntry{model, normalizedKind})
+			add(index.dated, NormalizeModelKey(stripDateSuffix(canonical)), indexedEntry{model, datedKind})
+		}
+		add(index.normalized, NormalizeModelKey(slug), indexedEntry{model, normalizedKind})
+		add(index.dated, NormalizeModelKey(stripDateSuffix(slug)), indexedEntry{model, datedKind})
+	}
+	return Catalog{FetchedAt: fetchedAt, Models: models, index: index}
+}
+
+func (c *Catalog) ensureIndex() *catalogIndex {
+	if c.index == nil {
+		*c = NewCatalog(c.Models, c.FetchedAt)
+	}
+	return c.index
+}
+
+// Lookup finds an OpenRouter model by its exact id.
+func (c Catalog) Lookup(id string) (UpstreamModel, bool) {
+	model, ok := c.ensureIndex().byID[strings.ToLower(strings.TrimSpace(id))]
+	return model, ok
+}
+
+// Match is the upstream model a CPA model resolved to and how precisely.
+type Match struct {
+	Model UpstreamModel
+	Kind  string
+}
+
+var matchKindRank = map[string]int{
+	MatchExact: 0, MatchCanonical: 1, MatchNormalized: 2, MatchDateStripped: 3, MatchAlias: 4,
+}
+
+// MatchModel resolves the strongest OpenRouter identity for a CPA model. The
+// chain is: match precision (exact id, canonical slug, normalized, date-stripped,
+// floating alias) → first-party author for the model's family → shorter slug →
+// id. It is total, so the winner is stable across syncs. A name that only
+// resembles a listed model is not matched; Suggest offers it instead.
+func (c Catalog) MatchModel(model string) (Match, bool) {
+	index := c.ensureIndex()
 	model = strings.TrimSpace(model)
 	if model == "" {
-		return nil
+		return Match{}, false
+	}
+	if exact, ok := index.byID[strings.ToLower(model)]; ok {
+		kind := MatchExact
+		if exact.IsAlias() {
+			kind = MatchAlias
+		}
+		return Match{Model: exact, Kind: kind}, true
 	}
 	suffix := StripProviderPrefix(model)
-	type lookup struct {
-		key          string
-		score        int
-		isNormalized bool
-	}
-	var lookups []lookup
-	if suffix != model {
-		lookups = []lookup{
-			{strings.ToLower(suffix), scoreExactSuffix, false},
-			{NormalizeModelKey(suffix), scoreNormalizedSuffix, true},
-			{strings.ToLower(model), scoreExactFull, false},
-			{NormalizeModelKey(model), scoreNormalizedFull, true},
-		}
-	} else {
-		lookups = []lookup{
-			{strings.ToLower(model), scoreExactSuffix, false},
-			{NormalizeModelKey(model), scoreNormalizedSuffix, true},
+	var candidates []indexedEntry
+	candidates = append(candidates, index.exact[strings.ToLower(suffix)]...)
+	candidates = append(candidates, index.normalized[NormalizeModelKey(suffix)]...)
+	if stripped := stripDateSuffix(suffix); stripped != suffix {
+		for _, entry := range index.normalized[NormalizeModelKey(stripped)] {
+			candidates = append(candidates, indexedEntry{entry.model, demoteToDated(entry.kind)})
 		}
 	}
-	best := make(map[string]rankedCandidate, 8)
+	candidates = append(candidates, index.dated[NormalizeModelKey(stripDateSuffix(suffix))]...)
+	if len(candidates) == 0 {
+		return Match{}, false
+	}
+	officials := firstPartyAuthors(modelFamilyOf(model))
+	officialRank := func(author string) int {
+		for i, candidate := range officials {
+			if candidate == author {
+				return i
+			}
+		}
+		return len(officials)
+	}
+	sort.SliceStable(candidates, func(i, j int) bool {
+		left, right := candidates[i], candidates[j]
+		if matchKindRank[left.kind] != matchKindRank[right.kind] {
+			return matchKindRank[left.kind] < matchKindRank[right.kind]
+		}
+		if leftRank, rightRank := officialRank(left.model.Author), officialRank(right.model.Author); leftRank != rightRank {
+			return leftRank < rightRank
+		}
+		if len(upstreamSlug(left.model.ID)) != len(upstreamSlug(right.model.ID)) {
+			return len(upstreamSlug(left.model.ID)) < len(upstreamSlug(right.model.ID))
+		}
+		return left.model.ID < right.model.ID
+	})
+	return Match{Model: candidates[0].model, Kind: candidates[0].kind}, true
+}
+
+func demoteToDated(kind string) string {
+	if kind == MatchAlias {
+		return MatchAlias
+	}
+	return MatchDateStripped
+}
+
+// Suggest ranks upstream models that resemble a model MatchModel could not
+// resolve, such as a reasoning-effort decoration ("gpt-5.4-mini-high"). The
+// console offers them for one-click adoption; they are never applied on their
+// own, because resemblance is not identity.
+func (c Catalog) Suggest(model string, limit int) []UpstreamModel {
+	if limit <= 0 {
+		return nil
+	}
+	key := NormalizeModelKey(StripProviderPrefix(model))
+	if len(key) < 3 {
+		return nil
+	}
+	// Effort controls can identify a useful suggestion, but are not proof of price identity.
+	base := strings.TrimSpace(reasoningSuffix.ReplaceAllString(StripProviderPrefix(model), ""))
+	preferredID := ""
+	if base != StripProviderPrefix(model) {
+		if matched, ok := c.MatchModel(base); ok {
+			preferredID = matched.Model.ID
+		}
+	}
 	family := modelFamilyOf(model)
-	officials := officialProvidersByFamily(family)
-	officialRank := make(map[string]int, len(officials))
-	for i, provider := range officials {
-		officialRank[provider] = i
+	officials := firstPartyAuthors(family)
+	type scored struct {
+		model    UpstreamModel
+		prefix   int
+		overlap  float64
+		official bool
 	}
-	add := func(entry CatalogEntry, score int) {
-		candidate := rankedCandidate{
-			entry:         entry,
-			score:         score,
-			officialRank:  -1,
-			deprecated:    strings.EqualFold(strings.TrimSpace(entry.Model.Status), "deprecated"),
-			idMatchLength: idMatchLength(model, entry.Model.ID),
+	wanted := modelTokens(StripProviderPrefix(model))
+	var ranked []scored
+	for _, candidate := range c.Models {
+		slugKey := NormalizeModelKey(upstreamSlug(candidate.ID))
+		prefix := commonPrefix(key, slugKey)
+		if candidate.ID != preferredID && (prefix < 4 || prefix*2 < len(slugKey)) {
+			continue
 		}
-		if isPlanZeroProvider(entry.ProviderID) && costIsZero(entry.Model.Cost) {
-			// Subscription-plan catalogs list $0 quotas, not USD rates.
-			candidate.planZero = true
-		} else if rank, ok := officialRank[strings.ToLower(strings.TrimSpace(entry.ProviderID))]; ok {
-			candidate.officialRank = rank
-		}
-		key := entry.ProviderID + "\x00" + entry.Model.ID
-		if existing, ok := best[key]; !ok || candidateLess(candidate, existing) {
-			best[key] = candidate
-		}
-	}
-	for _, item := range lookups {
-		key := strings.ToLower(item.key)
-		if item.isNormalized {
-			for _, entry := range index.normalized[NormalizeModelKey(item.key)] {
-				add(entry, item.score)
-			}
-		} else {
-			for _, entry := range index.exact[key] {
-				add(entry, item.score)
+		official := false
+		for _, author := range officials {
+			if author == candidate.Author {
+				official = true
 			}
 		}
+		if len(officials) > 0 && !official {
+			continue
+		}
+		ranked = append(ranked, scored{candidate, prefix, tokenOverlap(wanted, modelTokens(upstreamSlug(candidate.ID))), official})
 	}
-	result := make([]rankedCandidate, 0, len(best))
-	for _, candidate := range best {
-		result = append(result, candidate)
+	sort.SliceStable(ranked, func(i, j int) bool {
+		left, right := ranked[i], ranked[j]
+		if (left.model.ID == preferredID) != (right.model.ID == preferredID) {
+			return left.model.ID == preferredID
+		}
+		if left.model.IsAlias() != right.model.IsAlias() {
+			return !left.model.IsAlias()
+		}
+		if left.prefix != right.prefix {
+			return left.prefix > right.prefix
+		}
+		if left.overlap != right.overlap {
+			return left.overlap > right.overlap
+		}
+		return left.model.ID < right.model.ID
+	})
+	result := make([]UpstreamModel, 0, min(limit, len(ranked)))
+	for _, item := range ranked {
+		if len(result) == limit {
+			break
+		}
+		result = append(result, item.model)
 	}
-	sort.Slice(result, func(i, j int) bool { return candidateLess(result[i], result[j]) })
 	return result
 }
 
-// candidateLess orders candidates the way Keeper does: subscription-plan zero
-// prices last, first-party providers first, then match precision, then the
-// freshest, shortest-namespace entry. The chain is total, so the winner is
-// deterministic across syncs.
-func candidateLess(left, right rankedCandidate) bool {
-	if left.planZero != right.planZero {
-		return !left.planZero
-	}
-	if left.officialRank != right.officialRank && (left.officialRank >= 0 || right.officialRank >= 0) {
-		if left.officialRank < 0 {
-			return false
+func commonPrefix(left, right string) int {
+	n := min(len(left), len(right))
+	for i := 0; i < n; i++ {
+		if left[i] != right[i] {
+			return i
 		}
-		if right.officialRank < 0 {
-			return true
-		}
-		return left.officialRank < right.officialRank
 	}
-	if left.score != right.score {
-		return left.score > right.score
-	}
-	if left.idMatchLength != right.idMatchLength {
-		return left.idMatchLength > right.idMatchLength
-	}
-	leftNamespaces := strings.Count(left.entry.Model.ID, "/")
-	rightNamespaces := strings.Count(right.entry.Model.ID, "/")
-	if leftNamespaces != rightNamespaces {
-		return leftNamespaces < rightNamespaces
-	}
-	if left.deprecated != right.deprecated {
-		return !left.deprecated
-	}
-	if left.entry.Model.LastUpdated != right.entry.Model.LastUpdated {
-		return left.entry.Model.LastUpdated > right.entry.Model.LastUpdated
-	}
-	if left.entry.ProviderID != right.entry.ProviderID {
-		return left.entry.ProviderID < right.entry.ProviderID
-	}
-	return left.entry.Model.ID < right.entry.Model.ID
+	return n
 }
 
-// idMatchLength scores how concretely a catalog id answered the lookup: only a
-// true identity (equal, routed suffix, or prefix-stripped equal) counts;
-// unrelated longer ids must not outrank an exact bare id.
-func idMatchLength(model, id string) int {
-	model = strings.ToLower(strings.TrimSpace(model))
-	id = strings.ToLower(strings.TrimSpace(id))
-	if id == "" {
+// modelTokens splits a name into lowercase alphanumeric words.
+func modelTokens(value string) map[string]struct{} {
+	tokens := make(map[string]struct{})
+	for _, word := range strings.FieldsFunc(strings.ToLower(value), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	}) {
+		tokens[word] = struct{}{}
+	}
+	return tokens
+}
+
+func tokenOverlap(left, right map[string]struct{}) float64 {
+	if len(left) == 0 || len(right) == 0 {
 		return 0
 	}
-	if model == id || strings.HasSuffix(model, "/"+id) || strings.HasSuffix(model, ":"+id) ||
-		NormalizeModelKey(StripProviderPrefix(model)) == NormalizeModelKey(StripProviderPrefix(id)) {
-		return len(id)
-	}
-	return 0
-}
-
-// isPlanZeroProvider marks subscription-plan catalogs (coding-plan /
-// token-plan) whose listed prices are zero: they describe plan quotas, not USD.
-func isPlanZeroProvider(providerID string) bool {
-	provider := strings.ToLower(strings.TrimSpace(providerID))
-	return strings.Contains(provider, "coding-plan") || strings.Contains(provider, "token-plan")
-}
-
-func costIsZero(cost MetadataCost) bool {
-	return cost.Input != nil && cost.Output != nil && *cost.Input == 0 && *cost.Output == 0
-}
-
-// usableCost requires explicit input and output rates; a catalog entry without
-// them must not become a zero-completion price.
-func usableCost(cost MetadataCost) bool {
-	return cost.Input != nil && cost.Output != nil &&
-		*cost.Input >= 0 && *cost.Output >= 0
-}
-
-// MatchModel resolves the strongest catalog identity for a model. First-party
-// providers win over relays; among relays the most specific, freshest entry
-// wins deterministically. A model with no catalog entry at all stays unpriced.
-func (c Catalog) MatchModel(model string) *CatalogEntry {
-	index := buildCatalogIndex(c.Entries)
-	for _, candidate := range buildCandidates(model, index) {
-		if !candidate.planZero && usableCost(candidate.entry.Model.Cost) {
-			entry := candidate.entry
-			return &entry
+	shared := 0
+	for token := range left {
+		if _, ok := right[token]; ok {
+			shared++
 		}
 	}
-	return nil
+	return float64(shared) / float64(len(left)+len(right)-shared)
 }

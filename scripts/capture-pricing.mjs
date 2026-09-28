@@ -1,4 +1,4 @@
-// Ad-hoc dual-language capture of the pricing leaderboard, for design review.
+// Ad-hoc dual-language capture of the price book and its editor, for design review.
 //
 // Deliberately outside every verification gate: browser-acceptance.mjs owns
 // assertions, this script only writes PNGs. It drives a real browser against a
@@ -77,17 +77,29 @@ async function main() {
     await page.goto(`${baseUrl}/pricing`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(1000);
 
-    const leaderboard = page.locator('[data-testid="pricing-leaderboard"]');
-    await leaderboard.scrollIntoViewIfNeeded();
-    await page.waitForTimeout(500);
-    await leaderboard.screenshot({ path: path.join(outDir, 'pricing_leaderboard_zh.png') });
-    await page.screenshot({ path: path.join(outDir, 'pricing_full_zh.png') });
-
-    if (await switchLanguage(page, 'English')) {
-      await leaderboard.scrollIntoViewIfNeeded();
+    // The book, then one model's editor drawer, then the channel tab: the three surfaces a
+    // pricing change touches.
+    const captureAll = async (suffix) => {
+      await page.screenshot({ path: path.join(outDir, `pricing_book_${suffix}.png`), fullPage: true });
+      const edit = page.locator('[data-testid="pricing-row-edit"]').first();
+      if ((await edit.count()) > 0) {
+        await edit.click();
+        await page.locator('[data-testid="pricing-editor"]').waitFor({ state: 'visible' });
+        await page.waitForTimeout(600);
+        await page.screenshot({ path: path.join(outDir, `pricing_editor_${suffix}.png`) });
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(300);
+      }
+      await page.goto(`${baseUrl}/pricing?tab=channels`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(500);
-      await leaderboard.screenshot({ path: path.join(outDir, 'pricing_leaderboard_en.png') });
-      await page.screenshot({ path: path.join(outDir, 'pricing_full_en.png') });
+      await page.screenshot({ path: path.join(outDir, `pricing_channels_${suffix}.png`), fullPage: true });
+      await page.goto(`${baseUrl}/pricing`, { waitUntil: 'networkidle' });
+      await page.waitForTimeout(500);
+    };
+
+    await captureAll('zh');
+    if (await switchLanguage(page, 'English')) {
+      await captureAll('en');
     }
   } finally {
     await browser.close();

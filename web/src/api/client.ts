@@ -43,7 +43,16 @@ import type {
   PluginsResponse,
   PluginStoreResponse,
 } from '../types/plugin';
-import { PricingResponse, PricingSyncState, PricingUpdatePayload } from '../types/pricing';
+import type {
+  PricingAttention,
+  PricingChannel,
+  PricingModelDetail,
+  PricingModelUpdate,
+  PricingResponse,
+  PricingSyncState,
+  ModelPrice,
+  UpstreamModel,
+} from '../types/pricing';
 
 
 /** DEFAULT_LOG_PAGE is the page size a fresh tail read asks for. */
@@ -963,13 +972,27 @@ export const api = {
     });
   },
 
-  // Pricing: one read endpoint for the page plus three operator actions.
+  // Pricing: the price book, the cheap attention read the navigation polls, the stored
+  // OpenRouter snapshot the model picker filters locally, one model's editor read, and the
+  // operator's decisions. Model and channel names can contain "/", so they are always encoded.
   async getPricing(): Promise<PricingResponse> {
     return request<PricingResponse>('/pricing', { method: 'GET' });
   },
 
-  async updatePricingModels(payload: PricingUpdatePayload): Promise<{ updated: number }> {
-    return request<{ updated: number }>('/pricing/models', {
+  async getPricingAttention(): Promise<PricingAttention> {
+    return request<PricingAttention>('/pricing/attention', { method: 'GET' });
+  },
+
+  async getPricingCatalog(): Promise<{ models: UpstreamModel[] }> {
+    return request<{ models: UpstreamModel[] }>('/pricing/catalog', { method: 'GET' });
+  },
+
+  async getPricingModel(model: string): Promise<PricingModelDetail> {
+    return request<PricingModelDetail>(`/pricing/models/${encodeURIComponent(model)}`, { method: 'GET' });
+  },
+
+  async updatePricingModel(model: string, payload: PricingModelUpdate): Promise<{ price: ModelPrice }> {
+    return request<{ price: ModelPrice }>(`/pricing/models/${encodeURIComponent(model)}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
     });
@@ -977,6 +1000,19 @@ export const api = {
 
   async deletePricingModel(model: string): Promise<{ deleted: boolean }> {
     return request<{ deleted: boolean }>(`/pricing/models/${encodeURIComponent(model)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async updatePricingChannel(channel: string, payload: { multiplier: number; note: string }): Promise<{ channel: PricingChannel }> {
+    return request<{ channel: PricingChannel }>(`/pricing/channels/${encodeURIComponent(channel)}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deletePricingChannel(channel: string): Promise<{ deleted: boolean }> {
+    return request<{ deleted: boolean }>(`/pricing/channels/${encodeURIComponent(channel)}`, {
       method: 'DELETE',
     });
   },

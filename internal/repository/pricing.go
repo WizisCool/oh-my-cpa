@@ -15,7 +15,7 @@ import (
 // exactly the domain struct the pricing package validates.
 type ModelPrice = pricing.ModelPrice
 
-// PricingSyncState is the durable result of the last models.dev sync. Running
+// PricingSyncState is the durable result of the last OpenRouter sync. Running
 // is an in-memory property of the service and is never trusted from disk.
 type PricingSyncState = pricing.SyncState
 
@@ -61,7 +61,9 @@ func (r *Repository) ListModelPrices(ctx context.Context) ([]ModelPrice, error) 
 	if err := r.requirePricingSchema(ctx); err != nil {
 		return nil, err
 	}
-	rows, err := r.SQL().QueryContext(ctx, `SELECT model, prompt_price_per_1m, completion_price_per_1m, cache_read_price_per_1m, cache_write_price_per_1m, price_multiplier, source, synced_at_ms, updated_at_ms FROM model_prices ORDER BY model`)
+	rows, err := r.SQL().QueryContext(ctx, `SELECT model, prompt_price_per_1m, completion_price_per_1m, cache_read_price_per_1m,
+ cache_write_price_per_1m, price_multiplier, tiers_json, source, upstream_id, match_kind, synced_at_ms, updated_at_ms
+ FROM model_prices ORDER BY model`)
 	if err != nil {
 		return nil, fmt.Errorf("list model prices: %w", err)
 	}
@@ -69,17 +71,61 @@ func (r *Repository) ListModelPrices(ctx context.Context) ([]ModelPrice, error) 
 	result := make([]ModelPrice, 0, 64)
 	for rows.Next() {
 		var row ModelPrice
-		if err := rows.Scan(&row.Model, &row.PromptPricePer1M, &row.CompletionPer1M, &row.CacheReadPer1M, &row.CacheWritePer1M, &row.PriceMultiplier, &row.Source, &row.SyncedAtMS, &row.UpdatedAtMS); err != nil {
+		var tiers string
+		if err := rows.Scan(&row.Model, &row.PromptPricePer1M, &row.CompletionPer1M, &row.CacheReadPer1M, &row.CacheWritePer1M,
+			&row.PriceMultiplier, &tiers, &row.Source, &row.UpstreamID, &row.MatchKind, &row.SyncedAtMS, &row.UpdatedAtMS); err != nil {
 			return nil, fmt.Errorf("scan model price: %w", err)
+		}
+		if row.Tiers, err = pricing.DecodeTiers(tiers); err != nil {
+			return nil, fmt.Errorf("model price %q: %w", row.Model, err)
 		}
 		result = append(result, row)
 	}
 	return result, rows.Err()
 }
 
-// UpsertModelPrices writes a batch of validated rows in one transaction. The
-// ON CONFLICT guard keeps an automatic sync from overwriting a manual row, so a
-// concurrent operator edit always wins.
+// modelPriceUpsert writes one row. The guard is appended by the caller: a sync
+// must not replace a custom row or a row pinned to another model, while an
+// operator's own mode change replaces whatever is there.
+const modelPriceUpsert = `INSERT INTO model_prices (
+	model, prompt_price_per_1m, completion_price_per_1m, cache_read_price_per_1m, cache_write_price_per_1m,
+	price_multiplier, tiers_json, source, upstream_id, match_kind, synced_at_ms, updated_at_ms
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(model) DO UPDATE SET
+	prompt_price_per_1m = excluded.prompt_price_per_1m,
+	completion_price_per_1m = excluded.completion_price_per_1m,
+	cache_read_price_per_1m = excluded.cache_read_price_per_1m,
+	cache_write_price_per_1m = excluded.cache_write_price_per_1m,
+	price_multiplier = excluded.price_multiplier,
+	tiers_json = excluded.tiers_json,
+	source = excluded.source,
+	upstream_id = excluded.upstream_id,
+	match_kind = excluded.match_kind,
+	synced_at_ms = excluded.synced_at_ms,
+	updated_at_ms = excluded.updated_at_ms`
+
+func execModelPriceUpsert(ctx context.Context, tx *sql.Tx, row ModelPrice, guard string, now int64) error {
+	if err := row.ValidateWrite(); err != nil {
+		return fmt.Errorf("model price %q: %w", row.Model, err)
+	}
+	tiers, err := pricing.EncodeTiers(row.Tiers)
+	if err != nil {
+		return err
+	}
+	// Bookkeeping is server-authoritative. UpdatedAtMS is shown as when the rate
+	// last changed, so a browser clock must not be able to misdate it; the value
+	// is stamped here rather than trusted from the request payload.
+	if _, err := tx.ExecContext(ctx, modelPriceUpsert+guard,
+		row.Model, row.PromptPricePer1M, row.CompletionPer1M, row.CacheReadPer1M, row.CacheWritePer1M,
+		row.PriceMultiplier, tiers, row.Source, row.UpstreamID, row.MatchKind, row.SyncedAtMS, now); err != nil {
+		return fmt.Errorf("upsert model price %q: %w", row.Model, err)
+	}
+	return nil
+}
+
+// UpsertModelPrices writes a batch of synced rows in one transaction. The guard
+// keeps an automatic write from replacing a custom row, or a row an operator
+// pinned to a different OpenRouter model, so a concurrent operator edit wins.
 func (r *Repository) UpsertModelPrices(ctx context.Context, rows []ModelPrice) error {
 	if err := r.requirePricingSchema(ctx); err != nil {
 		return err
@@ -94,32 +140,63 @@ func (r *Repository) UpsertModelPrices(ctx context.Context, rows []ModelPrice) e
 	}
 	defer func() { _ = tx.Rollback() }()
 	for _, row := range rows {
-		if err := row.Validate(); err != nil {
-			return fmt.Errorf("model price %q: %w", row.Model, err)
-		}
-		// Bookkeeping is server-authoritative. UpdatedAtMS is shown as when the rate
-		// last changed, so a browser clock must not be able to misdate it; the value
-		// is stamped here rather than trusted from the request payload.
-		if _, err := tx.ExecContext(ctx, `INSERT INTO model_prices (
-			model, prompt_price_per_1m, completion_price_per_1m, cache_read_price_per_1m,
-			cache_write_price_per_1m, price_multiplier, source, synced_at_ms, updated_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(model) DO UPDATE SET
-			prompt_price_per_1m = excluded.prompt_price_per_1m,
-			completion_price_per_1m = excluded.completion_price_per_1m,
-			cache_read_price_per_1m = excluded.cache_read_price_per_1m,
-			cache_write_price_per_1m = excluded.cache_write_price_per_1m,
-			price_multiplier = excluded.price_multiplier,
-			source = excluded.source,
-			synced_at_ms = excluded.synced_at_ms,
-			updated_at_ms = excluded.updated_at_ms
-        WHERE excluded.source = 'manual' OR model_prices.source <> 'manual'`,
-			row.Model, row.PromptPricePer1M, row.CompletionPer1M, row.CacheReadPer1M,
-			row.CacheWritePer1M, row.PriceMultiplier, row.Source, row.SyncedAtMS, now); err != nil {
-			return fmt.Errorf("upsert model price %q: %w", row.Model, err)
+		if err := execModelPriceUpsert(ctx, tx, row, `
+	WHERE excluded.source = 'manual' OR (model_prices.source <> 'manual' AND NOT EXISTS (
+		SELECT 1 FROM pricing_model_links l WHERE l.model = excluded.model AND l.upstream_id <> excluded.upstream_id))`, now); err != nil {
+			return err
 		}
 	}
 	return tx.Commit()
+}
+
+// ApplyModelPrice is an operator's mode change: the row replaces whatever is
+// stored (a custom row included) and the pin is set or cleared in the same
+// transaction, so the change mints exactly one price version.
+func (r *Repository) ApplyModelPrice(ctx context.Context, row ModelPrice, link string) error {
+	if err := r.requirePricingSchema(ctx); err != nil {
+		return err
+	}
+	tx, err := r.SQL().BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin apply model price: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	now := time.Now().UnixMilli()
+	if err := execModelPriceUpsert(ctx, tx, row, "", now); err != nil {
+		return err
+	}
+	link = strings.TrimSpace(link)
+	if link == "" {
+		_, err = tx.ExecContext(ctx, `DELETE FROM pricing_model_links WHERE model = ?`, row.Model)
+	} else {
+		_, err = tx.ExecContext(ctx, `INSERT INTO pricing_model_links(model, upstream_id, updated_at_ms) VALUES (?, ?, ?)
+ ON CONFLICT(model) DO UPDATE SET upstream_id = excluded.upstream_id, updated_at_ms = excluded.updated_at_ms`, row.Model, link, now)
+	}
+	if err != nil {
+		return fmt.Errorf("save model link %q: %w", row.Model, err)
+	}
+	return tx.Commit()
+}
+
+// ListModelLinks returns every operator pin, model → OpenRouter id.
+func (r *Repository) ListModelLinks(ctx context.Context) (map[string]string, error) {
+	if err := r.requirePricingSchema(ctx); err != nil {
+		return nil, err
+	}
+	rows, err := r.SQL().QueryContext(ctx, `SELECT model, upstream_id FROM pricing_model_links`)
+	if err != nil {
+		return nil, fmt.Errorf("list model links: %w", err)
+	}
+	defer rows.Close()
+	links := make(map[string]string)
+	for rows.Next() {
+		var model, upstream string
+		if err := rows.Scan(&model, &upstream); err != nil {
+			return nil, err
+		}
+		links[model] = upstream
+	}
+	return links, rows.Err()
 }
 
 // SeedModelPriceHistoryBackfill writes one price version per row, effective at
@@ -152,36 +229,51 @@ func (r *Repository) SeedModelPriceHistoryBackfill(ctx context.Context, rows []M
 	}
 	defer func() { _ = tx.Rollback() }()
 	for _, row := range rows {
-		if err := row.Validate(); err != nil {
+		if err := row.ValidateWrite(); err != nil {
 			return fmt.Errorf("model price %q: %w", row.Model, err)
+		}
+		tiers, err := pricing.EncodeTiers(row.Tiers)
+		if err != nil {
+			return err
 		}
 		if _, errExec := tx.ExecContext(ctx, `
 			INSERT INTO model_price_versions (
 				model, effective_from_ms, available, prompt_price_per_1m, completion_price_per_1m,
-				cache_read_price_per_1m, cache_write_price_per_1m, price_multiplier, source
-			) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?)`,
+				cache_read_price_per_1m, cache_write_price_per_1m, price_multiplier, source, tiers_json, upstream_id
+			) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			row.Model, effectiveFromMS, row.PromptPricePer1M, row.CompletionPer1M,
-			row.CacheReadPer1M, row.CacheWritePer1M, row.PriceMultiplier, row.Source); errExec != nil {
+			row.CacheReadPer1M, row.CacheWritePer1M, row.PriceMultiplier, row.Source, tiers, row.UpstreamID); errExec != nil {
 			return fmt.Errorf("backfill model price version %q: %w", row.Model, errExec)
 		}
 	}
 	return tx.Commit()
 }
 
-// DeleteModelPrice removes one row; history stays in audit events.
+// DeleteModelPrice retires the current price and the model's pin together; the
+// delete trigger writes the tombstone version that stops the rate leaking
+// forward.
 func (r *Repository) DeleteModelPrice(ctx context.Context, model string) (bool, error) {
 	if err := r.requirePricingSchema(ctx); err != nil {
 		return false, err
 	}
-	result, err := r.SQL().ExecContext(ctx, `DELETE FROM model_prices WHERE model = ?`, strings.TrimSpace(model))
+	model = strings.TrimSpace(model)
+	tx, err := r.SQL().BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("begin delete model price: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.ExecContext(ctx, `DELETE FROM model_prices WHERE model = ?`, model)
 	if err != nil {
 		return false, fmt.Errorf("delete model price: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM pricing_model_links WHERE model = ?`, model); err != nil {
+		return false, fmt.Errorf("delete model link: %w", err)
+	}
 	deleted, _ := result.RowsAffected()
-	return deleted > 0, nil
+	return deleted > 0, tx.Commit()
 }
 
-// GetPricingSyncState returns the models.dev sync bookkeeping; sql.ErrNoRows
+// GetPricingSyncState returns the OpenRouter sync bookkeeping; sql.ErrNoRows
 // means the source has never been synced.
 func (r *Repository) GetPricingSyncState(ctx context.Context, source string) (PricingSyncState, error) {
 	if err := r.requirePricingSchema(ctx); err != nil {
@@ -208,8 +300,8 @@ func (r *Repository) SavePricingSyncState(ctx context.Context, state PricingSync
 	}
 	// Every UPDATE term must read from excluded/ or the target row: an earlier
 	// revision put a seventh placeholder in COALESCE() here and passed the source
-	// name for it, so each repeat sync overwrote last_success_at_ms with the TEXT
-	// 'modelsdev' and the pricing page could no longer read its own state.
+	// name for it, so each repeat sync overwrote last_success_at_ms with TEXT and
+	// the pricing page could no longer read its own state.
 	// COALESCE against the existing row still keeps the last good success when a
 	// sync fails, without any placeholder in the UPDATE clause.
 	autoInterval := state.AutoSyncIntervalHours
@@ -259,18 +351,18 @@ func (r *Repository) UpdatePricingSyncSchedule(ctx context.Context, source strin
 	return nil
 }
 
-// requirePricingSchema refuses to touch pricing tables until the immutable
-// snapshot and current-catalog migrations are present.
+// requirePricingSchema refuses to touch pricing tables until the migration that
+// gives them provider membership is present.
 func (r *Repository) requirePricingSchema(ctx context.Context) error {
 	if r == nil || r.SQL() == nil {
 		return errors.New("repository is not initialized")
 	}
 	var applied int
-	if err := r.SQL().QueryRowContext(ctx, `SELECT COUNT(1) FROM schema_migrations WHERE version = 20`).Scan(&applied); err != nil {
+	if err := r.SQL().QueryRowContext(ctx, `SELECT COUNT(1) FROM schema_migrations WHERE version = 29`).Scan(&applied); err != nil {
 		return fmt.Errorf("pricing schema check: %w", err)
 	}
 	if applied == 0 {
-		return errors.New("model pricing schema migration 20 is not applied")
+		return errors.New("model pricing schema migration 29 is not applied")
 	}
 	return nil
 }

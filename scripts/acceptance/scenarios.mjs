@@ -53,6 +53,7 @@ import {
 import { overlayBackDismisses } from './probes/overlayHistory.mjs';
 import { phoneListRendering } from './probes/phoneLists.mjs';
 import { pluginManagement, pluginManagementFixtures, pluginManagementNarrow } from './probes/pluginManagement.mjs';
+import { pricingBook, pricingFixtures, pricingFromRequestList } from './probes/pricingBook.mjs';
 import { touchErgonomics } from './probes/touchErgonomics.mjs';
 import { oauthManagement, oauthManagementFixtures, oauthManagementProbeRoutes } from './probes/oauthManagement.mjs';
 import { iconPickerStacking, pickerProvider, providerIconPick } from './probes/providerConsole.mjs';
@@ -83,6 +84,7 @@ import {
 const logsAuditRequests = [];
 /** The writes the plugin management scenario's page sent, read back by its own checks. */
 const pluginManagementWrites = [];
+const pricingBookWrites = [];
 
 export const SCENARIOS = [
   { id: 'agent', name: 'Agent data notice, reasoning effort, confirmed tools, remembered target and server conversation recovery', options: { routes: agentFixtures() }, run: agentWorkspace },
@@ -578,48 +580,7 @@ export const SCENARIOS = [
           ],
           total: 2,
         })],
-        [(url) => url.pathname.endsWith('/management/pricing') || url.pathname.endsWith('/pricing'), () => ({
-          source: 'models.dev',
-          models: [
-            {
-              model: 'gpt-5-codex',
-              prompt_price_per_1m: 1.25,
-              completion_price_per_1m: 10,
-              cache_read_price_per_1m: 0.125,
-              cache_write_price_per_1m: 1.25,
-              price_multiplier: 1,
-              source: 'models.dev',
-              synced_at_ms: Date.now() - 3_600_000,
-              updated_at_ms: Date.now() - 3_600_000,
-            },
-            {
-              model: 'claude-sonnet-4-5-20250929',
-              prompt_price_per_1m: 3,
-              completion_price_per_1m: 15,
-              cache_read_price_per_1m: 0.3,
-              cache_write_price_per_1m: 3.75,
-              price_multiplier: 1.2,
-              source: 'manual',
-              synced_at_ms: 0,
-              updated_at_ms: Date.now() - 7_200_000,
-            },
-          ],
-          unpriced: ['vendor/unpriced-fixture-model'],
-          sync: {
-            known: true,
-            running: false,
-            state: {
-              source: 'models.dev',
-              last_error: '',
-              last_matched: 2,
-              last_unmatched: 1,
-              last_success_at_ms: Date.now() - 3_600_000,
-              updated_at_ms: Date.now() - 3_600_000,
-              auto_sync_interval_hours: 24,
-              next_sync_at_ms: Date.now() + 86_400_000,
-            },
-          },
-        })],
+        ...pricingFixtures([]),
         [(url) => url.pathname.endsWith('/management/request-error-logs'), () => ({
           files: [
             { name: 'errors-2026-09-19.log', size: 262144, modified: Math.floor(Date.now() / 1000) - 600 },
@@ -631,6 +592,28 @@ export const SCENARIOS = [
       ],
     },
     run: phoneListRendering,
+  },
+  {
+    id: 'pricing-book',
+    name: 'the provider-grouped price book paginates models and edits prices in place',
+    options: { routes: pricingFixtures(pricingBookWrites) },
+    run: (context) => pricingBook({ ...context, writes: pricingBookWrites }),
+  },
+  {
+    id: 'pricing-request-list',
+    name: 'an unpriced request prices its model without opening the record',
+    options: {
+      routes: [
+        ...pricingFixtures([]),
+        [(url) => url.pathname.endsWith('/usage/facets'), () => alignmentFacets],
+        [(url) => url.pathname.includes('/usage/events'), () => ({ items: interactionRecords, has_more: false, limit: 100 })],
+        [
+          (url) => url.pathname.endsWith('/usage/ingest-status'),
+          () => ({ enabled: true, healthy: true, collector: { mode: 'http_pull', captured: 500, coverage_gaps: 0 }, stats: { pending: 0 } }),
+        ],
+      ],
+    },
+    run: (context) => pricingFromRequestList({ ...context, writes: [] }),
   },
   {
     id: 'request-list-interactions',

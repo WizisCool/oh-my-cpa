@@ -39,8 +39,18 @@ type BackupConfig struct {
 type OpenOption func(*openConfig) error
 
 type openConfig struct {
-	cipher *appcrypto.Cipher
-	backup BackupConfig
+	cipher       *appcrypto.Cipher
+	backup       BackupConfig
+	migrateUntil int
+}
+
+// withMigrationsUntil stops Open's migration at a version, so an upgrade test
+// can build a real database at an older schema and then run the rest.
+func withMigrationsUntil(version int) OpenOption {
+	return func(config *openConfig) error {
+		config.migrateUntil = version
+		return nil
+	}
 }
 
 // WithMigrationBackup enables encrypted migration backups and also wires the
@@ -93,6 +103,8 @@ type DB struct {
 	path      string
 	driver    string
 	writeGate *writeGate
+	// migrateUntil, when positive, is the last migration version Migrate applies.
+	migrateUntil int
 }
 
 // Cipher returns the application cipher associated with this connection.
@@ -140,7 +152,7 @@ func Open(ctx context.Context, databasePath string, options ...OpenOption) (*DB,
 		database.Close()
 		return nil, fmt.Errorf("ping sqlite: %w", err)
 	}
-	wrapped := &DB{SQL: database, cipher: config.backup.Cipher, backup: config.backup, path: databasePath, driver: gatedDriverName, writeGate: gate}
+	wrapped := &DB{SQL: database, cipher: config.backup.Cipher, backup: config.backup, path: databasePath, driver: gatedDriverName, writeGate: gate, migrateUntil: config.migrateUntil}
 	if wrapped.cipher == nil {
 		wrapped.cipher = config.cipher
 	}
@@ -189,6 +201,9 @@ func (db *DB) Migrate(ctx context.Context) error {
 			return fmt.Errorf("duplicate migration version %d in %q and %q", version, previous, entry.Name())
 		}
 		seenVersions[version] = entry.Name()
+		if db.migrateUntil > 0 && version > db.migrateUntil {
+			continue
+		}
 		var applied int
 		if err := db.SQL.QueryRowContext(ctx, `SELECT COUNT(1) FROM schema_migrations WHERE version = ?`, version).Scan(&applied); err != nil {
 			return fmt.Errorf("check migration %d: %w", version, err)

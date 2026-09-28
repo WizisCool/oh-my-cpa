@@ -28,6 +28,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { BrandArtwork } from './BrandArtwork';
 import { useT, type TFunc } from '../../i18n';
+import { PricingEditorProvider } from '../pricing/PricingEditorContext';
 
 const { Sider, Content } = Layout;
 
@@ -325,7 +326,9 @@ export const AppLayout: React.FC = () => {
               swapping, and the scroll position resets with the new page. */}
           <div key={location.pathname} className={`route-transition${WORKSPACE_ROUTES.has(location.pathname) ? ' workspace-route' : ''}`}>
             <React.Suspense fallback={<div style={{ padding: 60, textAlign: 'center' }}><Spin size="large" /></div>}>
-              <Outlet />
+              <PricingEditorProvider>
+                <Outlet />
+              </PricingEditorProvider>
             </React.Suspense>
           </div>
         </Content>

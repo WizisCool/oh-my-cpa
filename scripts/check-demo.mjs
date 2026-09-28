@@ -67,7 +67,7 @@ const CONSOLE_ROUTES = [
  * data has no captured response even if the route itself renders.
  */
 const ROUTE_READS = {
-  '/dashboard': ['overview', 'dashboard-24h', 'dashboard-tail-24h', 'dashboard-models-call-24h', 'dashboard-models-model-24h', 'dashboard-token-heatmap-utc'],
+  '/dashboard': ['overview', 'pricing-attention', 'dashboard-24h', 'dashboard-tail-24h', 'dashboard-models-call-24h', 'dashboard-models-model-24h', 'dashboard-token-heatmap-utc'],
   '/quick-start': ['overview', 'providers', 'api-keys'],
   '/playground': ['api-keys', 'playground-models'],
   '/agent': ['api-keys', 'capabilities', 'agent-session'],
@@ -76,7 +76,7 @@ const ROUTE_READS = {
   '/oauth-management': ['auth-files', 'auth-files-model-aliases', 'plugins', 'quota'],
   '/logs': ['logs', 'logs-status', 'request-error-logs'],
   '/usage/events': ['usage-events', 'usage-facets', 'usage-event-detail', 'usage-ingest-status'],
-  '/pricing': ['pricing'],
+  '/pricing': ['pricing', 'pricing-attention', 'pricing-catalog', 'pricing-model-claude-opus-5.5'],
   '/config': ['config', 'config-source'],
   '/omc-settings': ['preferences', 'system'],
   '/plugins': ['plugins', 'plugin-store', 'plugins-settings', 'plugin-config-usage-exporter'],

@@ -101,7 +101,15 @@ func (h *Handler) shiftProviderMetadataAfterDelete(ctx context.Context, idPrefix
 	if len(icons) > 0 {
 		updates[repository.PreferenceProviderIcons] = shiftPositionalProviderIDs(icons, idPrefix, deletedIndex)
 	}
-	return h.saveStringPreferences(ctx, updates)
+	encoded := make(map[string]string, len(updates))
+	for key, value := range updates {
+		document, err := json.Marshal(value)
+		if err != nil {
+			return err
+		}
+		encoded[key] = string(document)
+	}
+	return h.repo.PutProviderPreferencesAfterDelete(ctx, encoded, idPrefix, deletedIndex)
 }
 
 // idPrefixForFamily is the positional id prefix a family's rows carry.

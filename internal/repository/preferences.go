@@ -119,6 +119,10 @@ func (r *Repository) PutPreference(ctx context.Context, key, value string) error
 // cancellation must leave the whole set at its previous revision rather than
 // exposing a half-applied overlay.
 func (r *Repository) PutPreferences(ctx context.Context, values map[string]string) error {
+	return r.putPreferences(ctx, values, nil)
+}
+
+func (r *Repository) putPreferences(ctx context.Context, values map[string]string, beforeCommit func(*sql.Tx) error) error {
 	if r == nil || r.SQL() == nil {
 		return errors.New("repository is not initialized")
 	}
@@ -130,7 +134,7 @@ func (r *Repository) PutPreferences(ctx context.Context, values map[string]strin
 			return fmt.Errorf("preference %q exceeds %d bytes", key, MaxPreferenceValueBytes)
 		}
 	}
-	if len(values) == 0 {
+	if len(values) == 0 && beforeCommit == nil {
 		return nil
 	}
 
@@ -148,6 +152,11 @@ func (r *Repository) PutPreferences(ctx context.Context, values map[string]strin
 			ON CONFLICT(pref_key) DO UPDATE SET pref_value = excluded.pref_value, updated_at_ms = excluded.updated_at_ms`,
 			key, value, now); err != nil {
 			return fmt.Errorf("write preference %q: %w", key, err)
+		}
+	}
+	if beforeCommit != nil {
+		if err := beforeCommit(tx); err != nil {
+			return err
 		}
 	}
 	if err := tx.Commit(); err != nil {

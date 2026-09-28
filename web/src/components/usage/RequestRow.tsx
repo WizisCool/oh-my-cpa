@@ -1,10 +1,11 @@
 import React from 'react';
 import { Tooltip, App as AntdApp } from 'antd';
-import { BlockOutlined, BulbOutlined, CopyOutlined, RightOutlined } from '../icons';
+import { BlockOutlined, BulbOutlined, CopyOutlined, DollarOutlined, RightOutlined } from '../icons';
 import dayjs from 'dayjs';
 import { getProviderDefaultIcon } from '../LobeIcon';
 import { ProviderBrandIcon } from '../LobeIcon';
 import { useT } from '../../i18n';
+import { useOpenPriceEditor } from '../pricing/PricingEditorContext';
 import { copyText } from '../../utils/clipboard';
 import { maskKeyText } from '../../utils/maskKey';
 import { cacheScaleMix, formatCacheRate } from '../../theme/cacheScale';
@@ -54,6 +55,7 @@ export const RequestRow = React.memo<RequestRowProps>(
   }) => {
     const t = useT();
     const { message } = AntdApp.useApp();
+    const openPriceEditor = useOpenPriceEditor();
     // The console-wide token unit style: the list scans compactly while every
     // accessible name keeps the exact count.
     const { style: tokenStyle } = useTokenDisplayStyle();
@@ -292,15 +294,35 @@ export const RequestRow = React.memo<RequestRowProps>(
         </div>
 
         {/* Column 8: cost, locked at request time; unpriced stays an em dash
-            rather than a fabricated 0 */}
+            rather than a fabricated 0, beside the one action that fixes it */}
         <div className={`req-col req-col-cost ${requestColumnAlignClass('cost')}`}>
           <span className="req-mobile-label">{t('events.col_cost')}</span>
           {event.cost_usd != null ? (
             <strong className="req-cost-val">${event.cost_usd.toFixed(4)}</strong>
           ) : (
-            <Tooltip title={t('events.cost_unpriced')}>
-              <span className="req-cost-none">—</span>
-            </Tooltip>
+            <>
+              <Tooltip title={t('events.cost_unpriced')}>
+                <span className="req-cost-none">—</span>
+              </Tooltip>
+              {openPriceEditor && event.model && event.pricing_status !== 'legacy_unpriced' && (
+                <Tooltip title={t('cost.set_price', { model: event.model })}>
+                  <button
+                    type="button"
+                    className="req-cost-set"
+                    aria-label={t('cost.set_price', { model: event.model })}
+                    // The row opens the record; this control opens the price editor instead.
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openPriceEditor(event.model);
+                    }}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    data-testid="request-set-price"
+                  >
+                    <DollarOutlined />
+                  </button>
+                </Tooltip>
+              )}
+            </>
           )}
         </div>
         {/* Column 9: cache hit rate */}

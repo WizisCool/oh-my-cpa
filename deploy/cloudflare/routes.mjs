@@ -44,6 +44,8 @@ const FIXED_ROUTES = new Map([
   ['/api/v1/resources', 'resources'],
   ['/api/v1/preferences', 'preferences'],
   ['/api/v1/pricing', 'pricing'],
+  ['/api/v1/pricing/attention', 'pricing-attention'],
+  ['/api/v1/pricing/catalog', 'pricing-catalog'],
   ['/api/v1/management/overview', 'overview'],
   ['/api/v1/management/system', 'system'],
   ['/api/v1/management/system/releases', 'system-releases'],
@@ -102,6 +104,9 @@ const REQUEST_EVENT_DETAIL = '/api/v1/usage/events/{id}';
 /** One installed plugin's settings document. */
 const PLUGIN_CONFIG = '/api/v1/management/plugins/{id}/config';
 
+/** One model's price editor read. */
+const PRICING_MODEL = '/api/v1/pricing/models/{model}';
+
 /** Routes that take a parameter the console chooses, with the value it sends. */
 const PARAMETERISED_ROUTES = [
   // The heatmap answers in the viewer's own zone, so the timezone is part of the ask.
@@ -137,6 +142,23 @@ const PARAMETERISED_ROUTES = [
     pattern: /^\/api\/v1\/management\/plugins\/[A-Za-z0-9._-]+\/config$/,
     resolve: (url) => {
       const name = `plugin-config-${url.pathname.split('/').at(-2)}`;
+      return Object.hasOwn(dataset.responses, name) ? name : undefined;
+    },
+  },
+  // One model's editor read, captured per model the price book lists. The name arrives
+  // encoded, because a model name can contain "/"; a model the dataset does not hold has no
+  // answer rather than another model's price history.
+  {
+    path: PRICING_MODEL,
+    pattern: /^\/api\/v1\/pricing\/models\/[^/]+$/,
+    resolve: (url) => {
+      let model;
+      try {
+        model = decodeURIComponent(url.pathname.split('/').at(-1));
+      } catch {
+        return undefined;
+      }
+      const name = `pricing-model-${model}`;
       return Object.hasOwn(dataset.responses, name) ? name : undefined;
     },
   },

@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -147,59 +149,98 @@ func ensureInstance(ctx context.Context, repo *repository.Repository, now time.T
 	})
 }
 
-// seedPrices publishes the price list the cost column is computed from, the
-// catalogue that decides which of those rows the pricing page shows, and the one
-// historical version the fabricated history is priced against.
+// seedPrices publishes the price book the cost column is computed from: the
+// OpenRouter snapshot the picker reads, the catalogue that decides which rows the
+// page shows, a price per served model (matched automatically, pinned, or set by
+// hand), the channel multipliers, and the one historical version of each that the
+// fabricated history is priced against.
 //
 // The catalogue is part of the fixture because a self-hosted deployment fills it
 // from the gateway's own model list during a sync, and the demo deliberately runs
-// no sync. Without it the pricing page would intersect sixteen stored prices with
-// an empty catalogue and render nothing at all.
+// no sync. Without it the pricing page would intersect the stored prices with an
+// empty catalogue and render nothing at all.
 func seedPrices(ctx context.Context, repo *repository.Repository, now time.Time) (int, error) {
+	upstream, err := pricing.DecodeOpenRouter(openRouterSnapshot)
+	if err != nil {
+		return 0, fmt.Errorf("decode OpenRouter snapshot: %w", err)
+	}
+	if err := repo.ReplaceUpstreamCatalog(ctx, upstream); err != nil {
+		return 0, fmt.Errorf("seed OpenRouter snapshot: %w", err)
+	}
+	catalog := pricing.NewCatalog(upstream, now)
+	custom := make(map[string]priceRow, len(customPriceCatalog()))
+	for _, row := range customPriceCatalog() {
+		custom[row.model] = row
+	}
+	syncedAt := now.Add(-3 * time.Hour).UnixMilli()
 	matched := int64(0)
-	rows := make([]repository.ModelPrice, 0, len(priceCatalog()))
-	for _, price := range priceCatalog() {
-		// The catalogue decides what the page *shows*; this decides what the price
-		// *claims to be*. They are different questions and answering both with the
-		// catalogue made every row look like it came from models.dev, including the
-		// relay models whose rate only an operator could have set.
-		source := pricing.SourceManual
-		if _, tracked := modelsDevCanonical[price.model]; tracked {
-			source = pricing.SourceModelsDev
-			matched++
+	rows := make([]repository.ModelPrice, 0, len(modelCatalog()))
+	for _, profile := range modelCatalog() {
+		if row, ok := custom[profile.name]; ok {
+			rows = append(rows, repository.ModelPrice{
+				Model: row.model, PromptPricePer1M: row.prompt, CompletionPer1M: row.completion,
+				CacheReadPer1M: row.cacheRead, CacheWritePer1M: row.cacheWrite, PriceMultiplier: 1, Source: pricing.SourceManual,
+			})
+			continue
 		}
-		rows = append(rows, repository.ModelPrice{
-			Model:            price.model,
-			PromptPricePer1M: price.prompt,
-			CompletionPer1M:  price.completion,
-			CacheReadPer1M:   price.cacheRead,
-			CacheWritePer1M:  price.cacheWrite,
-			PriceMultiplier:  1,
-			Source:           source,
-			SyncedAtMS:       now.UnixMilli(),
-		})
+		if pin, ok := linkedModels[profile.name]; ok {
+			model, found := catalog.Lookup(pin)
+			if !found {
+				return 0, fmt.Errorf("pinned model %q is not in the OpenRouter snapshot", pin)
+			}
+			rows = append(rows, model.PriceFor(profile.name, pricing.MatchLinked, 1, syncedAt))
+			matched++
+			continue
+		}
+		// Every other served model must match on its own, the way a sync would match
+		// it; a fixture model that does not is a fixture error, not an unpriced row.
+		match, found := catalog.MatchModel(profile.name)
+		if !found {
+			return 0, fmt.Errorf("served model %q matches nothing in the OpenRouter snapshot", profile.name)
+		}
+		rows = append(rows, match.Model.PriceFor(profile.name, match.Kind, 1, syncedAt))
+		matched++
+	}
+	if _, err := repo.ReplacePricingModels(ctx, pricingCatalogTargets(), pricingProviderCatalog()...); err != nil {
+		return 0, fmt.Errorf("seed pricing catalogue: %w", err)
 	}
 	if err := repo.UpsertModelPrices(ctx, rows); err != nil {
 		return 0, fmt.Errorf("seed model prices: %w", err)
+	}
+	for model, pin := range linkedModels {
+		for _, row := range rows {
+			if row.Model == model {
+				if err := repo.ApplyModelPrice(ctx, row, pin); err != nil {
+					return 0, fmt.Errorf("seed model pin: %w", err)
+				}
+			}
+		}
 	}
 	historyStart := now.AddDate(0, 0, -historyDays).Add(-24 * time.Hour)
 	if err := repo.SeedModelPriceHistoryBackfill(ctx, rows, historyStart.UnixMilli()); err != nil {
 		return 0, fmt.Errorf("seed price history: %w", err)
 	}
-	if _, err := repo.ReplacePricingModels(ctx, pricingCatalogTargets()); err != nil {
-		return 0, fmt.Errorf("seed pricing catalogue: %w", err)
+	channels := make([]pricing.ChannelMultiplier, 0, len(channelCatalog()))
+	for _, row := range channelCatalog() {
+		channel := pricing.ChannelMultiplier{Channel: row.channel, Multiplier: row.multiplier, Note: row.note}
+		if err := repo.UpsertChannelMultiplier(ctx, channel); err != nil {
+			return 0, fmt.Errorf("seed channel multiplier: %w", err)
+		}
+		channels = append(channels, channel)
+	}
+	if err := repo.SeedChannelHistoryBackfill(ctx, channels, historyStart.UnixMilli()); err != nil {
+		return 0, fmt.Errorf("seed channel history: %w", err)
 	}
 	// The sync bookkeeping is what the pricing page prints beside its rows. A
 	// fixture that left it untouched would show "never synced" on a page whose
 	// prices are present, which reads as a broken sync rather than as a demo.
-	lastSuccess := now.Add(-3 * time.Hour).UnixMilli()
 	state := pricing.SyncState{
-		Source:                pricing.SourceModelsDev,
-		LastSuccessAtMS:       &lastSuccess,
-		UpdatedAtMS:           lastSuccess,
+		Source:                pricing.SourceOpenRouter,
+		LastSuccessAtMS:       &syncedAt,
+		UpdatedAtMS:           syncedAt,
 		LastMatched:           matched,
+		LastUnmatched:         int64(len(unpricedCatalogModels)),
 		AutoSyncIntervalHours: 24,
-		CatalogUpdatedAtMS:    lastSuccess,
 	}
 	if err := repo.SavePricingSyncState(ctx, state); err != nil {
 		return 0, fmt.Errorf("seed pricing sync state: %w", err)
@@ -208,31 +249,15 @@ func seedPrices(ctx context.Context, repo *repository.Repository, now time.Time)
 }
 
 // pricingCatalogTargets is the model catalogue the pricing page resolves prices
-// against, keyed by the model the gateway serves and valued by the canonical
-// identity a price is looked up under.
-//
-// A model whose canonical identity is empty is one a real deployment prices by
-// hand: the relay and self-hosted models whose operators set their own rate.
+// against, keyed by the model the gateway serves and valued by the identity a
+// price is matched under. The fixture serves every model under its own name.
 func pricingCatalogTargets() map[string]string {
 	targets := make(map[string]string)
 	for _, model := range modelCatalog() {
-		if canonical, ok := modelsDevCanonical[model.name]; ok {
-			targets[model.name] = canonical
-		}
+		targets[model.name] = model.name
 	}
-	for _, price := range priceCatalog() {
-		if _, ok := targets[price.model]; ok {
-			continue
-		}
-		// A model the catalogue does not list is priced by hand, and its own name is
-		// the identity that price is keyed under. Leaving it out would hide the row:
-		// the pricing page shows stored prices intersected with this catalogue, which
-		// is what makes a manual rate for a relay model editable at all.
-		if canonical, ok := modelsDevCanonical[price.model]; ok {
-			targets[price.model] = canonical
-			continue
-		}
-		targets[price.model] = price.model
+	for _, model := range unpricedCatalogModels {
+		targets[model] = model
 	}
 	return targets
 }
@@ -656,4 +681,59 @@ func (d *deterministic) nextUint64() uint64 {
 
 func (d *deterministic) nextFloat() float64 {
 	return float64(d.nextUint64()>>11) / float64(1<<53)
+}
+
+// pricingProviderCatalog uses the same fixture sources as CPA's discovery endpoints.
+func pricingProviderCatalog() []pricing.CatalogProvider {
+	providers := []pricing.CatalogProvider{}
+	for _, family := range familyCatalog() {
+		for index, key := range family.keys {
+			provider := pricing.CatalogProvider{ID: fmt.Sprintf("%s-%d", family.family, index), Family: family.family, Channel: family.family, EndpointHost: demoEndpointHost(key.baseURL), Priority: key.priority, Models: []string{}}
+			for _, model := range key.models {
+				provider.Models = append(provider.Models, model.name)
+				if model.alias != "" {
+					provider.Models = append(provider.Models, model.alias)
+				}
+			}
+			providers = append(providers, provider)
+		}
+	}
+	for index, relay := range compatibilityCatalog() {
+		provider := pricing.CatalogProvider{ID: fmt.Sprintf("openai-compat-%d", index), Family: "openai-compatibility", Name: relay.name, EndpointHost: demoEndpointHost(relay.baseURL), Channel: compatibilityRecordLabel(relay.name), Priority: relay.priority, Models: []string{}}
+		for _, model := range relay.models {
+			provider.Models = append(provider.Models, model.name)
+			if model.alias != "" {
+				provider.Models = append(provider.Models, model.alias)
+			}
+		}
+		providers = append(providers, provider)
+	}
+	oauth := make(map[string]*pricing.CatalogProvider)
+	for _, credential := range credentialCatalog() {
+		if credential.isDisabled {
+			continue
+		}
+		provider := oauth[credential.provider]
+		if provider == nil {
+			provider = &pricing.CatalogProvider{ID: "oauth:" + credential.provider, Family: credential.provider, Name: credential.provider, Channel: credential.provider, Priority: credential.priority, IsOAuth: true, Models: []string{}}
+			oauth[credential.provider] = provider
+		}
+		if credential.priority > provider.Priority {
+			provider.Priority = credential.priority
+		}
+		provider.Models = append(provider.Models, credential.models...)
+	}
+	for _, provider := range oauth {
+		providers = append(providers, *provider)
+	}
+	sort.Slice(providers, func(i, j int) bool { return providers[i].ID < providers[j].ID })
+	return providers
+}
+
+func demoEndpointHost(rawURL string) string {
+	endpoint, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	return endpoint.Hostname()
 }

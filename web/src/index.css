@@ -353,7 +353,10 @@ a { color: inherit; }
 .fact-list.is-quiet dd { color: var(--fg-2); }
 
 /* A wide table scrolls sideways inside its card, never the page (docs/design.md §3). */
-.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+/* A wide table scrolls sideways only. `overflow-x: auto` alone computes the other axis to `auto`
+   too, and a table's bottom border overflows by a subpixel, so every list became a vertical
+   scroller of one pixel that caught the wheel: over a stack of lists the page would not scroll. */
+.table-scroll { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
 .responsive-list .ant-pagination { margin-top: 12px; }
 /* A phone row inside a card takes the card's own inset rather than adding its own on top: the
    two stacked to 36px a side, which on a 390px screen is a tenth of the width spent on margin. */
@@ -436,6 +439,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .app-menu .ant-menu-item-selected { color: var(--fg) !important; font-weight: 600; background: transparent !important; box-shadow: inset 2px 0 0 var(--fg) !important; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 .app-menu .ant-menu-item:hover { color: var(--fg) !important; background: var(--surface) !important; }
 .app-menu .ant-menu-item-selected:hover { background: var(--surface) !important; }
+/* A page waiting on the operator (models without a price) carries a warn pip after its label. */
 .nav-label-with-count { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .nav-count { min-width: 20px; padding: 0 5px; border: 1px solid var(--warn); border-radius: 4px; color: var(--warn); font-size: 10px; text-align: center; line-height: 17px; }
 .app-sider-foot { border-top: 1px solid var(--border); padding: 10px 12px; color: var(--muted); font-size: 10px; line-height: 1.8; display: flex; flex-direction: column; gap: 2px; min-height: 33px; justify-content: center; }
@@ -857,6 +861,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   font-size: 13px;
 }
 .tile-caption b { color: var(--fg); font-weight: 500; font-variant-numeric: tabular-nums; }
+.tile-caption .tile-caption-link { height: auto; padding: 0; font-size: inherit; color: var(--warn); }
 /* One pip, on the verdict. What sits beside it is the evidence for that number,
    so a hairline separates the two and the failure count carries the colour the
    pip would otherwise repeat. */
@@ -1137,6 +1142,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .model-usage-cost { color: var(--fg-2); font-size: 12px; white-space: nowrap; text-align: left; }
 .model-usage-cost.is-partial { color: var(--muted); }
 .model-usage-cost.is-unpriced { color: var(--muted); }
+.model-usage-cost-action { padding: 0; font: inherit; cursor: pointer; background: transparent; border: 0; text-decoration: underline dotted var(--warn); text-underline-offset: 3px; transition: color var(--motion-fast) ease; }
+.model-usage-cost-action:hover, .model-usage-cost-action:focus-visible { color: var(--fg); }
 /* The grouping toggle sits in the card's header row, opposite the title. */
 .model-view-toggle { flex: none; }
 

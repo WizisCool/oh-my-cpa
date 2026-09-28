@@ -46,7 +46,7 @@ type Handler struct {
 	auth       *auth.Manager
 	// usage reports the background capture pipeline; nil when ingestion is off.
 	usage usagePipeline
-	// pricing serves model prices and the models.dev sync; nil until SetPricing.
+	// pricing serves model prices and the OpenRouter sync; nil until SetPricing.
 	pricing PricingManager
 	// release observes both products' published versions; nil until SetRelease. Nil
 	// means the page reports "not checked yet" rather than failing.
@@ -57,8 +57,9 @@ type Handler struct {
 	// pluginLogos inlines the logos plugins publish, so the browser never fetches a
 	// plugin's own host; see management_plugin_logos.go.
 	pluginLogos *pluginLogoFetcher
-	// nowFn overrides the clock for the one surface whose window is not the caller's to
-	// set. Nil means the wall clock; only the demo dataset export sets it.
+	// nowFn overrides the clock for the surfaces whose window is not the caller's to set:
+	// the token-activity grid and the price book's recent traffic. Nil means the wall
+	// clock; only the demo dataset export sets it.
 	nowFn func() time.Time
 
 	configMu       sync.Mutex
@@ -197,10 +198,16 @@ func (h *Handler) routes() chi.Router {
 				v1.Put("/preferences/{key}", h.putPreference)
 				v1.Get("/usage/ingest-status", h.dashboardIngestStatus)
 				v1.Post("/usage/ingest/refresh", h.refreshUsageIngest)
-				// Pricing: one read endpoint for the page plus four operator actions.
+				// Pricing: the price book, the editor's per-model read, the stored
+				// OpenRouter snapshot for the picker, and the operator actions.
 				v1.Get("/pricing", h.listPricing)
-				v1.Put("/pricing/models", h.updatePricingModels)
+				v1.Get("/pricing/attention", h.getPricingAttention)
+				v1.Get("/pricing/catalog", h.getPricingCatalog)
+				v1.Get("/pricing/models/{model}", h.getPricingModel)
+				v1.Put("/pricing/models/{model}", h.updatePricingModel)
 				v1.Delete("/pricing/models/{model}", h.deletePricingModel)
+				v1.Put("/pricing/channels/{channel}", h.updatePricingChannel)
+				v1.Delete("/pricing/channels/{channel}", h.deletePricingChannel)
 				v1.Post("/pricing/sync", h.startPricingSync)
 				v1.Put("/pricing/sync-schedule", h.updatePricingSyncSchedule)
 				v1.Get("/usage/events", h.listUsageEvents)

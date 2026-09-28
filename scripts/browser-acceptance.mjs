@@ -391,17 +391,18 @@ try {
     const pricingOpenMS = Date.now() - pricingOpenStart;
     check('pricing page opens under 3s', pricingOpenMS < 3000, `${pricingOpenMS}ms`);
 
-    // The manual price editor must be a real form: labeled fields with units, not
-    // bare number inputs. This guards the redesigned modal structure.
-    await page.getByRole('button', { name: /添加价格|Add price/ }).first().click();
-    await page.locator('.ant-modal .ant-form .ant-form-item').first().waitFor({ state: 'visible', timeout: 5000 });
-    const editorLabels = await page.locator('.ant-modal .ant-form .ant-form-item-label label').allInnerTexts();
-    check('price editor shows labeled fields', editorLabels.length >= 6, `labels=${editorLabels.length}`);
-    const rateUnits = await page.locator('.ant-modal .ant-form .ant-input-number-suffix').allInnerTexts();
-    check('price editor shows $/1M units', rateUnits.filter((u) => u.includes('/ 1M')).length === 4, `units=${rateUnits.length}`);
+    // The in-place editor keeps rates labelled and denominated without leaving the book.
+    await page.locator('[data-testid="pricing-row-edit"]').first().click();
+    const priceEditor = page.locator('[data-testid="pricing-editor"]');
+    await priceEditor.waitFor({ state: 'visible', timeout: 5000 });
+    await priceEditor.locator('[data-testid="pricing-mode-custom"]').click();
+    const rateInputs = priceEditor.locator('input[data-testid^="pricing-rate-"]');
+    await rateInputs.first().waitFor({ state: 'visible', timeout: 5000 });
+    const labelledRates = await rateInputs.evaluateAll((inputs) => inputs.every((input) => input.closest('label')?.textContent.trim()));
+    check('price editor shows four labelled rates', (await rateInputs.count()) === 4 && labelledRates);
+    check('price editor states the per-million unit', /1M|1 M|百万/.test(await priceEditor.innerText()));
     await page.keyboard.press('Escape');
-    // forceRender keeps the form mounted, so closing hides it instead of detaching.
-    await page.locator('.ant-modal .ant-form').first().waitFor({ state: 'hidden', timeout: 5000 });
+    await priceEditor.waitFor({ state: 'hidden', timeout: 5000 });
     check('price editor closes cleanly', true);
     await runProvidersAcceptance({
       auditPage,

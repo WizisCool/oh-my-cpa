@@ -35,7 +35,7 @@ var demoAuditTrail = []demoAuditEntry{
 	{5 * time.Hour, "config.save_source", "config", "config_source_yaml", []string{"attempt", "success"}, map[string]any{"bytes": 8574}},
 	{8 * time.Hour, "oauth.start", "oauth_provider", "anthropic", []string{"success"}, nil},
 	{8*time.Hour - 2*time.Minute, "oauth.callback", "oauth_callback", "anthropic", []string{"attempt", "success"}, nil},
-	{26 * time.Hour, "pricing.sync.start", "pricing", "modelsdev", []string{"success"}, nil},
+	{26 * time.Hour, "pricing.sync.start", "pricing", "openrouter", []string{"success"}, nil},
 	{27 * time.Hour, "plugin.disable", "plugin", "request-logger", []string{"attempt", "failure"}, map[string]any{"error": "CPA returned HTTP 409"}},
 	{29 * time.Hour, "capability.usage_aggregate", "capability_operation", "agent-usage-01", []string{"attempt", "success"}, map[string]any{"adapter": "agent"}},
 	{30 * time.Hour, "capability.providers_delete", "capability_operation", "agent-provider-02", []string{"prepared", "rejected"}, map[string]any{"adapter": "agent"}},

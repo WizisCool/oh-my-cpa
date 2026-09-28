@@ -153,6 +153,9 @@ func TestDemoPolicyKeepsTheReadingSurface(t *testing.T) {
 		{http.MethodGet, "/api/v1/management/system"},
 		{http.MethodGet, "/api/v1/management/client-key-aliases"},
 		{http.MethodGet, "/api/v1/pricing"},
+		{http.MethodGet, "/api/v1/pricing/attention"},
+		{http.MethodGet, "/api/v1/pricing/catalog"},
+		{http.MethodGet, "/api/v1/pricing/models/gpt-5"},
 		{http.MethodGet, "/api/v1/resources"},
 		{http.MethodGet, "/api/v1/playground/models"},
 		// Writes the demonstration can perform on its own fixture or on Oh My CPA's
@@ -165,8 +168,10 @@ func TestDemoPolicyKeepsTheReadingSurface(t *testing.T) {
 		{http.MethodPut, "/api/v1/management/client-key-aliases"},
 		{http.MethodDelete, "/api/v1/management/client-key-aliases/hmac%3Aabc"},
 		{http.MethodPatch, "/api/v1/resources/res-1/override"},
-		{http.MethodPut, "/api/v1/pricing/models"},
+		{http.MethodPut, "/api/v1/pricing/models/openai%2Fgpt-5"},
 		{http.MethodDelete, "/api/v1/pricing/models/gpt-5"},
+		{http.MethodPut, "/api/v1/pricing/channels/relay"},
+		{http.MethodDelete, "/api/v1/pricing/channels/relay"},
 		{http.MethodPut, "/api/v1/pricing/sync-schedule"},
 		{http.MethodPost, "/api/v1/usage/ingest/refresh"},
 	}

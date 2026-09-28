@@ -925,6 +925,25 @@
 .req-cost-none {
   color: var(--muted);
 }
+/* Prices the row's model in place. Always visible rather than revealed on hover: an unpriced
+   request is exactly the row an operator is looking for, and a finger has no hover. */
+.req-cost-set {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 4px;
+  color: var(--warn);
+  font: inherit;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 2px;
+  transition: color var(--motion-fast) ease, background-color var(--motion-fast) ease;
+}
+.req-cost-set:hover,
+.req-cost-set:focus-visible {
+  color: var(--fg);
+  background: var(--surface-2);
+}
 /* Column 8: Cache Rate — one continuous scale, 0% yellow → 100% green. Red is
    deliberately absent: a low hit rate is not a failure, and the danger hue
    belongs to failed requests. The component supplies the two stops and the
@@ -1504,6 +1523,8 @@
 }
 
 @media (pointer: coarse) {
+  .req-cost-set { position: relative; }
+  .req-cost-set::before { content: ''; position: absolute; inset: -10px; }
   .req-id-quick-copy { position: relative; }
   .req-id-quick-copy::before {
     content: '';

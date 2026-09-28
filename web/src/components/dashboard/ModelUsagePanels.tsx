@@ -4,6 +4,7 @@ import { ReloadOutlined } from '../icons';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';
+import { useOpenPriceEditor } from '../pricing/PricingEditorContext';
 import { seriesColor, seriesDomainKey } from '../../charts/chartTheme';
 import { useTheme } from '../../theme/ThemeContext';
 import type { ThemePalette } from '../../theme/palette';
@@ -65,6 +66,7 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
   const t = useT();
   const { theme } = useTheme();
   const { modelView, setModelView, style: tokenStyle } = useTokenDisplayStyle();
+  const openPriceEditor = useOpenPriceEditor();
   const sliding = isSlidingRange(range);
 
   const modelsQuery = React.useMemo(() => withGroupBy(query, modelView), [query, modelView]);
@@ -190,7 +192,12 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
                       <span className="model-usage-name" title={groupLabel(group, foldedLabel, unnamedLabel)}>
                         {groupLabel(group, foldedLabel, unnamedLabel)}
                       </span>
-                      <ModelCost group={group} />
+                      <ModelCost
+                        group={group}
+                        // Only the model view names what a price is keyed on: a call point may be an alias
+                        // whose requests are priced under the upstream model it resolved to.
+                        onPrice={openPriceEditor && modelView === 'model' && !group.folded && group.model ? () => openPriceEditor(group.model) : undefined}
+                      />
                       <span
                         className="model-usage-tokens"
                         // The exact count lives in the accessible name: the compact cell is for scanning,
@@ -221,21 +228,30 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
  * with no priced request at all reports that instead of a zero: a zero would claim these calls were
  * free, which is the one thing an unpriced window never proves.
  */
-const ModelCost: React.FC<{ group: DashboardModelUsage }> = ({ group }) => {
+const ModelCost: React.FC<{ group: DashboardModelUsage; onPrice?: () => void }> = ({ group, onPrice }) => {
   const t = useT();
-  if (group.priced_requests <= 0 || group.cost_usd == null) {
+  const isUnpriced = group.priced_requests <= 0 || group.cost_usd == null;
+  const isPartial = !isUnpriced && group.priced_requests < group.requests;
+  const text = isUnpriced ? '—' : formatCost(group.cost_usd);
+  const className = `model-usage-cost${isUnpriced ? ' is-unpriced' : isPartial ? ' is-partial' : ''}`;
+  if (!isUnpriced && !isPartial) return <span className={className}>{text}</span>;
+  const note = isUnpriced
+    ? t('dash.models.cost_unpriced')
+    : t('dash.models.cost_partial', { priced: group.priced_requests, total: group.requests });
+  // An incomplete cost is the one a price fixes, so where the group is a real upstream model the
+  // cell opens the price editor for it rather than only explaining the gap.
+  if (onPrice) {
     return (
-      <Tooltip title={t('dash.models.cost_unpriced')}>
-        <span className="model-usage-cost is-unpriced">—</span>
+      <Tooltip title={`${note} · ${t('dash.models.set_price')}`}>
+        <button type="button" className={`${className} model-usage-cost-action`} onClick={onPrice} aria-label={`${note} · ${t('dash.models.set_price')}`}>
+          {text}
+        </button>
       </Tooltip>
     );
   }
-  const isPartial = group.priced_requests < group.requests;
-  const value = formatCost(group.cost_usd);
-  if (!isPartial) return <span className="model-usage-cost">{value}</span>;
   return (
-    <Tooltip title={t('dash.models.cost_partial', { priced: group.priced_requests, total: group.requests })}>
-      <span className="model-usage-cost is-partial">{value}</span>
+    <Tooltip title={note}>
+      <span className={className}>{text}</span>
     </Tooltip>
   );
 };

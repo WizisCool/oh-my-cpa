@@ -132,13 +132,6 @@ const EXCEPTIONS = [
     property: 'margin',
     why: 'Part of the same disclosure: collapsing the header to zero height still leaves its box gap, and the negative margin is what takes that back.',
   },
-  {
-    kind: 'layout',
-    file: 'pages/pricing/PricingLeaderboard.module.css',
-    selector: '.bar-fill',
-    property: 'width',
-    why: 'The request count and model name are siblings that sit immediately after the bar, so the bar\u2019s width *is* the layout that positions its own label. Sweeping it with a transform would move the painted bar while the number it labels jumped to its final place.',
-  },
 ];
 
 /** Strip comments so prose about a duration is never read as one. */

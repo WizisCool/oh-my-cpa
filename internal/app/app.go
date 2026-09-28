@@ -37,7 +37,7 @@ type App struct {
 	// pipeline captures CPA request records into the local database. Nil when
 	// ingestion is disabled or no CPA instance is configured yet.
 	pipeline *ingest.Pipeline
-	// pricing keeps model prices fresh from models.dev; nil-safe service.
+	// pricing keeps model prices fresh from OpenRouter; nil-safe service.
 	pricing *pricing.Service
 	// release observes both products' published versions. It is nil in demo mode,
 	// where nothing may leave the process at all.
@@ -144,10 +144,10 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 	}
 	handler := api.NewHandler(cfg, repo, cipher, logger, authManager)
 
-	// Zero-config pricing: the service syncs once at startup and then daily, and
-	// manual operator rows always win. Failures degrade to stale prices, never
-	// to wrong ones.
-	pricingService := pricing.NewService(repo, nil, logger)
+	// Zero-config pricing: the service syncs from OpenRouter once at startup and
+	// then daily, and custom rows and operator pins always win. Failures degrade
+	// to stale prices, never to wrong ones.
+	pricingService := pricing.NewService(repo, pricing.NewOpenRouterClient(), logger)
 	pricingService.SetModelLister(&cpaModelLister{repo: repo, cipher: cipher, cfg: cfg})
 	handler.SetPricing(pricingService)
 
@@ -260,19 +260,24 @@ type cpaModelLister struct {
 }
 
 func (l *cpaModelLister) ListConfiguredModelCatalog(ctx context.Context) (map[string]string, error) {
+	snapshot, err := l.ListConfiguredModelSnapshot(ctx)
+	return snapshot.Models, err
+}
+
+func (l *cpaModelLister) ListConfiguredModelSnapshot(ctx context.Context) (pricing.ModelCatalogSnapshot, error) {
 	instance, err := l.repo.GetInstance(ctx, "default")
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) || strings.Contains(err.Error(), "no rows") {
-			return nil, errors.New("CPA instance is not configured")
+			return pricing.ModelCatalogSnapshot{}, errors.New("CPA instance is not configured")
 		}
-		return nil, err
+		return pricing.ModelCatalogSnapshot{}, err
 	}
 	if strings.TrimSpace(instance.BaseURL) == "" {
-		return nil, errors.New("CPA instance is not configured")
+		return pricing.ModelCatalogSnapshot{}, errors.New("CPA instance is not configured")
 	}
 	key, err := l.cipher.Decrypt(instance.ManagementKeyCiphertext, instance.ManagementKeyNonce)
 	if err != nil {
-		return nil, fmt.Errorf("decrypt CPA management key: %w", err)
+		return pricing.ModelCatalogSnapshot{}, fmt.Errorf("decrypt CPA management key: %w", err)
 	}
 	defer func() {
 		for i := range key {
@@ -281,9 +286,17 @@ func (l *cpaModelLister) ListConfiguredModelCatalog(ctx context.Context) (map[st
 	}()
 	client, err := management.NewClient(instance.BaseURL, string(key), l.cfg.RequestTimeout, l.cfg.TLSSkipVerify)
 	if err != nil {
-		return nil, fmt.Errorf("build CPA management client: %w", err)
+		return pricing.ModelCatalogSnapshot{}, fmt.Errorf("build CPA management client: %w", err)
 	}
-	return client.ListConfiguredModelCatalog(ctx)
+	snapshot, err := client.ListConfiguredModelSnapshot(ctx)
+	if err != nil {
+		return pricing.ModelCatalogSnapshot{}, err
+	}
+	providers := make([]pricing.CatalogProvider, 0, len(snapshot.Providers))
+	for _, provider := range snapshot.Providers {
+		providers = append(providers, pricing.CatalogProvider{ID: provider.ID, Family: provider.Family, Name: provider.Name, Prefix: provider.Prefix, EndpointHost: provider.EndpointHost, Channel: provider.Channel, Priority: provider.Priority, IsOAuth: provider.IsOAuth, Models: provider.Models})
+	}
+	return pricing.ModelCatalogSnapshot{Models: snapshot.Models, Providers: providers}, nil
 }
 
 // buildUsagePipeline wires capture, decode and maintenance over the default CPA
@@ -364,7 +377,7 @@ func (a *App) Run(ctx context.Context) error {
 	// The pricing loop is best-effort: losing it keeps prices stale but never
 	// stops request capture or the HTTP server. A demo does not run it at all: its
 	// prices are part of the fixture, and syncing them would make the process
-	// reach models.dev, which a public demonstration must not do.
+	// reach openrouter.ai, which a public demonstration must not do.
 	if !a.cfg.IsDemoMode {
 		go func() {
 			if err := a.pricing.Run(ctx); err != nil {

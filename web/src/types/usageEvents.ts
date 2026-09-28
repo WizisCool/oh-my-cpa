@@ -1,3 +1,5 @@
+import type { RequestCostBreakdown } from './pricing';
+
 /**
  * Request-record types shared by the dashboard drill-down, the event table and
  * every later analytics page. The filter vocabulary matches the server's
@@ -109,6 +111,8 @@ export interface UsageEventDetail {
   };
   related_errors?: UsageEventRelatedError[];
   partial_errors?: string[];
+  /** Why the stored cost is what it is; absent when the server could not load it. */
+  cost_breakdown?: RequestCostBreakdown;
 }
 
 export interface UsageFacetValue {

@@ -52,7 +52,7 @@ function keyOf<T extends object>(record: T, rowKey: ResponsiveListProps<T>['rowK
  *     true while the first read is still in flight.
  *   - **Blocked is not empty.** With no cached rows, a failed read shows nothing here; the page's
  *     error alert is the one true statement.
- *   - **A page means the same thing at either width**, and the remembered phone page is clamped,
+ *   - **A page means the same thing at either width**, and the remembered page is clamped,
  *     because removing a row can shrink the list past it. A paginator for one page is not drawn.
  *   - **The row is derived from the columns** (`phoneRowFields`), so the table and the row cannot
  *     disagree about what a record shows, and a control is the column's own rendered cell.
@@ -70,23 +70,33 @@ export function ResponsiveList<T extends object>({
   tableProps,
 }: ResponsiveListProps<T>) {
   const isPhone = useIsPhoneViewport();
-  const [phonePage, setPhonePage] = React.useState(1);
+  const listRef = React.useRef<HTMLDivElement>(null);
+  const [page, setPage] = React.useState(1);
   React.useEffect(() => {
-    setPhonePage(1);
+    setPage(1);
   }, [pageResetKey]);
+
+  const lastPage = pageSize === false ? 1 : Math.max(1, Math.ceil(dataSource.length / pageSize));
+  const safePage = Math.min(page, lastPage);
+
+  const changePage = (nextPage: number) => {
+    setPage(nextPage);
+    const list = listRef.current;
+    if (list && list.getBoundingClientRect().top < 0) list.scrollIntoView({ block: 'start' });
+  };
 
   const empty = isBlocked ? null : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyText} />;
 
   if (!isPhone) {
     return (
-      <div className="table-scroll">
+      <div className="table-scroll" ref={listRef}>
         <Table<T>
           {...tableProps}
           columns={columns}
           dataSource={dataSource as T[]}
           rowKey={rowKey as TableProps<T>['rowKey']}
           loading={isLoading}
-          pagination={pageSize === false ? false : { pageSize, showSizeChanger: false, hideOnSinglePage: true }}
+          pagination={pageSize === false ? false : { current: safePage, onChange: changePage, pageSize, showSizeChanger: false, hideOnSinglePage: true }}
           locale={{ ...tableProps?.locale, emptyText: empty ?? <span /> }}
         />
       </div>
@@ -96,8 +106,6 @@ export function ResponsiveList<T extends object>({
   if (isLoading && dataSource.length === 0) return <PageLoading variant="block" />;
   if (dataSource.length === 0) return empty;
 
-  const lastPage = pageSize === false ? 1 : Math.max(1, Math.ceil(dataSource.length / pageSize));
-  const safePage = Math.min(phonePage, lastPage);
   const visible = pageSize === false
     ? dataSource
     : dataSource.slice((safePage - 1) * pageSize, safePage * pageSize);
@@ -106,7 +114,7 @@ export function ResponsiveList<T extends object>({
   const offset = pageSize === false ? 0 : (safePage - 1) * pageSize;
 
   return (
-    <div className="responsive-list">
+    <div className="responsive-list" ref={listRef}>
       {visible.map((record, localIndex) => {
         const index = offset + localIndex;
         return (
@@ -127,7 +135,7 @@ export function ResponsiveList<T extends object>({
           current={safePage}
           pageSize={pageSize}
           total={dataSource.length}
-          onChange={setPhonePage}
+          onChange={changePage}
         />
       )}
     </div>

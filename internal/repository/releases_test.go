@@ -460,29 +460,15 @@ func openDatabaseAtMigration(t *testing.T, through int) *DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	database, err := Open(ctx, path, WithMigrationBackup(cipher, filepath.Join(t.TempDir(), "backups"), 3))
+	// Stopping the migrator at the requested point builds the schema that history really
+	// had, rather than migrating fully and undoing later migrations by hand, which has to be
+	// kept in step with every migration added after this test was written.
+	database, err := Open(ctx, path, WithMigrationBackup(cipher, filepath.Join(t.TempDir(), "backups"), 3), withMigrationsUntil(through))
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}
 	t.Cleanup(func() { _ = database.Close() })
-
-	// Roll the schema back to the requested point. Deleting the migration rows alone would leave
-	// the schema at its final shape while claiming the later migrations are pending, so the next
-	// run would exercise the "already applied" path and never the upgrade. The schema has to move
-	// with the history, which for 025 means dropping the column it adds.
-	if _, err := database.SQL.ExecContext(ctx, `DELETE FROM schema_migrations WHERE version > ?`, through); err != nil {
-		t.Fatalf("reset migration history to %d: %v", through, err)
-	}
-	if through < 26 {
-		if _, err := database.SQL.ExecContext(ctx, `DROP TABLE agent_documents;`); err != nil {
-			t.Fatalf("drop migration 026 tables: %v", err)
-		}
-	}
-	if through < 25 {
-		if _, err := database.SQL.ExecContext(ctx, `ALTER TABLE release_check_state DROP COLUMN truncated`); err != nil {
-			t.Fatalf("drop the column migration 025 adds: %v", err)
-		}
-	}
+	database.migrateUntil = 0
 	return database
 }
 

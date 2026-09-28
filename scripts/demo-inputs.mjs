@@ -14,6 +14,11 @@ export const INPUTS = [
   'internal/demo/fixture.go',
   'internal/demo/seed.go',
   'internal/demo/upstream.go',
+  // The price book is priced from this snapshot by the same decoder and matcher a sync uses.
+  'internal/demo/openrouter_snapshot.json',
+  'internal/pricing/openrouter.go',
+  'internal/pricing/match.go',
+  'internal/api/management_pricing.go',
   'internal/cpa/gateway/client.go',
   'internal/cpa/gateway/types.go',
   'internal/cpa/gateway/agent.go',

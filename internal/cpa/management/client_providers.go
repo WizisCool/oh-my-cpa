@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -97,12 +99,67 @@ type ModelAlias struct {
 	Thinking         *ThinkingSupport `json:"thinking,omitempty"`
 }
 
-// ListConfiguredModelCatalog collects every configured model across all
-// providers and auth files, keeping each model's routed target so aliases can
-// be resolved back to a canonical pricing identity.
+// ConfiguredModelProvider is non-secret provenance captured alongside the model directory.
+type ConfiguredModelProvider struct {
+	EndpointHost string
+	ID           string
+	Family       string
+	Name         string
+	Prefix       string
+	Channel      string
+	Priority     int
+	IsOAuth      bool
+	Models       []string
+}
+
+// Only the hostname is needed to reuse provider icon inference; URL credentials,
+// paths and query parameters never belong in pricing identity metadata.
+func pricingEndpointHost(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return ""
+	}
+	return parsed.Hostname()
+}
+
+type ConfiguredModelSnapshot struct {
+	Models    map[string]string
+	Providers []ConfiguredModelProvider
+}
+
 func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]string, error) {
+	snapshot, err := c.ListConfiguredModelSnapshot(ctx)
+	return snapshot.Models, err
+}
+
+// ListConfiguredModelSnapshot reads membership in the same sweep as aliases so
+// console reads never need to fan out across individual credentials.
+func (c *Client) ListConfiguredModelSnapshot(ctx context.Context) (ConfiguredModelSnapshot, error) {
 	if c == nil {
-		return nil, errors.New("CPA client is not initialized")
+		return ConfiguredModelSnapshot{}, errors.New("CPA client is not initialized")
+	}
+	providers := make(map[string]*ConfiguredModelProvider)
+	addProvider := func(provider ConfiguredModelProvider, models []string) {
+		current := providers[provider.ID]
+		if current == nil {
+			current = &provider
+			current.Models = nil
+			providers[provider.ID] = current
+		}
+		if provider.Priority > current.Priority {
+			current.Priority = provider.Priority
+		}
+		for _, model := range models {
+			if model = strings.TrimSpace(model); model != "" {
+				current.Models = append(current.Models, model)
+			}
+		}
+	}
+	priorityOf := func(priority *int) int {
+		if priority == nil {
+			return 0
+		}
+		return *priority
 	}
 	modelSet := make(map[string]string)
 	add := func(id, target string) {
@@ -161,8 +218,21 @@ func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]str
 				errs = append(errs, failures[i])
 				continue
 			}
+			file := authResp.Files[i]
+			family := strings.ToLower(strings.TrimSpace(file.Provider))
+			if family == "" {
+				family = strings.ToLower(strings.TrimSpace(file.Type))
+			}
+			if family == "" {
+				family = "unknown"
+			}
+			identities := make([]string, 0, len(models))
 			for _, m := range models {
 				add(m.ID, m.ID)
+				identities = append(identities, m.ID)
+			}
+			if !file.Disabled {
+				addProvider(ConfiguredModelProvider{ID: "oauth:" + family, Family: family, Name: family, Channel: family, Priority: file.Priority, IsOAuth: true}, identities)
 			}
 		}
 	}
@@ -185,10 +255,15 @@ func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]str
 			}
 			continue
 		}
-		for _, entry := range entries {
+		for entryIndex, entry := range entries {
 			if IsExcludedAll(entry.ExcludedModels) {
 				continue
 			}
+			identities := make([]string, 0, len(entry.Models)*2)
+			for _, model := range entry.Models {
+				identities = append(identities, model.Name, model.Alias)
+			}
+			addProvider(ConfiguredModelProvider{ID: fmt.Sprintf("%s-%d", family, entryIndex), Family: string(family), Prefix: entry.Prefix, EndpointHost: pricingEndpointHost(entry.BaseURL), Channel: string(family), Priority: priorityOf(entry.Priority)}, identities)
 			for _, m := range entry.Models {
 				name := strings.TrimSpace(m.Name)
 				if name != "" {
@@ -205,10 +280,15 @@ func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]str
 	if oaiResp, err := c.OpenAICompatibility(ctx); err != nil {
 		errs = append(errs, fmt.Errorf("openai-compatibility: %w", err))
 	} else {
-		for _, entry := range oaiResp.Entries {
+		for entryIndex, entry := range oaiResp.Entries {
 			if entry.Disabled {
 				continue
 			}
+			identities := make([]string, 0, len(entry.Models)*2)
+			for _, model := range entry.Models {
+				identities = append(identities, model.Name, model.Alias)
+			}
+			addProvider(ConfiguredModelProvider{ID: fmt.Sprintf("openai-compat-%d", entryIndex), Family: "openai-compatibility", Name: entry.Name, Prefix: entry.Prefix, EndpointHost: pricingEndpointHost(entry.BaseURL), Channel: OpenAICompatibilityLabelPrefix + strings.ToLower(entry.Name), Priority: priorityOf(entry.Priority)}, identities)
 			for _, m := range entry.Models {
 				name := strings.TrimSpace(m.Name)
 				if name != "" {
@@ -227,10 +307,20 @@ func (c *Client) ListConfiguredModelCatalog(ctx context.Context) (map[string]str
 		// replaces its model table from this snapshot, so a catalog missing every
 		// provider that failed to read would prune the rates of models that are
 		// still configured (see pricing.Service.refreshModels).
-		return nil, &catalogError{failures: errs}
+		return ConfiguredModelSnapshot{}, &catalogError{failures: errs}
 	}
 
-	return modelSet, nil
+	snapshot := ConfiguredModelSnapshot{Models: modelSet, Providers: make([]ConfiguredModelProvider, 0, len(providers))}
+	for _, provider := range providers {
+		sort.Strings(provider.Models)
+		provider.Models = slices.Compact(provider.Models)
+		if provider.Models == nil {
+			provider.Models = []string{}
+		}
+		snapshot.Providers = append(snapshot.Providers, *provider)
+	}
+	sort.Slice(snapshot.Providers, func(i, j int) bool { return snapshot.Providers[i].ID < snapshot.Providers[j].ID })
+	return snapshot, nil
 }
 
 // catalogError aggregates the failures of one catalog read.

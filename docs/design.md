@@ -845,6 +845,8 @@ reader moving between pages never sees the refresh control jump or resize:
 - **Table headers never wrap.** A squeezed column wraps its cells, not its name.
 - **Lists render through `ResponsiveList`**: a table on a wide viewport, labelled rows below 640px,
   one empty state (antd's simple `Empty`), and no paginator for a single page.
+  A wide table scrolls sideways inside its own box and never vertically: the wheel over a list
+  scrolls the page, however many lists a page stacks.
 - **Code is shown in a `CodeFrame`**: a head naming the language with the copy action, then the code
   in the console's own mono stack - never the browser's default `monospace`.
 
@@ -1566,3 +1568,7 @@ remembered. ADR 0012 records the threshold, its measurement and its alternatives
       at least 16px; both are achieved without moving the drawn size (§8)
 - [ ] A new threshold is one of the two viewport breakpoints or a container query on the box the layout
       is actually about, and it states which (§8)
+
+### Cost & Usage provider grouping
+
+The price book uses the existing console tokens and table/phone-row primitives. Provider headings carry the shared provider mark and display name, authentication kind and routing priority; model rows carry text identities and inline pricing actions. One global 20-row page bounds the rendered memberships across groups. A single sticky footer shows the visible entry range and page navigation; phones use a read-only compact page indicator with 40px previous/next targets. Search and provider/mode filters remain above the list, with the sync control in the page header. The upstream model picker uses bounded 12-row pages. No new palette, typography, spacing or motion tokens are introduced.

@@ -21,7 +21,7 @@ func TestPricingRoundTripAndUsageCost(t *testing.T) {
 		{
 			Model: "openai/gpt-5", PromptPricePer1M: 2, CompletionPer1M: 10,
 			CacheReadPer1M: 0.2, CacheWritePer1M: 2, PriceMultiplier: 1.5,
-			Source: pricing.SourceModelsDev, SyncedAtMS: now.UnixMilli(),
+			Source: pricing.SourceOpenRouter, SyncedAtMS: now.UnixMilli(),
 		},
 		{
 			Model: "manual-model", PromptPricePer1M: 5, CompletionPer1M: 5,
@@ -86,10 +86,10 @@ func TestPricingRoundTripAndUsageCost(t *testing.T) {
 		t.Fatalf("second delete: deleted=%v err=%v", deleted, err)
 	}
 
-	if err := repo.SavePricingSyncState(ctx, pricing.SyncState{Source: pricing.SourceModelsDev, LastMatched: 3, LastUnmatched: 1}); err != nil {
+	if err := repo.SavePricingSyncState(ctx, pricing.SyncState{Source: pricing.SourceOpenRouter, LastMatched: 3, LastUnmatched: 1}); err != nil {
 		t.Fatal(err)
 	}
-	state, err := repo.GetPricingSyncState(ctx, pricing.SourceModelsDev)
+	state, err := repo.GetPricingSyncState(ctx, pricing.SourceOpenRouter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,17 +108,17 @@ func TestSavePricingSyncStateSurvivesRepeatedUpserts(t *testing.T) {
 	ctx := context.Background()
 	first := int64(1788935416510)
 	if err := repo.SavePricingSyncState(ctx, PricingSyncState{
-		Source: pricing.SourceModelsDev, LastSuccessAtMS: &first, LastMatched: 4, LastUnmatched: 3,
+		Source: pricing.SourceOpenRouter, LastSuccessAtMS: &first, LastMatched: 4, LastUnmatched: 3,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	second := first + 60_000
 	if err := repo.SavePricingSyncState(ctx, PricingSyncState{
-		Source: pricing.SourceModelsDev, LastSuccessAtMS: &second, LastMatched: 5, LastUnmatched: 2,
+		Source: pricing.SourceOpenRouter, LastSuccessAtMS: &second, LastMatched: 5, LastUnmatched: 2,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	state, err := repo.GetPricingSyncState(ctx, pricing.SourceModelsDev)
+	state, err := repo.GetPricingSyncState(ctx, pricing.SourceOpenRouter)
 	if err != nil {
 		t.Fatalf("read state after a repeat sync: %v", err)
 	}
@@ -130,11 +130,11 @@ func TestSavePricingSyncStateSurvivesRepeatedUpserts(t *testing.T) {
 	}
 	// A failed sync records the error and preserves the last good success.
 	if err := repo.SavePricingSyncState(ctx, PricingSyncState{
-		Source: pricing.SourceModelsDev, LastError: "models.dev is unreachable",
+		Source: pricing.SourceOpenRouter, LastError: "models.dev is unreachable",
 	}); err != nil {
 		t.Fatal(err)
 	}
-	state, err = repo.GetPricingSyncState(ctx, pricing.SourceModelsDev)
+	state, err = repo.GetPricingSyncState(ctx, pricing.SourceOpenRouter)
 	if err != nil {
 		t.Fatalf("read state after a failed sync: %v", err)
 	}
@@ -154,15 +154,15 @@ func TestGetPricingSyncStateToleratesCorruptSuccessTimestamp(t *testing.T) {
 	ctx := context.Background()
 	success := int64(1788935416510)
 	if err := repo.SavePricingSyncState(ctx, PricingSyncState{
-		Source: pricing.SourceModelsDev, LastSuccessAtMS: &success, LastMatched: 4, LastUnmatched: 3,
+		Source: pricing.SourceOpenRouter, LastSuccessAtMS: &success, LastMatched: 4, LastUnmatched: 3,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := repo.SQL().ExecContext(ctx,
-		`UPDATE pricing_sync_state SET last_success_at_ms = 'modelsdev' WHERE source = ?`, pricing.SourceModelsDev); err != nil {
+		`UPDATE pricing_sync_state SET last_success_at_ms = 'modelsdev' WHERE source = ?`, pricing.SourceOpenRouter); err != nil {
 		t.Fatal(err)
 	}
-	state, err := repo.GetPricingSyncState(ctx, pricing.SourceModelsDev)
+	state, err := repo.GetPricingSyncState(ctx, pricing.SourceOpenRouter)
 	if err != nil {
 		t.Fatalf("corrupt success must stay readable: %v", err)
 	}
@@ -174,11 +174,11 @@ func TestGetPricingSyncStateToleratesCorruptSuccessTimestamp(t *testing.T) {
 	}
 	next := success + 1000
 	if err := repo.SavePricingSyncState(ctx, PricingSyncState{
-		Source: pricing.SourceModelsDev, LastSuccessAtMS: &next, LastMatched: 6,
+		Source: pricing.SourceOpenRouter, LastSuccessAtMS: &next, LastMatched: 6,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.GetPricingSyncState(ctx, pricing.SourceModelsDev); err != nil {
+	if _, err := repo.GetPricingSyncState(ctx, pricing.SourceOpenRouter); err != nil {
 		t.Fatalf("resync after corruption: %v", err)
 	}
 }
@@ -189,7 +189,7 @@ func TestMigrationRepairsCorruptPricingSyncState(t *testing.T) {
 	ctx := context.Background()
 	if _, err := repo.SQL().ExecContext(ctx, `INSERT INTO pricing_sync_state (
 		source, running, last_success_at_ms, last_error, last_matched, last_unmatched, updated_at_ms
-	) VALUES ('modelsdev', 0, 'modelsdev', '', 'three', 'four', 'fifteen')`); err != nil {
+	) VALUES ('openrouter', 0, 'openrouter', '', 'three', 'four', 'fifteen')`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := repo.SQL().ExecContext(ctx, `DELETE FROM schema_migrations WHERE version = 16`); err != nil {
@@ -201,7 +201,7 @@ func TestMigrationRepairsCorruptPricingSyncState(t *testing.T) {
 	var successType, matchedType, unmatchedType, updatedAtType string
 	if err := repo.SQL().QueryRowContext(ctx, `SELECT
 		typeof(last_success_at_ms), typeof(last_matched), typeof(last_unmatched), typeof(updated_at_ms)
-		FROM pricing_sync_state WHERE source = 'modelsdev'`).
+		FROM pricing_sync_state WHERE source = 'openrouter'`).
 		Scan(&successType, &matchedType, &unmatchedType, &updatedAtType); err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ func TestMigrationRepairsCorruptPricingSyncState(t *testing.T) {
 			t.Fatalf("%s must be repaired to an integer, got %q", column, kind)
 		}
 	}
-	if _, err := repo.GetPricingSyncState(ctx, pricing.SourceModelsDev); err != nil {
+	if _, err := repo.GetPricingSyncState(ctx, pricing.SourceOpenRouter); err != nil {
 		t.Fatalf("repaired state must read cleanly: %v", err)
 	}
 }

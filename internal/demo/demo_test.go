@@ -102,7 +102,7 @@ func TestSeedFillsTheDatabaseTheConsoleReads(t *testing.T) {
 	if stats.Requests < 5000 {
 		t.Fatalf("seeded %d requests, want enough history to look like a running instance", stats.Requests)
 	}
-	if stats.Prices != len(priceCatalog()) || stats.Aliases != len(gatewayKeyCatalog()) {
+	if stats.Prices != len(modelCatalog()) || stats.Aliases != len(gatewayKeyCatalog()) {
 		t.Fatalf("seed stats = %+v, want every price and every alias written", stats)
 	}
 
@@ -209,26 +209,57 @@ func TestSeedPricesTheFabricatedHistory(t *testing.T) {
 		t.Fatalf("%d of %d stored prices are visible against the seeded catalogue", visible, len(rows))
 	}
 
-	// Both sources have to be present. The pricing page has a tab per source, and a
-	// fixture that marked every row `modelsdev` would claim an operator's own rates came
-	// from the public catalogue - which is what happened while the catalogue that decides
-	// visibility was also being read as the answer to "did models.dev match this model".
-	sources := make(map[string]int)
-	for _, row := range rows {
-		sources[row.Source]++
-	}
-	if sources[pricing.SourceManual] == 0 || sources[pricing.SourceModelsDev] == 0 {
-		t.Fatalf("seeded price sources = %v, want both a synced and a hand-set rate", sources)
-	}
-
-	// The page also prints the sync bookkeeping beside those rows, and the count it
-	// reports has to be the rows it actually marked as synced.
-	state, err := repo.GetPricingSyncState(ctx, pricing.SourceModelsDev)
+	// Every mode the price book distinguishes has to be present: automatic matches, a
+	// pin, and hand-set rates. A fixture that marked every row as synced would claim an
+	// operator's own rates came from OpenRouter.
+	modes := make(map[string]int)
+	links, err := repo.ListModelLinks(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.LastSuccessAtMS == nil || state.LastMatched != int64(sources[pricing.SourceModelsDev]) {
-		t.Fatalf("pricing sync state = %+v, want %d matched models", state, sources[pricing.SourceModelsDev])
+	for _, row := range rows {
+		_, linked := links[row.Model]
+		modes[pricing.DeriveMode(row.Source, linked)]++
+	}
+	if modes[pricing.ModeAuto] == 0 || modes[pricing.ModeLinked] == 0 || modes[pricing.ModeCustom] == 0 {
+		t.Fatalf("seeded price modes = %v, want automatic, linked and custom rates", modes)
+	}
+	// The attention inbox needs a current model with no price.
+	unpricedModels := 0
+	for model := range catalog {
+		found := false
+		for _, row := range rows {
+			found = found || row.Model == model
+		}
+		if !found {
+			unpricedModels++
+		}
+	}
+	if unpricedModels == 0 {
+		t.Fatal("no catalogue model is left unpriced, so the attention inbox never renders")
+	}
+	// The picker reads the stored snapshot, and the channel tab needs a multiplier.
+	upstream, err := repo.ListUpstreamCatalog(ctx)
+	if err != nil || len(upstream) == 0 {
+		t.Fatalf("OpenRouter snapshot: %d %v", len(upstream), err)
+	}
+	channels, err := repo.ListChannelMultipliers(ctx)
+	if err != nil || len(channels) == 0 {
+		t.Fatalf("channel multipliers: %+v %v", channels, err)
+	}
+	var scaled int64
+	if err := repo.SQL().QueryRowContext(ctx, `SELECT COUNT(*) FROM usage_events WHERE channel_version_id IS NOT NULL`).Scan(&scaled); err != nil || scaled == 0 {
+		t.Fatalf("no seeded request was priced under the channel multiplier: %d %v", scaled, err)
+	}
+
+	// The page also prints the sync bookkeeping beside those rows, and the count it
+	// reports has to be the rows it actually priced from OpenRouter.
+	state, err := repo.GetPricingSyncState(ctx, pricing.SourceOpenRouter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.LastSuccessAtMS == nil || state.LastMatched != int64(modes[pricing.ModeAuto]+modes[pricing.ModeLinked]) {
+		t.Fatalf("pricing sync state = %+v, want %d matched models", state, modes[pricing.ModeAuto]+modes[pricing.ModeLinked])
 	}
 }
 

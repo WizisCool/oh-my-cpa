@@ -32,6 +32,12 @@ func manualPriceService(t *testing.T, r *Repository, fetcher pricing.Fetcher) *p
 	return service
 }
 
+// saveCustomPrice is the operator's custom-rate edit.
+func saveCustomPrice(ctx context.Context, service *pricing.Service, price pricing.ModelPrice) error {
+	_, err := service.SetModelMode(ctx, pricing.ModeChange{Model: price.Model, Mode: pricing.ModeCustom, Price: price, Multiplier: price.PriceMultiplier})
+	return err
+}
+
 func effectiveVersionID(t *testing.T, r *Repository, model string) int64 {
 	t.Helper()
 	var id int64
@@ -53,9 +59,9 @@ func TestManualPricePricesLaterRequestsWithoutSync(t *testing.T) {
 	service := manualPriceService(t, r, fetcher)
 
 	const model = "priced-model"
-	if err := service.SaveManualPrices(ctx, []pricing.ModelPrice{{
+	if err := saveCustomPrice(ctx, service, pricing.ModelPrice{
 		Model: model, PromptPricePer1M: 2, CompletionPer1M: 0, PriceMultiplier: 1,
-	}}); err != nil {
+	}); err != nil {
 		t.Fatal(err)
 	}
 	versionID := effectiveVersionID(t, r, model)
@@ -93,9 +99,9 @@ func TestManualPriceBoundaryAndDelayedIngestion(t *testing.T) {
 	service := manualPriceService(t, r, &countingFetcher{})
 
 	const model = "priced-model"
-	if err := service.SaveManualPrices(ctx, []pricing.ModelPrice{{
+	if err := saveCustomPrice(ctx, service, pricing.ModelPrice{
 		Model: model, PromptPricePer1M: 1, CompletionPer1M: 0, PriceMultiplier: 1,
-	}}); err != nil {
+	}); err != nil {
 		t.Fatal(err)
 	}
 	var effective int64
@@ -149,9 +155,9 @@ func TestManualPriceAppliesOnBothInsertPaths(t *testing.T) {
 	service := manualPriceService(t, r, &countingFetcher{})
 
 	const model = "priced-model"
-	if err := service.SaveManualPrices(ctx, []pricing.ModelPrice{{
+	if err := saveCustomPrice(ctx, service, pricing.ModelPrice{
 		Model: model, PromptPricePer1M: 3, CompletionPer1M: 0, PriceMultiplier: 1,
-	}}); err != nil {
+	}); err != nil {
 		t.Fatal(err)
 	}
 	versionID := effectiveVersionID(t, r, model)
@@ -219,10 +225,10 @@ func TestManualPriceUpdateTimeIsServerAuthoritative(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			before := time.Now().UnixMilli()
 			const model = "priced-model"
-			if err := service.SaveManualPrices(ctx, []pricing.ModelPrice{{
+			if err := saveCustomPrice(ctx, service, pricing.ModelPrice{
 				Model: model, PromptPricePer1M: 1, CompletionPer1M: 1, PriceMultiplier: 1,
 				UpdatedAtMS: testCase.clientTime,
-			}}); err != nil {
+			}); err != nil {
 				t.Fatal(err)
 			}
 			after := time.Now().UnixMilli()
@@ -260,9 +266,9 @@ func TestManualPriceDeletionStopsFutureRequests(t *testing.T) {
 	service := manualPriceService(t, r, &countingFetcher{})
 
 	const model = "priced-model"
-	if err := service.SaveManualPrices(ctx, []pricing.ModelPrice{{
+	if err := saveCustomPrice(ctx, service, pricing.ModelPrice{
 		Model: model, PromptPricePer1M: 1, CompletionPer1M: 0, PriceMultiplier: 1,
-	}}); err != nil {
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if deleted, err := service.DeletePrice(ctx, model); err != nil || !deleted {

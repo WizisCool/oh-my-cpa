@@ -1,110 +1,216 @@
 # Model prices
 
-Design chosen after studying `cpa-usage-keeper` and `CPA-Manager-Plus` and
-replacing the earlier heavier valuation prototype (removed before this work).
+The price book: how every request the gateway serves is given a cost, which
+rates that cost is locked against, and how an operator changes them. The
+decision record is ADR 0030; the request-time lock it extends is ADR 0003.
 
 ## Principles
 
-1. Zero-config by default. The pricing service syncs from models.dev at startup
-   and then on a server-side interval that defaults to daily; the operator can
-   change it (off / 1h / 6h / 12h / 24h) without a restart. Deterministic
-   candidate ranking selects winning price rows automatically per the ranking chain.
-2. Pricing follows the current CPA catalog. A complete catalog snapshot is
-   persisted separately from usage history; removed models leave the maintenance
-   list while their immutable request snapshots remain queryable.
-3. One source. `https://models.dev/api.json` is the only pricing source.
-4. Manual wins. Operator edits are saved with source `manual` and are never
-   overwritten by sync; deleting a row creates a retired tombstone version so
-   future requests stay unpriced until the catalog re-syncs or a manual price is
-   re-added.
-5. Unpriced is not zero. Events without a price row report `cost_usd` absent,
-   and the dashboard marks the window `partial` instead of fabricating money.
-6. Request costs are locked once. The insertion transaction selects the price
-   version effective at the request timestamp and stores USD nanos, so later
-   edits cannot rewrite history. Existing rows from before this migration stay
-   usage-only because their original rate is unknowable.
+1. **Zero-config by default.** The pricing service downloads OpenRouter's public
+   model list (`https://openrouter.ai/api/v1/models`, no key) at startup and then
+   on a server-side interval that defaults to daily; the operator can change it
+   (off / 1h / 6h / 12h / 24h) without a restart. Every current CPA model that
+   matches an OpenRouter model is priced automatically, and a model CPA starts
+   serving is priced within the five-minute catalog reconciliation from the
+   stored snapshot, without waiting for the next download.
+2. **One source.** OpenRouter is the only automatic source. The URL is a
+   compile-time constant; no operator-supplied URL is ever fetched.
+3. **Pricing follows the current CPA catalog.** A complete catalog snapshot is
+   persisted separately from usage history; removed models leave the book while
+   their immutable request snapshots remain queryable.
+4. **Three modes, and the operator's always wins.** A model is priced
+   automatically (`auto`), follows an OpenRouter model the operator chose
+   (`linked`), or uses the operator's own rates (`custom`). Syncs refresh auto
+   and linked rows and never touch custom ones; a sync never replaces a pinned
+   model with its own match.
+5. **Unpriced is not zero.** A request with no price version reports `cost_usd`
+   absent, and every total that excludes it says it is partial.
+6. **Request costs are locked once.** The insertion transaction selects the price
+   version and the channel version effective at the request timestamp, applies
+   the tier the request qualifies for, and stores USD nanos, the tier index and
+   both version ids. Later edits cannot rewrite history.
 
-## Components
+## Price structure
 
-- `migrations/015_model_prices.sql`: `model_prices` + `pricing_sync_state`.
-- `migrations/019_request_price_snapshots.sql`: immutable price versions and
-  request-time cost/status snapshots.
-- `migrations/020_pricing_model_catalog.sql`: current CPA catalog projection.
-- `migrations/016_pricing_sync_state_repair.sql`: normalises sync-state rows
-  that the first revision of the upsert wrote with TEXT in an INTEGER column.
-- `migrations/017_pricing_auto_sync.sql`: adds `auto_sync_interval_hours` to
-  `pricing_sync_state` (0 = disabled, default 24).
-- `internal/pricing`: domain types, catalog fetch/decode, match, sync service.
-  The package defines the `Store` interface; `internal/repository` implements it
-  (dependency direction: repository → pricing).
-- `internal/api/management_pricing.go`: `GET /v1/pricing`, `PUT /v1/pricing/models`,
-  `DELETE /v1/pricing/models/{model}`, `POST /v1/pricing/sync` (409 while running),
-  `PUT /v1/pricing/sync-schedule`.
-- `web/src/pages/pricing/PricingPage.tsx`: one page — a sync telemetry bar with the
-  interval selector, an unpriced-model ribbon, and a workbench whose filter tabs
-  are all / models.dev / manual / unpriced, over a modal editor for the four
-  rates and the multiplier.
-- Usage events and the dashboard read the stored request-cost snapshot; they do
-  not join mutable `model_prices` when calculating historical totals.
+A price is four rates per 1M tokens (prompt, completion, cache read, cache
+write), a model multiplier, and an optional list of **tiers**:
+
+- a **long-context tier** (`min_prompt_tokens`) applies when the request's full
+  input, cached tokens included, reaches the threshold;
+- a **time-of-day tier** (`utc_start`/`utc_end`, HHMM) applies when the
+  request's own timestamp falls in the UTC window `[start, end)`, which wraps
+  past midnight when the end is not after the start;
+- a tier carrying both applies only when both hold.
+
+Exactly one tier governs a request: the highest applicable threshold, then a
+windowed tier over an unwindowed one, then stored order. Rates a tier leaves
+out inherit the base price. `pricing.Quote` is the single implementation; the
+console's editor preview mirrors it in `web/src/types/pricingDisplay.ts` and
+the logic suite pins the two against the same cases.
+
+A **channel multiplier** scales every request one CPA provider answered
+(`usage_events.provider`, e.g. `codex`, `openai-compatible-deepseek`). The
+request cost is:
+
+```
+tiered base cost × model multiplier × channel multiplier
+```
+
+Both multipliers are applied as exact fractions before a single half-up
+rounding to nanos, so a request with no tiers and a 1× channel costs exactly
+what the pre-tier formula charged (`FuzzQuoteLegacyParity`).
+
+## Decoding OpenRouter
+
+`internal/pricing/openrouter.go` reduces the envelope to list prices:
+
+- per-token decimal strings are scaled to per-1M exactly;
+- variants (`:free`, `:batch`, every `:` flavour), OpenRouter's own routers and
+  any entry whose price is negative or missing are skipped;
+- `~vendor/…-latest` aliases are kept but only ever match as a last resort;
+- overrides with `min_prompt_tokens` or `utc_start`/`utc_end` become tiers; any
+  other override is dropped;
+- **a cache rate OpenRouter omits resolves to the prompt rate**, never to zero:
+  the omission means no cache discount is published, and zero would bill cached
+  tokens as free. A tier inherits its own prompt rate the same way when the base
+  inherited one.
+
+Tiers are stored in one canonical spelling (`pricing.EncodeTiers`), because the
+version trigger compares the stored text and two spellings of the same tiers
+would mint a version on every sync.
 
 ## Matching rule
 
-`Catalog.MatchModel` ranks candidates instead of refusing them. Exact id,
-name and normalized identities all enter the candidate set; the winner is
-decided by the chain `plan-zero last → first-party provider (family list) →
-match precision → longest true id match → fewest namespaces → not deprecated →
-most recently updated → provider/model id`. The family lists mirror
-cpa-usage-keeper and are verified against the live catalog (glm → zai/zhipuai,
-qwen → alibaba-cn/alibaba, mimo → xiaomi, ...), which is what fixed the old
-"only GPT models get priced" behavior. Entries without explicit input/output
-rates are never selected — a missing rate must not become zero. A model with
-no catalog identity at all stays unpriced for manual setup (the manual editor
-pre-fills nothing and never guesses).
+`Catalog.MatchModel` ranks candidates by match precision, then first-party
+author, then slug length, then id — a total order, so the winner is stable
+across syncs:
 
-## Manual edit bookkeeping
+1. `exact` — the OpenRouter id without its author namespace;
+2. `canonical` — the dated canonical slug (`claude-opus-5.5-20260921`);
+3. `normalized` — case and separator normalization (`GLM-5.3 Flash` = `glm-5.3-flash`), preserving numeric component boundaries so `5.1` never equals `51`;
+4. `date_stripped` — after removing one release date (`-YYYYMMDD`,
+   `-YYYY-MM-DD`, `-MM-YYYY`, or `-MMDD` when it reads as a real month and day, so
+   Qwen's YYMM `2507` survives);
+5. `alias` — a floating `~…-latest` alias.
 
-A manual price is written as a new immutable version whose `effective_from_ms`
-the database trigger stamps from the server clock. `updated_at_ms` on
-`model_prices` — the value the pricing table and editor render as "when this rate
-last changed" — is stamped by `UpsertModelPrices` from the same server clock and
-is never taken from the request payload. The browser used to send `Date.now()`,
-which let a skewed client clock misdate the change relative to the version that
-actually governed billing.
+The first-party author table maps a model family to OpenRouter namespaces
+(`gpt` → `openai`, `glm` → `z-ai`, `kimi` → `moonshotai`, …). A CPA name is
+split with `StripProviderPrefix`; an OpenRouter id is split at its first `/`
+and its `:` variant is never treated as a model.
 
-Manual edits take effect immediately: `SaveManualPrices` writes the version in
-the same transaction, so subsequent requests are priced without a metadata sync.
-Requests stamped before the version's effective time stay `unpriced` even when
-they are ingested later, because selection uses the request timestamp.
+A name that only resembles a listed model — typically a reasoning-effort
+decoration such as `gpt-5.4-mini-high` — is not matched. `Catalog.Suggest`
+offers it instead, restricted to the family's first-party authors. A recognized trailing effort or thinking control is removed for suggestion ranking only; a resolved base identity (including canonical or dated names) ranks first. The console lets the operator adopt a suggestion in one click (a link).
 
-## Sync-state write rule
+A CPA alias with conflicting targets is persisted with an empty `price_model`. It stays visible but does not auto-match; other models continue syncing. A newly ambiguous alias retires its previous automatic price, while custom prices and operator links remain authoritative. Invalid model identities still reject the entire snapshot.
 
-SQLite column types are advisory, so a mistyped value is stored happily and only
-explodes on read. `SavePricingSyncState` therefore keeps every `DO UPDATE SET`
-term on `excluded.` or the target row: the first revision bound a seventh
-placeholder inside the UPDATE clause and passed the source name for it, which
-wrote `modelsdev` into `last_success_at_ms` on every repeat sync and made
-`GET /v1/pricing` fail. The read guards the column with `typeof()` so one dirty
-bookkeeping field can never blank the page, and migration 016 heals stored rows.
-`GET /v1/pricing` also degrades instead of failing: an unreadable sync state
-returns `sync.known = false` with the reason in `sync.state.last_error`, while
-the price table and unpriced models still load.
+## Components
+
+- `migrations/028_openrouter_pricing.sql`: rebuilds `model_prices` (tiers, upstream
+  id, match kind, the `openrouter` source) and `pricing_sync_state` (source
+  `openrouter`, the schedule carried over), extends `model_price_versions`, and adds
+  `pricing_model_links`, `pricing_upstream_catalog`, `pricing_channels`,
+  `pricing_channel_versions` and `usage_events.channel_version_id`/`price_tier`.
+  Existing rows are copied with the version triggers dropped, so the upgrade mints
+  no version and reprices nothing.
+- `migrations/019_request_price_snapshots.sql` and
+  `migrations/020_pricing_model_catalog.sql`: the append-only versions, the request
+  snapshot columns and the CPA catalog projection this builds on.
+- `internal/pricing`: `openrouter.go` (fetch and decode), `match.go` (index,
+  ranking, suggestions), `quote.go` (tier selection, `Quote`, tier encoding),
+  `service.go` (sync, modes, channels), `types.go`. The package defines the
+  `Store` interface; `internal/repository` implements it.
+- `internal/repository/usage_pricing.go`: the request lock (`lockUsagePrice`), the
+  read-time breakdown (`GetUsageEventCostBreakdown`) and price history;
+  `pricing_channels.go`, `pricing_upstream.go`, `pricing_usage.go` (30-day traffic
+  per model and channel, and the median token profile).
+- `internal/api/management_pricing.go`: `GET /v1/pricing`,
+  `GET /v1/pricing/attention`, `GET /v1/pricing/catalog`,
+  `GET|PUT|DELETE /v1/pricing/models/{model}`,
+  `PUT|DELETE /v1/pricing/channels/{channel}`, `POST /v1/pricing/sync` (409 while
+  running), `PUT /v1/pricing/sync-schedule`. Path parameters are decoded, so a
+  model named `openai/gpt-5` works. The request detail response carries
+  `cost_breakdown`.
+- `internal/operations/pricing.go`: the agent capabilities `pricing_list`,
+  `pricing_set` (mode, link, rates, tiers), `pricing_delete`, `pricing_sync`,
+  `pricing_channel_set`, `pricing_channel_delete`.
+- `web/src/components/pricing/`: the console-wide editor (`PricingEditorProvider`,
+  `PriceEditorDrawer`), the request cost breakdown, and shared parts.
+- `web/src/pages/pricing/`: the price book — coverage and sync status in the head,
+  the provider-grouped model list, and the channel multiplier tab.
+
+## Where a price is set
+
+The editor opens in place from every surface that shows a cost:
+
+- the price book's rows (where "Adopt" links a suggestion without opening the editor);
+- an unpriced row of the request list, without opening the record;
+- the request drawer's cost breakdown;
+- an unpriced or partially priced group of the dashboard's model ranking, in the
+  model view only — a call point may be an alias priced under the model it
+  resolved to.
+
+The dashboard's cost tile links to the book when its total is partial. The editor
+previews the change on the model's median request of the last seven days, and
+on its largest recent prompt when that reaches a long-context tier.
+
+## Provider-grouped workbench
+
+Model membership is collected during the same complete CPA catalog sweep as alias targets, then persisted atomically in `pricing_catalog_state.providers_json` (migration 029). The price book reads this snapshot locally: opening the page never fans out across credentials. API-key providers retain their provider-page ids; OAuth credentials are combined by provider, using the highest active credential priority. Disabled credentials do not contribute membership. A failed sweep preserves the entire previous snapshot. Deleting a positional API-key provider re-keys stored membership in the same transaction as its display-name, website and icon overlays.
+
+`GET /v1/pricing` includes `providers`, with id, family, display name, channel, priority, OAuth marker, model membership, an optional icon override and a hostname-only endpoint hint for the existing provider icon resolver. URL userinfo, paths and query parameters are excluded. The facade resolves current provider name/icon preferences at read time; the frontend uses the same default provider marks and plugin-owned logos as provider management. Individual model names are text-only; `pricingModelIdentity` is the metadata extension point.
+
+Groups sort by descending routing priority, then natural provider name and stable id. Models sort naturally by name, case-insensitively first and uppercase first for case-only ties. Membership uses exact model identities: two names differing only in case remain distinct. A model served by multiple providers appears in each relevant group, but all entries edit the same global price. Models without recorded membership appear in an explicit unconfirmed group rather than a guessed maker group.
+
+Search, price-mode filters and a provider selector operate on the grouped book. One global page renders at most 20 membership rows across all groups on desktop and phones. Unpriced models occupy their normal sorted position and show any suggested link beside their name. The OpenRouter picker searches ids, canonical slugs and display names with separator-tolerant search; it paginates all matches in groups of 12 instead of truncating the catalog. Channel multipliers use 20-row pages and reuse known provider aliases/icons; a channel shared by several configured providers names those providers together.
+
+## Mode changes
+
+A mode change is one write (`Repository.ApplyModelPrice`) that replaces the row,
+custom included, and sets or clears the pin in the same transaction, so it mints
+exactly one version and never a tombstone in between. A switch to `auto` or
+`linked` is refused when the stored snapshot has nothing to price it with,
+rather than leaving the model unpriced. Removing a price retires it and its pin;
+the next reconciliation may price the model automatically again.
+
+Sync and operator writes share one lock. The download happens outside it, and
+prices and pins are re-read under it before writing, so a pin set during a slow
+download is honoured; the upsert guard refuses to replace a pinned row with a
+different upstream model as a second line.
+
+## Bookkeeping
+
+`updated_at_ms` is stamped by the server when a row is written; a browser clock
+never dates a price change. SQLite column types are advisory, so
+`SavePricingSyncState` keeps every `DO UPDATE SET` term on `excluded.` or the
+target row, the read guards `last_success_at_ms` with `typeof()`, and
+`GET /v1/pricing` degrades to `sync.known = false` with the reason in
+`sync.state.last_error` rather than failing. Traffic columns degrade the same
+way: a failed usage read leaves them empty and the response names it in
+`partial`.
+
+A request breakdown preserves its stored status and amount when its locked tier
+snapshot is unreadable, reports `invalid_reason`, and withholds a recomputed quote.
+Price history rejects corrupt tier snapshots rather than presenting them as base-only rates.
 
 ## Known limits
 
-- First sync after boot needs a complete CPA catalog and network access to
-  models.dev; a failure keeps the last complete catalog and good prices. The read
-  is refused whole rather than partially published — publishing only the providers
-  that answered would prune the rates of the ones that failed — and the aggregate
-  keeps each source's error type, so a gateway that lacks an endpoint stays
-  classifiable (`IsMissingCapability`) apart from one that failed to answer.
-- Cached-token prices differ per provider; a missing field in the catalog means
-  that bucket is billed at zero in estimates (recorded as-is, not invented).
-- **Demo mode is the one deployment that breaks principle 3, and it breaks it in the
-  direction of having no source at all.** It runs no sync, so the price list, the
-  model catalog the pricing page resolves against, and the sync bookkeeping beside
-  those rows are all fixture data. The prices are still locked by the same
-  request-time rule as a live deployment's: the fixture writes the version its
-  fabricated history has to be priced against, because the trigger that shadows a
-  price write stamps the moment of the write and a request from last month would
-  otherwise find no version and report `unpriced`. See
-  `docs/architecture.md` §12 and `Repository.SeedModelPriceHistoryBackfill`.
+- The first download after boot needs network access to openrouter.ai; a failure
+  keeps the last complete snapshot and good prices, and reconciliation keeps
+  pricing new models from the stored snapshot. Local reconciliation preserves the
+  previous refresh error and schedule; only a successful price refresh clears it.
+- A model OpenRouter does not list stays unpriced until an operator links or
+  prices it; suggestions only help when the name resembles a listed model.
+- Rows priced from models.dev before the switch keep their `modelsdev` source
+  until a sync matches them, and stay priced meanwhile; the book labels them as
+  legacy. A version written under that source still prices late-arriving
+  requests stamped inside its period.
+- A request's cost breakdown is recomputed from the versions it locked. The stored
+  amount is authoritative; `recomputed_matches` flags any disagreement.
+- **Demo mode runs no sync.** The OpenRouter snapshot, the prices, one pin, one
+  channel multiplier and the sync bookkeeping are fixture data seeded by
+  `internal/demo`; the snapshot is a trimmed copy of the real list
+  (`internal/demo/openrouter_snapshot.json`) priced by the same decoder and
+  matcher. The fixture writes the price and channel versions its fabricated
+  history is priced against (`Repository.SeedModelPriceHistoryBackfill`,
+  `Repository.SeedChannelHistoryBackfill`). See `docs/architecture.md` §13.
