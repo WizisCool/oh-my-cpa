@@ -38,6 +38,7 @@ import {
 import { FactList, type Fact } from '../common/FactList';
 import { RefreshButton } from '../common/RefreshButton';
 import { StatusLabel, type StatusTone } from '../common/StatusLabel';
+import { StatTiles } from '../common/StatTiles';
 import { CopyButton } from '../common/CopyButton';
 import { PageLoading } from '../common/PageLoading';
 import { saveBlob } from '../../utils/download';
@@ -263,25 +264,20 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ filters, onFiltersChange
 
   return (
     <section className={styles.panel}>
-      <div className={styles['audit-stats']} role="group" aria-label={t('audit.outcome_filter')} data-testid="audit-stats">
-        {OUTCOME_TILES.map(({ outcome, tone }) => (
-          <button
-            key={outcome}
-            type="button"
-            className={clsx(styles['audit-stat'], filters.outcome === outcome && styles['audit-stat-active'])}
-            aria-pressed={filters.outcome === outcome}
-            onClick={() => update({ outcome })}
-            data-testid={`audit-stat-${outcome}`}
-          >
-            <span className={styles['audit-stat-label']}>
-              {outcome === 'all' ? t('audit.stat_all') : <StatusLabel tone={tone}>{t(`audit.outcome_${outcome}`)}</StatusLabel>}
-            </span>
-            <span className={clsx(styles['audit-stat-value'], outcome !== 'all' && facets.outcomes[outcome] > 0 && styles[`stat-${tone}`])}>
-              {hasCounts ? facets.outcomes[outcome].toLocaleString() : '—'}
-            </span>
-          </button>
-        ))}
-      </div>
+      <StatTiles
+        className={styles['audit-stats']}
+        ariaLabel={t('audit.outcome_filter')}
+        testId="audit-stats"
+        tileTestIdPrefix="audit-stat"
+        selected={filters.outcome}
+        onSelect={(outcome) => update({ outcome })}
+        tiles={OUTCOME_TILES.map(({ outcome, tone }) => ({
+          key: outcome,
+          label: outcome === 'all' ? t('audit.stat_all') : t(`audit.outcome_${outcome}`),
+          count: hasCounts ? facets.outcomes[outcome] : undefined,
+          tone,
+        }))}
+      />
 
       <div className="logs-toolbar">
         <Input

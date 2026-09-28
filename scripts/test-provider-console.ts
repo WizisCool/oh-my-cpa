@@ -15,6 +15,15 @@ import {
   resolveProviderIcon,
   shiftProviderIconsAfterDelete,
 } from '../web/src/types/providerIcons.ts';
+import {
+  DEFAULT_PROVIDER_FILTERS,
+  matchesProviderSearch,
+  needsAttention,
+  providerTrafficById,
+  summarizeProviders,
+  totalProviderTraffic,
+} from '../web/src/components/providers/providerOverview.ts';
+import type { ProviderItem } from '../web/src/types/providers.ts';
 
 // ---- provider ids: the list's key is not the API's family name ----
 
@@ -283,3 +292,50 @@ assert.deepEqual(
 );
 
 console.log('PASS provider icons: a delete drops its own override and shifts the later ones down');
+
+// ---- the provider list's overview: traffic join, attention and facet counts ----
+
+const overviewRows: ProviderItem[] = [
+  // A renamed relay: CPA labels its traffic by the upstream name, not the operator's label.
+  { id: 'openai-compat-0', family: 'openai-compatibility', name: 'My Relay', upstream_name: 'relay', protocol: 'OpenAI', base_url: 'https://relay.example/v1', disabled: false, key_configured: true, key_entries: [{}], model_entries: [{ name: 'gpt-5' }] } as ProviderItem,
+  { id: 'openai-compat-1', family: 'openai-compatibility', name: 'Flaky', upstream_name: 'flaky', protocol: 'OpenAI', disabled: false, key_configured: true, key_entries: [{}] } as ProviderItem,
+  { id: 'claude-0', family: 'claude', name: 'Claude', protocol: 'Anthropic Messages', disabled: false, key_configured: false } as ProviderItem,
+  { id: 'gemini-0', family: 'gemini', name: 'Gemini', protocol: 'Gemini', disabled: true, key_configured: false } as ProviderItem,
+];
+const overviewTraffic = providerTrafficById(overviewRows, [
+  { id: 'relay', total: 10, success: 10, failure: 0, success_rate: 100 },
+  { id: 'flaky', total: 10, success: 4, failure: 6, success_rate: 40 },
+]);
+assert.ok(overviewTraffic, 'a readable window yields a traffic map');
+assert.equal(overviewTraffic.get('openai-compat-0')?.total, 10, 'traffic joins on the upstream name');
+assert.equal(overviewTraffic.get('claude-0')?.total, 0, 'a provider absent from the window served nothing');
+// An unreadable window is unknown, not zero: the page must not claim a provider was idle.
+assert.equal(providerTrafficById(overviewRows, undefined), undefined);
+assert.equal(totalProviderTraffic(overviewRows, undefined), undefined);
+assert.deepEqual(totalProviderTraffic(overviewRows, overviewTraffic), { total: 20, success: 14, failure: 6, successRate: 70 });
+
+// Attention is a switched-on row that cannot serve well: no key, or a rate below the healthy band.
+const enabledOf = (row: ProviderItem) => !row.disabled;
+assert.equal(needsAttention(overviewRows[0], true, overviewTraffic.get('openai-compat-0')), false);
+assert.equal(needsAttention(overviewRows[1], true, overviewTraffic.get('openai-compat-1')), true, 'a failing rate needs attention');
+assert.equal(needsAttention(overviewRows[2], true, overviewTraffic.get('claude-0')), true, 'a keyless enabled row needs attention');
+assert.equal(needsAttention(overviewRows[3], false, undefined), false, 'a switched-off row is a decision, not a fault');
+
+// Search reaches the models and the endpoint as well as the name.
+assert.equal(matchesProviderSearch(overviewRows[0], 'GPT-5'), true);
+assert.equal(matchesProviderSearch(overviewRows[0], 'relay.example'), true);
+assert.equal(matchesProviderSearch(overviewRows[0], 'claude'), false);
+
+// Each facet counts under the other facet's selection, so a tile says what choosing it shows.
+const everything = summarizeProviders(overviewRows, DEFAULT_PROVIDER_FILTERS, enabledOf, overviewTraffic);
+assert.deepEqual(everything.statusCounts, { all: 4, active: 3, disabled: 1, attention: 2 });
+assert.deepEqual(everything.familyCounts, { 'openai-compatibility': 2, claude: 1, gemini: 1 });
+assert.equal(everything.visible.length, 4);
+const attentionOnly = summarizeProviders(overviewRows, { ...DEFAULT_PROVIDER_FILTERS, status: 'attention' }, enabledOf, overviewTraffic);
+assert.deepEqual(attentionOnly.visible.map((row) => row.id), ['openai-compat-1', 'claude-0']);
+assert.deepEqual(attentionOnly.statusCounts, everything.statusCounts, 'the status filter does not change the status counts');
+assert.deepEqual(attentionOnly.familyCounts, { 'openai-compatibility': 1, claude: 1 });
+const relaysOnly = summarizeProviders(overviewRows, { ...DEFAULT_PROVIDER_FILTERS, family: 'openai-compatibility' }, enabledOf, overviewTraffic);
+assert.deepEqual(relaysOnly.statusCounts, { all: 2, active: 2, disabled: 0, attention: 1 });
+
+console.log('PASS provider overview: traffic joins by upstream name, attention and facets count consistently');

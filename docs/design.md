@@ -821,7 +821,8 @@ Every route opens with the same head, built by `PageHeader` (`web/src/components
 reader moving between pages never sees the refresh control jump or resize:
 
 - **Title block left, actions right.** One `h1` (`.terminal-title`), and under it only a line that
-  carries live data (the OAuth workspace's counts). A sentence describing what the page is for restates
+  carries live data (the OAuth workspace's counts, the AI provider list's provider, model, key and
+  header totals). A sentence describing what the page is for restates
   the navigation label beside it and is not drawn.
 - **No echo copy.** A footnote restating a column's window, a hint under a field restating its label, a
   notice explaining how the console stores something: each is documentation pasted into the surface.
@@ -850,6 +851,12 @@ reader moving between pages never sees the refresh control jump or resize:
   rules, and a `--surface` hover. The shared `.data-table` rule in `web/src/index.css` draws it
   for `ResponsiveList`; a list that is the whole body of a card adds `.data-table-flush`, so the
   card is the frame and no list sits in a frame inside a frame.
+- **A list summarised before it is listed opens with `StatTiles`** (`web/src/components/common/`):
+  a strip of counted tiles on `--bg` with a 1px `--border` frame, a 12px label (a `StatusLabel` for
+  a toned tile, plain for the "everything" tile) over a 22px tabular count, which paints in its tone
+  only when non-zero. Each tile is also the list's filter (`aria-pressed`; the selected one takes
+  the accent frame and `--hover-inset`), and the `.logs-toolbar` strip of search and selects sits
+  directly under it. The audit trail's outcomes and the AI provider list's states both use it.
 - **Lists render through `ResponsiveList`**: a table on a wide viewport, labelled rows below 640px,
   one empty state (antd's simple `Empty`), and no paginator for a single page.
   A wide table scrolls sideways inside its own box and never vertically: the wheel over a list

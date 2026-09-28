@@ -10,68 +10,9 @@
   margin-left: auto;
 }
 
-/* ── outcome strip: the window's operations by outcome, each a filter ───────── */
+/* The outcome strip is the shared StatTiles; the page only spaces it from the toolbar. */
 .audit-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
   margin-bottom: 12px;
-}
-
-.audit-stat {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  min-width: 0;
-  padding: 10px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease;
-}
-
-.audit-stat:hover {
-  border-color: var(--muted);
-}
-
-.audit-stat-active {
-  border-color: var(--accent);
-  background: var(--hover-inset);
-}
-
-.audit-stat:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.audit-stat-label {
-  color: var(--fg-2);
-  font-size: 12px;
-}
-
-.audit-stat-value {
-  color: var(--fg);
-  font-size: 22px;
-  font-weight: 600;
-  line-height: 1.1;
-  font-variant-numeric: tabular-nums;
-}
-
-.stat-success {
-  color: var(--success);
-}
-
-.stat-danger {
-  color: var(--danger);
-}
-
-.stat-warn {
-  color: var(--warn);
 }
 
 .category-option {
@@ -291,10 +232,6 @@
 }
 
 @media (max-width: 640px) {
-  .audit-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .audit-search {
     width: 100%;
   }

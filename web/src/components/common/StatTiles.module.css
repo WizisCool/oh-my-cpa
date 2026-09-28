@@ -1,0 +1,70 @@
+/* StatTiles.module.css — a strip of counted tiles, each one a filter over the list below it.
+   Terminal-flat: a 1px frame per tile, a background shift for the selected one, no shadow. */
+
+.stat-tiles {
+  display: grid;
+  grid-template-columns: repeat(var(--stat-tile-count, 4), minmax(0, 1fr));
+  gap: 8px;
+}
+
+.stat-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease;
+}
+
+.stat-tile:hover {
+  border-color: var(--muted);
+}
+
+.stat-tile-active {
+  border-color: var(--accent);
+  background: var(--hover-inset);
+}
+
+.stat-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.stat-tile-label {
+  color: var(--fg-2);
+  font-size: 12px;
+}
+
+.stat-tile-value {
+  color: var(--fg);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-success {
+  color: var(--success);
+}
+
+.stat-danger {
+  color: var(--danger);
+}
+
+.stat-warn {
+  color: var(--warn);
+}
+
+@media (max-width: 640px) {
+  .stat-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

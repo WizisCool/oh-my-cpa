@@ -1,0 +1,68 @@
+/* ProvidersPage.module.css — the provider list's overview: status tiles, then the toolbar.
+   The tiles and the toolbar are the audit trail's own (StatTiles, `.logs-toolbar`), so the two
+   pages that summarise their rows before listing them read as one console. */
+
+.provider-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* The toolbar sits directly on the list below it; the page stack already spaces the two. */
+.provider-overview :global(.logs-toolbar) {
+  margin-bottom: 0;
+}
+
+.provider-search {
+  width: 260px;
+}
+
+.provider-family-filter {
+  width: 180px;
+}
+
+.family-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.family-count {
+  color: var(--meta);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.window-summary {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-left: auto;
+  color: var(--fg-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.window-label {
+  color: var(--meta);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 640px) {
+  .provider-search {
+    width: 100%;
+  }
+
+  .provider-family-filter {
+    flex: 1 1 140px;
+  }
+
+  .window-summary {
+    margin-left: 0;
+  }
+}
