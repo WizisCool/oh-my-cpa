@@ -289,7 +289,19 @@ export async function createProbePage(
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  return { context, page, errors };
+  // What the page said and where it went, kept for the failure log only. A step that silently
+  // does nothing leaves no page error, and a screenshot cannot tell a refused action from a
+  // reload that discarded it; the console's warnings and the main frame's navigations can.
+  const trail = [];
+  const startedAt = performance.now();
+  const note = (line) => trail.push(`+${Math.round(performance.now() - startedAt)}ms ${line}`);
+  page.on('console', (message) => {
+    if (message.type() === 'error' || message.type() === 'warning') note(`console.${message.type()}: ${message.text()}`);
+  });
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) note(`navigated: ${frame.url()}`);
+  });
+  return { context, page, errors, trail };
 }
 
 /** Collects results the way `acceptance/harness.mjs` does, for probes that assert. */
@@ -316,7 +328,7 @@ const FAILURE_DIR = path.join(root, 'tmp', 'probe-failure');
  * The same evidence the acceptance suite keeps on failure: a screenshot, the DOM, the
  * URL and the page's errors, under `tmp/probe-failure/` so CI can upload it.
  */
-async function writeProbeDiagnostics(page, errors, scenarioName) {
+async function writeProbeDiagnostics(page, errors, trail, scenarioName) {
   fs.mkdirSync(FAILURE_DIR, { recursive: true });
   const slug = scenarioName.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
   await page.screenshot({ path: path.join(FAILURE_DIR, `${slug}.png`), fullPage: true }).catch(() => {});
@@ -324,7 +336,10 @@ async function writeProbeDiagnostics(page, errors, scenarioName) {
     .content()
     .then((html) => fs.writeFileSync(path.join(FAILURE_DIR, `${slug}.html`), html))
     .catch(() => {});
-  fs.writeFileSync(path.join(FAILURE_DIR, `${slug}.log`), [`url: ${page.url()}`, ...errors].join('\n'));
+  fs.writeFileSync(
+    path.join(FAILURE_DIR, `${slug}.log`),
+    [`url: ${page.url()}`, '', 'page errors:', ...errors, '', 'console and navigation:', ...trail].join('\n'),
+  );
 }
 
 /**
@@ -390,7 +405,7 @@ export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG
     for (const scenario of scenarios) {
       const startedAt = performance.now();
       const options = scenario.options ?? {};
-      const { context, page, errors } = await createProbePage(browser, options);
+      const { context, page, errors, trail } = await createProbePage(browser, options);
       // Counted per scenario so a failed check keeps the same evidence a thrown error
       // does; most probe failures are checks, and they used to leave nothing behind.
       let failedChecks = 0;
@@ -401,7 +416,7 @@ export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG
       try {
         await installRoutes(context, options.routes);
         await scenario.run({ base, page, context, errors, check, failures });
-        if (failedChecks > 0) await writeProbeDiagnostics(page, errors, scenario.name);
+        if (failedChecks > 0) await writeProbeDiagnostics(page, errors, trail, scenario.name);
         else passed += 1;
       } catch (error) {
         // The scenario name travels with the error, so a failure in a combined run
@@ -411,12 +426,15 @@ export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG
         // which one it was.
         console.error(`FAIL ${scenario.name}: ${error?.stack ?? error?.message ?? error}`);
         if (errors.length > 0) console.error(`  page errors: ${errors.join(' | ')}`);
+        // The tail of the trail goes in the job log itself: the artifact holds all of it, but the
+        // log is what a reader of a red run sees first.
+        if (trail.length > 0) console.error(`  console and navigation (last ${Math.min(trail.length, 10)}):\n    ${trail.slice(-10).join('\n    ')}`);
         await page
           .locator('body')
           .innerText()
           .then((text) => console.error(`  page text: ${JSON.stringify(text.slice(0, 400))}`))
           .catch(() => {});
-        await writeProbeDiagnostics(page, errors, scenario.name);
+        await writeProbeDiagnostics(page, errors, trail, scenario.name);
         failures.push(scenario.name);
       } finally {
         await context.close().catch(() => {});
