@@ -84,9 +84,15 @@ export const InspectPanel = React.memo(function InspectPanel({ turn, defaultUser
           />
         )}
         <div className={styles['related']}>
-          <Button icon={<HistoryOutlined />} onClick={() => onOpenRequests(turn)}>{t('pg.view_requests')}</Button>
-          {/* The link filters by key, model and time; it is a candidate list, not the record. */}
-          <p className={workspace['field-hint']}>{t('pg.usage_delay')}</p>
+          {turn.requestID && (
+            <span className={styles['request-id']}>
+              {t('pg.request_id')}
+              <code>{turn.requestID}</code>
+              <CopyButton text={turn.requestID} label={`${t('common.copy')}: ${t('pg.request_id')}`} />
+            </span>
+          )}
+          <Button icon={<HistoryOutlined />} disabled={!turn.requestID} onClick={() => onOpenRequests(turn)}>{t('pg.view_requests')}</Button>
+          <p className={workspace['field-hint']}>{t(turn.requestID ? 'pg.usage_delay' : 'pg.request_id_missing')}</p>
         </div>
       </section>
       <Tabs

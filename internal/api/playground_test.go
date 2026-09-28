@@ -106,6 +106,7 @@ func TestPlaygroundStreamDeadlineContextAndCancellation(t *testing.T) {
 		if len(messages) != 4 || messages[0].(map[string]any)["role"] != "system" {
 			t.Errorf("context projection %v", messages)
 		}
+		writer.Header().Set(gateway.TraceIDHeader, "20260928183000-1a2b3c-0000002a")
 		writer.Header().Set("Content-Type", "text/event-stream")
 		writer.(http.Flusher).Flush()
 		// Scale the ordinary deadline down, not the special route's deadline. This
@@ -132,6 +133,11 @@ func TestPlaygroundStreamDeadlineContextAndCancellation(t *testing.T) {
 	}
 	if calls.Load() != 1 {
 		t.Fatalf("paid calls %d", calls.Load())
+	}
+	// CPA's id reaches the console before the answer, so the turn can name its record early.
+	announced := strings.Index(string(data), "event: request\ndata: {\"request_id\":\"0000002a\"}")
+	if announced < 0 || announced > strings.Index(string(data), "event: thought") {
+		t.Fatalf("request id not announced before the answer: %s", data)
 	}
 }
 func TestPlaygroundValidationAndAdmissionBeforeInference(t *testing.T) {

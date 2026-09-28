@@ -2085,7 +2085,11 @@ resolved client key server-side, and refuses redirects. Model IDs come from the 
 client directory, not pricing or historical traffic. Each entry carries the OpenAI
 `id` plus an explicit `call_point` (the same client-visible identifier CPA returns);
 the selector uses that call point. Vision capability is unknown.
-The facade emits `meta`, `delta`, `thought`, `usage`, `done` and `error` SSE events. Errors contain
+The facade emits `meta`, `request`, `delta`, `thought`, `usage`, `done` and `error` SSE events.
+`request` carries CPA's `request_id` for the call, read from the `X-CPA-TRACE-ID` response header
+CPA stamps once it has picked a credential (`<selection time>-<auth index>-<request id>`, parsed by
+`gateway.RequestIDFromTrace`); it is the same id CPA publishes on the request's usage record, and an
+`error` for a request CPA rejected after that point carries it too. Errors contain
 safe codes, upstream HTTP status and allowlisted parameter names rather than upstream
 bodies. Missing usage stays missing. CPA ingestion remains unchanged.
 
@@ -2117,14 +2121,18 @@ route projects allowlisted SSE events. TPS in the turn footer comes from the sam
 Request inspection substitutes image summaries at any depth (a valid custom body may replace
 `messages` with the string-content form) and omits `user_agent` from the body preview, since it
 travels as a header; cURL uses environment placeholders, sets that header explicitly, and
-requires local image substitution. The model named by the turn label and by related-request
-links is the effective one, so a turn is never labelled with a model it did not call. Related
-request links (`usageLink`) filter by the exact client-key identity, the effective model and
-the turn's User-Agent within an absolute window of the turn's own span anchored on the server's
-`started_at_ms` (±5 s; ±5 min for a turn restored without server timings). A turn with no known
+requires local image substitution. The model named by the turn label and the diagnostics heading
+is the effective one, so a turn is never labelled with a model it did not call. A turn's request
+link (`usageLink`) filters the request records by its `request_id`.
+CPA numbers requests with a counter that restarts with CPA, so the same id recurs across
+restarts; the link therefore also keeps an absolute window of the turn's own span, anchored on
+the server's `started_at_ms` (browser time for a turn restored without it) and widened by five
+minutes either side to absorb clock skew between OMC, CPA and the browser. A turn with no known
 end, and a link opened within a minute of its window closing, stay open-ended, so the list keeps
-polling until ingest delivers the record. They are candidate links, not a claimed event ID: CPA's `request_id` is not surfaced
-to the playground. ADR
+polling until ingest delivers the record. A turn that never learned its id (CPA refused it before
+choosing a credential, or it was stored before the id existed) has no link: the button is
+disabled with the reason rather than falling back to matching by key, model and time, which
+listed neighbouring requests as if they were this one. ADR
 0022 records the entitlement and privacy boundary; ADR 0023 recorded the selection-only preference
 and is superseded by ADR 0024, which records the single latest session that replaced it. Gateway unit tests, facade tests,
 `scripts/test-playground.ts`, and desktop/phone probes cover this flow. Public-demo

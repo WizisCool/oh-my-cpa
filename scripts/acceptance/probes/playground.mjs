@@ -31,7 +31,8 @@ export async function playground({ base, page, check, context }) {
     }
     const answer = mode === 'error' ? 'Partial response' : 'A streamed answer\n\n' + 'Additional detail line.\n\n'.repeat(10) + '![tracking](https://tracking.invalid/x.png)\n<img src="https://tracking.invalid/html.png" onerror="window.__playgroundInjected=1">';
     await route.fulfill({ contentType: 'text/event-stream', body:
-      frame('meta', { model: 'vision-alias', started_at_ms: Date.now() }) + frame('delta', { content: answer }) +
+      frame('meta', { model: 'vision-alias', started_at_ms: Date.now() }) +
+      (mode === 'error' ? '' : frame('request', { request_id: '0000002a' })) + frame('delta', { content: answer }) +
       (mode === 'error' ? frame('error', { code: 'upstream_rejected', upstream_status: 400 }) :
         frame('usage', { usage: { prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 } }) + frame('done', { finish_reason: 'stop', first_content_ms: 42, duration_ms: 90 })) });
   });
@@ -98,6 +99,8 @@ export async function playground({ base, page, check, context }) {
   // formula parity with the request records; it is not a claim about any particular reported
   // rate, which depends on that call's own timings.
   check('the footer tps matches the shared request-record formula', (await page.locator('[data-testid="playground-page"]').innerText()).includes('88.89 t/s'), 'expected the shared formula\'s rate, not a residual-window division');
+  const viewRequest = answer => answer.getByRole('button', { name: 'View in request records', exact: true });
+  check('a turn CPA named links to its request record', await viewRequest(page.locator('[data-testid="playground-answer"]').first()).isEnabled());
   check('model output does not fetch external images or execute HTML', external.length === 0 && !await page.evaluate(() => window.__playgroundInjected), external.join(','));
   await page.getByLabel('System prompt', { exact: true }).fill('Changed system prompt');
   await page.getByRole('tab', { name: 'Turn diagnostics', exact: true }).click();
@@ -119,6 +122,7 @@ export async function playground({ base, page, check, context }) {
   await until(async () => await page.getByRole('button', { name: 'Retry', exact: true }).isEnabled(), {
     label: 'the retry affordance after a partial response',
   });
+  check('a turn CPA never named offers no request link', await viewRequest(page.locator('[data-testid="playground-answer"]').last()).isDisabled());
   check('multi-turn request contains the completed assistant answer', calls[1].messages.length === 3 && calls[1].messages[1].role === 'assistant', JSON.stringify(calls[1].messages));
   mode = 'success'; await page.getByRole('button', { name: 'Retry', exact: true }).click();
   await until(() => calls.length === 3, { label: 'the retry to reach the upstream' });
@@ -162,6 +166,13 @@ export async function playground({ base, page, check, context }) {
   });
   check('the session persists through reload as one preference', preference?.playground_session?.model === 'vision-alias' && !('playground_selection' in (preference ?? {})), JSON.stringify(preference));
   const stored = await page.evaluate(() => Object.values(localStorage).concat(Object.values(sessionStorage)).join('\n'));
+  // The id survives the reload and is the whole filter: the list opens on that one request.
+  await viewRequest(page.locator('[data-testid="playground-answer"]').first()).click();
+  await until(() => new URL(page.url()).pathname.endsWith('/usage/events'), { label: 'the request link to open the request records' });
+  const requestLink = new URL(page.url()).searchParams;
+  check('the request link filters by the turn\'s request id', requestLink.get('request_id') === '0000002a' && !requestLink.has('api_key') && !requestLink.has('model') && !requestLink.has('ua'), page.url());
+  await page.goBack({ waitUntil: 'domcontentloaded' });
+  await page.locator('[data-testid="playground-page"]').waitFor();
   check('conversation and prompt were not persisted in browser storage', !stored.includes('Original system prompt') && !stored.includes('Inspect this image'), 'browser storage inspected');
   await page.getByRole('button', { name: 'New conversation', exact: true }).click();
   await page.locator('[data-testid="playground-empty"]').waitFor();

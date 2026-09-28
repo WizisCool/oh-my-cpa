@@ -142,8 +142,8 @@ function TurnFooter({ turn, isLast, canRetry, onRetry, onInspect, onOpenRequests
       <span className={workspace['foot-spacer']} />
       <span className={workspace['foot-actions']}>
         <CopyButton text={turn.reply} label={t('pg.copy_answer')} disabled={!turn.reply} />
-        <Tooltip title={t('pg.view_requests')}>
-          <Button type="text" size="small" aria-label={t('pg.view_requests')} icon={<HistoryOutlined />} onClick={() => onOpenRequests(turn)} />
+        <Tooltip title={t(turn.requestID ? 'pg.view_requests' : 'pg.request_id_missing')}>
+          <Button type="text" size="small" aria-label={t('pg.view_requests')} disabled={!turn.requestID} icon={<HistoryOutlined />} onClick={() => onOpenRequests(turn)} />
         </Tooltip>
         {isLast && (
           <Tooltip title={t('common.retry')}>

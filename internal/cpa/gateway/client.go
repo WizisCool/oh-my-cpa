@@ -73,9 +73,40 @@ func (client *Client) requestWithUA(ctx context.Context, method, endpoint string
 	}
 	if response.StatusCode != http.StatusOK {
 		defer response.Body.Close()
-		return nil, readError(response)
+		failure := readError(response)
+		failure.RequestID = RequestIDFromTrace(response.Header.Get(TraceIDHeader))
+		return nil, failure
 	}
 	return response, nil
+}
+
+// TraceIDHeader is the response header CPA stamps once it has picked a credential for an
+// inference request: `<selection time>-<auth index>-<request id>`.
+const TraceIDHeader = "X-CPA-TRACE-ID"
+
+// RequestIDFromTrace returns the request id a CPA trace header ends with, or "" when the
+// header is absent or not in that shape.
+//
+// The id is the same `request_id` CPA publishes on the request's usage record, so it names
+// that record exactly. It is the last segment because the auth index before it may itself
+// contain a hyphen, while the id is a bare token. Anything else is refused rather than
+// guessed at: a wrong id would open the request list on some other request.
+func RequestIDFromTrace(header string) string {
+	header = strings.TrimSpace(header)
+	cut := strings.LastIndexByte(header, '-')
+	if cut <= 0 {
+		return ""
+	}
+	id := header[cut+1:]
+	if id == "" || len(id) > 64 {
+		return ""
+	}
+	for _, character := range id {
+		if !(character >= '0' && character <= '9' || character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z') {
+			return ""
+		}
+	}
+	return id
 }
 func readError(response *http.Response) *Error {
 	failure := &Error{Code: "upstream_rejected", Status: response.StatusCode}
@@ -178,6 +209,11 @@ func (client *Client) Stream(ctx context.Context, request ChatRequest, payload m
 		return err
 	}
 	defer response.Body.Close()
+	if requestID := RequestIDFromTrace(response.Header.Get(TraceIDHeader)); requestID != "" {
+		if err := emit(Event{Type: "request", RequestID: requestID}); err != nil {
+			return err
+		}
+	}
 	if !strings.HasPrefix(response.Header.Get("Content-Type"), "text/event-stream") {
 		return &Error{Code: "invalid_gateway_response"}
 	}
@@ -309,6 +345,7 @@ func ErrorEvent(err error) Event {
 		event.Code = failure.Code
 		event.UpstreamStatus = failure.Status
 		event.Parameter = failure.Parameter
+		event.RequestID = failure.RequestID
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		event.Code = "upstream_timeout"

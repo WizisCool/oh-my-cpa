@@ -189,8 +189,8 @@ function isStoredMessage(value: unknown): value is Message {
   return value.content.every(part => isObject(part) && (part.type === 'text' && typeof part.text === 'string' || part.type === 'image_url' && isObject(part.image_url) && typeof part.image_url.url === 'string'));
 }
 function isStoredEvent(value: unknown): value is StreamEvent {
-  if (!isObject(value) || !['meta', 'delta', 'thought', 'usage', 'done', 'error'].includes(String(value.type))) return false;
-  for (const field of ['content', 'model', 'finish_reason', 'code', 'parameter']) if (value[field] !== undefined && typeof value[field] !== 'string') return false;
+  if (!isObject(value) || !(PLAYGROUND_EVENT_TYPES as readonly string[]).includes(String(value.type))) return false;
+  for (const field of ['content', 'model', 'finish_reason', 'code', 'parameter', 'request_id']) if (value[field] !== undefined && typeof value[field] !== 'string') return false;
   for (const field of ['started_at_ms', 'duration_ms', 'upstream_status']) if (value[field] !== undefined && (typeof value[field] !== 'number' || !Number.isFinite(value[field]))) return false;
   return value.usage === undefined || isStoredUsage(value.usage);
 }
@@ -202,7 +202,7 @@ function isStoredTurn(value: unknown): value is Turn {
   if (!['running', 'success', 'error', 'cancelled'].includes(String(value.status)) || typeof value.startedAt !== 'number' || !Number.isFinite(value.startedAt)) return false;
   if (typeof value.eventBytes !== 'number' || !Number.isFinite(value.eventBytes) || typeof value.isTruncated !== 'boolean') return false;
   for (const field of ['serverStartedAt', 'endedAt', 'firstContentMS', 'durationMS']) if (value[field] !== undefined && (typeof value[field] !== 'number' || !Number.isFinite(value[field]))) return false;
-  for (const field of ['thought', 'finishReason']) if (value[field] !== undefined && typeof value[field] !== 'string') return false;
+  for (const field of ['thought', 'finishReason', 'requestID']) if (value[field] !== undefined && typeof value[field] !== 'string') return false;
   if (value.usage !== undefined && !isStoredUsage(value.usage) || value.error !== undefined && !isStoredEvent(value.error)) return false;
   const request = value.request;
   if (!isObject(request) || typeof request.model !== 'string' || typeof request.client_key_fingerprint !== 'string' || !Array.isArray(request.messages) || !request.messages.every(isStoredMessage)) return false;
@@ -353,8 +353,10 @@ export interface ChatRequest {
   custom_body?: Record<string, unknown>;
 }
 export interface Usage { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }
+/** Every event the playground route streams; anything else is a malformed response. */
+export const PLAYGROUND_EVENT_TYPES = ['meta', 'request', 'delta', 'thought', 'usage', 'done', 'error'] as const;
 export interface StreamEvent {
-  type: 'meta' | 'delta' | 'thought' | 'usage' | 'done' | 'error';
+  type: typeof PLAYGROUND_EVENT_TYPES[number];
   content?: string;
   model?: string;
   started_at_ms?: number;
@@ -365,6 +367,8 @@ export interface StreamEvent {
   code?: string;
   upstream_status?: number;
   parameter?: string;
+  /** CPA's id for the request, on `request` and on an `error` for a request CPA rejected. */
+  request_id?: string;
 }
 export interface Turn {
   id: string;
@@ -376,6 +380,8 @@ export interface Turn {
   status: 'running' | 'success' | 'error' | 'cancelled';
   startedAt: number;
   serverStartedAt?: number;
+  /** CPA's `request_id` for this turn: the key its request record is found by. */
+  requestID?: string;
   endedAt?: number;
   firstContentMS?: number;
   durationMS?: number;
@@ -413,6 +419,7 @@ export function applyEvent(turn: Turn, event: StreamEvent, now = Date.now()): Tu
   const next = { ...turn, events: canKeep ? [...turn.events, event] : turn.events,
     eventBytes: canKeep ? turn.eventBytes + eventBytes : turn.eventBytes, isTruncated: turn.isTruncated || !canKeep };
   if (event.type === 'meta' && event.started_at_ms !== undefined) next.serverStartedAt = event.started_at_ms;
+  if ((event.type === 'request' || event.type === 'error') && event.request_id) next.requestID ??= event.request_id;
   if (event.type === 'thought' && event.content) {
     next.thought = (next.thought ?? '') + event.content;
   }
@@ -506,9 +513,8 @@ export function buildCurl(request: ChatRequest, defaultUserAgent: string): strin
  * effectiveModel reports the model a turn's request will actually use.
  *
  * `custom_body` outranks the selector, so the selected call point is not always the model
- * that was called. Every surface that names the model - the turn label, the diagnostics
- * panel heading and the request-records filter - reads this, so a turn cannot be labelled
- * with one model and filtered by another.
+ * that was called. Every surface that names the model - the turn label and the diagnostics
+ * panel heading - reads this, so a turn is never labelled with a model it did not call.
  */
 export function effectiveModel(request: ChatRequest): string {
   const override = request.custom_body?.model;
@@ -518,14 +524,13 @@ export function effectiveModel(request: ChatRequest): string {
 /**
  * How far either side of a turn's own span the request-records window reaches.
  *
- * The record's time is CPA's request time, stamped a few milliseconds after the server's
- * `started_at_ms`; the margin absorbs that and a slow gateway accept without widening the
- * window to where a neighbouring turn on the same key and model would also match. A turn
- * restored without server timings is placed by the browser's clock, which may be skewed
- * against the server's, so it gets the wider margin.
+ * The request id is what names the record; the window is there because CPA numbers requests
+ * with a counter that starts again from zero whenever CPA restarts, so the same id recurs
+ * across restarts. The record's time is stamped by CPA's clock and the turn's by OMC's (or,
+ * for a turn restored without server timings, the browser's), so the margin is wide enough
+ * to absorb skew between them while staying far shorter than the gap between two uses of one id.
  */
-const USAGE_LINK_SERVER_MARGIN_MS = 5_000;
-const USAGE_LINK_BROWSER_MARGIN_MS = 5 * 60_000;
+const USAGE_LINK_MARGIN_MS = 5 * 60_000;
 /**
  * How long after a turn's window closes its record may still be on its way into OMC. CPA
  * publishes a record when the request finishes and ingest drains it on its own cadence; a
@@ -535,39 +540,26 @@ const USAGE_LINK_BROWSER_MARGIN_MS = 5 * 60_000;
 const USAGE_LINK_INGEST_GRACE_MS = 60_000;
 
 /**
- * usageLink opens the request records on the one request this turn made.
+ * usageLink opens the request records on the one request this turn made, or returns
+ * undefined when the turn never learned CPA's id for it.
  *
- * A turn is identified by the four things the gateway records about it: the key, the model it
- * actually called, the User-Agent it sent and a closed window around its own span. A relative
- * preset instead listed every request on that key and model in the last hour, which is not the
- * turn the operator clicked on.
+ * The turn is found by the `request_id` CPA published on its usage record. There is
+ * deliberately no fallback to matching by key, model and time, which lists neighbouring
+ * requests as if they were this one.
  */
-export function usageLink(turn: Turn, now = Date.now()): string {
-  const hasServerTime = turn.serverStartedAt !== undefined;
+export function usageLink(turn: Turn, now = Date.now()): string | undefined {
+  if (!turn.requestID) return undefined;
   const started = turn.serverStartedAt ?? turn.startedAt;
-  const margin = hasServerTime ? USAGE_LINK_SERVER_MARGIN_MS : USAGE_LINK_BROWSER_MARGIN_MS;
   const span = turn.durationMS
     ?? (turn.endedAt !== undefined ? turn.endedAt - turn.startedAt : undefined);
-  const from = Math.max(0, Math.floor(started - margin));
-  const params = new URLSearchParams({ from: String(from) });
+  const from = Math.max(0, Math.floor(started - USAGE_LINK_MARGIN_MS));
+  const params = new URLSearchParams({ request_id: turn.requestID, from: String(from) });
   // A turn still running, or cut off without a `done`, has no known end: its record may land
   // at any later time, and a closed window is never re-read, so the link stays open-ended.
   if (span !== undefined) {
-    const to = Math.ceil(started + Math.max(0, span) + margin);
+    const to = Math.ceil(started + Math.max(0, span) + USAGE_LINK_MARGIN_MS);
     if (now >= to + USAGE_LINK_INGEST_GRACE_MS) params.set("to", String(to));
   }
-  if (turn.request.client_key_fingerprint) {
-    params.set("api_key", turn.request.client_key_fingerprint);
-  }
-  // The effective model: filtering by the selected one would list records for a model
-  // this turn never called when an override was in force.
-  const model = effectiveModel(turn.request);
-  if (model) {
-    params.set("model", model);
-  }
-  // The UA separates the playground's request from a client sharing the same key and model in
-  // the same seconds. The default is matched on its product token, which every build shares.
-  params.set("ua", turn.request.user_agent?.trim() || "Oh-My-CPA/");
   return `/usage/events?${params.toString()}`;
 }
 export async function readImage(file: File): Promise<ImageAttachment> {

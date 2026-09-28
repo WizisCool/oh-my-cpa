@@ -111,47 +111,65 @@ test('user_agent is a transport header, never a payload field', () => {
   assert.equal(buildCurl(turn.request, playgroundUserAgent()).includes(`User-Agent: ${playgroundUserAgent()}`), true);
 });
 
-test("request drill-down pins the turn's own window, exact model, key and user agent", () => {
+test("request drill-down names the turn's own request id within its window", () => {
   let turn = applyEvent(makeTurn(), { type: "meta", started_at_ms: 5_000_000 });
+  turn = applyEvent(turn, { type: "request", request_id: "0000002a" });
   turn = applyEvent(turn, { type: "done", first_content_ms: 35, duration_ms: 2_000 }, 1003000);
-  const url = new URL(usageLink(turn), "http://local");
+  assert.equal(turn.requestID, "0000002a");
+  const url = new URL(usageLink(turn)!, "http://local");
   const query = readEventQuery(url.searchParams);
+  assert.equal(url.pathname, "/usage/events");
+  assert.equal(query.text?.request_id, "0000002a");
+  // The id is exact; key, model and User-Agent would only repeat it, and a mismatch would hide it.
+  assert.equal(url.searchParams.has("api_key"), false);
+  assert.equal(url.searchParams.has("model"), false);
+  assert.equal(url.searchParams.has("ua"), false);
   assert.equal(url.searchParams.has("preset"), false);
-  // Server time, not the browser's startedAt, anchors the window.
-  assert.equal(query.from, 5_000_000 - 5_000);
-  assert.equal(query.to, 5_000_000 + 2_000 + 5_000);
-  assert.deepEqual(query.filters?.model, ["alias/model"]);
-  assert.deepEqual(query.filters?.api_key, ["fingerprint"]);
-  assert.equal(query.text?.ua, "Oh-My-CPA/");
+  // CPA's ids restart with CPA, so the window stays; server time anchors it.
+  assert.equal(query.from, 5_000_000 - 5 * 60_000);
+  assert.equal(query.to, 5_000_000 + 2_000 + 5 * 60_000);
 });
 
-test("request drill-down follows a custom model override and user agent", () => {
-  const turn = makeTurn();
-  turn.request = { ...turn.request, custom_body: { model: "override/model" }, user_agent: " my-agent/1 " };
-  turn.endedAt = 1_001_000;
-  const query = readEventQuery(new URL(usageLink(turn), "http://local").searchParams);
-  assert.deepEqual(query.filters?.model, ["override/model"]);
-  assert.equal(query.text?.ua, "my-agent/1");
-  // Without server timings the browser clock places the window, with a wider margin for skew.
+test("a turn CPA gave no request id has no drill-down at all", () => {
+  let turn = applyEvent(makeTurn(), { type: "meta", started_at_ms: 5_000_000 });
+  turn = applyEvent(turn, { type: "done", duration_ms: 2_000 }, 1003000);
+  assert.equal(turn.requestID, undefined);
+  assert.equal(usageLink(turn), undefined);
+});
+
+test("a request CPA rejected is still found by the id on its error", () => {
+  const failed = applyEvent(makeTurn(), { type: "error", code: "upstream_rate_limited", upstream_status: 429, request_id: "0000002b" }, 1_001_000);
+  assert.equal(failed.requestID, "0000002b");
+  assert.equal(new URL(usageLink(failed)!, "http://local").searchParams.get("request_id"), "0000002b");
+  // The id announced first is the request's; a later error cannot rename it.
+  const streamed = applyEvent(applyEvent(makeTurn(), { type: "request", request_id: "0000002c" }), { type: "error", code: "stream_incomplete", request_id: "ffffffff" });
+  assert.equal(streamed.requestID, "0000002c");
+});
+
+test("a turn restored without server timings is placed by the browser clock", () => {
+  const turn = { ...makeTurn(), requestID: "0000002a", endedAt: 1_001_000 };
+  const query = readEventQuery(new URL(usageLink(turn)!, "http://local").searchParams);
   assert.equal(query.from, 1_000_000 - 5 * 60_000);
   assert.equal(query.to, 1_001_000 + 5 * 60_000);
 });
 
 test("a turn that just finished stays open-ended until its record can have been ingested", () => {
   let turn = applyEvent(makeTurn(), { type: "meta", started_at_ms: 9_000_000 });
+  turn = applyEvent(turn, { type: "request", request_id: "0000002a" });
   turn = applyEvent(turn, { type: "done", duration_ms: 1_000 }, 9_001_000);
-  const fresh = new URL(usageLink(turn, 9_010_000), "http://local").searchParams;
-  assert.equal(fresh.get("from"), String(9_000_000 - 5_000));
+  const fresh = new URL(usageLink(turn, 9_010_000)!, "http://local").searchParams;
+  assert.equal(fresh.get("from"), String(9_000_000 - 5 * 60_000));
   assert.equal(fresh.has("to"), false);
-  const settled = new URL(usageLink(turn, 9_000_000 + 1_000 + 5_000 + 60_000), "http://local").searchParams;
-  assert.equal(settled.get("to"), String(9_000_000 + 1_000 + 5_000));
+  const settled = new URL(usageLink(turn, 9_000_000 + 1_000 + 5 * 60_000 + 60_000)!, "http://local").searchParams;
+  assert.equal(settled.get("to"), String(9_000_000 + 1_000 + 5 * 60_000));
 });
 
 test("a turn without an end stays open-ended however long ago it started", () => {
-  const link = usageLink(applyEvent(makeTurn(), { type: "meta", started_at_ms: 2_000_000 }), 2_000_000 + 24 * 3_600_000);
-  const params = new URL(link, "http://local").searchParams;
+  const started = applyEvent(makeTurn(), { type: "meta", started_at_ms: 2_000_000 });
+  const link = usageLink(applyEvent(started, { type: "request", request_id: "0000002a" }), 2_000_000 + 24 * 3_600_000);
+  const params = new URL(link!, "http://local").searchParams;
   assert.equal(params.has("to"), false);
-  assert.equal(readEventQuery(params).from, 2_000_000 - 5_000);
+  assert.equal(readEventQuery(params).from, 2_000_000 - 5 * 60_000);
 });
 
 test('playground IDs do not require a secure-context randomUUID', () => {
@@ -242,10 +260,6 @@ test('the effective model follows the override everywhere it is named', () => {
   const request = { ...makeTurn().request, model: 'selected', custom_body: { model: 'overridden' } as Record<string, unknown> };
   assert.equal(effectiveModel(request), 'overridden');
 
-  const turn = { ...makeTurn(), request, endedAt: 1001000 };
-  const url = new URL(usageLink(turn), 'http://local');
-  assert.deepEqual(url.searchParams.getAll('model'), ['overridden']);
-
   // A blank or non-string override is not a model, so the selection stands.
   for (const override of ['   ', 42, null, undefined, {}]) {
     assert.equal(effectiveModel({ ...request, custom_body: { model: override } as Record<string, unknown> }), 'selected', JSON.stringify(override));
@@ -304,8 +318,13 @@ test('session restoration rejects malformed nested turns without crashing later 
     { ...valid, user: null }, { ...valid, user: { role: 'user', content: [{}] } },
     { ...valid, request: {} }, { ...valid, request: { ...valid.request, messages: [null] } },
     { ...valid, status: 'invented' }, { ...valid, usage: { total_tokens: 'wrong' } },
-    { ...valid, reply: {} }, { ...valid, thought: {} },
+    { ...valid, reply: {} }, { ...valid, thought: {} }, { ...valid, requestID: 42 },
   ]) assert.equal(parsePlaygroundSession({ turns: [bad, valid] })?.turns?.length, 1);
+  // A restored turn keeps the id its drill-down needs.
+  const withID = { ...valid, requestID: '0000002a', events: [{ type: 'request', request_id: '0000002a' }, { type: 'request', request_id: 42 }] };
+  const restored = parsePlaygroundSession(JSON.parse(JSON.stringify({ turns: [withID] })))?.turns?.[0];
+  assert.equal(restored?.requestID, '0000002a');
+  assert.deepEqual(restored?.events, [{ type: 'request', request_id: '0000002a' }]);
 });
 test('storage redacts diagnostics and avoids quadratic historical snapshots', () => {
   const turns = Array.from({ length: 10 }, (_, index) => ({ ...makeTurn(), id: String(index), request: { ...makeTurn().request, messages: Array(index + 1).fill(makeTurn().user) } }));

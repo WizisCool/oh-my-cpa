@@ -112,11 +112,14 @@ type Event struct {
 	Code           string `json:"code,omitempty"`
 	UpstreamStatus int    `json:"upstream_status,omitempty"`
 	Parameter      string `json:"parameter,omitempty"`
+	RequestID      string `json:"request_id,omitempty"`
 }
 type Error struct {
 	Code      string
 	Status    int
 	Parameter string
+	// RequestID is CPA's id for a rejected request, when it got far enough to be given one.
+	RequestID string
 }
 
 func (failure *Error) Error() string { return failure.Code }

@@ -390,3 +390,64 @@ func TestUserAgentHeaderIsTheDedicatedFieldOnly(t *testing.T) {
 		t.Errorf("custom_body user_agent = %q present=%v, want it passed through as a body parameter", bodyValue, inBody)
 	}
 }
+
+func TestRequestIDFromTrace(t *testing.T) {
+	for _, test := range []struct{ header, want string }{
+		{"20260928183000-1a2b3c-0000002a", "0000002a"},
+		// An auth index may carry hyphens of its own; the id is always the last segment.
+		{"20260928183000-codex-user-1-0000002a", "0000002a"},
+		{" 20260928183000-1a2b3c-0000002a ", "0000002a"},
+		{"", ""},
+		{"0000002a", ""},
+		{"20260928183000-1a2b3c-", ""},
+		{"20260928183000-1a2b3c-00 2a", ""},
+		{"20260928183000-1a2b3c-" + strings.Repeat("a", 65), ""},
+	} {
+		if got := RequestIDFromTrace(test.header); got != test.want {
+			t.Errorf("RequestIDFromTrace(%q) = %q, want %q", test.header, got, test.want)
+		}
+	}
+}
+
+func TestStreamReportsCPARequestIDFirst(t *testing.T) {
+	client := makeClient(t, func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set(TraceIDHeader, "20260928183000-1a2b3c-0000002a")
+		writer.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(writer, `data: {"choices":[{"delta":{"content":"hello"},"finish_reason":"stop"}]}`+"\n\n"+`data: [DONE]`+"\n\n")
+	})
+	var events []Event
+	if err := streamTestRequest(t, client, context.Background(), testRequest(), func(event Event) error { events = append(events, event); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 3 || events[0].Type != "request" || events[0].RequestID != "0000002a" || events[1].Content != "hello" {
+		t.Fatalf("request id was not reported before the answer: %#v", events)
+	}
+}
+
+func TestStreamWithoutTraceHeaderReportsNoRequestID(t *testing.T) {
+	client := makeClient(t, func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(writer, `data: {"choices":[{"delta":{"content":"hello"},"finish_reason":"stop"}]}`+"\n\n"+`data: [DONE]`+"\n\n")
+	})
+	var events []Event
+	if err := streamTestRequest(t, client, context.Background(), testRequest(), func(event Event) error { events = append(events, event); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range events {
+		if event.Type == "request" || event.RequestID != "" {
+			t.Fatalf("an id was invented without a trace header: %#v", events)
+		}
+	}
+}
+
+func TestRejectedRequestCarriesItsRequestID(t *testing.T) {
+	client := makeClient(t, func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set(TraceIDHeader, "20260928183000-1a2b3c-0000002b")
+		writer.WriteHeader(429)
+		io.WriteString(writer, `{"error":{"message":"slow down"}}`)
+	})
+	err := streamTestRequest(t, client, context.Background(), testRequest(), func(Event) error { return nil })
+	if event := ErrorEvent(err); event.Code != "upstream_rate_limited" || event.RequestID != "0000002b" {
+		t.Fatalf("rejected request lost its id: %#v", event)
+	}
+}

@@ -1,5 +1,6 @@
 import { XStream } from '@ant-design/x-sdk';
 import { requestResponse, ApiError } from '../../api/client';
+import { PLAYGROUND_EVENT_TYPES } from './state';
 import type { ChatRequest, StreamEvent } from './state';
 
 export async function streamChat(request: ChatRequest, signal: AbortSignal, onEvent: (event: StreamEvent) => void): Promise<void> {
@@ -11,7 +12,7 @@ export async function streamChat(request: ChatRequest, signal: AbortSignal, onEv
   for await (const frame of XStream({ readableStream: response.body })) {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
     if (!frame.event || !frame.data) continue;
-    if (!['meta', 'delta', 'thought', 'usage', 'done', 'error'].includes(frame.event)) throw new Error('invalid_gateway_response');
+    if (!(PLAYGROUND_EVENT_TYPES as readonly string[]).includes(frame.event)) throw new Error('invalid_gateway_response');
     const event = { ...JSON.parse(frame.data), type: frame.event } as StreamEvent;
     onEvent(event);
     if (event.type === 'done' || event.type === 'error') { hasTerminalEvent = true; break; }

@@ -228,7 +228,10 @@ export const PlaygroundPage: React.FC = () => {
     setIsPanelOpen(true);
   }, []);
 
-  const onOpenRequests = React.useCallback((turn: Turn) => navigate(usageLink(turn)), [navigate]);
+  const onOpenRequests = React.useCallback((turn: Turn) => {
+    const link = usageLink(turn);
+    if (link) navigate(link);
+  }, [navigate]);
 
   const resetConversation = () => {
     if (isRunning) return;

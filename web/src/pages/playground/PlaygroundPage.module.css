@@ -217,6 +217,20 @@
   gap: 6px;
 }
 
+.request-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.request-id code {
+  color: var(--fg);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 640px) {
   .action-label {
     display: none;
