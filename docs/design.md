@@ -821,7 +821,8 @@ Every route opens with the same head, built by `PageHeader` (`web/src/components
 reader moving between pages never sees the refresh control jump or resize:
 
 - **Title block left, actions right.** One `h1` (`.terminal-title`), and under it only a line that
-  carries live data (the OAuth workspace's counts). A sentence describing what the page is for restates
+  carries live data (the OAuth workspace's counts, the AI provider list's provider, model, key and
+  header totals). A sentence describing what the page is for restates
   the navigation label beside it and is not drawn.
 - **No echo copy.** A footnote restating a column's window, a hint under a field restating its label, a
   notice explaining how the console stores something: each is documentation pasted into the surface.
@@ -850,15 +851,18 @@ reader moving between pages never sees the refresh control jump or resize:
   rules, and a `--surface` hover. The shared `.data-table` rule in `web/src/index.css` draws it
   for `ResponsiveList`; a list that is the whole body of a card adds `.data-table-flush`, so the
   card is the frame and no list sits in a frame inside a frame.
+- **A list summarised before it is listed opens with `StatTiles`** (`web/src/components/common/`):
+  a strip of counted tiles on `--bg` with a 1px `--border` frame, a 12px label (a `StatusLabel` for
+  a toned tile, plain for the "everything" tile) over a 22px tabular count, which paints in its tone
+  only when non-zero. Each tile is also the list's filter (`aria-pressed`; the selected one takes
+  the accent frame and `--hover-inset`), and the `.logs-toolbar` strip of search and selects sits
+  directly under it. The audit trail's outcomes and the AI provider list's states both use it.
 - **Lists render through `ResponsiveList`**: a table on a wide viewport, labelled rows below 640px,
   one empty state (antd's simple `Empty`), and no paginator for a single page.
   A wide table scrolls sideways inside its own box and never vertically: the wheel over a list
   scrolls the page, however many lists a page stacks.
-- **A filter with counts is a tab row.** A small closed set of choices that each carry a count - an
-  OAuth provider, an audit outcome - is drawn as the provider tabs are: a quiet `--fg` underline and
-  a mono count pill per option (`ProviderFilterTabs`, and `CountTabs` for a filter that is not a
-  provider). It is never a row of KPI cards: cards are reserved for KPIs, and a list is not a KPI
-  view. An open-ended set (the audit categories) stays a `Select` whose options carry the count.
+- **A counted filter over an open-ended set stays a `Select`** whose options carry the count (the
+  audit categories, the provider families): a strip of tiles or tabs is for a small closed set.
 - **A record opens in a Drawer.** A row is a reading; the full record - identifiers, the raw code
   behind a sentence, recorded detail - opens from the row's Details action (or a click on the row)
   in a Drawer, never by expanding the row in place, which pushed every row below it down the page.

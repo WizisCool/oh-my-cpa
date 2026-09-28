@@ -41,7 +41,7 @@ import { RefreshButton } from '../common/RefreshButton';
 import { StatusLabel, type StatusTone } from '../common/StatusLabel';
 import { ResponsiveList } from '../common/ResponsiveList';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
-import { CountTabs } from '../common/CountTabs';
+import { StatTiles } from '../common/StatTiles';
 import { saveBlob } from '../../utils/download';
 import { auditActionLabel, auditResultLabel } from './auditText';
 import { AuditEventDrawer } from './AuditEventDrawer';
@@ -63,9 +63,9 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   system: <DatabaseOutlined />,
 };
 
-/** The outcome tabs, in reading order, with the tone of each one's pip. */
-const OUTCOME_TABS: readonly { outcome: AuditOutcome; tone?: StatusTone }[] = [
-  { outcome: 'all' },
+/** The outcome tiles, in reading order, with the tone of each one's label and count. */
+const OUTCOME_TILES: readonly { outcome: AuditOutcome; tone: StatusTone }[] = [
+  { outcome: 'all', tone: 'neutral' },
   { outcome: 'succeeded', tone: 'success' },
   { outcome: 'failed', tone: 'danger' },
   { outcome: 'unfinished', tone: 'warn' },
@@ -337,21 +337,22 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
         )}
       />
 
-      <CountTabs<AuditOutcome>
-        className={styles['outcome-tabs']}
-        testId="audit-outcomes"
+      <StatTiles
+        className={styles['audit-stats']}
         ariaLabel={t('audit.outcome_filter')}
-        active={filters.outcome}
-        onChange={(outcome) => update({ outcome })}
-        tabs={OUTCOME_TABS.map(({ outcome, tone }) => ({
+        testId="audit-stats"
+        tileTestIdPrefix="audit-stat"
+        selected={filters.outcome}
+        onSelect={(outcome) => update({ outcome })}
+        tiles={OUTCOME_TILES.map(({ outcome, tone }) => ({
           key: outcome,
-          label: outcome === 'all' ? t('common.all') : t(`audit.outcome_${outcome}`),
+          label: outcome === 'all' ? t('audit.stat_all') : t(`audit.outcome_${outcome}`),
           count: hasCounts ? facets.outcomes[outcome] : undefined,
-          icon: tone ? <span className={clsx('status-label', `is-${tone}`)} aria-hidden="true"><span className="status-label-pip" /></span> : undefined,
+          tone,
         }))}
       />
 
-      <div className={styles.toolbar}>
+      <div className={clsx('logs-toolbar', styles.toolbar)}>
         <Input
           allowClear
           className={styles['audit-search']}

@@ -1,9 +1,11 @@
-/* ── filter row: search takes the slack, the facets keep their width ───────── */
+/* The outcome strip is the shared StatTiles; the page only spaces it from the toolbar. */
+.audit-stats {
+  margin-bottom: 12px;
+}
+
+/* ── filter row: the console's `.logs-toolbar` strip, as on the provider list; search
+   takes the slack, the facets keep their width ────────────────────────────────────── */
 .toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
   margin-bottom: 16px;
 }
 
@@ -318,16 +320,5 @@
     flex: 1 1 0;
     width: auto;
     min-width: 0;
-  }
-
-  /* The tabs drop their gutter and the pip (the word already names the outcome), so the
-     four fit a phone in Chinese; a longer locale falls back to the tabs' overflow menu. */
-  .outcome-tabs :global(.ant-tabs-nav .ant-tabs-tab) {
-    padding: 8px 8px 11px !important;
-    margin: 0 !important;
-  }
-
-  .outcome-tabs :global(.status-label) {
-    display: none;
   }
 }

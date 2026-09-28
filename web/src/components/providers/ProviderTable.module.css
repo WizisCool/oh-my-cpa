@@ -25,6 +25,13 @@
   border-color: var(--accent);
 }
 
+.provider-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .provider-name {
   min-width: 0;
   color: var(--fg);
@@ -35,6 +42,25 @@
 
 .provider-name a {
   color: var(--accent);
+}
+
+/* The gateway's own name and the routing priority: facts a reader checks the row against, set
+   in the meta ink so they never compete with the operator's label above them. */
+.provider-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.provider-meta-text {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--meta);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .protocol-tag {
@@ -57,24 +83,31 @@
   color: var(--family-color) !important;
 }
 
+/* A long endpoint breaks onto a second line rather than holding one wide line: the row is two
+   lines tall anyway (name and meta), and the width it frees keeps the count pills two a line. */
 .endpoint {
-  max-width: 260px;
+  display: -webkit-box;
+  max-width: 190px;
   overflow: hidden;
   color: var(--fg);
   font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .prefix-chip {
   display: inline-block;
-  padding: 0 6px;
+  flex-shrink: 0;
+  padding: 0 5px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg);
   color: var(--accent);
-  font-size: 12px;
-  line-height: 20px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
 }
 
 .muted {
@@ -85,13 +118,12 @@
 .count-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 6px;
-  max-width: 200px;
+  gap: 4px;
 }
 
 .count-pill {
   display: inline-block;
-  padding: 0 8px;
+  padding: 0 6px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface);
@@ -101,3 +133,60 @@
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+
+/* A count that explains a warning (a switched-on row with no key) carries the warn tone on its
+   frame and number, never on the fill, so the pill still reads as one of the row's counts. */
+.count-pill-warn {
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--border));
+  color: var(--warn);
+}
+
+/* ── traffic over the page's window ─────────────────────────────────────────── */
+.traffic {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.traffic-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.traffic-requests {
+  color: var(--fg);
+  font-size: 12px;
+}
+
+.traffic-rate {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.traffic-meter {
+  width: 100%;
+}
+
+.traffic-failed {
+  color: var(--danger);
+  font-size: 11px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The band's three tones, as the dashboard paints them; neutral is a window with nothing to judge. */
+.tone-success { color: var(--success); }
+.tone-warn { color: var(--warn); }
+.tone-danger { color: var(--danger); }
+.tone-neutral { color: var(--meta); }
+
+/* Scoped under the meter so the tone outranks the shared `.dashboard-meter span` fill. */
+.traffic-meter .meter-success { background: var(--success); }
+.traffic-meter .meter-warn { background: var(--warn); }
+.traffic-meter .meter-danger { background: var(--danger); }
+.traffic-meter .meter-neutral { background: var(--meta); }

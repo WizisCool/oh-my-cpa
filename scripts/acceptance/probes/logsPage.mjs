@@ -21,7 +21,7 @@ const AUDIT_PAGE_TWO = [
   { id: 3, occurred_at_ms: NOW - 3 * 86_400_000, action: 'auth.login', target_type: 'auth', target_id: 'operator', result: 'success', request_id: 'req-probe-3', source_summary: 'ip=198.51.100.0/24 ua=Mozilla/5.0' },
 ];
 
-/** The summary behind the outcome tabs and the category counts, over every page of the trail. */
+/** The summary behind the outcome tiles and the category counts, over every page of the trail. */
 const AUDIT_BUCKETS = [
   { prefix: 'provider', outcome: 'succeeded', count: 1 },
   { prefix: 'plugin', outcome: 'failed', count: 1 },
@@ -155,11 +155,11 @@ export async function auditTrail({ base, page, check, auditRequests }) {
     check('the drawer closes', closed);
   }
 
-  const failedTab = page.locator('[data-testid="audit-outcomes-failed"]');
-  const failedCounted = await until(async () => (await failedTab.innerText()).includes('1'), {
+  const failedTile = page.locator('[data-testid="audit-stat-failed"]');
+  const failedCounted = await until(async () => (await failedTile.innerText()).includes('1'), {
     label: 'the failed-outcome count',
   }).then(() => true).catch(() => false);
-  check('the outcome tabs count the whole trail from the summary', failedCounted, await failedTab.innerText());
+  check('the outcome tiles count the whole trail from the summary', failedCounted, await failedTile.innerText());
 
   // ── paging and filtering ask the server ─────────────────────────────────────
   await page.getByRole('button', { name: /加载更早的记录|Load older entries/ }).click();
@@ -169,7 +169,7 @@ export async function auditTrail({ base, page, check, auditRequests }) {
   check('loading older entries appends the next page', olderShown);
   check('the next page is asked for with the cursor', auditRequests.some((search) => search.includes('before=')), auditRequests.join(' | '));
 
-  await failedTab.click();
+  await failedTile.click();
   const filtered = await until(async () => (await entries.count()) === 1, {
     label: 'the failed-outcome filter',
   }).then(() => true).catch(() => false);
@@ -186,7 +186,7 @@ export async function auditTrailNarrow({ base, page, check }) {
   const overflow = await page.evaluate(() => {
     const width = document.documentElement.clientWidth;
     const outside = [];
-    for (const node of document.querySelectorAll('[data-testid="audit-trail"] [data-testid="audit-entry"], [data-testid="audit-outcomes"], [data-testid="audit-page"] .terminal-page-head')) {
+    for (const node of document.querySelectorAll('[data-testid="audit-trail"] [data-testid="audit-entry"], [data-testid="audit-stats"], [data-testid="audit-page"] .terminal-page-head')) {
       const rect = node.getBoundingClientRect();
       if (rect.right > width + 1) outside.push(`${node.className} ${Math.round(rect.right)}`);
     }

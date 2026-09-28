@@ -1,4 +1,5 @@
 import type React from 'react';
+import clsx from 'clsx';
 import { Button, Popconfirm, Switch, Tag, Tooltip } from 'antd';
 import { DeleteOutlined, EditOutlined, EyeOutlined } from '../icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -11,16 +12,29 @@ import { resolveProviderIcon } from '../../types/providerIcons';
 import { pluginOAuthLogoFor, type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
 import type { ProviderItem } from '../../types/providers';
 import { matchProviderFamily } from '../../types/providerFamilies';
+import { successRateTone } from '../../types/usageEventMetrics';
 import { ResponsiveList } from '../common/ResponsiveList';
 import { StatusLabel } from '../common/StatusLabel';
 import styles from './ProviderTable.module.css';
 import type { useProviderManagement } from './useProviderManagement';
+import {
+  providerHeaderCount,
+  providerKeyCount,
+  providerModelCount,
+  type ProviderTraffic,
+} from './providerOverview';
 
 type ProviderManagement = ReturnType<typeof useProviderManagement>;
 
 interface ProviderTableProps {
   providers: ProviderItem[];
   providersLoading: boolean;
+  /** True when the list's read failed with nothing cached, so the page's alert is the one statement. */
+  isBlocked?: boolean;
+  /** The empty copy: no provider configured, or none matching the filters. */
+  emptyText: React.ReactNode;
+  /** Each row's traffic over the page's window, by provider id; `undefined` while unknown. */
+  traffic: Map<string, ProviderTraffic> | undefined;
   providerIcons: Record<string, string>;
   /** Logos published by installed plugins, keyed by the OAuth provider they register. */
   pluginLogos?: PluginOAuthLogos;
@@ -38,14 +52,18 @@ interface ProviderTableProps {
  * The provider table: one row per credential line, with the enable switch, the
  * brand mark and the actions that open the editor.
  *
- * The column set is the CPAMC table's order, so an operator moving between the two
- * consoles finds the same facts in the same sequence. It is one component because
+ * The columns keep the CPAMC table's order, so an operator moving between the two
+ * consoles finds the same facts in the same sequence; the window's traffic, which
+ * CPAMC does not show, sits before the state columns it helps explain. It is one component because
  * the switch's rendered state, the row's status label and the icon override the
  * row displays are three readings of the same row that must not disagree.
  */
 export function ProviderTable({
   providers,
   providersLoading,
+  isBlocked,
+  emptyText,
+  traffic,
   providerIcons,
   pluginLogos,
   statusQueue,
@@ -78,7 +96,7 @@ export function ProviderTable({
   };
 
   // Column order mirrors the CPAMC provider table so operators moving between
-  // the two consoles find the same facts in the same sequence.
+  // the two consoles find the same facts in the same sequence; traffic is OMC's own.
   const providerColumns: ColumnsType<ProviderItem> = [
     // 1. icon + display name
     {
@@ -86,7 +104,7 @@ export function ProviderTable({
       key: 'name',
       // The name is the row's identity: auto layout otherwise hands its width to the endpoint
       // and breaks "Anthropic Claude" one syllable per line.
-      minWidth: 200,
+      minWidth: 184,
       render: (_, record) => {
         const iconId = resolveProviderIcon(
           providerIcons,
@@ -101,6 +119,17 @@ export function ProviderTable({
           ?? pluginOAuthLogoFor(pluginLogos, record.name)
           ?? pluginOAuthLogoFor(pluginLogos, record.id);
         const website = safeExternalURL(record.website);
+        // The routing facts under the name: the model prefix, the priority, and the gateway's own
+        // name when the operator renamed the row (request records and CPA's logs carry that name,
+        // so it is what a reader cross-checks the row against). The prefix lives here rather than
+        // in a column of its own because most rows have none, and a column of "none" was the
+        // widest empty space on the page.
+        const upstreamName = record.upstream_name && record.upstream_name !== record.name ? record.upstream_name : '';
+        const meta = [
+          upstreamName,
+          record.priority ? t('omc.priority_value', { n: record.priority }) : '',
+        ].filter(Boolean);
+        const hasMeta = Boolean(record.prefix) || meta.length > 0;
         return (
           <div className={styles['provider-identity']}>
             <div
@@ -119,16 +148,30 @@ export function ProviderTable({
             >
               <ProviderBrandIcon iconId={iconId} logo={pluginLogo} size={22} />
             </div>
-            <div className={styles['provider-name']}>
-              {website ? (
-                // The name is the link when a website is known: the operator's own label is what
-                // they look for on the row, so making it the target avoids a column for one URL.
-                // rel/target keep the destination from reaching back through window.opener.
-                <a href={website} target="_blank" rel="noopener noreferrer">
-                  {record.name}
-                </a>
-              ) : (
-                record.name
+            <div className={styles['provider-text']}>
+              <div className={styles['provider-name']}>
+                {website ? (
+                  // The name is the link when a website is known: the operator's own label is what
+                  // they look for on the row, so making it the target avoids a column for one URL.
+                  // rel/target keep the destination from reaching back through window.opener.
+                  <a href={website} target="_blank" rel="noopener noreferrer">
+                    {record.name}
+                  </a>
+                ) : (
+                  record.name
+                )}
+              </div>
+              {hasMeta && (
+                <div className={styles['provider-meta']}>
+                  {record.prefix && (
+                    <Tooltip title={t('pro.field_prefix')}>
+                      <span className={styles['prefix-chip']} aria-label={`${t('pro.field_prefix')}: ${record.prefix}`}>
+                        {record.prefix}
+                      </span>
+                    </Tooltip>
+                  )}
+                  {meta.length > 0 && <span className={styles['provider-meta-text']}>{meta.join(' · ')}</span>}
+                </div>
               )}
             </div>
           </div>
@@ -177,26 +220,17 @@ export function ProviderTable({
       },
     },
 
-    // 4. prefix (shows "none" when absent)
-    {
-      title: t('pro.field_prefix'),
-      key: 'prefix',
-      render: (_, record) =>
-        record.prefix ? (
-          <span className={styles['prefix-chip']}>{record.prefix}</span>
-        ) : (
-          <span className={styles['muted']}>{t('pro.none_text')}</span>
-        ),
-    },
-
-    // 5. models / request headers
+    // 4. models / request headers
     {
       title: t('pro.col_models_headers'),
       key: 'models_headers',
+      // Two pills a line: three in a column made every row three pills tall, one line of three
+      // was wider than the traffic column it would have cost.
+      width: 148,
       render: (_, record) => {
-        const modelCount = record.model_entries?.length || record.models?.length || 0;
-        const keyCount = record.key_entries?.length || (record.key_configured ? 1 : 0);
-        const headerCount = record.headers ? Object.keys(record.headers).length : 0;
+        const modelCount = providerModelCount(record);
+        const keyCount = providerKeyCount(record);
+        const headerCount = providerHeaderCount(record);
         const modelNames =
           record.model_entries?.map((m) => m.name).join(', ') ||
           record.models?.join(', ') ||
@@ -207,8 +241,48 @@ export function ProviderTable({
             <Tooltip title={modelNames || undefined}>
               <span className={styles['count-pill']}>{t('pro.model_count_pill', { n: modelCount })}</span>
             </Tooltip>
-            <span className={styles['count-pill']}>{t('pro.key_count_pill', { n: keyCount })}</span>
+            {/* A switched-on row without a key cannot serve, so its key count is the pill that
+                says why the row counts toward "needs attention". */}
+            <span className={clsx(styles['count-pill'], keyCount === 0 && styles['count-pill-warn'])}>
+              {t('pro.key_count_pill', { n: keyCount })}
+            </span>
             <span className={styles['count-pill']}>{t('pro.header_count_pill', { n: headerCount })}</span>
+          </div>
+        );
+      },
+    },
+
+    // 5. traffic over the page's window
+    {
+      title: t('pro.col_traffic'),
+      key: 'traffic',
+      width: 148,
+      render: (_, record) => {
+        const row = traffic?.get(record.id);
+        if (!row) {
+          return (
+            <Tooltip title={t('pro.traffic_unknown')}>
+              <span className={styles['muted']}>—</span>
+            </Tooltip>
+          );
+        }
+        if (row.total === 0) return <span className={styles['muted']}>{t('pro.traffic_none')}</span>;
+        // The rate's colour is the console's one band (successRateTone), carried by the number as
+        // well as by the meter: at a measured 0% the meter has no width to paint.
+        const tone = successRateTone(row.successRate);
+        const rate = row.successRate ?? 0;
+        return (
+          <div className={styles['traffic']}>
+            <div className={styles['traffic-line']}>
+              <span className={styles['traffic-requests']}>{t('pro.traffic_requests', { n: row.total.toLocaleString() })}</span>
+              <span className={clsx(styles['traffic-rate'], styles[`tone-${tone}`])}>{`${rate.toFixed(1)}%`}</span>
+            </div>
+            <div className={clsx('dashboard-meter', styles['traffic-meter'])} aria-hidden="true">
+              <span className={styles[`meter-${tone}`]} style={{ width: `${Math.max(0, Math.min(100, rate))}%` }} />
+            </div>
+            {row.failure > 0 && (
+              <span className={styles['traffic-failed']}>{t('pro.traffic_failed', { n: row.failure.toLocaleString() })}</span>
+            )}
           </div>
         );
       },
@@ -314,7 +388,8 @@ export function ProviderTable({
       dataSource={providers}
       rowKey="id"
       isLoading={providersLoading}
-      emptyText={t('pro.providers_empty')}
+      isBlocked={isBlocked}
+      emptyText={emptyText}
       phone={{ identity: 'name', actions: ['status', 'switch', 'actions'] }}
     />
   );
