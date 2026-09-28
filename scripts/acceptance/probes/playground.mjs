@@ -61,20 +61,21 @@ export async function playground({ base, page, check, context }) {
   await page.getByLabel('Custom request body (JSON)', { exact: true }).fill('[1, 2]');
   await input.fill('Inspect this image');
   check('an invalid custom body is flagged in place and blocks sending', await page.getByText('Custom body must be a valid JSON object').isVisible() && await page.getByRole('button', { name: 'Send', exact: true }).isDisabled());
-  await page.getByLabel('Custom request body (JSON)', { exact: true }).fill('');
-  // `submit` returns silently while any clause of its send gate is false - including the custom
-  // body the check above just made invalid - so acting before the gate reopens sends nothing and
-  // leaves the transcript empty. Wait on the affordance the action depends on.
-  const send = page.getByRole('button', { name: 'Send', exact: true });
-  await until(async () => await send.isEnabled(), { label: 'the composer to accept a corrected custom body' });
-  await input.press('Enter');
-  // Assert the action had an effect before waiting on anything downstream. A press the composer
-  // refuses is silent, and without this the only symptom is a rendering wait ten seconds later
-  // that says nothing about which step failed - which is how this scenario's own CI failure had
-  // to be diagnosed from a screenshot. The refusal is rare (unreproduced in 64 local attempts,
-  // including under a one-CPU constraint) and the path predates this change; what is fixed here
-  // is that it now reports itself at the step that broke.
-  await until(() => calls.length === 1, { label: 'the first turn to reach the upstream', timeoutMs: 5000 });
+  // Correcting the body and pressing Enter happen in one task, so the keypress lands in the same
+  // commit that reopens the send gate and before any later render. Enter used to be decided by
+  // Ant Design X's own copy of the send button's state, which an effect updates one render after
+  // the button itself is enabled: a key arriving inside that window was refused in silence. A
+  // loaded CI runner hit the window on a real keypress about one run in five; doing both in one
+  // task hits it every time, so the check fails on that design rather than on the runner's speed.
+  await page.evaluate(() => {
+    const body = document.getElementById('playground-custom-body');
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(body, '');
+    body.dispatchEvent(new Event('input', { bubbles: true }));
+    const composer = document.querySelector('textarea[aria-label="Enter a message, or paste an image…"]');
+    composer.focus();
+    composer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
+  });
+  await until(() => calls.length === 1, { label: 'Enter pressed as the send gate reopens to reach the upstream', timeoutMs: 5000 });
   await until(async () => await page.getByText('Complete', { exact: true }).count() > 0, {
     label: 'the first streamed turn to complete',
   });
@@ -104,7 +105,16 @@ export async function playground({ base, page, check, context }) {
   check('request diagnostics preserve the original snapshot and omit image bytes', (await page.locator('aside pre').innerText()).includes('Original system prompt') && (await page.locator('aside pre').innerText()).includes('"reasoning_effort": "medium"') && !(await page.locator('aside pre').innerText()).includes('iVBOR'), 'snapshot and image redaction');
   const codeBg = await page.locator('aside pre').evaluate(el => getComputedStyle(el).backgroundColor);
   check('code highlighter background does not use hardcoded one-light', !codeBg.includes('250, 250') && codeBg !== 'rgb(250, 250, 250)');
-  mode = 'error'; await input.fill('Next question'); await page.getByRole('button', { name: 'Send', exact: true }).click();
+  // The send button carries the same guarantee as Enter: typing into an empty composer reopens the
+  // gate, and a click in that same task must send rather than meet the stale copy Enter used to.
+  mode = 'error';
+  await page.evaluate(() => {
+    const composer = document.querySelector('textarea[aria-label="Enter a message, or paste an image…"]');
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(composer, 'Next question');
+    composer.dispatchEvent(new Event('input', { bubbles: true }));
+    document.querySelector('button[aria-label="Send"]').click();
+  });
+  await until(() => calls.length === 2, { label: 'a click as the send gate reopens to reach the upstream', timeoutMs: 5000 });
   await page.getByText('Partial response', { exact: true }).waitFor();
   await until(async () => await page.getByRole('button', { name: 'Retry', exact: true }).isEnabled(), {
     label: 'the retry affordance after a partial response',

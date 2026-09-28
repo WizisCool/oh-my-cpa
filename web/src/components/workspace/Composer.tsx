@@ -40,10 +40,13 @@ export interface ComposerProps {
 /**
  * The message box both workspaces share.
  *
- * Sending goes through Ant Design X's own `SendButton` even though the button is drawn in the
- * footer: Sender only honours Enter while that button is mounted, because the button is what
- * reports whether a submission is currently allowed. A plain button in its place would leave Enter
- * permanently refused while the click still worked.
+ * Enter and the send button are decided here, from `canSend`, rather than by Sender. Sender keeps
+ * its own copy of whether a submission is allowed, which its `SendButton` writes from an effect,
+ * so that copy trails the button by one render: an Enter or a click landing between the commit
+ * that enables the button and the render that follows was refused in silence, with the message
+ * still in the box. Reading the prop the same commit rendered leaves no such window. Sender is
+ * given no `onSubmit`, which makes its own send a no-op, and its Enter handling is switched off by
+ * answering `false` from `onKeyDown`; `SendButton` stays only for its look, with our own click.
  *
  * The textarea is named through the DOM rather than a prop. Sender copies ARIA props onto its
  * container as well as the field, which gives the page two elements with the same name.
@@ -76,6 +79,21 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
     containerRef.current?.querySelector('textarea')?.setAttribute('aria-label', inputLabel);
   }, [inputLabel, isDisabled]);
 
+  const submit = () => {
+    if (canSend) onSubmit(value);
+  };
+
+  // Plain Enter sends; Shift+Enter keeps the newline, and a modified Enter is left to the browser.
+  // A keypress that confirms an IME composition is not a send: `isComposing` covers most engines,
+  // and keyCode 229 covers Safari, which ends the composition before the keydown it belongs to.
+  const onKeyDown: SenderProps['onKeyDown'] = (event) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return false;
+    event.preventDefault();
+    submit();
+    return false;
+  };
+
   const footer: SenderProps['footer'] = (_, { components: { SendButton } }) => (
     <div className={styles['composer-foot']}>
       <div className={styles['composer-foot-start']}>{footerStart}</div>
@@ -92,6 +110,7 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
             aria-label={sendLabel}
             icon={<ArrowUpOutlined />}
             disabled={!canSend}
+            onClick={submit}
           >
             {isSendLabelled ? sendLabel : null}
           </SendButton>
@@ -106,7 +125,7 @@ export const Composer = React.forwardRef<ComposerHandle, ComposerProps>(function
         className={styles['sender']}
         value={value}
         onChange={next => onChange(next)}
-        onSubmit={onSubmit}
+        onKeyDown={onKeyDown}
         onCancel={onStop}
         loading={isRunning}
         disabled={isDisabled}
