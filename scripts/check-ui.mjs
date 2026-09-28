@@ -135,6 +135,13 @@ const selectedIds = options.all
   : options.scenario !== undefined
     ? [options.scenario]
     : plan.ids;
+// An explicit selection is its own reason: the file-based plan was not consulted for it,
+// and printing that plan's reason beside it would describe a selection that did not run.
+const selectionReason = options.all
+  ? '--all'
+  : options.scenario !== undefined
+    ? `--scenario ${options.scenario}`
+    : plan.reason;
 
 if (options.plan) {
   console.log(`Changed files: ${files.length === 0 ? '(none)' : files.join(', ')}`);
@@ -163,7 +170,7 @@ const selected = SCENARIOS.filter((scenario) => selectedIds.includes(scenario.id
 const { check, failures } = createProbeChecker({ quiet: true });
 
 console.log(`Running ${selected.length} of ${SCENARIOS.length} scenarios: ${selectedIds.join(', ')}`);
-console.log(`Reason: ${plan.reason}\n`);
+console.log(`Reason: ${selectionReason}\n`);
 
 // The runner reports one line per failure with the scenario's own name alongside it,
 // so a focused run is as diagnostic as a full one without printing every pass.

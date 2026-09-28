@@ -446,7 +446,7 @@ function reachScenarios(file, importers) {
  */
 export function planScenarios(files, allIds, impact) {
   if (files.length === 0) {
-    return { ids: [], reasons: [{ kind: 'none', detail: 'no changed files' }] };
+    return { ids: [], reason: 'no changed files', reasons: [{ kind: 'none', detail: 'no changed files' }] };
   }
 
   // The harness is checked before anything else: a change to how scenarios are run,

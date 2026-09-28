@@ -209,8 +209,11 @@ test('backend and documentation changes select nothing', () => {
   }
 });
 
-test('an empty change selects nothing', () => {
-  assert.deepEqual(planScenarios([], ALL).ids, []);
+test('an empty change selects nothing and says why', () => {
+  const plan = planScenarios([], ALL);
+  assert.deepEqual(plan.ids, []);
+  // Every plan carries a reason: `check:ui` prints it, and an empty tree used to print "undefined".
+  assert.equal(plan.reason, 'no changed files');
 });
 
 test('the plan preserves registry order and contains no duplicates', () => {

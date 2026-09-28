@@ -62,9 +62,24 @@ export async function agentWorkspace({ base, page, check }) {
   await page.getByRole('menuitem', { name: 'High (high)' }).click();
   await page.getByLabel('Describe an OMC query or action').fill('Disable this provider');
   check('agent can send as soon as a message is typed', await page.getByRole('button', { name: 'Send', exact: true }).isEnabled());
+  // The composer decides Enter itself, so the two Enters that must not send are pinned beside the
+  // one that must: Shift+Enter adds a line, and an Enter confirming an IME composition belongs to
+  // the input method. A send empties the box in the same task, so an unchanged box is the evidence.
+  const composer = page.getByLabel('Describe an OMC query or action');
+  await composer.press('Shift+Enter');
+  check('Shift+Enter adds a line instead of sending', await composer.inputValue() === 'Disable this provider\n', JSON.stringify(await composer.inputValue()));
+  await composer.fill('Disable this provider');
+  // React flushes a key event's updates in a microtask it queues during dispatch, so the box is
+  // read from a microtask queued after it: by then a send would have emptied it.
+  const afterImeEnter = await composer.evaluate(async (element) => {
+    element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 229, isComposing: true, bubbles: true, cancelable: true }));
+    await new Promise((resolve) => queueMicrotask(resolve));
+    return element.value;
+  });
+  check('an Enter that confirms an IME composition does not send', afterImeEnter === 'Disable this provider', JSON.stringify(afterImeEnter));
   // Enter is the composer's primary submit. It is asserted rather than the button, because the two
   // are separate paths through the chat component and only the button used to work.
-  await page.getByLabel('Describe an OMC query or action').press('Enter');
+  await composer.press('Enter');
   await page.getByLabel('Enter target identifier to confirm').waitFor();
   check('agent submits a message with Enter', runs.length === 1 && runs[0].message === 'Disable this provider', JSON.stringify(runs));
   check('agent sends the chosen reasoning effort and no consent flag', runs[0].reasoning_effort === 'high' && !('has_consent' in runs[0]), JSON.stringify(runs[0]));

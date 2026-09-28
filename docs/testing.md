@@ -97,9 +97,10 @@ with a test in `scripts/ui-impact.test.mjs` or `scripts/check-ui-plan.test.mjs`.
 
 ## 4. When CI fails
 
-- Probe shards upload `tmp/probe-failure/` (screenshot, DOM, URL and page errors for
-  every failed scenario, whether a check failed or it threw). Reproduce with
-  `pnpm check:ui --scenario <id>`.
+- Probe shards upload `tmp/probe-failure/`: for every failed scenario, whether a check
+  failed or it threw, a screenshot, the DOM, the URL, page errors, and the page's console
+  warnings and navigations. A scenario that threw also prints the last of those in the job
+  log. Reproduce with `pnpm check:ui --scenario <id>`.
 - Cross-stack acceptance uploads `tmp/browser-acceptance-failure/`. Reproduce with
   `pnpm build` and `pnpm verify:browser` (or `verify:browser:p0`).
 - Rerun only the failed command. A failure that passes on rerun is a flake to fix at
