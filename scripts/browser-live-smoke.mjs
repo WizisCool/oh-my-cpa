@@ -331,15 +331,15 @@ async function main() {
 
   // The plugin manager renders the gateway's own plugin list (or its empty state).
   await page.goto(`${appURL}/plugins`, { waitUntil: 'domcontentloaded' });
-  await page.locator('.plugins-page .ant-table, .plugins-page .ant-empty').first().waitFor({ timeout: 10000 });
-  const pluginRows = await page.locator('.plugins-page .ant-table-row').count();
+  await page.locator('[data-plugin-panel="installed"], .plugins-page .ant-empty').first().waitFor({ timeout: 10000 });
+  const pluginRows = await page.locator('[data-plugin-panel="installed"] article[data-plugin-id]').count();
   const pluginsResponse = await page.request.get(`${appURL}/api/v1/management/plugins`);
   const pluginsBody = pluginsResponse.ok() ? await pluginsResponse.json() : undefined;
   // A body without a plugin array is a broken answer, not an empty list.
   const pluginsListed = Array.isArray(pluginsBody?.plugins) ? pluginsBody.plugins.length : -1;
   const pluginsEmptyShown = (await page.locator('.plugins-page .ant-empty').count()) > 0;
-  // The list pages at 20, so a longer list shows its first page.
-  const pluginsMatch = pluginsListed === 0 ? pluginsEmptyShown : pluginRows === Math.min(pluginsListed, 20);
+  // The installed list is not paged: every plugin CPA reports is a row.
+  const pluginsMatch = pluginsListed === 0 ? pluginsEmptyShown : pluginRows === pluginsListed;
   check('插件管理页渲染 CPA 插件列表', `rows=${pluginRows} listed=${pluginsListed}`, pluginsListed >= 0 && pluginsMatch);
 
   // Probe API rejection of unknown key

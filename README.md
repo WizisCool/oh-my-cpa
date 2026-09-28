@@ -77,7 +77,7 @@ does.
 
 ### Configuration & Security
 - **Dual-Mode Config Editor**: Modify gateway settings through structured visual forms or directly in an embedded Monaco YAML editor with comment preservation.
-- **Plugin Management**: Install, configure, and manage plugins from the plugin store.
+- **Plugin Management**: One page with three tabs — installed plugins (state, enable switch, settings, uninstall), the plugin store as cards (icon, author, tags, description, GitHub and homepage links, official/third-party marking, install or update to a chosen version), and the plugin system's own settings (the global switch, third-party store sources and store authentication rules). A plugin's declared settings are edited as typed form fields, with a JSON view of the same document.
 - **Encrypted Storage**: Sensitive credentials and raw inbox messages are encrypted at rest using AES-GCM.
 - **Audit Logging**: Sensitive operations (downloading auth files, exporting logs, viewing or editing YAML, and revealing stored client or provider keys) are written to an append-only audit log; a failed audit write refuses the operation.
 - **Offline Operation**: Frontend assets are bundled into the binary; no runtime CDN requests or external database servers required. A plugin logo a plugin publishes elsewhere is fetched by the server and inlined, so the browser still loads only what the binary serves — in an air-gapped deployment that fetch fails and the console draws its own bundled brand mark instead.

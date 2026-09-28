@@ -54,6 +54,7 @@ const FIXED_ROUTES = new Map([
   ['/api/v1/management/api-keys', 'api-keys'],
   ['/api/v1/management/client-key-aliases', 'client-key-aliases'],
   ['/api/v1/management/plugins', 'plugins'],
+  ['/api/v1/management/plugins/settings', 'plugins-settings'],
   ['/api/v1/management/plugin-store', 'plugin-store'],
   ['/api/v1/management/auth-files', 'auth-files'],
   ['/api/v1/management/auth-files/model-aliases', 'auth-files-model-aliases'],
@@ -98,6 +99,9 @@ const PRESET_ROUTES = new Map([
 /** A request record's detail, for whichever record the console opened. */
 const REQUEST_EVENT_DETAIL = '/api/v1/usage/events/{id}';
 
+/** One installed plugin's settings document. */
+const PLUGIN_CONFIG = '/api/v1/management/plugins/{id}/config';
+
 /** Routes that take a parameter the console chooses, with the value it sends. */
 const PARAMETERISED_ROUTES = [
   // The heatmap answers in the viewer's own zone, so the timezone is part of the ask.
@@ -126,6 +130,16 @@ const PARAMETERISED_ROUTES = [
   { path: '/api/v1/management/oauth/status', resolve: () => 'oauth-status' },
   { path: '/api/v1/management/logs', resolve: () => 'logs' },
   { path: '/api/v1/management/quota/auth-codex-01', resolve: () => 'quota-codex' },
+  // One installed plugin's settings document, captured per fixture plugin. A plugin the
+  // dataset does not hold has no answer rather than another plugin's settings.
+  {
+    path: PLUGIN_CONFIG,
+    pattern: /^\/api\/v1\/management\/plugins\/[A-Za-z0-9._-]+\/config$/,
+    resolve: (url) => {
+      const name = `plugin-config-${url.pathname.split('/').at(-2)}`;
+      return Object.hasOwn(dataset.responses, name) ? name : undefined;
+    },
+  },
   // Any request record the list shows. The dataset holds one capture, and the detail it
   // contains is shaped the same for every record, so answering the one capture for any id
   // is what keeps a visitor's click working: keyed to the captured id alone, every other

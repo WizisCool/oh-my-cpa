@@ -23,7 +23,7 @@ func (s *Service) registerSystem(registry *capability.Registry) error {
 		items, err := client.Plugins(ctx)
 		result := Plugins{Items: []Plugin{}}
 		for _, item := range items {
-			result.Items = append(result.Items, Plugin{safeLabel(item.ID), safeLabel(item.Name), safeLabel(item.Version), item.Enabled})
+			result.Items = append(result.Items, Plugin{safeLabel(item.ID), safeLabel(item.DisplayName()), safeLabel(item.DisplayVersion()), item.Enabled})
 		}
 		return result, err
 	}); err != nil {

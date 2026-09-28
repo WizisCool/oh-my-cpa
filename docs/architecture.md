@@ -96,7 +96,24 @@ Two rules keep the boundary meaningful:
   `managementAuthFileResponse`, …) instead of forwarding the facade model it decoded CPA
   into, so a field added there for decoding cannot reach a caller without a decision at
   this boundary. The plugin projection is also where manifest text is bounded
-  (`management_plugin_projection.go`), because that text arrives from an installed plugin.
+  (`management_plugin_projection.go`), because that text arrives from an installed plugin
+  or a store registry; it also derives each entry's repository link and whether a store
+  entry is first-party, so no surface decides trust on its own.
+
+**Plugin management** (ADR 0029). `internal/api/management_plugins.go` maps each console
+route to one CPA plugin route: the installed list with the global switch and each
+plugin's declared configuration fields, the per-plugin switch
+(`PATCH /plugins/{id}/enabled`), the per-plugin settings document
+(`GET`/`PUT /plugins/{id}/config`, passed through unprojected because its shape is the
+plugin's), removal, the store and installation from a named registry at a named version.
+CPA's plugin error codes (`plugin_not_found`, `plugin_delete_requires_restart`,
+`plugin_store_rate_limited`, …) are kept rather than folded into the generic facade
+error. The plugin system's own settings - `plugins.enabled`, `plugins.store-sources`
+and `plugins.store-auth` - have no CPA route narrower than `config.yaml`, so
+`internal/api/management_plugin_settings.go` reads the document, rewrites only those
+keys through `internal/cpa/configyaml/plugins.go` (comments and every other key kept),
+and writes it back under the provider write gate, the configuration mutex and the
+revision the page loaded, exactly like a configuration save.
 
 
 ### Agent runtime, capability registry and the MCP bridge
@@ -386,7 +403,8 @@ the plugin's host from the browser, but to keep the browser away from it.
 `internal/api/management_plugin_logos.go` fetches the URL a plugin publishes,
 requires an image media type from a bound allowlist, caps the response - for a logo
 published inline as well as for one fetched - and reports it as an inline `data:`
-URL on both `logo` and `metadata.logo`. The whole plugin list shares one fetch
+URL on both `logo` and `metadata.logo`; a store registry's icon is inlined the same
+way, on the store list. Each list shares one fetch
 deadline, because what has to stay bounded is the endpoint the console polls and not
 each request; the result is cached, failures included, so a plugin list that names an
 unreachable host does not refetch it on every poll. An exhausted budget is the one
@@ -517,6 +535,7 @@ Query for server state.
 | `components/common/` | What more than one page renders: the shell (`AppLayout`, `HeaderNav`, `AuthGate`, `PreferenceMenus`); the page chrome every route opens with - `PageHeader` (title, subtitle or live summary, right-aligned actions), `RefreshButton` (the one refresh glyph and size, spinning rather than locking while a read is in flight), `PanelTitle` (a card's glyph, title and its one control), `StatusLabel` (a state as pip + word), `FactList` (label/value rows), `PageLoading` and `CodeFrame` with `CopyButton` (a code block and its copy action, shared by the transcripts and the setup snippets); and the list a surface renders at both widths - `ResponsiveList.tsx` (table on a wide viewport, rows below 640px, with loading-before-empty, blocked-is-not-empty and clamped paging decided once) over `PhoneRow.tsx` (headline, summary, labelled fields, controls) and `phoneRowFields.ts` (derives a row's fields, and one column's rendered cell, from the *table's own* column array, so a list has one description of a record at both widths and a column cannot silently disappear on a phone; see ADR 0012) |
 | `components/workspace/` | The conversation workspace the Playground and the Agent share: `WorkspaceLayout` (head with title, target and actions; main column; resizable side panel that becomes a Back-aware Drawer below 900px), `useResizablePanel` (pointer and keyboard resizing that writes the width to the DOM during a drag and commits it once), `ConversationList` (Ant Design X's `Bubble.List` with its native reverse-scroll anchoring and the "back to latest" control), `Composer` (X's `Sender` with the send path running through its own `SendButton`, so Enter and the button stay one gate), `ModelMarkdown` (safe `@ant-design/x-markdown` rendering with allowlisted code highlighting inside the shared `CodeFrame`), `ReasoningBlock` (X's `Think`), `TargetPicker` (key and call point as one joined control) and `useXLocale` |
 | `components/logs/` | The Logs page's three sources: `CpaLogPanel` (the gateway tail and error files), `ServiceLogPanel` (the service log), `AuditTrail` (the audit timeline, with `auditText.ts` turning an action and a result into the sentence and word a reader sees), and `LogList`, the scrolling tail both log sources render into - it follows the newest line until the reader scrolls away and mounts only the newest chunk. Wire types and pure helpers live in `types/logs.ts` and `types/audit.ts` |
+| `components/plugins/` | The plugin management page's three tabs: `InstalledPluginsPanel` (each plugin's state in words - running, enabled but not running, disabled - its switch, settings and removal), `PluginStorePanel` (the store as cards with the registry's icon, author, tags, repository and homepage links, and the install dialog that asks a third-party install for the typed plugin id), `PluginSettingsPanel` (the plugin system switch, the third-party registries and the store authentication rules) and `PluginConfigDrawer` (a plugin's declared fields as typed controls, with the JSON view of the same document). The pure rules sit beside them: `pluginConfigForm.ts` (draft to document, per-field validation, undeclared keys carried through), `pluginConfig.ts` (JSON parsing that refuses a duplicate key) and `pluginStoreLogic.ts` (store filters and the settings draft's validation). `pages/PluginsPage.tsx` owns the tab in the URL and reads the store only once its tab is opened |
 | `components/`, `pages/` | Feature UI; one page per route, no page owns another. A page composes its surface rather than carrying it: `pages/UsageEventsPage.tsx` renders `components/usage/`'s toolbar, header and rows and takes its state from that directory's hooks, `pages/ProvidersPage.tsx` renders `components/providers/`'s table and editor, and `pages/ConfigPage.tsx` renders `components/config/`'s renderers. The framework-free policies of a surface stay beside it: `components/usage/` carries `searchDebounce.ts`, `pollingPolicy.ts`, `timeRangePolicy.ts`, `syncPresentation.ts` and `chipDisplay.ts`, and `components/config/` carries `payloadRules.ts`, `configDirty.ts` and `configLayout.ts` |
 
 A failure's sentence goes through `describeError` (`api/client.ts`) rather than each

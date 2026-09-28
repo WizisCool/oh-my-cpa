@@ -143,6 +143,20 @@ import { fileURLToPath } from 'node:url';
  *   - `main entry` 222 -> 232, leaving 9.8 kB (4.4%): the proportion the earlier re-baselines
  *     left, and still the tightest budget in this file.
  *   - Every other limit is untouched.
+ *
+ * ## The plugin-management re-baseline (2026-09-28)
+ *
+ * A clean build of the base commit measured entry 222.21 kB; with plugin management it measures
+ * 235.02 kB against the 232 limit, and every other budget passes with its margin intact. The
+ * +12.81 kB is localized copy again, measured rather than assumed: the unified plugin page adds
+ * 172 `plugin.*` keys (the store cards, the install dialog, the typed settings form with its
+ * per-field errors, and the plugin system settings that moved off the configuration page) at
+ * 16453 bytes of source, and retires 44 keys (the two table pages and the configuration group)
+ * at 3747 bytes - a net 12706 bytes. The page and its components are a lazy route.
+ *
+ *   - `main entry` 232 -> 244, leaving 8.98 kB (3.7%): within the range the earlier re-baselines
+ *     left, and still the tightest budget in this file.
+ *   - Every other limit is untouched.
  */
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const distDir = path.join(root, 'web', 'dist');
@@ -185,7 +199,7 @@ const iconBytes = totalDirectorySize(iconDir);
 const totalDistBytes = totalDirectorySize(distDir);
 
 const budgets = [
-  { label: 'main entry', matches: (name) => name === entryFile, maxKB: 232, required: true },
+  { label: 'main entry', matches: (name) => name === entryFile, maxKB: 244, required: true },
   { label: 'Lobe icon JS', pattern: /^LobeIcon-.*\.js$/, maxKB: 96, required: true },
   { label: 'vendor antd', pattern: /^vendor-antd-.*\.js$/, maxKB: 1250, required: true },
   { label: 'vendor charts', pattern: /^vendor-charts-.*\.js$/, maxKB: 1600, required: true },

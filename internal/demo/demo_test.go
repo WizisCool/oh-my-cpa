@@ -576,6 +576,7 @@ func TestUpstreamServesTheConsoleSurface(t *testing.T) {
 		"/gemini-api-key",
 		"/meta-api-key",
 		"/plugins",
+		"/plugins/usage-exporter/config",
 		"/plugin-store",
 		"/logs",
 		"/request-error-logs",
@@ -612,19 +613,24 @@ func TestUpstreamStoresCredentialEdits(t *testing.T) {
 	}
 }
 
-// Inlining a plugin's logo means fetching a URL the plugin declares. The fixture
-// publishes none, which is what keeps the demonstration from fetching anything a
-// plugin names even if the fetcher were ever installed in demo mode.
-func TestFixturePublishesNoPluginLogo(t *testing.T) {
-	for _, plugin := range append(pluginCatalog(), pluginStoreCatalog()...) {
-		if strings.Contains(strings.ToLower(plugin.description), "http") {
-			t.Errorf("plugin %q describes itself with a URL", plugin.id)
-		}
+// Inlining a plugin's logo means fetching a URL the plugin declares. Every fixture
+// logo is inline artwork instead, which is what keeps the demonstration from fetching
+// anything a plugin or a registry names even if the fetcher were ever installed in
+// demo mode.
+func TestFixturePublishesNoPluginLogoURL(t *testing.T) {
+	logos := []string{}
+	for _, plugin := range pluginCatalog() {
+		logos = append(logos, plugin.logo)
 	}
-	state := newUpstreamState(time.Now().UTC())
-	for _, plugin := range append(state.plugins, state.pluginStore...) {
-		if _, ok := plugin["logo"]; ok {
-			t.Errorf("plugin %v publishes a logo URL", plugin["id"])
+	for _, plugin := range pluginStoreCatalog() {
+		if strings.Contains(strings.ToLower(plugin.description), "http") {
+			t.Errorf("store plugin %q describes itself with a URL", plugin.id)
+		}
+		logos = append(logos, plugin.logo)
+	}
+	for _, logo := range logos {
+		if logo != "" && !strings.HasPrefix(logo, "data:image/svg+xml;base64,") {
+			t.Errorf("fixture logo %q is not inline artwork", logo)
 		}
 	}
 }

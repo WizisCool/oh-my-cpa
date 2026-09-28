@@ -109,9 +109,6 @@ test('every schema field has a v8 location or is shared by both layouts', () => 
     'routing.strategy',
     'routing.session-affinity',
     'routing.session-affinity-ttl',
-    'plugins.enabled',
-    'plugins.store-sources',
-    'plugins.store-auth',
     'quota-exceeded.switch-project',
     'quota-exceeded.switch-preview-model',
   ]);

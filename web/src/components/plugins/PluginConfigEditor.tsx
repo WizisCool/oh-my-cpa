@@ -11,9 +11,10 @@ export interface PluginConfigEditorProps {
   value: string;
   onChange: (value: string) => void;
   pluginName: string;
+  isReadOnly?: boolean;
 }
 
-export const PluginConfigEditor: React.FC<PluginConfigEditorProps> = ({ value, onChange, pluginName }) => {
+export const PluginConfigEditor: React.FC<PluginConfigEditorProps> = ({ value, onChange, pluginName, isReadOnly = false }) => {
   const t = useT();
   const parsed = React.useMemo(() => parsePluginConfig(value), [value]);
   const summary = React.useMemo(
@@ -31,16 +32,16 @@ export const PluginConfigEditor: React.FC<PluginConfigEditorProps> = ({ value, o
       <div className={styles.toolbar}>
         <div className={styles.validity}>
           {parsed.error === 'duplicate-key' ? (
-            <Tag color="error">{t('plg.config_duplicate_key', { key: parsed.key ?? '' })}</Tag>
+            <Tag color="error">{t('plugin.config_duplicate_key', { key: parsed.key ?? '' })}</Tag>
           ) : parsed.error ? (
-            <Tag color="error">{t('plg.config_invalid_json')}</Tag>
+            <Tag color="error">{t('plugin.config_invalid_json')}</Tag>
           ) : (
-            <Tag color="success" icon={<CheckOutlined />}>{t('plg.config_valid')}</Tag>
+            <Tag color="success" icon={<CheckOutlined />}>{t('plugin.config_valid')}</Tag>
           )}
-          <Text type="secondary">{t('plg.config_top_level', { n: summary.length })}</Text>
+          <Text type="secondary">{t('plugin.config_top_level', { n: summary.length })}</Text>
         </div>
-        <Button size="small" icon={<FormatPainterOutlined />} disabled={!parsed.value} onClick={formatValue}>
-          {t('plg.config_format')}
+        <Button size="small" icon={<FormatPainterOutlined />} disabled={isReadOnly || !parsed.value} onClick={formatValue}>
+          {t('plugin.config_format')}
         </Button>
       </div>
 
@@ -48,7 +49,7 @@ export const PluginConfigEditor: React.FC<PluginConfigEditorProps> = ({ value, o
         <Alert
           type="error"
           showIcon
-          description={parsed.error === 'duplicate-key' ? t('plg.config_duplicate_key_desc') : t('plg.config_json_desc')}
+          description={parsed.error === 'duplicate-key' ? t('plugin.config_duplicate_key_desc') : t('plugin.config_json_desc')}
         />
       )}
 
@@ -57,15 +58,16 @@ export const PluginConfigEditor: React.FC<PluginConfigEditorProps> = ({ value, o
           data-plugin-config-source
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          rows={12}
+          readOnly={isReadOnly}
+          rows={14}
           spellCheck={false}
-          aria-label={t('plg.config_title', { name: pluginName })}
+          aria-label={t('plugin.config_title', { name: pluginName })}
           className={styles.source}
         />
-        <div className={styles.summary} data-plugin-config-summary aria-label={t('plg.config_preview')}>
-          <div className={styles['summary-title']}>{t('plg.config_preview')}</div>
+        <div className={styles.summary} data-plugin-config-summary aria-label={t('plugin.config_preview')}>
+          <div className={styles['summary-title']}>{t('plugin.config_preview')}</div>
           {summary.length === 0 ? (
-            <Text type="secondary">{t('plg.config_empty')}</Text>
+            <Text type="secondary">{t('plugin.config_empty')}</Text>
           ) : (
             <ul className={styles['summary-list']}>
               {summary.map((entry) => (

@@ -57,7 +57,6 @@ const CONSOLE_ROUTES = [
   '/config',
   '/omc-settings',
   '/plugins',
-  '/plugin-store',
   '/system',
 ];
 
@@ -80,8 +79,7 @@ const ROUTE_READS = {
   '/pricing': ['pricing'],
   '/config': ['config', 'config-source'],
   '/omc-settings': ['preferences', 'system'],
-  '/plugins': ['plugins'],
-  '/plugin-store': ['plugin-store'],
+  '/plugins': ['plugins', 'plugin-store', 'plugins-settings', 'plugin-config-usage-exporter'],
   '/system': ['system', 'system-releases', 'system-maintenance'],
 };
 

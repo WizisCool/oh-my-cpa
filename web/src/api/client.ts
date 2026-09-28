@@ -34,7 +34,15 @@ import {
   SystemProductVersion,
   SystemMaintenanceResponse,
 } from '../types/system';
-import { PluginsResponse, PluginStoreResponse } from '../types/plugin';
+import type {
+  PluginConfigResponse,
+  PluginDeleteResponse,
+  PluginInstallResponse,
+  PluginSettings,
+  PluginSettingsUpdate,
+  PluginsResponse,
+  PluginStoreResponse,
+} from '../types/plugin';
 import { PricingResponse, PricingSyncState, PricingUpdatePayload } from '../types/pricing';
 
 
@@ -814,17 +822,21 @@ export const api = {
     return request<PluginsResponse>('/management/plugins', { method: 'GET' });
   },
 
-  async setPluginStatus(id: string, enabled: boolean): Promise<{ status: string; id: string; enabled: boolean }> {
-    return request<{ status: string; id: string; enabled: boolean }>(`/management/plugins/${encodeURIComponent(id)}/status`, {
+  async setPluginEnabled(id: string, enabled: boolean): Promise<{ status: string; id: string; enabled: boolean }> {
+    return request<{ status: string; id: string; enabled: boolean }>(`/management/plugins/${encodeURIComponent(id)}/enabled`, {
       method: 'PATCH',
       body: JSON.stringify({ enabled }),
     });
   },
 
-  async deletePlugin(id: string): Promise<{ status: string; id: string }> {
-    return request<{ status: string; id: string }>(`/management/plugins/${encodeURIComponent(id)}`, {
+  async deletePlugin(id: string): Promise<PluginDeleteResponse> {
+    return request<PluginDeleteResponse>(`/management/plugins/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
+  },
+
+  async getPluginConfig(id: string): Promise<PluginConfigResponse> {
+    return request<PluginConfigResponse>(`/management/plugins/${encodeURIComponent(id)}/config`, { method: 'GET' });
   },
 
   async setPluginConfig(id: string, config: Record<string, unknown>): Promise<{ status: string; id: string }> {
@@ -834,13 +846,28 @@ export const api = {
     });
   },
 
+  async getPluginSettings(): Promise<PluginSettings> {
+    return request<PluginSettings>('/management/plugins/settings', { method: 'GET' });
+  },
+
+  async updatePluginSettings(settings: PluginSettingsUpdate): Promise<PluginSettings> {
+    return request<PluginSettings>('/management/plugins/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    });
+  },
+
   async getPluginStore(): Promise<PluginStoreResponse> {
     return request<PluginStoreResponse>('/management/plugin-store', { method: 'GET' });
   },
 
-  async installPlugin(id: string): Promise<{ status: string; id: string }> {
-    return request<{ status: string; id: string }>(`/management/plugin-store/${encodeURIComponent(id)}/install`, {
+  async installPlugin(id: string, options: { sourceId?: string; version?: string } = {}): Promise<PluginInstallResponse> {
+    const body: Record<string, string> = {};
+    if (options.sourceId) body.source_id = options.sourceId;
+    if (options.version) body.version = options.version;
+    return request<PluginInstallResponse>(`/management/plugin-store/${encodeURIComponent(id)}/install`, {
       method: 'POST',
+      body: JSON.stringify(body),
     });
   },
 

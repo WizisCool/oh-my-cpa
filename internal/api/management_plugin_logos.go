@@ -185,47 +185,75 @@ func (f *pluginLogoFetcher) inline(ctx context.Context, plugins []management.Plu
 	if f == nil {
 		return
 	}
-	// Distinct targets only: two plugins may publish the same logo URL, and the cache
-	// would otherwise be asked twice for the same answer in the same call.
-	targets := make([]string, 0, len(plugins))
-	seen := make(map[string]int, len(plugins))
-	perPlugin := make([]int, len(plugins))
+	raws := make([]string, len(plugins))
 	for index := range plugins {
-		raw := pluginLogoURL(plugins[index])
+		raws[index] = pluginLogoURL(plugins[index])
+	}
+	inlined := f.inlineAll(ctx, raws)
+	for index := range plugins {
+		// Both places the list reports a logo carry the same resolved value, so a
+		// consumer reading either field cannot see a URL the browser may not load.
+		plugins[index].Logo = inlined[index]
+		if plugins[index].Metadata != nil {
+			plugins[index].Metadata.Logo = inlined[index]
+		}
+	}
+}
+
+// inlineStore replaces each store entry's logo with inline artwork, or clears it. A
+// registry's logo is a URL its publisher chose, so it is held to exactly the rules an
+// installed plugin's logo is.
+func (f *pluginLogoFetcher) inlineStore(ctx context.Context, plugins []management.StorePluginItem) {
+	if f == nil {
+		return
+	}
+	raws := make([]string, len(plugins))
+	for index := range plugins {
+		raws[index] = logoCandidate(plugins[index].Logo)
+	}
+	inlined := f.inlineAll(ctx, raws)
+	for index := range plugins {
+		plugins[index].Logo = inlined[index]
+	}
+}
+
+// inlineAll resolves one logo per slot; an empty slot stays empty.
+func (f *pluginLogoFetcher) inlineAll(ctx context.Context, raws []string) []string {
+	// Distinct targets only: two entries may publish the same logo URL, and the cache
+	// would otherwise be asked twice for the same answer in the same call.
+	targets := make([]string, 0, len(raws))
+	seen := make(map[string]int, len(raws))
+	perSlot := make([]int, len(raws))
+	for index, raw := range raws {
 		if raw == "" {
-			perPlugin[index] = -1
+			perSlot[index] = -1
 			continue
 		}
 		if target, ok := seen[raw]; ok {
-			perPlugin[index] = target
+			perSlot[index] = target
 			continue
 		}
 		seen[raw] = len(targets)
-		perPlugin[index] = len(targets)
+		perSlot[index] = len(targets)
 		targets = append(targets, raw)
 	}
 
-	// One deadline for the whole plugin list, not one per logo: this fetch sits inside an
+	// One deadline for the whole list, not one per logo: this fetch sits inside an
 	// endpoint the console polls, so what has to be bounded is the response, not each
 	// request. Whatever has not resolved when the budget runs out is reported as absent
-	// (and deliberately not cached), which leaves the catalog mark on screen.
+	// (and deliberately not cached), which leaves the fallback mark on screen.
 	fetchCtx, cancel := context.WithTimeout(ctx, pluginLogoFetchTimeout)
 	defer cancel()
 
 	inlined := f.resolveAll(fetchCtx, targets)
 
-	for index := range plugins {
-		resolved := ""
-		if target := perPlugin[index]; target >= 0 {
-			resolved = inlined[target]
-		}
-		// Both places the list reports a logo carry the same resolved value, so a
-		// consumer reading either field cannot see a URL the browser may not load.
-		plugins[index].Logo = resolved
-		if plugins[index].Metadata != nil {
-			plugins[index].Metadata.Logo = resolved
+	result := make([]string, len(raws))
+	for index := range raws {
+		if target := perSlot[index]; target >= 0 {
+			result[index] = inlined[target]
 		}
 	}
+	return result
 }
 
 // resolveAll resolves each target, with bounded parallelism.
@@ -374,6 +402,12 @@ func pluginLogoURL(plugin management.PluginItem) string {
 	if candidate == "" && plugin.Metadata != nil {
 		candidate = strings.TrimSpace(plugin.Metadata.Logo)
 	}
+	return logoCandidate(candidate)
+}
+
+// logoCandidate is a declared logo worth resolving, or empty.
+func logoCandidate(candidate string) string {
+	candidate = strings.TrimSpace(candidate)
 	if candidate == "" {
 		return ""
 	}

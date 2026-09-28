@@ -60,13 +60,6 @@ const SURFACES = [
     routes: [],
   },
   {
-    id: 'plugin manager',
-    route: '/plugins',
-    tableSelector: '.ant-table',
-    rowSelector: '[data-testid="phone-row"]',
-    routes: [],
-  },
-  {
     id: 'cost & usage',
     route: '/pricing',
     tableSelector: '.ant-table',
@@ -88,13 +81,6 @@ const SURFACES = [
       else await page.locator('.ant-tabs-tab').last().click();
       await page.waitForTimeout(400);
     },
-  },
-  {
-    id: 'plugin store',
-    route: '/plugin-store',
-    tableSelector: '.ant-table',
-    rowSelector: '[data-testid="phone-row"]',
-    routes: [],
   },
 ];
 

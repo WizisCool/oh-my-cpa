@@ -166,14 +166,6 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
 
   // ── 6. Advanced & experimental ────────────────────────────────────────────
   {
-    id: 'grp_plugins',
-    sectionId: 'advanced',
-    labelKey: 'cfg.grp_plugins',
-    descKey: 'cfg.grp_plugins_desc',
-    variant: 'form-grid',
-    fieldIds: ['pluginsEnabled', 'pluginStoreSources', 'pluginStoreAuth'],
-  },
-  {
     id: 'grp_signature_cache',
     sectionId: 'advanced',
     labelKey: 'cfg.grp_signature_cache',
@@ -682,34 +674,6 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
   },
 
   // ── 6. Advanced & experimental ────────────────────────────────────────────
-  {
-    id: 'pluginsEnabled',
-    sectionId: 'advanced',
-    labelKey: 'cfg.f_plugins_enabled',
-    descKey: 'cfg.f_plugins_enabled_desc',
-    yamlPath: ['plugins', 'enabled'],
-    type: 'switch',
-    defaultValue: false,
-    keywords: ['plugin', 'extension'],
-  },
-  {
-    id: 'pluginStoreSources',
-    sectionId: 'advanced',
-    labelKey: 'cfg.f_plugin_store_sources',
-    descKey: 'cfg.f_plugin_store_sources_desc',
-    yamlPath: ['plugins', 'store-sources'],
-    type: 'string',
-    keywords: ['plugin', 'store', 'source'],
-  },
-  {
-    id: 'pluginStoreAuth',
-    sectionId: 'advanced',
-    labelKey: 'cfg.f_plugin_store_auth',
-    descKey: 'cfg.f_plugin_store_auth_desc',
-    yamlPath: ['plugins', 'store-auth'],
-    type: 'json_editor',
-    keywords: ['plugin', 'auth'],
-  },
   {
     id: 'antigravitySignatureCacheEnabled',
     sectionId: 'advanced',

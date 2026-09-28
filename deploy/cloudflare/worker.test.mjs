@@ -201,6 +201,8 @@ describe('routing', () => {
       '/api/v1/management/quota',
       '/api/v1/management/logs',
       '/api/v1/management/plugins',
+      '/api/v1/management/plugins/settings',
+      '/api/v1/management/plugins/usage-exporter/config',
       '/api/v1/management/plugin-store',
       '/api/v1/management/config',
       '/api/v1/pricing',
@@ -222,6 +224,12 @@ describe('routing', () => {
       assert.ok(name, `${path} has no dataset entry`);
       assert.ok(DATASET.responses[name], `${path} resolved to a missing response`);
     }
+  });
+
+  it('answers a plugin settings document only for a plugin the dataset holds', () => {
+    // Another plugin's document would be the wrong settings shown under this plugin's name.
+    assert.equal(responseNameFor(request('/api/v1/management/plugins/usage-exporter/config')), 'plugin-config-usage-exporter');
+    assert.equal(responseNameFor(request('/api/v1/management/plugins/not-installed/config')), undefined);
   });
 
   it('serves the playground directory and refuses inference', async () => {

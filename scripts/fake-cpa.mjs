@@ -140,8 +140,69 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
   const renderConfigYaml = () => {
     if (configYaml !== null) return configYaml;
     const keys = clientKeys.map((key) => `  - ${key}`).join('\n');
-    return `host: 127.0.0.1\nport: 8317\ndebug: false\nlogging-to-file: true\nrequest-log: true\napi-keys:\n${keys}\n`;
+    return `host: 127.0.0.1\nport: 8317\ndebug: false\nlogging-to-file: true\nrequest-log: true\napi-keys:\n${keys}\nplugins:\n  enabled: true\n  dir: plugins\n`;
   };
+
+  const plugins = new Map([
+    ['fixture-logger', {
+      id: 'fixture-logger',
+      path: 'plugins/fixture-logger.so',
+      configured: true,
+      registered: true,
+      enabled: true,
+      supports_oauth: false,
+      oauth_provider: '',
+      supports_quota: false,
+      logo: '',
+      config_fields: [
+        { name: 'level', type: 'enum', enum_values: ['debug', 'info', 'warn'], description: 'Minimum level written to the log.' },
+        { name: 'sample-rate', type: 'number', enum_values: [], description: 'Share of requests logged.' },
+        { name: 'redact-headers', type: 'array', enum_values: [], description: 'Header names removed before logging.' },
+        { name: 'include-body', type: 'boolean', enum_values: [], description: 'Log request bodies.' },
+      ],
+      menus: [],
+      metadata: { name: 'Request Logger Plugin', version: '1.0.0', author: 'router-for-me', github_repository: 'router-for-me/fixture-logger', logo: '', config_fields: [] },
+    }],
+    ['iflow-auth', {
+      id: 'iflow-auth',
+      path: 'plugins/iflow-auth.so',
+      configured: true,
+      registered: true,
+      enabled: true,
+      supports_oauth: true,
+      oauth_provider: 'iflow',
+      supports_quota: false,
+      logo: FAKE_PLUGIN_LOGO_DATA_URL,
+      config_fields: [],
+      menus: [],
+      metadata: { name: 'iFlow Alliance Auth', version: '1.0.0', author: 'router-for-me', github_repository: '', logo: FAKE_PLUGIN_LOGO_DATA_URL, config_fields: [] },
+    }],
+  ]);
+  const pluginConfigs = new Map([
+    ['fixture-logger', { enabled: true, level: 'info', 'sample-rate': 1, 'redact-headers': ['authorization'], 'include-body': false }],
+    ['iflow-auth', { enabled: true }],
+  ]);
+  const storePlugins = [
+    {
+      store_id: 'official/fixture-limiter', source_id: 'official', source_name: 'official', source_url: 'https://registry.fake-cpa.local/plugins.json',
+      id: 'fixture-limiter', name: 'Rate Limiter', description: 'In-memory client token-bucket rate limiter',
+      author: 'router-for-me', version: '1.2.0', repository: 'router-for-me/fixture-limiter', install_type: 'github_release',
+      auth_required: false, auth_configured: false, platforms: [{ goos: 'linux', goarch: 'amd64' }],
+      logo: FAKE_PLUGIN_LOGO_DATA_URL, homepage: 'https://limiter.fake-cpa.local', license: 'MIT', tags: ['network', 'limits'],
+    },
+    {
+      store_id: 'official/fixture-logger', source_id: 'official', source_name: 'official', source_url: 'https://registry.fake-cpa.local/plugins.json',
+      id: 'fixture-logger', name: 'Request Logger Plugin', description: 'Audits and logs request metadata to internal store',
+      author: 'router-for-me', version: '1.1.0', repository: 'router-for-me/fixture-logger', install_type: 'github_release',
+      auth_required: false, auth_configured: false, platforms: [], logo: '', homepage: '', license: 'MIT', tags: ['logging'],
+    },
+    {
+      store_id: 'source-community/fixture-mirror', source_id: 'source-community', source_name: 'community.fake-cpa.local', source_url: 'https://community.fake-cpa.local/registry.json',
+      id: 'fixture-mirror', name: 'Community Mirror', description: 'A plugin from a third-party registry',
+      author: 'someone', version: '0.3.0', repository: 'someone/fixture-mirror', install_type: 'direct',
+      auth_required: true, auth_configured: false, platforms: [], logo: '', homepage: '', license: '', tags: [],
+    },
+  ];
 
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url, 'http://fake-cpa.local');
@@ -512,57 +573,112 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       json(response, 200, { status_code: 200, header: {}, body: {} });
       return;
     }
+    // The plugin routes are CPA's own shapes: the installed list carries the global
+    // switch and each plugin's declared config fields, the settings document is read
+    // per plugin, and the store joins each registry entry with the local install state.
+    // Enablement, settings and installs are stateful, so a control that stops writing
+    // is caught on the next read rather than acknowledged.
     if (request.method === 'GET' && path === '/plugins') {
-      json(response, 200, { plugins: [
-        {
-          id: 'fixture-logger',
-          name: 'Request Logger Plugin',
-          description: 'Audits and logs request metadata to internal store',
-          version: '1.0.0',
-          author: 'cpa-official',
-          enabled: true,
-          permissions: ['read_request', 'write_log'],
-          config: { level: 'info' }
-        },
-        {
-          id: 'iflow-auth',
-          name: 'iFlow Alliance Auth',
-          description: 'iFlow alliance OAuth login plugin',
-          version: '1.0.0',
-          author: 'cpa-official',
-          enabled: true,
-          effective_enabled: true,
-          registered: true,
-          supports_oauth: true,
-          oauth_provider: 'iflow',
-          logo: FAKE_PLUGIN_LOGO_DATA_URL,
-          permissions: ['oauth'],
-        },
-      ] });
+      json(response, 200, {
+        plugins_enabled: true,
+        plugins_dir: 'plugins',
+        plugins: [...plugins.values()].map((plugin) => ({ ...plugin, effective_enabled: plugin.enabled && plugin.registered })),
+      });
+      return;
+    }
+    const pluginConfigMatch = /^\/plugins\/([^/]+)\/config$/.exec(path);
+    if (pluginConfigMatch && request.method === 'GET') {
+      const id = decodeURIComponent(pluginConfigMatch[1]);
+      if (!plugins.has(id)) {
+        json(response, 404, { error: 'plugin_not_found', message: 'plugin not found' });
+        return;
+      }
+      json(response, 200, pluginConfigs.get(id) ?? {});
+      return;
+    }
+    if (pluginConfigMatch && request.method === 'PUT') {
+      const id = decodeURIComponent(pluginConfigMatch[1]);
+      let payload = {};
+      try { payload = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch {}
+      pluginConfigs.set(id, payload);
+      const plugin = plugins.get(id);
+      if (plugin) {
+        plugin.configured = true;
+        if (typeof payload.enabled === 'boolean') plugin.enabled = payload.enabled;
+      }
+      json(response, 200, { status: 'ok' });
+      return;
+    }
+    const pluginEnabledMatch = /^\/plugins\/([^/]+)\/enabled$/.exec(path);
+    if (pluginEnabledMatch && request.method === 'PATCH') {
+      const id = decodeURIComponent(pluginEnabledMatch[1]);
+      let payload = {};
+      try { payload = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch {}
+      const plugin = plugins.get(id);
+      if (plugin && typeof payload.enabled === 'boolean') {
+        plugin.enabled = payload.enabled;
+        plugin.configured = true;
+        pluginConfigs.set(id, { ...(pluginConfigs.get(id) ?? {}), enabled: payload.enabled });
+      }
+      json(response, 200, { status: 'ok' });
       return;
     }
     if (request.method === 'GET' && path === '/plugin-store') {
-      json(response, 200, { plugins: [{
-        id: 'fixture-limiter',
-        name: 'Rate Limiter',
-        description: 'In-memory client token-bucket rate limiter',
-        version: '1.2.0',
-        author: 'cpa-community',
-        permissions: ['inspect_client_ip', 'enforce_limit'],
-        installed: false
-      }, {
-        id: 'fixture-logger',
-        name: 'Request Logger Plugin',
-        description: 'Audits and logs request metadata to internal store',
-        version: '1.0.0',
-        author: 'cpa-official',
-        permissions: ['read_request', 'write_log'],
-        installed: true
-      }] });
+      json(response, 200, {
+        plugins_enabled: true,
+        plugins_dir: 'plugins',
+        sources: [
+          { id: 'official', name: 'official', url: 'https://registry.fake-cpa.local/plugins.json' },
+          { id: 'source-community', name: 'community.fake-cpa.local', url: 'https://community.fake-cpa.local/registry.json' },
+        ],
+        source_errors: [],
+        plugins: storePlugins.map((entry) => {
+          const installed = plugins.get(entry.id);
+          return {
+            ...entry,
+            installed: Boolean(installed),
+            installed_version: installed?.metadata?.version ?? '',
+            effective_enabled: Boolean(installed?.enabled && installed?.registered),
+            update_available: Boolean(installed && installed.metadata?.version !== entry.version),
+          };
+        }),
+      });
       return;
     }
-    if ((request.method === 'POST' || request.method === 'PATCH' || request.method === 'PUT' || request.method === 'DELETE') && (path.startsWith('/plugins') || path.startsWith('/plugin-store'))) {
-      json(response, 200, { status: 'ok' });
+    const pluginInstallMatch = /^\/plugin-store\/([^/]+)\/install$/.exec(path);
+    if (pluginInstallMatch && request.method === 'POST') {
+      const id = decodeURIComponent(pluginInstallMatch[1]);
+      const entry = storePlugins.find((candidate) => candidate.id === id);
+      if (!entry) {
+        json(response, 404, { error: 'plugin_not_found', message: `plugin ${id} was not found in any plugin store source` });
+        return;
+      }
+      plugins.set(id, {
+        id,
+        path: `plugins/${id}.so`,
+        configured: true,
+        registered: true,
+        enabled: true,
+        supports_oauth: false,
+        oauth_provider: '',
+        supports_quota: false,
+        logo: '',
+        config_fields: [],
+        menus: [],
+        metadata: { name: entry.name, version: entry.version, author: entry.author, github_repository: entry.repository, logo: '', config_fields: [] },
+      });
+      pluginConfigs.set(id, { enabled: true });
+      json(response, 200, { status: 'installed', source_id: entry.source_id, source_name: entry.source_name, id, version: entry.version, install_type: 'github_release', path: `plugins/${id}.so`, plugins_enabled: true, restart_required: false });
+      return;
+    }
+    const pluginDeleteMatch = /^\/plugins\/([^/]+)$/.exec(path);
+    if (pluginDeleteMatch && request.method === 'DELETE') {
+      const id = decodeURIComponent(pluginDeleteMatch[1]);
+      const existed = plugins.delete(id);
+      pluginConfigs.delete(id);
+      json(response, existed ? 200 : 404, existed
+        ? { status: 'deleted', id, path: `plugins/${id}.so`, file_deleted: true, configured_removed: true, restart_required: false }
+        : { error: 'plugin_not_found', message: 'plugin not found' });
       return;
     }
     if (request.method === 'GET' && path === '/api-keys') {

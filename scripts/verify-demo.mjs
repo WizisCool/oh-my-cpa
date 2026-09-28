@@ -163,7 +163,6 @@ const ROUTES = [
   '/config',
   '/omc-settings',
   '/plugins',
-  '/plugin-store',
   '/system',
 ];
 

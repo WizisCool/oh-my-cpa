@@ -1,7 +1,7 @@
 import React from 'react';
 import { App as AntdApp, Layout, Menu, Drawer, Tooltip, Button, Breadcrumb, Spin } from 'antd';
 import {
-  ApiOutlined,
+  PuzzleOutlined,
   CloudServerOutlined,
   CodeSandboxOutlined,
   ControlOutlined,
@@ -16,7 +16,6 @@ import {
   ProfileOutlined,
   RobotOutlined,
   SettingOutlined,
-  ShopOutlined,
   ThunderboltOutlined,
 } from '../icons';
 import type { MenuProps } from 'antd';
@@ -93,8 +92,7 @@ const navGroups: NavGroup[] = [
     items: [
       { key: '/config', labelKey: 'nav.config', icon: <ControlOutlined /> },
       { key: '/omc-settings', labelKey: 'nav.omc_settings', icon: <SettingOutlined /> },
-      { key: '/plugins', labelKey: 'nav.plugins', icon: <ApiOutlined /> },
-      { key: '/plugin-store', labelKey: 'nav.plugin_store', icon: <ShopOutlined /> },
+      { key: '/plugins', labelKey: 'nav.plugins', icon: <PuzzleOutlined /> },
       { key: '/system', labelKey: 'nav.system', icon: <InfoCircleOutlined /> },
     ],
   },

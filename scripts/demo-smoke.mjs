@@ -51,8 +51,9 @@ const PAGES = [
   { route: 'pricing', label: 'pricing', selector: '.ant-table-row', min: 5 },
   { route: 'config', label: 'configuration', selector: '.ant-input, .ant-select, .config-field', min: 3 },
   { route: 'omc-settings', label: 'oh my cpa settings', selector: '.ant-segmented, .ant-radio-group, .ant-card', min: 2 },
-  { route: 'plugins', label: 'plugins', selector: '.ant-table-row', min: 2 },
-  { route: 'plugin-store', label: 'plugin store', selector: '.ant-table-row', min: 2 },
+  { route: 'plugins', label: 'plugins', selector: '[data-plugin-panel="installed"] article', min: 2 },
+  { route: 'plugins?tab=store', label: 'plugin store', selector: '[data-plugin-panel="store"] article', min: 2 },
+  { route: 'plugins?tab=settings', label: 'plugin settings', selector: '[data-plugin-panel="settings"] .ant-card', min: 3 },
   { route: 'system', label: 'system', selector: '.ant-card', min: 3 },
 ];
 
@@ -72,7 +73,9 @@ const REFUSED = [
   { method: 'GET', path: '/api/v1/management/request-error-logs/request-error-2026-01-01T00-00-00Z.log' },
   { method: 'GET', path: '/api/v1/usage/events/1/request-log' },
   { method: 'POST', path: '/api/v1/management/plugin-store/otel-bridge/install', body: {} },
-  { method: 'PATCH', path: '/api/v1/management/plugins/usage-exporter/status', body: { enabled: false } },
+  { method: 'PATCH', path: '/api/v1/management/plugins/usage-exporter/enabled', body: { enabled: false } },
+  { method: 'PUT', path: '/api/v1/management/plugins/usage-exporter/config', body: { config: { enabled: true } } },
+  { method: 'PUT', path: '/api/v1/management/plugins/settings', body: { revision: 'x', enabled: false, store_sources: [], store_auth: [] } },
   { method: 'PUT', path: '/api/v1/management/config/source', body: { source: 'debug: true' } },
   { method: 'PUT', path: '/api/v1/management/config/debug', body: { value: true } },
   { method: 'POST', path: '/api/v1/management/providers/pull-models', body: {} },

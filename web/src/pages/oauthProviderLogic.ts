@@ -1,6 +1,6 @@
 import { credentialProviderIconId } from '../components/common/providerMetadata';
 import type { TFunc } from '../i18n';
-import type { PluginItem } from '../types/plugin';
+import { pluginDisplayName, type PluginItem } from '../types/plugin';
 import { pluginOAuthLogoFor, pluginOAuthProviderLogos } from '../types/pluginOAuthProviders';
 
 /**
@@ -335,7 +335,7 @@ export function pluginOAuthProviderChoices(
       continue;
     }
     seen.add(providerId);
-    const title = plugin.metadata?.name?.trim() || plugin.name?.trim() || plugin.id;
+    const title = pluginDisplayName(plugin);
     choices.push({
       id: providerId,
       flow: 'manual-callback',

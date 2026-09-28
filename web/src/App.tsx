@@ -30,7 +30,6 @@ const OAuthManagementPage = React.lazy(() => import('./pages/oauthManagement/OAu
 const LegacyOAuthManagementRedirect = React.lazy(() => import('./pages/LegacyOAuthManagementRedirect').then(m => ({ default: m.LegacyOAuthManagementRedirect })));
 const SystemPage = React.lazy(() => import('./pages/SystemPage').then(m => ({ default: m.SystemPage })));
 const PluginsPage = React.lazy(() => import('./pages/PluginsPage').then(m => ({ default: m.PluginsPage })));
-const PluginStorePage = React.lazy(() => import('./pages/PluginStorePage').then(m => ({ default: m.PluginStorePage })));
 // Lazy like every other route, and not only for consistency: the palette editor pulls in Ant Design's
 // colour picker, which is a large dependency for a page an operator visits once. Loading it eagerly put
 // that cost into the first paint of the console - and into the sign-in screen, which renders this
@@ -117,7 +116,8 @@ const AppRoutes: React.FC = () => {
         { path: 'config', element: <ConfigPage /> },
         { path: 'omc-settings', element: <OmcSettingsPage /> },
         { path: 'plugins', element: <PluginsPage /> },
-        { path: 'plugin-store', element: <PluginStorePage /> },
+        // The store is a tab of plugin management now; the old address keeps working.
+        { path: 'plugin-store', element: <Navigate to="/plugins?tab=store" replace /> },
         { path: 'system', element: <SystemPage /> },
         { path: '*', element: <Navigate to="/dashboard" replace /> },
       ],

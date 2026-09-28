@@ -1,7 +1,7 @@
 /**
  * Configuration and plugin release acceptance: payload-rule structure, source
- * editing, plugin-store/system/quick-start routes, and the structured plugin
- * configuration editor.
+ * editing, the plugin store/settings, system and quick-start routes, and the
+ * structured plugin configuration editor.
  */
 export async function runConfigurationPluginsAcceptance({
   auditRoutes,
@@ -124,35 +124,45 @@ export async function runConfigurationPluginsAcceptance({
   }
   await auditRoutes(page, responseBodies, [
     ['/plugins', '.plugins-page', { pageSecrets: providerSecrets }],
-    ['/plugin-store', '.plugin-store-page', { pageSecrets: providerSecrets }],
+    ['/plugins?tab=store', '[data-plugin-panel="store"]', { pageSecrets: providerSecrets }],
+    ['/plugins?tab=settings', '[data-plugin-panel="settings"]', { pageSecrets: providerSecrets }],
     ['/system', '.system-page', { pageSecrets: providerSecrets }],
     ['/quick-start', '.quick-start-page', { pageSecrets: providerSecrets }],
   ]);
 
-  // Plugin configuration is a structured editing surface, not a bare JSON
-  // textarea: the editor must validate before save, expose the object shape, and
-  // protect an unsaved draft on close.
+  // Plugin configuration is a structured editing surface: the declared fields are
+  // typed controls, the JSON view validates before save and exposes the object
+  // shape, and an unsaved draft is protected on close.
   await page.goto(`${appURL}/plugins`, { waitUntil: 'domcontentloaded' });
   await page.locator('.plugins-page').first().waitFor({ state: 'visible', timeout: 15000 });
-  const pluginConfigButton = page.locator('.plugins-page .ant-table-row').first().locator('button').filter({ has: page.locator('.anticon-setting') }).first();
-  await pluginConfigButton.click();
-  const pluginModal = page.locator('.ant-modal:visible').filter({ has: page.locator('[data-plugin-config-source]') });
-  await pluginModal.waitFor({ state: 'visible', timeout: 5000 });
-  const pluginSource = pluginModal.locator('[data-plugin-config-source]');
-  const pluginSummary = pluginModal.locator('[data-plugin-config-summary]');
+  const loggerRow = page.locator('article[data-plugin-id="fixture-logger"]');
+  await loggerRow.waitFor({ state: 'visible', timeout: 15000 });
+  await loggerRow.getByRole('button', { name: /配置|Configure/ }).click();
+  const drawer = page.locator('[data-plugin-config="fixture-logger"]');
+  await drawer.waitFor({ state: 'visible', timeout: 5000 });
+  await drawer.locator('[data-plugin-config-field]').first().waitFor({ state: 'visible', timeout: 5000 });
+  check('plugin config renders each declared field as a control', (await drawer.locator('[data-plugin-config-field]').count()) === 4);
+  const levelText = await drawer.locator('[data-plugin-config-field="level"]').innerText();
+  check('plugin config reads the stored value into its control', levelText.includes('info'), levelText);
+
+  await page.locator('.ant-drawer .ant-segmented-item').filter({ hasText: 'JSON' }).click();
+  const pluginSource = drawer.locator('[data-plugin-config-source]');
+  const pluginSummary = drawer.locator('[data-plugin-config-summary]');
+  await pluginSource.waitFor({ state: 'visible', timeout: 5000 });
   check('plugin config exposes a structured preview', (await pluginSummary.locator('li').count()) > 0);
+  const saveButton = page.locator('[data-plugin-config-save]');
   await pluginSource.fill('{invalid');
-  check('invalid plugin JSON is reported before save', await pluginModal.getByText(/valid JSON object|合法的 JSON 对象/).isVisible());
-  check('invalid plugin JSON disables save', await pluginModal.locator('.ant-btn-primary').isDisabled());
+  check('invalid plugin JSON is reported before save', await drawer.getByText(/valid JSON object|合法的 JSON 对象/).first().isVisible());
+  await saveButton.click();
+  check('invalid plugin JSON is not saved', await drawer.isVisible());
   await pluginSource.fill('');
-  check('empty plugin config is not treated as an implicit clear', await pluginModal.getByText(/valid JSON object|合法的 JSON 对象/).isVisible() && await pluginModal.locator('.ant-btn-primary').isDisabled());
+  check('empty plugin config is not treated as an implicit clear', await drawer.getByText(/valid JSON object|合法的 JSON 对象/).first().isVisible());
   await pluginSource.fill('{"level":"debug","enabled":true}');
   check('valid plugin JSON is reflected in the preview', (await pluginSummary.getByText('level', { exact: true }).count()) === 1 && (await pluginSummary.getByText('enabled', { exact: true }).count()) === 1);
-  await pluginModal.locator('.ant-modal-footer .ant-btn-default').first().click();
+  await page.locator('.ant-drawer-footer .ant-btn-default').first().click();
   const pluginDiscard = page.locator('.ant-modal-confirm');
   await pluginDiscard.waitFor({ state: 'visible', timeout: 5000 });
   check('plugin configuration discards only after confirmation', await pluginDiscard.isVisible());
   await pluginDiscard.locator('.ant-btn-primary').first().click();
-  await pluginModal.waitFor({ state: 'hidden', timeout: 5000 });
-
+  await drawer.waitFor({ state: 'hidden', timeout: 5000 });
 }

@@ -189,11 +189,11 @@ const SCENARIO_PATHS = [
   // runs every scenario for a one-line change to a page a single scenario covers.
   {
     prefix: 'web/src/pages/PluginsPage',
-    scenarios: ['phone-lists'],
+    scenarios: ['plugin-management', 'plugin-management-narrow'],
   },
   {
-    prefix: 'web/src/pages/PluginStorePage',
-    scenarios: ['phone-lists'],
+    prefix: 'web/src/components/plugins/',
+    scenarios: ['plugin-management', 'plugin-management-narrow'],
   },
   {
     prefix: 'web/src/pages/pricing/',

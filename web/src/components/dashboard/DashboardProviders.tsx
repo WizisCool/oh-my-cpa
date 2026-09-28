@@ -99,7 +99,7 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
       if (p.supports_oauth || p.oauth_provider) {
         if (p.id) ids.add(p.id.toLowerCase().trim());
         if (p.oauth_provider) ids.add(p.oauth_provider.toLowerCase().trim());
-        if (p.name) ids.add(p.name.toLowerCase().trim());
+        if (p.metadata?.name) ids.add(p.metadata.name.toLowerCase().trim());
       }
     }
     return ids;

@@ -1,6 +1,7 @@
 package demo
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strings"
 	"time"
@@ -399,54 +400,154 @@ func priceCatalog() []priceRow {
 	}
 }
 
-// pluginEntry is one installed CPA plugin.
+// pluginEntry is one installed CPA plugin, in the shape CPA's plugin host reports it.
+//
+// A fixture logo is inline artwork, never a URL: the console inlines plugin-declared
+// logos by fetching them, and a public demo must not fetch anything a plugin names.
 type pluginEntry struct {
 	id           string
 	name         string
 	version      string
 	author       string
-	description  string
+	repository   string
+	logo         string
 	isEnabled    bool
 	isConfigured bool
 	isRegistered bool
-	permissions  []string
-	// No fixture plugin declares a logo URL on purpose: the console inlines
-	// plugin-declared logos by fetching them, and a public demo must not fetch
-	// anything a plugin names. See internal/demo/README-less doc comment on the
-	// upstream, and internal/api's pluginLogoFetcher.
+	configFields []map[string]any
+	config       map[string]any
+}
+
+// storePluginEntry is one plugin a store registry offers.
+type storePluginEntry struct {
+	id               string
+	name             string
+	version          string
+	author           string
+	description      string
+	repository       string
+	homepage         string
+	license          string
+	tags             []string
+	logo             string
+	sourceID         string
+	installedVersion string
+}
+
+// fixtureLogo draws a plugin mark as an inline SVG, so the demo shows plugin artwork
+// without anything to fetch.
+func fixtureLogo(initials, color string) string {
+	svg := `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="` + color +
+		`"/><text x="24" y="30" font-family="sans-serif" font-size="17" font-weight="700" fill="#fff" text-anchor="middle">` + initials + `</text></svg>`
+	return "data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString([]byte(svg))
+}
+
+func configField(name, fieldType, description string, enumValues ...string) map[string]any {
+	field := map[string]any{"name": name, "type": fieldType, "description": description, "enum_values": []string{}}
+	if len(enumValues) > 0 {
+		field["enum_values"] = enumValues
+	}
+	return field
 }
 
 func pluginCatalog() []pluginEntry {
 	return []pluginEntry{
 		{
-			id: "usage-exporter", name: "Usage exporter", version: "1.4.2", author: "oh-my-cpa",
-			description: "Streams every captured request record to an S3-compatible bucket.",
-			isEnabled:   true, isConfigured: true, isRegistered: true,
-			permissions: []string{"usage:read", "network:egress"},
+			id: "usage-exporter", name: "Usage exporter", version: "1.4.2", author: "router-for-me",
+			repository: "router-for-me/cpa-plugin-usage-exporter", logo: fixtureLogo("UE", "#0F766E"),
+			isEnabled: true, isConfigured: true, isRegistered: true,
+			configFields: []map[string]any{
+				configField("bucket", "string", "Destination bucket name."),
+				configField("region", "enum", "Bucket region.", "us-east-1", "eu-west-1", "ap-southeast-1"),
+				configField("flush-interval-seconds", "integer", "How often buffered records are uploaded."),
+				configField("compress", "boolean", "Gzip each uploaded batch."),
+				configField("include-models", "array", "Only export records for these models; empty exports all."),
+			},
+			config: map[string]any{
+				"enabled": true, "priority": 10, "bucket": "cpa-usage-archive", "region": "eu-west-1",
+				"flush-interval-seconds": 60, "compress": true, "include-models": []any{},
+			},
 		},
 		{
 			id: "prompt-redactor", name: "Prompt redactor", version: "0.9.0", author: "community",
-			description: "Rewrites prompt bodies before they reach an upstream provider.",
-			isEnabled:   true, isConfigured: false, isRegistered: true,
-			permissions: []string{"request:mutate"},
+			repository: "cpa-community/prompt-redactor",
+			isEnabled:  true, isConfigured: false, isRegistered: true,
+			configFields: []map[string]any{
+				configField("mode", "enum", "What happens to a matched span.", "mask", "drop"),
+				configField("patterns", "array", "Regular expressions whose matches are redacted."),
+				configField("replacement", "string", "Text a masked span is replaced with."),
+			},
+			config: map[string]any{},
 		},
 		{
 			id: "quota-notifier", name: "Quota notifier", version: "2.1.0", author: "community",
-			description: "Posts a webhook when a credential's quota window crosses a threshold.",
-			isEnabled:   false, isConfigured: true, isRegistered: true,
-			permissions: []string{"quota:read", "network:egress"},
+			repository: "cpa-community/quota-notifier", logo: fixtureLogo("QN", "#B45309"),
+			isEnabled: false, isConfigured: true, isRegistered: true,
+			configFields: []map[string]any{
+				configField("webhook-url", "string", "Where the notification is posted."),
+				configField("threshold-percent", "number", "Remaining quota that triggers a notification."),
+				configField("labels", "object", "Extra labels attached to every notification."),
+			},
+			config: map[string]any{
+				"enabled": false, "webhook-url": "https://hooks.example.net/cpa-quota",
+				"threshold-percent": 15, "labels": map[string]any{"team": "platform"},
+			},
 		},
 	}
 }
 
-func pluginStoreCatalog() []pluginEntry {
-	return []pluginEntry{
-		{id: "otel-bridge", name: "OpenTelemetry bridge", version: "1.0.3", author: "oh-my-cpa",
-			description: "Exports request traces to an OTLP collector.", permissions: []string{"usage:read", "network:egress"}},
-		{id: "cost-anomaly", name: "Cost anomaly detector", version: "0.4.1", author: "community",
-			description: "Flags a model whose spend leaves its trailing baseline.", permissions: []string{"usage:read"}},
+func pluginStoreCatalog() []storePluginEntry {
+	return []storePluginEntry{
+		{id: "usage-exporter", name: "Usage exporter", version: "1.5.0", author: "router-for-me",
+			description: "Streams every captured request record to an S3-compatible bucket.",
+			repository:  "router-for-me/cpa-plugin-usage-exporter", license: "MIT",
+			tags: []string{"observability", "export"}, logo: fixtureLogo("UE", "#0F766E"),
+			sourceID: "official", installedVersion: "1.4.2"},
+		{id: "otel-bridge", name: "OpenTelemetry bridge", version: "1.0.3", author: "router-for-me",
+			description: "Exports request traces to an OTLP collector, one span per upstream attempt, with the model, credential index and latency as attributes.",
+			repository:  "router-for-me/cpa-plugin-otel-bridge", license: "Apache-2.0",
+			tags: []string{"observability", "tracing"}, logo: fixtureLogo("OT", "#4F46E5"), sourceID: "official"},
+		{id: "cost-anomaly", name: "Cost anomaly detector", version: "0.4.1", author: "router-for-me",
+			description: "Flags a model whose spend leaves its trailing baseline.",
+			repository:  "router-for-me/cpa-plugin-cost-anomaly", license: "MIT",
+			tags: []string{"cost", "alerting"}, sourceID: "official"},
+		{id: "quota-notifier", name: "Quota notifier", version: "2.1.0", author: "community",
+			description: "Posts a webhook when a credential's quota window crosses a threshold.",
+			repository:  "cpa-community/quota-notifier", license: "MIT",
+			tags: []string{"quota", "alerting"}, logo: fixtureLogo("QN", "#B45309"),
+			sourceID: "community", installedVersion: "2.1.0"},
 		{id: "team-router", name: "Team router", version: "1.2.0", author: "community",
-			description: "Routes a caller key to a credential pool by team.", permissions: []string{"request:mutate", "config:read"}},
+			description: "Routes a caller key to a credential pool by team.",
+			repository:  "cpa-community/team-router", license: "BSD-3-Clause",
+			tags: []string{"routing"}, logo: fixtureLogo("TR", "#BE185D"), sourceID: "community"},
+	}
+}
+
+// pluginStoreSources are the registries the fixture's store lists, keyed by source id.
+func pluginStoreSources() []map[string]any {
+	return []map[string]any{
+		{"id": "official", "name": "official", "url": "https://plugins.router-for-me.example/registry.json"},
+		{"id": "community", "name": "plugins.cpa-community.example", "url": "https://plugins.cpa-community.example/registry.json"},
+	}
+}
+
+// pluginsSection is the `plugins` block of the fixture's configuration document.
+func pluginsSection() map[string]any {
+	configs := map[string]any{}
+	for _, plugin := range pluginCatalog() {
+		if plugin.isConfigured {
+			configs[plugin.id] = plugin.config
+		}
+	}
+	return map[string]any{
+		"enabled":       true,
+		"dir":           "plugins",
+		"store-sources": []string{"https://plugins.cpa-community.example/registry.json"},
+		"store-auth": []map[string]any{{
+			"match": "https://plugins.cpa-community.example/", "apply-to": []string{"registry", "artifact"},
+			"type": "bearer", "token-env": "CPA_COMMUNITY_PLUGIN_TOKEN",
+		}},
+		"configs": configs,
 	}
 }
 
@@ -533,6 +634,7 @@ func configDocument() map[string]any {
 		"oauth-model-alias":        oauthModelAliases(),
 		"oauth-excluded-models":    oauthExcludedModels(),
 		"remote-management":        map[string]any{"allow-remote": false, "disable-control-panel": false},
+		"plugins":                  pluginsSection(),
 	}
 }
 

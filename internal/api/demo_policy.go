@@ -209,6 +209,8 @@ var demoPolicy = []demoPolicyRule{
 	// Plugin and store reads: the lists are fixture data, and a plugin's declared
 	// logo is never fetched because no fixture plugin publishes one.
 	{http.MethodGet, "/api/v1/management/plugins", demoAllow, ""},
+	{http.MethodGet, "/api/v1/management/plugins/settings", demoAllow, ""},
+	{http.MethodGet, "/api/v1/management/plugins/{id}/config", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/plugin-store", demoAllow, ""},
 
 	// Sign-in: starting a real OAuth exchange is the one thing a public demo must
@@ -234,7 +236,8 @@ var demoPolicy = []demoPolicyRule{
 
 	// Plugin execution.
 	{http.MethodPost, "/api/v1/management/plugin-store/{id}/install", demoRefuse, "installing a plugin is disabled: plugins execute inside the gateway"},
-	{http.MethodPatch, "/api/v1/management/plugins/{id}/status", demoRefuse, "changing a plugin's status is disabled: plugins execute inside the gateway"},
+	{http.MethodPatch, "/api/v1/management/plugins/{id}/enabled", demoRefuse, "changing a plugin's status is disabled: plugins execute inside the gateway"},
+	{http.MethodPut, "/api/v1/management/plugins/settings", demoRefuse, "changing the plugin system settings is disabled: plugins execute inside the gateway"},
 	{http.MethodDelete, "/api/v1/management/plugins/{id}", demoRefuse, "removing a plugin is disabled"},
 	{http.MethodPut, "/api/v1/management/plugins/{id}/config", demoRefuse, "editing a plugin's configuration is disabled"},
 

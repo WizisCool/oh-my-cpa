@@ -57,7 +57,6 @@ func countingFetcher(t *testing.T, handler roundTripFunc) (*pluginLogoFetcher, *
 func pluginWithLogo(id, logo string) management.PluginItem {
 	return management.PluginItem{
 		ID:            id,
-		Name:          id,
 		Enabled:       true,
 		SupportsOAuth: true,
 		OAuthProvider: id,
@@ -308,7 +307,7 @@ func TestPluginLogoFetcherSkipsAPluginWithNoLogo(t *testing.T) {
 		t.Fatal("a plugin without a logo must not start a fetch")
 		return nil, nil
 	})
-	plugin := management.PluginItem{ID: "plain", Name: "plain", Enabled: true}
+	plugin := management.PluginItem{ID: "plain", Enabled: true}
 	plugins := []management.PluginItem{plugin}
 	fetcher.inline(context.Background(), plugins)
 	if calls.Load() != 0 || plugins[0].Logo != "" {

@@ -1,266 +1,190 @@
-import React, { useMemo, useState } from 'react';
-import {
-  Card,
-  Button,
-  Switch,
-  Alert,
-  Modal,
-  Popconfirm,
-  Tooltip,
-  App as AntdApp,
-} from 'antd';
-import type { ColumnsType } from 'antd/es/table';
-import {
-  SettingOutlined,
-  DeleteOutlined,
-  ShopOutlined,
-} from '../components/icons';
-import { useNavigate } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import React from 'react';
+import { Alert, Button, Card, Segmented } from 'antd';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { api, describeError } from '../api/client';
 import { useT } from '../i18n';
 import { isDemoMode } from '../types/demoMode';
 import type { PluginItem } from '../types/plugin';
-import { PluginConfigEditor } from '../components/plugins/PluginConfigEditor';
-import { parsePluginConfig, pluginConfigsEqual } from '../components/plugins/pluginConfig';
-import { PluginIdentity, PluginPermissions, PluginVersion, pluginDisplayName } from '../components/plugins/PluginCells';
-import { useOverlayHistory } from '../hooks/useOverlayHistory';
 import { PageHeader } from '../components/common/PageHeader';
 import { RefreshButton } from '../components/common/RefreshButton';
-import { ResponsiveList } from '../components/common/ResponsiveList';
-import { StatusLabel } from '../components/common/StatusLabel';
+import { InstalledPluginsPanel } from '../components/plugins/InstalledPluginsPanel';
+import { PluginStorePanel } from '../components/plugins/PluginStorePanel';
+import { PluginSettingsPanel } from '../components/plugins/PluginSettingsPanel';
+import { PluginConfigDrawer } from '../components/plugins/PluginConfigDrawer';
+import { storeListingsByPluginId } from '../components/plugins/pluginStoreLogic';
+import styles from '../components/plugins/Plugins.module.css';
 
-/** One page of the list, shared by both renderings so a page means the same thing at either width. */
-const PAGE_SIZE = 20;
+const PLUGIN_TABS = ['installed', 'store', 'settings'] as const;
+type PluginTab = (typeof PLUGIN_TABS)[number];
 
+function parseTab(value: string | null): PluginTab {
+  return PLUGIN_TABS.includes(value as PluginTab) ? (value as PluginTab) : 'installed';
+}
+
+/**
+ * Plugin management: what is installed, what the store offers, and how the plugin system
+ * itself is configured, on one page.
+ *
+ * The three are one surface because they are one workflow - find a plugin, install it,
+ * configure it, switch the system on - and the operator should not have to cross to the
+ * configuration page for the last step. The tab lives in the URL (`?tab=store`), so the
+ * store and the settings can be linked to directly; `?plugin=<id>` opens that plugin's
+ * settings.
+ *
+ * The store is only read once its tab is opened: reading it makes CPA fetch every
+ * registry, which is slow and rate limited, and the installed list must not wait on it.
+ * Once read, it also supplies the descriptions and links the installed list shows.
+ */
 export const PluginsPage: React.FC = () => {
   const t = useT();
-  const navigate = useNavigate();
-  const { message, modal } = AntdApp.useApp();
+  const isDemo = isDemoMode();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = parseTab(searchParams.get('tab'));
+  const [hasVisitedStore, setHasVisitedStore] = React.useState(tab === 'store');
+  const [configuring, setConfiguring] = React.useState<PluginItem | null>(null);
 
-  const [configModalPlugin, setConfigModalPlugin] = useState<PluginItem | null>(null);
-  const [configText, setConfigText] = useState<string>('');
-  const parsedConfig = useMemo(() => parsePluginConfig(configText), [configText]);
-
-  const {
-    data: pluginsData,
-    isLoading,
-    isFetching,
-    isError,
-    error,
-    refetch,
-  } = useQuery({
+  const pluginsQuery = useQuery({
     queryKey: ['management-plugins'],
     queryFn: api.getPlugins,
     staleTime: 15000,
   });
 
-  const plugins: PluginItem[] = pluginsData?.plugins || [];
+  React.useEffect(() => {
+    if (tab === 'store') setHasVisitedStore(true);
+  }, [tab]);
 
-  const statusMutation = useMutation({
-    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
-      api.setPluginStatus(id, enabled),
-    onSuccess: () => {
-      message.success(t('plg.status_updated'));
-      void queryClient.invalidateQueries({ queryKey: ['management-plugins'] });
-    },
-    onError: (err: unknown) => {
-      message.error(describeError(err));
-    },
+  const storeQuery = useQuery({
+    queryKey: ['management-plugin-store'],
+    queryFn: api.getPluginStore,
+    enabled: hasVisitedStore,
+    staleTime: 5 * 60_000,
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.deletePlugin(id),
-    onSuccess: () => {
-      message.success(t('plg.deleted'));
-      void queryClient.invalidateQueries({ queryKey: ['management-plugins'] });
-      void queryClient.invalidateQueries({ queryKey: ['management-plugin-store'] });
-    },
-    onError: (err: unknown) => {
-      message.error(describeError(err));
-    },
-  });
+  const plugins = React.useMemo(() => pluginsQuery.data?.plugins ?? [], [pluginsQuery.data]);
+  const catalog = React.useMemo(() => storeListingsByPluginId(storeQuery.data?.plugins), [storeQuery.data]);
+  const isSystemEnabled = pluginsQuery.data?.plugins_enabled ?? true;
 
-  const configMutation = useMutation({
-    mutationFn: ({ id, config }: { id: string; config: Record<string, unknown> }) =>
-      api.setPluginConfig(id, config),
-    onSuccess: () => {
-      message.success(t('plg.config_saved'));
-      setConfigModalPlugin(null);
-      void queryClient.invalidateQueries({ queryKey: ['management-plugins'] });
-    },
-    onError: (err: unknown) => {
-      message.error(describeError(err));
-    },
-  });
-
-  const handleOpenConfig = (plugin: PluginItem) => {
-    const text = JSON.stringify(plugin.config || {}, null, 2);
-    setConfigModalPlugin(plugin);
-    setConfigText(text);
+  const updateParams = (mutate: (params: URLSearchParams) => void) => {
+    setSearchParams((current) => {
+      const params = new URLSearchParams(current);
+      mutate(params);
+      return params;
+    }, { replace: true });
   };
 
-  const handleSaveConfig = () => {
-    if (!configModalPlugin) return;
-    if (!parsedConfig.value) {
-      message.error(parsedConfig.error === 'duplicate-key'
-        ? t('plg.config_duplicate_key_desc')
-        : t('plg.config_invalid_json'));
-      return;
-    }
-    configMutation.mutate({ id: configModalPlugin.id, config: parsedConfig.value });
-  };
+  const selectTab = (next: PluginTab) => updateParams((params) => {
+    if (next === 'installed') params.delete('tab');
+    else params.set('tab', next);
+  });
 
-  // The config dialog refuses to close while an edit is in progress, which the hook handles:
-  // a refused close re-arms its sentinel rather than letting the next Back leave the page.
-  const handleCloseConfig = () => {
-    if (!configModalPlugin || pluginConfigsEqual(parsedConfig.value, configModalPlugin.config ?? {})) {
-      setConfigModalPlugin(null);
-      return;
-    }
-    modal.confirm({
-      title: t('plg.config_unsaved_title'),
-      content: t('plg.config_unsaved_desc'),
-      okText: t('common.confirm'),
-      cancelText: t('common.cancel'),
-      okButtonProps: { danger: true },
-      onOk: () => setConfigModalPlugin(null),
+  // `?plugin=<id>` opens that plugin's settings once the list has it.
+  const requestedPlugin = searchParams.get('plugin');
+  React.useEffect(() => {
+    if (!requestedPlugin || !pluginsQuery.data) return;
+    const match = pluginsQuery.data.plugins.find((plugin) => plugin.id === requestedPlugin);
+    if (match) setConfiguring(match);
+    updateParams((params) => params.delete('plugin'));
+    // Only a new request or a new list can open the editor; `updateParams` is recreated
+    // every render and is deliberately not a trigger.
+  }, [requestedPlugin, pluginsQuery.data]);
+
+  const manage = (pluginId: string) => {
+    updateParams((params) => {
+      params.delete('tab');
+      params.set('plugin', pluginId);
     });
   };
 
-  // The dialog refuses to close while an edit is in progress, which the hook handles: a refused
-  // close re-arms its sentinel instead of letting the next Back press leave the page under an
-  // open editor.
-  useOverlayHistory({ isOpen: configModalPlugin !== null, onClose: handleCloseConfig });
+  const refresh = () => {
+    void pluginsQuery.refetch();
+    if (tab === 'store' || storeQuery.data) void storeQuery.refetch();
+    if (tab === 'settings') void queryClient.invalidateQueries({ queryKey: ['management-plugin-settings'] });
+  };
+  const isRefreshing = pluginsQuery.isFetching || (tab === 'store' && storeQuery.isFetching);
 
-  // Plugins execute inside the gateway, so enabling, configuring or removing one is not something
-  // the demonstration can honour: the server refuses it, and the controls say so up front.
-  const isDemo = isDemoMode();
-
-  const columns: ColumnsType<PluginItem> = [
-    {
-      title: t('plg.col_plugin'),
-      key: 'name',
-      render: (_, r) => <PluginIdentity name={pluginDisplayName(r)} id={r.id} description={r.description} />,
-    },
-    {
-      title: t('plg.col_version'),
-      key: 'version',
-      width: 160,
-      render: (_, r) => <PluginVersion version={r.version || r.metadata?.version} author={r.author || r.metadata?.author} />,
-    },
-    {
-      title: t('plg.col_permissions'),
-      key: 'permissions',
-      render: (_, r) => <PluginPermissions permissions={r.permissions} />,
-    },
-    {
-      title: t('plg.col_status'),
-      key: 'status',
-      width: 150,
-      render: (_, r) => (
-        <div className="switch-status-cell">
-          <Switch
-            size="small"
-            checked={r.enabled}
-            loading={statusMutation.isPending && statusMutation.variables?.id === r.id}
-            disabled={isDemo}
-            onChange={(checked) => statusMutation.mutate({ id: r.id, enabled: checked })}
-            aria-label={`${t('plg.col_status')}: ${pluginDisplayName(r)}`}
-          />
-          <StatusLabel tone={r.enabled ? 'success' : 'neutral'}>
-            {r.enabled ? t('plg.status_enabled') : t('plg.status_disabled')}
-          </StatusLabel>
-        </div>
-      ),
-    },
-    {
-      title: t('plg.col_actions'),
-      key: 'actions',
-      width: 110,
-      align: 'right',
-      render: (_, r) => (
-        <div className="row-actions">
-          <Tooltip title={isDemo ? t('demo.blocked') : t('plg.config_title', { name: pluginDisplayName(r) })}>
-            <Button
-              size="small"
-              className="row-action-btn"
-              icon={<SettingOutlined />}
-              disabled={isDemo}
-              onClick={() => handleOpenConfig(r)}
-              aria-label={t('plg.config_title', { name: pluginDisplayName(r) })}
-            />
-          </Tooltip>
-          <Popconfirm
-            title={t('plg.delete_confirm')}
-            onConfirm={() => deleteMutation.mutate(r.id)}
-            okText={t('common.confirm')}
-            cancelText={t('common.cancel')}
-            okButtonProps={{ danger: true }}
-            disabled={isDemo}
-          >
-            <Tooltip title={isDemo ? t('demo.blocked') : t('common.delete')}>
-              <Button
-                size="small"
-                danger
-                className="row-action-btn"
-                icon={<DeleteOutlined />}
-                disabled={isDemo}
-                loading={deleteMutation.isPending && deleteMutation.variables === r.id}
-                aria-label={`${t('common.delete')}: ${pluginDisplayName(r)}`}
-              />
-            </Tooltip>
-          </Popconfirm>
-        </div>
-      ),
-    },
-  ];
+  const effectiveCount = plugins.filter((plugin) => plugin.effective_enabled).length;
+  const activeError = tab === 'store' ? storeQuery.error : pluginsQuery.error;
+  const isActiveError = tab === 'store' ? storeQuery.isError : pluginsQuery.isError;
 
   return (
     <div className="terminal-page terminal-page-stack plugins-page">
       <PageHeader
-        title={t('plg.title')}
+        title={t('nav.plugins')}
         actions={(
           <>
-            <RefreshButton onRefresh={() => void refetch()} isRefreshing={isFetching} />
-            <Button icon={<ShopOutlined />} onClick={() => navigate('/plugin-store')}>
-              {t('plg.go_store')}
-            </Button>
+            <Segmented
+              className="plugins-tabs"
+              value={tab}
+              onChange={(value) => selectTab(value as PluginTab)}
+              options={[
+                { value: 'installed', label: t('plugin.tab_installed', { n: plugins.length }) },
+                { value: 'store', label: t('plugin.tab_store') },
+                { value: 'settings', label: t('plugin.tab_settings') },
+              ]}
+            />
+            <RefreshButton onRefresh={refresh} isRefreshing={isRefreshing} />
           </>
         )}
-      />
-
-      {isError && <Alert type="error" showIcon description={describeError(error)} />}
-
-      <Card>
-        <ResponsiveList
-          columns={columns}
-          dataSource={plugins}
-          rowKey="id"
-          isLoading={isLoading}
-          isBlocked={isError && !pluginsData}
-          emptyText={t('plg.empty')}
-          pageSize={PAGE_SIZE}
-          /* The status column draws the switch *and* its label, so the whole cell is the control
-             strip: the row cannot show a state the switch disagrees with. */
-          phone={{ identity: 'name', actions: ['status', 'actions'] }}
-        />
-      </Card>
-
-      {/* Config Edit Modal */}
-      <Modal
-        title={t('plg.config_title', { name: configModalPlugin ? pluginDisplayName(configModalPlugin) : '' })}
-        open={!!configModalPlugin}
-        onOk={handleSaveConfig}
-        onCancel={handleCloseConfig}
-        confirmLoading={configMutation.isPending}
-        okButtonProps={{ disabled: !parsedConfig.value }}
-        okText={t('common.confirm')}
-        cancelText={t('common.cancel')}
       >
-        <PluginConfigEditor value={configText} onChange={setConfigText} pluginName={configModalPlugin ? pluginDisplayName(configModalPlugin) : ''} />
-      </Modal>
+        {pluginsQuery.data && (
+          <div className={styles['status-strip']} data-plugin-status>
+            <span>
+              {t('plugin.status_system')}
+              <span className={styles['status-strip-value']}>
+                {isSystemEnabled ? t('plugin.system_enabled') : t('plugin.system_disabled')}
+              </span>
+            </span>
+            <span>
+              {t('plugin.status_dir')}
+              <code className={styles['status-strip-path']}>{pluginsQuery.data.plugins_dir || 'plugins'}</code>
+            </span>
+            <span>
+              {t('plugin.status_running')}
+              <span className={styles['status-strip-value']}>{effectiveCount} / {plugins.length}</span>
+            </span>
+          </div>
+        )}
+      </PageHeader>
+
+      {pluginsQuery.data && !isSystemEnabled && tab !== 'settings' && (
+        <Alert
+          type="warning"
+          showIcon
+          title={t('plugin.system_disabled_title')}
+          description={t('plugin.system_disabled_desc')}
+          action={<Button size="small" onClick={() => selectTab('settings')}>{t('plugin.open_settings')}</Button>}
+        />
+      )}
+
+      {isActiveError && <Alert type="error" showIcon description={describeError(activeError)} />}
+
+      {tab === 'installed' && (
+        <Card>
+          <InstalledPluginsPanel
+            plugins={plugins}
+            isLoading={pluginsQuery.isLoading}
+            isPluginSystemEnabled={isSystemEnabled}
+            catalog={catalog}
+            isDemo={isDemo}
+            onConfigure={setConfiguring}
+            onBrowseStore={() => selectTab('store')}
+          />
+        </Card>
+      )}
+      {tab === 'store' && (
+        <PluginStorePanel
+          store={storeQuery.data}
+          isLoading={storeQuery.isLoading}
+          isDemo={isDemo}
+          onManage={manage}
+          onOpenSettings={() => selectTab('settings')}
+        />
+      )}
+      {tab === 'settings' && <PluginSettingsPanel isDemo={isDemo} />}
+
+      <PluginConfigDrawer plugin={configuring} isDemo={isDemo} onClose={() => setConfiguring(null)} />
     </div>
   );
 };

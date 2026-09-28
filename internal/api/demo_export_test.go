@@ -122,6 +122,12 @@ func demoExportCases() []demoExportCase {
 		{Name: "client-key-aliases", Path: "/api/v1/management/client-key-aliases"},
 		{Name: "pricing", Path: "/api/v1/pricing"},
 		{Name: "plugins", Path: "/api/v1/management/plugins"},
+		{Name: "plugins-settings", Path: "/api/v1/management/plugins/settings"},
+		// Each installed plugin's settings document, for the editor the list opens. The
+		// ids are the fixture's own, so the list and its editors cannot disagree.
+		{Name: "plugin-config-usage-exporter", Path: "/api/v1/management/plugins/usage-exporter/config", Route: "/api/v1/management/plugins/{id}/config"},
+		{Name: "plugin-config-prompt-redactor", Path: "/api/v1/management/plugins/prompt-redactor/config", Route: "/api/v1/management/plugins/{id}/config"},
+		{Name: "plugin-config-quota-notifier", Path: "/api/v1/management/plugins/quota-notifier/config", Route: "/api/v1/management/plugins/{id}/config"},
 		{Name: "plugin-store", Path: "/api/v1/management/plugin-store"},
 		{Name: "auth-files", Path: "/api/v1/management/auth-files"},
 		// The model and alias lists are asked for per credential; `auth-files-models`

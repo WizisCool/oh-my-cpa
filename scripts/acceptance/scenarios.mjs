@@ -52,6 +52,7 @@ import {
 } from './probes/providerRateMarks.mjs';
 import { overlayBackDismisses } from './probes/overlayHistory.mjs';
 import { phoneListRendering } from './probes/phoneLists.mjs';
+import { pluginManagement, pluginManagementFixtures, pluginManagementNarrow } from './probes/pluginManagement.mjs';
 import { touchErgonomics } from './probes/touchErgonomics.mjs';
 import { oauthManagement, oauthManagementFixtures, oauthManagementProbeRoutes } from './probes/oauthManagement.mjs';
 import { iconPickerStacking, pickerProvider, providerIconPick } from './probes/providerConsole.mjs';
@@ -80,6 +81,8 @@ import {
  */
 /** The audit queries the logs scenario's page sent, read back by the scenario's own checks. */
 const logsAuditRequests = [];
+/** The writes the plugin management scenario's page sent, read back by its own checks. */
+const pluginManagementWrites = [];
 
 export const SCENARIOS = [
   { id: 'agent', name: 'Agent data notice, reasoning effort, confirmed tools, remembered target and server conversation recovery', options: { routes: agentFixtures() }, run: agentWorkspace },
@@ -575,29 +578,6 @@ export const SCENARIOS = [
           ],
           total: 2,
         })],
-        [(url) => url.pathname.endsWith('/management/plugins'), () => ({
-          plugins: [
-            {
-              id: 'fixture-logger',
-              name: 'Request Logger Plugin',
-              version: '1.0.0',
-              author: 'cpa-official',
-              description: 'Audits and logs request metadata to internal store',
-              permissions: ['read_request', 'write_log'],
-              enabled: true,
-              config: {},
-            },
-            {
-              id: 'fixture-auth',
-              name: 'iFlow Alliance Auth',
-              version: '1.0.0',
-              author: 'cpa-official',
-              permissions: ['oauth'],
-              enabled: false,
-              config: {},
-            },
-          ],
-        })],
         [(url) => url.pathname.endsWith('/management/pricing') || url.pathname.endsWith('/pricing'), () => ({
           source: 'models.dev',
           models: [
@@ -648,19 +628,6 @@ export const SCENARIOS = [
         })],
         [(url) => url.pathname.endsWith('/management/logs'), () => ({ lines: [], latest_after: 0, next_cursor: '', cursor_reset: false, limit: 2000 })],
         [(url) => url.pathname.endsWith('/management/logs/status'), () => ({ logging_to_file: true, request_log: false })],
-        [(url) => url.pathname.endsWith('/management/plugin-store'), () => ({
-          plugins: [
-            {
-              id: 'store-fixture',
-              name: 'Store Fixture Plugin',
-              version: '2.1.0',
-              author: 'community',
-              description: 'A plugin the store offers',
-              permissions: ['read_request'],
-              installed: false,
-            },
-          ],
-        })],
       ],
     },
     run: phoneListRendering,
@@ -682,6 +649,18 @@ export const SCENARIOS = [
       ],
     },
     run: requestListInteractions,
+  },
+  {
+    id: 'plugin-management',
+    name: 'plugin management shows store cards with their artwork and links, gates a third-party install, and edits declared fields as typed controls',
+    options: { routes: pluginManagementFixtures(pluginManagementWrites) },
+    run: (context) => pluginManagement({ ...context, writes: pluginManagementWrites }),
+  },
+  {
+    id: 'plugin-management-narrow',
+    name: 'the plugin page fits a phone on every tab',
+    options: { routes: pluginManagementFixtures([]), viewport: { width: 375, height: 812 } },
+    run: pluginManagementNarrow,
   },
   {
     id: 'logs-sources',

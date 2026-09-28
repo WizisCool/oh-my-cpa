@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"gopkg.in/yaml.v3"
 	"log/slog"
 	"net"
 	"net/http"
@@ -68,16 +69,17 @@ type Upstream struct {
 // credential or edit its metadata, and a fixture that acknowledged a write
 // without storing it could not tell a working write from a lost one.
 type upstreamState struct {
-	files       []map[string]any
-	aliases     map[string]any
-	excluded    map[string]any
-	config      map[string]any
-	configYAML  string
-	plugins     []map[string]any
-	pluginStore []map[string]any
-	logLines    []string
-	logLatest   int64
-	quota       map[string]any
+	files         []map[string]any
+	aliases       map[string]any
+	excluded      map[string]any
+	config        map[string]any
+	configYAML    string
+	plugins       map[string]any
+	pluginConfigs map[string]map[string]any
+	pluginStore   map[string]any
+	logLines      []string
+	logLatest     int64
+	quota         map[string]any
 }
 
 // StartUpstream binds the fixture to a loopback port and serves it.
@@ -197,44 +199,83 @@ func newUpstreamState(now time.Time) *upstreamState {
 
 	document := configDocument()
 	plugins := make([]map[string]any, 0, len(pluginCatalog()))
+	pluginConfigs := make(map[string]map[string]any, len(pluginCatalog()))
 	for _, plugin := range pluginCatalog() {
 		plugins = append(plugins, map[string]any{
 			"id":                plugin.id,
-			"name":              plugin.name,
-			"path":              "/plugins/" + plugin.id,
-			"description":       plugin.description,
-			"version":           plugin.version,
-			"author":            plugin.author,
-			"enabled":           plugin.isEnabled,
-			"effective_enabled": plugin.isEnabled,
+			"path":              "plugins/" + plugin.id + ".so",
 			"configured":        plugin.isConfigured,
 			"registered":        plugin.isRegistered,
-			"permissions":       plugin.permissions,
+			"enabled":           plugin.isEnabled,
+			"effective_enabled": plugin.isEnabled && plugin.isRegistered,
+			"supports_oauth":    false,
+			"oauth_provider":    "",
+			"supports_quota":    false,
+			"logo":              plugin.logo,
+			"config_fields":     plugin.configFields,
+			"menus":             []any{},
+			"metadata": map[string]any{
+				"name": plugin.name, "version": plugin.version, "author": plugin.author,
+				"github_repository": plugin.repository, "logo": plugin.logo, "config_fields": plugin.configFields,
+			},
 		})
+		pluginConfigs[plugin.id] = plugin.config
 	}
-	store := make([]map[string]any, 0, len(pluginStoreCatalog()))
+	installed := make(map[string]pluginEntry, len(pluginCatalog()))
+	for _, plugin := range pluginCatalog() {
+		installed[plugin.id] = plugin
+	}
+	sourceNames := map[string]string{}
+	for _, source := range pluginStoreSources() {
+		sourceNames[source["id"].(string)] = source["name"].(string)
+	}
+	storePlugins := make([]map[string]any, 0, len(pluginStoreCatalog()))
 	for _, plugin := range pluginStoreCatalog() {
-		store = append(store, map[string]any{
-			"id":          plugin.id,
-			"name":        plugin.name,
-			"description": plugin.description,
-			"version":     plugin.version,
-			"author":      plugin.author,
-			"permissions": plugin.permissions,
-			"installed":   false,
+		local, isInstalled := installed[plugin.id]
+		storePlugins = append(storePlugins, map[string]any{
+			"store_id":          plugin.sourceID + "/" + plugin.id,
+			"source_id":         plugin.sourceID,
+			"source_name":       sourceNames[plugin.sourceID],
+			"id":                plugin.id,
+			"name":              plugin.name,
+			"description":       plugin.description,
+			"author":            plugin.author,
+			"version":           plugin.version,
+			"repository":        plugin.repository,
+			"homepage":          "",
+			"license":           plugin.license,
+			"tags":              plugin.tags,
+			"logo":              plugin.logo,
+			"install_type":      "github_release",
+			"platforms":         []map[string]any{{"goos": "linux", "goarch": "amd64"}, {"goos": "linux", "goarch": "arm64"}},
+			"auth_required":     plugin.sourceID != "official",
+			"auth_configured":   plugin.sourceID != "official",
+			"installed":         isInstalled,
+			"installed_version": plugin.installedVersion,
+			"effective_enabled": isInstalled && local.isEnabled,
+			"update_available":  isInstalled && plugin.installedVersion != plugin.version,
 		})
 	}
+	store := map[string]any{
+		"plugins_enabled": true,
+		"plugins_dir":     "plugins",
+		"sources":         pluginStoreSources(),
+		"source_errors":   []any{},
+		"plugins":         storePlugins,
+	}
+	pluginList := map[string]any{"plugins_enabled": true, "plugins_dir": "plugins", "plugins": plugins}
 	return &upstreamState{
-		files:       files,
-		aliases:     oauthModelAliases(),
-		excluded:    oauthExcludedModels(),
-		config:      document,
-		configYAML:  renderConfigYAML(document),
-		plugins:     plugins,
-		pluginStore: store,
-		logLines:    logTail(now),
-		logLatest:   now.Unix(),
-		quota:       quotaPayloads(now),
+		files:         files,
+		aliases:       oauthModelAliases(),
+		excluded:      oauthExcludedModels(),
+		config:        document,
+		configYAML:    renderConfigYAML(document),
+		plugins:       pluginList,
+		pluginConfigs: pluginConfigs,
+		pluginStore:   store,
+		logLines:      logTail(now),
+		logLatest:     now.Unix(),
+		quota:         quotaPayloads(now),
 	}
 }
 
@@ -339,6 +380,13 @@ func (u *Upstream) serve(writer http.ResponseWriter, request *http.Request) {
 		writeFixtureJSON(writer, http.StatusOK, map[string]any{family + "-api-key": familySection(family)})
 	case request.Method == http.MethodGet && path == "/plugins":
 		writeFixtureJSON(writer, http.StatusOK, u.fixture.plugins)
+	case request.Method == http.MethodGet && strings.HasPrefix(path, "/plugins/") && strings.HasSuffix(path, "/config"):
+		config, ok := u.fixture.pluginConfigs[strings.TrimSuffix(strings.TrimPrefix(path, "/plugins/"), "/config")]
+		if !ok {
+			writeFixtureJSON(writer, http.StatusNotFound, map[string]any{"error": "plugin_not_found", "message": "plugin not found"})
+			return
+		}
+		writeFixtureJSON(writer, http.StatusOK, config)
 	case request.Method == http.MethodGet && path == "/plugin-store":
 		writeFixtureJSON(writer, http.StatusOK, u.fixture.pluginStore)
 	case request.Method == http.MethodGet && path == "/logs":
@@ -591,6 +639,14 @@ func renderConfigYAML(document map[string]any) string {
 	builder.WriteString("api-keys:\n")
 	for _, key := range keys {
 		builder.WriteString("  - " + key + "\n")
+	}
+	// The plugin section is rendered whole: the plugin page reads its switch, store
+	// sources and authentication rules from this document, and each plugin's settings
+	// sit under it as CPA keeps them.
+	if plugins, ok := document["plugins"]; ok {
+		if encoded, err := yaml.Marshal(map[string]any{"plugins": plugins}); err == nil {
+			builder.Write(encoded)
+		}
 	}
 	return builder.String()
 }

@@ -125,7 +125,7 @@ a new capability must not add them:
 
 - raw credential reads, auth-file downloads, or key reveals;
 - arbitrary URL, CPA, or HTTP proxying; SQL; filesystem; shell; or host maintenance;
-- plugin installation, execution, or configuration;
+- plugin installation, execution, or configuration, including the plugin system settings;
 - raw configuration YAML writes - only the named scalar allowlist
   (`request_retry`, `max_retry_interval`, `max_retry_credentials`,
   `routing_strategy`, `force_model_prefix`);
