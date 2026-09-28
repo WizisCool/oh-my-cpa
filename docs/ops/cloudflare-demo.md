@@ -39,9 +39,9 @@ value of generating rather than authoring is that every response has been throug
 same DTO projection a self-hosted install produces, so the demonstration cannot show a
 shape the product never emits.
 
-The export is reproducible: two runs over unchanged code are byte-identical. That is
-what makes `--check` meaningful, and it needed three things to be true rather than
-approximately true.
+The export is reproducible: two runs over unchanged code are byte-identical, on any
+machine and at any time. That is what makes `--check` meaningful, and it needed four
+things to be true rather than approximately true.
 
 - **The window is closed, on a fixed instant in the past.** A `preset` resolves against
   the wall clock, so two exports a minute apart disagree; and the server clamps a
@@ -54,6 +54,12 @@ approximately true.
   goroutines, the fixture's ephemeral port and an error-log file name stamped when the
   listing was asked for describe the machine, not the demonstration. A public page should
   not present them as though they described the service a visitor is looking at.
+- **Host facts are pinned, and an unset instant stays unset.** The runtime's Go version
+  and platform describe whichever machine ran the export, so the dataset states the
+  pinned toolchain from `scripts/tools-versions.json` and the release image's platform
+  instead. A zero instant means "never" and is not shifted, by the export or by the Worker.
+  `TestDemoExportRebaseIsIndependentOfTheExportClock` exports the same body at two
+  different clocks and requires identical output.
 
 ## Why it does not go stale
 
@@ -117,9 +123,14 @@ pnpm verify:demo:go         # the Go binary's own demonstration mode, still supp
 defects in this Worker were invisible to unit tests and obvious in one browser run: the
 session endpoint sitting outside `/api/v1`, which put every page on the sign-in card; the
 model-name corruption above; and an event list captured without a window, which rendered
-as "no request records". It counts DOM nodes as well, and its numbers land within one or
-two of the real Go binary - the dashboard at 1513 against 1514 - which is the closest
-thing to a measure of "this is the same console" that a test can make.
+as "no request records". Without a remote URL, the check stages the existing production build and serves the
+real Worker handler in-process. Each navigation registers its required initial reads
+before loading, waits for successful response-body completion, then checks the actual
+page heading and visible content (including the agent capability directory). Visible
+loading states, missing reads, API/transport failures and console errors fail the run.
+There is no fixed per-page sleep or global network-idle wait; ongoing polls do not
+block completion. Per-route timings are printed, and browser/server cleanup runs on
+failure as well as success.
 
 ## Deploying
 
@@ -224,10 +235,12 @@ this section and the ADR that records why the move happened.
 
 Two things are worth knowing if you find traces of it.
 
-The **GitHub deployments panel still lists 47 entries** created by `vercel[bot]`. They
-are GitHub's own audit record of what the deleted integration did, every one of them in
-a terminal state, and they are history rather than residue - deleting them would erase
-an accurate account of what happened without removing anything that runs.
+The **GitHub deployments panel no longer carries the retired integration's records**.
+Its 47 entries created by `vercel[bot]` - 34 Preview and 13 Production, all in terminal
+states, from 2026-09-19 to 2026-09-22 - and the `Preview` and `Production` environments
+the first deployments created were removed on 2026-09-28. The Vercel period remains
+recorded in this section, in commit `9630b9b` and in the ADR that records why the move
+happened.
 
 The **credential the CLI stored had expired**, and re-authenticating needed one
 interactive step. That is why this section exists: a future cleanup that reports "the
@@ -246,7 +259,10 @@ convention is `*_at_ms`, and a field that does not follow it is worth renaming.
 
 **`pnpm demo:generate --check` fails immediately after a merge.** Someone changed a source
 file the dataset derives from. Regenerate, read the diff, and commit the data with the
-change - which is exactly what the gate is for.
+change - which is exactly what the gate is for. A diff that touches only timestamps or
+runtime facts is not a source change: it means a new field escaped the export's
+determinism rules, and the fix is a rule in `internal/api/demo_export_test.go`, not a
+regenerated copy.
 
 **The local server will not start.** Delete `deploy/cloudflare/.wrangler` (it is ignored
 per-machine state) and run `pnpm install` again, which fetches the runtime binary the

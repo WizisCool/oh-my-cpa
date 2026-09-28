@@ -129,6 +129,9 @@ type Config struct {
 	// retrying at the idle interval with a wrong key would lock the operator
 	// out of their own gateway.
 	AuthCooldown time.Duration
+	// ReadinessGrace is how long a capture request waits for a collector that has
+	// not started yet before reporting ErrCollectorNotRunning.
+	ReadinessGrace time.Duration
 }
 
 func (c Config) withDefaults() Config {
@@ -162,6 +165,9 @@ func (c Config) withDefaults() Config {
 	}
 	if c.AuthCooldown <= 0 {
 		c.AuthCooldown = 5 * time.Minute
+	}
+	if c.ReadinessGrace <= 0 {
+		c.ReadinessGrace = defaultCaptureReadinessGrace
 	}
 	return c
 }
@@ -293,11 +299,11 @@ func NewRunner(instanceID string, upstream Upstream, sink Sink, errorSink ErrorS
 	}, nil
 }
 
-// captureReadinessGrace is how long a request waits for a collector that has not
-// started yet. The HTTP server and the pipeline start in parallel, so a refresh
+// defaultCaptureReadinessGrace is how long a request waits for a collector that has
+// not started yet. The HTTP server and the pipeline start in parallel, so a refresh
 // arriving in that window is legitimate; a collector still absent after this long
 // is a stopped one, and the caller deserves an answer rather than a timeout.
-const captureReadinessGrace = 2 * time.Second
+const defaultCaptureReadinessGrace = 2 * time.Second
 
 // CaptureNow asks the collector to drain CPA immediately and waits for the pass
 // to finish.
@@ -324,7 +330,7 @@ func (r *Runner) CaptureNow(ctx context.Context) (CaptureOutcome, error) {
 	// A missing collector is reported rather than waited out, but only after the
 	// start-up window has passed: the request stays queued meanwhile, so a
 	// pipeline that is still coming up serves it on its first pass.
-	readiness := time.NewTimer(captureReadinessGrace)
+	readiness := time.NewTimer(r.config.ReadinessGrace)
 	defer readiness.Stop()
 	for {
 		select {
@@ -339,7 +345,7 @@ func (r *Runner) CaptureNow(ctx context.Context) (CaptureOutcome, error) {
 			if !r.Status().Running {
 				return CaptureOutcome{}, ErrCollectorNotRunning
 			}
-			readiness.Reset(captureReadinessGrace)
+			readiness.Reset(r.config.ReadinessGrace)
 		}
 	}
 }
