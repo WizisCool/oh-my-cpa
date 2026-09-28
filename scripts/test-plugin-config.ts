@@ -99,6 +99,13 @@ const bare = buildPluginConfigDraft(FIELDS, {}, true);
 assert.deepEqual(composePluginConfig(bare, FIELDS, {}).value, {});
 assert.deepEqual(composePluginConfig({ ...bare, enabled: false }, FIELDS, {}).value, { enabled: false });
 
+// An undeclared key spelled `__proto__` is carried through as a key, not as a prototype.
+const protoSaved = JSON.parse('{"__proto__":{"polluted":true},"level":"info"}') as Record<string, unknown>;
+const protoComposed = composePluginConfig(buildPluginConfigDraft(FIELDS, protoSaved, false), FIELDS, protoSaved).value!;
+assert.equal(Object.prototype.hasOwnProperty.call(protoComposed, '__proto__'), true);
+assert.equal(Object.getPrototypeOf(protoComposed), Object.prototype);
+assert.equal(JSON.stringify(protoComposed), '{"__proto__":{"polluted":true},"level":"info"}');
+
 // Typed values are written with their types; clearing a field removes its key.
 const edited = {
   ...draft,

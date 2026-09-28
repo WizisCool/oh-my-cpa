@@ -426,7 +426,6 @@ type storePluginEntry struct {
 	author           string
 	description      string
 	repository       string
-	homepage         string
 	license          string
 	tags             []string
 	logo             string

@@ -558,8 +558,8 @@
 }
 
 .config-field-changed {
-  box-shadow: inset 2px 0 0 var(--accent);
-  padding-left: 10px;
+  border-left: 2px solid var(--accent);
+  padding-left: 8px;
 }
 
 .config-field-label {

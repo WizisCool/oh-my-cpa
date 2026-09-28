@@ -170,7 +170,11 @@ export function composePluginConfig(
 ): ComposedPluginConfig {
   const errors: Record<string, PluginFieldError> = {};
   const value: Record<string, unknown> = {};
-  for (const key of undeclaredPluginKeys(base, fields)) value[key] = base[key];
+  // Defined rather than assigned: a key spelled `__proto__` would otherwise set the
+  // object's prototype instead of becoming a key, and the saved document would lose it.
+  for (const key of undeclaredPluginKeys(base, fields)) {
+    Object.defineProperty(value, key, { value: base[key], enumerable: true, writable: true, configurable: true });
+  }
 
   if (draft.hasEnabledKey || draft.enabled !== draft.initialEnabled) value.enabled = draft.enabled;
 
