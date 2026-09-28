@@ -51,7 +51,7 @@ OMCPA_DEMO_MODE=true go run ./cmd/oh-my-cpa
 ## 功能特性
 
 ### 网关与 Provider 管理
-- **AI 提供商管理**：配置与管理 Codex、Claude、Gemini、Meta Muse、DeepSeek 及 OpenAI 兼容服务的凭据与端点。config API-key 家族（claude、codex、gemini、meta）的管理方式完全一致：凭据、模型、priority/weight、代理以及网关级启停开关。
+- **AI 提供商管理**：配置与管理 Codex、Claude、Gemini、Meta Muse、xAI、Vertex AI、Gemini Interactions、DeepSeek 及 OpenAI 兼容服务的凭据与端点。config API-key 家族（claude、codex、gemini、meta、xai、vertex、interactions）的管理方式完全一致：凭据、模型、priority/weight、代理以及网关级启停开关。
 - **协议级启停控制**：通过 `excluded-models: ['*']` 实现网关协议层有效阻断，防止流量误路由至已停用凭据。
 - **模型目录自动拉取**：直连上游提供商获取最新可用模型列表。模型拉取要求 HTTPS，仅 localhost、回环或私有 IP 字面量可使用 HTTP，并拒绝跨源重定向。
 - **客户端 Key 别名管理**：创建、查看与删除代理客户端 API Key。支持为 Key 设置可读别名，别名自动呈现在请求记录、详情抽屉与筛选标签中。

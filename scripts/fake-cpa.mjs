@@ -130,6 +130,14 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
     { 'api-key': FAKE_PROVIDER_SECRET, 'auth-index': 'meta-e2e', 'base-url': 'https://api.meta.ai/v1' },
   ];
   let metaProviders = JSON.parse(JSON.stringify(initialMetaProviders));
+  // The xAI list is served for the same reason, and it carries a setting the
+  // console does not model (`websockets`): an edit made through the console
+  // rewrites the whole list, and the stored copy is what shows that setting
+  // survived it.
+  const initialXAIProviders = [
+    { 'api-key': FAKE_PROVIDER_SECRET, 'auth-index': 'xai-e2e', 'base-url': 'https://api.x.ai/v1', websockets: true },
+  ];
+  let xaiProviders = JSON.parse(JSON.stringify(initialXAIProviders));
 
   // The gateway client keys are stateful for the same reason authFiles is: the
   // key-management page renders its list from `/config.yaml` but rewrites it
@@ -702,6 +710,23 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
         metaProviders = parsed;
       } else if (Array.isArray(parsed?.['meta-api-key'])) {
         metaProviders = parsed['meta-api-key'];
+      }
+      json(response, 200, { status: 'ok' });
+      return;
+    }
+    if (request.method === 'GET' && path === '/xai-api-key') {
+      json(response, 200, { 'xai-api-key': xaiProviders });
+      return;
+    }
+    if (request.method === 'PUT' && path === '/xai-api-key') {
+      let parsed = null;
+      try {
+        parsed = JSON.parse(requests[requests.length - 1].body || '[]');
+      } catch { /* keep the stored list */ }
+      if (Array.isArray(parsed)) {
+        xaiProviders = parsed;
+      } else if (Array.isArray(parsed?.['xai-api-key'])) {
+        xaiProviders = parsed['xai-api-key'];
       }
       json(response, 200, { status: 'ok' });
       return;

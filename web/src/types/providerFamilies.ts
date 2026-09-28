@@ -35,6 +35,12 @@ export interface ProviderFamilyMeta {
    * display name is at hand, e.g. a request record that predates the family tag.
    */
   protocolMatchers: string[];
+  /**
+   * Whether CPA keeps an entry of this family only when it carries a base URL.
+   * CPA drops such an entry without an error, so the form requires the field
+   * rather than letting a save report success for a row that never appears.
+   */
+  requiresBaseURL?: boolean;
 }
 
 /** In the order the provider list and the family picker present them. */
@@ -52,6 +58,7 @@ export const PROVIDER_FAMILIES: ProviderFamilyMeta[] = [
     color: '#60A5FA',
     iconId: 'Codex',
     protocolMatchers: ['response'],
+    requiresBaseURL: true,
   },
   {
     id: 'claude',
@@ -73,6 +80,28 @@ export const PROVIDER_FAMILIES: ProviderFamilyMeta[] = [
     color: '#0866FF',
     iconId: 'Meta',
     protocolMatchers: ['meta muse', 'meta'],
+  },
+  {
+    id: 'xai',
+    labelKey: 'pro.family_xai',
+    color: '#A1A1AA',
+    iconId: 'XAI',
+    protocolMatchers: ['xai', 'grok'],
+    requiresBaseURL: true,
+  },
+  {
+    id: 'vertex',
+    labelKey: 'pro.family_vertex',
+    color: '#4285F4',
+    iconId: 'Google',
+    protocolMatchers: ['vertex'],
+  },
+  {
+    id: 'interactions',
+    labelKey: 'pro.family_interactions',
+    color: '#34A853',
+    iconId: 'Gemini',
+    protocolMatchers: ['interactions'],
   },
 ];
 

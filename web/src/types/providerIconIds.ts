@@ -27,6 +27,7 @@ export const PROVIDER_ICON_IDS: Record<string, string> = {
   gemini: 'Gemini',
   google: 'Gemini',
   vertex: 'Google',
+  interactions: 'Gemini',
   qwen: 'Qwen',
   deepseek: 'DeepSeek',
   minimax: 'Minimax',

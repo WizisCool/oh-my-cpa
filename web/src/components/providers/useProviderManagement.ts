@@ -10,6 +10,7 @@ import { getProviderDefaultIcon } from '../LobeIcon';
 import { resolveProviderIcon } from '../../types/providerIcons';
 import { isSafeExternalURL } from '../../utils/externalUrl';
 import { providerStatusPayload } from '../../types/providerId';
+import { lookupProviderFamily } from '../../types/providerFamilies';
 import type {
   ProviderItem,
   SaveProviderPayload,
@@ -583,6 +584,11 @@ export function useProviderManagement({
   };
 
   const handleSaveProvider = () => {
+    if (lookupProviderFamily(formFamily)?.requiresBaseURL && !formBaseURL.trim()) {
+      message.warning(t('pro.base_url_required'));
+      return;
+    }
+
     const keysPayload: SaveProviderKeyItem[] = formKeys.map((k) => ({
       api_key: k.apiKey || '',
       proxy_url: k.proxyUrl || '',

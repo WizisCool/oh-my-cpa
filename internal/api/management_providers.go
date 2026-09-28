@@ -71,7 +71,7 @@ type ProviderItemDTO struct {
 // The families differ only in constants: which CPA list carries them, the
 // positional id their rows get, and the name and protocol a row falls back to.
 // They share one credential schema and one whole-list write, so they are data
-// here instead of four copies of every code path - adding a provider whose
+// here instead of one copy of every code path per family - adding a provider whose
 // credentials CPA stores this way is a row in providerConfigFamilies plus its
 // console-side presentation.
 type providerConfigFamilySpec struct {
@@ -82,15 +82,26 @@ type providerConfigFamilySpec struct {
 	// for an entry whose configured prefix is "team".
 	PrefixLabel string
 	Protocol    string
+	// RequiresBaseURL marks a family whose entries CPA discards when they carry
+	// no base URL. CPA does so silently and still answers the write with 200, so
+	// the console refuses such an entry up front instead of reporting a save
+	// whose row then never appears.
+	RequiresBaseURL bool
+	// PullProtocol is the auth dialect the family's upstream expects on a
+	// model-list request; empty means the OpenAI bearer dialect.
+	PullProtocol string
 }
 
 // providerConfigFamilies is the ordered registry of config API-key families the
 // console manages. The declared order is the provider list's row order.
 var providerConfigFamilies = []providerConfigFamilySpec{
-	{Family: management.ConfigFamilyCodex, IDPrefix: "codex-", DefaultName: "Codex / Responses", PrefixLabel: "Codex", Protocol: "OpenAI Responses"},
-	{Family: management.ConfigFamilyClaude, IDPrefix: "claude-", DefaultName: "Anthropic Claude", PrefixLabel: "Claude", Protocol: "Anthropic Messages"},
-	{Family: management.ConfigFamilyGemini, IDPrefix: "gemini-", DefaultName: "Google Gemini", PrefixLabel: "Gemini", Protocol: "Gemini Generate Content"},
+	{Family: management.ConfigFamilyCodex, IDPrefix: "codex-", DefaultName: "Codex / Responses", PrefixLabel: "Codex", Protocol: "OpenAI Responses", RequiresBaseURL: true},
+	{Family: management.ConfigFamilyClaude, IDPrefix: "claude-", DefaultName: "Anthropic Claude", PrefixLabel: "Claude", Protocol: "Anthropic Messages", PullProtocol: "anthropic"},
+	{Family: management.ConfigFamilyGemini, IDPrefix: "gemini-", DefaultName: "Google Gemini", PrefixLabel: "Gemini", Protocol: "Gemini Generate Content", PullProtocol: "gemini"},
 	{Family: management.ConfigFamilyMeta, IDPrefix: "meta-", DefaultName: "Meta Muse", PrefixLabel: "Meta", Protocol: "Meta Muse"},
+	{Family: management.ConfigFamilyXAI, IDPrefix: "xai-", DefaultName: "xAI Grok", PrefixLabel: "xAI", Protocol: "xAI Grok", RequiresBaseURL: true},
+	{Family: management.ConfigFamilyVertex, IDPrefix: "vertex-", DefaultName: "Vertex AI", PrefixLabel: "Vertex", Protocol: "Vertex Generate Content", PullProtocol: "gemini"},
+	{Family: management.ConfigFamilyInteractions, IDPrefix: "interactions-", DefaultName: "Gemini Interactions", PrefixLabel: "Interactions", Protocol: "Interactions API", PullProtocol: "gemini"},
 }
 
 // lookupProviderConfigFamily resolves a provider family name to its registry row.

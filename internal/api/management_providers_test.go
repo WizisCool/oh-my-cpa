@@ -28,6 +28,9 @@ type providerFakeServerState struct {
 	claudeProviders []map[string]any
 	geminiProviders []map[string]any
 	metaProviders   []map[string]any
+	// familyLists serves the config API-key families that need no per-family
+	// instrumentation (xai, vertex, interactions), keyed by family.
+	familyLists map[string][]map[string]any
 	// putCount counts the whole-list writes CPA actually received, so a test can
 	// assert that a refused write never reached the gateway.
 	putCount int
@@ -143,6 +146,20 @@ func newProviderTestFixture(t *testing.T) providerTestFixture {
 				"base-url":   "https://api.meta.ai/v1",
 			},
 		},
+		familyLists: map[string][]map[string]any{
+			// The fields the console does not model are CPA settings an operator
+			// wrote in config.yaml; they are here so a round trip can prove they
+			// survive an edit.
+			"xai": {{
+				"api-key":       "xai-test-token-1234",
+				"auth-index":    "xai-1",
+				"base-url":      "https://api.x.ai/v1",
+				"websockets":    true,
+				"request-retry": 2,
+			}},
+			"vertex":       {},
+			"interactions": {},
+		},
 	}
 
 	cpaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -218,6 +235,17 @@ func newProviderTestFixture(t *testing.T) providerTestFixture {
 			state.metaProviders = arr
 			state.putCount++
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
+		case strings.HasSuffix(path, "-api-key") && state.familyLists[strings.TrimSuffix(strings.TrimPrefix(path, "/v0/management/"), "-api-key")] != nil:
+			family := strings.TrimSuffix(strings.TrimPrefix(path, "/v0/management/"), "-api-key")
+			if request.Method == http.MethodPut {
+				var arr []map[string]any
+				_ = json.NewDecoder(request.Body).Decode(&arr)
+				state.familyLists[family] = arr
+				state.putCount++
+				_, _ = writer.Write([]byte(`{"status":"ok"}`))
+				return
+			}
+			_ = json.NewEncoder(writer).Encode(map[string]any{family + "-api-key": state.familyLists[family]})
 		default:
 			writer.WriteHeader(http.StatusOK)
 			_, _ = writer.Write([]byte(`{}`))
@@ -407,5 +435,95 @@ func TestUnifiedProviderArchitectureClaudeCodexGemini(t *testing.T) {
 	}
 	if !foundGemini {
 		t.Fatalf("newly created Gemini Pro Line not found in providers list")
+	}
+}
+
+func TestProviderFamiliesXAIVertexInteractions(t *testing.T) {
+	client, baseURL, state := startProviderTestServer(t)
+
+	listProviders := func() map[string]ProviderItemDTO {
+		t.Helper()
+		resp, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/providers?include_keys=true")
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("list providers status = %d body %s", resp.StatusCode, payload)
+		}
+		var decoded struct {
+			Providers []ProviderItemDTO `json:"providers"`
+		}
+		if err := json.Unmarshal(payload, &decoded); err != nil {
+			t.Fatal(err)
+		}
+		byID := map[string]ProviderItemDTO{}
+		for _, provider := range decoded.Providers {
+			byID[provider.ID] = provider
+		}
+		return byID
+	}
+
+	xaiRow, ok := listProviders()["xai-0"]
+	if !ok || xaiRow.Family != "xai" || xaiRow.Protocol != "xAI Grok" || xaiRow.AuthIndex != "xai-1" {
+		t.Fatalf("xai-0 row = %#v (found %v)", xaiRow, ok)
+	}
+
+	// An edit through the console rewrites the whole list; the settings it does
+	// not model must reach CPA unchanged.
+	updateXAI := `{"family":"xai","name":"Grok Line","base_url":"https://api.x.ai/v1","keys":[{"api_key":"xai-new-secret-5678"}]}`
+	if resp, payload := doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/providers/xai-0", updateXAI); resp.StatusCode != http.StatusOK {
+		t.Fatalf("update xai status = %d body %s", resp.StatusCode, payload)
+	}
+	state.mu.Lock()
+	stored := state.familyLists["xai"][0]
+	state.mu.Unlock()
+	if stored["api-key"] != "xai-new-secret-5678" || stored["websockets"] != true || stored["request-retry"] != float64(2) {
+		t.Fatalf("xai entry after update = %#v, want the new key with websockets and request-retry kept", stored)
+	}
+
+	// CPA silently drops an xAI entry without a base URL while answering 200, so
+	// the console refuses it before any write reaches the gateway.
+	state.mu.Lock()
+	putsBefore := state.putCount
+	state.mu.Unlock()
+	resp, payload := doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/providers", `{"family":"xai","name":"No URL","keys":[{"api_key":"xai-other"}]}`)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("create xai without base URL status = %d body %s", resp.StatusCode, payload)
+	}
+	state.mu.Lock()
+	putsAfter := state.putCount
+	state.mu.Unlock()
+	if putsAfter != putsBefore {
+		t.Fatalf("a refused xai create reached CPA: %d writes, want %d", putsAfter, putsBefore)
+	}
+
+	// Vertex and Interactions take an optional base URL.
+	for _, create := range []string{
+		`{"family":"vertex","name":"Vertex Line","keys":[{"api_key":"vertex-secret"}],"model_entries":[{"name":"gemini-2.5-pro","alias":"vertex-pro"}]}`,
+		`{"family":"interactions","name":"Interactions Line","base_url":"https://generativelanguage.googleapis.com","keys":[{"api_key":"interactions-secret"}]}`,
+	} {
+		if resp, payload := doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/providers", create); resp.StatusCode != http.StatusOK {
+			t.Fatalf("create %s status = %d body %s", create, resp.StatusCode, payload)
+		}
+	}
+	rows := listProviders()
+	if row := rows["vertex-0"]; row.Name != "Vertex Line" || row.Family != "vertex" || len(row.Models) != 1 {
+		t.Fatalf("vertex-0 row = %#v", row)
+	}
+	if row := rows["interactions-0"]; row.Name != "Interactions Line" || row.Family != "interactions" {
+		t.Fatalf("interactions-0 row = %#v", row)
+	}
+
+	// The toggle uses CPA's excluded-all marker, as for every config family.
+	if resp, payload := doJSON(t, client, http.MethodPatch, baseURL+"/omc/api/v1/management/providers/status", `{"family":"interactions","index":0,"disabled":true}`); resp.StatusCode != http.StatusOK {
+		t.Fatalf("patch interactions status = %d body %s", resp.StatusCode, payload)
+	}
+	if row := listProviders()["interactions-0"]; !row.Disabled {
+		t.Fatalf("interactions-0 should be disabled after the toggle: %#v", row)
+	}
+
+	resp, payload = doJSON(t, client, http.MethodDelete, baseURL+"/omc/api/v1/management/providers/vertex-0", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("delete vertex status = %d body %s", resp.StatusCode, payload)
+	}
+	if _, isListed := listProviders()["vertex-0"]; isListed {
+		t.Fatal("vertex-0 is still listed after its delete")
 	}
 }

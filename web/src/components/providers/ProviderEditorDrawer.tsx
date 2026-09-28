@@ -18,7 +18,7 @@ import { isDemoMode } from '../../types/demoMode';
 import { LobeIcon, getProviderDefaultIcon } from '../LobeIcon';
 import { maskKeyText } from '../../utils/maskKey';
 import { modelOptionsFor } from '../../utils/modelOptions';
-import { PROVIDER_FAMILIES } from '../../types/providerFamilies';
+import { PROVIDER_FAMILIES, lookupProviderFamily } from '../../types/providerFamilies';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import type { useProviderManagement } from './useProviderManagement';
 import { EditorSection } from './EditorSection';
@@ -304,6 +304,7 @@ export function ProviderEditorDrawer({
 
           {/* Base URL */}
           <Form.Item
+            required={lookupProviderFamily(formFamily)?.requiresBaseURL ?? false}
             label={
               <span>
                 {t('pro.field_base_url')}{' '}

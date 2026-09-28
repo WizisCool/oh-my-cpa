@@ -354,10 +354,10 @@ including all configuration writes, stays on v0.
 
 ### Provider families are data, not code paths
 
-CPA stores `claude`, `codex`, `gemini` and `meta` credentials as four lists with
-one shared entry schema and one shared write shape. The console mirrors that:
-`internal/cpa/management/config_keys.go` owns the family values, the endpoints
-and the decoding, and `internal/api/management_providers.go` holds one
+CPA stores `claude`, `codex`, `gemini`, `meta`, `xai`, `vertex` and `interactions`
+credentials as seven lists with one shared entry core and one shared write shape.
+The console mirrors that: `internal/cpa/management/config_keys.go` owns the family
+values (`ConfigKeyFamilies`), the endpoints and the decoding, and `internal/api/management_providers.go` holds one
 declaration per family (`providerConfigFamilies`) that supplies the presentation
 constants, with the list projection it feeds beside it. The writes live in
 `internal/api/management_provider_crud.go`, the enable/disable toggle in
@@ -372,6 +372,16 @@ row in that table, and its label in `PROVIDER_FAMILIES`
 frontend table renders as a row without a protocol label, so both the contract
 test in `internal/cpa/management/config_keys_test.go` and the browser acceptance
 check on the rendered provider table assert the label rather than the module.
+
+The families differ only in the fields around that core (a Codex-style entry's
+`websockets`, a Claude entry's `cloak`, `request-retry` on most of them). The
+console does not model those, but every write it makes replaces a whole list, so
+`ConfigAPIKey` keeps each entry's unmodelled fields verbatim and writes them back;
+an edit in the console cannot strip a setting the operator wrote in `config.yaml`.
+Two per-family constants in the registry carry the remaining differences:
+`RequiresBaseURL` (Codex and xAI, whose entries CPA drops without an error when the
+base URL is empty, so the console refuses them up front) and `PullProtocol` (the
+auth dialect a model-list pull uses).
 
 A family an installed CPA does not have answers `404`; that is a missing
 capability rather than an empty or broken list (`IsMissingCapability`), so a
@@ -697,8 +707,8 @@ startup so a rotation needs no SQLite surgery.
 
 ```text
 POST /api/v1/instances/default/discover
-  → internal/cpa/management reads auth-files, the claude/codex/gemini/meta API-key
-    lists, and openai-compatibility entries
+  → internal/cpa/management reads auth-files, the codex API-key list, and
+    openai-compatibility entries
   → cpa/discovery derives a stable resource key and binding fingerprint
   → repository upserts discovered_resources + cpa_bindings (served via /api/v1/resources)
 ```
@@ -1037,12 +1047,13 @@ mask is resolved on the server while the request list is read, and returned on e
 record as `provider_key_mask`.
 
 `internal/api/usage_provider_key_masks.go` owns that resolution. It reads the
-credential lists CPA currently reports — the four config API-key families and the
+credential lists CPA currently reports — the config API-key families and the
 `openai-compatibility` providers — and indexes each one by auth index.
 
 **The record's own provider label chooses the list, and an unrecognized label is not
 a candidate at all.** CPA labels a config API-key credential with the family name
-(`codex`, `claude`, `gemini`, `meta`) and a compatibility credential with
+(`codex`, `claude`, `gemini`, `meta`, `xai`, `vertex`, `interactions`) and a
+compatibility credential with
 `openai-compatible-<upstream name>`
 (`management.OpenAICompatibilityLabelPrefix`, the same constant the dashboard's
 provider grouping uses). Those two shapes are what an attributable request looks
@@ -1294,6 +1305,16 @@ there is no user-supplied URL or generic `/api-call` surface.
 A provider is observed only once `internal/quota` both recognizes it
 (`DetectProvider`) and implements its probe; a credential whose provider has no
 probe is reported with `refresh_supported: false` rather than as a failed fetch.
+
+Normalization never lets an exhausted window make another look exhausted. Codex
+flags a whole rate limit as reached (`limit_reached` / `allowed: false`) without
+saying which window tripped, while still reporting each window's own
+`used_percent`. `ParseCodexUsage` therefore attributes the flag per window
+(`exhaustedFlags`): a window with its own reading keeps it, a window with no
+readable usage is pinned to 100%, and when every window reports usage below 100
+(upstream rounds) only the most used one is pinned. The rule applies alike to the
+standard, code-review and additional per-model rate limits; the domain definition
+is **Quota Window** in `CONTEXT.md`.
 
 A plan's renewal instant is carried with its provenance. Codex probes the
 subscription endpoint on every refresh and records `expires_source:
