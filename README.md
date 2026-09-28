@@ -52,7 +52,7 @@ does.
 ## Features
 
 ### Gateway & Provider Management
-- **AI Providers**: Configure and monitor endpoints for Codex, Claude, Gemini, Meta Muse, DeepSeek, and OpenAI-compatible services. Each config API-key family (claude, codex, gemini, meta) is managed the same way: credentials, models, priority/weight, proxy, and a gateway-level enable switch.
+- **AI Providers**: Configure and monitor endpoints for Codex, Claude, Gemini, Meta Muse, xAI, Vertex AI, Gemini Interactions, DeepSeek, and OpenAI-compatible services. Each config API-key family (claude, codex, gemini, meta, xai, vertex, interactions) is managed the same way: credentials, models, priority/weight, proxy, and a gateway-level enable switch.
 - **Protocol-Level Toggling**: Enable or disable providers with real gateway exclusion (`excluded-models: ['*']`), preventing requests from routing to inactive credentials.
 - **Model Catalog Pulling**: Fetch model lists directly from upstream providers to keep available models up to date. Pulls require HTTPS except for localhost, loopback, or private IP literals; cross-origin redirects are refused.
 - **Model Playground**: Test connected models with text and images, streamed multi-turn answers, generation parameters and safe request diagnostics. Select an existing client key without exposing it to the browser; CPA handles normal routing.

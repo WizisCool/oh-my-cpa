@@ -290,3 +290,19 @@ func TestPullProviderModelsByProviderID(t *testing.T) {
 		t.Fatalf("unexpected codex models list: %#v", pullResp.Models)
 	}
 }
+
+func TestPullProtocolFollowsFamilyRegistry(t *testing.T) {
+	for family, want := range map[string]string{
+		"claude":               "anthropic",
+		"gemini":               "gemini",
+		"vertex":               "gemini",
+		"interactions":         "gemini",
+		"xai":                  "openai",
+		"codex":                "openai",
+		"openai-compatibility": "openai",
+	} {
+		if got := pullProtocol(family); got != want {
+			t.Fatalf("pullProtocol(%q) = %q, want %q", family, got, want)
+		}
+	}
+}

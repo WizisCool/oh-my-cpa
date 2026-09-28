@@ -16,6 +16,9 @@ export const FAMILY_BY_PROVIDER_ID_PREFIX: Record<string, string> = {
   claude: 'claude',
   gemini: 'gemini',
   meta: 'meta',
+  xai: 'xai',
+  vertex: 'vertex',
+  interactions: 'interactions',
 };
 
 export interface ProviderID {
