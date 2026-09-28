@@ -79,9 +79,14 @@
 }
 
 /* The row whose entry is open in the Drawer, marked the way the console marks a selected
-   row: an accent inset rule, not a filled block. */
+   row: an accent rule, not a filled block. Every row reserves the rule's width, so marking
+   one moves nothing. */
+.audit-row > td:first-child {
+  border-left: 2px solid transparent;
+}
+
 .audit-row-open > td:first-child {
-  box-shadow: inset 2px 0 0 var(--accent);
+  border-left-color: var(--accent);
 }
 
 .audit-time {
@@ -295,6 +300,12 @@
   flex-shrink: 0;
   color: var(--meta);
   font-size: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phone-entry {
+    transition: none;
+  }
 }
 
 @media (max-width: 640px) {

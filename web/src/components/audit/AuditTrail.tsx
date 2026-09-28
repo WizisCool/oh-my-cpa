@@ -213,17 +213,19 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
   const category = selectedCategory(filters);
   const hasCounts = summary.data !== undefined;
   const isBlocked = query.isError && !query.data;
-  const update = (patch: Partial<AuditFilters>) => onFiltersChange({ ...filters, ...patch });
+  // A filter change closes the open entry: it may leave the list, and the Drawer must not
+  // reopen on its own when a later filter brings it back.
+  const update = (patch: Partial<AuditFilters>) => {
+    setOpenId(undefined);
+    onFiltersChange({ ...filters, ...patch });
+  };
   const refresh = () => {
     void query.refetch();
     void summary.refetch();
   };
   const closeDetail = React.useCallback(() => setOpenId(undefined), []);
   const navigateDetail = React.useCallback((event: AuditEvent) => setOpenId(event.id), []);
-  const searchFromDetail = (needle: string) => {
-    setOpenId(undefined);
-    update({ search: needle });
-  };
+  const searchFromDetail = (needle: string) => update({ search: needle });
 
   const onExport = async () => {
     setIsExporting(true);
@@ -397,7 +399,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
           />
         )}
         {isFiltered && (
-          <Button type="link" className={styles['clear-filters']} onClick={() => onFiltersChange({ categories: [], outcome: 'all', search: '', range: 'all' })}>
+          <Button type="link" className={styles['clear-filters']} onClick={() => update({ categories: [], outcome: 'all', search: '', range: 'all' })}>
             {t('audit.clear_filters')}
           </Button>
         )}
