@@ -414,6 +414,7 @@ const DICT: Record<string, [string, string]> = {
   'audit.range_7d': ['7 天', '7d'],
   'audit.range_30d': ['30 天', '30d'],
   'audit.range_all': ['全部', 'All'],
+  'audit.range_all_time': ['全部时间', 'All time'],
   'audit.clear_filters': ['清除筛选', 'Clear filters'],
   'audit.export_hint': ['将当前筛选的记录导出为 JSON（包含每次写入的尝试行）', 'Export the filtered trail as JSON, including each write\'s attempt row'],
   'audit.only_target': ['只看此对象', 'Only this target'],

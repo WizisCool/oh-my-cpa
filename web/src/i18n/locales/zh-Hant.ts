@@ -346,6 +346,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "audit.range_7d": "7 天",
   "audit.range_30d": "30 天",
   "audit.range_all": "全部",
+  "audit.range_all_time": "全部時間",
   "audit.clear_filters": "清除篩選",
   "audit.export_hint": "將目前篩選的記錄匯出為 JSON（包含每次寫入的嘗試列）",
   "audit.only_target": "只看此對象",

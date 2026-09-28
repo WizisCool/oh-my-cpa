@@ -346,6 +346,7 @@ export const MS: Readonly<Record<string, string>> = {
   "audit.range_7d": "7h",
   "audit.range_30d": "30h",
   "audit.range_all": "Semua",
+  "audit.range_all_time": "Sepanjang masa",
   "audit.clear_filters": "Kosongkan penapis",
   "audit.export_hint": "Eksport jejak yang ditapis sebagai JSON, termasuk baris percubaan setiap penulisan",
   "audit.only_target": "Sasaran ini sahaja",

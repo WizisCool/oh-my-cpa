@@ -221,13 +221,102 @@
   min-width: 0;
 }
 
+/* ── phone: one tappable row per entry ────────────────────────────────────── */
+.phone-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.phone-list > li + li {
+  border-top: 1px solid var(--border-soft);
+}
+
+.phone-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 60px;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) ease;
+}
+
+.phone-entry:active,
+.phone-entry-open {
+  background: var(--surface);
+}
+
+.phone-entry:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.phone-entry-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.phone-entry-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.phone-entry-result {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.phone-entry-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.phone-entry-meta .audit-target {
+  min-width: 0;
+  line-height: 18px;
+}
+
+.phone-entry-chevron {
+  flex-shrink: 0;
+  color: var(--meta);
+  font-size: 12px;
+}
+
 @media (max-width: 640px) {
   .audit-search {
     flex-basis: 100%;
   }
 
-  .audit-category {
-    flex: 1 1 140px;
+  .audit-category,
+  .audit-range {
+    flex: 1 1 0;
     width: auto;
+    min-width: 0;
+  }
+
+  /* The tabs drop their gutter and the pip (the word already names the outcome), so the
+     four fit a phone in Chinese; a longer locale falls back to the tabs' overflow menu. */
+  .outcome-tabs :global(.ant-tabs-nav .ant-tabs-tab) {
+    padding: 8px 8px 11px !important;
+    margin: 0 !important;
+  }
+
+  .outcome-tabs :global(.status-label) {
+    display: none;
   }
 }

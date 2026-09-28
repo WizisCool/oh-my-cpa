@@ -863,6 +863,9 @@ reader moving between pages never sees the refresh control jump or resize:
   behind a sentence, recorded detail - opens from the row's Details action (or a click on the row)
   in a Drawer, never by expanding the row in place, which pushed every row below it down the page.
   Where the list is a sequence (requests, the audit trail), the Drawer steps to its neighbours.
+  On a phone a record whose row is one sentence and a verdict (the audit trail) is one tappable
+  row - the sentence and its state on the first line, the time and target under it, a chevron -
+  rather than a labelled field list with a separate Details button.
 - **A list grouped by a heading is one frame per group** (the price book's providers, the audit
   trail's days), with the column names drawn once, above the first frame; later frames keep their
   header row for assistive technology and clip it from view (`.data-table-head-hidden`).

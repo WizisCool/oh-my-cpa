@@ -13,6 +13,7 @@ import {
   KeyOutlined,
   LoginOutlined,
   ProfileOutlined,
+  RightOutlined,
   RobotOutlined,
   SafetyCertificateOutlined,
   SearchOutlined,
@@ -38,7 +39,8 @@ import {
 import { PageHeader } from '../common/PageHeader';
 import { RefreshButton } from '../common/RefreshButton';
 import { StatusLabel, type StatusTone } from '../common/StatusLabel';
-import { ResponsiveList, type ResponsiveListPhoneLayout } from '../common/ResponsiveList';
+import { ResponsiveList } from '../common/ResponsiveList';
+import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { CountTabs } from '../common/CountTabs';
 import { saveBlob } from '../../utils/download';
 import { auditActionLabel, auditResultLabel } from './auditText';
@@ -71,8 +73,57 @@ const OUTCOME_TABS: readonly { outcome: AuditOutcome; tone?: StatusTone }[] = [
 
 const RANGES: readonly AuditRange[] = ['24h', '7d', '30d', 'all'];
 
-/** On a phone the row keeps what, on what, when and how it ended; the rest is in the Drawer. */
-const AUDIT_PHONE_LAYOUT: ResponsiveListPhoneLayout = { identity: 'operation', actions: ['actions'], skip: ['category', 'source'] };
+/** Only reached for the empty and loading states: a phone draws its own entry rows (`AuditPhoneEntry`). */
+const AUDIT_PHONE_LAYOUT = { identity: 'operation', actions: ['actions'] } as const;
+
+interface AuditPhoneEntryProps {
+  event: AuditEvent;
+  isOpen: boolean;
+  onOpen: (event: AuditEvent) => void;
+}
+
+/**
+ * One entry on a phone: the whole row is the control that opens it.
+ *
+ * The generic labelled row (`PhoneRow`) spent three label lines and a separate Details
+ * button on every entry, so a phone screen held two and a half operations and each had to
+ * be read field by field. An audit entry is one sentence and a verdict, so the row reads
+ * as one: the sentence and its outcome on the first line, the target and the time under
+ * it, and the rest behind the tap.
+ */
+const AuditPhoneEntry: React.FC<AuditPhoneEntryProps> = ({ event, isOpen, onOpen }) => {
+  const t = useT();
+  const eventCategory = categoryOf(event.action);
+  const target = readableTarget(event);
+  const action = auditActionLabel(event.action, t);
+  return (
+    <li>
+      <button
+        type="button"
+        className={clsx(styles['phone-entry'], isOpen && styles['phone-entry-open'])}
+        onClick={() => onOpen(event)}
+        aria-label={`${t('common.details')}: ${action}`}
+        data-testid="audit-entry"
+      >
+        <span className={styles['audit-mark']} aria-hidden="true">
+          {(eventCategory && CATEGORY_ICONS[eventCategory]) ?? <DatabaseOutlined />}
+        </span>
+        <span className={styles['phone-entry-body']}>
+          <span className={styles['phone-entry-line']}>
+            <span className={styles['audit-action']}>{action}</span>
+            <StatusLabel tone={resultTone(event.result)} className={styles['phone-entry-result']}>{auditResultLabel(event.result, t)}</StatusLabel>
+          </span>
+          <span className={styles['phone-entry-meta']}>
+            <span className={styles['audit-time']}>{dayjs(event.occurred_at_ms).format('HH:mm:ss')}</span>
+            {target && <span className={styles['audit-target']}>{target}</span>}
+            {!target && eventCategory && <span className={styles['audit-meta']}>{t(`audit.cat.${eventCategory}`)}</span>}
+          </span>
+        </span>
+        <RightOutlined className={styles['phone-entry-chevron']} aria-hidden="true" />
+      </button>
+    </li>
+  );
+};
 
 function dayHeading(key: string, t: ReturnType<typeof useT>): string {
   const today = dayKey(Date.now());
@@ -102,6 +153,7 @@ interface AuditTrailProps {
 export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFiltersChange }) => {
   const t = useT();
   const { message } = AntdApp.useApp();
+  const isPhone = useIsPhoneViewport();
   const [searchDraft, setSearchDraft] = React.useState(filters.search);
   const [isExporting, setIsExporting] = React.useState(false);
   const [openId, setOpenId] = React.useState<number>();
@@ -284,6 +336,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
       />
 
       <CountTabs<AuditOutcome>
+        className={styles['outcome-tabs']}
         testId="audit-outcomes"
         ariaLabel={t('audit.outcome_filter')}
         active={filters.outcome}
@@ -325,12 +378,24 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
           ]}
           onChange={(value: string) => update({ categories: value === 'all' ? [] : [...AUDIT_CATEGORIES[value]] })}
         />
-        <Segmented
-          value={filters.range}
-          aria-label={t('audit.range_label')}
-          options={RANGES.map((range) => ({ value: range, label: t(`audit.range_${range}`) }))}
-          onChange={(value) => update({ range: value as AuditRange })}
-        />
+        {/* A phone has no width for four segments beside the category, so the range is the
+            same choice as a select sharing that row. */}
+        {isPhone ? (
+          <Select
+            className={styles['audit-range']}
+            value={filters.range}
+            aria-label={t('audit.range_label')}
+            options={RANGES.map((range) => ({ value: range, label: t(range === 'all' ? 'audit.range_all_time' : `audit.range_${range}`) }))}
+            onChange={(value: AuditRange) => update({ range: value })}
+          />
+        ) : (
+          <Segmented
+            value={filters.range}
+            aria-label={t('audit.range_label')}
+            options={RANGES.map((range) => ({ value: range, label: t(`audit.range_${range}`) }))}
+            onChange={(value) => update({ range: value as AuditRange })}
+          />
+        )}
         {isFiltered && (
           <Button type="link" className={styles['clear-filters']} onClick={() => onFiltersChange({ categories: [], outcome: 'all', search: '', range: 'all' })}>
             {t('audit.clear_filters')}
@@ -373,24 +438,32 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
               </header>
               {/* Every day has the same columns, so their names are drawn once, above the
                   first day; later days keep the header row for assistive technology. */}
-              <ResponsiveList<AuditEvent>
-                columns={columns}
-                dataSource={day.events}
-                rowKey="id"
-                isLoading={false}
-                emptyText={null}
-                phone={AUDIT_PHONE_LAYOUT}
-                tableProps={{
-                  size: 'small',
-                  className: index > 0 ? 'data-table-head-hidden' : undefined,
-                  tableLayout: 'fixed',
-                  onRow: (event) => ({
-                    onClick: () => setOpenId(event.id),
-                    className: clsx(styles['audit-row'], event.id === openId && styles['audit-row-open']),
-                    'data-testid': 'audit-entry',
-                  } as React.HTMLAttributes<HTMLElement>),
-                }}
-              />
+              {isPhone ? (
+                <ol className={clsx('data-table', styles['phone-list'])}>
+                  {day.events.map((event) => (
+                    <AuditPhoneEntry key={event.id} event={event} isOpen={event.id === openId} onOpen={navigateDetail} />
+                  ))}
+                </ol>
+              ) : (
+                <ResponsiveList<AuditEvent>
+                  columns={columns}
+                  dataSource={day.events}
+                  rowKey="id"
+                  isLoading={false}
+                  emptyText={null}
+                  phone={AUDIT_PHONE_LAYOUT}
+                  tableProps={{
+                    size: 'small',
+                    className: index > 0 ? 'data-table-head-hidden' : undefined,
+                    tableLayout: 'fixed',
+                    onRow: (event) => ({
+                      onClick: () => setOpenId(event.id),
+                      className: clsx(styles['audit-row'], event.id === openId && styles['audit-row-open']),
+                      'data-testid': 'audit-entry',
+                    } as React.HTMLAttributes<HTMLElement>),
+                  }}
+                />
+              )}
             </section>
           ))}
           <div className={styles['audit-footer']}>

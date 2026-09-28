@@ -178,15 +178,15 @@ export async function auditTrail({ base, page, check, auditRequests }) {
   check('the outcome filter is kept in the address', new URL(page.url()).searchParams.get('outcome') === 'failed', page.url());
 }
 
-/** At a phone width the trail renders as labelled rows, and nothing runs off the right edge. */
+/** At a phone width each entry is one tappable row, and nothing runs off the edge. */
 export async function auditTrailNarrow({ base, page, check }) {
   await page.goto(`${base}/audit`, { waitUntil: 'domcontentloaded' });
-  const rows = page.locator('[data-testid="audit-trail"] [data-testid="phone-row"]');
+  const rows = page.locator('[data-testid="audit-trail"] [data-testid="audit-entry"]');
   await rows.first().waitFor({ timeout: 20_000 });
   const overflow = await page.evaluate(() => {
     const width = document.documentElement.clientWidth;
     const outside = [];
-    for (const node of document.querySelectorAll('[data-testid="audit-trail"] [data-testid="phone-row"], [data-testid="audit-outcomes"], [data-testid="audit-page"] .terminal-page-head')) {
+    for (const node of document.querySelectorAll('[data-testid="audit-trail"] [data-testid="audit-entry"], [data-testid="audit-outcomes"], [data-testid="audit-page"] .terminal-page-head')) {
       const rect = node.getBoundingClientRect();
       if (rect.right > width + 1) outside.push(`${node.className} ${Math.round(rect.right)}`);
     }
@@ -194,8 +194,13 @@ export async function auditTrailNarrow({ base, page, check }) {
   });
   check('no audit row or control runs past a phone screen', overflow.outside.length === 0 && overflow.scroll <= 1, JSON.stringify(overflow));
 
-  await rows.first().getByRole('button', { name: /详情|Details/ }).click();
+  const firstText = await rows.first().innerText();
+  check('a phone row reads as the sentence and its outcome, not a list of labelled fields', /删除提供商|Deleted a provider/.test(firstText) && /成功|Succeeded/.test(firstText) && !/时间|Time\n/.test(firstText), firstText);
+  const rowHeight = await rows.first().evaluate((row) => row.getBoundingClientRect().height);
+  check('a phone row stays compact', rowHeight <= 80, String(rowHeight));
+
+  await rows.first().click();
   const detailShown = await until(async () => page.locator('[data-testid="audit-detail"]').isVisible().catch(() => false), { label: 'the phone drawer' })
     .then(() => true).catch(() => false);
-  check('a phone row opens its entry in the drawer', detailShown);
+  check('tapping a phone row opens its entry in the drawer', detailShown);
 }

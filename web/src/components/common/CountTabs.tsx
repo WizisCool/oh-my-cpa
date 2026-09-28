@@ -20,15 +20,16 @@ export interface CountTabsProps<K extends string> {
   onChange: (key: K) => void;
   ariaLabel?: string;
   testId?: string;
+  className?: string;
 }
 
 /**
  * A filter drawn as a tab row whose every option carries its count: the OAuth provider tabs'
  * look, for a filter that is not a provider.
  */
-export function CountTabs<K extends string>({ tabs, active, onChange, ariaLabel, testId }: CountTabsProps<K>) {
+export function CountTabs<K extends string>({ tabs, active, onChange, ariaLabel, testId, className }: CountTabsProps<K>) {
   return (
-    <div className={styles['tabs-wrap']} data-testid={testId}>
+    <div className={clsx(styles['tabs-wrap'], className)} data-testid={testId}>
       <Tabs
         activeKey={active}
         onChange={(key) => onChange(key as K)}

@@ -659,7 +659,7 @@ export const SCENARIOS = [
   },
   {
     id: 'audit-trail-narrow',
-    name: 'the audit trail fits a phone',
+    name: 'the audit trail reads as one tappable row per entry on a phone',
     options: { routes: logsFixtures([]), viewport: { width: 360, height: 800 } },
     run: auditTrailNarrow,
   },
