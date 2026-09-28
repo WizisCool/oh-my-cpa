@@ -1,6 +1,7 @@
 // Deterministic browser acceptance against an isolated fake CPA by default.
 // Set OMCPA_LIVE_CPA=1 to run the separately maintained live-system smoke.
 
+import { isolatedAppEnvironment } from './acceptance/environment.mjs';
 import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -279,8 +280,7 @@ try {
   seedUsage();
   appProcess = spawn(executable, [], {
     cwd: root,
-    env: {
-      ...process.env,
+    env: isolatedAppEnvironment({
       OMCPA_LISTEN_ADDR: `127.0.0.1:${appPort}`,
       OMCPA_BASE_PATH: '/omc',
       OMCPA_DATA_DIR: path.join(temporary, 'data'),
@@ -304,7 +304,7 @@ try {
       OMCPA_UPDATE_CHECK_ON_PAGE_LOAD: 'false',
       OMCPA_PUBLIC_URL: '',
       OMCPA_VERSION: 'v0.1.0-e2e',
-    },
+    }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   appProcess.stdout.on('data', (chunk) => appLog.push(chunk.toString()));
@@ -314,6 +314,7 @@ try {
   });
 
   const redirect = await waitFor(appURL);
+  check('fixture startup ignores operator dotenv files', !appLog.join('').includes('loaded environment file'));
   check('/omc redirects to /omc/', redirect.status === 308 && redirect.headers.get('location') === '/omc/', `status=${redirect.status}`);
 
   browser = await chromium.launch({ headless: true });
@@ -458,21 +459,6 @@ try {
     await runThemeBrandAcceptance({ appURL, page, check, until, measureStable, settleLayout });
 
     await runOAuthFlowAcceptance({ appURL, page, check });
-  }
-
-  // Bundle budget check
-  const assetsDir = path.join(root, 'web', 'dist', 'assets');
-  if (fs.existsSync(assetsDir)) {
-    // The entry is the module the built HTML loads. A lazy chunk may also be named `index-*`
-    // (the shared Markdown chunk is), so picking the first such file measured whichever hash
-    // sorted first. The limit is `scripts/check-bundle-budget.mjs`'s, which owns the rationale.
-    const html = fs.readFileSync(path.join(root, 'web', 'dist', 'index.html'), 'utf8');
-    const mainEntry = html.match(/<script\b[^>]*type="module"[^>]*src="[^"]*\/([^"/]+)"/)?.[1];
-    check('bundle budget: the built HTML names its module entry', Boolean(mainEntry), mainEntry ?? 'none');
-    if (mainEntry) {
-      const entrySize = fs.statSync(path.join(assetsDir, mainEntry)).size;
-      check('bundle budget: main entry under 256 kB', entrySize <= 256 * 1024, `${(entrySize / 1024).toFixed(2)} kB`);
-    }
   }
 
   check('browser console has no unexplained errors', consoleErrors.length === 0, consoleErrors.join(' | '));

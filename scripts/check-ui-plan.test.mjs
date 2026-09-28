@@ -148,6 +148,23 @@ test('the shared layer widens the plan to every scenario', () => {
   }
 });
 
+test('the document shell widens the plan to every scenario', () => {
+  // The file every route is loaded into: it names the module entry and seeds the runtime
+  // configuration the console reads its base path from. It is outside `web/src`, so a planner
+  // that only recognised `web/src` would report "no frontend source changed" for an edit that
+  // can break every page - the silent narrow plan this file exists to rule out.
+  const plan = planScenarios(['web/index.html'], ALL);
+  assert.deepEqual(plan.ids, ALL, 'the document shell widens the plan');
+  assert.match(plan.reason, /shared layer/);
+});
+
+test('a served-by-copy asset under web/public selects nothing', () => {
+  // The deliberate other half of the boundary above. `web/public` is copied verbatim, so
+  // nothing imports these files and no scenario asserts against them; treating them as
+  // frontend source would spend the whole catalog on a favicon.
+  assert.deepEqual(planFor('web/public/favicon.svg'), []);
+});
+
 test('an unrecognised frontend path widens rather than selecting nothing', () => {
   // The critical negative case. An unclassified file is not evidence of no impact,
   // and reporting "nothing to check" here is how a fast path becomes a blind one.
@@ -246,4 +263,12 @@ test('no scenario id is selected by a path that cannot affect it', () => {
 
 test('playground source selects its desktop and phone acceptance', () => {
   assert.deepEqual(planFor('web/src/pages/playground/PlaygroundPage.tsx'), ['playground', 'playground-narrow']);
+});
+
+
+test('dependency and build inputs widen the UI plan even with unrelated documentation', () => {
+  for (const file of ['package.json', 'web/package.json', 'pnpm-lock.yaml', 'web/vite.config.ts', 'web/tsconfig.json']) {
+    const expected = ['fixture-scenario'];
+    assert.deepEqual(planScenarios([file, 'README.md'], expected).ids, expected);
+  }
 });

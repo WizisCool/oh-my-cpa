@@ -51,6 +51,8 @@ export const INPUTS = [
   // response were the two the digest did not cover.
   'deploy/cloudflare/worker.mjs',
   'scripts/generate-demo-data.mjs',
+  // The dataset states the pinned Go toolchain as the gateway's runtime version.
+  'scripts/tools-versions.json',
   // The packaging step decides what the served assets reference, so a change to it
   // changes the demonstration as surely as a change to the Worker does.
   'scripts/build-demo.mjs',

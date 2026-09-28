@@ -1590,60 +1590,102 @@ that partial outcome rather than either success or failure.
 ## 12. Test layering
 
 The suite is split by what each layer can actually prove, not by which runner is
-fashionable. The rule is **Browser Everything → Browser Only Where Browser
+fashionable. `docs/testing.md` is the working guide (where a new test goes, how it is
+registered, what to run when); this section records why. The rule is **Browser Everything → Browser Only Where Browser
 Matters**: an assertion moves down a layer when a lower layer can make the same
 claim, and it stays in Chromium only when the claim is about the engine.
 
 | Layer | Command | What it proves |
 | --- | --- | --- |
-| Pure logic | `pnpm test:logic` | Decisions about the operator's own input: URL rewrites, saved-view derivation, debounce invalidation, the poll decision, range validation, chip display mapping, refresh presentation. Runs under Node with no bundler, no HTTP server, no Go binary and no browser. |
-| Mechanical repository gates | `pnpm test:docs`, `pnpm test:i18n`, `pnpm test:css-modules`, `pnpm test:dev-target`, `pnpm test:affected-checks`, `pnpm test:sync-web-dist`, `pnpm test:install-chromium`, `pnpm test:check-ui-plan` | Path references, translation keys, CSS class references, the dev proxy target, the embedded-distribution sync, the Chromium installer's decision, the fast-path planner and the UI scenario planner. |
-| **UI fast path** (development only) | `pnpm check:ui` | The subset of browser claims a change can affect, against the **dev server** with mocked routes. No `pnpm build`, no Go binary, no fake CPA. This is the only layer where `React.StrictMode`'s double-invoke happens, so it is the only place a hook that disposes what it should re-create can be observed. |
-| Cross-stack smoke | `pnpm verify:browser:smoke` | The thin path a pull request needs: `/omc` redirect, sign-in rejection and success, the dashboard and request list rendering their seeded rows, no console or page error. |
-| Cross-stack P0 gates | `pnpm verify:browser:p0` | Pull-request release gates over the request-record/live-tail suite and the OAuth management scheduling-field suite, using the same built binary and deterministic fixture. |
+| Pure logic | `pnpm test:logic` | Decisions about the operator's own input: URL rewrites, saved-view derivation, debounce invalidation, the poll decision, range validation, chip display mapping, refresh presentation. Runs under Node with no bundler, no HTTP server, no Go binary and no browser. Every `scripts/test-*.ts` is discovered; there is no suite list to register in. |
+| Mechanical repository gates | `pnpm test:self` | Every `*.test.mjs` under `scripts/` and `deploy/cloudflare/`, discovered: path references, translation keys, CSS class references, the dev proxy target, the embedded-distribution sync, the Chromium installer's decision, both planners, the probe shards, the workflow structure and the fixed-wait ratchet. |
+| **UI fast path** (development only) | `pnpm check:ui` | The subset of browser claims a change can affect, against the **dev server** with mocked routes. No `pnpm build`, no Go binary, no fake CPA. Like the full probe catalog, this runs `React.StrictMode` double-invocation checks that a production build cannot expose. |
+| Cross-stack smoke | `pnpm verify:browser:smoke` | A local quick check of the thin path: `/omc` redirect, sign-in rejection and success, the dashboard and request list rendering their seeded rows, no console or page error. |
+| Cross-stack P0 gates | `pnpm verify:browser:p0` | The pull-request gate: the smoke path and its checks, then the request-record/live-tail suite and the OAuth management scheduling-field suite, using the same built binary and deterministic fixture. |
 | Cross-stack acceptance | `pnpm verify:browser` | The whole stack against the fake CPA: auth, every route's render and secret boundary, key aliases, provider enable/disable and its concurrent path, live-tail polling, and the unified OAuth management workspace. |
-| Browser-only probes | `pnpm verify:probes` | The same claims as the UI fast path, but against the built SPA for release. Drawer/modal stacking and hit-testing, column geometry and truncation, the responsive alignment override, dashboard trend mark paint, refresh sequencing under a held response, the platform's Back dismissing each overlay class, the phone rendering of each list surface against its table, and the touch rules on a deliberately coarse-and-hoverless context. |
-| Demo smoke | `pnpm verify:demo` | The demonstration as a deployment: the binary in demo mode with no gateway anywhere in its environment, every console page rendering its own fixture data with no failed request and no script error, the refusals reached with `fetch` rather than through the page, and one permitted edit reporting that it is not durable. `verify:browser` cannot cover this, because it drives the self-hosted path against a fake gateway. |
+| Browser-only probes | `pnpm verify:probes` | The full scenario catalog on the Vite dev server with mocked routes; this is not built-artifact coverage. CI runs it as three weight-balanced shards (`--shard i/3`) on every pull request and master push. Drawer/modal stacking and hit-testing, column geometry and truncation, the responsive alignment override, dashboard trend mark paint, refresh sequencing under a held response, the platform's Back dismissing each overlay class, the phone rendering of each list surface against its table, and the touch rules on a deliberately coarse-and-hoverless context. |
+| Demo acceptance | `pnpm verify:demo` | The staged production console and the real Worker handler served in-process, or an explicit deployment URL. Every route must complete its initial reads and render its page heading and content, with no API, transport or script errors. |
+| Go demo smoke | `pnpm verify:demo:go` | Separate coverage of the binary's demo mode: isolated settings, read-only refusals and permitted non-durable edits. This opt-in command is not part of `verify:full`. |
 
-Pull requests run smoke followed by the P0 gates. Master retains the full
-`verify:browser:release` orchestration, which runs cross-stack acceptance and the
-browser-only probes concurrently.
+Pull requests run the P0 gates, which contain the smoke path; master runs the whole
+cross-stack acceptance. Both then run the demo acceptance. The probe catalog is its
+own sharded job on both events, behind one aggregate `probes` check (ADR 0032).
 
-### 11.0 The fast path is not a cheaper gate
+### 12.0 Development and built-artifact coverage
 
 `check:ui` and `verify:probes` run the **same scenarios** from
-`scripts/acceptance/scenarios.mjs`, which orders the implementations under
-`scripts/acceptance/probes/` (one module per product surface); the difference is
-what they run them against, and
-that difference is not a cost trade - it is a coverage difference in both directions.
+`scripts/acceptance/scenarios.mjs`, ordered under `scripts/acceptance/probes/`.
+Both call the Vite dev-server harness in `scripts/acceptance/probe.mjs` with
+mocked endpoints. The difference is selection: `check:ui` selects affected scenarios
+(or an explicit scenario), while `verify:probes` runs the complete catalog.
 
-`check:ui` cannot replace `verify:probes`, because the dev server and a mocked API
-cannot show path resolution, minification or chunk boundaries, which is exactly the
-class of bug a release artefact exposes. `verify:probes` cannot replace `check:ui`,
-because a production build does not double-invoke effects, so a hook that creates a
-disposable resource during render and disposes it in the first cleanup looks correct
-there and is broken in development. The `search-dev-server` scenario exists because
-that is not hypothetical: the debounce controller was refactored into exactly that
-shape, the whole production-bundle suite stayed green, and the search box silently
-stopped committing on the dev server. It was found by running the scenario against
-the dev server, and it is guarded there now.
+Neither substitutes for built-artifact acceptance. Production path resolution,
+minification, chunk loading and the embedded Go surface are exercised by
+`verify:browser`; `verify:demo` also drives the production console. Conversely,
+production builds cannot expose `React.StrictMode` double invocation. The
+`search-dev-server` scenario guards a real controller-cleanup regression that
+left production checks green but stopped search commits on the dev server.
+Moving the full probe catalog to production artifacts would require retaining
+explicit development coverage; it is not how the harness currently runs.
 
-### 11.0.1 Three verification moments
+### 12.0.1 Three verification moments
 
 Verification is organised by *when it runs*, because what a developer pays is
 waiting, and a gate that costs minutes gets routed around:
 
-| Moment | Runs | Cost |
+| Moment | Runs | Cost guidance |
 | --- | --- | --- |
-| Development iteration | `pnpm test:fast`, plus `pnpm check:ui` when the change touches interaction, layout or a browser lifecycle | 1-13s, plus 3-19s |
-| One logical feature complete | `pnpm verify` | ~22s |
-| Before declaring done or pushing | `pnpm verify:full`; skipped when the stage's own run already covered unchanged code and artefact | ~95s |
+| Development iteration | `pnpm test:fast`, plus `pnpm check:ui` when the change touches interaction, layout or a browser lifecycle | Scope-dependent; use printed check and scenario timings |
+| Feature complete, and before declaring done or pushing | `pnpm verify` and `pnpm check:ui` | Tens of seconds of static gates plus the scenarios the change reaches |
+| Pull request | CI: static gates, P0 acceptance, the full probe catalog in shards, demo | Runs beside the author; its checks gate the merge |
+
+`pnpm verify:full` runs everything CI runs, locally. It is for changes to the build,
+the embedded distribution, the browser harness or the workflow, and for reproducing a
+CI failure. ADR 0032 records why the full catalog moved from a local pre-push duty to
+a required CI check: it used to be enforced only by local discipline and by master CI
+after merge, while every developer paid for it serially before each push.
 
 The rule that keeps this honest is that a *narrow* plan must never be **silent**.
 `scripts/affected-checks.mjs` and `scripts/acceptance/check-ui-plan.mjs` both widen
-rather than guess: the shared layer selects everything, an unrecognised frontend path
-selects everything, and a change to either planner's own framework selects
-everything. Both are pinned by tests that were checked against negative controls.
+rather than guess, and every rule that narrows has a negative case in its self-test.
+The UI planner narrows on evidence only:
+
+- **Runtime imports.** `scripts/acceptance/ui-impact.mjs` builds the reverse import
+  graph of `web/src` from TypeScript's `transpileModule` output, so imports used only
+  as types are not edges. A file's scenarios are those of every mapped module on the
+  chains that import it. A chain that reaches the shared layer, or a routed page
+  without a rule, selects everything; so does any unresolved local import, an asset
+  the graph cannot see (a CSS `url()`, `web/index.html`), a dependency or Vite change.
+  `scripts/ui-impact.test.mjs` requires every routed page to have a rule and the real
+  tree to resolve completely.
+- **Translation additions.** A catalog edit whose every pre-existing entry and every
+  line outside the catalog objects is unchanged selects nothing: a new entry is only
+  rendered by code that references it, which the planner places separately.
+- **Probe code.** `scripts/acceptance/probe-impact.mjs` attributes a probe module or
+  registry edit to the scenarios that use it. The runner (`probe.mjs` and the two entry
+  scripts) still selects everything; the planners select nothing, because they decide
+  which scenarios run, not what a scenario observes, and are pinned by self-tests.
+- **Manifests.** A `package.json` edit confined to `scripts` is not a runtime input.
+
+`test:fast` compares against `HEAD` by default. `--base <ref>` includes committed
+differences as well as staged, unstaged and untracked files; renames retain both
+source and destination paths. `--plan` only prints the selection. Each file contributes
+a conservative set of checks and the final plan is their union: a migration plus
+a Markdown edit must still run Go tests. Dependency inputs widen both the static
+and UI planners; TS/TSX references also select the CSS-module checker; a Go test edit
+also runs the self-tests, which include the fixed-wait ratchet. The frontend type
+check is incremental in `test:fast` only (build info under `tmp/tsc/`); `verify` and
+CI always run a fresh `tsc`.
+
+`scripts/fixed-waits.test.mjs` is a one-way ratchet on fixed sleeps in browser
+tests and Go tests: adding one fails, and removing one fails until its recorded count
+is lowered, so an improvement cannot be quietly undone.
+
+`test:self` discovers the Node test files in `scripts/` and `deploy/cloudflare/`,
+uses one Node invocation with test-file process isolation and concurrency two, and
+runs demo freshness checking alongside it. This removes repeated package-manager
+startup without reducing the test set. Shared fixtures must not write to the same
+paths across files; isolated temporary directories remain the convention.
 
 Two properties of this split are load bearing.
 
@@ -1665,7 +1707,7 @@ selection lives in `scripts/affected-checks.mjs` so it can be asserted directly,
 including that negative property, and a file the rules cannot place selects the
 broad gates rather than nothing.
 
-### 11.1 Why some claims live where they do
+### 12.1 Why some claims live where they do
 
 - **Request ordering belongs to Go.** `TestListUsageEventsOrdersByRequestTime` in
   `internal/repository` inserts a request that was recorded last but started
@@ -1703,9 +1745,9 @@ broad gates rather than nothing.
   context is granted no clipboard permission on purpose - granting it would stop the
   acceptance from exercising the fallback at all.
 
-### 11.2 Where the wall clock actually goes
+### 12.2 Where the wall clock actually goes
 
-Assertion count was not the cost, and reducing it did not by itself make the
+Earlier profiling established that assertion count was not the cost, and reducing it did not by itself make the
 browser suite faster. Measured per line, the acceptance run's time sits in
 navigations, `waitFor` round trips and one ten-second cadence wait - which is why
 the useful levers were structural rather than subtractive:
@@ -1717,7 +1759,16 @@ the useful levers were structural rather than subtractive:
 | Fix the suite's CPU-sensitive reads, then run the two browser phases concurrently | About 12s on a 2-CPU runner, about 14s on four cores |
 | Remove the deletion window from the embedded-distribution sync | Not a speed fix: it removes a race between `pnpm build` and the Go gates, which is what made overlapping them safe to keep |
 
-Two levers were measured and rejected.
+Current wait removal is narrower than changing browser clocks. Demo navigation waits
+for successful, completed initial reads and visible page content, with explicit
+per-route timeouts; it never waits for global network silence while polling continues.
+The system-information stale-cache probe holds its first response until the in-flight
+assertions finish, then releases it in `finally` instead of sleeping ten seconds.
+Every probe now prints its own elapsed duration, including failed scenarios.
+
+The numerical observations in this section describe earlier profiling, not current
+runtime guarantees. Re-profile the current catalog before setting a speed budget.
+Two other levers were previously evaluated:
 
 **Clock-driven polling.** `page.clock` does make the ten-second interval fire early
 (11s of app time in about 900ms), but the same mock covers `requestAnimationFrame`
@@ -1727,10 +1778,13 @@ the top, with no page error, breaking the assertion the block exists for. Isolat
 the interval from the frame clock is not expressible through that API, so the wait
 stays.
 
-**`tsc --incremental`.** It needs a cache that stays correct across a changing
-`include` set, which is the fragile dependency graph `test:fast` exists to avoid.
+**`tsc --incremental`.** Adopted for `test:fast` only. The build info records a
+hash of every program file and the compiler options, so a changed file, a deleted
+file or an edited `tsconfig` invalidates what it must; a fresh `tsc` in `verify` and
+CI remains the backstop for any cache defect. Measured on a 4-CPU machine: about 16s
+cold, 6s with nothing changed, 9s after editing a widely imported utility.
 
-### 11.3 The flakes were real, and they were in the assertions
+### 12.3 The flakes were real, and they were in the assertions
 
 The suite carried a recorded history of intermittent failures in the filter
 section. Running the same suite under a 2-CPU constraint on the **unmodified
@@ -1763,9 +1817,9 @@ After the fixes, the suite passes eight consecutive trials under the strictest
 configuration available here (2 CPUs, with the probes running concurrently), which
 is the configuration the baseline failed.
 
-### 11.4 The CI critical path is Chromium's OS dependencies
+### 12.4 CI preparation and fail-early artifact gates
 
-The `browser` job's preparation step was about 99s, bound by
+An earlier profile of the `browser` job's preparation step was about 99s, bound by
 `playwright-core install --with-deps chromium`: almost all of it apt installing the
 shared libraries Chromium links against. The SPA build (29.5s) and the Go binaries
 (1.3s) run concurrently with that work and are entirely hidden behind it, which is
@@ -1785,8 +1839,8 @@ success while the binary cannot start is precisely the state `--with-deps` exist
 repair, so trusting the exit status would reintroduce the bug the flag prevents.
 `scripts/install-chromium.test.mjs` asserts both halves.
 
-Removing the apt cost then exposed what it had been hiding: the Go build is now the
-floor of that step, about 60s locally with a cold build cache against 92s on the
+Removing the apt cost then exposed what it had been hiding: the Go build became the
+floor of that measured step, about 60s locally with a cold build cache against 92s on the
 runner. Two ideas for it were measured and rejected rather than left looking open:
 warming the non-embedding packages concurrently with the SPA build is *slower*
 (48s against 46s), because the warm-up competes for the same cores the build is
@@ -1803,6 +1857,29 @@ Two constraints keep the preparation step's shape:
 - **A cache hit on `~/.cache/ms-playwright` proves the browser files are present and
   says nothing about the shared libraries.** That is why the OS dependencies are
   still guaranteed on every run, just by probe rather than unconditionally.
+
+`pnpm check:bundle` owns the complete chunk and aggregate budget policy. CI runs
+it immediately after `pnpm build`, before compiling the embedded app, and rejects
+a dirty generated worktree before launching browser suites. Final clean-tree and
+secret checks still run. The local build, E2E and full-gate commands call the same
+checker; standalone browser acceptance does not carry a second entry-only policy.
+Workflow self-tests exercise missing, misordered and non-enforcing gate cases, and
+the probe jobs' structure: shards `1..n` matching the `--shard` denominator, no
+event filter, no fail-fast, retained diagnostics, and an aggregate that fails unless
+every shard succeeded.
+
+Probe shards need no build and no Go: each installs dependencies and Chromium and
+runs its part of the catalog on its own runner, so the scenarios' timing-sensitive
+checks see no contention from a sibling browser. A failed check writes the same
+screenshot, DOM, URL and page-error evidence as a thrown error, and each run clears
+earlier evidence first.
+
+The application processes spawned by cross-stack acceptance and Go demo smoke use
+`scripts/acceptance/environment.mjs`: inherited `OMCPA_*`, `PORT` and transport proxy
+variables are removed, fixture overrides are explicit, and `OMCPA_ENV_FILE` points
+to the platform's empty device. Startup must not log a loaded dotenv file. This
+prevents a developer's working-directory `.env` or operator settings from silently
+changing the fixture. Explicit live-system smoke remains separate.
 
 ## 13. Demo mode
 

@@ -18,6 +18,7 @@
 // Env overrides:
 //   OMCPA_DEMO_URL (check a deployment instead of starting one), OMCPA_BROWSER
 
+import { isolatedAppEnvironment } from './acceptance/environment.mjs';
 import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -38,14 +39,16 @@ const { check, checkEventually, failures, checks } = createChecker();
 const PAGES = [
   { route: 'playground', label: 'playground', selector: '[data-testid="playground-page"]', min: 1 },
   { route: 'dashboard', label: 'dashboard', selector: '.dashboard-tile', min: 4 },
-  { route: 'quick-start', label: 'quick start', selector: '.ant-card', min: 3 },
+  { route: 'quick-start', label: 'quick start', selector: '.quick-start-page ol > li', min: 4 },
   { route: 'ai-providers', label: 'providers', selector: '.ant-table-row', min: 2 },
   { route: 'api-keys', label: 'gateway keys', selector: '.ant-table-row', min: 2 },
-  { route: 'auth-files', label: 'credentials', selector: '.ant-card', min: 4 },
-  { route: 'oauth', label: 'oauth providers', selector: '[data-oauth-card]', min: 4 },
-  // The quota cards are `<article class="terminal-panel ...">`, not Ant Design cards, so
-  // the selector is the panel class the console lays every one of them out with.
-  { route: 'quota', label: 'quota', selector: 'article.terminal-panel', min: 6 },
+  { route: 'agent', label: 'agent', selector: '[data-testid="agent-directory"] code', min: 1 },
+  { route: 'audit', label: 'audit', selector: '[data-testid="audit-entry"]', min: 1 },
+  { route: 'oauth-management', label: 'OAuth workspace', selector: '[data-testid="oauth-credential-record"]', min: 4 },
+  { route: 'auth-files', label: 'legacy credentials', selector: '[data-testid="oauth-credential-record"]', min: 4, redirectedPath: '/oauth-management' },
+  { route: 'oauth', label: 'legacy OAuth connect', selector: '[data-oauth-card]', min: 4, redirectedPath: '/oauth-management' },
+  // Legacy quota links now land on credential rows carrying their matched quota data.
+  { route: 'quota', label: 'legacy quota', selector: '[data-quota-focus-anchor] [data-testid="oauth-credential-record"]', min: 6, redirectedPath: '/oauth-management' },
   { route: 'logs', label: 'logs', selector: '.ant-typography, .log-line, .ant-tabs', min: 1 },
   { route: 'usage/events', label: 'request records', selector: '.ant-table-row, .request-row, [data-request-row]', min: 1 },
   { route: 'pricing', label: 'pricing', selector: '.ant-table-row', min: 5 },
@@ -153,8 +156,7 @@ async function startLocalDemo() {
   const output = [];
   const child = spawn(binary, [], {
     cwd: root,
-    env: {
-      ...process.env,
+    env: isolatedAppEnvironment({
       OMCPA_DEMO_MODE: 'true',
       OMCPA_BASE_PATH: '/',
       // The fixture rebuilds this directory on every boot; see internal/demo.
@@ -169,7 +171,7 @@ async function startLocalDemo() {
       // And that it needs no outbound network: a resolver that answers nothing.
       HTTPS_PROXY: 'http://127.0.0.1:1',
       HTTP_PROXY: 'http://127.0.0.1:1',
-    },
+    }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   for (const stream of [child.stdout, child.stderr]) {
@@ -178,6 +180,7 @@ async function startLocalDemo() {
   const base = `http://127.0.0.1:${port}`;
   try {
     await waitFor(`${base}/api/healthz`);
+    if (output.join('').includes('loaded environment file')) throw new Error('demo fixture loaded an operator environment file');
   } catch (error) {
     child.kill('SIGKILL');
     console.error(output.join(''));
@@ -257,6 +260,9 @@ async function main() {
         ok === true,
         ok === true ? `${definition.selector} × ≥${definition.min}` : ok,
       );
+      if (definition.redirectedPath) {
+        check(`${definition.label} reaches the unified workspace`, new URL(page.url()).pathname === definition.redirectedPath);
+      }
       // Nothing the page needs may be missing: an empty panel is what a fixture gap
       // looks like from the outside.
       check(`${definition.label} page loads every request it makes`, failedRequests.length === 0, failedRequests.join(' | '));

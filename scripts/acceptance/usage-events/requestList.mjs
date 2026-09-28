@@ -67,11 +67,11 @@ export async function requestListSection(context) {
     await skewedPage.close();
   }
 
-  if (smokeOnly) {
-    check('browser console has no errors in the smoke path', consoleErrors.length === 0, consoleErrors.join(' | '));
-    check('browser has no page errors in the smoke path', pageErrors.length === 0, pageErrors.join(' | '));
-    onSmokeComplete();
-  }
+  // Asserted in every mode, so the P0 and full runs contain the smoke path's checks
+  // exactly rather than only a later, broader equivalent. Only smoke stops here.
+  check('browser console has no errors in the smoke path', consoleErrors.length === 0, consoleErrors.join(' | '));
+  check('browser has no page errors in the smoke path', pageErrors.length === 0, pageErrors.join(' | '));
+  if (smokeOnly) onSmokeComplete();
 
   // Latency carries no verdict colour. The fixture's slowest row is a nine-minute
   // agent request, and an absolute threshold used to paint it amber. It is located

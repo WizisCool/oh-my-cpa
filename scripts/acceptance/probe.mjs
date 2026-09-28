@@ -310,6 +310,23 @@ export function createProbeChecker({ quiet = false } = {}) {
   return { check, failures, count: () => count };
 }
 
+const FAILURE_DIR = path.join(root, 'tmp', 'probe-failure');
+
+/**
+ * The same evidence the acceptance suite keeps on failure: a screenshot, the DOM, the
+ * URL and the page's errors, under `tmp/probe-failure/` so CI can upload it.
+ */
+async function writeProbeDiagnostics(page, errors, scenarioName) {
+  fs.mkdirSync(FAILURE_DIR, { recursive: true });
+  const slug = scenarioName.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+  await page.screenshot({ path: path.join(FAILURE_DIR, `${slug}.png`), fullPage: true }).catch(() => {});
+  await page
+    .content()
+    .then((html) => fs.writeFileSync(path.join(FAILURE_DIR, `${slug}.html`), html))
+    .catch(() => {});
+  fs.writeFileSync(path.join(FAILURE_DIR, `${slug}.log`), [`url: ${page.url()}`, ...errors].join('\n'));
+}
+
 /**
  * Runs scenarios against one dev server and one browser.
  *
@@ -364,13 +381,26 @@ export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG
     const base = started.base;
     browser = await chromium.launch({ headless: true });
 
+    // Evidence from an earlier run would be indistinguishable from this run's, and a
+    // reader who opens the directory after a failure must see only what just failed.
+    fs.rmSync(FAILURE_DIR, { recursive: true, force: true });
+
     for (const scenario of scenarios) {
+      const startedAt = performance.now();
       const options = scenario.options ?? {};
       const { context, page, errors } = await createProbePage(browser, options);
+      // Counted per scenario so a failed check keeps the same evidence a thrown error
+      // does; most probe failures are checks, and they used to leave nothing behind.
+      let failedChecks = 0;
+      const check = (name, condition, detail) => {
+        if (!condition) failedChecks += 1;
+        return scenario.check(name, condition, detail);
+      };
       try {
         await installRoutes(context, options.routes);
-        await scenario.run({ base, page, context, errors, check: scenario.check, failures });
-        passed += 1;
+        await scenario.run({ base, page, context, errors, check, failures });
+        if (failedChecks > 0) await writeProbeDiagnostics(page, errors, scenario.name);
+        else passed += 1;
       } catch (error) {
         // The scenario name travels with the error, so a failure in a combined run
         // still says which probe it came from. The page's own errors and text are
@@ -384,20 +414,11 @@ export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG
           .innerText()
           .then((text) => console.error(`  page text: ${JSON.stringify(text.slice(0, 400))}`))
           .catch(() => {});
-        // The same evidence the acceptance suite keeps on failure: a screenshot, the
-        // DOM and the scenario name, under `tmp/probe-failure/` so CI can upload it.
-        const output = path.join(root, 'tmp', 'probe-failure');
-        fs.mkdirSync(output, { recursive: true });
-        const slug = scenario.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-        await page.screenshot({ path: path.join(output, `${slug}.png`), fullPage: true }).catch(() => {});
-        await page
-          .content()
-          .then((html) => fs.writeFileSync(path.join(output, `${slug}.html`), html))
-          .catch(() => {});
-        fs.writeFileSync(path.join(output, `${slug}.log`), errors.join('\n'));
+        await writeProbeDiagnostics(page, errors, scenario.name);
         failures.push(scenario.name);
       } finally {
         await context.close().catch(() => {});
+        console.log(`[probe] ${scenario.id ?? scenario.name}: ${((performance.now() - startedAt) / 1000).toFixed(2)}s`);
       }
     }
   } finally {

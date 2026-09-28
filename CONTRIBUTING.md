@@ -46,16 +46,24 @@ Thank you for your interest in contributing to Oh My CPA! We welcome bug reports
 
 ## Verification Gates (Three Verification Moments)
 
-To keep feedback fast and reliable, verification in Oh My CPA is structured into three stages (detailed in [`AGENTS.md`](AGENTS.md)):
+To keep feedback fast and reliable, verification in Oh My CPA is structured into three stages (detailed in [`AGENTS.md`](AGENTS.md)). Before writing a test, read [`docs/testing.md`](docs/testing.md): it says which layer a claim belongs in and how a new test is registered.
 
 | Stage | Command | When to Run |
 | --- | --- | --- |
-| **Development iteration** | `pnpm test:fast` | Run frequently after editing code. It runs only the checks affected by your current working tree changes (1–13s). |
+| **Development iteration** | `pnpm test:fast` | Run frequently after editing code. It runs only the checks affected by your current working tree changes. Use `--plan` to inspect scope and `--base <ref>` to include committed changes. |
 | **UI fast-path** | `pnpm check:ui` | Run when modifying frontend components, layout, or browser lifecycles (runs against dev server + mock APIs without full build). |
-| **Feature completion** | `pnpm verify` | Run before committing and opening a PR. Covers toolchain verification, Go vet/tests, frontend type checking, pure logic suites, antd lint, i18n validation, and secret scanning (~22s). |
-| **Full gate** | `pnpm verify:full` | Full pre-merge validation including production build, bundle budget verification, and deterministic browser acceptance + probes (~95s). |
+| **Feature completion and before pushing** | `pnpm verify` and `pnpm check:ui` | Toolchain verification, Go vet/tests, fresh frontend type checking, pure logic suites, antd lint, i18n validation and secret scanning, plus the browser scenarios your change can reach. |
+| **Pull request (CI)** | automatic | Production build and budgets, P0 cross-stack acceptance, the whole dev-server probe catalog in three shards, and demo acceptance. |
+| **Full local gate** | `pnpm verify:full` | Everything CI runs, locally. Use it for changes to the build, the embedded distribution, the browser harness or the workflow, and to reproduce a CI failure. |
+
+Do not rerun a gate after each edit. When a check fails, rerun that check first. Both
+UI probe commands use the dev server; production-artifact coverage comes from browser
+and demo acceptance.
+Per-check and per-scenario durations are observations, not fixed runtime promises.
 
 Additional targeted checks:
+- `pnpm test:self`: Runs repository and Worker Node tests with concurrency two, plus demo freshness.
+- `pnpm check:bundle`: Checks every chunk and aggregate budget against the existing build.
 - `pnpm check-docs`: Validates that all backticked repository paths in documentation resolve and no retired references exist.
 - `pnpm check-i18n`: Identifies missing source keys and incomplete or stale locale catalogs.
 - `pnpm check-css-modules`: Ensures CSS module class references match their definition files.
@@ -83,9 +91,10 @@ User-facing strings must never be hardcoded in backend responses or React compon
    git checkout -b feat/your-feature-name
    ```
 2. Commit your changes with concise, conventional commit messages (`feat: ...`, `fix: ...`, `docs: ...`, `test: ...`).
-3. Ensure all static checks pass:
+3. Run the feature-completion gates before pushing (CI runs the full browser catalog):
    ```bash
    pnpm verify
+   pnpm check:ui
    ```
 4. Push your branch to your fork and open a Pull Request against `master`.
 5. Pull requests are reviewed against [`.coderabbit.yaml`](.coderabbit.yaml), which points the reviewer at the invariants in [`AGENTS.md`](AGENTS.md).

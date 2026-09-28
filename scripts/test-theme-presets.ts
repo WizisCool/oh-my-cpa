@@ -92,8 +92,12 @@ for (const definition of BUILT_IN_PALETTES) {
   assert.equal(palette.cacheRateYellow, palette.warn, `${where} the cache scale's low end is the warning hue`);
   assert.equal(palette.cacheRateGreen, palette.success, `${where} the cache scale's high end is the success hue`);
   assert.equal(palette.hover, palette.rowHover, `${where} a hovered row and a hovered control lift by the same step`);
-  assert.equal(palette.hoverInset, definition.mode === 'dark' ? palette.bg : palette.hoverInset,
-    `${where} dark mode's inset step is the page itself`);
+  if (definition.mode === 'dark') {
+    assert.equal(palette.hoverInset, palette.bg, `${where} dark mode's inset step is the page itself`);
+  } else {
+    // Light mode's inset step is a blend toward the foreground, so an inset hover is visible.
+    assert.notEqual(palette.hoverInset, palette.bg, `${where} light mode's inset step differs from the page`);
+  }
 
   // The accent ladder has to be a ladder: a filled control whose resting and hover fills are the
   // same colour has no hover state, and one whose hover and pressed fills match has no press.

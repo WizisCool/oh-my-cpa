@@ -15,50 +15,29 @@
  * state behind for the next, and the exit code is the first non-zero one.
  */
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
- * The suites to run. `flags` is the Node invocation each needs: the loader hook is
- * required by the suites that import application modules for their runtime values
- * (Node's ESM resolver needs an explicit extension where a bundler does not).
+ * The suites to run: every `scripts/test-*.ts`, discovered rather than listed, so a
+ * new suite cannot be written and then never run because nobody registered it. The
+ * loader hook is passed to all of them; a suite that does not import application
+ * modules pays nothing for it. `test-base-path.mjs` is the one JavaScript suite here.
  */
 const SUITES = [
-  { name: 'playground', script: 'scripts/test-playground.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'agent workspace', script: 'scripts/test-agent-workspace.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'payload rules', script: 'scripts/test-payload-rules.ts', flags: ['--experimental-strip-types'] },
-  { name: 'config dirty', script: 'scripts/test-dirty.ts', flags: ['--experimental-strip-types'] },
-  { name: 'config states', script: 'scripts/test-config-states.ts', flags: ['--experimental-strip-types'] },
-  { name: 'config layout', script: 'scripts/test-config-layout.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'log lines', script: 'scripts/test-log-lines.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'audit trail', script: 'scripts/test-audit-trail.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'auth file logic', script: 'scripts/test-auth-file-logic.ts', flags: ['--experimental-strip-types'] },
-  { name: 'usage event view', script: 'scripts/test-usage-event-view.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'usage events view policy', script: 'scripts/test-usage-events-view-policy.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'provider console', script: 'scripts/test-provider-console.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'provider toggle queue', script: 'scripts/test-provider-toggle-queue.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'scroll intent', script: 'scripts/test-scroll-intent.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'overlay history', script: 'scripts/test-overlay-history.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'phone row fields', script: 'scripts/test-phone-rows.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'mask parity', script: 'scripts/test-mask-key.ts', flags: ['--experimental-strip-types'] },
-  { name: 'clipboard strategy', script: 'scripts/test-clipboard.ts', flags: ['--experimental-strip-types'] },
-  { name: 'visible clock', script: 'scripts/test-visible-clock.ts', flags: ['--experimental-strip-types'] },
-  { name: 'chart marks', script: 'scripts/test-chart-marks.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'dashboard cost note', script: 'scripts/test-dashboard-cost-note.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'pricing display', script: 'scripts/test-pricing-display.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'token heatmap', script: 'scripts/test-token-heatmap.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'token display', script: 'scripts/test-token-display.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'quota renewal display', script: 'scripts/test-quota-renewal.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'theme presets', script: 'scripts/test-theme-presets.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'plugin config', script: 'scripts/test-plugin-config.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'oauth model aliases', script: 'scripts/test-oauth-model-alias.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'oauth providers', script: 'scripts/test-oauth-providers.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'oauth workspace', script: 'scripts/test-oauth-workspace.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'dashboard providers', script: 'scripts/test-dashboard-providers.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'provider icons', script: 'scripts/test-provider-icons.ts', flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'] },
-  { name: 'deploy base path', script: 'scripts/test-base-path.mjs', flags: [] },];
+  ...fs.readdirSync(path.join(root, 'scripts'))
+    .filter((file) => /^test-.+\.ts$/.test(file))
+    .sort()
+    .map((file) => ({
+      name: file.replace(/^test-|\.ts$/g, '').replaceAll('-', ' '),
+      script: `scripts/${file}`,
+      flags: ['--experimental-strip-types', '--import', './scripts/ts-resolve.mjs'],
+    })),
+  { name: 'deploy base path', script: 'scripts/test-base-path.mjs', flags: [] },
+];
 
 /** Bounded so a small machine is not asked to schedule every parser at once. */
 // Parsed with Number rather than parseInt so a malformed value falls back to the

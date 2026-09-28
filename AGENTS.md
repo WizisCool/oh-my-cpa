@@ -10,7 +10,7 @@
 
 CLIProxyAPI (CPA) handles protocol adaptation, credential execution, and proxying requests; Oh My CPA provides **user-owned identity, naming, organization, a management facade, and usage observability** above it. Both are co-deployed in the same stack. Oh My CPA is a single-replica Go modular monolith + embedded React SPA + SQLite WAL, operating completely offline with zero CDN dependencies.
 
-Read these three documents before doing substantive work:
+Read these three documents before doing substantive work, and `docs/testing.md` before writing or changing any test:
 
 1. `CONTEXT.md` — Domain vocabulary and rules (time windows, i18n, authentication model, price semantics).
 2. `docs/architecture.md` — Module map, data flows, and architectural invariants.
@@ -36,6 +36,7 @@ Treat the table below as a hard constraint. Whenever a change touches a "Trigger
 | `docs/ops/cloudflare-demo.md` | Deployment runbook for the public online demo (Cloudflare Worker + generated dataset) | Changes to the demo's deployment, its platform configuration, its dataset's shape, or the console steps it needs |
 | `deploy/cloudflare/data/` | The dataset the public demonstration is served from | **Any** change to a console page's data, a route's response shape, or a read the console makes: regenerate with `pnpm demo:generate`, read the diff, and commit the data in the same change. `pnpm check:demo` fails until you do |
 | `docs/plans/model-prices.md` | Pricing design, matching rules, known limitations | Pricing match chain, sync rules, pricing schema changes |
+| `docs/testing.md` | Where a new test belongs, how it is registered, what to run when, and how the UI planner selects scenarios | Adding or changing a test layer, runner, gate, planner rule, CI job, registration step or verification moment |
 | `docs/agent-capabilities.md` | Agent capability contract: declaration fields, permission and confirmation rules, secret/OAuth handoff, adapters, testing | Adding, changing or removing an agent capability; changing permission, risk or confirmation policy; changing the MCP bridge. When a new OMC feature is suitable for agent use, register it in the same change instead of adapting it later |
 
 ### Documentation Maintenance Checklist (Execute Before Declaring Complete)
@@ -59,8 +60,8 @@ Treat the table below as a hard constraint. Whenever a change touches a "Trigger
 Before declaring any change complete, all of the following requirements must be satisfied:
 
 - The development loop prioritizes `pnpm test:fast`, which runs only the checks affected by the current worktree changes;
-- When a logical feature is complete, run `pnpm verify` (toolchain check with version divergence warnings, full static gates, and worktree secret scan);
-- Before declaring a task complete or pushing, run `pnpm verify:full` (adds git history secret scan, production build, bundle budget, and deterministic browser acceptance + probes);
+- When a logical feature is complete, and again before declaring a task complete or pushing, run `pnpm verify` (toolchain check with version divergence warnings, full static gates, and worktree secret scan) and `pnpm check:ui` (the browser scenarios the change can reach). CI then runs the full browser catalog before merge (ADR 0032); `pnpm verify:full` runs all of it locally and is for build, harness or workflow changes and for reproducing CI;
+- New tests follow `docs/testing.md`: lowest layer that can fail for the right reason, no fixed waits, automatic discovery instead of new registration lists;
 - All context documents triggered by the change per §2 have been updated;
 - No obsolete comments, dead references, or unlocalized user-visible strings remain.
 
@@ -68,22 +69,24 @@ Before declaring any change complete, all of the following requirements must be 
 
 The real cost developers pay during development is **waiting**. Verification is structured across three distinct moments. Cramming the full test gate into every single iteration adds minutes to each turn—causing developers to bypass checks altogether, and a bypassed gate is no gate at all.
 
-| Moment | What to Run | Approximate Cost |
+| Moment | What to Run | Cost Guidance |
 | --- | --- | --- |
-| **Development iteration** (after editing files to confirm nothing broke) | `pnpm test:fast`; add `pnpm check:ui` if the change touches UI interactions, layout, or browser lifecycle | 1–13s / 3–19s |
-| **Logical feature complete** (end of an independently verifiable milestone) | `pnpm verify` | ~22s |
-| **Before declaring done / pushing** | `pnpm verify:full` | ~95s |
+| **Development iteration** (after editing files to confirm nothing broke) | `pnpm test:fast`; add `pnpm check:ui` if the change touches UI interactions, layout, or browser lifecycle | Scope-dependent; inspect per-check/scenario timings |
+| **Logical feature complete / before declaring done or pushing** | `pnpm verify` and `pnpm check:ui` | Tens of seconds for static gates; browser time scales with the change |
+| **Pull request** | CI: static gates, P0 acceptance, the whole probe catalog in three shards, demo | Runs beside you; branch protection requires its `static`, `browser` and `probes` checks (ADR 0032) |
 
 Rules:
 
-- **Do not run `verify` or `verify:full` after every individual response or single file edit.** "Logical feature complete" refers to an independently verifiable feature or fix, not a single reply or file edit.
-- **Use `pnpm check:ui` for rapid UI feedback.** It requires no `pnpm build`, no Go binary, and no fake CPA (it runs against Vite dev server + mocked endpoints), running only scenarios affected by the changes; `--list` / `--plan` can inspect the scope and rationale without launching a browser. Because it runs on the **dev server**, it is the only place capable of catching issues exposed by `React.StrictMode` double-invocation.
-- **`check:ui` does not replace built-artifact acceptance.** It tests against the dev server with mock endpoints, so it cannot observe path resolution, minification, or chunk boundary defects that only appear in production artifacts. Therefore, the end of a milestone and pre-push still require `verify:full`.
-- **Do not rerun immediately if already run.** If `verify:full` at the end of a milestone already covered the identical, unchanged code and build artifacts, reuse that result rather than rerunning it immediately before pushing.
+- **Do not run `verify` or `check:ui` after every individual response or single file edit.** "Logical feature complete" refers to an independently verifiable feature or fix, not a single reply or file edit.
+- **Use `pnpm check:ui` for rapid UI feedback.** It requires no `pnpm build`, no Go binary, and no fake CPA (it runs against Vite dev server + mocked endpoints), running only scenarios affected by the changes; `--list` / `--plan` can inspect the scope and rationale without launching a browser. Both this command and the full `verify:probes` catalog run on the **dev server** and can catch `React.StrictMode` double-invocation issues. Built-artifact coverage comes from cross-stack acceptance and the demo check, not from the probe catalog.
+- **`check:ui` does not replace built-artifact acceptance.** It tests against the dev server with mock endpoints, so it cannot observe path resolution, minification, or chunk boundary defects that only appear in production artifacts. CI's browser job covers those on every pull request; run `pnpm verify:full` locally when the change touches the build, `vite.config.ts`, the embedded distribution, the browser harness or the workflow.
+- **Never add a skip switch, retry or longer wait to make a run pass or go faster.** Fix the assertion, or add a planner rule with a self-test (`docs/testing.md` §3).
+- **Do not rerun immediately if already run.** If the same unchanged code already passed a gate, reuse that result.
 - **When a check fails, rerun only the failed check first**, rather than rerunning the entire suite after each fix.
-- Selection logic resides in `scripts/affected-checks.mjs` (for checks) and `scripts/acceptance/check-ui-plan.mjs` (for UI scenarios); both are pinned by tests asserting they never silently select nothing.
+- **Inspect the fast plan before broad work.** `pnpm test:fast --plan` shows the files and selected checks without running them. After committing, use `pnpm test:fast --base <ref>` (optionally with `--plan`) to include committed differences; the default base is `HEAD`. Selection unions the checks required by each file, so adding documentation cannot hide a migration or configuration change. Dependency changes widen both static and UI plans.
+- Selection logic resides in `scripts/affected-checks.mjs` (for checks) and `scripts/acceptance/check-ui-plan.mjs` with `scripts/acceptance/ui-impact.mjs` and `scripts/acceptance/probe-impact.mjs` (for UI scenarios); all are pinned by tests asserting they never silently select nothing, and each narrowing rule has a negative case.
 
-CI (`.github/workflows/ci.yml`) runs static gates and browser gates in parallel: PRs use `verify:browser:smoke` for fast feedback, while `master` branch pushes use full `verify:browser` and `verify:probes` (executed concurrently, collecting exit codes independently). Both retain strict toolchain checks, secret scanning, and clean worktree assertions; a new run on the same ref cancels pending older runs. On browser test failures, screenshots, HTML snapshots, and application logs are uploaded as short-lived artifacts (`tmp/browser-acceptance-failure/`, `tmp/probe-failure/`).
+CI (`.github/workflows/ci.yml`) runs three jobs in parallel: static gates; the browser job (PRs run `verify:browser:p0`, which contains the smoke path; `master` runs the full `verify:browser`; both then run `verify:demo`); and the probe catalog as three `verify:probes --shard i/3` jobs behind one aggregate `probes` check, on PRs and `master` alike, which branch protection requires alongside `static` and `browser`. The browser job runs the complete `check:bundle` gate after building and checks generated-state cleanliness before browser execution; every job ends with a clean-worktree assertion, and the static job runs the worktree and history secret scans. Strict toolchain checks remain mandatory; a new run on the same ref cancels pending older runs. On browser test failures, screenshots, HTML snapshots, and application logs are uploaded as short-lived artifacts (`tmp/browser-acceptance-failure/`, and `tmp/probe-failure/` per probe shard).
 
 ---
 
@@ -140,7 +143,7 @@ Semantic requirements:
 
 ## 6. Common Commands
 
-Test layering criteria and "what belongs in the browser" are detailed in [`docs/architecture.md`](docs/architecture.md) §11:
+Test layering criteria and "what belongs in the browser" are detailed in [`docs/architecture.md`](docs/architecture.md) §12:
 **Pay the browser testing cost only when Chromium is genuinely needed.** `pnpm test:fast` never builds, never launches Vite / Chromium / fake CPA; selection logic lives in `scripts/affected-checks.mjs` and its tests assert this property.
 
 | Command | Purpose |
@@ -149,10 +152,12 @@ Test layering criteria and "what belongs in the browser" are detailed in [`docs/
 | `pnpm dev:api` / `pnpm dev:web` | Run Go/Air only, or Vite only |
 | `pnpm cpa:start` | Start local CLIProxyAPI from `cpa/` |
 | `pnpm build` | Build frontend and sync to `internal/web/dist`; type checking is handled by independent gates |
-| `pnpm test:fast` | Concurrently run minimum affected checks based on worktree changes (default for development iterations) |
+| `pnpm test:fast` | Concurrent affected checks relative to `HEAD` (incremental frontend type check); `--base <ref>` includes committed changes, `--plan` prints without running |
+| `pnpm test:self` | Discover repository and Worker Node test files with test-file isolation and concurrency two; also check demo freshness |
+| `pnpm check:bundle` | Check every chunk and aggregate budget against the existing production build |
 | `pnpm check:ui` | UI fast lane: dev server + mock API, running only affected scenarios; `--list` / `--plan` inspects without launching a browser |
 | `pnpm verify` | Toolchain check (warns on version divergence) + full static gates + worktree secret scan |
-| `pnpm verify:full` | Parallel orchestrated full final gate |
+| `pnpm verify:full` | Everything CI runs, locally: for build, harness or workflow changes and for reproducing CI |
 | `pnpm verify:demo` | Browser acceptance for the public demonstration: every console route renders, no API errors, no console errors; `OMCPA_DEMO_URL` checks a deployment instead of a local server |
 | `pnpm verify:demo:go` | The same check against the Go binary's own demonstration mode (still supported; it generates the dataset) |
 | `pnpm demo:generate` | Regenerate the demonstration's dataset from the real handlers; `--check` fails when the committed copy is stale |
@@ -162,9 +167,9 @@ Test layering criteria and "what belongs in the browser" are detailed in [`docs/
 | `pnpm build:demo` | Stage the built console for the demonstration: inject the runtime configuration, make asset URLs root-relative |
 | `pnpm verify:full:serial` | Serial final gate, used only for diagnosing parallel orchestration discrepancies |
 | `pnpm verify:browser` | Run deterministic browser acceptance against built SPA (with fake CPA fixture) |
-| `pnpm verify:browser:smoke` | Run browser smoke tests covering core auth, dashboard, and request list paths |
-| `pnpm verify:probes` | Run browser probes requiring real Chromium for geometry, stacking, pixels, and refresh sequencing |
-| `pnpm verify:e2e` | Build first, then run browser acceptance and browser probes |
+| `pnpm verify:browser:smoke` | Run only the browser smoke path (auth, dashboard, request list) for a quick local check; CI's P0 run contains it |
+| `pnpm verify:probes` | Run the whole dev-server probe catalog (geometry, stacking, pixels, refresh sequencing); `--shard i/n` runs one balanced part, as CI does |
+| `pnpm verify:e2e` | Build and check all bundle budgets, then run browser acceptance and browser probes |
 | `pnpm verify:secrets` | Scan worktree for secrets |
 | `pnpm check-i18n` | Find translation keys referenced in code but missing from the dictionary |
 | `pnpm check-docs` | Validate context document path references, retired references, and absolute line numbers (`pnpm test:docs` self-test) |

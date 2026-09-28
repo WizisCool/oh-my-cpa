@@ -15,6 +15,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { CHECK_IDS, planChecks } from './affected-checks.mjs';
+import { CHECK_COMMANDS, changedFiles, parseFastOptions } from './verify-fast.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 /** Checks that would pay for a build, a dev server, a browser or the fixture. */
 const BROWSER_OR_BUILD_CHECKS = ['browser', 'browser-smoke', 'build', 'e2e', 'fake-cpa', 'chromium'];
@@ -37,7 +42,7 @@ test('every selected id is a check the runner knows how to execute', () => {
   ];
   for (const file of corpus) {
     for (const id of planChecks([file])) {
-      assert.ok(CHECK_IDS.includes(id), `${file} selected unknown check ${id}`);
+      assert.ok(Object.hasOwn(CHECK_COMMANDS, id), `${file} selected unknown check ${id}`);
     }
   }
 });
@@ -48,6 +53,7 @@ test('an ordinary component change selects the frontend gates and nothing else',
     'logic',
     'i18n',
     'antd-lint',
+    'css-modules',
     // A component's inline style is a motion declaration too: `transition: 'all 0.15s'` inside a
     // `style` object is a duration the budget owns, and the checker reads both extensions.
     'motion',
@@ -153,8 +159,6 @@ test('an unplaceable file runs the broad gates rather than nothing', () => {
 
 test('a placed file with no specific rule still runs the broad gates', () => {
   for (const file of [
-    'web/vite.config.ts',
-    'migrations/900_example.sql',
     'internal/config.yaml',
     '.github/CODEOWNERS',
   ]) {
@@ -226,4 +230,93 @@ test('the Go relocation table also selects the frontend logic suite that reads i
   assert.ok(plan.includes('go'));
   assert.ok(plan.includes('logic'));
   assert.equal(planChecks(['internal/cpa/configyaml/layout.go']).includes('logic'), false);
+});
+
+test('adding files cannot remove checks required by any changed file', () => {
+  const corpus = [
+    'migrations/900_example.sql', 'web/vite.config.ts', 'internal/config.yaml',
+    'README.md', 'web/src/App.tsx', 'scripts/check-docs.mjs', 'pnpm-lock.yaml',
+    '.github/CODEOWNERS', 'internal/api/handler.go', 'newmod/config.json',
+  ];
+  for (const first of corpus) {
+    for (const second of corpus) {
+      const combined = new Set(planChecks([first, second]));
+      for (const required of planChecks([first])) {
+        assert.ok(combined.has(required), `${first} + ${second} lost ${required}`);
+      }
+    }
+  }
+});
+
+test('component-only edits validate CSS module references', () => {
+  assert.ok(planChecks(['web/src/components/common/ResponsiveList.tsx']).includes('css-modules'));
+});
+
+test('dependency and build configuration changes exercise runtime logic', () => {
+  for (const file of ['pnpm-lock.yaml', 'package.json', 'web/package.json', 'web/vite.config.ts']) {
+    assert.ok(planChecks([file, 'README.md']).includes('logic'), file);
+  }
+});
+
+
+test('migrations select Go even when accompanied by documentation', () => {
+  assert.deepEqual(planChecks(['migrations/900_example.sql', 'docs/architecture.md']), ['go', 'docs']);
+});
+
+test('the fast command registry is complete and contains no browser commands', () => {
+  assert.deepEqual(Object.keys(CHECK_COMMANDS), CHECK_IDS);
+  for (const { command, args } of Object.values(CHECK_COMMANDS)) {
+    assert.doesNotMatch([command, ...args].join(' '), /build|vite|chromium|browser|fake-cpa/);
+  }
+});
+
+test('every fast command names a script the package defines', () => {
+  // Checking ids against the planner's own list cannot catch a command that no longer
+  // exists; the package manifest is what actually runs it.
+  const scripts = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).scripts;
+  for (const [id, { command, args }] of Object.entries(CHECK_COMMANDS)) {
+    if (command !== 'pnpm') continue;
+    assert.ok(Object.hasOwn(scripts, args[0]), `${id} runs pnpm ${args[0]}, which package.json does not define`);
+  }
+});
+
+test('the fast type check is incremental while the milestone gate stays fresh', () => {
+  const scripts = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).scripts;
+  assert.match(scripts[CHECK_COMMANDS['type-check'].args[0]], /--incremental/);
+  assert.doesNotMatch(scripts['verify:static:frontend'], /incremental/);
+});
+
+test('fast CLI accepts an explicit base and a dry plan, rejecting incomplete arguments', () => {
+  assert.deepEqual(parseFastOptions(['--base', 'HEAD~1', '--plan']), { base: 'HEAD~1', plan: true });
+  for (const argv of [['--base'], ['--base', '--plan'], ['--skip'], ['--base', '--output=elsewhere']]) {
+    assert.throws(() => parseFastOptions(argv));
+  }
+});
+
+test('changed files include committed, staged, deleted, renamed and untracked paths relative to the base', (context) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'omc-fast-git-'));
+  context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const git = (...args) => execFileSync('git', args, { cwd: directory, encoding: 'utf8' }).trim();
+  git('init', '--quiet');
+  git('config', 'user.email', 'fixture@example.test');
+  git('config', 'user.name', 'Fixture');
+  fs.writeFileSync(path.join(directory, 'kept.txt'), 'base');
+  fs.writeFileSync(path.join(directory, 'deleted.txt'), 'base');
+  fs.writeFileSync(path.join(directory, 'renamed.go'), 'rename fixture');
+  git('add', '.');
+  git('commit', '--quiet', '-m', 'base');
+  const base = git('rev-parse', 'HEAD');
+  fs.writeFileSync(path.join(directory, 'kept.txt'), 'committed');
+  git('commit', '--quiet', '-am', 'change');
+  git('mv', 'renamed.go', 'renamed.md');
+  fs.rmSync(path.join(directory, 'deleted.txt'));
+  fs.writeFileSync(path.join(directory, 'staged.txt'), 'staged');
+  git('add', 'staged.txt');
+  fs.writeFileSync(path.join(directory, 'untracked.txt'), 'untracked');
+  assert.deepEqual(changedFiles(base, directory).sort(), ['deleted.txt', 'kept.txt', 'renamed.go', 'renamed.md', 'staged.txt', 'untracked.txt']);
+});
+
+test('a Go test edit also runs the fixed-wait ratchet', () => {
+  assert.deepEqual(planChecks(['internal/usage/ingest/sync_test.go']), ['go', 'self-tests']);
+  assert.deepEqual(planChecks(['internal/usage/ingest/runner.go']), ['go']);
 });

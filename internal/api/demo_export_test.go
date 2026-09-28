@@ -458,6 +458,16 @@ var demoExportMeasuredKeys = map[string]bool{
 	"started_at_ms": true,
 }
 
+// demoExportHostKeys are runtime facts about the machine that ran the export. They
+// differ between a developer's laptop and CI, so the dataset states the release
+// build's values instead: the pinned Go toolchain in `scripts/tools-versions.json`
+// (which the Dockerfile's builder image also pins) and the release image's default
+// platform. `TestDemoExportHostKeysFollowThePinnedToolchain` keeps the version in step.
+var demoExportHostKeys = map[string]string{
+	"go_version": "go1.27.1",
+	"os_arch":    "linux/amd64",
+}
+
 // demoExportLogInstant matches an RFC3339 instant inside a rendered log line. The
 // log tail embeds its timestamps in prose, so they cannot be reached by key.
 var demoExportLogInstant = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z`)
@@ -492,9 +502,15 @@ func demoExportRebase(value any, deltaMS int64, requestIDs map[string]int) any {
 				typed[key] = demoExportStableRequestID(requestIDs, item)
 			case demoExportDayBoundaryKeys[key]:
 				typed[key] = demoExportNormaliseDayBoundary(typed, key, item)
-			case key == "occurred_at_ms" && demoExportIsSeededInstant(item):
-				// A seeded audit row is already on the reference's calendar; only a
-				// row the export itself stamped needs moving onto it.
+			case demoExportHostKeys[key] != "":
+				typed[key] = demoExportHostKeys[key]
+			case (key == "occurred_at_ms" || key == "effective_from_ms") && demoExportIsSeededInstant(item):
+				// A seeded audit row or price version is already on the reference's
+				// calendar; only a value the export itself stamped needs moving onto it.
+			case key == "effective_from_ms":
+				// A price version written by the export's own sync is stamped with the
+				// wall clock; moved onto the reference, two exports agree.
+				typed[key] = demoExportShiftMillis(item, deltaMS)
 			case demoExportShiftedMillisKeys[key]:
 				typed[key] = demoExportShiftMillis(item, deltaMS)
 			case demoExportShiftedTextKeys[key]:
@@ -569,7 +585,10 @@ func demoExportMirrorTailAsOfMS(decoded any) any {
 
 func demoExportShiftMillis(item any, deltaMS int64) any {
 	millis, ok := demoExportNumericMillis(item)
-	if !ok {
+	// Zero is "never happened" (an unconfigured channel has no update time), not the
+	// epoch. Shifting it produced a negative instant that tracked the export's own
+	// wall clock, so every regeneration differed.
+	if !ok || millis == 0 {
 		return item
 	}
 	// A field reported in seconds rather than milliseconds is one whose magnitude is
@@ -1165,4 +1184,61 @@ func demoExportPlaygroundModelsPath(captured map[string]demoExportResponse) (str
 		return "", errors.New("client keys must be exported before playground models")
 	}
 	return "/api/v1/playground/models?client_key_fingerprint=" + payload.Keys[0].UsageFingerprint, nil
+}
+
+// The host facts are pinned rather than measured, so this is what keeps the pin
+// honest: bumping the toolchain without the dataset would publish a stale version.
+func TestDemoExportHostKeysFollowThePinnedToolchain(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "scripts", "tools-versions.json"))
+	if err != nil {
+		t.Fatalf("read pinned tool versions: %v", err)
+	}
+	var pinned struct {
+		Go struct {
+			Version string `json:"version"`
+		} `json:"go"`
+	}
+	if err := json.Unmarshal(raw, &pinned); err != nil {
+		t.Fatalf("decode pinned tool versions: %v", err)
+	}
+	if want := "go" + pinned.Go.Version; demoExportHostKeys["go_version"] != want {
+		t.Fatalf("go_version is pinned to %q, toolchain is %q", demoExportHostKeys["go_version"], want)
+	}
+}
+
+// Each value here once varied between two exports of identical history.
+func TestDemoExportRebaseIsIndependentOfTheExportClock(t *testing.T) {
+	reference := demoExportReference.UnixMilli()
+	export := func(exportedAt int64) map[string]any {
+		body := map[string]any{
+			"runtime":  map[string]any{"go_version": "go1.99.0", "os_arch": "plan9/mips"},
+			"channels": []any{map[string]any{"updated_at_ms": float64(0)}},
+			"versions": []any{
+				map[string]any{"effective_from_ms": float64(exportedAt + 3)},
+				map[string]any{"effective_from_ms": float64(reference - 86_400_000)},
+			},
+		}
+		return demoExportRebase(body, reference-exportedAt, map[string]int{}).(map[string]any)
+	}
+	first := export(reference + 1_000_000_000)
+	second := export(reference + 2_000_000_000)
+	firstJSON, _ := json.Marshal(first)
+	secondJSON, _ := json.Marshal(second)
+	if string(firstJSON) != string(secondJSON) {
+		t.Fatalf("exports differ:\n%s\n%s", firstJSON, secondJSON)
+	}
+	versions := first["versions"].([]any)
+	if got := versions[0].(map[string]any)["effective_from_ms"]; got != float64(reference) {
+		t.Fatalf("stamped version = %v, want the reference %d", got, reference)
+	}
+	if got := versions[1].(map[string]any)["effective_from_ms"]; got != float64(reference-86_400_000) {
+		t.Fatalf("seeded version moved to %v", got)
+	}
+	if got := first["channels"].([]any)[0].(map[string]any)["updated_at_ms"]; got != float64(0) {
+		t.Fatalf("an unset instant was shifted to %v", got)
+	}
+	runtimeFacts := first["runtime"].(map[string]any)
+	if runtimeFacts["go_version"] != demoExportHostKeys["go_version"] || runtimeFacts["os_arch"] != demoExportHostKeys["os_arch"] {
+		t.Fatalf("the exporting host leaked into the dataset: %v", runtimeFacts)
+	}
 }

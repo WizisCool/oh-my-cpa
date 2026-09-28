@@ -39,93 +39,39 @@ const WEB_TEST_INFRASTRUCTURE = [
   'scripts/test-logic.mjs',
 ];
 
-export function planChecks(files) {
-  const has = (predicate) => files.some(predicate);
+const DEPENDENCY_INPUTS = new Set([
+  'package.json', 'web/package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc',
+]);
+const FRONTEND_CHECKS = ['type-check', 'logic', 'i18n', 'antd-lint', 'css-modules', 'motion'];
+
+function planFileChecks(file) {
   const checks = new Set();
+  const add = (...ids) => ids.forEach((id) => checks.add(id));
+  const isWebCode = file.startsWith('web/src/') && /\.(?:ts|tsx)$/.test(file);
 
-  const hasWebSource = has((file) => file.startsWith('web/src/'));
-  const hasWebCode = hasWebSource && has((file) => /\.(?:ts|tsx)$/.test(file));
-  const hasGo = has((file) => /^(?:.*\.go|go\.mod|go\.sum)$/.test(file));
-  const hasScript = has((file) => file.startsWith('scripts/'));
-  const hasTestSuite = has((file) => file.startsWith('scripts/') && file.endsWith('.ts'));
-  const hasTestInfrastructure = has((file) => WEB_TEST_INFRASTRUCTURE.includes(file));
+  if (DEPENDENCY_INPUTS.has(file)) return CHECK_IDS;
+  if (isWebCode) add('type-check', 'logic', 'i18n', 'css-modules');
+  if (file.endsWith('.tsx')) add('antd-lint', 'motion', 'css-modules');
+  if (file.endsWith('.css')) add('css-modules', 'motion');
+  if (/^(?:.*\.go|go\.mod|go\.sum)$/.test(file)
+      || file.startsWith('migrations/') || file.startsWith('internal/web/')) add('go');
+  // Go tests are also counted by the fixed-wait ratchet, which is a repository self-test.
+  if (file.endsWith('_test.go')) add('self-tests');
+  if (file.endsWith('.md')) add('docs');
+  if (file.startsWith('.github/workflows/') || file === 'scripts/validate-workflow.mjs') add('workflow');
+  if (file.startsWith('scripts/') || file.startsWith('deploy/cloudflare/')) add('self-tests');
+  if ((file.startsWith('scripts/') && file.endsWith('.ts'))
+      || WEB_TEST_INFRASTRUCTURE.includes(file)
+      || file === 'internal/cpa/configyaml/layout_rules.go') add('logic');
+  if (/^web\/(?:vite\.config\.|tsconfig)/.test(file)) add(...FRONTEND_CHECKS, 'self-tests');
+  if (file === 'scripts/tools-versions.json') add('toolchain');
 
-  // A dependency or TypeScript-configuration change can invalidate any frontend
-  // result, so it selects the type check whatever else changed.
-  if (
-    hasWebCode ||
-    has((file) => ['web/package.json', 'web/tsconfig.json', 'package.json', 'pnpm-lock.yaml'].includes(file))
-  ) {
-    checks.add('type-check');
-  }
+  // Fallback is per file: a documentation edit must never hide an unclassified
+  // migration, configuration or source file by making the overall plan non-empty.
+  return checks.size > 0 ? [...checks] : CHECK_IDS;
+}
 
-  // The config layout suite reads CPA's relocation table from the Go source, so a
-  // change to that table is a frontend-logic change too.
-  const hasSharedLayoutTable = has((file) => file === 'internal/cpa/configyaml/layout_rules.go');
-  if (hasWebCode || hasTestSuite || hasTestInfrastructure || hasSharedLayoutTable) checks.add('logic');
-  if (hasWebCode) checks.add('i18n');
-  if (has((file) => file.endsWith('.tsx'))) checks.add('antd-lint');
-  if (has((file) => file.endsWith('.css'))) checks.add('css-modules');
-  // The motion budget is declared in stylesheets and in the inline styles of components, so either
-  // extension can break it; the checker reads both.
-  if (has((file) => file.endsWith('.css') || file.endsWith('.tsx'))) checks.add('motion');
-  if (hasGo) checks.add('go');
-  if (has((file) => file.endsWith('.md'))) checks.add('docs');
-  if (has((file) => file.startsWith('.github/workflows/') || file === 'scripts/validate-workflow.mjs')) {
-    checks.add('workflow');
-  }
-
-  // Any other tooling change runs the mechanical self-tests, which is where the
-  // scripts that build, sync, scan and validate are themselves covered. Without
-  // this a change to `scripts/` matched no rule at all: it was "placed" (so the
-  // fallback below did not fire) while selecting nothing, and the one family of
-  // change that can silently break every gate was the one family nothing checked.
-  //
-  // It deliberately does not select the browser gates. A test that cannot be run
-  // cheaply is still a reason to run the cheap gates that cover the tooling, not a
-  // reason for the fast path to start paying for Chromium.
-  if (hasScript) checks.add('self-tests');
-
-  // The public demonstration's Worker and its dataset live outside `scripts/`, and its
-  // tests are what keep the served responses in step with the console. A change there
-  // selects the same self-tests a tooling change does, because that is the family the
-  // checks belong to: Node tests that need no browser and no build.
-  if (has((file) => file.startsWith('deploy/cloudflare/'))) checks.add('self-tests');
-
-  // The Go gates read the embedded SPA from `internal/web/dist`, so a regenerated
-  // bundle is a Go-relevant change even though the diff is one HTML file.
-  if (has((file) => file.startsWith('internal/web/'))) checks.add('go');
-
-  // Anything the rules above did not place runs the broad gates instead of
-  // nothing. This is what keeps a new top-level directory from being silently
-  // unverified; it is intentionally the last word, so a file that matches no rule
-  // cannot fall through to an empty plan.
-  const isPlaced = (file) =>
-    file.startsWith('web/src/') ||
-    file.startsWith('internal/') ||
-    file.startsWith('scripts/') ||
-    file.startsWith('deploy/') ||
-    file.startsWith('.github/') ||
-    file.startsWith('docs/') ||
-    file.startsWith('migrations/') ||
-    file.startsWith('cmd/') ||
-    file.endsWith('.md') ||
-    file.endsWith('.go') ||
-    file.endsWith('.ts') ||
-    file.endsWith('.tsx') ||
-    file.endsWith('.css') ||
-    /^(?:.*\.go|go\.mod|go\.sum)$/.test(file) ||
-    ['web/package.json', 'web/tsconfig.json', 'package.json', 'pnpm-lock.yaml'].includes(file);
-  if (has((file) => !isPlaced(file)) || (files.length > 0 && checks.size === 0)) {
-    checks.add('type-check');
-    checks.add('logic');
-    checks.add('go');
-  }
-
-  // A toolchain or dependency change can invalidate every result above, so it takes
-  // the pinned-version check as well.
-  if (has((file) => ['package.json', 'pnpm-lock.yaml', 'scripts/tools-versions.json'].includes(file))) {
-    checks.add('toolchain');
-  }
-  return CHECK_IDS.filter((id) => checks.has(id));
+export function planChecks(files) {
+  const selected = new Set(files.flatMap(planFileChecks));
+  return CHECK_IDS.filter((id) => selected.has(id));
 }

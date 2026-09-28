@@ -343,6 +343,14 @@ describe('re-basing onto the viewer’s clock', () => {
     assert.equal(moved.modified, seconds + 3600);
   });
 
+  it('moves a price version with the history it priced', () => {
+    assert.equal(rebase({ effective_from_ms: REFERENCE_MS }, 3_600_000).effective_from_ms, REFERENCE_MS + 3_600_000);
+  });
+
+  it('leaves an unset instant unset', () => {
+    assert.equal(rebase({ updated_at_ms: 0 }, 3_600_000).updated_at_ms, 0);
+  });
+
   it('moves a window and its buckets together', () => {
     // The property the dashboard depends on: a bucket never falls outside the window
     // it is drawn in.
