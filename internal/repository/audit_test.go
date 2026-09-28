@@ -162,12 +162,13 @@ func TestQueryAuditEventsFiltersFoldsAndPages(t *testing.T) {
 	}
 	expect("summary", summary,
 		"api_key/failed=1", "apixkey/succeeded=1", "auth/succeeded=1", "provider/succeeded=1", "provider/unfinished=1", "quota/succeeded=1")
-	windowed, err := repo.SummarizeAuditEvents(ctx, AuditQuery{FoldAttempts: true, SinceMS: base + 4000, Search: "create"})
+	// api_key.create sits at base+4000, so a cutoff one second later keeps apixkey alone.
+	windowed, err := repo.SummarizeAuditEvents(ctx, AuditQuery{FoldAttempts: true, SinceMS: base + 5000, Search: "create"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(windowed) != 2 || windowed[0].Prefix != "api_key" || windowed[1].Prefix != "apixkey" {
-		t.Fatalf("windowed summary = %#v, want api_key and apixkey only", windowed)
+	if len(windowed) != 1 || windowed[0] != (AuditBucket{Prefix: "apixkey", Outcome: AuditOutcomeSucceeded, Count: 1}) {
+		t.Fatalf("windowed summary = %#v, want apixkey/succeeded=1 only", windowed)
 	}
 
 	first, err := repo.QueryAuditEvents(ctx, AuditQuery{Limit: 4, Categories: []string{"auth", "provider", "api_key", "apixkey"}})

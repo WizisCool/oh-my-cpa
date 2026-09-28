@@ -449,14 +449,15 @@ export const PricingPage: React.FC = () => {
                   <h2>{identity?.label ?? t('pricing.provider.unassigned')}</h2>
                   {group.provider && <span className={styles.dimmed}>{group.provider.is_oauth ? t('pricing.provider.oauth') : t('pricing.provider.api')} · {t('omc.priority_value', { n: group.provider.priority })}</span>}
                 </header>
-                {/* The columns are the same fixed set in every group, so their names are printed
+                {/* The columns are the same fixed set in every group, so their names are drawn
                     once, above the first group; repeating them per provider put a header row
-                    beside every one-model group and doubled the page's height. */}
+                    beside every one-model group and doubled the page's height. Later groups
+                    keep their header row for assistive technology, visually hidden. */}
                 <ResponsiveList<BookRow>
                   columns={priceColumns} dataSource={group.rows} rowKey="model"
                   isLoading={result.isLoading} isBlocked={result.isError && !data}
                   emptyText={t('pricing.table.empty_filter')}
-                  phone={{ identity: 'model', actions: ['actions'] }} tableProps={{ size: 'small', showHeader: groupIndex === 0 }}
+                  phone={{ identity: 'model', actions: ['actions'] }} tableProps={{ size: 'small', className: groupIndex === 0 ? undefined : 'data-table-head-hidden' }}
                 />
               </section>
             );

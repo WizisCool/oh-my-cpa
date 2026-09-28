@@ -381,6 +381,16 @@ a { color: inherit; }
 }
 .data-table .ant-table-wrapper .ant-table-tbody > tr.ant-table-row:hover > td { background: var(--surface); }
 .data-table .ant-table-wrapper .ant-table-tbody > tr:last-child > td { border-bottom: 0; }
+/* A header a reader already saw above an identical table: kept for assistive technology,
+   which reads each table on its own, and clipped from view. */
+.data-table .data-table-head-hidden .ant-table-thead {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .responsive-list .ant-pagination { margin-top: 12px; }
 /* A phone row inside a card takes the card's own inset rather than adding its own on top: the
    two stacked to 36px a side, which on a 390px screen is a tenth of the width spent on margin. */

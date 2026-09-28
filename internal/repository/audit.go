@@ -362,7 +362,7 @@ func (r *Repository) SummarizeAuditEvents(ctx context.Context, query AuditQuery)
 		counts[[2]string{prefix, auditOutcomeClass(result)}] += count
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("iterate audit summary: %w", err)
 	}
 	buckets := make([]AuditBucket, 0, len(counts))
 	for key, count := range counts {

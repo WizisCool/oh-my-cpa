@@ -43,6 +43,21 @@ type auditEventDTO struct {
 	Details       map[string]any `json:"details,omitempty"`
 }
 
+// auditBucketDTO is the wire shape of one summary cell, spelled out for the same reason.
+type auditBucketDTO struct {
+	Prefix  string `json:"prefix"`
+	Outcome string `json:"outcome"`
+	Count   int64  `json:"count"`
+}
+
+func auditBucketDTOs(buckets []repository.AuditBucket) []auditBucketDTO {
+	out := make([]auditBucketDTO, 0, len(buckets))
+	for _, bucket := range buckets {
+		out = append(out, auditBucketDTO{Prefix: bucket.Prefix, Outcome: bucket.Outcome, Count: bucket.Count})
+	}
+	return out
+}
+
 func auditEventDTOs(events []repository.AuditEvent) []auditEventDTO {
 	out := make([]auditEventDTO, 0, len(events))
 	for _, event := range events {
@@ -181,7 +196,7 @@ func (h *Handler) summarizeAuditEvents(writer http.ResponseWriter, request *http
 		writeInternalError(writer, err)
 		return
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{"buckets": buckets})
+	writeJSON(writer, http.StatusOK, map[string]any{"buckets": auditBucketDTOs(buckets)})
 }
 
 // exportAuditEvents downloads the filtered trail, up to repository.AuditPageMax

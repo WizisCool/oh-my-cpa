@@ -147,10 +147,11 @@ test("a turn that just finished stays open-ended until its record can have been 
   assert.equal(settled.get("to"), String(9_000_000 + 1_000 + 5_000));
 });
 
-test("a turn without an end still yields a closed window the query accepts", () => {
-  const query = readEventQuery(new URL(usageLink(applyEvent(makeTurn(), { type: "meta", started_at_ms: 2_000_000 })), "http://local").searchParams);
-  assert.equal(query.from, 2_000_000 - 5_000);
-  assert.equal(query.to, 2_000_000 + 10 * 60_000 + 5_000);
+test("a turn without an end stays open-ended however long ago it started", () => {
+  const link = usageLink(applyEvent(makeTurn(), { type: "meta", started_at_ms: 2_000_000 }), 2_000_000 + 24 * 3_600_000);
+  const params = new URL(link, "http://local").searchParams;
+  assert.equal(params.has("to"), false);
+  assert.equal(readEventQuery(params).from, 2_000_000 - 5_000);
 });
 
 test('playground IDs do not require a secure-context randomUUID', () => {

@@ -135,7 +135,7 @@ func (c *pluginIdentityCache) refresh(ctx context.Context, client *management.Cl
 	c.remember(store.Plugins)
 }
 
-// hasGaps reports whether any plugin is missing a name or a logo.
+// hasGaps reports whether any plugin is missing a name, author, version or logo.
 func (c *pluginIdentityCache) hasGaps(plugins []management.PluginItem) bool {
 	for _, plugin := range plugins {
 		if pluginIdentityGap(plugin) {
@@ -145,7 +145,9 @@ func (c *pluginIdentityCache) hasGaps(plugins []management.PluginItem) bool {
 	return false
 }
 
-// hasUnknown reports whether a plugin with a gap has no cached identity to fill it from.
+// hasUnknown reports whether a plugin has a gap its cached identity cannot fill: no entry at
+// all, or an entry that lacks the very field the plugin is missing. Either is worth another
+// store read once the retry interval has passed, since a registry may since have added it.
 func (c *pluginIdentityCache) hasUnknown(plugins []management.PluginItem) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -153,7 +155,8 @@ func (c *pluginIdentityCache) hasUnknown(plugins []management.PluginItem) bool {
 		if !pluginIdentityGap(plugin) {
 			continue
 		}
-		if _, ok := c.entries[strings.TrimSpace(plugin.ID)]; !ok {
+		identity, ok := c.entries[strings.TrimSpace(plugin.ID)]
+		if !ok || !pluginIdentityCloses(plugin, identity) {
 			return true
 		}
 	}
@@ -164,10 +167,22 @@ func pluginIdentityGap(plugin management.PluginItem) bool {
 	if strings.TrimSpace(plugin.ID) == "" {
 		return false
 	}
-	if plugin.Metadata == nil || strings.TrimSpace(plugin.Metadata.Name) == "" {
-		return true
+	return !pluginIdentityCloses(plugin, pluginIdentity{})
+}
+
+// pluginIdentityCloses reports whether every field the plugin left empty is supplied by the
+// identity. With an empty identity it answers whether the plugin has no gap at all.
+func pluginIdentityCloses(plugin management.PluginItem, identity pluginIdentity) bool {
+	var name, author, version string
+	if plugin.Metadata != nil {
+		name = strings.TrimSpace(plugin.Metadata.Name)
+		author = strings.TrimSpace(plugin.Metadata.Author)
+		version = strings.TrimSpace(plugin.Metadata.Version)
 	}
-	return pluginLogoURL(plugin) == ""
+	return (name != "" || identity.Name != "") &&
+		(author != "" || identity.Author != "") &&
+		(version != "" || identity.Version != "") &&
+		(pluginLogoURL(plugin) != "" || identity.Logo != "")
 }
 
 // applyPluginIdentity fills only the fields the plugin left empty: what a loaded plugin

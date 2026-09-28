@@ -111,3 +111,36 @@ func TestPluginIdentityRemembersTheStorePageAndSkipsCompletePlugins(t *testing.T
 		t.Fatalf("logo = %q, want the matched listing's", plugins[0].Logo)
 	}
 }
+
+func TestPluginIdentityRetriesWhenTheCachedEntryCannotFillTheGap(t *testing.T) {
+	var reads atomic.Int32
+	client := newIdentityStoreServer(t, &reads)
+	cache := newPluginIdentityCache()
+	now := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
+	cache.now = func() time.Time { return now }
+	// A listing with a name but no logo: the plugin's missing logo is still an open gap.
+	cache.remember([]management.StorePluginItem{{ID: "limiter", Name: "Rate Limiter", Author: "acme", InstalledVersion: "1.0.0", Installed: true}})
+
+	cache.fill(context.Background(), client, []management.PluginItem{{ID: "limiter"}})
+	if reads.Load() != 0 {
+		t.Fatalf("store reads = %d within the retry interval, want 0", reads.Load())
+	}
+	now = now.Add(pluginIdentityRetryInterval)
+	cache.fill(context.Background(), client, []management.PluginItem{{ID: "limiter"}})
+	if reads.Load() != 1 {
+		t.Fatalf("store reads = %d after the retry interval, want 1: a cached entry without the logo must not end the search", reads.Load())
+	}
+}
+
+func TestPluginIdentityFillsAMissingAuthorAndVersion(t *testing.T) {
+	cache := newPluginIdentityCache()
+	cache.remember([]management.StorePluginItem{{ID: "codebuddy", Name: "CodeBuddy", Author: "tencent", InstalledVersion: "0.2.1", Installed: true, Logo: "data:image/png;base64,AAAA"}})
+	plugins := []management.PluginItem{{ID: "codebuddy", Logo: "https://example.com/own.png", Metadata: &management.PluginMetadata{Name: "CodeBuddy"}}}
+	cache.fill(context.Background(), nil, plugins)
+	if plugins[0].Metadata.Author != "tencent" || plugins[0].Metadata.Version != "0.2.1" {
+		t.Fatalf("metadata = %#v, want the store's author and version", plugins[0].Metadata)
+	}
+	if plugins[0].Logo != "https://example.com/own.png" {
+		t.Fatalf("logo = %q, want the plugin's own", plugins[0].Logo)
+	}
+}

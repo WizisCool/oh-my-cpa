@@ -526,8 +526,6 @@ export function effectiveModel(request: ChatRequest): string {
  */
 const USAGE_LINK_SERVER_MARGIN_MS = 5_000;
 const USAGE_LINK_BROWSER_MARGIN_MS = 5 * 60_000;
-/** A turn still running (or cut off without a `done`) has no end yet; its record cannot be later than this. */
-const USAGE_LINK_OPEN_SPAN_MS = 10 * 60_000;
 /**
  * How long after a turn's window closes its record may still be on its way into OMC. CPA
  * publishes a record when the request finishes and ingest drains it on its own cadence; a
@@ -549,11 +547,15 @@ export function usageLink(turn: Turn, now = Date.now()): string {
   const started = turn.serverStartedAt ?? turn.startedAt;
   const margin = hasServerTime ? USAGE_LINK_SERVER_MARGIN_MS : USAGE_LINK_BROWSER_MARGIN_MS;
   const span = turn.durationMS
-    ?? (turn.endedAt !== undefined ? Math.max(0, turn.endedAt - turn.startedAt) : USAGE_LINK_OPEN_SPAN_MS);
+    ?? (turn.endedAt !== undefined ? turn.endedAt - turn.startedAt : undefined);
   const from = Math.max(0, Math.floor(started - margin));
-  const to = Math.ceil(started + span + margin);
   const params = new URLSearchParams({ from: String(from) });
-  if (now >= to + USAGE_LINK_INGEST_GRACE_MS) params.set("to", String(to));
+  // A turn still running, or cut off without a `done`, has no known end: its record may land
+  // at any later time, and a closed window is never re-read, so the link stays open-ended.
+  if (span !== undefined) {
+    const to = Math.ceil(started + Math.max(0, span) + margin);
+    if (now >= to + USAGE_LINK_INGEST_GRACE_MS) params.set("to", String(to));
+  }
   if (turn.request.client_key_fingerprint) {
     params.set("api_key", turn.request.client_key_fingerprint);
   }

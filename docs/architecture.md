@@ -2023,9 +2023,9 @@ requires local image substitution. The model named by the turn label and by rela
 links is the effective one, so a turn is never labelled with a model it did not call. Related
 request links (`usageLink`) filter by the exact client-key identity, the effective model and
 the turn's User-Agent within an absolute window of the turn's own span anchored on the server's
-`started_at_ms` (±5 s; ±5 min for a turn restored without server timings). A link opened within a
-minute of that window closing stays open-ended, so the list keeps polling until ingest delivers
-the record. They are candidate links, not a claimed event ID: CPA's `request_id` is not surfaced
+`started_at_ms` (±5 s; ±5 min for a turn restored without server timings). A turn with no known
+end, and a link opened within a minute of its window closing, stay open-ended, so the list keeps
+polling until ingest delivers the record. They are candidate links, not a claimed event ID: CPA's `request_id` is not surfaced
 to the playground. ADR
 0022 records the entitlement and privacy boundary; ADR 0023 recorded the selection-only preference
 and is superseded by ADR 0024, which records the single latest session that replaced it. Gateway unit tests, facade tests,
