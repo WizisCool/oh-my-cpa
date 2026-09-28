@@ -581,7 +581,7 @@ func (u *Upstream) serveAPICall(writer http.ResponseWriter, request *http.Reques
 }
 
 func isFamilyEndpoint(path string) bool {
-	for _, family := range []string{"claude", "codex", "gemini", "meta"} {
+	for _, family := range []string{"claude", "codex", "gemini", "meta", "xai", "vertex", "interactions"} {
 		if path == "/"+family+"-api-key" {
 			return true
 		}

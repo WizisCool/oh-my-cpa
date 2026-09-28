@@ -241,12 +241,7 @@ func (c *Client) ListConfiguredModelSnapshot(ctx context.Context) (ConfiguredMod
 	// families are walked rather than repeated. A family CPA cannot answer for
 	// is reported per family, which keeps a newly added credential list from
 	// silently disappearing out of the catalog.
-	for _, family := range []ConfigKeyFamily{
-		ConfigFamilyCodex,
-		ConfigFamilyClaude,
-		ConfigFamilyGemini,
-		ConfigFamilyMeta,
-	} {
+	for _, family := range ConfigKeyFamilies {
 		entries, err := c.ConfigAPIKeys(ctx, family)
 		if err != nil {
 			// A family an older CPA release does not have is not a catalog failure.

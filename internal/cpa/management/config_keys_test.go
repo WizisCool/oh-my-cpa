@@ -2,6 +2,7 @@ package management
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -189,5 +190,58 @@ func TestOAuthProviderRegistryFlagsMatchTheConsoleFlow(t *testing.T) {
 	// than inventing flags for them.
 	if _, ok := LookupOAuthProvider("some-plugin"); ok {
 		t.Fatal("an unknown provider must not resolve")
+	}
+}
+
+func TestConfigAPIKeyRoundTripKeepsUnmodelledFields(t *testing.T) {
+	raw := `{"api-key":"k","base-url":"https://api.x.ai/v1","prefix":"old","websockets":true,"request-retry":2,"cloak":{"mode":"auto"}}`
+	var entry ConfigAPIKey
+	if err := json.Unmarshal([]byte(raw), &entry); err != nil {
+		t.Fatal(err)
+	}
+	if entry.APIKey != "k" || entry.Prefix != "old" {
+		t.Fatalf("modelled fields = %#v", entry)
+	}
+
+	// Clearing a modelled field must not let the stored copy of it come back.
+	entry.Prefix = ""
+	entry.APIKey = "k2"
+	encoded, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded["api-key"] != "k2" || decoded["websockets"] != true || decoded["request-retry"] != float64(2) {
+		t.Fatalf("encoded entry = %s", encoded)
+	}
+	if cloak, _ := decoded["cloak"].(map[string]any); cloak["mode"] != "auto" {
+		t.Fatalf("nested unmodelled field lost: %s", encoded)
+	}
+	if _, hasPrefix := decoded["prefix"]; hasPrefix {
+		t.Fatalf("a cleared prefix came back: %s", encoded)
+	}
+
+	// An entry built in code, with nothing to replay, encodes as before.
+	plain, err := json.Marshal(ConfigAPIKey{APIKey: "fresh"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(plain) != `{"api-key":"fresh"}` {
+		t.Fatalf("plain entry = %s", plain)
+	}
+}
+
+func TestConfigKeyFamiliesCoverEveryCPAList(t *testing.T) {
+	sections := map[string]bool{}
+	for _, family := range ConfigKeyFamilies {
+		sections[family.ConfigSection()] = true
+	}
+	for _, section := range []string{"codex-api-key", "claude-api-key", "gemini-api-key", "meta-api-key", "xai-api-key", "vertex-api-key", "interactions-api-key"} {
+		if !sections[section] {
+			t.Fatalf("ConfigKeyFamilies is missing %s", section)
+		}
 	}
 }

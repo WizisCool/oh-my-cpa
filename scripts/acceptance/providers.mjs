@@ -62,6 +62,25 @@ export async function runProvidersAcceptance({
     `src=${metaMarkSrc || 'none'}`,
   );
 
+  // xAI is one of the families added to the same registry later; its row proves
+  // the label and the mark reach the page for it too.
+  const xaiRow = page.locator('.providers-page tbody tr', { hasText: 'xAI Grok' }).first();
+  await xaiRow.waitFor({ state: 'visible', timeout: 15000 });
+  check(
+    'the xAI family renders with its own protocol label',
+    (await xaiRow.innerText()).includes('xAI (Grok)'),
+    `row=${await xaiRow.innerText()}`,
+  );
+  // xAI's mark has no colour variant, so it renders as a masked glyph rather than
+  // an image; the asset path is asserted wherever the row references it.
+  const xaiRowMarkup = await xaiRow.innerHTML();
+  const xaiMarkPath = xaiRowMarkup.match(/lobe-icons\/[a-z0-9-]+\.svg/i)?.[0] ?? '';
+  check(
+    'the xAI family renders the xAI brand mark',
+    /lobe-icons\/xai/i.test(xaiMarkPath),
+    `mark=${xaiMarkPath || 'none'}`,
+  );
+
   // The codex family's first entry is addressed by the console as `codex-0`; the
   // fixture also configures a second codex entry, so this is a position within a
   // family rather than the deployment's whole provider list.

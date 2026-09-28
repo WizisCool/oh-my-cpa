@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
+	"strings"
 )
 
 // ConfigKeyFamily names one of CPA's `{family}-api-key` credential lists.
@@ -17,20 +19,42 @@ import (
 type ConfigKeyFamily string
 
 const (
-	ConfigFamilyClaude ConfigKeyFamily = "claude"
-	ConfigFamilyCodex  ConfigKeyFamily = "codex"
-	ConfigFamilyGemini ConfigKeyFamily = "gemini"
-	ConfigFamilyMeta   ConfigKeyFamily = "meta"
+	ConfigFamilyClaude       ConfigKeyFamily = "claude"
+	ConfigFamilyCodex        ConfigKeyFamily = "codex"
+	ConfigFamilyGemini       ConfigKeyFamily = "gemini"
+	ConfigFamilyMeta         ConfigKeyFamily = "meta"
+	ConfigFamilyXAI          ConfigKeyFamily = "xai"
+	ConfigFamilyVertex       ConfigKeyFamily = "vertex"
+	ConfigFamilyInteractions ConfigKeyFamily = "interactions"
 )
+
+// ConfigKeyFamilies is every family, in the order readers that walk all of them
+// (the model catalog, the provider list) visit them.
+var ConfigKeyFamilies = []ConfigKeyFamily{
+	ConfigFamilyCodex,
+	ConfigFamilyClaude,
+	ConfigFamilyGemini,
+	ConfigFamilyMeta,
+	ConfigFamilyXAI,
+	ConfigFamilyVertex,
+	ConfigFamilyInteractions,
+}
 
 // ConfigAPIKey is the credential entry CPA uses across every config API-key
 // family.
 //
 // CPA declares these as separate structs (ClaudeKey, CodexKey, GeminiKey,
-// MetaKey) that are field-for-field identical - MetaKey is in fact an alias of
-// CodexKey upstream. Mirroring that duplication here would mean four copies of
-// every read, write and merge path that must stay in lockstep, with no type
-// safety gained, because the wire shape is the only thing that matters.
+// VertexCompatKey, ...) that share this common core - MetaKey and XAIKey are
+// aliases of CodexKey upstream, and the Interactions list reuses GeminiKey.
+// Mirroring that duplication here would mean a copy of every read, write and
+// merge path per family that must stay in lockstep, with no type safety gained,
+// because the wire shape is the only thing that matters.
+//
+// The families do differ in the fields around that core (a Codex entry's
+// `websockets`, a Claude entry's `cloak`, `request-retry` on most of them), and
+// the console only ever writes a whole list back. Those fields are therefore
+// carried through in extra rather than modelled: an edit made here must not
+// silently strip a setting the operator configured in config.yaml.
 type ConfigAPIKey struct {
 	APIKey         string            `json:"api-key"`
 	AuthIndex      string            `json:"auth-index,omitempty"`
@@ -43,6 +67,74 @@ type ConfigAPIKey struct {
 	Weight         *int              `json:"weight,omitempty"`
 	Prefix         string            `json:"prefix,omitempty"`
 	DisableCooling *bool             `json:"disable-cooling,omitempty"`
+
+	// extra holds the entry's fields this struct does not model, verbatim, so a
+	// read-modify-write round trip returns them to CPA unchanged.
+	extra map[string]json.RawMessage
+}
+
+// configAPIKeyFields is ConfigAPIKey without its JSON methods, so they can use
+// the default encoding for the modelled fields without recursing.
+type configAPIKeyFields ConfigAPIKey
+
+// configAPIKeyModelledFields is the set of wire names ConfigAPIKey models. It is
+// derived from the struct tags so a newly modelled field can never also be
+// replayed from extra.
+var configAPIKeyModelledFields = func() map[string]bool {
+	names := map[string]bool{}
+	fieldType := reflect.TypeOf(configAPIKeyFields{})
+	for i := 0; i < fieldType.NumField(); i++ {
+		tag := fieldType.Field(i).Tag.Get("json")
+		if name, _, _ := strings.Cut(tag, ","); name != "" && name != "-" {
+			names[name] = true
+		}
+	}
+	return names
+}()
+
+// UnmarshalJSON decodes the modelled fields and keeps every other field.
+func (k *ConfigAPIKey) UnmarshalJSON(data []byte) error {
+	var fields configAPIKeyFields
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	for name := range raw {
+		if configAPIKeyModelledFields[name] {
+			delete(raw, name)
+		}
+	}
+	*k = ConfigAPIKey(fields)
+	if len(raw) > 0 {
+		k.extra = raw
+	} else {
+		k.extra = nil
+	}
+	return nil
+}
+
+// MarshalJSON encodes the modelled fields and replays the unmodelled ones.
+//
+// A modelled field always wins: extra never holds a modelled name, so clearing
+// an optional field (which omitempty then drops) cannot bring back its old value.
+func (k ConfigAPIKey) MarshalJSON() ([]byte, error) {
+	encoded, err := json.Marshal(configAPIKeyFields(k))
+	if err != nil || len(k.extra) == 0 {
+		return encoded, err
+	}
+	merged := map[string]json.RawMessage{}
+	if err := json.Unmarshal(encoded, &merged); err != nil {
+		return nil, err
+	}
+	for name, value := range k.extra {
+		if _, isSet := merged[name]; !isSet {
+			merged[name] = value
+		}
+	}
+	return json.Marshal(merged)
 }
 
 // ConfigSection is the configuration document key this family is stored under,

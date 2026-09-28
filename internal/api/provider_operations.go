@@ -129,6 +129,9 @@ func (h *Handler) createProvider(ctx context.Context, client *management.Client,
 		if !isConfigFamily {
 			return nil, newProviderWriteError(http.StatusBadRequest, "unsupported provider family: "+family)
 		}
+		if spec.RequiresBaseURL && baseURL == "" {
+			return nil, newProviderWriteError(http.StatusBadRequest, "base URL is required for this provider family")
+		}
 		newEntry := management.ConfigAPIKey{
 			APIKey:         firstKey,
 			BaseURL:        baseURL,
@@ -303,6 +306,9 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 		spec, isConfigFamily := lookupProviderConfigFamily(family)
 		if !isConfigFamily {
 			return nil, newProviderWriteError(http.StatusBadRequest, "unsupported provider family")
+		}
+		if spec.RequiresBaseURL && baseURL == "" {
+			return nil, newProviderWriteError(http.StatusBadRequest, "base URL is required for this provider family")
 		}
 		if err := h.mutateConfigKeyProvider(ctx, client, spec, index, func(entry *management.ConfigAPIKey) {
 			entry.BaseURL = baseURL
