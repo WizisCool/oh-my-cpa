@@ -101,8 +101,11 @@ func TestMaintenanceRefusesASecondConcurrentJob(t *testing.T) {
 	}
 
 	service := newTestMaintenanceService(t, database)
-	// Hold the gate so the first job stays in flight while the second is attempted.
-	if err := database.writeGate.enterMaintenance(ctx); err != nil {
+	// Hold the shared side so the first job queues behind this writer and is still in
+	// flight when the second is attempted. Holding the exclusive side instead would let
+	// the job fail on acquisition and finish before the second attempt, which made this
+	// assertion depend on the scheduler rather than on the single-flight slot.
+	if err := database.writeGate.enterWrite(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -113,7 +116,7 @@ func TestMaintenanceRefusesASecondConcurrentJob(t *testing.T) {
 		t.Fatalf("second job error = %v, want ErrMaintenanceRunning", err)
 	}
 
-	database.writeGate.leaveMaintenance()
+	database.writeGate.leaveWrite()
 	waitForMaintenance(t, service)
 }
 
@@ -713,11 +716,13 @@ func TestAReleaseAfterLaunchCannotReportTheJobAsStopped(t *testing.T) {
 	}
 	service := newTestMaintenanceService(t, database)
 
-	// Hold the gate so the launched job stays in flight while the release is attempted.
-	if err := database.writeGate.enterMaintenance(ctx); err != nil {
+	// Hold the shared side so the launched job queues behind this writer and stays in
+	// flight while the release is attempted. Holding the exclusive side would let the
+	// job fail on acquisition and finish first, leaving nothing running to check.
+	if err := database.writeGate.enterWrite(ctx); err != nil {
 		t.Fatal(err)
 	}
-	defer database.writeGate.leaveMaintenance()
+	defer database.writeGate.leaveWrite()
 
 	_, handle, err := service.Reserve(ctx, MaintenanceCheckpoint)
 	if err != nil {
@@ -739,7 +744,7 @@ func TestAReleaseAfterLaunchCannotReportTheJobAsStopped(t *testing.T) {
 	}
 
 	// Let the job finish so the test does not leave it parked.
-	database.writeGate.leaveMaintenance()
+	database.writeGate.leaveWrite()
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		if !service.Status().Running {
