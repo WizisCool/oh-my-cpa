@@ -70,8 +70,13 @@ export async function agentWorkspace({ base, page, check }) {
   check('agent sends the chosen reasoning effort and no consent flag', runs[0].reasoning_effort === 'high' && !('has_consent' in runs[0]), JSON.stringify(runs[0]));
   check('agent cannot submit destructive approval without target challenge', await page.getByRole('button', { name: 'Approve execution' }).isDisabled());
   await page.getByLabel('Enter target identifier to confirm').fill('provider-test');
+  // The approval gate opens only once the typed identifier has committed, and a click that
+  // lands first is swallowed rather than reported. Wait for the affordance the click depends on.
+  await until(async () => await page.getByRole('button', { name: 'Approve execution' }).isEnabled(), {
+    label: 'the approval gate to open for the typed target identifier',
+  });
   await page.getByRole('button', { name: 'Approve execution' }).click();
-  await until(() => decisions.length === 1);
+  await until(() => decisions.length === 1, { label: 'the approval decision reach the server' });
   await page.getByRole('button', { name: 'Resume', exact: true }).click();
   await page.getByText('The approved operation completed.').waitFor();
   check('agent resumes server conversation instead of supplying tool history', runs.length === 2 && runs[1].message === '' && !('messages' in runs[1]) && !('tools' in runs[1]));
@@ -79,7 +84,9 @@ export async function agentWorkspace({ base, page, check }) {
   await page.reload();
   await page.getByText('The approved operation completed.').waitFor();
   const selection = () => page.locator('[data-testid="agent-page"] header').innerText();
-  await until(async () => (await selection()).includes('vision-alias'));
+  await until(async () => (await selection()).includes('vision-alias'), {
+    label: 'the restored header to name the model',
+  });
   check('agent restores server-side history and the chosen target after reload', (await selection()).includes('vision-alias') && await page.getByRole('button', { name: 'Reasoning effort: High (high)', exact: true }).count() === 1, await selection());
   await page.getByRole('button', { name: 'New conversation', exact: true }).click();
   await page.locator('[data-testid="agent-empty"]').waitFor();
