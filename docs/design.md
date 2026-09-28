@@ -854,6 +854,18 @@ reader moving between pages never sees the refresh control jump or resize:
   one empty state (antd's simple `Empty`), and no paginator for a single page.
   A wide table scrolls sideways inside its own box and never vertically: the wheel over a list
   scrolls the page, however many lists a page stacks.
+- **A filter with counts is a tab row.** A small closed set of choices that each carry a count - an
+  OAuth provider, an audit outcome - is drawn as the provider tabs are: a quiet `--fg` underline and
+  a mono count pill per option (`ProviderFilterTabs`, and `CountTabs` for a filter that is not a
+  provider). It is never a row of KPI cards: cards are reserved for KPIs, and a list is not a KPI
+  view. An open-ended set (the audit categories) stays a `Select` whose options carry the count.
+- **A record opens in a Drawer.** A row is a reading; the full record - identifiers, the raw code
+  behind a sentence, recorded detail - opens from the row's Details action (or a click on the row)
+  in a Drawer, never by expanding the row in place, which pushed every row below it down the page.
+  Where the list is a sequence (requests, the audit trail), the Drawer steps to its neighbours.
+- **A list grouped by a heading is one frame per group** (the price book's providers, the audit
+  trail's days), with the column names drawn once, above the first frame; later frames keep their
+  header row for assistive technology and clip it from view (`.data-table-head-hidden`).
 - **Code is shown in a `CodeFrame`**: a head naming the language with the copy action, then the code
   in the console's own mono stack - never the browser's default `monospace`.
 

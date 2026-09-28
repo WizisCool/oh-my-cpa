@@ -1,7 +1,6 @@
 import React from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useT } from '../i18n';
-import { PageHeader } from '../components/common/PageHeader';
 import { AuditTrail } from '../components/audit/AuditTrail';
 import { readAuditFilters, writeAuditFilters, type AuditFilters } from '../types/audit';
 
@@ -24,8 +23,7 @@ export const AuditPage: React.FC = () => {
 
   return (
     <div className="terminal-page" data-testid="audit-page">
-      <PageHeader title={t('nav.audit')} subtitle={t('audit.subtitle')} />
-      <AuditTrail filters={filters} onFiltersChange={setFilters} />
+      <AuditTrail title={t('nav.audit')} filters={filters} onFiltersChange={setFilters} />
     </div>
   );
 };
