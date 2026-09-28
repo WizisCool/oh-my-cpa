@@ -19,7 +19,7 @@ import (
  * `auth_index` of the credential CPA selected, which is stable for a configured
  * credential, and the keys themselves live only in CPA's configuration. The mask
  * is therefore resolved here, at read time, from the credential lists CPA
- * reports - the four config API-key families and the openai-compatibility
+ * reports - the config API-key families and the openai-compatibility
  * providers - and returned on the record as `provider_key_mask`.
  *
  * Three properties bound what this can answer, and each is deliberate:
@@ -52,7 +52,7 @@ import (
 // Two credential lists can in principle mint the same index, so a match is only
 // honoured inside the list the record came from: a config family's index cannot
 // be answered with a compatibility provider's entry, or the other way round. The
-// four family lists are named by the family itself, because that is the label CPA
+// config family lists are named by the family itself, because that is the label CPA
 // puts on a record they served.
 type providerKeyMaskNamespace string
 
@@ -65,10 +65,13 @@ const namespaceOpenAICompatibility providerKeyMaskNamespace = "openai-compatibil
 // with `openai-compatible-<provider name>` belongs to the compatibility list
 // instead; any other label belongs to neither and is not a candidate.
 var providerKeyMaskFamilies = map[string]bool{
-	string(management.ConfigFamilyCodex):  true,
-	string(management.ConfigFamilyClaude): true,
-	string(management.ConfigFamilyGemini): true,
-	string(management.ConfigFamilyMeta):   true,
+	string(management.ConfigFamilyCodex):        true,
+	string(management.ConfigFamilyClaude):       true,
+	string(management.ConfigFamilyGemini):       true,
+	string(management.ConfigFamilyMeta):         true,
+	string(management.ConfigFamilyXAI):          true,
+	string(management.ConfigFamilyVertex):       true,
+	string(management.ConfigFamilyInteractions): true,
 }
 
 const (

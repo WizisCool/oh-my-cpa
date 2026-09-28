@@ -99,11 +99,11 @@ func TestCredentialRevealReadsAreAuditedFailClosed(t *testing.T) {
 	if !hasProviderReveal || providerReveal.targetType != "provider" || providerReveal.targetID != "list" {
 		t.Fatalf("provider key reveal audit = %#v, want target provider/list", providerReveal)
 	}
-	if got, hasKeyCount := providerReveal.details["key_count"].(float64); !hasKeyCount || got != 5 {
-		t.Fatalf("provider key reveal audit key_count = %#v, want 5", providerReveal.details["key_count"])
+	if got, hasKeyCount := providerReveal.details["key_count"].(float64); !hasKeyCount || got != 6 {
+		t.Fatalf("provider key reveal audit key_count = %#v, want 6", providerReveal.details["key_count"])
 	}
-	if got, hasProviderCount := providerReveal.details["provider_count"].(float64); !hasProviderCount || got != 5 {
-		t.Fatalf("provider key reveal audit provider_count = %#v, want 5", providerReveal.details["provider_count"])
+	if got, hasProviderCount := providerReveal.details["provider_count"].(float64); !hasProviderCount || got != 6 {
+		t.Fatalf("provider key reveal audit provider_count = %#v, want 6", providerReveal.details["provider_count"])
 	}
 
 	if _, err := fixture.handler.repo.SQL().Exec("DROP TABLE audit_events"); err != nil {

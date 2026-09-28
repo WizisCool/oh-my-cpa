@@ -37,6 +37,9 @@ assert.deepEqual(parseProviderID('codex-3'), { family: 'codex', index: 3 });
 assert.deepEqual(parseProviderID('claude-1'), { family: 'claude', index: 1 });
 assert.deepEqual(parseProviderID('gemini-0'), { family: 'gemini', index: 0 });
 assert.deepEqual(parseProviderID('meta-0'), { family: 'meta', index: 0 });
+assert.deepEqual(parseProviderID('xai-2'), { family: 'xai', index: 2 });
+assert.deepEqual(parseProviderID('vertex-0'), { family: 'vertex', index: 0 });
+assert.deepEqual(parseProviderID('interactions-1'), { family: 'interactions', index: 1 });
 assert.notEqual(
   FAMILY_BY_PROVIDER_ID_PREFIX['openai-compat'],
   'openai-compat',
@@ -217,7 +220,14 @@ console.log(
 // the list can render and the gateway rejects.
 assert.deepEqual(
   PROVIDER_FAMILIES.map((family) => family.id),
-  ['openai-compatibility', 'codex', 'claude', 'gemini', 'meta'],
+  ['openai-compatibility', 'codex', 'claude', 'gemini', 'meta', 'xai', 'vertex', 'interactions'],
+);
+
+// CPA discards a Codex-style entry without a base URL while answering the write
+// with success, so exactly those families make the field required in the form.
+assert.deepEqual(
+  PROVIDER_FAMILIES.filter((family) => family.requiresBaseURL).map((family) => family.id),
+  ['codex', 'xai'],
 );
 
 // The tag's border and fill are derived by appending hex alpha to this value, so a
@@ -237,6 +247,10 @@ assert.equal(lookupProviderFamily(' META ')?.id, 'meta');
 assert.equal(matchProviderFamily('gemini')?.id, 'gemini');
 assert.equal(matchProviderFamily(undefined, 'OpenAI Chat Completions')?.id, 'openai-compatibility');
 assert.equal(matchProviderFamily(undefined, 'Anthropic Messages')?.id, 'claude');
+assert.equal(matchProviderFamily(undefined, 'xAI Grok')?.id, 'xai');
+assert.equal(matchProviderFamily(undefined, 'Vertex Generate Content')?.id, 'vertex');
+assert.equal(matchProviderFamily(undefined, 'Interactions API')?.id, 'interactions');
+assert.equal(lookupProviderFamily('xai')?.iconId, 'XAI');
 assert.equal(matchProviderFamily('unknown-family'), undefined);
 assert.equal(matchProviderFamily(undefined, undefined), undefined);
 

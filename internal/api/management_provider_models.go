@@ -49,14 +49,10 @@ func mergePullDefaults(entryBaseURL, entryAPIKey, entryProxyURL string, entryHea
 // pullProtocol maps a provider family to the auth dialect of its upstream so
 // model-list requests are authenticated the same way CPA itself would be.
 func pullProtocol(family string) string {
-	switch family {
-	case "claude":
-		return "anthropic"
-	case "gemini":
-		return "gemini"
-	default:
-		return "openai"
+	if spec, isConfigFamily := lookupProviderConfigFamily(family); isConfigFamily && spec.PullProtocol != "" {
+		return spec.PullProtocol
 	}
+	return "openai"
 }
 
 func (h *Handler) pullProviderModels(writer http.ResponseWriter, request *http.Request) {
