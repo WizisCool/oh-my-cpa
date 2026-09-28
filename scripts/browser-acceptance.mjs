@@ -463,10 +463,15 @@ try {
   // Bundle budget check
   const assetsDir = path.join(root, 'web', 'dist', 'assets');
   if (fs.existsSync(assetsDir)) {
-    const mainEntry = fs.readdirSync(assetsDir).find((f) => f.startsWith('index-') && f.endsWith('.js'));
+    // The entry is the module the built HTML loads. A lazy chunk may also be named `index-*`
+    // (the shared Markdown chunk is), so picking the first such file measured whichever hash
+    // sorted first. The limit is `scripts/check-bundle-budget.mjs`'s, which owns the rationale.
+    const html = fs.readFileSync(path.join(root, 'web', 'dist', 'index.html'), 'utf8');
+    const mainEntry = html.match(/<script\b[^>]*type="module"[^>]*src="[^"]*\/([^"/]+)"/)?.[1];
+    check('bundle budget: the built HTML names its module entry', Boolean(mainEntry), mainEntry ?? 'none');
     if (mainEntry) {
       const entrySize = fs.statSync(path.join(assetsDir, mainEntry)).size;
-      check('bundle budget: main entry under 250 kB', entrySize <= 250 * 1024, `${(entrySize / 1024).toFixed(2)} kB`);
+      check('bundle budget: main entry under 256 kB', entrySize <= 256 * 1024, `${(entrySize / 1024).toFixed(2)} kB`);
     }
   }
 
