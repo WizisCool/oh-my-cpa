@@ -167,6 +167,45 @@ func TestParseCodexUsageRejectsNonFiniteNumbersAndHonoursLimitReached(t *testing
 	}
 }
 
+// A limit reached on the 5-hour window must not report the weekly window as spent: the
+// flag covers the rate limit, while each window still carries its own usage.
+func TestParseCodexUsageLimitReachedPinsOnlyTheExhaustedWindow(t *testing.T) {
+	raw := []byte(`{
+		"plan_type": "plus",
+		"rate_limit": {
+			"allowed": false,
+			"limit_reached": true,
+			"primary_window": {"used_percent": 100, "limit_window_seconds": 18000, "reset_after_seconds": 10000},
+			"secondary_window": {"used_percent": 37, "limit_window_seconds": 604800, "reset_after_seconds": 400000}
+		}
+	}`)
+	_, windows, _, err := ParseCodexUsage(raw, time.Now().UnixMilli())
+	if err != nil {
+		t.Fatalf("ParseCodexUsage failed: %v", err)
+	}
+	if len(windows) != 2 {
+		t.Fatalf("len(windows) = %d, want 2", len(windows))
+	}
+	if windows[0].ID != "five_hour" || windows[0].RemainingPercent == nil || *windows[0].RemainingPercent != 0 {
+		t.Fatalf("five_hour = %+v, want 0%% remaining", windows[0])
+	}
+	if windows[1].ID != "weekly" || windows[1].UsedPercent == nil || *windows[1].UsedPercent != 37 {
+		t.Fatalf("weekly used = %v, want 37", windows[1].UsedPercent)
+	}
+
+	// With rounded usage below 100, the most used window is the one pinned.
+	raw = []byte(`{"rate_limit": {"limit_reached": true,
+		"primary_window": {"used_percent": 20, "limit_window_seconds": 18000},
+		"secondary_window": {"used_percent": 99, "limit_window_seconds": 604800}}}`)
+	_, windows, _, err = ParseCodexUsage(raw, time.Now().UnixMilli())
+	if err != nil {
+		t.Fatalf("ParseCodexUsage failed: %v", err)
+	}
+	if *windows[0].UsedPercent != 20 || *windows[1].UsedPercent != 100 {
+		t.Fatalf("used = %v / %v, want 20 / 100", *windows[0].UsedPercent, *windows[1].UsedPercent)
+	}
+}
+
 func TestParseCodexResetCreditsPayload(t *testing.T) {
 	raw := []byte(`{
 		"available_count": 3,

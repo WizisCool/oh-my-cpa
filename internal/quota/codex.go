@@ -346,7 +346,46 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 			(rateLimit.LimitReachedAlt != nil && *rateLimit.LimitReachedAlt)
 	}
 
-	addWindow := func(w *RawCodexWindow, id, defaultLabel, scope, model string, limitReached bool) {
+	// exhaustedFlags attributes a rate limit's limit_reached / allowed=false to its windows.
+	// The flag covers the rate limit as a whole, not a window: when the 5-hour window runs
+	// out, upstream still reports the weekly window's real usage beside it, so pinning every
+	// window to 100% would claim the weekly quota is spent too. A window is pinned only when
+	// it carries no usage of its own; when every window reports usage and none reaches 100
+	// (upstream rounds), the most used one is the window that tripped the limit.
+	exhaustedFlags := func(rateLimit *RawCodexRateLimit, windows ...*RawCodexWindow) []bool {
+		flags := make([]bool, len(windows))
+		if !limitReached(rateLimit) {
+			return flags
+		}
+		best, bestUsed, isAnyExhausted := -1, -1.0, false
+		for i, w := range windows {
+			if w == nil {
+				continue
+			}
+			rawUsed := w.UsedPercent
+			if rawUsed == nil {
+				rawUsed = w.UsedPercentAlt
+			}
+			used, ok := toFloat(rawUsed)
+			if !ok {
+				flags[i] = true
+				isAnyExhausted = true
+				continue
+			}
+			if used >= 100 {
+				isAnyExhausted = true
+			}
+			if used > bestUsed {
+				best, bestUsed = i, used
+			}
+		}
+		if !isAnyExhausted && best >= 0 {
+			flags[best] = true
+		}
+		return flags
+	}
+
+	addWindow := func(w *RawCodexWindow, id, defaultLabel, scope, model string, isExhausted bool) {
 		if w == nil {
 			return
 		}
@@ -355,7 +394,7 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 			rawUsed = w.UsedPercentAlt
 		}
 		usedVal, hasUsed := toFloat(rawUsed)
-		if limitReached {
+		if isExhausted {
 			usedVal = 100
 			hasUsed = true
 		}
@@ -469,8 +508,9 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 			secondary = rateLimit.SecondaryWinAlt
 		}
 
-		addWindow(primary, "five_hour", "5小时用量上限 (5-Hour)", "standard", "", limitReached(rateLimit))
-		addWindow(secondary, "weekly", "每周用量上限 (Weekly)", "standard", "", limitReached(rateLimit))
+		flags := exhaustedFlags(rateLimit, primary, secondary)
+		addWindow(primary, "five_hour", "5小时用量上限 (5-Hour)", "standard", "", flags[0])
+		addWindow(secondary, "weekly", "每周用量上限 (Weekly)", "standard", "", flags[1])
 	}
 
 	codeReview := payload.CodeReviewRateLimit
@@ -486,8 +526,9 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 		if crSecondary == nil {
 			crSecondary = codeReview.SecondaryWinAlt
 		}
-		addWindow(crPrimary, "code_review_5h", "代码审查", "code_review", "", limitReached(codeReview))
-		addWindow(crSecondary, "code_review_weekly", "代码审查", "code_review", "", limitReached(codeReview))
+		flags := exhaustedFlags(codeReview, crPrimary, crSecondary)
+		addWindow(crPrimary, "code_review_5h", "代码审查", "code_review", "", flags[0])
+		addWindow(crSecondary, "code_review_weekly", "代码审查", "code_review", "", flags[1])
 	}
 
 	// Additional rate limits (e.g. GPT-5.3-Codex-Spark, o1, etc.)
@@ -520,8 +561,9 @@ func ParseCodexUsage(raw []byte, nowMS int64) (*QuotaPlan, []QuotaWindow, *Codex
 			if s == nil {
 				s = lim.SecondaryWinAlt
 			}
-			addWindow(p, fmt.Sprintf("addl_%d_p", i), name, "model", name, limitReached(lim))
-			addWindow(s, fmt.Sprintf("addl_%d_s", i), name, "model", name, limitReached(lim))
+			flags := exhaustedFlags(lim, p, s)
+			addWindow(p, fmt.Sprintf("addl_%d_p", i), name, "model", name, flags[0])
+			addWindow(s, fmt.Sprintf("addl_%d_s", i), name, "model", name, flags[1])
 		}
 	}
 
