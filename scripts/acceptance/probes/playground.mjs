@@ -62,8 +62,22 @@ export async function playground({ base, page, check, context }) {
   await input.fill('Inspect this image');
   check('an invalid custom body is flagged in place and blocks sending', await page.getByText('Custom body must be a valid JSON object').isVisible() && await page.getByRole('button', { name: 'Send', exact: true }).isDisabled());
   await page.getByLabel('Custom request body (JSON)', { exact: true }).fill('');
+  // `submit` returns silently while any clause of its send gate is false - including the custom
+  // body the check above just made invalid - so acting before the gate reopens sends nothing and
+  // leaves the transcript empty. Wait on the affordance the action depends on.
+  const send = page.getByRole('button', { name: 'Send', exact: true });
+  await until(async () => await send.isEnabled(), { label: 'the composer to accept a corrected custom body' });
   await input.press('Enter');
-  await until(async () => await page.getByText('Complete', { exact: true }).count() > 0);
+  // Assert the action had an effect before waiting on anything downstream. A press the composer
+  // refuses is silent, and without this the only symptom is a rendering wait ten seconds later
+  // that says nothing about which step failed - which is how this scenario's own CI failure had
+  // to be diagnosed from a screenshot. The refusal is rare (unreproduced in 64 local attempts,
+  // including under a one-CPU constraint) and the path predates this change; what is fixed here
+  // is that it now reports itself at the step that broke.
+  await until(() => calls.length === 1, { label: 'the first turn to reach the upstream', timeoutMs: 5000 });
+  await until(async () => await page.getByText('Complete', { exact: true }).count() > 0, {
+    label: 'the first streamed turn to complete',
+  });
   check('playground sends exactly one request under StrictMode', calls.length === 1, `calls=${calls.length}`);
   check('playground sends the selected call point, reasoning effort, only a fingerprint and an inline image', calls[0].model === 'vision-alias' && calls[0].reasoning_effort === 'medium' && calls[0].client_key_fingerprint === 'playground-identity' && calls[0].messages[0].content[1].image_url.url.startsWith('data:image/png;base64,'), JSON.stringify(calls[0]).slice(0, 200));
   // The User-Agent parameter is a transport header, so it travels as its own field and
@@ -92,22 +106,28 @@ export async function playground({ base, page, check, context }) {
   check('code highlighter background does not use hardcoded one-light', !codeBg.includes('250, 250') && codeBg !== 'rgb(250, 250, 250)');
   mode = 'error'; await input.fill('Next question'); await page.getByRole('button', { name: 'Send', exact: true }).click();
   await page.getByText('Partial response', { exact: true }).waitFor();
-  await until(async () => await page.getByRole('button', { name: 'Retry', exact: true }).isEnabled());
+  await until(async () => await page.getByRole('button', { name: 'Retry', exact: true }).isEnabled(), {
+    label: 'the retry affordance after a partial response',
+  });
   check('multi-turn request contains the completed assistant answer', calls[1].messages.length === 3 && calls[1].messages[1].role === 'assistant', JSON.stringify(calls[1].messages));
   mode = 'success'; await page.getByRole('button', { name: 'Retry', exact: true }).click();
-  await until(() => calls.length === 3);
+  await until(() => calls.length === 3, { label: 'the retry to reach the upstream' });
   check('retry reuses the same request instead of appending a partial answer', JSON.stringify(calls[2]) === JSON.stringify(calls[1]), 'request snapshot equality');
-  await until(async () => await page.getByRole('button', { name: 'New conversation', exact: true }).isEnabled());
+  await until(async () => await page.getByRole('button', { name: 'New conversation', exact: true }).isEnabled(), {
+    label: 'the composer to accept a new conversation',
+  });
 
   // The transcript scrolls in reverse (the library anchors the newest message natively), so the
   // newest message is at scrollTop 0 and the oldest at -(scrollHeight - clientHeight).
   const scrollBox = page.locator('.ant-bubble-list-scroll-box');
   const distanceFromLatest = () => scrollBox.evaluate(el => Math.abs(el.scrollTop));
   await scrollBox.evaluate(el => { el.scrollTop = -el.scrollHeight; el.dispatchEvent(new Event('scroll')); });
-  await until(async () => await page.getByRole('button', { name: 'Back to latest', exact: true }).isVisible());
+  await until(async () => await page.getByRole('button', { name: 'Back to latest', exact: true }).isVisible(), {
+    label: 'the back-to-latest control after scrolling away',
+  });
   check('scrolling away from the newest message displays back to latest button', await page.getByRole('button', { name: 'Back to latest', exact: true }).isVisible());
   await page.getByRole('button', { name: 'Back to latest', exact: true }).click();
-  await until(async () => await distanceFromLatest() < 48);
+  await until(async () => await distanceFromLatest() < 48, { label: 'the transcript to return to the newest message' });
   check('back to latest button returns to the newest message', await distanceFromLatest() < 48);
 
   mode = 'wait'; await input.fill('Please wait'); await page.getByRole('button', { name: 'Send', exact: true }).click();
@@ -117,11 +137,15 @@ export async function playground({ base, page, check, context }) {
   await lastAnswer.getByText('Stopped', { exact: true }).waitFor();
   check('stop preserves an explicit cancelled state', await lastAnswer.getByText('Stopped', { exact: true }).count() === 1, String(cancelled));
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await until(async () => await page.getByText('A streamed answer').count() > 0);
+  await until(async () => await page.getByText('A streamed answer').count() > 0, {
+    label: 'the persisted conversation after a reload',
+  });
   check('refresh restores latest session including conversation across devices', await page.getByText('A streamed answer').count() > 0, 'persisted conversation');
-  await until(async () => await distanceFromLatest() < 48);
+  await until(async () => await distanceFromLatest() < 48, { label: 'the reloaded transcript to settle on the newest message' });
   check('conversation opens on the newest message after reload', await distanceFromLatest() < 48);
-  await until(async () => (await page.locator('[data-testid="playground-page"]').innerText()).includes('vision-alias'));
+  await until(async () => (await page.locator('[data-testid="playground-page"]').innerText()).includes('vision-alias'), {
+    label: 'the reloaded transcript to name its model',
+  });
   const preference = await page.evaluate(async () => {
     const response = await fetch('/omc/api/v1/preferences');
     return (await response.json()).preferences;
@@ -134,7 +158,9 @@ export async function playground({ base, page, check, context }) {
   check('new conversation clears messages and discards stored turns', await page.getByText('A streamed answer').count() === 0, 'empty conversation');
   const head = await page.locator('[data-testid="playground-page"] header').innerText();
   check('new conversation keeps the key and model', head.includes('Test key') && head.includes('vision-alias'), head);
-  await until(async () => (await page.evaluate(async () => (await (await fetch('/omc/api/v1/preferences')).json()).preferences))?.playground_session?.turns?.length === 0);
+  await until(async () => (await page.evaluate(async () => (await (await fetch('/omc/api/v1/preferences')).json()).preferences))?.playground_session?.turns?.length === 0, {
+    label: 'the stored session to drop its turns',
+  });
   const storedSession = (await page.evaluate(async () => (await (await fetch('/omc/api/v1/preferences')).json()).preferences)).playground_session;
   check('the stored session keeps its target after a new conversation', storedSession.model === 'vision-alias' && storedSession.client_key_fingerprint === 'playground-identity', JSON.stringify(storedSession));
 }
@@ -145,7 +171,9 @@ export async function playgroundNarrow({ base, page, check }) {
   await page.getByRole('button', { name: 'Parameters', exact: true }).click();
   await page.locator('.ant-drawer-section').waitFor();
   await page.goBack();
-  await until(async () => await page.locator('.ant-drawer-section:visible').count() === 0);
+  await until(async () => await page.locator('.ant-drawer-section:visible').count() === 0, {
+    label: 'Back to close the settings drawer',
+  });
   check('Back closes playground settings without leaving the page', new URL(page.url()).pathname.endsWith('/playground'), page.url());
   const geometry = await page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth, body: document.body.scrollHeight, height: innerHeight,
     page: document.querySelector('[data-testid="playground-page"]').getBoundingClientRect().bottom }));

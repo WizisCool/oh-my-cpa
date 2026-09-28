@@ -56,8 +56,8 @@ try {
  * project as its working directory so module resolution finds the pinned
  * `playwright-core`.
  */
-export function canLaunchChromium() {
-  const result = spawnSync(
+export function canLaunchChromium(spawn = spawnSync) {
+  const result = spawn(
     process.execPath,
     ['--input-type=module', '--eval', PROBE_SOURCE],
     { cwd: root, encoding: 'utf8', timeout: 120_000 },
@@ -76,36 +76,47 @@ function install(args) {
   return { ok: result.status === 0, seconds: (Date.now() - started) / 1000 };
 }
 
-const filesOnly = install([]);
-if (!filesOnly.ok) {
-  console.error('[chromium] the browser download failed');
-  process.exit(1);
-}
-console.log(`[chromium] browser files ready in ${filesOnly.seconds.toFixed(1)}s`);
+/**
+ * The decision, with its side effects injected so it can be exercised without a
+ * download: returns the process exit code.
+ */
+export function installChromium({ runInstall = install, probeLaunch = canLaunchChromium, log = console } = {}) {
+  const filesOnly = runInstall([]);
+  if (!filesOnly.ok) {
+    log.error('[chromium] the browser download failed');
+    return 1;
+  }
+  log.log(`[chromium] browser files ready in ${filesOnly.seconds.toFixed(1)}s`);
 
-const probe = canLaunchChromium();
-if (probe.ok) {
-  // The common case on a runner image that already carries the libraries: the
-  // ~100s of apt work is skipped because a real launch just proved it unnecessary.
-  console.log('[chromium] launches as installed; OS dependencies not needed');
-  process.exit(0);
+  const probe = probeLaunch();
+  if (probe.ok) {
+    // The common case on a runner image that already carries the libraries: the
+    // ~100s of apt work is skipped because a real launch just proved it unnecessary.
+    log.log('[chromium] launches as installed; OS dependencies not needed');
+    return 0;
+  }
+
+  log.log('[chromium] launch failed, installing OS dependencies');
+  log.log(`[chromium] probe said: ${probe.detail.split('\n')[0] ?? 'no detail'}`);
+
+  const withDeps = runInstall(['--with-deps']);
+  if (!withDeps.ok) {
+    log.error('[chromium] installing OS dependencies failed');
+    return 1;
+  }
+  log.log(`[chromium] OS dependencies installed in ${withDeps.seconds.toFixed(1)}s`);
+
+  const recheck = probeLaunch();
+  if (!recheck.ok) {
+    // Reported rather than tolerated: this is the state that would otherwise surface
+    // as a browser job with no browser.
+    log.error(`[chromium] still cannot launch after installing dependencies:\n${recheck.detail}`);
+    return 1;
+  }
+  log.log('[chromium] launches after installing OS dependencies');
+  return 0;
 }
 
-console.log('[chromium] launch failed, installing OS dependencies');
-console.log(`[chromium] probe said: ${probe.detail.split('\n')[0] ?? 'no detail'}`);
-
-const withDeps = install(['--with-deps']);
-if (!withDeps.ok) {
-  console.error('[chromium] installing OS dependencies failed');
-  process.exit(1);
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  process.exit(installChromium());
 }
-console.log(`[chromium] OS dependencies installed in ${withDeps.seconds.toFixed(1)}s`);
-
-const recheck = canLaunchChromium();
-if (!recheck.ok) {
-  // Reported rather than tolerated: this is the state that would otherwise surface
-  // as a browser job with no browser.
-  console.error(`[chromium] still cannot launch after installing dependencies:\n${recheck.detail}`);
-  process.exit(1);
-}
-console.log('[chromium] launches after installing OS dependencies');

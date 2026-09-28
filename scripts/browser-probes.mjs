@@ -12,13 +12,16 @@
  * what lets `pnpm check:ui` run the relevant subset against the dev server during
  * development without this file's release-gate framing getting in the way.
  *
- * Run it with `pnpm verify:probes`; it is also part of `pnpm verify:full`.
+ * Run it with `pnpm verify:probes`; it is also part of `pnpm verify:full`. CI runs
+ * it as `pnpm verify:probes --shard i/n`, one disjoint, weight-balanced part of the
+ * catalog per job (see `acceptance/probe-shards.mjs`).
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createProbeChecker, runProbes } from './acceptance/probe.mjs';
 import { SCENARIOS } from './acceptance/scenarios.mjs';
+import { parseShard, selectShard } from './acceptance/probe-shards.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -28,10 +31,18 @@ const PORT = 5180;
 
 const { check, failures } = createProbeChecker();
 
-// Every scenario, in registry order. The registry supplies the fixtures and the
-// assertions; this file supplies the runner's reporting, so a scenario does not have
-// to know whether it is being run by the release gate or by the fast path.
-const scenarios = SCENARIOS.map((scenario) => ({ ...scenario, check }));
+// Every scenario, or one shard of them, in registry order. The registry supplies the
+// fixtures and the assertions; this file supplies the runner's reporting, so a scenario
+// does not have to know whether it is being run by the release gate or by the fast path.
+const shardFlag = process.argv.indexOf('--shard');
+const shard = shardFlag >= 0 ? parseShard(process.argv[shardFlag + 1]) : undefined;
+const shardIds = shard ? new Set(selectShard(SCENARIOS.map((scenario) => scenario.id), shard)) : undefined;
+const scenarios = SCENARIOS
+  .filter((scenario) => !shardIds || shardIds.has(scenario.id))
+  .map((scenario) => ({ ...scenario, check }));
+if (shard) {
+  console.log(`probe shard ${shard.index}/${shard.count}: ${scenarios.map((scenario) => scenario.id).join(', ')}\n`);
+}
 
 const FAILURE_DIR = path.join(root, 'tmp', 'probe-failure');
 const startedAt = Date.now();

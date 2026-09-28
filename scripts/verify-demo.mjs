@@ -13,7 +13,7 @@
  *
  *   OMCPA_DEMO_URL=https://<host> pnpm verify:demo
  *
- * Without that variable it expects a local server, which `pnpm dev:demo` starts.
+ * Without that variable it stages the built console and starts an in-process Worker server.
  *
  * The run is a claim about what a visitor sees, so it checks rendered content and not
  * just status codes: an empty root is a 200 as far as the network is concerned.
@@ -24,6 +24,7 @@ import { createServer } from 'node:http';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
+import { DEMO_ROUTES, hasDemoContent, watchDemoReads } from './demo-readiness.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -142,136 +143,64 @@ async function startLocalDemo() {
   return () => server.close();
 }
 
-/**
- * The console's routes, as the application registers them.
- *
- * This list is duplicated from `web/src/App.tsx` on purpose. Importing it would mean
- * the check can never fail for the reason it exists - a route the demonstration cannot
- * render - because adding a route would add it to the check in the same edit.
- */
-const ROUTES = [
-  '/dashboard',
-  '/quick-start',
-  '/playground',
-  '/agent',
-  '/ai-providers',
-  '/api-keys',
-  '/oauth-management',
-  '/logs',
-  '/audit',
-  '/usage/events',
-  '/pricing',
-  '/config',
-  '/omc-settings',
-  '/plugins',
-  '/system',
-];
-
-/**
- * What must be on the page for it to count as rendered.
- *
- * A route's own heading, so an error boundary or a fallback to the sign-in view is
- * reported as the wrong page rather than as a pass. The strings are the console's own
- * Chinese labels because the demonstration serves the console as built.
- */
-const EXPECTED = {
-  '/dashboard': '仪表盘',
-  '/quick-start': '快速开始',
-  '/playground': '操练场',
-  '/agent': '智能体',
-  // The capability directory renders from `/capabilities`, which the demonstration
-  // answers from the dataset. Waiting for one of its entries proves the agent route
-  // read the registry rather than merely mounting its shell over an empty aside.
-  '/ai-providers': 'AI 提供商',
-  '/api-keys': '密钥管理',
-  '/oauth-management': 'OAuth 管理',
-  '/logs': '日志',
-  '/audit': '操作审计',
-  '/usage/events': '请求记录',
-  '/pricing': '费用与用量',
-  '/system': '系统信息',
-};
-
-/** Per-route content that must be present beyond the heading, when the route has any. */
-const EXPECTED_DETAIL = {
-  '/agent': 'providers_list',
-};
-
-/** A generous ceiling: a cold start on a deployed demonstration is the slow case. */
 const NAVIGATION_TIMEOUT_MS = 30_000;
-
-/** How long a page is given to finish its first data fetch before it is read. */
-const SETTLE_MS = 2_500;
 
 async function main() {
   // A local server is only started when no deployment was named, and it needs the
   // console staged before it can serve one.
   const stopServer = CONFIGURED_URL ? undefined : await startLocalDemo();
 
-  const browser = await chromium.launch();
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-  const page = await context.newPage();
-
+  let browser;
   const consoleErrors = [];
   const failedRequests = [];
-  page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text());
-  });
-  page.on('pageerror', (error) => consoleErrors.push(String(error)));
-  page.on('response', (response) => {
-    const url = new URL(response.url());
-    if (url.origin === new URL(BASE).origin && response.status() >= 400) {
-      failedRequests.push(`${response.status()} ${response.request().method()} ${url.pathname}`);
-    }
-  });
-
   const failures = [];
+  try {
+    browser = await chromium.launch();
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    page.on('console', (message) => {
+      if (message.type() === 'error') consoleErrors.push(message.text());
+    });
+    page.on('pageerror', (error) => consoleErrors.push(String(error)));
+    page.on('response', (response) => {
+      const url = new URL(response.url());
+      if (url.origin === new URL(BASE).origin && response.status() >= 400) {
+        failedRequests.push(`${response.status()} ${response.request().method()} ${url.pathname}`);
+      }
+    });
+    page.on('requestfailed', (request) => {
+      // Navigating to the next page deliberately cancels the previous page's polls.
+      if (new URL(request.url()).origin === new URL(BASE).origin
+          && request.failure()?.errorText !== 'net::ERR_ABORTED') {
+        failedRequests.push(`${request.failure()?.errorText} ${request.url()}`);
+      }
+    });
 
-  for (const route of ROUTES) {
-    try {
-      // `networkidle` is the wrong signal here and was the first version's bug: the
-      // console polls - the dashboard's tail, the log tail, the ingest status - so the
-      // network never goes idle and every route timed out against a page that had
-      // already rendered. The wait is for the application to mount and settle instead.
-      await page.goto(BASE + route, { waitUntil: 'domcontentloaded', timeout: NAVIGATION_TIMEOUT_MS });
-      await page.waitForFunction(
-        () => (document.getElementById('root')?.children.length ?? 0) > 0,
-        undefined,
-        { timeout: NAVIGATION_TIMEOUT_MS },
-      );
-    } catch (error) {
-      failures.push(`${route}: could not be opened (${error.message})`);
-      continue;
+    for (const route of DEMO_ROUTES) {
+      const started = performance.now();
+      const reads = watchDemoReads(page, BASE, route.reads, NAVIGATION_TIMEOUT_MS);
+      try {
+        // Polling never becomes globally idle. Wait for required response bodies and
+        // the page's actual content instead; neither alone proves a successful render.
+        await Promise.all([
+          reads.ready,
+          page.goto(BASE + route.path, { waitUntil: 'domcontentloaded', timeout: NAVIGATION_TIMEOUT_MS }),
+        ]);
+        await page.waitForFunction(hasDemoContent, route, { timeout: NAVIGATION_TIMEOUT_MS });
+        const text = await page.locator('body').innerText();
+        if (text.includes('Management Key') || text.includes('使用 CPA')) {
+          throw new Error('rendered the sign-in card instead of the console');
+        }
+        console.log(`[demo] ${route.path}: ${((performance.now() - started) / 1000).toFixed(2)}s`);
+      } catch (error) {
+        failures.push(`${route.path}: ${error.message}`);
+      } finally {
+        reads.dispose();
+      }
     }
-    await page.waitForTimeout(SETTLE_MS);
-
-    const state = await page.evaluate(() => ({
-      mounted: (document.getElementById('root')?.children.length ?? 0) > 0,
-      text: document.body.innerText ?? '',
-    }));
-
-    if (!state.mounted) {
-      failures.push(`${route}: the application did not mount`);
-      continue;
-    }
-    // The sign-in card means the console never learned it was signed in, which is what
-    // the wrong session path produced.
-    if (state.text.includes('Management Key') || state.text.includes('使用 CPA')) {
-      failures.push(`${route}: rendered the sign-in card instead of the console`);
-      continue;
-    }
-    const expected = EXPECTED[route];
-    if (expected && !state.text.includes(expected)) {
-      failures.push(`${route}: rendered without its own heading (${expected})`);
-    }
-    const detail = EXPECTED_DETAIL[route];
-    if (detail && !state.text.includes(detail)) {
-      failures.push(`${route}: rendered without ${detail}`);
-    }
+  } finally {
+    try { await browser?.close(); } finally { await stopServer?.(); }
   }
-
-  await browser.close();
-  await stopServer?.();
 
   for (const failure of failures) console.error(`  FAIL ${failure}`);
   if (failedRequests.length > 0) {
@@ -287,7 +216,7 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  console.log(`the demonstration renders all ${ROUTES.length} routes at ${BASE}`);
+  console.log(`the demonstration renders all ${DEMO_ROUTES.length} routes at ${BASE}`);
 }
 
 try {

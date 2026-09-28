@@ -211,11 +211,12 @@ The public demonstration shows the page and model directory but refuses inferenc
 | --- | --- |
 | `pnpm dev` | Start Air + Vite development environment |
 | `pnpm build` | Build frontend SPA and sync to `internal/web/dist` |
-| `pnpm test:fast` | Run affected tests based on current worktree changes |
-| `pnpm check:ui` | Fast UI scenario tests against dev server with mocked APIs |
-| `pnpm verify` | Static gate: toolchain check, static analysis, and secret scan |
-| `pnpm verify:full` | Full gate: build, bundle budgets, browser acceptance & probes |
-| `pnpm verify:demo` | Browser smoke test for the demo deployment (`OMCPA_DEMO_URL` to check a remote one) |
+| `pnpm test:fast` | Run affected checks relative to `HEAD`; `--base <ref>` includes committed changes, `--plan` previews selection |
+| `pnpm test:self` | Run repository and Worker self-tests with bounded concurrency, plus demo freshness |
+| `pnpm check:bundle` | Validate all chunk and aggregate budgets against the existing production build |
+| `pnpm check:ui` | The browser scenarios your change can reach, against the dev server with mocked APIs (`--plan` explains the selection) |
+| `pnpm verify` | Static gate: toolchain check, static analysis, and secret scan; with `check:ui`, what to run before pushing |
+| `pnpm verify:full` | Everything CI runs, locally: build, bundle budgets, browser acceptance, the whole probe catalog, demo |
 | `pnpm verify:demo` | Browser acceptance for the demo: every console route renders (`OMCPA_DEMO_URL` to check a deployment) |
 | `pnpm demo:generate` | Regenerate the demo's dataset from the real handlers (`--check` to verify instead) |
 | `pnpm check:demo` | The demo's maintenance contract: coverage, freshness and privacy |

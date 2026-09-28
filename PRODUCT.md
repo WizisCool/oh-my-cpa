@@ -77,7 +77,7 @@ web
 - **Module Map, Data Flows & Invariants**: `docs/architecture.md`;
 - **Architecture Decision Records**: `docs/adr/`;
 - **Visual System & Token Authority**: `docs/design.md`, with the palette itself in `web/src/theme/palette.ts` (nine authored tokens per palette, seventeen derived) and its projection into `web/src/theme/themeConfig.ts` and `web/src/index.css` (root `DESIGN.md` is the synchronized design-tool summary);
-- Automated test suites: `internal/api/*_test.go`, covering credential protection, dashboard statistics, quota throttling, and DTO allowlist enforcement; `internal/demo/demo_test.go`, covering the fixture, its refusal layers and the total route classification; `scripts/demo-smoke.mjs` (`pnpm verify:demo`), driving a browser across the demonstration's pages against a locally started binary.
+- Automated test suites: `internal/api/*_test.go`, covering credential protection, dashboard statistics, quota throttling, and DTO allowlist enforcement; `internal/demo/demo_test.go`, covering the fixture, its refusal layers and the total route classification; `scripts/verify-demo.mjs` (`pnpm verify:demo`), driving a browser across the served console's routes and their initial reads; and `scripts/demo-smoke.mjs` (`pnpm verify:demo:go`), doing the same against the binary's own demonstration mode.
 
 ## Product Principles
 

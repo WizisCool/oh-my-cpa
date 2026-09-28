@@ -233,8 +233,11 @@ export async function systemInformationPage({ base, page, check }) {
 
   await toggle.click();
   // The log opens as an overlay, and the body arrives from the releases route, so both the
-  // panel and its content are asynchronous.
-  const drawer = page.locator('.ant-drawer:visible');
+  // panel and its content are asynchronous. Scoping to the open marker rather than a
+  // visibility test is what makes "opens" and "closes" two different observations: the portal
+  // root of a closed drawer is still on screen, so only the class antd adds while open can
+  // tell the two states apart.
+  const drawer = page.locator('.ant-drawer-open');
   const drawerShown = await until(async () => ((await drawer.count()) > 0 ? true : false), {
     label: 'the change log drawer',
     timeoutMs: 10_000,
@@ -286,22 +289,38 @@ export async function systemInformationPage({ base, page, check }) {
     'the note-less release was dropped from the log',
   );
 
-  // Close the log before asserting what the page itself shows.
+  // Close the log before asserting what the page itself shows. A drawer that stays open is
+  // its own failure rather than a precondition to skip past.
+  //
+  // The open-state marker is `.ant-drawer-open`, which antd removes when the drawer closes,
+  // not `.ant-drawer:visible`. rc-drawer keeps the closed drawer's root in the document with
+  // `autoDestroy` and `removeOnLeave` off, so that root still fills the viewport and still
+  // counts as visible to a bounding-box test: a wait on it can never succeed.
   await page.keyboard.press('Escape');
-  await until(async () => ((await page.locator('.ant-drawer:visible').count()) === 0 ? true : false), {
+  const drawerClosed = await until(async () => (await page.locator('.ant-drawer-open').count()) === 0, {
     label: 'the drawer closing',
     timeoutMs: 5000,
-  }).catch(() => {});
+  }).catch(() => false);
+  check('the change log closes on Escape', drawerClosed);
 
   // ── the page stays a gateway dashboard, not a database console ─────────────
   // The page shows four cards: versions, maintenance, storage, component health. A page
   // that grows a fifth surface as a side effect of a later change is the failure this
   // pins, because the information budget is a product decision rather than a default.
-  const cardTitles = await page.locator('.system-page .ant-card-head-title').allInnerTexts();
+  // Waiting for at least four and then requiring exactly four keeps a fifth card a
+  // failure, while a busy runner still re-rendering after the overlay's history pop
+  // no longer reads an empty page. The URL is reported because "found 0" otherwise
+  // cannot say whether the page was mid-render or had been navigated away from.
+  const cardTitleLocator = page.locator('.system-page .ant-card-head-title');
+  await until(async () => (await cardTitleLocator.count()) >= 4, {
+    label: 'the system page cards after the change log closed',
+    timeoutMs: 10_000,
+  }).catch(() => false);
+  const cardTitles = await cardTitleLocator.allInnerTexts();
   check(
     'the page keeps its four cards',
     cardTitles.length === 4,
-    `found ${cardTitles.length}: ${cardTitles.join(' | ')}`,
+    `url=${page.url()} found ${cardTitles.length}: ${cardTitles.join(' | ')}`,
   );
   // The DBA details live in the diagnostics bundle, not here.
   const pageTextForScope = await page.locator('.system-page').innerText();
@@ -688,15 +707,15 @@ export async function systemInformationPage({ base, page, check }) {
     detail: '',
     error: '',
   };
-  // A poll that is deliberately slow. The window before it answers is the one that matters: while
-  // polling is enabled the card reads the poll's cache, so only a seeded cache can report the
-  // running job then. Only the first poll is slow; every later one reports the job finished, so the
-  // page settles and the checks after this block see an idle card.
+  // Hold the first response until the in-flight assertions finish. A time delay
+  // either wastes its remaining window or releases too soon on a busy runner.
+  let releaseSlowPoll;
+  const heldPoll = new Promise((resolve) => { releaseSlowPoll = resolve; });
   let slowPolls = 0;
   const slowPollHandler = async (route) => {
     slowPolls += 1;
     if (slowPolls === 1) {
-      await new Promise((resolve) => setTimeout(resolve, 10_000));
+      await heldPoll;
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -725,40 +744,42 @@ export async function systemInformationPage({ base, page, check }) {
     });
   };
   await page.route('**/omc/api/v1/management/system/maintenance**', slowPollHandler);
-  servedMaintenance = { ...freshRunningJob };
-  await page.locator('.system-page').getByRole('button', { name: /Refresh|刷新/i }).first().click();
+  try {
+    servedMaintenance = { ...freshRunningJob };
+    await page.locator('.system-page').getByRole('button', { name: /Refresh|刷新/i }).first().click();
 
-  // Measured inside the window before the slow poll answers. The window is the point: with no
-  // seeded cache the card reads the earlier job's terminal record, so the banner appears only once
-  // that poll lands - some ten seconds later - and a wait that tolerated that would prove nothing.
-  // Scoped to the info alert rather than the card's whole text, for the same reason as the assertion
-  // above: the card's static copy contains words this check would otherwise match, so measuring the
-  // card as a whole could report a banner that was never rendered.
-  const staleCacheAlert = page.locator('[data-testid="sys-card-maintenance"] .ant-alert-info');
-  const runningBannerShown = await until(
-    async () => (await staleCacheAlert.count()) > 0,
-    { label: 'the in-progress banner for a job the page just adopted', timeoutMs: 3000 },
-  ).catch(() => false);
-  check(
-    'a running job is shown as in progress even though the poll cache held a terminal record',
-    Boolean(runningBannerShown),
-    `alert=${(await staleCacheAlert.first().innerText().catch(() => '')).slice(0, 120)}`,
-  );
-  // The write gate is the reason the banner matters: while a job runs, the actions must not look
-  // available. A stale record made them clickable.
-  const vacuumDisabledWhileRunning = await page
-    .locator('[data-testid="sys-card-maintenance"]')
-    .getByRole('button', { name: /VACUUM|重建/i })
-    .first()
-    .isDisabled()
-    .catch(() => false);
-  check(
-    'maintenance actions are disabled while that job runs',
-    vacuumDisabledWhileRunning,
-    `VACUUM disabled=${vacuumDisabledWhileRunning}`,
-  );
-  // Let the delayed job finish, which is what settles this block: the poll stops and the card goes
-  // back to idle for the checks that follow.
+    // The response stays held throughout these assertions: waiting for the banner
+    // cannot accidentally pass because a slow response has already populated the cache.
+    // Scoped to the info alert rather than the card's whole text, for the same reason as the assertion
+    // above: the card's static copy contains words this check would otherwise match, so measuring the
+    // card as a whole could report a banner that was never rendered.
+    const staleCacheAlert = page.locator('[data-testid="sys-card-maintenance"] .ant-alert-info');
+    const runningBannerShown = await until(
+      async () => (await staleCacheAlert.count()) > 0,
+      { label: 'the in-progress banner for a job the page just adopted', timeoutMs: 3000 },
+    ).catch(() => false);
+    check(
+      'a running job is shown as in progress even though the poll cache held a terminal record',
+      Boolean(runningBannerShown),
+      `alert=${(await staleCacheAlert.first().innerText().catch(() => '')).slice(0, 120)}`,
+    );
+    // The write gate is the reason the banner matters: while a job runs, the actions must not look
+    // available. A stale record made them clickable.
+    const vacuumDisabledWhileRunning = await page
+      .locator('[data-testid="sys-card-maintenance"]')
+      .getByRole('button', { name: /VACUUM|重建/i })
+      .first()
+      .isDisabled()
+      .catch(() => false);
+    check(
+      'maintenance actions are disabled while that job runs',
+      vacuumDisabledWhileRunning,
+      `VACUUM disabled=${vacuumDisabledWhileRunning}`,
+    );
+  } finally {
+    releaseSlowPoll();
+  }
+  // Once the in-flight state is proved, let the real poll follow the job to completion.
   await until(
     async () => (await page.locator('[data-testid="sys-maintenance-outcome"]').count()) > 0,
     { label: 'the slow job reaching its outcome', timeoutMs: 30_000 },

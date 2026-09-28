@@ -146,7 +146,11 @@ func TestCaptureNowServesRequestQueuedBeforeCollectorStarts(t *testing.T) {
 func TestCaptureNowReportsACollectorThatNeverStarts(t *testing.T) {
 	store := newStore(t)
 	upstream := newFakeUpstream()
-	runner, err := NewRunner("default", upstream, store, nil, nil, syncConfig(ModeHTTPPull))
+	config := syncConfig(ModeHTTPPull)
+	// A short grace keeps the test about the answer, not about waiting out the
+	// production start-up window.
+	config.ReadinessGrace = 50 * time.Millisecond
+	runner, err := NewRunner("default", upstream, store, nil, nil, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +293,9 @@ func TestCaptureNowReportsUnservedReasons(t *testing.T) {
 	upstream := newFakeUpstream()
 	ctx := context.Background()
 
-	idle, err := NewRunner("default", upstream, store, nil, nil, fastConfig(ModeHTTPPull))
+	idleConfig := fastConfig(ModeHTTPPull)
+	idleConfig.ReadinessGrace = 50 * time.Millisecond
+	idle, err := NewRunner("default", upstream, store, nil, nil, idleConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -419,7 +425,9 @@ func TestRefreshNowReportsUndrainedPass(t *testing.T) {
 func TestRefreshNowRefusesOverlappingRequests(t *testing.T) {
 	store := newStore(t)
 	upstream := newFakeUpstream()
-	runner, err := NewRunner("default", upstream, store, nil, nil, syncConfig(ModeHTTPPull))
+	config := syncConfig(ModeHTTPPull)
+	config.ReadinessGrace = 50 * time.Millisecond
+	runner, err := NewRunner("default", upstream, store, nil, nil, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -479,12 +487,24 @@ func TestCaptureNowRespectsAuthenticationCooldown(t *testing.T) {
 	startRunner(t, runner)
 	waitForMode(t, runner, ModeHTTPPull)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// The first refresh fails either way: served, it reports the rejection; queued
+	// behind the start-up pass that was already rejected, it waits out the cooldown
+	// until its own deadline. The deadline only bounds that wait, so it is short.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	if _, err := runner.CaptureNow(ctx); err == nil {
 		t.Fatal("a rejected key must surface as a failed sync")
 	}
+	// The rejected call must be counted before the baseline is taken, or a slow
+	// first pass landing later would read as a bypassed cooldown.
+	deadline := time.Now().Add(5 * time.Second)
+	for upstream.callCount() == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
 	callsAfterFirst := upstream.callCount()
+	if callsAfterFirst == 0 {
+		t.Fatal("CPA was never asked, so the cooldown was never entered")
+	}
 
 	// The collector is now in its cooldown. A second refresh must not reach CPA
 	// again; it should time out waiting rather than spend another attempt.

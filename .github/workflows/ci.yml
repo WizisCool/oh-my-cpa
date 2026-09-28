@@ -75,6 +75,7 @@ jobs:
       - name: Verify clean generated state
         run: |
           git diff --check
+          git status --short
           test -z "$(git status --porcelain)"
 
   browser:
@@ -144,6 +145,9 @@ jobs:
           install_pid=$!
           build_status=0
           pnpm build || build_status=$?
+          if [ "${build_status}" -eq 0 ]; then
+            pnpm check:bundle || build_status=$?
+          fi
           go_status=0
           if [ "${build_status}" -eq 0 ]; then
             mkdir -p tmp
@@ -164,20 +168,16 @@ jobs:
           fi
           exit "${install_status}"
 
-      # Pull requests get the thin cross-stack smoke: the redirect, sign-in, and
-      # that the dashboard and the request list render their seeded rows without a
-      # console or page error. Everything else a browser can prove is in the two
-      # master steps below.
-      - name: Run deterministic browser smoke
-        if: github.event_name == 'pull_request'
-        env:
-          OMCPA_BROWSER_BINARY: tmp/oh-my-cpa-browser
-          OMCPA_SEED_USAGE_BINARY: tmp/seed-usage-browser
-        run: pnpm verify:browser:smoke
+      - name: Verify generated state before browser tests
+        run: |
+          git diff --check
+          git status --short
+          test -z "$(git status --porcelain)"
 
-      # Pull requests must also clear the two P0 release gates: request-record
-      # correctness and OAuth/auth-file scheduling fields. This mode reuses the
-      # same built binary and fixture while skipping unrelated page suites.
+      # Pull requests clear the P0 release gates: request-record correctness and
+      # OAuth/auth-file scheduling fields. P0 runs the smoke path first and asserts
+      # its checks where smoke would stop, so one process covers both without paying
+      # for sign-in, seeding and the dashboard twice.
       - name: Run deterministic browser P0 gates
         if: github.event_name == 'pull_request'
         env:
@@ -185,37 +185,20 @@ jobs:
           OMCPA_SEED_USAGE_BINARY: tmp/seed-usage-browser
         run: pnpm verify:browser:p0
 
-      # Master keeps both browser phases, and runs them concurrently. They are
-      # independent processes with their own Chromium and their own service under
-      # test - the probes drive Vite with mocked routes, the acceptance run drives
-      # the built binary, the fake CPA and a seeded SQLite - so neither can observe
-      # the other.
-      #
-      # Concurrency was rejected once, because the acceptance suite failed under the
-      # contention and the first instinct was to serialise. The failures turned out to
-      # be the suite's long-standing CPU-sensitive reads - a footer read racing a
-      # refetch, and a poll wait with only three intervals of headroom - and they
-      # reproduce on the unmodified baseline commit too. Fixing those was the real
-      # work; eight consecutive trials on a 2-CPU constraint now pass concurrently,
-      # where the baseline failed two in three.
-      #
-      # Both phases are backgrounded and each status collected with its own `wait`, so
-      # a failure in either still fails the step. Running the second in the foreground
-      # would swallow the first's exit code and report a green build for a failed run.
-      # The workflow validator asserts both statuses are collected.
-      - name: Run browser acceptance and probes
+      # Master runs the whole cross-stack acceptance. The dev-server probe catalog is
+      # its own sharded job below, on pull requests and master alike.
+      - name: Run browser acceptance
         if: github.event_name != 'pull_request'
         env:
           OMCPA_BROWSER_BINARY: tmp/oh-my-cpa-browser
           OMCPA_SEED_USAGE_BINARY: tmp/seed-usage-browser
-        run: pnpm verify:browser:release
+        run: pnpm verify:browser
 
       # The public demonstration is a separate deployment of the same console, so a
       # change can break it while every self-hosted gate stays green. It runs after the
-      # two phases above rather than beside them: it starts a workerd process, and on a
-      # 4-CPU runner that was enough to starve the acceptance suite's CPU-sensitive
-      # reads. It stages its own console and starts its own server, so it needs nothing
-      # from the steps above.
+      # acceptance step rather than beside it, keeping that step's resource budget
+      # stable. It serves the real Worker handler in-process against the built
+      # console and waits for each route's responses and visible content.
       - name: Run the demonstration's browser acceptance
         run: pnpm verify:demo
 
@@ -224,15 +207,82 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: browser-acceptance-failure
-          path: |
-            tmp/browser-acceptance-failure/
-            tmp/probe-failure/
-            tmp/acceptance.log
-            tmp/probes.log
+          path: tmp/browser-acceptance-failure/
           if-no-files-found: ignore
           retention-days: 7
 
       - name: Verify clean generated state
         run: |
           git diff --check
+          git status --short
           test -z "$(git status --porcelain)"
+
+  # The browser-only probe catalog: every scenario, on every pull request and on
+  # master. It drives the Vite dev server with mocked routes, so it needs neither a
+  # build nor Go, and it is split into weight-balanced disjoint shards
+  # (`scripts/acceptance/probe-shards.mjs`) that run on separate runners - one browser
+  # per machine, so the scenarios' timing-sensitive checks see no added contention.
+  probes:
+    name: probes (${{ matrix.shard }}/3)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Activate pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22.23.2
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache Playwright Chromium
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('scripts/tools-versions.json') }}
+
+      - name: Install Chromium
+        run: node scripts/install-chromium.mjs
+
+      - name: Run the probe shard
+        run: pnpm verify:probes --shard ${{ matrix.shard }}/3
+
+      - name: Upload probe failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: probe-failure-${{ matrix.shard }}
+          path: tmp/probe-failure/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Verify clean generated state
+        run: |
+          git diff --check
+          git status --short
+          test -z "$(git status --porcelain)"
+
+  # One stable check name for branch protection, whatever the shard count. It runs
+  # even when a shard failed or was cancelled, and passes only if every shard passed.
+  probes-complete:
+    name: probes
+    needs: probes
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every probe shard
+        env:
+          PROBES_RESULT: ${{ needs.probes.result }}
+        run: test "${PROBES_RESULT}" = success

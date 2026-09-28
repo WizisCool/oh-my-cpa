@@ -16,7 +16,7 @@
  *     mapping and widens the plan rather than guessing when it does not recognise a
  *     path.
  *   - The dev server is where `React.StrictMode` actually double-invokes, so this is
- *     the only place a binding bug like a controller disposed by the first cleanup
+ *     a place a binding bug like a controller disposed by the first cleanup
  *     can be observed at all. Running against the built SPA cannot see it, which is
  *     why `search-dev-server` exists and why this path is not merely a cheaper copy
  *     of `verify:probes`.
@@ -33,11 +33,14 @@
  *   pnpm check:ui --base <ref>          plan against <ref>..worktree instead of HEAD
  */
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createProbeChecker, runProbes } from './acceptance/probe.mjs';
 import { SCENARIOS } from './acceptance/scenarios.mjs';
 import { planScenarios } from './acceptance/check-ui-plan.mjs';
+import { buildImporterGraph, isCatalogAdditionOnly, isManifestScriptsOnly, readAtRef } from './acceptance/ui-impact.mjs';
+import { planProbeChange } from './acceptance/probe-impact.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -69,7 +72,9 @@ function parseArgs(argv) {
  * most useful.
  */
 function changedFiles(base) {
-  const tracked = execFileSync('git', ['diff', '--name-only', '-z', base], {
+  // `--no-renames` lists both sides of a rename, so a moved module is placed by its
+  // old path's importers as well as its new one.
+  const tracked = execFileSync('git', ['diff', '--name-only', '--no-renames', '-z', base], {
     cwd: root,
     encoding: 'utf8',
   });
@@ -105,7 +110,25 @@ if (options.scenario !== undefined && !ids.includes(options.scenario)) {
 }
 
 const files = changedFiles(options.base);
-const plan = planScenarios(files, ids);
+// The import graph costs a few seconds of transpiling, so it is built only when the
+// selection is actually being planned.
+const readCurrent = (file) => (fs.existsSync(path.join(root, file)) ? fs.readFileSync(path.join(root, file), 'utf8') : undefined);
+const readBase = (file) => readAtRef(options.base, file);
+const needsImpact = !options.all && options.scenario === undefined && files.length > 0;
+const impact = needsImpact
+  ? {
+    ...buildImporterGraph(),
+    isAdditionOnly: (file) => isCatalogAdditionOnly(file, readBase(file), readCurrent(file)),
+    isManifestScriptsOnly: (file) => isManifestScriptsOnly(file, readBase(file), readCurrent(file)),
+    probeChange: (changed) => planProbeChange(changed, {
+      readBase,
+      readCurrent,
+      acceptanceFiles: execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'scripts/acceptance'], { cwd: root, encoding: 'utf8' })
+        .split('\n').filter((file) => file.endsWith('.mjs')),
+    }),
+  }
+  : undefined;
+const plan = planScenarios(files, ids, impact);
 
 const selectedIds = options.all
   ? ids
@@ -118,7 +141,7 @@ if (options.plan) {
   for (const file of files) console.log(`  - ${file}`);
   console.log(`\nPlan: ${plan.reason}`);
   for (const entry of plan.reasons) {
-    if (entry.kind === 'map') console.log(`  ${entry.detail}`);
+    if (entry.kind === 'map' || entry.kind === 'skip') console.log(`  ${entry.detail}`);
   }
   console.log(
     selectedIds.length === 0

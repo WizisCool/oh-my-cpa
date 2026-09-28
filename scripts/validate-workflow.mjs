@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseDocument } from 'yaml';
+import { validateArtifactGates, validateBrowserPhases, validateProbeJobs } from './workflow-checks.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const workflow = path.join(root, '.github', 'workflows', 'ci.yml');
@@ -19,6 +20,7 @@ if (document.errors.length > 0) {
     throw new Error('CI workflow does not cancel superseded runs');
   }
   const browserSteps = value.jobs.browser.steps;
+  validateArtifactGates(browserSteps);
   const requiredActions = [
     ['static', 'actions/checkout@v7'],
     ['static', 'actions/setup-go@v7'],
@@ -31,34 +33,12 @@ if (document.errors.length > 0) {
       throw new Error(`CI workflow has no ${action} step in ${jobName}`);
     }
   }
-  if (!browserSteps.some((step) => step.if === "github.event_name == 'pull_request'" && step.run === 'pnpm verify:browser:smoke')) {
-    throw new Error('CI workflow has no pull-request browser smoke step');
-  }
-  if (!browserSteps.some((step) => step.if === "github.event_name == 'pull_request'" && step.run === 'pnpm verify:browser:p0')) {
-    throw new Error('CI workflow has no pull-request browser P0 gate');
-  }
-  // The two browser phases run concurrently on master, and the step must fail when
-  // either does: a concurrent step whose status is not collected reports a green
-  // build for a failed run, which is worse than running them sequentially.
-  const masterBrowser = browserSteps.find((step) => step.name === 'Run browser acceptance and probes');
-  if (!masterBrowser) {
-    throw new Error('CI workflow does not run the browser phases together on master');
-  }
-  if (masterBrowser.run.includes('verify:browser:smoke')) {
-    throw new Error('the master browser step must not run the pull-request smoke path');
-  }
-  if (masterBrowser.run !== 'pnpm verify:browser:release') {
-    throw new Error('the master browser step does not use the release browser orchestrator');
-  }
-  // The probes reach master for the first time here: they used to sit outside every
-  // gate, so a regression in overlay stacking or column geometry was only caught if
-  // someone remembered the command.
-  const browserOrchestrator = fs.readFileSync(path.join(root, 'scripts', 'run-browser-release.mjs'), 'utf8');
-  for (const marker of ['scripts/browser-acceptance.mjs', 'scripts/browser-probes.mjs', 'Promise.all', 'failed.length']) {
-    if (!browserOrchestrator.includes(marker)) {
-      throw new Error(`the browser orchestrator omits ${marker}`);
-    }
-  }
+  // The browser phases and the probe shards are checked by parsed structure, with
+  // negative cases in `workflow-checks.test.mjs`: a step that runs on the wrong event,
+  // a shard count that leaves part of the catalog unrun, or an aggregate that passes
+  // on a failed shard is each refused.
+  validateBrowserPhases(browserSteps);
+  validateProbeJobs(value.jobs);
   const browserPreparation = browserSteps.find((step) => step.name === 'Prepare Chromium and build embedded SPA');
   if (!browserPreparation?.run?.includes('install-chromium.mjs') || !browserPreparation.run.includes('pnpm build')) {
     throw new Error('CI workflow does not prepare Chromium and build the SPA in one step');
@@ -81,14 +61,5 @@ if (document.errors.length > 0) {
   if (!browserPreparation.run.includes('install-chromium.mjs')) {
     throw new Error('CI workflow does not install Chromium through the probe-and-fallback script');
   }
-  for (const name of ['Run deterministic browser smoke', 'Run deterministic browser P0 gates']) {
-    const step = browserSteps.find((candidate) => candidate.name === name);
-    if (step?.env?.OMCPA_BROWSER_BINARY !== 'tmp/oh-my-cpa-browser') {
-      throw new Error(`${name} does not reuse the prepared browser binary`);
-    }
-  }
-  if (masterBrowser.env?.OMCPA_BROWSER_BINARY !== 'tmp/oh-my-cpa-browser') {
-    throw new Error('the master browser step does not reuse the prepared browser binary');
-  }
-  console.log(`CI workflow parsed with ${value.jobs.static.steps.length} static and ${browserSteps.length} browser steps.`);
+  console.log(`CI workflow parsed: ${value.jobs.static.steps.length} static steps, ${browserSteps.length} browser steps, ${value.jobs.probes.strategy.matrix.shard.length} probe shards.`);
 }

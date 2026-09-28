@@ -45,6 +45,32 @@ than an oversight:
   no gate and its numbers were never a budget. The one timing claim that is a real
   budget - the pricing page opening under 3s - lives in the acceptance suite.
 
+## Go demonstration page assertions
+
+`scripts/demo-smoke.mjs` checks quick-start's four ordered steps rather than the
+retired card layout. Legacy credential, OAuth and quota URLs remain exercised:
+they must reach the unified OAuth workspace and render credential records, connect
+choices and matched quota records respectively. Direct workspace, agent-directory
+and audit-entry reads are also covered. Server-side refusal, masked-key and
+non-durable-write assertions remain unchanged.
+
+## Artifact budgets
+
+The entry-only bundle assertions formerly inside `scripts/browser-acceptance.mjs`
+are enforced by `scripts/check-bundle-budget.mjs` through `pnpm check:bundle`.
+That checker also requires the expected chunks and enforces vendor, editor, icon
+and aggregate budgets. CI, `verify:build`, `verify:e2e`, `verify:full` and its serial
+counterpart invoke it after building, before browsers; standalone browser commands
+exercise behavior rather than a duplicate budget policy. Workflow self-tests guard
+the CI ordering and generated-state rejection.
+
+## Smoke path inside P0
+
+The two smoke-path checks in `scripts/acceptance/usage-events/requestList.mjs` (no
+console errors and no page errors at the end of the smoke path) run in every mode
+rather than only under `--smoke`. P0 and the full run therefore contain every smoke
+assertion at the same point, which is what lets pull-request CI run P0 alone.
+
 ## Classes
 
 | Class | Meaning |

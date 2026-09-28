@@ -42,6 +42,8 @@ export const DOCUMENTS = [
   { file: 'docs/ops/sqlite-operations.md' },
   { file: 'docs/ops/cloudflare-demo.md' },
   { file: 'docs/plans/model-prices.md' },
+  { file: 'docs/testing.md' },
+  { file: 'docs/adr/0032-ci-owns-the-full-browser-catalog.md', archival: true },
   { file: 'docs/adr/0001-go-react-sqlite-modular-monolith.md', archival: true },
   { file: 'docs/adr/0002-cpa-binding-and-identity-hierarchy.md', archival: true },
   { file: 'docs/adr/0003-request-time-price-snapshots.md', archival: true },
@@ -50,6 +52,7 @@ export const DOCUMENTS = [
 /** References that have already gone stale at least once. Each entry is
  * evidence for a future reviewer: the reason explains what replaced it. */
 export const RETIRED_REFERENCES = [
+  { pattern: /run-browser-release\.mjs|verify:browser:release/, reason: 'CI runs the probe catalog as its own sharded job; the combined release orchestrator was removed (ADR 0032)' },
   { pattern: /docs\/DESIGN\.md/, reason: 'the visual-system source of truth is docs/design.md (lowercase)' },
   { pattern: /cli-proxy-api-management-center\.html/, reason: 'the prototype HTML is not part of this repository' },
   { pattern: /AllResourcesPage/, reason: 'the triage console page was removed when navigation aligned with gateway surfaces' },

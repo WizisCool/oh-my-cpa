@@ -22,7 +22,7 @@ if (!await runChecks([
 
 if (!await runChecks([
   { label: 'worktree-secrets', command: 'pnpm', args: ['verify:secrets:worktree'] },
-  { label: 'bundle-budget', command: 'node', args: ['scripts/check-bundle-budget.mjs'] },
+  { label: 'bundle-budget', command: 'pnpm', args: ['check:bundle'] },
 ])) process.exit(1);
 
 // The two browser phases run concurrently. They are independent processes with their
@@ -47,8 +47,7 @@ if (!await runChecks([
 // Measured under that same 2-CPU constraint: sequential 81.4s / 81.6s, concurrent
 // 69.5s / 71.7s - about 12 seconds, and the gap is larger on more cores.
 //
-// The demonstration's check runs last. It takes 46s, starts its own server and leaves
-// no process behind.
+// The demonstration runs last with its own server and content-driven readiness checks.
 if (!await runChecks([
   { label: 'browser', command: 'pnpm', args: ['verify:browser'] },
   { label: 'probes', command: 'pnpm', args: ['verify:probes'] },

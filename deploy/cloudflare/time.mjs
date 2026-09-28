@@ -39,6 +39,9 @@ const INSTANT_NAMED = new Set([
   'to_ms',
   'as_of_ms',
   'timestamp_ms',
+  // A price version's start, moved with the history so the price book's timeline stays
+  // in step with the usage it priced.
+  'effective_from_ms',
   'latest_after',
   'from',
   'to',
@@ -119,7 +122,9 @@ function parseInstant(text) {
 
 /** Moves one instant held as a number, preserving the unit it was written in. */
 function shiftNumber(value, deltaMs) {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return value;
+  // Zero is an instant that never happened (an unconfigured channel's update time), and
+  // moving it would render a date in 1970 plus the delta as though it were real.
+  if (typeof value !== 'number' || !Number.isFinite(value) || value === 0) return value;
   if (Math.abs(value) < MILLIS_THRESHOLD) return value + deltaMs / THOUSAND;
   return value + deltaMs;
 }
