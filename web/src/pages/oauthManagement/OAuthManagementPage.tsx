@@ -843,6 +843,7 @@ export const OAuthManagementPage: React.FC = () => {
                 <span>{t('omc.col_credential')}</span>
               </div>
               <div className={styles['th-status']}>{t('af.detail_status')}</div>
+              <div className={styles['th-switch']}>{t('pro.col_switch')}</div>
               <div className={styles['th-management']}>{t('omc.col_traffic')}</div>
               <div className={styles['th-quota']}>{t('omc.col_quota_window')}</div>
               <div className={styles['th-actions']}>{t('keys.col_actions')}</div>

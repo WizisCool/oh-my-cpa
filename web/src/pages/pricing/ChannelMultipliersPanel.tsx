@@ -56,7 +56,7 @@ export const ChannelMultipliersPanel: React.FC<{
       key: 'usage',
       align: 'right' as const,
       width: 150,
-      render: (_: unknown, channel: PricingChannel) => <UsageCell usage={channel.usage_30d} />,
+      render: (_: unknown, channel: PricingChannel) => <UsageCell usage={channel.usage_30d} scope={{ key: 'provider', value: channel.channel }} />,
     },
   ];
   return (

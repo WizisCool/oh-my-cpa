@@ -101,6 +101,10 @@ func (h *Handler) listPlugins(writer http.ResponseWriter, request *http.Request)
 		return
 	}
 
+	// An installed plugin the host has not loaded reports no name or logo of its own;
+	// the store's listing of it supplies them, before the logos are inlined below.
+	h.pluginIdentities.fill(request.Context(), client, list.Plugins)
+
 	// A plugin's logo is its own to declare, but the browser that draws it must not
 	// depend on the plugin's host: the mark is inlined here instead. A logo that
 	// cannot be inlined is reported as absent, which is what makes the console fall
@@ -295,6 +299,7 @@ func (h *Handler) listPluginStore(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
+	h.pluginIdentities.remember(store.Plugins)
 	h.pluginLogos.inlineStore(request.Context(), store.Plugins)
 
 	projected := projectStorePlugins(store.Plugins)

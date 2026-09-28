@@ -277,7 +277,7 @@ export const PricingPage: React.FC = () => {
       key: 'usage',
       align: 'right' as const,
       width: 150,
-      render: (_: unknown, row: BookRow) => <UsageCell usage={row.usage_30d} />,
+      render: (_: unknown, row: BookRow) => <UsageCell usage={row.usage_30d} scope={{ key: 'model', value: row.model }} />,
     },
     {
       title: t('common.actions'),
@@ -440,7 +440,7 @@ export const PricingPage: React.FC = () => {
               phone={{ identity: 'model', actions: ['actions'] }} tableProps={{ size: 'small' }}
             />
           )}
-          {pageGroups.map((group) => {
+          {pageGroups.map((group, groupIndex) => {
             const identity = group.provider ? pricingProviderIdentity(group.provider) : null;
             return (
               <section key={group.id} className={styles['provider-group']} data-testid="pricing-provider-group" aria-label={identity?.label ?? t('pricing.provider.unassigned')}>
@@ -449,11 +449,14 @@ export const PricingPage: React.FC = () => {
                   <h2>{identity?.label ?? t('pricing.provider.unassigned')}</h2>
                   {group.provider && <span className={styles.dimmed}>{group.provider.is_oauth ? t('pricing.provider.oauth') : t('pricing.provider.api')} · {t('omc.priority_value', { n: group.provider.priority })}</span>}
                 </header>
+                {/* The columns are the same fixed set in every group, so their names are printed
+                    once, above the first group; repeating them per provider put a header row
+                    beside every one-model group and doubled the page's height. */}
                 <ResponsiveList<BookRow>
                   columns={priceColumns} dataSource={group.rows} rowKey="model"
                   isLoading={result.isLoading} isBlocked={result.isError && !data}
                   emptyText={t('pricing.table.empty_filter')}
-                  phone={{ identity: 'model', actions: ['actions'] }} tableProps={{ size: 'small' }}
+                  phone={{ identity: 'model', actions: ['actions'] }} tableProps={{ size: 'small', showHeader: groupIndex === 0 }}
                 />
               </section>
             );

@@ -23,18 +23,22 @@
   flex-direction: column;
 }
 
+/* The two products are rows of one list rather than boxes inside the card: a card of cards
+   spent a border and 32px of padding per product on framing the card already provides. */
 .product-block {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);
+  gap: 10px;
+  padding: 4px 0 16px;
 }
 
 .product-block + .product-block {
-  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.product-block:last-child {
+  padding-bottom: 0;
 }
 
 .product-header {
@@ -102,10 +106,28 @@
 
 .version-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px 20px;
   font-size: 13px;
+}
+
+.version-pair {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.version-value {
+  padding: 1px 6px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-xs);
+  background: var(--hover-inset);
+  color: var(--fg);
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 /* On a phone the running and latest versions stack. Two labels and two values in one row left
@@ -118,17 +140,26 @@
     align-items: flex-start;
     gap: 4px;
   }
-}
 
-.version-tag {
-  font-family: var(--font-mono, monospace);
-  font-size: 12px;
+  .changelog-toggle {
+    margin-left: 0;
+  }
+
+  /* An action's name and description take the row and its button drops below them, so a
+     long Malay description never squeezes the control off the screen. */
+  .maintenance-action {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .maintenance-action :global(.ant-btn) {
+    align-self: flex-start;
+  }
 }
 
 .changelog-toggle {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 4px;
+  margin-left: auto;
+  padding-inline: 0;
 }
 
 .changelog-panel {
@@ -301,24 +332,57 @@
 
 .maintenance-actions {
   display: flex;
-  gap: 12px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
+  flex-direction: column;
+  margin-bottom: 12px;
 }
 
-/* A maintenance button may shrink and wrap its own label.
-   The labels are deliberately explicit ("Rebuild Database (VACUUM)"), and Malay renders that as
-   a long compound. On a 320px screen the button then pushed past the viewport; letting the
-   content wrap keeps the sentence intact instead of truncating a destructive action's name,
-   which is the one label an operator should never have to guess at. */
-.maintenance-actions :global(.ant-btn) {
-  height: auto;
-  min-height: 32px;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  text-align: left;
+.maintenance-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-soft);
 }
+
+.maintenance-action:first-child {
+  padding-top: 0;
+}
+
+.maintenance-action:last-child {
+  border-bottom: 0;
+}
+
+.maintenance-action-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.maintenance-action-title {
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.maintenance-action-desc {
+  color: var(--meta);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.maintenance-action-fact {
+  display: block;
+  color: var(--fg-2);
+  font-family: var(--font-mono, monospace);
+  white-space: nowrap;
+}
+
+.maintenance-action :global(.ant-btn) {
+  flex: none;
+}
+
 
 .maintenance-box {
   padding: 14px;
@@ -445,7 +509,8 @@
 /* ── shared readings ─────────────────────────────────────────────────────── */
 
 .version-label {
-  margin-right: 6px;
+  color: var(--meta);
+  font-size: 12px;
 }
 
 .check-alert {

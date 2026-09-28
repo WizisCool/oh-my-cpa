@@ -294,7 +294,7 @@ export async function systemInformationPage({ base, page, check }) {
   }).catch(() => {});
 
   // ── the page stays a gateway dashboard, not a database console ─────────────
-  // The page shows four cards: versions, storage, component health, maintenance. A page
+  // The page shows four cards: versions, maintenance, storage, component health. A page
   // that grows a fifth surface as a side effect of a later change is the failure this
   // pins, because the information budget is a product decision rather than a default.
   const cardTitles = await page.locator('.system-page .ant-card-head-title').allInnerTexts();
@@ -995,8 +995,9 @@ export async function systemInformationPage({ base, page, check }) {
 
   // ── 2x2 grid layout and equal height within rows on desktop ───────────────
   // The four cards form a 2x2 grid where siblings in the same row share equal height.
-  // Row 1: Versions & Updates (left) | SQLite Storage (right)
-  // Row 2: Component Topology & Health (left) | Maintenance & Diagnostics (right)
+  // Row 1: Versions & Updates (left) | Maintenance & Diagnostics (right)
+  // Row 2: SQLite Storage (left) | Component Topology & Health (right)
+  // The rows pair cards of similar height, so neither card in a row is mostly empty space.
   const gridGeometry = await page.evaluate(() => {
     const cards = Array.from(document.querySelectorAll('.system-page .ant-card'));
     if (cards.length !== 4) return { error: `expected 4 cards, found ${cards.length}` };
@@ -1024,7 +1025,7 @@ export async function systemInformationPage({ base, page, check }) {
     const widthDiff = Math.abs(c1.width - c2.width);
 
     // Maintenance card must be at bottom right (c4).
-    const isMaintenanceFourth = /Maintenance|Penyelenggaraan|维护|維護/i.test(c4.title);
+    const isMaintenanceSecond = /Maintenance|Penyelenggaraan|维护|維護/i.test(c2.title);
 
     return {
       row1TopDiff,
@@ -1036,7 +1037,7 @@ export async function systemInformationPage({ base, page, check }) {
       colLeftDiff,
       colRightDiff,
       widthDiff,
-      isMaintenanceFourth,
+      isMaintenanceSecond,
       boxes,
     };
   });
@@ -1057,9 +1058,9 @@ export async function systemInformationPage({ base, page, check }) {
     `colLeftDiff=${gridGeometry.colLeftDiff}px, colRightDiff=${gridGeometry.colRightDiff}px, widthDiff=${gridGeometry.widthDiff}px`,
   );
   check(
-    'maintenance card sits in the bottom-right cell',
-    gridGeometry.isMaintenanceFourth,
-    `fourth card title: ${gridGeometry.boxes?.[3]?.title}`,
+    'maintenance card sits in the top-right cell, beside the versions card',
+    gridGeometry.isMaintenanceSecond,
+    `second card title: ${gridGeometry.boxes?.[1]?.title}`,
   );
 }
 

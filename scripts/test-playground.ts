@@ -111,24 +111,46 @@ test('user_agent is a transport header, never a payload field', () => {
   assert.equal(buildCurl(turn.request, playgroundUserAgent()).includes(`User-Agent: ${playgroundUserAgent()}`), true);
 });
 
-test("request drill-down uses a safe past preset window, exact model and key identity", () => {
-  const turn = makeTurn(); turn.endedAt = 1001000;
+test("request drill-down pins the turn's own window, exact model, key and user agent", () => {
+  let turn = applyEvent(makeTurn(), { type: "meta", started_at_ms: 5_000_000 });
+  turn = applyEvent(turn, { type: "done", first_content_ms: 35, duration_ms: 2_000 }, 1003000);
   const url = new URL(usageLink(turn), "http://local");
   const query = readEventQuery(url.searchParams);
-  assert.equal(url.searchParams.has("preset"), true);
+  assert.equal(url.searchParams.has("preset"), false);
+  // Server time, not the browser's startedAt, anchors the window.
+  assert.equal(query.from, 5_000_000 - 5_000);
+  assert.equal(query.to, 5_000_000 + 2_000 + 5_000);
   assert.deepEqual(query.filters?.model, ["alias/model"]);
   assert.deepEqual(query.filters?.api_key, ["fingerprint"]);
+  assert.equal(query.text?.ua, "Oh-My-CPA/");
 });
 
-test("server timings and candidate links are independent of browser clock skew", () => {
-  let turn = applyEvent(makeTurn(), { type: "meta", started_at_ms: 1000000 });
-  turn = applyEvent(turn, { type: "delta", content: "answer", first_content_ms: 35 }, 1000100);
-  assert.equal(turn.firstContentMS, 35);
-  turn = applyEvent(turn, { type: "done", first_content_ms: 35, duration_ms: 200 }, 1000300);
-  const url = new URL(usageLink(turn), "http://local");
-  const query = readEventQuery(url.searchParams);
-  assert.equal(url.searchParams.has("preset"), true);
-  assert.deepEqual(query.filters?.model, ["alias/model"]);
+test("request drill-down follows a custom model override and user agent", () => {
+  const turn = makeTurn();
+  turn.request = { ...turn.request, custom_body: { model: "override/model" }, user_agent: " my-agent/1 " };
+  turn.endedAt = 1_001_000;
+  const query = readEventQuery(new URL(usageLink(turn), "http://local").searchParams);
+  assert.deepEqual(query.filters?.model, ["override/model"]);
+  assert.equal(query.text?.ua, "my-agent/1");
+  // Without server timings the browser clock places the window, with a wider margin for skew.
+  assert.equal(query.from, 1_000_000 - 5 * 60_000);
+  assert.equal(query.to, 1_001_000 + 5 * 60_000);
+});
+
+test("a turn that just finished stays open-ended until its record can have been ingested", () => {
+  let turn = applyEvent(makeTurn(), { type: "meta", started_at_ms: 9_000_000 });
+  turn = applyEvent(turn, { type: "done", duration_ms: 1_000 }, 9_001_000);
+  const fresh = new URL(usageLink(turn, 9_010_000), "http://local").searchParams;
+  assert.equal(fresh.get("from"), String(9_000_000 - 5_000));
+  assert.equal(fresh.has("to"), false);
+  const settled = new URL(usageLink(turn, 9_000_000 + 1_000 + 5_000 + 60_000), "http://local").searchParams;
+  assert.equal(settled.get("to"), String(9_000_000 + 1_000 + 5_000));
+});
+
+test("a turn without an end still yields a closed window the query accepts", () => {
+  const query = readEventQuery(new URL(usageLink(applyEvent(makeTurn(), { type: "meta", started_at_ms: 2_000_000 })), "http://local").searchParams);
+  assert.equal(query.from, 2_000_000 - 5_000);
+  assert.equal(query.to, 2_000_000 + 10 * 60_000 + 5_000);
 });
 
 test('playground IDs do not require a secure-context randomUUID', () => {

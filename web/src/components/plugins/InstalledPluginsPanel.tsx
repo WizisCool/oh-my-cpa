@@ -114,8 +114,8 @@ export function InstalledPluginsPanel({
       ) : (
         <div className={styles['installed-list']}>
           {visible.map((plugin) => {
-            const name = pluginDisplayName(plugin);
             const listing = catalog.get(plugin.id);
+            const name = pluginDisplayName({ id: plugin.id, metadata: { name: plugin.metadata?.name || listing?.name } });
             const logo = plugin.logo || plugin.metadata?.logo || listing?.logo;
             const version = formatPluginVersion(plugin.metadata?.version || listing?.installed_version);
             const isUpdating = enabledMutation.isPending && enabledMutation.variables?.id === plugin.id;

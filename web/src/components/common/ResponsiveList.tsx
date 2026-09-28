@@ -89,7 +89,7 @@ export function ResponsiveList<T extends object>({
 
   if (!isPhone) {
     return (
-      <div className="table-scroll" ref={listRef}>
+      <div className="table-scroll data-table" ref={listRef}>
         <Table<T>
           {...tableProps}
           columns={columns}

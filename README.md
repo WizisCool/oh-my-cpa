@@ -68,7 +68,7 @@ does.
 - **Faceted Request Browser**: Filter requests by model, provider, client key alias, status, cost, and latency using multi-select facets and full-text search.
 - **Request Detail & Waterfall**: Inspect duration, time-to-first-token (TTFT), token breakdowns, and download raw per-request logs.
 - **Streaming & Pull Ingestion**: Collects usage events via background RESP stream or polling, with automatic backoff during idle periods.
-- **Logs & Audit Trail**: Tail the gateway's log and download its error log files, read Oh My CPA's own recent service log without shell access, and browse the operator audit trail as a readable, filterable timeline with JSON export.
+- **Logs & Audit Trail**: Tail the gateway's log and download its error log files, and read Oh My CPA's own recent service log without shell access. The operator audit trail has its own page: a readable timeline with outcome counts, category, outcome, text and time-range filters kept in the URL, and JSON export.
 
 ### Model Pricing & Cost Accounting
 - **Request-Time Snapshots**: Each request locks its cost at completion using immutable price versions, ensuring historical numbers never drift when rates are updated.

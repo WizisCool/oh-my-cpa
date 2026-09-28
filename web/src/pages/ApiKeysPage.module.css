@@ -6,6 +6,13 @@
   overflow: hidden;
 }
 
+/* The card is the list's frame: the head and the table run to its edges, as the OAuth list
+   does, rather than floating in a 20px inset with a second frame of their own. A phone keeps
+   the inset, because its rows are open blocks rather than a table. */
+.keys-panel :global(.ant-card-body) {
+  padding: 0;
+}
+
 /* The head names the list and states what it holds - how many keys, how many answered traffic
    in the window, and how much - with the search on the right. It wraps rather than scrolls. */
 .keys-head {
@@ -14,7 +21,7 @@
   justify-content: space-between;
   gap: 12px 16px;
   flex-wrap: wrap;
-  padding-bottom: 14px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -63,14 +70,26 @@
   color: var(--muted);
 }
 
-/* Loading and failure states occupy the card's own inset, so the surface does not
-   change shape when the query resolves. */
+/* Loading and failure states take the rows' own inset, so the surface does not change shape
+   when the query resolves. */
 .keys-state {
   min-height: 88px;
-  padding-top: 16px;
+  padding: 16px;
 }
 
 @media (max-width: 640px) {
+  .keys-panel :global(.ant-card-body) {
+    padding: 16px;
+  }
+
+  .keys-head {
+    padding: 0 0 14px;
+  }
+
+  .keys-state {
+    padding: 16px 0 0;
+  }
+
   .keys-search {
     width: 100%;
   }

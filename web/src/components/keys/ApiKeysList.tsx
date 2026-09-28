@@ -425,8 +425,8 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
         </div>
       ) : (
         /* Sideways scrolling stays inside the card, so the page's content column stays where the
-           reader left it. */
-        <div className="table-scroll">
+           reader left it. The card is the list's frame, so the table draws none of its own. */
+        <div className="table-scroll data-table data-table-flush">
           <Table<ApiKeyRecord>
             className="config-api-keys-table"
             size="small"

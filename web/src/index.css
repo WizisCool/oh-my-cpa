@@ -236,14 +236,19 @@ a { color: inherit; }
 .ant-descriptions-item-label { font-size: 13px; color: var(--muted) !important; }
 .ant-table-wrapper .ant-table-thead > tr > th {
   /* A header names its column in one line: a squeezed column wraps its cells, never its name,
-     which is how "前缀" came to read one glyph per line. */
+     which is how "前缀" came to read one glyph per line. The strip is the OAuth list's header,
+     so every list in the console names its columns the same way. */
   white-space: nowrap;
-  font-size: 12px;
-  letter-spacing: .08em;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .05em;
   text-transform: uppercase;
   color: var(--muted) !important;
-  background: var(--bg) !important;
+  background: var(--surface) !important;
+  border-bottom: 1px solid var(--border-soft) !important;
 }
+.ant-table-wrapper .ant-table-thead > tr > th::before { display: none; }
 .ant-drawer-title, .ant-modal-title { font-size: 16px; font-weight: 600; }
 .ant-drawer-header { border-bottom: 1px solid var(--border); }
 .ant-drawer-footer { border-top: 1px solid var(--border); }
@@ -357,6 +362,25 @@ a { color: inherit; }
    too, and a table's bottom border overflows by a subpixel, so every list became a vertical
    scroller of one pixel that caught the wheel: over a stack of lists the page would not scroll. */
 .table-scroll { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
+/* The console's one list surface, drawn after the OAuth credential list: a hairline frame, the
+   header strip above, rows on the page background divided by soft rules. A list that is the
+   only thing in its container is the frame itself (`data-table-flush`), so no list sits in a
+   frame inside a frame. */
+.data-table {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.data-table-flush { border: 0; border-radius: 0; }
+.data-table .ant-table-wrapper .ant-table { background: transparent; }
+.data-table .ant-table-wrapper .ant-table-thead > tr > th { padding: 8px 16px; }
+.data-table .ant-table-wrapper .ant-table-tbody > tr > td {
+  background: transparent;
+  border-bottom: 1px solid var(--border-soft);
+  padding: 12px 16px;
+}
+.data-table .ant-table-wrapper .ant-table-tbody > tr.ant-table-row:hover > td { background: var(--surface); }
+.data-table .ant-table-wrapper .ant-table-tbody > tr:last-child > td { border-bottom: 0; }
 .responsive-list .ant-pagination { margin-top: 12px; }
 /* A phone row inside a card takes the card's own inset rather than adding its own on top: the
    two stacked to 36px a side, which on a 390px screen is a tenth of the width spent on margin. */
@@ -2107,25 +2131,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   font-family: var(--font-mono);
   font-size: 13px;
   border-radius: var(--radius-sm);
-}
-
-/* API Keys table */
-.config-api-keys-table {
-  background: transparent;
-}
-
-.config-api-keys-table .ant-table-tbody > tr > td {
-  background: transparent !important;
-  border-bottom: 1px solid var(--border-soft);
-  padding: 12px 16px;
-}
-
-.config-api-keys-table .ant-table-tbody > tr:hover > td {
-  background: var(--hover) !important;
-}
-
-.config-api-keys-table .ant-table-tbody > tr:last-child > td {
-  border-bottom: none;
 }
 
 /* The key editor: the secret first, because it is what the dialog exists for, then the

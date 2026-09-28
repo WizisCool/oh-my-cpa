@@ -2,6 +2,7 @@ import React from 'react';
 import { App as AntdApp, Layout, Menu, Drawer, Tooltip, Button, Breadcrumb, Spin } from 'antd';
 import {
   PuzzleOutlined,
+  AuditOutlined,
   CloudServerOutlined,
   CodeSandboxOutlined,
   ControlOutlined,
@@ -23,6 +24,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { HeaderNav } from './HeaderNav';
 import { NARROW_VIEWPORT_QUERY } from '../../hooks/useIsNarrowViewport';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { DataProgress } from './DataProgress';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
@@ -85,6 +87,7 @@ const navGroups: NavGroup[] = [
       { key: '/usage/events', labelKey: 'nav.usage_events', icon: <HistoryOutlined /> },
       { key: '/pricing', labelKey: 'nav.pricing', icon: <DollarOutlined /> },
       { key: '/logs', labelKey: 'nav.logs', icon: <ProfileOutlined /> },
+      { key: '/audit', labelKey: 'nav.audit', icon: <AuditOutlined /> },
     ],
   },
   {
@@ -174,6 +177,7 @@ export const AppLayout: React.FC = () => {
     .sort((a, b) => b.length - a.length)[0] ?? '/dashboard';
   const currentEntry = navEntries.find((entry) => entry.key === selectedKey);
   const currentGroup = navGroups.find((group) => group.items.some((entry) => entry.key === selectedKey));
+  useDocumentTitle(currentEntry ? t(currentEntry.labelKey) : t('common.management'));
   const menuItems = React.useMemo(() => buildMenuItems(t, isCollapsed), [t, isCollapsed]);
 
   const selectPage = ({ key }: { key: string }) => {

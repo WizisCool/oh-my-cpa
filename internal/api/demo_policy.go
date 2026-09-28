@@ -163,6 +163,7 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodGet, "/api/v1/usage/events/{id}", demoAllow, ""},
 	{http.MethodGet, "/api/v1/usage/facets", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/audit/events", demoAllow, ""},
+	{http.MethodGet, "/api/v1/management/audit/summary", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/audit/export", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/system", demoAllow, ""},
 

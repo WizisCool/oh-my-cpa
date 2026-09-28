@@ -190,7 +190,7 @@ function serve(entry, nowMs, url) {
         { status: 404, headers: { ...JSON_HEADERS, 'Content-Type': entry.content_type } },
       );
     }
-    const decoded = rebase(applyQueryFilters(identity, url), deltaMs);
+    const decoded = rebase(applyQueryFilters(identity, url, { deltaMs, dataset: DATASET }), deltaMs);
     const preset = url.searchParams.has('preset') ? presetOf(url) : '';
     body = JSON.stringify(labelPreset(decoded, preset));
   } catch {

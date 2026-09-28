@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -127,8 +129,9 @@ type AuditQuery struct {
 	// Categories keeps actions whose first segment is one of these (`provider`
 	// keeps `provider.update`). Empty keeps every action.
 	Categories []string
-	// Outcome keeps only rows of one result class: AuditOutcomeFailed or
-	// AuditOutcomeSucceeded. Empty keeps every result.
+	// Outcome keeps only rows of one result class: AuditOutcomeFailed,
+	// AuditOutcomeSucceeded or AuditOutcomeUnfinished (an `attempt` row; with
+	// FoldAttempts, one whose outcome never landed). Empty keeps every result.
 	Outcome string
 	// Search is a case-insensitive substring of the action, target or request id.
 	Search string
@@ -165,8 +168,9 @@ const (
 	// AuditPageMax bounds one page, and therefore one export.
 	AuditPageMax = 5000
 
-	AuditOutcomeFailed    = "failed"
-	AuditOutcomeSucceeded = "succeeded"
+	AuditOutcomeFailed     = "failed"
+	AuditOutcomeSucceeded  = "succeeded"
+	AuditOutcomeUnfinished = "unfinished"
 )
 
 // Result classes. Everything not named here (`attempt`, and the Agent's
@@ -189,58 +193,7 @@ func (r *Repository) QueryAuditEvents(ctx context.Context, query AuditQuery) (Au
 		limit = AuditPageMax
 	}
 
-	where := make([]string, 0, 6)
-	args := make([]any, 0, 16)
-	if query.Before.ID > 0 {
-		where = append(where, "(e.occurred_at_ms < ? OR (e.occurred_at_ms = ? AND e.id < ?))")
-		args = append(args, query.Before.OccurredAtMS, query.Before.OccurredAtMS, query.Before.ID)
-	}
-	if query.SinceMS > 0 {
-		where = append(where, "e.occurred_at_ms >= ?")
-		args = append(args, query.SinceMS)
-	}
-	if len(query.Categories) > 0 {
-		clauses := make([]string, 0, len(query.Categories))
-		for _, category := range query.Categories {
-			// Categories are validated identifiers, but the prefix match still
-			// escapes LIKE's wildcards so `_` in `api_key` matches only itself.
-			clauses = append(clauses, `(e.action = ? OR e.action LIKE ? ESCAPE '\')`)
-			args = append(args, category, escapeLikePattern(category)+".%")
-		}
-		where = append(where, "("+strings.Join(clauses, " OR ")+")")
-	}
-	switch query.Outcome {
-	case AuditOutcomeFailed:
-		where = append(where, "e.result IN ("+placeholders(len(auditFailedResults))+")")
-		args = appendStrings(args, auditFailedResults)
-	case AuditOutcomeSucceeded:
-		where = append(where, "e.result IN ("+placeholders(len(auditSucceededResults))+")")
-		args = appendStrings(args, auditSucceededResults)
-	}
-	if search := strings.TrimSpace(query.Search); search != "" {
-		pattern := "%" + escapeLikePattern(strings.ToLower(search)) + "%"
-		where = append(where, `(lower(e.action) LIKE ? ESCAPE '\' OR lower(e.target_type) LIKE ? ESCAPE '\' OR lower(e.target_id) LIKE ? ESCAPE '\' OR lower(e.request_id) LIKE ? ESCAPE '\')`)
-		args = append(args, pattern, pattern, pattern, pattern)
-	}
-	if query.FoldAttempts {
-		// The request-id pairing is exact. The second arm pairs rows written before
-		// request ids were stable per request: an outcome for the same action and
-		// target that followed within auditFoldWindowMS is the same operation. Both rows
-		// must be older than migration 027, which shipped with stable ids, so neither a
-		// later attempt nor a later outcome is ever paired by guesswork.
-		where = append(where, `NOT (e.result = 'attempt' AND (
-			(e.request_id <> '' AND EXISTS (
-				SELECT 1 FROM audit_events o
-				WHERE o.request_id = e.request_id AND o.action = e.action AND o.result <> 'attempt'))
-			OR (e.occurred_at_ms < COALESCE((SELECT applied_at FROM schema_migrations WHERE version = ?), 0) * 1000
-				AND EXISTS (
-					SELECT 1 FROM audit_events o
-					WHERE o.action = e.action AND o.target_id = e.target_id AND o.result <> 'attempt'
-					  AND o.occurred_at_ms BETWEEN e.occurred_at_ms AND e.occurred_at_ms + ?
-					  AND o.occurred_at_ms < COALESCE((SELECT applied_at FROM schema_migrations WHERE version = ?), 0) * 1000))))`)
-		args = append(args, auditStableRequestIDMigration, auditFoldWindowMS, auditStableRequestIDMigration)
-	}
-
+	where, args := auditFilterClauses(query)
 	statement := `
 		SELECT e.id, e.occurred_at_ms, e.action, e.target_type, e.target_id, e.result,
 		       e.request_id, e.source_summary, e.details_json
@@ -287,6 +240,68 @@ func (r *Repository) QueryAuditEvents(ctx context.Context, query AuditQuery) (Au
 	return page, nil
 }
 
+// auditFilterClauses turns a query into WHERE clauses over `audit_events e`, shared by
+// the page read and the summary so both count exactly the rows the timeline would show.
+func auditFilterClauses(query AuditQuery) ([]string, []any) {
+	where := make([]string, 0, 6)
+	args := make([]any, 0, 16)
+	if query.Before.ID > 0 {
+		where = append(where, "(e.occurred_at_ms < ? OR (e.occurred_at_ms = ? AND e.id < ?))")
+		args = append(args, query.Before.OccurredAtMS, query.Before.OccurredAtMS, query.Before.ID)
+	}
+	if query.SinceMS > 0 {
+		where = append(where, "e.occurred_at_ms >= ?")
+		args = append(args, query.SinceMS)
+	}
+	if len(query.Categories) > 0 {
+		clauses := make([]string, 0, len(query.Categories))
+		for _, category := range query.Categories {
+			// Categories are validated identifiers, but the prefix match still
+			// escapes LIKE's wildcards so `_` in `api_key` matches only itself.
+			clauses = append(clauses, `(e.action = ? OR e.action LIKE ? ESCAPE '\')`)
+			args = append(args, category, escapeLikePattern(category)+".%")
+		}
+		where = append(where, "("+strings.Join(clauses, " OR ")+")")
+	}
+	switch query.Outcome {
+	case AuditOutcomeUnfinished:
+		// With folding on, an attempt left in the result is one whose outcome was never
+		// recorded; without it every attempt would match, finished or not.
+		where = append(where, "e.result = 'attempt'")
+	case AuditOutcomeFailed:
+		where = append(where, "e.result IN ("+placeholders(len(auditFailedResults))+")")
+		args = appendStrings(args, auditFailedResults)
+	case AuditOutcomeSucceeded:
+		where = append(where, "e.result IN ("+placeholders(len(auditSucceededResults))+")")
+		args = appendStrings(args, auditSucceededResults)
+	}
+	if search := strings.TrimSpace(query.Search); search != "" {
+		pattern := "%" + escapeLikePattern(strings.ToLower(search)) + "%"
+		where = append(where, `(lower(e.action) LIKE ? ESCAPE '\' OR lower(e.target_type) LIKE ? ESCAPE '\' OR lower(e.target_id) LIKE ? ESCAPE '\' OR lower(e.request_id) LIKE ? ESCAPE '\')`)
+		args = append(args, pattern, pattern, pattern, pattern)
+	}
+	if query.FoldAttempts {
+		// The request-id pairing is exact. The second arm pairs rows written before
+		// request ids were stable per request: an outcome for the same action and
+		// target that followed within auditFoldWindowMS is the same operation. Both rows
+		// must be older than migration 027, which shipped with stable ids, so neither a
+		// later attempt nor a later outcome is ever paired by guesswork.
+		where = append(where, `NOT (e.result = 'attempt' AND (
+			(e.request_id <> '' AND EXISTS (
+				SELECT 1 FROM audit_events o
+				WHERE o.request_id = e.request_id AND o.action = e.action AND o.result <> 'attempt'))
+			OR (e.occurred_at_ms < COALESCE((SELECT applied_at FROM schema_migrations WHERE version = ?), 0) * 1000
+				AND EXISTS (
+					SELECT 1 FROM audit_events o
+					WHERE o.action = e.action AND o.target_id = e.target_id AND o.result <> 'attempt'
+					  AND o.occurred_at_ms BETWEEN e.occurred_at_ms AND e.occurred_at_ms + ?
+					  AND o.occurred_at_ms < COALESCE((SELECT applied_at FROM schema_migrations WHERE version = ?), 0) * 1000))))`)
+		args = append(args, auditStableRequestIDMigration, auditFoldWindowMS, auditStableRequestIDMigration)
+	}
+
+	return where, args
+}
+
 func placeholders(count int) string {
 	return strings.TrimSuffix(strings.Repeat("?,", count), ",")
 }
@@ -296,4 +311,83 @@ func appendStrings(args []any, values []string) []any {
 		args = append(args, value)
 	}
 	return args
+}
+
+// AuditBucket counts the trail's rows for one action prefix and one outcome class.
+type AuditBucket struct {
+	// Prefix is the action's first segment (`provider` for `provider.update`).
+	Prefix string `json:"prefix"`
+	// Outcome is AuditOutcomeSucceeded, AuditOutcomeFailed, AuditOutcomeUnfinished,
+	// or "other" for results that are neither (the Agent's `prepared`/`decision`).
+	Outcome string `json:"outcome"`
+	Count   int64  `json:"count"`
+}
+
+// auditSummaryOther classes a result that is neither a success, a failure nor an attempt.
+const auditSummaryOther = "other"
+
+// SummarizeAuditEvents counts the rows QueryAuditEvents would return for the same
+// query, as a matrix of action prefix by outcome class. Cursor, category and outcome
+// are ignored: the matrix is what the console derives both facets from, and each
+// facet's counts must hold the other facet's selection, not its own.
+func (r *Repository) SummarizeAuditEvents(ctx context.Context, query AuditQuery) ([]AuditBucket, error) {
+	if r == nil || r.SQL() == nil {
+		return nil, errors.New("repository is not initialized")
+	}
+	query.Before = AuditCursor{}
+	query.Categories = nil
+	query.Outcome = ""
+	where, args := auditFilterClauses(query)
+	statement := `
+		SELECT CASE WHEN instr(e.action, '.') > 0 THEN substr(e.action, 1, instr(e.action, '.') - 1) ELSE e.action END,
+		       e.result, COUNT(1)
+		FROM audit_events e`
+	if len(where) > 0 {
+		statement += "\n\t\tWHERE " + strings.Join(where, "\n\t\t  AND ")
+	}
+	statement += "\n\t\tGROUP BY 1, 2"
+	rows, err := r.SQL().QueryContext(ctx, statement, args...)
+	if err != nil {
+		return nil, fmt.Errorf("summarize audit events: %w", err)
+	}
+	defer rows.Close()
+
+	counts := make(map[[2]string]int64)
+	for rows.Next() {
+		var prefix, result string
+		var count int64
+		if err := rows.Scan(&prefix, &result, &count); err != nil {
+			return nil, fmt.Errorf("scan audit summary: %w", err)
+		}
+		counts[[2]string{prefix, auditOutcomeClass(result)}] += count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	buckets := make([]AuditBucket, 0, len(counts))
+	for key, count := range counts {
+		buckets = append(buckets, AuditBucket{Prefix: key[0], Outcome: key[1], Count: count})
+	}
+	sort.Slice(buckets, func(i, j int) bool {
+		if buckets[i].Prefix != buckets[j].Prefix {
+			return buckets[i].Prefix < buckets[j].Prefix
+		}
+		return buckets[i].Outcome < buckets[j].Outcome
+	})
+	return buckets, nil
+}
+
+// auditOutcomeClass maps a stored result onto the outcome filter's classes, from the
+// same lists the filter uses, so a facet count always equals what its filter returns.
+func auditOutcomeClass(result string) string {
+	switch {
+	case result == "attempt":
+		return AuditOutcomeUnfinished
+	case slices.Contains(auditSucceededResults, result):
+		return AuditOutcomeSucceeded
+	case slices.Contains(auditFailedResults, result):
+		return AuditOutcomeFailed
+	default:
+		return auditSummaryOther
+	}
 }

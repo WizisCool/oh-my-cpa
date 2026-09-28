@@ -2,8 +2,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  auditFacets,
   auditSearchParams,
   categoryOf,
+  DEFAULT_AUDIT_FILTERS,
+  readAuditFilters,
+  selectedCategory,
+  writeAuditFilters,
+  type AuditBucket,
   formatDetailValue,
   parseAuditSource,
   readableTarget,
@@ -56,11 +62,46 @@ test('an unfinished attempt is a warning and an unknown result carries no verdic
 });
 
 test('filters become the query the server reads, and defaults send nothing', () => {
-  assert.equal(auditSearchParams({ categories: [], outcome: 'all', search: '  ' }).toString(), '');
+  assert.equal(auditSearchParams({ categories: [], outcome: 'all', search: '  ', range: 'all' }).toString(), '');
   assert.equal(
-    auditSearchParams({ categories: ['api_key', 'client_key'], outcome: 'failed', search: ' gem ' }).toString(),
+    auditSearchParams({ categories: ['api_key', 'client_key'], outcome: 'failed', search: ' gem ', range: 'all' }).toString(),
     'category=api_key%2Cclient_key&outcome=failed&q=gem',
   );
+  // A relative range is resolved against the moment of the request.
+  assert.equal(
+    auditSearchParams({ categories: [], outcome: 'unfinished', search: '', range: '24h' }, 90_000_000).toString(),
+    `outcome=unfinished&since_ms=${90_000_000 - 86_400_000}`,
+  );
+});
+
+test('the page URL round-trips its filters and refuses values it does not know', () => {
+  const filters = readAuditFilters(new URLSearchParams('category=keys&outcome=failed&q=%20gem%20&range=7d'));
+  assert.deepEqual(filters, { categories: ['api_key', 'client_key'], outcome: 'failed', search: 'gem', range: '7d' });
+  assert.equal(writeAuditFilters(filters).toString(), 'category=keys&outcome=failed&q=gem&range=7d');
+  assert.equal(selectedCategory(filters), 'keys');
+  assert.deepEqual(readAuditFilters(new URLSearchParams('category=api_key&outcome=sideways&range=1y')), DEFAULT_AUDIT_FILTERS);
+  assert.equal(writeAuditFilters(DEFAULT_AUDIT_FILTERS).toString(), '');
+});
+
+test('each facet counts under the other facet\'s selection, never its own', () => {
+  const buckets: AuditBucket[] = [
+    { prefix: 'api_key', outcome: 'succeeded', count: 3 },
+    { prefix: 'api_key', outcome: 'failed', count: 1 },
+    { prefix: 'provider', outcome: 'unfinished', count: 2 },
+    { prefix: 'capability', outcome: 'other', count: 4 },
+    { prefix: 'unknown', outcome: 'failed', count: 5 },
+  ];
+  const everything = auditFacets(buckets, DEFAULT_AUDIT_FILTERS);
+  assert.equal(everything.total, 15);
+  assert.deepEqual(everything.outcomes, { all: 15, succeeded: 3, failed: 6, unfinished: 2 });
+  assert.equal(everything.categories.keys, 4);
+  assert.equal(everything.categories.agent, 4);
+
+  const keysFailed = auditFacets(buckets, { ...DEFAULT_AUDIT_FILTERS, categories: ['api_key', 'client_key'], outcome: 'failed' });
+  assert.deepEqual(keysFailed.outcomes, { all: 4, succeeded: 3, failed: 1, unfinished: 0 });
+  assert.equal(keysFailed.categories.keys, 1);
+  assert.equal(keysFailed.categories.providers, 0);
+  assert.equal(keysFailed.total, 15);
 });
 
 test('detail values read as text, and structures as JSON', () => {

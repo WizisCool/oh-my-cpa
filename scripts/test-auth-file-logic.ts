@@ -5,6 +5,7 @@ import {
   isAuthFileProblem,
   isAuthFileHealthy,
   hasAuthFileStatusWarning,
+  summarizeAuthFileStatusMessage,
   deriveAuthFileIdentity,
   matchesStatusFilter,
   sortAuthFiles,
@@ -177,4 +178,15 @@ test('Production chunkItems splits lists correctly for batch operations', () => 
   // Edge cases
   assert.deepEqual(chunkItems([]), []);
   assert.deepEqual(chunkItems(['single']), [['single']]);
+});
+
+test('Status message summary lifts the sentence out of an upstream JSON error body', () => {
+  const body = '{"error":{"type":"usage_limit_reached","message":"The usage limit has been reached","plan_type":"plus","resets_at":1790593718,"eligible_promo":null,"limit_window_minutes":300,"resets_in_seconds":3668}}';
+  assert.equal(summarizeAuthFileStatusMessage(body), 'The usage limit has been reached');
+  assert.equal(summarizeAuthFileStatusMessage(`429 Too Many Requests: ${body}`), '429 Too Many Requests: The usage limit has been reached');
+  assert.equal(summarizeAuthFileStatusMessage('{"error":{"type":"rate_limited"}}'), 'rate_limited');
+  assert.equal(summarizeAuthFileStatusMessage('{"error":"token expired"}'), 'token expired');
+  assert.equal(summarizeAuthFileStatusMessage('token expired'), 'token expired');
+  assert.equal(summarizeAuthFileStatusMessage('{not json'), '{not json');
+  assert.equal(summarizeAuthFileStatusMessage('{"unrelated":true}'), '{"unrelated":true}');
 });

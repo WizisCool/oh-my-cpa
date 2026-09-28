@@ -38,6 +38,23 @@
 
 .identity-alert {
   margin-top: 12px;
+  min-width: 0;
+}
+
+.identity-alert-raw {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  max-height: 160px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--fg-2);
+  background: var(--hover-inset);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-xs);
 }
 
 .overview-table {

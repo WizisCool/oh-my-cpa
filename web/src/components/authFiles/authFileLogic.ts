@@ -13,6 +13,37 @@ export function getAuthFileStatusMessage(file: ManagementAuthFile): string {
   return (file.status_message ?? '').trim();
 }
 
+/**
+ * CPA stores an upstream rejection verbatim, so a status message is often a whole JSON error body
+ * (`{"error":{"type":"usage_limit_reached","message":"…",…}}`). A list row has room for one line: this
+ * lifts the human sentence out of that body and leaves the raw text for the tooltip and the drawer.
+ * Anything that is not a recognisable error body is returned as-is.
+ */
+export function summarizeAuthFileStatusMessage(message: string): string {
+  const trimmed = message.trim();
+  const start = trimmed.indexOf('{');
+  if (start < 0) return trimmed;
+  let body: unknown;
+  try {
+    body = JSON.parse(trimmed.slice(start));
+  } catch {
+    return trimmed;
+  }
+  const readText = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+  const record = (value: unknown): Record<string, unknown> | undefined =>
+    value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+  const root = record(body);
+  if (!root) return trimmed;
+  const errorValue = root.error;
+  const error = record(errorValue);
+  const sentence = readText(error?.message) || readText(typeof errorValue === 'string' ? errorValue : undefined) || readText(root.message);
+  const code = readText(error?.type) || readText(error?.code) || readText(root.type) || readText(root.code);
+  const prefix = trimmed.slice(0, start).trim().replace(/[:\-–]\s*$/, '').trim();
+  const summary = sentence || code;
+  if (!summary) return trimmed;
+  return prefix ? `${prefix}: ${summary}` : summary;
+}
+
 export function hasAuthFileStatusWarning(file: ManagementAuthFile): boolean {
   const msg = getAuthFileStatusMessage(file);
   return Boolean(msg) && !HEALTHY_STATUS_MESSAGES.has(msg.toLowerCase());

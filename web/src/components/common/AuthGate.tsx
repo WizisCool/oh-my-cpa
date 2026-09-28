@@ -7,6 +7,7 @@ import { useT } from '../../i18n';
 import { BrandArtwork } from './BrandArtwork';
 import { PreferenceMenus } from './PreferenceMenus';
 import { isDemoMode } from '../../types/demoMode';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const t = useT();
@@ -14,6 +15,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const queryClient = useQueryClient();
   const isDemo = isDemoMode();
   const [status, setStatus] = React.useState<'loading' | 'authenticated' | 'unauthenticated'>('loading');
+  useDocumentTitle(status === 'unauthenticated' ? t('auth.submit') : null);
   const [error, setError] = React.useState<string>();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 

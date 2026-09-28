@@ -124,8 +124,25 @@
   font-weight: 600;
 }
 
-.usage .dimmed {
+.usage-requests,
+.usage-unpriced {
   font-size: 11px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.usage-requests {
+  color: var(--muted);
+}
+
+.usage-unpriced {
+  color: var(--warn);
+}
+
+a.usage-requests:hover,
+a.usage-unpriced:hover {
+  color: var(--accent);
+  text-decoration: underline;
 }
 
 /* ── Channel multipliers ── */
@@ -171,8 +188,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--border-soft);
+  padding: 14px 0 8px;
   font-size: 12px;
 }
 

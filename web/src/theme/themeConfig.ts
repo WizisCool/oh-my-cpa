@@ -164,7 +164,7 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
         colorBorderSecondary: t.border,
       },
       Table: {
-        headerBg: dark ? t.bg : t.surface,
+        headerBg: t.surface,
         borderColor: t.borderSoft,
         rowHoverBg: t.rowHover,
         headerColor: t.muted,
@@ -172,7 +172,7 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
         cellPaddingInlineSM: 12,
         fontSize: 13.5,
         fontSizeSM: 13,
-        headerSplitColor: t.border,
+        headerSplitColor: 'transparent',
       },
       Button: {
         controlHeight: 32,

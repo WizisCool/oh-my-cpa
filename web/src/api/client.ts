@@ -22,7 +22,7 @@ import { DashboardResponse, DashboardTailResponse, DashboardWindow } from '../ty
 import { DashboardTokenHeatmap } from '../types/tokenHeatmap';
 import { DashboardModelsResponse } from '../types/dashboardModels';
 import { ErrorLogFile, type ServiceLogPage } from '../types/logs';
-import { AUDIT_PAGE_SIZE, auditSearchParams, type AuditEvent, type AuditFilters, type AuditPage } from '../types/audit';
+import { AUDIT_PAGE_SIZE, auditSearchParams, type AuditBucket, type AuditEvent, type AuditFilters, type AuditPage } from '../types/audit';
 import { ConfigScalarsResponse, ConfigSourceResponse } from '../types/configManagement';
 import { ClientAPIKeyItem, ClientKeyUsageItem, ProviderItem, SaveProviderPayload } from '../types/providers';
 import { GatewayModelItem } from '../types/gatewayModels';
@@ -635,6 +635,20 @@ export const api = {
       { method: 'GET' },
     );
     return { events: data.events ?? [], nextCursor: data.next_cursor || undefined };
+  },
+
+  /**
+   * getAuditSummary counts the trail by action prefix and outcome for the filters' window and
+   * search. Category and outcome are not sent: both facets are derived from the one matrix.
+   */
+  async getAuditSummary(filters: AuditFilters): Promise<AuditBucket[]> {
+    const search = auditSearchParams({ ...filters, categories: [], outcome: 'all' });
+    const query = search.toString();
+    const data = await request<{ buckets?: AuditBucket[] }>(
+      `/management/audit/summary${query ? `?${query}` : ''}`,
+      { method: 'GET' },
+    );
+    return data.buckets ?? [];
   },
 
   /** exportAuditEvents downloads the filtered trail; the server records the export itself. */

@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
 
-import { filterAuditEvents, filterServiceLogs } from './filters.mjs';
+import { filterAuditEvents, filterServiceLogs, summarizeAuditEvents } from './filters.mjs';
 
 const TRAIL = {
   events: [
@@ -30,6 +30,32 @@ describe('the demonstration audit trail', () => {
 
   it('has no second page to give', () => {
     assert.deepEqual(read('?before=1_1').events, []);
+  });
+
+  it('keeps only unfinished operations when asked', () => {
+    assert.deepEqual(actions(read('?outcome=unfinished')), ['provider.delete:attempt']);
+  });
+
+  it('moves the window onto the dataset calendar before applying it', () => {
+    const dated = structuredClone(TRAIL);
+    dated.events.forEach((event, index) => { event.occurred_at_ms = 1_000 * (4 - index); });
+    const url = new URL('https://demo.test/api/v1/management/audit/events?since_ms=12500');
+    // Re-based by +10s, the rows sit at 14s, 13s, 12s and 11s; folded, two are at or after 12.5s.
+    assert.deepEqual(actions(filterAuditEvents(dated, url, { deltaMs: 10_000 })), ['plugin.disable:failure']);
+  });
+
+  it('summarizes the folded trail by prefix and outcome, ignoring category and outcome', () => {
+    const dataset = { responses: { 'audit-events': { body: JSON.stringify(TRAIL) } } };
+    const url = new URL('https://demo.test/api/v1/management/audit/summary?category=plugin&outcome=failed');
+    assert.deepEqual(summarizeAuditEvents({ buckets: [] }, url, { dataset }).buckets, [
+      { prefix: 'api_key', outcome: 'succeeded', count: 1 },
+      { prefix: 'plugin', outcome: 'failed', count: 1 },
+      { prefix: 'provider', outcome: 'unfinished', count: 1 },
+    ]);
+    const searched = new URL('https://demo.test/api/v1/management/audit/summary?q=gemini');
+    assert.deepEqual(summarizeAuditEvents({ buckets: [] }, searched, { dataset }).buckets, [
+      { prefix: 'provider', outcome: 'unfinished', count: 1 },
+    ]);
   });
 });
 

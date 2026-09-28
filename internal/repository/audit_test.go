@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -145,6 +146,29 @@ func TestQueryAuditEventsFiltersFoldsAndPages(t *testing.T) {
 		"api_key.create:failure", "auth.login:success")
 	expect("failed", actions(AuditQuery{Outcome: AuditOutcomeFailed}), "api_key.create:failure")
 	expect("search", actions(AuditQuery{Search: "GEMINI"}), "provider.delete:attempt")
+	expect("unfinished", actions(AuditQuery{FoldAttempts: true, Outcome: AuditOutcomeUnfinished}), "provider.delete:attempt")
+
+	// The summary counts what the folded timeline shows, whatever category, outcome or
+	// cursor the query carries, and classes each result the way the outcome filter does.
+	buckets, err := repo.SummarizeAuditEvents(ctx, AuditQuery{
+		FoldAttempts: true, Categories: []string{"auth"}, Outcome: AuditOutcomeFailed, Before: AuditCursor{OccurredAtMS: base, ID: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary := make([]string, 0, len(buckets))
+	for _, bucket := range buckets {
+		summary = append(summary, fmt.Sprintf("%s/%s=%d", bucket.Prefix, bucket.Outcome, bucket.Count))
+	}
+	expect("summary", summary,
+		"api_key/failed=1", "apixkey/succeeded=1", "auth/succeeded=1", "provider/succeeded=1", "provider/unfinished=1", "quota/succeeded=1")
+	windowed, err := repo.SummarizeAuditEvents(ctx, AuditQuery{FoldAttempts: true, SinceMS: base + 4000, Search: "create"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(windowed) != 2 || windowed[0].Prefix != "api_key" || windowed[1].Prefix != "apixkey" {
+		t.Fatalf("windowed summary = %#v, want api_key and apixkey only", windowed)
+	}
 
 	first, err := repo.QueryAuditEvents(ctx, AuditQuery{Limit: 4, Categories: []string{"auth", "provider", "api_key", "apixkey"}})
 	if err != nil || len(first.Events) != 4 || first.Next == nil {

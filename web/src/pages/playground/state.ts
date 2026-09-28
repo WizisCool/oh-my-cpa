@@ -515,15 +515,45 @@ export function effectiveModel(request: ChatRequest): string {
   return typeof override === 'string' && override.trim() ? override : request.model;
 }
 
-export function usageLink(turn: Turn): string {
-  const elapsed = Date.now() - (turn.serverStartedAt ?? turn.startedAt);
-  let preset = "1h";
-  if (elapsed > 24 * 60 * 60 * 1000) {
-    preset = "7d";
-  } else if (elapsed > 60 * 60 * 1000) {
-    preset = "24h";
-  }
-  const params = new URLSearchParams({ preset });
+/**
+ * How far either side of a turn's own span the request-records window reaches.
+ *
+ * The record's time is CPA's request time, stamped a few milliseconds after the server's
+ * `started_at_ms`; the margin absorbs that and a slow gateway accept without widening the
+ * window to where a neighbouring turn on the same key and model would also match. A turn
+ * restored without server timings is placed by the browser's clock, which may be skewed
+ * against the server's, so it gets the wider margin.
+ */
+const USAGE_LINK_SERVER_MARGIN_MS = 5_000;
+const USAGE_LINK_BROWSER_MARGIN_MS = 5 * 60_000;
+/** A turn still running (or cut off without a `done`) has no end yet; its record cannot be later than this. */
+const USAGE_LINK_OPEN_SPAN_MS = 10 * 60_000;
+/**
+ * How long after a turn's window closes its record may still be on its way into OMC. CPA
+ * publishes a record when the request finishes and ingest drains it on its own cadence; a
+ * closed window is frozen and never re-read, so a link opened inside this grace stays
+ * open-ended and the list keeps polling until the record arrives.
+ */
+const USAGE_LINK_INGEST_GRACE_MS = 60_000;
+
+/**
+ * usageLink opens the request records on the one request this turn made.
+ *
+ * A turn is identified by the four things the gateway records about it: the key, the model it
+ * actually called, the User-Agent it sent and a closed window around its own span. A relative
+ * preset instead listed every request on that key and model in the last hour, which is not the
+ * turn the operator clicked on.
+ */
+export function usageLink(turn: Turn, now = Date.now()): string {
+  const hasServerTime = turn.serverStartedAt !== undefined;
+  const started = turn.serverStartedAt ?? turn.startedAt;
+  const margin = hasServerTime ? USAGE_LINK_SERVER_MARGIN_MS : USAGE_LINK_BROWSER_MARGIN_MS;
+  const span = turn.durationMS
+    ?? (turn.endedAt !== undefined ? Math.max(0, turn.endedAt - turn.startedAt) : USAGE_LINK_OPEN_SPAN_MS);
+  const from = Math.max(0, Math.floor(started - margin));
+  const to = Math.ceil(started + span + margin);
+  const params = new URLSearchParams({ from: String(from) });
+  if (now >= to + USAGE_LINK_INGEST_GRACE_MS) params.set("to", String(to));
   if (turn.request.client_key_fingerprint) {
     params.set("api_key", turn.request.client_key_fingerprint);
   }
@@ -533,6 +563,9 @@ export function usageLink(turn: Turn): string {
   if (model) {
     params.set("model", model);
   }
+  // The UA separates the playground's request from a client sharing the same key and model in
+  // the same seconds. The default is matched on its product token, which every build shares.
+  params.set("ua", turn.request.user_agent?.trim() || "Oh-My-CPA/");
   return `/usage/events?${params.toString()}`;
 }
 export async function readImage(file: File): Promise<ImageAttachment> {

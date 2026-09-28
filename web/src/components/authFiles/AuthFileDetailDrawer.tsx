@@ -35,6 +35,7 @@ import {
   hasAuthFileStatusWarning,
   isAuthFileDisabled,
   isAuthFileProblem,
+  summarizeAuthFileStatusMessage,
 } from './authFileLogic';
 import styles from './AuthFileDetailDrawer.module.css';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
@@ -485,10 +486,14 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                             <Alert
                               type="warning"
                               showIcon
+                              title={t('af.warning_status')}
                               description={
-                                <span>
-                                  <b>{t('af.warning_status')}:</b> {file.status_message}
-                                </span>
+                                <>
+                                  <div>{summarizeAuthFileStatusMessage(file.status_message)}</div>
+                                  {summarizeAuthFileStatusMessage(file.status_message) !== file.status_message.trim() && (
+                                    <pre className={styles['identity-alert-raw']}>{file.status_message}</pre>
+                                  )}
+                                </>
                               }
                               className={styles['identity-alert']}
                             />

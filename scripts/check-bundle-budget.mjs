@@ -156,6 +156,19 @@ import { fileURLToPath } from 'node:url';
  *
  *   - `main entry` 232 -> 244, leaving 8.98 kB (3.7%): within the range the earlier re-baselines
  *     left, and still the tightest budget in this file.
+ *   - Every other limit is untouched. *
+ * ## The audit page re-baseline (2026-09-28)
+ *
+ * A clean build of the base commit measured entry 243.69 kB, 0.31 kB under its limit; with the
+ * audit page, the page-following document title and the system page rework it measures
+ * 247.36 kB. Of the +3.67 kB, 1893 bytes of source are localized copy (the audit page's filters
+ * and outcome counts, the system page's runtime and record facts, the navigation entry), and the
+ * rest is what the shell must carry for a new route: its navigation glyph, the client's audit
+ * summary call with the filter serialization it shares with the trail, and the title hook. The
+ * audit page itself, its trail and the system page's change log are lazy chunks.
+ *
+ *   - `main entry` 244 -> 256, leaving 8.64 kB (3.4%): within the range the earlier re-baselines
+ *     left, and still the tightest budget in this file.
  *   - Every other limit is untouched.
  */
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -199,7 +212,7 @@ const iconBytes = totalDirectorySize(iconDir);
 const totalDistBytes = totalDirectorySize(distDir);
 
 const budgets = [
-  { label: 'main entry', matches: (name) => name === entryFile, maxKB: 244, required: true },
+  { label: 'main entry', matches: (name) => name === entryFile, maxKB: 256, required: true },
   { label: 'Lobe icon JS', pattern: /^LobeIcon-.*\.js$/, maxKB: 96, required: true },
   { label: 'vendor antd', pattern: /^vendor-antd-.*\.js$/, maxKB: 1250, required: true },
   { label: 'vendor charts', pattern: /^vendor-charts-.*\.js$/, maxKB: 1600, required: true },

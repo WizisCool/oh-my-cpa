@@ -156,7 +156,30 @@ func TestAuditEventsEndpoints(t *testing.T) {
 		t.Errorf("expected at least 1 audit event, got %d", len(listData.Events))
 	}
 
-	// 2. Export audit events
+	// 2. Summarize them: the facet matrix covers the rows the list returned.
+	summaryResp, err := cli.Get(ts.URL + "/omc/api/v1/management/audit/summary?outcome=unfinished")
+	if err != nil || summaryResp.StatusCode != http.StatusOK {
+		t.Fatalf("summarize audit events failed: %v, status: %d", err, summaryResp.StatusCode)
+	}
+	var summaryData struct {
+		Buckets []repository.AuditBucket `json:"buckets"`
+	}
+	_ = json.NewDecoder(summaryResp.Body).Decode(&summaryData)
+	summaryResp.Body.Close()
+	var summarized int64
+	for _, bucket := range summaryData.Buckets {
+		summarized += bucket.Count
+	}
+	if summarized < int64(len(listData.Events)) {
+		t.Errorf("summary counts %d rows, want at least the %d listed", summarized, len(listData.Events))
+	}
+	badResp, err := cli.Get(ts.URL + "/omc/api/v1/management/audit/summary?outcome=sideways")
+	if err != nil || badResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("unknown outcome status = %v, %v; want 400", badResp.StatusCode, err)
+	}
+	badResp.Body.Close()
+
+	// 3. Export audit events
 	exportResp, err := cli.Get(ts.URL + "/omc/api/v1/management/audit/export")
 	if err != nil || exportResp.StatusCode != http.StatusOK {
 		t.Fatalf("export audit events failed: %v, status: %d", err, exportResp.StatusCode)

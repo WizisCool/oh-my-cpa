@@ -1,13 +1,12 @@
 import React from 'react';
 import { Segmented } from 'antd';
-import { useSearchParams } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { useT } from '../i18n';
 import { PageHeader } from '../components/common/PageHeader';
 import { CpaLogPanel } from '../components/logs/CpaLogPanel';
 import { ServiceLogPanel } from '../components/logs/ServiceLogPanel';
-import { AuditTrail } from '../components/logs/AuditTrail';
 
-const LOG_SOURCES = ['cpa', 'service', 'audit'] as const;
+const LOG_SOURCES = ['cpa', 'service'] as const;
 type LogSource = (typeof LOG_SOURCES)[number];
 
 function parseSource(value: string | null): LogSource {
@@ -15,19 +14,20 @@ function parseSource(value: string | null): LogSource {
 }
 
 /**
- * The logs page reads three different records, and keeps them apart:
+ * The logs page reads two different records, and keeps them apart:
  *
  * - CPA gateway: the gateway's own log file and its request error files.
  * - OMC service: this console's backend log, from the bounded copy it keeps in memory.
- * - Audit trail: the durable record of what operators did through this console.
  *
  * Only one source is mounted at a time, so a source the operator is not looking at does not
- * poll. The choice lives in the URL, so a link can point at the audit trail directly.
+ * poll. The choice lives in the URL, so a link can point at the service log directly. The
+ * operator audit trail is its own page (`/audit`); an older link to it here is sent there.
  */
 export const LogsPage: React.FC = () => {
   const t = useT();
   const [searchParams, setSearchParams] = useSearchParams();
   const source = parseSource(searchParams.get('source'));
+  const isAuditLink = searchParams.get('source') === 'audit';
 
   const selectSource = (next: LogSource) => {
     setSearchParams((current) => {
@@ -37,6 +37,8 @@ export const LogsPage: React.FC = () => {
       return params;
     }, { replace: true });
   };
+
+  if (isAuditLink) return <Navigate to="/audit" replace />;
 
   return (
     <div className="terminal-page logs-page">
@@ -49,7 +51,6 @@ export const LogsPage: React.FC = () => {
             options={[
               { value: 'cpa', label: t('logs.source_cpa') },
               { value: 'service', label: t('logs.source_service') },
-              { value: 'audit', label: t('logs.source_audit') },
             ]}
             onChange={(value) => selectSource(value as LogSource)}
           />
@@ -57,7 +58,6 @@ export const LogsPage: React.FC = () => {
       />
       {source === 'cpa' && <CpaLogPanel />}
       {source === 'service' && <ServiceLogPanel />}
-      {source === 'audit' && <AuditTrail />}
     </div>
   );
 };

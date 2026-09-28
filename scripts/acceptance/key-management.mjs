@@ -78,16 +78,20 @@ export async function runKeyManagementAcceptance({
       containerCount === 1 && nestedPanelCount === 0,
       `cards=${containerCount} nested=${nestedPanelCount}`,
     );
-    // ...and it keeps that card's own inset, which is what makes this list exactly as
-    // wide as the list every other page renders.
+    // ...and that card is the list's frame: the table runs to its edges, as every other
+    // list's rows run to their own frame, rather than drawing a second frame inside it.
     const cardBodyPadding = await page
       .locator('.keys-page .ant-card-body')
       .first()
       .evaluate((el) => getComputedStyle(el).paddingLeft);
+    const tableBorder = await page
+      .locator('.keys-page .data-table')
+      .first()
+      .evaluate((el) => getComputedStyle(el).borderLeftWidth);
     check(
-      'the key list keeps the card inset other lists use',
-      cardBodyPadding === '20px',
-      `padding=${cardBodyPadding}`,
+      'the key list is flush inside its card, with no frame of its own',
+      cardBodyPadding === '0px' && tableBorder === '0px',
+      `padding=${cardBodyPadding} border=${tableBorder}`,
     );
     // Masked by default: the row shows a preview, never the stored secret.
     const keyText = await page.locator('.config-api-keys-table .config-key-text').first().innerText();

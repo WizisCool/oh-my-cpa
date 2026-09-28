@@ -95,7 +95,7 @@ func parseAuditQuery(request *http.Request, maxLimit int, defaultFold bool) (rep
 	}
 	switch outcome := values.Get("outcome"); outcome {
 	case "", "all":
-	case repository.AuditOutcomeFailed, repository.AuditOutcomeSucceeded:
+	case repository.AuditOutcomeFailed, repository.AuditOutcomeSucceeded, repository.AuditOutcomeUnfinished:
 		query.Outcome = outcome
 	default:
 		return query, fmt.Errorf("unknown audit outcome %q", outcome)
@@ -159,6 +159,29 @@ func (h *Handler) listAuditEvents(writer http.ResponseWriter, request *http.Requ
 		"events":      auditEventDTOs(page.Events),
 		"next_cursor": formatAuditCursor(page.Next),
 	})
+}
+
+// summarizeAuditEvents counts the trail the timeline would show for the same window
+// and search, as action prefix by outcome class. The console derives both facets'
+// counts from this one matrix, so it ignores the category and outcome filters and the
+// cursor: a facet's count has to describe what choosing it would return.
+func (h *Handler) summarizeAuditEvents(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	if h.repo == nil {
+		writeError(writer, http.StatusServiceUnavailable, "database is not initialized")
+		return
+	}
+	query, err := parseAuditQuery(request, auditListPageMax, true)
+	if err != nil {
+		writeError(writer, http.StatusBadRequest, err.Error())
+		return
+	}
+	buckets, err := h.repo.SummarizeAuditEvents(request.Context(), query)
+	if err != nil {
+		writeInternalError(writer, err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, map[string]any{"buckets": buckets})
 }
 
 // exportAuditEvents downloads the filtered trail, up to repository.AuditPageMax

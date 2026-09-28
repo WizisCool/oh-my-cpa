@@ -212,11 +212,11 @@ const SCENARIO_PATHS = [
   },
   {
     prefix: 'web/src/pages/LogsPage',
-    scenarios: ['phone-lists', 'logs-sources', 'logs-sources-narrow'],
+    scenarios: ['phone-lists', 'logs-sources'],
   },
   {
     prefix: 'web/src/components/logs/',
-    scenarios: ['phone-lists', 'logs-sources', 'logs-sources-narrow'],
+    scenarios: ['phone-lists', 'logs-sources'],
   },
   {
     prefix: 'web/src/hooks/useServiceLogTail',
@@ -228,7 +228,15 @@ const SCENARIO_PATHS = [
   },
   {
     prefix: 'web/src/types/audit',
-    scenarios: ['logs-sources', 'logs-sources-narrow'],
+    scenarios: ['audit-trail', 'audit-trail-narrow'],
+  },
+  {
+    prefix: 'web/src/pages/AuditPage',
+    scenarios: ['logs-sources', 'audit-trail', 'audit-trail-narrow'],
+  },
+  {
+    prefix: 'web/src/components/audit/',
+    scenarios: ['audit-trail', 'audit-trail-narrow'],
   },
   {
     prefix: 'web/src/types/logs',

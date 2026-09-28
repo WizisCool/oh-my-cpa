@@ -154,6 +154,7 @@ func demoExportCases() []demoExportCase {
 		{Name: "service-logs", Path: "/api/v1/management/service-logs"},
 		{Name: "request-error-logs", Path: "/api/v1/management/request-error-logs"},
 		{Name: "audit-events", Path: "/api/v1/management/audit/events"},
+		{Name: "audit-summary", Path: "/api/v1/management/audit/summary"},
 		{Name: "usage-ingest-status", Path: "/api/v1/usage/ingest-status"},
 		// The window is closed on the reference for the same reason the dashboard's is:
 		// without it the server resolves its default against the wall clock, which is

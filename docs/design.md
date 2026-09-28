@@ -697,7 +697,7 @@ measures what every other page measures:
 content area         viewport − 236 (the sider)
 page column         min(1440, content area)   centred once the cap binds
 content column      1440 − 2×32 = 1376  (what the page owns)
-list inside a Card  1376 − 2×1 − 2×20 = 1334  (antd Card body padding, 20px each side)
+list frame          1376, its rows 1376 − 2×1 = 1374  (the frame is the list's container)
 ```
 
 - **One content column.** `.terminal-page` owns it. A page-level class must not
@@ -709,12 +709,13 @@ every other surface. Where a page genuinely needs a different column it states
 the reason next to the rule. Two surfaces do: the configuration workbench (a 920px
 reading column between a nav track and a balancing gutter) and the conversation workspaces
 (a frame anchored to the viewport around a 760px reading column, §5).
-- **Lists do not change the column.** A list sits inside the page's Card and keeps
-that card's 20px inset; the table's width follows from the card, not from the
-viewport or from a column count. Measured at a 1920px viewport: card 1376,
-table 1334, both at the same x as the AI Providers table.
+- **Lists do not change the column.** A list is its own frame and spans the
+content column; its width follows from the column, not from the viewport or from
+a column count. Measured at a 1920px viewport: every list frame is 1376 wide and
+at the same x, whether it stands alone (AI Providers, OAuth, pricing) or is the
+body of a card whose head names it (key management, where the card is the frame).
 - **A page's own surface is never wider than the page.** Sideways scrolling for a
-wide table happens inside the card, so the column stays where the reader left it.
+wide table happens inside the list's frame, so the column stays where the reader left it.
 
 ## 4. Shape, spacing, elevation
 
@@ -843,6 +844,12 @@ reader moving between pages never sees the refresh control jump or resize:
 - **Card heads** use `PanelTitle`: a muted glyph, the title, and the one control that acts on that
   card alone.
 - **Table headers never wrap.** A squeezed column wraps its cells, not its name.
+- **One list surface.** Every wide list is drawn the way the OAuth credential list is: a 1px
+  `--border` frame with the small radius, a header strip on `--surface` (mono 10px, weight 600,
+  uppercase, `--muted`, 8px × 16px), rows on `--bg` at 12px × 16px divided by `--border-soft`
+  rules, and a `--surface` hover. The shared `.data-table` rule in `web/src/index.css` draws it
+  for `ResponsiveList`; a list that is the whole body of a card adds `.data-table-flush`, so the
+  card is the frame and no list sits in a frame inside a frame.
 - **Lists render through `ResponsiveList`**: a table on a wide viewport, labelled rows below 640px,
   one empty state (antd's simple `Empty`), and no paginator for a single page.
   A wide table scrolls sideways inside its own box and never vertically: the wheel over a list
@@ -1045,7 +1052,8 @@ Non-obvious decisions, keep these when editing:
   single-task dialogs use a clean uninterrupted body ("Title → Field/Content →
   Right-aligned Actions") without decorative header/footer hairline dividers;
   only complex Drawers retain section dividers.
-- Table: uppercase 12px `--muted` headers on `--bg`, `rowHoverBg = surface`.
+- Table: `headerBg = surface` with no header split lines; the header type and the row rules are
+  the list surface in §5 (`.data-table`).
 - All shadow tokens set to `'none'`; every motion token pinned to ≤ 0.1s (§7).
 - Components pinned: Button 32/28px with `primaryColor = accentOn` and `Input` active ring
   `accent22`, Select optionSelectedBg = surface, Tag defaultBg = bg. The button label is pinned

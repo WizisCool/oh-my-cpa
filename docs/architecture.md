@@ -412,6 +412,14 @@ outcome that is not cached, since running out of time is not an answer about the
 logo. A logo that cannot be inlined is reported as absent rather than as a URL, which
 is what makes every provider surface fall back to the vendored catalog mark; see §3.
 
+CPA reports a plugin's name, author, version and logo only once its host has loaded it, so
+an installed plugin that is disabled or waiting for a restart arrives with its id alone.
+`internal/api/management_plugin_identity.go` fills those empty fields - never a value the
+plugin registered - from the store's listing of the installed plugin, before the logos are
+inlined. Every store read refreshes that in-memory copy; the plugin list reads the store
+itself only when a gap remains the copy cannot close, at most once per ten minutes and
+within five seconds, so a plugin no registry lists costs one store read, not one per poll.
+
 ### OAuth providers are one registry
 
 `internal/cpa/management/oauth_providers.go` is the single declaration of which
@@ -477,11 +485,12 @@ The old `/oauth`, `/auth-files` and `/quota` routes are retained only as
 parameter-safe replacement redirects. They preserve documented filter and
 connection intent while dropping callback, state, session and code material.
 
-### Logs: three records, kept apart
+### Logs and the audit trail: three records, kept apart
 
-The Logs page (`/logs`, with `?source=service` or `?source=audit`) reads three records
-that answer different questions, and mounts only the one being read so the others do
-not poll.
+The Logs page (`/logs`, with `?source=service`) reads the two log records and mounts only
+the one being read so the other does not poll; the audit trail is its own page (`/audit`,
+`pages/AuditPage.tsx`), because it is read by filtering and counting over a long span rather
+than by following a tail. An older `/logs?source=audit` link redirects there.
 
 - **Gateway log** — CPA's own log file and request error files, proxied through the
   typed management client (`/management/logs`, `/management/logs/status`,
@@ -499,7 +508,8 @@ not poll.
   process built without the tee answers `capturing: false`.
 - **Audit trail** — `audit_events`, served by `GET /api/v1/management/audit/events`
   with `category` (action prefixes, validated identifiers), `outcome`
-  (`succeeded` / `failed`), `q` (a substring of action, target or request id),
+  (`succeeded` / `failed` / `unfinished` — an `attempt` row, which with folding on is one
+  whose outcome never landed), `q` (a substring of action, target or request id),
   `since_ms`, `limit` (at most 200) and `before`, an opaque `<occurred_at_ms>_<id>`
   keyset cursor the previous page returned as `next_cursor`. `fold` (default on) hides
   an `attempt` row once an outcome exists for the same request id and action; rows
@@ -509,7 +519,14 @@ not poll.
   (migration 027) serves that lookup. `GET /api/v1/management/audit/export` takes the
   same filters, returns every row including attempts unless `fold=1`, stops at
   `repository.AuditPageMax` rows with `truncated` set, and is itself audited and
-  withheld when that record cannot be written.
+  withheld when that record cannot be written. `GET /api/v1/management/audit/summary`
+  (`repository.SummarizeAuditEvents`) counts the rows the timeline would show for the
+  same `since_ms`, `q` and `fold` as a matrix of action prefix by outcome class; it ignores
+  `category`, `outcome` and the cursor, because the page derives both facets' counts from
+  that one matrix (`auditFacets`) and each facet must count under the other's selection.
+  The page keeps its filters (`category` as the console's category name, `outcome`, `q`,
+  `range` of `24h`/`7d`/`30d`/`all`) in its URL, so an entry's "only this target" and
+  "only this request" actions, and any link, open a narrowed trail.
 
 Every request is given one server-generated id on arrival (`assignRequestID`, which
 answers it back as `X-Request-ID`). A write's attempt and outcome rows therefore share
@@ -534,7 +551,8 @@ Query for server state.
 | `utils/` | `maskKey.ts` (the console's one caller-key mask shape, kept branch for branch with the server's `security.MaskSecret`), `externalUrl.ts` (the http/https link rule), `modelOptions.ts` (model-input filtering), `smoothScroll.ts` (the gesture/correction scroll schedule), `clipboard.ts` (the one copy path, below), `download.ts` (`saveBlob`, the one download path: it attaches the anchor and releases the object URL on a delay, because revoking it in the click's own task cancels the save in Firefox and Safari), `format.ts` (`formatBytes`) |
 | `components/common/` | What more than one page renders: the shell (`AppLayout`, `HeaderNav`, `AuthGate`, `PreferenceMenus`); the page chrome every route opens with - `PageHeader` (title, subtitle or live summary, right-aligned actions), `RefreshButton` (the one refresh glyph and size, spinning rather than locking while a read is in flight), `PanelTitle` (a card's glyph, title and its one control), `StatusLabel` (a state as pip + word), `FactList` (label/value rows), `PageLoading` and `CodeFrame` with `CopyButton` (a code block and its copy action, shared by the transcripts and the setup snippets); and the list a surface renders at both widths - `ResponsiveList.tsx` (table on a wide viewport, rows below 640px, with loading-before-empty, blocked-is-not-empty and clamped paging decided once) over `PhoneRow.tsx` (headline, summary, labelled fields, controls) and `phoneRowFields.ts` (derives a row's fields, and one column's rendered cell, from the *table's own* column array, so a list has one description of a record at both widths and a column cannot silently disappear on a phone; see ADR 0012) |
 | `components/workspace/` | The conversation workspace the Playground and the Agent share: `WorkspaceLayout` (head with title, target and actions; main column; resizable side panel that becomes a Back-aware Drawer below 900px), `useResizablePanel` (pointer and keyboard resizing that writes the width to the DOM during a drag and commits it once), `ConversationList` (Ant Design X's `Bubble.List` with its native reverse-scroll anchoring and the "back to latest" control), `Composer` (X's `Sender` with the send path running through its own `SendButton`, so Enter and the button stay one gate), `ModelMarkdown` (safe `@ant-design/x-markdown` rendering with allowlisted code highlighting inside the shared `CodeFrame`), `ReasoningBlock` (X's `Think`), `TargetPicker` (key and call point as one joined control) and `useXLocale` |
-| `components/logs/` | The Logs page's three sources: `CpaLogPanel` (the gateway tail and error files), `ServiceLogPanel` (the service log), `AuditTrail` (the audit timeline, with `auditText.ts` turning an action and a result into the sentence and word a reader sees), and `LogList`, the scrolling tail both log sources render into - it follows the newest line until the reader scrolls away and mounts only the newest chunk. Wire types and pure helpers live in `types/logs.ts` and `types/audit.ts` |
+| `components/logs/` | The Logs page's two sources: `CpaLogPanel` (the gateway tail and error files), `ServiceLogPanel` (the service log), and `LogList`, the scrolling tail both render into - it follows the newest line until the reader scrolls away and mounts only the newest chunk. Wire types and pure helpers live in `types/logs.ts` |
+| `components/audit/` | The audit page's `AuditTrail`: the outcome strip (each count a filter), the search, category and range filters, and the day-grouped timeline, with `auditText.ts` turning an action and a result into the sentence and word a reader sees. Wire types, URL state and facet counting live in `types/audit.ts` |
 | `components/plugins/` | The plugin management page's three tabs: `InstalledPluginsPanel` (each plugin's state in words - running, enabled but not running, disabled - its switch, settings and removal), `PluginStorePanel` (the store as cards with the registry's icon, author, tags, repository and homepage links, and the install dialog that asks a third-party install for the typed plugin id), `PluginSettingsPanel` (the plugin system switch, the third-party registries and the store authentication rules) and `PluginConfigDrawer` (a plugin's declared fields as typed controls, with the JSON view of the same document). The pure rules sit beside them: `pluginConfigForm.ts` (draft to document, per-field validation, undeclared keys carried through), `pluginConfig.ts` (JSON parsing that refuses a duplicate key) and `pluginStoreLogic.ts` (store filters and the settings draft's validation). `pages/PluginsPage.tsx` owns the tab in the URL and reads the store only once its tab is opened |
 | `components/`, `pages/` | Feature UI; one page per route, no page owns another. A page composes its surface rather than carrying it: `pages/UsageEventsPage.tsx` renders `components/usage/`'s toolbar, header and rows and takes its state from that directory's hooks, `pages/ProvidersPage.tsx` renders `components/providers/`'s table and editor, and `pages/ConfigPage.tsx` renders `components/config/`'s renderers. The framework-free policies of a surface stay beside it: `components/usage/` carries `searchDebounce.ts`, `pollingPolicy.ts`, `timeRangePolicy.ts`, `syncPresentation.ts` and `chipDisplay.ts`, and `components/config/` carries `payloadRules.ts`, `configDirty.ts` and `configLayout.ts` |
 
@@ -1307,6 +1325,12 @@ account as the reading it was decided from.
 | Operations | `audit_events`, `ui_preferences`, `quota_snapshots`, `schema_migrations` | Audit has no update or delete path — only `RecordAuditEvent` writes and read queries (`ListAuditEvents`, `QueryAuditEvents`) exist, and export itself is audited; the schema carries no enforcement trigger, so the guarantee lives in the repository API. Migration 027 adds `idx_audit_events_request_action`, which the trail's attempt folding looks up |
 | Release observation | `release_index`, `release_check_state` | Migrations 024 and 025; `truncated` is added by 025, so a database that applied 024 before it existed still gains the column. `release_index` holds one row per published version (tag, name, publication time, prerelease flag) and is **replaced as a unit per product** by `PublishReleaseSnapshot`, because a feed that stops listing a withdrawn release must stop the console claiming it exists. `release_check_state` holds one row per product — the last attempt and success times, the redacted failure reason, the latest tag, the ETag and the truncation flag — and is written by `RecordReleaseCheckAttempt`/`PublishReleaseSnapshot`/`RecordReleaseCheckFailure`, read by `ListReleases` and `GetReleaseCheckState(ForRepository)`. A release's prose body is **never stored**: it lives in bounded process memory for the life of the process, so an index without notes still names the versions and links to the source (see §10) |
 
+`GET /management/system` resolves the gateway client once and runs its reads side by side
+- both products' version states, the gateway's health round trip, the credential list (read
+once for both the gateway's version header and its credential count), the plugin and
+provider counts, and the database, collector, record-count and admission reads - so the page
+waits for its slowest read rather than for the sum of them.
+
 The management system surface is five routes: `GET /management/system` (the page),
 `GET /management/system/releases` (one product's merged change log), `POST
 /management/system/check-updates` (a check, subject to the floor), `GET
@@ -1997,8 +2021,12 @@ Request inspection substitutes image summaries at any depth (a valid custom body
 travels as a header; cURL uses environment placeholders, sets that header explicitly, and
 requires local image substitution. The model named by the turn label and by related-request
 links is the effective one, so a turn is never labelled with a model it did not call. Related
-request links filter by the exact client-key identity and a model-name search within a numeric
-time window; they are candidate links, not a claimed event ID. ADR
+request links (`usageLink`) filter by the exact client-key identity, the effective model and
+the turn's User-Agent within an absolute window of the turn's own span anchored on the server's
+`started_at_ms` (±5 s; ±5 min for a turn restored without server timings). A link opened within a
+minute of that window closing stays open-ended, so the list keeps polling until ingest delivers
+the record. They are candidate links, not a claimed event ID: CPA's `request_id` is not surfaced
+to the playground. ADR
 0022 records the entitlement and privacy boundary; ADR 0023 recorded the selection-only preference
 and is superseded by ADR 0024, which records the single latest session that replaced it. Gateway unit tests, facade tests,
 `scripts/test-playground.ts`, and desktop/phone probes cover this flow. Public-demo

@@ -97,7 +97,9 @@
   padding-inline: 2px;
 }
 
+/* The header and every record lay out on one track list, declared once so the two cannot drift. */
 .records {
+  --oauth-record-columns: minmax(240px, 1.2fr) 88px 48px minmax(105px, 0.45fr) minmax(300px, 1.4fr) auto;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -110,7 +112,7 @@
 
 .table-header {
   display: grid;
-  grid-template-columns: minmax(260px, 1.2fr) 95px minmax(105px, 0.45fr) minmax(310px, 1.4fr) auto;
+  grid-template-columns: var(--oauth-record-columns);
   align-items: center;
   gap: 16px;
   padding: 8px 16px;
@@ -130,6 +132,7 @@
 }
 
 .th-status,
+.th-switch,
 .th-management,
 .th-quota {
   min-width: 0;

@@ -2,13 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Card,
   Button,
-  Tag,
   Typography,
   Alert,
   Spin,
   Modal,
   Drawer,
-  Tooltip,
   App as AntdApp,
 } from 'antd';
 import {
@@ -29,7 +27,6 @@ import {
 } from '../components/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
-import XMarkdown from '@ant-design/x-markdown';
 import { api, describeError } from '../api/client';
 import { useT } from '../i18n';
 import { isDemoMode } from '../types/demoMode';
@@ -47,133 +44,15 @@ import { PanelTitle } from '../components/common/PanelTitle';
 import { FactList } from '../components/common/FactList';
 import { PageLoading } from '../components/common/PageLoading';
 import { StatusLabel } from '../components/common/StatusLabel';
-import { formatBytes } from '../utils/format';
+import { formatBytes, formatTimeAgo } from '../utils/format';
 import { saveBlob } from '../utils/download';
 import styles from './SystemPage.module.css';
 
 const { Text, Paragraph } = Typography;
 
-/** The merged change log for one product, rendered as a drawer's content. */
-interface ProductChangelogProps {
-  product: ReleaseProduct;
-}
-
-const ProductChangelog: React.FC<ProductChangelogProps> = ({ product }) => {
-  const t = useT();
-
-  // Fetched only when this component exists, which the drawer decides: a request feed is
-  // rate limited, so nothing here may run for a reader who has not asked for the log.
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['management-system-releases', product],
-    queryFn: () => api.getSystemReleases(product),
-    staleTime: 60000,
-  });
-
-  if (isLoading) return <PageLoading variant="block" />;
-
-  if (isError) {
-    const msg = describeError(error);
-    return <Alert type="error" showIcon description={msg} />;
-  }
-
-  if (!data || data.releases.length === 0) {
-    return <Text type="secondary">{t('sys.no_changelog_entries')}</Text>;
-  }
-
-  return (
-    <div className={styles['changelog-panel']}>
-      {!data.range_complete && (
-        <Alert
-          type="warning"
-          showIcon
-          description={t('sys.range_incomplete')}
-        />
-      )}
-
-      {data.check_error && (
-        <Alert
-          type="error"
-          showIcon
-          description={data.check_error}
-        />
-      )}
-
-      <div className={styles['changelog-header']}>
-        <span>{t('sys.view_changelog', { count: data.releases.length })}</span>
-        <a
-          href={data.repository_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={styles['repo-link']}
-          aria-label={t('sys.open_repo_link', { repo: data.repository })}
-        >
-          {data.repository} <LinkOutlined />
-        </a>
-      </div>
-
-      {data.releases.map((release) => (
-        <div key={release.tag} className={styles['release-entry']}>
-          <div className={styles['release-title-row']}>
-            <div className={styles['release-tag-group']}>
-              <Tag className={styles['release-tag']}>{release.tag}</Tag>
-              {release.in_range && (
-                <Tag color="processing">{t('sys.changelog_in_range')}</Tag>
-              )}
-              {release.name && release.name !== release.tag && (
-                <Text strong className={styles['release-name']}>{release.name}</Text>
-              )}
-            </div>
-            <div className={styles['release-meta']}>
-              {release.published_at_ms > 0 && (
-                <span>{dayjs(release.published_at_ms).format('YYYY-MM-DD')}</span>
-              )}
-              <Tooltip title={t('sys.view_release_on_github', { tag: release.tag })}>
-                <a
-                  href={release.html_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={t('sys.view_release_on_github', { tag: release.tag })}
-                >
-                  <LinkOutlined />
-                </a>
-              </Tooltip>
-            </div>
-          </div>
-
-          {!release.body_available || !release.body ? (
-            <div className={styles['release-notes-missing']}>{t('sys.notes_unavailable')}</div>
-          ) : (
-            <div className={styles['markdown-body']}>
-              <XMarkdown
-                content={release.body}
-                escapeRawHtml
-                openLinksInNewTab
-                components={{
-                  a: ({ href, children, domNode: _d, streamStatus: _s, ...props }: any) => (
-                    <a href={href} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} {...props}>
-                      {children}
-                    </a>
-                  ),
-                  img: ({ src, alt, domNode: _d, streamStatus: _s }: any) => (
-                    <a
-                      href={src}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={styles['image-link']}
-                      aria-label={alt || src}
-                    >
-                      [{t('sys.image_link')}: {alt || src}]
-                    </a>
-                  ),
-                }}
-              />
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-};
+// The change log renders release notes as Markdown, and the Markdown renderer is the largest
+// dependency on this page. It is only needed once a reader opens a log, so it is loaded then.
+const ProductChangelog = React.lazy(() => import('../components/system/ProductChangelog').then((module) => ({ default: module.ProductChangelog })));
 
 /** Product version block with status, repository link, and changelog toggle. */
 interface ProductBlockProps {
@@ -237,31 +116,32 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
         <div className={styles['product-badge']}>{renderStateBadge()}</div>
       </div>
 
+      {/* Running and published side by side on one line, with the change log beside them: the
+          pair is one comparison, and the log is what explains the difference between them. */}
       <div className={styles['version-row']} data-testid="sys-version-row">
-        <div>
-          <Text type="secondary" className={styles['version-label']}>{t('sys.current_version')}:</Text>
-          <Tag className={styles['version-tag']}>{version.running_version || t('sys.version_unknown')}</Tag>
-        </div>
+        <span className={styles['version-pair']}>
+          <span className={styles['version-label']}>{t('sys.current_version')}</span>
+          <span className={styles['version-value']}>{version.running_version || t('sys.version_unknown')}</span>
+        </span>
         {version.latest_version && (
-          <div>
-            <Text type="secondary" className={styles['version-label']}>{t('sys.latest_version')}:</Text>
-            <span className={styles['version-tag']}>{version.latest_version}</span>
-          </div>
+          <span className={styles['version-pair']}>
+            <span className={styles['version-label']}>{t('sys.latest_version')}</span>
+            <span className={styles['version-value']}>{version.latest_version}</span>
+          </span>
         )}
-      </div>
-
-      {hasNewer && (
-        <div className={styles['changelog-toggle']}>
+        {hasNewer && (
           <Button
             type="link"
             size="small"
+            className={styles['changelog-toggle']}
             icon={<RightOutlined />}
+            iconPlacement="end"
             onClick={onOpenChangelog}
           >
             {t('sys.view_changelog', { count: version.merge_count || 1 })}
           </Button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* No routine "last checked" readout: it is the same timestamp on every card and it
           answered a question nobody asked. What remains is the one state a reader cannot infer
@@ -612,7 +492,10 @@ export const SystemPage: React.FC = () => {
 
       {isError && <Alert type="error" showIcon description={describeError(error)} />}
 
-      {/* 2x2 Grid of the 4 System Information cards */}
+      {/* Four cards in a 2x2 grid, paired by height: versions beside maintenance and storage
+          beside health keeps each row's cards close to the same height, so neither card in a row
+          is mostly empty. The source order is the reading order, so a keyboard, a screen reader
+          and a phone all meet the cards in the order the grid draws them. */}
       <div className={styles['system-grid']}>
         {/* Card 1: Versions & Updates */}
         <Card
@@ -657,122 +540,31 @@ export const SystemPage: React.FC = () => {
           )}
         </Card>
 
-        {/* Card 2: SQLite Storage */}
-        <Card
-          className={styles['system-card']}
-          data-testid="sys-card-storage"
-          title={<PanelTitle icon={<DatabaseOutlined />}>{t('sys.storage_card')}</PanelTitle>}
-        >
-          {sysInfo && (
-            <>
-              <div className={styles['storage-headline']}>
-                <span className={styles['storage-headline-label']}>{t('sys.storage_total')}</span>
-                <span className={styles['storage-total-num']}>
-                  {formatBytes(sysInfo.database.files.total_bytes)}
-                </span>
-              </div>
-
-              <FactList
-                className={styles['storage-files']}
-                testId="sys-storage-file-list"
-                facts={([
-                  ['main', t('sys.storage_main'), sysInfo.database.files.main_exists, sysInfo.database.files.main_bytes],
-                  ['wal', t('sys.storage_wal'), sysInfo.database.files.wal_exists, sysInfo.database.files.wal_bytes],
-                  ['shm', t('sys.storage_shm'), sysInfo.database.files.shm_exists, sysInfo.database.files.shm_bytes],
-                ] as const).map(([key, label, exists, bytes]) => ({
-                  key,
-                  label,
-                  value: exists ? formatBytes(bytes) : t('sys.file_not_exist'),
-                  testId: 'sys-storage-file-row',
-                }))}
-              />
-
-              {/* What the file is, rather than how it is organised internally: the
-                  observed journal mode, the schema generation, and the space in use. Page
-                  geometry, free pages and the connection's own settings are in the
-                  redacted diagnostics bundle for anyone who needs them. */}
-              <FactList
-                emphasis="quiet"
-                testId="sys-storage-facts"
-                facts={[
-                  { key: 'journal', label: t('sys.journal_mode'), value: (sysInfo.database.journal_mode || '—').toUpperCase(), testId: 'sys-storage-fact-row' },
-                  { key: 'schema', label: t('sys.schema_version'), value: `v${sysInfo.database.schema_version}`, testId: 'sys-storage-fact-row' },
-                  { key: 'used', label: t('sys.used_bytes'), value: formatBytes(sysInfo.database.used_bytes), testId: 'sys-storage-fact-row' },
-                ]}
-              />
-            </>
-          )}
-        </Card>
-
-        {/* Card 3: Component Topology & Health */}
-        <Card
-          className={styles['system-card']}
-          data-testid="sys-card-health"
-          title={<PanelTitle icon={<CloudServerOutlined />}>{t('sys.topology_card')}</PanelTitle>}
-        >
-          <div className={styles['component-list']}>
-            <div className={styles['component-row']}>
-              <div className={styles['component-identity']}>
-                <div className={styles['component-name']}>{t('sys.component_cpa')}</div>
-                <div className={styles['component-meta']}>{sysInfo?.cpa.endpoint_masked}</div>
-              </div>
-              {sysInfo?.cpa.status === 'connected' ? (
-                <StatusLabel tone="success">
-                  {sysInfo.cpa.latency_ms > 0
-                    ? t('sys.cpa_latency', { ms: sysInfo.cpa.latency_ms })
-                    : t('shell.connected')}
-                </StatusLabel>
-              ) : (
-                <StatusLabel tone="danger">{t('shell.offline')}</StatusLabel>
-              )}
-            </div>
-
-            <div className={styles['component-row']}>
-              <div className={styles['component-identity']}>
-                <div className={styles['component-name']}>{t('sys.component_db')}</div>
-                <div className={styles['component-meta']}>
-                  {t('sys.db_mode', {
-                    mode: (sysInfo?.database.journal_mode || '').toUpperCase() || '—',
-                  })}
-                </div>
-              </div>
-              {sysInfo?.database.status === 'ok' ? (
-                <StatusLabel tone="success">{t('inst.db_ok')}</StatusLabel>
-              ) : (
-                <StatusLabel tone="danger">{t('inst.db_error')}</StatusLabel>
-              )}
-            </div>
-
-            <div className={styles['component-row']}>
-              <div className={styles['component-identity']}>
-                <div className={styles['component-name']}>{t('sys.component_collector')}</div>
-                <div className={styles['component-meta']}>
-                  {t('sys.collector_mode', {
-                    mode: sysInfo?.collector.mode || 'auto',
-                    gaps: sysInfo?.collector.gap_count || 0,
-                  })}
-                </div>
-              </div>
-              <StatusLabel tone={sysInfo?.collector.status === 'active' ? 'success' : 'neutral'}>
-                {sysInfo?.collector.status === 'active'
-                  ? t('sys.collector_status_active')
-                  : t('sys.collector_status_disabled')}
-              </StatusLabel>
-            </div>
-          </div>
-        </Card>
-
-        {/* Card 4: Maintenance & Diagnostics */}
+        {/* Card 2: Maintenance & Diagnostics */}
         <Card
           className={styles['system-card']}
           data-testid="sys-card-maintenance"
           title={<PanelTitle icon={<SafetyCertificateOutlined />}>{t('sys.maintenance_card')}</PanelTitle>}
         >
-          {/* Actions Bar */}
+          {/* Each action with what it does, in the card rather than in a tooltip: these rewrite
+              the database file, and what an operator is about to run should be readable before
+              the pointer reaches it. */}
           <div className={styles['maintenance-actions']}>
-            <Tooltip title={t('sys.checkpoint_desc')}>
+            <div className={styles['maintenance-action']}>
+              <div className={styles['maintenance-action-copy']}>
+                <div className={styles['maintenance-action-title']}>{t('sys.action_checkpoint')}</div>
+                <div className={styles['maintenance-action-desc']}>
+                  {t('sys.checkpoint_desc')}
+                  {sysInfo?.database.files.wal_exists && (
+                    <span className={styles['maintenance-action-fact']}>
+                      {t('sys.wal_size', { size: formatBytes(sysInfo.database.files.wal_bytes) })}
+                    </span>
+                  )}
+                </div>
+              </div>
               <Button
                 icon={<ClearOutlined />}
+                aria-label={t('sys.action_checkpoint')}
                 loading={
                   submittingAction === 'checkpoint' ||
                   (effectiveMaintenance?.running &&
@@ -781,19 +573,22 @@ export const SystemPage: React.FC = () => {
                 disabled={isDemo || isMaintenanceActive}
                 onClick={() => void handleRunCheckpoint()}
               >
-                {t('sys.action_checkpoint')}
+                {t('sys.action_run')}
               </Button>
-            </Tooltip>
+            </div>
 
-            <Tooltip
-              title={
-                effectiveAdmission && !effectiveAdmission.allowed
-                  ? t('sys.vacuum_disabled_reason', { reason: effectiveAdmission.reason })
-                  : t('sys.vacuum_desc')
-              }
-            >
+            <div className={styles['maintenance-action']}>
+              <div className={styles['maintenance-action-copy']}>
+                <div className={styles['maintenance-action-title']}>{t('sys.action_vacuum')}</div>
+                <div className={styles['maintenance-action-desc']}>
+                  {effectiveAdmission && !effectiveAdmission.allowed
+                    ? t('sys.vacuum_disabled_reason', { reason: effectiveAdmission.reason })
+                    : t('sys.vacuum_desc')}
+                </div>
+              </div>
               <Button
                 icon={<CompressOutlined />}
+                aria-label={t('sys.action_vacuum')}
                 loading={
                   submittingAction === 'vacuum' ||
                   (effectiveMaintenance?.running && effectiveMaintenance.action === 'vacuum')
@@ -801,20 +596,26 @@ export const SystemPage: React.FC = () => {
                 disabled={isDemo || isMaintenanceActive || (effectiveAdmission ? !effectiveAdmission.allowed : false)}
                 onClick={() => setIsVacuumModalOpen(true)}
               >
-                {t('sys.action_vacuum')}
+                {t('sys.action_run')}
               </Button>
-            </Tooltip>
+            </div>
 
-            <Button
-              type="primary"
-              icon={<DownloadOutlined />}
-              loading={downloadingDiag}
-              disabled={isDemo}
-              title={isDemo ? t('demo.blocked') : undefined}
-              onClick={() => void handleDownloadDiagnostics()}
-            >
-              {t('sys.download_diag')}
-            </Button>
+            <div className={styles['maintenance-action']}>
+              <div className={styles['maintenance-action-copy']}>
+                <div className={styles['maintenance-action-title']}>{t('sys.download_diag')}</div>
+                <div className={styles['maintenance-action-desc']}>{t('sys.diag_desc')}</div>
+              </div>
+              <Button
+                icon={<DownloadOutlined />}
+                aria-label={t('sys.download_diag')}
+                loading={downloadingDiag}
+                disabled={isDemo}
+                title={isDemo ? t('demo.blocked') : undefined}
+                onClick={() => void handleDownloadDiagnostics()}
+              >
+                {t('sys.action_download')}
+              </Button>
+            </div>
           </div>
 
           {/* The running job, from the live server status. It is always shown, including one
@@ -907,7 +708,153 @@ export const SystemPage: React.FC = () => {
               )}
             </div>
           )}
+        </Card>
 
+        {/* Card 3: SQLite Storage */}
+        <Card
+          className={styles['system-card']}
+          data-testid="sys-card-storage"
+          title={<PanelTitle icon={<DatabaseOutlined />}>{t('sys.storage_card')}</PanelTitle>}
+        >
+          {sysInfo && (
+            <>
+              <div className={styles['storage-headline']}>
+                <span className={styles['storage-headline-label']}>{t('sys.storage_total')}</span>
+                <span className={styles['storage-total-num']}>
+                  {formatBytes(sysInfo.database.files.total_bytes)}
+                </span>
+              </div>
+
+              <FactList
+                className={styles['storage-files']}
+                testId="sys-storage-file-list"
+                facts={([
+                  ['main', t('sys.storage_main'), sysInfo.database.files.main_exists, sysInfo.database.files.main_bytes],
+                  ['wal', t('sys.storage_wal'), sysInfo.database.files.wal_exists, sysInfo.database.files.wal_bytes],
+                  ['shm', t('sys.storage_shm'), sysInfo.database.files.shm_exists, sysInfo.database.files.shm_bytes],
+                ] as const).map(([key, label, exists, bytes]) => ({
+                  key,
+                  label,
+                  value: exists ? formatBytes(bytes) : t('sys.file_not_exist'),
+                  testId: 'sys-storage-file-row',
+                }))}
+              />
+
+              {/* What the file is, rather than how it is organised internally: the
+                  observed journal mode, the schema generation, and the space in use. Page
+                  geometry, free pages and the connection's own settings are in the
+                  redacted diagnostics bundle for anyone who needs them. */}
+              <FactList
+                emphasis="quiet"
+                testId="sys-storage-facts"
+                facts={[
+                  { key: 'journal', label: t('sys.journal_mode'), value: (sysInfo.database.journal_mode || '—').toUpperCase(), testId: 'sys-storage-fact-row' },
+                  { key: 'schema', label: t('sys.schema_version'), value: `v${sysInfo.database.schema_version}`, testId: 'sys-storage-fact-row' },
+                  { key: 'used', label: t('sys.used_bytes'), value: formatBytes(sysInfo.database.used_bytes), testId: 'sys-storage-fact-row' },
+                ]}
+              />
+
+            </>
+          )}
+        </Card>
+
+        {/* Card 4: Component Topology & Health */}
+        <Card
+          className={styles['system-card']}
+          data-testid="sys-card-health"
+          title={<PanelTitle icon={<CloudServerOutlined />}>{t('sys.topology_card')}</PanelTitle>}
+        >
+          <div className={styles['component-list']}>
+            <div className={styles['component-row']}>
+              <div className={styles['component-identity']}>
+                <div className={styles['component-name']}>{t('sys.component_cpa')}</div>
+                <div className={styles['component-meta']}>{sysInfo?.cpa.endpoint_masked}</div>
+                {sysInfo && (
+                  <div className={styles['component-meta']}>
+                    {t('sys.gateway_counts', {
+                      credentials: sysInfo.data_volumes.credentials ?? '—',
+                      providers: sysInfo.data_volumes.providers ?? '—',
+                      plugins: sysInfo.data_volumes.plugins ?? '—',
+                    })}
+                  </div>
+                )}
+              </div>
+              {sysInfo?.cpa.status === 'connected' ? (
+                <StatusLabel tone="success">
+                  {sysInfo.cpa.latency_ms > 0
+                    ? t('sys.cpa_latency', { ms: sysInfo.cpa.latency_ms })
+                    : t('shell.connected')}
+                </StatusLabel>
+              ) : (
+                <StatusLabel tone="danger">{t('shell.offline')}</StatusLabel>
+              )}
+            </div>
+
+            <div className={styles['component-row']}>
+              <div className={styles['component-identity']}>
+                <div className={styles['component-name']}>{t('sys.component_omc')}</div>
+                {sysInfo && (
+                  <div className={styles['component-meta']}>
+                    {t('sys.omc_runtime', {
+                      ago: formatTimeAgo(sysInfo.runtime.started_at_ms, Date.now(), t),
+                      mem: Math.round(sysInfo.runtime.alloc_mb),
+                      platform: sysInfo.runtime.os_arch,
+                    })}
+                  </div>
+                )}
+              </div>
+              <StatusLabel tone="success">{t('sys.omc_running')}</StatusLabel>
+            </div>
+
+            <div className={styles['component-row']}>
+              <div className={styles['component-identity']}>
+                <div className={styles['component-name']}>{t('sys.component_db')}</div>
+                <div className={styles['component-meta']}>
+                  {t('sys.db_mode', {
+                    mode: (sysInfo?.database.journal_mode || '').toUpperCase() || '—',
+                  })}
+                </div>
+                {/* What the file holds, so its size on the storage card can be read against the
+                    records behind it. */}
+                {sysInfo && (
+                  <div className={styles['component-meta']} data-testid="sys-db-records">
+                    {t('sys.db_records', {
+                      usage: sysInfo.data_volumes.usage_events.toLocaleString(),
+                      audit: sysInfo.data_volumes.audit_events.toLocaleString(),
+                    })}
+                    {sysInfo.data_volumes.first_event_ms
+                      ? ` · ${t('sys.db_records_since', { date: dayjs(sysInfo.data_volumes.first_event_ms).format('YYYY-MM-DD') })}`
+                      : ''}
+                    {sysInfo.data_volumes.inbox_pending > 0
+                      ? ` · ${t('sys.records_pending_n', { n: sysInfo.data_volumes.inbox_pending.toLocaleString() })}`
+                      : ''}
+                  </div>
+                )}
+              </div>
+              {sysInfo?.database.status === 'ok' ? (
+                <StatusLabel tone="success">{t('inst.db_ok')}</StatusLabel>
+              ) : (
+                <StatusLabel tone="danger">{t('inst.db_error')}</StatusLabel>
+              )}
+            </div>
+
+            <div className={styles['component-row']}>
+              <div className={styles['component-identity']}>
+                <div className={styles['component-name']}>{t('sys.component_collector')}</div>
+                <div className={styles['component-meta']}>
+                  {t('sys.collector_mode', {
+                    mode: sysInfo?.collector.mode || 'auto',
+                    gaps: sysInfo?.collector.gap_count || 0,
+                  })}
+                </div>
+              </div>
+              <StatusLabel tone={sysInfo?.collector.status === 'active' ? 'success' : 'neutral'}>
+                {sysInfo?.collector.status === 'active'
+                  ? t('sys.collector_status_active')
+                  : t('sys.collector_status_disabled')}
+              </StatusLabel>
+            </div>
+          </div>
         </Card>
       </div>
 
@@ -927,7 +874,11 @@ export const SystemPage: React.FC = () => {
           product: changelogProduct === 'cpa' ? t('sys.cpa_version') : t('sys.omc_version'),
         })}
       >
-        {changelogProduct && <ProductChangelog product={changelogProduct} />}
+        {changelogProduct && (
+          <React.Suspense fallback={<PageLoading variant="block" />}>
+            <ProductChangelog product={changelogProduct} />
+          </React.Suspense>
+        )}
       </Drawer>
 
       {/* VACUUM Confirmation Modal */}

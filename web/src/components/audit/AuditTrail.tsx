@@ -1,6 +1,6 @@
 import React from 'react';
 import { Alert, App as AntdApp, Button, Empty, Input, Segmented, Select, Tooltip } from 'antd';
-import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import clsx from 'clsx';
 import {
@@ -9,6 +9,7 @@ import {
   DatabaseOutlined,
   DollarOutlined,
   DownloadOutlined,
+  FilterOutlined,
   KeyOutlined,
   LoginOutlined,
   RobotOutlined,
@@ -21,25 +22,27 @@ import { api, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import {
   AUDIT_CATEGORIES,
+  auditFacets,
   categoryOf,
   dayKey,
-  DEFAULT_AUDIT_FILTERS,
   formatDetailValue,
   parseAuditSource,
   readableTarget,
   resultTone,
+  selectedCategory,
   type AuditEvent,
   type AuditFilters,
   type AuditOutcome,
+  type AuditRange,
 } from '../../types/audit';
 import { FactList, type Fact } from '../common/FactList';
 import { RefreshButton } from '../common/RefreshButton';
-import { StatusLabel } from '../common/StatusLabel';
+import { StatusLabel, type StatusTone } from '../common/StatusLabel';
 import { CopyButton } from '../common/CopyButton';
 import { PageLoading } from '../common/PageLoading';
 import { saveBlob } from '../../utils/download';
 import { auditActionLabel, auditResultLabel } from './auditText';
-import styles from './Logs.module.css';
+import styles from './Audit.module.css';
 
 /** How long typing settles before the search asks the server. */
 const SEARCH_SETTLE_MS = 300;
@@ -57,7 +60,23 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   system: <DatabaseOutlined />,
 };
 
-const AuditEntry: React.FC<{ event: AuditEvent }> = ({ event }) => {
+/** The outcome tiles, in reading order, with the tone each one's count is painted in. */
+const OUTCOME_TILES: readonly { outcome: AuditOutcome; tone: StatusTone }[] = [
+  { outcome: 'all', tone: 'neutral' },
+  { outcome: 'succeeded', tone: 'success' },
+  { outcome: 'failed', tone: 'danger' },
+  { outcome: 'unfinished', tone: 'warn' },
+];
+
+const RANGES: readonly AuditRange[] = ['24h', '7d', '30d', 'all'];
+
+interface AuditEntryProps {
+  event: AuditEvent;
+  /** Narrows the trail to one identifier, from the entry's own detail. */
+  onSearch: (needle: string) => void;
+}
+
+const AuditEntry: React.FC<AuditEntryProps> = ({ event, onSearch }) => {
   const t = useT();
   const [isOpen, setIsOpen] = React.useState(false);
   const category = categoryOf(event.action);
@@ -65,6 +84,7 @@ const AuditEntry: React.FC<{ event: AuditEvent }> = ({ event }) => {
   const source = parseAuditSource(event.source_summary);
   const tone = resultTone(event.result);
   const detailId = `audit-detail-${event.id}`;
+  const targetId = event.target_id.trim();
 
   const facts: Fact[] = [
     { key: 'time', label: t('audit.field_time'), value: dayjs(event.occurred_at_ms).format('YYYY-MM-DD HH:mm:ss.SSS') },
@@ -121,6 +141,22 @@ const AuditEntry: React.FC<{ event: AuditEvent }> = ({ event }) => {
       {isOpen && (
         <div id={detailId} className={styles['audit-detail']}>
           <FactList facts={facts} emphasis="quiet" />
+          {/* The two questions a single entry raises: what else happened to this thing, and
+              what else did this one request do. Both are the trail's own search. */}
+          {(targetId || event.request_id) && (
+            <div className={styles['audit-detail-actions']}>
+              {targetId && (
+                <Button size="small" icon={<FilterOutlined />} onClick={() => onSearch(targetId)}>
+                  {t('audit.only_target')}
+                </Button>
+              )}
+              {event.request_id && (
+                <Button size="small" icon={<FilterOutlined />} onClick={() => onSearch(event.request_id)}>
+                  {t('audit.only_request')}
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       )}
     </li>
@@ -136,27 +172,41 @@ function dayHeading(key: string, t: ReturnType<typeof useT>): string {
   return date;
 }
 
+interface AuditTrailProps {
+  filters: AuditFilters;
+  onFiltersChange: (next: AuditFilters) => void;
+}
+
 /**
  * AuditTrail reads the operator audit log as a timeline: one entry per operation, grouped
- * by day, each a sentence ("Deleted a provider  gemini") with its outcome.
+ * by day, each a sentence ("Deleted a provider  gemini") with its outcome, under a strip that
+ * counts the window by outcome.
  *
  * The server folds a write's `attempt` row into the outcome it recorded, so an entry is an
  * operation rather than a pair of rows; an attempt that never recorded an outcome stays
- * visible as unfinished, because that is the one the operator needs to see.
+ * visible as unfinished, because that is the one the operator needs to see. The filters are
+ * owned by the caller (the page keeps them in its URL), so a link can open a filtered trail.
  */
-export const AuditTrail: React.FC = () => {
+export const AuditTrail: React.FC<AuditTrailProps> = ({ filters, onFiltersChange }) => {
   const t = useT();
   const { message } = AntdApp.useApp();
-  const [filters, setFilters] = React.useState<AuditFilters>(DEFAULT_AUDIT_FILTERS);
-  const [searchDraft, setSearchDraft] = React.useState('');
+  const [searchDraft, setSearchDraft] = React.useState(filters.search);
   const [isExporting, setIsExporting] = React.useState(false);
+  const filtersRef = React.useRef(filters);
+  filtersRef.current = filters;
+
+  // A search set from outside the box (an entry's "only this target", Back) replaces the draft.
+  React.useEffect(() => {
+    setSearchDraft(filters.search);
+  }, [filters.search]);
 
   React.useEffect(() => {
+    if (searchDraft.trim() === filtersRef.current.search) return undefined;
     const timer = window.setTimeout(() => {
-      setFilters((current) => (current.search === searchDraft ? current : { ...current, search: searchDraft }));
+      onFiltersChange({ ...filtersRef.current, search: searchDraft.trim() });
     }, SEARCH_SETTLE_MS);
     return () => window.clearTimeout(timer);
-  }, [searchDraft]);
+  }, [searchDraft, onFiltersChange]);
 
   const query = useInfiniteQuery({
     queryKey: ['audit-events', filters],
@@ -168,6 +218,17 @@ export const AuditTrail: React.FC = () => {
     staleTime: 10_000,
   });
 
+  // Keyed on what the summary actually reads, so switching a facet reuses the matrix it
+  // already has instead of asking the server to count the same rows again.
+  const summary = useQuery({
+    queryKey: ['audit-summary', filters.range, filters.search],
+    queryFn: () => api.getAuditSummary(filters),
+    placeholderData: keepPreviousData,
+    meta: { silent: true },
+    staleTime: 10_000,
+  });
+
+  const facets = React.useMemo(() => auditFacets(summary.data ?? [], filters), [summary.data, filters]);
   const events = React.useMemo(() => query.data?.pages.flatMap((page) => page.events) ?? [], [query.data]);
   const days = React.useMemo(() => {
     const groups: { key: string; events: AuditEvent[] }[] = [];
@@ -180,10 +241,14 @@ export const AuditTrail: React.FC = () => {
     return groups;
   }, [events]);
 
-  const isFiltered = filters.categories.length > 0 || filters.outcome !== 'all' || filters.search.trim() !== '';
-  const category = Object.keys(AUDIT_CATEGORIES).find(
-    (name) => AUDIT_CATEGORIES[name].join(',') === filters.categories.join(','),
-  );
+  const isFiltered = filters.categories.length > 0 || filters.outcome !== 'all' || filters.search.trim() !== '' || filters.range !== 'all';
+  const category = selectedCategory(filters);
+  const hasCounts = summary.data !== undefined;
+  const update = (patch: Partial<AuditFilters>) => onFiltersChange({ ...filters, ...patch });
+  const refresh = () => {
+    void query.refetch();
+    void summary.refetch();
+  };
 
   const onExport = async () => {
     setIsExporting(true);
@@ -198,12 +263,33 @@ export const AuditTrail: React.FC = () => {
 
   return (
     <section className={styles.panel}>
+      <div className={styles['audit-stats']} role="group" aria-label={t('audit.outcome_filter')} data-testid="audit-stats">
+        {OUTCOME_TILES.map(({ outcome, tone }) => (
+          <button
+            key={outcome}
+            type="button"
+            className={clsx(styles['audit-stat'], filters.outcome === outcome && styles['audit-stat-active'])}
+            aria-pressed={filters.outcome === outcome}
+            onClick={() => update({ outcome })}
+            data-testid={`audit-stat-${outcome}`}
+          >
+            <span className={styles['audit-stat-label']}>
+              {outcome === 'all' ? t('audit.stat_all') : <StatusLabel tone={tone}>{t(`audit.outcome_${outcome}`)}</StatusLabel>}
+            </span>
+            <span className={clsx(styles['audit-stat-value'], outcome !== 'all' && facets.outcomes[outcome] > 0 && styles[`stat-${tone}`])}>
+              {hasCounts ? facets.outcomes[outcome].toLocaleString() : '—'}
+            </span>
+          </button>
+        ))}
+      </div>
+
       <div className="logs-toolbar">
         <Input
           allowClear
           className={styles['audit-search']}
           prefix={<SearchOutlined />}
           placeholder={t('audit.search_placeholder')}
+          aria-label={t('audit.search_placeholder')}
           value={searchDraft}
           onChange={(event) => setSearchDraft(event.target.value)}
         />
@@ -211,33 +297,41 @@ export const AuditTrail: React.FC = () => {
           className={styles['audit-category']}
           value={category ?? 'all'}
           aria-label={t('audit.all_categories')}
+          popupMatchSelectWidth={false}
           options={[
             { value: 'all', label: t('audit.all_categories') },
-            ...Object.keys(AUDIT_CATEGORIES).map((name) => ({ value: name, label: t(`audit.cat.${name}`) })),
+            ...Object.keys(AUDIT_CATEGORIES).map((name) => ({
+              value: name,
+              label: (
+                <span className={styles['category-option']}>
+                  <span>{t(`audit.cat.${name}`)}</span>
+                  {hasCounts && <span className={styles['category-count']}>{facets.categories[name] ?? 0}</span>}
+                </span>
+              ),
+            })),
           ]}
-          onChange={(value: string) => setFilters((current) => ({
-            ...current,
-            categories: value === 'all' ? [] : [...AUDIT_CATEGORIES[value]],
-          }))}
+          onChange={(value: string) => update({ categories: value === 'all' ? [] : [...AUDIT_CATEGORIES[value]] })}
         />
         <Segmented
           size="small"
-          value={filters.outcome}
-          options={[
-            { value: 'all', label: t('audit.outcome_all') },
-            { value: 'succeeded', label: t('audit.outcome_succeeded') },
-            { value: 'failed', label: t('audit.outcome_failed') },
-          ]}
-          onChange={(value) => setFilters((current) => ({ ...current, outcome: value as AuditOutcome }))}
+          value={filters.range}
+          aria-label={t('audit.range_label')}
+          options={RANGES.map((range) => ({ value: range, label: t(`audit.range_${range}`) }))}
+          onChange={(value) => update({ range: value as AuditRange })}
         />
         <div className={styles['toolbar-actions']}>
+          {isFiltered && (
+            <Button type="link" size="small" onClick={() => onFiltersChange({ categories: [], outcome: 'all', search: '', range: 'all' })}>
+              {t('audit.clear_filters')}
+            </Button>
+          )}
           <RefreshButton
             isIconOnly
             label={t('logs.reload')}
-            isRefreshing={query.isFetching && !query.isFetchingNextPage}
-            onRefresh={() => void query.refetch()}
+            isRefreshing={(query.isFetching && !query.isFetchingNextPage) || summary.isFetching}
+            onRefresh={refresh}
           />
-          <Tooltip title={t('audit.export')}>
+          <Tooltip title={t('audit.export_hint')}>
             <Button icon={<DownloadOutlined />} loading={isExporting} onClick={() => void onExport()} aria-label={t('audit.export')}>
               <span className={styles['action-label']}>{t('audit.export')}</span>
             </Button>
@@ -271,7 +365,9 @@ export const AuditTrail: React.FC = () => {
                 )}
               </header>
               <ol className={styles['audit-list']}>
-                {day.events.map((event) => <AuditEntry key={event.id} event={event} />)}
+                {day.events.map((event) => (
+                  <AuditEntry key={event.id} event={event} onSearch={(needle) => update({ search: needle })} />
+                ))}
               </ol>
             </section>
           ))}

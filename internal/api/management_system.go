@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"sync"
 	"time"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/release"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
@@ -158,13 +160,13 @@ type SystemMaintenanceStatusDTO struct {
 	// JobID identifies one admitted job for the life of the process, monotonically. A reader uses it
 	// to tell a later job from an earlier one, which the start time cannot promise: it is the wall
 	// clock, so two jobs can share a millisecond and a synchronised clock can step backwards.
-	JobID           int64  `json:"job_id"`
-	Running         bool   `json:"running"`
-	StartedAtMS     int64  `json:"started_at_ms"`
-	FinishedAtMS    int64  `json:"finished_at_ms"`
-	SizeBeforeBytes int64  `json:"size_before_bytes"`
-	SizeAfterBytes  int64  `json:"size_after_bytes"`
-	ReclaimedBytes  int64  `json:"reclaimed_bytes"`
+	JobID           int64 `json:"job_id"`
+	Running         bool  `json:"running"`
+	StartedAtMS     int64 `json:"started_at_ms"`
+	FinishedAtMS    int64 `json:"finished_at_ms"`
+	SizeBeforeBytes int64 `json:"size_before_bytes"`
+	SizeAfterBytes  int64 `json:"size_after_bytes"`
+	ReclaimedBytes  int64 `json:"reclaimed_bytes"`
 	// Incomplete distinguishes "the statement ran" from "it did its job": SQLite does
 	// not error when a checkpoint is blocked.
 	Incomplete bool   `json:"incomplete"`
@@ -237,19 +239,157 @@ func (h *Handler) getSystemInfo(writer http.ResponseWriter, request *http.Reques
 	}
 
 	dto := SystemInfoDTO{
-		OMCVersion:            h.productVersionDTO(ctx, release.ProductOMC, h.omcVersion()),
-		CPAVersion:            h.productVersionDTO(ctx, release.ProductCPA, h.observedCPAVersion(ctx)),
 		UpdateCheckOnPageLoad: h.cfg.Release.AutoCheck,
 		UptimeSeconds:         uptime,
-		Database:              h.databaseDTO(ctx),
-		CPA:                   h.cpaDTO(ctx),
-		Collector:             h.collectorDTO(ctx),
-		DataVolumes:           h.dataVolumesDTO(ctx),
 		Maintenance:           h.maintenanceStatusDTO(),
 		Runtime:               h.runtimeDTO(),
 	}
-	dto.MaintenanceAdmission = h.maintenanceAdmissionDTO(ctx)
+
+	// The page is a set of independent reads, most of them round trips to the gateway, and
+	// they used to run one after another - so the page waited for the sum of eight gateway
+	// requests. The gateway client is resolved once and the reads run side by side; each
+	// writes only its own variable, and they are assembled after the last one returns.
+	gateway := h.systemGatewayClient(ctx)
+	var (
+		wg          sync.WaitGroup
+		cpaVersion  = "unknown"
+		credentials *int
+		plugins     *int
+		providers   *int
+		volumes     SystemDataVolumesDTO
+	)
+	run := func(read func()) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			read()
+		}()
+	}
+	run(func() { dto.OMCVersion = h.productVersionDTO(ctx, release.ProductOMC, h.omcVersion()) })
+	run(func() {
+		// One read of the credential list answers two questions: the version header the
+		// gateway stamps on it, and how many credentials it holds.
+		cpaVersion, credentials = gatewayVersionAndCredentials(ctx, gateway.client)
+		dto.CPAVersion = h.productVersionDTO(ctx, release.ProductCPA, cpaVersion)
+	})
+	run(func() { dto.CPA = gateway.healthDTO(ctx) })
+	run(func() { plugins = gatewayPluginCount(ctx, gateway.client) })
+	run(func() { providers = gatewayProviderCount(ctx, gateway.client) })
+	run(func() { dto.Database = h.databaseDTO(ctx) })
+	run(func() { dto.Collector = h.collectorDTO(ctx) })
+	run(func() { volumes = h.localDataVolumesDTO(ctx) })
+	run(func() { dto.MaintenanceAdmission = h.maintenanceAdmissionDTO(ctx) })
+	wg.Wait()
+
+	volumes.Credentials = credentials
+	volumes.Plugins = plugins
+	volumes.Providers = providers
+	dto.DataVolumes = volumes
 	writeJSON(writer, http.StatusOK, dto)
+}
+
+// systemGateway is the gateway as the system page reaches it: the masked endpoint it
+// names and a client, which is nil when the instance is not configured or its key
+// cannot be read. Every gateway read on the page goes through this one resolution.
+type systemGateway struct {
+	endpointMasked string
+	client         *management.Client
+}
+
+func (h *Handler) systemGatewayClient(ctx context.Context) systemGateway {
+	gateway := systemGateway{endpointMasked: "configured"}
+	if h.repo == nil {
+		return gateway
+	}
+	instance, err := h.repo.GetInstance(ctx, defaultInstanceID())
+	if err != nil {
+		return gateway
+	}
+	if instance.BaseURL != "" {
+		gateway.endpointMasked = security.PublicURL(instance.BaseURL)
+	}
+	if client, err := h.clientForInstance(ctx, instance); err == nil {
+		gateway.client = client
+	}
+	return gateway
+}
+
+// healthDTO is the gateway's reachability and the round trip it took.
+func (g systemGateway) healthDTO(ctx context.Context) SystemCPADTO {
+	dto := SystemCPADTO{Status: "offline", EndpointMasked: g.endpointMasked}
+	if g.client == nil {
+		return dto
+	}
+	start := time.Now()
+	if err := g.client.Health(ctx); err != nil {
+		return dto
+	}
+	dto.Status = "connected"
+	dto.LatencyMS = time.Since(start).Milliseconds()
+	return dto
+}
+
+// gatewayVersionAndCredentials reads the credential list once for the version header the
+// gateway stamps on it and the number of credentials it holds. A gateway that cannot be
+// read reports "unknown" and no count, rather than zero credentials.
+func gatewayVersionAndCredentials(ctx context.Context, client *management.Client) (string, *int) {
+	if client == nil {
+		return "unknown", nil
+	}
+	files, meta, err := client.AuthFilesWithMeta(ctx)
+	if err != nil {
+		return "unknown", nil
+	}
+	count := len(files.Files)
+	return safeVersionHeader(meta.Header), &count
+}
+
+func gatewayPluginCount(ctx context.Context, client *management.Client) *int {
+	if client == nil {
+		return nil
+	}
+	plugins, err := client.Plugins(ctx)
+	if err != nil {
+		return nil
+	}
+	count := len(plugins)
+	return &count
+}
+
+// gatewayProviderCount counts providers the way the provider page does, from the config
+// API-key families, so this number cannot disagree with the page it summarizes. The
+// families are separate gateway reads and are asked for side by side.
+func gatewayProviderCount(ctx context.Context, client *management.Client) *int {
+	if client == nil {
+		return nil
+	}
+	counts := make([]int, len(providerConfigFamilies))
+	isRead := make([]bool, len(providerConfigFamilies))
+	var wg sync.WaitGroup
+	for index, spec := range providerConfigFamilies {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			entries, err := client.ConfigAPIKeys(ctx, spec.Family)
+			if err != nil {
+				return
+			}
+			counts[index] = len(entries)
+			isRead[index] = true
+		}()
+	}
+	wg.Wait()
+	total, anyRead := 0, false
+	for index := range counts {
+		if isRead[index] {
+			total += counts[index]
+			anyRead = true
+		}
+	}
+	if !anyRead {
+		return nil
+	}
+	return &total
 }
 
 // getSystemReleases serves one product's merged change log.
@@ -634,7 +774,9 @@ func (h *Handler) collectorDTO(ctx context.Context) SystemCollectorDTO {
 	return SystemCollectorDTO{Status: status, Mode: mode, GapCount: gaps}
 }
 
-func (h *Handler) dataVolumesDTO(ctx context.Context) SystemDataVolumesDTO {
+// localDataVolumesDTO is the record counts this database holds. The gateway-side counts
+// are read beside it by getSystemInfo.
+func (h *Handler) localDataVolumesDTO(ctx context.Context) SystemDataVolumesDTO {
 	dto := SystemDataVolumesDTO{}
 	if h.repo == nil {
 		return dto
@@ -648,66 +790,6 @@ func (h *Handler) dataVolumesDTO(ctx context.Context) SystemDataVolumesDTO {
 		dto.LastEventMS = volumes.LastEventMS
 		dto.AuditEvents = volumes.AuditEvents
 	}
-
-	// Gateway-side counts. A gateway that cannot be reached leaves these null rather
-	// than reporting zero credentials, which would read as an empty deployment.
-	instance, err := h.repo.GetInstance(ctx, defaultInstanceID())
-	if err != nil {
-		return dto
-	}
-	client, err := h.clientForInstance(ctx, instance)
-	if err != nil {
-		return dto
-	}
-	if files, err := client.AuthFiles(ctx); err == nil {
-		count := len(files.Files)
-		dto.Credentials = &count
-	}
-	if plugins, err := client.Plugins(ctx); err == nil {
-		count := len(plugins)
-		dto.Plugins = &count
-	}
-	// Providers are counted the way the provider page counts them, from the config
-	// API-key families plus the compatibility entries, so this number cannot disagree
-	// with the page it summarizes.
-	providerCount := 0
-	providersRead := false
-	for _, spec := range providerConfigFamilies {
-		entries, err := client.ConfigAPIKeys(ctx, spec.Family)
-		if err != nil {
-			continue
-		}
-		providerCount += len(entries)
-		providersRead = true
-	}
-	if providersRead {
-		dto.Providers = &providerCount
-	}
-	return dto
-}
-
-func (h *Handler) cpaDTO(ctx context.Context) SystemCPADTO {
-	dto := SystemCPADTO{Status: "offline", EndpointMasked: "configured"}
-	if h.repo == nil {
-		return dto
-	}
-	instance, err := h.repo.GetInstance(ctx, defaultInstanceID())
-	if err != nil {
-		return dto
-	}
-	if instance.BaseURL != "" {
-		dto.EndpointMasked = security.PublicURL(instance.BaseURL)
-	}
-	client, err := h.clientForInstance(ctx, instance)
-	if err != nil {
-		return dto
-	}
-	start := time.Now()
-	if err := client.Health(ctx); err != nil {
-		return dto
-	}
-	dto.Status = "connected"
-	dto.LatencyMS = time.Since(start).Milliseconds()
 	return dto
 }
 

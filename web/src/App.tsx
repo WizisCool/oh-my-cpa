@@ -25,6 +25,7 @@ const AgentPage = React.lazy(() => import('./pages/agent/AgentPage').then(module
 const PlaygroundPage = React.lazy(() => import('./pages/playground/PlaygroundPage').then(module => ({ default: module.PlaygroundPage })));
 const QuickStartPage = React.lazy(() => import('./pages/QuickStartPage').then(m => ({ default: m.QuickStartPage })));
 const LogsPage = React.lazy(() => import('./pages/LogsPage').then(m => ({ default: m.LogsPage })));
+const AuditPage = React.lazy(() => import('./pages/AuditPage').then(m => ({ default: m.AuditPage })));
 const ConfigPage = React.lazy(() => import('./pages/ConfigPage').then(m => ({ default: m.ConfigPage })));
 const OAuthManagementPage = React.lazy(() => import('./pages/oauthManagement/OAuthManagementPage').then(m => ({ default: m.OAuthManagementPage })));
 const LegacyOAuthManagementRedirect = React.lazy(() => import('./pages/LegacyOAuthManagementRedirect').then(m => ({ default: m.LegacyOAuthManagementRedirect })));
@@ -111,6 +112,7 @@ const AppRoutes: React.FC = () => {
         { path: 'oauth', element: <LegacyOAuthManagementRedirect from="/oauth" /> },
         { path: 'quota', element: <LegacyOAuthManagementRedirect from="/quota" /> },
         { path: 'logs', element: <LogsPage /> },
+        { path: 'audit', element: <AuditPage /> },
         { path: 'usage/events', element: <UsageEventsPage /> },
         { path: 'pricing', element: <PricingPage /> },
         { path: 'config', element: <ConfigPage /> },

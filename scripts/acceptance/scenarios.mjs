@@ -43,7 +43,7 @@ import {
   dashboardTokenHeatmapPruned,
 } from './probes/dashboardTokenHeatmap.mjs';
 import { omcSettings } from './probes/omcSettings.mjs';
-import { logsFixtures, logsSources, logsSourcesNarrow } from './probes/logsPage.mjs';
+import { auditTrail, auditTrailNarrow, logsFixtures, logsSources } from './probes/logsPage.mjs';
 import {
   providerRateMarks,
   providerRateOverview,
@@ -80,8 +80,8 @@ import {
  * serves the release gate (which runs all of them) and the development fast path
  * (which runs the relevant subset) without either owning the other's reporting.
  */
-/** The audit queries the logs scenario's page sent, read back by the scenario's own checks. */
-const logsAuditRequests = [];
+/** The audit queries the audit scenario's page sent, read back by the scenario's own checks. */
+const auditRequests = [];
 /** The writes the plugin management scenario's page sent, read back by its own checks. */
 const pluginManagementWrites = [];
 const pricingBookWrites = [];
@@ -647,15 +647,21 @@ export const SCENARIOS = [
   },
   {
     id: 'logs-sources',
-    name: 'the logs page keeps the gateway, service and audit sources apart, and reads the audit trail as sentences',
-    options: { routes: logsFixtures(logsAuditRequests) },
-    run: (context) => logsSources({ ...context, auditRequests: logsAuditRequests }),
+    name: 'the logs page keeps the gateway and service sources apart, and sends an old audit link to the audit page',
+    options: { routes: logsFixtures([]) },
+    run: logsSources,
   },
   {
-    id: 'logs-sources-narrow',
+    id: 'audit-trail',
+    name: 'the audit page reads the trail as sentences, counts it from the summary and filters on the server',
+    options: { routes: logsFixtures(auditRequests) },
+    run: (context) => auditTrail({ ...context, auditRequests }),
+  },
+  {
+    id: 'audit-trail-narrow',
     name: 'the audit trail fits a phone',
     options: { routes: logsFixtures([]), viewport: { width: 360, height: 800 } },
-    run: logsSourcesNarrow,
+    run: auditTrailNarrow,
   },
   {
     id: 'system-information',

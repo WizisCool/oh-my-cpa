@@ -1,8 +1,8 @@
 import { until } from '../harness.mjs';
 
 /**
- * The logs page's three sources: the gateway's tail, this console's own service log and the
- * operator audit trail.
+ * The logs page's two sources - the gateway's tail and this console's own service log - and the
+ * operator audit trail, which is a page of its own.
  *
  * What only a browser establishes here is that the sources stay apart - each one mounted on its
  * own and reading its own route - and that the audit trail reads as sentences a person can scan:
@@ -19,6 +19,14 @@ const AUDIT_PAGE_ONE = [
 ];
 const AUDIT_PAGE_TWO = [
   { id: 3, occurred_at_ms: NOW - 3 * 86_400_000, action: 'auth.login', target_type: 'auth', target_id: 'operator', result: 'success', request_id: 'req-probe-3', source_summary: 'ip=198.51.100.0/24 ua=Mozilla/5.0' },
+];
+
+/** The summary behind the outcome tiles and the category counts, over every page of the trail. */
+const AUDIT_BUCKETS = [
+  { prefix: 'provider', outcome: 'succeeded', count: 1 },
+  { prefix: 'plugin', outcome: 'failed', count: 1 },
+  { prefix: 'capability', outcome: 'succeeded', count: 1 },
+  { prefix: 'auth', outcome: 'succeeded', count: 1 },
 ];
 
 export function logsFixtures(auditRequests) {
@@ -40,6 +48,7 @@ export function logsFixtures(auditRequests) {
       ].filter((record) => record.seq > after);
       return { capturing: true, records, latest_seq: 3, oldest_seq: 1, gap: false, capacity: 2000, started_at_ms: NOW - 3_600_000 };
     }],
+    [(url) => url.pathname.endsWith('/management/audit/summary'), () => ({ buckets: AUDIT_BUCKETS })],
     [(url) => url.pathname.endsWith('/management/audit/events'), (url) => {
       auditRequests.push(url.search);
       if (url.searchParams.get('before')) return { events: AUDIT_PAGE_TWO, next_cursor: '' };
@@ -64,7 +73,7 @@ async function chooseSource(page, index) {
   await page.locator('.logs-source .ant-segmented-item').nth(index).click();
 }
 
-export async function logsSources({ base, page, check, auditRequests }) {
+export async function logsSources({ base, page, check }) {
   await page.goto(`${base}/logs`, { waitUntil: 'domcontentloaded' });
   await page.locator('.logs-page').waitFor({ timeout: 20_000 });
 
@@ -91,12 +100,25 @@ export async function logsSources({ base, page, check, auditRequests }) {
   }).then(() => true).catch(() => false);
   check('a level chip narrows the service records', onlyErrors, String(await page.locator('.log-row').count()));
 
+  check('the logs page offers only its own two sources', (await page.locator('.logs-source .ant-segmented-item').count()) === 2);
+
+  // ── an old audit link lands on the audit page ───────────────────────────────
+  await page.goto(`${base}/logs?source=audit`, { waitUntil: 'domcontentloaded' });
+  const redirected = await until(async () => new URL(page.url()).pathname.endsWith('/audit'), {
+    label: 'the audit redirect',
+  }).then(() => true).catch(() => false);
+  check('a link to the old audit source opens the audit page', redirected, page.url());
+}
+
+export async function auditTrail({ base, page, check, auditRequests }) {
+  await page.goto(`${base}/audit`, { waitUntil: 'domcontentloaded' });
+  await page.locator('[data-testid="audit-page"]').waitFor({ timeout: 20_000 });
+
   // ── the audit trail reads as sentences ──────────────────────────────────────
-  await chooseSource(page, 2);
   const trail = page.locator('[data-testid="audit-trail"]');
   const trailShown = await until(async () => (await trail.count()) > 0, { label: 'the audit trail' })
     .then(() => true).catch(() => false);
-  check('the audit source renders a timeline', trailShown);
+  check('the audit page renders a timeline', trailShown);
   if (!trailShown) return;
 
   const firstEntry = page.locator('[data-testid="audit-entry"]').first();
@@ -114,6 +136,12 @@ export async function logsSources({ base, page, check, auditRequests }) {
   const detailText = await firstEntry.innerText();
   check('opening an entry shows its request id and action code', detailText.includes('req-probe-9') && detailText.includes('provider.delete'), detailText);
 
+  const failedTile = page.locator('[data-testid="audit-stat-failed"]');
+  const failedCounted = await until(async () => (await failedTile.innerText()).includes('1'), {
+    label: 'the failed-outcome count',
+  }).then(() => true).catch(() => false);
+  check('the outcome tiles count the whole trail from the summary', failedCounted, await failedTile.innerText());
+
   // ── paging and filtering ask the server ─────────────────────────────────────
   await page.getByRole('button', { name: /加载更早的记录|Load older entries/ }).click();
   const olderShown = await until(async () => (await page.locator('[data-testid="audit-entry"]').count()) === 4, {
@@ -122,22 +150,23 @@ export async function logsSources({ base, page, check, auditRequests }) {
   check('loading older entries appends the next page', olderShown);
   check('the next page is asked for with the cursor', auditRequests.some((search) => search.includes('before=')), auditRequests.join(' | '));
 
-  await page.locator('.logs-toolbar .ant-segmented-item').nth(2).click();
+  await failedTile.click();
   const filtered = await until(async () => (await page.locator('[data-testid="audit-entry"]').count()) === 1, {
     label: 'the failed-outcome filter',
   }).then(() => true).catch(() => false);
   check('the outcome filter narrows the trail', filtered);
   check('the outcome filter is sent to the server', auditRequests.some((search) => search.includes('outcome=failed')), auditRequests.join(' | '));
+  check('the outcome filter is kept in the address', new URL(page.url()).searchParams.get('outcome') === 'failed', page.url());
 }
 
 /** At a phone width no audit entry may run off the right edge. */
-export async function logsSourcesNarrow({ base, page, check }) {
-  await page.goto(`${base}/logs?source=audit`, { waitUntil: 'domcontentloaded' });
+export async function auditTrailNarrow({ base, page, check }) {
+  await page.goto(`${base}/audit`, { waitUntil: 'domcontentloaded' });
   await page.locator('[data-testid="audit-entry"]').first().waitFor({ timeout: 20_000 });
   const overflow = await page.evaluate(() => {
     const width = document.documentElement.clientWidth;
     const outside = [];
-    for (const node of document.querySelectorAll('[data-testid="audit-entry"], .logs-toolbar, .logs-source')) {
+    for (const node of document.querySelectorAll('[data-testid="audit-entry"], [data-testid="audit-stats"], .logs-toolbar')) {
       const rect = node.getBoundingClientRect();
       if (rect.right > width + 1) outside.push(`${node.className} ${Math.round(rect.right)}`);
     }

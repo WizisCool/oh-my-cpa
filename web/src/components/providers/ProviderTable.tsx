@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Button, Card, Popconfirm, Switch, Tag, Tooltip } from 'antd';
+import { Button, Popconfirm, Switch, Tag, Tooltip } from 'antd';
 import { DeleteOutlined, EditOutlined, EyeOutlined } from '../icons';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -84,6 +84,9 @@ export function ProviderTable({
     {
       title: t('pro.col_provider'),
       key: 'name',
+      // The name is the row's identity: auto layout otherwise hands its width to the endpoint
+      // and breaks "Anthropic Claude" one syllable per line.
+      minWidth: 200,
       render: (_, record) => {
         const iconId = resolveProviderIcon(
           providerIcons,
@@ -306,15 +309,13 @@ export function ProviderTable({
   // state, the switch and the actions are the row's control strip - printing them twice would make
   // the row read as if it had two states that could disagree.
   return (
-    <Card>
-      <ResponsiveList
-        columns={providerColumns}
-        dataSource={providers}
-        rowKey="id"
-        isLoading={providersLoading}
-        emptyText={t('pro.providers_empty')}
-        phone={{ identity: 'name', actions: ['status', 'switch', 'actions'] }}
-      />
-    </Card>
+    <ResponsiveList
+      columns={providerColumns}
+      dataSource={providers}
+      rowKey="id"
+      isLoading={providersLoading}
+      emptyText={t('pro.providers_empty')}
+      phone={{ identity: 'name', actions: ['status', 'switch', 'actions'] }}
+    />
   );
 }

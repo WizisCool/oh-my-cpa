@@ -44,6 +44,7 @@ export const ArrowDownOutlined = createIcon(Lucide.ArrowDown, 'anticon-arrow-dow
 export const ArrowLeftOutlined = createIcon(Lucide.ArrowLeft, 'anticon-arrow-left');
 export const ArrowRightOutlined = createIcon(Lucide.ArrowRight, 'anticon-arrow-right');
 export const ArrowUpOutlined = createIcon(Lucide.ArrowUp, 'anticon-arrow-up');
+export const AuditOutlined = createIcon(Lucide.ScrollText, 'anticon-audit');
 export const BarChartOutlined = createIcon(Lucide.BarChart3, 'anticon-bar-chart');
 export const BlockOutlined = createIcon(Lucide.Boxes, 'anticon-block');
 export const BranchesOutlined = createIcon(Lucide.GitBranch, 'anticon-branches');

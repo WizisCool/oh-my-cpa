@@ -13,6 +13,7 @@ import {
 } from '../../components/icons';
 import { credentialProviderIconId } from '../../components/common/providerMetadata';
 import { ProviderBrandIcon } from '../../components/LobeIcon';
+import { StatusLabel, type StatusTone } from '../../components/common/StatusLabel';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import type { ManagementAuthFile } from '../../types/managementAuthFile';
@@ -21,6 +22,7 @@ import {
   hasAuthFileStatusWarning,
   isAuthFileDisabled,
   isAuthFileProblem,
+  summarizeAuthFileStatusMessage,
 } from '../../components/authFiles/authFileLogic';
 import styles from './OAuthCredentialRecord.module.css';
 
@@ -84,13 +86,16 @@ export const OAuthCredentialRecord: React.FC<OAuthCredentialRecordProps> = ({
   const hasWarning = hasAuthFileStatusWarning(file);
   const iconId = credentialProviderIconId(displayProvider, file.name);
 
-  const status = file.runtime_only
-    ? { color: undefined, label: t('af.runtime_only_badge') }
+  // The state is read in its own column and the switch sits in the next one, as in the provider
+  // table: a label beside the control made the pair read as one widget whose word changed with the
+  // switch, and a problem credential's word was pushed out of the column whenever the switch rendered.
+  const status: { tone: StatusTone; label: string } = file.runtime_only
+    ? { tone: 'neutral', label: t('af.runtime_only_badge') }
     : disabled
-      ? { color: 'error', label: t('af.disabled') }
+      ? { tone: 'danger', label: t('af.disabled') }
       : problem
-        ? { color: 'warning', label: t('af.status_problem') }
-        : { color: 'success', label: t('af.enabled') };
+        ? { tone: 'warn', label: t('af.status_problem') }
+        : { tone: 'success', label: t('af.enabled') };
 
   return (
     <article
@@ -119,13 +124,6 @@ export const OAuthCredentialRecord: React.FC<OAuthCredentialRecordProps> = ({
             <Text strong className={styles['record-primary']} title={identity.primary}>
               {identity.primary}
             </Text>
-            {hasWarning && file.status_message && (
-              <Tooltip title={file.status_message}>
-                <span className={styles['record-warning']}>
-                  <WarningOutlined /> {file.status_message}
-                </span>
-              </Tooltip>
-            )}
           </div>
           <div className={styles['record-secondary-row']}>
             {identity.secondary && identity.secondary !== identity.primary && (
@@ -152,11 +150,24 @@ export const OAuthCredentialRecord: React.FC<OAuthCredentialRecordProps> = ({
               </Tooltip>
             )}
           </div>
+          {hasWarning && file.status_message && (
+            <Tooltip title={<span className={styles['record-warning-raw']}>{file.status_message}</span>}>
+              <span className={styles['record-warning']} data-testid="oauth-credential-warning">
+                <WarningOutlined className={styles['record-warning-icon']} />
+                <span className={styles['record-warning-text']}>{summarizeAuthFileStatusMessage(file.status_message)}</span>
+              </span>
+            </Tooltip>
+          )}
         </div>
       </div>
 
-      {/* 2. Status Column */}
-      <div className={styles['record-status']}>
+      {/* 2. Status */}
+      <div className={styles['record-status']} data-testid="oauth-credential-status">
+        <StatusLabel tone={status.tone}>{status.label}</StatusLabel>
+      </div>
+
+      {/* 3. Enable switch */}
+      <div className={styles['record-switch']}>
         <Switch
           size="small"
           checked={!disabled}
@@ -164,12 +175,9 @@ export const OAuthCredentialRecord: React.FC<OAuthCredentialRecordProps> = ({
           onChange={onToggle}
           aria-label={t('af.status_toggle_label', { name: file.name })}
         />
-        <Tag className={`${styles['status-tag']} ${styles[`status-tag-${status.color || 'neutral'}`]}`}>
-          {status.label}
-        </Tag>
       </div>
 
-      {/* 3. Traffic Metrics */}
+      {/* 4. Traffic Metrics */}
       <div className={styles['record-management']}>
         <div className={styles['traffic-cell']}>
           <div className={styles['traffic-primary']}>
@@ -190,12 +198,12 @@ export const OAuthCredentialRecord: React.FC<OAuthCredentialRecordProps> = ({
         {reauthAction && <div className={styles['record-reauth']}>{reauthAction}</div>}
       </div>
 
-      {/* 3. Quota & Usage Windows */}
+      {/* 5. Quota & Usage Windows */}
       <div className={styles['record-quota']}>
         {quotaContent}
       </div>
 
-      {/* 5. Controls & Actions */}
+      {/* 6. Controls & Actions */}
       <div className={styles['record-actions']}>
         <Tooltip title={t('common.details')}>
           <Button

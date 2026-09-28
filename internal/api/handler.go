@@ -57,6 +57,9 @@ type Handler struct {
 	// pluginLogos inlines the logos plugins publish, so the browser never fetches a
 	// plugin's own host; see management_plugin_logos.go.
 	pluginLogos *pluginLogoFetcher
+	// pluginIdentities remembers the name and logo each installed plugin is listed under
+	// in the store, for a plugin CPA has not loaded and so reports by id alone.
+	pluginIdentities *pluginIdentityCache
 	// nowFn overrides the clock for the surfaces whose window is not the caller's to set:
 	// the token-activity grid and the price book's recent traffic. Nil means the wall
 	// clock; only the demo dataset export sets it.
@@ -108,6 +111,7 @@ func NewHandler(cfg config.Config, repo *repository.Repository, cipher *appcrypt
 		providerWrites:   newProviderWriteGate(),
 		providerKeyMasks: newProviderKeyMaskCache(),
 		pluginLogos:      newPluginLogoFetcher(),
+		pluginIdentities: newPluginIdentityCache(),
 	}
 	if handler.logger == nil {
 		// A handler built without a logger - which several tests do - must still be able
@@ -272,6 +276,7 @@ func (h *Handler) routes() chi.Router {
 				v1.Get("/management/plugin-store", h.listPluginStore)
 				v1.Post("/management/plugin-store/{id}/install", h.installPlugin)
 				v1.Get("/management/audit/events", h.listAuditEvents)
+				v1.Get("/management/audit/summary", h.summarizeAuditEvents)
 				v1.Get("/management/audit/export", h.exportAuditEvents)
 				v1.NotFound(h.notFound)
 				v1.MethodNotAllowed(h.methodNotAllowed)
