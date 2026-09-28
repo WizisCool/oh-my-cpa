@@ -549,11 +549,13 @@ func (h *Handler) getUsageEvent(writer http.ResponseWriter, request *http.Reques
 	item := projectUsageEvent(row)
 	applyProviderKeyMask(&item, h.resolveProviderKeyMasks(request, []usageEventResponse{item}))
 	response := map[string]any{"event": projectUsageEventDetail(row, item.ProviderKeyMask)}
+	// partial_errors carries stable section codes, not prose: the console decides
+	// which section each one degrades and says so in the viewer's language.
 	var partialErrors []string
 	if row.AuthIndex != "" {
 		correlated, corrErr := h.repo.CorrelatedErrorEvents(request.Context(), row.AuthIndex, row.TimestampMS, 2*60*1000)
 		if corrErr != nil {
-			partialErrors = append(partialErrors, "correlated errors unavailable")
+			partialErrors = append(partialErrors, "related_errors")
 		} else {
 			response["related_errors"] = correlated
 		}
@@ -562,7 +564,7 @@ func (h *Handler) getUsageEvent(writer http.ResponseWriter, request *http.Reques
 	// an explanation, so losing it degrades the drawer rather than failing it.
 	if breakdown, costErr := h.repo.GetUsageEventCostBreakdown(request.Context(), row.ID); costErr != nil {
 		slog.Warn("request cost breakdown unavailable", "id", row.ID, "error", costErr)
-		partialErrors = append(partialErrors, "cost breakdown unavailable")
+		partialErrors = append(partialErrors, "cost_breakdown")
 	} else {
 		response["cost_breakdown"] = breakdown
 	}

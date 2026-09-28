@@ -306,14 +306,16 @@ func TestApplyModelPriceMintsOneVersion(t *testing.T) {
 	}
 }
 
-func TestCatalogReplacementKeepsPinnedPricesOnRetarget(t *testing.T) {
+func TestCatalogReplacementKeepsPinnedPrices(t *testing.T) {
 	r := usageTestRepository(t)
 	ctx := context.Background()
-	if _, err := r.ReplacePricingModels(ctx, map[string]string{"pinned": "old", "auto": "old", "gone": "gone"}); err != nil {
+	if _, err := r.ReplacePricingModels(ctx, map[string]string{"pinned": "old", "pinned-gone": "pinned-gone", "auto": "old", "gone": "gone"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.ApplyModelPrice(ctx, pricing.ModelPrice{Model: "pinned", PromptPricePer1M: 1, PriceMultiplier: 1, Source: pricing.SourceOpenRouter, UpstreamID: "v/x", MatchKind: pricing.MatchLinked}, "v/x"); err != nil {
-		t.Fatal(err)
+	for _, model := range []string{"pinned", "pinned-gone"} {
+		if err := r.ApplyModelPrice(ctx, pricing.ModelPrice{Model: model, PromptPricePer1M: 1, PriceMultiplier: 1, Source: pricing.SourceOpenRouter, UpstreamID: "v/x", MatchKind: pricing.MatchLinked}, "v/x"); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := r.UpsertModelPrices(ctx, []pricing.ModelPrice{
 		{Model: "auto", PromptPricePer1M: 1, PriceMultiplier: 1, Source: pricing.SourceOpenRouter},
@@ -326,8 +328,8 @@ func TestCatalogReplacementKeepsPinnedPricesOnRetarget(t *testing.T) {
 		t.Fatalf("pruned %d %v", pruned, err)
 	}
 	rows, _ := r.ListModelPrices(ctx)
-	if len(rows) != 1 || rows[0].Model != "pinned" {
-		t.Fatalf("a pinned price was pruned on retarget: %+v", rows)
+	if len(rows) != 2 || rows[0].Model != "pinned" || rows[1].Model != "pinned-gone" {
+		t.Fatalf("a pinned price was pruned on retarget or removal: %+v", rows)
 	}
 }
 

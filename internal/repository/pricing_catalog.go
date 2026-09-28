@@ -69,14 +69,15 @@ func (r *Repository) ReplacePricingModels(ctx context.Context, models map[string
 			return 0, err
 		}
 	}
-	// A model that left the catalog loses its automatic price. A model whose
-	// alias target changed loses it too, unless an operator pinned it: the pin,
-	// not the alias, decides what a linked model costs.
-	result, err := tx.ExecContext(ctx, `DELETE FROM model_prices WHERE source<>'manual' AND (
+	// A model that left the catalog, or whose alias target changed, loses its
+	// automatic price. A pinned price is the operator's choice like a custom one:
+	// the pin, not the catalog or the alias, decides what a linked model costs, so
+	// it is kept for the model's return rather than tombstoned.
+	result, err := tx.ExecContext(ctx, `DELETE FROM model_prices WHERE source<>'manual'
+ AND NOT EXISTS(SELECT 1 FROM pricing_model_links l WHERE l.model=model_prices.model) AND (
  NOT EXISTS(SELECT 1 FROM next_pricing_catalog n WHERE n.model=model_prices.model)
- OR (NOT EXISTS(SELECT 1 FROM pricing_model_links l WHERE l.model=model_prices.model)
- AND EXISTS(SELECT 1 FROM pricing_model_catalog old JOIN next_pricing_catalog n ON n.model=old.model
- WHERE old.model=model_prices.model AND old.price_model<>n.price_model)))`)
+ OR EXISTS(SELECT 1 FROM pricing_model_catalog old JOIN next_pricing_catalog n ON n.model=old.model
+ WHERE old.model=model_prices.model AND old.price_model<>n.price_model))`)
 	if err != nil {
 		return 0, fmt.Errorf("retire automatic prices: %w", err)
 	}
