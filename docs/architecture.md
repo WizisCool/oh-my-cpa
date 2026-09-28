@@ -1295,6 +1295,16 @@ A provider is observed only once `internal/quota` both recognizes it
 (`DetectProvider`) and implements its probe; a credential whose provider has no
 probe is reported with `refresh_supported: false` rather than as a failed fetch.
 
+Normalization never lets an exhausted window make another look exhausted. Codex
+flags a whole rate limit as reached (`limit_reached` / `allowed: false`) without
+saying which window tripped, while still reporting each window's own
+`used_percent`. `ParseCodexUsage` therefore attributes the flag per window
+(`exhaustedFlags`): a window with its own reading keeps it, a window with no
+readable usage is pinned to 100%, and when every window reports usage below 100
+(upstream rounds) only the most used one is pinned. The rule applies alike to the
+standard, code-review and additional per-model rate limits; the domain definition
+is **Quota Window** in `CONTEXT.md`.
+
 A plan's renewal instant is carried with its provenance. Codex probes the
 subscription endpoint on every refresh and records `expires_source:
 live_subscription` when it answers, so an expiry the usage payload happens to
