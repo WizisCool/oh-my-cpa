@@ -176,11 +176,11 @@ One-time setup, in the Cloudflare console:
 4. Set the build command to `pnpm build && pnpm check:demo && pnpm build:demo`, and the deploy
    command to `pnpm exec wrangler deploy --config deploy/cloudflare/wrangler.jsonc`.
 
-   `pnpm build` is the part that is easy to leave out and cannot be: the built console's
-   `assets/` directory is gitignored, so a fresh clone has `internal/web/dist/index.html`
-   and nothing it references. `build:demo` stages what `pnpm build` produced rather than
-   building it, so without the first command the deployment serves a blank page whose
-   scripts 404. Verified in a fresh clone: `pnpm build` takes about 37s there.
+   `pnpm build` is the part that is easy to leave out and cannot be: the built console is
+   gitignored, so a fresh clone's `internal/web/dist/` holds only its `.gitkeep`.
+   `build:demo` stages what `pnpm build` produced rather than building it, and without the
+   first command it stops with "no built console". Verified in a fresh clone: `pnpm build`
+   takes about 37s there.
 
    `pnpm install` is not part of it because Workers Builds installs dependencies itself,
    using the `packageManager` field and `.nvmrc` this repository already pins. No build

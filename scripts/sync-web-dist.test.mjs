@@ -55,6 +55,16 @@ test('a build is copied into the embedded directory', () => {
   assert.equal(fs.readFileSync(path.join(sandbox, 'internal/web/dist/assets/index-aaa.js'), 'utf8'), 'console.log(1)');
 });
 
+test('the tracked .gitkeep survives the prune', () => {
+  // It is the directory's only committed file. Pruning it as "not in the build" would
+  // leave every build with a deleted tracked file, which CI's clean-worktree gate refuses.
+  const { sandbox, write, run } = fixture();
+  write('internal/web/dist/.gitkeep', '');
+  write('web/dist/index.html', '<html>built</html>');
+  run();
+  assert.ok(fs.existsSync(path.join(sandbox, 'internal/web/dist/.gitkeep')));
+});
+
 test('a retired asset is pruned rather than accumulated', () => {
   // Vite content-hashes asset names, so every build adds new files. Without the
   // prune the embedded bundle would keep growing with hashes nothing references.

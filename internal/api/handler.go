@@ -823,7 +823,7 @@ func (h *Handler) spa(writer http.ResponseWriter, request *http.Request) {
 		h.methodNotAllowed(writer, request)
 		return
 	}
-	data, err := fs.ReadFile(web.Dist, "dist/index.html")
+	data, err := web.IndexHTML(web.Dist)
 	if err != nil {
 		writeInternalError(writer, fmt.Errorf("read embedded index: %w", err))
 		return

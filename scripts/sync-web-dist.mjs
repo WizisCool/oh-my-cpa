@@ -110,7 +110,9 @@ for (const file of sourceFiles) {
 await withRetry('copy index.html', () => cp(join(source, 'index.html'), join(target, 'index.html')));
 
 // Prune what the new build does not have: retired asset hashes, and directories
-// that no longer carry anything the entry document references.
-await pruneStale(target, new Set(['index.html', ...sourceFiles]), target);
+// that no longer carry anything the entry document references. `.gitkeep` is the one
+// tracked file here - it is what lets an unbuilt checkout compile the embed - so a
+// build must never delete it and leave the worktree dirty.
+await pruneStale(target, new Set(['index.html', '.gitkeep', ...sourceFiles]), target);
 
 console.log(`synced ${source} -> ${target}`);

@@ -10,7 +10,7 @@ web/dist/
 dist/
 internal/web/dist/*
 !internal/web/dist/
-!internal/web/dist/index.html
+!internal/web/dist/.gitkeep
 
 # TypeScript build info
 *.tsbuildinfo

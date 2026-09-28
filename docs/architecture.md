@@ -82,7 +82,7 @@ cycle even though the `internal/usage` directory appears in both directions.
 | `internal/agent` | Server-side Agent runtime: conversation persistence, the tool catalogue it declares to the model, budgets, model loop, resumption | `capability`, `cpa/gateway`, `repository` |
 | `internal/mcpbridge` | stdio MCP transport over the capability HTTP endpoints; no business logic or approval policy | `capability` |
 | `internal/api` | Routes, DTO allowlists, audited sensitive reveals, audit writes, the demo policy, capability/Agent endpoints | all of the above, `internal/web` |
-| `internal/web` | `go:embed` of the built SPA | — |
+| `internal/web` | `go:embed` of the built SPA, with a committed placeholder entry page for a binary built without it (ADR 0033) | — |
 | `internal/app` | Wiring, background loops, graceful shutdown | all of the above |
 
 Two rules keep the boundary meaningful:

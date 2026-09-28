@@ -85,11 +85,12 @@ test('a CSS change selects the CSS module check without the TypeScript gates', (
   assert.deepEqual(planChecks(['web/src/pages/UsageEventsPage.css']), ['css-modules', 'motion']);
 });
 
-test('the regenerated embedded bundle is a Go-relevant change', () => {
-  // `internal/web/dist` is embedded into the Go binary, so a rebuild of the stub
-  // changes what the Go tests and the browser suite serve even though the diff is
-  // one HTML file.
-  assert.ok(planChecks(['internal/web/dist/index.html']).includes('go'));
+test('the embedded placeholder is a Go-relevant change', () => {
+  // `internal/web` is embedded into the Go binary: the placeholder page is what an
+  // unbuilt checkout serves and what the Go tests read, so changing it changes their
+  // result even though the diff is one HTML file.
+  assert.ok(planChecks(['internal/web/placeholder.html']).includes('go'));
+  assert.ok(planChecks(['internal/web/dist/.gitkeep']).includes('go'));
 });
 
 test('editing a logic test suite runs the logic suites', () => {
@@ -178,7 +179,7 @@ test('no planned check for any representative path reaches the browser or a buil
     'web/src/i18n/index.tsx',
     'internal/api/handler.go',
     'internal/api/management_provider_writes.go',
-    'internal/web/dist/index.html',
+    'internal/web/placeholder.html',
     'cmd/oh-my-cpa/main.go',
     'migrations/004_something.sql',
     'scripts/test-usage-event-view.ts',

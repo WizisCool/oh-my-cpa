@@ -23,7 +23,7 @@
  */
 import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -133,13 +133,15 @@ async function rewriteStagedModules(stage) {
 }
 
 async function main() {
-  if (!existsSync(SOURCE)) {
+  // The directory exists in every checkout, held by its tracked `.gitkeep`; only an
+  // entry document says a build is there.
+  if (!existsSync(join(SOURCE, 'index.html'))) {
     throw new Error(`no built console at ${SOURCE}; run pnpm build first`);
   }
 
   await rm(STAGE, { recursive: true, force: true });
   await mkdir(STAGE, { recursive: true });
-  await cp(SOURCE, STAGE, { recursive: true });
+  await cp(SOURCE, STAGE, { recursive: true, filter: (source) => basename(source) !== '.gitkeep' });
 
   // The header rules live beside this deployment's config rather than in the built
   // console, because they describe how this host should serve the console rather than

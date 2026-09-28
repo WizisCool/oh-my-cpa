@@ -12,8 +12,8 @@ if (!await runChecks([
 // same embedded distribution. They are safe together because the build only writes
 // `internal/web/dist`, and the Go tests read whatever is there - a Go test that
 // depended on the build's output would be reading the previous run's bytes, which
-// is why the embedded-stub consistency check is a separate gate (`git status` in
-// CI) rather than something this orchestration relies on.
+// is why the Go tests assert only what the committed placeholder also satisfies
+// (`internal/web/placeholder.html`), and never the build itself.
 if (!await runChecks([
   { label: 'static', command: 'pnpm', args: ['verify:static'] },
   { label: 'history-secrets', command: 'pnpm', args: ['verify:secrets:history'] },
