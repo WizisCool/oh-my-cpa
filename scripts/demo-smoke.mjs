@@ -261,7 +261,15 @@ async function main() {
         ok === true ? `${definition.selector} × ≥${definition.min}` : ok,
       );
       if (definition.redirectedPath) {
-        check(`${definition.label} reaches the unified workspace`, new URL(page.url()).pathname === definition.redirectedPath);
+        // The path's tail rather than the whole pathname: a deployment served under a base path
+        // (`OMCPA_DEMO_URL=https://host/omc`) reaches this route as `/omc/<route>`, and the local
+        // fixture reaches it as `/<route>`. Comparing the whole pathname would fail the deployed
+        // form and pass the local one, which is the reverse of what this check is for.
+        check(
+          `${definition.label} reaches the unified workspace`,
+          new URL(page.url()).pathname.endsWith(definition.redirectedPath),
+          new URL(page.url()).pathname,
+        );
       }
       // Nothing the page needs may be missing: an empty panel is what a fixture gap
       // looks like from the outside.

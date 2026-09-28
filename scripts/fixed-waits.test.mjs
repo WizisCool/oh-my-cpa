@@ -11,6 +11,13 @@
  * The ratchet only turns one way. Adding a fixed wait fails this test: replace it
  * with a condition (see "Writing a test" in docs/testing.md). Removing one also fails
  * until the count below is lowered, so an improvement cannot be quietly undone.
+ *
+ * The browser pattern counts `setTimeout` in any form, not only the `setTimeout(resolve`
+ * shorthand. Matching the shorthand left the same wait one arrow function away from
+ * being invisible to this test, and a ratchet that a small rewrite defeats guards
+ * nothing. What this now also counts is the timeout that `rejects` or `fails` a promise
+ * rather than waiting for the application - a deadline, which is the opposite of a fixed
+ * wait - so those are recorded below instead of being excluded by pattern.
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -35,7 +42,8 @@ const BASELINE = {
   'internal/usage/ingest/polling_test.go': 1,
   'internal/usage/ingest/sync_test.go': 3,
   'scripts/acceptance/harness.mjs': 5,
-  'scripts/acceptance/probe.mjs': 4,
+  // Two deadline guards and the polling cadence of the condition helpers themselves.
+  'scripts/acceptance/probe.mjs': 6,
   'scripts/acceptance/probes/dashboardCharts.mjs': 5,
   'scripts/acceptance/probes/dashboardModelPanels.mjs': 1,
   'scripts/acceptance/probes/dashboardTokenHeatmap.mjs': 8,
@@ -52,16 +60,22 @@ const BASELINE = {
   'scripts/acceptance/usage-events/searchAndRejections.mjs': 1,
   'scripts/browser-acceptance.mjs': 2,
   'scripts/browser-live-smoke.mjs': 23,
-  'scripts/demo-smoke.mjs': 1,
+  // Browser test code that the scan set did not reach until the pattern widened: it drives
+  // Playwright, and the `hasDemoContent` it exports runs in the page.
+  'scripts/demo-readiness.mjs': 1,
+  // Raced deadlines - the guards that fail a run when a required read or the browser cleanup
+  // never finishes. They reject rather than wait for the application, which is the opposite of
+  // a fixed wait, and the widened pattern counts them rather than pretending they are absent.
+  'scripts/demo-smoke.mjs': 2,
 };
 
-const BROWSER_WAIT = /\bwaitForTimeout\(|\bsleep\(|setTimeout\(resolve/g;
+const BROWSER_WAIT = /\bwaitForTimeout\(|\bsleep\(|setTimeout\(/g;
 const GO_WAIT = /time\.Sleep\(/g;
 
 function testFiles() {
   const listed = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard',
     'scripts/acceptance', 'scripts/browser-acceptance.mjs', 'scripts/browser-live-smoke.mjs',
-    'scripts/demo-smoke.mjs', 'scripts/verify-demo.mjs', '*_test.go'], { encoding: 'utf8' });
+    'scripts/demo-smoke.mjs', 'scripts/demo-readiness.mjs', 'scripts/verify-demo.mjs', '*_test.go'], { encoding: 'utf8' });
   return [...new Set(listed.split('\n'))].filter((file) => file && !file.endsWith('.test.mjs') && fs.existsSync(file));
 }
 

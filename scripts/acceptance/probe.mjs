@@ -376,14 +376,16 @@ export async function runProbes({ port, scenarios, watchdogMs = DEFAULT_WATCHDOG
   watchdog.unref();
 
   try {
+    // Evidence from an earlier run would be indistinguishable from this run's, and a reader who
+    // opens the directory after a failure must see only what just failed. Cleared before the
+    // server and the browser start, so a run that fails to start does not leave the previous
+    // run's evidence behind for someone to read as this one's.
+    fs.rmSync(FAILURE_DIR, { recursive: true, force: true });
+
     const started = await startVite(port);
     server = started.server;
     const base = started.base;
     browser = await chromium.launch({ headless: true });
-
-    // Evidence from an earlier run would be indistinguishable from this run's, and a
-    // reader who opens the directory after a failure must see only what just failed.
-    fs.rmSync(FAILURE_DIR, { recursive: true, force: true });
 
     for (const scenario of scenarios) {
       const startedAt = performance.now();
