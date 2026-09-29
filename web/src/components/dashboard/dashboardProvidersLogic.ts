@@ -245,15 +245,13 @@ export function aggregateProviders({
   }
 
   /**
-   * resolveConfiguredTraffic credits an API-key provider with the traffic its own keys served,
-   * plus, for an OpenAI-compatible provider, the records CPA labelled with that provider's own
-   * name (`openai-compatible-<name>`) that carry no key index. Exact identities only: a family
-   * name or a substring would be a guess, and a wrong one reads as real traffic.
+   * takeOwnKeyTraffic credits a provider with the requests its own keys served, and removes those
+   * indexes from the pool so a second row cannot be credited with them a second time.
    */
-  const resolveConfiguredTraffic = (provider: ProviderItem) => {
+  const takeOwnKeyTraffic = (provider: ProviderItem) => {
+    const indexes = provider.auth_indexes?.length ? provider.auth_indexes : provider.auth_index ? [provider.auth_index] : [];
     let total = 0;
     let failure = 0;
-    const indexes = provider.auth_indexes?.length ? provider.auth_indexes : provider.auth_index ? [provider.auth_index] : [];
     for (const index of indexes) {
       const credential = credentialTraffic.get(index);
       if (!credential) continue;
@@ -261,15 +259,27 @@ export function aggregateProviders({
       total += credential.total;
       failure += credential.failure;
     }
-    if (provider.family === OPENAI_COMPATIBILITY_FAMILY && provider.upstream_name) {
-      const key = normalizeProviderKey(provider.upstream_name);
-      const labelled = trafficMap.get(key);
-      if (labelled && !consumedTrafficKeys.has(key)) {
-        consumedTrafficKeys.add(key);
-        total += labelled.total;
-        failure += labelled.failure;
-      }
-    }
+    return { total, failure };
+  };
+
+  /**
+   * takeCompatibilityLabelTraffic credits an OpenAI-compatible provider with the records CPA
+   * labelled `openai-compatible-<name>`: the ones no key index claims, because the credential that
+   * answered them is gone. Exact label only - a family name, a display name or a substring would be
+   * a guess, and a wrong one reads as real traffic.
+   */
+  const takeCompatibilityLabelTraffic = (provider: ProviderItem) => {
+    if (provider.family !== OPENAI_COMPATIBILITY_FAMILY || !provider.upstream_name) return { total: 0, failure: 0 };
+    const key = normalizeProviderKey(provider.upstream_name);
+    const labelled = trafficMap.get(key);
+    if (!labelled || consumedTrafficKeys.has(key)) return { total: 0, failure: 0 };
+    consumedTrafficKeys.add(key);
+    return { total: labelled.total, failure: labelled.failure };
+  };
+
+  const summarizeTraffic = (...shares: { total: number; failure: number }[]) => {
+    const total = shares.reduce((sum, share) => sum + share.total, 0);
+    const failure = shares.reduce((sum, share) => sum + share.failure, 0);
     const success = Math.max(0, total - failure);
     return { total, success, failure, successRate: total > 0 ? (success / total) * 100 : null };
   };
@@ -405,9 +415,23 @@ export function aggregateProviders({
     const credentials = isOAuth ? resolveCredentials([cp.upstream_name, cp.name, cp.id], configuredCreds) : configuredCreds;
     const disabled = cp.disabled || areAllCredentialsDisabled(ownedCredentialKeys(cp, isOAuth));
 
-    const traffic = isOAuth ? resolveTraffic([cp.upstream_name, cp.name, cp.id]) : resolveConfiguredTraffic(cp);
+    const traffic = summarizeTraffic(
+      takeOwnKeyTraffic(cp),
+      // A row the console presents as a channel keeps the label match channels have always relied on
+      // (which also covers a relay relaying under a channel's name); anything else takes only the
+      // exact label CPA derives from its own name.
+      isOAuth ? resolveTraffic([cp.upstream_name, cp.name, cp.id]) : takeCompatibilityLabelTraffic(cp),
+    );
 
-    markClaimed(cp.id, cp.name, cp.upstream_name, normName, normUpstream, normId);
+    // A row claims the identities under which its own requests are labelled. An OpenAI-compatible
+    // provider is labelled with its own name (`openai-compatible-<name>`), so it claims that name and
+    // the gateway's label row for it merges into this row instead of rendering a second time. A
+    // `{family}-api-key` provider is labelled with its family's name, which belongs to the family's
+    // OAuth channel - so it claims nothing: its id or display name merely spelling a channel must not
+    // hide that channel's own row, and the traffic its files served, out of the panel.
+    if (cp.family === OPENAI_COMPATIBILITY_FAMILY) {
+      markClaimed(cp.id, cp.name, cp.upstream_name, normName, normUpstream, normId);
+    }
 
     const oauthChannelId = isOAuth
       ? (OAUTH_CHANNEL_META[normUpstream] ? normUpstream : OAUTH_CHANNEL_META[normName] ? normName : OAUTH_CHANNEL_META[normId] ? normId : (normUpstream || normName || cp.id))

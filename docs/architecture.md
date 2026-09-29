@@ -1126,10 +1126,15 @@ already in the record: the credential's runtime `auth_index`.
 `providers[]` by the label CPA wrote — the OAuth channels, and records that name no
 credential — and the rest into `credentials[]`, one entry per key that served traffic.
 A configured provider's traffic is then the sum over the indexes of its own keys, which
-the provider DTO publishes as `auth_indexes` (`internal/api/management_providers.go`).
-Only `openai-compatibility` rows may also claim a label, and only the exact
-`openai-compatible-<name>` label CPA derives from that provider's own name, because
-those records carry no key index; family labels belong to the OAuth channel.
+the provider DTO publishes as `auth_indexes` (`internal/api/management_providers.go`),
+plus the records that name no index. Only an `openai-compatibility` row takes a label:
+exactly the `openai-compatible-<name>` label CPA derives from that provider's own name,
+or, when the row is one the console presents as an OAuth channel, that channel's label as
+channel rows have always been matched. A `{family}-api-key` provider takes neither — not
+even when its display name spells a family — because those records were served by
+different credentials, and family labels belong to the family's OAuth channel. Only a row
+the console presents as a channel keeps taking its label by containment as well as by
+exact match; every other row's label is an identity.
 
 Four properties are load-bearing:
 
@@ -1139,7 +1144,10 @@ Four properties are load-bearing:
   created a moment ago — and a confidently wrong number is worse than a narrow one.
 - **Every configured provider is its own row.** Rows are no longer merged or skipped by
   name, so two providers left at CPA's default name, and two keys of one family, each
-  report their own count instead of collapsing into one row and a dash.
+  report their own count instead of collapsing into one row and a dash. Only an
+  `openai-compatibility` row claims the gateway's label rows for its own name, which is
+  the identity its requests carry; a configured key provider whose display name spells a
+  channel is a different thing and leaves that channel's row standing.
 - **A provider's credential count is its own** (`key_entries`, or `auth_indexes` for a
   key CPA reports without a mask). The gateway's per-type tally counts auth files, and
   several of those type ids are shared with the API-key families, so taking the count

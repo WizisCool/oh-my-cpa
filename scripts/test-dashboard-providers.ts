@@ -358,8 +358,7 @@ const codexFamilyRow = (id: string, name: string, authIndex: string): ProviderIt
   auth_indexes: [authIndex],
   disabled: false,
   key_configured: true,
-});
-const byKey = aggregateProviders({
+});const byKey = aggregateProviders({
   windowProviders: [{ id: 'codex', total: 7, success: 5, failure: 2, success_rate: 71.4 }],
   windowCredentials: [
     { auth_index: 'key-a', total: 3, failure: 1 },
@@ -383,6 +382,60 @@ assert.equal(trafficOf('codex-2')?.credentials, 1, 'an API-key provider counts i
 const oauthCodex = byKey.find((row) => row.key === 'oauth:codex');
 assert.equal(oauthCodex?.total, 7, 'the OAuth channel keeps the traffic no API key answered');
 console.log('✓ API-key traffic joined by auth index verified');
+
+// Test 7c: a configured key provider does not swallow the OAuth channel of its family
+//
+// The channel row is built from the gateway's auth-file tally, and the configured row used to claim
+// every name of a family it touched - so configuring a Codex API key made the Codex OAuth channel
+// disappear from the panel, and the requests its files served were credited to no row at all.
+const withChannel = aggregateProviders({
+  windowProviders: [
+    { id: 'codex', total: 5, success: 5, failure: 0, success_rate: 100 },
+    { id: 'claude', total: 2, success: 2, failure: 0, success_rate: 100 },
+  ],
+  windowCredentials: [{ auth_index: 'key-a', total: 3, failure: 1 }],
+  authFilesByType: [
+    { type: 'codex', count: 2, disabled: 0 },
+    { type: 'claude', count: 1, disabled: 0 },
+  ],
+  configuredProviders: [codexFamilyRow('codex-0', 'Codex', 'key-a')],
+});
+const channelRow = withChannel.find((row) => row.key === 'oauth:codex');
+assert.ok(channelRow, 'the Codex OAuth channel still has its own row beside the configured provider');
+assert.equal(channelRow.credentials, 2, 'the channel reports its own auth files');
+assert.equal(channelRow.total, 5, 'the channel keeps the traffic no API key answered');
+assert.equal(withChannel.find((row) => row.providerId === 'codex-0')?.total, 3, 'the configured provider keeps its own keys');
+const claudeRow = withChannel.find((row) => row.key === 'oauth:claude');
+assert.equal(claudeRow?.total, 2, 'an unrelated channel is untouched');
+console.log('✓ A configured key provider leaves its family\'s OAuth channel in place');
+
+// Test 7d: an OpenAI-compatible relay that stands for a channel takes both halves of its traffic
+//
+// CPA labels its requests `openai-compatible-<name>` and strips that prefix everywhere the id is
+// normalized, so the label row is shared with the channel. Its key-indexed records are split out of
+// that row into `credentials[]`, which means a row credited only by the label would silently lose
+// every request one of its keys served.
+const relay = aggregateProviders({
+  windowProviders: [{ id: 'codex', total: 4, success: 4, failure: 0, success_rate: 100 }],
+  windowCredentials: [{ auth_index: 'relay-key', total: 6, failure: 1 }],
+  authFilesByType: [{ type: 'codex', count: 1, disabled: 0 }],
+  configuredProviders: [{
+    id: 'openai-compat-0',
+    family: 'openai-compatibility',
+    name: 'codex',
+    upstream_name: 'codex',
+    protocol: 'OpenAI Responses',
+    auth_indexes: ['relay-key'],
+    disabled: false,
+    key_configured: true,
+  }],
+});
+const channelRelayRow = relay.find((row) => row.providerId === 'openai-compat-0');
+assert.ok(channelRelayRow, 'the relay renders as the channel');
+assert.equal(channelRelayRow.total, 10, 'the relay takes its keys\' requests and the unindexed label traffic');
+assert.equal(channelRelayRow.failure, 1);
+assert.equal(relay.length, 1, 'the auth-file channel does not appear a second time beside it');
+console.log('✓ A relay that stands for a channel is credited from both its keys and its label');
 
 // Test 8: Summary stats calculation
 const summary = computeProviderSummary(aggregated);
