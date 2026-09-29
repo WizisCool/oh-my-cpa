@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/agent"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/agui"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/capability"
 )
 
@@ -184,13 +186,55 @@ func (h *Handler) resetAgent(writer http.ResponseWriter, request *http.Request) 
 	}
 	h.currentAgent(writer, request)
 }
+
+// agentForwardedProps is the OMC part of a run request: the stored revision the client last saw,
+// and the key, model and effort to run with. Decoded as strictly as the envelope around it.
+type agentForwardedProps struct {
+	Revision        int64  `json:"revision"`
+	Model           string `json:"model"`
+	Fingerprint     string `json:"client_key_fingerprint"`
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+}
+
+// AGENT_CONTEXT_LANGUAGE is the one context entry a run may carry: the console's reading language,
+// which the prompt uses as the reply language's default.
+const AGENT_CONTEXT_LANGUAGE = "console_language"
+
+// runAgent serves one Agent run as an AG-UI event stream (ADR 0041).
+//
+// A request the runtime refuses before it persisted the turn still gets a stream, but one without
+// RUN_STARTED: the browser reads that as "not accepted" and hands the message back to the
+// composer, instead of losing it behind an HTTP 200 that looked like acceptance.
 func (h *Handler) runAgent(writer http.ResponseWriter, request *http.Request) {
 	if !h.readyAgent(writer) {
 		return
 	}
-	var input agent.Input
-	if !readAgentInput(writer, request, &input) {
+	request.Body = http.MaxBytesReader(writer, request.Body, 64<<10)
+	wire, err := agui.DecodeRunInput(request.Body, agui.Limits{Tools: agent.DisplayToolNames(), Context: map[string]bool{AGENT_CONTEXT_LANGUAGE: true}})
+	var props agentForwardedProps
+	if err == nil {
+		decoder := json.NewDecoder(bytes.NewReader(wire.ForwardedProps))
+		decoder.DisallowUnknownFields()
+		if len(wire.ForwardedProps) == 0 || decoder.Decode(&props) != nil || decoder.Decode(new(any)) != io.EOF {
+			err = agui.ErrInvalidInput
+		}
+	}
+	if err != nil {
+		writePlaygroundError(writer, 400, "invalid_parameters")
 		return
+	}
+	input := agent.Input{
+		ConversationID:  wire.ThreadID,
+		Revision:        props.Revision,
+		Message:         wire.Message,
+		Fingerprint:     props.Fingerprint,
+		Model:           props.Model,
+		ReasoningEffort: props.ReasoningEffort,
+		Language:        wire.Context[AGENT_CONTEXT_LANGUAGE],
+		DisplayTools:    wire.Tools,
+	}
+	for _, entry := range wire.Resume {
+		input.Resume = append(input.Resume, entry.InterruptID)
 	}
 	writer.Header().Set("Content-Type", "text/event-stream")
 	writer.Header().Set("X-Accel-Buffering", "no")
@@ -213,7 +257,7 @@ func (h *Handler) runAgent(writer http.ResponseWriter, request *http.Request) {
 			case <-ticker.C:
 				streamMu.Lock()
 				_ = controller.SetWriteDeadline(time.Now().Add(30 * time.Second))
-				_, err := io.WriteString(writer, ": keepalive\n\n")
+				_, err := io.WriteString(writer, agui.KEEPALIVE)
 				if err == nil {
 					err = controller.Flush()
 				}
@@ -226,20 +270,73 @@ func (h *Handler) runAgent(writer http.ResponseWriter, request *http.Request) {
 		}
 	}()
 	defer func() { close(stop); <-stopped }()
-	emit := func(event agent.Event) error {
+	translator := agui.NewTranslator(wire.RunID, func(event agui.Event) error {
 		streamMu.Lock()
 		defer streamMu.Unlock()
 		_ = controller.SetWriteDeadline(time.Now().Add(30 * time.Second))
-		raw, err := json.Marshal(event)
-		if err != nil {
-			return err
-		}
-		if _, err = writer.Write(append(append([]byte("data: "), raw...), []byte("\n\n")...)); err != nil {
+		if err := agui.WriteEvent(writer, event); err != nil {
 			return err
 		}
 		return controller.Flush()
+	})
+	if err := h.agent.runtime.Run(streamCtx, input, func(event agent.Event) error {
+		return translateAgentEvent(translator, input.Model, event)
+	}); err != nil {
+		_ = translator.Error(capability.ErrorCode(err), nil)
 	}
-	if err := h.agent.runtime.Run(streamCtx, input, emit); err != nil {
-		_ = emit(agent.Event{Type: "error", Content: capability.ErrorCode(err)})
+}
+
+// translateAgentEvent maps one runtime event onto the wire. It is the only code that knows both
+// vocabularies, so the runtime stays free of any protocol and the protocol package free of OMC.
+func translateAgentEvent(translator *agui.Translator, model string, event agent.Event) error {
+	switch event.Type {
+	case "started":
+		return translator.Started(event.ConversationID, map[string]any{"turn_id": event.TurnID})
+	case "round":
+		return translator.Step(event.Round, agent.MAX_TURN_ROUNDS)
+	case "thought":
+		return translator.Reasoning(event.Round, event.Content)
+	case "text":
+		return translator.Text(event.Round, event.Content)
+	case "tool_call":
+		return translator.ToolCall(event.Trace.ID, event.Trace.Name, event.Trace.Arguments, map[string]any{"started_at_ms": event.Trace.StartedMS})
+	case "tool_result":
+		metadata := map[string]any{}
+		if event.Trace.StartedMS > 0 {
+			metadata["started_at_ms"] = event.Trace.StartedMS
+		}
+		if event.Trace.EndedMS > 0 {
+			metadata["ended_at_ms"] = event.Trace.EndedMS
+		}
+		if len(event.Trace.View) > 0 {
+			metadata["view"] = event.Trace.View
+		}
+		return translator.ToolResult(event.Trace.ID, event.Content, metadata)
+	case "finished":
+		conversation := event.Conversation
+		if err := translator.Snapshot(conversation); err != nil {
+			return err
+		}
+		turn := conversation.Turns[len(conversation.Turns)-1]
+		var usage []agui.TokenUsage
+		if turn.Usage != nil {
+			usage = []agui.TokenUsage{{Model: model, InputTokens: turn.Usage.InputTokens, OutputTokens: turn.Usage.OutputTokens, TotalTokens: turn.Usage.TotalTokens}}
+		}
+		if turn.Status == "error" {
+			return translator.Error(turn.Code, usage)
+		}
+		interrupts := make([]agui.Interrupt, 0, len(event.Interrupts))
+		for _, pending := range event.Interrupts {
+			interrupt := agui.Interrupt{ID: pending.OperationID, Reason: pending.Reason, ToolCallID: pending.TraceID, Metadata: map[string]any{"capability": pending.Capability}}
+			if pending.Permission != "" {
+				interrupt.Metadata["permission"] = pending.Permission
+			}
+			if pending.ExpiresAtMS > 0 {
+				interrupt.ExpiresAt = time.UnixMilli(pending.ExpiresAtMS).UTC().Format(time.RFC3339)
+			}
+			interrupts = append(interrupts, interrupt)
+		}
+		return translator.Finished(interrupts, usage)
 	}
+	return nil
 }
