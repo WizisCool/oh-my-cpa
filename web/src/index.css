@@ -2130,6 +2130,28 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   font-size: 14px !important;
 }
 
+/* A list field is a free-form tag editor rather than a picker: it has no dropdown to open, and
+   it wraps onto further lines as values accumulate. It therefore takes its column's full width -
+   the 280px bound above sizes a picker against its longest option, which says nothing about how
+   many addresses an operator trusts - and grows in height, where the single-line frame above
+   would paint the tags outside a box pinned at 40px. */
+.settings-field-control.is-string_list .ant-select,
+.settings-toggle-control.is-string_list .ant-select {
+  width: 100% !important;
+  max-width: none !important;
+  height: auto !important;
+}
+
+.settings-field-control.is-string_list .ant-select {
+  min-height: 40px !important;
+}
+
+/* The tag itself keeps a single line's height: the 38px line above lets a chip fill the frame,
+   which turns each address into a 40px block where the wrapping editor expects a chip. */
+.settings-field-control.is-string_list .ant-select-selection-item {
+  line-height: 22px !important;
+}
+
 .config-mono-input {
   font-family: var(--font-mono);
 }

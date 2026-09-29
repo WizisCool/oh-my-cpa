@@ -20,6 +20,13 @@ const CONFIG_YAML = [
   '# gateway',
   'server:',
   '    port: 8317',
+  '    trusted-proxies:',
+  '        - 127.0.0.1',
+  '        - 10.0.0.0/8',
+  '        - 172.16.0.0/12',
+  '        - 192.168.0.0/16',
+  '        - 2001:db8::/32',
+  '        - 203.0.113.7',
   'observability:',
   '    logs:',
   '        debug: false',
@@ -34,7 +41,7 @@ export function configSourceFixtures() {
       (url, method) => url.pathname.endsWith('/management/config') && method === 'GET',
       () => ({
         scalars: { port: 8317, debug: false },
-        supported_keys: ['server.port', 'observability.logs.debug'],
+        supported_keys: ['server.port', 'server.trusted-proxies', 'observability.logs.debug'],
         revision: REVISION,
         safe_yaml: CONFIG_YAML,
       }),
@@ -74,6 +81,35 @@ export async function configSourceEditor({ base, page, check }) {
   await page.goto(`${base}/config`, { waitUntil: 'domcontentloaded' });
   await page.locator('.config-page').first().waitFor({ state: 'visible', timeout: 15000 });
   check('the configuration page opens', true);
+
+  // A list field is a free-form tag editor, and the frame that sizes the panel's pickers does not
+  // fit it: bounded to that frame, the box measured 280px inside a 415px column and its 40px height
+  // held tags that wrap onto a second line, so the addresses painted outside the box they belong
+  // to. It takes the column's width and grows with its tags instead. Read while the default
+  // section is up, because the navigation below replaces it.
+  const tagsBox = await page.locator('.settings-field-control.is-string_list .ant-select').first().evaluate((node) => {
+    const control = node.closest('.settings-field-control');
+    const box = node.getBoundingClientRect();
+    const tags = [...node.querySelectorAll('.ant-select-selection-item')].map((tag) => tag.getBoundingClientRect());
+    return {
+      select: Math.round(box.width),
+      control: Math.round(control.getBoundingClientRect().width),
+      height: Math.round(box.height),
+      tags: tags.length,
+      tagsBottom: Math.round(Math.max(...tags.map((tag) => tag.bottom))),
+      boxBottom: Math.round(box.bottom),
+      arrows: node.querySelectorAll('.ant-select-suffix').length,
+    };
+  });
+  check(
+    'the trusted-proxies list field fills its column, keeps its tags inside, and draws no picker arrow',
+    tagsBox.select === tagsBox.control
+      && tagsBox.tags > 1
+      && tagsBox.tagsBottom <= tagsBox.boxBottom + 1
+      && tagsBox.height > 40
+      && tagsBox.arrows === 0,
+    JSON.stringify(tagsBox),
+  );
 
   // The four-mode image-generation picker is the one select the settings list renders, and it has to
   // fill the fixed-width control column its row gives it: Ant Design sizes a `Select` to its content

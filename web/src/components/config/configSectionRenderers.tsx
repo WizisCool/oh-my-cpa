@@ -132,7 +132,9 @@ export function renderFieldControl(view: ConfigSectionContext, field: ConfigFiel
 
     if (field.type === 'string_list') {
       // A list of plain words or addresses, one tag each. A comma separates tags; a space does
-      // not, because a sensitive word may contain one.
+      // not, because a sensitive word may contain one. The dropdown is pinned shut because a
+      // free-form list has nothing to pick from, so the control draws no arrow: an arrow over a
+      // list that never opens promises an interaction the field does not have.
       const items = Array.isArray(val) ? val.map(String) : [];
       return (
         <Select
@@ -141,6 +143,7 @@ export function renderFieldControl(view: ConfigSectionContext, field: ConfigFiel
           mode="tags"
           tokenSeparators={[',']}
           open={false}
+          suffixIcon={null}
           disabled={disabled}
           placeholder={field.placeholderKey ? (field.placeholderKey.startsWith('cfg.') ? t(field.placeholderKey) : field.placeholderKey) : ''}
           value={items}
