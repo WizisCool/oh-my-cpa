@@ -1,4 +1,4 @@
-# ADR 0038: Deployment-wide calendar timezone
+# ADR 0039: Deployment-wide calendar timezone
 
 - Status: Accepted
 - Date: 2026-09-29
