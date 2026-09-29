@@ -138,7 +138,7 @@ func TestManagementOAuthModelAliasesRequireReadback(t *testing.T) {
 func TestManagementOAuthModelAliasesGuardrails(t *testing.T) {
 	client, baseURL, _ := startAuthFilesTestServer(t, "management-secret-value", func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"oauth-model-alias":{"codex":[{"name":"gpt-5","alias":"fast"}]}}`))
+		_, _ = writer.Write([]byte(`{"codex":[{"name":"gpt-5","alias":"fast"}]}`))
 	})
 	base := baseURL + "/omc/api/v1/management/auth-files/model-aliases"
 	for _, probe := range []struct {

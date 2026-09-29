@@ -212,7 +212,8 @@ func (c *Client) ApplyConfigChanges(ctx context.Context, changes []ConfigChange)
 	if len(changes) == 0 {
 		return nil
 	}
-	if err := c.keepLegacyConfig(ctx); err != nil {
+	stored, err := c.keepLegacyConfigStored(ctx)
+	if err != nil {
 		return err
 	}
 
@@ -230,6 +231,7 @@ func (c *Client) ApplyConfigChanges(ctx context.Context, changes []ConfigChange)
 	}
 	hasLanded := false
 	failed := func(err error) error {
+		scrubWriteRejection(err, stored, changes)
 		if hasLanded {
 			return fmt.Errorf("%w: %w", ErrConfigPartiallyApplied, err)
 		}
@@ -237,7 +239,7 @@ func (c *Client) ApplyConfigChanges(ctx context.Context, changes []ConfigChange)
 	}
 	if len(merge) > 0 {
 		if err := c.doJSONBody(ctx, http.MethodPatch, "/config", merge, nil); err != nil {
-			return err
+			return failed(err)
 		}
 		hasLanded = true
 	}
@@ -262,6 +264,31 @@ func (c *Client) ApplyConfigChanges(ctx context.Context, changes []ConfigChange)
 		hasLanded = true
 	}
 	return nil
+}
+
+// scrubWriteRejection removes secrets from CPA's answer to a refused write,
+// in place. CPA's reason can quote a value, and a write carries secrets the
+// operator was never shown: a family's provider write sends every key of the
+// family, including one only this request adds, and CPA validates the whole
+// stored document it merges into. The body reaches both the response and the
+// audit log, so it is scrubbed once here, before either sees it.
+func scrubWriteRejection(err error, storedYAML string, changes []ConfigChange) {
+	var httpErr *HTTPError
+	if !errors.As(err, &httpErr) || httpErr.Body == "" {
+		return
+	}
+	sent := map[string]any{}
+	for _, change := range changes {
+		if !change.Remove {
+			setAt(sent, change.Path, change.Value)
+		}
+	}
+	body := configyaml.ScrubStoredSecrets(httpErr.Body, storedYAML)
+	// JSON is YAML, so the sent values are scrubbed by the same rules.
+	if encoded, marshalErr := json.Marshal(sent); marshalErr == nil {
+		body = configyaml.ScrubStoredSecrets(body, string(encoded))
+	}
+	httpErr.Body = body
 }
 
 func validateConfigChanges(changes []ConfigChange) error {

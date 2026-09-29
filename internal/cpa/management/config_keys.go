@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 )
 
 // ConfigKeyFamily names one of CPA's `{family}-api-key` credential lists.
@@ -71,6 +72,20 @@ type ConfigAPIKey struct {
 	// origin is the v8 group this entry was read from, set only by
 	// EditableConfigAPIKeys, so a write can return it to the group it came from.
 	origin *keyGroupOrigin
+	// runtimeBaseURL is the base URL the runtime list reported for this key,
+	// which is what the console's edit form shows.
+	runtimeBaseURL string
+}
+
+// SubmittedBaseURL is the base URL an edit stores when the form submitted
+// submitted. The runtime fills in a family's default endpoint where the file
+// has none, and the form shows that value; sending it back unchanged must not
+// write the default into the file and move the key out of its group.
+func (k ConfigAPIKey) SubmittedBaseURL(submitted string) string {
+	if k.origin != nil && strings.TrimSpace(k.BaseURL) == "" && strings.TrimSpace(submitted) == strings.TrimSpace(k.runtimeBaseURL) {
+		return ""
+	}
+	return submitted
 }
 
 // configAPIKeyFields is ConfigAPIKey without its JSON methods, so they can use

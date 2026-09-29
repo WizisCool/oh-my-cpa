@@ -141,6 +141,9 @@ func (c *Client) EditableConfigAPIKeys(ctx context.Context, family ConfigKeyFami
 	}
 	stored := flattenKeyGroups(groups)
 	entries := make([]ConfigAPIKey, len(runtime))
+	// Matching moves forward only, so of two stored keys with the same API key
+	// and base URL the first is matched and the later one, which the runtime
+	// dropped as a duplicate, is not.
 	next := 0
 	for i, live := range runtime {
 		entries[i] = live
@@ -158,6 +161,7 @@ func (c *Client) EditableConfigAPIKeys(ctx context.Context, family ConfigKeyFami
 			}
 			entry.AuthIndex = live.AuthIndex
 			entry.origin = stored[j].origin
+			entry.runtimeBaseURL = live.BaseURL
 			entries[i] = entry
 			next = j + 1
 			break
@@ -329,6 +333,24 @@ func settleGroupFields(group map[string]any, members []map[string]any) map[strin
 			settled[field] = group[field]
 		}
 	}
+	// A group field outside the shared settings (a newer CPA setting) stays on
+	// the group while every member still has its value, rather than being
+	// copied onto each key.
+	for field, value := range group {
+		if field == "name" || field == "keys" || isGroupSharedField(field) {
+			continue
+		}
+		isAgreed := true
+		for _, member := range members {
+			if memberValue, has := member[field]; !has || !reflect.DeepEqual(memberValue, value) {
+				isAgreed = false
+				break
+			}
+		}
+		if isAgreed {
+			settled[field] = value
+		}
+	}
 	return settled
 }
 
@@ -337,9 +359,13 @@ func settleGroupFields(group map[string]any, members []map[string]any) map[strin
 func keyWithinGroup(entryFields map[string]any, shared map[string]any) (map[string]any, bool) {
 	key := map[string]any{}
 	for field, value := range entryFields {
-		if !isGroupSharedField(field) {
-			key[field] = value
+		if isGroupSharedField(field) {
+			continue
 		}
+		if sharedValue, isShared := shared[field]; isShared && reflect.DeepEqual(value, sharedValue) {
+			continue
+		}
+		key[field] = value
 	}
 	for _, field := range groupSharedFields {
 		value, has := entryFields[field]

@@ -120,6 +120,24 @@ func (h *Handler) listPlugins(writer http.ResponseWriter, request *http.Request)
 	})
 }
 
+// enterConfigWrite takes the gate and mutex a configuration save holds. A
+// plugin's switch and settings are keys of the configuration document, so a
+// source save that passed its revision check must not be able to overwrite
+// one landing in between. The order matches the save's.
+func (h *Handler) enterConfigWrite(writer http.ResponseWriter, request *http.Request) bool {
+	if err := h.providerWrites.acquire(request.Context()); err != nil {
+		writeProviderWriteError(writer, err)
+		return false
+	}
+	h.configMu.Lock()
+	return true
+}
+
+func (h *Handler) leaveConfigWrite() {
+	h.configMu.Unlock()
+	h.providerWrites.release()
+}
+
 type setPluginEnabledRequest struct {
 	Enabled *bool `json:"enabled"`
 }
@@ -144,6 +162,10 @@ func (h *Handler) setPluginEnabled(writer http.ResponseWriter, request *http.Req
 	if !ok {
 		return
 	}
+	if !h.enterConfigWrite(writer, request) {
+		return
+	}
+	defer h.leaveConfigWrite()
 
 	action := "plugin.enable"
 	if !*req.Enabled {
@@ -223,6 +245,10 @@ func (h *Handler) setPluginConfig(writer http.ResponseWriter, request *http.Requ
 	if !ok {
 		return
 	}
+	if !h.enterConfigWrite(writer, request) {
+		return
+	}
+	defer h.leaveConfigWrite()
 
 	target := security.RedactText(pluginID)
 	if auditErr := h.recordAudit(request, "plugin.config", "plugin", target, "attempt", nil); auditErr != nil {

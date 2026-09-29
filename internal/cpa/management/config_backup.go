@@ -52,18 +52,25 @@ func (c *Client) IsStoredConfigV8(ctx context.Context) (bool, string, error) {
 // time, and converting that one without a copy is the loss this guards against.
 // A converted file costs one read per write.
 func (c *Client) keepLegacyConfig(ctx context.Context) error {
+	_, err := c.keepLegacyConfigStored(ctx)
+	return err
+}
+
+// keepLegacyConfigStored is keepLegacyConfig returning the stored document it
+// read, so a write can scrub that document's secrets from CPA's refusal.
+func (c *Client) keepLegacyConfigStored(ctx context.Context) (string, error) {
 	isV8, stored, err := c.IsStoredConfigV8(ctx)
 	if err != nil {
-		return fmt.Errorf("read the stored configuration before converting it: %w", err)
+		return "", fmt.Errorf("read the stored configuration before converting it: %w", err)
 	}
 	if isV8 {
-		return nil
+		return stored, nil
 	}
 	if c.configBackup == nil {
-		return ErrConfigBackupUnavailable
+		return "", ErrConfigBackupUnavailable
 	}
 	if err := c.configBackup.KeepLegacyConfig(ctx, c.baseURL, stored); err != nil {
-		return fmt.Errorf("%w: %v", ErrConfigBackupUnavailable, err)
+		return "", fmt.Errorf("%w: %v", ErrConfigBackupUnavailable, err)
 	}
-	return nil
+	return stored, nil
 }

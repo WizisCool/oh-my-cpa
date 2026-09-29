@@ -207,7 +207,32 @@ func (c *Client) SetPluginEnabled(ctx context.Context, id string, enabled bool) 
 	if err != nil {
 		return err
 	}
+	if err := c.requireKnownPlugin(ctx, id, path); err != nil {
+		return err
+	}
 	return c.ApplyConfigChanges(ctx, []ConfigChange{{Path: append(path, "enabled"), Value: enabled}})
+}
+
+// requireKnownPlugin refuses a write for a plugin that is neither installed nor
+// configured. A v8 write would otherwise create settings for any id it is
+// given, where CPA's plugin routes answer plugin_not_found.
+func (c *Client) requireKnownPlugin(ctx context.Context, id string, path []string) error {
+	plugins, err := c.Plugins(ctx)
+	if err != nil {
+		return err
+	}
+	if slices.ContainsFunc(plugins, func(plugin PluginItem) bool { return plugin.ID == strings.TrimSpace(id) }) {
+		return nil
+	}
+	var config any
+	configured, err := c.configValueAt(ctx, path, &config)
+	if err != nil {
+		return err
+	}
+	if !configured {
+		return errPluginNotFound
+	}
+	return nil
 }
 
 // errPluginNotFound is CPA's own answer for a plugin it does not know, so the
@@ -250,6 +275,9 @@ func (c *Client) SetPluginConfig(ctx context.Context, id string, config map[stri
 	}
 	if config == nil {
 		config = map[string]any{}
+	}
+	if err := c.requireKnownPlugin(ctx, id, path); err != nil {
+		return err
 	}
 	return c.ApplyConfigChanges(ctx, []ConfigChange{{Path: path, Value: config}})
 }

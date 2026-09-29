@@ -75,6 +75,12 @@ Measured on CPA v8.0.2:
 - A stored key that CPA's runtime leaves out is not part of the editable list, so a
   write drops it. Examples are a duplicate, or a key without the base URL its family
   requires. A whole-list v0 write dropped it too.
+- An edit starts from the stored entry, so a key's and a model's settings the form does
+  not show are kept, and a family default base URL the runtime reports is not written
+  into a key the file stores without one.
+- A provider write sends every key of its family, including one only that request adds,
+  and CPA's reason for a refusal can quote a value. The reason is scrubbed of the
+  stored file's secrets and the sent ones before the response or the audit log sees it.
 - A key whose base URL changes moves out of its group, so the file can gain a group
   named `<group>-<n>`. The list's order, and so every provider id, is unchanged.
 

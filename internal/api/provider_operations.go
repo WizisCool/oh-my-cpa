@@ -93,7 +93,7 @@ func (h *Handler) createProvider(ctx context.Context, client *management.Client,
 			BaseURL:        baseURL,
 			Prefix:         strings.TrimSpace(req.Prefix),
 			Priority:       req.Priority,
-			DisableCooling: req.DisableCooling,
+			DisableCooling: editedDisableCooling(nil, req.DisableCooling),
 			Disabled:       req.Disabled,
 			Models:         models,
 			Headers:        req.Headers,
@@ -225,12 +225,6 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 		firstWeight = req.Keys[0].Weight
 	}
 
-	var disableCoolingPtr *bool
-	if req.DisableCooling {
-		t := true
-		disableCoolingPtr = &t
-	}
-
 	if auditErr := audit("provider.update", "provider", id, "attempt", map[string]any{"name": name}); auditErr != nil {
 		return nil, newProviderWriteError(http.StatusInternalServerError, "audit failure; provider update aborted")
 	}
@@ -259,9 +253,9 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 				entry.BaseURL = baseURL
 				entry.Prefix = strings.TrimSpace(req.Prefix)
 				entry.Priority = req.Priority
-				entry.DisableCooling = req.DisableCooling
+				entry.DisableCooling = editedDisableCooling(entry.DisableCooling, req.DisableCooling)
 				entry.Disabled = req.Disabled
-				entry.Models = models
+				entry.Models = mergeModelEdits(entry.Models, models)
 				entry.Headers = req.Headers
 
 				if len(req.Keys) > 0 {
@@ -276,11 +270,19 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 							}
 						}
 						if kVal != "" {
-							updatedKeys = append(updatedKeys, management.APIKeyEntry{
-								APIKey:   kVal,
-								ProxyURL: strings.TrimSpace(k.ProxyURL),
-								Weight:   k.Weight,
-							})
+							// The key keeps the settings the form does not show
+							// (its own headers or models), matched by API key.
+							updated := management.APIKeyEntry{}
+							for _, old := range entry.APIKeyEntries {
+								if strings.TrimSpace(old.APIKey) == kVal {
+									updated = old
+									break
+								}
+							}
+							updated.APIKey = kVal
+							updated.ProxyURL = strings.TrimSpace(k.ProxyURL)
+							updated.Weight = k.Weight
+							updatedKeys = append(updatedKeys, updated)
 						}
 					}
 					entry.APIKeyEntries = updatedKeys
@@ -307,7 +309,7 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 			return nil, newProviderWriteError(http.StatusBadRequest, "base URL is required for this provider family")
 		}
 		if err := h.mutateConfigKeyProvider(ctx, client, spec, index, func(entry *management.ConfigAPIKey) {
-			entry.BaseURL = baseURL
+			entry.BaseURL = entry.SubmittedBaseURL(baseURL)
 			if firstKey != "" {
 				entry.APIKey = firstKey
 			}
@@ -315,9 +317,9 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 			entry.Prefix = strings.TrimSpace(req.Prefix)
 			entry.Priority = req.Priority
 			entry.Weight = firstWeight
-			entry.Models = models
+			entry.Models = mergeModelEdits(entry.Models, models)
 			entry.Headers = req.Headers
-			entry.DisableCooling = disableCoolingPtr
+			entry.DisableCooling = editedDisableCooling(entry.DisableCooling, req.DisableCooling)
 		}, func(ctx context.Context, _ []management.ConfigAPIKey) error {
 			return h.applyProviderMetadata(ctx, id, name, website, websiteProvided)
 		}); err != nil {
@@ -401,4 +403,58 @@ func (h *Handler) deleteProvider(ctx context.Context, client *management.Client,
 		"status":  "ok",
 		"deleted": id,
 	}, nil
+}
+
+// editedDisableCooling is the stored disable-cooling after an edit. The form has
+// one switch, so an unchecked switch cannot tell "off" from "inherit the global
+// setting": a stored false stays false, and anything else becomes absent.
+func editedDisableCooling(stored *bool, isChecked bool) *bool {
+	if isChecked {
+		value := true
+		return &value
+	}
+	if stored != nil && !*stored {
+		return stored
+	}
+	return nil
+}
+
+// mergeModelEdits applies the form's models to the stored ones. The form edits
+// a model's name, alias, image flag and thinking levels; every other setting
+// of a model it keeps (display name, force-mapping, input modalities, thinking
+// bounds) comes from the stored model of the same name.
+func mergeModelEdits(stored, edited []management.ModelAlias) []management.ModelAlias {
+	byName := make(map[string]management.ModelAlias, len(stored))
+	for _, model := range stored {
+		if _, seen := byName[model.Name]; !seen {
+			byName[model.Name] = model
+		}
+	}
+	merged := make([]management.ModelAlias, 0, len(edited))
+	for _, model := range edited {
+		old, found := byName[model.Name]
+		if !found {
+			merged = append(merged, model)
+			continue
+		}
+		old.Alias = model.Alias
+		old.Image = model.Image
+		var levels []string
+		if model.Thinking != nil {
+			levels = model.Thinking.Levels
+		}
+		if old.Thinking != nil {
+			thinking := *old.Thinking
+			thinking.Levels = levels
+			if thinking.Min == 0 && thinking.Max == 0 && !thinking.ZeroAllowed && !thinking.DynamicAllowed && len(levels) == 0 {
+				old.Thinking = nil
+			} else {
+				old.Thinking = &thinking
+			}
+		} else {
+			old.Thinking = model.Thinking
+		}
+		merged = append(merged, old)
+	}
+	return merged
 }

@@ -160,8 +160,8 @@ func TestEditableConfigAPIKeysSkipsAStoredKeyTheRuntimeLeftOut(t *testing.T) {
 	// A duplicate key is dropped by CPA's runtime; the positions the console
 	// shows are the runtime's, so the stored duplicate is not matched to one.
 	gateway := &groupsGateway{
-		family: "gemini",
-		stored: `[{"name":"g-1","keys":[{"api-key":"dup"}]},{"name":"g-2","keys":[{"api-key":"dup"}]},{"name":"g-3","keys":[{"api-key":"other","prefix":" Team "}]}]`,
+		family:  "gemini",
+		stored:  `[{"name":"g-1","keys":[{"api-key":"dup"}]},{"name":"g-2","keys":[{"api-key":"dup"}]},{"name":"g-3","keys":[{"api-key":"other","prefix":" Team "}]}]`,
 		runtime: `{"gemini-api-key":[{"api-key":"dup","auth-index":"a"},{"api-key":"other","prefix":"team","auth-index":"b"}]}`,
 	}
 	entries, err := newGroupsClient(t, gateway).EditableConfigAPIKeys(context.Background(), ConfigFamilyGemini)
@@ -357,5 +357,94 @@ func TestPluginConfigTellsAnUnconfiguredPluginFromAnUnknownOne(t *testing.T) {
 	var httpErr *HTTPError
 	if _, err := client.PluginConfig(context.Background(), "ghost"); err == nil || !errors.As(err, &httpErr) || !strings.Contains(httpErr.Body, "plugin_not_found") {
 		t.Fatalf("unknown plugin err = %v, want plugin_not_found", err)
+	}
+}
+
+func TestUpdateConfigAPIKeysKeepsAnImplicitDefaultBaseURLImplicit(t *testing.T) {
+	// The file states no endpoint; the runtime reports the family default, and
+	// the edit form sends back what it showed.
+	gateway := &groupsGateway{
+		family:  "claude",
+		stored:  `[{"name":"team","priority":3,"keys":[{"api-key":"k1"},{"api-key":"k2"}]}]`,
+		runtime: `{"claude-api-key":[{"api-key":"k1","base-url":"https://api.default.test","priority":3,"auth-index":"i1"},{"api-key":"k2","base-url":"https://api.default.test","priority":3,"auth-index":"i2"}]}`,
+	}
+	client := newGroupsClient(t, gateway)
+	entries, err := client.EditableConfigAPIKeys(context.Background(), ConfigFamilyClaude)
+	if err != nil {
+		t.Fatal(err)
+	}
+	weight := 5
+	entries[1].BaseURL = entries[1].SubmittedBaseURL("https://api.default.test")
+	entries[1].Weight = &weight
+	if err := client.UpdateConfigAPIKeys(context.Background(), ConfigFamilyClaude, entries); err != nil {
+		t.Fatal(err)
+	}
+	gateway.mu.Lock()
+	defer gateway.mu.Unlock()
+	if got := groupNames(gateway.written); !reflect.DeepEqual(got, []string{"team"}) {
+		t.Fatalf("groups = %v, want the key to stay in its group", got)
+	}
+	if _, has := gateway.written[0]["base-url"]; has {
+		t.Fatalf("group = %#v, want the default endpoint left implicit", gateway.written[0])
+	}
+	if keys := groupKeys(gateway.written[0]); keys[1]["weight"] != float64(5) {
+		t.Fatalf("keys = %#v, want the edited weight", keys)
+	}
+	// A different endpoint is still the operator's edit.
+	if got := entries[1].SubmittedBaseURL("https://other.test"); got != "https://other.test" {
+		t.Fatalf("SubmittedBaseURL = %q", got)
+	}
+}
+
+func TestUpdateConfigAPIKeysKeepsAnUnmodelledGroupFieldOnTheGroup(t *testing.T) {
+	gateway := &groupsGateway{
+		family:  "codex",
+		stored:  `[{"name":"team","base-url":"https://a.test","websockets":true,"keys":[{"api-key":"k1"},{"api-key":"k2"}]}]`,
+		runtime: `{"codex-api-key":[{"api-key":"k1","base-url":"https://a.test","websockets":true,"auth-index":"i1"},{"api-key":"k2","base-url":"https://a.test","websockets":true,"auth-index":"i2"}]}`,
+	}
+	client := newGroupsClient(t, gateway)
+	entries, err := client.EditableConfigAPIKeys(context.Background(), ConfigFamilyCodex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := client.UpdateConfigAPIKeys(context.Background(), ConfigFamilyCodex, entries); err != nil {
+		t.Fatal(err)
+	}
+	gateway.mu.Lock()
+	defer gateway.mu.Unlock()
+	want := decodeGroups(t, gateway.stored)
+	if !reflect.DeepEqual(gateway.written, want) {
+		t.Fatalf("groups = %#v\nwant %#v", gateway.written, want)
+	}
+}
+
+func TestApplyConfigChangesScrubsSecretsFromARefusal(t *testing.T) {
+	server := newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodGet && request.URL.Path == "/v0/management/config.yaml":
+			_, _ = writer.Write([]byte("config-version: 8\napi-keys:\n  gemini:\n    - name: g\n      keys:\n        - api-key: stored-gemini-secret\n"))
+		case request.Method == http.MethodPatch && request.URL.Path == "/v8/management/config":
+			writer.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = writer.Write([]byte(`{"error":"invalid_config","message":"key new-claude-secret conflicts with stored-gemini-secret"}`))
+		default:
+			writer.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(server.Close)
+	client, err := NewClient(server.URL, "management-secret", time.Second, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	groups := []map[string]any{{"name": "c", "keys": []any{map[string]any{"api-key": "new-claude-secret"}}}}
+	err = client.ApplyConfigChanges(context.Background(), []ConfigChange{{Path: ConfigFamilyClaude.GroupsPath(), Value: groups}})
+	reason, rejected := IsConfigRejected(err)
+	if !rejected {
+		t.Fatalf("err = %v, want the refusal kept", err)
+	}
+	for _, secret := range []string{"new-claude-secret", "stored-gemini-secret"} {
+		if strings.Contains(reason, secret) || strings.Contains(err.Error(), secret) {
+			t.Fatalf("refusal %q (%v) quotes %s", reason, err, secret)
+		}
 	}
 }

@@ -34,6 +34,9 @@ type pluginMockState struct {
 	configPuts    int
 	configWrites  []string
 	deleteBlocked bool
+	handler       *Handler
+	// hasBareInstall lists a second plugin that is installed but has no settings.
+	hasBareInstall bool
 }
 
 // pluginConfigsPath is where the fake serves `plugins.configs.<id>`.
@@ -66,7 +69,11 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 
 		switch {
 		case path == "/v8/management/plugins" && request.Method == http.MethodGet:
-			_, _ = writer.Write([]byte(`{"plugins_enabled":true,"plugins_dir":"/srv/cpa/plugins","plugins":[{"id":"logger","path":"/srv/cpa/plugins/logger.so","configured":true,"registered":true,"enabled":true,"effective_enabled":true,"supports_oauth":true,"oauth_provider":"logger-oauth","supports_quota":false,"logo":"https://example.com/logo.png","config_fields":[{"name":"level","type":"enum","enum_values":["debug","info"],"description":"Log level"},{"name":"level","type":"string"}],"menus":[{"path":"/x","menu":"X","description":""}],"metadata":{"name":"Logger","version":"1.0.0","author":"cpa-official","github_repository":"router-for-me/logger-plugin","logo":"https://example.com/logo.png","config_fields":[]}}]}`))
+			list := `{"plugins_enabled":true,"plugins_dir":"/srv/cpa/plugins","plugins":[{"id":"logger","path":"/srv/cpa/plugins/logger.so","configured":true,"registered":true,"enabled":true,"effective_enabled":true,"supports_oauth":true,"oauth_provider":"logger-oauth","supports_quota":false,"logo":"https://example.com/logo.png","config_fields":[{"name":"level","type":"enum","enum_values":["debug","info"],"description":"Log level"},{"name":"level","type":"string"}],"menus":[{"path":"/x","menu":"X","description":""}],"metadata":{"name":"Logger","version":"1.0.0","author":"cpa-official","github_repository":"router-for-me/logger-plugin","logo":"https://example.com/logo.png","config_fields":[]}}]}`
+			if state.hasBareInstall {
+				list = strings.Replace(list, `"plugins":[`, `"plugins":[{"id":"installed","path":"/srv/cpa/plugins/installed.so","registered":true},`, 1)
+			}
+			_, _ = writer.Write([]byte(list))
 		case path == "/v8/management/config.yaml" && request.Method == http.MethodGet:
 			writer.Header().Set("Content-Type", "application/yaml")
 			_, _ = writer.Write([]byte(state.configYAML))
@@ -182,6 +189,7 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 		CheckRedirect: sameOriginRedirectGuard(errPluginLogoRedirectRefused, maxPluginLogoRedirects),
 	}
 
+	state.handler = handler
 	appServer := httptest.NewServer(handler.Router())
 	t.Cleanup(appServer.Close)
 
@@ -501,5 +509,65 @@ func TestPluginSettingsRejectionDoesNotEchoStoredSecrets(t *testing.T) {
 	}
 	if response.StatusCode != http.StatusUnprocessableEntity || refusal["code"] != "config_rejected" || strings.Contains(string(payload), "top-secret-management-key") || !strings.Contains(fmt.Sprint(refusal["reason"]), "management.secret-key") {
 		t.Fatalf("status = %d body %s", response.StatusCode, payload)
+	}
+}
+
+func TestPluginWritesWaitForAConfigurationSave(t *testing.T) {
+	client, baseURL, _, state := startPluginTestServer(t)
+	// A configuration save holds the write gate across its revision check and
+	// its write; a plugin write landing inside that window would be overwritten.
+	gate := &state.handler.providerWrites
+	gate.acquireTimeout = 50 * time.Millisecond
+	if err := gate.acquire(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	defer gate.release()
+
+	for _, write := range []struct{ method, path, body string }{
+		{http.MethodPatch, "/omc/api/v1/management/plugins/logger/enabled", `{"enabled":false}`},
+		{http.MethodPut, "/omc/api/v1/management/plugins/logger/config", `{"config":{"level":"debug"}}`},
+	} {
+		response, body := doJSON(t, client, write.method, baseURL+write.path, write.body)
+		if response.StatusCode != http.StatusServiceUnavailable || !strings.Contains(string(body), "write_busy") {
+			t.Fatalf("%s %s = %d %s, want the busy refusal", write.method, write.path, response.StatusCode, body)
+		}
+	}
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if len(state.enabledCalls) != 0 || state.configs["logger"]["level"] != "info" {
+		t.Fatalf("CPA was written while the gate was held: %v %v", state.enabledCalls, state.configs)
+	}
+}
+
+func TestPluginWritesRefuseAnUnknownPlugin(t *testing.T) {
+	client, baseURL, _, state := startPluginTestServer(t)
+	for _, write := range []struct{ method, path, body string }{
+		{http.MethodPatch, "/omc/api/v1/management/plugins/ghost/enabled", `{"enabled":true}`},
+		{http.MethodPut, "/omc/api/v1/management/plugins/ghost/config", `{"config":{"level":"debug"}}`},
+	} {
+		response, body := doJSON(t, client, write.method, baseURL+write.path, write.body)
+		if response.StatusCode != http.StatusNotFound || !strings.Contains(string(body), "plugin_not_found") {
+			t.Fatalf("%s %s = %d %s, want plugin_not_found", write.method, write.path, response.StatusCode, body)
+		}
+	}
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if _, created := state.configs["ghost"]; created || len(state.enabledCalls) != 0 {
+		t.Fatalf("settings were created for an unknown plugin: %v %v", state.enabledCalls, state.configs)
+	}
+}
+
+func TestPluginConfigOfAnInstalledPluginWithoutSettingsIsEmpty(t *testing.T) {
+	client, baseURL, _, state := startPluginTestServer(t)
+	state.mu.Lock()
+	state.hasBareInstall = true
+	state.mu.Unlock()
+	response, body := doJSON(t, client, http.MethodGet, baseURL+"/omc/api/v1/management/plugins/installed/config", "")
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusOK || payload["id"] != "installed" || fmt.Sprint(payload["config"]) != "map[]" {
+		t.Fatalf("config = %d %s, want an empty document", response.StatusCode, body)
 	}
 }

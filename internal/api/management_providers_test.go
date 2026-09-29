@@ -500,3 +500,50 @@ func TestProviderFamiliesXAIVertexInteractions(t *testing.T) {
 		t.Fatal("vertex-0 is still listed after its delete")
 	}
 }
+
+func TestProviderEditKeepsTheSettingsTheFormDoesNotShow(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	fixture.state.mu.Lock()
+	fixture.state.oaiProviders = []map[string]any{{
+		"name":            "relay",
+		"base-url":        "https://relay.test/v1",
+		"disable-cooling": false,
+		"api-key-entries": []any{map[string]any{"api-key": "sk-relay-1", "headers": map[string]any{"X-Team": "a"}, "auth-index": "r-1"}},
+		"models":          []any{map[string]any{"name": "gpt-4o", "alias": "g4", "force-mapping": true, "input-modalities": []any{"text", "image"}}},
+	}}
+	fixture.state.claudeProviders = []map[string]any{{
+		"api-key": "sk-ant-1", "auth-index": "ant-1", "base-url": "https://api.anthropic.com",
+		"models": []any{map[string]any{"name": "claude-x", "alias": "cx", "display-name": "Claude X", "input-modalities": []any{"text"}}},
+	}}
+	fixture.state.mu.Unlock()
+
+	// The shape the edit form sends: the fields it shows, keys left blank to keep.
+	updates := map[string]string{
+		"openai-compat-0": `{"family":"openai-compatibility","name":"relay","base_url":"https://relay.test/v1","keys":[{"api_key":"","proxy_url":"","weight":2}],"model_entries":[{"name":"gpt-4o","alias":"g4o"}]}`,
+		"claude-0":        `{"family":"claude","name":"Claude","base_url":"https://api.anthropic.com","keys":[{"api_key":""}],"model_entries":[{"name":"claude-x","alias":"cx2"}]}`,
+	}
+	for id, body := range updates {
+		if resp, payload := doJSON(t, fixture.client, http.MethodPut, fixture.baseURL+"/omc/api/v1/management/providers/"+id, body); resp.StatusCode != http.StatusOK {
+			t.Fatalf("update %s = %d %s", id, resp.StatusCode, payload)
+		}
+	}
+
+	fixture.state.mu.Lock()
+	defer fixture.state.mu.Unlock()
+	relay := fixture.state.oaiProviders[0]
+	key := anyList(relay["api-key-entries"])[0].(map[string]any)
+	if key["api-key"] != "sk-relay-1" || key["weight"] != float64(2) || fmt.Sprint(key["headers"]) != "map[X-Team:a]" {
+		t.Fatalf("relay key = %#v, want its headers kept beside the edit", key)
+	}
+	model := anyList(relay["models"])[0].(map[string]any)
+	if model["alias"] != "g4o" || model["force-mapping"] != true || fmt.Sprint(model["input-modalities"]) != "[text image]" {
+		t.Fatalf("relay model = %#v, want its other settings kept", model)
+	}
+	if relay["disable-cooling"] != false {
+		t.Fatalf("relay disable-cooling = %#v, want the stored false kept", relay["disable-cooling"])
+	}
+	claudeModel := anyList(fixture.state.claudeProviders[0]["models"])[0].(map[string]any)
+	if claudeModel["alias"] != "cx2" || claudeModel["display-name"] != "Claude X" || fmt.Sprint(claudeModel["input-modalities"]) != "[text]" {
+		t.Fatalf("claude model = %#v, want its other settings kept", claudeModel)
+	}
+}

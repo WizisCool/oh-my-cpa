@@ -314,7 +314,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       return;
     }
     // A v8 gateway: operations live under /v8/management, and /v0/management answers
-    // only the reads and configuration writes the client still sends there
+    // only the reads the client still sends there
     // (internal/cpa/management/client_v0.go). A request sent to the other generation
     // finds no route, so a call moved to the wrong tree fails the suites instead of
     // passing against a handler shared by both.

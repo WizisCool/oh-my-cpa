@@ -312,7 +312,7 @@ func (h *Handler) readProviderItems(ctx context.Context, client *management.Clie
 				BaseURL:         entry.BaseURL,
 				Prefix:          entry.Prefix,
 				Priority:        entry.Priority,
-				DisableCooling:  entry.DisableCooling,
+				DisableCooling:  entry.DisableCooling != nil && *entry.DisableCooling,
 				Models:          models,
 				ModelEntries:    modelEntries,
 				Disabled:        entry.Disabled,

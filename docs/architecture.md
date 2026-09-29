@@ -100,12 +100,15 @@ Two rules keep the boundary meaningful:
   or a store registry; it also derives each entry's repository link and whether a store
   entry is first-party, so no surface decides trust on its own.
 
-**Plugin management** (ADR 0029). `internal/api/management_plugins.go` maps each console
-route to one CPA plugin route: the installed list with the global switch and each
-plugin's declared configuration fields, the per-plugin switch
-(`PATCH /plugins/{id}/enabled`), the per-plugin settings document
-(`GET`/`PUT /plugins/{id}/config`, passed through unprojected because its shape is the
-plugin's), removal, the store and installation from a named registry at a named version.
+**Plugin management** (ADR 0029, ADR 0038). `internal/api/management_plugins.go` maps
+the installed list with the global switch and each plugin's declared configuration
+fields, removal, the store and installation from a named registry at a named version to
+CPA's plugin routes. The per-plugin switch and settings document are keys of the
+configuration: the switch is written at `plugins.configs.<id>.enabled` and the settings
+document (passed through unprojected because its shape is the plugin's) is read and
+written at `plugins.configs.<id>` through the v8 configuration API, under the provider
+write gate and the configuration mutex a configuration save holds; a write for a plugin
+that is neither installed nor configured is refused as `plugin_not_found`.
 CPA's plugin error codes (`plugin_not_found`, `plugin_delete_requires_restart`,
 `plugin_store_rate_limited`, …) are kept rather than folded into the generic facade
 error. The plugin system's own settings - `plugins.enabled`, `plugins.store-sources`
@@ -439,7 +442,14 @@ list's exact order: a key stays in its group, stating its own value where it dif
 from a setting the group stores; a key its group cannot express (another base URL, a
 cleared `disable-cooling` or `request-retry`) and a new provider become groups of
 their own. OpenAI-compatible providers are one group per provider
-(`EditableOpenAICompatibility`, `UpdateOpenAICompatibility`).
+(`EditableOpenAICompatibility`, `UpdateOpenAICompatibility`). The edit form shows the
+runtime values, so an edit starts from the stored entry: a key's and a model's
+settings the form does not show are kept (matched by API key and model name), a
+base URL equal to the runtime's default for a key the file stores without one stays
+unstated (`ConfigAPIKey.SubmittedBaseURL`), and a group field outside the shared
+settings stays on the group. CPA's reason for refusing any v8 write is scrubbed of
+the stored file's secrets and of the ones the write sent before the response or the
+audit log sees it (`ApplyConfigChanges`).
 Two per-family constants in the registry carry the remaining differences:
 `RequiresBaseURL` (Codex and xAI, whose entries CPA drops without an error when the
 base URL is empty, so the console refuses them up front) and `PullProtocol` (the

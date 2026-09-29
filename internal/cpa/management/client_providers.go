@@ -57,7 +57,7 @@ type OpenAICompatibility struct {
 	Disabled       bool              `json:"disabled"`
 	Prefix         string            `json:"prefix,omitempty"`
 	Priority       *int              `json:"priority,omitempty"`
-	DisableCooling bool              `json:"disable-cooling,omitempty"`
+	DisableCooling *bool             `json:"disable-cooling,omitempty"`
 	BaseURL        string            `json:"base-url"`
 	APIKeyEntries  []APIKeyEntry     `json:"api-key-entries,omitempty"`
 	LegacyAPIKeys  []string          `json:"api-keys,omitempty"`
