@@ -166,16 +166,16 @@ assert.equal(heatmapMinPanelWidth(Number.NaN), null, 'a non-numeric column count
 // ── local-day reading ──────────────────────────────────────────────────────
 
 configureTimeZone('Asia/Kuala_Lumpur');
-assert.equal(localDayOf(Date.parse('2026-09-14T23:30:00+08:00')), '2026-09-14', 'localDayOf reads the local calendar, not UTC');
+assert.equal(localDayOf(Date.parse('2026-09-14T23:30:00+08:00')), '2026-09-14', 'localDayOf reads the effective calendar, not UTC');
 assert.equal(localDayOf(Date.parse('2026-09-14T00:00:01+08:00')), '2026-09-14', 'the first instant of a local day belongs to it');
 
 // ── cell states ────────────────────────────────────────────────────────────
 
-const firstStored = new Date(2026, 8, 10, 9, 0, 0).getTime();
+const firstStored = Date.parse('2026-09-10T09:00:00+08:00');
 // The grid is resolved mid-week, so the span's last column holds four days that have not happened.
 // Every call passes it: a state function with no notion of "now" classifies a future day by whether
 // tracking happened to start before it, which is a fact about the deployment rather than the day.
-const asOf = new Date(2026, 8, 11, 12, 0, 0).getTime();
+const asOf = Date.parse('2026-09-11T12:00:00+08:00');
 
 // Three distinct states, each meaning something different. A day that has not happened is not among
 // them: it is a day nothing is stored for, which is what `unrecorded` already says, and a separate
@@ -216,7 +216,7 @@ assert.equal(
 // The boundary itself: the day the read instant falls on is in the past, and is classified by its
 // traffic like any other recorded day.
 assert.equal(
-  heatmapCellState(dayEntry('2026-09-11', 0), firstStored, new Date(2026, 8, 11, 0, 0, 1).getTime()),
+  heatmapCellState(dayEntry('2026-09-11', 0), firstStored, Date.parse('2026-09-11T00:00:01+08:00')),
   'empty',
   'the read instant\'s own day is recorded, measured from its first instant',
 );
@@ -236,7 +236,7 @@ assert.equal(heatmapCellState(undefined, null, asOf), 'empty', 'a missing day is
 // The marker is an instant and the day key is a local date, so a marker late in the local day it
 // lands on must not mark that whole day unrecorded.
 assert.equal(
-  heatmapCellState(dayEntry('2026-09-10', 0), new Date(2026, 8, 10, 23, 59, 0).getTime(), asOf),
+  heatmapCellState(dayEntry('2026-09-10', 0), Date.parse('2026-09-10T23:59:00+08:00'), asOf),
   'empty',
   'the marker day itself is recorded',
 );
