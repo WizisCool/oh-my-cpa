@@ -1,19 +1,18 @@
 import React from 'react';
-import { Alert, Button, Tabs, Tooltip } from 'antd';
-import { XProvider } from '@ant-design/x';
-import type { BubbleItemType, BubbleListProps } from '@ant-design/x';
+import { Alert, Button, Dropdown, Tooltip } from 'antd';
+import { AssistantRuntimeProvider } from '@assistant-ui/react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { BrandArtwork } from '../../components/common/BrandArtwork';
-import { CloseOutlined, LayoutOutlined, MessageOutlined, ReloadOutlined } from '../../components/icons';
-import { Composer } from '../../components/workspace/Composer';
-import { ConversationList } from '../../components/workspace/ConversationList';
-import type { ConversationListHandle } from '../../components/workspace/ConversationList';
+import { DownloadOutlined, LayoutOutlined, MessageOutlined, ReloadOutlined } from '../../components/icons';
+import { AssistantComposer } from '../../components/workspace/AssistantComposer';
+import { AssistantThread } from '../../components/workspace/AssistantThread';
 import { TargetPicker } from '../../components/workspace/TargetPicker';
 import { WorkspaceLayout } from '../../components/workspace/WorkspaceLayout';
-import { useXLocale } from '../../components/workspace/useXLocale';
 import workspace from '../../components/workspace/Workspace.module.css';
+import { exportFileName, playgroundMarkdown } from '../../agent/export';
+import { saveBlob } from '../../utils/download';
 import { usePreference } from '../../hooks/usePreference';
 import { NARROW_VIEWPORT_QUERY } from '../../hooks/useIsNarrowViewport';
 import { useI18n } from '../../i18n';
@@ -25,13 +24,14 @@ import { playgroundErrorKey } from './errors';
 import { InspectPanel } from './InspectPanel';
 import { ParametersPanel } from './ParametersPanel';
 import { AssistantMessage, UserMessage } from './PlaygroundTurn';
+import { PlaygroundImageAdapter } from './attachments';
+import { usePlaygroundThreadRuntime } from './runtime';
 import {
   buildChatRequest, buildHistory, createID, DEFAULT_PLAYGROUND_PARAMETERS, DEFAULT_PLAYGROUND_SESSION,
-  hasOmittedImage, MAX_REQUEST_BYTES, parametersFromSession, parsePlaygroundSession, playgroundUserAgent,
+  effectiveModel, hasOmittedImage, MAX_REQUEST_BYTES, parametersFromSession, parsePlaygroundSession, playgroundUserAgent,
   PLAYGROUND_SESSION_PREFERENCE, readCustomBody, sessionDocument, usageLink,
 } from './state';
 import type { Content, Message, PlaygroundParameters, PlaygroundSession, Turn } from './state';
-import { useImageAttachments } from './useImageAttachments';
 import { usePlaygroundRun } from './usePlaygroundRun';
 import styles from './PlaygroundPage.module.css';
 
@@ -42,11 +42,6 @@ import styles from './PlaygroundPage.module.css';
  * system prompt would send the transcript to the server once per character.
  */
 const PERSIST_DEBOUNCE_MS = 600;
-
-const BUBBLE_ROLES: BubbleListProps['role'] = {
-  user: { placement: 'end', variant: 'borderless' },
-  ai: { placement: 'start', variant: 'borderless' },
-};
 
 type PanelTab = 'parameters' | 'inspect';
 
@@ -63,7 +58,6 @@ interface Target {
 export const PlaygroundPage: React.FC = () => {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const xLocale = useXLocale();
   const isDemo = isDemoMode();
   // The deployment's own build names the default User-Agent in the placeholder and the copied
   // cURL; the server resolves the value that actually leaves the process.
@@ -72,14 +66,11 @@ export const PlaygroundPage: React.FC = () => {
   const sessionPref = usePreference<PlaygroundSession>(PLAYGROUND_SESSION_PREFERENCE, DEFAULT_PLAYGROUND_SESSION, parsePlaygroundSession);
   const [target, setTarget] = React.useState<Target>({ fingerprint: '', model: '' });
   const [parameters, setParameters] = React.useState<PlaygroundParameters>(DEFAULT_PLAYGROUND_PARAMETERS);
-  const [draft, setDraft] = React.useState('');
   const [selectedID, setSelectedID] = React.useState('');
   const [panelTab, setPanelTab] = React.useState<PanelTab>('parameters');
   const [isPanelOpen, setIsPanelOpen] = React.useState(() => !window.matchMedia(NARROW_VIEWPORT_QUERY).matches);
   const [notice, setNotice] = React.useState('');
-  const { turns, isRunning, send, retry, stop, replaceTurns } = usePlaygroundRun();
-  const attachments = useImageAttachments(React.useCallback(() => setNotice('invalid_image'), []));
-  const listRef = React.useRef<ConversationListHandle>(null);
+  const { turns, isRunning, send, retry, edit, stop, replaceTurns } = usePlaygroundRun();
 
   // The console's own key list entry, so a key created or renamed on the key page is current here.
   // Only a key with a usage fingerprint can be named to the server, so the rest are not offered.
@@ -176,14 +167,14 @@ export const PlaygroundPage: React.FC = () => {
   // ── actions ────────────────────────────────────────────────────────────────
 
   const customBody = readCustomBody(parameters.customBody);
-  const canSend = !!target.fingerprint && !!target.model && !isRunning && !isDemo
-    && attachments.pendingCount === 0 && customBody.ok && (!!draft.trim() || attachments.images.length > 0);
+  const isTargetReady = !!target.fingerprint && !!target.model;
 
-  const submit = (text: string) => {
-    if (!canSend || !customBody.ok) return;
+  const submit = (text: string, images: string[]) => {
+    if (!isTargetReady || isRunning || isDemo || !customBody.ok) return;
+    if (!text.trim() && images.length === 0) return;
     const content: Content[] = [
       ...(text.trim() ? [{ type: 'text' as const, text }] : []),
-      ...attachments.images.map(image => ({ type: 'image_url' as const, image_url: { url: image.url } })),
+      ...images.map(url => ({ type: 'image_url' as const, image_url: { url } })),
     ];
     const user: Message = { role: 'user', content };
     const request = buildChatRequest(target, parameters, customBody.value, buildHistory(turns), user);
@@ -204,23 +195,21 @@ export const PlaygroundPage: React.FC = () => {
       eventBytes: 0,
       isTruncated: false,
     };
-    setDraft('');
-    attachments.take();
     setNotice('');
     setSelectedID(turn.id);
-    listRef.current?.followLatest();
     send(turn);
   };
 
-  const onRetry = React.useCallback((turn: Turn) => {
+  // A turn whose image was dropped from storage cannot be asked again; the notice says why rather
+  // than the replay failing at the gateway.
+  const isReplayable = React.useCallback((turn: Turn) => {
     if (hasOmittedImage(turn)) {
       setNotice('image_omitted');
-      return;
+      return false;
     }
     setNotice('');
-    listRef.current?.followLatest();
-    retry(turn);
-  }, [retry]);
+    return true;
+  }, []);
 
   const onInspect = React.useCallback((turn: Turn) => {
     setSelectedID(turn.id);
@@ -233,13 +222,68 @@ export const PlaygroundPage: React.FC = () => {
     if (link) navigate(link);
   }, [navigate]);
 
+  const runtimeRef = React.useRef<ReturnType<typeof usePlaygroundThreadRuntime>>();
+  const attachmentAdapter = React.useMemo(() => new PlaygroundImageAdapter(
+    () => runtimeRef.current?.thread.composer.getState().attachments.length ?? 0,
+    () => setNotice('invalid_image'),
+  ), []);
+  const runtime = usePlaygroundThreadRuntime({
+    turns,
+    isRunning,
+    isDisabled: isDemo || !isTargetReady,
+    isSendDisabled: isDemo || !isTargetReady || !customBody.ok,
+    attachments: attachmentAdapter,
+    onSend: submit,
+    onReload: () => {
+      const last = turns.at(-1);
+      if (last && !isRunning && isReplayable(last)) retry(last);
+    },
+    onEdit: text => {
+      const last = turns.at(-1);
+      if (last && !isRunning && isReplayable(last)) edit(last, text);
+    },
+    onCancel: stop,
+  });
+  runtimeRef.current = runtime;
+
   const resetConversation = () => {
     if (isRunning) return;
     replaceTurns([]);
-    attachments.clear();
-    setDraft('');
+    runtime.thread.composer.reset();
     setSelectedID('');
     setNotice('');
+  };
+
+  const exportConversation = (format: 'markdown' | 'json') => {
+    const now = new Date();
+    if (format === 'json') {
+      saveBlob(new Blob([`${JSON.stringify(sessionDocument(target, parameters, turns), null, 2)}\n`], { type: 'application/json' }), exportFileName('omc-playground', 'json', now));
+      return;
+    }
+    const markdown = playgroundMarkdown(turns.map(turn => ({
+      user: turn.user.content.flatMap(part => (part.type === 'text' ? [part.text] : [])).join('\n'),
+      imageCount: turn.user.content.filter(part => part.type === 'image_url').length,
+      reply: turn.reply,
+      model: effectiveModel(turn.request),
+      status: turn.status,
+      parameters: {
+        system_prompt: turn.request.system_prompt,
+        temperature: turn.request.temperature,
+        top_p: turn.request.top_p,
+        max_tokens: turn.request.max_tokens,
+        reasoning_effort: turn.request.reasoning_effort,
+      },
+    })), {
+      title: t('pg.export.title'),
+      exportedAt: t('agent.export.exported_at'),
+      operator: t('agent.export.operator'),
+      answer: t('agent.export.answer_heading'),
+      model: t('agent.export.model'),
+      parameters: t('pg.parameters'),
+      images: count => t('pg.export.images', { count: String(count) }),
+      status: status => t(`pg.status.${status}`),
+    }, now);
+    saveBlob(new Blob([markdown], { type: 'text/markdown;charset=utf-8' }), exportFileName('omc-playground', 'md', now));
   };
 
   const onParametersChange = React.useCallback((patch: Partial<PlaygroundParameters>) => {
@@ -249,26 +293,7 @@ export const PlaygroundPage: React.FC = () => {
 
   // ── transcript ─────────────────────────────────────────────────────────────
 
-  const lastID = turns.at(-1)?.id;
   const canRetry = !isRunning && !isDemo;
-  const items = React.useMemo<BubbleItemType[]>(() => turns.flatMap(turn => [
-    { key: `${turn.id}-user`, role: 'user', content: <UserMessage turn={turn} /> },
-    {
-      key: `${turn.id}-ai`,
-      role: 'ai',
-      content: (
-        <AssistantMessage
-          turn={turn}
-          isLast={turn.id === lastID}
-          canRetry={canRetry}
-          onRetry={onRetry}
-          onInspect={onInspect}
-          onOpenRequests={onOpenRequests}
-        />
-      ),
-    },
-  ]), [turns, lastID, canRetry, onRetry, onInspect, onOpenRequests]);
-
   const selectedTurn = turns.find(turn => turn.id === selectedID) ?? turns.at(-1);
 
   // ── frame ──────────────────────────────────────────────────────────────────
@@ -301,6 +326,20 @@ export const PlaygroundPage: React.FC = () => {
           }}
         />
       </Tooltip>
+      <Dropdown
+        disabled={turns.length === 0 || isRunning}
+        menu={{
+          items: [
+            { key: 'markdown', label: t('agent.export.markdown') },
+            { key: 'json', label: t('agent.export.json') },
+          ],
+          onClick: ({ key }) => exportConversation(key as 'markdown' | 'json'),
+        }}
+      >
+        <Button aria-label={t('agent.export')} icon={<DownloadOutlined />} disabled={turns.length === 0 || isRunning}>
+          <span className={styles['action-label']}>{t('agent.export')}</span>
+        </Button>
+      </Dropdown>
       <Button aria-label={t('pg.new_chat')} icon={<MessageOutlined />} disabled={isRunning || turns.length === 0} onClick={resetConversation}>
         <span className={styles['action-label']}>{t('pg.new_chat')}</span>
       </Button>
@@ -316,53 +355,8 @@ export const PlaygroundPage: React.FC = () => {
     </>
   );
 
-  const panel = (
-    <Tabs
-      className={workspace['panel-tabs']}
-      activeKey={panelTab}
-      onChange={key => setPanelTab(key as PanelTab)}
-      items={[
-        {
-          key: 'parameters',
-          label: t('pg.parameters'),
-          children: (
-            <ParametersPanel
-              parameters={parameters}
-              defaultUserAgent={defaultUserAgent}
-              onChange={onParametersChange}
-              onReset={onParametersReset}
-            />
-          ),
-        },
-        {
-          key: 'inspect',
-          label: t('pg.debug'),
-          children: <InspectPanel turn={selectedTurn} defaultUserAgent={defaultUserAgent} onOpenRequests={onOpenRequests} />,
-        },
-      ]}
-    />
-  );
-
-  const composerHeader = attachments.images.length > 0 ? (
-    <div className={styles['attachments']}>
-      {attachments.images.map(image => (
-        <div className={styles['attachment']} key={image.uid}>
-          <img src={image.url} alt={image.name} />
-          <Button
-            type="text"
-            size="small"
-            className={styles['attachment-remove']}
-            aria-label={t('pg.remove_image')}
-            onClick={() => attachments.remove(image.uid)}
-            icon={<CloseOutlined />}
-          />
-        </div>
-      ))}
-    </div>
-  ) : null;
-
   return (
-    <XProvider locale={xLocale}>
+    <AssistantRuntimeProvider runtime={runtime}>
       <WorkspaceLayout
         testId="playground-page"
         title={t('nav.playground')}
@@ -383,40 +377,56 @@ export const PlaygroundPage: React.FC = () => {
         notices={notices}
         aside={{
           title: t('pg.parameters'),
-          content: panel,
+          tabs: [
+            {
+              key: 'parameters',
+              label: t('pg.parameters'),
+              content: (
+                <ParametersPanel
+                  parameters={parameters}
+                  defaultUserAgent={defaultUserAgent}
+                  onChange={onParametersChange}
+                  onReset={onParametersReset}
+                />
+              ),
+            },
+            {
+              key: 'inspect',
+              label: t('pg.debug'),
+              content: <InspectPanel turn={selectedTurn} defaultUserAgent={defaultUserAgent} onOpenRequests={onOpenRequests} />,
+            },
+          ],
+          activeTab: panelTab,
+          onTabChange: key => setPanelTab(key as PanelTab),
           isOpen: isPanelOpen,
           onOpenChange: setIsPanelOpen,
           resizeLabel: t('pg.resize_sidebar'),
           defaultWidth: 380,
         }}
       >
-        {turns.length === 0 ? (
-          <div className={workspace['empty']} data-testid="playground-empty">
-            <BrandArtwork shape="wordmark" height={28} className={workspace['empty-mark']} label="Oh My CPA" />
-            {target.model && <p className={styles['empty-target']}>{target.model}</p>}
-          </div>
-        ) : (
-          <ConversationList ref={listRef} items={items} roles={BUBBLE_ROLES} latestLabel={t('pg.latest')} />
-        )}
-        <Composer
-          value={draft}
-          onChange={setDraft}
-          onSubmit={submit}
-          onStop={stop}
+        <AssistantThread
+          latestLabel={t('pg.latest')}
+          testId="playground-transcript"
+          empty={(
+            <div className={workspace['empty']} data-testid="playground-empty">
+              <BrandArtwork shape="wordmark" height={28} className={workspace['empty-mark']} label="Oh My CPA" />
+              {target.model && <p className={styles['empty-target']}>{target.model}</p>}
+            </div>
+          )}
+        >
+          {({ message }) => (message.role === 'user'
+            ? <UserMessage canEdit={canRetry} />
+            : <AssistantMessage canRetry={canRetry} isReplayable={isReplayable} onInspect={onInspect} onOpenRequests={onOpenRequests} />)}
+        </AssistantThread>
+        <AssistantComposer
           placeholder={t('pg.input')}
           inputLabel={t('pg.input')}
           sendLabel={t('pg.send')}
           stopLabel={t('pg.stop')}
-          isRunning={isRunning}
-          canSend={canSend}
-          isDisabled={isDemo || !target.fingerprint || !target.model}
           blockedReason={!customBody.ok ? t('pg.invalid_json') : undefined}
-          header={composerHeader}
-          onPasteFile={files => {
-            if (!isRunning && !isDemo) attachments.add(files);
-          }}
+          attachments={{ addLabel: t('pg.add_image'), removeLabel: t('pg.remove_image') }}
         />
       </WorkspaceLayout>
-    </XProvider>
+    </AssistantRuntimeProvider>
   );
 };

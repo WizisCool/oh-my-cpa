@@ -1,7 +1,7 @@
 import React from 'react';
 import { isAbortError } from '../../api/client';
 import { failureCode, streamChat } from './api';
-import { applyEvent, createID, retriedTurn } from './state';
+import { applyEvent, createID, editedTurn, retriedTurn } from './state';
 import type { Turn } from './state';
 
 /**
@@ -20,6 +20,8 @@ export interface PlaygroundRun {
   send: (turn: Turn) => void;
   /** Replays the last turn's request snapshot in its place. */
   retry: (turn: Turn) => void;
+  /** Replays the last turn with its message's text replaced. */
+  edit: (turn: Turn, text: string) => void;
   stop: () => void;
   /** Replaces the conversation; refused while a turn is streaming. */
   replaceTurns: (turns: Turn[]) => void;
@@ -95,11 +97,14 @@ export function usePlaygroundRun(): PlaygroundRun {
   const retry = React.useCallback((turn: Turn) => {
     void run(retriedTurn(turn, createID('turn'), Date.now()), true);
   }, [run]);
+  const edit = React.useCallback((turn: Turn, text: string) => {
+    void run(editedTurn(turn, text, createID('turn'), Date.now()), true);
+  }, [run]);
   const stop = React.useCallback(() => controllerRef.current?.abort(), []);
   const replaceTurns = React.useCallback((next: Turn[]) => {
     if (controllerRef.current) return;
     setTurns(next);
   }, []);
 
-  return { turns, isRunning, send, retry, stop, replaceTurns };
+  return { turns, isRunning, send, retry, edit, stop, replaceTurns };
 }

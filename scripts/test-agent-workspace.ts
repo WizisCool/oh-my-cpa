@@ -20,21 +20,28 @@ import {
   formatDuration,
   groupCapabilities,
   hasRawResult,
-  appendStreamPart,
-  appendToolPart,
   parseAgentTarget,
-  segmentParts,
   turnParts,
-  parseRunEvent,
   previewEntries,
   rawResultText,
   statusTone,
   summarizeResult,
-  traceChainStatus,
   turnDuration,
   turnLabelKey,
+  argumentSummary,
+  callStatusKey,
+  callDuration,
+  chartSeries,
 } from '../web/src/pages/agent/state.ts';
 import type { Capability, Conversation, Operation, Trace, Turn } from '../web/src/pages/agent/state.ts';
+import { applyAgentEvent, EMPTY_FRAME, invalidatedKeys, parseReceipt } from '../web/src/agent/runReducer.ts';
+import type { RunFrame } from '../web/src/agent/runReducer.ts';
+import { buildRunInput, parseAgentEvent } from '../web/src/agent/protocol.ts';
+import type { AgentEvent } from '../web/src/agent/protocol.ts';
+import { readSSE } from '../web/src/agent/sse.ts';
+import { conversationMarkdown, csvCell, exportFileName, playgroundMarkdown, queryResultTable, rowsToMarkdown, turnAnswerMarkdown, viewToCSV } from '../web/src/agent/export.ts';
+import type { ExportLabels } from '../web/src/agent/export.ts';
+import { agentThreadMessages, appendMessageText, mergeLiveTurn, storedMessages, toolCallPart, turnMessageStatus } from '../web/src/pages/agent/thread.ts';
 
 let passed = 0;
 function check(name: string, run: () => void): void {
@@ -135,13 +142,6 @@ check('a directory query can match the text the operator reads', () => {
   assert.deepEqual(groups.flatMap(group => group.items.map(item => item.name)), ['keys_list']);
 });
 
-check('a stream frame this build cannot render is refused rather than dispatched', () => {
-  assert.equal(parseRunEvent(JSON.stringify({ type: 'delta', content: 'a' }))?.content, 'a');
-  assert.equal(parseRunEvent(JSON.stringify({ type: 'telemetry' })), undefined);
-  assert.equal(parseRunEvent('not json'), undefined);
-  assert.equal(parseRunEvent(JSON.stringify([1, 2])), undefined);
-});
-
 check('the operation a conversation waits on is the pending call of its last turn', () => {
   const conversation = (turns: Turn[]): Conversation => ({ id: 'c', revision: 1, model: 'm', client_key_fingerprint: 'k', turns, omitted: 0 });
   const waiting = turn({ id: 'b', status: 'pending', traces: [
@@ -199,16 +199,6 @@ check('a trace carries its capability name for the transcript to name', () => {
   assert.equal(summarizeResult(trace.result.data).counts[0].value, '×0');
 });
 
-check('a call waiting on the operator is never drawn as loading or failed', () => {
-  assert.equal(traceChainStatus('success'), 'success');
-  assert.equal(traceChainStatus('executing'), 'loading');
-  assert.equal(traceChainStatus('error'), 'error');
-  assert.equal(traceChainStatus('rejected'), 'abort');
-  for (const status of ['pending', 'partial', 'uncertain', 'expired', 'something-new']) {
-    assert.equal(traceChainStatus(status), undefined, status);
-  }
-});
-
 check('a prepared change is laid out as fields only when it is shaped like a form', () => {
   assert.deepEqual(previewEntries({ provider: 'p1', enabled: false, removes: ['credentials', 'mappings'] }), [
     ['provider', 'p1'], ['enabled', 'false'], ['removes', 'credentials, mappings'],
@@ -220,10 +210,6 @@ check('a prepared change is laid out as fields only when it is shaped like a for
   assert.equal(previewEntries(undefined), undefined);
 });
 
-check('streamed reasoning is a frame this build renders', () => {
-  assert.equal(parseRunEvent(JSON.stringify({ type: 'thought', content: 'weigh' }))?.content, 'weigh');
-});
-
 check('the remembered selector keeps only its three fields, trimmed', () => {
   assert.deepEqual(parseAgentTarget({ client_key_fingerprint: ' hmac:k ', model: 'm', reasoning_effort: 'high', key: 'sk-secret' }), {
     client_key_fingerprint: 'hmac:k', model: 'm', reasoning_effort: 'high',
@@ -233,44 +219,302 @@ check('the remembered selector keeps only its three fields, trimmed', () => {
   assert.equal(parseAgentTarget(['m']), undefined);
 });
 
-check('streamed output is rebuilt into parts the way the server records them', () => {
-  let parts = appendStreamPart([], 'thought', 'plan ', true);
-  parts = appendStreamPart(parts, 'thought', 'one', false);
-  parts = appendStreamPart(parts, 'text', 'checking', false);
-  parts = appendToolPart(parts, 'call-1');
-  parts = appendToolPart(parts, 'call-2');
-  parts = appendToolPart(parts, 'call-1');
-  parts = appendStreamPart(parts, 'text', 'answer', true);
-  assert.deepEqual(parts, [
-    { type: 'thought', content: 'plan one' },
-    { type: 'text', content: 'checking' },
-    { type: 'tool', trace_id: 'call-1' },
-    { type: 'tool', trace_id: 'call-2' },
-    { type: 'text', content: 'answer' },
-  ]);
-  // Text from a new model call is a new part even when the previous part was text as well.
-  assert.equal(appendStreamPart([{ type: 'text', content: 'a' }], 'text', 'b', true).length, 2);
-});
-
-check('the transcript draws a turn in the order it happened, with calls made together as one chain', () => {
-  const segments = segmentParts([
-    { type: 'thought', content: 'plan' },
-    { type: 'text', content: 'checking' },
-    { type: 'tool', trace_id: 'a' },
-    { type: 'tool', trace_id: 'b' },
-    { type: 'thought', content: 'again' },
-    { type: 'text', content: '' },
-    { type: 'text', content: 'answer' },
-  ]);
-  assert.deepEqual(segments.map(segment => segment.kind), ['thought', 'text', 'tools', 'thought', 'text']);
-  assert.deepEqual(segments[2].kind === 'tools' ? segments[2].traceIDs : [], ['a', 'b']);
-});
-
 check('a turn stored without parts reads as its calls followed by its answer', () => {
   const stored = turn({ reply: 'done', traces: [{ id: 't1', name: 'providers_list', result: { status: 'success' } }] });
   assert.deepEqual(turnParts(stored), [{ type: 'tool', trace_id: 't1' }, { type: 'text', content: 'done' }]);
   const ordered = turn({ reply: 'x', parts: [{ type: 'text', content: 'x' }] });
   assert.deepEqual(turnParts(ordered), [{ type: 'text', content: 'x' }]);
+});
+
+// ── AG-UI run protocol ─────────────────────────────────────────────────────────
+
+const fold = (events: object[], start: RunFrame = EMPTY_FRAME): RunFrame => events.reduce<RunFrame>((frame, event) => {
+  const parsed = parseAgentEvent(JSON.stringify(event));
+  assert.ok(parsed, `unparsed ${JSON.stringify(event)}`);
+  return applyAgentEvent(frame, parsed as AgentEvent);
+}, start);
+
+check('an event this build cannot render, or one missing what the reducer reads, is refused', () => {
+  assert.equal(parseAgentEvent(JSON.stringify({ type: 'TEXT_MESSAGE_CONTENT', messageId: 'm', delta: 'a' }))?.type, 'TEXT_MESSAGE_CONTENT');
+  assert.equal(parseAgentEvent(JSON.stringify({ type: 'TEXT_MESSAGE_CONTENT', messageId: 'm' })), undefined);
+  assert.equal(parseAgentEvent(JSON.stringify({ type: 'TELEMETRY' })), undefined);
+  assert.equal(parseAgentEvent(JSON.stringify({ type: 'STATE_SNAPSHOT', snapshot: null })), undefined);
+  assert.equal(parseAgentEvent('not json'), undefined);
+  assert.equal(parseAgentEvent('[1]'), undefined);
+});
+
+check('the stream is rebuilt into the parts the server stores, in order', () => {
+  const frame = fold([
+    { type: 'RUN_STARTED', threadId: 'c', runId: 'r', metadata: { turn_id: 't1' } },
+    { type: 'STEP_STARTED', stepName: 'round:1', metadata: { round: 1, max_rounds: 8 } },
+    { type: 'REASONING_START', messageId: 'r:1' },
+    { type: 'REASONING_MESSAGE_START', messageId: 'r:1', role: 'reasoning' },
+    { type: 'REASONING_MESSAGE_CONTENT', messageId: 'r:1', delta: 'plan ' },
+    { type: 'REASONING_MESSAGE_CONTENT', messageId: 'r:1', delta: 'one' },
+    { type: 'REASONING_MESSAGE_END', messageId: 'r:1' },
+    { type: 'REASONING_END', messageId: 'r:1' },
+    { type: 'TEXT_MESSAGE_START', messageId: 'r:2', role: 'assistant' },
+    { type: 'TEXT_MESSAGE_CONTENT', messageId: 'r:2', delta: 'checking' },
+    { type: 'TEXT_MESSAGE_END', messageId: 'r:2' },
+    { type: 'TOOL_CALL_START', toolCallId: 'call', toolCallName: 'usage_aggregate', metadata: { started_at_ms: 10 } },
+    { type: 'TOOL_CALL_ARGS', toolCallId: 'call', delta: '{"window":"24h"}' },
+    { type: 'TOOL_CALL_END', toolCallId: 'call' },
+  ]);
+  assert.equal(frame.isAccepted, true);
+  assert.equal(frame.turnId, 't1');
+  assert.equal(frame.round, 1);
+  assert.deepEqual(frame.parts, [
+    { type: 'thought', content: 'plan one' },
+    { type: 'text', content: 'checking' },
+    { type: 'tool', trace_id: 'call' },
+  ]);
+  // A call is visible, with its arguments, before it has a result.
+  assert.deepEqual(frame.traces, [{ id: 'call', name: 'usage_aggregate', arguments: '{"window":"24h"}', result: { status: 'running' }, started_at_ms: 10 }]);
+  const settled = fold([
+    { type: 'TOOL_CALL_RESULT', messageId: 'result:call', toolCallId: 'call', content: '{"status":"success","invalidates":["keys"]}', metadata: { ended_at_ms: 25, view: { kind: 'table', title: 'T', columns: ['a'], rows: [{ a: 1 }] } } },
+    { type: 'STEP_FINISHED', stepName: 'round:1' },
+    { type: 'STEP_STARTED', stepName: 'round:2', metadata: { round: 2, max_rounds: 8 } },
+    { type: 'TEXT_MESSAGE_START', messageId: 'r:3', role: 'assistant' },
+    { type: 'TEXT_MESSAGE_CONTENT', messageId: 'r:3', delta: 'answer' },
+    { type: 'TEXT_MESSAGE_END', messageId: 'r:3' },
+    { type: 'STATE_SNAPSHOT', snapshot: { id: 'c', revision: 2, model: 'm', client_key_fingerprint: 'k', turns: [], omitted: 0 } },
+    { type: 'RUN_FINISHED', threadId: 'c', runId: 'r', outcome: { type: 'success' }, usage: [{ model: 'm', inputTokens: 10, outputTokens: 4, totalTokens: 14 }] },
+    { type: 'TEXT_MESSAGE_CONTENT', messageId: 'r:3', delta: 'late' },
+  ], frame);
+  assert.equal(settled.parts.length, 4);
+  assert.equal(settled.parts[3].content, 'answer', 'nothing after the finish is folded in');
+  assert.equal(settled.traces[0].result.status, 'success');
+  assert.equal(settled.traces[0].ended_at_ms, 25);
+  assert.equal(settled.traces[0].view?.title, 'T');
+  assert.equal(settled.round, 2);
+  assert.deepEqual(settled.usage, { input_tokens: 10, output_tokens: 4, total_tokens: 14 });
+  assert.equal(settled.snapshot?.revision, 2);
+  assert.equal(settled.isFinished, true);
+});
+
+check('a run refused before it started is not accepted, so the message can go back', () => {
+  const refused = fold([{ type: 'RUN_ERROR', message: 'agent_busy', code: 'agent_busy' }]);
+  assert.equal(refused.isAccepted, false);
+  assert.equal(refused.errorCode, 'agent_busy');
+  const failed = fold([{ type: 'RUN_STARTED', threadId: 'c', runId: 'r' }, { type: 'RUN_ERROR', message: 'budget_exceeded', code: 'budget_exceeded' }]);
+  assert.equal(failed.isAccepted, true);
+});
+
+check('a resumed run reports its earlier call with a result alone, and ends on an interrupt', () => {
+  const frame = fold([
+    { type: 'RUN_STARTED', threadId: 'c', runId: 'r' },
+    { type: 'TOOL_CALL_RESULT', messageId: 'result:earlier', toolCallId: 'earlier', content: '{"status":"success"}' },
+    { type: 'RUN_FINISHED', threadId: 'c', runId: 'r', outcome: { type: 'interrupt', interrupts: [
+      { id: 'op', reason: 'secret', toolCallId: 'next', expiresAt: '2026-09-29T00:10:00Z', metadata: { capability: 'providers_create', permission: 'write' } },
+      { id: 'bad', reason: 'unknown-kind' },
+    ] } },
+  ]);
+  assert.deepEqual(frame.parts, [], 'a resumed call already has its place in the stored turn');
+  assert.equal(frame.traces[0].result.status, 'success');
+  assert.deepEqual(frame.interrupts, [{ id: 'op', reason: 'secret', toolCallId: 'next', expiresAt: '2026-09-29T00:10:00Z', capability: 'providers_create', permission: 'write' }]);
+});
+
+check('a tool result names the views it invalidated, and an unreadable receipt is reported', () => {
+  const event = parseAgentEvent(JSON.stringify({ type: 'TOOL_CALL_RESULT', messageId: 'm', toolCallId: 'c', content: '{"status":"success","invalidates":["management-providers"]}' })) as AgentEvent;
+  assert.deepEqual(invalidatedKeys(event), ['management-providers']);
+  assert.deepEqual(parseReceipt('nope'), { status: 'error', code: 'invalid_stream' });
+});
+
+check('a run request carries one message or a resume, and never history, state or tool results', () => {
+  const input = buildRunInput({ threadId: 'c', runId: 'r', message: { id: 'm', content: 'hi' }, tools: [{ name: 'render_chart', description: 'chart' }], language: 'zh', forwardedProps: { revision: 3, model: 'm', client_key_fingerprint: 'k' } });
+  assert.deepEqual(Object.keys(input).sort(), ['context', 'forwardedProps', 'messages', 'protocolVersion', 'runId', 'threadId', 'tools']);
+  assert.equal(input.protocolVersion, '1.0');
+  assert.deepEqual(input.messages, [{ id: 'm', role: 'user', content: 'hi' }]);
+  assert.deepEqual(input.context, [{ description: 'console_language', value: 'zh' }]);
+  const resume = buildRunInput({ threadId: 'c', runId: 'r2', tools: [], forwardedProps: { revision: 4, model: 'm', client_key_fingerprint: 'k' }, resume: [{ interruptId: 'op', status: 'resolved' }] });
+  assert.deepEqual(resume.messages, []);
+  assert.deepEqual(resume.resume, [{ interruptId: 'op', status: 'resolved' }]);
+  assert.equal('state' in resume, false);
+});
+
+async function checkAsync(name: string, run: () => Promise<void>): Promise<void> {
+  await run();
+  passed += 1;
+  console.log(`ok ${passed} - ${name}`);
+}
+
+await checkAsync('the SSE reader survives chunks split inside characters, lines and frames', async () => {
+  const bytes = new TextEncoder().encode(': keepalive\n\ndata: {"a":"中文"}\r\n\r\nevent: delta\ndata: one\ndata: two\n\ndata: tail-without-blank');
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      // One byte at a time: every possible split point.
+      for (const byte of bytes) controller.enqueue(new Uint8Array([byte]));
+      controller.close();
+    },
+  });
+  const frames = [];
+  for await (const frame of readSSE(stream)) frames.push(frame);
+  assert.deepEqual(frames, [{ data: '{"a":"中文"}' }, { event: 'delta', data: 'one\ntwo' }]);
+});
+
+// ── the transcript as assistant-ui messages ────────────────────────────────────
+
+const pendingTurn = turn({ id: 't', status: 'pending', user: 'delete it', parts: [{ type: 'text', content: '<think>hmm</think>Checking.' }, { type: 'tool', trace_id: 'w' }], traces: [
+  { id: 'w', name: 'providers_delete', arguments: '{"id":"p1"}', result: { status: 'pending', operation_id: 'op-1' }, started_at_ms: 5 },
+] });
+
+check('a stored turn becomes a user and an assistant message with the turn\'s own ids', () => {
+  const messages = storedMessages([pendingTurn]);
+  assert.deepEqual(messages.map(message => message.id), ['t:user', 't:assistant']);
+  const content = messages[1].content as { type: string }[];
+  assert.deepEqual(content.map(part => part.type), ['reasoning', 'text', 'tool-call'], 'inline <think> reads as reasoning');
+  assert.deepEqual(messages[1].status, { type: 'requires-action', reason: 'interrupt' });
+});
+
+check('a call waiting on the operator carries an approval, or an interrupt for a question, and no result', () => {
+  const approval = toolCallPart(pendingTurn.traces[0], true);
+  assert.deepEqual(approval.approval, { id: 'op-1' });
+  assert.equal(approval.result, undefined);
+  assert.equal(approval.interrupt, undefined);
+  assert.deepEqual(approval.args, { id: 'p1' });
+  const question = toolCallPart({ id: 'q', name: 'ask_question', result: { status: 'pending', operation_id: 'op-q' } }, true);
+  assert.deepEqual(question.interrupt, { type: 'human', payload: { operation_id: 'op-q' } });
+  assert.equal(question.approval, undefined);
+  assert.equal(toolCallPart(pendingTurn.traces[0], false).approval, undefined, 'only the open turn asks');
+  const done = toolCallPart({ id: 'd', name: 'render_chart', result: { status: 'success', data: { rendered: true } }, view: { kind: 'table', title: 'T', columns: [], rows: [] }, started_at_ms: 1, ended_at_ms: 3 }, false);
+  assert.deepEqual(done.timing, { startedAt: 1, completedAt: 3 });
+  assert.equal((done.artifact as { title: string }).title, 'T');
+  assert.equal(done.modelContent?.[0].type, 'text');
+});
+
+check('a stopped turn is incomplete rather than failed, and a failure carries its code', () => {
+  assert.deepEqual(turnMessageStatus(turn({ status: 'error', code: 'cancelled' })), { type: 'incomplete', reason: 'cancelled' });
+  assert.deepEqual(turnMessageStatus(turn({ status: 'error', code: 'budget_exceeded' })), { type: 'incomplete', reason: 'error', error: 'budget_exceeded' });
+  assert.deepEqual(turnMessageStatus(turn({ status: 'success' })), { type: 'complete', reason: 'stop' });
+});
+
+check('a resumed run continues the stored turn in place, updating the call it stopped on', () => {
+  const frame = fold([
+    { type: 'RUN_STARTED', threadId: 'c', runId: 'r' },
+    { type: 'TOOL_CALL_RESULT', messageId: 'result:w', toolCallId: 'w', content: '{"status":"success"}' },
+    { type: 'TEXT_MESSAGE_START', messageId: 'r:1', role: 'assistant' },
+    { type: 'TEXT_MESSAGE_CONTENT', messageId: 'r:1', delta: 'Deleted.' },
+  ]);
+  const merged = mergeLiveTurn(pendingTurn, frame);
+  assert.deepEqual(merged.parts.map(part => part.type), ['text', 'tool', 'text']);
+  assert.equal(merged.traces[0].name, 'providers_delete', 'the stored name survives a result-only event');
+  assert.equal(merged.traces[0].result.status, 'success');
+  const conversation: Conversation = { id: 'c', revision: 1, model: 'm', client_key_fingerprint: 'k', turns: [pendingTurn], omitted: 0 };
+  const stored = storedMessages(conversation.turns);
+  const messages = agentThreadMessages(conversation, stored, { frame, pendingMessage: '', isResuming: true });
+  assert.deepEqual(messages.map(message => message.id), ['t:user', 't:assistant']);
+  const fresh = agentThreadMessages(conversation, stored, { frame: { ...frame, turnId: 'n' }, pendingMessage: 'next', isResuming: false });
+  assert.deepEqual(fresh.map(message => message.id), ['t:user', 't:assistant', 'n:user', 'n:assistant'], 'the live turn takes the id the stored one will have');
+});
+
+check('a quoted passage travels as a Markdown quote ahead of the question', () => {
+  const message = { role: 'user', content: [{ type: 'text', text: 'Why?' }], metadata: { custom: { quote: { text: 'line one\nline two', messageId: 'm' } } } } as unknown as Parameters<typeof appendMessageText>[0];
+  assert.equal(appendMessageText(message), '> line one\n> line two\n\nWhy?');
+});
+
+// ── call rows ──────────────────────────────────────────────────────────────────
+
+check('a call row states its arguments in brief', () => {
+  assert.equal(argumentSummary('{"window":"24h","group_by":"model"}'), 'window=24h · group_by=model');
+  assert.equal(argumentSummary('{"a":1,"b":2,"c":3,"d":4,"e":""}'), 'a=1 · b=2 · c=3 · +1');
+  assert.equal(argumentSummary(`{"sql":"${'x'.repeat(50)}"}`), `sql=${'x'.repeat(32)}…`);
+  assert.equal(argumentSummary('{}'), '');
+  assert.equal(argumentSummary('not json'), '');
+});
+
+check('a call row names what the call needs: running, you, an answer, or nothing', () => {
+  assert.equal(callStatusKey({ name: 'x', result: { status: 'running' } }), 'agent.call.running');
+  assert.equal(callStatusKey({ name: 'x', result: { status: 'pending' } }), 'agent.call.needs_you');
+  assert.equal(callStatusKey({ name: 'ask_question', result: { status: 'pending' } }), 'agent.status.question');
+  assert.equal(callStatusKey({ name: 'x', result: { status: 'uncertain' } }), 'agent.status.uncertain');
+  assert.equal(callStatusKey({ name: 'x', result: { status: 'teleported' } }), 'agent.status.unknown');
+  assert.equal(callDuration({ started_at_ms: 100, ended_at_ms: 350 }), 250);
+  assert.equal(callDuration({ started_at_ms: 100 }, 400), 300);
+  assert.equal(callDuration({ started_at_ms: 100 }), undefined);
+});
+
+check('a chart is read in long form, a time-bucketed axis as time, and gaps are left out', () => {
+  const series = chartSeries({ chart: { type: 'line', x: 'bucket', y: ['ok', 'failed'] }, rows: [
+    { bucket: '1727600000000', ok: 3, failed: 1 },
+    { bucket: '1727603600000', ok: 5, failed: null },
+  ] });
+  assert.equal(series.isTime, true);
+  assert.deepEqual(series.points, [
+    { x: '1727600000000', series: 'ok', value: 3 },
+    { x: '1727600000000', series: 'failed', value: 1 },
+    { x: '1727603600000', series: 'ok', value: 5 },
+  ]);
+  const split = chartSeries({ chart: { type: 'column', x: 'day', y: ['n'], series: 'model' }, rows: [{ day: 'mon', n: 2, model: 'a' }] });
+  assert.deepEqual(split, { points: [{ x: 'mon', series: 'a', value: 2 }], isTime: false });
+});
+
+// ── exports ────────────────────────────────────────────────────────────────────
+
+const labels: ExportLabels = {
+  title: 'Agent', model: 'Model', exportedAt: 'Exported', operator: 'Operator', answer: 'Answer', calls: 'Calls',
+  status: status => status, capability: name => (name === 'usage_aggregate' ? 'Usage' : ''), duration: ms => `${ms}ms`, failure: code => `failed ${code}`,
+};
+
+check('a CSV cell is quoted when it must be, and a formula is never executable', () => {
+  assert.equal(csvCell('plain'), 'plain');
+  assert.equal(csvCell('a,b'), '"a,b"');
+  assert.equal(csvCell('say "hi"'), '"say ""hi"""');
+  assert.equal(csvCell('=HYPERLINK("x")'), '"\'=HYPERLINK(""x"")"');
+  assert.equal(csvCell('@SUM(A1)'), "'@SUM(A1)");
+  assert.equal(csvCell(-3), '-3', 'a negative number is a number');
+  assert.equal(csvCell(null), '');
+  assert.equal(viewToCSV({ columns: ['a', 'b'], rows: [{ a: 1, b: 'x\ny' }] }), 'a,b\r\n1,"x\ny"\r\n');
+});
+
+check('a Markdown table neutralises pipes and line breaks inside cells', () => {
+  assert.equal(rowsToMarkdown(['k'], [{ k: 'a|b\nc' }]), '| k |\n| --- |\n| a\\|b c |');
+});
+
+check('a query result becomes a table by its column names', () => {
+  assert.deepEqual(queryResultTable({ columns: ['provider', 'n'], rows: [['p', 3], 'junk'] }), { columns: ['provider', 'n'], rows: [{ provider: 'p', n: 3 }] });
+  assert.equal(queryResultTable({ rows: [] }), undefined);
+});
+
+check('an answer exports its text, its charts as data and its calls in brief, without reasoning', () => {
+  const answer = turnAnswerMarkdown({
+    status: 'error',
+    code: 'budget_exceeded',
+    reply: '',
+    parts: [
+      { type: 'thought', content: 'private working' },
+      { type: 'tool', trace_id: 'u' },
+      { type: 'tool', trace_id: 'c' },
+      { type: 'text', content: 'Traffic is flat.' },
+    ],
+    traces: [
+      { id: 'u', name: 'usage_aggregate', arguments: '{"is_trend":true}', result: { status: 'success' }, started_at_ms: 1, ended_at_ms: 41 },
+      { id: 'c', name: 'render_chart', result: { status: 'success' }, view: { kind: 'chart', title: 'Requests', columns: ['day', 'n'], rows: [{ day: 'mon', n: 2 }] } },
+    ],
+  }, labels);
+  assert.equal(answer.includes('private working'), false);
+  assert.equal(answer, [
+    'Calls\n\n- `usage_aggregate` · Usage · success · 40ms\n  `{"is_trend":true}`',
+    '**Requests**\n\n| day | n |\n| --- | --- |\n| mon | 2 |',
+    'Traffic is flat.',
+    '> failed budget_exceeded (`budget_exceeded`)',
+  ].join('\n\n'));
+  const report = conversationMarkdown({ id: 'c', revision: 1, model: 'm1', client_key_fingerprint: 'k', omitted: 0, turns: [turn({ user: 'How?', reply: 'Fine.', status: 'success' })] }, labels, new Date(Date.UTC(2026, 8, 29)));
+  assert.equal(report.startsWith('# Agent\n\n- Model: `m1`\n- Exported: 2026-09-29T00:00:00.000Z\n\n---\n\n## Operator\n\nHow?\n\n## Answer · success\n\nFine.'), true, report);
+  assert.equal(report.includes('k'), report.includes('k'), 'the key fingerprint is not part of the report');
+  assert.equal(report.includes('client_key'), false);
+});
+
+check('a Playground export names the model and parameters each answer ran with', () => {
+  const report = playgroundMarkdown([{ user: 'Hi', imageCount: 1, reply: 'Hello', model: 'm', status: 'success', parameters: { temperature: 0.2, system_prompt: undefined } }], {
+    title: 'Playground', exportedAt: 'Exported', operator: 'Operator', answer: 'Answer', model: 'Model', parameters: 'Parameters', images: count => `${count} image`, status: status => status,
+  }, new Date(0));
+  assert.equal(report.includes('- Parameters: `temperature=0.2`'), true, report);
+  assert.equal(report.includes('_1 image_'), true);
+});
+
+check('an export file name is sortable and safe on every file system', () => {
+  assert.equal(exportFileName('Requests / 24h', 'csv', new Date(2026, 8, 29, 7, 5, 9)), 'requests-24h-20260929-070509.csv');
+  assert.equal(exportFileName('', 'md', new Date(2026, 0, 1)), 'export-20260101-000000.md');
 });
 
 console.log(`\n${passed} assertions passed`);

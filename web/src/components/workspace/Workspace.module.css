@@ -132,12 +132,12 @@
 .transcript {
   flex: 1;
   min-height: 0;
-}
-
-/* The transcript scrolls vertically only. A code block or a table scrolls sideways inside its own
-   frame; if anything else ever outgrows the column, it is clipped rather than letting a sideways
-   swipe drag the whole conversation off the screen on a touch device. */
-.transcript :global(.ant-bubble-list-scroll-box) {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  /* The transcript scrolls vertically only. A code block or a table scrolls sideways inside its own
+     frame; if anything else ever outgrows the column, it is clipped rather than letting a sideways
+     swipe drag the whole conversation off the screen on a touch device. */
   overflow-x: hidden;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
@@ -145,58 +145,41 @@
 
 /* The reading column. The scroll box stays full width so its scrollbar sits at the edge of the
    pane, and the messages centre inside it. */
-.transcript :global(.ant-bubble-list-scroll-content) {
+.transcript-column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
   width: 100%;
   max-width: calc(var(--workspace-column) + 48px);
   margin: 0 auto;
   padding: 24px 24px 16px;
   box-sizing: border-box;
-  gap: 20px;
 }
 
-.transcript :global(.ant-bubble) {
+.transcript-column:empty {
+  display: none;
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
   gap: 6px;
-}
-
-.transcript :global(.ant-bubble-content) {
+  min-width: 0;
   font-size: 14px;
   line-height: 1.65;
-  min-width: 0;
-  max-width: 100%;
 }
 
-.transcript :global(.ant-bubble-end .ant-bubble-body) {
+.message[data-role='user'] {
+  align-items: flex-end;
+}
+
+.user-bubble {
   max-width: min(80%, 640px);
-}
-
-.transcript :global(.ant-bubble-end .ant-bubble-content) {
-  max-width: 100%;
   padding: 10px 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--fg);
-}
-
-.transcript :global(.ant-bubble-start) {
-  width: 100%;
-}
-
-.transcript :global(.ant-bubble-start .ant-bubble-body) {
-  width: 100%;
-  min-width: 0;
-}
-
-.transcript :global(.ant-bubble-start .ant-bubble-content) {
-  width: 100%;
-  padding: 0;
-  background: transparent;
-}
-
-.transcript :global(.ant-bubble-header),
-.transcript :global(.ant-bubble-footer) {
-  width: 100%;
-  margin: 0;
 }
 
 .latest {
@@ -224,6 +207,11 @@
 .latest:hover {
   color: var(--fg);
   border-color: var(--muted);
+}
+
+/* The primitive disables "back to latest" while the reader is already there. */
+.latest:disabled {
+  display: none;
 }
 
 @keyframes workspace-rise {
@@ -345,17 +333,35 @@
   font-size: 12px;
 }
 
-.reasoning :global(.ant-think-status-wrapper) {
-  color: var(--muted);
-  font-size: 12px;
+.reasoning-toggle {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color var(--motion-fast);
 }
 
-.reasoning :global(.ant-think-status-wrapper:hover) {
+.reasoning-toggle:hover,
+.is-thinking .reasoning-toggle {
   color: var(--fg-2);
 }
 
-.reasoning :global(.ant-think-content) {
+.reasoning-caret {
+  font-size: 10px;
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+
+[aria-expanded='true'] > .reasoning-caret {
+  transform: rotate(90deg);
+}
+
+.reasoning-body {
   margin-top: 6px;
   padding: 2px 0 2px 12px;
   border-left: 1px solid var(--border);
@@ -641,49 +647,136 @@
   box-sizing: border-box;
 }
 
-.sender {
+.composer-frame {
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface);
-  box-shadow: none;
   transition: border-color var(--motion-fast);
 }
 
-.sender:hover {
+.composer-frame:hover {
   border-color: var(--muted);
 }
 
-.sender:focus-within {
+.composer-frame:focus-within {
   border-color: var(--accent);
 }
 
-.sender :global(.ant-sender-content) {
+.composer-body {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
   padding: 12px 12px 4px 14px;
 }
 
-.sender :global(textarea) {
+.composer-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
   font-family: var(--font-mono);
   font-size: 14px;
   line-height: 1.6;
   color: var(--fg);
 }
 
-.sender :global(textarea:focus-visible) {
+.composer-input:focus-visible {
   /* The frame's accent border is the focus mark; the console's global ring would draw a second one
      inside it. */
   box-shadow: none !important;
 }
 
-.sender :global(textarea::placeholder) {
+.composer-input::placeholder {
   color: var(--muted);
 }
 
-.sender :global(.ant-sender-header) {
-  border-bottom: 1px solid var(--border-soft);
+.composer-input:disabled {
+  cursor: not-allowed;
+  color: var(--muted);
 }
 
-.sender :global(.ant-sender-footer) {
-  padding: 4px 8px 8px 12px;
+.composer-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.dropzone {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 12px;
+}
+
+.dropzone:has(.attachment) {
+  padding-top: 10px;
+}
+
+.dropzone[data-dragging='true'] {
+  outline: 1px dashed var(--accent);
+  outline-offset: -4px;
+  min-height: 48px;
+}
+
+.attachment {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  max-width: 180px;
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.attachment img {
+  display: block;
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+}
+
+.attachment-remove:global(.ant-btn) {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  background: var(--elevated);
+}
+
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 4px 4px 4px 10px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--fg-2);
+}
+
+.queue-label {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.queue-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .composer-foot {
@@ -691,6 +784,7 @@
   align-items: center;
   gap: 8px;
   min-height: 32px;
+  padding: 4px 8px 8px 12px;
   font-size: 12px;
   color: var(--muted);
 }
@@ -903,21 +997,18 @@
   padding-bottom: 8px;
 }
 
-.is-phone .sender :global(.ant-sender-content) {
+.is-phone .composer-body {
   align-items: flex-end;
   padding: 6px 6px 6px 12px;
 }
 
-.is-phone .sender :global(textarea) {
+.is-phone .composer-input {
   line-height: 1.5;
-}
-
-.is-phone .sender :global(.ant-sender-footer) {
-  padding: 0 8px 4px;
 }
 
 .is-phone .composer-foot {
   min-height: 28px;
+  padding: 0 8px 4px;
 }
 
 .is-phone .composer-note {
@@ -961,7 +1052,7 @@
     padding-right: 12px;
   }
 
-  .transcript :global(.ant-bubble-list-scroll-content) {
+  .transcript-column {
     padding: 16px 12px 12px;
   }
 
@@ -980,14 +1071,8 @@
     padding-top: 24px;
   }
 
-  .transcript :global(.ant-bubble-end .ant-bubble-body) {
+  .user-bubble {
     max-width: 88%;
-  }
-
-  /* Bubble List keeps 15% of the row free beside an answer, which on a phone is a fifth of the
-     screen that a code block or a table then has to scroll for. */
-  .transcript :global(.ant-bubble.ant-bubble-start:not(.ant-bubble-divider):not(.ant-bubble-system)) {
-    padding-inline-end: 0;
   }
 }
 

@@ -1,15 +1,24 @@
 import React from 'react';
-import { Drawer } from 'antd';
+import { Drawer, Tabs } from 'antd';
 import { clsx } from 'clsx';
 import { useIsNarrowViewport } from '../../hooks/useIsNarrowViewport';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { useResizablePanel } from './useResizablePanel';
 import styles from './Workspace.module.css';
 
+/** One tab of the side panel; the panel is where a workspace's secondary views register. */
+export interface WorkspaceAsideTab {
+  key: string;
+  label: string;
+  content: React.ReactNode;
+}
+
 export interface WorkspaceAside {
   /** Names the panel for assistive technology, and titles the Drawer it becomes on a phone. */
   title: string;
-  content: React.ReactNode;
+  tabs: WorkspaceAsideTab[];
+  activeTab: string;
+  onTabChange: (key: string) => void;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   resizeLabel: string;
@@ -31,7 +40,9 @@ export interface WorkspaceLayoutProps {
 
 /**
  * The frame both conversation workspaces share: a head carrying the title, the target and the
- * page actions; a main column the page fills with its conversation; and a resizable side panel.
+ * page actions; a main column the page fills with its conversation; and a resizable, tabbed side
+ * panel - the extension slot for views beside the conversation (a directory, call details,
+ * parameters), each registered as a tab rather than wired into the page.
  *
  * The frame spans the whole content area rather than the 1440px page column, for the same reason
  * the configuration workbench does: the head's rule and the panel's left edge are anchored to the
@@ -51,6 +62,16 @@ export function WorkspaceLayout({ testId, title, target, actions, notices, aside
   const { onOpenChange } = aside;
   const close = React.useCallback(() => onOpenChange(false), [onOpenChange]);
   useOverlayHistory({ isOpen: isNarrow && aside.isOpen, onClose: close });
+  // One tab needs no tab strip; several are Ant Design tabs, so the panel reads like every other
+  // tabbed surface of the console.
+  const content = aside.tabs.length === 1 ? aside.tabs[0].content : (
+    <Tabs
+      className={styles['panel-tabs']}
+      activeKey={aside.activeTab}
+      onChange={aside.onTabChange}
+      items={aside.tabs.map(tab => ({ key: tab.key, label: tab.label, children: tab.content }))}
+    />
+  );
 
   return (
     <div className={styles['workspace']} data-testid={testId}>
@@ -73,7 +94,7 @@ export function WorkspaceLayout({ testId, title, target, actions, notices, aside
               style={{ width: panel.width }}
               aria-label={aside.title}
             >
-              {aside.content}
+              {content}
             </aside>
           </>
         )}
@@ -87,7 +108,7 @@ export function WorkspaceLayout({ testId, title, target, actions, notices, aside
           size="min(400px, 92vw)"
           className={styles['drawer']}
         >
-          {aside.content}
+          {content}
         </Drawer>
       )}
     </div>

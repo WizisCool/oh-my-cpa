@@ -38,6 +38,8 @@ export function createIcon(LucideComponent: LucideIcon, defaultClassName?: strin
   return IconComponent;
 }
 
+const SpinningLoader = createIcon(Lucide.LoaderCircle, 'anticon-loading');
+
 export const ApiOutlined = createIcon(Lucide.Plug, 'anticon-api');
 export const AppstoreOutlined = createIcon(Lucide.LayoutGrid, 'anticon-appstore');
 export const ArrowDownOutlined = createIcon(Lucide.ArrowDown, 'anticon-arrow-down');
@@ -79,6 +81,7 @@ export const ExperimentOutlined = createIcon(Lucide.FlaskConical, 'anticon-exper
 export const EyeInvisibleOutlined = createIcon(Lucide.EyeOff, 'anticon-eye-invisible');
 export const EyeOutlined = createIcon(Lucide.Eye, 'anticon-eye');
 export const FieldTimeOutlined = createIcon(Lucide.Timer, 'anticon-field-time');
+export const FileTextOutlined = createIcon(Lucide.FileText, 'anticon-file-text');
 export const FilterOutlined = createIcon(Lucide.Filter, 'anticon-filter');
 export const FireOutlined = createIcon(Lucide.Flame, 'anticon-fire');
 export const FormatPainterOutlined = createIcon(Lucide.Paintbrush, 'anticon-format-painter');
@@ -90,7 +93,9 @@ export const InfoCircleOutlined = createIcon(Lucide.Info, 'anticon-info-circle')
 export const KeyOutlined = createIcon(Lucide.Key, 'anticon-key');
 export const LayoutOutlined = createIcon(Lucide.PanelRight, 'anticon-layout');
 export const LeftOutlined = createIcon(Lucide.ChevronLeft, 'anticon-left');
+export const LineChartOutlined = createIcon(Lucide.ChartLine, 'anticon-line-chart');
 export const LinkOutlined = createIcon(Lucide.Link, 'anticon-link');
+export const LoadingOutlined = (props: AntdIconProps) => <SpinningLoader spin {...props} />;
 export const LockOutlined = createIcon(Lucide.Lock, 'anticon-lock');
 export const LoginOutlined = createIcon(Lucide.LogIn, 'anticon-login');
 export const LogoutOutlined = createIcon(Lucide.LogOut, 'anticon-logout');
@@ -107,6 +112,7 @@ export const PlayCircleOutlined = createIcon(Lucide.PlayCircle, 'anticon-play-ci
 export const PlusOutlined = createIcon(Lucide.Plus, 'anticon-plus');
 export const ProfileOutlined = createIcon(Lucide.FileText, 'anticon-profile');
 export const QuestionCircleOutlined = createIcon(Lucide.HelpCircle, 'anticon-question-circle');
+export const QuoteOutlined = createIcon(Lucide.TextQuote, 'anticon-quote');
 export const ReloadOutlined = createIcon(Lucide.RotateCw, 'anticon-reload');
 export const RightOutlined = createIcon(Lucide.ChevronRight, 'anticon-right');
 export const RobotOutlined = createIcon(Lucide.Bot, 'anticon-robot');
@@ -120,6 +126,7 @@ export const SlidersOutlined = createIcon(Lucide.SlidersHorizontal, 'anticon-sli
 export const StopOutlined = createIcon(Lucide.Square, 'anticon-stop');
 export const SunOutlined = createIcon(Lucide.Sun, 'anticon-sun');
 export const SyncOutlined = createIcon(Lucide.RefreshCw, 'anticon-sync');
+export const TableOutlined = createIcon(Lucide.Table2, 'anticon-table');
 export const TagOutlined = createIcon(Lucide.Tag, 'anticon-tag');
 export const ThunderboltFilled = createIcon(Lucide.Zap, 'anticon-thunderbolt');
 export const ThunderboltOutlined = createIcon(Lucide.Zap, 'anticon-thunderbolt');

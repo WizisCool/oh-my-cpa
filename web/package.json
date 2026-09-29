@@ -10,10 +10,11 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@ag-ui/core": "1.0.0",
     "@ant-design/charts": "2.6.7",
     "@ant-design/x": "2.9.0",
     "@ant-design/x-markdown": "2.9.0",
-    "@ant-design/x-sdk": "2.9.0",
+    "@assistant-ui/react": "0.15.22",
     "@monaco-editor/react": "^4.7.0",
     "@number-flow/react": "0.6.2",
     "@tanstack/react-query": "^5.66.0",

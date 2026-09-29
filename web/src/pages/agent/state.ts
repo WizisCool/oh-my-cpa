@@ -2,56 +2,10 @@ import { getTimeZone } from '../../utils/time';
 import type { Lang } from '../../i18n/language';
 import { languageLocale } from '../../i18n/language';
 
-/** The executor envelope a capability returns, as the agent sees it. */
-export interface CapabilityReceipt {
-  status: string;
-  code?: string;
-  /** What to change, for a refusal its author can act on - a query naming an unreadable column. */
-  detail?: string;
-  data?: unknown;
-  operation_id?: string;
-  invalidates?: string[];
-}
-
-export interface Trace {
-  id: string;
-  name: string;
-  result: CapabilityReceipt;
-}
-
-/**
- * One step of a turn in the order the model produced it: reasoning, answer text, or a capability
- * call named by its trace. A model may reason, answer, call tools and answer again in one turn.
- */
-export interface TurnPart {
-  type: 'thought' | 'text' | 'tool';
-  content?: string;
-  trace_id?: string;
-}
-
-export interface Turn {
-  id: string;
-  user: string;
-  /** Every round's answer text as one document, which is what copying the answer takes. */
-  reply: string;
-  parts?: TurnPart[];
-  status: string;
-  code?: string;
-  traces: Trace[];
-  started_at_ms?: number;
-  ended_at_ms?: number;
-}
-
-export interface Conversation {
-  id: string;
-  revision: number;
-  model: string;
-  client_key_fingerprint: string;
-  reasoning_effort?: string;
-  turns: Turn[];
-  omitted: number;
-  anchor_ms?: number;
-}
+export type {
+  AgentInterrupt, CapabilityReceipt, Conversation, DisplayView, InterruptReason, Trace, Turn, TurnPart, TurnUsage,
+} from '../../agent/types';
+import type { CapabilityReceipt, Conversation, DisplayView, Trace, Turn, TurnPart } from '../../agent/types';
 
 export interface Operation {
   id: string;
@@ -170,16 +124,6 @@ export interface Capability {
   version: number;
 }
 
-/** A frame of the `/agent/run` stream. */
-export interface RunEvent {
-  type: string;
-  content?: string;
-  /** The model call a text or reasoning event belongs to; a new call starts a new part. */
-  round?: number;
-  trace?: Trace;
-  conversation?: Conversation;
-}
-
 /**
  * The statuses a turn can legitimately carry.
  *
@@ -245,31 +189,6 @@ export function statusTone(status: string, code?: string): 'success' | 'processi
       return 'error';
     default:
       return 'default';
-  }
-}
-
-/**
- * The Ant Design X chain status a capability result is drawn with, or `undefined` for the states
- * the chain has no mark for.
- *
- * The chain knows running, succeeded, failed and aborted. A call waiting for approval, and one
- * whose outcome is partial, expired or unconfirmed, is none of those - drawing it as "loading"
- * would claim work is happening and drawing it as "error" would claim it failed - so those steps
- * carry their own attention mark instead.
- */
-export function traceChainStatus(status: string): 'loading' | 'success' | 'error' | 'abort' | undefined {
-  switch (status) {
-    case 'success':
-      return 'success';
-    case 'running':
-    case 'executing':
-      return 'loading';
-    case 'error':
-      return 'error';
-    case 'rejected':
-      return 'abort';
-    default:
-      return undefined;
   }
 }
 
@@ -352,24 +271,6 @@ export function failureKey(code: string): string {
 }
 
 /**
- * Extends a turn's parts with streamed text or reasoning, exactly as the server records them: the
- * same kind of output from the same model call grows the last part, anything else starts a new one.
- * Returns a new array so a memoised view sees the change.
- */
-export function appendStreamPart(parts: TurnPart[], type: 'thought' | 'text', content: string, isNewRound: boolean): TurnPart[] {
-  const last = parts.at(-1);
-  if (last && !isNewRound && last.type === type) {
-    return [...parts.slice(0, -1), { ...last, content: (last.content ?? '') + content }];
-  }
-  return [...parts, { type, content }];
-}
-
-/** Records a capability call where it happened; a later result for the same call is not a new step. */
-export function appendToolPart(parts: TurnPart[], traceID: string): TurnPart[] {
-  return parts.some(part => part.type === 'tool' && part.trace_id === traceID) ? parts : [...parts, { type: 'tool', trace_id: traceID }];
-}
-
-/**
  * A stored turn's parts. A turn saved without them - before the order was recorded - is read as
  * its calls followed by its answer, which is the order such a turn was always shown in.
  */
@@ -379,46 +280,6 @@ export function turnParts(turn: Turn): TurnPart[] {
     ...turn.traces.map(trace => ({ type: 'tool' as const, trace_id: trace.id })),
     ...(turn.reply ? [{ type: 'text' as const, content: turn.reply }] : []),
   ];
-}
-
-export type TurnSegment =
-  | { kind: 'thought'; key: string; content: string }
-  | { kind: 'text'; key: string; content: string }
-  | { kind: 'tools'; key: string; traceIDs: string[] };
-
-/**
- * The parts as the transcript draws them: consecutive capability calls become one chain, because a
- * model that calls several capabilities in one round called them together, and everything else
- * stays where it happened. Keys are positional, so a streamed part keeps its component as it grows.
- */
-export function segmentParts(parts: TurnPart[]): TurnSegment[] {
-  const segments: TurnSegment[] = [];
-  parts.forEach((part, index) => {
-    const last = segments.at(-1);
-    if (part.type === 'tool') {
-      if (!part.trace_id) return;
-      if (last?.kind === 'tools') last.traceIDs.push(part.trace_id);
-      else segments.push({ kind: 'tools', key: `tools-${index}`, traceIDs: [part.trace_id] });
-      return;
-    }
-    if (!part.content) return;
-    segments.push({ kind: part.type, key: `${part.type}-${index}`, content: part.content });
-  });
-  return segments;
-}
-
-/** Parses one stream frame, refusing frames this build cannot render. */
-export function parseRunEvent(raw: string): RunEvent | undefined {
-  let value: unknown;
-  try {
-    value = JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
-  if (typeof value !== 'object' || value === null) return undefined;
-  const event = value as RunEvent;
-  if (!['delta', 'thought', 'tool', 'state', 'error'].includes(event.type)) return undefined;
-  return event;
 }
 
 const SUMMARY_FIELDS_MAX = 6;
@@ -517,4 +378,92 @@ export function groupCapabilities(
   return PERMISSION_ORDER
     .map(permission => ({ permission, items: matched.filter(item => item.permission === permission).sort((left, right) => left.name.localeCompare(right.name)) }))
     .filter(group => group.items.length > 0);
+}
+
+const ARGUMENT_SUMMARY_FIELDS = 3;
+const ARGUMENT_SUMMARY_CHARS = 32;
+
+/**
+ * A call's arguments as one short line: the first few top-level fields as `name=value`, each value
+ * clipped. The whole argument text is one click away in the details panel; the row only has to say
+ * which window, which provider, which model.
+ */
+export function argumentSummary(argumentsText: string | undefined): string {
+  if (!argumentsText) return '';
+  let value: unknown;
+  try {
+    value = JSON.parse(argumentsText);
+  } catch {
+    return '';
+  }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return '';
+  const clip = (text: string) => (text.length > ARGUMENT_SUMMARY_CHARS ? `${text.slice(0, ARGUMENT_SUMMARY_CHARS)}…` : text);
+  const fields = Object.entries(value)
+    .filter(([, field]) => field !== null && field !== '' && !(Array.isArray(field) && field.length === 0))
+    .map(([key, field]) => `${key}=${clip(typeof field === 'string' ? field : JSON.stringify(field))}`);
+  const shown = fields.slice(0, ARGUMENT_SUMMARY_FIELDS).join(' · ');
+  return fields.length > ARGUMENT_SUMMARY_FIELDS ? `${shown} · +${fields.length - ARGUMENT_SUMMARY_FIELDS}` : shown;
+}
+
+/**
+ * The label a call row states: running, done, needs you, uncertain, failed. A call waiting on the
+ * agent's question says so rather than "awaiting confirmation", which would send the operator
+ * looking for an approval that is not there.
+ */
+export function callStatusKey(trace: Pick<Trace, 'name' | 'result'>): string {
+  switch (trace.result.status) {
+    case 'running':
+      return 'agent.call.running';
+    case 'pending':
+      return trace.name === ASK_QUESTION ? 'agent.status.question' : 'agent.call.needs_you';
+    case 'success':
+      return 'agent.call.done';
+    default:
+      return isKnownTurnStatus(trace.result.status) ? `agent.status.${trace.result.status}` : 'agent.status.unknown';
+  }
+}
+
+/** How long a call took, or how long it has been running when `nowMS` is given. */
+export function callDuration(trace: Pick<Trace, 'started_at_ms' | 'ended_at_ms'>, nowMS?: number): number | undefined {
+  if (!trace.started_at_ms) return undefined;
+  const end = trace.ended_at_ms ?? nowMS;
+  return end === undefined ? undefined : Math.max(0, end - trace.started_at_ms);
+}
+
+export interface ChartPoint {
+  x: string;
+  series: string;
+  value: number;
+}
+
+/** An epoch in milliseconds from 1973 on: a time-bucket key, not a count. */
+const EPOCH_MS_FLOOR = 1e11;
+
+/**
+ * A frozen chart's rows in long form: one point per x, series and value.
+ *
+ * Several y fields become one series each; a `series` field splits a single y into one series per
+ * value; one y alone is a single unnamed series. An x axis whose every value is an epoch in
+ * milliseconds - the shape a time-bucketed aggregate returns - is read as time. Missing values are
+ * left out rather than drawn as zero, which would invent a dip.
+ */
+export function chartSeries(view: Pick<DisplayView, 'chart' | 'rows'>): { points: ChartPoint[]; isTime: boolean } {
+  const chart = view.chart;
+  if (!chart) return { points: [], isTime: false };
+  const points: ChartPoint[] = [];
+  for (const row of view.rows) {
+    const x = row[chart.x] === null || row[chart.x] === undefined ? '' : String(row[chart.x]);
+    if (chart.series) {
+      const value = row[chart.y[0]];
+      if (typeof value === 'number') points.push({ x, series: String(row[chart.series] ?? ''), value });
+      continue;
+    }
+    for (const field of chart.y) {
+      const value = row[field];
+      if (typeof value === 'number') points.push({ x, series: chart.y.length > 1 ? field : '', value });
+    }
+  }
+  const xs = points.map(point => point.x);
+  const isTime = chart.type !== 'pie' && xs.length > 0 && xs.every(x => /^\d+$/.test(x) && Number(x) >= EPOCH_MS_FLOOR);
+  return { points, isTime };
 }

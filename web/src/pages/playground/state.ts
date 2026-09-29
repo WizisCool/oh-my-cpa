@@ -162,6 +162,17 @@ export function retriedTurn(turn: Turn, id: string, now: number): Turn {
   };
 }
 
+/**
+ * The last turn asked again with its text changed: the same request snapshot - key, model,
+ * parameters, history, and the images that went with the message - with only the message's text
+ * replaced. Editing is a retry with different words, not a new turn after the old one.
+ */
+export function editedTurn(turn: Turn, text: string, id: string, now: number): Turn {
+  const images = turn.user.content.filter(part => part.type === 'image_url');
+  const user: Message = { role: 'user', content: [...(text.trim() ? [{ type: 'text' as const, text }] : []), ...images] };
+  return { ...retriedTurn(turn, id, now), user, request: { ...turn.request, messages: [...turn.request.messages.slice(0, -1), user] } };
+}
+
 /** Whether a stored turn lost an image to storage redaction, so its request can no longer be replayed. */
 export function hasOmittedImage(turn: Turn): boolean {
   return turn.request.messages.some(message => message.content.some(part =>
