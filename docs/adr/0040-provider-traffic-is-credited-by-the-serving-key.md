@@ -53,11 +53,14 @@ label is unusable; the index is an identity.
    provider's own name, and those records carry no key index. That exact label is added
    to the provider's own keys' traffic, for the provider whose `upstream_name` produces
    it.
-3. **Nothing is credited by family, by display name, or by substring.** Family labels
-   belong to the OAuth channel that shares the name; a family match credits a provider
-   with another surface's traffic. A configured provider of one of CPA's API-key families
-   is an API-key provider by construction, and takes the channel's identity only when it
-   is an OpenAI-compatible provider relaying under a channel's name.
+3. **Nothing is credited by family or by display name.** Family labels belong to the OAuth
+   channel that shares the name; a family match credits a provider with another surface's
+   traffic. A configured provider of one of CPA's API-key families is an API-key provider by
+   construction, and takes the channel's identity only through the name CPA carries for it —
+   the name its own requests are labelled with — never through the name the console displays
+   it under, which an operator can override in the browser. A channel row keeps the label
+   match it has always used, including its containment fallback for a channel whose label is
+   spelled differently.
 4. **Every configured provider is its own row.** Two providers left with CPA's default
    name, and two keys of one family, are distinct providers with distinct traffic and
    distinct credentials; neither is merged into the other, and neither is skipped.
@@ -72,7 +75,8 @@ label is unusable; the index is an identity.
    was captured has none, and one whose credential CPA no longer holds keeps the index it was
    served under while no configured provider publishes it — it stays in `credentials[]` under
    that index and is credited to no row. Neither can be claimed by inference: a provider that
-   has one key is not evidence that it served a record with no index.
+   has one key is not evidence that it served a record with no index. These records remain in
+   the window's own totals and in the request list; only the provider rows omit them.
 8. **An index two configured providers both publish is credited to neither.** CPA derives a
    credential's runtime index from the credential itself, so one key entered twice under one
    name resolves to one index. Crediting whichever row comes first would make the number
@@ -107,6 +111,13 @@ label is unusable; the index is an identity.
 - **The dashboard response grew a second list.** `credentials[]` is one entry per key
   that served traffic in the window rather than per provider, so the payload scales with
   both providers and their keys. Each entry is three small fields.
+- **The two halves are only meaningful together.** `credentials[]` is the part of the label
+  rows that the server split out by serving key, so a reader that takes the key rows without
+  the label rows counts the same requests twice; the console reads them from one response and
+  credits keys only when that response's label list is there.
+- **An entry CPA holds without a name is credited to nobody.** Its records carry the shared
+  `openai-compatibility` label, which no single provider can claim, and CPA must name an entry
+  to derive a per-entry label at all. Such a provider's keys still report whatever they served.
 - **The console now depends on a per-key fact, not a per-provider one.** A key that CPA
   reports without an index cannot be credited, and the provider shows only its other
   keys' traffic — the same honest omission as above, at a smaller scale.

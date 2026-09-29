@@ -485,6 +485,55 @@ assert.equal(separatorLabels.find((row) => row.providerId === 'openai-compat-0')
 assert.equal(separatorLabels.find((row) => row.providerId === 'openai-compat-1')?.total, 4, 'DeepSeek keeps its own label traffic');
 console.log('✓ Labels that differ only by separators are credited apart');
 
+// Test 7g: a locally renamed relay does not become the channel it is renamed after
+//
+// The console stores provider names as an operator preference, so `name` may be any string the
+// operator typed while `upstream_name` stays what CPA carries. Deriving the channel identity from the
+// display name let a rename hand a relay the channel's traffic, its credential count and its row.
+const renamedRelay = aggregateProviders({
+  windowProviders: [
+    { id: 'codex', total: 9, success: 7, failure: 2, success_rate: 77.8 },
+    { id: 'myrelay', total: 3, success: 3, failure: 0, success_rate: 100 },
+  ],
+  windowCredentials: [{ auth_index: 'relay-key', total: 2, failure: 1 }],
+  authFilesByType: [{ type: 'codex', count: 2, disabled: 0 }],
+  configuredProviders: [{
+    id: 'openai-compat-0',
+    family: 'openai-compatibility',
+    name: 'CodeX',
+    upstream_name: 'myrelay',
+    protocol: 'OpenAI Chat Completions',
+    auth_indexes: ['relay-key'],
+    disabled: false,
+    key_configured: true,
+  }],
+});
+const relayUnderOwnName = renamedRelay.find((row) => row.providerId === 'openai-compat-0');
+assert.ok(relayUnderOwnName, 'the renamed relay keeps its own row');
+assert.equal(relayUnderOwnName.total, 5, 'the renamed relay is credited with its own label and its own keys, never the channel\'s requests');
+assert.equal(relayUnderOwnName.credentials, 1, 'the renamed relay reports the one key it holds, not the channel\'s files');
+assert.equal(relayUnderOwnName.kind, 'ai_provider', 'a rename does not make the row an OAuth channel');
+const survivingChannel = renamedRelay.find((row) => row.key === 'oauth:codex');
+assert.ok(survivingChannel, 'the channel whose name the relay borrowed keeps its own row');
+assert.equal(survivingChannel.total, 9, 'the channel keeps its own requests');
+console.log('✓ A renamed relay borrows nothing from the channel it is named after');
+
+// Test 7h: key rows without their label list are not credited at all
+//
+// Both halves come from one response because `credentials[]` is the part of the label rows the server
+// split out; taking the keys alone would count those requests twice.
+const keysWithoutLabels = aggregateProviders({
+  overviewProviders: [{ id: 'codex', credentials: 2, success: 5, failure: 2, total: 7, success_rate: 71.4 }],
+  windowCredentials: [{ auth_index: 'key-a', total: 3, failure: 1 }],
+  configuredProviders: [codexFamilyRow('codex-0', 'Codex', 'key-a')],
+});
+assert.equal(
+  keysWithoutLabels.reduce((sum, row) => sum + row.total, 0),
+  7,
+  'the panel never reports more requests than the window holds',
+);
+console.log('✓ Key rows without their label list are ignored');
+
 // Test 8: Summary stats calculation
 const summary = computeProviderSummary(aggregated);
 assert.equal(summary.totalProviders, 6);

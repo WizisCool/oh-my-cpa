@@ -254,9 +254,14 @@ export function aggregateProviders({
   const providerIndexes = (provider: ProviderItem): string[] =>
     provider.auth_indexes?.length ? provider.auth_indexes : provider.auth_index ? [provider.auth_index] : [];
 
+  // The two halves of the windowed read come from one response and are only meaningful together:
+  // `credentials[]` is the part of the label rows that the server split out by serving key, so
+  // crediting keys without those labels would count the same requests twice.
   const credentialTraffic = new Map<string, WindowCredentialTraffic>();
-  for (const credential of windowCredentials) {
-    if (credential.auth_index) credentialTraffic.set(credential.auth_index, credential);
+  if (hasWindowData) {
+    for (const credential of windowCredentials) {
+      if (credential.auth_index) credentialTraffic.set(credential.auth_index, credential);
+    }
   }
 
   const sharedIndexCount = new Map<string, number>();
@@ -364,6 +369,16 @@ export function aggregateProviders({
   };
 
   /**
+   * cpaName is the name CPA itself carries for a provider, and the only name a row may hold an
+   * identity through. An OpenAI-compatible entry's records are labelled with this name, and the
+   * console lets an operator override the display name it shows instead: a rename must not hand a
+   * relay the channel whose name it borrows. CPA names the positional families itself, and only an
+   * OpenAI-compatible entry carries this name in its payload.
+   */
+  const cpaName = (provider: ProviderItem): string =>
+    provider.family === OPENAI_COMPATIBILITY_FAMILY ? (provider.upstream_name || '').trim() : '';
+
+  /**
    * ownedCredentialKeys names the auth-file types a configured provider may take
    * its disabled state from.
    *
@@ -371,17 +386,15 @@ export function aggregateProviders({
    * every auth-file type: matching on the provider's names alone would let an
    * openai-compatibility relay that happens to be called "gemini" read as off
    * while its own key still serves. A `{family}-api-key` provider's family names
-   * the credentials it holds, and a row the console presents as a channel (a
-   * plugin OAuth id, or a channel CPA names itself) holds that channel's files;
-   * no other name of a configured row does.
+   * the credentials it holds, and a row the console presents as a channel holds
+   * that channel's files; no other name of a configured row does.
    */
   const ownedCredentialKeys = (provider: ProviderItem, isOAuth: boolean): string[] => {
     const keys = [normalizeProviderKey(provider.family)];
     if (!isOAuth) return keys;
-    for (const candidate of [provider.upstream_name, provider.name, provider.id]) {
-      if (candidate && isOAuthChannel(candidate, undefined, pluginOAuthIds)) {
-        keys.push(normalizeProviderKey(candidate));
-      }
+    const identity = cpaName(provider);
+    if (identity && isOAuthChannel(identity, undefined, pluginOAuthIds)) {
+      keys.push(normalizeProviderKey(identity));
     }
     return keys;
   };
@@ -409,19 +422,16 @@ export function aggregateProviders({
   //    and skipping the second one on a name collision left it with no row and no traffic at all.
   for (const cp of configuredProviders) {
 
-    const normName = normalizeProviderKey(cp.name);
-    const normUpstream = normalizeProviderKey(cp.upstream_name);
-    const normId = normalizeProviderKey(cp.id);
-
     // A row of one of CPA's API-key families (codex, claude, xai, ...) is an API-key provider by
     // construction, even though several of those family ids also name OAuth channels. Only an
-    // OpenAI-compatible provider can stand for a channel, through the name it relays under.
-    const isOAuth =
-      cp.family === OPENAI_COMPATIBILITY_FAMILY &&
-      (isOAuthChannel(cp.name, undefined, pluginOAuthIds) ||
-        (cp.upstream_name ? isOAuthChannel(cp.upstream_name, undefined, pluginOAuthIds) : false));
+    // OpenAI-compatible provider can stand for a channel, and only through the name CPA carries for
+    // it - the name its requests are labelled with - because the display name is an operator
+    // preference this console stores and can change.
+    const identity = cpaName(cp);
+    const isOAuth = identity !== '' && isOAuthChannel(identity, undefined, pluginOAuthIds);
+    const normIdentity = normalizeProviderKey(identity);
 
-    const meta = isOAuth ? (OAUTH_CHANNEL_META[normId] || OAUTH_CHANNEL_META[normUpstream] || OAUTH_CHANNEL_META[normName]) : undefined;
+    const meta = isOAuth ? OAUTH_CHANNEL_META[normIdentity] : undefined;
     const name = isOAuth && meta ? meta.name : (cp.name || cp.upstream_name || cp.id);
 
     const defaultIcon = isOAuth && meta
@@ -437,30 +447,26 @@ export function aggregateProviders({
     } else if (cp.key_configured || cp.api_key) {
       configuredCreds = 1;
     }
-    const credentials = isOAuth ? resolveCredentials([cp.upstream_name, cp.name, cp.id], configuredCreds) : configuredCreds;
+    const credentials = isOAuth ? resolveCredentials([identity], configuredCreds) : configuredCreds;
     const disabled = cp.disabled || areAllCredentialsDisabled(ownedCredentialKeys(cp, isOAuth));
 
     const traffic = summarizeTraffic(
       takeOwnKeyTraffic(cp),
-      // A row the console presents as a channel keeps the label match channels have always relied on
-      // (which also covers a relay relaying under a channel's name); anything else takes only the
-      // exact label CPA derives from its own name.
-      isOAuth ? resolveTraffic([cp.upstream_name, cp.name, cp.id]) : takeCompatibilityLabelTraffic(cp),
+      // A row CPA names after a channel keeps the label match channel rows have always used (exact
+      // first, then containment for a channel whose label is spelled differently). Anything else
+      // takes only the exact label CPA derives from its own name.
+      isOAuth ? resolveTraffic([identity]) : takeCompatibilityLabelTraffic(cp),
     );
 
-    // A row claims the identities under which its own requests are labelled. An OpenAI-compatible
-    // provider is labelled with its own name (`openai-compatible-<name>`), so it claims that name and
-    // the gateway's label row for it merges into this row instead of rendering a second time. A
+    // A row claims the identities its own requests are labelled with. An OpenAI-compatible provider
+    // is labelled with its own name (`openai-compatible-<name>`), so it claims that name and the
+    // gateway's label row for it merges into this row instead of rendering a second time. A
     // `{family}-api-key` provider is labelled with its family's name, which belongs to the family's
-    // OAuth channel - so it claims nothing: its id or display name merely spelling a channel must not
-    // hide that channel's own row, and the traffic its files served, out of the panel.
-    if (cp.family === OPENAI_COMPATIBILITY_FAMILY) {
-      markClaimed(cp.id, cp.name, cp.upstream_name, normName, normUpstream, normId);
-    }
+    // OAuth channel - so it claims nothing. Never the display name: it is a console preference, and
+    // claiming it would hide the row whose real name it borrows.
+    markClaimed(identity);
 
-    const oauthChannelId = isOAuth
-      ? (OAUTH_CHANNEL_META[normUpstream] ? normUpstream : OAUTH_CHANNEL_META[normName] ? normName : OAUTH_CHANNEL_META[normId] ? normId : (normUpstream || normName || cp.id))
-      : cp.id;
+    const oauthChannelId = isOAuth ? (OAUTH_CHANNEL_META[normIdentity] ? normIdentity : identity) : cp.id;
 
     result.push({
       key: `configured:${cp.id}`,

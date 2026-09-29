@@ -1133,7 +1133,9 @@ the `openai-compatible-<name>` label CPA derives from that provider's own name, 
 row is one the console presents as an OAuth channel, that channel's label as channel rows have
 always been matched. A `{family}-api-key` provider takes neither — not even when its display
 name spells a family — because those records were served by different credentials, and family
-labels belong to the family's OAuth channel.
+labels belong to the family's OAuth channel. Only a name **CPA** carries makes a row a channel:
+the display name is an operator preference the browser can change, so a rename must not hand a
+relay the channel whose name it borrows.
 
 Six properties are load-bearing:
 
