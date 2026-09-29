@@ -68,10 +68,15 @@ label is unusable; the index is an identity.
    index is an opaque identifier CPA assigns to a credential at runtime; it is not key
    material, and ADR 0017 already returns it per request record. The provider DTO carries
    the indexes of the provider's keys so the browser can join without reading any key.
-7. **A record that names no index is credited to nobody.** Records stored before the
-   index was captured, and records whose key has since been deleted, are absent from
-   `credentials[]` and cannot be claimed by inference — a provider that has one key is
-   not evidence that it served a record with no index.
+7. **A record that names no index is credited to nobody.** A record stored before the index
+   was captured has none, and one whose credential CPA no longer holds keeps the index it was
+   served under while no configured provider publishes it — it stays in `credentials[]` under
+   that index and is credited to no row. Neither can be claimed by inference: a provider that
+   has one key is not evidence that it served a record with no index.
+8. **An index two configured providers both publish is credited to neither.** CPA derives a
+   credential's runtime index from the credential itself, so one key entered twice under one
+   name resolves to one index. Crediting whichever row comes first would make the number
+   depend on the order of the provider list.
 
 ## Consequences
 
@@ -94,6 +99,11 @@ label is unusable; the index is an identity.
   alternative — guessing from the family label, the display name, or a provider's only
   key — is systematically wrong in the two cases this decision exists to fix, and a
   number that is confidently wrong is worse than a zero that is honestly narrow.
+- **The panel's first paint is unpartitioned.** While the windowed read is absent — the frame
+  before it arrives, or a partial failure — rows fall back to the overview's label totals, which
+  are not split by serving key, and a channel row then carries its family's mixed total. The
+  windowed read replaces them on arrival; the alternative would be to withhold the only figures
+  available in that state.
 - **The dashboard response grew a second list.** `credentials[]` is one entry per key
   that served traffic in the window rather than per provider, so the payload scales with
   both providers and their keys. Each entry is three small fields.

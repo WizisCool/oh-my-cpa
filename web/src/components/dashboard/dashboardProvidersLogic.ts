@@ -176,35 +176,46 @@ export function aggregateProviders({
     return undefined;
   };
 
-  // 1. Build unified traffic lookup map (windowProviders overrides overviewProviders for the window)
-  const trafficMap = new Map<string, {
+  // 1. Build unified traffic lookup map (windowProviders overrides overviewProviders for the window).
+  //
+  //    Two identities are kept per row, because the label CPA writes is an identity and
+  //    `normalizeProviderKey` is not: that helper strips separators, which would merge the labels of
+  //    two providers named `deep-seek` and `deepseek` - which CPA does label apart. `exactTrafficMap`
+  //    is keyed by the label as the server folded it (lowercased and trimmed, separators kept), and
+  //    is what an OpenAI-compatible row's own label is looked up in. `trafficMap` keeps the
+  //    normalized key for channel rows, including the containment fallback they have always used.
+  type ProviderTrafficEntry = {
+    label: string;
     total: number;
     success: number;
     failure: number;
     successRate: number | null;
-  }>();
-  const consumedTrafficKeys = new Set<string>();
+    consumed: boolean;
+  };
+  const trafficMap = new Map<string, ProviderTrafficEntry>();
+  const exactTrafficMap = new Map<string, ProviderTrafficEntry>();
+
+  /** foldedLabel is the identity the server folds a label to: lowercase, trimmed, prefix removed. */
+  const foldedLabel = (value: string): string => value.toLowerCase().trim().replace(/^openai-compatible-/, '').trim();
+
+  const addTraffic = (id: string, total: number, success: number, failure: number, successRate: number | null): void => {
+    const entry: ProviderTrafficEntry = { label: foldedLabel(id), total, success, failure, successRate, consumed: false };
+    const key = normalizeProviderKey(id);
+    if (!trafficMap.has(key)) trafficMap.set(key, entry);
+    if (entry.label && !exactTrafficMap.has(entry.label)) exactTrafficMap.set(entry.label, entry);
+  };
 
   const hasWindowData = Array.isArray(windowProviders);
   if (hasWindowData) {
     for (const wp of windowProviders!) {
-      const key = normalizeProviderKey(wp.id);
-      trafficMap.set(key, {
-        total: wp.total,
-        success: wp.success,
-        failure: wp.failure,
-        successRate: wp.success_rate,
-      });
+      addTraffic(wp.id, wp.total, wp.success, wp.failure, wp.success_rate);
     }
   } else {
+    // The overview totals are not split by serving key: this path is taken while the windowed read is
+    // absent (first paint, or a partial failure), and its numbers are label totals that still include
+    // the requests API keys answered. The window read replaces them the moment it arrives.
     for (const op of overviewProviders) {
-      const key = normalizeProviderKey(op.id);
-      trafficMap.set(key, {
-        total: op.total,
-        success: op.success,
-        failure: op.failure,
-        successRate: op.success_rate,
-      });
+      addTraffic(op.id, op.total, op.success, op.failure, op.success_rate);
     }
   }
 
@@ -213,10 +224,10 @@ export function aggregateProviders({
     // Exact match first
     for (const candidate of candidateKeys) {
       if (!candidate) continue;
-      const key = normalizeProviderKey(candidate);
-      if (trafficMap.has(key) && !consumedTrafficKeys.has(key)) {
-        consumedTrafficKeys.add(key);
-        return trafficMap.get(key)!;
+      const entry = trafficMap.get(normalizeProviderKey(candidate));
+      if (entry && !entry.consumed) {
+        entry.consumed = true;
+        return entry;
       }
     }
     // Substring / containment match
@@ -224,10 +235,10 @@ export function aggregateProviders({
       if (!candidate) continue;
       const cleanCandidate = normalizeProviderKey(candidate);
       if (!cleanCandidate || cleanCandidate.length < 3) continue;
-      for (const [trafficKey, stats] of trafficMap.entries()) {
-        if (!consumedTrafficKeys.has(trafficKey) && (trafficKey === cleanCandidate || trafficKey.includes(cleanCandidate) || cleanCandidate.includes(trafficKey))) {
-          consumedTrafficKeys.add(trafficKey);
-          return stats;
+      for (const [trafficKey, entry] of trafficMap.entries()) {
+        if (!entry.consumed && (trafficKey === cleanCandidate || trafficKey.includes(cleanCandidate) || cleanCandidate.includes(trafficKey))) {
+          entry.consumed = true;
+          return entry;
         }
       }
     }
@@ -239,23 +250,37 @@ export function aggregateProviders({
     };
   };
 
+  /** providerIndexes is the runtime auth indexes the provider DTO publishes for its own keys. */
+  const providerIndexes = (provider: ProviderItem): string[] =>
+    provider.auth_indexes?.length ? provider.auth_indexes : provider.auth_index ? [provider.auth_index] : [];
+
   const credentialTraffic = new Map<string, WindowCredentialTraffic>();
   for (const credential of windowCredentials) {
     if (credential.auth_index) credentialTraffic.set(credential.auth_index, credential);
   }
 
+  const sharedIndexCount = new Map<string, number>();
+  for (const provider of configuredProviders) {
+    for (const index of providerIndexes(provider)) {
+      sharedIndexCount.set(index, (sharedIndexCount.get(index) ?? 0) + 1);
+    }
+  }
+
   /**
-   * takeOwnKeyTraffic credits a provider with the requests its own keys served, and removes those
-   * indexes from the pool so a second row cannot be credited with them a second time.
+   * takeOwnKeyTraffic credits a provider with the requests its own keys served. An index two configured
+   * providers both publish is an ambiguity, not an ordered claim: CPA derives a credential's runtime
+   * index from the credential itself, so the same key entered twice under one name resolves to one
+   * index. Crediting whichever row comes first would print a number that depends on the order of the
+   * provider list; a record two rows can both claim is credited to neither.
    */
   const takeOwnKeyTraffic = (provider: ProviderItem) => {
-    const indexes = provider.auth_indexes?.length ? provider.auth_indexes : provider.auth_index ? [provider.auth_index] : [];
     let total = 0;
     let failure = 0;
-    for (const index of indexes) {
+    for (const index of providerIndexes(provider)) {
       const credential = credentialTraffic.get(index);
       if (!credential) continue;
       credentialTraffic.delete(index);
+      if ((sharedIndexCount.get(index) ?? 0) > 1) continue;
       total += credential.total;
       failure += credential.failure;
     }
@@ -271,11 +296,10 @@ export function aggregateProviders({
    */
   const takeCompatibilityLabelTraffic = (provider: ProviderItem) => {
     if (provider.family !== OPENAI_COMPATIBILITY_FAMILY || !provider.upstream_name) return { total: 0, failure: 0 };
-    const key = normalizeProviderKey(provider.upstream_name);
-    const labelled = trafficMap.get(key);
-    if (!labelled || consumedTrafficKeys.has(key)) return { total: 0, failure: 0 };
-    consumedTrafficKeys.add(key);
-    return { total: labelled.total, failure: labelled.failure };
+    const entry = exactTrafficMap.get(foldedLabel(provider.upstream_name));
+    if (!entry || entry.consumed) return { total: 0, failure: 0 };
+    entry.consumed = true;
+    return { total: entry.total, failure: entry.failure };
   };
 
   const summarizeTraffic = (...shares: { total: number; failure: number }[]) => {

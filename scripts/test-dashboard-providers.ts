@@ -437,6 +437,54 @@ assert.equal(channelRelayRow.failure, 1);
 assert.equal(relay.length, 1, 'the auth-file channel does not appear a second time beside it');
 console.log('✓ A relay that stands for a channel is credited from both its keys and its label');
 
+// Test 7e: an index two providers both publish is credited to neither
+//
+// CPA derives a credential's runtime index from the credential's own values, so one key entered twice
+// under one name resolves to one index and appears in both providers' `auth_indexes`. Crediting
+// whichever row came first printed a number that depended on the order of the provider list, and the
+// second provider reported a zero it had not earned.
+const sharedIndexScenario = (reversed: boolean) => {
+  const providers = [codexFamilyRow('codex-0', 'Codex One', 'key-shared'), codexFamilyRow('codex-1', 'Codex Two', 'key-shared')];
+  return aggregateProviders({
+    windowProviders: [{ id: 'codex', total: 5, success: 5, failure: 0, success_rate: 100 }],
+    windowCredentials: [{ auth_index: 'key-shared', total: 5, failure: 2 }],
+    configuredProviders: reversed ? [...providers].reverse() : providers,
+  });
+};
+const sharedForward = sharedIndexScenario(false);
+const sharedReversed = sharedIndexScenario(true);
+for (const [name, rows] of [
+  ['forward', sharedForward],
+  ['reversed', sharedReversed],
+] as const) {
+  assert.equal(rows.find((row) => row.providerId === 'codex-0')?.total, 0, `codex-0 reports nothing for an index two providers claim (${name})`);
+  assert.equal(rows.find((row) => row.providerId === 'codex-1')?.total, 0, `codex-1 reports nothing for an index two providers claim (${name})`);
+}
+assert.deepEqual(
+  sharedForward.map((row) => row.total),
+  sharedReversed.map((row) => row.total),
+  'the numbers do not depend on the order of the provider list',
+);
+console.log('✓ A multiply claimed auth index is credited to nobody, in any order');
+
+// Test 7f: two labels that differ only by separators stay two labels
+//
+// `normalizeProviderKey` strips separators, so it maps CPA's `deep-seek` and `deepseek` labels onto one
+// key - and the exact label lookup has to keep them apart, because CPA does.
+const separatorLabels = aggregateProviders({
+  windowProviders: [
+    { id: 'deep-seek', total: 6, success: 6, failure: 0, success_rate: 100 },
+    { id: 'deepseek', total: 4, success: 3, failure: 1, success_rate: 75 },
+  ],
+  configuredProviders: [
+    { id: 'openai-compat-0', family: 'openai-compatibility', name: 'Deep Seek', upstream_name: 'Deep-Seek', protocol: 'OpenAI Chat Completions', disabled: false, key_configured: true },
+    { id: 'openai-compat-1', family: 'openai-compatibility', name: 'DeepSeek', upstream_name: 'DeepSeek', protocol: 'OpenAI Chat Completions', disabled: false, key_configured: true },
+  ],
+});
+assert.equal(separatorLabels.find((row) => row.providerId === 'openai-compat-0')?.total, 6, 'Deep-Seek keeps its own label traffic');
+assert.equal(separatorLabels.find((row) => row.providerId === 'openai-compat-1')?.total, 4, 'DeepSeek keeps its own label traffic');
+console.log('✓ Labels that differ only by separators are credited apart');
+
 // Test 8: Summary stats calculation
 const summary = computeProviderSummary(aggregated);
 assert.equal(summary.totalProviders, 6);

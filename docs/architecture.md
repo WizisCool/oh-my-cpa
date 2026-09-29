@@ -1125,18 +1125,17 @@ already in the record: the credential's runtime `auth_index`.
 `internal/api/management_dashboard_providers.go` folds the empty-index rows into
 `providers[]` by the label CPA wrote — the OAuth channels, and records that name no
 credential — and the rest into `credentials[]`, one entry per key that served traffic.
-A configured provider's traffic is then the sum over the indexes of its own keys, which
+A configured provider's traffic is the sum over the indexes of its own keys, which
 the provider DTO publishes as `auth_indexes` (`internal/api/management_providers.go`),
-plus the records that name no index. Only an `openai-compatibility` row takes a label:
-exactly the `openai-compatible-<name>` label CPA derives from that provider's own name,
-or, when the row is one the console presents as an OAuth channel, that channel's label as
-channel rows have always been matched. A `{family}-api-key` provider takes neither — not
-even when its display name spells a family — because those records were served by
-different credentials, and family labels belong to the family's OAuth channel. Only a row
-the console presents as a channel keeps taking its label by containment as well as by
-exact match; every other row's label is an identity.
+plus whatever a label attributes to it — never a general claim on indexless records, which
+carry no provider identity at all. Only an `openai-compatibility` row takes a label: exactly
+the `openai-compatible-<name>` label CPA derives from that provider's own name, or, when the
+row is one the console presents as an OAuth channel, that channel's label as channel rows have
+always been matched. A `{family}-api-key` provider takes neither — not even when its display
+name spells a family — because those records were served by different credentials, and family
+labels belong to the family's OAuth channel.
 
-Four properties are load-bearing:
+Six properties are load-bearing:
 
 - **The join is an identity, never a heuristic.** No family match, no display-name
   match, no substring and no "the provider's only key": each of those is wrong in the
@@ -1153,9 +1152,18 @@ Four properties are load-bearing:
   several of those type ids are shared with the API-key families, so taking the count
   from there reported credentials the provider does not hold.
 - **A record that names no index is credited to nobody.** History written before the
-  index was captured, and a record whose credential has since been deleted, count
-  toward no configured provider. They stay in the totals and in the request list. The
-  alternative is inference, and inference is what produced the defect.
+  index was captured, and a record whose credential CPA no longer holds — it keeps the index it
+  was served under, which no configured provider publishes — count toward no configured provider.
+  They stay in the totals and in the request list. The alternative is inference, and inference is
+  what produced the defect this rule exists for.
+- **An index two providers both publish is credited to neither.** CPA derives a credential's
+  runtime index from the credential itself, so one key entered twice under one name resolves to
+  a single index. Crediting whichever row the list happens to put first would print a number that
+  changes with the order of the provider list.
+- **A label is an identity, at CPA's precision.** `deep-seek` and `deepseek` are two labels to
+  CPA and stay two rows here; the console must not fold them through a normalizer that strips
+  separators to look a label up, and it must keep the label the server folded rather than
+  re-deriving it from a display name.
 
 The provider page reuses this aggregation rather than reimplementing it
 (`providerTrafficById` in `web/src/components/providers/providerOverview.ts`), so the
