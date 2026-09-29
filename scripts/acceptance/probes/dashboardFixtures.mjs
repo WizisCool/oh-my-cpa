@@ -4,15 +4,15 @@
  * They live together because a scenario's route table names them by value.
  */
 
-/** Local `YYYY-MM-DD` and midnight bounds for an offset from today. */
+/** UTC days match the console default, independent of the probe host timezone. */
 function heatmapDayEntry(dayOffset, tokens, requests, failures) {
   const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() + dayOffset);
-  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1, 0, 0, 0, 0);
-  const month = `${start.getMonth() + 1}`.padStart(2, '0');
+  start.setUTCHours(0, 0, 0, 0);
+  start.setUTCDate(start.getUTCDate() + dayOffset);
+  const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate() + 1));
+  const month = `${start.getUTCMonth() + 1}`.padStart(2, '0');
   return {
-    day: `${start.getFullYear()}-${month}-${`${start.getDate()}`.padStart(2, '0')}`,
+    day: `${start.getUTCFullYear()}-${month}-${`${start.getUTCDate()}`.padStart(2, '0')}`,
     from_ms: start.getTime(),
     to_ms: end.getTime() - 1,
     tokens,
@@ -32,16 +32,16 @@ export const HEATMAP_TOTAL_DAYS = HEATMAP_WEEKS * 7;
 /** Days from this week's Monday to today inclusive. */
 const HEATMAP_WEEKDAY_OFFSET = (() => {
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  // JavaScript's getDay() is Sunday-first; this numbers the week from Monday.
-  return (today.getDay() + 6) % 7;
+  today.setUTCHours(0, 0, 0, 0);
+  // JavaScript's getUTCDay() is Sunday-first; this numbers the week from Monday.
+  return (today.getUTCDay() + 6) % 7;
 })();
 /** The offset of the grid's first day: 52 whole weeks plus the days elapsed this week. */
 const HEATMAP_FIRST_OFFSET = -((HEATMAP_WEEKS - 1) * 7 + HEATMAP_WEEKDAY_OFFSET);
 /** The last day the window can carry data for: the days after it are clamped to the read instant. */
 export const HEATMAP_TODAY = (() => {
   const today = new Date();
-  return `${today.getFullYear()}-${`${today.getMonth() + 1}`.padStart(2, '0')}-${`${today.getDate()}`.padStart(2, '0')}`;
+  return `${today.getUTCFullYear()}-${`${today.getUTCMonth() + 1}`.padStart(2, '0')}-${`${today.getUTCDate()}`.padStart(2, '0')}`;
 })();
 
 /**
@@ -90,7 +90,7 @@ export function heatmapGridDays() {
 
 export const chartTokenHeatmap = {
   as_of_ms: Date.now(),
-  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  timezone: 'UTC',
   // Tracking started well before the grid's first day, so no cell in this fixture is
   // "unrecorded".
   first_stored_ms: Date.parse('2024-01-01T00:00:00Z'),

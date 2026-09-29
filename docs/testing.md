@@ -48,7 +48,9 @@ Rules that keep the suite fast and honest:
   `scripts/install-chromium.test.mjs` does.
 - **Keep the fixtures hermetic.** Browser fixtures build their environment with
   `scripts/acceptance/environment.mjs`; never read the operator's `.env`, network or
-  data directory.
+  data directory. Calendar fixtures must use the console's configured timezone rather
+  than the host timezone; the dashboard heatmap fixtures use the default UTC calendar,
+  with a script self-test spanning hosts on opposite sides of a UTC date boundary.
 
 ## 2. Registering a new test
 
