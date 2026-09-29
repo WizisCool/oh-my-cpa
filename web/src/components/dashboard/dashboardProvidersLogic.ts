@@ -266,7 +266,8 @@ export function aggregateProviders({
    * takeCompatibilityLabelTraffic credits an OpenAI-compatible provider with the records CPA
    * labelled `openai-compatible-<name>`: the ones no key index claims, because the credential that
    * answered them is gone. Exact label only - a family name, a display name or a substring would be
-   * a guess, and a wrong one reads as real traffic.
+   * a guess, and a wrong one reads as real traffic. An entry CPA holds without a name is labelled
+   * with the shared `openai-compatibility` bucket instead, which no one provider can claim.
    */
   const takeCompatibilityLabelTraffic = (provider: ProviderItem) => {
     if (provider.family !== OPENAI_COMPATIBILITY_FAMILY || !provider.upstream_name) return { total: 0, failure: 0 };
