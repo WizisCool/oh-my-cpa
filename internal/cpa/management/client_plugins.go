@@ -197,7 +197,8 @@ func (c *Client) SetPluginEnabled(ctx context.Context, id string, enabled bool) 
 	if err != nil {
 		return err
 	}
-	return c.doJSONBody(ctx, http.MethodPatch, endpoint, map[string]any{"enabled": enabled}, nil)
+	_, err = c.doV0JSON(ctx, http.MethodPatch, endpoint, map[string]any{"enabled": enabled}, nil)
+	return err
 }
 
 // PluginConfig reads `plugins.configs.<id>` as a JSON object. A plugin that is
@@ -208,7 +209,7 @@ func (c *Client) PluginConfig(ctx context.Context, id string) (map[string]any, e
 		return nil, err
 	}
 	var config map[string]any
-	if err := c.DoJSON(ctx, http.MethodGet, endpoint, &config); err != nil {
+	if _, err := c.doV0JSON(ctx, http.MethodGet, endpoint, nil, &config); err != nil {
 		return nil, err
 	}
 	if config == nil {
@@ -223,7 +224,8 @@ func (c *Client) SetPluginConfig(ctx context.Context, id string, config map[stri
 	if err != nil {
 		return err
 	}
-	return c.doJSONBody(ctx, http.MethodPut, endpoint, config, nil)
+	_, err = c.doV0JSON(ctx, http.MethodPut, endpoint, config, nil)
+	return err
 }
 
 func (c *Client) DeletePlugin(ctx context.Context, id string) (PluginDeleteResult, error) {
@@ -240,7 +242,7 @@ func (c *Client) DeletePlugin(ctx context.Context, id string) (PluginDeleteResul
 
 func (c *Client) PluginStore(ctx context.Context) (PluginStore, error) {
 	var raw json.RawMessage
-	if err := c.DoJSON(ctx, http.MethodGet, "/plugin-store", &raw); err != nil {
+	if err := c.DoJSON(ctx, http.MethodGet, "/plugins/store", &raw); err != nil {
 		return PluginStore{}, err
 	}
 	result := PluginStore{}
@@ -266,7 +268,7 @@ func (c *Client) InstallPlugin(ctx context.Context, id, sourceID, version string
 	if id == "" {
 		return PluginInstallResult{}, errors.New("plugin id is required")
 	}
-	endpoint := "/plugin-store/" + url.PathEscape(id) + "/install"
+	endpoint := "/plugins/store/" + url.PathEscape(id) + "/install"
 	if sourceID = strings.TrimSpace(sourceID); sourceID != "" {
 		endpoint += "?" + url.Values{"source": []string{sourceID}}.Encode()
 	}

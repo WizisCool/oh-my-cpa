@@ -31,10 +31,10 @@ func TestBrowserDTOAllowlistAndSecretExclusion(t *testing.T) {
 		"secret-query-param=confidential",
 	}
 
-	fakeCPA := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	fakeCPA := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		path := request.URL.Path
 		switch {
-		case strings.HasPrefix(path, "/v0/management/auth-files"):
+		case strings.HasPrefix(path, "/v8/management/credentials"):
 			writer.Header().Set("Content-Type", "application/json")
 			_, _ = writer.Write([]byte(`{
 				"files": [{

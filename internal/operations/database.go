@@ -20,7 +20,7 @@ type DatabaseTables struct {
 // columns are readable, and how a statement is proven to be a read - lives with the repository
 // (readonly_query.go), so the capability here only describes it to the model.
 //
-// Only the built-in Agent is offered it (ADR 0035). An MCP client runs outside OMC, on a host and
+// Only the built-in Agent is offered it (ADR 0036). An MCP client runs outside OMC, on a host and
 // a model the operator did not pick on the Agent page, and free-form SQL reaches more of OMC's
 // records at once than any declared read; the declared reads remain its surface.
 func (s *Service) registerDatabase(registry *capability.Registry) error {

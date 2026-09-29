@@ -18,7 +18,7 @@ export interface AuthorizationDialogProps {
 }
 
 /**
- * The agent asking to change something, as one allow-or-deny decision (ADR 0034).
+ * The agent asking to change something, as one allow-or-deny decision (ADR 0035).
  *
  * The dialog opens by itself when a run stops for approval, so the request is in front of the
  * operator rather than somewhere in the transcript, and deciding it continues the run: there is

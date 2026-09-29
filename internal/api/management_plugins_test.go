@@ -53,14 +53,14 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 		configYAML:   pluginTestConfigYAML,
 	}
 
-	cpaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	cpaServer := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		state.mu.Lock()
 		defer state.mu.Unlock()
 		writer.Header().Set("Content-Type", "application/json")
 		path := request.URL.Path
 
 		switch {
-		case path == "/v0/management/plugins" && request.Method == http.MethodGet:
+		case path == "/v8/management/plugins" && request.Method == http.MethodGet:
 			_, _ = writer.Write([]byte(`{"plugins_enabled":true,"plugins_dir":"/srv/cpa/plugins","plugins":[{"id":"logger","path":"/srv/cpa/plugins/logger.so","configured":true,"registered":true,"enabled":true,"effective_enabled":true,"supports_oauth":true,"oauth_provider":"logger-oauth","supports_quota":false,"logo":"https://example.com/logo.png","config_fields":[{"name":"level","type":"enum","enum_values":["debug","info"],"description":"Log level"},{"name":"level","type":"string"}],"menus":[{"path":"/x","menu":"X","description":""}],"metadata":{"name":"Logger","version":"1.0.0","author":"cpa-official","github_repository":"router-for-me/logger-plugin","logo":"https://example.com/logo.png","config_fields":[]}}]}`))
 		case path == "/v0/management/config.yaml" && request.Method == http.MethodGet:
 			writer.Header().Set("Content-Type", "application/yaml")
@@ -94,7 +94,7 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 			_ = json.NewDecoder(request.Body).Decode(&body)
 			state.configs[id] = body
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
-		case strings.HasPrefix(path, "/v0/management/plugins/") && request.Method == http.MethodDelete:
+		case strings.HasPrefix(path, "/v8/management/plugins/") && request.Method == http.MethodDelete:
 			parts := strings.Split(path, "/")
 			id := parts[len(parts)-1]
 			if state.deleteBlocked {
@@ -104,9 +104,9 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 			}
 			state.deleted = id
 			_, _ = writer.Write([]byte(`{"status":"deleted","id":"` + id + `","path":"/srv/cpa/plugins/logger.so","file_deleted":true,"configured_removed":true,"restart_required":false}`))
-		case path == "/v0/management/plugin-store" && request.Method == http.MethodGet:
+		case path == "/v8/management/plugins/store" && request.Method == http.MethodGet:
 			_, _ = writer.Write([]byte(`{"plugins_enabled":true,"plugins_dir":"plugins","sources":[{"id":"official","name":"official","url":"https://registry.example/plugins.json"},{"id":"source-abc","name":"mirror.example","url":"https://mirror.example/registry.json"}],"source_errors":[{"source_id":"source-def","source_name":"down.example","source_url":"https://down.example/r.json","message":"fetch registry: 503"}],"plugins":[{"store_id":"official/limiter","source_id":"official","source_name":"official","source_url":"https://registry.example/plugins.json","id":"limiter","name":"Rate Limiter","description":"Token buckets","author":"router-for-me","version":"1.2.0","repository":"router-for-me/limiter","install_type":"github_release","auth_required":false,"auth_configured":false,"platforms":[{"goos":"linux","goarch":"amd64"}],"logo":"https://cdn.example/limiter.png","homepage":"javascript:alert(1)","license":"MIT","tags":["network","limits"],"installed":false,"installed_version":"","path":"","configured":false,"registered":false,"enabled":false,"effective_enabled":false,"update_available":false},{"store_id":"source-abc/limiter","source_id":"source-abc","source_name":"mirror.example","source_url":"https://mirror.example/registry.json","id":"limiter","name":"Rate Limiter","author":"someone","version":"1.2.0","repository":"router-for-me/limiter","homepage":"https://limiter.example","installed":false}]}`))
-		case strings.HasPrefix(path, "/v0/management/plugin-store/") && strings.HasSuffix(path, "/install"):
+		case strings.HasPrefix(path, "/v8/management/plugins/store/") && strings.HasSuffix(path, "/install"):
 			parts := strings.Split(path, "/")
 			id := parts[len(parts)-2]
 			state.installed = id

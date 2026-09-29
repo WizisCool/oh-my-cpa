@@ -6,7 +6,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"strconv"
 	"strings"
@@ -66,7 +65,7 @@ func pluginWithLogo(id, logo string) management.PluginItem {
 }
 
 func TestPluginLogoFetcherInlinesAnImageOnBothFields(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if accept := request.Header.Get("Accept"); !strings.Contains(accept, "image/") {
 			t.Errorf("Accept = %q, want an image preference", accept)
 		}
@@ -153,12 +152,12 @@ func TestPluginLogoFetcherRefusesANonOKResponse(t *testing.T) {
 }
 
 func TestPluginLogoFetcherRefusesACrossOriginRedirect(t *testing.T) {
-	target := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+	target := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		t.Error("the cross-origin target must not be reached")
 	}))
 	defer target.Close()
 
-	origin := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	origin := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		http.Redirect(writer, request, target.URL+"/logo.png", http.StatusFound)
 	}))
 	defer origin.Close()
@@ -171,7 +170,7 @@ func TestPluginLogoFetcherRefusesACrossOriginRedirect(t *testing.T) {
 }
 
 func TestPluginLogoFetcherFollowsASameOriginRedirect(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/logo.png" {
 			http.Redirect(writer, request, "/real/logo.png", http.StatusFound)
 			return
@@ -353,7 +352,7 @@ func TestSameOriginRedirectGuardToleratesAnEmptyChain(t *testing.T) {
 }
 
 func TestPluginLogoFetcherIsConcurrencySafe(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+	server := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		writer.Header().Set("Content-Type", "image/png")
 		_, _ = writer.Write([]byte("png-bytes"))
 	}))

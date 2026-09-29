@@ -181,7 +181,7 @@ func (f ConfigKeyFamily) configKeysEndpoint() string {
 // credential list break every caller that reads all families at once.
 func (c *Client) ConfigAPIKeys(ctx context.Context, family ConfigKeyFamily) ([]ConfigAPIKey, error) {
 	var response map[string]json.RawMessage
-	if err := c.DoJSON(ctx, http.MethodGet, family.configKeysEndpoint(), &response); err != nil {
+	if _, err := c.doV0JSON(ctx, http.MethodGet, family.configKeysEndpoint(), nil, &response); err != nil {
 		return nil, err
 	}
 	entries := []ConfigAPIKey{}
@@ -205,5 +205,6 @@ func (c *Client) UpdateConfigAPIKeys(ctx context.Context, family ConfigKeyFamily
 	if entries == nil {
 		entries = []ConfigAPIKey{}
 	}
-	return c.doJSONBody(ctx, http.MethodPut, family.configKeysEndpoint(), entries, nil)
+	_, err := c.doV0JSON(ctx, http.MethodPut, family.configKeysEndpoint(), entries, nil)
+	return err
 }

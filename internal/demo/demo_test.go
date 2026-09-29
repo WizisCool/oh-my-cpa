@@ -489,7 +489,7 @@ func TestUpstreamAnswersQuotaReadsWithoutFetchingAnything(t *testing.T) {
 	client := upstreamClient(upstream)
 
 	for _, target := range quotaPayloadKeys() {
-		response := postJSON(t, client, upstream.BaseURL()+managementPrefix+"/api-call", map[string]any{
+		response := postJSON(t, client, upstream.BaseURL()+managementPrefix+"/requests/api-call", map[string]any{
 			"method": "GET",
 			"url":    target,
 		})
@@ -519,7 +519,7 @@ func TestUpstreamAnswersQuotaReadsWithoutFetchingAnything(t *testing.T) {
 		"http://127.0.0.1:80/admin",
 		"https://chatgpt.com/backend-api/wham/usage/../other",
 	} {
-		response := postJSON(t, client, upstream.BaseURL()+managementPrefix+"/api-call", map[string]any{
+		response := postJSON(t, client, upstream.BaseURL()+managementPrefix+"/requests/api-call", map[string]any{
 			"method": "GET",
 			"url":    target,
 		})
@@ -540,17 +540,21 @@ func TestUpstreamRefusesCredentialAndLogBodies(t *testing.T) {
 	for _, call := range []struct {
 		method, path, body string
 	}{
-		{http.MethodGet, "/auth-files/download?name=codex-team-primary.json", ""},
-		{http.MethodGet, "/request-error-logs/request-error-2026-09-19T08-15-04Z.log", ""},
-		{http.MethodPost, "/auth-files", `{"type":"codex"}`},
-		{http.MethodDelete, "/auth-files", `{"names":["codex-team-primary.json"]}`},
-		{http.MethodPost, "/reset-quota", `{"auth_index":"auth-codex-01"}`},
-		{http.MethodPut, "/config.yaml", "debug: true"},
-		{http.MethodPut, "/api-keys", `["sk-new"]`},
-		{http.MethodPost, "/plugins/usage-exporter", `{}`},
-		{http.MethodGet, "/codex-auth-url", ""},
+		{http.MethodGet, managementPrefix + "/credentials/download?name=codex-team-primary.json", ""},
+		{http.MethodGet, managementPrefix + "/observability/logs/errors/request-error-2026-09-19T08-15-04Z.log", ""},
+		{http.MethodPost, managementPrefix + "/credentials", `{"type":"codex"}`},
+		{http.MethodDelete, managementPrefix + "/credentials", `{"names":["codex-team-primary.json"]}`},
+		{http.MethodPost, managementPrefix + "/routing/cooldown/reset", `{"auth_index":"auth-codex-01"}`},
+		{http.MethodPut, managementPrefix + "/config.yaml", "debug: true"},
+		{http.MethodPatch, managementPrefix + "/config", `{"debug":true}`},
+		{http.MethodDelete, managementPrefix + "/plugins/usage-exporter", ""},
+		{http.MethodPost, managementPrefix + "/plugins/store/usage-exporter/install", `{}`},
+		{http.MethodGet, managementPrefix + "/oauth/auth-url?provider=codex", ""},
+		{http.MethodPut, legacyManagementPrefix + "/config.yaml", "debug: true"},
+		{http.MethodPut, legacyManagementPrefix + "/api-keys", `["sk-new"]`},
+		{http.MethodPut, legacyManagementPrefix + "/codex-api-key", `[]`},
 	} {
-		request, err := http.NewRequest(call.method, upstream.BaseURL()+managementPrefix+call.path, strings.NewReader(call.body))
+		request, err := http.NewRequest(call.method, upstream.BaseURL()+call.path, strings.NewReader(call.body))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -559,11 +563,6 @@ func TestUpstreamRefusesCredentialAndLogBodies(t *testing.T) {
 			t.Fatal(err)
 		}
 		body := readBody(t, response)
-		if response.StatusCode == http.StatusNotFound && call.path == "/plugins/usage-exporter" {
-			// Plugin mutations are matched by prefix; a POST to a plugin path that is not
-			// a route is a 404 rather than a refusal, which is still not a write.
-			continue
-		}
 		if response.StatusCode != http.StatusForbidden {
 			t.Errorf("%s %s = %d (%s), want 403", call.method, call.path, response.StatusCode, body)
 			continue
@@ -576,7 +575,7 @@ func TestUpstreamRefusesCredentialAndLogBodies(t *testing.T) {
 
 func TestUpstreamRequiresItsOwnKey(t *testing.T) {
 	upstream := startTestUpstream(t)
-	response, err := http.Get(upstream.BaseURL() + managementPrefix + "/auth-files")
+	response, err := http.Get(upstream.BaseURL() + managementPrefix + "/credentials")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -592,29 +591,33 @@ func TestUpstreamServesTheConsoleSurface(t *testing.T) {
 	upstream := startTestUpstream(t)
 	client := upstreamClient(upstream)
 
+	// The gate's probe answers a bare 8, which is the whole of a usable answer.
+	if body := readBody(t, getWithClient(t, client, upstream.BaseURL()+managementPrefix+"/config/config-version")); strings.TrimSpace(body) != "8" {
+		t.Fatalf("the fixture must answer the v8 probe with 8, got %q", body)
+	}
 	for _, path := range []string{
-		"/auth-files",
-		"/auth-files/models?name=codex-team-primary.json",
-		"/oauth-model-alias",
-		"/oauth-excluded-models",
-		"/config",
-		"/config.yaml",
-		"/api-keys",
-		"/api-key-usage",
-		"/openai-compatibility",
-		"/claude-api-key",
-		"/codex-api-key",
-		"/gemini-api-key",
-		"/meta-api-key",
-		"/plugins",
-		"/plugins/usage-exporter/config",
-		"/plugin-store",
-		"/logs",
-		"/request-error-logs",
-		"/latest-version",
-		"/get-auth-status",
+		managementPrefix + "/credentials",
+		managementPrefix + "/credentials/models?name=codex-team-primary.json",
+		managementPrefix + "/observability/usage/api-keys",
+		managementPrefix + "/plugins",
+		managementPrefix + "/plugins/store",
+		managementPrefix + "/observability/logs",
+		managementPrefix + "/observability/logs/errors",
+		managementPrefix + "/server/latest-version",
+		managementPrefix + "/oauth/status",
+		legacyManagementPrefix + "/oauth-model-alias",
+		legacyManagementPrefix + "/oauth-excluded-models",
+		legacyManagementPrefix + "/config",
+		legacyManagementPrefix + "/config.yaml",
+		legacyManagementPrefix + "/api-keys",
+		legacyManagementPrefix + "/openai-compatibility",
+		legacyManagementPrefix + "/claude-api-key",
+		legacyManagementPrefix + "/codex-api-key",
+		legacyManagementPrefix + "/gemini-api-key",
+		legacyManagementPrefix + "/meta-api-key",
+		legacyManagementPrefix + "/plugins/usage-exporter/config",
 	} {
-		response := getWithClient(t, client, upstream.BaseURL()+managementPrefix+path)
+		response := getWithClient(t, client, upstream.BaseURL()+path)
 		body := readBody(t, response)
 		if response.StatusCode != http.StatusOK {
 			t.Errorf("GET %s = %d (%s), want 200", path, response.StatusCode, body)
@@ -633,12 +636,12 @@ func TestUpstreamStoresCredentialEdits(t *testing.T) {
 	upstream := startTestUpstream(t)
 	client := upstreamClient(upstream)
 
-	response := patchJSON(t, client, upstream.BaseURL()+managementPrefix+"/auth-files/status", map[string]any{
+	response := patchJSON(t, client, upstream.BaseURL()+managementPrefix+"/credentials/status", map[string]any{
 		"name": "codex-team-primary.json", "disabled": true,
 	})
 	readBody(t, response)
 
-	body := readBody(t, getWithClient(t, client, upstream.BaseURL()+managementPrefix+"/auth-files"))
+	body := readBody(t, getWithClient(t, client, upstream.BaseURL()+managementPrefix+"/credentials"))
 	if !strings.Contains(body, `"status":"disabled"`) {
 		t.Fatalf("the status write was not stored: %s", body)
 	}

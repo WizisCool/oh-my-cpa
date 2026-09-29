@@ -83,7 +83,7 @@ func TestManagementOverviewUnconfiguredReportsNullCounts(t *testing.T) {
 func TestManagementOverviewAggregatesWithoutSecrets(t *testing.T) {
 	const managementKey = "management-secret"
 	const apiKey = "provider-secret"
-	cpaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	cpaServer := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Header.Get("Authorization") != "Bearer "+managementKey {
 			t.Fatalf("authorization = %q", request.Header.Get("Authorization"))
 		}
@@ -92,9 +92,9 @@ func TestManagementOverviewAggregatesWithoutSecrets(t *testing.T) {
 		switch request.URL.Path {
 		case "/v0/management/config":
 			_, _ = writer.Write([]byte(`{"api-keys":["management-client"],"codex-api-key":[{"api-key":"` + apiKey + `"}],"openai-compatibility":[{"name":"relay","api-key-entries":[{"api-key":"other-secret"},{"api-key":"third-secret"}]}]}`))
-		case "/v0/management/auth-files":
+		case "/v8/management/credentials":
 			_, _ = writer.Write([]byte(`{"files":[{"id":"auth-1","auth_index":"a1","type":"gemini","provider":"gemini","status":"ok","success":100,"failed":40,"recent_requests":[{"time":"now","success":4,"failed":1}],"account_type":"oauth","email":"owner@example.test"},{"id":"auth-2","auth_index":"a2","type":"codex","provider":"codex","status":"ok","disabled":true,"account_type":"oauth"}]}`))
-		case "/v0/management/api-key-usage":
+		case "/v8/management/observability/usage/api-keys":
 			_, _ = writer.Write([]byte(`{"codex":{"https://provider.test|` + apiKey + `":{"success":2,"failed":0,"recent_requests":[{"time":"now","success":2,"failed":0}]}}}`))
 		default:
 			writer.WriteHeader(http.StatusNotFound)
@@ -242,15 +242,15 @@ func TestManagementOverviewAggregatesWithoutSecrets(t *testing.T) {
 }
 
 func TestManagementOverviewPartialFailureAndNullCounts(t *testing.T) {
-	cpaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	cpaServer := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		switch request.URL.Path {
 		case "/v0/management/config":
 			writer.WriteHeader(http.StatusUnauthorized)
 			_, _ = writer.Write([]byte(`{"error":"bad management key"}`))
-		case "/v0/management/auth-files":
+		case "/v8/management/credentials":
 			_, _ = writer.Write([]byte(`{"files":[]}`))
-		case "/v0/management/api-key-usage":
+		case "/v8/management/observability/usage/api-keys":
 			writer.WriteHeader(http.StatusNotFound)
 		default:
 			writer.WriteHeader(http.StatusNotFound)

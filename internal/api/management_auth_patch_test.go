@@ -24,7 +24,7 @@ func TestManagementAuthFilesPatchFieldsSuccess(t *testing.T) {
 	runtimePriority := 0
 	runtimeWeight := int64(0)
 	runtimeNote := ""
-	cpaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	cpaServer := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		recorder.record(request)
 		writer.Header().Set("Content-Type", "application/json")
 		if strings.HasSuffix(request.URL.Path, "/models") {

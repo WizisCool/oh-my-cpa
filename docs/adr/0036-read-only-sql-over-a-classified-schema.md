@@ -1,4 +1,4 @@
-# ADR 0035: Agents may run read-only SQL over a classified schema
+# ADR 0036: Agents may run read-only SQL over a classified schema
 
 - Status: Accepted
 - Date: 2026-09-28

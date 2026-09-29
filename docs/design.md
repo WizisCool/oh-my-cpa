@@ -1047,7 +1047,7 @@ one whose outcome is partial, expired or unconfirmed carries a `--warn` attentio
 being drawn as loading or failed.
 
 A prepared operation is decided in an authorization dialog that opens by itself when a run stops
-for it: one decision, Deny or Allow, and deciding continues the run (ADR 0034). The dialog names
+for it: one decision, Deny or Allow, and deciding continues the run (ADR 0035). The dialog names
 the capability by its localized title and identifier, with its permission as a tag and its
 localized description, leads with the target,
 and lays a form-shaped change out as label/value rows (anything deeper stays JSON). A destructive

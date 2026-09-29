@@ -342,10 +342,6 @@ async function main() {
   const pluginsMatch = pluginsListed === 0 ? pluginsEmptyShown : pluginRows === pluginsListed;
   check('插件管理页渲染 CPA 插件列表', `rows=${pluginRows} listed=${pluginsListed}`, pluginsListed >= 0 && pluginsMatch);
 
-  // Probe API rejection of unknown key
-  const unknownProbe = await page.request.get(`${appURL}/api/v1/management/capabilities/unknown-key`);
-  check('未知能力探测键返回 404', `status=${unknownProbe.status()}`, unknownProbe.status() === 404);
-
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`${appURL}/dashboard`, { waitUntil: 'networkidle' });
   const domSecrets = await page.evaluate((key) => {

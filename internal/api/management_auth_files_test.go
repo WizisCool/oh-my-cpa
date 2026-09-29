@@ -73,7 +73,7 @@ func (r *cpaRecorder) last(t *testing.T, method, path string) recordedCPARequest
 func startAuthFilesTestServer(t *testing.T, managementKey string, handler func(http.ResponseWriter, *http.Request)) (*http.Client, string, *cpaRecorder) {
 	t.Helper()
 	recorder := &cpaRecorder{}
-	cpaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	cpaServer := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		recorder.record(request)
 		if managementKey != "" && request.Header.Get("Authorization") != "Bearer "+managementKey {
 			writer.WriteHeader(http.StatusUnauthorized)
@@ -188,18 +188,18 @@ func TestManagementAuthFilesFacadeProjectsAndForwards(t *testing.T) {
 	handler := func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		switch {
-		case request.URL.Path == "/v0/management/auth-files/models":
+		case request.URL.Path == "/v8/management/credentials/models":
 			_, _ = writer.Write([]byte(`{"models":[{"id":"gemini-pro","display_name":"Gemini Pro"},{"id":"","display_name":"skip me"}]}`))
-		case request.URL.Path == "/v0/management/auth-files/download":
+		case request.URL.Path == "/v8/management/credentials/download":
 			payload := make(map[string]any, len(safeFields)+1)
 			for key, value := range safeFields {
 				payload[key] = value
 			}
 			payload["refresh_token"] = refreshToken
 			_ = json.NewEncoder(writer).Encode(payload)
-		case request.URL.Path == "/v0/management/auth-files/status",
-			request.URL.Path == "/v0/management/auth-files/fields":
-			if request.URL.Path == "/v0/management/auth-files/fields" {
+		case request.URL.Path == "/v8/management/credentials/status",
+			request.URL.Path == "/v8/management/credentials/fields":
+			if request.URL.Path == "/v8/management/credentials/fields" {
 				var forwarded map[string]any
 				if err := json.NewDecoder(request.Body).Decode(&forwarded); err != nil {
 					t.Fatalf("decode fields patch: %v", err)
@@ -220,7 +220,7 @@ func TestManagementAuthFilesFacadeProjectsAndForwards(t *testing.T) {
 				}
 			}
 			_, _ = writer.Write([]byte(`{"status":"success"}`))
-		case request.URL.Path == "/v0/management/auth-files" && request.Method == http.MethodGet:
+		case request.URL.Path == "/v8/management/credentials" && request.Method == http.MethodGet:
 			var response managementAuthFilesResponse
 			if err := json.Unmarshal([]byte(filesFixture), &response); err != nil {
 				t.Fatal(err)
@@ -234,7 +234,7 @@ func TestManagementAuthFilesFacadeProjectsAndForwards(t *testing.T) {
 				response.Files[index].Note = runtimeNote
 			}
 			_ = json.NewEncoder(writer).Encode(response)
-		case request.URL.Path == "/v0/management/auth-files" && request.Method == http.MethodDelete:
+		case request.URL.Path == "/v8/management/credentials" && request.Method == http.MethodDelete:
 			_, _ = writer.Write([]byte(`{"status":"ok","deleted":2,"files":["claude.json","second.json"]}`))
 		default:
 			_, _ = writer.Write([]byte(`{"status":"success"}`))
@@ -309,7 +309,7 @@ func TestManagementAuthFilesFacadeProjectsAndForwards(t *testing.T) {
 		t.Fatalf("status patch = %d body = %s", response.StatusCode, raw)
 	}
 	var forwardedStatus map[string]any
-	if err := json.Unmarshal([]byte(recorder.last(t, http.MethodPatch, "/v0/management/auth-files/status").Body), &forwardedStatus); err != nil {
+	if err := json.Unmarshal([]byte(recorder.last(t, http.MethodPatch, "/v8/management/credentials/status").Body), &forwardedStatus); err != nil {
 		t.Fatal(err)
 	}
 	if forwardedStatus["name"] != "claude.json" || forwardedStatus["auth_index"] != "idx-1" || forwardedStatus["disabled"] != true {
@@ -321,7 +321,7 @@ func TestManagementAuthFilesFacadeProjectsAndForwards(t *testing.T) {
 		t.Fatalf("fields patch = %d body = %s", response.StatusCode, raw)
 	}
 	var forwardedFields map[string]any
-	if err := json.Unmarshal([]byte(recorder.last(t, http.MethodPatch, "/v0/management/auth-files/fields").Body), &forwardedFields); err != nil {
+	if err := json.Unmarshal([]byte(recorder.last(t, http.MethodPatch, "/v8/management/credentials/fields").Body), &forwardedFields); err != nil {
 		t.Fatal(err)
 	}
 	if forwardedFields["name"] != "claude.json" || forwardedFields["priority"] != float64(10) || forwardedFields["note"] != "renamed" {
@@ -374,7 +374,7 @@ func TestManagementAuthFilesFacadeProjectsAndForwards(t *testing.T) {
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("raw upload = %d body = %s", response.StatusCode, raw)
 	}
-	upload := recorder.last(t, http.MethodPost, "/v0/management/auth-files")
+	upload := recorder.last(t, http.MethodPost, "/v8/management/credentials")
 	if !strings.Contains(upload.Query, "name=uploaded.json") {
 		t.Fatalf("upload query = %q", upload.Query)
 	}
@@ -436,7 +436,7 @@ func TestManagementAuthFilesFacadeProjectsAndForwards(t *testing.T) {
 	var forwardedDelete struct {
 		Names []string `json:"names"`
 	}
-	if err := json.Unmarshal([]byte(recorder.last(t, http.MethodDelete, "/v0/management/auth-files").Body), &forwardedDelete); err != nil {
+	if err := json.Unmarshal([]byte(recorder.last(t, http.MethodDelete, "/v8/management/credentials").Body), &forwardedDelete); err != nil {
 		t.Fatal(err)
 	}
 	if len(forwardedDelete.Names) != 2 || forwardedDelete.Names[0] != "claude.json" || forwardedDelete.Names[1] != "second.json" {
@@ -477,7 +477,7 @@ func TestManagementAuthFilesFacadeProjectsAndForwards(t *testing.T) {
 func TestManagementAuthFileFieldsPatchRequiresReadback(t *testing.T) {
 	handler := func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
-		if request.Method == http.MethodPatch && request.URL.Path == "/v0/management/auth-files/fields" {
+		if request.Method == http.MethodPatch && request.URL.Path == "/v8/management/credentials/fields" {
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 			return
 		}
@@ -614,7 +614,7 @@ func TestManagementAuthFileListProjectionSurvivesUnexpectedTimeFormats(t *testin
 func TestManagementAuthFilesPartialDeletion(t *testing.T) {
 	handler := func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
-		if request.URL.Path == "/v0/management/auth-files" && request.Method == http.MethodDelete {
+		if request.URL.Path == "/v8/management/credentials" && request.Method == http.MethodDelete {
 			writer.WriteHeader(http.StatusOK)
 			_, _ = writer.Write([]byte(`{"deleted":1,"files":["ok.json"],"failed":[{"name":"missing.json","error":"file not found with secret_key=TOP_SECRET_123","upstream_secret":"LEAK_ME"}]}`))
 			return
@@ -664,7 +664,7 @@ func TestManagementAuthFilesPartialDeletion(t *testing.T) {
 func TestManagementAuthFilesAllFailureDeletion(t *testing.T) {
 	handler := func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
-		if request.URL.Path == "/v0/management/auth-files" && request.Method == http.MethodDelete {
+		if request.URL.Path == "/v8/management/credentials" && request.Method == http.MethodDelete {
 			writer.WriteHeader(http.StatusOK)
 			_, _ = writer.Write([]byte(`{"deleted":0,"files":[],"failed":[{"name":"fail1.json","error":"permission denied"},{"name":"fail2.json","error":"permission denied"}]}`))
 			return
@@ -709,7 +709,7 @@ func TestManagementAuthFilesEmptyOrContradictoryResponse(t *testing.T) {
 	// Empty response {} must not imply success
 	handler := func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
-		if request.URL.Path == "/v0/management/auth-files" && request.Method == http.MethodDelete {
+		if request.URL.Path == "/v8/management/credentials" && request.Method == http.MethodDelete {
 			writer.WriteHeader(http.StatusOK)
 			_, _ = writer.Write([]byte(`{}`))
 			return
@@ -867,7 +867,7 @@ func TestManagementAuthFilesEndpointBoundsQuotaProjection(t *testing.T) {
 		`"quota":` + string(quotaJSON) + `,"model_quotas":` + string(modelQuotasJSON) + `}]}`
 
 	client, baseURL, _ := startDashboardTestServer(t, func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/v0/management/auth-files" {
+		if request.URL.Path != "/v8/management/credentials" {
 			writer.WriteHeader(http.StatusNotFound)
 			return
 		}

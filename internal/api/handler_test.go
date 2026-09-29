@@ -218,10 +218,10 @@ func TestResourceResponseDoesNotExposeCredentialBearingURLs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cpaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	cpaServer := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		switch request.URL.Path {
-		case "/v0/management/auth-files":
+		case "/v8/management/credentials":
 			_, _ = writer.Write([]byte(`{"files":[]}`))
 		case "/v0/management/codex-api-key":
 			_, _ = writer.Write([]byte(`{"codex-api-key":[{"base-url":"https://user:password@provider.example.test/api","proxy-url":"socks5://proxy-user:proxy-password@proxy.example.test:1080"}]}`))

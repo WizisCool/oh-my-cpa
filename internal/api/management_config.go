@@ -90,14 +90,8 @@ func buildConfigLayoutDTO(ctx context.Context, client *management.Client, rawYAM
 const managementAPIUnknown = "unknown"
 
 // checkConfigLayout refuses a document CPA v8 would accept and then partly
-// ignore. It applies unless the gateway is known to lack the v8 API: a v7
-// gateway reads only legacy spellings, so nothing there is shadowed, while an
-// undecided probe is treated as v8 because the cost of a false refusal is a
-// message and the cost of a missed one is a silently lost setting.
-func checkConfigLayout(ctx context.Context, client *management.Client, storedYAML, submittedYAML string) (code string, shadowed []configyaml.LayoutRule) {
-	if hasV8, err := client.SupportsManagementV8(ctx); err == nil && !hasV8 {
-		return "", []configyaml.LayoutRule{}
-	}
+// ignore: every gateway the console talks to is a v8 one.
+func checkConfigLayout(storedYAML, submittedYAML string) (code string, shadowed []configyaml.LayoutRule) {
 	if replaced, err := configyaml.ReplacesProviderGroups(storedYAML, submittedYAML); err == nil && replaced {
 		return "config_provider_groups_replaced", []configyaml.LayoutRule{}
 	}
@@ -286,7 +280,7 @@ func (h *Handler) managementConfigSourcePut(writer http.ResponseWriter, request 
 		return
 	}
 
-	if code, shadowed := checkConfigLayout(request.Context(), client, currentYAML, finalYAML); code != "" {
+	if code, shadowed := checkConfigLayout(currentYAML, finalYAML); code != "" {
 		writeJSON(writer, http.StatusUnprocessableEntity, map[string]any{
 			"error":    "CPA v8 would ignore part of this configuration",
 			"code":     code,

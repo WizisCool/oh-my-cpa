@@ -26,7 +26,7 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 	var cpaConsumeHeader map[string]string
 	var cpaConsumeBody string
 
-	cpaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	cpaServer := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Header.Get("Authorization") != "Bearer "+managementKey {
 			writer.WriteHeader(http.StatusUnauthorized)
 			return
@@ -34,7 +34,7 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 		writer.Header().Set("Content-Type", "application/json")
 
 		switch request.URL.Path {
-		case "/v0/management/auth-files":
+		case "/v8/management/credentials":
 			_, _ = writer.Write([]byte(`{
 				"files": [
 					{
@@ -60,7 +60,7 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 				]
 			}`))
 
-		case "/v0/management/reset-quota":
+		case "/v8/management/routing/cooldown/reset":
 			var payload struct {
 				AuthIndex string `json:"auth_index"`
 			}
@@ -68,7 +68,7 @@ func TestManagementQuotaEndpoints(t *testing.T) {
 			cpaResetCalledWith = payload.AuthIndex
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 
-		case "/v0/management/api-call":
+		case "/v8/management/requests/api-call":
 			var payload struct {
 				AuthIndex string            `json:"auth_index"`
 				URL       string            `json:"url"`

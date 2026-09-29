@@ -14,7 +14,7 @@ browser ──▶ reverse proxy or Vite ──▶ Go process (one binary)
                                         ├─ usage collector  ──▶ CPA
                                         └─ pricing sync loop ──▶ openrouter.ai
 
-Go process ──▶ CPA management API (/v0/management; /v8/management on v8) ──▶ upstream providers
+Go process ──▶ CPA management API (/v8/management; CPA v8+) ──▶ upstream providers
 Go process ──▶ CPA RESP usage channel
 ```
 
@@ -68,7 +68,7 @@ cycle even though the `internal/usage` directory appears in both directions.
 | `internal/usage` | Decode CPA usage/error payloads into typed events | `security` |
 | `internal/usage/resp` | Minimal RESP client for CPA's subscribe/LPOP subset | — |
 | `internal/pricing` | OpenRouter fetch and decode, model matching, tiered quotes, sync service, modes and channel multipliers | — |
-| `internal/cpa/management` | Typed CPA Management API client (`/v0/management`, plus the grouped `/v8/management` routes where the gateway has them) and RESP stream wrapper | `internal/usage/resp` |
+| `internal/cpa/management` | Typed CPA Management API client (`/v8/management`, behind the v8 gate; the declared `/v0/management` reads in `client_v0.go`) and RESP stream wrapper | `internal/usage/resp` |
 | `internal/cpa/gateway` | Fixed-endpoint CPA inference client for the Playground and Agent: client-key auth, model directory, bounded SSE parsing, and bounded tool-call assembly for the Agent loop | — |
 | `internal/cpa/discovery` | Normalize CPA resources into the local identity model | `management`, `crypto`, `domain`, `security` |
 | `internal/cpa/configyaml` | YAML document editing that preserves comments and unknown keys; CPA v8 layout detection, CPA's relocation table, and the checks for settings a v8 gateway would drop | — |
@@ -135,7 +135,7 @@ is a memoised turn list (`AgentTurn.tsx`) that draws capability calls as an Ant 
 `ThoughtChain`, a prepared operation is decided in an authorization dialog
 (`AuthorizationDialog.tsx`) that opens when a run stops for it, and an `ask_question` call is
 answered in a panel that takes the composer's place (`QuestionPanel.tsx`); deciding either one
-continues the run (ADR 0034). The presentation rules - status vocabulary, chain status, failure copy, result digest, change preview -
+continues the run (ADR 0035). The presentation rules - status vocabulary, chain status, failure copy, result digest, change preview -
 are pure functions in `state.ts` with their own suite.
 
 A run request carries the message, the target and an optional `reasoning_effort`, validated by
@@ -166,7 +166,7 @@ than to `internal/operations`.
 `database_schema` and `database_query` read OMC's own database through a second, read-only
 SQLite pool that `internal/repository` opens on first use (`mode=ro`, `query_only`, no attached
 databases). The repository checks each statement's compiled `EXPLAIN` program against a table and
-column classification before running it, and bounds and masks what it returns (ADR 0035,
+column classification before running it, and bounds and masks what it returns (ADR 0036,
 `docs/agent-capabilities.md`).
 
 External agents use the same registry through `oh-my-cpa mcp`, a stdio MCP server. The
@@ -336,31 +336,35 @@ Properties to preserve when changing this code:
   re-keys the stored icon together with the name and website maps in the same
   gated metadata transaction.
 
-### CPA v7 and v8 gateways
+### The CPA v8 baseline
 
-One build serves both CPA generations (ADR 0028; the full record, mapping and
-measurements are in `docs/cpa-v8-compat.md`). Two facts are observed per gateway and
-per document, never inferred from a version string:
+Oh My CPA requires CPA v8.0.0 or later (ADR 0034, superseding ADR 0028; the mapping and
+measurements are in `docs/cpa-v8-compat.md`). The management client addresses
+`/v8/management` for every operation. Whether a gateway serves it is observed, never
+inferred from a version string: `Client.SupportsManagementV8` reads
+`/v8/management/config/config-version` and requires the value `8`; when that route is
+missing, `/v0/management/debug` tells an older gateway (`unsupported`) from one whose
+Management API is disabled because it has no management secret (`disabled`). The answer
+is cached per base URL (`API_SUPPORT_TTL` for v8, the shorter `API_UNSUPPORTED_TTL`
+otherwise) and dropped when a v8 route answers "missing"; a probe with no answer stops
+the gate re-probing for `API_UNDECIDED_TTL`. Every request passes that gate
+(`requireManagementV8` in `internal/cpa/management/v8_gate.go`): against a gateway that
+answered "not v8" it returns `ErrManagementV8Required` without sending anything, which
+the API layer reports as `cpa_v8_required`, and against a `disabled` one
+`ErrManagementDisabled` (`cpa_management_disabled`). `/api/healthz` carries the gate's
+answer as `cpa_management_api`, and the console shell replaces every page with upgrade
+guidance while it reads `unsupported` (`CpaUpgradeRequired`), or with the
+management-secret setting while it reads `disabled` (`CpaManagementDisabled`).
 
-- The **Management API generation**: `Client.SupportsManagementV8` reads
-  `/v8/management/config/config-version` and requires the value `8`. The answer is cached
-  per base URL (`API_SUPPORT_TTL`) and dropped when a v8 route answers "missing".
-- The **configuration layout** of the stored file (`configyaml.DetectLayout`: `legacy`,
-  `v8` or `mixed`).
-
-`GET /management/config` returns both as `layout`, with CPA's relocation table
-(`configyaml.LayoutRules`). The console places every field through
-`web/src/components/config/configLayout.ts`: a legacy file keeps v7 paths on either
-gateway, while a v8 or mixed file is edited at v8 paths with the legacy spelling read as a
-fallback and removed on write. The configuration source writer refuses, before CPA sees
-it, a document CPA v8 would accept and partly ignore (`checkConfigLayout`:
-`config_legacy_keys_shadowed`, `config_provider_groups_replaced`). OMC never performs a
-v8 configuration write, because any such write migrates and rewrites the operator's file.
-
-Operations that v8 serves on the same handler as v0 are listed once in
-`OPERATION_ROUTES` (`internal/cpa/management/api_generation.go`); the client calls the v8
-route on a v8 gateway and falls back to v0 when that route is missing. Everything else,
-including all configuration writes, stays on v0.
+`/v0/management` is addressed only through `internal/cpa/management/client_v0.go`: the
+per-family credential lists, which alone carry each upstream key's `auth-index`, and the
+configuration reads and writes whose editors have not moved to the v8 configuration API.
+Those still place fields by the stored file's layout (`configyaml.DetectLayout`:
+`legacy`, `v8` or `mixed`): `GET /management/config` returns the layout with CPA's
+relocation table (`configyaml.LayoutRules`), the console places every field through
+`web/src/components/config/configLayout.ts`, and the configuration source writer refuses
+a document CPA v8 would accept and partly ignore (`checkConfigLayout`:
+`config_legacy_keys_shadowed`, `config_provider_groups_replaced`).
 
 ### Provider families are data, not code paths
 
@@ -451,7 +455,8 @@ projections of it, and the browser's card registry
 rules for judging a pasted redirect.
 
 The registry is deliberately not an allowlist: CPA plugins register their own
-`{provider}-auth-url` routes at runtime, the console discovers them from the
+login providers at runtime, served by the same shared v8 login endpoint
+(`/v8/management/oauth/auth-url?provider=`), the console discovers them from the
 plugin list, and an id the registry does not know is forwarded unchanged with no
 per-provider flags. The two registries are held together by an id, so a provider
 is added in both or in neither.
@@ -781,8 +786,7 @@ deadline.
 `AUTH` only — never by popping, because a probe that consumed a record would
 destroy it. Subscription is preferred; repeated `SUBSCRIBE` failures degrade to
 RESP `LPOP`, and an unreachable RESP endpoint degrades to the HTTP usage queue
-(`/v0/management/usage-queue`, or `/v8/management/observability/usage/queue` on a
-v8 gateway). Empty pulls back off through `pullPacer` (1s → 2s →
+(`/v8/management/observability/usage/queue`). Empty pulls back off through `pullPacer` (1s → 2s →
 4s → 8s → 10s, then capped) while a full batch drains with no delay. A wrong
 management key triggers a long cooldown instead of retrying, because CPA bans a
 client IP after repeated failures.
@@ -2157,4 +2161,4 @@ model reads are generated through the real facade; inference is explicitly refus
 - Visual system: `docs/design.md`
 - Backup, restore, and migration gates: `docs/ops/sqlite-operations.md`
 - Feature parity status against CPAMC: `docs/cpamc-parity.md`
-- CPA v7/v8 compatibility, relocation table and measurements: `docs/cpa-v8-compat.md`
+- CPA v8 baseline, relocation table and measurements: `docs/cpa-v8-compat.md`

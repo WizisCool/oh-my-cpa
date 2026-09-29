@@ -162,7 +162,7 @@ func newProviderTestFixture(t *testing.T) providerTestFixture {
 		},
 	}
 
-	cpaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	cpaServer := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		// A codex read followed later by a codex write is one read-modify-write
 		// window. Bracketing both here is what lets a test assert that two windows
 		// never overlap, which is the invariant that prevents a lost update.

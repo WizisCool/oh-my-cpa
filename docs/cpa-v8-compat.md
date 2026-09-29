@@ -1,8 +1,11 @@
 # CPA v8 compatibility
 
-Oh My CPA (OMC) works against CLIProxyAPI (CPA) v7 and v8 gateways from one build. This
+Oh My CPA (OMC) requires CLIProxyAPI (CPA) v8.0.0 or later and speaks its v8 Management
+API (ADR 0034, which supersedes the one-build-for-v7-and-v8 decision of ADR 0028). This
 document records what v8 changed, what was measured against real binaries, how OMC
-decides where a setting lives and which API it calls, and what remains unverified.
+decides that a gateway is v8, where a setting lives, which routes it calls, and what
+remains unverified. Measurements against v7.3.20 below are kept as the record of how v8
+treats a v7 configuration file, which is what an upgraded deployment starts from.
 
 Upstream sources, all at tag `v8.0.2` (commit `4a2c818`):
 
@@ -326,15 +329,24 @@ kept the legacy layout (no `config-version`, legacy keys edited in place, all ef
 
 Two independent facts, both observed rather than inferred from a version string:
 
-- **Management API generation** (the capability bit): `GET
-  /v8/management/config/config-version` must answer the value `8`. A 404/405/501 means
-  v0 only. Any other status is not an answer and is not remembered. The body is checked,
-  not just the status, so a catch-all proxy that answers 2xx cannot pass. The answer is
-  cached per gateway base URL for five minutes (`API_SUPPORT_TTL`) and dropped whenever a
-  v8 route answers "missing" (`internal/cpa/management/api_generation.go`). It is exposed
-  as `layout.management_api` (`v8` / `v0` / `unknown`) on `GET /management/config`, and
-  as capability key `management-v8` on `GET /management/capabilities/{key}`
-  (`supported` / `missing`, the same contract as every other capability probe).
+- **Management API generation** (the gate): `GET /v8/management/config/config-version`
+  must answer the value `8`. A 2xx with any other body means the gateway is older than
+  v8; the body is checked so a catch-all proxy cannot pass. A 404/405/501 means the same
+  unless `GET /v0/management/debug` is missing too: CPA answers 404 on every management
+  path while it has no management secret, so that gateway is reported as `disabled`
+  rather than old. Any other status is not an answer and is not remembered; the gate then
+  lets requests through without probing again for fifteen seconds (`API_UNDECIDED_TTL`),
+  while `/api/healthz` keeps re-asking. A v8 answer is cached per gateway
+  base URL for five minutes (`API_SUPPORT_TTL`), a "not v8" answer for fifteen seconds
+  (`API_UNSUPPORTED_TTL`, so an upgrade lifts the block quickly), and the cache is dropped
+  whenever a v8 route answers "missing" (`internal/cpa/management/v8_gate.go`). Against a
+  gateway that answered "not v8", every client operation returns
+  `ErrManagementV8Required` without sending a request; the API layer reports it as
+  `cpa_v8_required`, `/api/healthz` reports `cpa_management_api: unsupported`, and the
+  console shows upgrade guidance in place of every page. Against a `disabled` gateway it
+  returns `ErrManagementDisabled` (`cpa_management_disabled`), and the console shows the
+  management-secret setting instead. An undecided probe blocks nothing. The configuration read still reports `layout.management_api` (`v8` or
+  `unknown`).
 - **Configuration layout** of the stored file (`configyaml.DetectLayout`): `v8` when it
   has v8 sections (`config-version`, a v8-only root section, a root `api-keys` mapping,
   or `routing.retry` / `routing.cooldown` / `routing.force-model-prefix`) and no legacy
@@ -356,8 +368,7 @@ Keys page resolve every field through `web/src/components/config/configLayout.ts
   client-key list. Payload rules live at `requests.payload`, one category at a time.
 
 **The save guard** (`checkConfigLayout` in `internal/api/management_config.go`) checks
-every `PUT /management/config/source`, including hand edits in source mode, unless the
-gateway is known to lack the v8 API. It refuses:
+every `PUT /management/config/source`, including hand edits in source mode. It refuses:
 
 - a document in which a legacy spelling and its v8 twin are both present
   (`config_legacy_keys_shadowed`), because CPA v8 would answer success and drop the
@@ -365,59 +376,70 @@ gateway is known to lack the v8 API. It refuses:
 - a document that turns a stored root `api-keys` mapping into anything else
   (`config_provider_groups_replaced`), because that deletes every upstream credential.
 
-An undecided probe is treated as v8 for the guard: a false refusal costs a message, a
-missed one costs a silently lost setting. Both codes are shown in the console's language.
+Both codes are shown in the console's language.
 
 **Scalar writes** (`PUT /management/config/{key}`, also used by the Agent's `config_set`)
 keep using the v0 flat setters. CPA places them itself (§1), so they need no mapping.
 
-## 7. Read-side routes
+## 7. Routes
 
-Operations whose v8 route is registered on the same CPA handler as the v0 route are in
-`OPERATION_ROUTES` (`internal/cpa/management/api_generation.go`). OMC calls the v8 route
-when the gateway has the v8 API and falls back to v0 when a v8 route answers
-404/405/501. The retry is safe because an unregistered route never reaches a handler.
-A handler's own 404 (an unknown request id) is retried once on v0 and answers the same.
+Every operation is addressed at its `/v8/management` route, with no fallback:
 
-| Operation | v8 route | v0 route |
-| --- | --- | --- |
-| Usage queue (HTTP pull) | `/observability/usage/queue` | `/usage-queue` |
-| API-key usage | `/observability/usage/api-keys` | `/api-key-usage` |
-| Application logs (read, clear) | `/observability/logs` | `/logs` |
-| Error-log list and download | `/observability/logs/errors[/<name>]` | `/request-error-logs[/<name>]` |
-| Request log by id | `/observability/logs/requests/<id>` | `/request-log-by-id/<id>` |
-| Authenticated upstream call (quota probes) | `/requests/api-call` | `/api-call` |
-| Credential cooldown reset | `/routing/cooldown/reset` | `/reset-quota` |
-| Latest release | `/server/latest-version` | `/latest-version` |
+| Operation | Route |
+| --- | --- |
+| Credential files: list, upload, delete, download, models, status, fields | `/credentials`, `/credentials/download`, `/credentials/models`, `/credentials/status`, `/credentials/fields` |
+| OAuth login, status, cancellation, callback | `/oauth/auth-url?provider=`, `/oauth/status`, `/oauth/session`, `/oauth/callback` |
+| Plugins: list, delete, store, install | `/plugins`, `/plugins/<id>`, `/plugins/store`, `/plugins/store/<id>/install` |
+| Usage queue (HTTP pull) | `/observability/usage/queue` |
+| API-key usage | `/observability/usage/api-keys` |
+| Application logs (read, clear) | `/observability/logs` |
+| Error-log list and download | `/observability/logs/errors[/<name>]` |
+| Request log by id | `/observability/logs/requests/<id>` |
+| Authenticated upstream call (quota probes) | `/requests/api-call` |
+| Credential cooldown reset | `/routing/cooldown/reset` |
+| Latest release | `/server/latest-version` |
 
-Everything else stays on v0, which v8 serves unchanged: configuration reads and writes,
-the per-family credential lists, auth files, OAuth, plugins and the RESP usage channel.
+The shared login endpoint names Claude `claude`, while the console and CPA's credential
+files call it `anthropic`; `OAuthProvider.LoginProvider` carries the difference. Plugin
+login providers are served by the same endpoint.
+
+`/v0/management`, which v8 serves unchanged, is addressed only through
+`internal/cpa/management/client_v0.go`:
+
+- the per-family credential lists (`/<family>-api-key`, `/openai-compatibility`), which
+  are the only source of each upstream key's `auth-index`: the v8 configuration view is
+  the stored document and carries no runtime fields;
+- the configuration reads and writes whose editors have not moved to the v8
+  configuration API yet: `/config`, `/config.yaml`, the flat setters, `/api-keys`, the
+  family lists' writes, `/oauth-model-alias`, and `/plugins/<id>/enabled|config`.
+
+The RESP usage channel is not part of the Management API and is unchanged.
 
 ## 8. Compatibility matrix
 
-"Measured" means exercised against the real binary in this change; "unverified" means
-not exercised end to end here.
+"Measured" means exercised against the real binary; "unverified" means not exercised end
+to end. The v7.3.20 column is the record from ADR 0028's change and no longer describes a
+supported gateway: OMC now refuses v7 before any request.
 
-| OMC surface | CPA v7.3.20 | CPA v8.0.2, legacy file | CPA v8.0.2, v8 file |
-| --- | --- | --- | --- |
-| Configuration page save | Measured, unchanged | Measured, stays legacy | Measured, v8 paths |
-| Source editor save guard | Measured, not applied (v7) | Measured, passes | Measured, refuses both cases |
-| Keys page | Measured, root `api-keys` | Unit-tested, root `api-keys` | Measured, `access.api-keys` |
-| Scalar setters (v0) | Measured (11 keys) | Unverified | Measured (13 keys) |
-| Provider credential lists (v0) | Measured read | Measured read | Measured read and write |
-| Usage: RESP subscription | Measured | Measured | Layout-independent |
-| Usage: HTTP queue, logs, error logs, API-key usage | Measured, v0 routes | Measured, v8 routes | Layout-independent |
-| Request log, cooldown reset, api-call, latest version | Measured, v0 routes | Measured, v8 routes | Layout-independent |
-| Capability probe `management-v8` | Measured `missing` | Measured `supported` | Layout-independent |
-| OAuth login, auth files, plugins | Unverified in this change | Unverified | Unverified |
+| OMC surface | CPA v8.0.2, legacy file | CPA v8.0.2, v8 file |
+| --- | --- | --- |
+| Configuration page save | Measured, stays legacy | Measured, v8 paths |
+| Source editor save guard | Measured, passes | Measured, refuses both cases |
+| Keys page | Unit-tested, root `api-keys` | Measured, `access.api-keys` |
+| Scalar setters (v0) | Unverified | Measured (13 keys) |
+| Provider credential lists (v0) | Measured read | Measured read and write |
+| Usage: RESP subscription | Measured | Layout-independent |
+| Usage: HTTP queue, logs, error logs, API-key usage | Measured, v8 routes | Layout-independent |
+| Request log, cooldown reset, api-call, latest version | Measured, v8 routes | Layout-independent |
+| Credential files, OAuth login, plugins (v8 routes) | Unit- and browser-tested against fixtures | Layout-independent |
+| Gate against a v7 gateway | Unit-tested (every route of a v7 gateway answers 404) | — |
 
-"Layout-independent" rows choose their route from the API generation alone, which does
-not depend on the file.
+"Layout-independent" rows do not depend on the file.
 
-The OAuth, auth-file and plugin rows use v0 routes that v8 keeps with the same handlers.
-No real provider sign-in or upstream traffic was possible in the test environment, so
-those flows and the contents of usage records were not exercised. For the table's
-routed operations, the route and status were checked, not payload contents.
+The credential, OAuth and plugin routes are registered on the same CPA handlers as their
+v0 counterparts (`server_management_v8.go`), which is why fixtures stand in for them. No
+real provider sign-in or upstream traffic was possible in the test environment, so those
+flows and the contents of usage records were not exercised against a real binary.
 
 ## 9. Risks
 
@@ -431,11 +453,8 @@ routed operations, the route and status were checked, not payload contents.
   formatting and unknown sections do not come back.
 - **v0 setters can leave legacy keys in a v8 file** (§1). CPA honours them and the
   editor reads them as fallbacks; the next edit of that field moves it to the v8 path.
-- **Plugin OAuth.** In v8, plugin-provided OAuth providers start only through
-  `/v8/management/oauth/auth-url`. OMC's OAuth workspace uses the per-provider v0 routes
-  for its built-in providers and does not offer plugin providers.
-- **Probe cache.** An upgrade in place is noticed within `API_SUPPORT_TTL` (five
-  minutes); a rollback is noticed on the first v8 route that answers "missing".
+- **Probe cache.** An upgrade from v7 is noticed within `API_UNSUPPORTED_TTL` (fifteen
+  seconds); a rollback to v7 is noticed on the first v8 route that answers "missing".
 
 ## 10. Re-deriving the table for a new CPA release
 
@@ -448,6 +467,6 @@ routed operations, the route and status were checked, not payload contents.
    ./internal/cpa/configyaml/ ./internal/api/` and `pnpm test:logic`. The frontend suite
    `scripts/test-config-layout.ts` reads the same file and fails when an editor field
    names a path CPA does not read.
-4. Compare `server_management_v8.go` of the release with `OPERATION_ROUTES`, and update
+4. Compare `server_management_v8.go` of the release with the routes in §7, and update
    this document.
 

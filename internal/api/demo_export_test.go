@@ -139,7 +139,6 @@ func demoExportCases() []demoExportCase {
 		{Name: "auth-files-models", Path: "/api/v1/management/auth-files/models?name=antigravity-studio.json"},
 		// The capability probe is keyed by a fixed catalogue name rather than by a
 		// credential; `oauth` is the one the console asks for.
-		{Name: "capabilities-oauth", Path: "/api/v1/management/capabilities/oauth"},
 		{Name: "oauth-providers", Path: "/api/v1/management/oauth/providers"},
 		// The status read is polled while a sign-in is in progress, and it needs the
 		// state it was started with. The fixture has no flow running, which is the

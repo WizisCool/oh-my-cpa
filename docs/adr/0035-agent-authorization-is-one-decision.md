@@ -1,4 +1,4 @@
-# ADR 0034: Agent authorization is one allow-or-deny decision, and the agent may ask the operator
+# ADR 0035: Agent authorization is one allow-or-deny decision, and the agent may ask the operator
 
 - Status: Accepted
 - Date: 2026-09-28

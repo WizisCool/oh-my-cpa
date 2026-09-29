@@ -5,11 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"net/http"
 	"strings"
-	"time"
 )
 
 // ApiCallRequest represents the payload passed to CPA's /api-call proxy endpoint.
@@ -59,7 +56,7 @@ func (c *Client) ApiCall(ctx context.Context, req ApiCallRequest) (ApiCallRespon
 	}
 
 	var resp ApiCallResponse
-	if err := c.doOperationJSON(ctx, OperationAPICall, http.MethodPost, payload, &resp); err != nil {
+	if err := c.doJSONBody(ctx, http.MethodPost, "/requests/api-call", payload, &resp); err != nil {
 		return ApiCallResponse{}, err
 	}
 	return resp, nil
@@ -89,82 +86,13 @@ func (c *Client) LatestVersion(ctx context.Context) (string, ResponseMeta, error
 	var response struct {
 		Version string `json:"latest-version"`
 	}
-	meta, err := c.doOperation(ctx, operationCall{operation: OperationLatestVersion, method: http.MethodGet}, &response)
+	meta, err := c.DoJSONWithMeta(ctx, http.MethodGet, "/server/latest-version", &response)
 	return strings.TrimSpace(response.Version), meta, err
 }
 
-// ProbeResult records the outcome of a read-only probe against a single CPA endpoint.
-type ProbeResult struct {
-	Endpoint   string `json:"endpoint"`
-	StatusCode int    `json:"http_status"`
-	LatencyMs  int64  `json:"latency_ms"`
-	Status     string `json:"status"` // "supported", "missing", "offline", "error"
-	Error      string `json:"error,omitempty"`
-}
-
-// ProbeEndpoint performs a bounded, read-only GET against a management endpoint
-// to check if upstream supports it, measuring latency and status code without
-// buffering large payloads.
-func (c *Client) ProbeEndpoint(ctx context.Context, endpoint string) ProbeResult {
-	return c.ProbeEndpointAt(ctx, APIGenerationV0, endpoint)
-}
-
-// ProbeEndpointAt is ProbeEndpoint under a chosen API generation.
-func (c *Client) ProbeEndpointAt(ctx context.Context, generation APIGeneration, endpoint string) ProbeResult {
-	start := time.Now()
-	if c == nil {
-		return ProbeResult{
-			Endpoint:  endpoint,
-			Status:    "offline",
-			Error:     "CPA client is not initialized",
-			LatencyMs: 0,
-		}
-	}
-	req, err := c.newRequestAt(ctx, http.MethodGet, generation, endpoint, nil, "")
-	if err != nil {
-		return ProbeResult{
-			Endpoint:  endpoint,
-			Status:    "error",
-			Error:     err.Error(),
-			LatencyMs: time.Since(start).Milliseconds(),
-		}
-	}
-	req.Header.Set("Authorization", "Bearer "+c.management)
-	req.Header.Set("Accept", "*/*")
-
-	resp, err := c.httpClient.Do(req)
-	latency := time.Since(start).Milliseconds()
-	if err != nil {
-		return ProbeResult{
-			Endpoint:  endpoint,
-			Status:    "offline",
-			LatencyMs: latency,
-			Error:     "connection failed",
-		}
-	}
-	defer resp.Body.Close()
-	_, _ = io.CopyN(io.Discard, resp.Body, 16*1024)
-
-	res := ProbeResult{
-		Endpoint:   endpoint,
-		StatusCode: resp.StatusCode,
-		LatencyMs:  latency,
-	}
-	switch {
-	case resp.StatusCode >= 200 && resp.StatusCode < 300:
-		res.Status = "supported"
-	case resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed || resp.StatusCode == http.StatusNotImplemented:
-		res.Status = "missing"
-	default:
-		res.Status = "error"
-		res.Error = fmt.Sprintf("HTTP %d", resp.StatusCode)
-	}
-	return res
-}
-
 func (c *Client) Health(ctx context.Context) error {
-	// /auth-files is a documented read-only management endpoint and exercises
-	// both CPA reachability and management-key authentication.
+	// The credential list is a read-only v8 endpoint that exercises reachability,
+	// management-key authentication and, through the gate, the API generation.
 	var response AuthFilesResponse
-	return c.DoJSON(ctx, http.MethodGet, "/auth-files", &response)
+	return c.DoJSON(ctx, http.MethodGet, "/credentials", &response)
 }

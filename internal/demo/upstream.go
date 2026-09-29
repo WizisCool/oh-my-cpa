@@ -17,9 +17,14 @@ import (
 	"time"
 )
 
-// managementPrefix is the CPA management API prefix the client builds its URLs
-// from, kept identical so the fixture exercises the real request path.
-const managementPrefix = "/v0/management"
+// managementPrefix and legacyManagementPrefix are the CPA management API prefixes
+// the client builds its URLs from, kept identical so the fixture exercises the real
+// request path. The fixture is a v8 gateway: it answers the v8 tree, and on v0 only
+// the reads the client still makes there (internal/cpa/management/client_v0.go).
+const (
+	managementPrefix       = "/v8/management"
+	legacyManagementPrefix = "/v0/management"
+)
 
 // demoRefusal names what the upstream answers when something is not part of the
 // demonstration. It is a second layer behind internal/api's route policy: a
@@ -335,14 +340,22 @@ func (u *Upstream) serve(writer http.ResponseWriter, request *http.Request) {
 		writeFixtureJSON(writer, http.StatusUnauthorized, map[string]any{"error": "unauthorized"})
 		return
 	}
-	path := strings.TrimPrefix(request.URL.Path, managementPrefix)
-	if path == request.URL.Path {
+	if path, isLegacy := strings.CutPrefix(request.URL.Path, legacyManagementPrefix); isLegacy {
+		// Everything the public demo must never perform is refused here as well as in
+		// internal/api, so the boundary does not depend on a single classification.
+		if u.refuseLegacy(writer, request, path) {
+			return
+		}
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		u.serveLegacy(writer, request, path)
+		return
+	}
+	path, found := strings.CutPrefix(request.URL.Path, managementPrefix)
+	if !found {
 		writeFixtureJSON(writer, http.StatusNotFound, map[string]any{"error": "unknown endpoint"})
 		return
 	}
-
-	// Everything the public demo must never perform is refused here as well as in
-	// internal/api, so the boundary does not depend on a single classification.
 	if u.refuse(writer, request, path) {
 		return
 	}
@@ -350,15 +363,41 @@ func (u *Upstream) serve(writer http.ResponseWriter, request *http.Request) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	switch {
-	case request.Method == http.MethodGet && path == "/auth-files":
+	case request.Method == http.MethodGet && path == "/config/config-version":
+		writeFixtureJSON(writer, http.StatusOK, 8)
+	case request.Method == http.MethodGet && path == "/credentials":
 		writeFixtureJSON(writer, http.StatusOK, map[string]any{"files": u.fixture.files})
-	case request.Method == http.MethodGet && path == "/auth-files/models":
+	case request.Method == http.MethodGet && path == "/credentials/models":
 		name := request.URL.Query().Get("name")
 		writeFixtureJSON(writer, http.StatusOK, map[string]any{"models": authFileModels(name)})
-	case request.Method == http.MethodPatch && path == "/auth-files/status":
+	case request.Method == http.MethodPatch && path == "/credentials/status":
 		u.patchAuthFileStatus(writer, request)
-	case request.Method == http.MethodPatch && path == "/auth-files/fields":
+	case request.Method == http.MethodPatch && path == "/credentials/fields":
 		u.patchAuthFileFields(writer, request)
+	case request.Method == http.MethodGet && path == "/observability/usage/api-keys":
+		writeFixtureJSON(writer, http.StatusOK, u.fixture.quota)
+	case request.Method == http.MethodGet && path == "/plugins":
+		writeFixtureJSON(writer, http.StatusOK, u.fixture.plugins)
+	case request.Method == http.MethodGet && path == "/plugins/store":
+		writeFixtureJSON(writer, http.StatusOK, u.fixture.pluginStore)
+	case request.Method == http.MethodGet && path == "/observability/logs":
+		u.serveLogs(writer, request)
+	case request.Method == http.MethodGet && path == "/observability/logs/errors":
+		writeFixtureJSON(writer, http.StatusOK, map[string]any{"files": errorLogFiles(u.now)})
+	case request.Method == http.MethodGet && path == "/server/latest-version":
+		writeFixtureJSON(writer, http.StatusOK, map[string]any{"latest-version": fixtureCPALatestVersion})
+	case request.Method == http.MethodGet && path == "/oauth/status":
+		writeFixtureJSON(writer, http.StatusOK, map[string]any{"status": "wait", "message": "no sign-in is in progress"})
+	case request.Method == http.MethodPost && path == "/requests/api-call":
+		u.serveAPICall(writer, request)
+	default:
+		writeFixtureJSON(writer, http.StatusNotFound, map[string]any{"error": "unknown endpoint"})
+	}
+}
+
+// serveLegacy answers the /v0/management reads the client still makes.
+func (u *Upstream) serveLegacy(writer http.ResponseWriter, request *http.Request, path string) {
+	switch {
 	case request.Method == http.MethodGet && path == "/oauth-model-alias":
 		writeFixtureJSON(writer, http.StatusOK, map[string]any{"oauth-model-alias": u.fixture.aliases})
 	case request.Method == http.MethodGet && path == "/oauth-excluded-models":
@@ -371,15 +410,11 @@ func (u *Upstream) serve(writer http.ResponseWriter, request *http.Request) {
 		_, _ = writer.Write([]byte(u.fixture.configYAML))
 	case request.Method == http.MethodGet && path == "/api-keys":
 		writeFixtureJSON(writer, http.StatusOK, map[string]any{"api-keys": gatewayKeyValues()})
-	case request.Method == http.MethodGet && path == "/api-key-usage":
-		writeFixtureJSON(writer, http.StatusOK, u.fixture.quota)
 	case request.Method == http.MethodGet && path == "/openai-compatibility":
 		writeFixtureJSON(writer, http.StatusOK, map[string]any{"openai-compatibility": compatibilitySection()})
 	case request.Method == http.MethodGet && isFamilyEndpoint(path):
 		family := strings.TrimSuffix(strings.TrimPrefix(path, "/"), "-api-key")
 		writeFixtureJSON(writer, http.StatusOK, map[string]any{family + "-api-key": familySection(family)})
-	case request.Method == http.MethodGet && path == "/plugins":
-		writeFixtureJSON(writer, http.StatusOK, u.fixture.plugins)
 	case request.Method == http.MethodGet && strings.HasPrefix(path, "/plugins/") && strings.HasSuffix(path, "/config"):
 		config, ok := u.fixture.pluginConfigs[strings.TrimSuffix(strings.TrimPrefix(path, "/plugins/"), "/config")]
 		if !ok {
@@ -387,73 +422,49 @@ func (u *Upstream) serve(writer http.ResponseWriter, request *http.Request) {
 			return
 		}
 		writeFixtureJSON(writer, http.StatusOK, config)
-	case request.Method == http.MethodGet && path == "/plugin-store":
-		writeFixtureJSON(writer, http.StatusOK, u.fixture.pluginStore)
-	case request.Method == http.MethodGet && path == "/logs":
-		u.serveLogs(writer, request)
-	case request.Method == http.MethodGet && path == "/request-error-logs":
-		writeFixtureJSON(writer, http.StatusOK, map[string]any{"files": errorLogFiles(u.now)})
-	case request.Method == http.MethodGet && path == "/latest-version":
-		writeFixtureJSON(writer, http.StatusOK, map[string]any{"latest-version": "7.3.5"})
-	case request.Method == http.MethodGet && path == "/get-auth-status":
-		writeFixtureJSON(writer, http.StatusOK, map[string]any{"status": "wait", "message": "no sign-in is in progress"})
-	case request.Method == http.MethodPost && path == "/api-call":
-		u.serveAPICall(writer, request)
 	default:
 		writeFixtureJSON(writer, http.StatusNotFound, map[string]any{"error": "unknown endpoint"})
 	}
 }
 
-// refuse answers the requests the public demo must never carry out. It covers
-// credential movement, sign-in, plugin execution, raw log bodies, configuration
-// writes and anything that would make the process reach a real provider.
+// refuse answers the /v8/management requests the public demo must never carry out.
+// It covers credential movement, sign-in, plugin execution, raw log bodies,
+// configuration writes and anything that would make the process reach a real
+// provider.
 func (u *Upstream) refuse(writer http.ResponseWriter, request *http.Request, path string) bool {
 	if request.Method == http.MethodGet || request.Method == http.MethodHead {
-		// Reads that hand back raw credential or log bytes, and the sign-in endpoints a
-		// caller reaches with a GET even though they start an OAuth exchange.
-		if path == "/auth-files/download" || strings.HasPrefix(path, "/request-error-logs/") || strings.HasSuffix(path, "-auth-url") {
-			writeFixtureJSON(writer, http.StatusForbidden, map[string]any{"error": demoRefusal})
-			return true
+		// Reads that hand back raw credential or log bytes, and the sign-in endpoint a
+		// caller reaches with a GET even though it starts an OAuth exchange.
+		if path == "/credentials/download" || strings.HasPrefix(path, "/observability/logs/errors/") || path == "/oauth/auth-url" {
+			return refuseDemo(writer)
 		}
 		return false
 	}
-	// Everything else writes through to CPA's own configuration, credential store or
-	// provider registry.
-	for _, prefix := range mutatingEndpoints {
-		if path == prefix || strings.HasPrefix(path, prefix+"/") {
-			writeFixtureJSON(writer, http.StatusForbidden, map[string]any{"error": demoRefusal})
-			return true
-		}
-	}
 	// The credential collection itself is upload and delete. Its two metadata sub-paths
-	// are deliberately not matched by the prefix above: editing a credential's note or
-	// its enabled state is a write the demonstration performs against the fixture, and
-	// refusing it here would answer a permitted call with a failure.
-	if path == "/auth-files" || path == "/auth-files/model-aliases" {
-		writeFixtureJSON(writer, http.StatusForbidden, map[string]any{"error": demoRefusal})
-		return true
+	// are deliberately not refused: editing a credential's note or its enabled state is
+	// a write the demonstration performs against the fixture, and refusing it here
+	// would answer a permitted call with a failure. The authenticated upstream call is
+	// answered from fixtures (serveAPICall) and never leaves the process.
+	if path == "/credentials/status" || path == "/credentials/fields" || path == "/requests/api-call" {
+		return false
 	}
-	// The credential lists are addressed one path per family, and the scalar settings
-	// one path per setting, so those are matched by shape rather than by name.
-	if isFamilyEndpoint(path) || strings.HasPrefix(path, "/config/") {
-		writeFixtureJSON(writer, http.StatusForbidden, map[string]any{"error": demoRefusal})
-		return true
-	}
-	return false
+	// Every other v8 write reaches CPA's configuration, credential store, plugin host
+	// or an upstream provider.
+	return refuseDemo(writer)
 }
 
-// mutatingEndpoints are the paths whose writes the fixture refuses. Their reads are
-// deliberately not refused: the console lists credentials, provider definitions and
-// plugins from exactly these paths.
-var mutatingEndpoints = []string{
-	"/reset-quota",
-	"/api-keys",
-	"/openai-compatibility",
-	"/config.yaml",
-	"/plugins",
-	"/plugin-store",
-	"/oauth-session",
-	"/oauth-callback",
+// refuseLegacy answers the /v0/management writes; the reads the client still makes
+// there are all permitted.
+func (u *Upstream) refuseLegacy(writer http.ResponseWriter, request *http.Request, _ string) bool {
+	if request.Method == http.MethodGet || request.Method == http.MethodHead {
+		return false
+	}
+	return refuseDemo(writer)
+}
+
+func refuseDemo(writer http.ResponseWriter) bool {
+	writeFixtureJSON(writer, http.StatusForbidden, map[string]any{"error": demoRefusal})
+	return true
 }
 
 func (u *Upstream) patchAuthFileStatus(writer http.ResponseWriter, request *http.Request) {
@@ -608,7 +619,11 @@ func writeFixtureJSON(writer http.ResponseWriter, status int, payload any) {
 // fixtureCPAVersion is the gateway version the fixture reports. It is a fixed
 // plausible release rather than a real one, so the system panel has something to
 // render without claiming a specific upstream build.
-const fixtureCPAVersion = "7.3.5"
+const fixtureCPAVersion = "8.0.1"
+
+// fixtureCPALatestVersion is what the gateway reports as its newest release, two
+// above the running one so the system page has an update to show.
+const fixtureCPALatestVersion = "8.0.3"
 
 func randomKey() (string, error) {
 	material := make([]byte, 24)

@@ -467,8 +467,8 @@ func TestUsageEventRequestLogProxiedFromCPA(t *testing.T) {
 	var requested atomic.Value
 	requested.Store("")
 	client, baseURL, repo := startDashboardTestServer(t, func(writer http.ResponseWriter, request *http.Request) {
-		if strings.HasPrefix(request.URL.Path, "/v0/management/request-log-by-id/") {
-			requested.Store(strings.TrimPrefix(request.URL.Path, "/v0/management/request-log-by-id/"))
+		if strings.HasPrefix(request.URL.Path, "/v8/management/observability/logs/requests/") {
+			requested.Store(strings.TrimPrefix(request.URL.Path, "/v8/management/observability/logs/requests/"))
 			writer.Header().Set("Content-Type", "text/plain")
 			_, _ = writer.Write([]byte("=== REQUEST INFO ===\nTimestamp: now\n"))
 			return

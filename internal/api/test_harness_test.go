@@ -15,6 +15,7 @@ import (
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/auth"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/config"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
@@ -35,6 +36,12 @@ func startDashboardTestServer(t *testing.T, handler func(http.ResponseWriter, *h
 		if request.Header.Get("Authorization") != "Bearer management-secret-value" {
 			writer.WriteHeader(http.StatusUnauthorized)
 			_, _ = writer.Write([]byte(`{"error":"unauthorized"}`))
+			return
+		}
+		// Every stand-in gateway is a v8 one: the console refuses anything older
+		// before calling it, which health_test.go covers with its own gateway.
+		if request.URL.Path == "/v8/management"+management.MANAGEMENT_V8_PROBE_ENDPOINT {
+			_, _ = writer.Write([]byte("8"))
 			return
 		}
 		if handler != nil {
@@ -161,4 +168,16 @@ func postJSON(t *testing.T, client *http.Client, url string) (*http.Response, []
 		t.Fatal(err)
 	}
 	return response, payload
+}
+
+// newFakeCPA starts a stand-in v8 gateway: it answers the gate's probe itself,
+// so the handler sees only the operations its test is about.
+func newFakeCPA(handler http.Handler) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/v8/management"+management.MANAGEMENT_V8_PROBE_ENDPOINT {
+			_, _ = writer.Write([]byte("8"))
+			return
+		}
+		handler.ServeHTTP(writer, request)
+	}))
 }

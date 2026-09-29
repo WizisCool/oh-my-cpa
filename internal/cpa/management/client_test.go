@@ -13,7 +13,7 @@ import (
 
 func TestClientUsesManagementAuthorizationAndDecodesResponses(t *testing.T) {
 	const key = "management-secret"
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/v0/management/codex-api-key" {
 			t.Fatalf("request path = %q", request.URL.Path)
 		}
@@ -44,8 +44,8 @@ func TestClientUsesManagementAuthorizationAndDecodesResponses(t *testing.T) {
 
 func TestClientAuthFilesDecodesV7ObservationsAndMetadata(t *testing.T) {
 	const key = "management-secret"
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/v0/management/auth-files" {
+	server := newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/v8/management/credentials" {
 			t.Fatalf("request path = %q", request.URL.Path)
 		}
 		writer.Header().Set("X-CPA-Version", "7.1.2")
@@ -74,7 +74,7 @@ func TestClientAuthFilesDecodesV7ObservationsAndMetadata(t *testing.T) {
 }
 
 func TestClientAuthFilesToleratesUnexpectedTimeFieldShapes(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+	server := newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		_, _ = writer.Write([]byte(`{"files":[
 			{"name":"rfc3339.json","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z","last_refresh":"2026-01-03T00:00:00Z"},
 			{"name":"epoch.json","created_at":1767225600,"updated_at":1767225600.5,"last_refresh":null},
@@ -117,11 +117,11 @@ func TestClientAuthFileMutationsUseFixedEndpoints(t *testing.T) {
 		ctype    string
 	}
 	var seen []observation
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		body, _ := io.ReadAll(request.Body)
 		seen = append(seen, observation{method: request.Method, path: request.URL.Path, rawQuery: request.URL.RawQuery, body: string(body), ctype: request.Header.Get("Content-Type")})
 		writer.Header().Set("Content-Type", "application/json")
-		if request.URL.Path == "/v0/management/auth-files/download" {
+		if request.URL.Path == "/v8/management/credentials/download" {
 			_, _ = writer.Write([]byte(`{"token":"raw-file-content"}`))
 			return
 		}
@@ -153,12 +153,12 @@ func TestClientAuthFileMutationsUseFixedEndpoints(t *testing.T) {
 	}
 
 	want := []observation{
-		{method: http.MethodPatch, path: "/v0/management/auth-files/status", body: `{"auth_index":"idx 1","disabled":true,"name":"a b.json"}`, ctype: "application/json"},
-		{method: http.MethodPatch, path: "/v0/management/auth-files/fields", body: `{"name":"a b.json","note":"x","priority":10}`, ctype: "application/json"},
-		{method: http.MethodPost, path: "/v0/management/auth-files", rawQuery: "name=up.json", body: `{"type":"gemini"}`, ctype: "application/json"},
-		{method: http.MethodDelete, path: "/v0/management/auth-files", body: `{"names":["a b.json","c.json"]}`, ctype: "application/json"},
-		{method: http.MethodGet, path: "/v0/management/auth-files/download", rawQuery: "name=a+b.json"},
-		{method: http.MethodGet, path: "/v0/management/auth-files/models", rawQuery: "name=a+b.json"},
+		{method: http.MethodPatch, path: "/v8/management/credentials/status", body: `{"auth_index":"idx 1","disabled":true,"name":"a b.json"}`, ctype: "application/json"},
+		{method: http.MethodPatch, path: "/v8/management/credentials/fields", body: `{"name":"a b.json","note":"x","priority":10}`, ctype: "application/json"},
+		{method: http.MethodPost, path: "/v8/management/credentials", rawQuery: "name=up.json", body: `{"type":"gemini"}`, ctype: "application/json"},
+		{method: http.MethodDelete, path: "/v8/management/credentials", body: `{"names":["a b.json","c.json"]}`, ctype: "application/json"},
+		{method: http.MethodGet, path: "/v8/management/credentials/download", rawQuery: "name=a+b.json"},
+		{method: http.MethodGet, path: "/v8/management/credentials/models", rawQuery: "name=a+b.json"},
 	}
 	if len(seen) != len(want) {
 		t.Fatalf("request count = %d, want %d: %#v", len(seen), len(want), seen)
@@ -181,7 +181,7 @@ func TestClientAuthFileMutationsUseFixedEndpoints(t *testing.T) {
 
 func TestClientDoesNotLeakKeyInHTTPError(t *testing.T) {
 	const key = "management-secret"
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.WriteHeader(http.StatusUnauthorized)
 		_, _ = writer.Write([]byte(`{"error":"management-secret was rejected"}`))
 	}))
@@ -201,13 +201,8 @@ func TestClientDoesNotLeakKeyInHTTPError(t *testing.T) {
 
 func TestClientApiCall(t *testing.T) {
 	const key = "management-secret"
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		// A v7 gateway: the v8 capability probe finds no route.
-		if strings.HasPrefix(request.URL.Path, "/v8/") {
-			http.NotFound(writer, request)
-			return
-		}
-		if request.URL.Path != "/v0/management/api-call" {
+	server := newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/v8/management/requests/api-call" {
 			t.Fatalf("request path = %q", request.URL.Path)
 		}
 		if request.Method != http.MethodPost {
@@ -284,10 +279,10 @@ func TestNewClientValidatesURLAndKey(t *testing.T) {
 }
 
 func TestListAllConfiguredModels(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newV8Server(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/v0/management/auth-files":
+		case "/v8/management/credentials":
 			_, _ = w.Write([]byte(`{"files":[{"models":[{"id":"claude-3-7-sonnet"}]}]}`))
 		case "/v0/management/codex-api-key":
 			_, _ = w.Write([]byte(`{"codex-api-key":[{"models":[{"name":"gpt-5","alias":"gpt-5-alias"}]},{"excluded-models":["*"],"models":[{"name":"disabled-codex"}]}]}`))
@@ -358,9 +353,9 @@ func TestConfiguredModelCatalogKeepsItsFailuresTypeable(t *testing.T) {
 	// Everything answers, so the aggregate carries exactly the one failure under
 	// test rather than a pile of unrelated ones.
 	newGateway := func(status int) *httptest.Server {
-		return httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		return newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			writer.Header().Set("Content-Type", "application/json")
-			if request.URL.Path == "/v0/management/auth-files" {
+			if request.URL.Path == "/v8/management/credentials" {
 				writer.WriteHeader(status)
 				_, _ = writer.Write([]byte(`{"error":"cannot list auth files"}`))
 				return

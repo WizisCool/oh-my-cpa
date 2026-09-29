@@ -14,11 +14,16 @@ const (
 	OAuthFlowDevice OAuthFlow = "device"
 )
 
-// OAuthProvider is one built-in authorization the CPA Management API exposes as
-// `GET /{id}-auth-url`.
+// OAuthProvider is one built-in authorization the CPA Management API starts
+// through `GET /oauth/auth-url?provider=<LoginProvider>`.
 type OAuthProvider struct {
 	ID   string
 	Name string
+	// LoginProvider is the `provider` value CPA's shared login endpoint expects,
+	// set only where it differs from ID: the console calls Claude "anthropic",
+	// the name its credential files carry, while the login endpoint calls it
+	// "claude".
+	LoginProvider string
 	// Description is shown to the operator in the provider list.
 	Description string
 	Flow        OAuthFlow
@@ -32,15 +37,15 @@ type OAuthProvider struct {
 // OAuthProviders is the registry of built-ins the console offers.
 //
 // It is the single place that answers three questions for each provider: which
-// management path carries it, which flow shape the console must render, and
+// login provider name CPA expects, which flow shape the console must render, and
 // whether CPA should be asked to open its loopback callback. Adding a provider
 // is a row here plus its console-side presentation; nothing branches on the
 // provider id.
 //
 // It is deliberately not a closed allowlist. CPA plugins register their own
-// `{provider}-auth-url` routes at runtime, and the console discovers them from
-// the plugin list, so an id that is absent here is still forwarded to CPA - it
-// simply gets no per-provider flags.
+// login providers at runtime, served by the same shared endpoint, and the
+// console discovers them from the plugin list, so an id that is absent here is
+// still forwarded to CPA - it simply gets no per-provider flags.
 var OAuthProviders = []OAuthProvider{
 	{
 		ID:          "kimi",
@@ -57,6 +62,7 @@ var OAuthProviders = []OAuthProvider{
 	},
 	{
 		ID:                   "anthropic",
+		LoginProvider:        "claude",
 		Name:                 "Anthropic Claude",
 		Description:          "Anthropic Claude OAuth authentication flow",
 		Flow:                 OAuthFlowRedirect,
@@ -93,6 +99,16 @@ var OAuthProviders = []OAuthProvider{
 		Description: "Meta Muse (api.meta.ai) device code / OAuth flow",
 		Flow:        OAuthFlowDevice,
 	},
+}
+
+// loginProviderFor is the `provider` query value CPA's shared login endpoint
+// expects for a console provider id; a plugin provider passes through unchanged.
+func loginProviderFor(id string) string {
+	normalized := strings.ToLower(strings.TrimSpace(id))
+	if registered, ok := LookupOAuthProvider(normalized); ok && registered.LoginProvider != "" {
+		return registered.LoginProvider
+	}
+	return normalized
 }
 
 // LookupOAuthProvider resolves a built-in provider id, case-insensitively.

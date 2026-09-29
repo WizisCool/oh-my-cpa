@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,9 +18,18 @@ import (
 
 func TestHealthzLivenessAndReadinessPartitioning(t *testing.T) {
 	cpaOnline := true
+	isPreV8 := false
 	fakeCPA := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if !cpaOnline {
 			writer.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		if isPreV8 && strings.HasPrefix(request.URL.Path, "/v8/") {
+			http.NotFound(writer, request)
+			return
+		}
+		if request.URL.Path == "/v8/management/config/config-version" {
+			_, _ = writer.Write([]byte("8"))
 			return
 		}
 		writer.WriteHeader(http.StatusOK)
@@ -71,7 +81,7 @@ func TestHealthzLivenessAndReadinessPartitioning(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
-	if body["status"] != "ok" || body["database_status"] != "ok" || body["cpa_connected"] != true {
+	if body["status"] != "ok" || body["database_status"] != "ok" || body["cpa_connected"] != true || body["cpa_management_api"] != "v8" {
 		t.Fatalf("unexpected healthy payload: %#v", body)
 	}
 	// Assert cpa_base_url is NOT leaked in public healthz
@@ -94,6 +104,25 @@ func TestHealthzLivenessAndReadinessPartitioning(t *testing.T) {
 	}
 	if body2["status"] != "degraded" || body2["cpa_connected"] != false || body2["database_status"] != "ok" {
 		t.Fatalf("unexpected degraded payload: %#v", body2)
+	}
+
+	// 2b. The gateway is replaced by one older than CPA v8: degraded, and named,
+	// because the console blocks itself on it. The cached v8 answer is dropped by
+	// the first v8 route that answers "missing", so the next poll re-probes.
+	cpaOnline = true
+	isPreV8 = true
+	var bodyPreV8 map[string]any
+	for range 2 {
+		respPreV8, err := http.Get(server.URL + "/api/healthz")
+		if err != nil {
+			t.Fatal(err)
+		}
+		bodyPreV8 = map[string]any{}
+		_ = json.NewDecoder(respPreV8.Body).Decode(&bodyPreV8)
+		respPreV8.Body.Close()
+	}
+	if bodyPreV8["status"] != "degraded" || bodyPreV8["cpa_connected"] != false || bodyPreV8["cpa_management_api"] != "unsupported" {
+		t.Fatalf("unexpected pre-v8 payload: %#v", bodyPreV8)
 	}
 
 	// 3. Database down (fatal readiness failure -> 503)

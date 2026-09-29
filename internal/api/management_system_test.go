@@ -23,11 +23,11 @@ import (
 func startSystemTestServer(t *testing.T) (*http.Client, string, *repository.Repository) {
 	t.Helper()
 
-	cpaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	cpaServer := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		writer.Header().Set("X-CPA-Version", "7.2.146-test")
 		switch {
-		case strings.HasSuffix(request.URL.Path, "/auth-files"):
+		case strings.HasSuffix(request.URL.Path, "/credentials"):
 			_, _ = writer.Write([]byte(`{"files":[{"name":"a.json"},{"name":"b.json"}]}`))
 		case strings.HasSuffix(request.URL.Path, "/plugins"):
 			_, _ = writer.Write([]byte(`[]`))

@@ -14,7 +14,7 @@ import (
 
 func (c *Client) OpenAICompatibility(ctx context.Context) (OpenAICompatibilityResponse, error) {
 	var response OpenAICompatibilityResponse
-	if err := c.DoJSON(ctx, http.MethodGet, "/openai-compatibility", &response); err != nil {
+	if _, err := c.doV0JSON(ctx, http.MethodGet, "/openai-compatibility", nil, &response); err != nil {
 		return OpenAICompatibilityResponse{}, err
 	}
 	return response, nil
@@ -26,7 +26,7 @@ type ClientAPIKeysResponse struct {
 
 func (c *Client) ClientAPIKeys(ctx context.Context) ([]string, error) {
 	var response ClientAPIKeysResponse
-	if err := c.DoJSON(ctx, http.MethodGet, "/api-keys", &response); err != nil {
+	if _, err := c.doV0JSON(ctx, http.MethodGet, "/api-keys", nil, &response); err != nil {
 		return nil, err
 	}
 	return response.APIKeys, nil
@@ -36,14 +36,16 @@ func (c *Client) UpdateClientAPIKeys(ctx context.Context, keys []string) error {
 	if keys == nil {
 		keys = []string{}
 	}
-	return c.doJSONBody(ctx, http.MethodPut, "/api-keys", keys, nil)
+	_, err := c.doV0JSON(ctx, http.MethodPut, "/api-keys", keys, nil)
+	return err
 }
 
 func (c *Client) UpdateOpenAICompatibility(ctx context.Context, entries []OpenAICompatibility) error {
 	if entries == nil {
 		entries = []OpenAICompatibility{}
 	}
-	return c.doJSONBody(ctx, http.MethodPut, "/openai-compatibility", entries, nil)
+	_, err := c.doV0JSON(ctx, http.MethodPut, "/openai-compatibility", entries, nil)
+	return err
 }
 
 type OpenAICompatibilityResponse struct {

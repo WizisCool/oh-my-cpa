@@ -19,7 +19,7 @@ func (c *Client) AuthFiles(ctx context.Context) (AuthFilesResponse, error) {
 
 func (c *Client) AuthFilesWithMeta(ctx context.Context) (AuthFilesResponse, ResponseMeta, error) {
 	var response AuthFilesResponse
-	meta, err := c.DoJSONWithMeta(ctx, http.MethodGet, "/auth-files", &response)
+	meta, err := c.DoJSONWithMeta(ctx, http.MethodGet, "/credentials", &response)
 	if err != nil {
 		return AuthFilesResponse{}, meta, err
 	}
@@ -32,7 +32,7 @@ func (c *Client) ResetQuota(ctx context.Context, authIndex string) error {
 		return errors.New("auth_index is required")
 	}
 	payload := map[string]string{"auth_index": authIndex}
-	return c.doOperationJSON(ctx, OperationCooldownReset, http.MethodPost, payload, nil)
+	return c.doJSONBody(ctx, http.MethodPost, "/routing/cooldown/reset", payload, nil)
 }
 
 // PatchAuthFileStatus changes only the disabled state of a named auth file.
@@ -45,7 +45,7 @@ func (c *Client) PatchAuthFileStatus(ctx context.Context, name, authIndex string
 		"disabled":   disabled,
 	}
 	var response map[string]any
-	if err := c.doJSONBody(ctx, http.MethodPatch, "/auth-files/status", payload, &response); err != nil {
+	if err := c.doJSONBody(ctx, http.MethodPatch, "/credentials/status", payload, &response); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -60,7 +60,7 @@ func (c *Client) PatchAuthFileFields(ctx context.Context, name string, fields ma
 		payload[key] = value
 	}
 	var response map[string]any
-	if err := c.doJSONBody(ctx, http.MethodPatch, "/auth-files/fields", payload, &response); err != nil {
+	if err := c.doJSONBody(ctx, http.MethodPatch, "/credentials/fields", payload, &response); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -73,7 +73,7 @@ func (c *Client) UploadAuthFile(ctx context.Context, name string, data []byte) (
 	query := url.Values{}
 	query.Set("name", strings.TrimSpace(name))
 	var response map[string]any
-	if err := c.doBody(ctx, http.MethodPost, "/auth-files?"+query.Encode(), data, "application/json", &response); err != nil {
+	if err := c.doBody(ctx, http.MethodPost, "/credentials?"+query.Encode(), data, "application/json", &response); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -83,7 +83,7 @@ func (c *Client) UploadAuthFile(ctx context.Context, name string, data []byte) (
 func (c *Client) DeleteAuthFiles(ctx context.Context, names []string) (map[string]any, error) {
 	payload := map[string]any{"names": names}
 	var response map[string]any
-	if err := c.doJSONBody(ctx, http.MethodDelete, "/auth-files", payload, &response); err != nil {
+	if err := c.doJSONBody(ctx, http.MethodDelete, "/credentials", payload, &response); err != nil {
 		return nil, err
 	}
 	return response, nil
@@ -93,7 +93,7 @@ func (c *Client) DeleteAuthFiles(ctx context.Context, names []string) (map[strin
 func (c *Client) DownloadAuthFile(ctx context.Context, name string) ([]byte, ResponseMeta, error) {
 	query := url.Values{}
 	query.Set("name", strings.TrimSpace(name))
-	request, err := c.newRequest(ctx, http.MethodGet, "/auth-files/download?"+query.Encode(), nil, "")
+	request, err := c.newRequest(ctx, http.MethodGet, "/credentials/download?"+query.Encode(), nil, "")
 	if err != nil {
 		return nil, ResponseMeta{}, err
 	}
@@ -107,7 +107,7 @@ func (c *Client) AuthFileModels(ctx context.Context, name string) ([]AuthModel, 
 	var response struct {
 		Models []AuthModel `json:"models"`
 	}
-	if err := c.DoJSON(ctx, http.MethodGet, "/auth-files/models?"+query.Encode(), &response); err != nil {
+	if err := c.DoJSON(ctx, http.MethodGet, "/credentials/models?"+query.Encode(), &response); err != nil {
 		return nil, err
 	}
 	return response.Models, nil

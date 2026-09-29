@@ -20,7 +20,7 @@ func TestPlaygroundUsesStableKeyAndProjectsModels(t *testing.T) {
 	var keyMu sync.Mutex
 	keys := []string{"playground-fixture-first", "playground-fixture-second"}
 	var authValue string
-	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	upstream := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		keyMu.Lock()
 		defer keyMu.Unlock()
 		switch request.URL.Path {
@@ -74,7 +74,7 @@ func pointPlaygroundAt(t *testing.T, handler *Handler, baseURL string) {
 func TestPlaygroundStreamDeadlineContextAndCancellation(t *testing.T) {
 	fixture := newProviderTestFixture(t)
 	var calls atomic.Int64
-	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	upstream := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/v0/management/api-keys" {
 			io.WriteString(writer, `{"api-keys":["playground-fixture"]}`)
 			return
@@ -181,7 +181,7 @@ func TestPlaygroundCustomUAAndCustomBodyPriority(t *testing.T) {
 	var captureMu sync.Mutex
 	var observedUA string
 	var observedPayload map[string]any
-	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	upstream := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/v0/management/api-keys" {
 			io.WriteString(writer, `{"api-keys":["playground-fixture"]}`)
 			return

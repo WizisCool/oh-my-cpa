@@ -173,16 +173,16 @@ import { fileURLToPath } from 'node:url';
  *
  * ## The agent-capability-copy re-baseline (2026-09-28)
  *
- * A clean build of the base commit measured entry 249.26 kB; with one-decision authorization,
- * `ask_question` and the localized capability directory it measures 261.75 kB against the 256
- * limit, and every other budget passes with its margin intact. The +12.49 kB is localized copy,
- * measured rather than assumed: 82 `agent.capability.*` keys (a title and a description for every
- * registered capability, so the directory, the authorization dialog and the call chain stop
- * showing model-facing English) at 13382 bytes of source, 18 other agent keys at 2350 bytes, and
- * 11 retired keys from the old operation card at 1756 bytes. The dialog, the question panel and
- * the directory are part of the lazy Agent route.
+ * A clean build of the base commit (with the CPA v8 baseline) measured entry 254.97 kB; with
+ * one-decision authorization, `ask_question` and the localized capability directory it measures
+ * 267.98 kB against the 256 limit, and every other budget passes with its margin intact. The
+ * +13.01 kB is localized copy, measured rather than assumed: 82 `agent.capability.*` keys (a
+ * title and a description for every registered capability, so the directory, the authorization
+ * dialog and the call chain stop showing model-facing English) at 13382 bytes of source, the
+ * question panel's and dialog's other keys, and 11 retired keys from the old operation card at
+ * 1756 bytes. The dialog, the question panel and the directory are part of the lazy Agent route.
  *
- *   - `main entry` 256 -> 272, leaving 10.25 kB (3.8%): within the range the earlier
+ *   - `main entry` 256 -> 278, leaving 10.02 kB (3.7%): within the range the earlier
  *     re-baselines left, and still the tightest budget in this file.
  *   - Every other limit is untouched.
  */
@@ -227,7 +227,7 @@ const iconBytes = totalDirectorySize(iconDir);
 const totalDistBytes = totalDirectorySize(distDir);
 
 const budgets = [
-  { label: 'main entry', matches: (name) => name === entryFile, maxKB: 272, required: true },
+  { label: 'main entry', matches: (name) => name === entryFile, maxKB: 278, required: true },
   { label: 'Lobe icon JS', pattern: /^LobeIcon-.*\.js$/, maxKB: 96, required: true },
   { label: 'vendor antd', pattern: /^vendor-antd-.*\.js$/, maxKB: 1250, required: true },
   { label: 'vendor charts', pattern: /^vendor-charts-.*\.js$/, maxKB: 1600, required: true },

@@ -22,16 +22,16 @@ import (
 
 func startAuditTestEnvironment(t *testing.T) (*http.Client, string, *repository.Repository, *repository.DB) {
 	t.Helper()
-	fakeCPA := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	fakeCPA := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		path := request.URL.Path
 		switch {
-		case strings.HasPrefix(path, "/v0/management/auth-files/download"):
+		case strings.HasPrefix(path, "/v8/management/credentials/download"):
 			writer.Header().Set("Content-Type", "application/json")
 			_, _ = writer.Write([]byte(`{"account":"secret-downloaded-token","provider":"openai"}`))
-		case strings.HasPrefix(path, "/v0/management/auth-files") && request.Method == http.MethodDelete:
+		case strings.HasPrefix(path, "/v8/management/credentials") && request.Method == http.MethodDelete:
 			writer.WriteHeader(http.StatusOK)
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
-		case strings.HasPrefix(path, "/v0/management/logs") && request.Method == http.MethodDelete:
+		case strings.HasPrefix(path, "/v8/management/observability/logs") && request.Method == http.MethodDelete:
 			writer.WriteHeader(http.StatusOK)
 			_, _ = writer.Write([]byte(`{"status":"cleared"}`))
 		case strings.HasPrefix(path, "/v0/management/config/source") && request.Method == http.MethodGet:
@@ -43,7 +43,7 @@ func startAuditTestEnvironment(t *testing.T) (*http.Client, string, *repository.
 		case strings.HasPrefix(path, "/v0/management/config") && request.Method == http.MethodPut:
 			writer.WriteHeader(http.StatusOK)
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
-		case strings.HasPrefix(path, "/v0/management/request-error-logs/"):
+		case strings.HasPrefix(path, "/v8/management/observability/logs/errors/"):
 			writer.Header().Set("Content-Type", "text/plain")
 			_, _ = writer.Write([]byte("log error payload with Authorization: Bearer secret-err-log"))
 		case strings.HasPrefix(path, "/v0/management/request-log"):

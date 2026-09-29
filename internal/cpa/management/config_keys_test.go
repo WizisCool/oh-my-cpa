@@ -5,14 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 )
 
 func TestConfigAPIKeysReadsEachFamilySection(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		switch request.URL.Path {
 		case "/v0/management/meta-api-key":
@@ -65,7 +64,7 @@ func TestConfigAPIKeysReadsEachFamilySection(t *testing.T) {
 }
 
 func TestConfigAPIKeysReportsAMissingFamilyAsAMissingCapability(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		// A CPA release older than the family answers 404, which the console has
 		// to read as "this gateway does not have it" rather than as an empty or
 		// broken credential list.
@@ -103,7 +102,7 @@ func TestConfigAPIKeysReportsAMissingFamilyAsAMissingCapability(t *testing.T) {
 func TestUpdateConfigAPIKeysSendsABareArray(t *testing.T) {
 	var path string
 	var body string
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		path = request.URL.Path
 		buf := make([]byte, request.ContentLength)
 		_, _ = request.Body.Read(buf)
@@ -131,8 +130,11 @@ func TestUpdateConfigAPIKeysSendsABareArray(t *testing.T) {
 
 func TestOAuthAuthURLSendsTheLoopbackFlagOnlyWhereItApplies(t *testing.T) {
 	queries := map[string]string{}
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		provider := strings.TrimSuffix(strings.TrimPrefix(request.URL.Path, "/v0/management/"), "-auth-url")
+	server := newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/v8/management/oauth/auth-url" {
+			t.Errorf("login started at %s, want the shared v8 endpoint", request.URL.Path)
+		}
+		provider := request.URL.Query().Get("provider")
 		queries[provider] = request.URL.Query().Get("is_webui")
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = writer.Write([]byte(`{"status":"ok","url":"https://auth.example.test/authorize","state":"st-1"}`))
@@ -150,7 +152,11 @@ func TestOAuthAuthURLSendsTheLoopbackFlagOnlyWhereItApplies(t *testing.T) {
 		}
 	}
 
-	for _, provider := range []string{"codex", "anthropic", "antigravity", "xai", "devin"} {
+	// CPA's shared endpoint names Claude "claude"; the console's id is "anthropic".
+	if _, sentAsConsoleID := queries["anthropic"]; sentAsConsoleID {
+		t.Fatal("anthropic must be sent as provider=claude")
+	}
+	for _, provider := range []string{"codex", "claude", "antigravity", "xai", "devin"} {
 		if queries[provider] != "true" {
 			t.Fatalf("%s is_webui = %q, want true", provider, queries[provider])
 		}

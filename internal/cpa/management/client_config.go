@@ -94,7 +94,8 @@ func (c *Client) UpdateConfigScalar(ctx context.Context, key string, value any) 
 		return fmt.Errorf("unknown scalar key: %s", key)
 	}
 	payload := map[string]any{"value": value}
-	return c.doJSONBody(ctx, http.MethodPut, def.Path, payload, nil)
+	_, err := c.doV0JSON(ctx, http.MethodPut, def.Path, payload, nil)
+	return err
 }
 
 // ConfigYAML fetches the raw configuration YAML file from CPA.
@@ -102,11 +103,7 @@ func (c *Client) ConfigYAML(ctx context.Context) (string, error) {
 	if c == nil {
 		return "", errors.New("CPA client is not initialized")
 	}
-	req, err := c.newRequest(ctx, http.MethodGet, "/config.yaml", nil, "")
-	if err != nil {
-		return "", err
-	}
-	data, _, err := c.doBytes(req, 2*1024*1024)
+	data, err := c.doV0Bytes(ctx, http.MethodGet, "/config.yaml", 2*1024*1024)
 	if err != nil {
 		return "", err
 	}
@@ -121,14 +118,14 @@ func (c *Client) UpdateConfigYAML(ctx context.Context, rawYAML string) error {
 	if len(rawYAML) > 2*1024*1024 {
 		return errors.New("configuration YAML exceeds 2MB limit")
 	}
-	return c.doBody(ctx, http.MethodPut, "/config.yaml", []byte(rawYAML), "application/yaml", nil)
+	return c.doV0Body(ctx, http.MethodPut, "/config.yaml", []byte(rawYAML), "application/yaml")
 }
 
 // Config returns the raw CPA configuration. The overview layer must project it
 // into a non-sensitive DTO before sending anything to a browser.
 func (c *Client) Config(ctx context.Context) (map[string]any, ResponseMeta, error) {
 	var response map[string]any
-	meta, err := c.DoJSONWithMeta(ctx, http.MethodGet, "/config", &response)
+	meta, err := c.doV0JSON(ctx, http.MethodGet, "/config", nil, &response)
 	if err != nil {
 		return nil, meta, err
 	}

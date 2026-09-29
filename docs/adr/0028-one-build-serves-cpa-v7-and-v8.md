@@ -1,6 +1,6 @@
 # ADR 0028: One build serves CPA v7 and v8, placing settings by the file's layout
 
-- Status: Accepted
+- Status: Superseded by ADR 0034
 - Date: 2026-09-27
 
 ## Context

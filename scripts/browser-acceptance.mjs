@@ -475,7 +475,7 @@ try {
     () => page.locator('input[type="password"]').isVisible(),
     { timeoutMs: 15000 },
   );
-  check('fake CPA received authenticated management calls', fakeCpa.requests.some((request) => request.path === '/v0/management/auth-files'));
+  check('fake CPA received authenticated management calls', fakeCpa.requests.some((request) => request.path === '/v8/management/credentials'));
 } catch (error) {
   if (!(error instanceof SmokeComplete)) {
     console.error(error.stack || error.message);

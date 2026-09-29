@@ -100,7 +100,7 @@ Browser ──▶ Reverse Proxy (Caddy / Nginx) ──▶ Oh My CPA (:8080)
 
 ### Prerequisites
 
-- Running [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) instance with its plaintext management key (`remote-management.secret-key`, or `management.secret-key` in a CPA v8-layout file)
+- Running [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) **v8.0.0 or later** with its plaintext management key (`remote-management.secret-key`, or `management.secret-key` in a CPA v8-layout file)
 - Go 1.25+ (build toolchain pins `1.27.1`)
 - Node.js 22+ & pnpm 11+
 
@@ -158,7 +158,7 @@ The API's data is generated from the real Go handlers rather than hand-written, 
 > - [`deploy/compose.full.yml`](deploy/compose.full.yml): Stack co-deploying CPA, Oh My CPA, and Caddy.
 > - [`deploy/compose.omc.yml`](deploy/compose.omc.yml): Standalone Oh My CPA connecting to an existing CPA instance.
 >
-> The full stack pins CPA `v8.0.2` by default; override `CPA_IMAGE` when connecting the stack to a different compatible release. The console serves CPA v7 and v8 gateways from the same build and edits `config.yaml` in the layout the file already has, so it never triggers CPA v8's whole-file migration (see `docs/cpa-v8-compat.md`). Its Caddy routes the console under `OMCPA_BASE_PATH` (default `/omc`) and everything else to CPA, so a non-default value is accepted in any of the forms the server normalises (`omc`, `/omc/`, `/omc`) and `/` makes the console take the whole host with CPA no longer reachable through the proxy.
+> The full stack pins CPA `v8.0.2` by default; override `CPA_IMAGE` when connecting the stack to a different compatible release. The console requires CPA v8.0.0 or later and speaks its v8 Management API; a gateway older than v8 is refused and every page shows upgrade guidance instead. CPA v8 reads an existing v7 `config.yaml` unchanged, so upgrading CPA needs no configuration change (see `docs/cpa-v8-compat.md`). Its Caddy routes the console under `OMCPA_BASE_PATH` (default `/omc`) and everything else to CPA, so a non-default value is accepted in any of the forms the server normalises (`omc`, `/omc/`, `/omc`) and `/` makes the console take the whole host with CPA no longer reachable through the proxy.
 
 ## Operational Notes
 
@@ -236,7 +236,7 @@ The public demonstration shows the page and model directory but refuses inferenc
 - [`docs/ops/sqlite-operations.md`](docs/ops/sqlite-operations.md) — SQLite operations, backup, and restore runbook
 - [`docs/ops/cloudflare-demo.md`](docs/ops/cloudflare-demo.md) — deployment runbook for the online demo
 - [`docs/cpamc-parity.md`](docs/cpamc-parity.md) — Feature parity matrix with official CPAMC
-- [`docs/cpa-v8-compat.md`](docs/cpa-v8-compat.md) — CPA v7/v8 compatibility: configuration relocation table, detection, and measurements
+- [`docs/cpa-v8-compat.md`](docs/cpa-v8-compat.md) — CPA v8 baseline: routes, configuration relocation table, detection, and measurements
 - [`AGENTS.md`](AGENTS.md) — Development conventions and code/doc sync contract
 
 ## License

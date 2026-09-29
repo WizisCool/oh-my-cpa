@@ -3,7 +3,6 @@ package management
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -38,10 +37,11 @@ func usesLoopbackCallback(provider string) bool {
 func (c *Client) OAuthAuthURL(ctx context.Context, provider string) (OAuthAuthURLResponse, error) {
 	provider = strings.ToLower(strings.TrimSpace(provider))
 	var response OAuthAuthURLResponse
-	endpoint := fmt.Sprintf("/%s-auth-url", url.PathEscape(provider))
+	query := url.Values{"provider": []string{loginProviderFor(provider)}}
 	if usesLoopbackCallback(provider) {
-		endpoint += "?is_webui=true"
+		query.Set("is_webui", "true")
 	}
+	endpoint := "/oauth/auth-url?" + query.Encode()
 	if err := c.DoJSON(ctx, http.MethodGet, endpoint, &response); err != nil {
 		return OAuthAuthURLResponse{}, err
 	}
@@ -56,7 +56,7 @@ type OAuthStatusResponse struct {
 
 func (c *Client) OAuthStatus(ctx context.Context, sessionID string) (OAuthStatusResponse, error) {
 	var response OAuthStatusResponse
-	endpoint := "/get-auth-status"
+	endpoint := "/oauth/status"
 	token := strings.TrimSpace(sessionID)
 	if token != "" {
 		endpoint += "?state=" + url.QueryEscape(token) + "&session_id=" + url.QueryEscape(token)
@@ -78,7 +78,7 @@ type OAuthCancelResult struct {
 }
 
 func (c *Client) CancelOAuthSession(ctx context.Context, sessionID string) (OAuthCancelResult, error) {
-	endpoint := "/oauth-session"
+	endpoint := "/oauth/session"
 	token := strings.TrimSpace(sessionID)
 	if token != "" {
 		endpoint += "?state=" + url.QueryEscape(token) + "&session_id=" + url.QueryEscape(token)
@@ -99,7 +99,7 @@ func (c *Client) OAuthCallbackRedirect(ctx context.Context, provider, redirectUR
 		"provider":     strings.TrimSpace(provider),
 		"redirect_url": strings.TrimSpace(redirectURL),
 	}
-	if err := c.doJSONBody(ctx, http.MethodPost, "/oauth-callback", body, nil); err != nil {
+	if err := c.doJSONBody(ctx, http.MethodPost, "/oauth/callback", body, nil); err != nil {
 		// CPA auto-callback (browser redirect to :8317/<provider>/callback) may
 		// have completed the flow before this manual submission arrives. In
 		// that case CPA answers 409 "already completed" while the credential
@@ -157,7 +157,7 @@ func (c *Client) OAuthModelAliases(ctx context.Context) (map[string][]OAuthModel
 	var response struct {
 		Aliases map[string][]OAuthModelAlias `json:"oauth-model-alias"`
 	}
-	if err := c.DoJSON(ctx, http.MethodGet, "/oauth-model-alias", &response); err != nil {
+	if _, err := c.doV0JSON(ctx, http.MethodGet, "/oauth-model-alias", nil, &response); err != nil {
 		return nil, err
 	}
 	return response.Aliases, nil
@@ -169,8 +169,9 @@ func (c *Client) PatchOAuthModelAliases(ctx context.Context, provider string, al
 	if aliases == nil {
 		aliases = []OAuthModelAlias{}
 	}
-	return c.doJSONBody(ctx, http.MethodPatch, "/oauth-model-alias", map[string]any{
+	_, err := c.doV0JSON(ctx, http.MethodPatch, "/oauth-model-alias", map[string]any{
 		"channel": strings.TrimSpace(provider),
 		"aliases": aliases,
 	}, nil)
+	return err
 }

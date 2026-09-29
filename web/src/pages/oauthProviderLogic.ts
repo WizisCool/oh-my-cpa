@@ -44,7 +44,7 @@ export interface OAuthCallbackRules {
 }
 
 export interface OAuthProviderDefinition {
-  /** Provider id, matching CPA's `{id}-auth-url` route. */
+  /** Provider id, as the console's OAuth facade and the backend provider registry name it. */
   id: string;
   /** Brand mark id resolved against the lobe icon catalog. */
   iconId: string;

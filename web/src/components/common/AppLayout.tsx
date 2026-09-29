@@ -26,6 +26,8 @@ import { NARROW_VIEWPORT_QUERY } from '../../hooks/useIsNarrowViewport';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { DataProgress } from './DataProgress';
+import { CpaUpgradeRequired } from './CpaUpgradeRequired';
+import { CpaManagementDisabled } from './CpaManagementDisabled';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { BrandArtwork } from './BrandArtwork';
@@ -226,7 +228,13 @@ export const AppLayout: React.FC = () => {
     document.documentElement.style.setProperty('--app-sider-width', `${width}px`);
   }, [isMobile, isCollapsed]);
 
-  const cpaState = health ? (health.cpa_connected ? t('shell.connected') : t('shell.offline')) : '—';
+  const isCpaUnsupported = health?.cpa_management_api === 'unsupported';
+  const isCpaManagementDisabled = health?.cpa_management_api === 'disabled';
+  const cpaState = health
+    ? (isCpaUnsupported ? t('shell.cpa_unsupported')
+      : isCpaManagementDisabled ? t('shell.cpa_management_disabled')
+        : health.cpa_connected ? t('shell.connected') : t('shell.offline'))
+    : '—';
 
   /**
    * The rail's foot: live CPA connection and version.
@@ -291,7 +299,7 @@ export const AppLayout: React.FC = () => {
               placement="right"
             >
               <div className="app-sider-foot is-collapsed">
-                <span className={`legend-dot ${health ? (health.cpa_connected ? 'success' : 'danger') : 'neutral'}`} />
+                <span className={`legend-dot ${health ? (isCpaUnsupported || isCpaManagementDisabled ? 'warning' : health.cpa_connected ? 'success' : 'danger') : 'neutral'}`} />
               </div>
             </Tooltip>
           ) : (
@@ -331,9 +339,15 @@ export const AppLayout: React.FC = () => {
               swapping, and the scroll position resets with the new page. */}
           <div key={location.pathname} className={`route-transition${WORKSPACE_ROUTES.has(location.pathname) ? ' workspace-route' : ''}`}>
             <React.Suspense fallback={<div style={{ padding: 60, textAlign: 'center' }}><Spin size="large" /></div>}>
-              <PricingEditorProvider>
-                <Outlet />
-              </PricingEditorProvider>
+              {isCpaUnsupported ? (
+                <CpaUpgradeRequired />
+              ) : isCpaManagementDisabled ? (
+                <CpaManagementDisabled />
+              ) : (
+                <PricingEditorProvider>
+                  <Outlet />
+                </PricingEditorProvider>
+              )}
             </React.Suspense>
           </div>
         </Content>

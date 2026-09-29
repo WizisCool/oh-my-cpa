@@ -14,6 +14,11 @@ func TestClientsReuseConnectionsWithoutSharingCredentials(t *testing.T) {
 	var connections atomic.Int64
 	var request atomic.Int64
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The gate's probe is cached per gateway, so only the first client sends it.
+		if r.URL.Path == "/v8/management"+MANAGEMENT_V8_PROBE_ENDPOINT {
+			_, _ = w.Write([]byte("8"))
+			return
+		}
 		expected := "Bearer first-key"
 		if request.Add(1) == 2 {
 			expected = "Bearer second-key"

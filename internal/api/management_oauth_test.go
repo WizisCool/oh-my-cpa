@@ -40,10 +40,13 @@ func startOAuthTestServer(t *testing.T) (*http.Client, string, *oauthCPAState, *
 		writer.Header().Set("Content-Type", "application/json")
 		path := request.URL.Path
 
+		provider := request.URL.Query().Get("provider")
 		switch {
-		case strings.HasPrefix(path, "/v0/management/nostate-auth-url"):
+		case path == "/v8/management/config/config-version":
+			_, _ = writer.Write([]byte("8"))
+		case path == "/v8/management/oauth/auth-url" && provider == "nostate":
 			_, _ = writer.Write([]byte(`{"url":"https://auth.example.test/authorize?client_id=nostate"}`))
-		case strings.HasSuffix(path, "-auth-url"):
+		case path == "/v8/management/oauth/auth-url":
 			isWebUI := request.URL.Query().Get("is_webui")
 			state.lastAuthURLQuery = isWebUI
 			stateVal := "cpa-state-123"
@@ -53,11 +56,11 @@ func startOAuthTestServer(t *testing.T) (*http.Client, string, *oauthCPAState, *
 			// A device grant answers with its flow label and the code the
 			// operator confirms on the vendor page, exactly as CPA does.
 			extra := ""
-			if strings.Contains(path, "meta-auth-url") {
+			if provider == "meta" {
 				extra = `,"flow":"device","user_code":"META-1234","expires_in":900`
 			}
 			_, _ = writer.Write([]byte(fmt.Sprintf(`{"url":"https://auth.example.test/authorize?client_id=123","state":"%s"%s}`, stateVal, extra)))
-		case path == "/v0/management/get-auth-status":
+		case path == "/v8/management/oauth/status":
 			reqState := request.URL.Query().Get("state")
 			if reqState == "" {
 				reqState = request.URL.Query().Get("session_id")
@@ -70,7 +73,7 @@ func startOAuthTestServer(t *testing.T) (*http.Client, string, *oauthCPAState, *
 				return
 			}
 			_, _ = writer.Write([]byte(fmt.Sprintf(`{"status":"wait","message":"waiting for callback: %s"}`, reqState)))
-		case path == "/v0/management/oauth-callback":
+		case path == "/v8/management/oauth/callback":
 			var body map[string]string
 			_ = json.NewDecoder(request.Body).Decode(&body)
 			state.lastCallback = body
@@ -88,7 +91,7 @@ func startOAuthTestServer(t *testing.T) (*http.Client, string, *oauthCPAState, *
 				return
 			}
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
-		case path == "/v0/management/oauth-session" && request.Method == http.MethodDelete:
+		case path == "/v8/management/oauth/session" && request.Method == http.MethodDelete:
 			state.cancelled = request.URL.Query().Get("state")
 			if state.cancelled == "" {
 				state.cancelled = request.URL.Query().Get("session_id")
@@ -100,12 +103,12 @@ func startOAuthTestServer(t *testing.T) (*http.Client, string, *oauthCPAState, *
 				return
 			}
 			_, _ = writer.Write([]byte(`{"status":"ok","cancelled":true}`))
-		case path == "/v0/management/reset-quota":
+		case path == "/v8/management/routing/cooldown/reset":
 			var body map[string]string
 			_ = json.NewDecoder(request.Body).Decode(&body)
 			state.resetIndex = body["auth_index"]
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
-		case path == "/v0/management/auth-files":
+		case path == "/v8/management/credentials":
 			_, _ = writer.Write([]byte(`{"files":[{"id":"af-1","name":"claude.json","auth_index":"cpa-auth-idx-1","provider":"claude","quota":{"signals":{"remaining":"1000"}},"model_quotas":{"claude-sonnet":{"signals":{"status":"healthy"}}}}]}`))
 		default:
 			writer.WriteHeader(http.StatusOK)

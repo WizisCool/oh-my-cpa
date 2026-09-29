@@ -55,27 +55,25 @@ func newReleaseFixture(now time.Time) *releaseFixture {
 			// interval rather than a single release.
 			release.ProductCPA: {
 				{
-					Tag:         "v7.3.7",
-					Name:        "v7.3.7",
+					Tag:         "v8.0.3",
+					Name:        "v8.0.3",
 					PublishedAt: now.Add(-1 * 24 * time.Hour).UTC().Format(time.RFC3339),
 					Body: "## Changelog\n\n" +
-						"- fix(responses): filter upstream private and telemetry events in SSE streams\n" +
-						"- feat(pluginapi): propagate streaming flag to usage plugins\n",
+						"- fix(discovery): support bonded interfaces and deduplicate build warnings\n",
 				},
 				{
-					Tag:         "v7.3.6",
-					Name:        "v7.3.6",
+					Tag:         "v8.0.2",
+					Name:        "v8.0.2",
 					PublishedAt: now.Add(-2 * 24 * time.Hour).UTC().Format(time.RFC3339),
 					Body: "## Changelog\n\n" +
-						"- fix(translator): hoist tool-result content part cache_control to the block\n" +
-						"- fix(xai): allow non-negative TTFT in usage record assertions\n",
+						"- fix(config): preserve unknown legacy sections as comments during v8 migration\n",
 				},
 				{
 					Tag:         fixtureCPAVersion,
 					Name:        fixtureCPAVersion,
 					PublishedAt: now.Add(-9 * 24 * time.Hour).UTC().Format(time.RFC3339),
 					Body: "## Changelog\n\n" +
-						"- fix(gemini): enforce array type for schema nodes declaring items\n",
+						"- fix(config): drop obsolete legacy keys during v8 migration\n",
 				},
 			},
 		},

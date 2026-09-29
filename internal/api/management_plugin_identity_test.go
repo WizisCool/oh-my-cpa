@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"net/http"
-	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -17,8 +16,8 @@ const identityStoreBody = `{"plugins":[` +
 
 func newIdentityStoreServer(t *testing.T, reads *atomic.Int32) *management.Client {
 	t.Helper()
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/v0/management/plugin-store" {
+	server := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/v8/management/plugins/store" {
 			http.NotFound(writer, request)
 			return
 		}

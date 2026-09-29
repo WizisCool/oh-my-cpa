@@ -13,7 +13,7 @@ import (
 
 func TestPullProviderModels(t *testing.T) {
 	// Fake upstream AI provider endpoint serving /v1/models
-	fakeUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	fakeUpstream := newFakeCPA(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer sk-test-upstream-key" {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
@@ -131,7 +131,7 @@ func TestPullProviderModelsReportsRedirectRefusal(t *testing.T) {
 	redirectTarget := httptest.NewServer(http.NotFoundHandler())
 	defer redirectTarget.Close()
 
-	redirectSource := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	redirectSource := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		http.Redirect(writer, request, redirectTarget.URL+"/models", http.StatusFound)
 	}))
 	defer redirectSource.Close()
@@ -158,13 +158,13 @@ func TestFetchEndpointModelsRefusesCrossOriginRedirect(t *testing.T) {
 	for _, protocol := range []string{"openai", "anthropic", "gemini"} {
 		t.Run(protocol, func(t *testing.T) {
 			redirectedHeaders := make(chan http.Header, 1)
-			redirectTarget := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			redirectTarget := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 				redirectedHeaders <- request.Header.Clone()
 				_ = json.NewEncoder(writer).Encode(map[string]any{"data": []map[string]any{{"id": "leaked-model"}}})
 			}))
 			defer redirectTarget.Close()
 
-			redirectSource := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			redirectSource := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 				http.Redirect(writer, request, redirectTarget.URL+"/models", http.StatusFound)
 			}))
 			defer redirectSource.Close()
@@ -190,7 +190,7 @@ func TestFetchEndpointModelsRefusesCrossOriginRedirect(t *testing.T) {
 }
 
 func TestFetchEndpointModelsFollowsSameOriginRedirect(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	upstream := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/models" {
 			http.Redirect(writer, request, "/v1/models", http.StatusFound)
 			return
@@ -220,7 +220,7 @@ func TestPullProviderModelsByProviderID(t *testing.T) {
 	// Upstream serves /v1/models only (like the official Anthropic API);
 	// wrong or missing auth is rejected with 401 the way relays report it.
 	var claudeAuthHeaders []string
-	fakeUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	fakeUpstream := newFakeCPA(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path != "/v1/models" {
 			http.NotFound(w, r)

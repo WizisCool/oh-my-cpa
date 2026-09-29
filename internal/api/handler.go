@@ -228,7 +228,6 @@ func (h *Handler) routes() chi.Router {
 				v1.Patch("/management/auth-files/model-aliases", h.patchManagementOAuthModelAliases)
 				v1.Delete("/management/auth-files", h.deleteManagementAuthFiles)
 				v1.Get("/management/auth-files/download", h.downloadManagementAuthFile)
-				v1.Get("/management/capabilities/{key}", h.managementCapabilityProbe)
 				v1.Get("/management/config", h.managementConfigGet)
 				v1.Put("/management/config/source", h.managementConfigSourcePut)
 				v1.Get("/management/config/source", h.managementConfigSourceGet)
@@ -476,10 +475,16 @@ func (h *Handler) healthz(writer http.ResponseWriter, request *http.Request) {
 	}
 
 	cpaConnected := false
+	// The management API state is reported beside connectivity because the
+	// console blocks itself on "unsupported" and "disabled": a gateway older than
+	// CPA v8, or one without a management secret, is reachable but cannot serve
+	// any page.
+	cpaManagementAPI := management.ManagementAPIUnknown
 	if instance, err := h.repo.GetInstance(request.Context(), defaultInstanceID()); err == nil {
 		client, clientErr := h.clientForInstance(request.Context(), instance)
-		if clientErr == nil && client.Health(request.Context()) == nil {
-			cpaConnected = true
+		if clientErr == nil {
+			cpaManagementAPI = client.ManagementAPI(request.Context())
+			cpaConnected = client.Health(request.Context()) == nil
 		}
 	}
 
@@ -489,10 +494,11 @@ func (h *Handler) healthz(writer http.ResponseWriter, request *http.Request) {
 
 	writer.Header().Set("Cache-Control", "no-store")
 	writeJSON(writer, httpStatus, map[string]any{
-		"status":          status,
-		"version":         h.cfg.Version,
-		"database_status": databaseStatus,
-		"cpa_connected":   cpaConnected,
+		"status":             status,
+		"version":            h.cfg.Version,
+		"database_status":    databaseStatus,
+		"cpa_connected":      cpaConnected,
+		"cpa_management_api": cpaManagementAPI,
 	})
 }
 

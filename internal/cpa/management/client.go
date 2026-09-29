@@ -82,8 +82,8 @@ type ResponseMeta struct {
 }
 
 // DoJSONWithMeta is kept as a typed internal escape hatch for response metadata
-// such as CPA version headers. Callers still provide a fixed management endpoint;
-// this client does not expose a general-purpose browser proxy.
+// such as CPA version headers. Callers still provide a fixed /v8/management
+// endpoint; this client does not expose a general-purpose browser proxy.
 func (c *Client) DoJSONWithMeta(ctx context.Context, method, endpoint string, output any) (ResponseMeta, error) {
 	if c == nil {
 		return ResponseMeta{}, errors.New("CPA client is not initialized")
@@ -95,8 +95,9 @@ func (c *Client) DoJSONWithMeta(ctx context.Context, method, endpoint string, ou
 	return c.do(request, output)
 }
 
+// newRequest addresses /v8/management, which every operation uses.
 func (c *Client) newRequest(ctx context.Context, method, endpoint string, body io.Reader, contentType string) (*http.Request, error) {
-	return c.newRequestAt(ctx, method, APIGenerationV0, endpoint, body, contentType)
+	return c.newRequestAt(ctx, method, APIGenerationV8, endpoint, body, contentType)
 }
 
 // newRequestAt addresses one API generation. Endpoints are fixed strings from
@@ -132,19 +133,17 @@ func (c *Client) doBody(ctx context.Context, method, endpoint string, data []byt
 	return err
 }
 
+// do sends a gated request and decodes its JSON answer.
 func (c *Client) do(request *http.Request, output any) (ResponseMeta, error) {
-	request.Header.Set("Authorization", "Bearer "+c.management)
+	if err := c.requireManagementV8(request.Context()); err != nil {
+		return ResponseMeta{}, err
+	}
 	request.Header.Set("Accept", "application/json")
-	response, err := c.httpClient.Do(request)
+	response, meta, err := c.send(request)
 	if err != nil {
-		return ResponseMeta{}, fmt.Errorf("CPA request failed: %w", err)
+		return meta, err
 	}
 	defer response.Body.Close()
-	meta := ResponseMeta{StatusCode: response.StatusCode, Header: response.Header.Clone()}
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		body, _ := io.ReadAll(io.LimitReader(response.Body, 16*1024))
-		return meta, &HTTPError{StatusCode: response.StatusCode, Body: redactSecret(strings.TrimSpace(string(body)), c.management)}
-	}
 	if output == nil || response.StatusCode == http.StatusNoContent {
 		return meta, nil
 	}
@@ -155,19 +154,21 @@ func (c *Client) do(request *http.Request, output any) (ResponseMeta, error) {
 	return meta, nil
 }
 
+// doBytes sends a gated request and returns its body, for downloads.
 func (c *Client) doBytes(request *http.Request, maxBytes int64) ([]byte, ResponseMeta, error) {
-	request.Header.Set("Authorization", "Bearer "+c.management)
+	if err := c.requireManagementV8(request.Context()); err != nil {
+		return nil, ResponseMeta{}, err
+	}
+	return c.sendBytes(request, maxBytes)
+}
+
+func (c *Client) sendBytes(request *http.Request, maxBytes int64) ([]byte, ResponseMeta, error) {
 	request.Header.Set("Accept", "application/json, application/octet-stream")
-	response, err := c.httpClient.Do(request)
+	response, meta, err := c.send(request)
 	if err != nil {
-		return nil, ResponseMeta{}, fmt.Errorf("CPA request failed: %w", err)
+		return nil, meta, err
 	}
 	defer response.Body.Close()
-	meta := ResponseMeta{StatusCode: response.StatusCode, Header: response.Header.Clone()}
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		body, _ := io.ReadAll(io.LimitReader(response.Body, 16*1024))
-		return nil, meta, &HTTPError{StatusCode: response.StatusCode, Body: redactSecret(strings.TrimSpace(string(body)), c.management)}
-	}
 	if maxBytes <= 0 {
 		maxBytes = 8 * 1024 * 1024
 	}
@@ -179,6 +180,28 @@ func (c *Client) doBytes(request *http.Request, maxBytes int64) ([]byte, Respons
 		return nil, meta, fmt.Errorf("CPA response exceeds %d bytes", maxBytes)
 	}
 	return data, meta, nil
+}
+
+// send is the one place a management request leaves the process. A non-2xx
+// answer is returned as an *HTTPError with the body closed; a 2xx answer is
+// returned open for the caller to read.
+func (c *Client) send(request *http.Request) (*http.Response, ResponseMeta, error) {
+	request.Header.Set("Authorization", "Bearer "+c.management)
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return nil, ResponseMeta{}, fmt.Errorf("CPA request failed: %w", err)
+	}
+	meta := ResponseMeta{StatusCode: response.StatusCode, Header: response.Header.Clone()}
+	if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
+		return response, meta, nil
+	}
+	defer response.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(response.Body, 16*1024))
+	httpErr := &HTTPError{StatusCode: response.StatusCode, Body: redactSecret(strings.TrimSpace(string(body)), c.management)}
+	if IsMissingCapability(httpErr) && strings.Contains(request.URL.Path, "/"+string(APIGenerationV8)+"/management/") {
+		c.forgetManagementV8()
+	}
+	return nil, meta, httpErr
 }
 
 type HTTPError struct {

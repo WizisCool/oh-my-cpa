@@ -19,7 +19,11 @@ func (c *Client) DownloadRequestLog(ctx context.Context, requestID string) ([]by
 	if requestID == "" || strings.ContainsAny(requestID, "/\\") || strings.Contains(requestID, "..") {
 		return nil, ResponseMeta{}, errors.New("invalid request id")
 	}
-	return c.doOperationBytes(ctx, operationCall{operation: OperationRequestLog, method: http.MethodGet, suffix: "/" + url.PathEscape(requestID)}, 16*1024*1024)
+	request, err := c.newRequest(ctx, http.MethodGet, "/observability/logs/requests/"+url.PathEscape(requestID), nil, "")
+	if err != nil {
+		return nil, ResponseMeta{}, err
+	}
+	return c.doBytes(request, 16*1024*1024)
 }
 
 // DefaultLogsLimit and MaxLogsLimit bound one incremental log read.
@@ -80,7 +84,7 @@ func (c *Client) Logs(ctx context.Context, query LogsQuery) (LogsPage, ResponseM
 		NextCursor  string   `json:"next-cursor"`
 		CursorReset any      `json:"cursor-reset"`
 	}
-	meta, err := c.doOperation(ctx, operationCall{operation: OperationLogs, method: http.MethodGet, suffix: "?" + params.Encode()}, &response)
+	meta, err := c.DoJSONWithMeta(ctx, http.MethodGet, "/observability/logs?"+params.Encode(), &response)
 	if err != nil {
 		return LogsPage{Lines: []string{}}, meta, err
 	}
@@ -101,7 +105,7 @@ func (c *Client) Logs(ctx context.Context, query LogsQuery) (LogsPage, ResponseM
 // ClearLogs truncates CPA's log file. Destructive, and never reached by a
 // poll: only an explicit operator action gets here.
 func (c *Client) ClearLogs(ctx context.Context) (ResponseMeta, error) {
-	return c.doOperation(ctx, operationCall{operation: OperationLogs, method: http.MethodDelete}, nil)
+	return c.DoJSONWithMeta(ctx, http.MethodDelete, "/observability/logs", nil)
 }
 
 // ErrorLogFile is one request-error log file held by CPA.
@@ -120,7 +124,7 @@ func (c *Client) RequestErrorLogs(ctx context.Context) ([]ErrorLogFile, error) {
 			Modified any    `json:"modified"`
 		} `json:"files"`
 	}
-	if _, err := c.doOperation(ctx, operationCall{operation: OperationErrorLogs, method: http.MethodGet}, &response); err != nil {
+	if err := c.DoJSON(ctx, http.MethodGet, "/observability/logs/errors", &response); err != nil {
 		return nil, err
 	}
 	files := make([]ErrorLogFile, 0, len(response.Files))
@@ -147,7 +151,11 @@ func (c *Client) DownloadRequestErrorLog(ctx context.Context, name string) ([]by
 	if !ValidLogFileName(name) {
 		return nil, ResponseMeta{}, errors.New("invalid log file name")
 	}
-	return c.doOperationBytes(ctx, operationCall{operation: OperationErrorLogs, method: http.MethodGet, suffix: "/" + url.PathEscape(name)}, 16*1024*1024)
+	request, err := c.newRequest(ctx, http.MethodGet, "/observability/logs/errors/"+url.PathEscape(name), nil, "")
+	if err != nil {
+		return nil, ResponseMeta{}, err
+	}
+	return c.doBytes(request, 16*1024*1024)
 }
 
 // ValidLogFileName accepts a bare log filename and nothing else.

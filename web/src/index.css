@@ -481,6 +481,10 @@ input:focus-visible, textarea:focus-visible { outline: none; }
    footer up to 113px in a 57px column. A single pip says the same thing, and
    the header already carries the full connection pill. */
 .app-sider-foot.is-collapsed { align-items: center; padding: 10px 0; }
+/* Stands in for every page while the gateway is older than CPA v8. The steps read
+   left-aligned under the centred result, like instructions rather than a slogan. */
+.cpa-blocked { max-width: 680px; margin: 48px auto; padding: 0 16px; }
+.cpa-blocked-steps { text-align: left; display: flex; flex-direction: column; gap: 12px; }
 /* Collapsed: antd centres the icon with inline padding computed against a box
    this app has already resized (the scroll wrapper insets the menu, and the
    expanded rule adds its own margin and width). The result is an icon 19px off

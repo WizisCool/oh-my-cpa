@@ -66,7 +66,6 @@ func TestConfigLayoutReportsGenerationAndLayout(t *testing.T) {
 		wantLayout    string
 		wantProviders bool
 	}{
-		{"v7 gateway, v7 file", false, layoutFixtureLegacy, "v0", "legacy", false},
 		{"v8 gateway, file not yet migrated", true, layoutFixtureLegacy, "v8", "legacy", false},
 		{"v8 gateway, migrated file", true, layoutFixtureV8, "v8", "v8", true},
 	}
@@ -147,36 +146,5 @@ func TestConfigSaveGuardOnV8Gateway(t *testing.T) {
 				t.Fatalf("shadowed = %v, want %v", shadowed, tc.wantShadowed)
 			}
 		})
-	}
-}
-
-// A v7 gateway reads only legacy spellings, so the guard stays out of the way
-// and a save behaves exactly as it did before v8 existed.
-func TestConfigSaveOnV7GatewayIsUnchanged(t *testing.T) {
-	fixture := &configFixtureCPA{yamlData: layoutFixtureLegacy}
-	client, baseURL, _ := startDashboardTestServer(t, generationFixtureCPA(fixture, false))
-	document := layoutFixtureLegacy + "observability:\n  logs:\n    debug: true\n"
-	status, body := putConfigSource(t, client, baseURL, strings.Replace(document, "debug: false", "debug: true", 1), configyaml.ComputeRevision(layoutFixtureLegacy))
-	if status != http.StatusOK {
-		t.Fatalf("status %d body %v", status, body)
-	}
-}
-
-func TestManagementV8CapabilityProbe(t *testing.T) {
-	for _, hasV8 := range []bool{true, false} {
-		fixture := &configFixtureCPA{yamlData: layoutFixtureLegacy}
-		client, baseURL, _ := startDashboardTestServer(t, generationFixtureCPA(fixture, hasV8))
-		resp, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/capabilities/management-v8")
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("status %d body %s", resp.StatusCode, payload)
-		}
-		var report CapabilityProbeReport
-		if err := json.Unmarshal(payload, &report); err != nil {
-			t.Fatal(err)
-		}
-		want := map[bool]string{true: "supported", false: "missing"}[hasV8]
-		if report.Status != want || len(report.Checks) != 1 || report.Checks[0].Endpoint != "/v8/management/config/config-version" {
-			t.Fatalf("hasV8=%v report = %+v", hasV8, report)
-		}
 	}
 }

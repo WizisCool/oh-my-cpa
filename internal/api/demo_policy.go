@@ -186,7 +186,6 @@ var demoPolicy = []demoPolicyRule{
 	// writes to the gateway.
 	{http.MethodGet, "/api/v1/management/config", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/config/source", demoAllow, ""},
-	{http.MethodGet, "/api/v1/management/capabilities/{key}", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/providers", demoAllow, ""},
 
 	// Credential metadata: the list, the per-credential model list and the fields a

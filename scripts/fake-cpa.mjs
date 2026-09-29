@@ -1,6 +1,19 @@
 import http from 'node:http';
 import { parse as parseYaml } from 'yaml';
 
+// The endpoints the client addresses on /v0/management; every other one lives
+// under /v8/management only.
+const V0_ENDPOINTS = new Set([
+  '/config', '/config.yaml', '/api-keys', '/openai-compatibility', '/oauth-model-alias', '/oauth-excluded-models',
+  '/debug', '/proxy-url', '/request-log', '/logging-to-file', '/usage-statistics-enabled', '/request-retry',
+  '/max-retry-interval', '/max-retry-credentials', '/ws-auth', '/force-model-prefix', '/routing/strategy',
+  '/logs-max-total-size-mb', '/error-logs-max-files',
+]);
+
+function isV0Endpoint(path) {
+  return V0_ENDPOINTS.has(path) || /^\/[a-z0-9-]+-api-key$/.test(path) || /^\/plugins\/[^/]+\/(enabled|config)$/.test(path);
+}
+
 export const FAKE_CPA_MANAGEMENT_KEY = 'omc-e2e-management-key';
 export const FAKE_PROVIDER_SECRET = 'omc-e2e-provider-secret';
 // FAKE_SECOND_PROVIDER_SECRET belongs to the second codex entry. Providers are
@@ -21,7 +34,7 @@ export const FAKE_CLIENT_SECRET = 'omc-e2e-client-secret';
 export const FAKE_PLUGIN_LOGO_DATA_URL = 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\'%3E%3Crect width=\'24\' height=\'24\' rx=\'6\' fill=\'%234F46E5\'/%3E%3Ctext x=\'12\' y=\'16\' font-size=\'9\' font-family=\'monospace\' fill=\'white\' text-anchor=\'middle\'%3EiF%3C/text%3E%3C/svg%3E';
 
 function json(response, status, body, headers = {}) {
-  response.writeHead(status, { 'Content-Type': 'application/json', 'X-CPA-Version': '7.3.5-e2e', ...headers });
+  response.writeHead(status, { 'Content-Type': 'application/json', 'X-CPA-Version': '8.0.2-e2e', ...headers });
   response.end(JSON.stringify(body));
 }
 
@@ -222,9 +235,23 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       json(response, 401, { error: 'unauthorized' });
       return;
     }
-    const path = url.pathname.replace(/^\/v0\/management/, '');
+    // A v8 gateway: operations live under /v8/management, and /v0/management answers
+    // only the reads and configuration writes the client still sends there
+    // (internal/cpa/management/client_v0.go). A request sent to the other generation
+    // finds no route, so a call moved to the wrong tree fails the suites instead of
+    // passing against a handler shared by both.
+    const path = url.pathname.replace(/^\/v[08]\/management/, '');
+    if (request.method === 'GET' && url.pathname === '/v8/management/config/config-version') {
+      json(response, 200, 8);
+      return;
+    }
+    const isV0Request = url.pathname.startsWith('/v0/management/');
+    if ((!isV0Request && !url.pathname.startsWith('/v8/management/')) || isV0Request !== isV0Endpoint(path)) {
+      json(response, 404, { error: 'not found' });
+      return;
+    }
 
-    if (request.method === 'GET' && path === '/auth-files') {
+    if (request.method === 'GET' && path === '/credentials') {
       json(response, 200, { files: authFiles });
       return;
     }
@@ -249,11 +276,11 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       json(response, 200, { status: 'ok' });
       return;
     }
-    if (request.method === 'GET' && path === '/auth-files/models') {
+    if (request.method === 'GET' && path === '/credentials/models') {
       json(response, 200, { models: [{ id: 'gpt-e2e', display_name: 'GPT E2E' }] });
       return;
     }
-    if (request.method === 'GET' && path === '/auth-files/download') {
+    if (request.method === 'GET' && path === '/credentials/download') {
       const target = authFiles.find(f => f.name === url.searchParams.get('name'));
       if (!target) {
         json(response, 404, { error: 'auth file not found' });
@@ -274,7 +301,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       });
       return;
     }
-    if (request.method === 'PATCH' && path === '/auth-files/status') {
+    if (request.method === 'PATCH' && path === '/credentials/status') {
       const bodyText = Buffer.concat(chunks).toString('utf8');
       let payload = {};
       try { payload = JSON.parse(bodyText || '{}'); } catch {}
@@ -286,7 +313,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       json(response, 200, { status: 'ok', disabled: payload.disabled });
       return;
     }
-    if (request.method === 'PATCH' && path === '/auth-files/fields') {
+    if (request.method === 'PATCH' && path === '/credentials/fields') {
       const bodyText = Buffer.concat(chunks).toString('utf8');
       let payload = {};
       try { payload = JSON.parse(bodyText || '{}'); } catch {}
@@ -306,7 +333,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       json(response, 200, { status: 'ok' });
       return;
     }
-    if (request.method === 'DELETE' && path === '/auth-files') {
+    if (request.method === 'DELETE' && path === '/credentials') {
       const bodyText = Buffer.concat(chunks).toString('utf8');
       let requestedNames = [];
       try {
@@ -355,7 +382,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       return;
     }
     if (request.method === 'GET' && path === '/config.yaml') {
-      response.writeHead(200, { 'Content-Type': 'application/yaml', 'X-CPA-Version': '7.3.5-e2e' });
+      response.writeHead(200, { 'Content-Type': 'application/yaml', 'X-CPA-Version': '8.0.2-e2e' });
       response.end(renderConfigYaml());
       return;
     }
@@ -379,28 +406,24 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       json(response, 200, { 'openai-compatibility': [] });
       return;
     }
-    if (request.method === 'GET' && path === '/api-key-usage') {
+    if (request.method === 'GET' && path === '/observability/usage/api-keys') {
       json(response, 200, { codex: { [`https://provider.example.test|${FAKE_PROVIDER_SECRET}`]: { success: 12, failed: 1, recent_requests: [{ time: '2026-09-01T12:00:00Z', success: 12, failed: 1 }] } } });
       return;
     }
-    if (request.method === 'GET' && path === '/logs') {
+    if (request.method === 'GET' && path === '/observability/logs') {
       json(response, 200, { lines: ['2026-09-01T12:00:00Z INFO fixture request completed'], 'latest-timestamp': 1788264000, 'next-cursor': 'fixture-cursor' });
       return;
     }
-    if (request.method === 'GET' && path === '/logs/status') {
-      json(response, 404, { error: 'not found' });
-      return;
-    }
-    if (request.method === 'GET' && path === '/request-error-logs') {
+    if (request.method === 'GET' && path === '/observability/logs/errors') {
       json(response, 200, { files: [] });
       return;
     }
-    if (request.method === 'GET' && path === '/latest-version') {
-      json(response, 200, { version: '7.3.5-e2e' });
+    if (request.method === 'GET' && path === '/server/latest-version') {
+      json(response, 200, { 'latest-version': '8.0.3' });
       return;
     }
-    if (request.method === 'GET' && path.endsWith('-auth-url')) {
-      const provider = path.replace(/^\//, '').replace(/-auth-url$/, '');
+    if (request.method === 'GET' && path === '/oauth/auth-url') {
+      const provider = url.searchParams.get('provider') || '';
       // Device-code providers answer with their flow label and the short code
       // the operator confirms on the vendor page, as CPA does.
       if (provider === 'meta' || provider === 'kimi') {
@@ -416,7 +439,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       json(response, 200, { url: 'https://auth.example.test/oauth?session=e2e', state: 'e2e-state' });
       return;
     }
-    if (request.method === 'GET' && path === '/get-auth-status') {
+    if (request.method === 'GET' && path === '/oauth/status') {
       const state = url.searchParams.get('state') || url.searchParams.get('session_id') || '';
       // Sessions whose browser auto-callback already finished report
       // completed, so the facade idempotency path is exercisable in E2E.
@@ -427,14 +450,14 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       json(response, 200, { status: 'wait', message: 'waiting for user' });
       return;
     }
-    if (request.method === 'DELETE' && path === '/oauth-session') {
+    if (request.method === 'DELETE' && path === '/oauth/session') {
       const state = url.searchParams.get('state') || url.searchParams.get('session_id') || '';
       // A session CPA could not cancel (already finished or expired) reports
       // cancelled:false rather than pretending it was abandoned.
       json(response, 200, { status: 'ok', cancelled: state !== 'already-done' });
       return;
     }
-    if (request.method === 'POST' && path === '/oauth-callback') {
+    if (request.method === 'POST' && path === '/oauth/callback') {
       let state = '';
       try {
         const body = JSON.parse(requests[requests.length - 1].body || '{}');
@@ -449,11 +472,11 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       json(response, 200, { status: 'ok' });
       return;
     }
-    if (request.method === 'POST' && path === '/reset-quota') {
+    if (request.method === 'POST' && path === '/routing/cooldown/reset') {
       json(response, 200, { status: 'ok' });
       return;
     }
-    if (request.method === 'POST' && path === '/api-call') {
+    if (request.method === 'POST' && path === '/requests/api-call') {
       let body = {};
       try {
         body = JSON.parse(requests[requests.length - 1].body || '{}');
@@ -631,7 +654,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       json(response, 200, { status: 'ok' });
       return;
     }
-    if (request.method === 'GET' && path === '/plugin-store') {
+    if (request.method === 'GET' && path === '/plugins/store') {
       json(response, 200, {
         plugins_enabled: true,
         plugins_dir: 'plugins',
@@ -653,7 +676,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       });
       return;
     }
-    const pluginInstallMatch = /^\/plugin-store\/([^/]+)\/install$/.exec(path);
+    const pluginInstallMatch = /^\/plugins\/store\/([^/]+)\/install$/.exec(path);
     if (pluginInstallMatch && request.method === 'POST') {
       const id = decodeURIComponent(pluginInstallMatch[1]);
       const entry = storePlugins.find((candidate) => candidate.id === id);
@@ -761,7 +784,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       json(response, 200, { status: 'ok' });
       return;
     }
-    if (request.method === 'DELETE' && path === '/logs') {
+    if (request.method === 'DELETE' && path === '/observability/logs') {
       json(response, 200, { status: 'ok' });
       return;
     }

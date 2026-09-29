@@ -37,7 +37,7 @@ type Metadata struct {
 }
 
 // Preview is what the operator decides on: one target at one revision, and the change proposed
-// for it. Approval is a single allow-or-deny decision (ADR 0034); the revision, not a typed
+// for it. Approval is a single allow-or-deny decision (ADR 0035); the revision, not a typed
 // confirmation, is what stops an approval from applying to a target that has since changed.
 type Preview struct {
 	Target   string `json:"target"`

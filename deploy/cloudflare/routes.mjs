@@ -132,7 +132,6 @@ const PARAMETERISED_ROUTES = [
   // the answer is the same for every credential because the fixture lists one model
   // set per provider family.
   { path: '/api/v1/management/auth-files/models', resolve: () => 'auth-files-models' },
-  { path: '/api/v1/management/capabilities/oauth', resolve: () => 'capabilities-oauth' },
   { path: '/api/v1/management/oauth/status', resolve: () => 'oauth-status' },
   { path: '/api/v1/management/logs', resolve: () => 'logs' },
   { path: '/api/v1/management/quota/auth-codex-01', resolve: () => 'quota-codex' },

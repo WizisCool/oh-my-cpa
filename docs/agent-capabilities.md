@@ -87,7 +87,7 @@ configuration is `high` risk and goes through the executor's confirmation flow:
 3. The executor stores the pending operation encrypted, writes a `prepared` audit
    event, and returns `{status: "pending", operation_id: ...}` to the caller.
 4. The console opens the request as an authorization dialog, and a signed-in operator
-   makes one decision: allow or deny (ADR 0034). Approval re-validates the capability
+   makes one decision: allow or deny (ADR 0035). Approval re-validates the capability
    version, the caller's authority, and the resource revision inside the same write gate
    that performs the change; deciding continues the Agent's run without a separate step.
 5. The result is recorded (`success`, `partial`, `error`, or `uncertain`) and audited.
@@ -128,7 +128,7 @@ secrets.
 ### Read-only database queries
 
 `database_schema` lists what `database_query` may read, and `database_query` runs one SQLite
-`SELECT` against OMC's own database (ADR 0035). Both are offered to the built-in Agent only
+`SELECT` against OMC's own database (ADR 0036). Both are offered to the built-in Agent only
 (`Adapters: ["agent"]`); MCP clients do not see them. The policy lives in
 `internal/repository/readonly_query.go`, not in the capability:
 
