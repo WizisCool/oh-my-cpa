@@ -1,3 +1,4 @@
+import { useT } from '../i18n';
 import React from 'react';
 import { App as AntdApp } from 'antd';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -39,6 +40,7 @@ export function usePreference<T>(
   parse: (raw: unknown) => T | undefined,
 ): Preference<T> {
   const { message } = AntdApp.useApp();
+  const t = useT();
   const queryClient = useQueryClient();
   const { data, isPending, isError } = useQuery({
     queryKey: ['preferences'],
@@ -77,7 +79,7 @@ export function usePreference<T>(
       .then(() => api.putPreference(key, next))
       .catch((err: unknown) => {
         ok = false;
-        message.error(describeError(err));
+        message.error(describeError(err) === 'invalid_timezone' ? t('omc.timezone_invalid') : describeError(err));
         // Put the control back where it was. Without this the optimistic value
         // stays in the cache while the server still holds the old one, and
         // because these preferences never auto-refetch (`staleTime: Infinity`)
@@ -105,7 +107,7 @@ export function usePreference<T>(
     // The queue holds the write itself; the caller gets the outcome of it. Reading `ok` when this
     // resolves is safe because the flag is set by the catch that has to have run first.
     return nextPromise.then(() => ({ ok }));
-  }, [key, message, queryClient]);
+  }, [key, message, queryClient, t]);
 
   return { value, ready: !isPending || isError, set };
 }

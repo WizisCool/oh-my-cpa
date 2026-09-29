@@ -1,7 +1,8 @@
+import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Tooltip, App as AntdApp } from 'antd';
 import { BlockOutlined, BulbOutlined, CopyOutlined, DollarOutlined, RightOutlined } from '../icons';
-import dayjs from 'dayjs';
+import dayjs from '../../utils/time';
 import { getProviderDefaultIcon } from '../LobeIcon';
 import { ProviderBrandIcon } from '../LobeIcon';
 import { useT } from '../../i18n';
@@ -53,6 +54,7 @@ export const RequestRow = React.memo<RequestRowProps>(
     onOpen,
     isSelected = false,
   }) => {
+  useTimeZone();
     const t = useT();
     const { message } = AntdApp.useApp();
     const openPriceEditor = useOpenPriceEditor();

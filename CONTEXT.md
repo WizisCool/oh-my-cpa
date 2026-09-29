@@ -477,3 +477,9 @@ A deployment may connect Oh My CPA to a CLIProxyAPI (CPA) instance that was alre
 4. **Multi-dimensional observability and filtering**:
    - Both the Request Records console (`/usage/events`) and the Dashboard (`/dashboard`) support filtering metrics, throughput, token volume, model ranking, and drill-down links by specific client key fingerprint (`api_key`).
    - Pre-existing traffic with or without custom names remains fully filterable via the stable HMAC fingerprint.
+
+## Time zone
+
+- **Deployment Time Zone**: The server's local calendar, resolved from `TZ` when configured or the operating system's timezone otherwise. Container deployments pass an IANA name through `TZ`; the supplied Compose stacks default to UTC and give CPA and OMC the same value.
+- **OMC Time Zone**: The deployment-wide calendar chosen in OMC Settings. An unset choice uses the Deployment Time Zone. A manual IANA choice takes precedence until the operator selects the server's zone again. Browser timezone does not override this choice. UTC offsets are evaluated at each instant, including daylight-saving changes.
+- The OMC Time Zone governs console timestamps, audit day grouping, calendar selections, daily token totals and OMC service-log timestamps. Stored epoch timestamps, durations, rolling windows and wire-format instants remain absolute. Switching zones never moves or rewrites historical events. Raw upstream logs remain evidence in their original form; offset-free CPA log timestamps are interpreted in the shared Deployment Time Zone before display. Price Tier time-of-day windows retain their explicit UTC contract.

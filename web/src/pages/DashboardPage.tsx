@@ -1,3 +1,4 @@
+import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Alert, Button, Card, Empty, Select, Skeleton, Tooltip, Typography } from 'antd';
@@ -5,7 +6,7 @@ import { HistoryOutlined, KeyOutlined, QuestionCircleOutlined, RightOutlined } f
 import { PageHeader } from '../components/common/PageHeader';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import dayjs from 'dayjs';
+import dayjs from '../utils/time';
 import { api, ApiError } from '../api/client';
 import { useT } from '../i18n';
 import { PRICING_QUERY_KEYS } from '../components/pricing/pricingQueries';
@@ -104,6 +105,7 @@ function rateTone(successRate: number | null | undefined): ChartTone {
 
 
 export const DashboardPage: React.FC = () => {
+  useTimeZone();
   const t = useT();
   const navigate = useNavigate();
   // Shared with the navigation's attention mark, so the dashboard adds no request of its own.
@@ -532,6 +534,7 @@ const OverviewSecondary: React.FC<{
   range?: DashboardRange;
   enabled?: boolean;
 }> = ({ query, range, enabled }) => {
+  useTimeZone();
   const t = useT();
   const { data } = useQuery({
     queryKey: ['management-overview'],

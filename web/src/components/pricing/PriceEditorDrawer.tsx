@@ -1,6 +1,7 @@
+import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Alert, App as AntdApp, Button, Collapse, Drawer, InputNumber, Popconfirm, Segmented, Skeleton } from 'antd';
-import dayjs from 'dayjs';
+import dayjs from '../../utils/time';
 import clsx from 'clsx';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { EditOutlined, LinkOutlined, ThunderboltOutlined } from '../icons';
@@ -82,6 +83,7 @@ export function modeTone(mode: PricingMode | null): StatusTone {
  * and after so the change is read in money rather than in per-million rates.
  */
 export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, initialMode, initialUpstream, isOpen, onClose }) => {
+  useTimeZone();
   const t = useT();
   const { message } = AntdApp.useApp();
   const queryClient = useQueryClient();
@@ -459,6 +461,7 @@ const PreviewRows: React.FC<{
   next: PreviewPrice | null;
   basis: string;
 }> = ({ profile, current, next, basis }) => {
+  useTimeZone();
   const t = useT();
   const { style: tokenStyle } = useTokenDisplayStyle();
   const typical = { input: profile.input, output: profile.output, cache_read: profile.cache_read, cache_write: profile.cache_write };
@@ -509,6 +512,7 @@ const PreviewRows: React.FC<{
 
 /** A model's price versions, newest first, each with the moment it took effect. */
 const PriceHistory: React.FC<{ versions: PriceVersion[] }> = ({ versions }) => {
+  useTimeZone();
   const t = useT();
   if (versions.length === 0) return <p className={styles['mode-hint']}>{t('pricing.editor.history_empty')}</p>;
   return (

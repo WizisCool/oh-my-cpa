@@ -1,3 +1,4 @@
+import { useTimeZone } from '../utils/TimeZoneProvider';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Card,
@@ -26,7 +27,7 @@ import {
   CloseOutlined,
 } from '../components/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import dayjs from 'dayjs';
+import dayjs from '../utils/time';
 import { api, describeError } from '../api/client';
 import { useT } from '../i18n';
 import { isDemoMode } from '../types/demoMode';
@@ -66,6 +67,7 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
   version,
   onOpenChangelog,
 }) => {
+  useTimeZone();
   const t = useT();
 
   const renderStateBadge = () => {
@@ -173,6 +175,7 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
 };
 
 export const SystemPage: React.FC = () => {
+  useTimeZone();
   const t = useT();
   const isDemo = isDemoMode();
   const { message } = AntdApp.useApp();

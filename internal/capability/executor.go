@@ -297,7 +297,7 @@ func ErrorCode(err error) string {
 	}
 	code := err.Error()
 	switch code {
-	case "provider_commit_partial", "agent_busy", "agent_revision_conflict", "confirmation_pending", "invalid_tool_arguments", "invalid_tool_result", "tool_input_too_large", "tool_result_too_large", "capability_forbidden", "resource_conflict", "resource_missing", "invalid_window", "invalid_parameters", "operation_outcome_unknown", "capability_unavailable", "audit_write_failed", "write_busy", "secret_required", "answer_required", "invalid_answer", "query_forbidden", "query_invalid", "query_timeout":
+	case "invalid_timezone", "provider_commit_partial", "agent_busy", "agent_revision_conflict", "confirmation_pending", "invalid_tool_arguments", "invalid_tool_result", "tool_input_too_large", "tool_result_too_large", "capability_forbidden", "resource_conflict", "resource_missing", "invalid_window", "invalid_parameters", "operation_outcome_unknown", "capability_unavailable", "audit_write_failed", "write_busy", "secret_required", "answer_required", "invalid_answer", "query_forbidden", "query_invalid", "query_timeout":
 		return code
 	}
 	if errors.Is(err, context.Canceled) {

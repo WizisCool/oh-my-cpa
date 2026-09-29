@@ -9,6 +9,14 @@ export type { Lang } from './language';
  * found fall through to the key itself so misses are visible in dev.
  */
 const DICT: Record<string, [string, string]> = {
+  'agent.capability.timezone_get': ["读取时区设置", "Read timezone settings"],
+  'agent.capability.timezone_get.description': ["读取服务器时区、手动选择和当前生效的时区。", "Read the server timezone, manual override and effective timezone."],
+  'agent.capability.timezone_set': ["设置时区", "Set timezone"],
+  'agent.capability.timezone_set.description': ["设置整个部署的时区，或恢复服务器默认时区。", "Set the deployment timezone or restore the server default."],
+  'omc.timezone_invalid': ["请选择有效的 IANA 时区。", "Choose a valid IANA time zone."],
+  'omc.timezone': ["时区", "Time zone"],
+  'omc.timezone_desc': ["应用于时间显示和自然日统计。", "Used for timestamps and calendar-day totals."],
+  'omc.timezone_server': ["服务器时区", "Server time zone"],
   // ── app / shell ──────────────────────────────────────────────────────────
   'app.name': ['oh-my-cpa', 'oh-my-cpa'],
   // The demo markers are the one place copy is deliberately not translated: they
@@ -849,10 +857,6 @@ const DICT: Record<string, [string, string]> = {
   'dash.heatmap.stale': [
     '刷新失败，下方仍显示上一次读取的数据。',
     'The refresh failed; the grid below is the last data that was read.',
-  ],
-  'dash.heatmap.no_timezone': [
-    '无法确定当前浏览器的时区，无法按自然日统计。',
-    'The browser timezone could not be determined, so daily totals cannot be resolved.',
   ],
   // Monday-first, matching the grid's rows. Two characters so the gutter stays narrow at this
   // cell size; English uses GitHub's own two-letter labels.

@@ -1,3 +1,5 @@
+import { useTimeZone } from '../../utils/TimeZoneProvider';
+import { formatGatewayTimestamp } from '../../utils/time';
 import React from 'react';
 import { Alert, App as AntdApp, Button, Checkbox, Empty, Input, Popconfirm, Segmented, Tabs, Tooltip, Typography } from 'antd';
 import {
@@ -9,7 +11,7 @@ import {
   SearchOutlined,
 } from '../icons';
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
-import dayjs from 'dayjs';
+import dayjs from '../../utils/time';
 import type { ColumnsType } from 'antd/es/table';
 import { api, apiErrorCode, ApiError, describeError } from '../../api/client';
 import { useT } from '../../i18n';
@@ -57,11 +59,12 @@ const STATUS_CLASS_LABELS: Record<LogStatusClass, string> = {
  * being skimmed, raw text for the one line that matters, without losing the context.
  */
 const CpaLogLine: React.FC<{ parts: LogLineParts; isOpen: boolean }> = ({ parts, isOpen }) => {
+  useTimeZone();
   const tone = statusTone(parts.status);
   return (
     <>
       <div className="log-line">
-        <span className="log-time">{parts.timestamp ?? ''}</span>
+        <span className="log-time">{parts.timestamp ? formatGatewayTimestamp(parts.timestamp) : ''}</span>
         {parts.requestId && <span className="log-req">{parts.requestId}</span>}
         {parts.level && <span className={`log-level is-${parts.level}`}>{parts.level}</span>}
         {parts.status !== undefined && (
@@ -78,6 +81,7 @@ const CpaLogLine: React.FC<{ parts: LogLineParts; isOpen: boolean }> = ({ parts,
 };
 
 const ErrorLogFiles: React.FC = () => {
+  useTimeZone();
   const t = useT();
   const isDemo = isDemoMode();
   const { message } = AntdApp.useApp();
@@ -162,6 +166,7 @@ const ErrorLogFiles: React.FC = () => {
 
 /** CpaLogPanel is the gateway's own log: CPA's file tail and its request error files. */
 export const CpaLogPanel: React.FC = () => {
+  useTimeZone();
   const t = useT();
   const isDemo = isDemoMode();
   const { message } = AntdApp.useApp();

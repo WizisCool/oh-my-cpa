@@ -1,3 +1,4 @@
+import { configureTimeZone } from '../web/src/utils/time.ts';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
@@ -164,8 +165,9 @@ assert.equal(heatmapMinPanelWidth(Number.NaN), null, 'a non-numeric column count
 
 // ── local-day reading ──────────────────────────────────────────────────────
 
-assert.equal(localDayOf(new Date(2026, 8, 14, 23, 30, 0).getTime()), '2026-09-14', 'localDayOf reads the local calendar, not UTC');
-assert.equal(localDayOf(new Date(2026, 8, 14, 0, 0, 1).getTime()), '2026-09-14', 'the first instant of a local day belongs to it');
+configureTimeZone('Asia/Kuala_Lumpur');
+assert.equal(localDayOf(Date.parse('2026-09-14T23:30:00+08:00')), '2026-09-14', 'localDayOf reads the local calendar, not UTC');
+assert.equal(localDayOf(Date.parse('2026-09-14T00:00:01+08:00')), '2026-09-14', 'the first instant of a local day belongs to it');
 
 // ── cell states ────────────────────────────────────────────────────────────
 

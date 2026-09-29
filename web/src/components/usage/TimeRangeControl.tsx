@@ -1,7 +1,9 @@
+import { pickerInstant } from '../../utils/time';
+import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Button, DatePicker, Dropdown, Modal } from 'antd';
 import { ClockCircleOutlined } from '../icons';
-import dayjs from 'dayjs';
+import dayjs from '../../utils/time';
 import { useT } from '../../i18n';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import {
@@ -35,6 +37,7 @@ export interface TimeRangeControlProps {
  * the operator reads it.
  */
 export const TimeRangeControl: React.FC<TimeRangeControlProps> = ({ preset, from, to, onChange }) => {
+  useTimeZone();
   const t = useT();
   const [isPickerOpen, setIsPickerOpen] = React.useState(false);
   // The custom-range dialog is a modal over the page, so Back closes it rather than leaving the
@@ -117,7 +120,7 @@ interface AbsoluteRangeFormProps {
   onApply: (from: number, to: number) => void;
 }
 
-type RangePair = [dayjs.Dayjs | null, dayjs.Dayjs | null];
+type RangePair = [import('dayjs').Dayjs | null, import('dayjs').Dayjs | null];
 
 /**
  * The absolute range is staged rather than live.
@@ -129,6 +132,7 @@ type RangePair = [dayjs.Dayjs | null, dayjs.Dayjs | null];
  * together.
  */
 const AbsoluteRangeForm: React.FC<AbsoluteRangeFormProps> = ({ from, to, onCancel, onApply }) => {
+  useTimeZone();
   const t = useT();
   const [range, setRange] = React.useState<RangePair>([
     from !== undefined ? dayjs(from) : dayjs().subtract(1, 'hour'),
@@ -141,7 +145,7 @@ const AbsoluteRangeForm: React.FC<AbsoluteRangeFormProps> = ({ from, to, onCance
   // there, because a half-chosen or transposed range has to be refused for reasons
   // no browser assertion can state.
   const validation = validateAbsoluteRange(
-    [start ? start.valueOf() : null, end ? end.valueOf() : null],
+    [start ? pickerInstant(start) : null, end ? pickerInstant(end) : null],
     Date.now(),
   );
   const errorKey = rangeErrorKey(validation.errorKey);
@@ -161,7 +165,7 @@ const AbsoluteRangeForm: React.FC<AbsoluteRangeFormProps> = ({ from, to, onCance
       {errorKey && <p className="req-filter-error">{t(errorKey)}</p>}
       <div className="req-time-form-footer">
         <Button onClick={onCancel}>{t('common.cancel')}</Button>
-        <Button type="primary" disabled={!validation.isValid} onClick={() => onApply(start!.valueOf(), end!.valueOf())}>
+        <Button type="primary" disabled={!validation.isValid} onClick={() => onApply(pickerInstant(start!), pickerInstant(end!))}>
           {t('events.apply_filters')}
         </Button>
       </div>

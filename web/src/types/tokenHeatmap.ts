@@ -1,3 +1,4 @@
+import dayjs from '../utils/time';
 /**
  * Response and strip shapes for the dashboard's daily token heatmap.
  *
@@ -105,19 +106,11 @@ export function heatmapCellState(
 }
 
 /**
- * localDayOf renders an instant as the `YYYY-MM-DD` the viewer's own clock shows.
- *
- * Read through the local accessors rather than by adding a UTC offset: an offset
- * is only constant where there is no daylight saving, and an event that happened
- * on a 23-hour or 25-hour day would otherwise land on the wrong calendar date.
- * This is the function that decides whether a day is "already before the first
- * recorded request", so it has to agree with the operator's wall clock exactly.
+ * localDayOf renders an instant in the effective OMC calendar, including the
+ * offset applicable at that instant rather than the browser's current offset.
  */
 export function localDayOf(ms: number): string {
-  const value = new Date(ms);
-  const month = `${value.getMonth() + 1}`.padStart(2, '0');
-  const date = `${value.getDate()}`.padStart(2, '0');
-  return `${value.getFullYear()}-${month}-${date}`;
+  return dayjs(ms).format('YYYY-MM-DD');
 }
 
 /**

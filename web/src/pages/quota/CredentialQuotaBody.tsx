@@ -1,3 +1,4 @@
+import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Alert, Button, Popconfirm, Tag } from 'antd';
 import { SyncOutlined, ThunderboltOutlined } from '../../components/icons';
@@ -34,6 +35,7 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
   onClearCooldown,
   onRedeemCredit,
 }) => {
+  useTimeZone();
   const t = useT();
   const windows = orderQuotaWindows(item.windows ?? []);
   const availableCredits = item.reset_credits?.available_count ?? 0;

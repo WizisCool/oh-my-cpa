@@ -73,6 +73,7 @@ async function generateInto(directory) {
       // is still a Go binary that reads its environment: pointing it at /dev/null and
       // a temporary directory is what keeps a run from picking up a real deployment's
       // configuration.
+      TZ: 'UTC',
       OMCPA_ENV_FILE: '/dev/null',
       OMCPA_DATA_DIR: directory,
       OMCPA_DEMO_EXPORT_DIR: directory,

@@ -1,8 +1,9 @@
+import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Alert, App as AntdApp, Button, Input, Segmented, Select, Tooltip } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import dayjs from 'dayjs';
+import dayjs from '../../utils/time';
 import clsx from 'clsx';
 import {
   ApiOutlined,
@@ -92,6 +93,7 @@ interface AuditPhoneEntryProps {
  * it, and the rest behind the tap.
  */
 const AuditPhoneEntry: React.FC<AuditPhoneEntryProps> = ({ event, isOpen, onOpen }) => {
+  useTimeZone();
   const t = useT();
   const eventCategory = categoryOf(event.action);
   const target = readableTarget(event);
@@ -127,7 +129,7 @@ const AuditPhoneEntry: React.FC<AuditPhoneEntryProps> = ({ event, isOpen, onOpen
 
 function dayHeading(key: string, t: ReturnType<typeof useT>): string {
   const today = dayKey(Date.now());
-  const yesterday = dayKey(Date.now() - 86_400_000);
+  const yesterday = dayjs().subtract(1, 'day').format('YYYY-MM-DD');
   const date = dayjs(key).format('YYYY-MM-DD');
   if (key === today) return `${t('audit.today')} · ${date}`;
   if (key === yesterday) return `${t('audit.yesterday')} · ${date}`;
@@ -151,6 +153,7 @@ interface AuditTrailProps {
  * owned by the caller (the page keeps them in its URL), so a link can open a filtered trail.
  */
 export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFiltersChange }) => {
+  const timeZone = useTimeZone();
   const t = useT();
   const { message } = AntdApp.useApp();
   const isPhone = useIsPhoneViewport();
@@ -204,7 +207,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
       else groups.push({ key, events: [event] });
     }
     return groups;
-  }, [events]);
+  }, [events, timeZone]);
 
   const openIndex = openId === undefined ? -1 : events.findIndex((event) => event.id === openId);
   const openEvent = openIndex >= 0 ? events[openIndex] : undefined;

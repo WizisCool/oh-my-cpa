@@ -1,3 +1,4 @@
+import dayjs from '../../utils/time';
 import type { TFunc } from '../../i18n';
 
 const pad2 = (n: number): string => (n < 10 ? `0${n}` : String(n));
@@ -7,14 +8,12 @@ const pad2 = (n: number): string => (n < 10 ? `0${n}` : String(n));
  * Numeric and locale-neutral on purpose so every language shares one layout.
  */
 export function formatShortDateTime(ms: number): string {
-  const d = new Date(ms);
-  if (Number.isNaN(d.getTime())) return '--';
-  return `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  return Number.isFinite(ms) ? dayjs(ms).format('MM/DD HH:mm') : '--';
 }
 
-/** "GMT+8" style label for the viewer's local timezone (dynamically derived). */
+/** "GMT+8" style label for the effective OMC timezone (dynamically derived). */
 export function formatGmtOffsetLabel(now: Date = new Date()): string {
-  const totalMinutes = -now.getTimezoneOffset();
+  const totalMinutes = dayjs(now).utcOffset();
   const sign = totalMinutes >= 0 ? '+' : '-';
   const abs = Math.abs(totalMinutes);
   return `GMT${sign}${Math.floor(abs / 60)}${abs % 60 ? `:${pad2(abs % 60)}` : ''}`;

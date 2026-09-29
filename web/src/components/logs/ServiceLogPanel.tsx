@@ -1,6 +1,7 @@
+import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Alert, Button, Input, Tooltip, Typography } from 'antd';
-import dayjs from 'dayjs';
+import dayjs from '../../utils/time';
 import { PauseCircleOutlined, PlayCircleOutlined, SearchOutlined } from '../icons';
 import { useT } from '../../i18n';
 import { useServiceLogTail } from '../../hooks/useServiceLogTail';
@@ -20,13 +21,14 @@ const INLINE_ATTRS = 4;
 function recordJSON(record: ServiceLogRecord): string {
   const fields = Object.fromEntries((record.attrs ?? []).map((attr) => [attr.key, attr.value]));
   return JSON.stringify(
-    { time: new Date(record.logged_at_ms).toISOString(), level: record.level, msg: record.message, ...fields },
+    { time: dayjs(record.logged_at_ms).format('YYYY-MM-DDTHH:mm:ss.SSSZ'), level: record.level, msg: record.message, ...fields },
     null,
     2,
   );
 }
 
 const ServiceLogLine: React.FC<{ record: ServiceLogRecord; isOpen: boolean }> = ({ record, isOpen }) => {
+  useTimeZone();
   const t = useT();
   const attrs = record.attrs ?? [];
   return (
@@ -60,6 +62,7 @@ const ServiceLogLine: React.FC<{ record: ServiceLogRecord; isOpen: boolean }> = 
  * without shell access to its container.
  */
 export const ServiceLogPanel: React.FC = () => {
+  useTimeZone();
   const t = useT();
   const tail = useServiceLogTail(true);
   const [search, setSearch] = React.useState('');

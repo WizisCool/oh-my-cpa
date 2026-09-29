@@ -1,7 +1,8 @@
+import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Alert, Tag, Tooltip, Typography } from 'antd';
 import { useQuery } from '@tanstack/react-query';
-import dayjs from 'dayjs';
+import dayjs from '../../utils/time';
 import XMarkdown from '@ant-design/x-markdown';
 import { LinkOutlined } from '../icons';
 import { api, describeError } from '../../api/client';
@@ -18,6 +19,7 @@ interface ProductChangelogProps {
 }
 
 export const ProductChangelog: React.FC<ProductChangelogProps> = ({ product }) => {
+  useTimeZone();
   const t = useT();
 
   // Fetched only when this component exists, which the drawer decides: a request feed is

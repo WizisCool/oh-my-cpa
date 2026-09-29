@@ -1,3 +1,4 @@
+import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -21,7 +22,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseDocument } from 'yaml';
 import type { Document } from 'yaml';
-import dayjs from 'dayjs';
+import dayjs from '../utils/time';
 import { api, ApiError, apiErrorCode, describeError } from '../api/client';
 import { useT } from '../i18n';
 import { isDemoMode } from '../types/demoMode';
@@ -76,6 +77,7 @@ const CLOSED_EDITOR: EditorState = { isOpen: false, index: null, originalKey: ''
  * a key is the only way to stop it, and that is what the list offers.
  */
 export const ApiKeysPage: React.FC = () => {
+  const timeZone = useTimeZone();
   const t = useT();
   // Gateway keys live in CPA's own configuration document, so adding, editing and
   // removing a key are refused by the demonstration.
@@ -377,7 +379,7 @@ export const ApiKeysPage: React.FC = () => {
     return indexed;
   }, [usageQuery.data]);
 
-  const formatUsageTime = React.useCallback((ms: number) => dayjs(ms).format('YYYY-MM-DD HH:mm:ss'), []);
+  const formatUsageTime = React.useCallback((ms: number) => dayjs(ms).format('YYYY-MM-DD HH:mm:ss'), [timeZone]);
 
   const refreshAll = () => {
     void configQuery.refetch();

@@ -1640,3 +1640,9 @@ remembered. ADR 0012 records the threshold, its measurement and its alternatives
 ### Cost & Usage provider grouping
 
 The price book uses the existing console tokens and table/phone-row primitives. Provider headings carry the shared provider mark and display name, authentication kind and routing priority; model rows carry text identities and inline pricing actions. One global 20-row page bounds the rendered memberships across groups. A single sticky footer shows the visible entry range and page navigation; phones use a read-only compact page indicator with 40px previous/next targets. Search and provider/mode filters remain above the list, with the sync control in the page header. The upstream model picker uses bounded 12-row pages. No new palette, typography, spacing or motion tokens are introduced.
+
+### Time zone picker
+
+The shared `TimeZoneSelect` follows the console's existing settings rows and color tokens. The selected value names the actual IANA zone. Options use two aligned columns: a wrapping zone name on the left and a right-aligned, tabular UTC offset on the right. The server zone is pinned first with a secondary localized source label below its name. The field and popup share a width, capped by the viewport; narrow layouts use the settings row's full width. The description is only “Used for timestamps and calendar-day totals.”
+
+The list uses fixed 64-pixel virtual rows, with space reserved for the selection indicator on every row so offsets do not shift when selected. Search accepts zone/city names, spaces in place of underscores, and UTC offsets. Offset labels reflect the current date, including fractional offsets and daylight saving. Existing typography, palette and motion tokens remain unchanged.

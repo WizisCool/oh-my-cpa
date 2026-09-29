@@ -300,3 +300,7 @@ configuration is needed. Regenerate and inspect the dataset whenever this surfac
 ### Pricing provider fixture
 
 The generated pricing response includes the same non-secret provider membership snapshot as the Go application: configured API-key provider ids, grouped active OAuth providers, channel labels, priorities and exact model memberships. `internal/demo/seed.go` derives it from the existing fixture catalogs. Provider identity changes or pricing response changes require regenerating and reviewing the dataset with `pnpm demo:generate`; the Worker serves that generated response without live CPA discovery.
+
+### Timezone metadata
+
+The generated preferences response includes `time_zone` with the deployment, override and effective timezone names. Dataset generation fixes `TZ=UTC` so the captured metadata cannot depend on the generating developer's machine. The console reads that metadata before calendar displays; the public Worker retains its existing read-only preference-write policy. Regenerate the dataset when the timezone response or console reads change.

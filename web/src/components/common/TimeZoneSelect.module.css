@@ -1,0 +1,80 @@
+.timezone-select {
+  width: 440px;
+  max-width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 52px;
+}
+
+.timezone-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 9ch;
+  align-items: center;
+  column-gap: 16px;
+  min-height: 52px;
+  width: 100%;
+  font-size: 12px;
+  font-weight: 400;
+  font-style: normal;
+  line-height: 1.5;
+}
+
+.timezone-identity {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.timezone-name {
+  color: var(--fg);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.timezone-source {
+  color: var(--fg2);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.timezone-offset {
+  color: var(--fg2);
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.timezone-select .timezone-option {
+  min-height: 36px;
+}
+
+.timezone-select :global(.ant-select-selection-item) {
+  display: flex;
+  align-items: center;
+  padding-block: 6px;
+}
+
+.timezone-popup {
+  max-width: calc(100vw - 32px);
+}
+
+/* Reserve the selection indicator on every row so the offset column never shifts. */
+.timezone-popup :global(.ant-select-item-option) {
+  position: relative;
+  height: 64px;
+  padding: 6px 32px 6px 12px;
+}
+
+.timezone-popup :global(.ant-select-item-option-state) {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+@media (max-width: 900px) {
+  .timezone-select {
+    width: 100%;
+  }
+}

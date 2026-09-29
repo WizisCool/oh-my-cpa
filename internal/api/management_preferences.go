@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/timezone"
 )
 
 // knownPreferences is the whole public surface of the preferences API. The
@@ -26,6 +27,7 @@ var knownPreferences = map[string]bool{
 	repository.PreferenceUsageEventsView:     true,
 	repository.PreferenceUsageEventsColumns:  true,
 	repository.PreferenceOAuthManagementView: true,
+	repository.PreferenceTimezone:            true,
 	repository.PreferenceTokenStyle:          true,
 	repository.PreferenceModelView:           true,
 	repository.PreferenceTheme:               true,
@@ -61,7 +63,12 @@ func (h *Handler) listPreferences(writer http.ResponseWriter, request *http.Requ
 		}
 		preferences[key] = preferenceValue(raw)
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{"preferences": preferences})
+	zone, err := h.repo.ReadTimezone(ctx)
+	if err != nil {
+		writeInternalError(writer, err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, map[string]any{"preferences": preferences, "time_zone": zone})
 }
 
 func (h *Handler) putPreference(writer http.ResponseWriter, request *http.Request) {
@@ -88,6 +95,10 @@ func (h *Handler) putPreference(writer http.ResponseWriter, request *http.Reques
 		return
 	}
 	if err := h.repo.PutPreference(request.Context(), key, string(body)); err != nil {
+		if errors.Is(err, timezone.ErrInvalid) {
+			writeError(writer, http.StatusBadRequest, "invalid_timezone")
+			return
+		}
 		if errors.Is(err, context.Canceled) {
 			return
 		}

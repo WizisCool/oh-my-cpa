@@ -95,23 +95,7 @@ func (r *Repository) ListPreferences(ctx context.Context) (map[string]string, er
 
 // PutPreference stores one preference, overwriting any previous value.
 func (r *Repository) PutPreference(ctx context.Context, key, value string) error {
-	if r == nil || r.SQL() == nil {
-		return errors.New("repository is not initialized")
-	}
-	if !validPreferenceKey(key) {
-		return fmt.Errorf("invalid preference key %q", key)
-	}
-	if len(value) > MaxPreferenceValueBytes {
-		return fmt.Errorf("preference %q exceeds %d bytes", key, MaxPreferenceValueBytes)
-	}
-	if _, err := r.SQL().ExecContext(ctx, `
-		INSERT INTO ui_preferences (pref_key, pref_value, updated_at_ms)
-		VALUES (?, ?, ?)
-		ON CONFLICT(pref_key) DO UPDATE SET pref_value = excluded.pref_value, updated_at_ms = excluded.updated_at_ms`,
-		key, value, time.Now().UTC().UnixMilli()); err != nil {
-		return fmt.Errorf("write preference %q: %w", key, err)
-	}
-	return nil
+	return r.PutPreferences(ctx, map[string]string{key: value})
 }
 
 // PutPreferences stores a set of preferences in one transaction. Callers use it
@@ -125,6 +109,20 @@ func (r *Repository) PutPreferences(ctx context.Context, values map[string]strin
 func (r *Repository) putPreferences(ctx context.Context, values map[string]string, beforeCommit func(*sql.Tx) error) error {
 	if r == nil || r.SQL() == nil {
 		return errors.New("repository is not initialized")
+	}
+	r.timezoneMu.Lock()
+	defer r.timezoneMu.Unlock()
+	var zoneLocation *time.Location
+	zoneRaw, hasTimezone := values[PreferenceTimezone]
+	if hasTimezone {
+		zoneName, err := parseTimezone(zoneRaw)
+		if err != nil {
+			return err
+		}
+		zoneLocation, err = r.timezone.Resolve(zoneName)
+		if err != nil {
+			return err
+		}
 	}
 	for key, value := range values {
 		if !validPreferenceKey(key) {
@@ -161,6 +159,9 @@ func (r *Repository) putPreferences(ctx context.Context, values map[string]strin
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit preference transaction: %w", err)
+	}
+	if hasTimezone {
+		r.timezone.Apply(zoneLocation)
 	}
 	return nil
 }

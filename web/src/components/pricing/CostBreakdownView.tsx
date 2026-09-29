@@ -1,6 +1,7 @@
+import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Alert, Button } from 'antd';
-import dayjs from 'dayjs';
+import dayjs from '../../utils/time';
 import { DollarOutlined } from '../icons';
 import { useT } from '../../i18n';
 import { formatTokensFull } from '../../types/tokenDisplay';
@@ -28,6 +29,7 @@ export interface CostBreakdownViewProps {
  * belief that it will be repriced.
  */
 export const CostBreakdownView: React.FC<CostBreakdownViewProps> = ({ breakdown, model, costUsd }) => {
+  useTimeZone();
   const t = useT();
   const openEditor = useOpenPriceEditor();
   const setPrice = openEditor ? (

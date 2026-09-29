@@ -1,3 +1,4 @@
+import { TimeZoneProvider } from './utils/TimeZoneProvider';
 import React from 'react';
 import {
   createBrowserRouter,
@@ -129,7 +130,7 @@ const AppRoutes: React.FC = () => {
 
   return (
     <AuthGate>
-      <RouterProvider router={router} />
+      <TimeZoneProvider><RouterProvider router={router} /></TimeZoneProvider>
     </AuthGate>
   );
 };

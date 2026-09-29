@@ -242,3 +242,9 @@ The public demonstration shows the page and model directory but refuses inferenc
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+
+### Time zone
+
+Set `TZ=Asia/Kuala_Lumpur` (or another IANA timezone) in the deployment environment to choose the server calendar. The supplied Compose files pass `TZ` to both OMC and CPA and default to `UTC`. For a standalone container, pass `-e TZ=Asia/Kuala_Lumpur`. Native deployments otherwise use the operating system timezone.
+
+In **OMC Settings → Time zone**, the server zone is selected automatically and marked **Server time zone**. Every option includes its current UTC offset. A manual choice is persisted for the deployment; selecting the server zone restores the deployment default. Timestamp displays, calendar selections, daily totals and OMC service logs use this setting without rewriting stored instants. Keep CPA and OMC deployment timezones equal: CPA log lines without an offset are interpreted in that shared timezone. Raw log downloads and explicit UTC pricing-tier rules retain their source semantics.

@@ -4,6 +4,14 @@
  * Keys mirror DICT in ../index.tsx. Keep this catalog complete: a missing key would fall back to another language and violate the console-wide full-localization rule.
  */
 export const MS: Readonly<Record<string, string>> = {
+  "agent.capability.timezone_get": "Baca tetapan zon waktu",
+  "agent.capability.timezone_get.description": "Baca zon waktu pelayan, pilihan manual dan zon waktu berkuat kuasa.",
+  "agent.capability.timezone_set": "Tetapkan zon waktu",
+  "agent.capability.timezone_set.description": "Tetapkan zon waktu penggunaan atau pulihkan lalai pelayan.",
+  "omc.timezone_invalid": "Pilih zon waktu IANA yang sah.",
+  "omc.timezone": "Zon waktu",
+  "omc.timezone_desc": "Digunakan untuk cap masa dan jumlah harian.",
+  "omc.timezone_server": "Zon waktu pelayan",
   "pg.history_omitted": "Sejarah tidak disimpan dalam petikan permintaan lama ini.",
   "nav.agent": "Ejen",
   "agent.status.pending": "Menunggu pengesahan",
@@ -631,7 +639,6 @@ export const MS: Readonly<Record<string, string>> = {
   "dash.heatmap.tip_no_requests": "Tiada permintaan pada tarikh ini",
   "dash.heatmap.error": "Gagal memuatkan aktiviti token",
   "dash.heatmap.stale": "Muat semula gagal; grid di bawah ialah data terakhir yang dibaca.",
-  "dash.heatmap.no_timezone": "Zon waktu penyemak imbas tidak dapat ditentukan, jadi jumlah harian tidak dapat diselesaikan.",
   "dash.heatmap.dow.mon": "Is",
   "dash.heatmap.dow.tue": "Se",
   "dash.heatmap.dow.wed": "Ra",

@@ -130,3 +130,40 @@ func TestPreferencesRoundTripThroughTheDatabase(t *testing.T) {
 		t.Fatalf("OAuth management view not persisted: found=%v err=%v", found, err)
 	}
 }
+
+func TestTimezonePreferenceControlsCalendarAndMetadata(t *testing.T) {
+	t.Setenv("TZ", "Asia/Kathmandu")
+	client, baseURL, _ := startDashboardTestServer(t, nil)
+	endpoint := baseURL + "/omc/api/v1/preferences"
+	response, payload := doJSON(t, client, http.MethodPut, endpoint+"/omc_timezone", `"America/New_York"`)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("%d %s", response.StatusCode, payload)
+	}
+	response, payload = getJSON(t, client, endpoint)
+	var body struct {
+		TimeZone repository.TimezoneInfo `json:"time_zone"`
+	}
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.TimeZone.Timezone != "America/New_York" || body.TimeZone.ServerTimezone != "Asia/Kathmandu" || body.TimeZone.EffectiveTimezone != "America/New_York" {
+		t.Fatalf("%s", payload)
+	}
+	heatmap := getHeatmapJSON(t, client, heatmapURL(baseURL, ""))
+	if heatmap.Timezone != "America/New_York" {
+		t.Fatal(heatmap.Timezone)
+	}
+	for _, raw := range []string{`null`, `{}`, `"Local"`, `"Invalid/Zone"`} {
+		response, payload = doJSON(t, client, http.MethodPut, endpoint+"/omc_timezone", raw)
+		if response.StatusCode != http.StatusBadRequest {
+			t.Fatalf("%d %s", response.StatusCode, payload)
+		}
+	}
+	response, payload = doJSON(t, client, http.MethodPut, endpoint+"/omc_timezone", `""`)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("%d %s", response.StatusCode, payload)
+	}
+	if heatmap := getHeatmapJSON(t, client, heatmapURL(baseURL, "")); heatmap.Timezone != "Asia/Kathmandu" {
+		t.Fatal(heatmap.Timezone)
+	}
+}

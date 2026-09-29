@@ -51,11 +51,11 @@ func dayFor(zone *time.Location, at time.Time) string {
 func TestTokenHeatmapRequiresAKnownTimezone(t *testing.T) {
 	client, baseURL, _ := startDashboardTestServer(t, nil)
 
-	// Absent, over-long and unknown zones are refused rather than defaulted to UTC. A
+	// Explicit over-long and unknown zones are refused rather than defaulted to UTC. A
 	// default would answer for a calendar the operator is not looking at, and the only
 	// visible symptom would be days shifting by some hours near midnight. The URL-
 	// encoded space case is a value that is not a zone name at all.
-	for _, query := range []string{"", "?tz=", "?tz=Not/AZone", "?tz=UTC+8", "?tz=" + fmt.Sprintf("%070d", 0)} {
+	for _, query := range []string{"?tz=Not/AZone", "?tz=UTC+8", "?tz=" + fmt.Sprintf("%070d", 0)} {
 		response, payload := getJSON(t, client, heatmapURL(baseURL, query))
 		if response.StatusCode != http.StatusBadRequest {
 			t.Fatalf("query %q: status = %d body %s", query, response.StatusCode, payload)

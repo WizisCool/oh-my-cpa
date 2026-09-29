@@ -413,3 +413,7 @@ bottom-aligned when cost notes wrap. KPI sparklines and Token Trend share G2 too
 hit-testing, crosshairs and positioning, with escaped content from
 `web/src/charts/chartTooltip.ts` and the palette-styled `.omc-tip` readout.
 Token Trend preserves measured zero buckets as continuous baseline segments.
+
+## Time zone picker
+
+Use the shared controlled `TimeZoneSelect`: actual IANA names, a left-aligned name column and a right-aligned tabular UTC-offset column. Pin the server zone first and place its localized source label below the name. Field and popup share a width; narrow screens use the full settings-row width. Keep the helper text to “Used for timestamps and calendar-day totals.” Fixed 64-pixel virtual rows reserve indicator space uniformly. Search supports city/zone names and UTC offsets. Reuse existing color, typography and motion tokens.

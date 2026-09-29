@@ -1,3 +1,4 @@
+import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import {
   Alert,
@@ -17,7 +18,7 @@ import {
   VerticalAlignTopOutlined,
 } from '../components/icons';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import dayjs from 'dayjs';
+import dayjs from '../utils/time';
 import { api } from '../api/client';
 import { usePreference } from '../hooks/usePreference';
 import { useT } from '../i18n';
@@ -65,6 +66,7 @@ import './UsageEventsPage.css';
 import { RefreshButton } from '../components/common/RefreshButton';
 
 export const UsageEventsPage: React.FC = () => {
+  useTimeZone();
   const t = useT();
   const {
     signature,

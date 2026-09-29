@@ -7,21 +7,25 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/security"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/timezone"
 )
 
 var ErrNotFound = sql.ErrNoRows
 
 type Repository struct {
-	db *DB
+	db         *DB
+	timezone   *timezone.Settings
+	timezoneMu sync.Mutex
 }
 
 func New(db *DB) *Repository {
-	return &Repository{db: db}
+	return &Repository{db: db, timezone: timezone.New(timezone.ServerLocation())}
 }
 
 func (r *Repository) SQL() *sql.DB {

@@ -1,3 +1,4 @@
+import { getTimeZone } from '../../utils/time';
 import type { Lang } from '../../i18n/language';
 import { languageLocale } from '../../i18n/language';
 
@@ -318,6 +319,7 @@ const FAILURE_KEYS: Record<string, string> = {
   capability_forbidden: 'agent.error.forbidden',
   capability_unavailable: 'agent.error.unavailable',
   invalid_parameters: 'agent.error.parameters',
+  invalid_timezone: 'omc.timezone_invalid',
   invalid_tool_arguments: 'agent.error.arguments',
   invalid_tool_result: 'agent.error.arguments',
   tool_input_too_large: 'agent.error.arguments',
@@ -477,7 +479,7 @@ export function formatDuration(milliseconds: number): string {
 
 export function formatClock(milliseconds: number | undefined, lang: Lang): string {
   if (!milliseconds) return '';
-  return new Date(milliseconds).toLocaleTimeString(languageLocale(lang), { hour: '2-digit', minute: '2-digit' });
+  return new Date(milliseconds).toLocaleTimeString(languageLocale(lang), { hour: '2-digit', minute: '2-digit', timeZone: getTimeZone() });
 }
 
 /** How long a stored turn took, or undefined while it is still in flight. */

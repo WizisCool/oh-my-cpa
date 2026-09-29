@@ -23,6 +23,7 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/pricing"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/release"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/timezone"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/usage/ingest"
 )
 
@@ -120,6 +121,12 @@ func newApp(ctx context.Context, cfg config.Config, logger *slog.Logger) (*App, 
 		return nil, err
 	}
 	repo := repository.New(db)
+	if err := repo.LoadTimezone(ctx); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("load timezone: %w", err)
+	}
+	logger = slog.New(timezone.Handler{Handler: logger.Handler(), Location: repo.Timezone().Location})
+	slog.SetDefault(logger)
 	if err := bootstrapDefaultInstance(ctx, cfg, repo, cipher); err != nil {
 		db.Close()
 		return nil, err

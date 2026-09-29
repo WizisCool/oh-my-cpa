@@ -1,3 +1,4 @@
+import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { ThoughtChain } from '@ant-design/x';
 import type { ThoughtChainItemType } from '@ant-design/x';
@@ -91,6 +92,7 @@ function traceItem(trace: Trace, t: TFunc): ThoughtChainItemType {
  * that it is waiting.
  */
 function ToolSegment({ traceIDs, traces }: { traceIDs: string[]; traces: Map<string, Trace> }) {
+  useTimeZone();
   const { t } = useI18n();
   const group = React.useMemo(
     () => traceIDs.flatMap(id => (traces.has(id) ? [traces.get(id) as Trace] : [])),
@@ -103,6 +105,7 @@ function ToolSegment({ traceIDs, traces }: { traceIDs: string[]; traces: Map<str
 
 /** Answer text; a provider that reasons inline in `<think>` tags has that part shown as reasoning. */
 function TextSegment({ content, isStreaming }: { content: string; isStreaming: boolean }) {
+  useTimeZone();
   const { t } = useI18n();
   const inline = React.useMemo(() => extractThinking(content), [content]);
   return (
@@ -141,6 +144,7 @@ export interface TurnViewProps {
  * keeps its identity and is skipped rather than re-parsed twenty-five times a second.
  */
 export const TurnView = React.memo(function TurnView({ turn, live }: TurnViewProps) {
+  useTimeZone();
   const { t, lang } = useI18n();
   const nowMS = useLiveNow(Boolean(live));
   const parts = React.useMemo(() => {

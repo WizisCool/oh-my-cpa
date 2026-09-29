@@ -998,7 +998,7 @@ every day on the far side of a daylight-saving transition, not merely the two tr
 days, because a single offset cannot describe a span that crosses one.
 
 `Repository.QueryDailyTokenTotals` therefore takes the days as exact instant ranges,
-built by the handler from the viewer's IANA zone with `time.Date`/`AddDate`, and reads the
+built by the handler from the effective OMC IANA zone with `time.Date`/`AddDate`, and reads the
 detail table only. It does not reuse the rollup-plus-tail split either: that split is
 correct for a bucket grid because the two halves partition by *time* against the same
 grid, but a day boundary and an hour checkpoint do not line up, and CPA event times can
@@ -2221,3 +2221,13 @@ model reads are generated through the real facade; inference is explicitly refus
 - Backup, restore, and migration gates: `docs/ops/sqlite-operations.md`
 - Feature parity status against CPAMC: `docs/cpamc-parity.md`
 - CPA v8 baseline, relocation table and measurements: `docs/cpa-v8-compat.md`
+
+## Deployment-wide calendar time
+
+`internal/timezone` resolves the deployment calendar from `TZ`, the system zone name or the local zone file, and embeds Go's IANA data for offline named-zone loading. `Repository` owns an atomic runtime location and serializes timezone preference commits before publishing the new location. Startup loads `omc_timezone` from the existing preference table; no migration or timestamp rewrite is needed. Invalid overrides fail validation rather than replacing a working calendar. The preference API remains allowlisted: `PUT /preferences/omc_timezone` accepts an IANA name or an empty string, and `GET /preferences` includes `time_zone` metadata (`timezone`, `server_timezone`, `effective_timezone`).
+
+The application wraps its log handler with a per-record location resolver, so successful timezone writes affect new OMC log timestamps without changing process-global `time.Local`. Retention, authentication expiry, collector watermarks and stored timestamps continue to use absolute instants. The built-in Agent's system context names the effective calendar; `timezone_get` and `timezone_set` use the same repository validation through `internal/operations`.
+
+`web/src/utils/time.ts` owns timezone-aware date construction, gateway timestamp conversion and picker wall-clock resolution. `TimeZoneProvider` hydrates the deployment setting inside the authenticated shell; subscribed readers update on preference changes and failed-write rollback. Memoized chart configuration and audit grouping include the zone as a dependency. Day keys use that calendar; DatePicker edits resolve wall-clock fields again so an offset retained from a different date cannot move a DST selection. The heatmap accepts an optional explicit `tz` for API consumers and defaults to the effective server-side OMC zone; the console sends its shared effective zone.
+
+`web/src/components/common/TimeZoneSelect.tsx` is a controlled, reusable picker independent of preference persistence. It accepts `value`, `onChange`, optional `serverTimezone`, `isDisabled`, `id` and an accessible label. The server zone is pinned first and annotated; the caller decides whether choosing it clears an override. Options and minute-keyed offsets are cached, and fixed-height virtual rows bound the rendered list while preserving search and keyboard navigation.

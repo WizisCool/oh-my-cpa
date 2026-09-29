@@ -1,6 +1,7 @@
+import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { Line } from '@ant-design/charts';
-import dayjs from 'dayjs';
+import dayjs from '../utils/time';
 import { renderChartTooltip } from './chartTooltip';
 import { buildModelTrendData } from './modelTrendData';
 import { useTheme } from '../theme/ThemeContext';
@@ -45,6 +46,7 @@ export interface ModelTokenTrendProps {
  * mark is painted on a canvas that CSS cannot reach. See `chartMotion.ts`.
  */
 export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, foldedLabel, tokenUnitLabel = '', height = 260 }) => {
+  const timeZone = useTimeZone();
   const { theme, themeMode } = useTheme();
   const isReducedMotion = usePrefersReducedMotion();
   const animate = resolveChartAnimation(isReducedMotion);
@@ -168,7 +170,7 @@ export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, folded
       tick: false,
       grid: true,
     },
-  }), [tickFilter, labelFormat, colors.fg2, colors.border]);
+  }), [tickFilter, labelFormat, timeZone, colors.fg2, colors.border]);
 
   if (data.length === 0) {
     return <div className="model-trend-empty" style={{ height }} aria-hidden="true" />;

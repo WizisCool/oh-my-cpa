@@ -36,7 +36,7 @@ export const MAX_LOG_BUFFER_LINES = 10000;
 export const MANAGEMENT_PATH_FRAGMENTS = ['/v0/management', '/v8/management'];
 
 const LINE_PREFIX =
-  /^\[(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?)\]\s+\[([^\]]*)\]\s+\[([a-zA-Z]+)\s*\]\s*(?:\[([^\]]*)\]\s*)?(.*)$/;
+  /^\[(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)\]\s+\[([^\]]*)\]\s+\[([a-zA-Z]+)\s*\]\s*(?:\[([^\]]*)\]\s*)?(.*)$/;
 const LEVEL_WORDS: Record<string, LogLevel> = {
   trace: 'trace',
   debug: 'debug',
@@ -69,6 +69,8 @@ function levelOf(value: string | undefined): LogLevel | undefined {
 export function parseLogLine(raw: string): LogLineParts {
   const match = raw.match(LINE_PREFIX);
   if (!match) {
+    const iso = raw.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2}))\s+(.*)$/);
+    if (iso) return { raw, timestamp: iso[1], message: iso[2], level: levelOf(inferLevelWord(iso[2])) };
     return { raw, message: raw, level: levelOf(inferLevelWord(raw)) };
   }
   const [, timestamp, requestId, level, source, rest] = match;

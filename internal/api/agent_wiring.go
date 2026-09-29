@@ -358,7 +358,7 @@ func (h *Handler) ensureAgent() error {
 		store := repository.AgentStore{Repo: h.repo, Cipher: h.cipher}
 		executor := &capability.Executor{Registry: registry, Store: store, Authorize: func(_ context.Context, id, _ string) bool { return h.auth != nil && id == h.auth.CapabilityIdentity() }, VerifyHuman: h.verifyAgentOAuth}
 		h.agent.executor = executor
-		h.agent.runtime = &agent.Runtime{Executor: executor, Store: store, Slots: h.playgroundSlots, Client: func(ctx context.Context, fingerprint string) (agent.ModelClient, error) {
+		h.agent.runtime = &agent.Runtime{Executor: executor, Store: store, Location: h.repo.Timezone().Location, Slots: h.playgroundSlots, Client: func(ctx context.Context, fingerprint string) (agent.ModelClient, error) {
 			return h.inferenceClient(ctx, fingerprint)
 		}}
 		h.agent.oauth = map[string]management.OAuthAuthURLResponse{}

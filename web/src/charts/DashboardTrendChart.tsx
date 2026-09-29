@@ -1,6 +1,7 @@
+import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { Area } from '@ant-design/charts';
-import dayjs from 'dayjs';
+import dayjs from '../utils/time';
 import { renderChartTooltip } from './chartTooltip';
 import { useTheme } from '../theme/ThemeContext';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
@@ -61,6 +62,7 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
   format,
   formatExact,
 }) => {
+  const timeZone = useTimeZone();
   const { theme, themeMode } = useTheme();
   const isReducedMotion = usePrefersReducedMotion();
   const animate = resolveChartAnimation(isReducedMotion);
@@ -120,7 +122,7 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
       plugins,
       onReady,
     }),
-    [chartData, height, color, animate, plugins, onReady, themeMode, theme.palette.muted, format, formatExact, label],
+    [chartData, height, timeZone, color, animate, plugins, onReady, themeMode, theme.palette.muted, format, formatExact, label],
   );
 
   if (values.length < 2) {

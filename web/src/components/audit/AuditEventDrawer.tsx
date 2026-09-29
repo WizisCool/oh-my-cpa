@@ -1,6 +1,7 @@
+import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Button, Drawer } from 'antd';
-import dayjs from 'dayjs';
+import dayjs from '../../utils/time';
 import { DownOutlined, FilterOutlined, UpOutlined } from '../icons';
 import { useT } from '../../i18n';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
@@ -38,6 +39,7 @@ export interface AuditEventDrawerProps {
  * what else happened to this target, and what else did this request do.
  */
 export const AuditEventDrawer: React.FC<AuditEventDrawerProps> = ({ event, newer, older, onNavigate, onClose, onSearch }) => {
+  useTimeZone();
   const t = useT();
   const isOpen = event !== undefined;
   useOverlayHistory({ isOpen, onClose });

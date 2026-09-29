@@ -1,3 +1,4 @@
+import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Alert, Button, Card, Tooltip } from 'antd';
 import { ReloadOutlined, RightOutlined } from '../icons';
@@ -62,24 +63,6 @@ const HEATMAP_REFRESH_MS = 5 * 60_000;
  */
 function full(value: number): string {
   return FULL_NUMBER_FORMAT.format(value);
-}
-
-/**
- * The viewer's IANA timezone, or null when it cannot be determined.
- *
- * `Intl.DateTimeFormat().resolvedOptions().timeZone` is the zone the browser is
- * actually applying, which is what the strip's days must be built from. It is not
- * always available (a stripped-down runtime, an unusual embedder), and the caller
- * reports that rather than guessing: an offset would be wrong for every day on the
- * far side of a daylight-saving transition, not merely the two transition days.
- */
-export function viewerTimezone(): string | null {
-  try {
-    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return zone && typeof zone === 'string' ? zone : null;
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -208,10 +191,9 @@ export const TokenHeatmap: React.FC = () => {
   const t = useT();
   const { lang } = useI18n();
 
-  // Read once: the zone does not change while the page is open, and reading it per
-  // render would make the query key unstable and refetch the panel on every unrelated
-  // state update.
-  const timezone = React.useMemo(() => viewerTimezone(), []);
+  // A timezone change selects a different calendar query, while unrelated renders
+  // keep the shared zone string and cached daily totals stable.
+  const timezone = useTimeZone();
   const [focusDay, setFocusDay] = React.useState<string | null>(null);
   // The hover ring is pure CSS and no state records it, so the only writes to this panel's own state
   // are moving the tab stop and opening a tooltip. The cell elements are memoized below, which keeps
@@ -221,8 +203,7 @@ export const TokenHeatmap: React.FC = () => {
   const hasScrolledToToday = React.useRef(false);
   const { data, isError, error, isFetching, refetch } = useQuery({
     queryKey: [TOKEN_HEATMAP_QUERY_KEY, timezone],
-    queryFn: () => api.getTokenHeatmap(timezone as string),
-    enabled: timezone !== null,
+    queryFn: () => api.getTokenHeatmap(timezone),
     // The strip re-reads on its own cadence, on window focus, and when the page's
     // refresh button is pressed (through the key above).
     refetchInterval: HEATMAP_REFRESH_MS,
@@ -444,17 +425,6 @@ export const TokenHeatmap: React.FC = () => {
     )),
     [cellsByRow, renderCell],
   );
-
-  // The zone is read from the browser and cannot be inferred, so a runtime without it gets
-  // an explanation rather than a grid built on a guess.
-  if (timezone === null) {
-    return (
-      <Card className="dashboard-tile is-wide heatmap-panel" styles={{ body: { padding: 20 } }}>
-        <div className="tile-label">{t('dash.heatmap.title')}</div>
-        <Alert className="heatmap-alert" type="warning" showIcon description={t('dash.heatmap.no_timezone')} />
-      </Card>
-    );
-  }
 
   // A first load that failed has no grid to keep, so it says so and offers the retry
   // instead of leaving a skeleton up forever.

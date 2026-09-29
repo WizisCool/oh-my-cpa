@@ -1,6 +1,7 @@
+import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Button, Empty, Input, InputNumber, Pagination, TimePicker, Tooltip } from 'antd';
-import dayjs from 'dayjs';
+import dayjs from '../../utils/time';
 import clsx from 'clsx';
 import { ClockCircleOutlined, DeleteOutlined, PlusOutlined, SearchOutlined } from '../icons';
 import { useT, type TFunc } from '../../i18n';
@@ -26,6 +27,7 @@ export function describeTier(t: TFunc, tier: PriceTier): string {
 
 /** Small marks naming a price's tiers; a price without tiers draws nothing. */
 export const TierBadges: React.FC<{ tiers: PriceTier[] | null | undefined }> = ({ tiers }) => {
+  useTimeZone();
   const t = useT();
   if (!tiers || tiers.length === 0) return null;
   return (
@@ -45,6 +47,7 @@ export const RateGrid: React.FC<{
   rates: { prompt: number; completion: number; cacheRead: number; cacheWrite: number };
   className?: string;
 }> = ({ rates, className }) => {
+  useTimeZone();
   const t = useT();
   const cells: Array<[string, number]> = [
     [t('pricing.rate.prompt'), rates.prompt],
@@ -66,6 +69,7 @@ export const RateGrid: React.FC<{
 
 /** One OpenRouter model: who publishes it, what it is called, and what it costs. */
 export const UpstreamSummary: React.FC<{ model: UpstreamModel; extra?: React.ReactNode }> = ({ model, extra }) => {
+  useTimeZone();
   const t = useT();
   return (
     <div className={styles['upstream-summary']} data-testid="pricing-upstream-summary">
@@ -106,6 +110,7 @@ export interface UpstreamPickerProps {
  * no request; before anything is typed, the server's suggestions for this model come first.
  */
 export const UpstreamPicker: React.FC<UpstreamPickerProps> = ({ models, suggestions, selectedId, isLoading, onSelect }) => {
+  useTimeZone();
   const t = useT();
   const [query, setQuery] = React.useState('');
   const [page, setPage] = React.useState(1);
@@ -177,6 +182,7 @@ export interface TierEditorProps {
  * change inside it. A blank rate inherits the base price, which is how providers publish tiers.
  */
 export const TierEditor: React.FC<TierEditorProps> = ({ drafts, invalidIndex, onChange }) => {
+  useTimeZone();
   const t = useT();
   const update = (key: string, patch: Partial<TierDraft>) =>
     onChange(drafts.map((draft) => (draft.key === key ? { ...draft, ...patch } : draft)));

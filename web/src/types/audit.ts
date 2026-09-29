@@ -1,3 +1,4 @@
+import dayjs from '../utils/time';
 /** Shapes and pure helpers for the operator audit trail. */
 
 export interface AuditEvent {
@@ -160,8 +161,7 @@ export function formatDetailValue(value: unknown): string {
 
 /** Local calendar day of an instant, as a stable grouping key. */
 export function dayKey(ms: number): string {
-  const date = new Date(ms);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  return dayjs(ms).format('YYYY-MM-DD');
 }
 
 /** The console category whose prefixes are exactly the filter's, if any. */

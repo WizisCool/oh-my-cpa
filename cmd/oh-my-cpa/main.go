@@ -52,6 +52,7 @@ func main() {
 		logger.Error("failed to initialize Oh My CPA", "error", err)
 		os.Exit(1)
 	}
+	logger = slog.Default()
 	defer running.Close()
 	if err := running.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("server stopped with error", "error", err)

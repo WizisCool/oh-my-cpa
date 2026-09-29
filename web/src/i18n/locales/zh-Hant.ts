@@ -4,6 +4,14 @@
  * Keys mirror DICT in ../index.tsx. Keep this catalog complete: a missing key would fall back to another language and violate the console-wide full-localization rule.
  */
 export const ZH_HANT: Readonly<Record<string, string>> = {
+  "agent.capability.timezone_get": "讀取時區設定",
+  "agent.capability.timezone_get.description": "讀取伺服器時區、手動選擇和目前生效的時區。",
+  "agent.capability.timezone_set": "設定時區",
+  "agent.capability.timezone_set.description": "設定整個部署的時區，或恢復伺服器預設時區。",
+  "omc.timezone_invalid": "請選擇有效的 IANA 時區。",
+  "omc.timezone": "時區",
+  "omc.timezone_desc": "套用於時間顯示和自然日統計。",
+  "omc.timezone_server": "伺服器時區",
   "pg.history_omitted": "歷史訊息未存入此舊請求快照。",
   "nav.agent": "智慧體",
   "agent.status.pending": "等待確認",
@@ -631,7 +639,6 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "dash.heatmap.tip_no_requests": "該日期無請求",
   "dash.heatmap.error": "無法讀取 Token 活動圖",
   "dash.heatmap.stale": "重新整理失敗，下方仍顯示上一次讀取的資料。",
-  "dash.heatmap.no_timezone": "無法確定目前瀏覽器的時區，無法按自然日統計。",
   "dash.heatmap.dow.mon": "一",
   "dash.heatmap.dow.tue": "二",
   "dash.heatmap.dow.wed": "三",

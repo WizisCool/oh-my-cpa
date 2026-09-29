@@ -1,6 +1,7 @@
+import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Alert, App as AntdApp, Button, Input, Pagination, Popover, Segmented, Select, Tooltip } from 'antd';
-import dayjs from 'dayjs';
+import dayjs from '../../utils/time';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { EditOutlined, LinkOutlined, SearchOutlined, SyncOutlined } from '../../components/icons';
@@ -72,6 +73,7 @@ function syncSummary(t: TFunc, data: PricingResponse | undefined): string {
  * pinned or priced by hand, and the multipliers for channels that do not bill list price.
  */
 export const PricingPage: React.FC = () => {
+  useTimeZone();
   const t = useT();
   const isDemo = isDemoMode();
   const { message } = AntdApp.useApp();

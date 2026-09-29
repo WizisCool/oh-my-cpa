@@ -1,7 +1,9 @@
+import { pickerInstant } from '../../utils/time';
+import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Button, DatePicker, Popover, Tabs } from 'antd';
 import { CaretDownOutlined } from '../icons';
-import dayjs, { type Dayjs } from 'dayjs';
+import dayjs, { type Dayjs } from '../../utils/time';
 import { useT } from '../../i18n';
 import { DASHBOARD_PRESETS, type DashboardPreset, type DashboardRange } from '../../types/dashboard';
 
@@ -41,6 +43,7 @@ interface TimeRangeControlProps {
  * date is "chosen", and the two disagree in ways users feel as friction.
  */
 export const TimeRangeControl: React.FC<TimeRangeControlProps> = ({ range, onChange }) => {
+  useTimeZone();
   const t = useT();
   const [open, setOpen] = React.useState(false);
   const isCustom = range.from !== undefined;
@@ -129,7 +132,7 @@ export const TimeRangeControl: React.FC<TimeRangeControlProps> = ({ range, onCha
                   typeof range.to === 'number' ? dayjs(range.to) : null,
                 ]}
                 onChange={(values: [Dayjs | null, Dayjs | null] | null) => {
-                  applyCustom(values?.[0]?.valueOf(), values?.[1]?.valueOf() ?? null);
+                  applyCustom(values?.[0] ? pickerInstant(values[0].startOf('day')) : undefined, values?.[1] ? pickerInstant(values[1]) : null);
                 }}
                 disabledDate={(current: Dayjs) => current && current.valueOf() > Date.now()}
               />

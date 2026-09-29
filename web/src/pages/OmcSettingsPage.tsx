@@ -1,3 +1,5 @@
+import { TimeZoneSelect } from '../components/common/TimeZoneSelect';
+import { useTimeZoneSetting } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { Button, ColorPicker, Segmented, Select } from 'antd';
 import { PlusOutlined } from '../components/icons';
@@ -89,6 +91,7 @@ const ROLE_LABEL_KEYS: Record<ContrastRole, string> = {
  */
 export const OmcSettingsPage: React.FC = () => {
   const t = useT();
+  const timezone = useTimeZoneSetting();
   const { lang, setLang } = useI18n();
   const { style, setStyle } = useTokenDisplayStyle();
   const { modePreference, setModePreference, systemMode, previewMode, themeMode } = useTheme();
@@ -119,6 +122,11 @@ export const OmcSettingsPage: React.FC = () => {
         <div className="settings-group-head">
           <h3 className="settings-group-title">{t('omc.section_display')}</h3>
         </div>
+        <SettingRow
+          label={t('omc.timezone')}
+          description={t('omc.timezone_desc')}
+          control={<TimeZoneSelect value={timezone.value} serverTimezone={timezone.server} onChange={(zone) => { void timezone.set(zone === timezone.server ? '' : zone); }} />}
+        />
         <SettingRow
           label={t('omc.token_style')}
           description={t('omc.token_style_desc')}

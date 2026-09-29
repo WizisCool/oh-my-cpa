@@ -376,8 +376,8 @@ export const api = {
    *
    * It is a separate call from getDashboard because its span is a fixed fifty-three
    * whole weeks while the dashboard's window is not: folding it into the KPI response
-   * would aggregate a year of history on every live tail poll. `timezone` is the viewer's
-   * IANA zone, which decides where each local day begins - the server cannot derive it,
+   * would aggregate a year of history on every live tail poll. `timezone` is the effective OMC
+   * IANA zone, which decides where each local day begins,
    * and a UTC offset would be wrong for every day on the far side of a daylight-saving
    * transition rather than only on the two transition days.
    */
@@ -429,8 +429,8 @@ export const api = {
    * and the operator's working window should survive all three.
    */
   async getPreferences(): Promise<Record<string, unknown>> {
-    const data = await request<{ preferences?: Record<string, unknown> }>('/preferences', { method: 'GET' });
-    return data.preferences ?? {};
+    const data = await request<{ preferences?: Record<string, unknown>; time_zone?: { server_timezone: string } }>('/preferences', { method: 'GET' });
+    return { ...data.preferences, omc_server_timezone: data.time_zone?.server_timezone ?? 'UTC' };
   },
 
   async putPreference(key: string, value: unknown): Promise<void> {

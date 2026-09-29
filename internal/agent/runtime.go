@@ -105,6 +105,7 @@ type ModelClient interface {
 type Runtime struct {
 	Executor *capability.Executor
 	Store    repository.AgentStore
+	Location func() *time.Location
 	Slots    chan struct{}
 	Client   func(context.Context, string) (ModelClient, error)
 	mu       sync.Mutex
@@ -318,7 +319,11 @@ func (r *Runtime) loop(ctx context.Context, conversation *Conversation, turn *Tu
 			return errors.New("model_budget_exceeded")
 		}
 		turn.Rounds++
-		messages := []gateway.AgentMessage{{Role: "system", Content: systemPrompt(conversation.AnchorMS)}}
+		prompt := systemPrompt(conversation.AnchorMS)
+		if r.Location != nil {
+			prompt += "\nEffective OMC calendar timezone: " + r.Location().String() + ". Interpret calendar dates and display timestamps in this zone; call timezone_get if it changes."
+		}
+		messages := []gateway.AgentMessage{{Role: "system", Content: prompt}}
 		// Include only complete previous turns, newest first within the byte budget; tool/result pairs remain intact.
 		var history []gateway.AgentMessage
 		used := 0

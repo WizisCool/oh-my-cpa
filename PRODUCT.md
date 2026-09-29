@@ -95,3 +95,7 @@ web
 - Full support for `prefers-reduced-motion`, automatically freezing dynamic progress bars, disabling transform animations, and dropping the chart marks' morph — the canvas library reads no such preference, so the switch is the console's own.
 - Touch accessibility on a coarse pointer: nothing is reachable only by hovering, every control a finger must hit is about 40px after its hit area without the drawn size changing, and every focusable text control is at least 16px so iOS Safari does not zoom the page on focus. Pinch-zoom is never disabled;
 - Every icon-only control carries an accessible name rather than only a tooltip.
+
+### Deployment-wide timezone
+
+OMC Settings provides a shared IANA timezone selection for timestamps and calendar-day totals across browsers. The default is the deployment's timezone (`TZ` in Docker); a manual choice persists on the server. The picker identifies the server zone and shows current UTC offsets, including fractional offsets and daylight saving. Historical instants and raw upstream evidence remain unchanged. Agents can read and change the same setting through declared capabilities.

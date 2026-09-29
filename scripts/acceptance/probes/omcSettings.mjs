@@ -13,15 +13,53 @@ import { sleep } from '../probe.mjs';
  */
 export async function omcSettings({ base, page, check, context }) {
   const writes = [];
+  const preferences = {};
+  await page.route('**/omc/api/**/preferences', (route) => route.fulfill({
+    json: { preferences, time_zone: { server_timezone: 'Asia/Kuala_Lumpur' } },
+  }));
   await page.route('**/omc/api/**/preferences/*', async (route) => {
     if (route.request().method() === 'PUT') {
-      writes.push({ key: new URL(route.request().url()).pathname.split('/').pop(), body: route.request().postData() });
+      const key = new URL(route.request().url()).pathname.split('/').pop();
+      writes.push({ key, body: route.request().postData() });
+      preferences[key] = JSON.parse(route.request().postData());
     }
     return route.fallback();
   });
 
   await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
   await page.locator('.omc-settings-page').waitFor({ timeout: 20_000 });
+
+  const timezone = page.getByRole('combobox', { name: 'Time zone', exact: true });
+  const timezoneControl = page.locator('.ant-select').filter({ has: timezone });
+  check('timezone defaults to the actual server zone with its UTC offset',
+    (await timezoneControl.innerText()).includes('Asia/Kuala_Lumpur') && (await timezoneControl.innerText()).includes('UTC+8') && (await timezoneControl.innerText()).includes('Server time zone'));
+  await timezone.click();
+  const popup = page.locator('.ant-select-dropdown:visible');
+  check('timezone popup keeps complete zone labels readable', await popup.evaluate((node) => {
+    return node.getBoundingClientRect().width >= 400 && [...node.querySelectorAll('.ant-select-item-option-content')]
+      .every((item) => item.scrollWidth <= item.clientWidth + 1);
+  }));
+  check('timezone list mounts only its visible options', await popup.locator('.ant-select-item-option').count() < 20);
+  const scrollHost = popup.locator('.ant-select-dropdown-list-holder');
+  const firstZone = await popup.locator('.ant-select-item-option').first().innerText();
+  await scrollHost.evaluate((node) => { node.scrollTop = 10000; });
+  await until(async () => (await popup.locator('.ant-select-item-option').first().innerText()) !== firstZone, { label: 'virtual timezone rows after scrolling' });
+  check('timezone scrolling keeps the mounted row count bounded', await popup.locator('.ant-select-item-option').count() < 20);
+  await timezone.fill('America/New_York');
+  await popup.locator('.ant-select-item-option').filter({ hasText: 'America/New_York' }).click();
+  await until(() => writes.some((write) => write.key === 'omc_timezone' && write.body === '"America/New_York"'), { label: 'timezone preference to persist' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await timezone.waitFor();
+  check('manual timezone survives reload with an explicit UTC offset', (await timezoneControl.innerText()).includes('America/New_York') && /UTC-[45]/.test(await timezoneControl.innerText()));
+  const heatmapRequest = page.waitForRequest((request) => request.url().includes('/token-heatmap?tz=America%2FNew_York'));
+  await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
+  const capturedHeatmapRequest = await heatmapRequest;
+  check('calendar reads use the selected timezone', new URL(capturedHeatmapRequest.url()).searchParams.get('tz') === 'America/New_York');
+  await page.goto(`${base}/omc-settings`, { waitUntil: 'domcontentloaded' });
+  await timezone.click();
+  await timezone.fill('Asia/Kuala_Lumpur');
+  await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: 'Asia/Kuala_Lumpur' }).click();
+  await until(() => writes.some((write) => write.key === 'omc_timezone' && write.body === '""'), { label: 'server timezone selection to clear the override' });
 
   // ── every header action names itself on hover ─────────────────────────────
   // Sign out is an icon button, because its label is the one string in this cluster whose
@@ -73,13 +111,13 @@ export async function omcSettings({ base, page, check, context }) {
   // Every console setting this page owns, once. A duplicated row would be two controls for one
   // setting - the operator changes one and the other silently disagrees.
   //
-  // Five rows, because the theme is now a mode and the palette each of the two modes uses: the mode
+  // Six rows include the deployment timezone, token style, language and appearance: the mode
   // is the setting an operator changes often, and the two palettes are the considered choices behind
   // it. A single "theme" row could only be one of those.
   const labels = await page.locator('.omc-settings-page .settings-toggle-title').allInnerTexts();
   check(
     'the settings page lists each console setting once',
-    labels.length === 5
+    labels.length === 6
       && new Set(labels).size === labels.length
       && labels.some((label) => /Token unit style|Token 计量单位/.test(label))
       && labels.some((label) => /Theme mode|主题模式/.test(label))

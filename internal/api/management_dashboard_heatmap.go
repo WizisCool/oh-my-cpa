@@ -9,6 +9,7 @@ import (
 	_ "time/tzdata"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/timezone"
 )
 
 // The grid is a rolling year: fifty-three whole Monday-first weeks ending on the week containing
@@ -86,7 +87,7 @@ type dashboardTokenHeatmapDay struct {
 // three reasons. Its span is a fixed fifty-three whole weeks while the dashboard's
 // window slides from fifteen minutes to ninety days, so it answers a different question
 // from a different range and would be recomputed on every tail poll if it rode along. The
-// timezone has to come from the browser, and the dashboard's own parameters are shared
+// calendar uses the OMC timezone, and the dashboard's own parameters are shared
 // with the request list. And the panel is allowed to fail on its own: an unavailable read
 // should not blank the six tiles beside it, which is the same reasoning that put
 // `partial_errors` on the overview.
@@ -97,7 +98,11 @@ func (h *Handler) dashboardTokenHeatmap(writer http.ResponseWriter, request *htt
 		return
 	}
 
-	zone, zoneErr := heatmapTimezone(request)
+	zone := h.repo.Timezone().Location()
+	var zoneErr string
+	if request.URL.Query().Get("tz") != "" {
+		zone, zoneErr = heatmapTimezone(request)
+	}
 	if zoneErr != "" {
 		writeError(writer, http.StatusBadRequest, zoneErr)
 		return
@@ -193,14 +198,8 @@ func (h *Handler) dashboardTokenHeatmap(writer http.ResponseWriter, request *htt
 	writeJSON(writer, http.StatusOK, response)
 }
 
-// heatmapTimezone resolves the viewer's timezone.
-//
-// The zone is a request parameter because the days it describes are the viewer's
-// days, and the server cannot derive them: the deployed image runs in a container
-// whose `TZ` is whatever the operator set, if anything. An IANA name is required
-// rather than a UTC offset because an offset cannot express daylight saving, and a
-// single offset applied to a whole quarter is wrong for every day on the other side
-// of a transition - not merely the two transition days.
+// heatmapTimezone validates an explicit IANA calendar for API clients. The console
+// sends its effective OMC zone; requests without tz use the deployment-wide setting.
 func heatmapTimezone(request *http.Request) (*time.Location, string) {
 	raw := strings.TrimSpace(request.URL.Query().Get("tz"))
 	if raw == "" {
@@ -209,7 +208,7 @@ func heatmapTimezone(request *http.Request) (*time.Location, string) {
 	if len(raw) > heatmapMaxZoneName {
 		return nil, "tz is not a valid timezone name"
 	}
-	zone, err := time.LoadLocation(raw)
+	zone, err := timezone.Load(raw)
 	if err != nil {
 		// An unknown zone is refused rather than defaulted to UTC: defaulting would
 		// answer for a calendar the operator is not looking at, and the only symptom

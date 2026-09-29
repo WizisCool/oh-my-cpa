@@ -4,6 +4,7 @@ services:
     pull_policy: if_not_present
     container_name: ${CPA_CONTAINER_NAME:-cli-proxy-api}
     environment:
+      TZ: ${TZ:-UTC}
       DEPLOY: ${DEPLOY:-}
       MANAGEMENT_PASSWORD: ${CPA_MANAGEMENT_KEY:?set CPA_MANAGEMENT_KEY}
     expose:
@@ -41,6 +42,7 @@ services:
     expose:
       - "8080"
     environment:
+      TZ: ${TZ:-UTC}
       OMCPA_LISTEN_ADDR: ":8080"
       OMCPA_BASE_PATH: ${OMCPA_BASE_PATH:-/omc}
       OMCPA_DATA_DIR: /data

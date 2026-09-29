@@ -1,3 +1,4 @@
+import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Alert, App as AntdApp, Button, Descriptions, Drawer, Empty, Modal, Skeleton, Tabs, Tooltip } from 'antd';
 import {
@@ -9,7 +10,7 @@ import {
   UpOutlined,
 } from '../icons';
 import { useQuery } from '@tanstack/react-query';
-import dayjs from 'dayjs';
+import dayjs from '../../utils/time';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
@@ -46,6 +47,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   events,
   onSelectEvent,
 }) => {
+  useTimeZone();
   const t = useT();
   const isDemo = isDemoMode();
   // The drawer's token cards follow the console's unit style; the values are

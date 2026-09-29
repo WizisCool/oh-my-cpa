@@ -1,3 +1,4 @@
+import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import {
   App as AntdApp,
@@ -82,6 +83,7 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
   onDelete,
   onViewRequests,
 }) => {
+  useTimeZone();
   const t = useT();
   const { message } = AntdApp.useApp();
   const { style: tokenStyle } = useTokenDisplayStyle();
