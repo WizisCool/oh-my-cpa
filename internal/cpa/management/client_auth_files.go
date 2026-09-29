@@ -37,8 +37,12 @@ func (c *Client) ResetQuota(ctx context.Context, authIndex string) error {
 
 // PatchAuthFileStatus changes only the disabled state of a named auth file.
 // The endpoint and request shape are fixed here rather than supplied by an
-// HTTP caller.
+// HTTP caller. For a credential that lives in the configuration file CPA saves
+// that file in the v8 layout, so a legacy one is kept first.
 func (c *Client) PatchAuthFileStatus(ctx context.Context, name, authIndex string, disabled bool) (map[string]any, error) {
+	if err := c.keepLegacyConfig(ctx); err != nil {
+		return nil, err
+	}
 	payload := map[string]any{
 		"name":       strings.TrimSpace(name),
 		"auth_index": strings.TrimSpace(authIndex),

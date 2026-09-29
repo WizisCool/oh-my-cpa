@@ -9,18 +9,19 @@ import (
 	"strings"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/configyaml"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
 
 /**
  * The plugin system's host settings: the global switch, the third-party store
  * registries and the store authentication rules.
  *
- * They live in CPA's `config.yaml` and CPA has no narrower route for them, so this
- * facade edits exactly those keys inside the whole document and writes it back. The
- * write is the same transaction a configuration save is: it holds the provider write
- * gate and the configuration mutex, and it is refused when the document changed since
- * the operator loaded it (`config_conflict`), so it can never overwrite an edit made
- * on the configuration page or by another session.
+ * They live under `plugins` in CPA's configuration and are written as a sparse v8
+ * change to exactly those keys. The write is the same transaction a configuration
+ * save is: it holds the provider write gate and the configuration mutex, and it is
+ * refused when the document changed since the operator loaded it
+ * (`config_conflict`), so it can never overwrite an edit made on the configuration
+ * page or by another session.
  */
 
 const (
@@ -257,9 +258,8 @@ func (h *Handler) putPluginSettings(writer http.ResponseWriter, request *http.Re
 		return
 	}
 
-	// The same gate and mutex a configuration save holds: this is a whole-document
-	// write, and a provider or configuration write landing between the read and the
-	// PUT below would otherwise be overwritten even though the revision matched.
+	// The same gate and mutex a configuration save holds, so the revision this
+	// write is checked against cannot change between the check and the write.
 	if err := h.providerWrites.acquire(request.Context()); err != nil {
 		writeProviderWriteError(writer, err)
 		return
@@ -268,29 +268,26 @@ func (h *Handler) putPluginSettings(writer http.ResponseWriter, request *http.Re
 	h.configMu.Lock()
 	defer h.configMu.Unlock()
 
-	currentYAML, err := client.ConfigYAML(request.Context())
-	if err != nil {
-		writeCPAFacadeError(writer, err)
+	currentYAML, ok := h.currentConfigAtRevision(writer, request, client, expectedRevision)
+	if !ok {
 		return
 	}
-	currentRevision := configyaml.ComputeRevision(currentYAML)
-	if !strings.EqualFold(expectedRevision, currentRevision) {
-		writeJSON(writer, http.StatusConflict, map[string]any{
-			"error":            "configuration has been modified by another session",
-			"code":             "config_conflict",
-			"current_revision": currentRevision,
-		})
+	// A section CPA itself would not load is refused rather than written over.
+	if _, err := configyaml.ReadPluginSettings(currentYAML); err != nil {
+		writePluginSettingsUnreadable(writer, err)
 		return
 	}
-
-	nextYAML, err := configyaml.ApplyPluginSettings(currentYAML, settings)
+	set, remove, err := configyaml.PluginSettingsEdit(settings)
 	if err != nil {
-		if errors.Is(err, configyaml.ErrPluginSettingsUnreadable) {
-			writePluginSettingsUnreadable(writer, err)
-			return
-		}
 		writeError(writer, http.StatusUnprocessableEntity, "the configuration cannot be edited: "+err.Error())
 		return
+	}
+	changes := make([]management.ConfigChange, 0, len(set)+len(remove))
+	for key, value := range set {
+		changes = append(changes, management.ConfigChange{Path: []string{"plugins", key}, Value: value})
+	}
+	for _, key := range remove {
+		changes = append(changes, management.ConfigChange{Path: []string{"plugins", key}, Remove: true})
 	}
 
 	details := map[string]any{
@@ -302,16 +299,26 @@ func (h *Handler) putPluginSettings(writer http.ResponseWriter, request *http.Re
 		writeError(writer, http.StatusInternalServerError, "audit log failure; plugin settings save aborted")
 		return
 	}
-	if err := client.UpdateConfigYAML(request.Context(), nextYAML); err != nil {
-		_ = h.recordAudit(request, "plugin.settings", "config", "plugins", "failure", map[string]any{"error": err.Error()})
-		writeCPAFacadeError(writer, err)
+	if err := client.ApplyConfigChanges(request.Context(), changes); err != nil {
+		_ = h.recordAudit(request, "plugin.settings", "config", "plugins", "failure", configWriteFailureDetail(err, map[string]any{}))
+		if errors.Is(err, management.ErrConfigPartiallyApplied) {
+			h.afterConfigWrite()
+		}
+		writeCPAFacadeError(writer, scrubConfigRejection(err, currentYAML))
 		return
 	}
 	_ = h.recordAudit(request, "plugin.settings", "config", "plugins", "success", details)
 
-	stored, err := configyaml.ReadPluginSettings(nextYAML)
+	savedYAML, err := client.ConfigYAML(request.Context())
+	if err != nil {
+		// The write landed; the answer is what was sent, without a revision, so
+		// the page reloads before its next save.
+		writeJSON(writer, http.StatusOK, projectPluginSettings("", settings))
+		return
+	}
+	stored, err := configyaml.ReadPluginSettings(savedYAML)
 	if err != nil {
 		stored = settings
 	}
-	writeJSON(writer, http.StatusOK, projectPluginSettings(configyaml.ComputeRevision(nextYAML), stored))
+	writeJSON(writer, http.StatusOK, projectPluginSettings(configyaml.ComputeRevision(savedYAML), stored))
 }

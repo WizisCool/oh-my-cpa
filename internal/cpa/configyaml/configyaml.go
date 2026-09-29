@@ -124,6 +124,9 @@ func RestoreSentinels(submittedYAML, serverYAML string) (string, error) {
 	if err := restoreMapping(submittedRoot.Content[0], serverRoot.Content[0], nil); err != nil {
 		return "", err
 	}
+	if unrestored, found := unrestoredSentinelPath(submittedRoot.Content[0], nil); found {
+		return "", fmt.Errorf("%s has no stored value to keep", unrestored)
+	}
 
 	var buf strings.Builder
 	enc := yaml.NewEncoder(&buf)
@@ -425,7 +428,10 @@ func isSensitivePath(path []string) bool {
 		"tls.key":
 		return true
 	default:
-		return strings.HasSuffix(joined, ".secret-key") || strings.HasSuffix(joined, ".key")
+		// `api-key` is an upstream provider credential wherever it appears (under
+		// each `api-keys.<family>` entry in v8). The caller keys at
+		// `access.api-keys` stay readable: the key page lists and reveals them.
+		return strings.HasSuffix(joined, ".secret-key") || strings.HasSuffix(joined, ".key") || strings.HasSuffix(joined, ".api-key")
 	}
 }
 
@@ -456,4 +462,71 @@ func sanitizeProxyURL(raw string) string {
 		raw = raw[:separator]
 	}
 	return raw
+}
+
+// SanitizeProxyURL removes a proxy URL's credentials, query and fragment: the
+// form every browser-facing projection of a proxy setting uses.
+func SanitizeProxyURL(raw string) string {
+	return sanitizeProxyURL(raw)
+}
+
+// SCRUBBED_SECRET_TEXT stands in for a hidden value ScrubStoredSecrets removed.
+const SCRUBBED_SECRET_TEXT = "[hidden]"
+
+// ScrubStoredSecrets removes from text every hidden value the stored document
+// holds: each sensitive value, and each proxy URL's credentials. A save puts
+// those values back into what it sends, so CPA's explanation of a refused save
+// can quote one the operator was never shown.
+func ScrubStoredSecrets(text, storedYAML string) string {
+	root, err := parseRootMapping(storedYAML)
+	if err != nil || root == nil || text == "" {
+		return text
+	}
+	replacements := map[string]string{}
+	collectStoredSecrets(root, nil, replacements)
+	secrets := make([]string, 0, len(replacements))
+	for secret := range replacements {
+		secrets = append(secrets, secret)
+	}
+	// The longest first, so a proxy URL is replaced whole before its password.
+	sort.Slice(secrets, func(i, j int) bool { return len(secrets[i]) > len(secrets[j]) })
+	for _, secret := range secrets {
+		text = strings.ReplaceAll(text, secret, replacements[secret])
+	}
+	return text
+}
+
+func collectStoredSecrets(node *yaml.Node, path []string, replacements map[string]string) {
+	if node == nil {
+		return
+	}
+	switch node.Kind {
+	case yaml.ScalarNode:
+		value := strings.TrimSpace(node.Value)
+		if value == "" {
+			return
+		}
+		if isSensitivePath(path) {
+			replacements[value] = SCRUBBED_SECRET_TEXT
+			return
+		}
+		if isProxyURLPath(path) {
+			if cleaned := sanitizeProxyURL(value); cleaned != value {
+				replacements[value] = cleaned
+				if parsed, err := url.Parse(value); err == nil && parsed.User != nil {
+					if password, ok := parsed.User.Password(); ok && password != "" {
+						replacements[password] = SCRUBBED_SECRET_TEXT
+					}
+				}
+			}
+		}
+	case yaml.MappingNode:
+		for index := 0; index+1 < len(node.Content); index += 2 {
+			collectStoredSecrets(node.Content[index+1], appendPath(path, node.Content[index].Value), replacements)
+		}
+	case yaml.SequenceNode:
+		for _, item := range node.Content {
+			collectStoredSecrets(item, path, replacements)
+		}
+	}
 }

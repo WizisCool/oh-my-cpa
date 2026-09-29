@@ -1,14 +1,11 @@
 import http from 'node:http';
-import { parse as parseYaml } from 'yaml';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
 // The endpoints the client addresses on /v0/management; every other one lives
-// under /v8/management only.
-const V0_ENDPOINTS = new Set([
-  '/config', '/config.yaml', '/api-keys', '/openai-compatibility', '/oauth-model-alias', '/oauth-excluded-models',
-  '/debug', '/proxy-url', '/request-log', '/logging-to-file', '/usage-statistics-enabled', '/request-retry',
-  '/max-retry-interval', '/max-retry-credentials', '/ws-auth', '/force-model-prefix', '/routing/strategy',
-  '/logs-max-total-size-mb', '/error-logs-max-files',
-]);
+// under /v8/management only. `/config.yaml` is on both: v0 returns the file as
+// stored (read before a write that would convert it) and v8 its v8 rendering.
+const V0_ENDPOINTS = new Set(['/config.yaml', '/openai-compatibility', '/oauth-model-alias']);
+const BOTH_GENERATION_ENDPOINTS = new Set(['/config.yaml']);
 
 function isV0Endpoint(path) {
   return V0_ENDPOINTS.has(path) || /^\/[a-z0-9-]+-api-key$/.test(path) || /^\/plugins\/[^/]+\/(enabled|config)$/.test(path);
@@ -125,9 +122,7 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
   // The codex API-key list is stateful for the same reason authFiles is: the
   // provider enable/disable flow writes it and then re-reads it, so a fixture
   // that acknowledged the write without storing it could not tell a working
-  // toggle from a lost one. Both the standalone endpoint and the copy embedded in
-  // `/config` read this one value, so the two views of the same list cannot
-  // drift apart.
+  // toggle from a lost one.
   const initialCodexProviders = [
     { 'api-key': FAKE_PROVIDER_SECRET, 'auth-index': 'codex-e2e', 'base-url': 'https://provider.example.test', models: [{ name: 'gpt-e2e', alias: 'gpt-e2e' }] },
     { 'api-key': FAKE_SECOND_PROVIDER_SECRET, 'auth-index': 'codex-e2e-second', 'base-url': 'https://provider-second.example.test', models: [{ name: 'gpt-e2e-second', alias: 'gpt-e2e-second' }] },
@@ -152,17 +147,31 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
   ];
   let xaiProviders = JSON.parse(JSON.stringify(initialXAIProviders));
 
-  // The gateway client keys are stateful for the same reason authFiles is: the
-  // key-management page renders its list from `/config.yaml` but rewrites it
-  // through `PUT /config.yaml`, so a fixture that served a fixed document while
-  // acknowledging writes would let a lost or mis-rendered list pass unnoticed.
-  let clientKeys = [FAKE_CLIENT_SECRET];
-  let configYaml = null;
-  const renderConfigYaml = () => {
-    if (configYaml !== null) return configYaml;
-    const keys = clientKeys.map((key) => `  - ${key}`).join('\n');
-    return `host: 127.0.0.1\nport: 8317\ndebug: false\nlogging-to-file: true\nrequest-log: true\napi-keys:\n${keys}\nplugins:\n  enabled: true\n  dir: plugins\n`;
+  // The configuration is one v8 document, stateful for the same reason authFiles
+  // is: the key-management page and the configuration page write single settings
+  // and read the whole document back, so a fixture that acknowledged writes
+  // without storing them would let a lost or misplaced setting pass unnoticed.
+  // The writes follow CPA's v8 semantics: PATCH merges objects and replaces lists
+  // and scalars, PUT replaces a path, DELETE removes one, and a legacy field name
+  // is refused.
+  let configDoc = {
+    server: { host: '127.0.0.1', port: 8317 },
+    observability: { logs: { debug: false, 'logging-to-file': true, 'request-log': true } },
+    access: { 'api-keys': [FAKE_CLIENT_SECRET] },
+    plugins: { enabled: true, dir: 'plugins' },
+    'config-version': 8,
   };
+  const V8_ROOTS = new Set(['server', 'management', 'access', 'credentials', 'routing', 'requests', 'oauth', 'multimedia', 'observability', 'plugins', 'quota-exceeded', 'api-keys', 'config-version']);
+  const legacyRootIn = (document) => Object.keys(document ?? {}).find((key) => !V8_ROOTS.has(key));
+  const isPlainObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+  const mergeConfig = (target, patch) => {
+    for (const [key, value] of Object.entries(patch)) {
+      if (isPlainObject(value) && isPlainObject(target[key])) mergeConfig(target[key], value);
+      else target[key] = structuredClone(value);
+    }
+  };
+  const configPathOf = (path) => path.slice('/config/'.length).split('/').map(decodeURIComponent);
+  const renderConfigYaml = () => stringifyYaml(configDoc);
 
   const plugins = new Map([
     ['fixture-logger', {
@@ -246,7 +255,8 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       return;
     }
     const isV0Request = url.pathname.startsWith('/v0/management/');
-    if ((!isV0Request && !url.pathname.startsWith('/v8/management/')) || isV0Request !== isV0Endpoint(path)) {
+    if ((!isV0Request && !url.pathname.startsWith('/v8/management/'))
+      || (!BOTH_GENERATION_ENDPOINTS.has(path) && isV0Request !== isV0Endpoint(path))) {
       json(response, 404, { error: 'not found' });
       return;
     }
@@ -369,21 +379,61 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       json(response, 200, { status: 'ok', deleted: deletedFiles.length, files: deletedFiles });
       return;
     }
-    if (request.method === 'GET' && path === '/config') {
-      json(response, 200, {
-        host: '127.0.0.1', port: 8317, debug: false, 'proxy-url': '', 'request-log': true,
-        'logging-to-file': true, 'usage-statistics-enabled': true, 'request-retry': 3,
-        'max-retry-interval': 30, 'max-retry-credentials': 2, 'ws-auth': true,
-        'force-model-prefix': false, 'logs-max-total-size-mb': 100, 'error-logs-max-files': 5,
-        routing: { strategy: 'least-load' }, 'api-keys': [...clientKeys],
-        'codex-api-key': codexProviders,
-        'openai-compatibility': [],
-      });
+    if (request.method === 'GET' && url.pathname === '/v8/management/config') {
+      json(response, 200, configDoc);
       return;
     }
-    if (request.method === 'GET' && path === '/config.yaml') {
+    // The v8 view and the stored file are the same document here: the fixture's
+    // file is already migrated, so no write converts it.
+    if (request.method === 'GET' && (url.pathname === '/v8/management/config.yaml' || url.pathname === '/v0/management/config.yaml')) {
       response.writeHead(200, { 'Content-Type': 'application/yaml', 'X-CPA-Version': '8.0.2-e2e' });
       response.end(renderConfigYaml());
+      return;
+    }
+    if (url.pathname.startsWith('/v8/management/config') && request.method !== 'GET') {
+      const bodyText = Buffer.concat(chunks).toString('utf8');
+      const configPath = path === '/config' || path === '/config.yaml' ? [] : configPathOf(path);
+      try {
+        if (request.method === 'PUT' && path === '/config.yaml') {
+          const document = parseYaml(bodyText) ?? {};
+          const legacy = legacyRootIn(document);
+          if (legacy) {
+            json(response, 400, { error: 'invalid_config', message: `legacy field ${legacy} is not accepted by v8` });
+            return;
+          }
+          configDoc = { ...document, 'config-version': 8 };
+        } else if (request.method === 'PATCH' && configPath.length === 0) {
+          const patch = JSON.parse(bodyText || '{}');
+          const legacy = legacyRootIn(patch);
+          if (legacy) {
+            json(response, 400, { error: 'invalid_config', message: `legacy field ${legacy} is not accepted by v8` });
+            return;
+          }
+          mergeConfig(configDoc, patch);
+        } else if (request.method === 'PUT' && configPath.length > 0) {
+          let parent = configDoc;
+          for (const key of configPath.slice(0, -1)) {
+            if (!isPlainObject(parent[key])) parent[key] = {};
+            parent = parent[key];
+          }
+          parent[configPath.at(-1)] = JSON.parse(bodyText);
+        } else if (request.method === 'DELETE' && configPath.length > 0) {
+          let parent = configDoc;
+          for (const key of configPath.slice(0, -1)) parent = isPlainObject(parent?.[key]) ? parent[key] : undefined;
+          if (!parent || !(configPath.at(-1) in parent)) {
+            json(response, 404, { error: 'not_found' });
+            return;
+          }
+          delete parent[configPath.at(-1)];
+        } else {
+          json(response, 405, { error: 'method not allowed' });
+          return;
+        }
+      } catch (error) {
+        json(response, 400, { error: 'invalid_config', message: String(error?.message ?? error) });
+        return;
+      }
+      json(response, 200, { status: 'ok', 'config-version': 8 });
       return;
     }
     if (request.method === 'GET' && path === '/codex-api-key') {
@@ -712,10 +762,6 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
         : { error: 'plugin_not_found', message: 'plugin not found' });
       return;
     }
-    if (request.method === 'GET' && path === '/api-keys') {
-      json(response, 200, { 'api-keys': [...clientKeys] });
-      return;
-    }
     if (request.method === 'GET' && ['/claude-api-key', '/gemini-api-key', '/oauth-excluded-models'].includes(path)) {
       json(response, 200, {});
       return;
@@ -750,32 +796,6 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
         xaiProviders = parsed;
       } else if (Array.isArray(parsed?.['xai-api-key'])) {
         xaiProviders = parsed['xai-api-key'];
-      }
-      json(response, 200, { status: 'ok' });
-      return;
-    }
-    // A config write replaces the whole document, so the fixture stores it and
-    // serves it back verbatim. Keeping the round trip makes a save that silently
-    // dropped the key list observable on the next read. The list is read back
-    // with the real YAML parser rather than a pattern match, so quoted, flow-style
-    // and empty `api-keys` forms are all handled the way CPA would handle them.
-    if (request.method === 'PUT' && path === '/config.yaml') {
-      const body = chunks.length ? Buffer.concat(chunks).toString('utf8') : '';
-      if (body.trim() !== '') {
-        configYaml = body;
-        try {
-          const parsedDoc = parseYaml(body);
-          const keys = parsedDoc?.['api-keys'];
-          if (Array.isArray(keys)) {
-            clientKeys = keys.map((key) => String(key).trim()).filter(Boolean);
-          } else if (keys === undefined || keys === null) {
-            clientKeys = [];
-          } else {
-            clientKeys = [String(keys).trim()].filter(Boolean);
-          }
-        } catch {
-          // An unparseable document leaves the previous list in place.
-        }
       }
       json(response, 200, { status: 'ok' });
       return;

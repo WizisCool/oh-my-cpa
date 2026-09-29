@@ -186,6 +186,7 @@ var demoPolicy = []demoPolicyRule{
 	// writes to the gateway.
 	{http.MethodGet, "/api/v1/management/config", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/config/source", demoAllow, ""},
+	{http.MethodGet, "/api/v1/management/config/backups", demoAllow, ""},
 	{http.MethodGet, "/api/v1/management/providers", demoAllow, ""},
 
 	// Credential metadata: the list, the per-credential model list and the fields a
@@ -247,6 +248,8 @@ var demoPolicy = []demoPolicyRule{
 	{http.MethodPut, "/api/v1/management/plugins/{id}/config", demoRefuse, "editing a plugin's configuration is disabled"},
 
 	// Gateway configuration and credential state.
+	{http.MethodPatch, "/api/v1/management/config", demoRefuse, "writing the gateway configuration is disabled"},
+	{http.MethodGet, "/api/v1/management/config/backups/{id}", demoRefuse, "the demo gateway's configuration is never converted, so no backup exists"},
 	{http.MethodPut, "/api/v1/management/config/source", demoRefuse, "writing the gateway configuration is disabled"},
 	{http.MethodPut, "/api/v1/management/config/{key}", demoRefuse, "writing the gateway configuration is disabled"},
 	{http.MethodPost, "/api/v1/management/api-keys", demoRefuse, "changing gateway key material is disabled"},

@@ -4,10 +4,11 @@ import { App as AntdApp } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseDocument, type Document } from 'yaml';
 
-import { api, ApiError, apiErrorCode, describeError } from '../../api/client';
+import { api, ApiError, describeError } from '../../api/client';
 import { useT } from '../../i18n';
 import { getFieldSemanticValue, updateFieldWithBaseline, isConfigSemanticallyEqual } from './configDirty';
-import { describeLayoutRefusal, payloadComparisonPaths, resolveConfigFields, resolvePayloadPlacement } from './configLayout';
+import { computeConfigChanges, rebaseDraft } from './configPatch';
+import { describeConfigSaveError } from './configSaveErrors';
 import { ALL_CONFIG_FIELDS, type ConfigFieldDefinition, type ConfigSectionId } from '../../types/configSchema';
 import type { ConfigScalarsResponse } from '../../types/configManagement';
 import type { PayloadValidationIssue } from './payloadRules';
@@ -16,10 +17,16 @@ import type { YamlSourceEditorRef } from './YamlSourceEditor';
 /**
  * The configuration draft and the transaction that saves it.
  *
- * It is one hook because a save is a whole-document write against a revision:
- * the draft, the baseline it is compared with, the conflict it can be refused
- * with, the in-flight guard and the discard confirmations are all readings of the
- * same transaction, and splitting them would only spread its invariants.
+ * It is one hook because a save is a write against a revision: the draft, the
+ * baseline it is compared with, the conflict it can be refused with, the
+ * in-flight guard and the discard confirmations are all readings of the same
+ * transaction, and splitting them would only spread its invariants.
+ *
+ * The two views save differently. The visual editor sends only the settings the
+ * draft changed (see configPatch), which CPA v8 writes in place; the source view
+ * is the whole document by definition and replaces it. Either way the server
+ * answers with the document CPA now stores, rendered in CPA's own layout, and
+ * that answer becomes the next baseline rather than the text that was sent.
  *
  * Two invariants are load-bearing and stated here rather than discovered:
  *
@@ -57,44 +64,62 @@ export function useConfigDraft() {
   /** Guards against a second save starting before isPending propagates. */
   const saveInFlightRef = React.useRef(false);
 
+  const viewModeRef = React.useRef(viewMode);
+  viewModeRef.current = viewMode;
+
+  /** replaceDraft makes `yaml` the operator's draft. */
+  const replaceDraft = React.useCallback((yaml: string) => {
+    setRawYaml(yaml);
+    rawYamlRef.current = yaml;
+    try {
+      docRef.current = parseDocument(yaml);
+    } catch {
+      // A malformed document is expected here: the previous draft stays in place.
+    }
+  }, []);
+
+  /**
+   * adoptBaseline makes a document CPA stores the one the draft is compared
+   * with. A draft with edits of its own is carried over onto it (see
+   * rebaseDraft) instead of being replaced; `draftBase` is the document those
+   * edits were made against.
+   */
+  const adoptBaseline = React.useCallback(
+    (yaml: string, revision: string, draftBase: Document | null, hasLocalEdits: boolean) => {
+      const previousYaml = serverYamlRef.current;
+      setServerYaml(yaml);
+      serverYamlRef.current = yaml;
+      setServerRevision(revision);
+      try {
+        serverDocRef.current = parseDocument(yaml);
+      } catch {
+        // A malformed document is expected here: the previous baseline stays in place.
+      }
+      if (!hasLocalEdits) {
+        replaceDraft(yaml);
+        return;
+      }
+      // The source view's draft is the operator's own text, comments included,
+      // which a structural carry-over would re-render; it is left as typed.
+      if (yaml === previousYaml || !docRef.current || viewModeRef.current === 'source') return;
+      const rebased = rebaseDraft(draftBase, docRef.current, yaml);
+      if (rebased !== null) replaceDraft(rebased);
+    },
+    [replaceDraft],
+  );
+
   React.useEffect(() => {
     if (viewMode !== 'visual' || configQuery.data?.safe_yaml === undefined) return;
-    const safe = configQuery.data.safe_yaml;
-    const revision = configQuery.data.revision || '';
     // A refetch or an invalidation must never overwrite a draft the operator is
-    // still writing. Saving snapshot A while they have already begun draft B has
-    // to advance the saved baseline to A and leave B alone, so the baseline is
-    // always adopted here and rawYaml is only replaced when there is no draft to
-    // lose. Applying the server copy unconditionally was the bug: the save's own
-    // invalidation would come back and silently discard the newer edits.
-    const hasLocalEdits = rawYamlRef.current !== serverYamlRef.current;
-    setServerYaml(safe);
-    setServerRevision(revision);
-    try {
-      serverDocRef.current = parseDocument(safe);
-    } catch {
-      // A malformed document is expected here: the previous baseline stays in place.
-    }
-    if (hasLocalEdits) return;
-    setRawYaml(safe);
-    try {
-      docRef.current = parseDocument(safe);
-    } catch {
-      // A malformed document is expected here: the previous baseline stays in place.
-    }
-  }, [configQuery.data?.safe_yaml, configQuery.data?.revision, viewMode]);
-
-  // Field placement follows the loaded document's layout (see configLayout). The
-  // renderers keep handing over the schema's own definitions; they are swapped for
-  // the placed ones by id at the two points that touch the document.
-  const layout = configQuery.data?.layout;
-  const resolvedFields = React.useMemo(() => resolveConfigFields(ALL_CONFIG_FIELDS, layout), [layout]);
-  const resolvedFieldsById = React.useMemo(
-    () => new Map(resolvedFields.map((field) => [field.id, field])),
-    [resolvedFields],
-  );
-  const payloadPlacement = React.useMemo(() => resolvePayloadPlacement(layout), [layout]);
-  const payloadPaths = React.useMemo(() => payloadComparisonPaths(payloadPlacement), [payloadPlacement]);
+    // still writing: the draft's own edits are carried over onto the document
+    // that arrived, and only a draft without edits is replaced by it.
+    adoptBaseline(
+      configQuery.data.safe_yaml,
+      configQuery.data.revision || '',
+      serverDocRef.current,
+      rawYamlRef.current !== serverYamlRef.current,
+    );
+  }, [configQuery.data?.safe_yaml, configQuery.data?.revision, viewMode, adoptBaseline]);
 
   // Mirrored into refs so the hydration effect and saveConfig can read the current
   // values without being re-created on every keystroke.
@@ -116,11 +141,11 @@ export function useConfigDraft() {
         }
       }
 
-      updateFieldWithBaseline(currentDoc, serverDocRef.current, resolvedFieldsById.get(field.id) ?? field, value);
+      updateFieldWithBaseline(currentDoc, serverDocRef.current, field, value);
 
       // If after update, currentDoc is semantically identical to serverDoc across all fields and payload,
       // revert rawYaml completely back to serverYaml so no formatting artifacts trigger dirty!
-      if (serverDocRef.current && isConfigSemanticallyEqual(currentDoc, serverDocRef.current, resolvedFields, payloadPaths)) {
+      if (serverDocRef.current && isConfigSemanticallyEqual(currentDoc, serverDocRef.current, ALL_CONFIG_FIELDS)) {
         setRawYaml(serverYaml);
         docRef.current = parseDocument(serverYaml);
       } else {
@@ -128,7 +153,7 @@ export function useConfigDraft() {
         setRawYaml(nextYaml);
       }
     },
-    [rawYaml, serverYaml, message, t, resolvedFields, resolvedFieldsById, payloadPaths],
+    [rawYaml, serverYaml, message, t],
   );
 
   const getFieldValue = React.useCallback(
@@ -140,33 +165,58 @@ export function useConfigDraft() {
           return field.defaultValue;
         }
       }
-      return getFieldSemanticValue(docRef.current, resolvedFieldsById.get(field.id) ?? field);
+      return getFieldSemanticValue(docRef.current, field);
     },
     // rawYaml is a dependency on purpose: the document lives in a ref, so the
     // reader has to be re-created for its consumers to re-render.
-    [rawYaml, resolvedFieldsById],
+    [rawYaml],
   );
 
 
   const saveMutation = useMutation({
-    mutationFn: async ({ yamlToSave, revision }: { yamlToSave: string; revision: string }) => {
+    mutationFn: async ({ yamlToSave, revision }: { yamlToSave: string; revision: string }): Promise<{ yaml?: string; revision?: string }> => {
       setSaveError(null);
       setConflictState(null);
-      return api.updateConfigSource(yamlToSave, revision);
+      if (viewMode === 'source') {
+        const saved = await api.updateConfigSource(yamlToSave, revision);
+        return { yaml: saved.yaml, revision: saved.revision };
+      }
+      const draftDoc = parseDocument(yamlToSave);
+      const changes = computeConfigChanges(serverDocRef.current, draftDoc);
+      // A draft that differs only in formatting has nothing to send.
+      if (changes.length === 0) return { yaml: serverYamlRef.current, revision };
+      const saved = await api.patchConfig(changes, revision);
+      return { yaml: saved.safe_yaml, revision: saved.revision };
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (saved, variables) => {
       message.success(t('cfg.source_save_success'));
-      setServerYaml(variables.yamlToSave);
-      setServerRevision(data.revision);
+      // The operator may have kept typing while the save was in flight: those
+      // newer edits are carried over onto what was saved.
+      const hasNewerDraft = rawYamlRef.current !== variables.yamlToSave;
+      let savedDraft: Document | null = null;
       try {
-        serverDocRef.current = parseDocument(variables.yamlToSave);
+        savedDraft = parseDocument(variables.yamlToSave);
       } catch {
-        // A malformed document is expected here: the previous baseline stays in place.
+        // A malformed document is expected here: the newer draft is then kept as it is.
+      }
+      if (saved.yaml !== undefined && saved.revision) {
+        adoptBaseline(saved.yaml, saved.revision, savedDraft, hasNewerDraft);
+      } else {
+        // The write landed but CPA could not be re-read, so the stored document is
+        // unknown: the sent text stands in until a reload replaces it.
+        adoptBaseline(variables.yamlToSave, '', savedDraft, hasNewerDraft);
+        if (viewMode === 'source') {
+          void api.getConfigSource().then(
+            (source) => adoptBaseline(source.yaml, source.revision, serverDocRef.current, rawYamlRef.current !== serverYamlRef.current),
+            () => undefined,
+          );
+        }
       }
       setPayloadIssues([]);
       setShowErrorFeedback(false);
       setValidateTrigger(0);
       void queryClient.invalidateQueries({ queryKey: ['management-config'] });
+      void queryClient.invalidateQueries({ queryKey: ['management-config-backups'] });
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError && (err.status === 409 || (err.data as Record<string, unknown>)?.code === 'config_conflict')) {
@@ -174,19 +224,7 @@ export function useConfigDraft() {
         setConflictState({ currentRevision: currentRev });
         return;
       }
-      // A configuration save shares the provider write gate, so it can now be
-      // refused while a provider change is being written. The server's message for
-      // that is English prose; the banner comes from the dictionary instead, like
-      // every other user-visible string.
-      const code = apiErrorCode(err);
-      const layoutRefusal = describeLayoutRefusal(code, err instanceof ApiError ? err.data : null, t);
-      const msg = code === 'write_busy'
-        ? t('cfg.save_busy')
-        : layoutRefusal
-          ? layoutRefusal
-          : err instanceof ApiError
-            ? err.message
-            : String(err);
+      const msg = describeConfigSaveError(err, t);
       setSaveError(msg);
       message.error(msg);
     },
@@ -366,11 +404,29 @@ export function useConfigDraft() {
     }
   };
 
+  /**
+   * reloadAfterConflict answers the conflict dialog. The visual draft is a set of
+   * edited settings, so they are carried over onto the latest document; the
+   * source draft is whole text, which the latest document replaces (the dialog
+   * offers to copy it first).
+   */
+  const reloadAfterConflict = React.useCallback(async () => {
+    setConflictState(null);
+    if (viewModeRef.current === 'visual') {
+      await configQuery.refetch();
+      return;
+    }
+    try {
+      const source = await api.getConfigSource();
+      adoptBaseline(source.yaml, source.revision, null, false);
+    } catch (err) {
+      message.error(t('cfg.source_load_failed', { msg: describeError(err) }));
+    }
+  }, [adoptBaseline, configQuery, message, t]);
+
   return {
-    layout,
-    resolvedFields,
-    payloadPlacement,
-    payloadPaths,
+    storedLayout: configQuery.data?.stored_layout,
+    reloadAfterConflict,
     editorRef,
     viewMode,
     setViewMode,

@@ -34,13 +34,12 @@ func startAuditTestEnvironment(t *testing.T) (*http.Client, string, *repository.
 		case strings.HasPrefix(path, "/v8/management/observability/logs") && request.Method == http.MethodDelete:
 			writer.WriteHeader(http.StatusOK)
 			_, _ = writer.Write([]byte(`{"status":"cleared"}`))
-		case strings.HasPrefix(path, "/v0/management/config/source") && request.Method == http.MethodGet:
+		case path == "/v0/management/config.yaml":
+			_, _ = writer.Write([]byte("config-version: 8\n"))
+		case path == "/v8/management/config.yaml" && request.Method == http.MethodGet:
 			writer.Header().Set("Content-Type", "text/plain")
 			_, _ = writer.Write([]byte("api_key: secret-config-yaml\n"))
-		case strings.HasPrefix(path, "/v0/management/config/source") && request.Method == http.MethodPut:
-			writer.WriteHeader(http.StatusOK)
-			_, _ = writer.Write([]byte(`{"status":"ok"}`))
-		case strings.HasPrefix(path, "/v0/management/config") && request.Method == http.MethodPut:
+		case strings.HasPrefix(path, "/v8/management/config") && request.Method != http.MethodGet:
 			writer.WriteHeader(http.StatusOK)
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 		case strings.HasPrefix(path, "/v8/management/observability/logs/errors/"):

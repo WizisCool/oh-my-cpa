@@ -8,9 +8,7 @@ import {
   parseFilterRules,
   parseRawRules,
   parseTypedRules,
-  LEGACY_PAYLOAD_PLACEMENT,
   readPayloadCategory,
-  type PayloadPlacement,
   serializeFilterRules,
   serializeRawRules,
   serializeTypedRules,
@@ -42,13 +40,11 @@ import {
  */
 export function usePayloadRulesDraft({
   doc,
-  placement = LEGACY_PAYLOAD_PLACEMENT,
   onDocChange,
   onValidationChange,
   validateTrigger,
 }: {
   doc: Document | null;
-  placement?: PayloadPlacement;
   onDocChange: () => void;
   onValidationChange?: (issues: PayloadValidationIssue[]) => void;
   validateTrigger?: number;
@@ -68,19 +64,19 @@ export function usePayloadRulesDraft({
 
   // Local state for each category to guarantee ZERO input focus loss
   const [defaultRules, setDefaultRules] = useState<PayloadTypedRule[]>(() =>
-    parseTypedRules(readPayloadCategory(doc, 'default', placement), 'default')
+    parseTypedRules(readPayloadCategory(doc, 'default'), 'default')
   );
   const [defaultRawRules, setDefaultRawRules] = useState<PayloadRawRule[]>(() =>
-    parseRawRules(readPayloadCategory(doc, 'default-raw', placement), 'default-raw')
+    parseRawRules(readPayloadCategory(doc, 'default-raw'), 'default-raw')
   );
   const [overrideRules, setOverrideRules] = useState<PayloadTypedRule[]>(() =>
-    parseTypedRules(readPayloadCategory(doc, 'override', placement), 'override')
+    parseTypedRules(readPayloadCategory(doc, 'override'), 'override')
   );
   const [overrideRawRules, setOverrideRawRules] = useState<PayloadRawRule[]>(() =>
-    parseRawRules(readPayloadCategory(doc, 'override-raw', placement), 'override-raw')
+    parseRawRules(readPayloadCategory(doc, 'override-raw'), 'override-raw')
   );
   const [filterRules, setFilterRules] = useState<PayloadFilterRule[]>(() =>
-    parseFilterRules(readPayloadCategory(doc, 'filter', placement), 'filter')
+    parseFilterRules(readPayloadCategory(doc, 'filter'), 'filter')
   );
 
   // Track the doc instance to only sync external document changes
@@ -88,11 +84,11 @@ export function usePayloadRulesDraft({
   useEffect(() => {
     if (doc && doc !== lastDocInstanceRef.current) {
       lastDocInstanceRef.current = doc;
-      setDefaultRules(parseTypedRules(readPayloadCategory(doc, 'default', placement), 'default'));
-      setDefaultRawRules(parseRawRules(readPayloadCategory(doc, 'default-raw', placement), 'default-raw'));
-      setOverrideRules(parseTypedRules(readPayloadCategory(doc, 'override', placement), 'override'));
-      setOverrideRawRules(parseRawRules(readPayloadCategory(doc, 'override-raw', placement), 'override-raw'));
-      setFilterRules(parseFilterRules(readPayloadCategory(doc, 'filter', placement), 'filter'));
+      setDefaultRules(parseTypedRules(readPayloadCategory(doc, 'default'), 'default'));
+      setDefaultRawRules(parseRawRules(readPayloadCategory(doc, 'default-raw'), 'default-raw'));
+      setOverrideRules(parseTypedRules(readPayloadCategory(doc, 'override'), 'override'));
+      setOverrideRawRules(parseRawRules(readPayloadCategory(doc, 'override-raw'), 'override-raw'));
+      setFilterRules(parseFilterRules(readPayloadCategory(doc, 'filter'), 'filter'));
     }
   }, [doc]);
 
@@ -160,7 +156,7 @@ export function usePayloadRulesDraft({
   // Sync back helper
   const commitCategory = (category: PayloadCategoryKey, serialized: unknown[]) => {
     if (!doc) return;
-    writePayloadCategory(doc, category, serialized, placement);
+    writePayloadCategory(doc, category, serialized);
     onDocChange();
   };
 

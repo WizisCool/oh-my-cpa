@@ -32,6 +32,13 @@ func dashboardMemoryDSN(purpose string) string {
 // and request-event endpoints are exercised exactly as the product runs them.
 func startDashboardTestServer(t *testing.T, handler func(http.ResponseWriter, *http.Request), hooks ...func(*Handler)) (*http.Client, string, *repository.Repository) {
 	t.Helper()
+	return startDashboardTestServerStoring(t, "config-version: 8\n", handler, hooks...)
+}
+
+// startDashboardTestServerStoring is startDashboardTestServer over a gateway
+// whose stored configuration file is storedYAML.
+func startDashboardTestServerStoring(t *testing.T, storedYAML string, handler func(http.ResponseWriter, *http.Request), hooks ...func(*Handler)) (*http.Client, string, *repository.Repository) {
+	t.Helper()
 	cpaServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Header.Get("Authorization") != "Bearer management-secret-value" {
 			writer.WriteHeader(http.StatusUnauthorized)
@@ -42,6 +49,12 @@ func startDashboardTestServer(t *testing.T, handler func(http.ResponseWriter, *h
 		// before calling it, which health_test.go covers with its own gateway.
 		if request.URL.Path == "/v8/management"+management.MANAGEMENT_V8_PROBE_ENDPOINT {
 			_, _ = writer.Write([]byte("8"))
+			return
+		}
+		// A configuration write first reads the stored file, to decide whether it
+		// converts a legacy one.
+		if request.Method == http.MethodGet && request.URL.Path == "/v0/management/config.yaml" {
+			_, _ = writer.Write([]byte(storedYAML))
 			return
 		}
 		if handler != nil {
@@ -170,14 +183,23 @@ func postJSON(t *testing.T, client *http.Client, url string) (*http.Response, []
 	return response, payload
 }
 
-// newFakeCPA starts a stand-in v8 gateway: it answers the gate's probe itself,
-// so the handler sees only the operations its test is about.
+// newFakeCPA starts a stand-in v8 gateway whose stored file is already in the v8
+// layout: it answers the gate's probe and the stored-file read a configuration
+// write makes first, so the handler sees only the operations its test is about.
 func newFakeCPA(handler http.Handler) *httptest.Server {
+	return newFakeCPAStoring("config-version: 8\n", handler)
+}
+
+// newFakeCPAStoring is newFakeCPA with a given stored configuration file.
+func newFakeCPAStoring(storedYAML string, handler http.Handler) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path == "/v8/management"+management.MANAGEMENT_V8_PROBE_ENDPOINT {
+		switch {
+		case request.URL.Path == "/v8/management"+management.MANAGEMENT_V8_PROBE_ENDPOINT:
 			_, _ = writer.Write([]byte("8"))
-			return
+		case request.Method == http.MethodGet && request.URL.Path == "/v0/management/config.yaml":
+			_, _ = writer.Write([]byte(storedYAML))
+		default:
+			handler.ServeHTTP(writer, request)
 		}
-		handler.ServeHTTP(writer, request)
 	}))
 }

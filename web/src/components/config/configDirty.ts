@@ -1,5 +1,6 @@
-import { isSeq, type Document } from 'yaml';
+import type { Document } from 'yaml';
 import type { ConfigFieldDefinition } from '../../types/configSchema';
+import { PAYLOAD_PATH } from './payloadRules';
 
 /**
  * Reads a field's current value out of the parsed document, unwrapping YAML AST
@@ -14,12 +15,7 @@ export function getFieldSemanticValue(
   field: ConfigFieldDefinition
 ): unknown {
   if (!doc) return field.defaultValue;
-  let node = doc.getIn(field.yamlPath);
-  if ((node === undefined || node === null) && field.legacyYamlPath) {
-    // CPA v8 honours a legacy spelling while its v8 location is empty, so that
-    // is the value the gateway is running with.
-    node = readLegacyNode(doc, field);
-  }
+  const node = doc.getIn(field.yamlPath);
   if (node === undefined || node === null) {
     return field.defaultValue;
   }
@@ -85,9 +81,6 @@ export function updateFieldWithBaseline(
 
   if (areValuesSemanticallyEqual(newValue, serverBaselineValue)) {
     restorePathFromServer(currentDoc, serverDoc, field.yamlPath);
-    if (field.legacyYamlPath) {
-      restorePathFromServer(currentDoc, serverDoc, field.legacyYamlPath);
-    }
     return;
   }
 
@@ -105,13 +98,6 @@ export function updateFieldWithBaseline(
     }
   } else {
     currentDoc.setIn(field.yamlPath, newValue);
-  }
-  // The legacy spelling goes with every write to the v8 location. Left behind,
-  // CPA v8 would ignore it and delete it on its next save anyway; removing it
-  // here keeps the document saying one thing.
-  if (field.legacyYamlPath && readLegacyNode(currentDoc, field) !== undefined) {
-    currentDoc.deleteIn(field.legacyYamlPath);
-    pruneEmptyAncestors(currentDoc, serverDoc, field.legacyYamlPath);
   }
 }
 
@@ -157,18 +143,9 @@ function pruneEmptyAncestors(currentDoc: Document, serverDoc: Document | null, p
   }
 }
 
-/** Reads the legacy spelling, applying its shape condition (a list for api-keys). */
-function readLegacyNode(doc: Document, field: ConfigFieldDefinition): unknown {
-  if (!field.legacyYamlPath) return undefined;
-  const node = doc.getIn(field.legacyYamlPath);
-  // A parsed list is a YAMLSeq; one written by setIn in this session is a plain array.
-  if (field.legacyKind === 'sequence' && !isSeq(node) && !Array.isArray(node)) return undefined;
-  return node ?? undefined;
-}
-
 /**
  * Reports whether the operator's document matches the server's across every
- * schema field plus the `payload` subtree. The payload is compared as a whole
+ * schema field plus the `requests.payload` subtree. The payload is compared as a whole
  * because the rule builder owns its internals and already writes it back in a
  * normalised shape; comparing it field by field would report a difference for a
  * reordering the operator cannot see.
@@ -177,7 +154,7 @@ export function isConfigSemanticallyEqual(
   currentDoc: Document | null,
   serverDoc: Document | null,
   fields: ConfigFieldDefinition[],
-  payloadPaths: string[][] = [['payload']]
+  payloadPath: string[] = PAYLOAD_PATH
 ): boolean {
   if (!currentDoc || !serverDoc) return false;
 
@@ -189,13 +166,7 @@ export function isConfigSemanticallyEqual(
     }
   }
 
-  for (const payloadPath of payloadPaths) {
-    if (JSON.stringify(toPlain(currentDoc.getIn(payloadPath))) !== JSON.stringify(toPlain(serverDoc.getIn(payloadPath)))) {
-      return false;
-    }
-  }
-
-  return true;
+  return JSON.stringify(toPlain(currentDoc.getIn(payloadPath))) === JSON.stringify(toPlain(serverDoc.getIn(payloadPath)));
 }
 
 function toPlain(node: unknown): unknown {

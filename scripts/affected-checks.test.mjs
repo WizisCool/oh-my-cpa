@@ -226,13 +226,6 @@ test('an empty change selects nothing', () => {
   assert.deepEqual(planChecks([]), []);
 });
 
-test('the Go relocation table also selects the frontend logic suite that reads it', () => {
-  const plan = planChecks(['internal/cpa/configyaml/layout_rules.go']);
-  assert.ok(plan.includes('go'));
-  assert.ok(plan.includes('logic'));
-  assert.equal(planChecks(['internal/cpa/configyaml/layout.go']).includes('logic'), false);
-});
-
 test('adding files cannot remove checks required by any changed file', () => {
   const corpus = [
     'migrations/900_example.sql', 'web/vite.config.ts', 'internal/config.yaml',

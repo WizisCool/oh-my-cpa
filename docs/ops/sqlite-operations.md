@@ -200,7 +200,12 @@ When upgrading Oh My CPA, the application automatically inspects and applies une
    - The encrypted latest Agent session and its capability operations live here; the session ciphertext is written with the same `OMCPA_MASTER_KEY` envelope as other protected payloads, so the key must exist to resume a conversation or read a pending operation;
    - The session is capped and trimmed by whole turns, and a terminal operation is retained for 7 days. Purging is lazy - it happens during Agent requests under a one-minute throttle - so the Agent adds no background loop and there is no separate maintenance job to schedule;
    - Restoring this table from a backup restores conversation and operation history, but approval requires a new decision: an operation that was `executing` when the process stopped is reported as `uncertain` rather than replayed.
-4. **Space Reclamation & Compaction**:
+4. **CPA Configuration Backups (`cpa_config_backups`, migration 030)**:
+   - Before the configuration write that makes CPA convert a pre-v8 `config.yaml`, Oh My CPA stores the file as it was, encrypted with the same `OMCPA_MASTER_KEY` envelope; without the key a copy cannot be read. A write whose copy cannot be stored is refused, so a missing key or an unwritable database blocks the conversion instead of losing the original;
+   - The ten most recent copies are kept (`CONFIG_BACKUP_RETENTION`); a retried save of the same file reuses the gateway's newest copy instead of adding one, so refused attempts cannot push older copies out. Older ones are deleted in the same transaction as the insert, so the table stays small and needs no maintenance job. A copy is at most 2 MiB, the largest file CPA's management API accepts;
+   - The configuration page lists the copies and downloads one; each download is audited as `config.reveal_backup`. The table is hidden from the Agent's `database_query`;
+   - Restoring this table from a database backup restores the copies. Putting a copy back on the gateway is an operator action on CPA's own file, outside Oh My CPA.
+5. **Space Reclamation & Compaction**:
    - Large-scale historical data deletion leaves free pages inside SQLite. The file does
      not shrink on its own, and a large `-wal` file is normal rather than a fault: WAL is
      reused between checkpoints rather than truncated continuously;

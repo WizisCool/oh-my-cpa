@@ -158,7 +158,7 @@ API 的数据由真实 Go handler 生成，而非手工编写，因此所提供�
 > - [`deploy/compose.full.yml`](deploy/compose.full.yml)：协同部署 CPA、Oh My CPA 与 Caddy 的完整栈。
 > - [`deploy/compose.omc.yml`](deploy/compose.omc.yml)：连接已有 CPA 实例的独立 Oh My CPA 容器。
 >
-> 完整栈默认固定 CPA `v8.0.2`；如需连接其他兼容版本，可通过 `CPA_IMAGE` 覆盖。控制台要求 CPA v8.0.0 或更高版本，并使用其 v8 管理接口；连接到 v8 以下的网关时会拒绝服务，各页面改为显示升级指引。CPA v8 可以原样读取现有的 v7 `config.yaml`，因此升级 CPA 不需要改配置（见 `docs/cpa-v8-compat.md`）。其 Caddy 会把控制台路由到 `OMCPA_BASE_PATH`（默认 `/omc`），其余请求交给 CPA；该变量可写成服务器接受的任一形式（`omc`、`/omc/`、`/omc`），而设为 `/` 会让控制台占用整个主机，此时 CPA 不再通过该反向代理可达。
+> 完整栈默认固定 CPA `v8.0.2`；如需连接其他兼容版本，可通过 `CPA_IMAGE` 覆盖。控制台要求 CPA v8.0.0 或更高版本，并使用其 v8 管理接口；连接到 v8 以下的网关时会拒绝服务，各页面改为显示升级指引。CPA v8 可以原样读取现有的 v7 `config.yaml`，因此升级 CPA 不需要改配置。控制台第一次保存配置时会把这类文件转换为 v8 格式，转换前会加密保存原文件副本，可在配置页下载（见 `docs/cpa-v8-compat.md`）。其 Caddy 会把控制台路由到 `OMCPA_BASE_PATH`（默认 `/omc`），其余请求交给 CPA；该变量可写成服务器接受的任一形式（`omc`、`/omc/`、`/omc`），而设为 `/` 会让控制台占用整个主机，此时 CPA 不再通过该反向代理可达。
 
 ## 运维须知
 

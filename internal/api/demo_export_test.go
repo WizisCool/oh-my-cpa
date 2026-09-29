@@ -113,6 +113,7 @@ func demoExportCases() []demoExportCase {
 		{Name: "system-maintenance", Path: "/api/v1/management/system/maintenance"},
 		{Name: "config", Path: "/api/v1/management/config"},
 		{Name: "config-source", Path: "/api/v1/management/config/source"},
+		{Name: "config-backups", Path: "/api/v1/management/config/backups"},
 		{Name: "providers", Path: "/api/v1/management/providers"},
 		{Name: "providers-with-keys", Path: "/api/v1/management/providers?include_keys=true"},
 		{Name: "agent-session", Path: "/api/v1/agent/session"},

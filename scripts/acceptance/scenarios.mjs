@@ -459,7 +459,7 @@ export const SCENARIOS = [
           scalars: {},
           supported_keys: [],
           revision: 'fixture-r1',
-          safe_yaml: 'api-keys:\\n  - omc-fixture-key-aaaaaaaaaaaaaaaa\\n',
+          safe_yaml: 'access:\n  api-keys:\n    - omc-fixture-key-aaaaaaaaaaaaaaaa\n',
         })],
       ],
     },
@@ -523,7 +523,7 @@ export const SCENARIOS = [
           window: { from: Date.now() - 86_400_000, to: Date.now() },
           usage: [{ key_fingerprint: 'ufp-1', requests: 1284, failed: 3, total_tokens: 918_000, last_used_ms: Date.now() - 60_000 }],
         })],
-        [(url) => url.pathname.endsWith('/management/config'), () => ({ scalars: {}, supported_keys: [], revision: 'fixture-r1', safe_yaml: 'api-keys:\n  - omc-fixture-key-aaaaaaaaaaaaaaaa\n' })],
+        [(url) => url.pathname.endsWith('/management/config'), () => ({ scalars: {}, supported_keys: [], revision: 'fixture-r1', safe_yaml: 'access:\n  api-keys:\n    - omc-fixture-key-aaaaaaaaaaaaaaaa\n' })],
         [(url) => url.pathname.endsWith('/usage/facets'), () => alignmentFacets],
         [(url) => url.pathname.includes('/usage/events'), () => ({ items: interactionRecords, has_more: false, limit: 100 })],
         [(url) => url.pathname.endsWith('/usage/ingest-status'), () => ({ enabled: true, healthy: true, collector: { mode: 'http_pull', captured: 500, coverage_gaps: 0 }, stats: { pending: 0 } })],
@@ -563,7 +563,7 @@ export const SCENARIOS = [
           scalars: {},
           supported_keys: [],
           revision: 'fixture-r1',
-          safe_yaml: 'api-keys:\n  - omc-fixture-key-aaaaaaaaaaaaaaaa\n  - omc-fixture-key-bbbbbbbbbbbbbbbb\n',
+          safe_yaml: 'access:\n  api-keys:\n    - omc-fixture-key-aaaaaaaaaaaaaaaa\n    - omc-fixture-key-bbbbbbbbbbbbbbbb\n',
         })],
         [(url) => url.pathname.endsWith('/management/providers'), () => ({
           providers: [

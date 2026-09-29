@@ -192,15 +192,16 @@ type familyKey struct {
 }
 
 // familyCatalog holds the first-party credentials CPA stores as its own lists.
-// The values are shaped like provider keys because the console masks them before
-// they are rendered; none of them is usable, and nothing in the demo contacts
-// the hosts they point at.
+// The values are deliberately not shaped like any provider's keys: the demo's
+// configuration source view shows the file unmasked, as the product's does, and
+// the dataset's privacy check refuses anything that looks like a real credential.
+// Nothing in the demo contacts the hosts they point at.
 func familyCatalog() []apiKeyFamily {
 	return []apiKeyFamily{
 		{
 			family: "claude",
 			keys: []familyKey{{
-				apiKey: "sk-ant-demo-claude-0001", authIndex: "key-claude-01",
+				apiKey: "demo-claude-upstream-0001", authIndex: "key-claude-01",
 				models:   []modelRoute{{name: "claude-sonnet-4-5-20250929", alias: "sonnet"}, {name: "claude-haiku-4-5", alias: "haiku"}},
 				priority: 5, weight: 3,
 			}},
@@ -208,7 +209,7 @@ func familyCatalog() []apiKeyFamily {
 		{
 			family: "gemini",
 			keys: []familyKey{{
-				apiKey: "AIza-demo-gemini-0001", authIndex: "key-gemini-01",
+				apiKey: "demo-gemini-upstream-0001", authIndex: "key-gemini-01",
 				models:   []modelRoute{{name: "gemini-2.5-pro"}, {name: "gemini-2.5-flash"}},
 				priority: 5, weight: 3,
 			}},
@@ -216,7 +217,7 @@ func familyCatalog() []apiKeyFamily {
 		{
 			family: "codex",
 			keys: []familyKey{{
-				apiKey: "sk-demo-codex-0001", authIndex: "key-codex-01", baseURL: "https://api.openai.com/v1",
+				apiKey: "demo-codex-upstream-0001", authIndex: "key-codex-01", baseURL: "https://api.openai.com/v1",
 				models:   []modelRoute{{name: "gpt-5", alias: "gpt-5"}, {name: "gpt-5-mini", alias: "gpt-5-mini"}},
 				priority: 5, weight: 2,
 			}},
@@ -612,33 +613,72 @@ func logTail(now time.Time) []string {
 // configDocument is the CPA configuration the config page renders. It is a plain
 // document: it describes a working gateway without carrying a live secret, and
 // the same document is served as JSON and as YAML so the two views cannot drift.
+// configDocument is the gateway's configuration in the v8 layout, as CPA's v8
+// view renders a migrated file: the stored document without runtime fields, so
+// upstream groups carry no auth index.
 func configDocument() map[string]any {
-	return map[string]any{
-		"host":                     "0.0.0.0",
-		"port":                     8317,
-		"debug":                    false,
-		"logging-to-file":          true,
-		"request-log":              true,
-		"usage-statistics-enabled": true,
-		"request-retry":            2,
-		"max-retry-interval":       30,
-		"max-retry-credentials":    3,
-		"ws-auth":                  false,
-		"force-model-prefix":       false,
-		"logs-max-total-size-mb":   128,
-		"error-logs-max-files":     20,
-		"proxy-url":                "",
-		"api-keys":                 gatewayKeyValues(),
-		"routing":                  map[string]any{"strategy": "round-robin"},
-		"claude-api-key":           familySection("claude"),
-		"gemini-api-key":           familySection("gemini"),
-		"codex-api-key":            familySection("codex"),
-		"openai-compatibility":     compatibilitySection(),
-		"oauth-model-alias":        oauthModelAliases(),
-		"oauth-excluded-models":    oauthExcludedModels(),
-		"remote-management":        map[string]any{"allow-remote": false, "disable-control-panel": false},
-		"plugins":                  pluginsSection(),
+	upstreamGroups := map[string]any{"openai-compatibility": v8Groups("openai-compatibility", compatibilitySection())}
+	for _, family := range []string{"claude", "gemini", "codex"} {
+		upstreamGroups[family] = v8Groups(family, familySection(family))
 	}
+	return map[string]any{
+		"config-version": 8,
+		"server":         map[string]any{"host": "0.0.0.0", "port": 8317},
+		"management":     map[string]any{"allow-remote": false, "disable-control-panel": false},
+		"access":         map[string]any{"api-keys": gatewayKeyValues()},
+		"requests":       map[string]any{"proxy-url": ""},
+		"routing": map[string]any{
+			"strategy":           "round-robin",
+			"force-model-prefix": false,
+			"retry":              map[string]any{"request-retry": 2, "max-retry-interval": 30, "max-retry-credentials": 3},
+		},
+		"observability": map[string]any{
+			"logs": map[string]any{
+				"debug": false, "logging-to-file": true, "request-log": true,
+				"logs-max-total-size-mb": 128, "error-logs-max-files": 20,
+			},
+			"usage": map[string]any{"usage-statistics-enabled": true},
+		},
+		"oauth": map[string]any{
+			"providers":       map[string]any{"aistudio": map[string]any{"ws-auth": false}},
+			"model-alias":     oauthModelAliases(),
+			"excluded-models": oauthExcludedModels(),
+		},
+		"api-keys": upstreamGroups,
+		"plugins":  pluginsSection(),
+	}
+}
+
+// v8Groups turns the v0 per-family entries into v8 provider groups the way CPA's
+// migration does: one group per entry, its key material under `keys`, and no
+// runtime auth index.
+func v8Groups(family string, entries []map[string]any) []map[string]any {
+	groups := make([]map[string]any, 0, len(entries))
+	for index, entry := range entries {
+		group := map[string]any{}
+		for key, value := range entry {
+			switch key {
+			case "api-key", "auth-index", "api-key-entries":
+			default:
+				group[key] = value
+			}
+		}
+		if _, named := group["name"]; !named {
+			group["name"] = fmt.Sprintf("%s-%d", family, index+1)
+		}
+		keys := []map[string]any{}
+		if apiKey, ok := entry["api-key"].(string); ok {
+			keys = append(keys, map[string]any{"api-key": apiKey})
+		}
+		if nested, ok := entry["api-key-entries"].([]map[string]any); ok {
+			for _, key := range nested {
+				keys = append(keys, map[string]any{"api-key": key["api-key"]})
+			}
+		}
+		group["keys"] = keys
+		groups = append(groups, group)
+	}
+	return groups
 }
 
 func gatewayKeyValues() []string {

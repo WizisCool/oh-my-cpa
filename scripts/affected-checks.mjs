@@ -61,8 +61,7 @@ function planFileChecks(file) {
   if (file.startsWith('.github/workflows/') || file === 'scripts/validate-workflow.mjs') add('workflow');
   if (file.startsWith('scripts/') || file.startsWith('deploy/cloudflare/')) add('self-tests');
   if ((file.startsWith('scripts/') && file.endsWith('.ts'))
-      || WEB_TEST_INFRASTRUCTURE.includes(file)
-      || file === 'internal/cpa/configyaml/layout_rules.go') add('logic');
+      || WEB_TEST_INFRASTRUCTURE.includes(file)) add('logic');
   if (/^web\/(?:vite\.config\.|tsconfig)/.test(file)) add(...FRONTEND_CHECKS, 'self-tests');
   if (file === 'scripts/tools-versions.json') add('toolchain');
 

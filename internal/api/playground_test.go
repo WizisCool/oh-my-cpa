@@ -24,8 +24,8 @@ func TestPlaygroundUsesStableKeyAndProjectsModels(t *testing.T) {
 		keyMu.Lock()
 		defer keyMu.Unlock()
 		switch request.URL.Path {
-		case "/v0/management/api-keys":
-			json.NewEncoder(writer).Encode(map[string]any{"api-keys": keys})
+		case "/v8/management/config":
+			json.NewEncoder(writer).Encode(map[string]any{"access": map[string]any{"api-keys": keys}})
 		case "/v1/models":
 			authValue = request.Header.Get("Authorization")
 			io.WriteString(writer, `{"data":[{"id":"model-alias","secret":"omit-me"}]}`)
@@ -75,8 +75,8 @@ func TestPlaygroundStreamDeadlineContextAndCancellation(t *testing.T) {
 	fixture := newProviderTestFixture(t)
 	var calls atomic.Int64
 	upstream := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path == "/v0/management/api-keys" {
-			io.WriteString(writer, `{"api-keys":["playground-fixture"]}`)
+		if request.URL.Path == "/v8/management/config" {
+			io.WriteString(writer, `{"access":{"api-keys":["playground-fixture"]}}`)
 			return
 		}
 		if request.URL.Path != "/v1/chat/completions" {
@@ -182,8 +182,8 @@ func TestPlaygroundCustomUAAndCustomBodyPriority(t *testing.T) {
 	var observedUA string
 	var observedPayload map[string]any
 	upstream := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path == "/v0/management/api-keys" {
-			io.WriteString(writer, `{"api-keys":["playground-fixture"]}`)
+		if request.URL.Path == "/v8/management/config" {
+			io.WriteString(writer, `{"access":{"api-keys":["playground-fixture"]}}`)
 			return
 		}
 		var payload map[string]any

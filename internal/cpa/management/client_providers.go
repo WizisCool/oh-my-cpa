@@ -20,24 +20,32 @@ func (c *Client) OpenAICompatibility(ctx context.Context) (OpenAICompatibilityRe
 	return response, nil
 }
 
-type ClientAPIKeysResponse struct {
-	APIKeys []string `json:"api-keys"`
-}
+// CLIENT_KEYS_PATH is where v8 keeps the client authentication keys.
+var CLIENT_KEYS_PATH = []string{"access", "api-keys"}
 
+// ClientAPIKeys reads the client authentication keys from the v8 view.
 func (c *Client) ClientAPIKeys(ctx context.Context) ([]string, error) {
-	var response ClientAPIKeysResponse
-	if _, err := c.doV0JSON(ctx, http.MethodGet, "/api-keys", nil, &response); err != nil {
+	view, _, err := c.ConfigView(ctx)
+	if err != nil {
 		return nil, err
 	}
-	return response.APIKeys, nil
+	value, _ := ValueAt(view, CLIENT_KEYS_PATH)
+	items, _ := value.([]any)
+	keys := make([]string, 0, len(items))
+	for _, item := range items {
+		if key, ok := item.(string); ok {
+			keys = append(keys, key)
+		}
+	}
+	return keys, nil
 }
 
+// UpdateClientAPIKeys replaces the client authentication keys.
 func (c *Client) UpdateClientAPIKeys(ctx context.Context, keys []string) error {
 	if keys == nil {
 		keys = []string{}
 	}
-	_, err := c.doV0JSON(ctx, http.MethodPut, "/api-keys", keys, nil)
-	return err
+	return c.ApplyConfigChanges(ctx, []ConfigChange{{Path: CLIENT_KEYS_PATH, Value: keys}})
 }
 
 func (c *Client) UpdateOpenAICompatibility(ctx context.Context, entries []OpenAICompatibility) error {

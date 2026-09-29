@@ -12,12 +12,10 @@ import (
  * The plugin system's host settings in CPA's `config.yaml`: the global switch, the
  * extra store registries and the store authentication rules.
  *
- * CPA exposes no management route for these, only the whole document, so they are
- * read from and written back into that document. Only the three keys this file owns
- * are touched: `plugins.dir` and `plugins.configs` (each plugin's own settings, which
- * CPA writes through its plugin routes) keep their nodes and comments. The `plugins`
- * section has the same path in the legacy and the v8 layouts, so no layout decision is
- * involved.
+ * They are read from CPA's v8 view of the document and written as a sparse change
+ * to their own paths below `plugins`. Only the three keys this file owns are written:
+ * `plugins.dir` and `plugins.configs` (each plugin's own settings, which CPA writes
+ * through its plugin routes) are left as they are.
  *
  * A store authentication rule never holds a secret. It names environment variables
  * CPA reads when it makes the request, which is why the rules are safe to show and
@@ -78,97 +76,34 @@ func ReadPluginSettings(rawYAML string) (PluginSettings, error) {
 	return settings, nil
 }
 
-// ApplyPluginSettings writes the switch, the store sources and the store
-// authentication rules into the document and returns the new document. An empty
-// list removes its key, which is how CPA spells "none".
-func ApplyPluginSettings(rawYAML string, settings PluginSettings) (string, error) {
-	var document yaml.Node
-	if strings.TrimSpace(rawYAML) != "" {
-		if err := yaml.Unmarshal([]byte(rawYAML), &document); err != nil {
-			return "", fmt.Errorf("parse yaml: %w", err)
-		}
-	}
-	if document.Kind == 0 {
-		document = yaml.Node{Kind: yaml.DocumentNode}
-	}
-	if len(document.Content) == 0 {
-		document.Content = []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}
-	}
-	root := document.Content[0]
-	if root.Kind != yaml.MappingNode {
-		return "", fmt.Errorf("configuration must be a mapping")
-	}
-
-	section := mappingValue(root, "plugins")
-	if section == nil || section.Kind != yaml.MappingNode {
-		if section != nil && !(section.Kind == yaml.ScalarNode && section.Tag == "!!null") {
-			return "", ErrPluginSettingsUnreadable
-		}
-		section = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-		setMappingValue(root, "plugins", section)
-	}
-
-	setMappingValue(section, "enabled", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: fmt.Sprintf("%t", settings.Enabled)})
-
+// PluginSettingsEdit is the sparse write of the keys this file owns, as values
+// to set and keys to remove below `plugins`. An empty list is removed, which is
+// how CPA spells "none"; `plugins.dir` and `plugins.configs` are never named.
+func PluginSettingsEdit(settings PluginSettings) (set map[string]any, remove []string, err error) {
+	set = map[string]any{"enabled": settings.Enabled}
 	if len(settings.StoreSources) == 0 {
-		deleteMappingKey(section, "store-sources")
+		remove = append(remove, "store-sources")
 	} else {
-		sources := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+		sources := make([]any, 0, len(settings.StoreSources))
 		for _, source := range settings.StoreSources {
-			sources.Content = append(sources.Content, stringNode(source))
+			sources = append(sources, source)
 		}
-		setMappingValue(section, "store-sources", sources)
+		set["store-sources"] = sources
 	}
-
 	if len(settings.StoreAuth) == 0 {
-		deleteMappingKey(section, "store-auth")
+		remove = append(remove, "store-auth")
 	} else {
-		rules := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
-		for _, rule := range settings.StoreAuth {
-			var node yaml.Node
-			if err := node.Encode(rule); err != nil {
-				return "", fmt.Errorf("encode store auth rule: %w", err)
-			}
-			rules.Content = append(rules.Content, &node)
+		// Encoded through the YAML field names CPA reads, with their omitempty
+		// rules, rather than through a second JSON spelling of the same struct.
+		encoded, err := yaml.Marshal(settings.StoreAuth)
+		if err != nil {
+			return nil, nil, fmt.Errorf("encode store auth rules: %w", err)
 		}
-		setMappingValue(section, "store-auth", rules)
-	}
-
-	var buffer strings.Builder
-	encoder := yaml.NewEncoder(&buffer)
-	encoder.SetIndent(2)
-	if err := encoder.Encode(&document); err != nil {
-		return "", fmt.Errorf("encode yaml: %w", err)
-	}
-	_ = encoder.Close()
-	return buffer.String(), nil
-}
-
-func stringNode(value string) *yaml.Node {
-	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
-}
-
-// setMappingValue replaces a key's value in place, carrying the old value's comments
-// across so an operator's annotation on a setting survives the edit.
-func setMappingValue(mapping *yaml.Node, key string, value *yaml.Node) {
-	for index := 0; index+1 < len(mapping.Content); index += 2 {
-		if mapping.Content[index].Value == key {
-			previous := mapping.Content[index+1]
-			value.HeadComment = previous.HeadComment
-			value.LineComment = previous.LineComment
-			value.FootComment = previous.FootComment
-			mapping.Content[index+1] = value
-			return
+		var rules []any
+		if err := yaml.Unmarshal(encoded, &rules); err != nil {
+			return nil, nil, fmt.Errorf("decode store auth rules: %w", err)
 		}
+		set["store-auth"] = rules
 	}
-	mapping.Content = append(mapping.Content, stringNode(key), value)
-}
-
-func deleteMappingKey(mapping *yaml.Node, key string) {
-	for index := 0; index+1 < len(mapping.Content); index += 2 {
-		if mapping.Content[index].Value == key {
-			mapping.Content = append(mapping.Content[:index], mapping.Content[index+2:]...)
-			return
-		}
-	}
+	return set, remove, nil
 }

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/configyaml"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
 
@@ -34,6 +35,9 @@ func writeCPAFacadeError(writer http.ResponseWriter, err error) {
 	status := http.StatusBadGateway
 	code := "cpa_unavailable"
 	message := "CPA management request failed"
+	// reason is CPA's own sentence for a rejected configuration, carried apart
+	// from the message so the console can frame it in the reader's language.
+	reason := ""
 	var httpErr *management.HTTPError
 	if errors.Is(err, management.ErrManagementV8Required) {
 		status = http.StatusBadGateway
@@ -43,6 +47,20 @@ func writeCPAFacadeError(writer http.ResponseWriter, err error) {
 		status = http.StatusBadGateway
 		code = "cpa_management_disabled"
 		message = "CPA does not serve its Management API; set remote-management.secret-key in the CPA configuration"
+	} else if errors.Is(err, management.ErrConfigBackupUnavailable) {
+		// Nothing was sent to CPA: the file is unchanged.
+		status = http.StatusServiceUnavailable
+		code = "config_backup_failed"
+		message = "the CPA configuration file could not be backed up before converting it to the v8 layout; nothing was changed"
+	} else if errors.Is(err, management.ErrConfigPartiallyApplied) {
+		status = http.StatusBadGateway
+		code = "config_partially_applied"
+		message = "CPA applied only part of the configuration change before a request failed; reload the configuration to see what was saved"
+	} else if cpaReason, rejected := management.IsConfigRejected(err); rejected {
+		status = http.StatusUnprocessableEntity
+		code = "config_rejected"
+		message = "CPA rejected the configuration: " + cpaReason
+		reason = cpaReason
 	} else if errors.As(err, &httpErr) {
 		switch httpErr.StatusCode {
 		case http.StatusNotFound, http.StatusMethodNotAllowed:
@@ -67,7 +85,38 @@ func writeCPAFacadeError(writer http.ResponseWriter, err error) {
 			}
 		}
 	}
-	writeJSON(writer, status, map[string]string{"error": message, "code": code})
+	body := map[string]string{"error": message, "code": code}
+	if reason != "" {
+		body["reason"] = reason
+	}
+	writeJSON(writer, status, body)
+}
+
+// scrubConfigRejection removes the stored document's hidden values from CPA's
+// reason for refusing a save. The save restored those values into what it sent,
+// and CPA's reason can quote the value it refused.
+func scrubConfigRejection(err error, storedYAML string) error {
+	reason, rejected := management.IsConfigRejected(err)
+	var httpErr *management.HTTPError
+	if !rejected || !errors.As(err, &httpErr) {
+		return err
+	}
+	body, marshalErr := json.Marshal(map[string]string{"error": "invalid_config", "message": configyaml.ScrubStoredSecrets(reason, storedYAML)})
+	if marshalErr != nil {
+		return err
+	}
+	return &management.HTTPError{StatusCode: httpErr.StatusCode, Body: string(body)}
+}
+
+// configWriteFailureDetail is the audit detail of a failed configuration write.
+// A change set CPA stopped partway through did change the file, so the failure
+// says so and the caller drops what the write made stale.
+func configWriteFailureDetail(err error, detail map[string]any) map[string]any {
+	detail["error"] = publicCPAErrorMessage(err)
+	if errors.Is(err, management.ErrConfigPartiallyApplied) {
+		detail["partially_applied"] = true
+	}
+	return detail
 }
 
 func publicCPAErrorMessage(err error) string {
@@ -76,6 +125,15 @@ func publicCPAErrorMessage(err error) string {
 	}
 	if errors.Is(err, management.ErrManagementDisabled) {
 		return "CPA does not serve its Management API"
+	}
+	if errors.Is(err, management.ErrConfigBackupUnavailable) {
+		return "the CPA configuration file could not be backed up before converting it"
+	}
+	if errors.Is(err, management.ErrConfigPartiallyApplied) {
+		return "CPA applied only part of the configuration change"
+	}
+	if _, rejected := management.IsConfigRejected(err); rejected {
+		return "CPA rejected the configuration"
 	}
 	var httpErr *management.HTTPError
 	if errors.As(err, &httpErr) {

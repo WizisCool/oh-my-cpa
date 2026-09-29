@@ -30,7 +30,7 @@ import { copyText } from '../utils/clipboard';
 import { useTheme } from '../theme/ThemeContext';
 import { ConfigDirtyBar } from '../components/config/ConfigDirtyBar';
 import { useConfigDraft } from '../components/config/useConfigDraft';
-import { layoutNoticeKey } from '../components/config/configLayout';
+import { ConfigBackupsButton } from '../components/config/ConfigBackupsButton';
 import { useOverlayHistory } from '../hooks/useOverlayHistory';
 import {
   renderGroupPanel,
@@ -77,8 +77,8 @@ export const ConfigPage: React.FC = () => {
     docRef,
     isDirty,
     getFieldValue,
-    resolvedFields,
-    layout,
+    storedLayout,
+    reloadAfterConflict,
     saveMutation,
     showErrorFeedback,
     handleDiscardChanges,
@@ -123,8 +123,6 @@ export const ConfigPage: React.FC = () => {
   }, [apiKeysField, rawYaml, getFieldValue]);
 
 
-  const layoutNotice = layoutNoticeKey(layout);
-
   const currentSectionDef = React.useMemo(() => {
     return CONFIG_SECTIONS.find((s) => s.id === activeSection) ?? CONFIG_SECTIONS[0];
   }, [activeSection]);
@@ -140,10 +138,7 @@ export const ConfigPage: React.FC = () => {
         if (!f) return false;
         const label = t(f.labelKey).toLowerCase();
         const desc = t(f.descKey).toLowerCase();
-        // Both spellings are searchable: an operator may know a setting by its
-        // v8 location (observability.logs.debug) or by its legacy key (debug).
-        const placed = resolvedFields.find((item) => item.id === f.id) ?? f;
-        const yamlKey = `${f.yamlPath.join('.')} ${placed.yamlPath.join('.')}`.toLowerCase();
+        const yamlKey = f.yamlPath.join('.').toLowerCase();
         const keywords = (f.keywords ?? []).join(' ').toLowerCase();
         return label.includes(q) || desc.includes(q) || yamlKey.includes(q) || keywords.includes(q);
       });
@@ -152,7 +147,7 @@ export const ConfigPage: React.FC = () => {
       }
     }
     return results;
-  }, [searchQuery, t, resolvedFields]);
+  }, [searchQuery, t]);
 
   const totalSearchMatches = React.useMemo(() => {
     return searchMatchedGroups.reduce((acc, g) => acc + g.matchedFieldIds.length, 0);
@@ -210,6 +205,8 @@ export const ConfigPage: React.FC = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           )}
+
+          <ConfigBackupsButton />
 
           <Button
             size="small"
@@ -285,8 +282,13 @@ export const ConfigPage: React.FC = () => {
         />
       )}
 
-      {viewMode === 'visual' && layoutNotice && (
-        <Alert type="info" showIcon description={t(layoutNotice)} style={{ marginBottom: 16 }} />
+      {storedLayout === 'legacy' && (
+        <Alert
+          type="info"
+          showIcon
+          description={t('cfg.stored_layout_legacy')}
+          style={{ marginBottom: 16 }}
+        />
       )}
 
       {configQuery.isError && (
@@ -501,10 +503,7 @@ export const ConfigPage: React.FC = () => {
             key="reload"
             type="primary"
             icon={<ReloadOutlined />}
-            onClick={() => {
-              setConflictState(null);
-              void configQuery.refetch();
-            }}
+            onClick={() => void reloadAfterConflict()}
           >
             {t('cfg.conflict_reload')}
           </Button>,

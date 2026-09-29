@@ -76,7 +76,7 @@ func (s *Service) CreateKey(ctx context.Context, secret, revision string) (int, 
 		}
 	}
 	if err = client.UpdateClientAPIKeys(ctx, append(keys, secret)); err != nil {
-		return 0, errors.New("operation_outcome_unknown")
+		return 0, configWriteOutcome(err)
 	}
 	return len(keys), nil
 }
@@ -110,7 +110,7 @@ func (s *Service) DeleteKey(ctx context.Context, index int, fingerprint, revisio
 		}
 	}
 	if err = client.UpdateClientAPIKeys(ctx, append(keys[:index:index], keys[index+1:]...)); err != nil {
-		return errors.New("operation_outcome_unknown")
+		return configWriteOutcome(err)
 	}
 	return nil
 }

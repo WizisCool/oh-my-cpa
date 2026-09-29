@@ -23,8 +23,9 @@ type logsFixtureCPA struct {
 }
 
 func (f *logsFixtureCPA) serve(writer http.ResponseWriter, request *http.Request) {
-	// Operations live under /v8/management; the configuration read is still v0.
-	path := strings.TrimPrefix(strings.TrimPrefix(request.URL.Path, "/v8/management/observability"), "/v0/management")
+	// Log routes are served relative to /v8/management/observability; the
+	// configuration read keeps its full path.
+	path := strings.TrimPrefix(request.URL.Path, "/v8/management/observability")
 	f.mu.Lock()
 	f.queries = append(f.queries, path+"?"+request.URL.RawQuery)
 	f.methods = append(f.methods, request.Method)
@@ -43,9 +44,9 @@ func (f *logsFixtureCPA) serve(writer http.ResponseWriter, request *http.Request
 		_, _ = writer.Write([]byte(`{"status":"ok"}`))
 	case path == "/logs/status":
 		writer.WriteHeader(http.StatusNotFound)
-	case path == "/config":
+	case path == "/v8/management/config":
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"logging-to-file":true,"request-log":"true","port":8317}`))
+		_, _ = writer.Write([]byte(`{"observability":{"logs":{"logging-to-file":true,"request-log":"true"}},"server":{"port":8317}}`))
 	case path == "/logs/errors":
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = writer.Write([]byte(`{"files":[{"name":"request-error-2026-09-01.log","size":2048,"modified":1788235200},{"name":"","size":1}]}`))

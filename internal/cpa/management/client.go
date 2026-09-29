@@ -26,9 +26,10 @@ func newManagementTransport(insecure bool) *http.Transport {
 }
 
 type Client struct {
-	baseURL    string
-	management string
-	httpClient *http.Client
+	baseURL      string
+	management   string
+	httpClient   *http.Client
+	configBackup ConfigBackup
 }
 
 func NewClient(baseURL, managementKey string, timeout time.Duration, tlsSkipVerify bool) (*Client, error) {

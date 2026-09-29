@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -12,20 +14,38 @@ import (
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
 
+// configFixtureCPA is a v8 gateway's configuration endpoints: a JSON and a YAML
+// view of one document, and the writes sent to them.
 type configFixtureCPA struct {
-	mu           sync.Mutex
-	putPaths     []string
-	putBodies    []string
-	contentTypes []string
-	configData   map[string]any
-	yamlData     string
-	yamlError    bool
+	mu         sync.Mutex
+	writes     []string
+	bodies     []string
+	configData map[string]any
+	yamlData   string
+	// rejectWrites answers every write the way CPA refuses an invalid document.
+	rejectWrites bool
+	// rejectMessage replaces CPA's explanation when writes are refused.
+	rejectMessage string
 }
 
+const configFixtureYAML = `server:
+    host: 127.0.0.1
+    port: 8317
+management:
+    secret-key: top-secret-management-key
+observability:
+    logs:
+        debug: false
+config-version: 8
+`
+
 func (f *configFixtureCPA) serve(writer http.ResponseWriter, request *http.Request) {
-	path := strings.TrimPrefix(request.URL.Path, "/v0/management")
+	path := strings.TrimPrefix(request.URL.Path, "/v8/management")
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.yamlData == "" {
+		f.yamlData = configFixtureYAML
+	}
 
 	if request.Method == http.MethodGet {
 		switch path {
@@ -33,62 +53,62 @@ func (f *configFixtureCPA) serve(writer http.ResponseWriter, request *http.Reque
 			writer.Header().Set("Content-Type", "application/json")
 			if f.configData == nil {
 				f.configData = map[string]any{
-					"debug":                    false,
-					"proxy-url":                "http://proxy:8080",
-					"request-log":              true,
-					"logging-to-file":          false,
-					"usage-statistics-enabled": true,
-					"request-retry":            3,
-					"max-retry-interval":       30,
-					"max-retry-credentials":    2,
-					"ws-auth":                  true,
-					"force-model-prefix":       false,
-					"logs-max-total-size-mb":   100,
-					"error-logs-max-files":     5,
+					"requests": map[string]any{"proxy-url": "http://proxy:8080"},
+					"observability": map[string]any{
+						"logs":  map[string]any{"debug": false, "request-log": true, "logs-max-total-size-mb": 100, "error-logs-max-files": 5},
+						"usage": map[string]any{"usage-statistics-enabled": true},
+					},
 					"routing": map[string]any{
 						"strategy": "least-load",
+						"retry":    map[string]any{"request-retry": 3, "max-retry-interval": 30, "max-retry-credentials": 2},
 					},
 					// Secret and complex fields that must be redacted
-					"secret-key":     "top-secret-management-key",
-					"api-keys":       []any{"key-1", "key-2"},
-					"codex-api-key":  "secret-codex-key",
-					"gemini-api-key": "secret-gemini-key",
+					"management": map[string]any{"secret-key": "top-secret-management-key"},
+					"access":     map[string]any{"api-keys": []any{"key-1", "key-2"}},
+					"api-keys": map[string]any{
+						"codex":  []any{map[string]any{"name": "codex-1", "keys": []any{map[string]any{"api-key": "secret-codex-key"}}}},
+						"gemini": []any{map[string]any{"name": "gemini-1", "keys": []any{map[string]any{"api-key": "secret-gemini-key"}}}},
+					},
 				}
 			}
 			_ = json.NewEncoder(writer).Encode(f.configData)
-
 		case "/config.yaml":
 			writer.Header().Set("Content-Type", "application/yaml")
-			if f.yamlData == "" {
-				f.yamlData = "host: 127.0.0.1\nport: 8317\ndebug: false\n"
-			}
 			_, _ = writer.Write([]byte(f.yamlData))
-
 		default:
 			writer.WriteHeader(http.StatusNotFound)
 		}
 		return
 	}
 
-	if request.Method == http.MethodPut {
-		f.putPaths = append(f.putPaths, path)
-		f.contentTypes = append(f.contentTypes, request.Header.Get("Content-Type"))
-		body := make([]byte, 1024*1024)
-		n, _ := request.Body.Read(body)
-		f.putBodies = append(f.putBodies, string(body[:n]))
-
-		if path == "/config.yaml" && f.yamlError {
-			writer.WriteHeader(http.StatusBadRequest)
-			_, _ = writer.Write([]byte(`{"error":"invalid_yaml","message":"yaml parse error at line 2"}`))
-			return
+	body, _ := io.ReadAll(request.Body)
+	f.writes = append(f.writes, request.Method+" "+path)
+	f.bodies = append(f.bodies, string(body))
+	if f.rejectWrites {
+		message := f.rejectMessage
+		if message == "" {
+			message = "legacy field debug is not accepted by v8; use observability.logs.debug"
 		}
-
-		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"status":"ok"}`))
+		refusal, _ := json.Marshal(map[string]string{"error": "invalid_config", "message": message})
+		writer.WriteHeader(http.StatusBadRequest)
+		_, _ = writer.Write(refusal)
 		return
 	}
+	switch {
+	case request.Method == http.MethodPut && path == "/config.yaml":
+		// CPA stores the document in its own rendering.
+		f.yamlData = string(body) + "config-version: 8\n"
+	default:
+		f.yamlData += "# written\n"
+	}
+	writer.Header().Set("Content-Type", "application/json")
+	_, _ = writer.Write([]byte(`{"status":"ok","config-version":8}`))
+}
 
-	writer.WriteHeader(http.StatusMethodNotAllowed)
+func (f *configFixtureCPA) recordedWrites() ([]string, []string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.writes...), append([]string(nil), f.bodies...)
 }
 
 func TestManagementConfigGetRedactsSecrets(t *testing.T) {
@@ -203,11 +223,8 @@ func TestManagementConfigPutScalarHonoursProviderWriteGate(t *testing.T) {
 		t.Fatalf("refusal must carry code %q, got %q (%s)", providerWriteBusyCode, body.Code, payload)
 	}
 
-	fixture.mu.Lock()
-	putCount := len(fixture.putPaths)
-	fixture.mu.Unlock()
-	if putCount != 0 {
-		t.Fatalf("a refused scalar write reached CPA %d time(s)", putCount)
+	if writes, _ := fixture.recordedWrites(); len(writes) != 0 {
+		t.Fatalf("a refused scalar write reached CPA: %v", writes)
 	}
 }
 
@@ -285,9 +302,12 @@ func TestManagementConfigSourceGetAndPut(t *testing.T) {
 	}
 
 	// 8. PUT source with matching revision succeeds and returns new revision
-	newYAML := `host: 0.0.0.0
-port: 8317
-debug: true
+	newYAML := `server:
+    host: 0.0.0.0
+    port: 8317
+observability:
+    logs:
+        debug: true
 `
 	putGood, _ := json.Marshal(map[string]string{"yaml": newYAML, "revision": srcRes.Revision})
 	resp, payload = doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/config/source", string(putGood))
@@ -297,10 +317,196 @@ debug: true
 	var putRes struct {
 		Status   string `json:"status"`
 		Revision string `json:"revision"`
+		YAML     string `json:"yaml"`
 	}
 	_ = json.Unmarshal(payload, &putRes)
 	if putRes.Status != "ok" || putRes.Revision == "" || putRes.Revision == srcRes.Revision {
 		t.Fatalf("expected new revision, got %#v", putRes)
+	}
+	// The answer is CPA's rendering of what it stored, which is what the next
+	// save is compared against: the submitted text is not assumed to survive.
+	resp, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/config/source")
+	_ = json.Unmarshal(payload, &srcRes)
+	if resp.StatusCode != http.StatusOK || srcRes.Revision != putRes.Revision || srcRes.YAML != putRes.YAML {
+		t.Fatalf("saved revision %q does not match the stored one %q", putRes.Revision, srcRes.Revision)
+	}
+	writes, bodies := fixture.recordedWrites()
+	// The client secret-key sentinel is not involved, so the operator's text
+	// reaches CPA's v8 source endpoint unchanged.
+	if len(writes) != 1 || writes[0] != "PUT /config.yaml" || bodies[0] != newYAML {
+		t.Fatalf("writes = %v, bodies = %q", writes, bodies)
+	}
+}
+
+// CPA refuses a document it would partly ignore (a legacy field name, a wrong
+// type); the console reports CPA's reason instead of a generic failure.
+func TestManagementConfigSourcePutReportsCPARejection(t *testing.T) {
+	fixture := &configFixtureCPA{rejectWrites: true}
+	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
+	_, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/config/source")
+	var source struct {
+		Revision string `json:"revision"`
+	}
+	_ = json.Unmarshal(payload, &source)
+	body, _ := json.Marshal(map[string]string{"yaml": "debug: true\n", "revision": source.Revision})
+	resp, payload := doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/config/source", string(body))
+	var refusal map[string]any
+	_ = json.Unmarshal(payload, &refusal)
+	if resp.StatusCode != http.StatusUnprocessableEntity || refusal["code"] != "config_rejected" || !strings.Contains(fmt.Sprint(refusal["error"]), "observability.logs.debug") || !strings.Contains(fmt.Sprint(refusal["reason"]), "observability.logs.debug") {
+		t.Fatalf("status = %d body %s", resp.StatusCode, payload)
+	}
+}
+
+func TestManagementConfigPatchSendsOnlyTheChangedSettings(t *testing.T) {
+	fixture := &configFixtureCPA{}
+	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
+	_, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/config")
+	var loaded struct {
+		Revision     string `json:"revision"`
+		SafeYAML     string `json:"safe_yaml"`
+		StoredLayout string `json:"stored_layout"`
+	}
+	if err := json.Unmarshal(payload, &loaded); err != nil {
+		t.Fatal(err)
+	}
+	if loaded.StoredLayout != "v8" || strings.Contains(loaded.SafeYAML, "top-secret-management-key") {
+		t.Fatalf("loaded = %#v", loaded)
+	}
+	patch := func(body map[string]any) (*http.Response, []byte) {
+		encoded, _ := json.Marshal(body)
+		return doJSON(t, client, http.MethodPatch, baseURL+"/omc/api/v1/management/config", string(encoded))
+	}
+
+	// Nothing to save and no revision are both refused before CPA is called.
+	if resp, _ := patch(map[string]any{"revision": loaded.Revision, "changes": []any{}}); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("empty change set: %d", resp.StatusCode)
+	}
+	if resp, _ := patch(map[string]any{"changes": []any{map[string]any{"path": []string{"observability", "logs", "debug"}, "value": true}}}); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("missing revision: %d", resp.StatusCode)
+	}
+	if resp, _ := patch(map[string]any{"revision": "stale", "changes": []any{map[string]any{"path": []string{"observability", "logs", "debug"}, "value": true}}}); resp.StatusCode != http.StatusConflict {
+		t.Fatalf("stale revision: %d", resp.StatusCode)
+	}
+	if writes, _ := fixture.recordedWrites(); len(writes) != 0 {
+		t.Fatalf("refused saves reached CPA: %v", writes)
+	}
+
+	resp, payload := patch(map[string]any{"revision": loaded.Revision, "changes": []any{
+		map[string]any{"path": []string{"observability", "logs", "debug"}, "value": true},
+		// A masked secret the operator did not change is put back, not sent masked.
+		map[string]any{"path": []string{"management", "secret-key"}, "value": configyaml.UnchangedSentinel},
+		map[string]any{"path": []string{"requests", "proxy-url"}, "remove": true},
+	}})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("patch status = %d body %s", resp.StatusCode, payload)
+	}
+	var saved struct {
+		Revision string `json:"revision"`
+		SafeYAML string `json:"safe_yaml"`
+	}
+	_ = json.Unmarshal(payload, &saved)
+	if saved.Revision == "" || saved.Revision == loaded.Revision || strings.Contains(saved.SafeYAML, "top-secret-management-key") {
+		t.Fatalf("saved = %#v", saved)
+	}
+	writes, bodies := fixture.recordedWrites()
+	if strings.Join(writes, "|") != "PATCH /config|DELETE /config/requests/proxy-url" {
+		t.Fatalf("writes = %v", writes)
+	}
+	if bodies[0] != `{"management":{"secret-key":"top-secret-management-key"},"observability":{"logs":{"debug":true}}}` {
+		t.Fatalf("PATCH body = %s", bodies[0])
+	}
+}
+
+func TestManagementConfigPatchReportsCPARejection(t *testing.T) {
+	fixture := &configFixtureCPA{rejectWrites: true}
+	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
+	_, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/config")
+	var loaded struct {
+		Revision string `json:"revision"`
+	}
+	_ = json.Unmarshal(payload, &loaded)
+	body, _ := json.Marshal(map[string]any{"revision": loaded.Revision, "changes": []any{map[string]any{"path": []string{"debug"}, "value": true}}})
+	resp, payload := doJSON(t, client, http.MethodPatch, baseURL+"/omc/api/v1/management/config", string(body))
+	if resp.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(string(payload), "config_rejected") {
+		t.Fatalf("status = %d body %s", resp.StatusCode, payload)
+	}
+}
+
+// CPA's reason can quote the value it refused, and a save puts the stored
+// secrets back into what it sends; the reason reaches the console without them.
+func TestManagementConfigPatchRejectionDoesNotEchoRestoredSecrets(t *testing.T) {
+	fixture := &configFixtureCPA{rejectWrites: true, rejectMessage: `management.secret-key: "top-secret-management-key" is too short`}
+	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
+	_, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/config")
+	var loaded struct {
+		Revision string `json:"revision"`
+	}
+	_ = json.Unmarshal(payload, &loaded)
+	body, _ := json.Marshal(map[string]any{"revision": loaded.Revision, "changes": []any{
+		map[string]any{"path": []string{"management", "secret-key"}, "value": configyaml.UnchangedSentinel},
+	}})
+	resp, payload := doJSON(t, client, http.MethodPatch, baseURL+"/omc/api/v1/management/config", string(body))
+	if resp.StatusCode != http.StatusUnprocessableEntity || strings.Contains(string(payload), "top-secret-management-key") || !strings.Contains(string(payload), "management.secret-key") {
+		t.Fatalf("status = %d body %s", resp.StatusCode, payload)
+	}
+}
+
+// The first v8 write converts a legacy file irreversibly, so the file as it was
+// is kept, encrypted, before anything is sent, and can be read back.
+func TestManagementConfigFirstSaveKeepsTheLegacyFile(t *testing.T) {
+	legacy := "# operator notes\nport: 8317\ndebug: false\nremote-management:\n  secret-key: legacy-secret\n"
+	fixture := &configFixtureCPA{}
+	client, baseURL, repo := startDashboardTestServerStoring(t, legacy, fixture.serve)
+
+	_, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/config")
+	var loaded struct {
+		Revision     string `json:"revision"`
+		StoredLayout string `json:"stored_layout"`
+	}
+	_ = json.Unmarshal(payload, &loaded)
+	if loaded.StoredLayout != "legacy" {
+		t.Fatalf("stored_layout = %q", loaded.StoredLayout)
+	}
+	_, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/config/backups")
+	if !strings.Contains(string(payload), `"backups":[]`) {
+		t.Fatalf("backups before the first save = %s", payload)
+	}
+
+	body, _ := json.Marshal(map[string]any{"revision": loaded.Revision, "changes": []any{map[string]any{"path": []string{"observability", "logs", "debug"}, "value": true}}})
+	if resp, payload := doJSON(t, client, http.MethodPatch, baseURL+"/omc/api/v1/management/config", string(body)); resp.StatusCode != http.StatusOK {
+		t.Fatalf("patch status = %d body %s", resp.StatusCode, payload)
+	}
+
+	_, payload = getJSON(t, client, baseURL+"/omc/api/v1/management/config/backups")
+	var listed struct {
+		Backups []struct {
+			ID        int64 `json:"id"`
+			SizeBytes int64 `json:"size_bytes"`
+		} `json:"backups"`
+	}
+	_ = json.Unmarshal(payload, &listed)
+	if len(listed.Backups) != 1 || listed.Backups[0].SizeBytes != int64(len(legacy)) || strings.Contains(string(payload), "legacy-secret") || strings.Contains(string(payload), "gateway_url") {
+		t.Fatalf("backups = %s", payload)
+	}
+	_, payload = getJSON(t, client, fmt.Sprintf("%s/omc/api/v1/management/config/backups/%d", baseURL, listed.Backups[0].ID))
+	var kept struct {
+		YAML string `json:"yaml"`
+	}
+	_ = json.Unmarshal(payload, &kept)
+	if kept.YAML != legacy {
+		t.Fatalf("kept document = %q", kept.YAML)
+	}
+	if resp, _ := getJSON(t, client, baseURL+"/omc/api/v1/management/config/backups/999"); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("missing backup status = %d", resp.StatusCode)
+	}
+	// Revealing a kept file is audited fail-closed: without the audit row the
+	// document is not served.
+	if _, err := repo.SQL().Exec("DROP TABLE audit_events"); err != nil {
+		t.Fatal(err)
+	}
+	resp, payload := getJSON(t, client, fmt.Sprintf("%s/omc/api/v1/management/config/backups/%d", baseURL, listed.Backups[0].ID))
+	if resp.StatusCode != http.StatusInternalServerError || strings.Contains(string(payload), "legacy-secret") {
+		t.Fatalf("reveal without audit = %d body %s", resp.StatusCode, payload)
 	}
 }
 
@@ -327,6 +533,7 @@ func TestManagementConfigSourcePutRefusesUnprovableSequenceRestore(t *testing.T)
   - name: beta
     tls:
       key: key-for-beta
+config-version: 8
 `
 	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
 
@@ -360,11 +567,70 @@ func TestManagementConfigSourcePutRefusesUnprovableSequenceRestore(t *testing.T)
 		t.Fatalf("expected 400 for an unprovable entry restore, got %d body %s", resp.StatusCode, payload)
 	}
 
-	fixture.mu.Lock()
-	defer fixture.mu.Unlock()
-	for _, written := range fixture.putBodies {
+	_, bodies := fixture.recordedWrites()
+	for _, written := range bodies {
 		if strings.Contains(written, "key-for-alpha") || strings.Contains(written, "key-for-beta") {
 			t.Fatalf("refused save still wrote stored keys upstream: %s", written)
+		}
+	}
+}
+
+func TestManagementConfigSaveAuditFailure(t *testing.T) {
+	for _, mode := range []string{"changes", "source"} {
+		for _, outcome := range []string{"attempt", "success"} {
+			t.Run(mode+"/"+outcome, func(t *testing.T) {
+				fixture := &configFixtureCPA{}
+				client, baseURL, repo := startDashboardTestServer(t, fixture.serve)
+				// Refuse only the selected audit phase so the success case reaches CPA.
+				_, err := repo.SQL().Exec(`CREATE TRIGGER reject_config_audit BEFORE INSERT ON audit_events
+					WHEN NEW.action = 'config.save_` + mode + `' AND NEW.result = '` + outcome + `'
+					BEGIN SELECT RAISE(FAIL, 'audit unavailable'); END`)
+				if err != nil {
+					t.Fatal(err)
+				}
+				method, path, baselineKey := http.MethodPatch, "/management/config", "safe_yaml"
+				body := map[string]any{
+					"revision": configyaml.ComputeRevision(configFixtureYAML),
+					"changes":  []management.ConfigChange{{Path: []string{"observability", "logs", "debug"}, Value: true}},
+				}
+				if mode == "source" {
+					method, path, baselineKey = http.MethodPut, "/management/config/source", "yaml"
+					body = map[string]any{"revision": body["revision"], "yaml": "server:\n  port: 8318\n"}
+				}
+				encoded, err := json.Marshal(body)
+				if err != nil {
+					t.Fatal(err)
+				}
+				response, payload := doJSON(t, client, method, baseURL+"/omc/api/v1"+path, string(encoded))
+				writes, _ := fixture.recordedWrites()
+				if outcome == "attempt" {
+					if response.StatusCode != http.StatusInternalServerError || len(writes) != 0 {
+						t.Fatalf("failed attempt audit: status %d, writes %v, body %s", response.StatusCode, writes, payload)
+					}
+					return
+				}
+				if response.StatusCode != http.StatusOK || len(writes) != 1 {
+					t.Fatalf("failed success audit: status %d, writes %v, body %s", response.StatusCode, writes, payload)
+				}
+				var saved map[string]any
+				if err := json.Unmarshal(payload, &saved); err != nil {
+					t.Fatal(err)
+				}
+				fixture.mu.Lock()
+				storedYAML := fixture.yamlData
+				fixture.mu.Unlock()
+				wantBaseline := storedYAML
+				if mode == "changes" {
+					wantBaseline, err = configyaml.SanitizeSafeYAML(storedYAML)
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+				wantRevision := configyaml.ComputeRevision(storedYAML)
+				if saved["status"] != "ok" || saved["revision"] != wantRevision || saved[baselineKey] != wantBaseline || response.Header.Get("ETag") != fmt.Sprintf("%q", wantRevision) {
+					t.Fatalf("saved baseline mismatch: body %s, ETag %q", payload, response.Header.Get("ETag"))
+				}
+			})
 		}
 	}
 }

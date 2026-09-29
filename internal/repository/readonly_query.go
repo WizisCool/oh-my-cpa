@@ -74,10 +74,11 @@ var QUERY_READABLE_TABLES = map[string][]string{
 
 // QUERY_HIDDEN_TABLES are never readable, with the reason recorded for the next reviewer.
 var QUERY_HIDDEN_TABLES = map[string]string{
-	"agent_documents": "encrypted agent conversations and pending operations",
-	"cpa_instances":   "the encrypted CPA management key",
-	"ui_preferences":  "operator preferences, including the playground's saved conversation",
-	"usage_inboxes":   "raw usage payloads as CPA published them, which can carry client keys",
+	"agent_documents":    "encrypted agent conversations and pending operations",
+	"cpa_config_backups": "encrypted copies of CPA configuration files, which carry every secret in them",
+	"cpa_instances":      "the encrypted CPA management key",
+	"ui_preferences":     "operator preferences, including the playground's saved conversation",
+	"usage_inboxes":      "raw usage payloads as CPA published them, which can carry client keys",
 }
 
 const (
