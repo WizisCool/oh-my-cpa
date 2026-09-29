@@ -23,7 +23,7 @@ import { failureCode } from './api';
 import { playgroundErrorKey } from './errors';
 import { InspectPanel } from './InspectPanel';
 import { ParametersPanel } from './ParametersPanel';
-import { AssistantMessage, UserMessage } from './PlaygroundTurn';
+import { PlaygroundMessage } from './PlaygroundTurn';
 import { PlaygroundImageAdapter } from './attachments';
 import { usePlaygroundThreadRuntime } from './runtime';
 import {
@@ -414,9 +414,7 @@ export const PlaygroundPage: React.FC = () => {
             </div>
           )}
         >
-          {({ message }) => (message.role === 'user'
-            ? <UserMessage canEdit={canRetry} />
-            : <AssistantMessage canRetry={canRetry} isReplayable={isReplayable} onInspect={onInspect} onOpenRequests={onOpenRequests} />)}
+          {() => <PlaygroundMessage canEdit={canRetry} canRetry={canRetry} isReplayable={isReplayable} onInspect={onInspect} onOpenRequests={onOpenRequests} />}
         </AssistantThread>
         <AssistantComposer
           placeholder={t('pg.input')}

@@ -41,7 +41,7 @@ export async function playground({ base, page, check, context }) {
   const input = page.getByPlaceholder('Enter a message, or paste an image…');
   await page.getByLabel('Model', { exact: true }).click();
   await page.locator('.ant-select-item-option:visible', { hasText: 'vision-alias' }).click();
-  check('playground has no attach-image button', await page.getByRole('button', { name: 'Attach images', exact: true }).count() === 0);
+  check('playground offers one image picker beside paste', await page.getByRole('button', { name: 'Add image', exact: true }).count() === 1);
   await input.evaluate((element, base64) => {
     const bytes = Uint8Array.from(atob(base64), character => character.charCodeAt(0));
     const transfer = new DataTransfer();
@@ -49,9 +49,8 @@ export async function playground({ base, page, check, context }) {
     element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }));
   }, imageBytes.toString('base64'));
   await page.getByAltText('test.png').waitFor();
-  // Exactly one attachment from one paste. Both `onPaste` and `onPasteFile` used to be
-  // wired, and the dual-handler path added the same image twice; asserting only that the
-  // first image existed let that through.
+  // Exactly one attachment from one paste: a second paste handler beside the composer's own would
+  // add the same image twice, and asserting only that the first image existed would let that through.
   check('one pasted image produces exactly one attachment', await page.getByAltText('test.png').count() === 1, `attachments=${await page.getByAltText('test.png').count()}`);
   await page.getByLabel('System prompt', { exact: true }).fill('Original system prompt');
   await page.getByLabel('Reasoning effort', { exact: true }).click();
@@ -63,11 +62,10 @@ export async function playground({ base, page, check, context }) {
   await input.fill('Inspect this image');
   check('an invalid custom body is flagged in place and blocks sending', await page.getByText('Custom body must be a valid JSON object').isVisible() && await page.getByRole('button', { name: 'Send', exact: true }).isDisabled());
   // Correcting the body and pressing Enter happen in one task, so the keypress lands in the same
-  // commit that reopens the send gate and before any later render. Enter used to be decided by
-  // Ant Design X's own copy of the send button's state, which an effect updates one render after
-  // the button itself is enabled: a key arriving inside that window was refused in silence. A
-  // loaded CI runner hit the window on a real keypress about one run in five; doing both in one
-  // task hits it every time, so the check fails on that design rather than on the runner's speed.
+  // commit that reopens the send gate and before any later render. A composer that decides Enter
+  // from its own copy of the send state, updated by an effect one render after the button, refuses
+  // a key arriving inside that window in silence; doing both in one task hits the window every
+  // time, so the check fails on that design rather than on the runner's speed.
   await page.evaluate(() => {
     const body = document.getElementById('playground-custom-body');
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(body, '');
@@ -91,7 +89,8 @@ export async function playground({ base, page, check, context }) {
     return parts.length === 1 && parts[0].image_url.url.startsWith('data:image/png;base64,');
   })(), JSON.stringify(calls[0].messages[0].content.map(p => p.type)));
   check('playground renders the streamed answer and measured timing', await page.getByText('A streamed answer').count() > 0 && (await page.locator('[data-testid="playground-page"]').innerText()).includes('42'), 'expected content and first-content timing');
-  check('playground turn footer renders metrics and tps', await page.locator('.ant-bubble-list .anticon-thunderbolt').count() > 0 && await page.locator('.ant-bubble-list .anticon-field-time').count() > 0);
+  const transcript = page.locator('[data-testid="playground-transcript"]');
+  check('playground turn footer renders metrics and tps', await transcript.locator('.anticon-thunderbolt').count() > 0 && await transcript.locator('.anticon-field-time').count() > 0);
   // The displayed rate is the shared formula's, not a second one computed for this footer:
   // the fixture streams 8 output tokens over 90ms with a 42ms first token, a 48ms residual
   // below the 50ms floor, so the rate must be the end-to-end fallback 8*1000/90 = 88.89 t/s
@@ -109,7 +108,7 @@ export async function playground({ base, page, check, context }) {
   const codeBg = await page.locator('aside pre').evaluate(el => getComputedStyle(el).backgroundColor);
   check('code highlighter background does not use hardcoded one-light', !codeBg.includes('250, 250') && codeBg !== 'rgb(250, 250, 250)');
   // The send button carries the same guarantee as Enter: typing into an empty composer reopens the
-  // gate, and a click in that same task must send rather than meet the stale copy Enter used to.
+  // gate, and a click in that same task must send rather than meet a stale copy of it.
   mode = 'error';
   await page.evaluate(() => {
     const composer = document.querySelector('textarea[aria-label="Enter a message, or paste an image…"]');
@@ -119,23 +118,35 @@ export async function playground({ base, page, check, context }) {
   });
   await until(() => calls.length === 2, { label: 'a click as the send gate reopens to reach the upstream', timeoutMs: 5000 });
   await page.getByText('Partial response', { exact: true }).waitFor();
-  await until(async () => await page.getByRole('button', { name: 'Retry', exact: true }).isEnabled(), {
-    label: 'the retry affordance after a partial response',
+  const regenerate = page.getByRole('button', { name: 'Regenerate', exact: true });
+  await until(async () => await regenerate.isEnabled(), {
+    label: 'the regenerate affordance after a partial response',
   });
   check('a turn CPA never named offers no request link', await viewRequest(page.locator('[data-testid="playground-answer"]').last()).isDisabled());
   check('multi-turn request contains the completed assistant answer', calls[1].messages.length === 3 && calls[1].messages[1].role === 'assistant', JSON.stringify(calls[1].messages));
-  mode = 'success'; await page.getByRole('button', { name: 'Retry', exact: true }).click();
-  await until(() => calls.length === 3, { label: 'the retry to reach the upstream' });
-  check('retry reuses the same request instead of appending a partial answer', JSON.stringify(calls[2]) === JSON.stringify(calls[1]), 'request snapshot equality');
+  mode = 'success'; await regenerate.click();
+  await until(() => calls.length === 3, { label: 'the regenerate to reach the upstream' });
+  check('regenerating reuses the same request instead of appending a partial answer', JSON.stringify(calls[2]) === JSON.stringify(calls[1]), 'request snapshot equality');
+  await until(async () => await page.getByRole('button', { name: 'Edit and resend', exact: true }).isEnabled(), { label: 'the last message to become editable' });
+  // Editing the last message asks the same request again with different words: the edited text
+  // replaces the question and its answer rather than adding a turn.
+  const answersBeforeEdit = await page.locator('[data-testid="playground-answer"]').count();
+  await page.getByRole('button', { name: 'Edit and resend', exact: true }).click();
+  const editor = page.getByLabel('Edit and resend', { exact: true }).and(page.locator('textarea'));
+  await editor.fill('Next question, reworded');
+  await page.getByRole('button', { name: 'Resend', exact: true }).click();
+  await until(() => calls.length === 4, { label: 'the edited message to reach the upstream' });
+  check('an edited last message replaces its turn and carries the new text', calls[3].messages.length === calls[2].messages.length
+    && JSON.stringify(calls[3].messages.at(-1)).includes('Next question, reworded')
+    && JSON.stringify(calls[3].messages.slice(0, -1)) === JSON.stringify(calls[2].messages.slice(0, -1)), JSON.stringify(calls[3].messages).slice(0, 300));
+  await page.getByText('Next question, reworded', { exact: true }).waitFor();
+  check('the edit leaves one answer in the reworded turn\'s place', await page.locator('[data-testid="playground-answer"]').count() === answersBeforeEdit, `answers=${await page.locator('[data-testid="playground-answer"]').count()}`);
   await until(async () => await page.getByRole('button', { name: 'New conversation', exact: true }).isEnabled(), {
     label: 'the composer to accept a new conversation',
   });
 
-  // The transcript scrolls in reverse (the library anchors the newest message natively), so the
-  // newest message is at scrollTop 0 and the oldest at -(scrollHeight - clientHeight).
-  const scrollBox = page.locator('.ant-bubble-list-scroll-box');
-  const distanceFromLatest = () => scrollBox.evaluate(el => Math.abs(el.scrollTop));
-  await scrollBox.evaluate(el => { el.scrollTop = -el.scrollHeight; el.dispatchEvent(new Event('scroll')); });
+  const distanceFromLatest = () => transcript.evaluate(element => element.scrollHeight - element.clientHeight - element.scrollTop);
+  await transcript.evaluate(element => { element.scrollTop = 0; element.dispatchEvent(new Event('scroll')); });
   await until(async () => await page.getByRole('button', { name: 'Back to latest', exact: true }).isVisible(), {
     label: 'the back-to-latest control after scrolling away',
   });
@@ -145,7 +156,9 @@ export async function playground({ base, page, check, context }) {
   check('back to latest button returns to the newest message', await distanceFromLatest() < 48);
 
   mode = 'wait'; await input.fill('Please wait'); await page.getByRole('button', { name: 'Send', exact: true }).click();
-  check('running turn hides footer metrics until completion', await page.locator('.ant-bubble-list .anticon-thunderbolt').count() === 2);
+  await page.getByRole('button', { name: 'Stop', exact: true }).waitFor();
+  const runningAnswer = page.locator('[data-testid="playground-answer"]').last();
+  check('running turn hides footer metrics until completion', await runningAnswer.locator('.anticon-thunderbolt, .anticon-field-time').count() === 0);
   await page.getByRole('button', { name: 'Stop', exact: true }).click();
   const lastAnswer = page.locator('[data-testid="playground-answer"]').last();
   await lastAnswer.getByText('Stopped', { exact: true }).waitFor();
@@ -204,9 +217,13 @@ export async function playgroundNarrow({ base, page, check }) {
   // The placeholder alone may wrap at 320px, and autosize measures it, so the height bound allows
   // two lines; the claim that matters is that no separate send row exists.
   const composer = await page.evaluate(() => {
-    const sender = document.querySelector('[data-testid="playground-page"] .ant-sender');
-    const send = sender.querySelector('.ant-sender-content button');
-    return { height: sender.getBoundingClientRect().height, hasFootRow: !!sender.querySelector('.ant-sender-footer'), isSendInline: !!send };
+    const frame = [...document.querySelectorAll('[data-testid="playground-page"] form')].at(-1);
+    const input = frame.querySelector('textarea');
+    const send = frame.querySelector('button[aria-label="Send"]');
+    const inputBox = input.getBoundingClientRect();
+    const sendBox = send.getBoundingClientRect();
+    const isSendInline = sendBox.top < inputBox.bottom && sendBox.bottom > inputBox.top;
+    return { height: frame.getBoundingClientRect().height, hasFootRow: frame.childElementCount > 1 && !isSendInline, isSendInline };
   });
   check('the playground composer has send beside the input and no separate row on a phone', !composer.hasFootRow && composer.isSendInline && composer.height <= 72, JSON.stringify(composer));
 }

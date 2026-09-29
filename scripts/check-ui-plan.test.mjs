@@ -268,6 +268,22 @@ test('playground source selects its desktop and phone acceptance', () => {
   assert.deepEqual(planFor('web/src/pages/playground/PlaygroundPage.tsx'), ['playground', 'playground-narrow']);
 });
 
+test('the Agent run layer selects every Agent scenario and the Playground that shares it', () => {
+  const agentScenarios = ALL.filter((id) => id.startsWith('agent'));
+  for (const file of ['web/src/agent/runReducer.ts', 'web/src/agent/sse.ts', 'web/src/pages/agent/runtime.ts']) {
+    const ids = new Set(planFor(file));
+    for (const id of agentScenarios) assert.equal(ids.has(id), true, `${file} reaches ${id}`);
+  }
+  // The Playground reads its stream through `agent/sse.ts`, so the run layer reaches it too; the
+  // Agent page's own files do not.
+  assert.equal(new Set(planFor('web/src/agent/sse.ts')).has('playground'), true);
+  assert.equal(new Set(planFor('web/src/pages/agent/AgentPage.tsx')).has('playground'), false);
+  // Negative control: the run layer loads no chart catalog or request list.
+  const runLayer = new Set(planFor('web/src/agent/transport.ts'));
+  assert.equal(runLayer.has('dashboard-charts'), false);
+  assert.equal(runLayer.has('column-alignment'), false);
+});
+
 
 test('the config page and its editor select the source-editor scenario only', () => {
   // The page used to be named with no scenario at all, since nothing probed it. The source

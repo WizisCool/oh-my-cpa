@@ -34,22 +34,34 @@ export function useAgentThreadRuntime({ conversation, run, isSendDisabled, isDis
   callbacksRef.current = { run, onRejected, onDecided };
 
   // Messages sent while a run is in flight wait here and go out, in order, once it settles. The
-  // server still runs one turn at a time; the queue is only what lets the operator keep typing.
-  const queue = React.useMemo(() => createMessageQueue({
-    run: message => {
-      const text = appendMessageText(message);
-      void callbacksRef.current.run.send(text)
-        .catch((cause: unknown) => {
-          if (cause instanceof RunRejectedError) {
-            // A refusal is likely to refuse the next message for the same reason, so the queue
-            // pauses rather than draining into the same wall.
-            queue.notifyCancelled();
-            callbacksRef.current.onRejected(cause.text, cause.code);
-          }
-        });
-    },
-    cancel: () => callbacksRef.current.run.stop(),
-  }), []);
+  // server runs one turn at a time, so the queue never interrupts: it has no cancel to steer with,
+  // and a send the framework would steer ahead of the run is queued behind it like any other.
+  const queue = React.useMemo(() => {
+    const created = createMessageQueue({
+      run: message => {
+        const text = appendMessageText(message);
+        void callbacksRef.current.run.send(text)
+          .catch((cause: unknown) => {
+            if (cause instanceof RunRejectedError) {
+              // A refusal is likely to refuse the next message for the same reason, so the queue
+              // pauses rather than draining into the same wall.
+              created.notifyCancelled();
+              callbacksRef.current.onRejected(cause.text, cause.code);
+            }
+          });
+      },
+    });
+    // Inherits from the adapter rather than copying it: the queue rewrites the adapter's item
+    // lists in place, and the runtime recognises its queue by identity of this one object.
+    const adapter: typeof created.adapter = Object.create(created.adapter, {
+      steer: { value: (message: Parameters<typeof created.adapter.enqueue>[0]) => created.adapter.enqueue(message) },
+    });
+    return { ...created, adapter };
+  }, []);
+
+  // The runtime reads the queue's items when it is handed its options, so a change to the queue
+  // has to re-render the page for the composer to show it.
+  React.useSyncExternalStore(queue.subscribe, () => queue.adapter.items);
 
   // The queue follows the run's own edges, whoever started it: a resumption holds queued messages
   // back exactly as a queued send does, and the next one goes out when either settles.
@@ -75,6 +87,8 @@ export function useAgentThreadRuntime({ conversation, run, isSendDisabled, isDis
     isDisabled,
     isSendDisabled,
     queue: queue.adapter,
+    // With a queue, the runtime hands every send to it; `onNew` is only the adapter's required
+    // fallback and routes the same way.
     onNew: async message => {
       queue.adapter.enqueue(message);
     },

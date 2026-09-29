@@ -21,6 +21,7 @@ export const PROBE_WEIGHTS = {
   agent: 11,
   'agent-question': 5,
   'agent-live': 5,
+  'agent-views': 4,
   'agent-failure': 4,
   'agent-stream': 4,
   'agent-narrow': 4,

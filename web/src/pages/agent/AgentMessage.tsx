@@ -145,6 +145,15 @@ function TurnFooter({ turn }: { turn: Turn }) {
 }
 
 /**
+ * One thread message, drawn by the role of the message it is bound to rather than the role the
+ * thread's render callback saw: the runtime can place its own placeholder where a message was.
+ */
+export function AgentMessage() {
+  const role = useAuiState(state => state.message.role);
+  return role === 'user' ? <AgentUserMessage /> : <AgentAssistantMessage />;
+}
+
+/**
  * One answer, drawn in the order it happened: a model may reason, say something, call
  * capabilities, reason again and answer, so the turn is a sequence of parts rather than fixed slots.
  * A turn that failed says so on the message itself, in a sentence with the code beneath it.

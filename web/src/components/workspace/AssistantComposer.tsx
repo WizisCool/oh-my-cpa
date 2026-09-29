@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, Tooltip } from 'antd';
-import { AttachmentPrimitive, ComposerPrimitive, QueueItemPrimitive, useAuiState } from '@assistant-ui/react';
+import { AttachmentPrimitive, ComposerPrimitive, QueueItemPrimitive, useAui, useAuiState } from '@assistant-ui/react';
 import { clsx } from 'clsx';
 import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { ArrowUpOutlined, CloseOutlined, PictureOutlined } from '../icons';
@@ -34,14 +34,20 @@ const PHONE_ROWS = { minRows: 1, maxRows: 5 };
  * The message box both workspaces share, on assistant-ui's composer primitives with Ant Design
  * controls.
  *
- * Whether a message may be sent is the runtime's own state, read in the same render as the button,
- * so Enter and the button can never disagree. Plain Enter sends and Shift+Enter keeps the newline;
- * an Enter that confirms an IME composition is not a send - the primitive checks `isComposing`,
- * and keyCode 229 covers Safari, which ends the composition before the keydown it belongs to.
+ * Enter and the send button both ask the runtime to send, and the runtime decides against its live
+ * state. The framework's own send controls decide from the state their last render saw, which
+ * reaches them a task after the page changed it: a key or click arriving in that window - the
+ * operator fixing what blocked sending and pressing Enter at once - would be refused in silence.
+ * The button's blocked look is drawn from rendered state and `aria-disabled`, never the `disabled`
+ * attribute, which would drop the click before the runtime could accept it.
+ *
+ * Plain Enter sends and Shift+Enter keeps the newline; an Enter that confirms an IME composition is
+ * not a send - `isComposing`, plus keyCode 229 for Safari, which ends the composition before the
+ * keydown it belongs to.
  *
  * On a phone the conversation is most of the screen and the keyboard takes half of what is left,
- * so the box starts at one line with send beside it, and a foot row exists only when there is a
- * control to put in it.
+ * so the box starts at one line with send - and the attachment picker - beside it, and a foot row
+ * exists only when the page has a control of its own to put in it.
  */
 export function AssistantComposer({
   placeholder,
@@ -57,26 +63,38 @@ export function AssistantComposer({
   queue,
 }: AssistantComposerProps) {
   const isPhone = useIsPhoneViewport();
+  const aui = useAui();
   const isRunning = useAuiState(state => state.thread.isRunning);
   const canSend = useAuiState(state => state.composer.canSend);
   const hasQueue = useAuiState(state => state.thread.capabilities.queue);
 
+  const submit = () => {
+    const thread = aui.thread.getState();
+    // Without a queue a run in flight owns the thread; the typed message stays in the box.
+    if (thread.isRunning && !thread.capabilities.queue) return;
+    aui.composer.send();
+  };
+
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && (event.nativeEvent.isComposing || event.keyCode === 229)) event.preventDefault();
+    if (event.key !== 'Enter' || event.shiftKey) return;
+    // Taken over from the primitive, whose own Enter would submit through its render-time check.
+    event.preventDefault();
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+    submit();
   };
 
   const send = (
     <Tooltip title={canSend ? sendLabel : blockedReason}>
-      <ComposerPrimitive.Send asChild>
-        <Button
-          type="primary"
-          className={clsx(styles['send-button'], isSendLabelled && styles['is-labelled'])}
-          aria-label={sendLabel}
-          icon={<ArrowUpOutlined />}
-        >
-          {isSendLabelled ? sendLabel : null}
-        </Button>
-      </ComposerPrimitive.Send>
+      <Button
+        type="primary"
+        className={clsx(styles['send-button'], isSendLabelled && styles['is-labelled'])}
+        aria-label={sendLabel}
+        aria-disabled={!canSend || undefined}
+        icon={<ArrowUpOutlined />}
+        onClick={submit}
+      >
+        {isSendLabelled ? sendLabel : null}
+      </Button>
     </Tooltip>
   );
   const stop = (
@@ -100,7 +118,8 @@ export function AssistantComposer({
       </ComposerPrimitive.AddAttachment>
     </Tooltip>
   );
-  const start = (footerStart || addAttachment) ? <>{addAttachment}{footerStart}</> : null;
+  // On a phone the picker sits beside send, so an attachment alone never costs the box a row.
+  const start = (footerStart || (addAttachment && !isPhone)) ? <>{!isPhone && addAttachment}{footerStart}</> : null;
 
   return (
     <div className={clsx(styles['composer'], isPhone && styles['is-phone'])}>
@@ -144,6 +163,7 @@ export function AssistantComposer({
             onKeyDown={onKeyDown}
             {...(isPhone ? PHONE_ROWS : DESKTOP_ROWS)}
           />
+          {isPhone && addAttachment}
           {isPhone && controls}
         </div>
         {(!isPhone || start) && (

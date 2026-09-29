@@ -817,6 +817,16 @@
   padding: 0 12px;
 }
 
+/* Blocked, but still clickable: the runtime makes the final call on live state (AssistantComposer). */
+.send-button:global(.ant-btn)[aria-disabled='true'],
+.send-button:global(.ant-btn)[aria-disabled='true']:hover {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--meta);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
 .stop-button:global(.ant-btn) {
   width: 32px;
   min-width: 32px;

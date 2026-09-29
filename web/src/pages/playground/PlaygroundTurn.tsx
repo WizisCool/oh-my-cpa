@@ -44,9 +44,10 @@ const UserContent = React.memo(function UserContent({ turn }: { turn: Turn }) {
  */
 export function UserMessage({ canEdit }: { canEdit: boolean }) {
   const { t } = useI18n();
-  const { turn } = useAuiState(state => state.message.metadata.custom) as PlaygroundMessageCustom;
+  const turn = useAuiState(state => (state.message.metadata.custom as Partial<PlaygroundMessageCustom>).turn);
   const isLast = useAuiState(state => state.message.isLast || state.thread.messages.at(-2)?.id === state.message.id);
   const isEditing = useAuiState(state => state.message.composer.isEditing);
+  if (!turn) return null;
   if (isEditing) {
     return (
       <MessagePrimitive.Root className={workspace['message']} data-role="user">
@@ -81,6 +82,16 @@ export function UserMessage({ canEdit }: { canEdit: boolean }) {
   );
 }
 
+/**
+ * One thread message, drawn by the role of the message it is bound to. The role is read here rather
+ * than from the thread's render callback, because the runtime can put its own placeholder at an
+ * index a Playground message held a render earlier.
+ */
+export function PlaygroundMessage({ canEdit, ...props }: AssistantMessageProps & { canEdit: boolean }) {
+  const role = useAuiState(state => state.message.role);
+  return role === 'user' ? <UserMessage canEdit={canEdit} /> : <AssistantMessage {...props} />;
+}
+
 export interface AssistantMessageProps {
   canRetry: boolean;
   /** Whether the turn can be replayed; says why not when it cannot. */
@@ -96,8 +107,11 @@ interface AssistantContentProps extends AssistantMessageProps {
 
 /** One answer as a thread message; the turn it draws is the Playground's own. */
 export function AssistantMessage(props: AssistantMessageProps) {
-  const { turn } = useAuiState(state => state.message.metadata.custom) as PlaygroundMessageCustom;
+  const turn = useAuiState(state => (state.message.metadata.custom as Partial<PlaygroundMessageCustom>).turn);
   const isLast = useAuiState(state => state.message.isLast);
+  // The runtime's own placeholder for an answer that has not started carries no turn; the
+  // Playground's running turn already draws its waiting state.
+  if (!turn) return null;
   return (
     <MessagePrimitive.Root className={workspace['message']} data-role="assistant">
       <AssistantContent {...props} turn={turn} isLast={isLast} />

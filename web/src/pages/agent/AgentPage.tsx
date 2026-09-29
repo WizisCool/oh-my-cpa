@@ -22,7 +22,7 @@ import { gatewayCallPointOf } from '../../types/gatewayModels';
 import { useI18n } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
 import { saveBlob } from '../../utils/download';
-import { AgentAssistantMessage, AgentUserMessage } from './AgentMessage';
+import { AgentMessage } from './AgentMessage';
 import { failureCode, getCapabilities, getOperation, getSession, resetSession } from './api';
 import { CallDetails } from './CallDetails';
 import { CapabilityDirectory } from './CapabilityDirectory';
@@ -464,7 +464,7 @@ export function AgentPage() {
               <div className={workspace['empty']} data-testid="agent-loading" aria-busy="true" />
             ) : (
               <AssistantThread empty={empty} latestLabel={t('pg.latest')} testId="agent-transcript">
-                {({ message }) => (message.role === 'user' ? <AgentUserMessage /> : <AgentAssistantMessage />)}
+                {() => <AgentMessage />}
               </AssistantThread>
             )}
             <SelectionToolbarPrimitive.Root className={styles['selection-toolbar']}>
