@@ -1,4 +1,4 @@
-import { isDisplayTool } from './types';
+import { completedDisplayViews } from './types';
 import type { Conversation, DisplayView, Trace, Turn, TurnPart } from './types';
 
 /**
@@ -51,6 +51,10 @@ export function viewToMarkdown(view: Pick<DisplayView, 'title' | 'columns' | 'ro
   return `**${markdownCell(view.title)}**\n\n${rowsToMarkdown(view.columns, view.rows)}`;
 }
 
+/**
+ * The answer's export: its text first, then the figures only a successful turn publishes, then any
+ * failure. Display calls stay in the call list as work; the figures repeat the rows they froze.
+ */
 /** A `database_query` result - columns and positional rows - as the table shape the exports use. */
 export function queryResultTable(data: unknown): Pick<DisplayView, 'columns' | 'rows'> | undefined {
   const value = data as { columns?: unknown; rows?: unknown } | undefined;
@@ -114,15 +118,11 @@ export function turnAnswerMarkdown(turn: Pick<Turn, 'reply' | 'parts' | 'traces'
     } else if (part.type === 'tool' && part.trace_id) {
       const trace = traces.get(part.trace_id);
       if (!trace) continue;
-      if (isDisplayTool(trace.name) && trace.view) {
-        flushCalls();
-        blocks.push(viewToMarkdown(trace.view));
-      } else {
-        calls.push(traceLine(trace, labels));
-      }
+      calls.push(traceLine(trace, labels));
     }
   }
   flushCalls();
+  blocks.push(...completedDisplayViews(turn).map(trace => viewToMarkdown(trace.view!)));
   if (turn.code && turn.code !== 'cancelled') blocks.push(`> ${labels.failure(turn.code)} (\`${turn.code}\`)`);
   return blocks.join('\n\n');
 }

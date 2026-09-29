@@ -293,7 +293,7 @@ func translateAgentEvent(translator *agui.Translator, model string, event agent.
 	case "started":
 		return translator.Started(event.ConversationID, map[string]any{"turn_id": event.TurnID})
 	case "round":
-		return translator.Step(event.Round, agent.MAX_TURN_ROUNDS)
+		return translator.Step(event.Round)
 	case "thought":
 		return translator.Reasoning(event.Round, event.Content)
 	case "text":

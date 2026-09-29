@@ -92,13 +92,13 @@ func TestTranslatorFollowsTheStoredParts(t *testing.T) {
 	translator, events := record(t)
 	steps := []func() error{
 		func() error { return translator.Started("thread", nil) },
-		func() error { return translator.Step(1, 8) },
+		func() error { return translator.Step(1) },
 		func() error { return translator.Reasoning(1, "plan ") },
 		func() error { return translator.Reasoning(1, "1") },
 		func() error { return translator.Text(1, "checking") },
 		func() error { return translator.ToolCall("call", "usage_aggregate", `{"window":"24h"}`, nil) },
 		func() error { return translator.ToolResult("call", `{"status":"success"}`, nil) },
-		func() error { return translator.Step(2, 8) },
+		func() error { return translator.Step(2) },
 		func() error { return translator.Text(2, "ans") },
 		func() error { return translator.Text(2, "wer") },
 		func() error { return translator.Snapshot(map[string]any{"id": "thread"}) },
@@ -145,7 +145,7 @@ func TestTranslatorResumesWithAResultAlone(t *testing.T) {
 func TestTranslatorErrorClosesTheOpenMessage(t *testing.T) {
 	translator, events := record(t)
 	_ = translator.Started("thread", nil)
-	_ = translator.Step(1, 8)
+	_ = translator.Step(1)
 	_ = translator.Text(1, "partial")
 	_ = translator.Error("stream_incomplete", nil)
 	if got := types(*events); got != "RUN_STARTED,STEP_STARTED,TEXT_MESSAGE_START,TEXT_MESSAGE_CONTENT,TEXT_MESSAGE_END,STEP_FINISHED,RUN_ERROR" {

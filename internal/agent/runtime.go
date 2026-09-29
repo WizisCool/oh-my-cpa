@@ -94,18 +94,13 @@ type Turn struct {
 
 // Conversation is the stored session.
 //
-// Turn counts are distinct from the two switches that gate a turn's cost: a round is one model
-// call and a call is one capability invocation. They are persisted rather than derived because
-// they are what the run's budgets are stated in - an operator reading a `budget_exceeded` turn
-// needs to see which budget it hit and how far it got.
+// Rounds and calls are persisted progress counters, not limits on a task. Request and storage
+// budgets still bound resource use, and cancellation is checked between model and tool calls.
 //
 // There is no per-conversation subset of capabilities to remember: every registered capability
 // is declared to the model from the first round, so the model's tool list is the registry itself
 // and a resumption reconstructs it rather than restoring it.
 const (
-	MAX_TURN_ROUNDS = 8
-	MAX_TURN_CALLS  = 24
-
 	// MAX_CONTEXT_BYTES bounds one model request, and MAX_TOOL_SCHEMA_BYTES bounds the share of
 	// it the tool declarations may take. They are separate because the tool catalogue and the
 	// conversation grow for different reasons, and a request rejected for "context too large"
@@ -414,11 +409,17 @@ func (r *Runtime) interrupts(ctx context.Context, turn *Turn) []Interrupt {
 }
 func (r *Runtime) loop(ctx context.Context, conversation *Conversation, turn *Turn, input Input, emit func(Event) error) error {
 	// One client per fingerprint for the whole turn. Resolving a fingerprint reads CPA's key
-	// list, and a turn makes up to MAX_TURN_ROUNDS model calls; paying for that lookup on every
+	// list; paying for that lookup on every
 	// round buys nothing, because the fingerprint cannot change inside a turn.
 	clients := map[string]ModelClient{}
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		for len(turn.Pending) > 0 {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			call := turn.Pending[0]
 			index := slices.IndexFunc(turn.Traces, func(trace Trace) bool { return trace.ID == call.ID })
 			if index >= 0 {
@@ -443,9 +444,6 @@ func (r *Runtime) loop(ctx context.Context, conversation *Conversation, turn *Tu
 				}
 			} else {
 				turn.Calls++
-				if turn.Calls > MAX_TURN_CALLS {
-					return errors.New("tool_budget_exceeded")
-				}
 				trace := Trace{ID: call.ID, Name: call.Function.Name, Arguments: call.Function.Arguments, StartedMS: time.Now().UnixMilli()}
 				// Announced before it runs, so a slow capability is visibly running rather than
 				// silently absent until it returns.
@@ -490,9 +488,6 @@ func (r *Runtime) loop(ctx context.Context, conversation *Conversation, turn *Tu
 			}
 			turn.Messages = append(turn.Messages, gateway.AgentMessage{Role: "tool", ToolCallID: call.ID, Content: string(raw)})
 			turn.Pending = turn.Pending[1:]
-		}
-		if turn.Rounds >= MAX_TURN_ROUNDS {
-			return errors.New("model_budget_exceeded")
 		}
 		turn.Rounds++
 		promptContext := PromptContext{AnchorMS: conversation.AnchorMS, Language: input.Language, DisplayTools: input.DisplayTools}

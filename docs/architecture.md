@@ -209,13 +209,13 @@ secrets, or complete OAuth - it returns the operation id and the console link in
 
 #### What the model loop spends, and where
 
-Each turn is bounded in three currencies, because they fail differently and an operator
-reading `budget_exceeded` needs to know which one ran out:
+A turn has no fixed count of model rounds or capability calls: a task takes the rounds its
+work needs, and the loop checks cancellation between model calls and between calls. What is
+bounded is the cost and size of what each round may assemble, because those fail differently
+and an operator needs to know which one did:
 
 | Bound | Limit | Counts |
 | --- | --- | --- |
-| `agent.MAX_TURN_ROUNDS` | 8 | Model calls in one turn |
-| `agent.MAX_TURN_CALLS` | 24 | Capability invocations in one turn |
 | `agent.MAX_CONTEXT_BYTES` | 128 KiB | One assembled request, including its tool declarations |
 | `agent.MAX_TOOL_SCHEMA_BYTES` | 32 KiB | The catalogue's share of that request |
 

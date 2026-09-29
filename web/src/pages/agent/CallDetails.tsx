@@ -1,4 +1,5 @@
 import { Empty } from 'antd';
+import { DisplayFigure } from './tools/DisplayCall';
 import { CodeBlock } from '../../components/workspace/ModelMarkdown';
 import workspace from '../../components/workspace/Workspace.module.css';
 import type { Trace } from '../../agent/types';
@@ -88,6 +89,7 @@ export function CallDetails({ trace }: { trace: Trace | undefined }) {
           <p className={styles['details-note']}>
             {t('agent.details.view_note', { rows: String(trace.view.rows.length), source: trace.view.source?.call_id ?? t('agent.details.inline') })}
           </p>
+          <DisplayFigure view={trace.view} />
         </section>
       )}
     </div>

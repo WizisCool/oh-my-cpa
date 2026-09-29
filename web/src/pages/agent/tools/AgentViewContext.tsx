@@ -5,7 +5,6 @@ import type { Capability, Operation } from '../state';
 /** What the run in flight is doing, for the activity strip under the live answer. */
 export interface AgentActivity {
   round: number;
-  maxRounds: number;
   startedAtMS: number;
   isThinking: boolean;
   /** The capability executing right now, if one is. */

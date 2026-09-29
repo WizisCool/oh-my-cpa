@@ -331,6 +331,21 @@
   color: var(--fg-2);
 }
 
+/* The selection toolbar is portalled outside Ant Design's scoped CSS variable container. */
+.selection-action:global(.ant-btn) {
+  background: var(--elevated);
+  color: var(--fg);
+  border-color: transparent;
+  font-family: var(--font-mono);
+}
+
+.selection-action:global(.ant-btn):not(:disabled):hover,
+.selection-action:global(.ant-btn):not(:disabled):active {
+  background: var(--hover);
+  color: var(--fg);
+  border-color: transparent;
+}
+
 .selection-toolbar {
   padding: 2px;
   border: 1px solid var(--border);

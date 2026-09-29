@@ -8,6 +8,8 @@ import styles from './Workspace.module.css';
 export interface AssistantThreadProps {
   /** Shown instead of the transcript while the thread has no messages. */
   empty?: React.ReactNode;
+  /** Rendered inside the thread root, where a selection toolbar can scope itself. */
+  toolbar?: React.ReactNode;
   latestLabel: string;
   testId?: string;
   /** Draws one message; the page decides how a user and an assistant message look. */
@@ -23,7 +25,7 @@ export interface AssistantThreadProps {
  * centred reading column inside a full-width scroll box, which keeps the scrollbar at the pane's
  * edge.
  */
-export function AssistantThread({ empty, latestLabel, testId, children }: AssistantThreadProps) {
+export function AssistantThread({ empty, latestLabel, testId, toolbar, children }: AssistantThreadProps) {
   const isReducedMotion = usePrefersReducedMotion();
   return (
     <ThreadPrimitive.Root className={styles['conversation']}>
@@ -37,6 +39,7 @@ export function AssistantThread({ empty, latestLabel, testId, children }: Assist
         <ArrowDownOutlined aria-hidden="true" />
         <span>{latestLabel}</span>
       </ThreadPrimitive.ScrollToBottom>
+      {toolbar}
     </ThreadPrimitive.Root>
   );
 }

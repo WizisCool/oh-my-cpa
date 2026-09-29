@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -459,5 +460,54 @@ func TestRuntimeRefusesAnUnknownLanguageOrDisplayTool(t *testing.T) {
 		if err := runtime.Run(context.Background(), input, func(Event) error { return nil }); err == nil || err.Error() != "invalid_parameters" {
 			t.Fatalf("accepted %+v: %v", input, err)
 		}
+	}
+}
+
+func TestRuntimeLongTaskCompletesOrCancelsWithoutCountCeilings(t *testing.T) {
+	for _, shouldCancel := range []bool{false, true} {
+		t.Run(fmt.Sprintf("cancel=%t", shouldCancel), func(t *testing.T) {
+			runtime := newTestRuntime(t)
+			executions := 0
+			if err := capability.Register(runtime.Executor.Registry, capability.Metadata{Name: "fixture_read", Description: "fixture", Version: 1, Permission: "read", Risk: "low", Adapters: []string{"agent"}}, nil, func(context.Context, struct{}, string, string) (struct{}, error) {
+				executions++
+				return struct{}{}, nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			rounds := 0
+			runtime.Client = func(context.Context, string) (ModelClient, error) {
+				return modelFunc(func(context.Context, string, []gateway.AgentMessage, []gateway.AgentTool, func(gateway.Event) error) (gateway.AgentReply, error) {
+					rounds++
+					if rounds == 11 {
+						return gateway.AgentReply{Content: "Complete"}, nil
+					}
+					if shouldCancel && rounds == 10 {
+						cancel()
+					}
+					calls := make([]gateway.ToolCall, 3)
+					for i := range calls {
+						calls[i] = gateway.ToolCall{ID: fmt.Sprintf("read-%d-%d", rounds, i), Type: "function", Function: gateway.ToolFunction{Name: "fixture_read", Arguments: `{}`}}
+					}
+					return gateway.AgentReply{Calls: calls}, nil
+				}), nil
+			}
+			err := runtime.Run(ctx, Input{Message: "Investigate", Model: "fixture", Fingerprint: "key"}, func(Event) error { return nil })
+			if shouldCancel {
+				if err != nil || rounds != 10 || executions != 27 {
+					t.Fatalf("cancel: rounds=%d calls=%d error=%v", rounds, executions, err)
+				}
+			} else if err != nil || rounds != 11 || executions != 30 {
+				t.Fatalf("complete: rounds=%d calls=%d error=%v", rounds, executions, err)
+			}
+			stored, readErr := runtime.Current(context.Background())
+			if readErr != nil || len(stored.Turns) != 1 {
+				t.Fatalf("stored turn: %+v %v", stored, readErr)
+			}
+			if shouldCancel && stored.Turns[0].Code != "cancelled" || !shouldCancel && stored.Turns[0].Status != "success" {
+				t.Fatalf("terminal turn: %+v", stored.Turns[0])
+			}
+		})
 	}
 }

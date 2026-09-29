@@ -22,7 +22,7 @@ export function agentFixtures() {
 
 const sse = events => events.map(event => `data: ${JSON.stringify(event)}\n\n`).join('');
 const started = (turnId, runId = 'run-test') => ({ type: 'RUN_STARTED', threadId: THREAD, runId, protocolVersion: '1.0', metadata: { turn_id: turnId } });
-const step = round => ({ type: 'STEP_STARTED', stepName: `round:${round}`, metadata: { round, max_rounds: 8 } });
+const step = round => ({ type: 'STEP_STARTED', stepName: `round:${round}`, metadata: { round } });
 const text = (messageId, delta) => [
   { type: 'TEXT_MESSAGE_START', messageId, role: 'assistant' },
   { type: 'TEXT_MESSAGE_CONTENT', messageId, delta },
@@ -320,15 +320,31 @@ export async function agentLive({ base, page, check }) {
   await page.goto(`${base}/agent`, { waitUntil: 'domcontentloaded' });
   await page.locator('[data-testid="agent-page"]').waitFor();
   const input = page.getByLabel('Describe an OMC query or action');
+  const emptyHeight = await input.evaluate(element => element.getBoundingClientRect().height);
+  check('the desktop composer starts at one line', emptyHeight < 30, `height=${emptyHeight}`);
+  await input.fill('First line\nSecond line\nThird line');
+  const expandedHeight = await input.evaluate(element => element.getBoundingClientRect().height);
+  check('the composer grows for multiline input', expandedHeight > emptyHeight * 2, `empty=${emptyHeight} expanded=${expandedHeight}`);
   await input.fill('Which models failed?');
   await input.press('Enter');
   const transcript = page.locator('[data-testid="agent-transcript"]');
   await transcript.getByText('Which models failed?', { exact: true }).waitFor({ timeout: 2000 });
   check('the sent message appears before the run answers', await transcript.getByText('Which models failed?', { exact: true }).isVisible() && await page.locator('[data-testid="agent-activity"]').isVisible());
   check('the composer is cleared once the message is sent', await input.inputValue() === '');
+  const bubble = await transcript.locator('[data-role="user"]').last().evaluate(element => element.firstElementChild.getBoundingClientRect().height);
+  check('a single-line user message has compact vertical padding', bubble < 50, `height=${bubble}`);
+  await page.getByRole('button', { name: 'Stop', exact: true }).waitFor();
+  check('an empty running composer shows stop without a queue button', await page.getByRole('button', { name: 'Queue', exact: true }).count() === 0);
+
   await input.fill('And the day before?');
+  await page.getByRole('button', { name: 'Queue', exact: true }).waitFor();
+  check('a running composer with a draft replaces stop with queue', await page.getByRole('button', { name: 'Stop', exact: true }).count() === 0);
+
   await page.getByRole('button', { name: 'Queue', exact: true }).click();
   await page.locator('[data-testid="composer-queue-item"]').waitFor();
+  await page.getByRole('button', { name: 'Stop', exact: true }).waitFor();
+  check('queueing clears the draft and restores the stop action', await input.inputValue() === '' && await page.getByRole('button', { name: 'Queue', exact: true }).count() === 0);
+
   check('a message sent during a run waits in the queue instead of starting a second run', runs.length === 1 && await page.locator('[data-testid="composer-queue-item"]').getByText('And the day before?').isVisible(), `runs=${runs.length}`);
   releaseResult();
   await page.getByText('Two models failed most.').waitFor();
@@ -381,6 +397,7 @@ export async function agentViews({ base, page, check }) {
   await chart.getByText('Data', { exact: true }).click();
   await chart.getByText('gpt-4.1').waitFor();
   check('a chart can be read as the rows behind it', await chart.getByText('gpt-4.1').count() === 1 && await chart.locator('canvas').count() === 0);
+
 }
 
 /**

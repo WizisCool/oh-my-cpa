@@ -33,7 +33,9 @@ import {
   callDuration,
   chartSeries,
 } from '../web/src/pages/agent/state.ts';
+import { completedDisplayViews } from '../web/src/agent/types.ts';
 import type { Capability, Conversation, Operation, Trace, Turn } from '../web/src/pages/agent/state.ts';
+
 import { applyAgentEvent, EMPTY_FRAME, invalidatedKeys, parseReceipt } from '../web/src/agent/runReducer.ts';
 import type { RunFrame } from '../web/src/agent/runReducer.ts';
 import { buildRunInput, parseAgentEvent } from '../web/src/agent/protocol.ts';
@@ -246,7 +248,7 @@ check('an event this build cannot render, or one missing what the reducer reads,
 check('the stream is rebuilt into the parts the server stores, in order', () => {
   const frame = fold([
     { type: 'RUN_STARTED', threadId: 'c', runId: 'r', metadata: { turn_id: 't1' } },
-    { type: 'STEP_STARTED', stepName: 'round:1', metadata: { round: 1, max_rounds: 8 } },
+    { type: 'STEP_STARTED', stepName: 'round:1', metadata: { round: 1 } },
     { type: 'REASONING_START', messageId: 'r:1' },
     { type: 'REASONING_MESSAGE_START', messageId: 'r:1', role: 'reasoning' },
     { type: 'REASONING_MESSAGE_CONTENT', messageId: 'r:1', delta: 'plan ' },
@@ -273,7 +275,7 @@ check('the stream is rebuilt into the parts the server stores, in order', () => 
   const settled = fold([
     { type: 'TOOL_CALL_RESULT', messageId: 'result:call', toolCallId: 'call', content: '{"status":"success","invalidates":["keys"]}', metadata: { ended_at_ms: 25, view: { kind: 'table', title: 'T', columns: ['a'], rows: [{ a: 1 }] } } },
     { type: 'STEP_FINISHED', stepName: 'round:1' },
-    { type: 'STEP_STARTED', stepName: 'round:2', metadata: { round: 2, max_rounds: 8 } },
+    { type: 'STEP_STARTED', stepName: 'round:2', metadata: { round: 2 } },
     { type: 'TEXT_MESSAGE_START', messageId: 'r:3', role: 'assistant' },
     { type: 'TEXT_MESSAGE_CONTENT', messageId: 'r:3', delta: 'answer' },
     { type: 'TEXT_MESSAGE_END', messageId: 'r:3' },
@@ -493,8 +495,7 @@ check('an answer exports its text, its charts as data and its calls in brief, wi
   }, labels);
   assert.equal(answer.includes('private working'), false);
   assert.equal(answer, [
-    'Calls\n\n- `usage_aggregate` · Usage · success · 40ms\n  `{"is_trend":true}`',
-    '**Requests**\n\n| day | n |\n| --- | --- |\n| mon | 2 |',
+    'Calls\n\n- `usage_aggregate` · Usage · success · 40ms\n  `{"is_trend":true}`\n- `render_chart` · success',
     'Traffic is flat.',
     '> failed budget_exceeded (`budget_exceeded`)',
   ].join('\n\n'));
@@ -518,3 +519,17 @@ check('an export file name is sortable and safe on every file system', () => {
 });
 
 console.log(`\n${passed} assertions passed`);
+
+check('only a successful turn publishes display figures, and their export follows the calls', () => {
+  const view = { kind: 'chart', title: 'Requests', chart: { type: 'column', x: 'day', y: ['n'] }, columns: ['day', 'n'], rows: [{ day: 'mon', n: 2 }], source: { call_id: 'q', path: 'rows' } } as const;
+  const display: Trace = { id: 'd', name: 'render_chart', arguments: '{}', result: { status: 'success', data: { rendered: true } }, view };
+  const plain: Trace = { id: 'r', name: 'usage_aggregate', arguments: '{}', result: { status: 'success', data: {} } };
+  const base = { id: 't', user: 'Q', reply: 'Done.', status: 'success', parts: [], traces: [display, plain] } as const;
+  assert.deepEqual(completedDisplayViews(base).map(trace => trace.id), ['d']);
+  for (const status of ['running', 'pending', 'error', 'cancelled']) {
+    assert.deepEqual(completedDisplayViews({ ...base, status, code: status === 'error' ? 'failed' : status }), []);
+  }
+  assert.deepEqual(completedDisplayViews(undefined), []);
+  const markdown = turnAnswerMarkdown({ ...base, parts: [{ type: 'tool', trace_id: 'd' }, { type: 'text', content: 'Done.' }] }, labels);
+  assert.equal(markdown, ['Calls\n\n- `render_chart` · success', 'Done.', '**Requests**\n\n| day | n |\n| --- | --- |\n| mon | 2 |'].join('\n\n'));
+});

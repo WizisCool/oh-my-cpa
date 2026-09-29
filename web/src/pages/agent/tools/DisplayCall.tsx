@@ -100,12 +100,7 @@ export interface DisplayCallProps {
   onSelect: (id: string) => void;
 }
 
-/**
- * `render_chart` and `render_table` as part of the answer. While the call resolves, and when the
- * server refused its reference, it is an ordinary call row - the refusal is something the model
- * corrects in its next round, and the operator should see that it happened.
- */
+/** Display preparation stays in the trace; the successful answer owns the figures. */
 export function DisplayCall({ trace, isSelected, onSelect }: DisplayCallProps) {
-  if (trace.result.status === 'success' && trace.view) return <DisplayFigure view={trace.view} />;
   return <CapabilityCall trace={trace} isSelected={isSelected} onSelect={onSelect} />;
 }

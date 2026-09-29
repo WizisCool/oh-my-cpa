@@ -38,14 +38,14 @@ declares it can draw them (the console does; the MCP bridge does not).
 - Bounds: 1000 rows, 12 table columns, 8 chart series, 96 KiB per view; a larger array is refused
   with the instruction to aggregate first.
 
-The console draws a view inside the answer, outside the collapsed call chain: a table with sorting
-and CSV copy and download, a chart on the console's chart stack (series palette, shared tooltip,
-motion rules), loaded lazily, with a switch to the rows behind it and a PNG download.
+The console draws a view only from a turn that succeeded: the figures form a result section after the answer, outside the collapsed call chain - a table with sorting and CSV copy and download, a chart on the console's chart stack (series palette, shared tooltip, motion rules), loaded lazily, with a switch to the rows behind it and a PNG download. While the turn runs, a stopped answer or a refused reference keeps the display call in the trace as ordinary work; a chart or table the model drew while investigating is not published as an answer's result.
 
 ## Consequences
 
 - A chart's figures are a capability's figures. What the model can get wrong is which result it
   points at and how it describes it, both of which the operator can check in the call details.
+- Displays are final-answer artifacts: investigation stays in the trace, so a long task cannot
+  turn the transcript into a gallery of intermediate figures.
 - A chart or table costs its data once in tokens.
 - A stored conversation grows by the frozen rows; the per-view byte bound and the session's existing
   trimming by whole turns keep that bounded.

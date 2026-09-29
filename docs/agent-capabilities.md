@@ -149,6 +149,8 @@ call's trace, and returns a receipt (`rendered`, `rows`, `fields`) instead of th
 result whose detail names the field to change. Views are bounded to 1000 rows, 12 table columns,
 8 chart series and 96 KiB.
 
+Displays are selective final-answer artifacts, not progress reports: the model investigates and verifies before preparing one, uses the smallest complementary set, and leaves exploration in the trace. The console publishes a frozen view only from a successful turn, in a result section after the answer; earlier or unsuccessful work stays inspectable in the call details.
+
 What this means for a new capability: a result that holds its rows as an array of objects with
 scalar fields - or, like `database_query`, as positional arrays beside a `columns` list - can be
 charted and tabulated with no further work. A result shaped only for prose - rows packed into

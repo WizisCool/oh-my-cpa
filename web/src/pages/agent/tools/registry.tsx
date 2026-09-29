@@ -79,8 +79,8 @@ function QueryToolView(part: ToolCallMessagePartProps) {
   );
 }
 
-const RenderChartToolUI = makeAssistantToolUI({ toolName: 'render_chart', display: 'standalone', render: DisplayToolView });
-const RenderTableToolUI = makeAssistantToolUI({ toolName: 'render_table', display: 'standalone', render: DisplayToolView });
+const RenderChartToolUI = makeAssistantToolUI({ toolName: 'render_chart', render: DisplayToolView });
+const RenderTableToolUI = makeAssistantToolUI({ toolName: 'render_table', render: DisplayToolView });
 const DatabaseQueryToolUI = makeAssistantToolUI({ toolName: 'database_query', render: QueryToolView });
 
 /** Mounted once inside the runtime provider; each entry registers one tool's view. */

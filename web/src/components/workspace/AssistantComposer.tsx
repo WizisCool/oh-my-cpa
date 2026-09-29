@@ -27,7 +27,7 @@ export interface AssistantComposerProps {
   queue?: { title: string; removeLabel: string };
 }
 
-const DESKTOP_ROWS = { minRows: 2, maxRows: 10 };
+const DESKTOP_ROWS = { minRows: 1, maxRows: 10 };
 const PHONE_ROWS = { minRows: 1, maxRows: 5 };
 
 /**
@@ -67,6 +67,8 @@ export function AssistantComposer({
   const isRunning = useAuiState(state => state.thread.isRunning);
   const canSend = useAuiState(state => state.composer.canSend);
   const hasQueue = useAuiState(state => state.thread.capabilities.queue);
+  const hasDraft = useAuiState(state => state.composer.text.trim().length > 0 || state.composer.attachments.length > 0);
+  const shouldShowStop = isRunning && (!hasQueue || !hasDraft);
 
   const submit = () => {
     const thread = aui.thread.getState();
@@ -104,11 +106,10 @@ export function AssistantComposer({
       </ComposerPrimitive.Cancel>
     </Tooltip>
   );
-  // While a run is in flight a queueing runtime still accepts messages, so send sits beside stop.
+  // One action occupies the same slot: an empty running composer stops; a draft can be queued.
   const controls = (
     <span className={styles['composer-controls']}>
-      {isRunning && stop}
-      {(!isRunning || hasQueue) && send}
+      {shouldShowStop ? stop : send}
     </span>
   );
   const addAttachment = attachments && (

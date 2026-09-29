@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, Tooltip } from 'antd';
-import { ActionBarPrimitive, MessagePrimitive, groupPartByType, useAuiState } from '@assistant-ui/react';
+import { ActionBarPrimitive, MessagePartPrimitive, MessagePrimitive, groupPartByType, useAuiState } from '@assistant-ui/react';
 import type { MessagePartState } from '@assistant-ui/react';
 import { clsx } from 'clsx';
 import { useTimeZone } from '../../utils/TimeZoneProvider';
@@ -9,7 +9,9 @@ import { ModelMarkdown } from '../../components/workspace/ModelMarkdown';
 import { ReasoningBlock } from '../../components/workspace/ReasoningBlock';
 import workspace from '../../components/workspace/Workspace.module.css';
 import { exportFileName, turnAnswerMarkdown } from '../../agent/export';
+import { completedDisplayViews } from '../../agent/types';
 import type { Turn } from '../../agent/types';
+import { DisplayFigure } from './tools/DisplayCall';
 import { useI18n } from '../../i18n';
 import { capabilityTitle } from '../../i18n/capabilities';
 import { formatTokens } from '../../types/tokenDisplay';
@@ -23,12 +25,15 @@ import { ToolFallback } from './tools/registry';
 import { useLiveNow } from './tools/useLiveNow';
 import styles from './AgentPage.module.css';
 
+// User text is plain content, not a paragraph with browser-default vertical margins.
+const USER_PART_COMPONENTS = { Text: () => <MessagePartPrimitive.Text smooth={false} /> };
+
 /** The operator's message. */
 export function AgentUserMessage() {
   return (
     <MessagePrimitive.Root className={workspace['message']} data-role="user">
-      <div className={clsx(workspace['user-bubble'], workspace['user-text'])}>
-        <MessagePrimitive.Parts />
+      <div className={clsx(workspace['user-bubble'], workspace['user-text'])} data-aui-quote-selectable>
+        <MessagePrimitive.Parts components={USER_PART_COMPONENTS} />
       </div>
     </MessagePrimitive.Root>
   );
@@ -63,7 +68,7 @@ function ChainGroup({ group, children }: { group: GroupPart; children: React.Rea
   if (calls.length === 0) return <>{children}</>;
   const isOpen = chosen ?? (isRunning || needsOperator);
   return (
-    <div className={styles['chain']} data-testid="agent-chain">
+    <div className={styles['chain']} data-testid="agent-chain" data-aui-quote-selectable="false">
       <button type="button" className={styles['chain-toggle']} aria-expanded={isOpen} onClick={() => setChosen(!isOpen)}>
         <RightOutlined className={styles['chain-caret']} aria-hidden="true" />
         <span>{t('agent.chain.used', { count: String(calls.length) })}</span>
@@ -87,7 +92,7 @@ function ActivityStrip() {
   return (
     <div className={styles['activity']} role="status" aria-live="polite" data-testid="agent-activity">
       <span className={styles['activity-mark']} aria-hidden="true" />
-      {activity.round > 0 && <span className={styles['activity-round']}>{t('agent.activity.round', { round: String(activity.round), total: String(activity.maxRounds) })}</span>}
+      {activity.round > 0 && <span className={styles['activity-round']}>{t('agent.activity.round', { round: String(activity.round) })}</span>}
       <span className={styles['activity-label']}>{label}</span>
       <span className={workspace['metric']}>{formatDuration(Math.max(0, nowMS - activity.startedAtMS))}</span>
     </div>
@@ -173,7 +178,11 @@ export function AgentAssistantMessage() {
               case 'group-chain':
                 return <ChainGroup group={part as GroupPart}>{children}</ChainGroup>;
               case 'text':
-                return <ModelMarkdown content={part.text} isStreaming={part.status.type === 'running'} externalImageLabel={t('pg.external_image')} />;
+                return (
+                  <div data-aui-quote-selectable>
+                    <ModelMarkdown content={part.text} isStreaming={part.status.type === 'running'} externalImageLabel={t('pg.external_image')} />
+                  </div>
+                );
               case 'reasoning':
                 return <ReasoningBlock text={part.text} isThinking={part.status.type === 'running'} />;
               case 'tool-call':
@@ -183,6 +192,11 @@ export function AgentAssistantMessage() {
             }
           }}
         </MessagePrimitive.GroupedParts>
+        {!isLive && completedDisplayViews(turn).length > 0 && (
+          <section data-aui-quote-selectable="false" data-testid="agent-results" aria-label={t('agent.results')}>
+            {completedDisplayViews(turn).map(trace => <DisplayFigure key={trace.id} view={trace.view!} />)}
+          </section>
+        )}
         {failure && !isLive && (
           <MessagePrimitive.Error>
             <div className={styles['failure']} role="alert" data-tone={statusTone(turn?.status ?? 'error', turn?.code)}>

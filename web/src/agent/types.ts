@@ -111,5 +111,8 @@ export function isDisplayTool(name: string): name is DisplayToolName {
   return (DISPLAY_TOOLS as readonly string[]).includes(name);
 }
 
-/** The run budget the server enforces, shown as "round n of 8". */
-export const MAX_TURN_ROUNDS = 8;
+/** Only a successful turn publishes figures; other traces remain inspectable as work in progress. */
+export function completedDisplayViews(turn: Pick<Turn, 'status' | 'traces'> | undefined): Trace[] {
+  if (turn?.status !== 'success') return [];
+  return turn.traces.filter(trace => isDisplayTool(trace.name) && trace.result.status === 'success' && !!trace.view);
+}

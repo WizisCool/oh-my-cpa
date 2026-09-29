@@ -252,7 +252,6 @@ export function AgentPage() {
     selectCall,
     activity: isRunning ? {
       round: frame.round,
-      maxRounds: frame.maxRounds,
       startedAtMS,
       isThinking: frame.parts.at(-1)?.type === 'thought',
       runningCall,
@@ -463,15 +462,21 @@ export function AgentPage() {
             {session.isPending ? (
               <div className={workspace['empty']} data-testid="agent-loading" aria-busy="true" />
             ) : (
-              <AssistantThread empty={empty} latestLabel={t('pg.latest')} testId="agent-transcript">
+              <AssistantThread
+                empty={empty}
+                latestLabel={t('pg.latest')}
+                testId="agent-transcript"
+                toolbar={(
+                  <SelectionToolbarPrimitive.Root className={styles['selection-toolbar']}>
+                    <SelectionToolbarPrimitive.Quote asChild>
+                      <Button type="text" size="small" className={styles['selection-action']} icon={<QuoteOutlined />}>{t('agent.quote')}</Button>
+                    </SelectionToolbarPrimitive.Quote>
+                  </SelectionToolbarPrimitive.Root>
+                )}
+              >
                 {() => <AgentMessage />}
               </AssistantThread>
             )}
-            <SelectionToolbarPrimitive.Root className={styles['selection-toolbar']}>
-              <SelectionToolbarPrimitive.Quote asChild>
-                <Button size="small" icon={<QuoteOutlined />}>{t('agent.quote')}</Button>
-              </SelectionToolbarPrimitive.Quote>
-            </SelectionToolbarPrimitive.Root>
             {openOperation && isQuestion ? (
               <div className={workspace['composer']}>
                 <QuestionPanel key={openOperation.id} operation={openOperation} onDecided={answerQuestion} />

@@ -36,12 +36,12 @@ func (t *Translator) Started(threadID string, metadata map[string]any) error {
 }
 
 // Step opens a model round, closing the previous one.
-func (t *Translator) Step(round, maxRounds int) error {
+func (t *Translator) Step(round int) error {
 	if err := t.closeStep(); err != nil {
 		return err
 	}
 	t.step = "round:" + strconv.Itoa(round)
-	return t.emit(Event{Type: STEP_STARTED, StepName: t.step, Metadata: map[string]any{"round": round, "max_rounds": maxRounds}})
+	return t.emit(Event{Type: STEP_STARTED, StepName: t.step, Metadata: map[string]any{"round": round}})
 }
 
 func (t *Translator) Text(round int, delta string) error {

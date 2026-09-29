@@ -259,7 +259,7 @@ The console is operated from a phone as well as a desktop, and the phone is trea
 - **16px is the focus floor.** iOS Safari zooms the page when a focused field is under 16px, and the base size is 14px, so under `(pointer: coarse)` every focusable text control takes 16px. The declaration carries `!important` because antd injects its component styles at runtime, after the stylesheet: an equal-specificity rule loses on source order. The *displayed* text of a Select keeps its token size, because the browser reads the size of the element it focuses.
 - **Pinch-zoom is never disabled.** `maximum-scale=1` and `user-scalable=no` are absent on purpose.
 - **A page never moves sideways.** The content pane scrolls vertically only on a phone; a code block, a wide table, the heatmap, and a strip of choices that cannot wrap (price-book filters, configuration section nav) swipe inside their own frames with `overscroll-behavior-x: contain`. The conversation transcript clips horizontally as a backstop, and its capability steps are bounded by the column.
-- **A phone's composer starts at one line.** Below 640px the conversation composer grows from one line to five with send beside the input, and keeps a foot row only for a control that needs one; a desktop keeps the two-line box with send in its foot.
+- **The composer starts at one line.** It grows to ten lines on desktop, with the action in its foot. Below 640px it grows to five lines with the action beside the input, and keeps a foot row only for a control that needs one. User message text has no paragraph margins inside its padded bubble.
 - **The source editor is a phone surface too.** The configuration page's YAML editor stays editable at 640px and below, with the editor's own options rather than stylesheet rules (Monaco draws on a canvas-backed view): `fontSize` 16 with a 24px line height, `wordWrap: 'on'` so a long line does not force horizontal scrolling on the surface least able to perform it, and the minimap off. Its height is a `dvh` clamp so the on-screen keyboard cannot resize it under the caret.
 - **The viewport is not a fixed rectangle.** `viewport-fit=cover` is declared so `env(safe-area-inset-*)` resolves, and the insets go on chrome that touches a screen edge — never on a scroll container. Heights that decide how much data fits use `dvh`, not `vh`, because the mobile URL bar changes `100vh` continuously. `touch-action: manipulation` goes on controls, not on the page.
 
@@ -389,10 +389,12 @@ the configuration workbench.
   that never borrows the semantic hues. Raw HTML is escaped and images are links.
 - **Composer**: assistant-ui's composer with Ant Design controls; Enter and the send button as one
   gate decided on the runtime's live state, a blocked send drawn with `aria-disabled` (`--surface`
-  fill, `--meta` glyph), a stop button while running, queued messages as rows above the frame in
-  the Agent, and one line beneath naming the cost or privacy boundary.
+  fill, `--meta` glyph). Send and stop share one action slot: running with an empty draft
+  shows stop; an Agent draft replaces it with Queue, and queueing restores stop. Queued messages
+  appear as rows above the frame in the Agent, and one line beneath naming the cost or privacy boundary.
 - **Playground**: images pasted, dropped or picked into the composer; the last answer regenerates
-  and the last message edits in place, replacing its turn.
+  and the last message edits in place, replacing its turn. The Agent quote toolbar styles itself
+  from theme tokens even though its portal sits outside Ant Design's variable scope.
 - **Playground panel**: Parameters (unset values read "Default"; sliders rest muted) and Turn
   diagnostics (metrics grid, request and response code blocks, labelled cURL copy).
 - **Agent**: a capability directory as an open list grouped read / write / destructive with pips,

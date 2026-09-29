@@ -8,7 +8,7 @@ import (
 // PROMPT_VERSION names the system prompt a turn ran with. It is recorded on the turn, so an
 // operator asking "why did it answer like that" can tell which instructions were in force; change
 // it whenever a section's wording changes.
-const PROMPT_VERSION = "2026-09-29.1"
+const PROMPT_VERSION = "2026-09-30.1"
 
 // MAX_PROMPT_BYTES bounds the system prompt. It is resent on every model round of every turn, so
 // it is a per-round cost like the tool catalogue, and a section that grows past this is a
@@ -82,15 +82,16 @@ func presentationRules(displayTools []string) string {
 	rules := []string{"Lead with the answer; keep it short and use headings only for long answers."}
 	hasChart, hasTable := contains(displayTools, RENDER_CHART), contains(displayTools, RENDER_TABLE)
 	if hasChart {
-		rules = append(rules, "For a trend over time or a comparison across more than a few items, call render_chart.")
+		rules = append(rules, "Use render_chart only when the operator asks for a chart or a visual materially clarifies the final conclusion; a few numbers or a short sentence usually suffice.")
 	}
 	if hasTable {
-		rules = append(rules, "For more than about five rows or more than three columns, call render_table.")
+		rules = append(rules, "Use render_table only when the final answer needs a structured comparison that concise prose cannot explain clearly; do not display raw query results by default.")
 	}
 	if hasChart || hasTable {
 		rules = append(rules,
 			"Point a chart or table at the capability result with source {call_id, path} instead of copying numbers; use inline rows only for small values you derived yourself.",
-			"After a chart or table, state the conclusion in one or two sentences; never restate the data it shows.",
+			"Complete investigation and verify the data before preparing any display. Charts and tables are final-answer artifacts, not progress reports or scratch work. Do not create exploratory variants or a display for each tool result.",
+			"Prefer the smallest set of complementary displays; do not show the same data as both a chart and a table. Lead the final answer with the conclusion and explain why each display matters, without restating its rows.",
 			"Use Markdown tables only for short comparisons.",
 		)
 	} else {

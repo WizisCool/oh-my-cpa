@@ -1,6 +1,5 @@
 import { EventType } from '@ag-ui/core';
 import type { AgentEvent } from './protocol';
-import { MAX_TURN_ROUNDS } from './types';
 import type { AgentInterrupt, CapabilityReceipt, Conversation, DisplayView, InterruptReason, Trace, TurnPart, TurnUsage } from './types';
 
 /**
@@ -20,7 +19,6 @@ export interface RunFrame {
   /** Calls this run started or resolved; a call still executing has the `running` status. */
   traces: Trace[];
   round: number;
-  maxRounds: number;
   snapshot?: Conversation;
   interrupts: AgentInterrupt[];
   errorCode: string;
@@ -37,7 +35,6 @@ export const EMPTY_FRAME: RunFrame = {
   parts: [],
   traces: [],
   round: 0,
-  maxRounds: MAX_TURN_ROUNDS,
   interrupts: [],
   errorCode: '',
   isFinished: false,
@@ -130,7 +127,7 @@ export function applyAgentEvent(frame: RunFrame, event: AgentEvent): RunFrame {
     case EventType.RUN_STARTED:
       return { ...frame, isAccepted: true, threadId: event.threadId, turnId: typeof metadata.turn_id === 'string' ? metadata.turn_id : '' };
     case EventType.STEP_STARTED:
-      return { ...frame, round: numberOf(metadata.round) ?? frame.round + 1, maxRounds: numberOf(metadata.max_rounds) ?? frame.maxRounds };
+      return { ...frame, round: numberOf(metadata.round) ?? frame.round + 1 };
     case EventType.TEXT_MESSAGE_START:
       return openMessage(frame, event.messageId, 'text');
     case EventType.TEXT_MESSAGE_CONTENT:

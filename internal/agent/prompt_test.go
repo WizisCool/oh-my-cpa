@@ -49,6 +49,18 @@ func TestPromptMentionsOnlyTheDisplayToolsItWasGiven(t *testing.T) {
 	}
 }
 
+func TestPromptMakesVisualizationsSelectiveFinalArtifacts(t *testing.T) {
+	prompt := SystemPrompt(PromptContext{AnchorMS: 1, DisplayTools: []string{RENDER_CHART, RENDER_TABLE}})
+	for _, phrase := range []string{"final conclusion", "final answer needs", "not progress reports or scratch work", "smallest set", "concise prose"} {
+		if !strings.Contains(prompt, phrase) {
+			t.Errorf("presentation rules lack %q: %s", phrase, prompt)
+		}
+	}
+	if strings.Contains(prompt, "call render_chart") || strings.Contains(prompt, "call render_table") || strings.Contains(prompt, "more than about five rows") {
+		t.Fatalf("display tools are still instructed as defaults: %s", prompt)
+	}
+}
+
 func TestPromptFitsItsBudget(t *testing.T) {
 	prompt := SystemPrompt(PromptContext{AnchorMS: 1, TimeZone: "America/Argentina/ComodRivadavia", Language: "zh-Hant", DisplayTools: []string{RENDER_CHART, RENDER_TABLE}})
 	if len(prompt) > MAX_PROMPT_BYTES {

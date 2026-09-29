@@ -982,18 +982,19 @@ console, and an image is rendered as a link rather than fetched.
 **The composer is one gate.** Enter and the send button reach the same submission, decided on the
 runtime's live state, and the send button reads as blocked (`--surface` fill, `--meta` glyph,
 `aria-disabled`) whenever sending is not possible, with the reason on its tooltip when the page has
-one to give. While a turn runs a stop button appears; in the Agent, where a message sent during a
-run waits in a queue behind it, send stays beside stop as a labelled "Queue" action and each queued
-message is a row above the frame with a remove control. Beneath the composer one line states the boundary
+one to give. Send and stop occupy one action slot. While a turn runs with an empty draft it shows stop;
+in the Agent, entering a draft replaces stop with "Queue", and queueing clears the draft and
+restores stop. Each queued message is a row above the frame with a remove control. Beneath the composer one line states the boundary
 the operator is about to cross: the Playground's spends the key's entitlement, the Agent's names
 what must be allowed before a message can leave.
 
-**A phone's composer starts at one line.** At the 640px phone breakpoint the box grows from one line
-to five rather than from two to ten, send - and the Playground's image picker - sits beside the
+**The composer starts at one line.** It grows to ten lines on desktop. At the 640px phone
+breakpoint the box grows to five lines, send - and the Playground's image picker - sits beside the
 input instead of in a foot row, and the foot row appears only for a control that needs it (the
 Agent's reasoning effort); frame and note
 tighten with it. On a phone the conversation already shares its height with the keyboard, and the
-desktop layout left it a strip between two bars. A desktop keeps the two-line box.
+desktop layout left it a strip between two bars. On desktop the action remains in the foot row. User message text has no paragraph margins
+inside its padded bubble, so one line does not acquire a second layer of vertical spacing.
 
 **The transcript scrolls only vertically.** Code blocks and tables scroll sideways inside their own
 frames, every other element is bounded by the column (a capability step's digest is one
@@ -1078,7 +1079,7 @@ send and says so in a `--warn` line inside its frame, with a "Show" link that br
 view and focuses it.
 
 **Selected text can be asked about.** Selecting part of an answer raises a small toolbar on
-`--elevated` with "Ask about this"; the quote then sits inside the composer's frame above the input,
+`--elevated` with "Ask about this" - the portal styles itself from theme tokens, because it renders outside Ant Design's variable scope; the quote then sits inside the composer's frame above the input,
 in `--muted` with a remove control, and is sent as a Markdown quote ahead of the question.
 
 A question the agent asks (`ask_question`) takes the composer's place instead of opening a dialog,
