@@ -82,7 +82,7 @@ export const MS: Readonly<Record<string, string>> = {
   "agent.capability.config_set": "Tukar tetapan penghalaan atau cuba semula",
   "agent.capability.config_set.description": "Menukar satu tetapan penghalaan atau cuba semula yang dibenarkan selepas kebenaran anda.",
   "agent.capability.database_query": "Tanya pangkalan data (baca sahaja)",
-  "agent.capability.database_query.description": "Menjalankan satu SELECT baca sahaja pada pangkalan data OMC; jadual dan lajur sensitif tidak boleh dibaca, hasil dihadkan kepada 200 baris dan 5 saat, dan teks seperti kunci serta e-mel ditopeng.",
+  "agent.capability.database_query.description": "Menjalankan satu SELECT baca sahaja pada pangkalan data OMC; jadual dan lajur sensitif tidak boleh dibaca, hasil dihadkan kepada 200 baris dan 5 saat, dan teks seperti kunci serta e-mel ditopeng secara terbaik usaha, tanpa jaminan.",
   "agent.capability.database_schema": "Senaraikan jadual yang boleh ditanya",
   "agent.capability.database_schema.description": "Menyenaraikan jadual dan lajur yang boleh digunakan oleh pertanyaan baca sahaja, dan lajur yang disembunyikan.",
   "agent.capability.keys_create": "Cipta kunci klien",

@@ -241,6 +241,9 @@ func loadQuerySchema(ctx context.Context, conn *sql.Conn) (*querySchema, error) 
 			info.columns = append(info.columns, name)
 		}
 		columns.Close()
+		if err := columns.Err(); err != nil {
+			return nil, err
+		}
 		for _, name := range QUERY_READABLE_TABLES[item.name] {
 			info.denied[name] = true
 		}
@@ -275,6 +278,9 @@ func loadQuerySchema(ctx context.Context, conn *sql.Conn) (*querySchema, error) 
 			}
 		}
 		columns.Close()
+		if err := columns.Err(); err != nil {
+			return nil, err
+		}
 		schema.roots[item.root] = root
 	}
 	return schema, nil
@@ -466,6 +472,9 @@ func (r *Repository) QuerySchema(ctx context.Context) ([]QueryTable, error) {
 			table.Columns = append(table.Columns, column)
 		}
 		columns.Close()
+		if err := columns.Err(); err != nil {
+			return nil, err
+		}
 		tables = append(tables, table)
 	}
 	return tables, nil

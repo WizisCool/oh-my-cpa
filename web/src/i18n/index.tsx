@@ -155,8 +155,8 @@ const DICT: Record<string, [string, string]> = {
   ],
   'agent.capability.database_query': ["只读查询数据库", "Query the database (read-only)"],
   'agent.capability.database_query.description': [
-    "对 OMC 数据库执行一条只读 SELECT；敏感表与列不可读，结果限 200 行、5 秒，并对疑似密钥与邮箱打码。",
-    "Runs one read-only SELECT on the OMC database; sensitive tables and columns are unreadable, results are capped at 200 rows and 5 seconds, and key-like text and emails are masked.",
+    "对 OMC 数据库执行一条只读 SELECT；敏感表与列不可读，结果限 200 行、5 秒，疑似密钥与邮箱会尽力打码，但不作保证。",
+    "Runs one read-only SELECT on the OMC database; sensitive tables and columns are unreadable, results are capped at 200 rows and 5 seconds, and key-like text and emails are masked on a best-effort basis, not guaranteed.",
   ],
   'agent.capability.database_schema': ["查看可查询的表", "List queryable tables"],
   'agent.capability.database_schema.description': [

@@ -173,10 +173,11 @@ func (db *DB) Close() error {
 	if db == nil || db.SQL == nil {
 		return nil
 	}
+	var readOnlyErr error
 	if db.readOnly != nil {
-		db.readOnly.Close()
+		readOnlyErr = db.readOnly.Close()
 	}
-	return db.SQL.Close()
+	return errors.Join(db.SQL.Close(), readOnlyErr)
 }
 
 func (db *DB) Migrate(ctx context.Context) error {

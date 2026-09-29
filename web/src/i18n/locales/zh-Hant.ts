@@ -82,7 +82,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "agent.capability.config_set": "修改路由或重試設定",
   "agent.capability.config_set.description": "經你授權後修改一項白名單內的路由或重試設定。",
   "agent.capability.database_query": "唯讀查詢資料庫",
-  "agent.capability.database_query.description": "對 OMC 資料庫執行一條唯讀 SELECT；敏感表與欄位不可讀，結果限 200 列、5 秒，並對疑似金鑰與電子郵件遮罩。",
+  "agent.capability.database_query.description": "對 OMC 資料庫執行一條唯讀 SELECT；敏感表與欄位不可讀，結果限 200 列、5 秒，疑似金鑰與電子郵件會盡力遮罩，但不作保證。",
   "agent.capability.database_schema": "查看可查詢的資料表",
   "agent.capability.database_schema.description": "列出唯讀查詢可存取的資料表和欄位，以及被遮蔽的欄位。",
   "agent.capability.keys_create": "建立用戶端金鑰",
