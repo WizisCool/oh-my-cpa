@@ -52,6 +52,7 @@ const FIXED_ROUTES = new Map([
   ['/api/v1/management/system/maintenance', 'system-maintenance'],
   ['/api/v1/management/config', 'config'],
   ['/api/v1/management/config/source', 'config-source'],
+  ['/api/v1/management/config/backups', 'config-backups'],
   ['/api/v1/management/providers', 'providers'],
   ['/api/v1/management/api-keys', 'api-keys'],
   ['/api/v1/management/client-key-aliases', 'client-key-aliases'],

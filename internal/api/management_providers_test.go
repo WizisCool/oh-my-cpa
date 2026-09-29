@@ -181,17 +181,16 @@ func newProviderTestFixture(t *testing.T) providerTestFixture {
 		path := request.URL.Path
 
 		switch {
-		case path == "/v0/management/api-keys" && request.Method == http.MethodGet:
-			_ = json.NewEncoder(writer).Encode(map[string]any{"api-keys": state.clientKeys})
-		case path == "/v0/management/api-keys" && request.Method == http.MethodPut:
-			var arr []string
-			if err := json.NewDecoder(request.Body).Decode(&arr); err == nil {
-				state.clientKeys = arr
-			} else {
-				var req map[string][]string
-				_ = json.NewDecoder(request.Body).Decode(&req)
-				state.clientKeys = req["api-keys"]
+		case path == "/v8/management/config" && request.Method == http.MethodGet:
+			_ = json.NewEncoder(writer).Encode(map[string]any{"access": map[string]any{"api-keys": state.clientKeys}})
+		case path == "/v8/management/config" && request.Method == http.MethodPatch:
+			var merge struct {
+				Access struct {
+					APIKeys []string `json:"api-keys"`
+				} `json:"access"`
 			}
+			_ = json.NewDecoder(request.Body).Decode(&merge)
+			state.clientKeys = merge.Access.APIKeys
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 		case path == "/v0/management/codex-api-key" && request.Method == http.MethodGet:
 			_ = json.NewEncoder(writer).Encode(map[string]any{"codex-api-key": state.codexProviders})

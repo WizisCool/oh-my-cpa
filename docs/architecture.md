@@ -68,10 +68,10 @@ cycle even though the `internal/usage` directory appears in both directions.
 | `internal/usage` | Decode CPA usage/error payloads into typed events | `security` |
 | `internal/usage/resp` | Minimal RESP client for CPA's subscribe/LPOP subset | — |
 | `internal/pricing` | OpenRouter fetch and decode, model matching, tiered quotes, sync service, modes and channel multipliers | — |
-| `internal/cpa/management` | Typed CPA Management API client (`/v8/management`, behind the v8 gate; the declared `/v0/management` reads in `client_v0.go`) and RESP stream wrapper | `internal/usage/resp` |
+| `internal/cpa/management` | Typed CPA Management API client (`/v8/management`, behind the v8 gate; the declared `/v0/management` calls in `client_v0.go`), configuration change sets with the legacy-file backup hook, and RESP stream wrapper | `configyaml`, `internal/usage/resp` |
 | `internal/cpa/gateway` | Fixed-endpoint CPA inference client for the Playground and Agent: client-key auth, model directory, bounded SSE parsing, and bounded tool-call assembly for the Agent loop | — |
 | `internal/cpa/discovery` | Normalize CPA resources into the local identity model | `management`, `crypto`, `domain`, `security` |
-| `internal/cpa/configyaml` | YAML document editing that preserves comments and unknown keys; CPA v8 layout detection, CPA's relocation table, and the checks for settings a v8 gateway would drop | — |
+| `internal/cpa/configyaml` | The masked configuration view and per-value secret restoration, v8 file detection, and the plugin-system settings edit | — |
 | `internal/repository` | SQLite schema, migrations, queries, transactional invariants | `crypto`, `domain`, `pricing`, `security`, `usage` |
 | `internal/usage/ingest` | Collector loop, decode processor, rollup and retention maintenance | `repository`, `management`, `security`, `usage` |
 | `internal/quota` | Per-provider quota probes and normalization | `management` |
@@ -109,11 +109,11 @@ plugin's), removal, the store and installation from a named registry at a named 
 CPA's plugin error codes (`plugin_not_found`, `plugin_delete_requires_restart`,
 `plugin_store_rate_limited`, …) are kept rather than folded into the generic facade
 error. The plugin system's own settings - `plugins.enabled`, `plugins.store-sources`
-and `plugins.store-auth` - have no CPA route narrower than `config.yaml`, so
-`internal/api/management_plugin_settings.go` reads the document, rewrites only those
-keys through `internal/cpa/configyaml/plugins.go` (comments and every other key kept),
-and writes it back under the provider write gate, the configuration mutex and the
-revision the page loaded, exactly like a configuration save.
+and `plugins.store-auth` - have no dedicated CPA plugin route, so
+`internal/api/management_plugin_settings.go` writes them as a configuration change set
+on their `plugins.*` paths (`configyaml.PluginSettingsEdit`), under the provider write
+gate, the configuration mutex and the revision the page loaded, exactly like a
+configuration save.
 
 
 ### Agent runtime, capability registry and the MCP bridge
@@ -357,14 +357,38 @@ guidance while it reads `unsupported` (`CpaUpgradeRequired`), or with the
 management-secret setting while it reads `disabled` (`CpaManagementDisabled`).
 
 `/v0/management` is addressed only through `internal/cpa/management/client_v0.go`: the
-per-family credential lists, which alone carry each upstream key's `auth-index`, and the
-configuration reads and writes whose editors have not moved to the v8 configuration API.
-Those still place fields by the stored file's layout (`configyaml.DetectLayout`:
-`legacy`, `v8` or `mixed`): `GET /management/config` returns the layout with CPA's
-relocation table (`configyaml.LayoutRules`), the console places every field through
-`web/src/components/config/configLayout.ts`, and the configuration source writer refuses
-a document CPA v8 would accept and partly ignore (`checkConfigLayout`:
-`config_legacy_keys_shadowed`, `config_provider_groups_replaced`).
+per-family credential lists, which alone carry each upstream key's `auth-index`; the
+configuration file as stored (`StoredConfigYAML`), which only v0 returns; and the writes
+whose editors have not moved to the v8 configuration API (provider credentials, OAuth
+model aliases, per-plugin enablement and settings).
+
+### Configuration editing on the v8 configuration API
+
+The configuration editors read and write the v8 layout only (ADR 0037).
+`GET /management/config` returns CPA's v8 rendering (`GET /v8/management/config.yaml`)
+with secrets masked (`configyaml.SanitizeSafeYAML`), its revision (the SHA-256 of that
+rendering) and whether the stored file is still a pre-v8 one (`stored_layout`). The
+visual editor and the Keys page diff their draft against the document they loaded
+(`web/src/components/config/configPatch.ts`) and send `PATCH /management/config` with
+the changed paths; the source view sends the whole rendering to
+`PUT /management/config/source`. Both saves take the provider write gate and the
+configuration mutex, refuse a moved revision (`409 config_conflict`), restore masked
+secrets from the stored document, and answer with CPA's new rendering, which becomes the
+editor's baseline. `Client.ApplyConfigChanges` sends a change set as one
+`PATCH /v8/management/config` merge for scalars and lists, one `PUT /config/<path>` per
+map value and one `DELETE /config/<path>` per removal. CPA refuses a legacy name, an
+unknown section or a mistyped value with nothing written; the facade reports it as
+`422 config_rejected` with CPA's reason in `reason`.
+
+Before any v8 configuration write the client reads the stored file and, when it is not a
+v8 file (`configyaml.IsV8Document`), hands it to the configured `ConfigBackup`
+(`internal/cpa/management/config_backup.go`), because that write makes CPA convert the
+whole file. The API layer stores it encrypted in `cpa_config_backups`
+(`repository.ConfigBackupStore`, the latest `CONFIG_BACKUP_RETENTION`); a write whose
+copy cannot be kept is refused before anything is sent (`503 config_backup_failed`). A
+v8 answer is cached per gateway for `V8_FILE_TTL`, so a converted file costs one read.
+`GET /management/config/backups` lists the copies and
+`GET /management/config/backups/{id}` returns one, audited as `config.reveal_backup`.
 
 ### Provider families are data, not code paths
 
@@ -579,7 +603,7 @@ Query for server state.
 | `components/logs/` | The Logs page's two sources: `CpaLogPanel` (the gateway tail and error files), `ServiceLogPanel` (the service log), and `LogList`, the scrolling tail both render into - it follows the newest line until the reader scrolls away and mounts only the newest chunk. Wire types and pure helpers live in `types/logs.ts` |
 | `components/audit/` | The audit page's `AuditTrail`: the page head with refresh and export, the outcome tiles (`StatTiles`, each count a filter), the search, category and range filters, and the trail as one `ResponsiveList` frame per day (on a phone, one tappable row per entry: the sentence and its outcome over its time and target); `AuditEventDrawer` shows one entry in full and steps to its neighbours; `auditText.ts` turns an action and a result into the sentence and word a reader sees. Wire types, URL state and facet counting live in `types/audit.ts` |
 | `components/plugins/` | The plugin management page's three tabs: `InstalledPluginsPanel` (each plugin's state in words - running, enabled but not running, disabled - its switch, settings and removal), `PluginStorePanel` (the store as cards with the registry's icon, author, tags, repository and homepage links, and the install dialog that asks a third-party install for the typed plugin id), `PluginSettingsPanel` (the plugin system switch, the third-party registries and the store authentication rules) and `PluginConfigDrawer` (a plugin's declared fields as typed controls, with the JSON view of the same document). The pure rules sit beside them: `pluginConfigForm.ts` (draft to document, per-field validation, undeclared keys carried through), `pluginConfig.ts` (JSON parsing that refuses a duplicate key) and `pluginStoreLogic.ts` (store filters and the settings draft's validation). `pages/PluginsPage.tsx` owns the tab in the URL and reads the store only once its tab is opened |
-| `components/`, `pages/` | Feature UI; one page per route, no page owns another. A page composes its surface rather than carrying it: `pages/UsageEventsPage.tsx` renders `components/usage/`'s toolbar, header and rows and takes its state from that directory's hooks, `pages/ProvidersPage.tsx` renders `components/providers/`'s table and editor, and `pages/ConfigPage.tsx` renders `components/config/`'s renderers. The framework-free policies of a surface stay beside it: `components/usage/` carries `searchDebounce.ts`, `pollingPolicy.ts`, `timeRangePolicy.ts`, `syncPresentation.ts` and `chipDisplay.ts`, and `components/config/` carries `payloadRules.ts`, `configDirty.ts` and `configLayout.ts` |
+| `components/`, `pages/` | Feature UI; one page per route, no page owns another. A page composes its surface rather than carrying it: `pages/UsageEventsPage.tsx` renders `components/usage/`'s toolbar, header and rows and takes its state from that directory's hooks, `pages/ProvidersPage.tsx` renders `components/providers/`'s table and editor, and `pages/ConfigPage.tsx` renders `components/config/`'s renderers. The framework-free policies of a surface stay beside it: `components/usage/` carries `searchDebounce.ts`, `pollingPolicy.ts`, `timeRangePolicy.ts`, `syncPresentation.ts` and `chipDisplay.ts`, and `components/config/` carries `payloadRules.ts`, `configDirty.ts` and `configPatch.ts` |
 
 A failure's sentence goes through `describeError` (`api/client.ts`) rather than each
 call site's own `instanceof` ladder: an `ApiError` already carries the server's message
@@ -1358,6 +1382,7 @@ account as the reading it was decided from.
 | Pricing | `model_prices`, `model_price_versions`, `pricing_sync_state`, `pricing_model_catalog`, `pricing_catalog_state`, `pricing_model_links`, `pricing_upstream_catalog`, `pricing_channels`, `pricing_channel_versions` | Price and channel versions are append-only via triggers; migration 028 added tiers, links, the stored OpenRouter snapshot and channels, and `usage_events.channel_version_id`/`price_tier`. Migration 029 added `pricing_catalog_state.providers_json`; the pricing repository refuses to run before migration 29 |
 | Agent | `agent_documents` | Encrypted latest Agent session and capability operations (migration 026). Sessions are capped and trimmed by whole turns; terminal operations are retained 7 days and purged lazily during Agent requests |
 | Operations | `audit_events`, `ui_preferences`, `quota_snapshots`, `schema_migrations` | Audit has no update or delete path — only `RecordAuditEvent` writes and read queries (`ListAuditEvents`, `QueryAuditEvents`) exist, and export itself is audited; the schema carries no enforcement trigger, so the guarantee lives in the repository API. Migration 027 adds `idx_audit_events_request_action`, which the trail's attempt folding looks up |
+| CPA configuration | `cpa_config_backups` | Encrypted copies of pre-v8 CPA configuration files kept before the write that converts them (migration 030, ADR 0037); the latest ten are kept, and the table is hidden from `database_query` |
 | Release observation | `release_index`, `release_check_state` | Migrations 024 and 025; `truncated` is added by 025, so a database that applied 024 before it existed still gains the column. `release_index` holds one row per published version (tag, name, publication time, prerelease flag) and is **replaced as a unit per product** by `PublishReleaseSnapshot`, because a feed that stops listing a withdrawn release must stop the console claiming it exists. `release_check_state` holds one row per product — the last attempt and success times, the redacted failure reason, the latest tag, the ETag and the truncation flag — and is written by `RecordReleaseCheckAttempt`/`PublishReleaseSnapshot`/`RecordReleaseCheckFailure`, read by `ListReleases` and `GetReleaseCheckState(ForRepository)`. A release's prose body is **never stored**: it lives in bounded process memory for the life of the process, so an index without notes still names the versions and links to the source (see §10) |
 
 `GET /management/system` resolves the gateway client once and runs its reads side by side

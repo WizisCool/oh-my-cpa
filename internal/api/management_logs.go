@@ -108,14 +108,14 @@ func (h *Handler) managementLogsStatus(writer http.ResponseWriter, request *http
 	if !ok {
 		return
 	}
-	config, _, err := client.Config(request.Context())
+	scalars, err := client.ConfigScalars(request.Context())
 	if err != nil {
 		writeCPAFacadeError(writer, err)
 		return
 	}
 	writeJSON(writer, http.StatusOK, map[string]bool{
-		"logging_to_file": configBool(config, "logging-to-file"),
-		"request_log":     configBool(config, "request-log"),
+		"logging_to_file": scalars.LoggingToFile,
+		"request_log":     scalars.RequestLog,
 	})
 }
 
@@ -188,16 +188,4 @@ func parseLogsLimit(raw string) int {
 		return management.MaxLogsLimit
 	}
 	return parsed
-}
-
-// configBool reads a CPA config flag that arrives as a bool in some builds and
-// a "true" string in others.
-func configBool(config map[string]any, key string) bool {
-	switch typed := config[key].(type) {
-	case bool:
-		return typed
-	case string:
-		return strings.EqualFold(strings.TrimSpace(typed), "true")
-	}
-	return false
 }

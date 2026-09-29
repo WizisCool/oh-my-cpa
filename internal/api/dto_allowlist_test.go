@@ -52,15 +52,14 @@ func TestBrowserDTOAllowlistAndSecretExclusion(t *testing.T) {
 					"status": "ready"
 				}]
 			}`))
-		case strings.HasPrefix(path, "/v0/management/config"):
+		case path == "/v8/management/config":
 			writer.Header().Set("Content-Type", "application/json")
 			_, _ = writer.Write([]byte(`{
-				"config": {
-					"debug": false,
-					"request_log": true,
-					"proxy_url": "https://super-secret-user:super-secret-pass@proxy.example.test:8080?secret-query-param=confidential"
-				}
+				"observability": {"logs": {"debug": false, "request-log": true}},
+				"requests": {"proxy-url": "https://super-secret-user:super-secret-pass@proxy.example.test:8080?secret-query-param=confidential"}
 			}`))
+		case path == "/v8/management/config.yaml":
+			_, _ = writer.Write([]byte("requests:\n  proxy-url: https://super-secret-user:super-secret-pass@proxy.example.test:8080?secret-query-param=confidential\n"))
 		default:
 			writer.Header().Set("Content-Type", "application/json")
 			_, _ = writer.Write([]byte(`{}`))

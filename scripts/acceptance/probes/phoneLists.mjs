@@ -48,7 +48,7 @@ const SURFACES = [
       ],
       [
         (url) => url.pathname.endsWith('/management/config'),
-        () => ({ scalars: {}, supported_keys: [], revision: 'fixture-r1', safe_yaml: 'api-keys:\n  - omc-fixture-key-aaaaaaaaaaaaaaaa\n  - omc-fixture-key-bbbbbbbbbbbbbbbb\n' }),
+        () => ({ scalars: {}, supported_keys: [], revision: 'fixture-r1', safe_yaml: 'access:\n  api-keys:\n    - omc-fixture-key-aaaaaaaaaaaaaaaa\n    - omc-fixture-key-bbbbbbbbbbbbbbbb\n' }),
       ],
     ],
   },

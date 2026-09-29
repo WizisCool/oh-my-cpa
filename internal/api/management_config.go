@@ -1,7 +1,7 @@
 package api
 
 import (
-	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -21,6 +21,10 @@ type configSourcePutRequest struct {
 	Revision string `json:"revision,omitempty"`
 }
 
+// managementConfigGet serves the configuration editor: CPA's v8 view of the
+// stored file with secrets masked, the revision every save is checked against,
+// and whether the stored file is still in the pre-v8 layout (its first save
+// converts it, after a backup).
 func (h *Handler) managementConfigGet(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	client, ok := h.managementClientOrError(writer, request)
@@ -33,15 +37,21 @@ func (h *Handler) managementConfigGet(writer http.ResponseWriter, request *http.
 		writeCPAFacadeError(writer, err)
 		return
 	}
-
-	rawYAML, err := client.ConfigYAML(request.Context())
+	viewYAML, err := client.ConfigYAML(request.Context())
 	if err != nil {
 		writeCPAFacadeError(writer, err)
 		return
 	}
+	storedLayout := storedConfigLayoutUnknown
+	if isV8, _, err := client.IsStoredConfigV8(request.Context()); err == nil {
+		storedLayout = storedConfigLayoutLegacy
+		if isV8 {
+			storedLayout = storedConfigLayoutV8
+		}
+	}
 
-	rev := configyaml.ComputeRevision(rawYAML)
-	safeYAML, err := configyaml.SanitizeSafeYAML(rawYAML)
+	rev := configyaml.ComputeRevision(viewYAML)
+	safeYAML, err := configyaml.SanitizeSafeYAML(viewYAML)
 	if err != nil {
 		safeYAML = ""
 	}
@@ -52,53 +62,164 @@ func (h *Handler) managementConfigGet(writer http.ResponseWriter, request *http.
 		"supported_keys": management.KnownScalarKeys(),
 		"revision":       rev,
 		"safe_yaml":      safeYAML,
-		"layout":         buildConfigLayoutDTO(request.Context(), client, rawYAML),
+		"stored_layout":  storedLayout,
 	})
 }
 
-// configLayoutDTO tells the editor where each setting lives in this document.
+// The layout of the stored file, which only decides whether the next save
+// converts it. Every read and write of the editor is in the v8 layout either way.
+const (
+	storedConfigLayoutV8      = "v8"
+	storedConfigLayoutLegacy  = "legacy"
+	storedConfigLayoutUnknown = "unknown"
+)
+
+type configPatchRequest struct {
+	Revision string                    `json:"revision"`
+	Changes  []management.ConfigChange `json:"changes"`
+}
+
+// MAX_CONFIG_CHANGES bounds one save. The editor sends one change per edited
+// setting, so a larger set is not something it produces.
+const MAX_CONFIG_CHANGES = 256
+
+// managementConfigPatch saves only the settings the operator changed.
 //
-// Placement follows the document, not the gateway: a legacy file keeps its
-// spelling on either generation (CPA v8 reads it unchanged), while a v8 or mixed
-// file is only meaningful to a v8 gateway and must be edited at v8 locations. The
-// management API generation is reported alongside as the capability bit; it
-// decides whether the save guard applies. Rules are the same table the guard
-// checks, so the browser never carries a second copy of it.
-type configLayoutDTO struct {
-	ManagementAPI     string                  `json:"management_api"`
-	Layout            configyaml.ConfigLayout `json:"layout"`
-	HasProviderGroups bool                    `json:"has_provider_groups"`
-	Rules             []configyaml.LayoutRule `json:"rules"`
-}
+// The revision check and the write happen under the provider write gate, for
+// the same reason as a whole-document save: a check alone cannot see a write
+// landing between it and the request to CPA. Masked secrets inside a submitted
+// value are put back from the stored document, the same way a whole-document
+// save restores them.
+func (h *Handler) managementConfigPatch(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
 
-func buildConfigLayoutDTO(ctx context.Context, client *management.Client, rawYAML string) configLayoutDTO {
-	dto := configLayoutDTO{ManagementAPI: managementAPIUnknown, Layout: configyaml.LayoutLegacy, Rules: configyaml.LayoutRules()}
-	if hasV8, err := client.SupportsManagementV8(ctx); err == nil {
-		dto.ManagementAPI = string(management.APIGenerationV0)
-		if hasV8 {
-			dto.ManagementAPI = string(management.APIGenerationV8)
+	var req configPatchRequest
+	if err := decodeManagementJSON(writer, request, 2*1024*1024, &req); err != nil {
+		return
+	}
+	defer request.Body.Close()
+	if len(req.Changes) == 0 {
+		writeJSON(writer, http.StatusBadRequest, map[string]any{"error": "no configuration changes to save", "code": "config_no_changes"})
+		return
+	}
+	if len(req.Changes) > MAX_CONFIG_CHANGES {
+		writeError(writer, http.StatusBadRequest, "too many configuration changes in one save")
+		return
+	}
+	expectedRev := requestedConfigRevision(request, req.Revision)
+	if expectedRev == "" {
+		writeMissingRevision(writer)
+		return
+	}
+
+	client, ok := h.managementClientOrError(writer, request)
+	if !ok {
+		return
+	}
+	if err := h.providerWrites.acquire(request.Context()); err != nil {
+		writeProviderWriteError(writer, err)
+		return
+	}
+	defer h.providerWrites.release()
+	h.configMu.Lock()
+	defer h.configMu.Unlock()
+
+	currentYAML, ok := h.currentConfigAtRevision(writer, request, client, expectedRev)
+	if !ok {
+		return
+	}
+	paths := make([]string, 0, len(req.Changes))
+	for index, change := range req.Changes {
+		paths = append(paths, strings.Join(change.Path, "."))
+		if change.Remove {
+			continue
 		}
+		restored, err := configyaml.RestoreSentinelsAt(change.Value, change.Path, currentYAML)
+		if err != nil {
+			writeJSON(writer, http.StatusBadRequest, map[string]any{"error": "failed to process configuration sentinels: " + err.Error(), "code": "config_sentinel_unrestorable"})
+			return
+		}
+		req.Changes[index].Value = restored
 	}
-	if report, err := configyaml.DetectLayout(rawYAML); err == nil {
-		dto.Layout = report.Layout
-		dto.HasProviderGroups = report.HasProviderGroups
+
+	if auditErr := h.recordAudit(request, "config.save_changes", "config", "config_changes", "attempt", map[string]any{"revision": expectedRev, "paths": paths}); auditErr != nil {
+		writeError(writer, http.StatusInternalServerError, "audit log failure; config save aborted")
+		return
 	}
-	return dto
+	if err := client.ApplyConfigChanges(request.Context(), req.Changes); err != nil {
+		_ = h.recordAudit(request, "config.save_changes", "config", "config_changes", "failure", map[string]any{"error": publicCPAErrorMessage(err), "paths": paths})
+		if errors.Is(err, management.ErrInvalidConfigChange) {
+			writeJSON(writer, http.StatusBadRequest, map[string]any{"error": err.Error(), "code": "config_invalid_change"})
+			return
+		}
+		writeCPAFacadeError(writer, err)
+		return
+	}
+	h.afterConfigWrite()
+	// The write landed. CPA renders what it stored in its own layout, so the
+	// editor's next baseline is read back rather than assumed; when that read
+	// fails the answer carries no baseline and the editor reloads instead.
+	response := map[string]any{"status": "ok"}
+	auditDetail := map[string]any{"paths": paths}
+	if savedYAML, err := client.ConfigYAML(request.Context()); err == nil {
+		newRev := configyaml.ComputeRevision(savedYAML)
+		safeYAML, _ := configyaml.SanitizeSafeYAML(savedYAML)
+		response["revision"] = newRev
+		response["safe_yaml"] = safeYAML
+		auditDetail["revision"] = newRev
+		writer.Header().Set("ETag", fmt.Sprintf("%q", newRev))
+	}
+	if auditErr := h.recordAudit(request, "config.save_changes", "config", "config_changes", "success", auditDetail); auditErr != nil {
+		writeError(writer, http.StatusInternalServerError, "audit log failure; operation aborted")
+		return
+	}
+	writeJSON(writer, http.StatusOK, response)
 }
 
-// managementAPIUnknown reports a probe that got no definite answer.
-const managementAPIUnknown = "unknown"
+// requestedConfigRevision reads the revision a save was prepared against.
+func requestedConfigRevision(request *http.Request, bodyRevision string) string {
+	expected := strings.Trim(strings.TrimSpace(request.Header.Get("If-Match")), `"`)
+	if expected == "" {
+		expected = strings.Trim(strings.TrimSpace(bodyRevision), `"`)
+	}
+	return expected
+}
 
-// checkConfigLayout refuses a document CPA v8 would accept and then partly
-// ignore: every gateway the console talks to is a v8 one.
-func checkConfigLayout(storedYAML, submittedYAML string) (code string, shadowed []configyaml.LayoutRule) {
-	if replaced, err := configyaml.ReplacesProviderGroups(storedYAML, submittedYAML); err == nil && replaced {
-		return "config_provider_groups_replaced", []configyaml.LayoutRule{}
+func writeMissingRevision(writer http.ResponseWriter) {
+	writeJSON(writer, http.StatusBadRequest, map[string]any{
+		"error": "config revision or If-Match header is required for conflict protection",
+		"code":  "missing_revision",
+	})
+}
+
+// currentConfigAtRevision reads the v8 view a save is based on and refuses the
+// save when it is no longer the revision the operator edited.
+func (h *Handler) currentConfigAtRevision(writer http.ResponseWriter, request *http.Request, client *management.Client, expectedRev string) (string, bool) {
+	currentYAML, err := client.ConfigYAML(request.Context())
+	if err != nil {
+		writeCPAFacadeError(writer, err)
+		return "", false
 	}
-	if shadowed, err := configyaml.ShadowedLegacyPaths(submittedYAML); err == nil && len(shadowed) > 0 {
-		return "config_legacy_keys_shadowed", shadowed
+	currentRev := configyaml.ComputeRevision(currentYAML)
+	if !strings.EqualFold(expectedRev, currentRev) {
+		writeJSON(writer, http.StatusConflict, map[string]any{
+			"error":            "configuration has been modified by another session",
+			"code":             "config_conflict",
+			"current_revision": currentRev,
+		})
+		return "", false
 	}
-	return "", []configyaml.LayoutRule{}
+	return currentYAML, true
+}
+
+// afterConfigWrite drops what a configuration write may have made stale.
+func (h *Handler) afterConfigWrite() {
+	if h.pricing != nil {
+		h.pricing.NotifyModelsChanged()
+	}
+	// The saved document may have re-keyed a provider, so the masks resolved from
+	// the credential lists it contains are no longer known to be current.
+	h.providerKeyMasks.invalidate()
 }
 
 func (h *Handler) managementConfigPutScalar(writer http.ResponseWriter, request *http.Request) {
@@ -158,7 +279,8 @@ func validateScalarValue(key string, value any) (any, error) {
 	return operations.ValidateScalarValue(key, value)
 }
 
-// managementConfigSourceGet returns the raw config.yaml.
+// managementConfigSourceGet returns CPA's v8 view of config.yaml, secrets
+// included.
 //
 // There is no step-up authentication here, and that is deliberate. This used to
 // require a short-lived grant obtained by re-entering the CPA management key,
@@ -202,6 +324,10 @@ func (h *Handler) managementConfigSourceGet(writer http.ResponseWriter, request 
 	})
 }
 
+// managementConfigSourcePut replaces the whole document from source mode. CPA
+// validates it as a v8 document and refuses legacy field names itself, so a
+// document it accepts is fully effective. The answer carries CPA's rendering of
+// what it stored, which is the text the next save is compared against.
 func (h *Handler) managementConfigSourcePut(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 
@@ -226,15 +352,9 @@ func (h *Handler) managementConfigSourcePut(writer http.ResponseWriter, request 
 		return
 	}
 
-	expectedRev := strings.Trim(strings.TrimSpace(request.Header.Get("If-Match")), `"`)
+	expectedRev := requestedConfigRevision(request, req.Revision)
 	if expectedRev == "" {
-		expectedRev = strings.Trim(strings.TrimSpace(req.Revision), `"`)
-	}
-	if expectedRev == "" {
-		writeJSON(writer, http.StatusBadRequest, map[string]any{
-			"error": "config revision or If-Match header is required for conflict protection",
-			"code":  "missing_revision",
-		})
+		writeMissingRevision(writer)
 		return
 	}
 
@@ -259,18 +379,8 @@ func (h *Handler) managementConfigSourcePut(writer http.ResponseWriter, request 
 	h.configMu.Lock()
 	defer h.configMu.Unlock()
 
-	currentYAML, err := client.ConfigYAML(request.Context())
-	if err != nil {
-		writeCPAFacadeError(writer, err)
-		return
-	}
-	currentRev := configyaml.ComputeRevision(currentYAML)
-	if !strings.EqualFold(expectedRev, currentRev) {
-		writeJSON(writer, http.StatusConflict, map[string]any{
-			"error":            "configuration has been modified by another session",
-			"code":             "config_conflict",
-			"current_revision": currentRev,
-		})
+	currentYAML, ok := h.currentConfigAtRevision(writer, request, client, expectedRev)
+	if !ok {
 		return
 	}
 
@@ -280,41 +390,30 @@ func (h *Handler) managementConfigSourcePut(writer http.ResponseWriter, request 
 		return
 	}
 
-	if code, shadowed := checkConfigLayout(currentYAML, finalYAML); code != "" {
-		writeJSON(writer, http.StatusUnprocessableEntity, map[string]any{
-			"error":    "CPA v8 would ignore part of this configuration",
-			"code":     code,
-			"shadowed": shadowed,
-		})
-		return
-	}
-
 	if auditErr := h.recordAudit(request, "config.save_source", "config", "config_source_yaml", "attempt", map[string]any{"revision": expectedRev, "size_bytes": len(finalYAML)}); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit log failure; config save aborted")
 		return
 	}
 	if err := client.UpdateConfigYAML(request.Context(), finalYAML); err != nil {
-		_ = h.recordAudit(request, "config.save_source", "config", "config_source_yaml", "failure", map[string]any{"error": err.Error()})
+		_ = h.recordAudit(request, "config.save_source", "config", "config_source_yaml", "failure", map[string]any{"error": publicCPAErrorMessage(err)})
 		writeCPAFacadeError(writer, err)
 		return
 	}
 
-	if h.pricing != nil {
-		h.pricing.NotifyModelsChanged()
+	h.afterConfigWrite()
+	response := map[string]any{"status": "ok"}
+	auditDetail := map[string]any{"size_bytes": len(finalYAML)}
+	if savedYAML, err := client.ConfigYAML(request.Context()); err == nil {
+		newRev := configyaml.ComputeRevision(savedYAML)
+		response["revision"] = newRev
+		response["yaml"] = savedYAML
+		response["size_bytes"] = len(savedYAML)
+		auditDetail["revision"] = newRev
+		writer.Header().Set("ETag", fmt.Sprintf("%q", newRev))
 	}
-	// The saved document may have re-keyed a provider, so the masks resolved from
-	// the credential lists it contains are no longer known to be current.
-	h.providerKeyMasks.invalidate()
-	newRev := configyaml.ComputeRevision(finalYAML)
-	if auditErr := h.recordAudit(request, "config.save_source", "config", "config_source_yaml", "success", map[string]any{"revision": newRev, "size_bytes": len(finalYAML)}); auditErr != nil {
+	if auditErr := h.recordAudit(request, "config.save_source", "config", "config_source_yaml", "success", auditDetail); auditErr != nil {
 		writeError(writer, http.StatusInternalServerError, "audit log failure; operation aborted")
 		return
 	}
-
-	writer.Header().Set("ETag", fmt.Sprintf("%q", newRev))
-	writeJSON(writer, http.StatusOK, map[string]any{
-		"status":     "ok",
-		"size_bytes": len(finalYAML),
-		"revision":   newRev,
-	})
+	writeJSON(writer, http.StatusOK, response)
 }

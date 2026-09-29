@@ -31,6 +31,7 @@ type pluginMockState struct {
 	configs       map[string]map[string]any
 	configYAML    string
 	configPuts    int
+	configWrites  []string
 	deleteBlocked bool
 }
 
@@ -62,12 +63,13 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 		switch {
 		case path == "/v8/management/plugins" && request.Method == http.MethodGet:
 			_, _ = writer.Write([]byte(`{"plugins_enabled":true,"plugins_dir":"/srv/cpa/plugins","plugins":[{"id":"logger","path":"/srv/cpa/plugins/logger.so","configured":true,"registered":true,"enabled":true,"effective_enabled":true,"supports_oauth":true,"oauth_provider":"logger-oauth","supports_quota":false,"logo":"https://example.com/logo.png","config_fields":[{"name":"level","type":"enum","enum_values":["debug","info"],"description":"Log level"},{"name":"level","type":"string"}],"menus":[{"path":"/x","menu":"X","description":""}],"metadata":{"name":"Logger","version":"1.0.0","author":"cpa-official","github_repository":"router-for-me/logger-plugin","logo":"https://example.com/logo.png","config_fields":[]}}]}`))
-		case path == "/v0/management/config.yaml" && request.Method == http.MethodGet:
+		case path == "/v8/management/config.yaml" && request.Method == http.MethodGet:
 			writer.Header().Set("Content-Type", "application/yaml")
 			_, _ = writer.Write([]byte(state.configYAML))
-		case path == "/v0/management/config.yaml" && request.Method == http.MethodPut:
+		case strings.HasPrefix(path, "/v8/management/config") && request.Method != http.MethodGet:
 			body, _ := io.ReadAll(request.Body)
-			state.configYAML = string(body)
+			state.configWrites = append(state.configWrites, request.Method+" "+path+" "+string(body))
+			state.configYAML += "# written\n"
 			state.configPuts++
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 		case strings.HasPrefix(path, "/v0/management/plugins/") && strings.HasSuffix(path, "/enabled") && request.Method == http.MethodPatch:
@@ -396,23 +398,14 @@ func TestPluginSettingsRoundTrip(t *testing.T) {
 	}
 
 	state.mu.Lock()
-	written := state.configYAML
+	writes := append([]string(nil), state.configWrites...)
 	state.mu.Unlock()
-	for _, want := range []string{
-		"enabled: true # flipped from the console",
-		"- https://plugins.example/registry.json",
-		"token-env: PLUGIN_TOKEN",
-		"- artifact",
-		"level: info",
-		"# gateway",
-	} {
-		if !strings.Contains(written, want) {
-			t.Errorf("written config lacks %q:\n%s", want, written)
-		}
-	}
-	// Only the variable the rule's type reads is written.
-	if strings.Contains(written, "STALE") || strings.Count(written, "registry.json") != 1 {
-		t.Errorf("written config kept a stale or duplicate value:\n%s", written)
+	// One PATCH of the three keys the page owns: `dir` and `configs` are never
+	// written, only the variable the rule's type reads is sent, and the source
+	// list is de-duplicated.
+	want := `PATCH /v8/management/config {"plugins":{"enabled":true,"store-auth":[{"apply-to":["registry","artifact"],"match":"https://plugins.example/","token-env":"PLUGIN_TOKEN","type":"bearer"}],"store-sources":["https://plugins.example/registry.json"]}}`
+	if len(writes) != 1 || writes[0] != want {
+		t.Fatalf("writes = %q\nwant %q", writes, want)
 	}
 
 	// The stale revision is now refused rather than overwriting the save above.

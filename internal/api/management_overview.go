@@ -147,7 +147,7 @@ func (h *Handler) managementOverview(writer http.ResponseWriter, request *http.R
 	group.Add(3)
 	go func() {
 		defer group.Done()
-		rawConfig, configMeta, configErr = client.Config(ctx)
+		rawConfig, configMeta, configErr = client.ConfigView(ctx)
 	}()
 	go func() {
 		defer group.Done()
@@ -272,23 +272,27 @@ func safeBuildDateHeader(headers http.Header) string {
 	return ""
 }
 
-func countConfiguredKeys(raw map[string]any) (managementKeys, providerKeys int) {
-	managementKeys = arrayLength(raw["api-keys"])
-	for _, section := range []string{
-		"gemini-api-key",
-		"interactions-api-key",
-		"codex-api-key",
-		"xai-api-key",
-		"claude-api-key",
-		"vertex-api-key",
-		"meta-api-key",
-	} {
-		providerKeys += arrayLength(raw[section])
+// countConfiguredKeys counts client keys and upstream credentials in the v8
+// view: client keys under `access.api-keys`, and one credential per key of each
+// `api-keys.<family>` group.
+func countConfiguredKeys(view map[string]any) (managementKeys, providerKeys int) {
+	clientKeys, _ := management.ValueAt(view, management.CLIENT_KEYS_PATH)
+	managementKeys = arrayLength(clientKeys)
+	families, _ := view["api-keys"].(map[string]any)
+	for family, groups := range families {
+		groupList, _ := groups.([]any)
+		// CPAMC presents each openai-compatibility group as one provider. Its
+		// keys are credentials within that provider, not another provider row
+		// in the top-level count.
+		if family == "openai-compatibility" {
+			providerKeys += len(groupList)
+			continue
+		}
+		for _, group := range groupList {
+			entry, _ := group.(map[string]any)
+			providerKeys += arrayLength(entry["keys"])
+		}
 	}
-	// CPAMC presents each openai-compatibility object as one provider. Its
-	// nested API-key entries are credentials within that provider, not another
-	// provider row in the top-level count.
-	providerKeys += arrayLength(raw["openai-compatibility"])
 	return managementKeys, providerKeys
 }
 

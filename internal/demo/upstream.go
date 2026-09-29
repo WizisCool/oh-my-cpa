@@ -365,6 +365,12 @@ func (u *Upstream) serve(writer http.ResponseWriter, request *http.Request) {
 	switch {
 	case request.Method == http.MethodGet && path == "/config/config-version":
 		writeFixtureJSON(writer, http.StatusOK, 8)
+	case request.Method == http.MethodGet && path == "/config":
+		writeFixtureJSON(writer, http.StatusOK, u.fixture.config)
+	case request.Method == http.MethodGet && path == "/config.yaml":
+		writer.Header().Set("Content-Type", "application/yaml")
+		writer.WriteHeader(http.StatusOK)
+		_, _ = writer.Write([]byte(u.fixture.configYAML))
 	case request.Method == http.MethodGet && path == "/credentials":
 		writeFixtureJSON(writer, http.StatusOK, map[string]any{"files": u.fixture.files})
 	case request.Method == http.MethodGet && path == "/credentials/models":
@@ -402,14 +408,11 @@ func (u *Upstream) serveLegacy(writer http.ResponseWriter, request *http.Request
 		writeFixtureJSON(writer, http.StatusOK, map[string]any{"oauth-model-alias": u.fixture.aliases})
 	case request.Method == http.MethodGet && path == "/oauth-excluded-models":
 		writeFixtureJSON(writer, http.StatusOK, map[string]any{"oauth-excluded-models": u.fixture.excluded})
-	case request.Method == http.MethodGet && path == "/config":
-		writeFixtureJSON(writer, http.StatusOK, u.fixture.config)
 	case request.Method == http.MethodGet && path == "/config.yaml":
+		// The stored file, which the demo keeps in the v8 layout already.
 		writer.Header().Set("Content-Type", "application/yaml")
 		writer.WriteHeader(http.StatusOK)
 		_, _ = writer.Write([]byte(u.fixture.configYAML))
-	case request.Method == http.MethodGet && path == "/api-keys":
-		writeFixtureJSON(writer, http.StatusOK, map[string]any{"api-keys": gatewayKeyValues()})
 	case request.Method == http.MethodGet && path == "/openai-compatibility":
 		writeFixtureJSON(writer, http.StatusOK, map[string]any{"openai-compatibility": compatibilitySection()})
 	case request.Method == http.MethodGet && isFamilyEndpoint(path):
@@ -633,35 +636,12 @@ func randomKey() (string, error) {
 	return hex.EncodeToString(material), nil
 }
 
-// renderConfigYAML serialises the configuration document the way the config page
-// edits it. Only the value shapes the fixture uses are supported, and an
-// unsupported shape is rendered as its JSON form rather than silently dropped.
+// renderConfigYAML serialises the configuration document the way CPA's v8
+// view renders it, and the demo stores it the same way.
 func renderConfigYAML(document map[string]any) string {
-	var builder strings.Builder
-	builder.WriteString("# CLIProxyAPI configuration\n")
-	for _, key := range []string{
-		"host", "port", "debug", "logging-to-file", "request-log", "usage-statistics-enabled",
-		"request-retry", "max-retry-interval", "max-retry-credentials", "ws-auth",
-		"force-model-prefix", "logs-max-total-size-mb", "error-logs-max-files",
-	} {
-		value, ok := document[key]
-		if !ok {
-			continue
-		}
-		builder.WriteString(fmt.Sprintf("%s: %v\n", key, value))
+	encoded, err := yaml.Marshal(document)
+	if err != nil {
+		return "# CLIProxyAPI configuration\n"
 	}
-	keys := gatewayKeyValues()
-	builder.WriteString("api-keys:\n")
-	for _, key := range keys {
-		builder.WriteString("  - " + key + "\n")
-	}
-	// The plugin section is rendered whole: the plugin page reads its switch, store
-	// sources and authentication rules from this document, and each plugin's settings
-	// sit under it as CPA keeps them.
-	if plugins, ok := document["plugins"]; ok {
-		if encoded, err := yaml.Marshal(map[string]any{"plugins": plugins}); err == nil {
-			builder.Write(encoded)
-		}
-	}
-	return builder.String()
+	return "# CLIProxyAPI configuration\n" + string(encoded)
 }

@@ -14,32 +14,55 @@ export interface ConfigScalars {
   usage_statistics_enabled: boolean;
 }
 
-/** One CPA v8 relocation: a legacy dotted path and its v8 dotted path. */
-export interface ConfigLayoutRule {
-  legacy: string;
-  current: string;
-  /** 'sequence' when the legacy spelling only counts as a list (root api-keys). */
-  legacy_kind?: string;
-}
-
-export interface ConfigLayoutInfo {
-  /** The gateway's Management API: 'v8' also serves v0; 'unknown' when the probe got no answer. */
-  management_api: 'v8' | 'v0' | 'unknown';
-  layout: 'legacy' | 'v8' | 'mixed';
-  has_provider_groups: boolean;
-  rules: ConfigLayoutRule[];
-}
+/**
+ * Whether the gateway's stored file is still in the pre-v8 layout. The editor
+ * always reads and writes the v8 layout; a legacy file is converted by CPA on
+ * the first save, after Oh My CPA keeps an encrypted copy of it.
+ */
+export type StoredConfigLayout = 'v8' | 'legacy' | 'unknown';
 
 export interface ConfigScalarsResponse {
   scalars: ConfigScalars;
   supported_keys: string[];
   revision: string;
   safe_yaml?: string;
-  layout?: ConfigLayoutInfo;
+  stored_layout?: StoredConfigLayout;
 }
 
 export interface ConfigSourceResponse {
   yaml: string;
   size_bytes: number;
   revision: string;
+}
+
+/**
+ * One edited setting, addressed by its v8 path. `remove` deletes the setting so
+ * CPA falls back to its default; otherwise `value` replaces it.
+ */
+export interface ConfigChange {
+  path: string[];
+  value?: unknown;
+  remove?: boolean;
+}
+
+/** The answer to a save: the new baseline, absent when CPA could not be re-read. */
+export interface ConfigPatchResponse {
+  status: string;
+  revision?: string;
+  safe_yaml?: string;
+}
+
+export interface ConfigSourceSaveResponse {
+  status: string;
+  revision?: string;
+  yaml?: string;
+  size_bytes?: number;
+}
+
+/** A copy of a pre-v8 file, kept before the save that converted it. */
+export interface ConfigBackup {
+  id: number;
+  created_at_ms: number;
+  revision: string;
+  size_bytes: number;
 }

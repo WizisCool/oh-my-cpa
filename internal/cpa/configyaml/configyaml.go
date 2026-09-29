@@ -425,7 +425,10 @@ func isSensitivePath(path []string) bool {
 		"tls.key":
 		return true
 	default:
-		return strings.HasSuffix(joined, ".secret-key") || strings.HasSuffix(joined, ".key")
+		// `api-key` is an upstream provider credential wherever it appears (under
+		// each `api-keys.<family>` entry in v8). The caller keys at
+		// `access.api-keys` stay readable: the key page lists and reveals them.
+		return strings.HasSuffix(joined, ".secret-key") || strings.HasSuffix(joined, ".key") || strings.HasSuffix(joined, ".api-key")
 	}
 }
 
@@ -456,4 +459,10 @@ func sanitizeProxyURL(raw string) string {
 		raw = raw[:separator]
 	}
 	return raw
+}
+
+// SanitizeProxyURL removes a proxy URL's credentials, query and fragment: the
+// form every browser-facing projection of a proxy setting uses.
+func SanitizeProxyURL(raw string) string {
+	return sanitizeProxyURL(raw)
 }

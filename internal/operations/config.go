@@ -3,7 +3,9 @@ package operations
 import (
 	"context"
 	"errors"
+
 	"github.com/oh-my-cpa/oh-my-cpa/internal/capability"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/management"
 )
 
 var AGENT_CONFIG_KEYS = map[string]bool{"request_retry": true, "max_retry_interval": true, "max_retry_credentials": true, "routing_strategy": true, "force_model_prefix": true}
@@ -49,7 +51,7 @@ func (s *Service) SetScalar(ctx context.Context, key string, value any, revision
 		}
 	}
 	if err = client.UpdateConfigScalar(ctx, key, validated); err != nil {
-		return errors.New("operation_outcome_unknown")
+		return configWriteOutcome(err)
 	}
 	if s.Notify != nil {
 		s.Notify()
@@ -82,4 +84,17 @@ func (s *Service) registerConfig(registry *capability.Registry) error {
 		err := s.SetScalar(ctx, input.Key, input.Value, revision)
 		return Done{err == nil}, err
 	})
+}
+
+// configWriteOutcome reports a failed configuration write. A write CPA refused,
+// or one refused before anything was sent, is known not to have changed the
+// file, so it keeps its own error; anything else may have landed.
+func configWriteOutcome(err error) error {
+	if errors.Is(err, management.ErrConfigBackupUnavailable) || errors.Is(err, management.ErrManagementV8Required) {
+		return err
+	}
+	if _, rejected := management.IsConfigRejected(err); rejected {
+		return err
+	}
+	return errors.New("operation_outcome_unknown")
 }

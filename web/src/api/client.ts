@@ -23,7 +23,14 @@ import { DashboardTokenHeatmap } from '../types/tokenHeatmap';
 import { DashboardModelsResponse } from '../types/dashboardModels';
 import { ErrorLogFile, type ServiceLogPage } from '../types/logs';
 import { AUDIT_PAGE_SIZE, auditSearchParams, type AuditBucket, type AuditEvent, type AuditFilters, type AuditPage } from '../types/audit';
-import { ConfigScalarsResponse, ConfigSourceResponse } from '../types/configManagement';
+import {
+  ConfigBackup,
+  ConfigChange,
+  ConfigPatchResponse,
+  ConfigScalarsResponse,
+  ConfigSourceResponse,
+  ConfigSourceSaveResponse,
+} from '../types/configManagement';
 import { ClientAPIKeyItem, ClientKeyUsageItem, ProviderItem, SaveProviderPayload } from '../types/providers';
 import { GatewayModelItem } from '../types/gatewayModels';
 import { OAuthProviderItem, StartOAuthResponse, OAuthStatusResponse, OAuthCallbackResponse, OAuthCancelResponse } from '../types/oauth';
@@ -464,16 +471,38 @@ export const api = {
     return request<ConfigSourceResponse>('/management/config/source', { method: 'GET' });
   },
 
-  async updateConfigSource(yaml: string, revision?: string): Promise<{ status: string; size_bytes: number; revision: string }> {
+  async updateConfigSource(yaml: string, revision?: string): Promise<ConfigSourceSaveResponse> {
     const headers: Record<string, string> = {};
     if (revision) {
       headers['If-Match'] = revision;
     }
-    return request<{ status: string; size_bytes: number; revision: string }>('/management/config/source', {
+    return request<ConfigSourceSaveResponse>('/management/config/source', {
       method: 'PUT',
       headers,
       body: JSON.stringify({ yaml, revision }),
     });
+  },
+
+  /**
+   * patchConfig saves only the settings that changed, against the revision they
+   * were edited from. CPA writes each one in place, so a concurrent edit of an
+   * unrelated setting is not overwritten; the revision still refuses a save
+   * prepared against a document that has moved.
+   */
+  async patchConfig(changes: ConfigChange[], revision: string): Promise<ConfigPatchResponse> {
+    return request<ConfigPatchResponse>('/management/config', {
+      method: 'PATCH',
+      headers: { 'If-Match': revision },
+      body: JSON.stringify({ changes, revision }),
+    });
+  },
+
+  async listConfigBackups(): Promise<{ backups: ConfigBackup[] }> {
+    return request<{ backups: ConfigBackup[] }>('/management/config/backups', { method: 'GET' });
+  },
+
+  async getConfigBackup(id: number): Promise<{ backup: ConfigBackup; yaml: string }> {
+    return request<{ backup: ConfigBackup; yaml: string }>(`/management/config/backups/${id}`, { method: 'GET' });
   },
 
   /**

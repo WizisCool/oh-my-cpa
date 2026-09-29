@@ -34,6 +34,9 @@ func writeCPAFacadeError(writer http.ResponseWriter, err error) {
 	status := http.StatusBadGateway
 	code := "cpa_unavailable"
 	message := "CPA management request failed"
+	// reason is CPA's own sentence for a rejected configuration, carried apart
+	// from the message so the console can frame it in the reader's language.
+	reason := ""
 	var httpErr *management.HTTPError
 	if errors.Is(err, management.ErrManagementV8Required) {
 		status = http.StatusBadGateway
@@ -43,6 +46,16 @@ func writeCPAFacadeError(writer http.ResponseWriter, err error) {
 		status = http.StatusBadGateway
 		code = "cpa_management_disabled"
 		message = "CPA does not serve its Management API; set remote-management.secret-key in the CPA configuration"
+	} else if errors.Is(err, management.ErrConfigBackupUnavailable) {
+		// Nothing was sent to CPA: the file is unchanged.
+		status = http.StatusServiceUnavailable
+		code = "config_backup_failed"
+		message = "the CPA configuration file could not be backed up before converting it to the v8 layout; nothing was changed"
+	} else if cpaReason, rejected := management.IsConfigRejected(err); rejected {
+		status = http.StatusUnprocessableEntity
+		code = "config_rejected"
+		message = "CPA rejected the configuration: " + cpaReason
+		reason = cpaReason
 	} else if errors.As(err, &httpErr) {
 		switch httpErr.StatusCode {
 		case http.StatusNotFound, http.StatusMethodNotAllowed:
@@ -67,7 +80,11 @@ func writeCPAFacadeError(writer http.ResponseWriter, err error) {
 			}
 		}
 	}
-	writeJSON(writer, status, map[string]string{"error": message, "code": code})
+	body := map[string]string{"error": message, "code": code}
+	if reason != "" {
+		body["reason"] = reason
+	}
+	writeJSON(writer, status, body)
 }
 
 func publicCPAErrorMessage(err error) string {
@@ -76,6 +93,12 @@ func publicCPAErrorMessage(err error) string {
 	}
 	if errors.Is(err, management.ErrManagementDisabled) {
 		return "CPA does not serve its Management API"
+	}
+	if errors.Is(err, management.ErrConfigBackupUnavailable) {
+		return "the CPA configuration file could not be backed up before converting it"
+	}
+	if _, rejected := management.IsConfigRejected(err); rejected {
+		return "CPA rejected the configuration"
 	}
 	var httpErr *management.HTTPError
 	if errors.As(err, &httpErr) {

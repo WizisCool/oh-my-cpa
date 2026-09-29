@@ -22,16 +22,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseDocument } from 'yaml';
 import type { Document } from 'yaml';
 import dayjs from 'dayjs';
-import { api, ApiError, apiErrorCode, describeError } from '../api/client';
+import { api, ApiError, describeError } from '../api/client';
 import { useT } from '../i18n';
 import { isDemoMode } from '../types/demoMode';
 import { useOverlayHistory } from '../hooks/useOverlayHistory';
 import { copyText } from '../utils/clipboard';
 import { ApiKeysList, type ApiKeyRecord } from '../components/keys/ApiKeysList';
 import { updateFieldWithBaseline, getFieldSemanticValue } from '../components/config/configDirty';
-import { describeLayoutRefusal, resolveConfigFields } from '../components/config/configLayout';
+import { computeConfigChanges } from '../components/config/configPatch';
+import { describeConfigSaveError } from '../components/config/configSaveErrors';
 import { ALL_CONFIG_FIELDS } from '../types/configSchema';
-import type { ConfigScalarsResponse } from '../types/configManagement';
+import type { ConfigChange, ConfigScalarsResponse } from '../types/configManagement';
 import type { ClientKeyUsageItem } from '../types/providers';
 import { PageHeader } from '../components/common/PageHeader';
 import { RefreshButton } from '../components/common/RefreshButton';
@@ -113,13 +114,7 @@ export const ApiKeysPage: React.FC = () => {
   const [isKeyVisible, setIsKeyVisible] = React.useState(false);
   const [isSavingEditor, setIsSavingEditor] = React.useState(false);
 
-  // Client keys live at access.api-keys in a v8 document, where the root api-keys
-  // key holds the upstream provider groups instead; configLayout places the field.
-  const layout = configQuery.data?.layout;
-  const apiKeysField = React.useMemo(
-    () => resolveConfigFields(ALL_CONFIG_FIELDS, layout).find((field) => field.id === 'apiKeys'),
-    [layout],
-  );
+  const apiKeysField = React.useMemo(() => ALL_CONFIG_FIELDS.find((field) => field.id === 'apiKeys'), []);
 
   const serverYaml = configQuery.data?.safe_yaml ?? '';
   const serverRevision = configQuery.data?.revision ?? '';
@@ -175,9 +170,9 @@ export const ApiKeysPage: React.FC = () => {
   }, [message, t]);
 
   const saveMutation = useMutation({
-    mutationFn: ({ yamlToSave, revision }: { yamlToSave: string; revision: string }) => {
+    mutationFn: ({ changes, revision }: { changes: ConfigChange[]; revision: string }) => {
       setSaveError(null);
-      return api.updateConfigSource(yamlToSave, revision);
+      return api.patchConfig(changes, revision);
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['management-config'] });
@@ -193,9 +188,7 @@ export const ApiKeysPage: React.FC = () => {
         void configQuery.refetch();
         return;
       }
-      const msg =
-        describeLayoutRefusal(apiErrorCode(err), err instanceof ApiError ? err.data : null, t) ??
-        describeError(err);
+      const msg = describeConfigSaveError(err, t);
       setSaveError(msg);
       message.error(msg);
     },
@@ -224,10 +217,16 @@ export const ApiKeysPage: React.FC = () => {
         return 'failed';
       }
       updateFieldWithBaseline(draft, serverDoc, apiKeysField, next);
-      try {
-        await saveMutation.mutateAsync({ yamlToSave: draft.toString(), revision: serverRevision });
-      } catch {
-        return 'failed';
+      // Only the key list is sent, so a setting another session changed meanwhile
+      // is not written back; the revision still refuses a list computed from a
+      // document that has moved.
+      const changes = computeConfigChanges(serverDoc, draft);
+      if (changes.length > 0) {
+        try {
+          await saveMutation.mutateAsync({ changes, revision: serverRevision });
+        } catch {
+          return 'failed';
+        }
       }
       const isNamed = await applyAliases(aliases);
       await invalidateKeyReaders();

@@ -42,7 +42,7 @@ export async function runConfigurationPluginsAcceptance({
   // message but the absence of one: a write that throws inside the React handler leaves
   // the document untouched, so nothing reads as dirty and the save bar - the only save
   // control on this page - never appears at all. The section is opened here on a fresh
-  // fixture config, which has no `payload` key, and that is exactly the state the write
+  // fixture config, which has no `requests.payload`, and that is exactly the state the write
   // used to fail in.
   const overrideRawPanel = page
     .locator('.payload-builder-group .ant-collapse-item')

@@ -229,8 +229,11 @@ func (h *Handler) routes() chi.Router {
 				v1.Delete("/management/auth-files", h.deleteManagementAuthFiles)
 				v1.Get("/management/auth-files/download", h.downloadManagementAuthFile)
 				v1.Get("/management/config", h.managementConfigGet)
+				v1.Patch("/management/config", h.managementConfigPatch)
 				v1.Put("/management/config/source", h.managementConfigSourcePut)
 				v1.Get("/management/config/source", h.managementConfigSourceGet)
+				v1.Get("/management/config/backups", h.listConfigBackups)
+				v1.Get("/management/config/backups/{id}", h.getConfigBackup)
 				v1.Put("/management/config/{key}", h.managementConfigPutScalar)
 				v1.Get("/management/api-keys", h.listClientAPIKeys)
 				v1.Post("/management/api-keys", h.createClientAPIKey)
@@ -621,7 +624,11 @@ func (h *Handler) clientForInstance(ctx context.Context, instance domain.CPAInst
 		return nil, fmt.Errorf("decrypt CPA management key: %w", err)
 	}
 	defer clearBytes(key)
-	return management.NewClient(instance.BaseURL, string(key), h.cfg.RequestTimeout, h.cfg.TLSSkipVerify)
+	client, err := management.NewClient(instance.BaseURL, string(key), h.cfg.RequestTimeout, h.cfg.TLSSkipVerify)
+	if err != nil {
+		return nil, err
+	}
+	return client.WithConfigBackup(h.configBackupSink()), nil
 }
 
 type overrideRequest struct {

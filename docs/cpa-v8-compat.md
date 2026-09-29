@@ -3,8 +3,8 @@
 Oh My CPA (OMC) requires CLIProxyAPI (CPA) v8.0.0 or later and speaks its v8 Management
 API (ADR 0034, which supersedes the one-build-for-v7-and-v8 decision of ADR 0028). This
 document records what v8 changed, what was measured against real binaries, how OMC
-decides that a gateway is v8, where a setting lives, which routes it calls, and what
-remains unverified. Measurements against v7.3.20 below are kept as the record of how v8
+decides that a gateway is v8, how it edits the configuration (ADR 0037), which routes it
+calls, and what remains unverified. Measurements against v7.3.20 below are kept as the record of how v8
 treats a v7 configuration file, which is what an upgraded deployment starts from.
 
 Upstream sources, all at tag `v8.0.2` (commit `4a2c818`):
@@ -64,7 +64,23 @@ Two more precise statements than the usual summary:
   `server.tls.enable` is honoured, while a legacy `oauth-model-alias` map loses entirely
   to any v8 `oauth.model-alias` map, whatever providers each names.
 - `GET /v8/management/config.yaml` returns the *migrated view* of the file, not the file;
-  `GET /v0/management/config.yaml` returns the file as stored. OMC reads the latter.
+  `GET /v0/management/config.yaml` returns the file as stored. OMC edits the former and
+  reads the latter only to keep a legacy file before its first v8 write (§4).
+
+### v8 configuration writes (measured)
+
+Measured on the v8.0.2 binary with a management password set.
+
+| Request | Result |
+| --- | --- |
+| `PATCH /v8/management/config` with a JSON merge document | Merged; keys it does not name are kept |
+| `PUT /v8/management/config/<path>` | Replaces that path; the body is the raw JSON value (a `{"value": …}` envelope is refused) |
+| `DELETE /v8/management/config/<path>` | Removes that path; a path that is not set answers `404 not_found` |
+| A `null` in a merge | Writes the type's zero value, not a removal |
+| A legacy field name (`debug`, in a merge or in `PUT /config.yaml`) | `400 invalid_config`, "legacy field debug is not accepted by v8; use observability.logs.debug"; nothing written |
+| An unknown section | `400 invalid_config`, "unknown v8 configuration section …"; nothing written |
+| A value of the wrong type | `422 invalid_config` naming the line and type; nothing written |
+| A burst of sequential writes | Every value kept |
 
 Observed but not part of the v8 change: several v0 writes sent back to back without a
 pause can lose all but the last (each write reloads the configuration asynchronously).
@@ -114,8 +130,10 @@ string under `streaming`, while CPA reads an integer number of seconds at the ro
 
 ## 3. Complete legacy ↔ v8 mapping
 
-This is `internal/cpa/configyaml/layout_rules.go`, which is CPA's own table. The console
-receives the same rows from `GET /management/config`, so the two cannot drift.
+This is CPA's own table (`config_v8.go` at v8.0.2), which it applies when it converts a
+legacy file. OMC does not carry a copy: its editor schema (`web/src/types/configSchema.ts`)
+names the v8 column, and every schema path was accepted by a `PATCH /v8/management/config`
+against the v8.0.2 binary. The last column names the editor field.
 
 ### Settings (leaves)
 
@@ -241,8 +259,8 @@ page field that edits it.
 
 ### Sections
 
-Whole legacy sections that move; they place section-level editors (the payload rule
-builder) and paths below a leaf.
+Whole legacy sections that move, with everything below them (the payload rule builder
+edits `requests.payload`).
 
 | Legacy section | v8 section |
 | --- | --- |
@@ -269,8 +287,9 @@ builder) and paths below a leaf.
 ### Upstream credential lists
 
 These move under the root `api-keys` mapping **and change shape**, so no path rewrite
-translates them. OMC edits them only through the v0 per-family endpoints, which CPA
-translates in both directions (measured, §1).
+translates them. OMC still edits them through the v0 per-family endpoints, which CPA
+translates in both directions (measured, §1), until the provider editor moves to the v8
+groups. The masked configuration view hides every `api-key` value in them.
 
 | Legacy list | v8 location |
 | --- | --- |
@@ -289,41 +308,25 @@ translates in both directions (measured, §1).
 `routing.session-affinity-subagents`, `plugins.*`, `quota-exceeded.switch-project` and
 `quota-exceeded.switch-preview-model` (the last two have no v8 counterpart at all).
 
-## 4. OMC's write path on a v8 file: before and after
+## 4. OMC's configuration write path
 
-Measured with OMC's own save path: log in, `GET /management/config`, patch `safe_yaml`
-with the configuration page's field logic (`web/src/components/config/configDirty.ts`),
-`PUT /management/config/source`. The CPA file was the migrated v8 file from §1.
+ADR 0037. Measured end to end on 2026-09-29: OMC built from this change, CPA v8.0.2,
+and a legacy file with a top comment, client keys, one `codex-api-key` entry, payload
+rules and an unknown `omc-operator-notes` section.
 
-**Before this change** (OMC at `d201b28`): OMC answered `200 {"status":"ok"}`. Edits and
-the resulting CPA values, read back from `GET /v0/management/config`:
+| Step | Result |
+| --- | --- |
+| `GET /management/config` on the legacy file | `stored_layout: legacy`; `safe_yaml` is CPA's v8 rendering (client keys at `access.api-keys`, the codex entry as an `api-keys.codex` group with its `api-key` masked, the unknown section as a comment); the file is byte-identical afterwards |
+| `PATCH /management/config` with three changes (`observability.logs.debug`, `routing.retry.request-retry`, `access.api-keys`) | `200` with the new revision and rendering. One backup was kept first and is byte-identical to the original file; CPA converted the file (`config-version: 8`, four-space indentation, defaults added, the unknown section commented out) and all three values took effect; the upstream codex key was kept |
+| The same save with a stale revision | `409 config_conflict`, nothing written |
+| A change set whose merge carries a mistyped value | `422 config_rejected` with CPA's reason; nothing written, including the set's removal |
+| A removal on the converted file | `200`; the key is gone and CPA reads its default |
+| A later save on the converted file | No second backup |
+| `PUT /management/config/source` with a legacy name | `422 config_rejected`: "legacy field debug is not accepted by v8; use observability.logs.debug"; file unchanged |
 
-| Field | Written at | Sent | CPA effective after save |
-| --- | --- | --- | --- |
-| request-retry | `request-retry` | 9 | 3 (unchanged) |
-| proxy-url | `proxy-url` | `http://omc-proxy:3128` | `""` (unchanged) |
-| disable-cooling | `disable-cooling` | true | false (unchanged) |
-| passthrough-headers | `passthrough-headers` | true | false (unchanged) |
-| commercial-mode | `commercial-mode` | true | false (unchanged) |
-
-None of the five legacy keys remained in the file after the save. Writing the client-key
-list the same way (root `api-keys` list over the provider groups, which is what the Keys
-page did) is worse: measured directly against CPA, the client-key change was discarded
-**and every upstream `codex` credential was deleted**.
-
-**After this change**: the same edits are written at `routing.retry.request-retry`,
-`requests.proxy-url`, `routing.cooldown.disable-cooling`,
-`requests.passthrough-headers`, `server.commercial-mode`,
-`observability.logs.debug` and `requests.nonstream-keepalive-interval`; all seven took
-effect and no legacy key was written. A document with shadowed legacy keys is refused
-before it reaches CPA (`422 config_legacy_keys_shadowed`, listing each `legacy → v8`
-pair, file unchanged), and a root `api-keys` list over stored provider groups is refused
-with `422 config_provider_groups_replaced`. The Keys page writes `access.api-keys` and
-the upstream groups are untouched.
-
-On a v7.3.20 gateway, the same edits through the previous and the new build produced a
-**byte-identical** `config.yaml`. On a v8 gateway serving a legacy file, the new build
-kept the legacy layout (no `config-version`, legacy keys edited in place, all effective).
+A change set is sent as one merge for scalars and lists, one `PUT` per map value and one
+`DELETE` per removal, in that order (`Client.ApplyConfigChanges`). It is not atomic
+across those requests (§9).
 
 ## 5. Detection
 
@@ -345,41 +348,27 @@ Two independent facts, both observed rather than inferred from a version string:
   `cpa_v8_required`, `/api/healthz` reports `cpa_management_api: unsupported`, and the
   console shows upgrade guidance in place of every page. Against a `disabled` gateway it
   returns `ErrManagementDisabled` (`cpa_management_disabled`), and the console shows the
-  management-secret setting instead. An undecided probe blocks nothing. The configuration read still reports `layout.management_api` (`v8` or
-  `unknown`).
-- **Configuration layout** of the stored file (`configyaml.DetectLayout`): `v8` when it
-  has v8 sections (`config-version`, a v8-only root section, a root `api-keys` mapping,
-  or `routing.retry` / `routing.cooldown` / `routing.force-model-prefix`) and no legacy
-  spelling of a relocated setting; `legacy` when it has none of those; `mixed` when it
-  has both. Exposed as `layout.layout` and `layout.has_provider_groups`.
+  management-secret setting instead. An undecided probe blocks nothing.
+- **Stored file layout** (`configyaml.IsV8Document` over `GET /v0/management/config.yaml`):
+  `v8` when the file carries `config-version: 8` or later, `legacy` otherwise. It decides
+  only whether the next configuration write keeps a backup first, and is exposed as
+  `stored_layout`. A `v8` answer is cached per gateway for `V8_FILE_TTL`.
 
-## 6. Placement and the save guard
+## 6. Where a setting is written
 
-**Placement follows the document, not the gateway.** The configuration page and the
-Keys page resolve every field through `web/src/components/config/configLayout.ts`:
+Every editor names the v8 path, whatever the stored layout: CPA renders any file in the
+v8 layout, and a v8 write to a legacy file converts it. Client keys are
+`access.api-keys`; the root `api-keys` mapping is the upstream provider groups and is not
+part of any editor's change set. Payload rules are `requests.payload`, one category per
+change.
 
-- `legacy` document: legacy paths, on either gateway. A v7 gateway reads nothing else,
-  and a v8 gateway reads a legacy file unchanged. OMC never performs a v8 configuration
-  write, so it never triggers the migration.
-- `v8` or `mixed` document: every relocated field is written at its v8 path. The legacy
-  spelling is still read as a fallback while the v8 location is empty (CPA honours it
-  then) and is removed whenever the field is written. Client keys are
-  `access.api-keys`; the root `api-keys` mapping is never read as, or replaced by, a
-  client-key list. Payload rules live at `requests.payload`, one category at a time.
-
-**The save guard** (`checkConfigLayout` in `internal/api/management_config.go`) checks
-every `PUT /management/config/source`, including hand edits in source mode. It refuses:
-
-- a document in which a legacy spelling and its v8 twin are both present
-  (`config_legacy_keys_shadowed`), because CPA v8 would answer success and drop the
-  legacy value;
-- a document that turns a stored root `api-keys` mapping into anything else
-  (`config_provider_groups_replaced`), because that deletes every upstream credential.
-
-Both codes are shown in the console's language.
+There is no save guard of OMC's own. CPA refuses a legacy name, an unknown section or a
+mistyped value with nothing written (§1), and the console reports that as
+`config_rejected` with CPA's reason. Shadowed legacy keys cannot arise from an editor
+that only writes v8 paths.
 
 **Scalar writes** (`PUT /management/config/{key}`, also used by the Agent's `config_set`)
-keep using the v0 flat setters. CPA places them itself (§1), so they need no mapping.
+are one-change sets on the key's v8 path.
 
 ## 7. Routes
 
@@ -409,9 +398,9 @@ login providers are served by the same endpoint.
 - the per-family credential lists (`/<family>-api-key`, `/openai-compatibility`), which
   are the only source of each upstream key's `auth-index`: the v8 configuration view is
   the stored document and carries no runtime fields;
-- the configuration reads and writes whose editors have not moved to the v8
-  configuration API yet: `/config`, `/config.yaml`, the flat setters, `/api-keys`, the
-  family lists' writes, `/oauth-model-alias`, and `/plugins/<id>/enabled|config`.
+- `/config.yaml`, the file as stored, read before a v8 write to keep a legacy file;
+- the writes whose editors have not moved to the v8 configuration API yet: the family
+  lists' writes, `/oauth-model-alias`, and `/plugins/<id>/enabled|config`.
 
 The RESP usage channel is not part of the Management API and is unchanged.
 
@@ -423,10 +412,11 @@ supported gateway: OMC now refuses v7 before any request.
 
 | OMC surface | CPA v8.0.2, legacy file | CPA v8.0.2, v8 file |
 | --- | --- | --- |
-| Configuration page save | Measured, stays legacy | Measured, v8 paths |
-| Source editor save guard | Measured, passes | Measured, refuses both cases |
-| Keys page | Unit-tested, root `api-keys` | Measured, `access.api-keys` |
-| Scalar setters (v0) | Unverified | Measured (13 keys) |
+| Configuration page save (change set) | Measured: backup, then CPA converts the file | Measured, per-path writes |
+| Source editor save | Refused by CPA on a legacy name (measured) | Measured |
+| Keys page | Measured, `access.api-keys` (converts the file, as any save) | Measured, `access.api-keys` |
+| Editor schema paths | — | Measured: every path accepted by `PATCH /v8/management/config` |
+| Scalar writes (`config_set`) | Unit-tested, one-change set | Unit-tested, one-change set |
 | Provider credential lists (v0) | Measured read | Measured read and write |
 | Usage: RESP subscription | Measured | Layout-independent |
 | Usage: HTTP queue, logs, error logs, API-key usage | Measured, v8 routes | Layout-independent |
@@ -443,30 +433,26 @@ flows and the contents of usage records were not exercised against a real binary
 
 ## 9. Risks
 
-- **The relocation table is a snapshot of v8.0.2.** CPA derives it from its Config
-  struct, so a release that adds or moves a setting changes it. A new relocated setting
-  that OMC does not know is not placed by the editor, and the guard does not check it.
-  Re-derive the table (§10) when moving the pinned version.
-- **A v8 configuration write by anything else migrates the file.** CPAMC or a script
-  using `/v8/management/config` rewrites the whole file (reformatted, unknown sections
-  commented out). OMC then sees a `v8` layout on its next read and follows it, but
-  formatting and unknown sections do not come back.
-- **v0 setters can leave legacy keys in a v8 file** (§1). CPA honours them and the
-  editor reads them as fallbacks; the next edit of that field moves it to the v8 path.
+- **The editor schema names one release's paths.** A CPA release that moves or renames a
+  setting makes CPA refuse the editor's write for it (`config_rejected`, nothing
+  written) rather than drop it silently. Re-check the schema (§10) when moving the pinned
+  version.
+- **The first save converts the file.** Formatting, comments of unmoved keys and unknown
+  sections do not come back from CPA's conversion; the original is in the backup until
+  ten later conversions have pushed it out. Any other v8 configuration writer (CPAMC, a
+  script) converts the file the same way, without OMC's backup.
+- **A change set is not atomic.** The merge goes first and is where CPA refuses a
+  mistyped value; a map value or removal that fails after it leaves the merge applied.
+  The save's answer re-reads CPA, so the editor shows what CPA holds.
 - **Probe cache.** An upgrade from v7 is noticed within `API_UNSUPPORTED_TTL` (fifteen
   seconds); a rollback to v7 is noticed on the first v8 route that answers "missing".
 
-## 10. Re-deriving the table for a new CPA release
+## 10. Checking a new CPA release
 
-1. Check out the release in a CLIProxyAPI clone.
-2. Add a temporary test in its `internal/config` package that prints `v8Paths`,
-   `v8StructPaths` and `v8KeyFamilies` (the package-level values in `config_v8.go`),
-   and run it with `go test ./internal/config -run <name> -v`.
-3. Regenerate `internal/cpa/configyaml/layout_rules.go` from that output (sorted, with
-   `LegacyKind: LegacyKindSequence` on the `api-keys` row), then run `go test
-   ./internal/cpa/configyaml/ ./internal/api/` and `pnpm test:logic`. The frontend suite
-   `scripts/test-config-layout.ts` reads the same file and fails when an editor field
-   names a path CPA does not read.
-4. Compare `server_management_v8.go` of the release with the routes in §7, and update
+1. Run the release with a management password and a copy of a real configuration file.
+2. For every field in `web/src/types/configSchema.ts`, send its current value (or a
+   value of its type) to `PATCH /v8/management/config` at its `yamlPath`. A `400` names a
+   path the release no longer accepts; move the field to the path the release's
+   `config_v8.go` gives it, and add the row to §3.
+3. Compare `server_management_v8.go` of the release with the routes in §7, and update
    this document.
-

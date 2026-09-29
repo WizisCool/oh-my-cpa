@@ -76,7 +76,7 @@ func (s *Service) CreateKey(ctx context.Context, secret, revision string) (int, 
 		}
 	}
 	if err = client.UpdateClientAPIKeys(ctx, append(keys, secret)); err != nil {
-		return 0, errors.New("operation_outcome_unknown")
+		return 0, configWriteOutcome(err)
 	}
 	return len(keys), nil
 }

@@ -114,6 +114,7 @@ const GENERIC_TARGETS = new Set([
   'operator',
   'export',
   'config_source_yaml',
+  'config_changes',
   'release_feed',
   'redacted_bundle',
   'management_logs',

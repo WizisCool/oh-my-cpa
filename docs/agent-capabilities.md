@@ -175,7 +175,9 @@ a new capability must not add them:
 - plugin installation, execution, or configuration, including the plugin system settings;
 - raw configuration YAML writes - only the named scalar allowlist
   (`request_retry`, `max_retry_interval`, `max_retry_credentials`,
-  `routing_strategy`, `force_model_prefix`);
+  `routing_strategy`, `force_model_prefix`), each written as a one-path change set on the
+  v8 configuration API. Like any configuration save, the first one to a pre-v8 file makes
+  CPA convert the file, after OMC keeps a backup of it (ADR 0037);
 - the credential fields that can transport secrets: `oauth_set_credential_fields`
   accepts `prefix`, `priority`, `weight`, `note`, `excluded_models`, `expired`,
   `disable_cooling`, `websockets`, and `using_api`, while `headers` and `proxy_url`

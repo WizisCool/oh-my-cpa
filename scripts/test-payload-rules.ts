@@ -137,12 +137,13 @@ test('Document AST write and read retains outside YAML content and comments', ()
 host: "127.0.0.1"
 port: 8317
 
-payload:
-  default:
-    - models:
-        - name: "gpt-4"
-      params:
-        temperature: 0.5
+requests:
+  payload:
+    default:
+      - models:
+          - name: "gpt-4"
+        params:
+          temperature: 0.5
 `;
 
   const doc = parseDocument(yaml);
@@ -210,9 +211,9 @@ test('validateAllPayloadRules accurately detects issues without premature errors
 });
 
 /**
- * Writing a category into a document that has no usable `payload` map yet.
+ * Writing a category into a document that has no usable `requests.payload` map yet.
  *
- * This is the ordinary case, not an edge: a fresh CPA config has no `payload` key at
+ * This is the ordinary case, not an edge: a fresh CPA config has no `requests.payload` at
  * all, and `payload:` left empty is just as common. Both used to make the rule editor
  * throw out of its own React event handler, which meant the document was never
  * updated, nothing read as dirty, the save bar never appeared, and payload rules
@@ -229,7 +230,7 @@ test('a document with no payload key takes payload rules', () => {
 });
 
 test('an empty payload key takes payload rules', () => {
-  const doc = parseDocument('host: 127.0.0.1\npayload:\n');
+  const doc = parseDocument('host: 127.0.0.1\nrequests:\n  payload:\n');
   writePayloadCategory(doc, 'override-raw', [
     { models: [{ name: 'gpt-4o' }], params: { temperature: '0.7' } },
   ]);
@@ -241,19 +242,19 @@ test('an empty payload key takes payload rules', () => {
 test('a payload key holding something other than a map takes payload rules', () => {
   // Not a shape this console produces, but hand-edited config reaches it, and
   // refusing to write would leave the operator with no way to save at all.
-  const doc = parseDocument('host: 127.0.0.1\npayload: legacy-scalar\n');
+  const doc = parseDocument('host: 127.0.0.1\nrequests:\n  payload: legacy-scalar\n');
   writePayloadCategory(doc, 'filter', [{ models: [{ name: 'gpt-4o' }], params: ['temperature'] }]);
   assert.ok(Array.isArray(readPayloadCategory(doc, 'filter')));
 });
 
 test('clearing the last category takes the empty payload map with it', () => {
-  // Otherwise the editor writes `payload: {}` into a document the operator never
+  // Otherwise the editor writes `requests: {payload: {}}` into a document the operator never
   // configured, and the next save pushes that noise upstream.
   const doc = parseDocument('host: 127.0.0.1\n');
   writePayloadCategory(doc, 'override-raw', [{ models: [{ name: 'gpt-4o' }], params: {} }]);
-  assert.equal(doc.has('payload'), true);
+  assert.equal(doc.hasIn(['requests', 'payload']), true);
   writePayloadCategory(doc, 'override-raw', []);
-  assert.equal(doc.has('payload'), false);
+  assert.equal(doc.has('requests'), false);
   assert.equal(doc.toString(), 'host: 127.0.0.1\n');
 });
 

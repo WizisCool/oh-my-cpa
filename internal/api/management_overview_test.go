@@ -90,8 +90,8 @@ func TestManagementOverviewAggregatesWithoutSecrets(t *testing.T) {
 		writer.Header().Set("Content-Type", "application/json")
 		writer.Header().Set("X-CPA-Version", "7.1.2")
 		switch request.URL.Path {
-		case "/v0/management/config":
-			_, _ = writer.Write([]byte(`{"api-keys":["management-client"],"codex-api-key":[{"api-key":"` + apiKey + `"}],"openai-compatibility":[{"name":"relay","api-key-entries":[{"api-key":"other-secret"},{"api-key":"third-secret"}]}]}`))
+		case "/v8/management/config":
+			_, _ = writer.Write([]byte(`{"access":{"api-keys":["management-client"]},"api-keys":{"codex":[{"name":"codex-1","keys":[{"api-key":"` + apiKey + `"}]}],"openai-compatibility":[{"name":"relay","keys":[{"api-key":"other-secret"},{"api-key":"third-secret"}]}]}}`))
 		case "/v8/management/credentials":
 			_, _ = writer.Write([]byte(`{"files":[{"id":"auth-1","auth_index":"a1","type":"gemini","provider":"gemini","status":"ok","success":100,"failed":40,"recent_requests":[{"time":"now","success":4,"failed":1}],"account_type":"oauth","email":"owner@example.test"},{"id":"auth-2","auth_index":"a2","type":"codex","provider":"codex","status":"ok","disabled":true,"account_type":"oauth"}]}`))
 		case "/v8/management/observability/usage/api-keys":
@@ -245,7 +245,7 @@ func TestManagementOverviewPartialFailureAndNullCounts(t *testing.T) {
 	cpaServer := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		switch request.URL.Path {
-		case "/v0/management/config":
+		case "/v8/management/config":
 			writer.WriteHeader(http.StatusUnauthorized)
 			_, _ = writer.Write([]byte(`{"error":"bad management key"}`))
 		case "/v8/management/credentials":

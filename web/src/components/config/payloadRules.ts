@@ -401,54 +401,28 @@ export function serializeFilterRules(rules: PayloadFilterRule[]): Record<string,
 
 // ── Synchronize with Document AST ───────────────────────────────────────────
 
-/**
- * Where the payload section lives. A v8 document keeps it under
- * `requests.payload`; `legacyPath` is then the v7 spelling, read while a category
- * has no v8 value (CPA honours it until then) and removed when that category is
- * written. See configLayout.
- */
-export interface PayloadPlacement {
-  path: string[];
-  legacyPath?: string[];
-}
+/** Where CPA v8 keeps the payload rules. */
+export const PAYLOAD_PATH = ['requests', 'payload'];
 
-export const LEGACY_PAYLOAD_PLACEMENT: PayloadPlacement = { path: ['payload'] };
-
-export function readPayloadCategory(
-  doc: Document | null,
-  category: PayloadCategoryKey,
-  placement: PayloadPlacement = LEGACY_PAYLOAD_PLACEMENT
-): unknown {
+export function readPayloadCategory(doc: Document | null, category: PayloadCategoryKey): unknown {
   if (!doc) return undefined;
-  let payloadNode = doc.getIn([...placement.path, category]);
-  if ((payloadNode === undefined || payloadNode === null) && placement.legacyPath) {
-    payloadNode = doc.getIn([...placement.legacyPath, category]);
-  }
+  const payloadNode = doc.getIn([...PAYLOAD_PATH, category]);
   if (payloadNode && typeof (payloadNode as { toJSON?: () => unknown }).toJSON === 'function') {
     return (payloadNode as { toJSON: () => unknown }).toJSON();
   }
   return payloadNode;
 }
 
-export function writePayloadCategory(
-  doc: Document,
-  category: PayloadCategoryKey,
-  serializedValue: unknown[],
-  placement: PayloadPlacement = LEGACY_PAYLOAD_PLACEMENT
-): void {
-  // deleteIn throws when a map on the way is missing, so each side is only
-  // touched while its section is a map.
-  if (placement.legacyPath && isMap(doc.getIn(placement.legacyPath, true))) {
-    doc.deleteIn([...placement.legacyPath, category]);
-    pruneEmptyMaps(doc, placement.legacyPath);
-  }
+export function writePayloadCategory(doc: Document, category: PayloadCategoryKey, serializedValue: unknown[]): void {
   if (serializedValue.length === 0) {
-    if (isMap(doc.getIn(placement.path, true))) {
-      doc.deleteIn([...placement.path, category]);
+    // deleteIn throws when a map on the way is missing, so the category is only
+    // removed while its section is a map.
+    if (isMap(doc.getIn(PAYLOAD_PATH, true))) {
+      doc.deleteIn([...PAYLOAD_PATH, category]);
     }
     // The maps go too once their last entry is gone, so a document the operator
     // never configured is not written back with an empty `payload: {}`.
-    pruneEmptyMaps(doc, placement.path);
+    pruneEmptyMaps(doc, PAYLOAD_PATH);
     return;
   }
   // Every write below goes through `setIn`, and it throws when an intermediate
@@ -462,13 +436,13 @@ export function writePayloadCategory(
   // `payload: {}` and reads back as an empty object, so it looks right, but it
   // stores a plain object rather than a YAMLMap - and the next write through it
   // throws.
-  for (let depth = 1; depth <= placement.path.length; depth += 1) {
-    const levelPath = placement.path.slice(0, depth);
+  for (let depth = 1; depth <= PAYLOAD_PATH.length; depth += 1) {
+    const levelPath = PAYLOAD_PATH.slice(0, depth);
     if (!isMap(doc.getIn(levelPath, true))) {
       doc.setIn(levelPath, doc.createNode({}));
     }
   }
-  doc.setIn([...placement.path, category], serializedValue);
+  doc.setIn([...PAYLOAD_PATH, category], serializedValue);
 }
 
 /** Deletes the maps along a path that no longer hold anything, deepest first. */
