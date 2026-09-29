@@ -172,10 +172,9 @@ func (h *Handler) managementConfigPatch(writer http.ResponseWriter, request *htt
 		auditDetail["revision"] = newRev
 		writer.Header().Set("ETag", fmt.Sprintf("%q", newRev))
 	}
-	if auditErr := h.recordAudit(request, "config.save_changes", "config", "config_changes", "success", auditDetail); auditErr != nil {
-		writeError(writer, http.StatusInternalServerError, "audit log failure; operation aborted")
-		return
-	}
+	// The configuration is already stored; recordAudit logs failures, and the
+	// editor still needs the saved baseline to prepare its next change.
+	_ = h.recordAudit(request, "config.save_changes", "config", "config_changes", "success", auditDetail)
 	writeJSON(writer, http.StatusOK, response)
 }
 
@@ -414,9 +413,8 @@ func (h *Handler) managementConfigSourcePut(writer http.ResponseWriter, request 
 		auditDetail["revision"] = newRev
 		writer.Header().Set("ETag", fmt.Sprintf("%q", newRev))
 	}
-	if auditErr := h.recordAudit(request, "config.save_source", "config", "config_source_yaml", "success", auditDetail); auditErr != nil {
-		writeError(writer, http.StatusInternalServerError, "audit log failure; operation aborted")
-		return
-	}
+	// The configuration is already stored; recordAudit logs failures, and the
+	// editor still needs the saved baseline to prepare its next change.
+	_ = h.recordAudit(request, "config.save_source", "config", "config_source_yaml", "success", auditDetail)
 	writeJSON(writer, http.StatusOK, response)
 }

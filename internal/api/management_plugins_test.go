@@ -16,6 +16,7 @@ import (
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/auth"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/config"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/configyaml"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/crypto"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/domain"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/repository"
@@ -480,5 +481,19 @@ func assertDeclaredKeys(t *testing.T, what string, object map[string]any, declar
 		if !allowed[key] {
 			t.Errorf("%s exposed undeclared field %q: %#v", what, key, object)
 		}
+	}
+}
+
+func TestPluginSettingsRejectionDoesNotEchoStoredSecrets(t *testing.T) {
+	fixture := &configFixtureCPA{rejectWrites: true, rejectMessage: `management.secret-key: "top-secret-management-key" is too short`}
+	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
+	body := `{"revision":"` + configyaml.ComputeRevision(configFixtureYAML) + `","enabled":true}`
+	response, payload := doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/plugins/settings", body)
+	var refusal map[string]any
+	if err := json.Unmarshal(payload, &refusal); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusUnprocessableEntity || refusal["code"] != "config_rejected" || strings.Contains(string(payload), "top-secret-management-key") || !strings.Contains(fmt.Sprint(refusal["reason"]), "management.secret-key") {
+		t.Fatalf("status = %d body %s", response.StatusCode, payload)
 	}
 }

@@ -364,9 +364,10 @@ part of any editor's change set. Payload rules are `requests.payload`, one categ
 change.
 
 There is no save guard of OMC's own. CPA refuses a legacy name, an unknown section or a
-mistyped value with nothing written (§1), and the console reports that as
-`config_rejected` with CPA's reason. Shadowed legacy keys cannot arise from an editor
-that only writes v8 paths.
+mistyped value without writing that request (§1). The console reports
+`config_rejected` with CPA's reason if no earlier request in the change set landed, or
+`config_partially_applied` if earlier requests were already written. Shadowed legacy
+keys cannot arise from an editor that only writes v8 paths.
 
 **Scalar writes** (`PUT /management/config/{key}`, also used by the Agent's `config_set`)
 are one-change sets on the key's v8 path.
@@ -435,9 +436,10 @@ flows and the contents of usage records were not exercised against a real binary
 ## 9. Risks
 
 - **The editor schema names one release's paths.** A CPA release that moves or renames a
-  setting makes CPA refuse the editor's write for it (`config_rejected`, nothing
-  written) rather than drop it silently. Re-check the schema (§10) when moving the pinned
-  version.
+  setting makes CPA refuse the invalid request (`config_rejected` if no earlier
+  request landed). Earlier valid requests in the same change set may already have been
+  written; those saves return `config_partially_applied` without rolling them back.
+  Re-check the schema (§10) when moving the pinned version.
 - **The first save converts the file.** Formatting, comments of unmoved keys and unknown
   sections do not come back from CPA's conversion; the original is in the backup until
   ten later conversions have pushed it out. Any other v8 configuration writer (CPAMC, a

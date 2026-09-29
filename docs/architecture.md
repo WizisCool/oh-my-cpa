@@ -374,11 +374,15 @@ the changed paths; the source view sends the whole rendering to
 `PUT /management/config/source`. Both saves take the provider write gate and the
 configuration mutex, refuse a moved revision (`409 config_conflict`), restore masked
 secrets from the stored document, and answer with CPA's new rendering, which becomes the
-editor's baseline. `Client.ApplyConfigChanges` sends a change set as one
+editor's baseline. A failed success-audit write is logged but the save still returns
+`200` with that baseline, because the configuration write has already landed; if the
+readback fails, the response omits the baseline so the editor reloads.
+`Client.ApplyConfigChanges` sends a change set as one
 `PATCH /v8/management/config` merge for scalars and lists, one `PUT /config/<path>` per
 map value and one `DELETE /config/<path>` per removal. CPA refuses a legacy name, an
-unknown section or a mistyped value with nothing written; the facade reports it as
-`422 config_rejected` with CPA's reason in `reason`.
+unknown section or a mistyped value without writing that request; when no earlier
+request in the change set landed, the facade reports `422 config_rejected` with CPA's
+reason in `reason`. Earlier valid requests are not rolled back.
 
 Before any v8 configuration write the client reads the stored file and, when it is not a
 v8 file (`configyaml.IsV8Document`), hands it to the configured `ConfigBackup`

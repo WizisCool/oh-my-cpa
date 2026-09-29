@@ -574,3 +574,63 @@ config-version: 8
 		}
 	}
 }
+
+func TestManagementConfigSaveAuditFailure(t *testing.T) {
+	for _, mode := range []string{"changes", "source"} {
+		for _, outcome := range []string{"attempt", "success"} {
+			t.Run(mode+"/"+outcome, func(t *testing.T) {
+				fixture := &configFixtureCPA{}
+				client, baseURL, repo := startDashboardTestServer(t, fixture.serve)
+				// Refuse only the selected audit phase so the success case reaches CPA.
+				_, err := repo.SQL().Exec(`CREATE TRIGGER reject_config_audit BEFORE INSERT ON audit_events
+					WHEN NEW.action = 'config.save_` + mode + `' AND NEW.result = '` + outcome + `'
+					BEGIN SELECT RAISE(FAIL, 'audit unavailable'); END`)
+				if err != nil {
+					t.Fatal(err)
+				}
+				method, path, baselineKey := http.MethodPatch, "/management/config", "safe_yaml"
+				body := map[string]any{
+					"revision": configyaml.ComputeRevision(configFixtureYAML),
+					"changes":  []management.ConfigChange{{Path: []string{"observability", "logs", "debug"}, Value: true}},
+				}
+				if mode == "source" {
+					method, path, baselineKey = http.MethodPut, "/management/config/source", "yaml"
+					body = map[string]any{"revision": body["revision"], "yaml": "server:\n  port: 8318\n"}
+				}
+				encoded, err := json.Marshal(body)
+				if err != nil {
+					t.Fatal(err)
+				}
+				response, payload := doJSON(t, client, method, baseURL+"/omc/api/v1"+path, string(encoded))
+				writes, _ := fixture.recordedWrites()
+				if outcome == "attempt" {
+					if response.StatusCode != http.StatusInternalServerError || len(writes) != 0 {
+						t.Fatalf("failed attempt audit: status %d, writes %v, body %s", response.StatusCode, writes, payload)
+					}
+					return
+				}
+				if response.StatusCode != http.StatusOK || len(writes) != 1 {
+					t.Fatalf("failed success audit: status %d, writes %v, body %s", response.StatusCode, writes, payload)
+				}
+				var saved map[string]any
+				if err := json.Unmarshal(payload, &saved); err != nil {
+					t.Fatal(err)
+				}
+				fixture.mu.Lock()
+				storedYAML := fixture.yamlData
+				fixture.mu.Unlock()
+				wantBaseline := storedYAML
+				if mode == "changes" {
+					wantBaseline, err = configyaml.SanitizeSafeYAML(storedYAML)
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+				wantRevision := configyaml.ComputeRevision(storedYAML)
+				if saved["status"] != "ok" || saved["revision"] != wantRevision || saved[baselineKey] != wantBaseline || response.Header.Get("ETag") != fmt.Sprintf("%q", wantRevision) {
+					t.Fatalf("saved baseline mismatch: body %s, ETag %q", payload, response.Header.Get("ETag"))
+				}
+			})
+		}
+	}
+}

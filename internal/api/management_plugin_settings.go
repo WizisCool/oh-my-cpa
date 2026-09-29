@@ -304,7 +304,7 @@ func (h *Handler) putPluginSettings(writer http.ResponseWriter, request *http.Re
 		if errors.Is(err, management.ErrConfigPartiallyApplied) {
 			h.afterConfigWrite()
 		}
-		writeCPAFacadeError(writer, err)
+		writeCPAFacadeError(writer, scrubConfigRejection(err, currentYAML))
 		return
 	}
 	_ = h.recordAudit(request, "plugin.settings", "config", "plugins", "success", details)
