@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -74,17 +75,14 @@ type Upstream struct {
 // credential or edit its metadata, and a fixture that acknowledged a write
 // without storing it could not tell a working write from a lost one.
 type upstreamState struct {
-	files         []map[string]any
-	aliases       map[string]any
-	excluded      map[string]any
-	config        map[string]any
-	configYAML    string
-	plugins       map[string]any
-	pluginConfigs map[string]map[string]any
-	pluginStore   map[string]any
-	logLines      []string
-	logLatest     int64
-	quota         map[string]any
+	files       []map[string]any
+	config      map[string]any
+	configYAML  string
+	plugins     map[string]any
+	pluginStore map[string]any
+	logLines    []string
+	logLatest   int64
+	quota       map[string]any
 }
 
 // StartUpstream binds the fixture to a loopback port and serves it.
@@ -204,7 +202,6 @@ func newUpstreamState(now time.Time) *upstreamState {
 
 	document := configDocument()
 	plugins := make([]map[string]any, 0, len(pluginCatalog()))
-	pluginConfigs := make(map[string]map[string]any, len(pluginCatalog()))
 	for _, plugin := range pluginCatalog() {
 		plugins = append(plugins, map[string]any{
 			"id":                plugin.id,
@@ -224,7 +221,6 @@ func newUpstreamState(now time.Time) *upstreamState {
 				"github_repository": plugin.repository, "logo": plugin.logo, "config_fields": plugin.configFields,
 			},
 		})
-		pluginConfigs[plugin.id] = plugin.config
 	}
 	installed := make(map[string]pluginEntry, len(pluginCatalog()))
 	for _, plugin := range pluginCatalog() {
@@ -270,17 +266,14 @@ func newUpstreamState(now time.Time) *upstreamState {
 	}
 	pluginList := map[string]any{"plugins_enabled": true, "plugins_dir": "plugins", "plugins": plugins}
 	return &upstreamState{
-		files:         files,
-		aliases:       oauthModelAliases(),
-		excluded:      oauthExcludedModels(),
-		config:        document,
-		configYAML:    renderConfigYAML(document),
-		plugins:       pluginList,
-		pluginConfigs: pluginConfigs,
-		pluginStore:   store,
-		logLines:      logTail(now),
-		logLatest:     now.Unix(),
-		quota:         quotaPayloads(now),
+		files:       files,
+		config:      document,
+		configYAML:  renderConfigYAML(document),
+		plugins:     pluginList,
+		pluginStore: store,
+		logLines:    logTail(now),
+		logLatest:   now.Unix(),
+		quota:       quotaPayloads(now),
 	}
 }
 
@@ -371,6 +364,8 @@ func (u *Upstream) serve(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/yaml")
 		writer.WriteHeader(http.StatusOK)
 		_, _ = writer.Write([]byte(u.fixture.configYAML))
+	case request.Method == http.MethodGet && strings.HasPrefix(path, "/config/"):
+		u.serveConfigPath(writer, strings.TrimPrefix(path, "/config/"))
 	case request.Method == http.MethodGet && path == "/credentials":
 		writeFixtureJSON(writer, http.StatusOK, map[string]any{"files": u.fixture.files})
 	case request.Method == http.MethodGet && path == "/credentials/models":
@@ -401,13 +396,29 @@ func (u *Upstream) serve(writer http.ResponseWriter, request *http.Request) {
 	}
 }
 
+// serveConfigPath answers one path of the v8 configuration view from the same
+// document the whole view is, the way CPA answers `GET /config/<path>`.
+func (u *Upstream) serveConfigPath(writer http.ResponseWriter, path string) {
+	var value any = u.fixture.config
+	for _, segment := range strings.Split(path, "/") {
+		key, err := url.PathUnescape(segment)
+		object, isObject := value.(map[string]any)
+		if err != nil || !isObject {
+			value = nil
+			break
+		}
+		value = object[key]
+	}
+	if value == nil {
+		writeFixtureJSON(writer, http.StatusNotFound, map[string]any{"error": "not_found"})
+		return
+	}
+	writeFixtureJSON(writer, http.StatusOK, value)
+}
+
 // serveLegacy answers the /v0/management reads the client still makes.
 func (u *Upstream) serveLegacy(writer http.ResponseWriter, request *http.Request, path string) {
 	switch {
-	case request.Method == http.MethodGet && path == "/oauth-model-alias":
-		writeFixtureJSON(writer, http.StatusOK, map[string]any{"oauth-model-alias": u.fixture.aliases})
-	case request.Method == http.MethodGet && path == "/oauth-excluded-models":
-		writeFixtureJSON(writer, http.StatusOK, map[string]any{"oauth-excluded-models": u.fixture.excluded})
 	case request.Method == http.MethodGet && path == "/config.yaml":
 		// The stored file, which the demo keeps in the v8 layout already.
 		writer.Header().Set("Content-Type", "application/yaml")
@@ -418,13 +429,6 @@ func (u *Upstream) serveLegacy(writer http.ResponseWriter, request *http.Request
 	case request.Method == http.MethodGet && isFamilyEndpoint(path):
 		family := strings.TrimSuffix(strings.TrimPrefix(path, "/"), "-api-key")
 		writeFixtureJSON(writer, http.StatusOK, map[string]any{family + "-api-key": familySection(family)})
-	case request.Method == http.MethodGet && strings.HasPrefix(path, "/plugins/") && strings.HasSuffix(path, "/config"):
-		config, ok := u.fixture.pluginConfigs[strings.TrimSuffix(strings.TrimPrefix(path, "/plugins/"), "/config")]
-		if !ok {
-			writeFixtureJSON(writer, http.StatusNotFound, map[string]any{"error": "plugin_not_found", "message": "plugin not found"})
-			return
-		}
-		writeFixtureJSON(writer, http.StatusOK, config)
 	default:
 		writeFixtureJSON(writer, http.StatusNotFound, map[string]any{"error": "unknown endpoint"})
 	}

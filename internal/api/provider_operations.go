@@ -243,11 +243,7 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 	case openAICompatibilityFamily:
 		if err := gatedProviderListWrite(h, ctx,
 			func(ctx context.Context) ([]management.OpenAICompatibility, error) {
-				resp, err := client.OpenAICompatibility(ctx)
-				if err != nil {
-					return nil, err
-				}
-				return resp.Entries, nil
+				return client.EditableOpenAICompatibility(ctx)
 			},
 			func(ctx context.Context, list []management.OpenAICompatibility) error {
 				return client.UpdateOpenAICompatibility(ctx, list)
@@ -362,11 +358,7 @@ func (h *Handler) deleteProvider(ctx context.Context, client *management.Client,
 	case openAICompatibilityFamily:
 		if err := gatedProviderListWrite(h, ctx,
 			func(ctx context.Context) ([]management.OpenAICompatibility, error) {
-				resp, err := client.OpenAICompatibility(ctx)
-				if err != nil {
-					return nil, err
-				}
-				return resp.Entries, nil
+				return client.EditableOpenAICompatibility(ctx)
 			},
 			func(ctx context.Context, list []management.OpenAICompatibility) error {
 				return client.UpdateOpenAICompatibility(ctx, list)

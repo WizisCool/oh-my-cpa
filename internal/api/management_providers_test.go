@@ -30,8 +30,8 @@ type providerFakeServerState struct {
 	metaProviders   []map[string]any
 	// familyLists serves the config API-key families that need no per-family
 	// instrumentation (xai, vertex, interactions), keyed by family.
-	familyLists map[string][]map[string]any
-	// putCount counts the whole-list writes CPA actually received, so a test can
+	familyLists map[string]*[]map[string]any
+	// putCount counts the provider writes CPA actually received, so a test can
 	// assert that a refused write never reached the gateway.
 	putCount int
 	// hooksMu guards the hooks below, which a test installs before issuing any
@@ -46,6 +46,24 @@ type providerFakeServerState struct {
 	// value above 1 means two toggles read the same baseline.
 	openCodexSections int
 	peakCodexSections int
+}
+
+// providerList is the fixture's list for one family, as serveProviderGroups
+// reads and writes it; the caller holds the state lock.
+func (s *providerFakeServerState) providerList(family string) *[]map[string]any {
+	switch family {
+	case "openai-compatibility":
+		return &s.oaiProviders
+	case "codex":
+		return &s.codexProviders
+	case "claude":
+		return &s.claudeProviders
+	case "gemini":
+		return &s.geminiProviders
+	case "meta":
+		return &s.metaProviders
+	}
+	return s.familyLists[family]
 }
 
 func (s *providerFakeServerState) setBeforeCodexRead(hook func()) {
@@ -146,27 +164,28 @@ func newProviderTestFixture(t *testing.T) providerTestFixture {
 				"base-url":   "https://api.meta.ai/v1",
 			},
 		},
-		familyLists: map[string][]map[string]any{
+		familyLists: map[string]*[]map[string]any{
 			// The fields the console does not model are CPA settings an operator
 			// wrote in config.yaml; they are here so a round trip can prove they
 			// survive an edit.
-			"xai": {{
+			"xai": &[]map[string]any{{
 				"api-key":       "xai-test-token-1234",
 				"auth-index":    "xai-1",
 				"base-url":      "https://api.x.ai/v1",
 				"websockets":    true,
 				"request-retry": 2,
 			}},
-			"vertex":       {},
-			"interactions": {},
+			"vertex":       &[]map[string]any{},
+			"interactions": &[]map[string]any{},
 		},
 	}
 
 	cpaServer := newFakeCPA(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		// A codex read followed later by a codex write is one read-modify-write
+		// A codex read followed later by a provider write is one read-modify-write
 		// window. Bracketing both here is what lets a test assert that two windows
 		// never overlap, which is the invariant that prevents a lost update.
-		if request.URL.Path == "/v0/management/codex-api-key" && (request.Method == http.MethodGet || request.Method == http.MethodPut) {
+		isCodexRead := request.Method == http.MethodGet && (request.URL.Path == "/v0/management/codex-api-key" || request.URL.Path == "/v8/management/config/api-keys/codex")
+		if isCodexRead || (request.Method == http.MethodPatch && request.URL.Path == "/v8/management/config") {
 			state.beginCodexSection()
 			defer state.endCodexSection()
 		}
@@ -177,6 +196,9 @@ func newProviderTestFixture(t *testing.T) providerTestFixture {
 		}
 		state.mu.Lock()
 		defer state.mu.Unlock()
+		if serveProviderGroups(writer, request, state.providerList, func(string) { state.putCount++ }) {
+			return
+		}
 		writer.Header().Set("Content-Type", "application/json")
 		path := request.URL.Path
 
@@ -192,59 +214,11 @@ func newProviderTestFixture(t *testing.T) providerTestFixture {
 			_ = json.NewDecoder(request.Body).Decode(&merge)
 			state.clientKeys = merge.Access.APIKeys
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
-		case path == "/v0/management/codex-api-key" && request.Method == http.MethodGet:
-			_ = json.NewEncoder(writer).Encode(map[string]any{"codex-api-key": state.codexProviders})
-		case path == "/v0/management/codex-api-key" && request.Method == http.MethodPut:
-			var arr []map[string]any
-			_ = json.NewDecoder(request.Body).Decode(&arr)
-			state.codexProviders = arr
-			state.putCount++
-			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 		case path == "/v0/management/openai-compatibility" && request.Method == http.MethodGet:
 			_ = json.NewEncoder(writer).Encode(map[string]any{"openai-compatibility": state.oaiProviders})
-		case path == "/v0/management/openai-compatibility" && request.Method == http.MethodPut:
-			var arr []map[string]any
-			if err := json.NewDecoder(request.Body).Decode(&arr); err == nil {
-				state.oaiProviders = arr
-			} else {
-				var req map[string][]map[string]any
-				_ = json.NewDecoder(request.Body).Decode(&req)
-				state.oaiProviders = req["openai-compatibility"]
-			}
-			_, _ = writer.Write([]byte(`{"status":"ok"}`))
-		case path == "/v0/management/claude-api-key" && request.Method == http.MethodGet:
-			_ = json.NewEncoder(writer).Encode(map[string]any{"claude-api-key": state.claudeProviders})
-		case path == "/v0/management/claude-api-key" && request.Method == http.MethodPut:
-			var arr []map[string]any
-			_ = json.NewDecoder(request.Body).Decode(&arr)
-			state.claudeProviders = arr
-			_, _ = writer.Write([]byte(`{"status":"ok"}`))
-		case path == "/v0/management/gemini-api-key" && request.Method == http.MethodGet:
-			_ = json.NewEncoder(writer).Encode(map[string]any{"gemini-api-key": state.geminiProviders})
-		case path == "/v0/management/gemini-api-key" && request.Method == http.MethodPut:
-			var arr []map[string]any
-			_ = json.NewDecoder(request.Body).Decode(&arr)
-			state.geminiProviders = arr
-			_, _ = writer.Write([]byte(`{"status":"ok"}`))
-		case path == "/v0/management/meta-api-key" && request.Method == http.MethodGet:
-			_ = json.NewEncoder(writer).Encode(map[string]any{"meta-api-key": state.metaProviders})
-		case path == "/v0/management/meta-api-key" && request.Method == http.MethodPut:
-			var arr []map[string]any
-			_ = json.NewDecoder(request.Body).Decode(&arr)
-			state.metaProviders = arr
-			state.putCount++
-			_, _ = writer.Write([]byte(`{"status":"ok"}`))
-		case strings.HasSuffix(path, "-api-key") && state.familyLists[strings.TrimSuffix(strings.TrimPrefix(path, "/v0/management/"), "-api-key")] != nil:
+		case strings.HasSuffix(path, "-api-key") && request.Method == http.MethodGet && state.providerList(strings.TrimSuffix(strings.TrimPrefix(path, "/v0/management/"), "-api-key")) != nil:
 			family := strings.TrimSuffix(strings.TrimPrefix(path, "/v0/management/"), "-api-key")
-			if request.Method == http.MethodPut {
-				var arr []map[string]any
-				_ = json.NewDecoder(request.Body).Decode(&arr)
-				state.familyLists[family] = arr
-				state.putCount++
-				_, _ = writer.Write([]byte(`{"status":"ok"}`))
-				return
-			}
-			_ = json.NewEncoder(writer).Encode(map[string]any{family + "-api-key": state.familyLists[family]})
+			_ = json.NewEncoder(writer).Encode(map[string]any{family + "-api-key": *state.providerList(family)})
 		default:
 			writer.WriteHeader(http.StatusOK)
 			_, _ = writer.Write([]byte(`{}`))
@@ -471,7 +445,7 @@ func TestProviderFamiliesXAIVertexInteractions(t *testing.T) {
 		t.Fatalf("update xai status = %d body %s", resp.StatusCode, payload)
 	}
 	state.mu.Lock()
-	stored := state.familyLists["xai"][0]
+	stored := (*state.familyLists["xai"])[0]
 	state.mu.Unlock()
 	if stored["api-key"] != "xai-new-secret-5678" || stored["websockets"] != true || stored["request-retry"] != float64(2) {
 		t.Fatalf("xai entry after update = %#v, want the new key with websockets and request-retry kept", stored)

@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -14,7 +14,7 @@ import (
 
 func (c *Client) OpenAICompatibility(ctx context.Context) (OpenAICompatibilityResponse, error) {
 	var response OpenAICompatibilityResponse
-	if _, err := c.doV0JSON(ctx, http.MethodGet, "/openai-compatibility", nil, &response); err != nil {
+	if _, err := c.getV0JSON(ctx, "/openai-compatibility", &response); err != nil {
 		return OpenAICompatibilityResponse{}, err
 	}
 	return response, nil
@@ -48,14 +48,6 @@ func (c *Client) UpdateClientAPIKeys(ctx context.Context, keys []string) error {
 	return c.ApplyConfigChanges(ctx, []ConfigChange{{Path: CLIENT_KEYS_PATH, Value: keys}})
 }
 
-func (c *Client) UpdateOpenAICompatibility(ctx context.Context, entries []OpenAICompatibility) error {
-	if entries == nil {
-		entries = []OpenAICompatibility{}
-	}
-	_, err := c.doV0JSON(ctx, http.MethodPut, "/openai-compatibility", entries, nil)
-	return err
-}
-
 type OpenAICompatibilityResponse struct {
 	Entries []OpenAICompatibility `json:"openai-compatibility"`
 }
@@ -71,6 +63,29 @@ type OpenAICompatibility struct {
 	LegacyAPIKeys  []string          `json:"api-keys,omitempty"`
 	Models         []ModelAlias      `json:"models,omitempty"`
 	Headers        map[string]string `json:"headers,omitempty"`
+
+	// extra keeps the settings the console does not model (request-retry,
+	// support-prompt-cache-key, ...) through a whole-list write.
+	extra wireExtras
+}
+
+type openAICompatibilityFields OpenAICompatibility
+
+var openAICompatibilityModelledFields = modelledWireFields(reflect.TypeOf(openAICompatibilityFields{}))
+
+func (o *OpenAICompatibility) UnmarshalJSON(data []byte) error {
+	var fields openAICompatibilityFields
+	extra, err := decodeWithExtras(data, &fields, openAICompatibilityModelledFields)
+	if err != nil {
+		return err
+	}
+	*o = OpenAICompatibility(fields)
+	o.extra = extra
+	return nil
+}
+
+func (o OpenAICompatibility) MarshalJSON() ([]byte, error) {
+	return encodeWithExtras(openAICompatibilityFields(o), o.extra)
 }
 
 // OpenAICompatibilityLabelPrefix is what CPA puts in front of a compatibility
@@ -88,6 +103,27 @@ type APIKeyEntry struct {
 	AuthIndex string `json:"auth-index,omitempty"`
 	ProxyURL  string `json:"proxy-url,omitempty"`
 	Weight    *int   `json:"weight,omitempty"`
+
+	extra wireExtras
+}
+
+type apiKeyEntryFields APIKeyEntry
+
+var apiKeyEntryModelledFields = modelledWireFields(reflect.TypeOf(apiKeyEntryFields{}))
+
+func (e *APIKeyEntry) UnmarshalJSON(data []byte) error {
+	var fields apiKeyEntryFields
+	extra, err := decodeWithExtras(data, &fields, apiKeyEntryModelledFields)
+	if err != nil {
+		return err
+	}
+	*e = APIKeyEntry(fields)
+	e.extra = extra
+	return nil
+}
+
+func (e APIKeyEntry) MarshalJSON() ([]byte, error) {
+	return encodeWithExtras(apiKeyEntryFields(e), e.extra)
 }
 
 type ThinkingSupport struct {
@@ -107,6 +143,29 @@ type ModelAlias struct {
 	ForceMapping     bool             `json:"force-mapping,omitempty"`
 	IsCompat         bool             `json:"is-compat,omitempty"`
 	Thinking         *ThinkingSupport `json:"thinking,omitempty"`
+
+	// extra keeps a model's unmodelled settings (input-modalities, ...), which
+	// every provider write sends back for every model of the family.
+	extra wireExtras
+}
+
+type modelAliasFields ModelAlias
+
+var modelAliasModelledFields = modelledWireFields(reflect.TypeOf(modelAliasFields{}))
+
+func (m *ModelAlias) UnmarshalJSON(data []byte) error {
+	var fields modelAliasFields
+	extra, err := decodeWithExtras(data, &fields, modelAliasModelledFields)
+	if err != nil {
+		return err
+	}
+	*m = ModelAlias(fields)
+	m.extra = extra
+	return nil
+}
+
+func (m ModelAlias) MarshalJSON() ([]byte, error) {
+	return encodeWithExtras(modelAliasFields(m), m.extra)
 }
 
 // ConfiguredModelProvider is non-secret provenance captured alongside the model directory.

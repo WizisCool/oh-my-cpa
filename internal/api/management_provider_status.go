@@ -119,25 +119,25 @@ func (h *Handler) writeProviderStatus(ctx context.Context, client *management.Cl
 	switch req.Family {
 	case openAICompatibilityFamily:
 		return gatedProviderListWrite(h, ctx,
-			func(ctx context.Context) (management.OpenAICompatibilityResponse, error) {
-				return client.OpenAICompatibility(ctx)
+			func(ctx context.Context) ([]management.OpenAICompatibility, error) {
+				return client.EditableOpenAICompatibility(ctx)
 			},
-			func(ctx context.Context, list management.OpenAICompatibilityResponse) error {
-				return client.UpdateOpenAICompatibility(ctx, list.Entries)
+			func(ctx context.Context, list []management.OpenAICompatibility) error {
+				return client.UpdateOpenAICompatibility(ctx, list)
 			},
-			func(list *management.OpenAICompatibilityResponse) error {
+			func(list *[]management.OpenAICompatibility) error {
 				if req.beforeWrite != nil {
 					if err := req.beforeWrite(ctx); err != nil {
 						return err
 					}
 				}
-				if req.Index >= len(list.Entries) {
+				if req.Index >= len(*list) {
 					return newProviderWriteError(http.StatusNotFound, "provider index out of bounds")
 				}
-				if err := req.verifyName(list.Entries[req.Index].Name); err != nil {
+				if err := req.verifyName((*list)[req.Index].Name); err != nil {
 					return err
 				}
-				list.Entries[req.Index].Disabled = req.Disabled
+				(*list)[req.Index].Disabled = req.Disabled
 				return nil
 			},
 			nil)
@@ -155,7 +155,7 @@ func (h *Handler) writeProviderStatus(ctx context.Context, client *management.Cl
 func (h *Handler) writeConfigKeyProviderStatus(ctx context.Context, client *management.Client, spec providerConfigFamilySpec, req patchProviderStatusRequest) error {
 	return gatedProviderListWrite(h, ctx,
 		func(ctx context.Context) ([]management.ConfigAPIKey, error) {
-			return client.ConfigAPIKeys(ctx, spec.Family)
+			return client.EditableConfigAPIKeys(ctx, spec.Family)
 		},
 		func(ctx context.Context, list []management.ConfigAPIKey) error {
 			return client.UpdateConfigAPIKeys(ctx, spec.Family, list)

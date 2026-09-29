@@ -610,12 +610,11 @@ func logTail(now time.Time) []string {
 	return lines
 }
 
-// configDocument is the CPA configuration the config page renders. It is a plain
-// document: it describes a working gateway without carrying a live secret, and
-// the same document is served as JSON and as YAML so the two views cannot drift.
 // configDocument is the gateway's configuration in the v8 layout, as CPA's v8
 // view renders a migrated file: the stored document without runtime fields, so
-// upstream groups carry no auth index.
+// upstream groups carry no auth index. It describes a working gateway without
+// carrying a live secret, and the same document answers the JSON view, each
+// path of it and the YAML view, so they cannot drift.
 func configDocument() map[string]any {
 	upstreamGroups := map[string]any{"openai-compatibility": v8Groups("openai-compatibility", compatibilitySection())}
 	for _, family := range []string{"claude", "gemini", "codex"} {

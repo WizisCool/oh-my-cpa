@@ -18,11 +18,7 @@ func (h *Handler) appendOpenAICompatibilityGated(
 	var updated []management.OpenAICompatibility
 	err := gatedProviderListWrite(h, ctx,
 		func(ctx context.Context) ([]management.OpenAICompatibility, error) {
-			resp, err := client.OpenAICompatibility(ctx)
-			if err != nil {
-				return nil, err
-			}
-			return resp.Entries, nil
+			return client.EditableOpenAICompatibility(ctx)
 		},
 		func(ctx context.Context, list []management.OpenAICompatibility) error {
 			return client.UpdateOpenAICompatibility(ctx, list)
@@ -51,7 +47,7 @@ func (h *Handler) appendConfigKeyProvider(
 	var updated []management.ConfigAPIKey
 	err := gatedProviderListWrite(h, ctx,
 		func(ctx context.Context) ([]management.ConfigAPIKey, error) {
-			return client.ConfigAPIKeys(ctx, spec.Family)
+			return client.EditableConfigAPIKeys(ctx, spec.Family)
 		},
 		func(ctx context.Context, list []management.ConfigAPIKey) error {
 			return client.UpdateConfigAPIKeys(ctx, spec.Family, list)
@@ -77,7 +73,7 @@ func (h *Handler) mutateConfigKeyProvider(
 ) error {
 	return gatedProviderListWrite(h, ctx,
 		func(ctx context.Context) ([]management.ConfigAPIKey, error) {
-			return client.ConfigAPIKeys(ctx, spec.Family)
+			return client.EditableConfigAPIKeys(ctx, spec.Family)
 		},
 		func(ctx context.Context, list []management.ConfigAPIKey) error {
 			return client.UpdateConfigAPIKeys(ctx, spec.Family, list)
@@ -102,7 +98,7 @@ func (h *Handler) deleteConfigKeyProvider(
 ) error {
 	return gatedProviderListWrite(h, ctx,
 		func(ctx context.Context) ([]management.ConfigAPIKey, error) {
-			return client.ConfigAPIKeys(ctx, spec.Family)
+			return client.EditableConfigAPIKeys(ctx, spec.Family)
 		},
 		func(ctx context.Context, list []management.ConfigAPIKey) error {
 			return client.UpdateConfigAPIKeys(ctx, spec.Family, list)

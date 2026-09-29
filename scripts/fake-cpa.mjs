@@ -1,14 +1,61 @@
 import http from 'node:http';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
-// The endpoints the client addresses on /v0/management; every other one lives
-// under /v8/management only. `/config.yaml` is on both: v0 returns the file as
-// stored (read before a write that would convert it) and v8 its v8 rendering.
-const V0_ENDPOINTS = new Set(['/config.yaml', '/openai-compatibility', '/oauth-model-alias']);
+// The endpoints the client reads on /v0/management; every other one lives under
+// /v8/management only. `/config.yaml` is on both: v0 returns the file as stored
+// (read before a write that would convert it) and v8 its v8 rendering. The
+// per-family credential lists are the only source of each key's auth index.
+const V0_ENDPOINTS = new Set(['/config.yaml', '/openai-compatibility']);
 const BOTH_GENERATION_ENDPOINTS = new Set(['/config.yaml']);
 
 function isV0Endpoint(path) {
-  return V0_ENDPOINTS.has(path) || /^\/[a-z0-9-]+-api-key$/.test(path) || /^\/plugins\/[^/]+\/(enabled|config)$/.test(path);
+  return V0_ENDPOINTS.has(path) || /^\/[a-z0-9-]+-api-key$/.test(path);
+}
+
+// The settings a v8 credential group may carry for all of its keys.
+const GROUP_SHARED_FIELDS = new Set(['base-url', 'priority', 'prefix', 'proxy-url', 'headers', 'models', 'excluded-models', 'disable-cooling', 'request-retry', 'request-scoped-errors']);
+
+// groupEntries renders a flat credential list the way CPA renders a converted
+// pre-v8 file: one group per entry, without the runtime auth index.
+function groupEntries(family, entries) {
+  if (family === 'openai-compatibility') {
+    return entries.map(({ 'api-key-entries': keys = [], ...provider }) => ({
+      ...provider,
+      keys: keys.map(({ 'auth-index': _runtime, ...key }) => key),
+    }));
+  }
+  return entries.map((entry, index) => {
+    const group = { name: `${family}-${index + 1}` };
+    const key = {};
+    for (const [field, value] of Object.entries(entry)) {
+      if (field === 'auth-index') continue;
+      if (GROUP_SHARED_FIELDS.has(field)) group[field] = value;
+      else key[field] = value;
+    }
+    group.keys = [key];
+    return group;
+  });
+}
+
+// flattenGroups is CPA's reading of written groups: one entry per key. A key
+// keeps the auth index of the entry it replaces, since CPA derives the index
+// from the key's content.
+function flattenGroups(family, groups, previous) {
+  const indexOf = (apiKey) => previous.flatMap((entry) => [entry, ...(entry['api-key-entries'] ?? [])])
+    .find((entry) => entry['api-key'] === apiKey)?.['auth-index'] ?? `${family}-${apiKey}`;
+  if (family === 'openai-compatibility') {
+    return (groups ?? []).map(({ keys = [], ...provider }) => ({
+      ...provider,
+      'api-key-entries': keys.map((key) => ({ ...key, 'auth-index': indexOf(key['api-key']) })),
+    }));
+  }
+  return (groups ?? []).flatMap((group) => (group.keys ?? []).map((key) => {
+    const entry = {};
+    for (const [field, value] of Object.entries(group)) {
+      if (field !== 'name' && field !== 'keys') entry[field] = value;
+    }
+    return { ...entry, ...key, 'auth-index': indexOf(key['api-key']) };
+  }));
 }
 
 export const FAKE_CPA_MANAGEMENT_KEY = 'omc-e2e-management-key';
@@ -146,6 +193,18 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
     { 'api-key': FAKE_PROVIDER_SECRET, 'auth-index': 'xai-e2e', 'base-url': 'https://api.x.ai/v1', websockets: true },
   ];
   let xaiProviders = JSON.parse(JSON.stringify(initialXAIProviders));
+  // The families the fixture keeps no credentials for answer an empty list, and
+  // a write to one is stored like any other.
+  const otherProviders = { claude: [], gemini: [], vertex: [], interactions: [], 'openai-compatibility': [] };
+  const providerLists = {
+    codex: { get: () => codexProviders, set: (list) => { codexProviders = list; } },
+    meta: { get: () => metaProviders, set: (list) => { metaProviders = list; } },
+    xai: { get: () => xaiProviders, set: (list) => { xaiProviders = list; } },
+    ...Object.fromEntries(Object.keys(otherProviders).map((family) => [family, {
+      get: () => otherProviders[family],
+      set: (list) => { otherProviders[family] = list; },
+    }])),
+  };
 
   // The configuration is one v8 document, stateful for the same reason authFiles
   // is: the key-management page and the configuration page write single settings
@@ -212,6 +271,16 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
     ['fixture-logger', { enabled: true, level: 'info', 'sample-rate': 1, 'redact-headers': ['authorization'], 'include-body': false }],
     ['iflow-auth', { enabled: true }],
   ]);
+  // applyPluginConfig stores `plugins.configs.<id>` and what the plugin host
+  // derives from it.
+  const applyPluginConfig = (id, config) => {
+    pluginConfigs.set(id, config);
+    const plugin = plugins.get(id);
+    if (plugin) {
+      plugin.configured = true;
+      if (typeof config.enabled === 'boolean') plugin.enabled = config.enabled;
+    }
+  };
   const storePlugins = [
     {
       store_id: 'official/fixture-limiter', source_id: 'official', source_name: 'official', source_url: 'https://registry.fake-cpa.local/plugins.json',
@@ -263,27 +332,6 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
 
     if (request.method === 'GET' && path === '/credentials') {
       json(response, 200, { files: authFiles });
-      return;
-    }
-    if (request.method === 'GET' && path === '/oauth-model-alias') {
-      json(response, 200, { 'oauth-model-alias': oauthModelAliases });
-      return;
-    }
-    if (request.method === 'PATCH' && path === '/oauth-model-alias') {
-      const bodyText = Buffer.concat(chunks).toString('utf8');
-      let payload = {};
-      try { payload = JSON.parse(bodyText || '{}'); } catch {}
-      const channel = String(payload.channel ?? '').trim().toLowerCase();
-      if (!channel) {
-        json(response, 400, { error: 'invalid channel' });
-        return;
-      }
-      if (Array.isArray(payload.aliases) && payload.aliases.length > 0) {
-        oauthModelAliases[channel] = payload.aliases;
-      } else {
-        delete oauthModelAliases[channel];
-      }
-      json(response, 200, { status: 'ok' });
       return;
     }
     if (request.method === 'GET' && path === '/credentials/models') {
@@ -390,6 +438,83 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       response.end(renderConfigYaml());
       return;
     }
+    // Upstream credentials, OAuth model aliases and plugin settings live in the
+    // v8 document, but the fixture keeps them where the rest of it reads them:
+    // the credential lists its v0 routes serve, the alias map and the plugin
+    // host. These routes translate between the two.
+    const configPathMatch = /^\/v8\/management\/config\/(.+)$/.exec(url.pathname);
+    const settingPath = configPathMatch ? configPathMatch[1].split('/').map(decodeURIComponent) : [];
+    if (settingPath[0] === 'api-keys' && settingPath.length === 2 && (request.method === 'GET' || request.method === 'DELETE')) {
+      const list = providerLists[settingPath[1]]?.get() ?? [];
+      if (list.length === 0) {
+        json(response, 404, { error: 'not_found' });
+        return;
+      }
+      if (request.method === 'DELETE') {
+        providerLists[settingPath[1]].set([]);
+        json(response, 200, { status: 'ok', 'config-version': 8 });
+        return;
+      }
+      json(response, 200, groupEntries(settingPath[1], list));
+      return;
+    }
+    if (settingPath.join('/') === 'oauth/model-alias' && request.method === 'GET') {
+      json(response, 200, oauthModelAliases);
+      return;
+    }
+    if (settingPath[0] === 'oauth' && settingPath[1] === 'model-alias' && settingPath.length === 3 && request.method === 'DELETE') {
+      if (!(settingPath[2] in oauthModelAliases)) {
+        json(response, 404, { error: 'not_found' });
+        return;
+      }
+      delete oauthModelAliases[settingPath[2]];
+      json(response, 200, { status: 'ok', 'config-version': 8 });
+      return;
+    }
+    if (settingPath[0] === 'plugins' && settingPath[1] === 'configs' && settingPath.length === 3) {
+      const id = settingPath[2];
+      if (request.method === 'GET') {
+        if (!pluginConfigs.has(id)) {
+          json(response, 404, { error: 'not_found' });
+          return;
+        }
+        json(response, 200, pluginConfigs.get(id));
+        return;
+      }
+      if (request.method === 'PUT') {
+        let payload = {};
+        try { payload = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch {}
+        applyPluginConfig(id, payload);
+        json(response, 200, { status: 'ok', 'config-version': 8 });
+        return;
+      }
+    }
+    if (request.method === 'PATCH' && url.pathname === '/v8/management/config') {
+      let patch = {};
+      try { patch = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch {}
+      for (const [family, groups] of Object.entries(patch['api-keys'] ?? {})) {
+        if (!providerLists[family]) {
+          json(response, 400, { error: 'invalid_config', message: `unknown API-key provider ${family}` });
+          return;
+        }
+        providerLists[family].set(flattenGroups(family, groups, providerLists[family].get()));
+      }
+      for (const [channel, aliases] of Object.entries(patch.oauth?.['model-alias'] ?? {})) {
+        oauthModelAliases[channel] = aliases;
+      }
+      for (const [id, config] of Object.entries(patch.plugins?.configs ?? {})) {
+        applyPluginConfig(id, { ...(pluginConfigs.get(id) ?? {}), ...config });
+      }
+      delete patch['api-keys'];
+      if (patch.oauth) delete patch.oauth['model-alias'];
+      if (patch.plugins) delete patch.plugins.configs;
+      const isHandled = Object.keys(patch).every((root) => isPlainObject(patch[root]) && Object.keys(patch[root]).length === 0);
+      if (isHandled) {
+        json(response, 200, { status: 'ok', 'config-version': 8 });
+        return;
+      }
+      chunks.splice(0, chunks.length, Buffer.from(JSON.stringify(patch)));
+    }
     if (url.pathname.startsWith('/v8/management/config') && request.method !== 'GET') {
       const bodyText = Buffer.concat(chunks).toString('utf8');
       const configPath = path === '/config' || path === '/config.yaml' ? [] : configPathOf(path);
@@ -436,24 +561,13 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       json(response, 200, { status: 'ok', 'config-version': 8 });
       return;
     }
-    if (request.method === 'GET' && path === '/codex-api-key') {
-      json(response, 200, { 'codex-api-key': codexProviders });
-      return;
-    }
-    // The real CPA replaces the whole list on a write, which is why a toggle sends
-    // back every entry with one of them changed rather than a partial patch. The
-    // `excluded-models` marker the backend uses to disable an entry is stored and
-    // returned verbatim: deciding what it means is the backend's job.
-    if (request.method === 'PUT' && path === '/codex-api-key') {
-      try {
-        const parsed = JSON.parse(chunks.length ? Buffer.concat(chunks).toString('utf8') : '[]');
-        codexProviders = Array.isArray(parsed) ? parsed : parsed['codex-api-key'] ?? codexProviders;
-      } catch { /* keep the previous list on an unreadable body */ }
-      json(response, 200, { status: 'ok' });
+    const familyListMatch = /^\/([a-z0-9-]+)-api-key$/.exec(path);
+    if (familyListMatch && request.method === 'GET' && providerLists[familyListMatch[1]]) {
+      json(response, 200, { [`${familyListMatch[1]}-api-key`]: providerLists[familyListMatch[1]].get() });
       return;
     }
     if (request.method === 'GET' && path === '/openai-compatibility') {
-      json(response, 200, { 'openai-compatibility': [] });
+      json(response, 200, { 'openai-compatibility': providerLists['openai-compatibility'].get() });
       return;
     }
     if (request.method === 'GET' && path === '/observability/usage/api-keys') {
@@ -667,43 +781,6 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       });
       return;
     }
-    const pluginConfigMatch = /^\/plugins\/([^/]+)\/config$/.exec(path);
-    if (pluginConfigMatch && request.method === 'GET') {
-      const id = decodeURIComponent(pluginConfigMatch[1]);
-      if (!plugins.has(id)) {
-        json(response, 404, { error: 'plugin_not_found', message: 'plugin not found' });
-        return;
-      }
-      json(response, 200, pluginConfigs.get(id) ?? {});
-      return;
-    }
-    if (pluginConfigMatch && request.method === 'PUT') {
-      const id = decodeURIComponent(pluginConfigMatch[1]);
-      let payload = {};
-      try { payload = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch {}
-      pluginConfigs.set(id, payload);
-      const plugin = plugins.get(id);
-      if (plugin) {
-        plugin.configured = true;
-        if (typeof payload.enabled === 'boolean') plugin.enabled = payload.enabled;
-      }
-      json(response, 200, { status: 'ok' });
-      return;
-    }
-    const pluginEnabledMatch = /^\/plugins\/([^/]+)\/enabled$/.exec(path);
-    if (pluginEnabledMatch && request.method === 'PATCH') {
-      const id = decodeURIComponent(pluginEnabledMatch[1]);
-      let payload = {};
-      try { payload = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch {}
-      const plugin = plugins.get(id);
-      if (plugin && typeof payload.enabled === 'boolean') {
-        plugin.enabled = payload.enabled;
-        plugin.configured = true;
-        pluginConfigs.set(id, { ...(pluginConfigs.get(id) ?? {}), enabled: payload.enabled });
-      }
-      json(response, 200, { status: 'ok' });
-      return;
-    }
     if (request.method === 'GET' && path === '/plugins/store') {
       json(response, 200, {
         plugins_enabled: true,
@@ -760,44 +837,6 @@ export function createFakeCpaServer({ managementKey = FAKE_CPA_MANAGEMENT_KEY } 
       json(response, existed ? 200 : 404, existed
         ? { status: 'deleted', id, path: `plugins/${id}.so`, file_deleted: true, configured_removed: true, restart_required: false }
         : { error: 'plugin_not_found', message: 'plugin not found' });
-      return;
-    }
-    if (request.method === 'GET' && ['/claude-api-key', '/gemini-api-key', '/oauth-excluded-models'].includes(path)) {
-      json(response, 200, {});
-      return;
-    }
-    if (request.method === 'GET' && path === '/meta-api-key') {
-      json(response, 200, { 'meta-api-key': metaProviders });
-      return;
-    }
-    if (request.method === 'PUT' && path === '/meta-api-key') {
-      let parsed = null;
-      try {
-        parsed = JSON.parse(requests[requests.length - 1].body || '[]');
-      } catch { /* keep the stored list */ }
-      if (Array.isArray(parsed)) {
-        metaProviders = parsed;
-      } else if (Array.isArray(parsed?.['meta-api-key'])) {
-        metaProviders = parsed['meta-api-key'];
-      }
-      json(response, 200, { status: 'ok' });
-      return;
-    }
-    if (request.method === 'GET' && path === '/xai-api-key') {
-      json(response, 200, { 'xai-api-key': xaiProviders });
-      return;
-    }
-    if (request.method === 'PUT' && path === '/xai-api-key') {
-      let parsed = null;
-      try {
-        parsed = JSON.parse(requests[requests.length - 1].body || '[]');
-      } catch { /* keep the stored list */ }
-      if (Array.isArray(parsed)) {
-        xaiProviders = parsed;
-      } else if (Array.isArray(parsed?.['xai-api-key'])) {
-        xaiProviders = parsed['xai-api-key'];
-      }
-      json(response, 200, { status: 'ok' });
       return;
     }
     if (request.method === 'PUT' && path.startsWith('/')) {

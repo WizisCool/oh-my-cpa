@@ -356,11 +356,11 @@ answer as `cpa_management_api`, and the console shell replaces every page with u
 guidance while it reads `unsupported` (`CpaUpgradeRequired`), or with the
 management-secret setting while it reads `disabled` (`CpaManagementDisabled`).
 
-`/v0/management` is addressed only through `internal/cpa/management/client_v0.go`: the
-per-family credential lists, which alone carry each upstream key's `auth-index`; the
-configuration file as stored (`StoredConfigYAML`), which only v0 returns; and the writes
-whose editors have not moved to the v8 configuration API (provider credentials, OAuth
-model aliases, per-plugin enablement and settings).
+`/v0/management` is addressed only through `internal/cpa/management/client_v0.go`, and
+only for reads: the per-family credential lists, which alone carry each upstream key's
+`auth-index`, and the configuration file as stored (`StoredConfigYAML`), which only v0
+returns. Every configuration write goes through the v8 configuration API (ADR 0037,
+ADR 0038).
 
 ### Configuration editing on the v8 configuration API
 
@@ -423,9 +423,23 @@ check on the rendered provider table assert the label rather than the module.
 
 The families differ only in the fields around that core (a Codex-style entry's
 `websockets`, a Claude entry's `cloak`, `request-retry` on most of them). The
-console does not model those, but every write it makes replaces a whole list, so
-`ConfigAPIKey` keeps each entry's unmodelled fields verbatim and writes them back;
-an edit in the console cannot strip a setting the operator wrote in `config.yaml`.
+console does not model those, but every write it makes replaces a whole family, so
+`ConfigAPIKey` (and `OpenAICompatibility`, its key entries and `ModelAlias`) keep
+their unmodelled fields verbatim and write them back (`wire_extras.go`); an edit in
+the console cannot strip a setting the operator wrote in `config.yaml`.
+
+The file stores each family as v8 groups (`api-keys.<family>`: a name, a base URL
+and shared settings over a list of keys), while the console addresses providers by
+their position in CPA's flattened runtime list, the only one carrying `auth-index`
+(ADR 0038, `internal/cpa/management/provider_groups.go`). A write therefore reads
+both: `EditableConfigAPIKeys` matches the stored keys to the runtime entries in
+order, so each editable entry holds the file's own values, its `auth-index` and the
+group it came from. `UpdateConfigAPIKeys` writes the family back as groups in the
+list's exact order: a key stays in its group, stating its own value where it differs
+from a setting the group stores; a key its group cannot express (another base URL, a
+cleared `disable-cooling` or `request-retry`) and a new provider become groups of
+their own. OpenAI-compatible providers are one group per provider
+(`EditableOpenAICompatibility`, `UpdateOpenAICompatibility`).
 Two per-family constants in the registry carry the remaining differences:
 `RequiresBaseURL` (Codex and xAI, whose entries CPA drops without an error when the
 base URL is empty, so the console refuses them up front) and `PullProtocol` (the

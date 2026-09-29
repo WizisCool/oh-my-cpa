@@ -81,6 +81,12 @@ Measured on the v8.0.2 binary with a management password set.
 | An unknown section | `400 invalid_config`, "unknown v8 configuration section …"; nothing written |
 | A value of the wrong type | `422 invalid_config` naming the line and type; nothing written |
 | A burst of sequential writes | Every value kept |
+| `PATCH` with `{"api-keys": {"claude": [...]}}` | Replaces that family's groups; the other families are kept |
+| A key that overrides a group setting (`models: []`, `priority: 0`, `excluded-models`, `disable-cooling: false`) | Accepted; the v0 runtime list shows the key's own value |
+| `base-url` on a key | Refused: only a group may carry it |
+| `GET /config/api-keys/<family>/0/keys` | `404 not_found`: list items are not addressable paths, so a family is written whole |
+| `PUT /config/plugins/configs/<id>`, `PUT /config/plugins/configs/<id>/enabled` | Replace that plugin's settings, or only its switch |
+| `PATCH` of `oauth.model-alias.<provider>`, `DELETE /config/oauth/model-alias/<provider>` | Replace or remove one provider's aliases |
 
 Observed but not part of the v8 change: several v0 writes sent back to back without a
 pause can lose all but the last (each write reloads the configuration asynchronously).
@@ -286,10 +292,11 @@ edits `requests.payload`).
 
 ### Upstream credential lists
 
-These move under the root `api-keys` mapping **and change shape**, so no path rewrite
-translates them. OMC still edits them through the v0 per-family endpoints, which CPA
-translates in both directions (measured, §1), until the provider editor moves to the v8
-groups. The masked configuration view hides every `api-key` value in them.
+These move under the root `api-keys` mapping **and change shape**: each family is a list
+of groups (`name`, `base-url`, shared settings, `keys`), and CPA's runtime view, the v0
+per-family list, is those groups flattened one entry per key. OMC edits the flattened
+list and writes the family back as groups, keeping the operator's grouping (ADR 0038,
+§4). The masked configuration view hides every `api-key` value in them.
 
 | Legacy list | v8 location |
 | --- | --- |
@@ -329,6 +336,23 @@ A change set is sent as one merge for scalars and lists, one `PUT` per map value
 `DELETE` per removal, in that order (`Client.ApplyConfigChanges`). It is not atomic
 across those requests (§9).
 
+Provider, OAuth alias and plugin writes use the same change sets (ADR 0038). Measured end
+to end on 2026-09-29 with a legacy file holding two `claude-api-key` entries (one with
+`request-retry: 0`), an OpenAI-compatible provider with `support-prompt-cache-key` and a
+model's `input-modalities`, an OAuth alias and a plugin's settings:
+
+| Step | Result |
+| --- | --- |
+| Disable the second Claude key | One backup, then the file converted; the key is `api-keys.claude[1]` with `excluded-models: ["*"]` on the key and its group's `request-retry: 0` kept |
+| With the family regrouped by hand (`team`: two keys sharing base URL, priority and models; `solo`), disable `team`'s second key | `team` kept; the exclusion is on that key only |
+| Change the first key's base URL | That key becomes `team-2`, ahead of `team`; list order and every other `auth-index` unchanged |
+| Create a provider | Appended as its own group |
+| Delete a provider | Its key is removed from its group; the other groups unchanged |
+| Disable the OpenAI-compatible provider | `disabled: true`; `support-prompt-cache-key`, `input-modalities` and its key kept, no `auth-index` in the file |
+| Replace, add and empty OAuth aliases | `oauth.model-alias.codex` replaced; `claude` added then removed |
+| Enable a plugin, then replace its settings | `plugins.configs.foo.enabled`, then the whole object; an unknown plugin reads as `plugin_not_found` |
+| Every write after the first | No second backup |
+
 ## 5. Detection
 
 Two independent facts, both observed rather than inferred from a version string:
@@ -359,8 +383,8 @@ Two independent facts, both observed rather than inferred from a version string:
 
 Every editor names the v8 path, whatever the stored layout: CPA renders any file in the
 v8 layout, and a v8 write to a legacy file converts it. Client keys are
-`access.api-keys`; the root `api-keys` mapping is the upstream provider groups and is not
-part of any editor's change set. Payload rules are `requests.payload`, one category per
+`access.api-keys`; the root `api-keys` mapping is the upstream provider groups, written a
+family at a time by the provider editor (`api-keys.<family>`). Payload rules are `requests.payload`, one category per
 change.
 
 There is no save guard of OMC's own. CPA refuses a legacy name, an unknown section or a
@@ -370,7 +394,9 @@ mistyped value without writing that request (§1). The console reports
 keys cannot arise from an editor that only writes v8 paths.
 
 **Scalar writes** (`PUT /management/config/{key}`, also used by the Agent's `config_set`)
-are one-change sets on the key's v8 path.
+are one-change sets on the key's v8 path. OAuth model aliases are
+`oauth.model-alias.<provider>`, per-plugin settings `plugins.configs.<id>` and their
+switch `plugins.configs.<id>.enabled`.
 
 ## 7. Routes
 
@@ -395,14 +421,12 @@ files call it `anthropic`; `OAuthProvider.LoginProvider` carries the difference.
 login providers are served by the same endpoint.
 
 `/v0/management`, which v8 serves unchanged, is addressed only through
-`internal/cpa/management/client_v0.go`:
+`internal/cpa/management/client_v0.go`, and only to read:
 
 - the per-family credential lists (`/<family>-api-key`, `/openai-compatibility`), which
   are the only source of each upstream key's `auth-index`: the v8 configuration view is
   the stored document and carries no runtime fields;
-- `/config.yaml`, the file as stored, read before a v8 write to keep a legacy file;
-- the writes whose editors have not moved to the v8 configuration API yet: the family
-  lists' writes, `/oauth-model-alias`, and `/plugins/<id>/enabled|config`.
+- `/config.yaml`, the file as stored, read before a v8 write to keep a legacy file.
 
 The RESP usage channel is not part of the Management API and is unchanged.
 
@@ -419,7 +443,7 @@ supported gateway: OMC now refuses v7 before any request.
 | Keys page | Measured, `access.api-keys` (converts the file, as any save) | Measured, `access.api-keys` |
 | Editor schema paths | — | Measured: every path accepted by `PATCH /v8/management/config` |
 | Scalar writes (`config_set`) | Unit-tested, one-change set | Unit-tested, one-change set |
-| Provider credential lists (v0) | Measured read | Measured read and write |
+| Provider credentials, OAuth aliases, plugin settings | Measured: backup, then converted by the first write | Measured, group-preserving writes |
 | Usage: RESP subscription | Measured | Layout-independent |
 | Usage: HTTP queue, logs, error logs, API-key usage | Measured, v8 routes | Layout-independent |
 | Request log, cooldown reset, api-call, latest version | Measured, v8 routes | Layout-independent |
@@ -447,6 +471,10 @@ flows and the contents of usage records were not exercised against a real binary
 - **A change set is not atomic.** The merge goes first and is where CPA refuses a
   mistyped value; a map value or removal that fails after it leaves the merge applied.
   The save's answer re-reads CPA, so the editor shows what CPA holds.
+- **A family is written whole.** CPA has no path for one key of a group, so a provider
+  write sends the family's groups back. The provider write gate serialises OMC's own
+  writes; a concurrent writer outside OMC editing the same family between the read and
+  the write is overwritten, as with the v0 list writes before.
 - **Probe cache.** An upgrade from v7 is noticed within `API_UNSUPPORTED_TTL` (fifteen
   seconds); a rollback to v7 is noticed on the first v8 route that answers "missing".
 

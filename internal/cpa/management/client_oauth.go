@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 )
 
@@ -152,26 +153,81 @@ type OAuthModelAlias struct {
 	ForceMapping bool   `json:"force-mapping,omitempty"`
 }
 
-// OAuthModelAliases reads CPA's global OAuth model alias map.
+// OAUTH_MODEL_ALIAS_PATH is where v8 keeps the OAuth model aliases, one list
+// per provider.
+var OAUTH_MODEL_ALIAS_PATH = []string{"oauth", "model-alias"}
+
+// OAuthModelAliases reads CPA's global OAuth model alias map as CPA applies
+// it: the stored lists pass through the same cleanup CPA runs when it loads
+// them (see sanitizeOAuthModelAliases).
 func (c *Client) OAuthModelAliases(ctx context.Context) (map[string][]OAuthModelAlias, error) {
-	var response struct {
-		Aliases map[string][]OAuthModelAlias `json:"oauth-model-alias"`
-	}
-	if _, err := c.doV0JSON(ctx, http.MethodGet, "/oauth-model-alias", nil, &response); err != nil {
+	var stored map[string][]OAuthModelAlias
+	if _, err := c.configValueAt(ctx, OAUTH_MODEL_ALIAS_PATH, &stored); err != nil {
 		return nil, err
 	}
-	return response.Aliases, nil
+	return sanitizeOAuthModelAliases(stored), nil
 }
 
-// PatchOAuthModelAliases replaces one provider's alias list. CPA deletes the
-// provider when the replacement list is empty.
-func (c *Client) PatchOAuthModelAliases(ctx context.Context, provider string, aliases []OAuthModelAlias) error {
-	if aliases == nil {
-		aliases = []OAuthModelAlias{}
+// sanitizeOAuthModelAliases mirrors CPA's SanitizeOAuthModelAlias: providers
+// are lower-cased, and an alias without a name, equal to its model or repeated
+// within a provider is ignored. The stored document is what the operator
+// wrote; this is what the gateway uses.
+func sanitizeOAuthModelAliases(stored map[string][]OAuthModelAlias) map[string][]OAuthModelAlias {
+	providers := make([]string, 0, len(stored))
+	for provider := range stored {
+		providers = append(providers, provider)
 	}
-	_, err := c.doV0JSON(ctx, http.MethodPatch, "/oauth-model-alias", map[string]any{
-		"channel": strings.TrimSpace(provider),
-		"aliases": aliases,
-	}, nil)
-	return err
+	sort.Strings(providers)
+	out := map[string][]OAuthModelAlias{}
+	for _, rawProvider := range providers {
+		provider := strings.ToLower(strings.TrimSpace(rawProvider))
+		if provider == "" || out[provider] != nil {
+			continue
+		}
+		seen := map[string]bool{}
+		var clean []OAuthModelAlias
+		for _, entry := range stored[rawProvider] {
+			name, alias := strings.TrimSpace(entry.Name), strings.TrimSpace(entry.Alias)
+			if name == "" || alias == "" || strings.EqualFold(name, alias) || seen[strings.ToLower(alias)] {
+				continue
+			}
+			seen[strings.ToLower(alias)] = true
+			clean = append(clean, OAuthModelAlias{
+				Name:         name,
+				Alias:        alias,
+				Fork:         entry.Fork,
+				DisplayName:  strings.TrimSpace(entry.DisplayName),
+				ForceMapping: entry.ForceMapping,
+			})
+		}
+		if len(clean) > 0 {
+			out[provider] = clean
+		}
+	}
+	return out
+}
+
+// PatchOAuthModelAliases replaces one provider's alias list, and removes the
+// provider when the list is empty. A stored spelling of the same provider in
+// another case is removed with it, because CPA would read both as one provider
+// and keep either.
+func (c *Client) PatchOAuthModelAliases(ctx context.Context, provider string, aliases []OAuthModelAlias) error {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	var stored map[string]any
+	if _, err := c.configValueAt(ctx, OAUTH_MODEL_ALIAS_PATH, &stored); err != nil {
+		return err
+	}
+	path := append(append([]string{}, OAUTH_MODEL_ALIAS_PATH...), provider)
+	var changes []ConfigChange
+	for storedProvider := range stored {
+		if storedProvider != provider && strings.ToLower(strings.TrimSpace(storedProvider)) == provider {
+			changes = append(changes, ConfigChange{Path: append(append([]string{}, OAUTH_MODEL_ALIAS_PATH...), storedProvider), Remove: true})
+		}
+	}
+	if len(aliases) == 0 {
+		changes = append(changes, ConfigChange{Path: path, Remove: true})
+	} else {
+		changes = append(changes, ConfigChange{Path: path, Value: aliases})
+	}
+	return c.ApplyConfigChanges(ctx, changes)
 }

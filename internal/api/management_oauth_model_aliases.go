@@ -60,11 +60,7 @@ func (h *Handler) applyManagementOAuthModelAliases(ctx context.Context, client *
 		}
 	}
 	if err := client.PatchOAuthModelAliases(ctx, provider, managementOAuthModelAliasesToCPA(aliases)); err != nil {
-		// Deleting an already-absent provider reaches the same desired state; a
-		// missing endpoint has an empty body and is still reported as unsupported.
-		if len(aliases) != 0 || !managementOAuthModelAliasChannelMissing(err) {
-			return nil, err
-		}
+		return nil, err
 	}
 	serverAliases, err := client.OAuthModelAliases(ctx)
 	if err != nil {
@@ -262,9 +258,4 @@ func managementOAuthModelAliasesEqual(left []managementOAuthModelAlias, right []
 		}
 	}
 	return true
-}
-
-func managementOAuthModelAliasChannelMissing(err error) bool {
-	var httpErr *management.HTTPError
-	return errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound && strings.Contains(strings.ToLower(httpErr.Body), "channel not found")
 }

@@ -607,15 +607,14 @@ func TestUpstreamServesTheConsoleSurface(t *testing.T) {
 		managementPrefix + "/oauth/status",
 		managementPrefix + "/config",
 		managementPrefix + "/config.yaml",
-		legacyManagementPrefix + "/oauth-model-alias",
-		legacyManagementPrefix + "/oauth-excluded-models",
+		managementPrefix + "/config/oauth/model-alias",
+		managementPrefix + "/config/plugins/configs/usage-exporter",
 		legacyManagementPrefix + "/config.yaml",
 		legacyManagementPrefix + "/openai-compatibility",
 		legacyManagementPrefix + "/claude-api-key",
 		legacyManagementPrefix + "/codex-api-key",
 		legacyManagementPrefix + "/gemini-api-key",
 		legacyManagementPrefix + "/meta-api-key",
-		legacyManagementPrefix + "/plugins/usage-exporter/config",
 	} {
 		response := getWithClient(t, client, upstream.BaseURL()+path)
 		body := readBody(t, response)

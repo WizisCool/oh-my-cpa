@@ -36,6 +36,9 @@ type pluginMockState struct {
 	deleteBlocked bool
 }
 
+// pluginConfigsPath is where the fake serves `plugins.configs.<id>`.
+const pluginConfigsPath = "/v8/management/config/plugins/configs/"
+
 const pluginTestConfigYAML = `# gateway
 port: 8317
 plugins:
@@ -67,35 +70,38 @@ func startPluginTestServer(t *testing.T) (*http.Client, string, *repository.Repo
 		case path == "/v8/management/config.yaml" && request.Method == http.MethodGet:
 			writer.Header().Set("Content-Type", "application/yaml")
 			_, _ = writer.Write([]byte(state.configYAML))
+		case strings.HasPrefix(path, pluginConfigsPath) && request.Method == http.MethodGet:
+			config, ok := state.configs[strings.TrimPrefix(path, pluginConfigsPath)]
+			if !ok {
+				writer.WriteHeader(http.StatusNotFound)
+				_, _ = writer.Write([]byte(`{"error":"not_found"}`))
+				return
+			}
+			_ = json.NewEncoder(writer).Encode(config)
+		case strings.HasPrefix(path, pluginConfigsPath) && request.Method == http.MethodPut:
+			var body map[string]any
+			_ = json.NewDecoder(request.Body).Decode(&body)
+			state.configs[strings.TrimPrefix(path, pluginConfigsPath)] = body
+			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 		case strings.HasPrefix(path, "/v8/management/config") && request.Method != http.MethodGet:
 			body, _ := io.ReadAll(request.Body)
+			var merge struct {
+				Plugins struct {
+					Configs map[string]map[string]any `json:"configs"`
+				} `json:"plugins"`
+			}
+			if request.Method == http.MethodPatch && json.Unmarshal(body, &merge) == nil && len(merge.Plugins.Configs) > 0 {
+				for id, config := range merge.Plugins.Configs {
+					if enabled, ok := config["enabled"].(bool); ok {
+						state.enabledCalls[id] = enabled
+					}
+				}
+				_, _ = writer.Write([]byte(`{"status":"ok"}`))
+				return
+			}
 			state.configWrites = append(state.configWrites, request.Method+" "+path+" "+string(body))
 			state.configYAML += "# written\n"
 			state.configPuts++
-			_, _ = writer.Write([]byte(`{"status":"ok"}`))
-		case strings.HasPrefix(path, "/v0/management/plugins/") && strings.HasSuffix(path, "/enabled") && request.Method == http.MethodPatch:
-			parts := strings.Split(path, "/")
-			id := parts[len(parts)-2]
-			var body map[string]bool
-			_ = json.NewDecoder(request.Body).Decode(&body)
-			state.enabledCalls[id] = body["enabled"]
-			_, _ = writer.Write([]byte(`{"status":"ok"}`))
-		case strings.HasPrefix(path, "/v0/management/plugins/") && strings.HasSuffix(path, "/config"):
-			parts := strings.Split(path, "/")
-			id := parts[len(parts)-2]
-			if request.Method == http.MethodGet {
-				config, ok := state.configs[id]
-				if !ok {
-					writer.WriteHeader(http.StatusNotFound)
-					_, _ = writer.Write([]byte(`{"error":"plugin_not_found","message":"plugin not found"}`))
-					return
-				}
-				_ = json.NewEncoder(writer).Encode(config)
-				return
-			}
-			var body map[string]any
-			_ = json.NewDecoder(request.Body).Decode(&body)
-			state.configs[id] = body
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 		case strings.HasPrefix(path, "/v8/management/plugins/") && request.Method == http.MethodDelete:
 			parts := strings.Split(path, "/")

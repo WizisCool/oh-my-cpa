@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
-	"strings"
 )
 
 // ConfigKeyFamily names one of CPA's `{family}-api-key` credential lists.
@@ -68,73 +67,33 @@ type ConfigAPIKey struct {
 	Prefix         string            `json:"prefix,omitempty"`
 	DisableCooling *bool             `json:"disable-cooling,omitempty"`
 
-	// extra holds the entry's fields this struct does not model, verbatim, so a
-	// read-modify-write round trip returns them to CPA unchanged.
-	extra map[string]json.RawMessage
+	extra wireExtras
+	// origin is the v8 group this entry was read from, set only by
+	// EditableConfigAPIKeys, so a write can return it to the group it came from.
+	origin *keyGroupOrigin
 }
 
 // configAPIKeyFields is ConfigAPIKey without its JSON methods, so they can use
 // the default encoding for the modelled fields without recursing.
 type configAPIKeyFields ConfigAPIKey
 
-// configAPIKeyModelledFields is the set of wire names ConfigAPIKey models. It is
-// derived from the struct tags so a newly modelled field can never also be
-// replayed from extra.
-var configAPIKeyModelledFields = func() map[string]bool {
-	names := map[string]bool{}
-	fieldType := reflect.TypeOf(configAPIKeyFields{})
-	for i := 0; i < fieldType.NumField(); i++ {
-		tag := fieldType.Field(i).Tag.Get("json")
-		if name, _, _ := strings.Cut(tag, ","); name != "" && name != "-" {
-			names[name] = true
-		}
-	}
-	return names
-}()
+var configAPIKeyModelledFields = modelledWireFields(reflect.TypeOf(configAPIKeyFields{}))
 
 // UnmarshalJSON decodes the modelled fields and keeps every other field.
 func (k *ConfigAPIKey) UnmarshalJSON(data []byte) error {
 	var fields configAPIKeyFields
-	if err := json.Unmarshal(data, &fields); err != nil {
+	extra, err := decodeWithExtras(data, &fields, configAPIKeyModelledFields)
+	if err != nil {
 		return err
-	}
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	for name := range raw {
-		if configAPIKeyModelledFields[name] {
-			delete(raw, name)
-		}
 	}
 	*k = ConfigAPIKey(fields)
-	if len(raw) > 0 {
-		k.extra = raw
-	} else {
-		k.extra = nil
-	}
+	k.extra = extra
 	return nil
 }
 
 // MarshalJSON encodes the modelled fields and replays the unmodelled ones.
-//
-// A modelled field always wins: extra never holds a modelled name, so clearing
-// an optional field (which omitempty then drops) cannot bring back its old value.
 func (k ConfigAPIKey) MarshalJSON() ([]byte, error) {
-	encoded, err := json.Marshal(configAPIKeyFields(k))
-	if err != nil || len(k.extra) == 0 {
-		return encoded, err
-	}
-	merged := map[string]json.RawMessage{}
-	if err := json.Unmarshal(encoded, &merged); err != nil {
-		return nil, err
-	}
-	for name, value := range k.extra {
-		if _, isSet := merged[name]; !isSet {
-			merged[name] = value
-		}
-	}
-	return json.Marshal(merged)
+	return encodeWithExtras(configAPIKeyFields(k), k.extra)
 }
 
 // ConfigSection is the configuration document key this family is stored under,
@@ -181,7 +140,7 @@ func (f ConfigKeyFamily) configKeysEndpoint() string {
 // credential list break every caller that reads all families at once.
 func (c *Client) ConfigAPIKeys(ctx context.Context, family ConfigKeyFamily) ([]ConfigAPIKey, error) {
 	var response map[string]json.RawMessage
-	if _, err := c.doV0JSON(ctx, http.MethodGet, family.configKeysEndpoint(), nil, &response); err != nil {
+	if _, err := c.getV0JSON(ctx, family.configKeysEndpoint(), &response); err != nil {
 		return nil, err
 	}
 	entries := []ConfigAPIKey{}
@@ -196,15 +155,4 @@ func (c *Client) ConfigAPIKeys(ctx context.Context, family ConfigKeyFamily) ([]C
 		entries = []ConfigAPIKey{}
 	}
 	return entries, nil
-}
-
-// UpdateConfigAPIKeys replaces the whole family list. CPA accepts a bare array
-// for every family, so an empty list is sent as `[]` rather than omitted: a nil
-// slice would be encoded as `null`, which CPA rejects.
-func (c *Client) UpdateConfigAPIKeys(ctx context.Context, family ConfigKeyFamily, entries []ConfigAPIKey) error {
-	if entries == nil {
-		entries = []ConfigAPIKey{}
-	}
-	_, err := c.doV0JSON(ctx, http.MethodPut, family.configKeysEndpoint(), entries, nil)
-	return err
 }

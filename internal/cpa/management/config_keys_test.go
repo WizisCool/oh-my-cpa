@@ -99,35 +99,6 @@ func TestConfigAPIKeysReportsAMissingFamilyAsAMissingCapability(t *testing.T) {
 	}
 }
 
-func TestUpdateConfigAPIKeysSendsABareArray(t *testing.T) {
-	var path string
-	var body string
-	server := newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		path = request.URL.Path
-		buf := make([]byte, request.ContentLength)
-		_, _ = request.Body.Read(buf)
-		body = string(buf)
-		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"status":"ok"}`))
-	}))
-	defer server.Close()
-
-	client, err := NewClient(server.URL, "management-secret", time.Second, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := client.UpdateConfigAPIKeys(context.Background(), ConfigFamilyMeta, nil); err != nil {
-		t.Fatal(err)
-	}
-	if path != "/v0/management/meta-api-key" {
-		t.Fatalf("path = %q", path)
-	}
-	// CPA rejects `null`; a cleared family has to be sent as an empty array.
-	if strings.TrimSpace(body) != "[]" {
-		t.Fatalf("body = %q, want []", body)
-	}
-}
-
 func TestOAuthAuthURLSendsTheLoopbackFlagOnlyWhereItApplies(t *testing.T) {
 	queries := map[string]string{}
 	server := newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {

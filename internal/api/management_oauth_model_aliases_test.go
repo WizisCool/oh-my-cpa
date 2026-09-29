@@ -25,31 +25,30 @@ func TestManagementOAuthModelAliasesRoundTrip(t *testing.T) {
 			{Name: "same-model", Alias: "same-model"},
 		},
 	}
+	const aliasPath = "/v8/management/config/oauth/model-alias"
 	handler := func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
-		if request.URL.Path != "/v0/management/oauth-model-alias" {
-			_, _ = writer.Write([]byte(`{}`))
-			return
-		}
-		switch request.Method {
-		case http.MethodGet:
-			_ = json.NewEncoder(writer).Encode(map[string]any{"oauth-model-alias": state})
-		case http.MethodPatch:
+		switch {
+		case request.Method == http.MethodGet && request.URL.Path == aliasPath:
+			_ = json.NewEncoder(writer).Encode(state)
+		case request.Method == http.MethodPatch && request.URL.Path == "/v8/management/config":
 			var payload struct {
-				Channel string                       `json:"channel"`
-				Aliases []management.OAuthModelAlias `json:"aliases"`
+				OAuth struct {
+					ModelAlias map[string][]management.OAuthModelAlias `json:"model-alias"`
+				} `json:"oauth"`
 			}
 			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
 				t.Fatalf("decode model alias patch: %v", err)
 			}
-			if len(payload.Aliases) == 0 {
-				delete(state, payload.Channel)
-			} else {
-				state[payload.Channel] = payload.Aliases
+			for channel, aliases := range payload.OAuth.ModelAlias {
+				state[channel] = aliases
 			}
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
+		case request.Method == http.MethodDelete && strings.HasPrefix(request.URL.Path, aliasPath+"/"):
+			delete(state, strings.TrimPrefix(request.URL.Path, aliasPath+"/"))
+			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 		default:
-			writer.WriteHeader(http.StatusMethodNotAllowed)
+			_, _ = writer.Write([]byte(`{}`))
 		}
 	}
 	client, baseURL, recorder := startAuthFilesTestServer(t, "management-secret-value", handler)
@@ -59,10 +58,7 @@ func TestManagementOAuthModelAliasesRoundTrip(t *testing.T) {
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("list model aliases = %d body = %s", response.StatusCode, raw)
 	}
-	forwarded := recorder.last(t, http.MethodGet, "/v0/management/oauth-model-alias")
-	if forwarded.Path != "/v0/management/oauth-model-alias" {
-		t.Fatalf("model alias list path = %q", forwarded.Path)
-	}
+	recorder.last(t, http.MethodGet, aliasPath)
 	var listed struct {
 		Aliases map[string][]managementOAuthModelAlias `json:"aliases"`
 	}
@@ -95,8 +91,8 @@ func TestManagementOAuthModelAliasesRoundTrip(t *testing.T) {
 	if mutation.Status != "ok" || mutation.Provider != "codex" || len(mutation.Aliases) != 1 || mutation.Aliases[0].Alias != "gpt-5.1-fast" {
 		t.Fatalf("model alias mutation = %s", raw)
 	}
-	forwardedPatch := recorder.last(t, http.MethodPatch, "/v0/management/oauth-model-alias")
-	if !strings.Contains(forwardedPatch.Body, `"channel":"codex"`) || !strings.Contains(forwardedPatch.Body, `"force-mapping":true`) {
+	forwardedPatch := recorder.last(t, http.MethodPatch, "/v8/management/config")
+	if !strings.Contains(forwardedPatch.Body, `"model-alias":{"codex":[`) || !strings.Contains(forwardedPatch.Body, `"force-mapping":true`) {
 		t.Fatalf("forwarded model alias patch = %s", forwardedPatch.Body)
 	}
 
@@ -125,7 +121,7 @@ func TestManagementOAuthModelAliasesRequireReadback(t *testing.T) {
 			_, _ = writer.Write([]byte(`{"status":"ok"}`))
 			return
 		}
-		_, _ = writer.Write([]byte(`{"oauth-model-alias":{"codex":[{"name":"gpt-5","alias":"old-alias"}]}}`))
+		_, _ = writer.Write([]byte(`{"codex":[{"name":"gpt-5","alias":"old-alias"}]}`))
 	}
 	client, baseURL, _ := startAuthFilesTestServer(t, "management-secret-value", handler)
 	response, raw := doJSON(t, client, http.MethodPatch,

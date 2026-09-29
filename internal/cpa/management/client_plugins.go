@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 )
 
@@ -190,27 +191,50 @@ func pluginEndpoint(id, suffix string) (string, error) {
 	return "/plugins/" + url.PathEscape(id) + suffix, nil
 }
 
+// pluginConfigPath is `plugins.configs.<id>` in the v8 configuration.
+func pluginConfigPath(id string) ([]string, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, errors.New("plugin id is required")
+	}
+	return []string{"plugins", "configs", id}, nil
+}
+
 // SetPluginEnabled writes `plugins.configs.<id>.enabled`; it never touches the
-// global `plugins.enabled` switch.
+// global `plugins.enabled` switch or the plugin's other settings.
 func (c *Client) SetPluginEnabled(ctx context.Context, id string, enabled bool) error {
-	endpoint, err := pluginEndpoint(id, "/enabled")
+	path, err := pluginConfigPath(id)
 	if err != nil {
 		return err
 	}
-	_, err = c.doV0JSON(ctx, http.MethodPatch, endpoint, map[string]any{"enabled": enabled}, nil)
-	return err
+	return c.ApplyConfigChanges(ctx, []ConfigChange{{Path: append(path, "enabled"), Value: enabled}})
 }
 
+// errPluginNotFound is CPA's own answer for a plugin it does not know, so the
+// console reports it the same way whichever route found it missing.
+var errPluginNotFound = &HTTPError{StatusCode: http.StatusNotFound, Body: `{"error":"plugin_not_found","message":"plugin not found"}`}
+
 // PluginConfig reads `plugins.configs.<id>` as a JSON object. A plugin that is
-// discovered or registered but not yet configured answers with an empty object.
+// installed but not yet configured answers with an empty object; an unknown
+// one is not found.
 func (c *Client) PluginConfig(ctx context.Context, id string) (map[string]any, error) {
-	endpoint, err := pluginEndpoint(id, "/config")
+	path, err := pluginConfigPath(id)
 	if err != nil {
 		return nil, err
 	}
 	var config map[string]any
-	if _, err := c.doV0JSON(ctx, http.MethodGet, endpoint, nil, &config); err != nil {
+	configured, err := c.configValueAt(ctx, path, &config)
+	if err != nil {
 		return nil, err
+	}
+	if !configured {
+		plugins, err := c.Plugins(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if !slices.ContainsFunc(plugins, func(plugin PluginItem) bool { return plugin.ID == strings.TrimSpace(id) }) {
+			return nil, errPluginNotFound
+		}
 	}
 	if config == nil {
 		config = map[string]any{}
@@ -220,12 +244,14 @@ func (c *Client) PluginConfig(ctx context.Context, id string) (map[string]any, e
 
 // SetPluginConfig replaces `plugins.configs.<id>` with the given object.
 func (c *Client) SetPluginConfig(ctx context.Context, id string, config map[string]any) error {
-	endpoint, err := pluginEndpoint(id, "/config")
+	path, err := pluginConfigPath(id)
 	if err != nil {
 		return err
 	}
-	_, err = c.doV0JSON(ctx, http.MethodPut, endpoint, config, nil)
-	return err
+	if config == nil {
+		config = map[string]any{}
+	}
+	return c.ApplyConfigChanges(ctx, []ConfigChange{{Path: path, Value: config}})
 }
 
 // DeletePlugin removes a plugin. CPA saves the configuration file in the v8
