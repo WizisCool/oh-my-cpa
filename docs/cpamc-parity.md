@@ -6,7 +6,7 @@ This document links the feature inventory of the official [Cli-Proxy-API-Managem
 
 - **Target Upstream**: `router-for-me/CLIProxyAPI` v8.0.0 or later (ADR 0034). Every operation uses its `/v8/management` route; `/v0/management` is addressed only for the per-family credential lists that carry each key's `auth-index` and for the configuration reads and writes not yet moved to the v8 configuration API (`internal/cpa/management/client_v0.go`). The mapping and measurements are in `docs/cpa-v8-compat.md`.
 - **Official UI Baseline**: CPAMC README targets CLIProxyAPI `>= 7.1.0` and recommends using the latest release.
-- **Recommended Co-deployment**: The full-stack compose template pins CPA `v8.0.2`. A gateway older than v8 is refused before any request, and the console shows upgrade guidance in place of every page. A v8 gateway serving a v7-layout file keeps that layout; the console never migrates it.
+- **Recommended Co-deployment**: The full-stack compose template pins CPA `v8.0.2`. A gateway older than v8 is refused before any request, and the console shows upgrade guidance in place of every page. A v8 gateway serving a pre-v8 file keeps that layout until the first configuration save, which makes CPA convert it; Oh My CPA keeps the original encrypted first and offers it for download (ADR 0037).
 - **Oh My CPA Principle**: CPA remains responsible for execution and protocol adaptation; Oh My CPA provides the management user experience, security boundaries around real CPA data, and a user-owned resource identity layer.
 - **Credential Boundary**: The CPA Management Key is decrypted and used exclusively inside the Go process; the browser holds only an `HttpOnly` administrator session cookie. Credentials returned by CPA are displayed on-demand under protected administrative pages with masks by default.
 - **Compatibility Strategy**: Endpoints are proxied through an explicit allowlist; arbitrary URL pass-through proxying is forbidden. Missing upstream capabilities surface with explicit "unsupported / upgrade required" statuses.
@@ -65,7 +65,7 @@ Implemented surfaces: Dashboard, Quick Start, AI Providers, Key Management, OAut
 
 Subsequent milestones:
 
-1. **Configuration on the v8 API**: move the configuration editor, the Keys page, provider credentials, OAuth model aliases and exclusions, and per-plugin settings from `/v0/management` to the v8 configuration API (ADR 0034, decision 4).
+1. **Configuration on the v8 API**: the configuration editor and the Keys page already write through the v8 configuration API (ADR 0037); provider credentials, OAuth model aliases and exclusions, and per-plugin settings still move from `/v0/management` (ADR 0034, decision 4).
 2. **Multi-Instance Support**: Instance CRUD, key rotation, and instance-level permissions backed by an ADR (the database schema already models `cpa_bindings.instance_id`, while `/instances/default/*` remains single-instance).
 
 ## Oh My CPA Distinct Capabilities (No CPAMC Counterpart)
