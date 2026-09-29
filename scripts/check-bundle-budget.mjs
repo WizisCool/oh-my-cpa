@@ -213,6 +213,27 @@ import { fileURLToPath } from 'node:url';
  *     margin intact (197.71 kB and 494.23 kB respectively), so raising them would remove a check
  *     rather than relax one.
  *   - Every other limit is untouched.
+ *
+ * ## The assistant-ui re-baseline (2026-09-29)
+ *
+ * A clean build of the base commit measured entry 289.32 kB, JavaScript 10302.54 kB and dist
+ * 12006.36 kB; with the Agent and Playground on assistant-ui over AG-UI (ADR 0041) it measures
+ * 292.23, 10580.30 and 12288.66 kB. Only total JavaScript leaves its limit.
+ *
+ * The +277.76 kB is assistant-ui, bought rather than rebuilt: `@assistant-ui/core`, `react`,
+ * `store` and `tap` and the `assistant-stream` package core depends on, measured in the built
+ * chunk's source map rather than assumed. It lands in one lazy chunk shared by the Agent and
+ * Playground routes, which the entry lists only as a preload dependency of those routes, so no
+ * other page downloads it. The Ant Design X chat components it replaces left the shared lazy
+ * chunk they used to live in (about 170 kB), which is why the total grew by less than the chunk
+ * weighs; the code highlighter and Markdown packages moved with the pages and are not duplicated.
+ * The entry's +2.91 kB is the new workspace copy in the base dictionary.
+ *
+ *   - `total JavaScript` 10500 -> 10900, leaving 319.7 kB (2.9%): the proportion the System
+ *     Information re-baseline left for a page-local library, and less than a second copy of this
+ *     one would need.
+ *   - Every other limit is untouched: the entry keeps 9.77 kB (3.2%) and the dist total 211 kB,
+ *     so raising either would remove a check rather than relax one.
  */
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const distDir = path.join(root, 'web', 'dist');
@@ -278,7 +299,7 @@ for (const budget of budgets) {
 }
 
 const aggregateBudgets = [
-  { label: 'total JavaScript', bytes: totalJSBytes, maxKB: 10500 },
+  { label: 'total JavaScript', bytes: totalJSBytes, maxKB: 10900 },
   { label: 'generated Lobe SVG assets', bytes: iconBytes, maxKB: 1200 },
   { label: 'total web/dist', bytes: totalDistBytes, maxKB: 12500 },
 ];

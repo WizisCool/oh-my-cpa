@@ -40,10 +40,10 @@ const (
 
 var CHART_TYPES = []string{"line", "area", "column", "bar", "pie"}
 
-// DataSource points at an array of objects inside one earlier capability result.
+// DataSource points at the rows inside one earlier capability result.
 type DataSource struct {
 	CallID string `json:"call_id" jsonschema:"The id of a successful capability call earlier in this conversation"`
-	Path   string `json:"path,omitempty" jsonschema:"Dot path to an array of objects inside that call's data, e.g. items or series.points; empty when the data itself is the array"`
+	Path   string `json:"path,omitempty" jsonschema:"Dot path to the rows inside that call's data, e.g. items, series.points, or rows for a database_query result; empty when the data itself is the array"`
 }
 
 type RenderChartInput struct {
@@ -335,7 +335,7 @@ func resolveRows(conversation *Conversation, title string, source *DataSource, i
 	for index, item := range rows {
 		row, ok := item.(map[string]any)
 		if !ok {
-			return View{}, refuse("row %d is not an object; path must lead to an array of objects", index)
+			return View{}, refuse("row %d is not an object; path must lead to rows of objects, or to positional rows beside a columns list", index)
 		}
 		kept := make(map[string]any, len(fields))
 		for _, field := range fields {
@@ -364,6 +364,10 @@ func resolveRows(conversation *Conversation, title string, source *DataSource, i
 // referencedRows finds the array a source names. Only a successful capability call of this
 // conversation qualifies: a failed or pending call has no data to show, and a display call's own
 // data is a receipt, not rows.
+//
+// Rows are objects, or positional arrays beside a `columns` list naming their fields - the shape
+// `database_query` returns, and the most flexible source a chart can have - which are read into
+// objects here so the rest of resolution sees one shape.
 func referencedRows(conversation *Conversation, source DataSource) ([]any, error) {
 	if source.CallID == "" || len(source.Path) > MAX_SOURCE_PATH {
 		return nil, refuse("source.call_id is required and source.path is at most %d characters", MAX_SOURCE_PATH)
@@ -390,12 +394,14 @@ func referencedRows(conversation *Conversation, source DataSource) ([]any, error
 		return nil, refuse("call %q has no readable result", source.CallID)
 	}
 	current := data
+	var parent map[string]any
 	if source.Path != "" {
 		for _, segment := range strings.Split(source.Path, ".") {
 			object, ok := current.(map[string]any)
 			if !ok || segment == "" {
 				return nil, refuse("path %q does not lead through objects in call %q", source.Path, source.CallID)
 			}
+			parent = object
 			if current, ok = object[segment]; !ok {
 				return nil, refuse("path %q: no field %q in call %q", source.Path, segment, source.CallID)
 			}
@@ -405,5 +411,39 @@ func referencedRows(conversation *Conversation, source DataSource) ([]any, error
 	if !ok {
 		return nil, refuse("path %q in call %q is not an array", source.Path, source.CallID)
 	}
-	return rows, nil
+	return positionalRows(rows, parent), nil
+}
+
+// positionalRows reads rows that are arrays into objects keyed by the sibling `columns` list. Rows
+// that are already objects, or arrays with no usable column list, are returned unchanged and meet
+// the ordinary "not an object" refusal.
+func positionalRows(rows []any, parent map[string]any) []any {
+	names, ok := parent["columns"].([]any)
+	if !ok || len(rows) == 0 {
+		return rows
+	}
+	if _, isPositional := rows[0].([]any); !isPositional {
+		return rows
+	}
+	columns := make([]string, len(names))
+	for index, name := range names {
+		text, isText := name.(string)
+		if !isText {
+			return rows
+		}
+		columns[index] = text
+	}
+	objects := make([]any, len(rows))
+	for index, row := range rows {
+		values, isPositional := row.([]any)
+		if !isPositional || len(values) != len(columns) {
+			return rows
+		}
+		object := make(map[string]any, len(columns))
+		for position, column := range columns {
+			object[column] = values[position]
+		}
+		objects[index] = object
+	}
+	return objects
 }

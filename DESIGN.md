@@ -379,23 +379,34 @@ transcript, notices and composer share a centred 760px reading column; and a res
 below 900px, where the target moves onto its own head row. The frame spans the content area, like
 the configuration workbench.
 
-- **Transcript**: Ant Design X `Bubble.List` with native reverse-scroll anchoring and a "back to
-  latest" control. The operator's message is a bordered `--surface` block; an answer is borderless
-  with a model-and-status head, X `Think` for reasoning (no title shimmer), Markdown in the
-  console's own styles, and a foot of measurements plus muted icon actions.
+- **Transcript**: assistant-ui's thread viewport, following the newest message while the reader is
+  there and offering "back to latest" once they scroll away. The operator's message is a bordered
+  `--surface` block; an answer is borderless with a model-and-status head, a reasoning disclosure
+  with a `--warn` edge (no title shimmer), Markdown in the console's own styles, and a foot of
+  measurements plus muted icon actions.
 - **Model output**: tables in a hairline frame; fenced code with a language head and copy action,
   highlighted only for allowlisted languages after the fence closes, in a palette-ink syntax theme
   that never borrows the semantic hues. Raw HTML is escaped and images are links.
-- **Composer**: X `Sender` with Enter and the send button as one gate, a stop button while running,
-  and one line beneath naming the cost or privacy boundary.
+- **Composer**: assistant-ui's composer with Ant Design controls; Enter and the send button as one
+  gate decided on the runtime's live state, a blocked send drawn with `aria-disabled` (`--surface`
+  fill, `--meta` glyph), a stop button while running, queued messages as rows above the frame in
+  the Agent, and one line beneath naming the cost or privacy boundary.
+- **Playground**: images pasted, dropped or picked into the composer; the last answer regenerates
+  and the last message edits in place, replacing its turn.
 - **Playground panel**: Parameters (unset values read "Default"; sliders rest muted) and Turn
   diagnostics (metrics grid, request and response code blocks, labelled cURL copy).
 - **Agent**: a capability directory as an open list grouped read / write / destructive with pips,
   each row a localized title with its mono identifier beside it;
-  a turn drawn in the order it happened - reasoning, text and capability calls as segments, the calls
-  of one round as an X `ThoughtChain` with warn-toned attention marks for pending or unconfirmed
-  steps; an authorization dialog that opens by itself with one Deny / Allow decision (Allow in the
-  danger hue for a destructive capability); agent questions in an accent-framed panel that takes
+  call details as the panel's second tab;
+  a turn drawn in the order it happened - reasoning, text and capability calls as segments, runs of
+  calls folded into a "Used N capabilities" chain, each call one row (status square, title, mono
+  identifier, arguments in brief, status in words, duration) with a `--warn` attention glyph when it
+  waits on the operator or its outcome is unconfirmed; charts and tables from display calls drawn in
+  the answer in a hairline frame with a Chart / Data switch and CSV / PNG export; an approval card
+  under the call that raised it (`--surface`, a 2px `--warn` leading edge, `--danger` when
+  destructive) with one Deny / Allow decision (Allow in the danger hue for a destructive capability),
+  and a `--warn` notice in the composer while it is open; "Ask about this" on selected answer text,
+  quoted in the composer; agent questions in an accent-framed panel that takes
   the composer's place, shaped like the coding agents' question prompts: a tab per question and a
   Review tab, numbered option rows (a digit picks, the chosen one accent-edged with a filled key
   cap), "Something else…" as the last row with its field inside it; the data notice as the

@@ -953,17 +953,18 @@ dragging does not re-render the transcript. The panel never takes more than half
 Below 900px it becomes a Drawer joined to the platform Back gesture through `useOverlayHistory`. No
 breakpoint is added.
 
-**The transcript is anchored by the browser.** Ant Design X's list lays its scroll box out in
-reverse, so a growing answer holds the bottom without script, and a reader who scrolls up keeps
-their place while content arrives below. Scrolling away raises a "back to latest" control, which
-travels smoothly unless the reader asked for reduced motion. Sending returns the reader to the
-newest message.
+**The transcript follows the newest message.** The thread viewport (assistant-ui's) keeps a growing
+answer in view while the reader is at the bottom, and a reader who scrolls up keeps their place
+while content arrives below. Scrolling away raises a "back to latest" control, which travels
+smoothly unless the reader asked for reduced motion. A run starting, and a conversation opening,
+return the reader to the newest message.
 
 **A message's anatomy.** The operator's message is a filled `--surface` block with a 1px border,
 aligned to the end of the column. An answer is borderless and uses the full column: a head naming
-the model and a status pip, the reasoning as X's `Think` disclosure (open while reasoning streams,
-closed for an answer that already finished, the reader's own after that; its title shimmer is off,
-§7 rule 3), the Markdown answer, and a foot. The foot states measurements - first content, duration,
+the model and a status pip, the reasoning as a disclosure with a `--warn` rule on its edge (open
+while reasoning streams, closed for an answer that already finished, the reader's own after that;
+its caret turns with the `fast` motion token and its title does not shimmer, §7 rule 3), the
+Markdown answer, and a foot. The foot states measurements - first content, duration,
 tokens, TPS - with missing observations left out rather than shown as zero, and carries its actions
 as muted icon buttons with accessible names. Copy acknowledges itself by turning its glyph into a
 check mark; only a failed copy raises a toast.
@@ -978,24 +979,27 @@ literals `--fg-2`, punctuation `--muted`, comments `--meta` - and deliberately d
 semantic hues, because a string is not a success. Raw HTML is escaped, links open outside the
 console, and an image is rendered as a link rather than fetched.
 
-**The composer is one gate.** Enter and the send button reach the same submission, and the send
-button is disabled whenever sending is not possible, with the reason on its tooltip when the page
-has one to give. While a
-turn runs the send button becomes a stop button. Beneath the composer one line states the boundary
+**The composer is one gate.** Enter and the send button reach the same submission, decided on the
+runtime's live state, and the send button reads as blocked (`--surface` fill, `--meta` glyph,
+`aria-disabled`) whenever sending is not possible, with the reason on its tooltip when the page has
+one to give. While a turn runs a stop button appears; in the Agent, where a message sent during a
+run waits in a queue behind it, send stays beside stop as a labelled "Queue" action and each queued
+message is a row above the frame with a remove control. Beneath the composer one line states the boundary
 the operator is about to cross: the Playground's spends the key's entitlement, the Agent's names
 what must be allowed before a message can leave.
 
 **A phone's composer starts at one line.** At the 640px phone breakpoint the box grows from one line
-to five rather than from two to ten, send sits beside the input instead of in a foot row, and the
-foot row appears only for a control that needs it (the Agent's reasoning effort); frame and note
+to five rather than from two to ten, send - and the Playground's image picker - sits beside the
+input instead of in a foot row, and the foot row appears only for a control that needs it (the
+Agent's reasoning effort); frame and note
 tighten with it. On a phone the conversation already shares its height with the keyboard, and the
 desktop layout left it a strip between two bars. A desktop keeps the two-line box.
 
 **The transcript scrolls only vertically.** Code blocks and tables scroll sideways inside their own
 frames, every other element is bounded by the column (a capability step's digest is one
-ellipsized line, never the width of its text), and the scroll box clips horizontally as a
-backstop, so a sideways swipe on a touch screen never drags the conversation. On a phone an answer
-uses the full column: Bubble List's 15% reserve beside an answer is removed below 640px.
+ellipsized line, never the width of its text), and the column is bounded by the scroll box, so a
+sideways swipe on a touch screen never drags the conversation. An answer always uses the full
+column.
 
 **Streaming is published on a cadence.** Both run loops coalesce deltas onto 40ms and every settled
 turn keeps its object identity, so the memoised transcript re-renders the answer that is growing
@@ -1010,14 +1014,17 @@ to the default. The custom request body is checked as it is typed; an invalid bo
 field and disables sending. **Turn diagnostics** shows the selected turn - its measurements as a
 two-column grid, its immutable request and its bounded response events as code blocks, the cURL
 command as a labelled copy action, and a link to the candidate request records, stated as a
-candidate list. Inspecting a turn from its foot opens this tab. Images are pasted into the composer
-and shown as thumbnails with a remove control; nothing is uploaded, and a restored turn whose image
-was too large to keep shows a placeholder and cannot be retried. An empty conversation carries the
+candidate list. Inspecting a turn from its foot opens this tab. Images are pasted, dropped or picked
+into the composer and shown as thumbnails with a remove control; nothing is uploaded, and a
+restored turn whose image was too large to keep shows a placeholder and cannot be regenerated. The
+last answer's foot regenerates it, and the last message can be edited in place (a composer frame
+at the message's width with Cancel and Resend); the edit asks the same request again, so it
+replaces the answer below it rather than adding a turn. An empty conversation carries the
 wordmark and, once chosen, the call point it will reach.
 
 #### Agent
 
-The panel is the capability directory: the registry itself - the same list the model is offered -
+The panel has two tabs: the capability directory and the call details. The directory is the registry itself - the same list the model is offered -
 grouped read / write / destructive in that fixed order, each group marked with a pip (`--meta`,
 `--warn`, `--danger`). It is an open list, one hairline row per capability with its description
 clamped to two lines and expanded on selection, because a card per entry made the borders louder
@@ -1031,26 +1038,48 @@ copy for reads as its identifier and registry description.
 capabilities, reason again and answer, so a turn is a sequence of segments - reasoning, answer text,
 capability calls - rather than fixed slots for each kind. The server records the sequence as the
 turn's parts, and the browser rebuilds the same parts from the stream, so the live turn and the
-stored one are identical. Each stretch of reasoning is its own `Think` disclosure where it occurred;
-capability calls made in one model round are one X `ThoughtChain`. A turn resumed after an approval
-grows in place below its earlier segments rather than appearing as a second answer, and copying the
-answer takes every text segment, without the reasoning.
+stored one are identical. Each stretch of reasoning is its own disclosure where it occurred;
+consecutive reasoning and capability calls fold into one chain behind a quiet "Used N capabilities"
+toggle in `--muted` with a turning caret, open while the turn runs or waits on the operator and
+closed once it is done. A turn resumed after an approval grows in place below its earlier segments
+rather than appearing as a second answer, and copying the answer takes every text segment, without
+the reasoning.
 
-Each step of a chain names the capability by its localized title with the identifier beside it, states its status in words, and digests its result to top-level
-scalars and collection sizes, with the whole document one disclosure away as a code block. The
-chain's own marks cover running, succeeded, failed and rejected; a call waiting on the operator or
-one whose outcome is partial, expired or unconfirmed carries a `--warn` attention glyph instead of
-being drawn as loading or failed.
+**A capability call is one row.** A 7px square mark in the status hue (`--meta` rest, `--success`,
+`--danger`; a spinner in `--accent` while running, a `--warn` attention glyph when the call waits on
+the operator or its outcome is partial, expired or unconfirmed), the localized title in `--fg`, the
+identifier in small mono `--meta`, the arguments in brief in mono `--muted` and ellipsized, then the
+status in words and the duration in tabular figures. The row appears the moment the call is
+announced, before it has a result. Selecting it opens the details tab - status, start and duration,
+the full arguments, and the result exactly as the model received it - and marks the row as
+selected; a failed call adds its code and detail beneath the row.
 
-A prepared operation is decided in an authorization dialog that opens by itself when a run stops
-for it: one decision, Deny or Allow, and deciding continues the run (ADR 0035). The dialog names
-the capability by its localized title and identifier, with its permission as a tag and its
-localized description, leads with the target,
-and lays a form-shaped change out as label/value rows (anything deeper stays JSON). A destructive
-capability draws Allow in the danger hue and adds a "cannot be undone" line; nothing is typed to
-confirm. Private input and the OAuth hand-off appear in the dialog when the capability needs them.
-Dismissing the dialog leaves the composer's send as a labelled "Review request" action that reopens
-it, and Resume remains only for a decided operation whose run could not continue by itself.
+**Display calls are part of the answer.** A `render_table` or `render_chart` call is drawn outside
+the chain, where the answer reads, as a figure in a hairline `--border` frame: a title in `--fg`
+600, a sortable table with copy and download as CSV, or a chart on the dashboard's chart stack
+(series palette, shared tooltip, `chart-slot` height reservation, reduced-motion rule) with a
+Chart / Data switch and a PNG download composited on `--surface`. The chart runtime loads only when
+a chart is drawn. While a display call resolves, or when the server refused its reference, it is an
+ordinary call row.
+
+A finished answer's foot states its status, duration and start time, its rounds and calls, and the
+tokens the gateway reported, and carries copy and "export this answer" (Markdown) as muted icon
+actions. The head's Export menu saves the whole conversation as a Markdown report or as JSON.
+
+**A prepared operation is decided where it was raised** (ADR 0043): a card under the call, on
+`--surface` with a 1px border and a 2px `--warn` rule on its leading edge (`--danger` for a
+destructive capability). It names the capability's permission as a tag, leads with a sentence on
+what Allow and Deny do and the localized description, then the target in mono and a form-shaped
+change as label/value rows (anything deeper stays JSON), and ends with one decision, Deny or Allow;
+deciding continues the run (ADR 0035). A destructive capability draws Allow in the danger hue and
+adds a "cannot be undone" line; nothing is typed to confirm. Private input and the OAuth hand-off
+appear on the card when the capability needs them. While a decision is open the composer refuses to
+send and says so in a `--warn` line inside its frame, with a "Show" link that brings the card into
+view and focuses it.
+
+**Selected text can be asked about.** Selecting part of an answer raises a small toolbar on
+`--elevated` with "Ask about this"; the quote then sits inside the composer's frame above the input,
+in `--muted` with a remove control, and is sent as a Markdown quote ahead of the question.
 
 A question the agent asks (`ask_question`) takes the composer's place instead of opening a dialog,
 because the answer above it is often what the operator reads to reply. It follows the shape the
@@ -1074,16 +1103,16 @@ is the act that line describes. The composer's foot carries the reasoning effort
 button naming the current level, with a menu of the named levels and "use model default", which
 leaves the field out of the request. The operator's message enters the transcript the moment it is
 sent and the composer clears; a message the server refuses before accepting it returns to an empty
-composer. The model's reasoning streams into the live turn as the same `Think` disclosure the
+composer. The model's reasoning streams into the live turn as the same reasoning disclosure the
 Playground uses, open while it is being written, and stays with the stored turn, kept apart from
 the answer. The key, model and effort are the operator's choice and are remembered across reloads;
 New conversation replaces the transcript and nothing else. Failure is stated
 as a sentence with its code beneath it, and a run the operator stopped reads as stopped rather than
-failed. A live run carries an activity line - what it is waiting for, which capability it called,
-and for how long - because a spinner cannot tell working from stuck; its pip pulses as an
+failed. A live run carries an activity line - the round against its limit in `--muted` tabular
+figures, what it is waiting for or which capability it is calling, and for how long - because a
+spinner cannot tell working from stuck; its pip pulses as an
 indeterminate loop, frozen under reduced motion. The empty conversation offers example questions as
-keyboard-reachable buttons that fill the composer; X's `Prompts` renders click-only elements and is
-not used for that reason.
+keyboard-reachable buttons that fill the composer without sending.
 
 ## 6. antd theme wiring (themeConfig.ts)
 

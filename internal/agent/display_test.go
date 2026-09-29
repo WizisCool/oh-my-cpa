@@ -47,6 +47,25 @@ func TestDisplayFreezesTheReferencedRows(t *testing.T) {
 	}
 }
 
+// TestDisplayReadsPositionalRowsByTheirColumns: a SQL result's rows are arrays beside a column list,
+// and a chart references them by column name like any other rows. Rows that do not line up with
+// the column list are still refused rather than guessed at.
+func TestDisplayReadsPositionalRowsByTheirColumns(t *testing.T) {
+	conversation := &Conversation{Turns: []Turn{{Traces: []Trace{
+		{ID: "sql", Name: "database_query", Result: capability.Result{Status: "success", Data: json.RawMessage(`{"columns":["model","requests"],"rows":[["a",12],["b",30]],"is_truncated":false}`)}},
+		{ID: "ragged", Name: "database_query", Result: capability.Result{Status: "success", Data: json.RawMessage(`{"columns":["model","requests"],"rows":[["a",12],["b"]]}`)}},
+	}}}}
+	result, raw := renderDisplay(conversation, RENDER_CHART, `{"title":"Requests by model","type":"bar","source":{"call_id":"sql","path":"rows"},"x":"model","y":["requests"]}`)
+	var view View
+	if result.Status != "success" || json.Unmarshal(raw, &view) != nil || len(view.Rows) != 2 || view.Rows[1]["model"] != "b" || view.Rows[1]["requests"] != float64(30) {
+		t.Fatalf("result %+v view %s", result, raw)
+	}
+	result, _ = renderDisplay(conversation, RENDER_TABLE, `{"title":"Ragged","source":{"call_id":"ragged","path":"rows"},"columns":["model"]}`)
+	if result.Status != "error" || result.Code != "invalid_tool_arguments" {
+		t.Fatalf("ragged rows were drawn: %+v", result)
+	}
+}
+
 func TestDisplayTableAcceptsInlineRows(t *testing.T) {
 	result, raw := renderDisplay(displayConversation(), RENDER_TABLE, `{"title":"Derived shares","inline":[{"name":"a","share":0.25},{"name":"b","share":0.75}],"columns":["name","share"]}`)
 	if result.Status != "success" || !strings.Contains(string(raw), `"share":0.75`) || !strings.Contains(string(raw), `"kind":"table"`) {
