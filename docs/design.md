@@ -531,14 +531,10 @@ would overshoot *below* the axis between points, drawing a line where the data s
 curve cannot leave the range spanned by its own neighbours, so the floor stays the floor. The probe
 asserts this from painted pixels: no series-coloured ink appears below the axis rule.
 
-**A series is drawn only where it has traffic.** Each line covers its non-zero buckets plus the zero
-bucket on either side of a run, so every rise and fall still lands on the floor; a long quiet stretch is
-left undrawn. Drawing every series across the whole window stacked six lines on the floor's one row of
-pixels, so the floor took the colour of whichever series was painted last - a hue the legend did not
-show for most of the window - and a quiet model's small rise vanished into the stack. The top-ranked
-group is painted last, so where lines cross, the one the legend lists first is on top. The tooltip names
-each item by its own series key, never by position, because a series with no point at the hovered bucket
-would shift every name after it.
+**Measured zero buckets stay connected.** Each line includes every bucket in the shared grid,
+including long quiet stretches, so inactivity reads as a continuous baseline rather than missing data.
+The top-ranked group is painted last, so where lines overlap the first legend entry is on top.
+The shared tooltip names each item by its own series key and lists measured zeros explicitly.
 
 **Chart canvases are supersampled.** Every dashboard chart is drawn at no less than 2x the CSS size
 (`web/src/charts/chartRender.ts`): on a 1x display a 1.75px line rasterised straight onto the pixel grid
@@ -1132,11 +1128,12 @@ Non-obvious decisions, keep these when editing:
   initial login shell compact. The resolved palette is bridged into the chart
   config (`sparkColor(resolved.palette, tone)`), the marks morph between two revisions on
   §7's `roll` token with a reduced-motion escape (`chartMotion.ts`, §7 rule 5), and the hover
-  readout uses an app-owned HTML
-  `.chart-tooltip` styled from CSS custom properties. That readout is a direct child of
-  `.chart-slot`, so the slot's child sizing rule must exclude it
-  (`.chart-slot > div:not(.chart-tooltip)`); sizing every direct `div` stretches a
-  two-line label across the whole tile.
+  readout uses G2's shared tooltip interaction and `web/src/charts/chartTooltip.ts`,
+  the same escaped content renderer as Token Trend. G2 owns bucket hit-testing,
+  crosshairs and overlay positioning; `.omc-tip` shares palette styling across charts.
+  KPI card bodies stretch within each grid row and their captions absorb spare space,
+  keeping the plots bottom-aligned even when cost notes wrap. Model token trends retain
+  measured zero buckets as continuous baseline segments rather than missing observations.
   **Each tile plots its own metric**, and the six marks must stay visually distinct:
   Requests plots request counts, RPM those counts per minute, Tokens plots token
   volume, TPM that volume per minute, Cache rate plots the cache reads behind the

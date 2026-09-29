@@ -8,7 +8,7 @@ import { seriesColorRange, seriesDomainKey, seriesTrackColor } from './chartThem
 import { formatModelShare, formatModelTokens, type DashboardModelUsage } from '../types/dashboardModels';
 import { formatTokens, formatTokensFull } from '../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../types/tokenDisplayContext';
-import { escapeTooltipText } from './ModelTokenTrend';
+import { escapeTooltipText } from './chartTooltip';
 
 export interface ModelUsageDonutProps {
   groups: DashboardModelUsage[];

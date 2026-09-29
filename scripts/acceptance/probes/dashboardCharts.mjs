@@ -17,6 +17,9 @@ import { installRoutes } from '../probe.mjs';
  * this probe lacked, which is why it passed on a mark the design never called for.
  */
 export async function dashboardChartMarks({ base, page, check }) {
+  const partialCost = { ...chartDashboard, metrics: { ...chartDashboard.metrics, cost: 89.72, cost_source: 'partial' } };
+  await page.route(/\/management\/dashboard(?:\/tail)?(?:\?|$)/, (route) => route.fulfill({ json: partialCost }));
+  await page.route('**/pricing/attention', (route) => route.fulfill({ json: { unpriced: ['unpriced-model'] } }));
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
   await page.locator('.chart-slot canvas, .chart-slot svg').first().waitFor({ timeout: 20_000 });
 
@@ -107,11 +110,23 @@ export async function dashboardChartMarks({ base, page, check }) {
     `distinct=${uniqueDigests.size} of ${digests.length} (${digests.join(',')})`,
   );
 
+  await page.locator('[data-testid="dashboard-unpriced-link"]').waitFor();
+  const alignment = await page.locator('.dashboard-grid > .dashboard-tile').evaluateAll((tiles) => {
+    const rows = new Map();
+    for (const tile of tiles) {
+      const top = Math.round(tile.getBoundingClientRect().top);
+      const bottom = tile.querySelector('.chart-slot').getBoundingClientRect().bottom;
+      rows.set(top, [...(rows.get(top) ?? []), bottom]);
+    }
+    return [...rows.values()].every((bottoms) => Math.max(...bottoms) - Math.min(...bottoms) < 2);
+  });
+  check('same-row KPI plots share a baseline despite wrapped cost notes', alignment);
+
   const firstSlot = page.locator('.chart-slot').first();
   const box = await firstSlot.boundingBox();
   if (!box) throw new Error('no bounding box for the first trend tile');
   await page.mouse.move(box.x + box.width * 0.5, box.y + box.height / 2);
-  const tooltip = page.locator('.chart-tooltip').first();
+  const tooltip = page.locator('.chart-slot .omc-tip').first();
   await tooltip.waitFor({ state: 'visible', timeout: 5000 });
   const tooltipText = await tooltip.innerText();
   // The tooltip must name a real bucket: at 1h/1-minute resolution the label is
@@ -137,13 +152,14 @@ export async function dashboardChartMarks({ base, page, check }) {
     const x = box.x + Math.min(box.width - 1, (box.width * step) / 20);
     await page.mouse.move(x, box.y + box.height / 2);
   }
+  await page.mouse.move(box.x + box.width * 0.8, box.y + box.height / 2);
   check(
     'the tooltip still reports a bucket after a pointer sweep',
     (await tooltip.innerText().catch(() => '')).trim().length > 0,
   );
 
   const overlay = await page.evaluate(() => {
-    const node = document.querySelector('.chart-tooltip');
+    const node = document.querySelector('.chart-slot .omc-tip');
     if (!node) return { present: false };
     const style = window.getComputedStyle(node);
     return { present: true, transition: style.transitionDuration, position: style.position };
@@ -153,6 +169,16 @@ export async function dashboardChartMarks({ base, page, check }) {
     overlay.present && overlay.transition === '0s',
     JSON.stringify(overlay),
   );
+  for (let index = 0; index < 6; index += 1) {
+    const slot = page.locator('.chart-slot').nth(index);
+    const bounds = await slot.boundingBox();
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    const readout = slot.locator('.omc-tip');
+    await readout.waitFor({ state: 'visible' });
+    check(`KPI ${index + 1} uses the shared tooltip with an exact value`,
+      Boolean(await readout.locator('.omc-tip-value').getAttribute('title')));
+  }
+
 }
 
 /**

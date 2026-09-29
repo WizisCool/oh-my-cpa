@@ -1,6 +1,8 @@
 import React from 'react';
 import { Line } from '@ant-design/charts';
 import dayjs from 'dayjs';
+import { renderChartTooltip } from './chartTooltip';
+import { buildModelTrendData } from './modelTrendData';
 import { useTheme } from '../theme/ThemeContext';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import { resolveChartAnimation } from './chartMotion';
@@ -63,38 +65,18 @@ export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, folded
     [foldedLabel],
   );
 
-  // The display label per group, index-aligned with the series. G2's shared tooltip reports one entry
-  // per series in series order, so this is what turns its output into names.
+  // Labels follow legend order; tooltip items are matched by series key before rendering.
   const groupLabels = React.useMemo(() => groups.map((group) => labelOf(seriesDomainKey(group))), [groups, labelOf]);
 
   // One row per group per bucket. The trellis is built here rather than asking the library to melt
   // six series: the groups already share one bucket grid, so the long form is a flat map and the
   // colour key travels with every point.
   //
-  // **A series is drawn only where it has traffic**, plus the zero bucket on each side of a run so
-  // its rise and fall still land on the floor. A long quiet stretch is left undrawn (a null point
-  // breaks the line) rather than drawn as a zero: six series sharing the floor were six lines
-  // stacked on one row of pixels, so the floor took the colour of whichever was drawn last - a hue
-  // the legend did not show for most of the window - and a quiet model's small rise disappeared
-  // into that stack. The axis rule already states zero.
+  // Zero buckets are measured inactivity, so keep the baseline continuous between runs.
   //
   // **The top-ranked group is drawn last**, so where two lines cross, the one the legend lists first
   // is the one on top.
-  const data = React.useMemo(() => {
-    const rows: Array<{ series: string; bucket: string; at: number; tokens: number | null }> = [];
-    for (let rank = groups.length - 1; rank >= 0; rank -= 1) {
-      const group = groups[rank];
-      const key = seriesDomainKey(group);
-      const points = group.series;
-      points.forEach((point, index) => {
-        const isActive = point.tokens > 0
-          || (points[index - 1]?.tokens ?? 0) > 0
-          || (points[index + 1]?.tokens ?? 0) > 0;
-        rows.push({ series: key, bucket: String(point.t), at: point.t, tokens: isActive ? point.tokens : null });
-      });
-    }
-    return rows;
-  }, [groups]);
+  const data = React.useMemo(() => buildModelTrendData(groups), [groups]);
 
   // Supersampled: see `chartRender.ts` for why the canvas is drawn at no less than 2x.
   const { plugins, onReady } = useChartPlugins();
@@ -287,8 +269,7 @@ export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, folded
               context: { items?: Array<{ color?: string; value?: number | null; name?: string }>; title?: string },
             ) => {
               // Named by each item's own series key rather than by its position: the rows are drawn
-              // in reverse rank, and a series with no traffic at the hovered bucket has no point there,
-              // so position no longer lines up with the legend. The readout is re-sorted into the
+              // in reverse rank, so position does not line up with the legend. The readout is re-sorted into the
               // legend's order and a quiet series is listed at zero rather than left out.
               const byKey = new Map((context?.items ?? []).map((item) => [String(item.name ?? ''), item]));
               const items = domain.map((key, rank) => {
@@ -301,18 +282,12 @@ export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, folded
               // not showing, which is worse than printing nothing.
               const bucketMS = Number(context?.title);
               const time = Number.isFinite(bucketMS) ? dayjs(bucketMS).format('MM-DD HH:mm') : '';
-              const rows = items.map((item, index) => {
-                const name = groupLabels[index] ?? labelOf(item.key);
-                const shape = `<span class="omc-tip-swatch" style="background:${item.color ?? 'transparent'}"></span>`;
-                // The shared token layer's compact form: a tooltip that scans like the legend it
-                // annotates, with the exact count in the accessible name below.
-                // The visible value is abbreviated so the readout scans like the legend it
-                // annotates; the exact count is the value's own title, because an abbreviation is
-                // a rounded claim and must never be the only number on offer.
-                const exact = `${formatTokensFull(item.value ?? 0)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}`;
-                return `<div class="omc-tip-row">${shape}<span class="omc-tip-name">${escapeHtml(name)}</span><span class="omc-tip-value" title="${escapeHtml(exact)}">${formatTokensStyled(item.value ?? 0, tokenStyle)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}</span></div>`;
-              });
-              return `<div class="omc-tip"><div class="omc-tip-time">${time}</div>${rows.join('')}</div>`;
+              return renderChartTooltip(time, items.map((item, index) => ({
+                name: groupLabels[index] ?? labelOf(item.key),
+                color: item.color,
+                value: `${formatTokensStyled(item.value ?? 0, tokenStyle)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}`,
+                exact: `${formatTokensFull(item.value ?? 0)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}`,
+              })));
             },
           },
         }}
@@ -320,20 +295,3 @@ export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, folded
     </div>
   );
 };
-
-/**
- * escapeHtml neutralizes a model name before it is interpolated into the tooltip's markup.
- *
- * Model names reach this panel from upstream payloads, so they are untrusted input, and the tooltip is
- * built as an HTML string. Without this a crafted model name could inject markup into the page.
- */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-export { escapeHtml as escapeTooltipText };

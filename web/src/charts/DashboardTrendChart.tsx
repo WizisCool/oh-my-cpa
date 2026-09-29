@@ -1,6 +1,7 @@
 import React from 'react';
 import { Area } from '@ant-design/charts';
 import dayjs from 'dayjs';
+import { renderChartTooltip } from './chartTooltip';
 import { useTheme } from '../theme/ThemeContext';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import { resolveChartAnimation } from './chartMotion';
@@ -60,18 +61,17 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
   format,
   formatExact,
 }) => {
-  const { theme } = useTheme();
+  const { theme, themeMode } = useTheme();
   const isReducedMotion = usePrefersReducedMotion();
   const animate = resolveChartAnimation(isReducedMotion);
-  const [activeIndex, setActiveIndex] = React.useState<number | null>(null);
   const { plugins, onReady } = useChartPlugins();
 
   const values = React.useMemo(() => points.map((point) => Math.max(0, pick(point) ?? 0)), [points, pick]);
   const color = sparkColor(theme.palette, tone);
 
   const chartData = React.useMemo(
-    () => values.map((value, index) => ({ bucket: String(index), value })),
-    [values],
+    () => values.map((value, index) => ({ bucket: String(points[index].t), value })),
+    [values, points],
   );
 
   const config = React.useMemo(
@@ -100,49 +100,36 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
       scale: { y: { nice: false, domainMin: 0 } },
       axis: false,
       legend: false,
-      tooltip: false,
+      tooltip: { title: 'bucket', items: ['value'] },
+      theme: { type: themeMode, tooltip: { crosshairsStroke: theme.palette.muted, crosshairsStrokeOpacity: 1 } },
+      interaction: {
+        tooltip: {
+          shared: true,
+          crosshairs: true,
+          render: (_event: unknown, context: { title?: string; items?: Array<{ value?: number }> }) => {
+            const value = Number(context.items?.[0]?.value ?? 0);
+            const time = Number(context.title);
+            const displayValue = (format ?? formatCount)(value);
+            return renderChartTooltip((label ?? ((at: number) => dayjs(at).format('MM-DD HH:mm')))(time), [
+              { color, value: displayValue, exact: formatExact?.(value) ?? displayValue },
+            ]);
+          },
+        },
+      },
       animate,
       plugins,
       onReady,
     }),
-    [chartData, height, color, animate, plugins, onReady],
+    [chartData, height, color, animate, plugins, onReady, themeMode, theme.palette.muted, format, formatExact, label],
   );
-
-  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const bounds = event.currentTarget.getBoundingClientRect();
-    if (bounds.width <= 0) return;
-    const ratio = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
-    // The drawn mark spans the plot box, which the library insets; mapping the
-    // pointer by ratio keeps the readout aligned with the mark under it.
-    const index = Math.min(values.length - 1, Math.max(0, Math.round(ratio * (values.length - 1))));
-    setActiveIndex(index);
-  };
 
   if (values.length < 2) {
     return <div className="chart-placeholder" style={{ height }} aria-hidden="true" />;
   }
 
-  const activeValue = activeIndex === null ? null : values[activeIndex];
-  const activeTime = activeIndex === null ? 0 : points[activeIndex]?.t ?? 0;
-  const formatTooltipTitle = label ?? ((timeMs: number) => (timeMs > 0 ? dayjs(timeMs).format('MM-DD HH:mm') : ''));
-  const formatTooltipValue = format ?? ((value: number) => formatCount(value));
-  const formatTooltipExact = formatExact ?? formatTooltipValue;
-  const activeRatio = activeIndex === null || values.length < 2 ? 0 : activeIndex / (values.length - 1);
-
   return (
-    <div
-      className="chart-slot"
-      style={{ height }}
-      onPointerMove={handlePointerMove}
-      onPointerLeave={() => setActiveIndex(null)}
-    >
+    <div className="chart-slot" style={{ height }}>
       <Area {...config} />
-      {activeValue !== null && (
-        <div className="chart-tooltip" style={{ left: `${activeRatio * 100}%` }}>
-          <div className="chart-tooltip-time">{formatTooltipTitle(activeTime)}</div>
-          <div className="chart-tooltip-value" title={formatTooltipExact(activeValue)}>{formatTooltipValue(activeValue)}</div>
-        </div>
-      )}
     </div>
   );
 };

@@ -405,3 +405,11 @@ the configuration workbench.
 ### Cost & Usage provider grouping
 
 The price book uses the existing console tokens and table/phone-row primitives. Provider headings carry the shared provider mark and display name, authentication kind and routing priority; model rows carry text identities and inline pricing actions. One global 20-row page bounds the rendered memberships across groups. A single sticky footer shows the visible entry range and page navigation; phones use a read-only compact page indicator with 40px previous/next targets. Search and provider/mode filters remain above the list, with the sync control in the page header. The upstream model picker uses bounded 12-row pages. No new palette, typography, spacing or motion tokens are introduced.
+
+### Dashboard plot alignment and readouts
+
+KPI card bodies stretch within each grid row; captions absorb spare space so plots remain
+bottom-aligned when cost notes wrap. KPI sparklines and Token Trend share G2 tooltip
+hit-testing, crosshairs and positioning, with escaped content from
+`web/src/charts/chartTooltip.ts` and the palette-styled `.omc-tip` readout.
+Token Trend preserves measured zero buckets as continuous baseline segments.
