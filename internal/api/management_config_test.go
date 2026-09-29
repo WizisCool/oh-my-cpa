@@ -24,6 +24,8 @@ type configFixtureCPA struct {
 	yamlData   string
 	// rejectWrites answers every write the way CPA refuses an invalid document.
 	rejectWrites bool
+	// rejectMessage replaces CPA's explanation when writes are refused.
+	rejectMessage string
 }
 
 const configFixtureYAML = `server:
@@ -83,8 +85,13 @@ func (f *configFixtureCPA) serve(writer http.ResponseWriter, request *http.Reque
 	f.writes = append(f.writes, request.Method+" "+path)
 	f.bodies = append(f.bodies, string(body))
 	if f.rejectWrites {
+		message := f.rejectMessage
+		if message == "" {
+			message = "legacy field debug is not accepted by v8; use observability.logs.debug"
+		}
+		refusal, _ := json.Marshal(map[string]string{"error": "invalid_config", "message": message})
 		writer.WriteHeader(http.StatusBadRequest)
-		_, _ = writer.Write([]byte(`{"error":"invalid_config","message":"legacy field debug is not accepted by v8; use observability.logs.debug"}`))
+		_, _ = writer.Write(refusal)
 		return
 	}
 	switch {
@@ -425,12 +432,31 @@ func TestManagementConfigPatchReportsCPARejection(t *testing.T) {
 	}
 }
 
+// CPA's reason can quote the value it refused, and a save puts the stored
+// secrets back into what it sends; the reason reaches the console without them.
+func TestManagementConfigPatchRejectionDoesNotEchoRestoredSecrets(t *testing.T) {
+	fixture := &configFixtureCPA{rejectWrites: true, rejectMessage: `management.secret-key: "top-secret-management-key" is too short`}
+	client, baseURL, _ := startDashboardTestServer(t, fixture.serve)
+	_, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/config")
+	var loaded struct {
+		Revision string `json:"revision"`
+	}
+	_ = json.Unmarshal(payload, &loaded)
+	body, _ := json.Marshal(map[string]any{"revision": loaded.Revision, "changes": []any{
+		map[string]any{"path": []string{"management", "secret-key"}, "value": configyaml.UnchangedSentinel},
+	}})
+	resp, payload := doJSON(t, client, http.MethodPatch, baseURL+"/omc/api/v1/management/config", string(body))
+	if resp.StatusCode != http.StatusUnprocessableEntity || strings.Contains(string(payload), "top-secret-management-key") || !strings.Contains(string(payload), "management.secret-key") {
+		t.Fatalf("status = %d body %s", resp.StatusCode, payload)
+	}
+}
+
 // The first v8 write converts a legacy file irreversibly, so the file as it was
 // is kept, encrypted, before anything is sent, and can be read back.
 func TestManagementConfigFirstSaveKeepsTheLegacyFile(t *testing.T) {
 	legacy := "# operator notes\nport: 8317\ndebug: false\nremote-management:\n  secret-key: legacy-secret\n"
 	fixture := &configFixtureCPA{}
-	client, baseURL, _ := startDashboardTestServerStoring(t, legacy, fixture.serve)
+	client, baseURL, repo := startDashboardTestServerStoring(t, legacy, fixture.serve)
 
 	_, payload := getJSON(t, client, baseURL+"/omc/api/v1/management/config")
 	var loaded struct {
@@ -472,6 +498,15 @@ func TestManagementConfigFirstSaveKeepsTheLegacyFile(t *testing.T) {
 	}
 	if resp, _ := getJSON(t, client, baseURL+"/omc/api/v1/management/config/backups/999"); resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("missing backup status = %d", resp.StatusCode)
+	}
+	// Revealing a kept file is audited fail-closed: without the audit row the
+	// document is not served.
+	if _, err := repo.SQL().Exec("DROP TABLE audit_events"); err != nil {
+		t.Fatal(err)
+	}
+	resp, payload := getJSON(t, client, fmt.Sprintf("%s/omc/api/v1/management/config/backups/%d", baseURL, listed.Backups[0].ID))
+	if resp.StatusCode != http.StatusInternalServerError || strings.Contains(string(payload), "legacy-secret") {
+		t.Fatalf("reveal without audit = %d body %s", resp.StatusCode, payload)
 	}
 }
 

@@ -385,8 +385,14 @@ v8 file (`configyaml.IsV8Document`), hands it to the configured `ConfigBackup`
 (`internal/cpa/management/config_backup.go`), because that write makes CPA convert the
 whole file. The API layer stores it encrypted in `cpa_config_backups`
 (`repository.ConfigBackupStore`, the latest `CONFIG_BACKUP_RETENTION`); a write whose
-copy cannot be kept is refused before anything is sent (`503 config_backup_failed`). A
-v8 answer is cached per gateway for `V8_FILE_TTL`, so a converted file costs one read.
+copy cannot be kept is refused before anything is sent (`503 config_backup_failed`). The
+check reads the stored file before every write rather than remembering a v8 answer,
+because an operator can put a legacy file back at any time; a repeated attempt on the
+same legacy file keeps no second copy. The v8 writes after which CPA itself saves the file
+(`InstallPlugin`, `DeletePlugin`, `PatchAuthFileStatus`) take the same copy first. A
+change set CPA stops partway through is `ErrConfigPartiallyApplied`
+(`502 config_partially_applied`), and CPA's reason for a refused save has the stored
+document's hidden values removed (`configyaml.ScrubStoredSecrets`).
 `GET /management/config/backups` lists the copies and
 `GET /management/config/backups/{id}` returns one, audited as `config.reveal_backup`.
 

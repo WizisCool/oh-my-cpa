@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -299,7 +300,10 @@ func (h *Handler) putPluginSettings(writer http.ResponseWriter, request *http.Re
 		return
 	}
 	if err := client.ApplyConfigChanges(request.Context(), changes); err != nil {
-		_ = h.recordAudit(request, "plugin.settings", "config", "plugins", "failure", map[string]any{"error": publicCPAErrorMessage(err)})
+		_ = h.recordAudit(request, "plugin.settings", "config", "plugins", "failure", configWriteFailureDetail(err, map[string]any{}))
+		if errors.Is(err, management.ErrConfigPartiallyApplied) {
+			h.afterConfigWrite()
+		}
 		writeCPAFacadeError(writer, err)
 		return
 	}

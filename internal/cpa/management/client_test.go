@@ -118,6 +118,12 @@ func TestClientAuthFileMutationsUseFixedEndpoints(t *testing.T) {
 	}
 	var seen []observation
 	server := newV8Server(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		// A status change can make CPA save the configuration file, so the client
+		// first reads whether it is still a legacy one.
+		if request.URL.Path == "/v0/management/config.yaml" {
+			_, _ = writer.Write([]byte("config-version: 8\n"))
+			return
+		}
 		body, _ := io.ReadAll(request.Body)
 		seen = append(seen, observation{method: request.Method, path: request.URL.Path, rawQuery: request.URL.RawQuery, body: string(body), ctype: request.Header.Get("Content-Type")})
 		writer.Header().Set("Content-Type", "application/json")

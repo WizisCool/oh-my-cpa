@@ -147,12 +147,15 @@ func (h *Handler) managementConfigPatch(writer http.ResponseWriter, request *htt
 		return
 	}
 	if err := client.ApplyConfigChanges(request.Context(), req.Changes); err != nil {
-		_ = h.recordAudit(request, "config.save_changes", "config", "config_changes", "failure", map[string]any{"error": publicCPAErrorMessage(err), "paths": paths})
+		_ = h.recordAudit(request, "config.save_changes", "config", "config_changes", "failure", configWriteFailureDetail(err, map[string]any{"paths": paths}))
+		if errors.Is(err, management.ErrConfigPartiallyApplied) {
+			h.afterConfigWrite()
+		}
 		if errors.Is(err, management.ErrInvalidConfigChange) {
 			writeJSON(writer, http.StatusBadRequest, map[string]any{"error": err.Error(), "code": "config_invalid_change"})
 			return
 		}
-		writeCPAFacadeError(writer, err)
+		writeCPAFacadeError(writer, scrubConfigRejection(err, currentYAML))
 		return
 	}
 	h.afterConfigWrite()
@@ -396,7 +399,7 @@ func (h *Handler) managementConfigSourcePut(writer http.ResponseWriter, request 
 	}
 	if err := client.UpdateConfigYAML(request.Context(), finalYAML); err != nil {
 		_ = h.recordAudit(request, "config.save_source", "config", "config_source_yaml", "failure", map[string]any{"error": publicCPAErrorMessage(err)})
-		writeCPAFacadeError(writer, err)
+		writeCPAFacadeError(writer, scrubConfigRejection(err, currentYAML))
 		return
 	}
 

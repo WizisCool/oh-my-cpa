@@ -13,8 +13,9 @@ import (
 )
 
 // CONFIG_BACKUP_RETENTION is how many configuration backups are kept. A backup
-// is only taken when a file is converted to the v8 layout, which happens once
-// per file, so this bounds repeated conversions of restored legacy files.
+// is only taken when a file is converted to the v8 layout, and a retried save of
+// the same file reuses its copy, so this bounds repeated conversions of restored
+// legacy files rather than repeated attempts.
 const CONFIG_BACKUP_RETENTION = 10
 
 // CONFIG_BACKUP_MAX_BYTES matches the largest document CPA's management API
@@ -48,7 +49,10 @@ type configBackupEnvelope struct {
 // ErrConfigBackupTooLarge refuses a document larger than CPA itself accepts.
 var ErrConfigBackupTooLarge = errors.New("configuration backup is too large")
 
-// Save stores one document and drops the oldest beyond the retention.
+// Save stores one document and drops the oldest beyond the retention. When the
+// newest copy of this gateway already holds the same document it is returned
+// instead: a save CPA refuses leaves the legacy file in place, and every retry
+// would otherwise push an older, different copy out of the retention.
 func (s ConfigBackupStore) Save(ctx context.Context, gatewayURL, document string, now time.Time) (ConfigBackup, error) {
 	if s.Repo == nil || s.Cipher == nil {
 		return ConfigBackup{}, errors.New("configuration backup store is not configured")
@@ -72,6 +76,15 @@ func (s ConfigBackupStore) Save(ctx context.Context, gatewayURL, document string
 		return ConfigBackup{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	var latest ConfigBackup
+	err = tx.QueryRowContext(ctx, `SELECT id, gateway_url, created_at_ms, revision, size_bytes FROM cpa_config_backups WHERE gateway_url = ? ORDER BY id DESC LIMIT 1`, gatewayURL).
+		Scan(&latest.ID, &latest.GatewayURL, &latest.CreatedAtMS, &latest.Revision, &latest.SizeBytes)
+	switch {
+	case err == nil && latest.Revision == revision:
+		return latest, nil
+	case err != nil && !errors.Is(err, sql.ErrNoRows):
+		return ConfigBackup{}, err
+	}
 	result, err := tx.ExecContext(ctx, `INSERT INTO cpa_config_backups(gateway_url, created_at_ms, revision, size_bytes, ciphertext, nonce) VALUES(?,?,?,?,?,?)`,
 		backup.GatewayURL, backup.CreatedAtMS, backup.Revision, backup.SizeBytes, ciphertext, nonce)
 	if err != nil {

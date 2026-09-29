@@ -1527,6 +1527,7 @@ const DICT: Record<string, [string, string]> = {
   'cfg.save_busy': ['有其他设置正在保存中，请稍后重试', 'Another setting is still being saved; try again shortly'],
   'cfg.save_rejected': ['CPA 拒绝了这份配置，没有写入任何内容：{reason}', 'CPA rejected the configuration and nothing was written: {reason}'],
   'cfg.save_backup_failed': ['保存前无法备份旧版配置文件，因此没有转换，也没有写入任何内容。请检查 Oh My CPA 的数据库与主密钥后重试。', 'The pre-v8 configuration file could not be backed up before the save, so it was not converted and nothing was written. Check the Oh My CPA database and master key, then try again.'],
+  'cfg.save_partially_applied': ['CPA 只应用了部分修改，随后一个请求失败。请重新加载配置，查看已保存的内容后再保存其余修改。', 'CPA applied only part of the change before a request failed. Reload the configuration to see what was saved, then save the rest again.'],
   'cfg.save_sentinel_unrestorable': ['保存已取消：其中一个被遮蔽的密钥在服务器上已不存在，无法还原。请重新加载后再修改。', 'Not saved: a masked secret in the change no longer exists on the server and cannot be restored. Reload and make the change again.'],
   'cfg.stored_layout_legacy': ['网关的配置文件仍是 CPA v8 之前的格式。本页按 v8 格式显示；第一次保存时，CPA 会把整个文件转换为 v8 格式（注释和它不认识的键不会保留），转换前 Oh My CPA 会先加密备份原文件，可在“备份”中下载。', 'The gateway\'s configuration file is still in the pre-v8 format. This page shows it in the v8 format; on the first save CPA converts the whole file to v8 (comments and keys it does not know are not kept). Oh My CPA keeps an encrypted copy of the original first, which you can download under Backups.'],
   'cfg.backups': ['备份', 'Backups'],

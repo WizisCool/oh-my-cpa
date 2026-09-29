@@ -44,3 +44,38 @@ func TestConfigBackupsKeepTheNewestAndStoreThemEncrypted(t *testing.T) {
 		t.Fatalf("oversized save err = %v", err)
 	}
 }
+
+func TestConfigBackupsKeepOneCopyOfARetriedDocument(t *testing.T) {
+	repo, cipher := testRepository(t)
+	store := ConfigBackupStore{Repo: repo, Cipher: cipher}
+	ctx := context.Background()
+	start := time.UnixMilli(1_767_225_600_000)
+	if _, err := store.Save(ctx, "http://gateway.test", "port: 1\n", start); err != nil {
+		t.Fatal(err)
+	}
+	first, err := store.Save(ctx, "http://gateway.test", "port: 2\n", start)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Every save CPA refuses leaves the same legacy file behind and retries.
+	for i := 0; i < CONFIG_BACKUP_RETENTION+2; i++ {
+		again, err := store.Save(ctx, "http://gateway.test", "port: 2\n", start.Add(time.Duration(i+1)*time.Minute))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if again.ID != first.ID {
+			t.Fatalf("retry %d stored a new copy: %+v", i, again)
+		}
+	}
+	// Another gateway's identical file is its own copy.
+	if other, err := store.Save(ctx, "http://other.test", "port: 2\n", start); err != nil || other.ID == first.ID {
+		t.Fatalf("other gateway = %+v, %v", other, err)
+	}
+	backups, err := store.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(backups) != 3 {
+		t.Fatalf("backups = %+v", backups)
+	}
+}

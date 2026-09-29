@@ -228,9 +228,14 @@ func (c *Client) SetPluginConfig(ctx context.Context, id string, config map[stri
 	return err
 }
 
+// DeletePlugin removes a plugin. CPA saves the configuration file in the v8
+// layout when the plugin had settings there, so a legacy file is kept first.
 func (c *Client) DeletePlugin(ctx context.Context, id string) (PluginDeleteResult, error) {
 	endpoint, err := pluginEndpoint(id, "")
 	if err != nil {
+		return PluginDeleteResult{}, err
+	}
+	if err := c.keepLegacyConfig(ctx); err != nil {
 		return PluginDeleteResult{}, err
 	}
 	var result PluginDeleteResult
@@ -262,7 +267,8 @@ func (c *Client) PluginStore(ctx context.Context) (PluginStore, error) {
 
 // InstallPlugin installs or updates a store plugin. The source pins which
 // registry supplies it when several list the same id; an empty version asks
-// for the newest release.
+// for the newest release. CPA records the installed plugin by saving the
+// configuration file in the v8 layout, so a legacy file is kept first.
 func (c *Client) InstallPlugin(ctx context.Context, id, sourceID, version string) (PluginInstallResult, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -275,6 +281,9 @@ func (c *Client) InstallPlugin(ctx context.Context, id, sourceID, version string
 	payload := map[string]any{}
 	if version = strings.TrimSpace(version); version != "" {
 		payload["version"] = version
+	}
+	if err := c.keepLegacyConfig(ctx); err != nil {
+		return PluginInstallResult{}, err
 	}
 	var result PluginInstallResult
 	if err := c.doJSONBody(ctx, http.MethodPost, endpoint, payload, &result); err != nil {

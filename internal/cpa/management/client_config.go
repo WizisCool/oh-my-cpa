@@ -188,6 +188,11 @@ type ConfigChange struct {
 // ErrInvalidConfigChange reports a change set that cannot be sent as written.
 var ErrInvalidConfigChange = errors.New("invalid configuration change")
 
+// ErrConfigPartiallyApplied reports a change set that CPA stopped partway
+// through: at least one request landed before one failed, so the stored file is
+// neither the old document nor the requested one. It wraps the failure.
+var ErrConfigPartiallyApplied = errors.New("configuration change set partially applied")
+
 // ApplyConfigChanges writes only the settings that changed.
 //
 // Values are merged in one PATCH, so CPA validates them together and applies
@@ -195,7 +200,8 @@ var ErrInvalidConfigChange = errors.New("invalid configuration change")
 // operator removed; each one is replaced with PUT on its own path instead.
 // Removals are DELETEs, because a PATCH with null writes the zero value rather
 // than dropping the key (measured on CPA v8.0.2); a path that is already absent
-// is not an error.
+// is not an error. CPA has no transaction across these requests, so a failure
+// after the first one landed is returned wrapped in ErrConfigPartiallyApplied.
 func (c *Client) ApplyConfigChanges(ctx context.Context, changes []ConfigChange) error {
 	if c == nil {
 		return errors.New("CPA client is not initialized")
@@ -222,34 +228,44 @@ func (c *Client) ApplyConfigChanges(ctx context.Context, changes []ConfigChange)
 			setAt(merge, change.Path, change.Value)
 		}
 	}
+	hasLanded := false
+	failed := func(err error) error {
+		if hasLanded {
+			return fmt.Errorf("%w: %w", ErrConfigPartiallyApplied, err)
+		}
+		return err
+	}
 	if len(merge) > 0 {
 		if err := c.doJSONBody(ctx, http.MethodPatch, "/config", merge, nil); err != nil {
 			return err
 		}
+		hasLanded = true
 	}
 	for _, change := range replacements {
 		if err := c.doJSONBody(ctx, http.MethodPut, configPathEndpoint(change.Path), change.Value, nil); err != nil {
-			return err
+			return failed(err)
 		}
+		hasLanded = true
 	}
 	for _, change := range removals {
 		request, err := c.newRequest(ctx, http.MethodDelete, configPathEndpoint(change.Path), nil, "")
 		if err != nil {
-			return err
+			return failed(err)
 		}
 		if _, err := c.do(request, nil); err != nil {
 			var httpErr *HTTPError
 			if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound && strings.Contains(httpErr.Body, "not_found") {
 				continue
 			}
-			return err
+			return failed(err)
 		}
+		hasLanded = true
 	}
 	return nil
 }
 
 func validateConfigChanges(changes []ConfigChange) error {
-	seen := make([]string, 0, len(changes))
+	seen := make([][]string, 0, len(changes))
 	for _, change := range changes {
 		if len(change.Path) == 0 {
 			return fmt.Errorf("%w: empty path", ErrInvalidConfigChange)
@@ -259,17 +275,35 @@ func validateConfigChanges(changes []ConfigChange) error {
 				return fmt.Errorf("%w: %q is not a configuration key", ErrInvalidConfigChange, key)
 			}
 		}
-		joined := strings.Join(change.Path, ".")
+		label := strings.Join(change.Path, ".")
+		// A change with neither a value nor a removal would be sent as null,
+		// which CPA stores as the zero value instead of leaving the key alone.
+		if !change.Remove && change.Value == nil {
+			return fmt.Errorf("%w: %s has no value", ErrInvalidConfigChange, label)
+		}
 		// Two changes on one path, or on a path and a key below it, would depend
-		// on the order CPA applies them in.
+		// on the order CPA applies them in. Keys are compared one by one because
+		// a mapping key may itself contain a dot.
 		for _, other := range seen {
-			if joined == other || strings.HasPrefix(joined, other+".") || strings.HasPrefix(other, joined+".") {
-				return fmt.Errorf("%w: %s overlaps %s", ErrInvalidConfigChange, joined, other)
+			if isPathPrefix(other, change.Path) || isPathPrefix(change.Path, other) {
+				return fmt.Errorf("%w: %s overlaps %s", ErrInvalidConfigChange, label, strings.Join(other, "."))
 			}
 		}
-		seen = append(seen, joined)
+		seen = append(seen, change.Path)
 	}
 	return nil
+}
+
+func isPathPrefix(prefix, path []string) bool {
+	if len(prefix) > len(path) {
+		return false
+	}
+	for i, key := range prefix {
+		if path[i] != key {
+			return false
+		}
+	}
+	return true
 }
 
 func configPathEndpoint(path []string) string {
@@ -302,6 +336,11 @@ func setAt(target map[string]any, path []string, value any) {
 // section). It can quote the offending value, which is the value the operator
 // just submitted.
 func IsConfigRejected(err error) (string, bool) {
+	// Part of a partially applied change set landed, so it is not the refusal
+	// that leaves the file unchanged, whatever CPA said about the failing part.
+	if errors.Is(err, ErrConfigPartiallyApplied) {
+		return "", false
+	}
 	var httpErr *HTTPError
 	// CPA answers 400 for a name it does not accept and 422 for a value of the
 	// wrong type; both carry the same body.

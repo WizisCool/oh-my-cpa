@@ -48,13 +48,17 @@ may be lost in the move.
 3. **The source view writes the whole document through `PUT /v8/management/config.yaml`.**
    It edits CPA's v8 rendering, so a legacy name typed there is refused by CPA with its
    own explanation (`422 config_rejected`, shown in the console's language with CPA's
-   reason quoted).
+   reason quoted). The save restored the hidden values into what it sent, so any of them
+   the reason quotes is removed from it first.
 4. **A legacy file is backed up before it is converted.** Before any v8 configuration
    write, the client reads the stored file through `GET /v0/management/config.yaml` (the
    only route that returns the file as stored) and, when it is not a v8 file, stores it
-   encrypted in `cpa_config_backups` (migration 030, the latest ten kept). If the copy
-   cannot be kept, the write is refused before anything is sent
-   (`503 config_backup_failed`). The console marks a legacy file on the configuration
+   encrypted in `cpa_config_backups` (migration 030, the latest ten kept; a retried save
+   of the same file reuses its copy). The file is read before every such write rather
+   than remembered as converted, because an operator can put a legacy file back. The
+   other v8 writes after which CPA saves the file (installing or deleting a plugin,
+   enabling or disabling a credential) take the same copy first. If the copy cannot be
+   kept, the write is refused before anything is sent (`503 config_backup_failed`). The console marks a legacy file on the configuration
    page and offers the kept copies for download (`GET /management/config/backups`,
    `GET /management/config/backups/{id}`, the latter audited as `config.reveal_backup`).
 5. **Scalar writes use the same path.** `PUT /management/config/{key}`, which the Agent's
@@ -72,8 +76,10 @@ may be lost in the move.
   dialog's reload now keeps the visual editor's edits on top of the latest document.
 - A change set is not atomic across its requests. It is ordered so that the requests CPA
   is most likely to refuse (the merge that carries typed values) come first, but a set
-  whose later request fails leaves the earlier ones applied. The editor sends one save at
-  a time, and the answer re-reads CPA, so the console shows the state CPA holds.
+  whose later request fails leaves the earlier ones applied. That failure is reported as
+  `config_partially_applied` (audited as a failure with `partially_applied`), not as a
+  refusal that changed nothing, and the editor's next save meets the revision conflict
+  dialog, which reloads the state CPA holds.
 - `/v0/management` keeps three roles (`internal/cpa/management/client_v0.go`): the
   per-family credential lists (the only source of `auth-index`), the stored-file read
   the backup needs, and the writes whose editors have not moved yet (provider

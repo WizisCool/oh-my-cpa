@@ -63,14 +63,43 @@ func RestoreSentinelsAt(value any, path []string, serverYAML string) (any, error
 			return nil, err
 		}
 	}
-	if isSensitivePath(path) && nodeContainsSentinel(node) {
-		return nil, fmt.Errorf("%s has no stored value to keep", pathLabel(path))
+	// A sentinel the stored copy could not replace - under a list entry past the
+	// stored length, or a key the stored mapping lacks - would otherwise be
+	// written as the secret itself.
+	if unrestored, found := unrestoredSentinelPath(node, path); found {
+		return nil, fmt.Errorf("%s has no stored value to keep", unrestored)
 	}
 	var restored any
 	if err := node.Decode(&restored); err != nil {
 		return nil, fmt.Errorf("decode value: %w", err)
 	}
 	return restored, nil
+}
+
+// unrestoredSentinelPath finds a sensitive value that still holds the sentinel.
+// Only sensitive paths count: anywhere else the sentinel is ordinary text.
+func unrestoredSentinelPath(node *yaml.Node, path []string) (string, bool) {
+	if node == nil {
+		return "", false
+	}
+	if isSensitivePath(path) && nodeContainsSentinel(node) {
+		return pathLabel(path), true
+	}
+	switch node.Kind {
+	case yaml.MappingNode:
+		for index := 0; index+1 < len(node.Content); index += 2 {
+			if label, found := unrestoredSentinelPath(node.Content[index+1], appendPath(path, node.Content[index].Value)); found {
+				return label, true
+			}
+		}
+	case yaml.SequenceNode:
+		for _, item := range node.Content {
+			if label, found := unrestoredSentinelPath(item, path); found {
+				return label, true
+			}
+		}
+	}
+	return "", false
 }
 
 // nodeAt finds the node a mapping path names, or nil when any step is absent.

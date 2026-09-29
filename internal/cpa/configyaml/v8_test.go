@@ -82,6 +82,18 @@ requests:
 	if _, err := RestoreSentinelsAt(UnchangedSentinel, []string{"server", "tls", "key"}, stored); err == nil {
 		t.Fatal("a sentinel with no stored value must be refused")
 	}
+	// So is one below the path under a key the stored copy lacks, which the
+	// restore walk passes over.
+	storedGroups := `api-keys:
+  codex:
+    - name: codex-1
+      keys:
+        - api-key: stored-key
+`
+	newKey := map[string]any{"codex": []any{map[string]any{"name": "codex-1", "keys": []any{map[string]any{"api-key": "stored-key"}}}}, "claude": []any{map[string]any{"api-key": UnchangedSentinel}}}
+	if _, err := RestoreSentinelsAt(newKey, []string{"api-keys"}, storedGroups); err == nil {
+		t.Fatal("a sentinel under a key the stored copy lacks must be refused")
+	}
 }
 
 func TestSanitizeSafeYAMLMasksUpstreamCredentialsInTheV8Layout(t *testing.T) {
@@ -115,5 +127,25 @@ management:
 	}
 	if encoded := fmt.Sprint(restored); !strings.Contains(encoded, "sk-upstream-secret") {
 		t.Fatalf("restored = %s", encoded)
+	}
+}
+
+func TestScrubStoredSecretsRemovesHiddenValues(t *testing.T) {
+	stored := `management:
+  secret-key: stored-secret
+requests:
+  proxy-url: http://user:proxy-pass@proxy.example:3128
+api-keys:
+  codex:
+    - keys:
+        - api-key: sk-upstream
+access:
+  api-keys: [client-key]
+`
+	text := `stored-secret, http://user:proxy-pass@proxy.example:3128, proxy-pass, sk-upstream, client-key`
+	got := ScrubStoredSecrets(text, stored)
+	want := `[hidden], http://proxy.example:3128, [hidden], [hidden], client-key`
+	if got != want {
+		t.Fatalf("scrubbed = %q, want %q", got, want)
 	}
 }

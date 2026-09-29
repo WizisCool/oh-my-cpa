@@ -22,6 +22,10 @@ export function describeConfigSaveError(
     }
     case 'config_backup_failed':
       return t('cfg.save_backup_failed');
+    case 'config_partially_applied':
+      // Part of the change set landed, so the editor's baseline is stale and its
+      // next save meets the revision conflict dialog, which reloads onto it.
+      return t('cfg.save_partially_applied');
     case 'config_sentinel_unrestorable':
       return t('cfg.save_sentinel_unrestorable');
     default:

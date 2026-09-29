@@ -111,7 +111,7 @@ resolved below.
 | `streaming.*` (low confidence) | `requests.streaming.*` | Confirmed |
 | `commercial-mode` (low confidence) | `server.commercial-mode` | Confirmed |
 | `disable-cooling` (low confidence) | `routing.cooldown.disable-cooling` | Confirmed |
-| `quota-exceeded.switch-project`, `switch-preview-model` | Legacy-only | No v8 counterpart; they stay under `quota-exceeded` in both layouts |
+| `quota-exceeded.switch-project`, `switch-preview-model` | Not relocated | They stay under `quota-exceeded` in both layouts. CPA leaves them out of its v8 template as compatibility-only, but `quota-exceeded` is an accepted v8 root, a v8 `PATCH` writes them and the runtime applies them |
 
 Relocations the brief did not list include `nonstream-keepalive-interval` →
 `requests.nonstream-keepalive-interval`, `ws-auth` → `oauth.providers.aistudio.ws-auth`,
@@ -306,7 +306,8 @@ groups. The masked configuration view hides every `api-key` value in them.
 
 `routing.strategy`, `routing.session-affinity`, `routing.session-affinity-ttl`,
 `routing.session-affinity-subagents`, `plugins.*`, `quota-exceeded.switch-project` and
-`quota-exceeded.switch-preview-model` (the last two have no v8 counterpart at all).
+`quota-exceeded.switch-preview-model` (the last two are absent from CPA's v8 template but
+are written and applied at the same path).
 
 ## 4. OMC's configuration write path
 
@@ -352,7 +353,7 @@ Two independent facts, both observed rather than inferred from a version string:
 - **Stored file layout** (`configyaml.IsV8Document` over `GET /v0/management/config.yaml`):
   `v8` when the file carries `config-version: 8` or later, `legacy` otherwise. It decides
   only whether the next configuration write keeps a backup first, and is exposed as
-  `stored_layout`. A `v8` answer is cached per gateway for `V8_FILE_TTL`.
+  `stored_layout`. It is read again before every configuration write.
 
 ## 6. Where a setting is written
 

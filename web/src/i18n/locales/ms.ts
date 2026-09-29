@@ -1243,6 +1243,7 @@ export const MS: Readonly<Record<string, string>> = {
   "cfg.save_busy": "Tetapan lain masih disimpan; cuba lagi sebentar lagi",
   "cfg.save_rejected": "CPA menolak konfigurasi ini dan tiada apa-apa ditulis: {reason}",
   "cfg.save_backup_failed": "Fail konfigurasi pra-v8 tidak dapat disandarkan sebelum simpanan, jadi ia tidak ditukar dan tiada apa-apa ditulis. Semak pangkalan data dan kunci induk Oh My CPA, kemudian cuba lagi.",
+  "cfg.save_partially_applied": "CPA hanya menggunakan sebahagian perubahan sebelum satu permintaan gagal. Muat semula konfigurasi untuk melihat apa yang telah disimpan, kemudian simpan selebihnya sekali lagi.",
   "cfg.save_sentinel_unrestorable": "Tidak disimpan: rahsia bertopeng dalam perubahan ini tidak lagi wujud pada pelayan dan tidak dapat dipulihkan. Muat semula dan buat perubahan sekali lagi.",
   "cfg.stored_layout_legacy": "Fail konfigurasi get laluan masih dalam format pra-v8. Halaman ini memaparkannya dalam format v8; pada simpanan pertama CPA menukar seluruh fail kepada v8 (ulasan dan kunci yang tidak dikenalinya tidak disimpan). Oh My CPA menyimpan salinan asal yang disulitkan terlebih dahulu, yang boleh dimuat turun di bawah Sandaran.",
   "cfg.backups": "Sandaran",

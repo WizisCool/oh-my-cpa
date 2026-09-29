@@ -110,7 +110,7 @@ func (s *Service) DeleteKey(ctx context.Context, index int, fingerprint, revisio
 		}
 	}
 	if err = client.UpdateClientAPIKeys(ctx, append(keys[:index:index], keys[index+1:]...)); err != nil {
-		return errors.New("operation_outcome_unknown")
+		return configWriteOutcome(err)
 	}
 	return nil
 }

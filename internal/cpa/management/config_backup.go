@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
-	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/cpa/configyaml"
 )
@@ -24,16 +22,6 @@ type ConfigBackup interface {
 // ErrConfigBackupUnavailable refuses a v8 configuration write to a legacy file
 // when no backup could be kept first.
 var ErrConfigBackupUnavailable = errors.New("the CPA configuration file is in the pre-v8 layout and no backup store is available; refusing to convert it")
-
-// V8_FILE_TTL is how long a gateway whose stored file is already v8 is trusted
-// to stay so. Only a whole-file v0 write can put a legacy file back, and none of
-// the console's writes does.
-const V8_FILE_TTL = 5 * time.Minute
-
-var v8FileCache = struct {
-	sync.Mutex
-	until map[string]time.Time
-}{until: map[string]time.Time{}}
 
 // WithConfigBackup sets where a legacy file is kept before it is migrated.
 func (c *Client) WithConfigBackup(backup ConfigBackup) *Client {
@@ -56,21 +44,14 @@ func (c *Client) IsStoredConfigV8(ctx context.Context) (bool, string, error) {
 		// not yet migrated: keeping a copy costs nothing.
 		return false, stored, nil
 	}
-	if isV8 {
-		v8FileCache.Lock()
-		v8FileCache.until[c.baseURL] = time.Now().Add(V8_FILE_TTL)
-		v8FileCache.Unlock()
-	}
 	return isV8, stored, nil
 }
 
+// keepLegacyConfig reads the stored file before every v8 write rather than
+// remembering that it was v8: an operator can put a legacy file back at any
+// time, and converting that one without a copy is the loss this guards against.
+// A converted file costs one read per write.
 func (c *Client) keepLegacyConfig(ctx context.Context) error {
-	v8FileCache.Lock()
-	until, known := v8FileCache.until[c.baseURL]
-	v8FileCache.Unlock()
-	if known && time.Now().Before(until) {
-		return nil
-	}
 	isV8, stored, err := c.IsStoredConfigV8(ctx)
 	if err != nil {
 		return fmt.Errorf("read the stored configuration before converting it: %w", err)

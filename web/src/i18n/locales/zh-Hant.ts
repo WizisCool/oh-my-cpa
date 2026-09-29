@@ -1243,6 +1243,7 @@ export const ZH_HANT: Readonly<Record<string, string>> = {
   "cfg.save_busy": "有其他設定正在儲存中，請稍後重試",
   "cfg.save_rejected": "CPA 拒絕了這份設定，沒有寫入任何內容：{reason}",
   "cfg.save_backup_failed": "儲存前無法備份舊版設定檔，因此沒有轉換，也沒有寫入任何內容。請檢查 Oh My CPA 的資料庫與主金鑰後重試。",
+  "cfg.save_partially_applied": "CPA 只套用了部分修改，隨後一個請求失敗。請重新載入設定，查看已儲存的內容後再儲存其餘修改。",
   "cfg.save_sentinel_unrestorable": "儲存已取消：其中一個被遮蔽的金鑰在伺服器上已不存在，無法還原。請重新載入後再修改。",
   "cfg.stored_layout_legacy": "閘道的設定檔仍是 CPA v8 之前的格式。本頁以 v8 格式顯示；第一次儲存時，CPA 會把整個檔案轉換為 v8 格式（註解和它不認識的鍵不會保留），轉換前 Oh My CPA 會先加密備份原檔案，可在「備份」中下載。",
   "cfg.backups": "備份",

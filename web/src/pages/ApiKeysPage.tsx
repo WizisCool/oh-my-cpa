@@ -22,7 +22,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseDocument } from 'yaml';
 import type { Document } from 'yaml';
 import dayjs from 'dayjs';
-import { api, ApiError, describeError } from '../api/client';
+import { api, ApiError, apiErrorCode, describeError } from '../api/client';
 import { useT } from '../i18n';
 import { isDemoMode } from '../types/demoMode';
 import { useOverlayHistory } from '../hooks/useOverlayHistory';
@@ -191,6 +191,8 @@ export const ApiKeysPage: React.FC = () => {
       const msg = describeConfigSaveError(err, t);
       setSaveError(msg);
       message.error(msg);
+      // Part of the write landed, so the list shown is no longer CPA's.
+      if (apiErrorCode(err) === 'config_partially_applied') void configQuery.refetch();
     },
   });
 

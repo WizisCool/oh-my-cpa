@@ -134,10 +134,77 @@ func TestApplyConfigChangesRefusesAmbiguousPaths(t *testing.T) {
 		{{Path: []string{"routing/retry"}, Value: 1}},
 		{{Path: []string{"routing"}, Value: 1}, {Path: []string{"routing", "strategy"}, Value: "x"}},
 		{{Path: []string{"a", "b"}, Value: 1}, {Path: []string{"a", "b"}, Remove: true}},
+		// Neither a value nor a removal would be sent as null, a zero value.
+		{{Path: []string{"routing", "strategy"}}},
 	} {
 		if err := client.ApplyConfigChanges(context.Background(), changes); !errors.Is(err, ErrInvalidConfigChange) {
 			t.Errorf("%v: err = %v, want ErrInvalidConfigChange", changes, err)
 		}
+	}
+}
+
+func TestApplyConfigChangesComparesPathsKeyByKey(t *testing.T) {
+	client := newConfigClient(t, &configGateway{stored: "config-version: 8\n"})
+	// A mapping key may contain a dot; joined with dots these two would collide.
+	err := client.ApplyConfigChanges(context.Background(), []ConfigChange{
+		{Path: []string{"plugins", "configs", "a.b"}, Value: map[string]any{"x": 1}},
+		{Path: []string{"plugins", "configs", "a", "b"}, Value: 2},
+	})
+	if err != nil {
+		t.Fatalf("distinct paths refused: %v", err)
+	}
+}
+
+func TestApplyConfigChangesReportsAPartialWrite(t *testing.T) {
+	gateway := &configGateway{stored: "config-version: 8\n", answer: func(method, _ string) (int, string) {
+		if method == http.MethodPut {
+			return http.StatusUnprocessableEntity, `{"error":"invalid_config","message":"bad value"}`
+		}
+		return 0, ""
+	}}
+	client := newConfigClient(t, gateway)
+	err := client.ApplyConfigChanges(context.Background(), []ConfigChange{
+		{Path: []string{"observability", "logs", "debug"}, Value: true},
+		{Path: []string{"plugins", "configs", "demo"}, Value: map[string]any{"level": "info"}},
+	})
+	// The PATCH landed before the PUT was refused, so this is not the refusal
+	// that leaves the file unchanged.
+	if !errors.Is(err, ErrConfigPartiallyApplied) {
+		t.Fatalf("err = %v, want ErrConfigPartiallyApplied", err)
+	}
+	if _, rejected := IsConfigRejected(err); rejected {
+		t.Fatal("a partial write must not read as a refusal")
+	}
+	// The same refusal on the first request changed nothing.
+	err = client.ApplyConfigChanges(context.Background(), []ConfigChange{
+		{Path: []string{"plugins", "configs", "demo"}, Value: map[string]any{"level": "info"}},
+	})
+	if errors.Is(err, ErrConfigPartiallyApplied) {
+		t.Fatalf("err = %v, want a plain refusal", err)
+	}
+	if _, rejected := IsConfigRejected(err); !rejected {
+		t.Fatalf("err = %v, want a refusal", err)
+	}
+}
+
+func TestALegacyFilePutBackAfterAConversionIsKeptAgain(t *testing.T) {
+	gateway := &configGateway{stored: "config-version: 8\n"}
+	client := newConfigClient(t, gateway)
+	backup := &recordingBackup{}
+	client.WithConfigBackup(backup)
+	if err := client.UpdateConfigScalar(context.Background(), "debug", true); err != nil {
+		t.Fatal(err)
+	}
+	// The operator restores the legacy file right after a write to the v8 one.
+	legacy := "port: 8317\ndebug: false\n"
+	gateway.mu.Lock()
+	gateway.stored = legacy
+	gateway.mu.Unlock()
+	if err := client.UpdateConfigScalar(context.Background(), "debug", false); err != nil {
+		t.Fatal(err)
+	}
+	if len(backup.documents) != 1 || backup.documents[0] != legacy {
+		t.Fatalf("backup = %q", backup.documents)
 	}
 }
 
