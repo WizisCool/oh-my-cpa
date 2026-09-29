@@ -344,6 +344,46 @@ const unbranded = aggregateProviders({ authFilesByType: [{ type: 'antigravity', 
 assert.equal(unbranded[0].logo, undefined, 'a non-plugin channel has no plugin logo');
 console.log('✓ Plugin-provided brand artwork verified');
 
+// Test 7b: API-key providers are credited by the keys that served them, never by family
+//
+// CPA labels every codex API-key request "codex", as it labels a Codex OAuth request. Joining on
+// that label credited a codex provider created a moment ago with the OAuth channel's traffic,
+// while the first codex provider took the whole label and the others read "no requests"; two rows
+// sharing the family's default name lost the second row entirely.
+const codexFamilyRow = (id: string, name: string, authIndex: string): ProviderItem => ({
+  id,
+  family: 'codex',
+  name,
+  protocol: 'OpenAI Responses',
+  auth_indexes: [authIndex],
+  disabled: false,
+  key_configured: true,
+});
+const byKey = aggregateProviders({
+  windowProviders: [{ id: 'codex', total: 7, success: 5, failure: 2, success_rate: 71.4 }],
+  windowCredentials: [
+    { auth_index: 'key-a', total: 3, failure: 1 },
+    { auth_index: 'key-b', total: 2, failure: 0 },
+  ],
+  authFilesByType: [{ type: 'codex', count: 1, disabled: 0 }],
+  configuredProviders: [
+    codexFamilyRow('codex-0', 'Codex / Responses', 'key-a'),
+    codexFamilyRow('codex-1', 'Codex / Responses', 'key-b'),
+    codexFamilyRow('codex-2', 'TEST1', 'key-c'),
+  ],
+});
+const trafficOf = (providerId: string) => byKey.find((row) => row.providerId === providerId);
+assert.equal(trafficOf('codex-0')?.total, 3, 'the first codex key is credited with its own requests');
+assert.equal(trafficOf('codex-0')?.failure, 1);
+assert.equal(trafficOf('codex-1')?.total, 2, 'a second row with the same default name keeps its own row and traffic');
+assert.equal(trafficOf('codex-2')?.total, 0, 'a provider no request used has no traffic');
+assert.equal(trafficOf('codex-2')?.successRate, null);
+assert.equal(trafficOf('codex-2')?.kind, 'ai_provider', 'a codex API-key provider is not the Codex OAuth channel');
+assert.equal(trafficOf('codex-2')?.credentials, 1, 'an API-key provider counts its own keys, not the channel files');
+const oauthCodex = byKey.find((row) => row.key === 'oauth:codex');
+assert.equal(oauthCodex?.total, 7, 'the OAuth channel keeps the traffic no API key answered');
+console.log('✓ API-key traffic joined by auth index verified');
+
 // Test 8: Summary stats calculation
 const summary = computeProviderSummary(aggregated);
 assert.equal(summary.totalProviders, 6);

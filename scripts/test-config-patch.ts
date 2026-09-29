@@ -111,6 +111,43 @@ test('a section the server did not have is sent as one value', () => {
   assert.deepEqual(computeConfigChanges(server, draft), [{ path: ['observability'], value: { logs: { debug: true } } }]);
 });
 
+// A save names its path as deeply as the server already nests a map: only the maps both sides
+// hold are descended into, and a map the server never had travels whole.
+test('an OAuth provider switch is sent at the deepest path the server already has', () => {
+  const bare = parseDocument(SERVER_YAML);
+  const bareDraft = parseDocument(SERVER_YAML);
+  updateFieldWithBaseline(bareDraft, bare, field('codexLiveEnabled'), true);
+  assert.deepEqual(computeConfigChanges(bare, bareDraft), [
+    { path: ['oauth'], value: { providers: { codex: { 'live-media-relay': { enabled: true } } } } },
+  ]);
+
+  const providerYaml = `${SERVER_YAML}oauth:\n    providers:\n        codex:\n            header-defaults:\n                user-agent: codex\n`;
+  const provider = parseDocument(providerYaml);
+  const providerDraft = parseDocument(providerYaml);
+  updateFieldWithBaseline(providerDraft, provider, field('codexLiveEnabled'), true);
+  assert.deepEqual(computeConfigChanges(provider, providerDraft), [
+    { path: ['oauth', 'providers', 'codex', 'live-media-relay'], value: { enabled: true } },
+  ]);
+
+  const relayYaml = `${SERVER_YAML}oauth:\n    providers:\n        codex:\n            live-media-relay:\n                max-sessions: 32\n`;
+  const relay = parseDocument(relayYaml);
+  const relayDraft = parseDocument(relayYaml);
+  updateFieldWithBaseline(relayDraft, relay, field('codexLiveEnabled'), true);
+  assert.deepEqual(computeConfigChanges(relay, relayDraft), [
+    { path: ['oauth', 'providers', 'codex', 'live-media-relay', 'enabled'], value: true },
+  ]);
+});
+
+test('a trusted-proxy list is replaced whole', () => {
+  const serverYaml = 'server:\n    trusted-proxies:\n        - 127.0.0.1\n';
+  const server = parseDocument(serverYaml);
+  const draft = parseDocument(serverYaml);
+  updateFieldWithBaseline(draft, server, field('trustedProxies'), ['127.0.0.1', '10.0.0.0/8']);
+  assert.deepEqual(computeConfigChanges(server, draft), [
+    { path: ['server', 'trusted-proxies'], value: ['127.0.0.1', '10.0.0.0/8'] },
+  ]);
+});
+
 test('a draft is carried over onto a newer baseline without undoing what it did not see', () => {
   const base = parseDocument(SERVER_YAML);
   const draft = parseDocument(SERVER_YAML);

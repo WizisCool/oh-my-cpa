@@ -46,7 +46,7 @@ func writeCPAFacadeError(writer http.ResponseWriter, err error) {
 	} else if errors.Is(err, management.ErrManagementDisabled) {
 		status = http.StatusBadGateway
 		code = "cpa_management_disabled"
-		message = "CPA does not serve its Management API; set remote-management.secret-key in the CPA configuration"
+		message = "CPA does not serve its Management API; set management.secret-key in the CPA configuration"
 	} else if errors.Is(err, management.ErrConfigBackupUnavailable) {
 		// Nothing was sent to CPA: the file is unchanged.
 		status = http.StatusServiceUnavailable

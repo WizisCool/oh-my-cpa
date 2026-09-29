@@ -3,6 +3,9 @@ import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import Editor, { loader, type OnMount } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import 'monaco-editor/esm/vs/features/find/register.js';
+// The slim editor build registers no icon font of its own: every widget glyph (find, folding,
+// suggest) is a codicon, and without this the widgets render empty boxes.
+import 'monaco-editor/esm/vs/features/codicon/register.js';
 import 'monaco-editor/esm/vs/editor/contrib/format/browser/formatActions.js';
 import 'monaco-editor/esm/vs/editor/contrib/folding/browser/folding.js';
 import 'monaco-editor/esm/vs/editor/contrib/bracketMatching/browser/bracketMatching.js';

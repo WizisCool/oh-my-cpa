@@ -5,6 +5,13 @@ import {
   updateFieldWithBaseline,
   isConfigSemanticallyEqual,
 } from '../web/src/components/config/configDirty.ts';
+import { ALL_CONFIG_FIELDS, type ConfigFieldDefinition } from '../web/src/types/configSchema.ts';
+
+function schemaField(id: string): ConfigFieldDefinition {
+  const found = ALL_CONFIG_FIELDS.find((item) => item.id === id);
+  assert.ok(found, id);
+  return found;
+}
 
 interface ConfigStateMachine {
   status: 'initial' | 'loading' | 'loaded' | 'error' | 'saving' | 'conflict';
@@ -162,4 +169,18 @@ test('State Machine: Saving -> Conflict (409) preserves local edits without over
   // Local edits must remain intact!
   assert.equal(sm.rawYaml.includes('port: 9000'), true);
   assert.equal(conflictResponse.current_revision, 'rev-other-session');
+});
+
+// The image-generation setting is the one control whose four modes share a boolean-ish shape.
+// Reading "disabled everywhere" and "disabled in chat only" as the same state would leave the
+// save bar dark and silently drop the operator's change.
+test('State Machine: moving image generation from everywhere to chat-only stays dirty', () => {
+  const serverYaml = 'multimedia:\n    disable-image-generation: true\n';
+  const serverDoc = parseDocument(serverYaml);
+  const currentDoc = parseDocument(serverYaml);
+  const imageGeneration = schemaField('disableImageGeneration');
+
+  updateFieldWithBaseline(currentDoc, serverDoc, imageGeneration, 'chat');
+  assert.equal(currentDoc.getIn(['multimedia', 'disable-image-generation']), 'chat');
+  assert.equal(isConfigSemanticallyEqual(currentDoc, serverDoc, ALL_CONFIG_FIELDS), false);
 });

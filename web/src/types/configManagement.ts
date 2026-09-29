@@ -7,7 +7,7 @@ export interface ConfigScalars {
   logging_to_file: boolean;
   logs_max_total_size_mb: number;
   error_logs_max_files: number;
-  routing_strategy: 'round-robin' | 'least-load' | string;
+  routing_strategy: 'round-robin' | 'weighted-round-robin' | 'fill-first' | string;
   request_retry: number;
   max_retry_interval: number;
   max_retry_credentials: number;

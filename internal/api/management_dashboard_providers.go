@@ -11,9 +11,21 @@ import (
 )
 
 type dashboardProvidersResponse struct {
-	Window    dashboardWindow            `json:"window"`
+	Window dashboardWindow `json:"window"`
+	// Providers is the traffic of every record no API key answered, by the channel label CPA
+	// wrote: OAuth channels, and records that name no credential.
 	Providers []dashboardProviderTraffic `json:"providers"`
-	Errors    []string                   `json:"partial_errors"`
+	// Credentials is the traffic API keys answered, by each key's runtime auth index. A configured
+	// provider is credited from here, through the indexes of its own keys, and never from a label:
+	// CPA labels every key of a family, and that family's OAuth channel, the same.
+	Credentials []dashboardCredentialTraffic `json:"credentials"`
+	Errors      []string                     `json:"partial_errors"`
+}
+
+type dashboardCredentialTraffic struct {
+	AuthIndex string `json:"auth_index"`
+	Total     int64  `json:"total"`
+	Failure   int64  `json:"failure"`
 }
 
 type dashboardProviderTraffic struct {
@@ -46,9 +58,10 @@ func (h *Handler) dashboardProviders(writer http.ResponseWriter, request *http.R
 	defer cancel()
 
 	response := dashboardProvidersResponse{
-		Window:    window,
-		Providers: []dashboardProviderTraffic{},
-		Errors:    []string{},
+		Window:      window,
+		Providers:   []dashboardProviderTraffic{},
+		Credentials: []dashboardCredentialTraffic{},
+		Errors:      []string{},
 	}
 
 	rows, err := h.repo.QueryUsageProviderTotals(ctx, defaultInstanceID(), window.FromMS, window.ToMS)
@@ -58,25 +71,37 @@ func (h *Handler) dashboardProviders(writer http.ResponseWriter, request *http.R
 		return
 	}
 
-	response.Providers = foldProviderTraffic(rows)
+	response.Providers, response.Credentials = foldProviderTraffic(rows)
 	writeJSON(writer, http.StatusOK, response)
 }
 
-// foldProviderTraffic canonicalises the provider labels and derives each row's success rate.
+// foldProviderTraffic splits the window into API-key traffic, by auth index, and the rest, by
+// canonical provider label, and derives each label row's success rate.
 //
 // Providers are grouped under the identity the console displays them by (`overviewProviderID`),
 // not the raw label CPA wrote: one gateway name can appear in several spellings across a window,
 // and a list that showed each spelling as its own row would report a provider twice. Blank labels
 // are already folded into "unknown" by the query, so the two agree about that case too.
-func foldProviderTraffic(rows []repository.UsageProviderTotalsRow) []dashboardProviderTraffic {
+func foldProviderTraffic(rows []repository.UsageProviderTotalsRow) ([]dashboardProviderTraffic, []dashboardCredentialTraffic) {
 	type providerAccumulator struct {
 		id      string
 		total   int64
 		failure int64
 	}
 	groups := make(map[string]*providerAccumulator)
+	credentialsByIndex := make(map[string]*dashboardCredentialTraffic)
 
 	for _, row := range rows {
+		if row.CredentialIndex != "" {
+			credential, ok := credentialsByIndex[row.CredentialIndex]
+			if !ok {
+				credential = &dashboardCredentialTraffic{AuthIndex: row.CredentialIndex}
+				credentialsByIndex[row.CredentialIndex] = credential
+			}
+			credential.Total += row.Requests
+			credential.Failure += row.Failures
+			continue
+		}
 		normID := overviewProviderID(row.Provider)
 		acc, ok := groups[normID]
 		if !ok {
@@ -115,5 +140,11 @@ func foldProviderTraffic(rows []repository.UsageProviderTotalsRow) []dashboardPr
 		return providers[i].ID < providers[j].ID
 	})
 
-	return providers
+	credentials := make([]dashboardCredentialTraffic, 0, len(credentialsByIndex))
+	for _, credential := range credentialsByIndex {
+		credentials = append(credentials, *credential)
+	}
+	sort.Slice(credentials, func(i, j int) bool { return credentials[i].AuthIndex < credentials[j].AuthIndex })
+
+	return providers, credentials
 }

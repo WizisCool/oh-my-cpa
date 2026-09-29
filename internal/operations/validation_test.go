@@ -16,6 +16,19 @@ func TestScalarIntegersRejectTruncation(t *testing.T) {
 		}
 	}
 }
+func TestRoutingStrategyAcceptsOnlyWhatCPARuns(t *testing.T) {
+	for input, want := range map[string]string{"round-robin": "round-robin", "WRR": "weighted-round-robin", "fill-first": "fill-first", " ff ": "fill-first"} {
+		got, err := ValidateScalarValue("routing_strategy", input)
+		if err != nil || got != want {
+			t.Fatalf("%q: got %v %v, want %q", input, got, err, want)
+		}
+	}
+	for _, input := range []string{"least-load", "random", ""} {
+		if _, err := ValidateScalarValue("routing_strategy", input); err == nil {
+			t.Fatalf("accepted %q, which CPA does not run", input)
+		}
+	}
+}
 func TestAnalysisUsesFixedHalfOpenWindow(t *testing.T) {
 	ctx := capability.WithAnchor(context.Background(), 1000000000)
 	first, err := (UsageInput{}).filter(ctx)

@@ -1,5 +1,6 @@
 import type { ManagementOverviewProvider, ManagementOverviewTypeCount } from '../../types/management';
 import type { ProviderItem } from '../../types/providers';
+import type { WindowCredentialTraffic } from '../../types/dashboard';
 import { getProviderDefaultIcon } from '../../types/providerIconIds';
 import { resolveProviderIcon } from '../../types/providerIcons';
 import { pluginOAuthLogoFor, type PluginOAuthLogos } from '../../types/pluginOAuthProviders';
@@ -66,6 +67,8 @@ export interface WindowProviderTraffic {
   success_rate: number | null;
 }
 
+const OPENAI_COMPATIBILITY_FAMILY = 'openai-compatibility';
+
 /**
  * Built-in and known OAuth channels and their display channel names, brand icon IDs, and protocols.
  * As requested, CodeX, Meta, Devin, Codebuddy, etc. use their official channel titles rather than raw IDs.
@@ -121,6 +124,8 @@ export function resolveChannelName(id: string, fallbackName?: string): string {
 export interface AggregateProvidersOptions {
   overviewProviders?: ManagementOverviewProvider[];
   windowProviders?: WindowProviderTraffic[];
+  /** API-key traffic by auth index; the only traffic a configured provider's keys are credited. */
+  windowCredentials?: WindowCredentialTraffic[];
   configuredProviders?: ProviderItem[];
   customIcons?: Record<string, string>;
   authFilesByType?: ManagementOverviewTypeCount[];
@@ -137,6 +142,10 @@ export interface AggregateProvidersOptions {
  * 2. Each channel is unified under its canonical identity; no channel is ever displayed twice.
  * 3. OAuth channels (CodeX, Meta, Devin, Antigravity, Kimi, Codebuddy, etc.) use their proper channel names and icons.
  * 4. If windowProviders is supplied (from the dashboard time-range selector), traffic stats reflect that exact window.
+ *    A configured provider is credited only with what its own keys served (`windowCredentials`, by auth
+ *    index) and, for an OpenAI-compatible provider, the label CPA gives it alone. Never by family: CPA
+ *    labels every key of a family and that family's OAuth channel alike, so a family match would credit
+ *    a provider nobody has called yet with the channel's traffic.
  * 5. All active configured AI providers are displayed (including disabled ones), even if 0 requests in the
  *    window. A row reads as disabled when its own toggle is off, or when the gateway reports every
  *    credential of its type disabled.
@@ -147,6 +156,7 @@ export interface AggregateProvidersOptions {
 export function aggregateProviders({
   overviewProviders = [],
   windowProviders,
+  windowCredentials = [],
   configuredProviders = [],
   customIcons = {},
   authFilesByType = [],
@@ -227,6 +237,41 @@ export function aggregateProviders({
       failure: 0,
       successRate: null,
     };
+  };
+
+  const credentialTraffic = new Map<string, WindowCredentialTraffic>();
+  for (const credential of windowCredentials) {
+    if (credential.auth_index) credentialTraffic.set(credential.auth_index, credential);
+  }
+
+  /**
+   * resolveConfiguredTraffic credits an API-key provider with the traffic its own keys served,
+   * plus, for an OpenAI-compatible provider, the records CPA labelled with that provider's own
+   * name (`openai-compatible-<name>`) that carry no key index. Exact identities only: a family
+   * name or a substring would be a guess, and a wrong one reads as real traffic.
+   */
+  const resolveConfiguredTraffic = (provider: ProviderItem) => {
+    let total = 0;
+    let failure = 0;
+    const indexes = provider.auth_indexes?.length ? provider.auth_indexes : provider.auth_index ? [provider.auth_index] : [];
+    for (const index of indexes) {
+      const credential = credentialTraffic.get(index);
+      if (!credential) continue;
+      credentialTraffic.delete(index);
+      total += credential.total;
+      failure += credential.failure;
+    }
+    if (provider.family === OPENAI_COMPATIBILITY_FAMILY && provider.upstream_name) {
+      const key = normalizeProviderKey(provider.upstream_name);
+      const labelled = trafficMap.get(key);
+      if (labelled && !consumedTrafficKeys.has(key)) {
+        consumedTrafficKeys.add(key);
+        total += labelled.total;
+        failure += labelled.failure;
+      }
+    }
+    const success = Math.max(0, total - failure);
+    return { total, success, failure, successRate: total > 0 ? (success / total) * 100 : null };
   };
 
   // 2. Build credentials lookup map. The gateway's own per-type tally - how many
@@ -324,18 +369,22 @@ export function aggregateProviders({
     return false;
   };
 
-  // 3. Primary pass: process all active configured AI providers from settings
+  // 3. Primary pass: process all active configured AI providers from settings. Every configured
+  //    provider is its own row, whatever it is called: two keys of a family share a default name,
+  //    and skipping the second one on a name collision left it with no row and no traffic at all.
   for (const cp of configuredProviders) {
-    if (isClaimed(cp.id, cp.name, cp.upstream_name)) continue;
 
     const normName = normalizeProviderKey(cp.name);
     const normUpstream = normalizeProviderKey(cp.upstream_name);
     const normId = normalizeProviderKey(cp.id);
 
+    // A row of one of CPA's API-key families (codex, claude, xai, ...) is an API-key provider by
+    // construction, even though several of those family ids also name OAuth channels. Only an
+    // OpenAI-compatible provider can stand for a channel, through the name it relays under.
     const isOAuth =
-      isOAuthChannel(cp.family, undefined, pluginOAuthIds) ||
-      isOAuthChannel(cp.name, undefined, pluginOAuthIds) ||
-      (cp.upstream_name ? isOAuthChannel(cp.upstream_name, undefined, pluginOAuthIds) : false);
+      cp.family === OPENAI_COMPATIBILITY_FAMILY &&
+      (isOAuthChannel(cp.name, undefined, pluginOAuthIds) ||
+        (cp.upstream_name ? isOAuthChannel(cp.upstream_name, undefined, pluginOAuthIds) : false));
 
     const meta = isOAuth ? (OAUTH_CHANNEL_META[normId] || OAUTH_CHANNEL_META[normUpstream] || OAUTH_CHANNEL_META[normName]) : undefined;
     const name = isOAuth && meta ? meta.name : (cp.name || cp.upstream_name || cp.id);
@@ -348,13 +397,15 @@ export function aggregateProviders({
     let configuredCreds = 0;
     if (cp.key_entries && cp.key_entries.length > 0) {
       configuredCreds = cp.key_entries.length;
+    } else if (cp.auth_indexes && cp.auth_indexes.length > 0) {
+      configuredCreds = cp.auth_indexes.length;
     } else if (cp.key_configured || cp.api_key) {
       configuredCreds = 1;
     }
-    const credentials = resolveCredentials([cp.upstream_name, cp.name, cp.id, cp.family], configuredCreds);
+    const credentials = isOAuth ? resolveCredentials([cp.upstream_name, cp.name, cp.id], configuredCreds) : configuredCreds;
     const disabled = cp.disabled || areAllCredentialsDisabled(ownedCredentialKeys(cp, isOAuth));
 
-    const traffic = resolveTraffic([cp.upstream_name, cp.name, cp.id, cp.family]);
+    const traffic = isOAuth ? resolveTraffic([cp.upstream_name, cp.name, cp.id]) : resolveConfiguredTraffic(cp);
 
     markClaimed(cp.id, cp.name, cp.upstream_name, normName, normUpstream, normId);
 

@@ -34,12 +34,17 @@ export function getFieldSemanticValue(
  *   bar lit for a change the operator never made.
  * - numbers compare numerically, with `NaN` equal to `NaN`, because an
  *   unparseable numeric field must not read as "dirty" on every render.
- * - switches compare as booleans, since a YAML string `"true"` is still an
- *   enabled switch.
+ * - switches compare as booleans ("true"/"false" strings included), while any other string
+ *   beside a boolean is a distinct state.
  * - objects compare structurally.
  */
 export function areValuesSemanticallyEqual(currentValue: unknown, baselineValue: unknown): boolean {
   if (currentValue === baselineValue) return true;
+  // An empty list and an absent one are the same fact for every list the editor owns.
+  const isEmptyList = (value: unknown) => value === undefined || value === null || (Array.isArray(value) && value.length === 0);
+  if (Array.isArray(currentValue) || Array.isArray(baselineValue)) {
+    if (isEmptyList(currentValue) && isEmptyList(baselineValue)) return true;
+  }
   if (
     (currentValue === undefined || currentValue === null || currentValue === '') &&
     (baselineValue === undefined || baselineValue === null || baselineValue === '')
@@ -50,7 +55,20 @@ export function areValuesSemanticallyEqual(currentValue: unknown, baselineValue:
     return isNaN(currentValue) && isNaN(baselineValue) ? true : currentValue === baselineValue;
   }
   if (typeof currentValue === 'boolean' || typeof baselineValue === 'boolean') {
-    return Boolean(currentValue) === Boolean(baselineValue);
+    // A switch stored as the string "true" is still on, and an absent one is off. Any other
+    // string is a distinct state of a mixed setting (disable-image-generation's "chat"), not a
+    // truthy boolean, so it only equals the same string.
+    const asBoolean = (value: unknown): boolean | undefined => {
+      if (typeof value === 'boolean') return value;
+      if (value === undefined || value === null || value === '') return false;
+      if (value === 'true') return true;
+      if (value === 'false') return false;
+      return undefined;
+    };
+    const current = asBoolean(currentValue);
+    const baseline = asBoolean(baselineValue);
+    if (current === undefined || baseline === undefined) return String(currentValue) === String(baselineValue);
+    return current === baseline;
   }
   if (typeof currentValue === 'object' && typeof baselineValue === 'object') {
     return JSON.stringify(currentValue) === JSON.stringify(baselineValue);
@@ -87,7 +105,7 @@ export function updateFieldWithBaseline(
   // A cleared value still has to be representable in YAML: an empty string would
   // be written back verbatim, so each field type gets the "off" value it can
   // actually serialise.
-  if (newValue === undefined || newValue === null || newValue === '') {
+  if (newValue === undefined || newValue === null || newValue === '' || (Array.isArray(newValue) && newValue.length === 0)) {
     if (field.type === 'switch') {
       currentDoc.setIn(field.yamlPath, false);
     } else if (field.type === 'number') {

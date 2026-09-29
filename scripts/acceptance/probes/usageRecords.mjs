@@ -14,7 +14,8 @@ export const alignmentRecords = (() => {
   return Array.from({ length: 12 }, (_, index) => ({
     id: index + 1,
     event_key: `event-${index}`,
-    request_id: `req_fixture_${index}`,
+    // CPA v8's shape: one UUID per execution, far wider than the time column.
+    request_id: `01a0ebc0-1f12-780f-b958-91d438ab${String(1000 + index)}`,
     timestamp_ms: now - index * 1000,
     provider: LONG_PROVIDER,
     model: LONG_MODEL,
@@ -123,6 +124,20 @@ export async function columnAlignment({ base, page, check }) {
     JSON.stringify(truncation.model),
   );
 
+  // 2b. The request id sits under the time on one line: a wrapped UUID made every row several
+  //     lines tall.
+  const requestIdLine = await page.evaluate(() => {
+    const node = document.querySelector('.req-time-sub-id');
+    if (!node) return null;
+    const lineHeight = parseFloat(window.getComputedStyle(node).lineHeight) || 16;
+    return { height: node.getBoundingClientRect().height, lineHeight, whiteSpace: window.getComputedStyle(node).whiteSpace };
+  });
+  check(
+    'the request id stays on one line under the time',
+    requestIdLine !== null && requestIdLine.height < requestIdLine.lineHeight * 1.5,
+    JSON.stringify(requestIdLine),
+  );
+
   // 3. Numeric columns: header and first cell must agree on horizontal alignment.
   const alignment = await page.evaluate(() => {
     const pairs = [
@@ -228,6 +243,28 @@ export async function columnAlignment({ base, page, check }) {
     stackedEntries.length === 3 &&
       stackedEntries.every(([, value]) => value.align === 'flex-start' && value.textAlign === 'left'),
     JSON.stringify(stacked),
+  );
+
+  // 7. Narrowest supported width, the row was the tallest thing on the page: a UUID that wraps at
+  //    every hyphen turns one record into four or five lines. The id has to ellipsise here rather
+  //    than grow, which is a different failure from overflowing its cell and so is asserted again.
+  const narrowRequestId = await page.evaluate(() => {
+    const node = document.querySelector('.req-time-sub-id');
+    if (!node) return null;
+    const lineHeight = parseFloat(window.getComputedStyle(node).lineHeight) || 16;
+    const cell = node.closest('.req-col-time');
+    return {
+      height: node.getBoundingClientRect().height,
+      lineHeight,
+      overflowsCell: cell ? node.getBoundingClientRect().right > cell.getBoundingClientRect().right + 1 : false,
+    };
+  });
+  check(
+    'the request id still ellipsises to one line at 600px',
+    narrowRequestId !== null
+      && narrowRequestId.height < narrowRequestId.lineHeight * 1.5
+      && narrowRequestId.overflowsCell === false,
+    JSON.stringify(narrowRequestId),
   );
 }
 

@@ -54,7 +54,7 @@ const (
 	// list's first virtual window, while slot 0 keeps carrying the failure share.
 	pluginProviderRecord = 1
 	// The window slot answered by an API-key provider, bound to one of the two
-	// credentials the fake CPA configures for `codex-api-key`. The record stores the
+	// credentials the fake CPA configures for `api-keys.codex`. The record stores the
 	// credential's runtime auth index and the provider label CPA writes, which is
 	// what lets the console resolve which key answered; a second record below points
 	// at an index no credential claims, so the acceptance run can require the row to

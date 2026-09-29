@@ -134,7 +134,10 @@ export const RequestRow = React.memo<RequestRowProps>(
             </time>
           </Tooltip>
           <div className="req-time-sub" title={event.request_id}>
-            <span>{event.request_id || t('events.no_request_id')}</span>
+            {/* One line, truncated: CPA v8 names each execution with a 36-character UUID, which
+                wrapped at every hyphen and made every row several lines tall. The full id stays in
+                the title, the copy button and the detail drawer. */}
+            <span className="req-time-sub-id">{event.request_id || t('events.no_request_id')}</span>
             {event.request_id ? (
               <button
                 type="button"

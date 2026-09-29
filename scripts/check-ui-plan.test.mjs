@@ -269,6 +269,39 @@ test('playground source selects its desktop and phone acceptance', () => {
 });
 
 
+test('the config page and its editor select the source-editor scenario only', () => {
+  // The page used to be named with no scenario at all, since nothing probed it. The source
+  // editor's icon font is now a measured claim, so the page and the modules it is built from
+  // select the scenario that makes it - and not the chart and request-list catalogs, which is
+  // what keeps a settings-page edit from running them.
+  for (const file of [
+    'web/src/pages/ConfigPage.tsx',
+    'web/src/components/config/YamlSourceEditor.tsx',
+    'web/src/types/configSchema.ts',
+  ]) {
+    const ids = new Set(planFor(file));
+    assert.equal(ids.has('config-source-editor'), true, `${file} reaches the source editor's scenario`);
+    assert.equal(ids.has('dashboard-charts'), false, `${file} loads no chart`);
+    assert.equal(ids.has('column-alignment'), false, `${file} renders no request row`);
+  }
+});
+
+// The key page derives its list by resolving `ALL_CONFIG_FIELDS`'s `apiKeys` field against the
+// document through `getFieldSemanticValue`, and neither lives under that page's own directory - so
+// a break in the shared draft layer has to reach the scenario that reads that table, which is what
+// this pins. It is the reason those rules name more than the source-editor scenario.
+test('the config draft layer reaches the key page that shares it', () => {
+  for (const file of ['web/src/components/config/configDirty.ts', 'web/src/types/configSchema.ts']) {
+    const ids = new Set(planFor(file));
+    assert.equal(ids.has('phone-lists'), true, `${file} reaches the key list's rows`);
+    // Not a blanket widening: nothing in this directory owns an overlay or a hit target, so those
+    // scenarios must stay out of the plan - a rule that named them would pay for them on every
+    // settings edit.
+    assert.equal(ids.has('overlay-back'), false, `${file} owns no overlay`);
+    assert.equal(ids.has('touch-ergonomics'), false, `${file} draws no hit target`);
+  }
+});
+
 test('dependency and build inputs widen the UI plan even with unrelated documentation', () => {
   for (const file of ['package.json', 'web/package.json', 'pnpm-lock.yaml', 'web/vite.config.ts', 'web/tsconfig.json']) {
     const expected = ['fixture-scenario'];

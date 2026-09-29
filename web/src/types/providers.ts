@@ -67,6 +67,9 @@ export interface ProviderItem {
   priority?: number;
   disable_cooling?: boolean;
   auth_index?: string;
+  /** Runtime auth index of every key the provider holds. A request record names the index of the
+   *  key that served it, so this - not the family label - is what credits traffic to the row. */
+  auth_indexes?: string[];
   models?: string[];
   model_entries?: ProviderModelItem[];
   disabled: boolean;

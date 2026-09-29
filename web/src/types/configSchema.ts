@@ -4,6 +4,7 @@ export type ConfigSectionId =
   | 'logging'
   | 'quota'
   | 'streaming'
+  | 'providers'
   | 'advanced'
   | 'payload';
 
@@ -13,12 +14,20 @@ export type ConfigFieldType =
   | 'number'
   | 'select'
   | 'api_keys'
+  | 'string_list'
   | 'textarea'
   | 'json_editor';
 
 export interface ConfigFieldOption {
+  /** The picker's key. */
   value: string;
   labelKey: string;
+  /**
+   * The value written to CPA when it is not the key itself. CPA reads some settings as either a
+   * boolean or a word (`disable-image-generation: false | true | "chat" | "passthrough"`), and the
+   * picker's keys are strings, so the boolean states name their YAML value here.
+   */
+  yamlValue?: unknown;
 }
 
 export interface ConfigFieldDefinition {
@@ -45,6 +54,7 @@ export const CONFIG_SECTIONS: { id: ConfigSectionId; labelKey: string; icon: str
   { id: 'logging', labelKey: 'cfg.sec_logging', icon: 'ProfileOutlined', descKey: 'cfg.sec_logging_desc' },
   { id: 'quota', labelKey: 'cfg.sec_quota', icon: 'FieldTimeOutlined', descKey: 'cfg.sec_quota_desc' },
   { id: 'streaming', labelKey: 'cfg.sec_streaming', icon: 'NodeIndexOutlined', descKey: 'cfg.sec_streaming_desc' },
+  { id: 'providers', labelKey: 'cfg.sec_providers', icon: 'ApiOutlined', descKey: 'cfg.sec_providers_desc' },
   { id: 'advanced', labelKey: 'cfg.sec_advanced', icon: 'ExperimentOutlined', descKey: 'cfg.sec_advanced_desc' },
   { id: 'payload', labelKey: 'cfg.sec_payload', icon: 'CodeOutlined', descKey: 'cfg.sec_payload_desc' },
 ];
@@ -66,7 +76,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_service',
     descKey: 'cfg.grp_service_desc',
     variant: 'form-grid',
-    fieldIds: ['host', 'port', 'authDir'],
+    fieldIds: ['host', 'port', 'authDir', 'trustedProxies'],
   },
   {
     id: 'grp_apikeys',
@@ -90,7 +100,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_remote',
     descKey: 'cfg.grp_remote_desc',
     variant: 'settings-list',
-    fieldIds: ['rmAllowRemote', 'rmSecretKey', 'rmDisableControlPanel', 'rmDisableAutoUpdatePanel', 'rmPanelRepo'],
+    fieldIds: ['rmAllowRemote', 'rmSecretKey', 'rmDisableControlPanel', 'rmDisableAutoUpdatePanel', 'rmPanelRepo', 'rmBaseUrl'],
   },
 
   // ── 2. Network ────────────────────────────────────────────────
@@ -100,7 +110,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_proxy_retry',
     descKey: 'cfg.grp_proxy_retry_desc',
     variant: 'form-grid',
-    fieldIds: ['proxyUrl', 'requestRetry', 'maxRetryCredentials', 'maxRetryInterval', 'authAutoRefreshWorkers'],
+    fieldIds: ['proxyUrl', 'requestRetry', 'maxRetryCredentials', 'maxRetryInterval', 'transientErrorCooldownSeconds', 'authAutoRefreshWorkers'],
   },
   {
     id: 'grp_routing_affinity',
@@ -108,7 +118,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_routing_affinity',
     descKey: 'cfg.grp_routing_affinity_desc',
     variant: 'form-grid',
-    fieldIds: ['routingStrategy', 'routingSessionAffinityTTL', 'routingSessionAffinity'],
+    fieldIds: ['routingStrategy', 'routingSessionAffinityTTL', 'routingSessionAffinity', 'routingSessionAffinitySubagents'],
   },
   {
     id: 'grp_network_flags',
@@ -116,7 +126,7 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     labelKey: 'cfg.grp_network_flags',
     descKey: 'cfg.grp_network_flags_desc',
     variant: 'settings-list',
-    fieldIds: ['disableImageGeneration', 'gptImage2BaseModel', 'forceModelPrefix', 'passthroughHeaders', 'disableCooling', 'wsAuth'],
+    fieldIds: ['disableImageGeneration', 'gptImage2BaseModel', 'videoResultAuthCacheTTL', 'forceModelPrefix', 'passthroughHeaders', 'disableCooling', 'saveCooldownStatus', 'wsAuth'],
   },
 
   // ── 3. Logging & diagnostics ──────────────────────────────────────────────
@@ -157,33 +167,103 @@ export const CONFIG_GROUPS: ConfigGroupDefinition[] = [
     fieldIds: ['streamingKeepaliveSeconds', 'streamingBootstrapRetries', 'streamingNonstreamKeepalive'],
   },
 
-  // ── 6. Advanced & experimental ────────────────────────────────────────────
+  // ── 6. OAuth provider behaviour ──────────────────────────────────────────
+  //
+  // `oauth.providers.<provider>` applies to OAuth/file-backed credentials only; an
+  // API-key provider carries its own options in its `api-keys` group.
+  {
+    id: 'grp_codex_behavior',
+    sectionId: 'providers',
+    labelKey: 'cfg.grp_codex_behavior',
+    descKey: 'cfg.grp_codex_behavior_desc',
+    variant: 'settings-list',
+    fieldIds: [
+      'codexResponseSteering',
+      'codexIdentityConfuse',
+      'codexDisableCloaking',
+      'codexOptimizeMultiAgentV2',
+      'codexOrphanDelegationCompatibility',
+      'codexModelLevelCooling',
+      'codexStreamBootstrapBuffering',
+      'codexStreamBootstrapTimeout',
+    ],
+  },
+  {
+    id: 'grp_codex_live_relay',
+    sectionId: 'providers',
+    labelKey: 'cfg.grp_codex_live_relay',
+    descKey: 'cfg.grp_codex_live_relay_desc',
+    variant: 'settings-list',
+    fieldIds: ['codexLiveEnabled', 'codexLiveMaxSessions', 'codexLiveDisablePrivateRemoteIps', 'codexLivePublicIp', 'codexLiveUdpPortMin', 'codexLiveUdpPortMax'],
+  },
+  {
+    id: 'grp_codex_headers',
+    sectionId: 'providers',
+    labelKey: 'cfg.grp_codex_headers',
+    descKey: 'cfg.grp_codex_headers_desc',
+    variant: 'form-grid',
+    fieldIds: ['codexHeaderUserAgent', 'codexHeaderBetaFeatures'],
+  },
+  {
+    id: 'grp_claude_behavior',
+    sectionId: 'providers',
+    labelKey: 'cfg.grp_claude_behavior',
+    descKey: 'cfg.grp_claude_behavior_desc',
+    variant: 'settings-list',
+    fieldIds: ['claudeModelLevelCooling', 'claudeDisableCloakMode', 'claudeDisableCloakingModelList'],
+  },
+  {
+    id: 'grp_claude_headers',
+    sectionId: 'providers',
+    labelKey: 'cfg.grp_claude_headers',
+    descKey: 'cfg.grp_claude_headers_desc',
+    variant: 'form-grid',
+    fieldIds: ['claudeHeaderUserAgent', 'claudeHeaderPackageVersion', 'claudeHeaderRuntimeVersion', 'claudeHeaderOs', 'claudeHeaderArch', 'claudeHeaderTimeout', 'claudeHeaderTimezone', 'claudeHeaderStabilizeDeviceProfile'],
+  },
   {
     id: 'grp_signature_cache',
-    sectionId: 'advanced',
+    sectionId: 'providers',
     labelKey: 'cfg.grp_signature_cache',
     descKey: 'cfg.grp_signature_cache_desc',
     variant: 'settings-list',
     fieldIds: ['antigravitySignatureCacheEnabled', 'antigravitySignatureBypassStrict'],
   },
   {
-    id: 'grp_claude_headers',
-    sectionId: 'advanced',
-    labelKey: 'cfg.grp_claude_headers',
-    descKey: 'cfg.grp_claude_headers_desc',
-    variant: 'form-grid',
-    fieldIds: ['claudeHeaderUserAgent', 'claudeHeaderPackageVersion', 'claudeHeaderRuntimeVersion', 'claudeHeaderOs', 'claudeHeaderArch', 'claudeHeaderTimeout', 'claudeHeaderStabilizeDeviceProfile'],
+    id: 'grp_antigravity_behavior',
+    sectionId: 'providers',
+    labelKey: 'cfg.grp_antigravity_behavior',
+    descKey: 'cfg.grp_antigravity_behavior_desc',
+    variant: 'settings-list',
+    fieldIds: ['antigravityPoolEnabled', 'antigravityPoolIdleConnTimeout', 'antigravityPoolMaxIdleConnsPerHost', 'antigravitySensitiveWords'],
   },
   {
-    id: 'grp_codex_headers',
-    sectionId: 'advanced',
-    labelKey: 'cfg.grp_codex_headers',
-    descKey: 'cfg.grp_codex_headers_desc',
-    variant: 'form-grid',
-    fieldIds: ['codexHeaderUserAgent', 'codexHeaderBetaFeatures'],
+    id: 'grp_other_providers',
+    sectionId: 'providers',
+    labelKey: 'cfg.grp_other_providers',
+    descKey: 'cfg.grp_other_providers_desc',
+    variant: 'settings-list',
+    fieldIds: ['xaiInjectXSearch', 'devinSensitiveWords'],
   },
 
-  // ── 7. Payload rules ────────────────────────────────────────────
+  // ── 7. Advanced & experimental ────────────────────────────────────────────
+  {
+    id: 'grp_discovery',
+    sectionId: 'advanced',
+    labelKey: 'cfg.grp_discovery',
+    descKey: 'cfg.grp_discovery_desc',
+    variant: 'settings-list',
+    fieldIds: ['discoveryEnabled', 'discoveryServiceName', 'discoveryAuthRequired', 'discoveryAdvertiseManagement'],
+  },
+  {
+    id: 'grp_pprof',
+    sectionId: 'advanced',
+    labelKey: 'cfg.grp_pprof',
+    descKey: 'cfg.grp_pprof_desc',
+    variant: 'settings-list',
+    fieldIds: ['pprofEnable', 'pprofAddr'],
+  },
+
+  // ── 8. Payload rules ────────────────────────────────────────────
   {
     id: 'grp_payload_rules',
     sectionId: 'payload',
@@ -222,8 +302,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_host_desc',
     yamlPath: ['server', 'host'],
     type: 'string',
-    placeholderKey: '0.0.0.0',
-    defaultValue: '127.0.0.1',
+    placeholderKey: 'cfg.f_host_placeholder',
     keywords: ['host', 'ip', 'bind', 'server'],
   },
   {
@@ -245,8 +324,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_auth_dir_desc',
     yamlPath: ['oauth', 'auth-dir'],
     type: 'string',
-    placeholderKey: 'auth',
-    defaultValue: 'auth',
+    placeholderKey: '~/.cli-proxy-api',
     keywords: ['auth', 'dir', 'directory'],
   },
   {
@@ -333,8 +411,28 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_rm_panel_repo_desc',
     yamlPath: ['management', 'panel-github-repository'],
     type: 'string',
-    placeholderKey: 'router-for-me/Cli-Proxy-API-Management-Center',
+    placeholderKey: 'https://github.com/router-for-me/Cli-Proxy-API-Management-Center',
     keywords: ['repo', 'github'],
+  },
+  {
+    id: 'trustedProxies',
+    sectionId: 'connectivity',
+    labelKey: 'cfg.f_trusted_proxies',
+    descKey: 'cfg.f_trusted_proxies_desc',
+    yamlPath: ['server', 'trusted-proxies'],
+    type: 'string_list',
+    placeholderKey: '127.0.0.1, 192.0.2.0/24',
+    keywords: ['proxy', 'trusted', 'forwarded', 'cidr', 'x-forwarded-for'],
+  },
+  {
+    id: 'rmBaseUrl',
+    sectionId: 'connectivity',
+    labelKey: 'cfg.f_rm_base_url',
+    descKey: 'cfg.f_rm_base_url_desc',
+    yamlPath: ['management', 'base-url'],
+    type: 'string',
+    placeholderKey: 'https://proxy.example.com',
+    keywords: ['management', 'tui', 'base-url'],
   },
 
   // ── 2. Network ────────────────────────────────────────────────
@@ -358,7 +456,6 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     type: 'number',
     scalarEndpointKey: 'request_retry',
     min: 0,
-    max: 20,
     unitKey: 'cfg.unit_times',
     defaultValue: 3,
     keywords: ['retry', 'request'],
@@ -412,7 +509,6 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     defaultValue: 'round-robin',
     options: [
       { value: 'round-robin', labelKey: 'cfg.strategy_round_robin' },
-      { value: 'least-load', labelKey: 'cfg.strategy_least_load' },
       { value: 'weighted-round-robin', labelKey: 'cfg.strategy_wrr' },
       { value: 'fill-first', labelKey: 'cfg.strategy_fill_first' },
     ],
@@ -444,9 +540,15 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     labelKey: 'cfg.f_disable_image_gen',
     descKey: 'cfg.f_disable_image_gen_desc',
     yamlPath: ['multimedia', 'disable-image-generation'],
-    type: 'switch',
+    type: 'select',
     defaultValue: false,
-    keywords: ['image', 'dall-e'],
+    options: [
+      { value: 'false', labelKey: 'cfg.image_gen_enabled', yamlValue: false },
+      { value: 'true', labelKey: 'cfg.image_gen_disabled', yamlValue: true },
+      { value: 'chat', labelKey: 'cfg.image_gen_chat' },
+      { value: 'passthrough', labelKey: 'cfg.image_gen_passthrough' },
+    ],
+    keywords: ['image', 'dall-e', 'chat', 'passthrough'],
   },
   {
     id: 'gptImage2BaseModel',
@@ -455,6 +557,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_gpt_image_model_desc',
     yamlPath: ['multimedia', 'gpt-image-2-base-model'],
     type: 'string',
+    placeholderKey: 'gpt-5.4-mini',
     keywords: ['image', 'base64', 'model'],
   },
   {
@@ -498,6 +601,49 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     scalarEndpointKey: 'ws_auth',
     defaultValue: true,
     keywords: ['ws', 'websocket', 'auth'],
+  },
+  {
+    id: 'transientErrorCooldownSeconds',
+    sectionId: 'network',
+    labelKey: 'cfg.f_transient_cooldown',
+    descKey: 'cfg.f_transient_cooldown_desc',
+    // 0 keeps CPA's legacy 60-second cooldown and -1 turns it off, so the floor is -1.
+    yamlPath: ['routing', 'cooldown', 'transient-error-cooldown-seconds'],
+    type: 'number',
+    min: -1,
+    unitKey: 'cfg.unit_seconds',
+    defaultValue: 0,
+    keywords: ['cooldown', 'transient', '5xx', 'error'],
+  },
+  {
+    id: 'routingSessionAffinitySubagents',
+    sectionId: 'network',
+    labelKey: 'cfg.f_affinity_subagents',
+    descKey: 'cfg.f_affinity_subagents_desc',
+    yamlPath: ['routing', 'session-affinity-subagents'],
+    type: 'switch',
+    defaultValue: true,
+    keywords: ['affinity', 'subagent', 'session'],
+  },
+  {
+    id: 'videoResultAuthCacheTTL',
+    sectionId: 'network',
+    labelKey: 'cfg.f_video_ttl',
+    descKey: 'cfg.f_video_ttl_desc',
+    yamlPath: ['multimedia', 'video-result-auth-cache-ttl'],
+    type: 'string',
+    placeholderKey: '3h',
+    keywords: ['video', 'ttl', 'cache'],
+  },
+  {
+    id: 'saveCooldownStatus',
+    sectionId: 'network',
+    labelKey: 'cfg.f_save_cooldown_status',
+    descKey: 'cfg.f_save_cooldown_status_desc',
+    yamlPath: ['routing', 'cooldown', 'save-cooldown-status'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['cooldown', 'persist', 'cds'],
   },
 
   // ── 3. Logging & diagnostics ──────────────────────────────────────────────
@@ -578,6 +724,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     yamlPath: ['observability', 'usage', 'redis-usage-queue-retention-seconds'],
     type: 'number',
     min: 0,
+    max: 3600,
     unitKey: 'cfg.unit_seconds',
     defaultValue: 60,
     keywords: ['redis', 'queue', 'retention'],
@@ -590,7 +737,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     yamlPath: ['observability', 'usage', 'usage-statistics-enabled'],
     type: 'switch',
     scalarEndpointKey: 'usage_statistics_enabled',
-    defaultValue: true,
+    defaultValue: false,
     keywords: ['usage', 'stats', 'token'],
   },
 
@@ -602,7 +749,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_switch_project_desc',
     yamlPath: ['quota-exceeded', 'switch-project'],
     type: 'switch',
-    defaultValue: true,
+    defaultValue: false,
     keywords: ['quota', 'project', 'switch'],
   },
   {
@@ -612,7 +759,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_switch_preview_model_desc',
     yamlPath: ['quota-exceeded', 'switch-preview-model'],
     type: 'switch',
-    defaultValue: true,
+    defaultValue: false,
     keywords: ['quota', 'preview', 'model'],
   },
   {
@@ -622,7 +769,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     descKey: 'cfg.f_antigravity_credits_desc',
     yamlPath: ['oauth', 'providers', 'antigravity', 'antigravity-credits'],
     type: 'switch',
-    defaultValue: true,
+    defaultValue: false,
     keywords: ['antigravity', 'credits'],
   },
 
@@ -666,10 +813,10 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
     keywords: ['stream', 'nonstream', 'keepalive'],
   },
 
-  // ── 6. Advanced & experimental ────────────────────────────────────────────
+  // ── 6. OAuth provider behaviour ──────────────────────────────────────────
   {
     id: 'antigravitySignatureCacheEnabled',
-    sectionId: 'advanced',
+    sectionId: 'providers',
     labelKey: 'cfg.f_sig_cache',
     descKey: 'cfg.f_sig_cache_desc',
     // CPA treats an absent value as on.
@@ -680,7 +827,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
   },
   {
     id: 'antigravitySignatureBypassStrict',
-    sectionId: 'advanced',
+    sectionId: 'providers',
     labelKey: 'cfg.f_sig_strict',
     descKey: 'cfg.f_sig_strict_desc',
     yamlPath: ['oauth', 'providers', 'antigravity', 'signature-bypass-strict'],
@@ -690,7 +837,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
   },
   {
     id: 'claudeHeaderUserAgent',
-    sectionId: 'advanced',
+    sectionId: 'providers',
     labelKey: 'cfg.f_claude_ua',
     descKey: 'cfg.f_claude_ua_desc',
     yamlPath: ['oauth', 'providers', 'claude', 'header-defaults', 'user-agent'],
@@ -699,7 +846,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
   },
   {
     id: 'claudeHeaderPackageVersion',
-    sectionId: 'advanced',
+    sectionId: 'providers',
     labelKey: 'cfg.f_claude_pkg',
     descKey: 'cfg.f_claude_pkg_desc',
     yamlPath: ['oauth', 'providers', 'claude', 'header-defaults', 'package-version'],
@@ -708,7 +855,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
   },
   {
     id: 'claudeHeaderRuntimeVersion',
-    sectionId: 'advanced',
+    sectionId: 'providers',
     labelKey: 'cfg.f_claude_runtime',
     descKey: 'cfg.f_claude_runtime_desc',
     yamlPath: ['oauth', 'providers', 'claude', 'header-defaults', 'runtime-version'],
@@ -717,7 +864,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
   },
   {
     id: 'claudeHeaderOs',
-    sectionId: 'advanced',
+    sectionId: 'providers',
     labelKey: 'cfg.f_claude_os',
     descKey: 'cfg.f_claude_os_desc',
     yamlPath: ['oauth', 'providers', 'claude', 'header-defaults', 'os'],
@@ -726,7 +873,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
   },
   {
     id: 'claudeHeaderArch',
-    sectionId: 'advanced',
+    sectionId: 'providers',
     labelKey: 'cfg.f_claude_arch',
     descKey: 'cfg.f_claude_arch_desc',
     yamlPath: ['oauth', 'providers', 'claude', 'header-defaults', 'arch'],
@@ -735,7 +882,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
   },
   {
     id: 'claudeHeaderTimeout',
-    sectionId: 'advanced',
+    sectionId: 'providers',
     labelKey: 'cfg.f_claude_timeout',
     descKey: 'cfg.f_claude_timeout_desc',
     yamlPath: ['oauth', 'providers', 'claude', 'header-defaults', 'timeout'],
@@ -744,7 +891,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
   },
   {
     id: 'claudeHeaderStabilizeDeviceProfile',
-    sectionId: 'advanced',
+    sectionId: 'providers',
     labelKey: 'cfg.f_claude_stabilize',
     descKey: 'cfg.f_claude_stabilize_desc',
     yamlPath: ['oauth', 'providers', 'claude', 'header-defaults', 'stabilize-device-profile'],
@@ -754,7 +901,7 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
   },
   {
     id: 'codexHeaderUserAgent',
-    sectionId: 'advanced',
+    sectionId: 'providers',
     labelKey: 'cfg.f_codex_ua',
     descKey: 'cfg.f_codex_ua_desc',
     yamlPath: ['oauth', 'providers', 'codex', 'header-defaults', 'user-agent'],
@@ -763,15 +910,326 @@ export const ALL_CONFIG_FIELDS: ConfigFieldDefinition[] = [
   },
   {
     id: 'codexHeaderBetaFeatures',
-    sectionId: 'advanced',
+    sectionId: 'providers',
     labelKey: 'cfg.f_codex_beta',
     descKey: 'cfg.f_codex_beta_desc',
     yamlPath: ['oauth', 'providers', 'codex', 'header-defaults', 'beta-features'],
     type: 'string',
     keywords: ['codex', 'beta'],
   },
+  {
+    id: 'codexResponseSteering',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_codex_response_steering',
+    descKey: 'cfg.f_codex_response_steering_desc',
+    yamlPath: ['oauth', 'providers', 'codex', 'response-steering'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['codex', 'websocket', 'steering'],
+  },
+  {
+    id: 'codexIdentityConfuse',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_codex_identity_confuse',
+    descKey: 'cfg.f_codex_identity_confuse_desc',
+    yamlPath: ['oauth', 'providers', 'codex', 'identity-confuse'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['codex', 'identity', 'prompt_cache_key'],
+  },
+  {
+    id: 'codexDisableCloaking',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_codex_disable_cloaking',
+    descKey: 'cfg.f_codex_disable_cloaking_desc',
+    yamlPath: ['oauth', 'providers', 'codex', 'disable-codex-cloaking'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['codex', 'cloak', 'user-agent', 'originator'],
+  },
+  {
+    id: 'codexOptimizeMultiAgentV2',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_codex_multi_agent_v2',
+    descKey: 'cfg.f_codex_multi_agent_v2_desc',
+    yamlPath: ['oauth', 'providers', 'codex', 'optimize-multi-agent-v2'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['codex', 'multi-agent', 'agent'],
+  },
+  {
+    id: 'codexOrphanDelegationCompatibility',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_codex_orphan_delegation',
+    descKey: 'cfg.f_codex_orphan_delegation_desc',
+    yamlPath: ['oauth', 'providers', 'codex', 'orphan-delegation-compatibility'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['codex', 'orphan', 'delegation', 'subagent'],
+  },
+  {
+    id: 'codexModelLevelCooling',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_codex_model_cooling',
+    descKey: 'cfg.f_codex_model_cooling_desc',
+    yamlPath: ['oauth', 'providers', 'codex', 'model-level-cooling'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['codex', 'cooling', 'quota', 'model'],
+  },
+  {
+    id: 'codexStreamBootstrapBuffering',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_codex_bootstrap_buffering',
+    descKey: 'cfg.f_codex_bootstrap_buffering_desc',
+    yamlPath: ['oauth', 'providers', 'codex', 'stream-bootstrap-buffering'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['codex', 'stream', 'bootstrap', 'overload', 'failover'],
+  },
+  {
+    id: 'codexStreamBootstrapTimeout',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_codex_bootstrap_timeout',
+    descKey: 'cfg.f_codex_bootstrap_timeout_desc',
+    yamlPath: ['oauth', 'providers', 'codex', 'stream-bootstrap-timeout'],
+    type: 'string',
+    placeholderKey: '0',
+    keywords: ['codex', 'stream', 'bootstrap', 'timeout'],
+  },
+  // providers: Codex Live media relay. `ice-servers` is deliberately absent: its TURN
+  // credentials are never returned by CPA's configuration API, so the editor cannot show them.
+  {
+    id: 'codexLiveEnabled',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_codex_live_enabled',
+    descKey: 'cfg.f_codex_live_enabled_desc',
+    yamlPath: ['oauth', 'providers', 'codex', 'live-media-relay', 'enabled'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['codex', 'live', 'webrtc', 'media', 'relay'],
+  },
+  {
+    id: 'codexLiveMaxSessions',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_codex_live_max_sessions',
+    descKey: 'cfg.f_codex_live_max_sessions_desc',
+    yamlPath: ['oauth', 'providers', 'codex', 'live-media-relay', 'max-sessions'],
+    type: 'number',
+    min: 0,
+    defaultValue: 32,
+    keywords: ['codex', 'live', 'sessions'],
+  },
+  {
+    id: 'codexLiveDisablePrivateRemoteIps',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_codex_live_private_ips',
+    descKey: 'cfg.f_codex_live_private_ips_desc',
+    yamlPath: ['oauth', 'providers', 'codex', 'live-media-relay', 'disable-private-remote-ips'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['codex', 'live', 'sdp', 'private', 'ip'],
+  },
+  {
+    id: 'codexLivePublicIp',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_codex_live_public_ip',
+    descKey: 'cfg.f_codex_live_public_ip_desc',
+    yamlPath: ['oauth', 'providers', 'codex', 'live-media-relay', 'public-ip'],
+    type: 'string',
+    placeholderKey: '203.0.113.10',
+    keywords: ['codex', 'live', 'nat', 'public', 'ip'],
+  },
+  {
+    id: 'codexLiveUdpPortMin',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_codex_live_udp_min',
+    descKey: 'cfg.f_codex_live_udp_range_desc',
+    yamlPath: ['oauth', 'providers', 'codex', 'live-media-relay', 'udp-port-min'],
+    type: 'number',
+    min: 0,
+    max: 65535,
+    defaultValue: 0,
+    keywords: ['codex', 'live', 'udp', 'port'],
+  },
+  {
+    id: 'codexLiveUdpPortMax',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_codex_live_udp_max',
+    descKey: 'cfg.f_codex_live_udp_range_desc',
+    yamlPath: ['oauth', 'providers', 'codex', 'live-media-relay', 'udp-port-max'],
+    type: 'number',
+    min: 0,
+    max: 65535,
+    defaultValue: 0,
+    keywords: ['codex', 'live', 'udp', 'port'],
+  },
+  {
+    id: 'claudeModelLevelCooling',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_claude_model_cooling',
+    descKey: 'cfg.f_claude_model_cooling_desc',
+    yamlPath: ['oauth', 'providers', 'claude', 'model-level-cooling'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['claude', 'cooling', 'quota', 'model'],
+  },
+  {
+    id: 'claudeDisableCloakMode',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_claude_disable_cloak',
+    descKey: 'cfg.f_claude_disable_cloak_desc',
+    yamlPath: ['oauth', 'providers', 'claude', 'disable-claude-cloak-mode'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['claude', 'cloak', 'system prompt'],
+  },
+  {
+    id: 'claudeDisableCloakingModelList',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_claude_cloaking_model_list',
+    descKey: 'cfg.f_claude_cloaking_model_list_desc',
+    yamlPath: ['oauth', 'providers', 'claude', 'claude-code', 'disable-cloaking-model-list'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['claude', 'claude-code', 'model list', 'cloak'],
+  },
+  {
+    id: 'claudeHeaderTimezone',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_claude_timezone',
+    descKey: 'cfg.f_claude_timezone_desc',
+    yamlPath: ['oauth', 'providers', 'claude', 'header-defaults', 'timezone'],
+    type: 'string',
+    placeholderKey: 'Asia/Singapore',
+    keywords: ['claude', 'timezone', 'currentDate'],
+  },
+  {
+    id: 'antigravityPoolEnabled',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_ag_pool_enabled',
+    descKey: 'cfg.f_ag_pool_enabled_desc',
+    yamlPath: ['oauth', 'providers', 'antigravity', 'connection-pool', 'enabled'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['antigravity', 'connection', 'pool'],
+  },
+  {
+    id: 'antigravityPoolIdleConnTimeout',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_ag_pool_idle_timeout',
+    descKey: 'cfg.f_ag_pool_idle_timeout_desc',
+    yamlPath: ['oauth', 'providers', 'antigravity', 'connection-pool', 'idle-conn-timeout'],
+    type: 'string',
+    placeholderKey: '30s',
+    keywords: ['antigravity', 'idle', 'timeout', 'keep-alive'],
+  },
+  {
+    id: 'antigravityPoolMaxIdleConnsPerHost',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_ag_pool_max_idle',
+    descKey: 'cfg.f_ag_pool_max_idle_desc',
+    yamlPath: ['oauth', 'providers', 'antigravity', 'connection-pool', 'max-idle-conns-per-host'],
+    type: 'number',
+    min: 0,
+    defaultValue: 2,
+    keywords: ['antigravity', 'idle', 'connections'],
+  },
+  {
+    id: 'antigravitySensitiveWords',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_ag_sensitive_words',
+    descKey: 'cfg.f_ag_sensitive_words_desc',
+    yamlPath: ['oauth', 'providers', 'antigravity', 'sensitive-words'],
+    type: 'string_list',
+    placeholderKey: 'cfg.string_list_placeholder',
+    keywords: ['antigravity', 'sensitive', 'words', 'obfuscate'],
+  },
+  {
+    id: 'xaiInjectXSearch',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_xai_inject_search',
+    descKey: 'cfg.f_xai_inject_search_desc',
+    yamlPath: ['oauth', 'providers', 'xai', 'inject-x-search'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['xai', 'grok', 'x_search', 'search'],
+  },
+  {
+    id: 'devinSensitiveWords',
+    sectionId: 'providers',
+    labelKey: 'cfg.f_devin_sensitive_words',
+    descKey: 'cfg.f_devin_sensitive_words_desc',
+    yamlPath: ['oauth', 'providers', 'devin', 'sensitive-words'],
+    type: 'string_list',
+    placeholderKey: 'cfg.string_list_placeholder',
+    keywords: ['devin', 'sensitive', 'words', 'obfuscate'],
+  },
 
-  // ── 7. Payload rules ────────────────────────────────────────────
+  // ── 7. Advanced & experimental ────────────────────────────────────────────
+  {
+    id: 'discoveryEnabled',
+    sectionId: 'advanced',
+    labelKey: 'cfg.f_discovery_enabled',
+    descKey: 'cfg.f_discovery_enabled_desc',
+    yamlPath: ['server', 'discovery', 'enabled'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['mdns', 'dns-sd', 'discovery', 'lan'],
+  },
+  {
+    id: 'discoveryServiceName',
+    sectionId: 'advanced',
+    labelKey: 'cfg.f_discovery_service_name',
+    descKey: 'cfg.f_discovery_service_name_desc',
+    yamlPath: ['server', 'discovery', 'service-name'],
+    type: 'string',
+    placeholderKey: 'office',
+    keywords: ['mdns', 'discovery', 'name'],
+  },
+  {
+    id: 'discoveryAuthRequired',
+    sectionId: 'advanced',
+    labelKey: 'cfg.f_discovery_auth_required',
+    descKey: 'cfg.f_discovery_auth_required_desc',
+    // CPA reads an absent value as true.
+    yamlPath: ['server', 'discovery', 'auth-required'],
+    type: 'switch',
+    defaultValue: true,
+    keywords: ['mdns', 'discovery', 'auth'],
+  },
+  {
+    id: 'discoveryAdvertiseManagement',
+    sectionId: 'advanced',
+    labelKey: 'cfg.f_discovery_advertise_mgmt',
+    descKey: 'cfg.f_discovery_advertise_mgmt_desc',
+    yamlPath: ['server', 'discovery', 'advertise-management'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['mdns', 'discovery', 'management'],
+  },
+  {
+    id: 'pprofEnable',
+    sectionId: 'advanced',
+    labelKey: 'cfg.f_pprof_enable',
+    descKey: 'cfg.f_pprof_enable_desc',
+    yamlPath: ['observability', 'pprof', 'enable'],
+    type: 'switch',
+    defaultValue: false,
+    keywords: ['pprof', 'profile', 'debug'],
+  },
+  {
+    id: 'pprofAddr',
+    sectionId: 'advanced',
+    labelKey: 'cfg.f_pprof_addr',
+    descKey: 'cfg.f_pprof_addr_desc',
+    yamlPath: ['observability', 'pprof', 'addr'],
+    type: 'string',
+    placeholderKey: '127.0.0.1:8316',
+    keywords: ['pprof', 'address', 'listen'],
+  },
+
+  // ── 8. Payload rules ────────────────────────────────────────────
   {
     id: 'payloadDefaultRules',
     sectionId: 'payload',

@@ -7,6 +7,13 @@ import {
   areValuesSemanticallyEqual,
   getFieldSemanticValue,
 } from '../web/src/components/config/configDirty.ts';
+import { ALL_CONFIG_FIELDS, type ConfigFieldDefinition } from '../web/src/types/configSchema.ts';
+
+function schemaField(id: string): ConfigFieldDefinition {
+  const found = ALL_CONFIG_FIELDS.find((item) => item.id === id);
+  assert.ok(found, id);
+  return found;
+}
 
 const testFields = [
   { id: 'host', yamlPath: ['host'], type: 'string', defaultValue: '' },
@@ -15,6 +22,54 @@ const testFields = [
   { id: 'tlsEnable', yamlPath: ['tls', 'enable'], type: 'switch', defaultValue: false },
   { id: 'tlsCert', yamlPath: ['tls', 'cert'], type: 'string', defaultValue: '' },
 ];
+
+// A mixed setting's word states are not booleans. `Boolean('chat')` is true, so comparing
+// truthiness alone would read "disabled everywhere" and "disabled in chat only" as the same
+// state and never save the switch between them.
+test('A mixed setting distinguishes its word states from its boolean ones', () => {
+  assert.equal(areValuesSemanticallyEqual(true, 'chat'), false, 'a disabled-everywhere switch is not the chat-only mode');
+  assert.equal(areValuesSemanticallyEqual(false, 'passthrough'), false);
+  assert.equal(areValuesSemanticallyEqual('chat', 'chat'), true);
+  assert.equal(areValuesSemanticallyEqual(false, undefined), true, 'an absent switch is off');
+  assert.equal(areValuesSemanticallyEqual('true', true), true);
+});
+
+test('The image-generation picker reads all four modes as the states CPA stores', () => {
+  const imageGeneration = schemaField('disableImageGeneration');
+  for (const [optionKey, stored] of [['false', false], ['true', true], ['chat', 'chat'], ['passthrough', 'passthrough']] as const) {
+    const doc = parseDocument(`multimedia:\n    disable-image-generation: ${JSON.stringify(stored)}\n`);
+    const value = getFieldSemanticValue(doc, imageGeneration);
+    assert.equal(value, stored, optionKey);
+    const option = imageGeneration.options?.find((item) => item.value === optionKey);
+    assert.equal(option?.yamlValue ?? option?.value, stored, `${optionKey} writes ${String(stored)}`);
+  }
+});
+
+// The editor owns several lists (trusted proxies, sensitive words). Clearing one has to leave
+// the document byte-identical to the server's, not merely semantically equal.
+test('An emptied list is the same fact as an absent one', () => {
+  assert.equal(areValuesSemanticallyEqual([], undefined), true);
+  assert.equal(areValuesSemanticallyEqual([], []), true);
+  assert.equal(areValuesSemanticallyEqual(['a'], []), false);
+});
+
+test('Clearing a list the server did not have returns the editor to the server bytes', () => {
+  const originalYaml = 'server:\n    port: 8317\n';
+  const serverDoc = parseDocument(originalYaml);
+  const currentDoc = parseDocument(originalYaml);
+  const trustedProxies = schemaField('trustedProxies');
+
+  updateFieldWithBaseline(currentDoc, serverDoc, trustedProxies, ['127.0.0.1']);
+  assert.equal(currentDoc.hasIn(['server', 'trusted-proxies']), true);
+  assert.equal(isConfigSemanticallyEqual(currentDoc, serverDoc, ALL_CONFIG_FIELDS), false);
+
+  updateFieldWithBaseline(currentDoc, serverDoc, trustedProxies, []);
+  assert.equal(currentDoc.hasIn(['server', 'trusted-proxies']), false);
+  // The editor drops the whole draft and reloads the server document once nothing differs, so
+  // semantic equality here is what makes the cleared list byte-identical for the operator.
+  assert.equal(isConfigSemanticallyEqual(currentDoc, serverDoc, ALL_CONFIG_FIELDS), true);
+  assert.equal(isConfigSemanticallyEqual(currentDoc, serverDoc, ALL_CONFIG_FIELDS) ? originalYaml : currentDoc.toString(), originalYaml);
+});
 
 test('Omitted switch toggle ON then OFF restores exact clean YAML', () => {
   const originalYaml = `host: "127.0.0.1"\nport: 8317\n`;

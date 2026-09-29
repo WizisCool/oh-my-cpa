@@ -43,15 +43,30 @@ func ValidateScalarValue(key string, value any) (any, error) {
 
 	case "routing_strategy":
 		if s, ok := value.(string); ok {
-			trimmed := strings.ToLower(strings.TrimSpace(s))
-			if trimmed == "round-robin" || trimmed == "round_robin" || trimmed == "least-load" || trimmed == "least_load" || trimmed == "random" {
-				return trimmed, nil
+			if strategy, known := normalizeRoutingStrategy(s); known {
+				return strategy, nil
 			}
-			return nil, errors.New("invalid routing strategy: must be round-robin, least-load, or random")
+			return nil, errors.New("invalid routing strategy: must be round-robin, weighted-round-robin, or fill-first")
 		}
 		return nil, errors.New("value must be a string for routing_strategy")
 
 	default:
 		return nil, errors.New("unknown or unsupported config scalar key: " + key)
+	}
+}
+
+// normalizeRoutingStrategy accepts the spellings CPA's own management handler
+// accepts and returns the canonical one, so a value that passes here is one CPA
+// runs rather than one it silently falls back from.
+func normalizeRoutingStrategy(strategy string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(strategy)) {
+	case "round-robin", "roundrobin", "rr":
+		return "round-robin", true
+	case "weighted-round-robin", "weightedroundrobin", "wrr":
+		return "weighted-round-robin", true
+	case "fill-first", "fillfirst", "ff":
+		return "fill-first", true
+	default:
+		return "", false
 	}
 }

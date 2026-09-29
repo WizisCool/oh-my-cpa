@@ -1022,6 +1022,15 @@ assert.equal(customResolved.title, 'DeepSeek 专线');
 assert.equal(customResolved.iconId, 'DeepSeek');
 assert.equal(customResolved.subtitle, undefined);
 
+// The key that served the record outranks a name match earlier in the list, and every key of a
+// provider counts, not only its first.
+const secondKeyEvent = { ...apiKeyEvent, provider: 'codex', auth_index: 'auth-codex-second' } as UsageEvent;
+const byServingKey = resolveProviderInfo(secondKeyEvent, credFiles, {}, [
+  { id: 'codex-0', name: 'codex', family: 'codex', auth_index: 'auth-codex-first', auth_indexes: ['auth-codex-first'] },
+  { id: 'openai-compat-0', name: 'Relay', family: 'openai-compatibility', auth_index: 'auth-relay-first', auth_indexes: ['auth-relay-first', 'auth-codex-second'] },
+]);
+assert.equal(byServingKey.title, 'Relay');
+
 // Technical driver string: openai-compatible-opencode go -> Opencode with no subtitle
 const opencodeEvent = {
   id: 12,

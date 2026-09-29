@@ -185,6 +185,34 @@ import { fileURLToPath } from 'node:url';
  *   - `main entry` 256 -> 278, leaving 10.02 kB (3.7%): within the range the earlier
  *     re-baselines left, and still the tightest budget in this file.
  *   - Every other limit is untouched.
+ *
+ * ## The CPA v8 alignment re-baseline (2026-09-29)
+ *
+ * A clean build of the base commit (without this change) measured entry 276.56 kB, JavaScript
+ * 10260.12 kB and dist 11825.46 kB; this one measures 289.32, 10302.29 and 12005.77 kB. Only the
+ * entry leaves its limit, and the two causes are separate.
+ *
+ * The entry grew by 12.76 kB of localized copy: about 93 new settings keys for the OAuth-provider,
+ * discovery and pprof fields the visual editor gained, each with a title and a description in both
+ * languages, plus the reworded descriptions of the settings whose old text did not match what CPA
+ * does. The base dictionary is part of the first paint, so that copy is the entry's cost by
+ * construction, exactly as in every earlier re-baseline.
+ *
+ * The 180.31 kB of `web/dist` growth is mostly a font: 137.65 kB of `codicon.ttf`, emitted beside
+ * the lazy YAML editor's stylesheet. The slim Monaco build registers no icon font of its own, so
+ * every editor widget glyph - the find box, the folding arrows, the suggest list - was rendering as
+ * an empty box until the editor imported `features/codicon/register.js`. The font is a same-origin
+ * asset at a hashed path, so it stays inside the offline/no-CDN boundary. The lazy chunk itself did
+ * not move (2890.44 kB before and after): the font is a separate emitted asset, and the only change
+ * to that chunk's stylesheet is 0.35 kB. The remaining JavaScript growth is the same copy in the
+ * lazy `configSchema` and catalog chunks.
+ *
+ *   - `main entry` 278 -> 302, leaving 12.68 kB (4.2%) of headroom: within the range the earlier
+ *     re-baselines left (3.4-4.4%), and it still holds the same proportion of the total.
+ *   - `total JavaScript` and `total web/dist` are deliberately NOT raised: both passed with their
+ *     margin intact (197.71 kB and 494.23 kB respectively), so raising them would remove a check
+ *     rather than relax one.
+ *   - Every other limit is untouched.
  */
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const distDir = path.join(root, 'web', 'dist');
@@ -227,7 +255,7 @@ const iconBytes = totalDirectorySize(iconDir);
 const totalDistBytes = totalDirectorySize(distDir);
 
 const budgets = [
-  { label: 'main entry', matches: (name) => name === entryFile, maxKB: 278, required: true },
+  { label: 'main entry', matches: (name) => name === entryFile, maxKB: 302, required: true },
   { label: 'Lobe icon JS', pattern: /^LobeIcon-.*\.js$/, maxKB: 96, required: true },
   { label: 'vendor antd', pattern: /^vendor-antd-.*\.js$/, maxKB: 1250, required: true },
   { label: 'vendor charts', pattern: /^vendor-charts-.*\.js$/, maxKB: 1600, required: true },

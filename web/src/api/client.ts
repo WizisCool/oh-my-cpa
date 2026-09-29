@@ -18,7 +18,7 @@ import {
   ManagementOAuthModelAliasesResponse,
   ManagementOAuthModelAliasMutationResponse,
 } from '../types/managementOAuthModelAlias';
-import { DashboardResponse, DashboardTailResponse, DashboardWindow } from '../types/dashboard';
+import { DashboardResponse, DashboardTailResponse, DashboardWindow, type WindowCredentialTraffic } from '../types/dashboard';
 import { DashboardTokenHeatmap } from '../types/tokenHeatmap';
 import { DashboardModelsResponse } from '../types/dashboardModels';
 import { ErrorLogFile, type ServiceLogPage } from '../types/logs';
@@ -417,6 +417,8 @@ export const api = {
       failure: number;
       success_rate: number | null;
     }[];
+    /** API-key traffic by the key's runtime auth index (see `ProviderItem.auth_indexes`). */
+    credentials?: WindowCredentialTraffic[];
     partial_errors: string[];
   }> {
     const search = query ? (query.startsWith('?') ? query : `?${query}`) : '';

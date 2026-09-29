@@ -187,7 +187,11 @@ export const ProvidersPage: React.FC = () => {
   const windowProviders = Array.isArray(trafficQuery.data?.providers) && !trafficQuery.data.partial_errors?.length
     ? trafficQuery.data.providers
     : undefined;
-  const traffic = React.useMemo(() => providerTrafficById(providers, windowProviders), [providers, windowProviders]);
+  const windowCredentials = trafficQuery.data?.credentials;
+  const traffic = React.useMemo(
+    () => providerTrafficById(providers, windowProviders, Array.isArray(windowCredentials) ? windowCredentials : []),
+    [providers, windowProviders, windowCredentials],
+  );
   const windowTotals = React.useMemo(() => totalProviderTraffic(providers, traffic), [providers, traffic]);
 
   const [filters, setFilters] = React.useState<ProviderListFilters>(DEFAULT_PROVIDER_FILTERS);

@@ -253,15 +253,16 @@ export const providerRateTraffic = {
   partial_errors: [],
 };
 
-/** The configured providers the rows are aggregated from, including the unused channel. */
+/** The configured providers the rows are aggregated from, including the unused channel. They are
+ *  OpenAI-compatible because CPA labels those by their own name, which is the window's row id. */
 export const providerRateProviders = {
   providers: [
-    { id: 'healthy-rate', family: 'codex-api-key', name: 'healthy-rate', upstream_name: 'healthy-rate', disabled: false, key_configured: true },
-    { id: 'degraded-rate', family: 'cline-api-key', name: 'degraded-rate', upstream_name: 'degraded-rate', disabled: false, key_configured: true },
-    { id: 'outage-rate', family: 'gemini-api-key', name: 'outage-rate', upstream_name: 'outage-rate', disabled: false, key_configured: true },
-    { id: 'no-traffic-rate', family: 'deepseek-api-key', name: 'no-traffic-rate', upstream_name: 'no-traffic-rate', disabled: false, key_configured: true },
-    { id: 'healthy-boundary-rate', family: 'openai-api-key', name: 'healthy-boundary-rate', upstream_name: 'healthy-boundary-rate', disabled: false, key_configured: true },
-    { id: 'degraded-boundary-rate', family: 'moonshot-api-key', name: 'degraded-boundary-rate', upstream_name: 'degraded-boundary-rate', disabled: false, key_configured: true },
+    { id: 'healthy-rate', family: 'openai-compatibility', name: 'healthy-rate', upstream_name: 'healthy-rate', disabled: false, key_configured: true },
+    { id: 'degraded-rate', family: 'openai-compatibility', name: 'degraded-rate', upstream_name: 'degraded-rate', disabled: false, key_configured: true },
+    { id: 'outage-rate', family: 'openai-compatibility', name: 'outage-rate', upstream_name: 'outage-rate', disabled: false, key_configured: true },
+    { id: 'no-traffic-rate', family: 'openai-compatibility', name: 'no-traffic-rate', upstream_name: 'no-traffic-rate', disabled: false, key_configured: true },
+    { id: 'healthy-boundary-rate', family: 'openai-compatibility', name: 'healthy-boundary-rate', upstream_name: 'healthy-boundary-rate', disabled: false, key_configured: true },
+    { id: 'degraded-boundary-rate', family: 'openai-compatibility', name: 'degraded-boundary-rate', upstream_name: 'degraded-boundary-rate', disabled: false, key_configured: true },
   ],
   total: 6,
 };

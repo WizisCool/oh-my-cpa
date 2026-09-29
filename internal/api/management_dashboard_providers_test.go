@@ -44,7 +44,7 @@ func TestFoldProviderTrafficCanonicalisesLabels(t *testing.T) {
 		{Provider: "antigravity", Requests: 8, Failures: 0},
 	}
 
-	traffic := foldProviderTraffic(rows)
+	traffic, _ := foldProviderTraffic(rows)
 	if len(traffic) != 3 {
 		t.Fatalf("got %d providers, want 3: %#v", len(traffic), traffic)
 	}
@@ -91,7 +91,7 @@ func TestFoldProviderTrafficCanonicalisesLabels(t *testing.T) {
 // the console distinguishes the two - an absent rate reads neutral, a measured zero reads red. The
 // fold is where that distinction is made, so it is asserted here rather than left to the client.
 func TestFoldProviderTrafficReportsNoRateForAnEmptyRow(t *testing.T) {
-	traffic := foldProviderTraffic([]repository.UsageProviderTotalsRow{
+	traffic, _ := foldProviderTraffic([]repository.UsageProviderTotalsRow{
 		{Provider: "silent", Requests: 0, Failures: 0},
 	})
 	if len(traffic) != 1 {
@@ -102,6 +102,25 @@ func TestFoldProviderTrafficReportsNoRateForAnEmptyRow(t *testing.T) {
 	}
 	if traffic[0].Total != 0 {
 		t.Fatalf("empty row total = %d, want 0", traffic[0].Total)
+	}
+}
+
+// API-key traffic is credited by the key that served it, never by the family label.
+//
+// CPA labels a codex API-key request "codex", as it does a Codex OAuth request, so a provider
+// list that joined on the label credited every codex API-key provider - one just created and
+// never used included - with the OAuth channel's traffic.
+func TestFoldProviderTrafficSeparatesAPIKeyTrafficByAuthIndex(t *testing.T) {
+	providers, credentials := foldProviderTraffic([]repository.UsageProviderTotalsRow{
+		{Provider: "codex", Requests: 7, Failures: 2},
+		{Provider: "codex", CredentialIndex: "key-a", Requests: 3, Failures: 1},
+		{Provider: "codex", CredentialIndex: "key-b", Requests: 1, Failures: 0},
+	})
+	if len(providers) != 1 || providers[0].ID != "codex" || providers[0].Total != 7 || providers[0].Failure != 2 {
+		t.Fatalf("the codex label must carry only the traffic no API key answered: %#v", providers)
+	}
+	if len(credentials) != 2 || credentials[0] != (dashboardCredentialTraffic{AuthIndex: "key-a", Total: 3, Failure: 1}) || credentials[1] != (dashboardCredentialTraffic{AuthIndex: "key-b", Total: 1}) {
+		t.Fatalf("API-key traffic must be reported per auth index: %#v", credentials)
 	}
 }
 
@@ -145,6 +164,18 @@ func TestDashboardProvidersWindowAggregation(t *testing.T) {
 			TimestampMS: baseTime.Add(3 * time.Minute).UnixMilli(),
 			Failed:      false,
 			TotalTokens: 150,
+		},
+		// Answered by an API key: credited to its auth index, not to the codex label.
+		{
+			InstanceID:  "default",
+			EventKey:    "evt-5",
+			Provider:    "codex",
+			Model:       "gpt-4o",
+			AuthType:    "apikey",
+			AuthIndex:   "codex-key-1",
+			TimestampMS: baseTime.Add(4 * time.Minute).UnixMilli(),
+			Failed:      true,
+			TotalTokens: 10,
 		},
 		// Outside window
 		{
@@ -212,6 +243,9 @@ func TestDashboardProvidersWindowAggregation(t *testing.T) {
 
 	if antigravity == nil || antigravity.Total != 1 || antigravity.Success != 1 {
 		t.Fatalf("unexpected antigravity traffic: %#v", antigravity)
+	}
+	if len(parsed.Credentials) != 1 || parsed.Credentials[0] != (dashboardCredentialTraffic{AuthIndex: "codex-key-1", Total: 1, Failure: 1}) {
+		t.Fatalf("unexpected API-key traffic: %#v", parsed.Credentials)
 	}
 
 	// The row carries no per-bucket grid. It used to, for a sparkline this list drew; asserting the

@@ -17,3 +17,15 @@ id = "generic-api-key"
   paths = ['''internal/quota/service_test\.go''']
   regexTarget = "secret"
   regexes = ['''^q\w+\.Recommendation\.Priority$''']
+
+  # The Claude header-defaults timezone field carries CPA's own template example,
+  # `Asia/Singapore`, as its placeholder. A slash-joined word pair crosses the entropy
+  # threshold this rule uses, and the placeholder is a timezone name rather than a value:
+  # no credential is involved. Allowed by rule + path + value, so the same string stays
+  # visible in a file that could plausibly hold a key, and no rule or file is disabled.
+  [[rules.allowlists]]
+  description = "CPA's own timezone example in the config editor's field placeholder"
+  condition = "AND"
+  paths = ['''web/src/types/configSchema\.ts''']
+  regexTarget = "secret"
+  regexes = ['''^Asia/Singapore$''']

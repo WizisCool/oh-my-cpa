@@ -132,8 +132,13 @@ func (r *Repository) QueryUsageModelBuckets(ctx context.Context, instanceID stri
 // presentation decision, and keeping it out of SQL is what lets it be tested without a database.
 type UsageProviderTotalsRow struct {
 	Provider string
-	Requests int64
-	Failures int64
+	// CredentialIndex is the runtime auth index of the API key that served the rows, and empty
+	// for every other record. CPA labels an API-key request with its family ("codex"), the same
+	// label an OAuth request of that family carries, so the label alone cannot say which
+	// configured provider answered; the index can.
+	CredentialIndex string
+	Requests        int64
+	Failures        int64
 }
 
 // QueryUsageProviderTotals aggregates the requested window per provider.
@@ -153,12 +158,13 @@ func (r *Repository) QueryUsageProviderTotals(ctx context.Context, instanceID st
 
 	query := `
 		SELECT COALESCE(NULLIF(TRIM(provider), ''), 'unknown') AS provider_key,
+		       CASE WHEN auth_type = 'apikey' THEN TRIM(auth_index) ELSE '' END AS credential_index,
 		       COUNT(1),
 		       COALESCE(SUM(failed), 0)
 		FROM usage_events
 		WHERE instance_id = ? AND timestamp_ms >= ? AND timestamp_ms < ?
-		GROUP BY provider_key
-		ORDER BY provider_key ASC`
+		GROUP BY provider_key, credential_index
+		ORDER BY provider_key ASC, credential_index ASC`
 	rows, err := r.SQL().QueryContext(ctx, query, instanceID, fromMS, toMS)
 	if err != nil {
 		return nil, fmt.Errorf("read usage provider totals: %w", err)
@@ -168,7 +174,7 @@ func (r *Repository) QueryUsageProviderTotals(ctx context.Context, instanceID st
 	result := []UsageProviderTotalsRow{}
 	for rows.Next() {
 		var row UsageProviderTotalsRow
-		if errScan := rows.Scan(&row.Provider, &row.Requests, &row.Failures); errScan != nil {
+		if errScan := rows.Scan(&row.Provider, &row.CredentialIndex, &row.Requests, &row.Failures); errScan != nil {
 			return nil, fmt.Errorf("scan usage provider total: %w", errScan)
 		}
 		result = append(result, row)

@@ -1981,6 +1981,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 
 .settings-toggle-control.is-string,
+.settings-toggle-control.is-string_list,
 .settings-toggle-control.is-textarea,
 .settings-toggle-control.is-json_editor {
   width: 380px;
@@ -1992,6 +1993,16 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 
 .settings-toggle-control.is-select {
   width: 280px;
+}
+
+/* The config panel's select rows size their own picker. Ant Design renders a `Select` at its content
+   width by default, so the longest option of the four-mode image-generation setting ("Disabled
+   everywhere (including /v1/images)") measured wider than the 280px column that owns its fill and
+   spilled out of it. Scoped by the `is-select` modifier the config renderer emits, which the OMC
+   settings page's rows do not carry: that page's own pickers size themselves (the timezone picker is
+   440px) and are measured by their own browser scenario. */
+.settings-toggle-control.is-select .ant-select {
+  width: 100%;
 }
 
 /* Variant 3: TLS Accordion */
@@ -2369,6 +2380,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
     min-width: 0;
   }
   .settings-toggle-control.is-string,
+  .settings-toggle-control.is-string_list,
   .settings-toggle-control.is-select,
   .settings-toggle-control.is-textarea {
     width: 100%;

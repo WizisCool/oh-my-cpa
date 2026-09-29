@@ -59,6 +59,8 @@ export interface ProviderLookupEntry {
   upstream_name?: string;
   family?: string;
   auth_index?: string;
+  /** Every key's runtime auth index; `auth_index` is only the first key's. */
+  auth_indexes?: string[];
   base_url?: string;
 }
 
@@ -197,10 +199,15 @@ export function resolveProviderInfo(
   }
 
   // AI Provider flow
-  // 1. Try exact matches first: auth_index, resource_id, resource_name, id, or name
-  let matched = configuredProviders.find(
+  // 1. The key that served the record names its provider outright; only without one do the
+  //    weaker identities (resource, id, name) decide. Checking them in one pass let an earlier
+  //    row that merely shared a name win over the row whose key actually answered.
+  const eventAuthIndex = event.auth_index?.trim();
+  let matched = eventAuthIndex
+    ? configuredProviders.find((p) => p.auth_index === eventAuthIndex || (p.auth_indexes ?? []).includes(eventAuthIndex))
+    : undefined;
+  matched ??= configuredProviders.find(
     (p) =>
-      (event.auth_index && p.auth_index === event.auth_index) ||
       (event.resource_id && p.id === event.resource_id) ||
       (event.resource_name && p.name.toLowerCase() === event.resource_name.toLowerCase()) ||
       (p.id && p.id.toLowerCase() === (event.provider || '').toLowerCase()) ||

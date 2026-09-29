@@ -14,7 +14,7 @@ import (
 )
 
 // UnchangedSentinel is the placeholder used for management credentials (e.g.
-// remote-management.secret-key) and TLS private keys in visual configuration
+// management.secret-key) and TLS private keys in visual configuration
 // mode so those secrets are not exposed to the browser. Upstream/downstream
 // API keys are intentionally returned in plaintext.
 const UnchangedSentinel = "__OMCPA_UNCHANGED__"

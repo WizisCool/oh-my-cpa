@@ -277,3 +277,10 @@ export function applyTail(base: DashboardResponse, patch?: DashboardTailResponse
     },
   };
 }
+
+/** The window's traffic one upstream API key answered, by the key's runtime auth index. */
+export interface WindowCredentialTraffic {
+  auth_index: string;
+  total: number;
+  failure: number;
+}

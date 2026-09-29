@@ -196,7 +196,22 @@ const SCENARIO_PATHS = [
   // Routed pages no probe loads. Their behaviour is covered by the cross-stack acceptance
   // run and the logic suites; every probe scenario would observe nothing of them, so
   // naming them with no scenario is what keeps an edit from running the whole catalog.
-  { prefix: 'web/src/pages/ConfigPage', scenarios: [] },
+  // The configuration page and the source editor behind it. The planner used to name the page
+  // with no scenario at all, because nothing probed it; the source view now does, for the one
+  // claim a browser alone can settle - that the editor's widget glyphs are painted with the icon
+  // font its slim build has to register itself.
+  //
+  // The key page's own list scenario comes along because this directory is not the config page's
+  // alone: the key list is derived by resolving `ALL_CONFIG_FIELDS`'s `apiKeys` field against the
+  // document through `getFieldSemanticValue`, so a change to the draft layer or the schema can
+  // empty that page's table without touching a file under `pages/ApiKeysPage/`. `overlay-back` and
+  // `touch-ergonomics` are deliberately not named: nothing here owns an overlay or a hit target.
+  {
+    prefix: 'web/src/components/config/',
+    scenarios: ['config-source-editor', 'phone-lists'],
+  },
+  { prefix: 'web/src/pages/ConfigPage', scenarios: ['config-source-editor'] },
+  { prefix: 'web/src/types/configSchema', scenarios: ['config-source-editor', 'phone-lists'] },
   { prefix: 'web/src/pages/QuickStartPage', scenarios: [] },
   // The key list page: the phone rendering, the touch rules and the modal Back dismissal
   // each load `/api-keys`.

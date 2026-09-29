@@ -138,8 +138,25 @@ string under `streaming`, while CPA reads an integer number of seconds at the ro
 
 This is CPA's own table (`config_v8.go` at v8.0.2), which it applies when it converts a
 legacy file. OMC does not carry a copy: its editor schema (`web/src/types/configSchema.ts`)
-names the v8 column, and every schema path was accepted by a `PATCH /v8/management/config`
-against the v8.0.2 binary. The last column names the editor field.
+names the v8 column. The last column names the editor field; a `—` means no editor field
+edits that setting.
+
+Every schema path was measured against the v8.0.2 binary (Go build of tag `v8.0.2`,
+commit `4a2c818`, on 2026-09-29): each one was written with a `PATCH
+/v8/management/config` carrying the field's own default, and then read back out of the
+persisted `config.yaml`. All 36 paths the OAuth-provider, discovery and pprof fields
+added were accepted with `200` and survived into the file. Survival is the load-bearing
+half of that check, because CPA re-serialises the document from its parsed configuration:
+a key it does not know is dropped on the way to disk. Measured on the same binary, a
+mistyped sibling loses the whole request - `oauth.providers.codex.live-media-relay.enabledd`
+is refused with `400 invalid_config` ("field oauth not found in type config.legacyConfig"),
+as is a mistyped leaf under a section CPA does know - so the check can fail.
+
+Three value ranges in the schema were measured the same way rather than assumed:
+`redis-usage-queue-retention-seconds` is clamped to 3600 server-side (9999 is stored as
+3600, so the editor caps it), `transient-error-cooldown-seconds` accepts `-1` (so the
+floor is `-1`, not `0`), and `request-retry` has no upper bound in CPA (50 is stored
+unchanged, so the editor sets no maximum).
 
 ### Settings (leaves)
 
@@ -149,12 +166,12 @@ page field that edits it.
 | v8 section | Legacy path | v8 path | OMC editor field |
 | --- | --- | --- | --- |
 | `server` | `commercial-mode` | `server.commercial-mode` | `commercialMode` |
-| `server` | `discovery.advertise-management` | `server.discovery.advertise-management` | — |
-| `server` | `discovery.auth-required` | `server.discovery.auth-required` | — |
-| `server` | `discovery.enabled` | `server.discovery.enabled` | — |
+| `server` | `discovery.advertise-management` | `server.discovery.advertise-management` | `discoveryAdvertiseManagement` |
+| `server` | `discovery.auth-required` | `server.discovery.auth-required` | `discoveryAuthRequired` |
+| `server` | `discovery.enabled` | `server.discovery.enabled` | `discoveryEnabled` |
 | `server` | `discovery.interfaces.exclude` | `server.discovery.interfaces.exclude` | — |
 | `server` | `discovery.interfaces.include` | `server.discovery.interfaces.include` | — |
-| `server` | `discovery.service-name` | `server.discovery.service-name` | — |
+| `server` | `discovery.service-name` | `server.discovery.service-name` | `discoveryServiceName` |
 | `server` | `discovery.service-type` | `server.discovery.service-type` | — |
 | `server` | `discovery.subtypes` | `server.discovery.subtypes` | — |
 | `server` | `host` | `server.host` | `host` |
@@ -162,9 +179,9 @@ page field that edits it.
 | `server` | `tls.cert` | `server.tls.cert` | `tlsCert` |
 | `server` | `tls.enable` | `server.tls.enable` | `tlsEnable` |
 | `server` | `tls.key` | `server.tls.key` | `tlsKey` |
-| `server` | `trusted-proxies` | `server.trusted-proxies` | — |
+| `server` | `trusted-proxies` | `server.trusted-proxies` | `trustedProxies` |
 | `management` | `remote-management.allow-remote` | `management.allow-remote` | `rmAllowRemote` |
-| `management` | `remote-management.base-url` | `management.base-url` | — |
+| `management` | `remote-management.base-url` | `management.base-url` | `rmBaseUrl` |
 | `management` | `remote-management.disable-auto-update-panel` | `management.disable-auto-update-panel` | `rmDisableAutoUpdatePanel` |
 | `management` | `remote-management.disable-control-panel` | `management.disable-control-panel` | `rmDisableControlPanel` |
 | `management` | `remote-management.panel-github-repository` | `management.panel-github-repository` | `rmPanelRepo` |
@@ -191,8 +208,8 @@ page field that edits it.
 | `credentials` | `credential-in-flight.staging-retention` | `credentials.in-flight.staging-retention` | — |
 | `credentials` | `credential-in-flight.stale-after` | `credentials.in-flight.stale-after` | — |
 | `routing` | `disable-cooling` | `routing.cooldown.disable-cooling` | `disableCooling` |
-| `routing` | `save-cooldown-status` | `routing.cooldown.save-cooldown-status` | — |
-| `routing` | `transient-error-cooldown-seconds` | `routing.cooldown.transient-error-cooldown-seconds` | — |
+| `routing` | `save-cooldown-status` | `routing.cooldown.save-cooldown-status` | `saveCooldownStatus` |
+| `routing` | `transient-error-cooldown-seconds` | `routing.cooldown.transient-error-cooldown-seconds` | `transientErrorCooldownSeconds` |
 | `routing` | `force-model-prefix` | `routing.force-model-prefix` | `forceModelPrefix` |
 | `routing` | `max-retry-credentials` | `routing.retry.max-retry-credentials` | `maxRetryCredentials` |
 | `routing` | `max-retry-interval` | `routing.retry.max-retry-interval` | `maxRetryInterval` |
@@ -213,53 +230,53 @@ page field that edits it.
 | `oauth` | `oauth-model-alias` | `oauth.model-alias` | — |
 | `oauth` | `ws-auth` | `oauth.providers.aistudio.ws-auth` | `wsAuth` |
 | `oauth` | `quota-exceeded.antigravity-credits` | `oauth.providers.antigravity.antigravity-credits` | `quotaAntigravityCredits` |
-| `oauth` | `antigravity.connection-pool.enabled` | `oauth.providers.antigravity.connection-pool.enabled` | — |
-| `oauth` | `antigravity.connection-pool.idle-conn-timeout` | `oauth.providers.antigravity.connection-pool.idle-conn-timeout` | — |
-| `oauth` | `antigravity.connection-pool.max-idle-conns-per-host` | `oauth.providers.antigravity.connection-pool.max-idle-conns-per-host` | — |
-| `oauth` | `antigravity.sensitive-words` | `oauth.providers.antigravity.sensitive-words` | — |
+| `oauth` | `antigravity.connection-pool.enabled` | `oauth.providers.antigravity.connection-pool.enabled` | `antigravityPoolEnabled` |
+| `oauth` | `antigravity.connection-pool.idle-conn-timeout` | `oauth.providers.antigravity.connection-pool.idle-conn-timeout` | `antigravityPoolIdleConnTimeout` |
+| `oauth` | `antigravity.connection-pool.max-idle-conns-per-host` | `oauth.providers.antigravity.connection-pool.max-idle-conns-per-host` | `antigravityPoolMaxIdleConnsPerHost` |
+| `oauth` | `antigravity.sensitive-words` | `oauth.providers.antigravity.sensitive-words` | `antigravitySensitiveWords` |
 | `oauth` | `antigravity-signature-bypass-strict` | `oauth.providers.antigravity.signature-bypass-strict` | `antigravitySignatureBypassStrict` |
 | `oauth` | `antigravity-signature-cache-enabled` | `oauth.providers.antigravity.signature-cache-enabled` | `antigravitySignatureCacheEnabled` |
-| `oauth` | `claude-code.disable-cloaking-model-list` | `oauth.providers.claude.claude-code.disable-cloaking-model-list` | — |
-| `oauth` | `disable-claude-cloak-mode` | `oauth.providers.claude.disable-claude-cloak-mode` | — |
+| `oauth` | `claude-code.disable-cloaking-model-list` | `oauth.providers.claude.claude-code.disable-cloaking-model-list` | `claudeDisableCloakingModelList` |
+| `oauth` | `disable-claude-cloak-mode` | `oauth.providers.claude.disable-claude-cloak-mode` | `claudeDisableCloakMode` |
 | `oauth` | `claude-header-defaults.arch` | `oauth.providers.claude.header-defaults.arch` | `claudeHeaderArch` |
 | `oauth` | `claude-header-defaults.os` | `oauth.providers.claude.header-defaults.os` | `claudeHeaderOs` |
 | `oauth` | `claude-header-defaults.package-version` | `oauth.providers.claude.header-defaults.package-version` | `claudeHeaderPackageVersion` |
 | `oauth` | `claude-header-defaults.runtime-version` | `oauth.providers.claude.header-defaults.runtime-version` | `claudeHeaderRuntimeVersion` |
 | `oauth` | `claude-header-defaults.stabilize-device-profile` | `oauth.providers.claude.header-defaults.stabilize-device-profile` | `claudeHeaderStabilizeDeviceProfile` |
 | `oauth` | `claude-header-defaults.timeout` | `oauth.providers.claude.header-defaults.timeout` | `claudeHeaderTimeout` |
-| `oauth` | `claude-header-defaults.timezone` | `oauth.providers.claude.header-defaults.timezone` | — |
+| `oauth` | `claude-header-defaults.timezone` | `oauth.providers.claude.header-defaults.timezone` | `claudeHeaderTimezone` |
 | `oauth` | `claude-header-defaults.user-agent` | `oauth.providers.claude.header-defaults.user-agent` | `claudeHeaderUserAgent` |
-| `oauth` | `claude.model-level-cooling` | `oauth.providers.claude.model-level-cooling` | — |
-| `oauth` | `codex.disable-codex-cloaking` | `oauth.providers.codex.disable-codex-cloaking` | — |
+| `oauth` | `claude.model-level-cooling` | `oauth.providers.claude.model-level-cooling` | `claudeModelLevelCooling` |
+| `oauth` | `codex.disable-codex-cloaking` | `oauth.providers.codex.disable-codex-cloaking` | `codexDisableCloaking` |
 | `oauth` | `codex-header-defaults.beta-features` | `oauth.providers.codex.header-defaults.beta-features` | `codexHeaderBetaFeatures` |
 | `oauth` | `codex-header-defaults.user-agent` | `oauth.providers.codex.header-defaults.user-agent` | `codexHeaderUserAgent` |
-| `oauth` | `codex.identity-confuse` | `oauth.providers.codex.identity-confuse` | — |
-| `oauth` | `codex.live-media-relay.disable-private-remote-ips` | `oauth.providers.codex.live-media-relay.disable-private-remote-ips` | — |
-| `oauth` | `codex.live-media-relay.enabled` | `oauth.providers.codex.live-media-relay.enabled` | — |
+| `oauth` | `codex.identity-confuse` | `oauth.providers.codex.identity-confuse` | `codexIdentityConfuse` |
+| `oauth` | `codex.live-media-relay.disable-private-remote-ips` | `oauth.providers.codex.live-media-relay.disable-private-remote-ips` | `codexLiveDisablePrivateRemoteIps` |
+| `oauth` | `codex.live-media-relay.enabled` | `oauth.providers.codex.live-media-relay.enabled` | `codexLiveEnabled` |
 | `oauth` | `codex.live-media-relay.ice-servers` | `oauth.providers.codex.live-media-relay.ice-servers` | — |
-| `oauth` | `codex.live-media-relay.max-sessions` | `oauth.providers.codex.live-media-relay.max-sessions` | — |
-| `oauth` | `codex.live-media-relay.public-ip` | `oauth.providers.codex.live-media-relay.public-ip` | — |
-| `oauth` | `codex.live-media-relay.udp-port-max` | `oauth.providers.codex.live-media-relay.udp-port-max` | — |
-| `oauth` | `codex.live-media-relay.udp-port-min` | `oauth.providers.codex.live-media-relay.udp-port-min` | — |
-| `oauth` | `codex.model-level-cooling` | `oauth.providers.codex.model-level-cooling` | — |
-| `oauth` | `codex.optimize-multi-agent-v2` | `oauth.providers.codex.optimize-multi-agent-v2` | — |
-| `oauth` | `codex.orphan-delegation-compatibility` | `oauth.providers.codex.orphan-delegation-compatibility` | — |
-| `oauth` | `codex.response-steering` | `oauth.providers.codex.response-steering` | — |
-| `oauth` | `codex.stream-bootstrap-buffering` | `oauth.providers.codex.stream-bootstrap-buffering` | — |
-| `oauth` | `codex.stream-bootstrap-timeout` | `oauth.providers.codex.stream-bootstrap-timeout` | — |
-| `oauth` | `devin.sensitive-words` | `oauth.providers.devin.sensitive-words` | — |
-| `oauth` | `xai.inject-x-search` | `oauth.providers.xai.inject-x-search` | — |
+| `oauth` | `codex.live-media-relay.max-sessions` | `oauth.providers.codex.live-media-relay.max-sessions` | `codexLiveMaxSessions` |
+| `oauth` | `codex.live-media-relay.public-ip` | `oauth.providers.codex.live-media-relay.public-ip` | `codexLivePublicIp` |
+| `oauth` | `codex.live-media-relay.udp-port-max` | `oauth.providers.codex.live-media-relay.udp-port-max` | `codexLiveUdpPortMax` |
+| `oauth` | `codex.live-media-relay.udp-port-min` | `oauth.providers.codex.live-media-relay.udp-port-min` | `codexLiveUdpPortMin` |
+| `oauth` | `codex.model-level-cooling` | `oauth.providers.codex.model-level-cooling` | `codexModelLevelCooling` |
+| `oauth` | `codex.optimize-multi-agent-v2` | `oauth.providers.codex.optimize-multi-agent-v2` | `codexOptimizeMultiAgentV2` |
+| `oauth` | `codex.orphan-delegation-compatibility` | `oauth.providers.codex.orphan-delegation-compatibility` | `codexOrphanDelegationCompatibility` |
+| `oauth` | `codex.response-steering` | `oauth.providers.codex.response-steering` | `codexResponseSteering` |
+| `oauth` | `codex.stream-bootstrap-buffering` | `oauth.providers.codex.stream-bootstrap-buffering` | `codexStreamBootstrapBuffering` |
+| `oauth` | `codex.stream-bootstrap-timeout` | `oauth.providers.codex.stream-bootstrap-timeout` | `codexStreamBootstrapTimeout` |
+| `oauth` | `devin.sensitive-words` | `oauth.providers.devin.sensitive-words` | `devinSensitiveWords` |
+| `oauth` | `xai.inject-x-search` | `oauth.providers.xai.inject-x-search` | `xaiInjectXSearch` |
 | `oauth` | `oauth-request-scoped-errors` | `oauth.request-scoped-errors` | — |
 | `multimedia` | `disable-image-generation` | `multimedia.disable-image-generation` | `disableImageGeneration` |
 | `multimedia` | `gpt-image-2-base-model` | `multimedia.gpt-image-2-base-model` | `gptImage2BaseModel` |
-| `multimedia` | `video-result-auth-cache-ttl` | `multimedia.video-result-auth-cache-ttl` | — |
+| `multimedia` | `video-result-auth-cache-ttl` | `multimedia.video-result-auth-cache-ttl` | `videoResultAuthCacheTTL` |
 | `observability` | `debug` | `observability.logs.debug` | `debug` |
 | `observability` | `error-logs-max-files` | `observability.logs.error-logs-max-files` | `errorLogsMaxFiles` |
 | `observability` | `logging-to-file` | `observability.logs.logging-to-file` | `loggingToFile` |
 | `observability` | `logs-max-total-size-mb` | `observability.logs.logs-max-total-size-mb` | `logsMaxTotalSizeMb` |
 | `observability` | `request-log` | `observability.logs.request-log` | `requestLog` |
-| `observability` | `pprof.addr` | `observability.pprof.addr` | — |
-| `observability` | `pprof.enable` | `observability.pprof.enable` | — |
+| `observability` | `pprof.addr` | `observability.pprof.addr` | `pprofAddr` |
+| `observability` | `pprof.enable` | `observability.pprof.enable` | `pprofEnable` |
 | `observability` | `redis-usage-queue-retention-seconds` | `observability.usage.redis-usage-queue-retention-seconds` | `redisUsageQueueRetentionSeconds` |
 | `observability` | `usage-statistics-enabled` | `observability.usage.usage-statistics-enabled` | `usageStatisticsEnabled` |
 
@@ -314,7 +331,9 @@ list and writes the family back as groups, keeping the operator's grouping (ADR 
 `routing.strategy`, `routing.session-affinity`, `routing.session-affinity-ttl`,
 `routing.session-affinity-subagents`, `plugins.*`, `quota-exceeded.switch-project` and
 `quota-exceeded.switch-preview-model` (the last two are absent from CPA's v8 template but
-are written and applied at the same path).
+are written and applied at the same path). All four `routing.*` entries here are edited by
+the settings page (`routingStrategy`, `routingSessionAffinity`,
+`routingSessionAffinityTTL`, `routingSessionAffinitySubagents`).
 
 ## 4. OMC's configuration write path
 
@@ -441,7 +460,7 @@ supported gateway: OMC now refuses v7 before any request.
 | Configuration page save (change set) | Measured: backup, then CPA converts the file | Measured, per-path writes |
 | Source editor save | Refused by CPA on a legacy name (measured) | Measured |
 | Keys page | Measured, `access.api-keys` (converts the file, as any save) | Measured, `access.api-keys` |
-| Editor schema paths | — | Measured: every path accepted by `PATCH /v8/management/config` |
+| Editor schema paths | — | Measured: all 36 newly added paths, each written with its field's default and read back from the persisted file |
 | Scalar writes (`config_set`) | Unit-tested, one-change set | Unit-tested, one-change set |
 | Provider credentials, OAuth aliases, plugin settings | Measured: backup, then converted by the first write | Measured, group-preserving writes |
 | Usage: RESP subscription | Measured | Layout-independent |

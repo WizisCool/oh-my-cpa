@@ -44,12 +44,12 @@ func (d *Discoverer) Discover(ctx context.Context, client *management.Client, in
 		}
 	}
 	if entries, err := client.ConfigAPIKeys(ctx, management.ConfigFamilyCodex); err != nil {
-		errorsFound = append(errorsFound, "codex-api-key: "+err.Error())
+		errorsFound = append(errorsFound, "api-keys.codex: "+err.Error())
 	} else {
 		for index, entry := range entries {
 			resource, err := d.fromCodexAPIKey(instanceID, index, entry)
 			if err != nil {
-				errorsFound = append(errorsFound, "codex-api-key: "+err.Error())
+				errorsFound = append(errorsFound, "api-keys.codex: "+err.Error())
 				continue
 			}
 			resources = append(resources, resource)

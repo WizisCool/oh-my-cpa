@@ -41,13 +41,17 @@ type ProviderItemDTO struct {
 	// unrecoverable and the join could only be guessed. Only the
 	// openai-compatibility family names its entries upstream, so this stays empty
 	// for the positional families, which CPA labels by family instead.
-	UpstreamName    string                `json:"upstream_name,omitempty"`
-	Protocol        string                `json:"protocol"`
-	BaseURL         string                `json:"base_url,omitempty"`
-	Prefix          string                `json:"prefix,omitempty"`
-	Priority        *int                  `json:"priority,omitempty"`
-	DisableCooling  bool                  `json:"disable_cooling"`
-	AuthIndex       string                `json:"auth_index,omitempty"`
+	UpstreamName   string `json:"upstream_name,omitempty"`
+	Protocol       string `json:"protocol"`
+	BaseURL        string `json:"base_url,omitempty"`
+	Prefix         string `json:"prefix,omitempty"`
+	Priority       *int   `json:"priority,omitempty"`
+	DisableCooling bool   `json:"disable_cooling"`
+	AuthIndex      string `json:"auth_index,omitempty"`
+	// AuthIndexes are the runtime auth indexes of every key the provider holds. A request
+	// record names the index of the key that served it, which is the only sound way to credit
+	// traffic to a provider: CPA labels a family's keys by the family alone.
+	AuthIndexes     []string              `json:"auth_indexes,omitempty"`
 	Models          []string              `json:"models,omitempty"`
 	ModelEntries    []ProviderModelDTO    `json:"model_entries,omitempty"`
 	Disabled        bool                  `json:"disabled"`
@@ -172,6 +176,7 @@ func configKeyProviderItems(spec providerConfigFamilySpec, entries []management.
 			Priority:        entry.Priority,
 			DisableCooling:  disableCoolingVal,
 			AuthIndex:       entry.AuthIndex,
+			AuthIndexes:     nonEmptyStrings(entry.AuthIndex),
 			Models:          models,
 			ModelEntries:    modelEntries,
 			Disabled:        management.IsExcludedAll(entry.ExcludedModels),
@@ -183,6 +188,17 @@ func configKeyProviderItems(spec providerConfigFamilySpec, entries []management.
 		})
 	}
 	return items
+}
+
+// nonEmptyStrings keeps the values that carry text, trimmed.
+func nonEmptyStrings(values ...string) []string {
+	kept := make([]string, 0, len(values))
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			kept = append(kept, trimmed)
+		}
+	}
+	return kept
 }
 
 // revealedProviderKeyCount counts the distinct credential entries in a provider
@@ -288,7 +304,9 @@ func (h *Handler) readProviderItems(ctx context.Context, client *management.Clie
 				firstKey = entry.APIKeyEntries[0].APIKey
 			}
 			keyEntries := make([]ProviderKeyEntryDTO, 0, len(entry.APIKeyEntries)+len(entry.LegacyAPIKeys))
+			authIndexes := make([]string, 0, len(entry.APIKeyEntries))
 			for ki, k := range entry.APIKeyEntries {
+				authIndexes = append(authIndexes, nonEmptyStrings(k.AuthIndex)...)
 				keyEntries = append(keyEntries, ProviderKeyEntryDTO{
 					Index:    ki,
 					APIKey:   k.APIKey,
@@ -313,6 +331,7 @@ func (h *Handler) readProviderItems(ctx context.Context, client *management.Clie
 				Prefix:          entry.Prefix,
 				Priority:        entry.Priority,
 				DisableCooling:  entry.DisableCooling != nil && *entry.DisableCooling,
+				AuthIndexes:     authIndexes,
 				Models:          models,
 				ModelEntries:    modelEntries,
 				Disabled:        entry.Disabled,

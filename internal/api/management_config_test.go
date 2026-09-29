@@ -59,7 +59,7 @@ func (f *configFixtureCPA) serve(writer http.ResponseWriter, request *http.Reque
 						"usage": map[string]any{"usage-statistics-enabled": true},
 					},
 					"routing": map[string]any{
-						"strategy": "least-load",
+						"strategy": "fill-first",
 						"retry":    map[string]any{"request-retry": 3, "max-retry-interval": 30, "max-retry-credentials": 2},
 					},
 					// Secret and complex fields that must be redacted
@@ -138,8 +138,8 @@ func TestManagementConfigGetRedactsSecrets(t *testing.T) {
 	if res.Scalars.ProxyURL != "http://proxy:8080" {
 		t.Errorf("expected proxy_url http://proxy:8080, got %s", res.Scalars.ProxyURL)
 	}
-	if res.Scalars.RoutingStrategy != "least-load" {
-		t.Errorf("expected routing_strategy least-load, got %s", res.Scalars.RoutingStrategy)
+	if res.Scalars.RoutingStrategy != "fill-first" {
+		t.Errorf("expected routing_strategy fill-first, got %s", res.Scalars.RoutingStrategy)
 	}
 	if !res.Scalars.RequestLog {
 		t.Errorf("expected request_log true")

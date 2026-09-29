@@ -1,5 +1,6 @@
 import { Button, Input, InputNumber, Select, Switch, Typography } from 'antd';
 import {
+  ApiOutlined,
   CodeOutlined,
   ExperimentOutlined,
   FieldTimeOutlined,
@@ -61,6 +62,8 @@ export function sectionIcon(view: ConfigSectionContext, id: ConfigSectionId) {
         return <FieldTimeOutlined />;
       case 'streaming':
         return <NodeIndexOutlined />;
+      case 'providers':
+        return <ApiOutlined />;
       case 'advanced':
         return <ExperimentOutlined />;
       case 'payload':
@@ -127,18 +130,45 @@ export function renderFieldControl(view: ConfigSectionContext, field: ConfigFiel
       );
     }
 
+    if (field.type === 'string_list') {
+      // A list of plain words or addresses, one tag each. A comma separates tags; a space does
+      // not, because a sensitive word may contain one.
+      const items = Array.isArray(val) ? val.map(String) : [];
+      return (
+        <Select
+          id={`cfg-${field.id}`}
+          aria-describedby={`desc-${field.id}`}
+          mode="tags"
+          tokenSeparators={[',']}
+          open={false}
+          disabled={disabled}
+          placeholder={field.placeholderKey ? (field.placeholderKey.startsWith('cfg.') ? t(field.placeholderKey) : field.placeholderKey) : ''}
+          value={items}
+          onChange={(next: string[]) => updateFieldInDoc(field, next.map((item) => item.trim()).filter(Boolean))}
+        />
+      );
+    }
+
     if (field.type === 'select') {
+      const options = field.options ?? [];
+      // An option's YAML value can be a boolean while the picker's keys are strings, so the
+      // current value is matched by its string form and written back as the option's own value.
+      const current = String(val ?? field.defaultValue ?? '');
+      const selected = options.find((opt) => String(opt.yamlValue ?? opt.value) === current);
       return (
         <Select
           id={`cfg-${field.id}`}
           aria-describedby={`desc-${field.id}`}
           disabled={disabled}
-          value={String(val ?? field.defaultValue ?? '')}
-          options={(field.options ?? []).map((opt) => ({
+          value={selected?.value ?? current}
+          options={options.map((opt) => ({
             value: opt.value,
             label: t(opt.labelKey),
           }))}
-          onChange={(selected) => updateFieldInDoc(field, selected)}
+          onChange={(key) => {
+            const option = options.find((opt) => opt.value === key);
+            updateFieldInDoc(field, option ? (option.yamlValue ?? option.value) : key);
+          }}
         />
       );
     }

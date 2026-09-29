@@ -31,10 +31,10 @@ var ErrManagementV8Required = errors.New("CPA does not serve the v8 Management A
 
 // ErrManagementDisabled is returned, before any request is sent, while the
 // gateway serves no Management API at all. CPA answers 404 on every management
-// path, v0 and v8 alike, until remote-management.secret-key (or
-// MANAGEMENT_PASSWORD) is set, so the missing v8 tree alone would misread a
-// current gateway as one that needs an upgrade.
-var ErrManagementDisabled = errors.New("CPA does not serve its Management API; set remote-management.secret-key in the CPA configuration")
+// path, v0 and v8 alike, until management.secret-key (or MANAGEMENT_PASSWORD) is
+// set, so the missing v8 tree alone would misread a current gateway as one that
+// needs an upgrade.
+var ErrManagementDisabled = errors.New("CPA does not serve its Management API; set management.secret-key in the CPA configuration")
 
 // ManagementAPIStatus is the gate's answer as the console shows it.
 type ManagementAPIStatus string

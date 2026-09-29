@@ -58,6 +58,7 @@ import { touchErgonomics } from './probes/touchErgonomics.mjs';
 import { oauthManagement, oauthManagementFixtures, oauthManagementProbeRoutes } from './probes/oauthManagement.mjs';
 import { iconPickerStacking, pickerProvider, providerIconPick } from './probes/providerConsole.mjs';
 import { systemInformationNarrow, systemInformationPage, systemFixtures } from './probes/systemInformation.mjs';
+import { configSourceEditor, configSourceFixtures } from './probes/configSourceEditor.mjs';
 import {
   alignmentFacets,
   alignmentRecords,
@@ -493,7 +494,7 @@ export const SCENARIOS = [
         [(url) => url.pathname.endsWith('/management/dashboard/providers'), () => ({
           window: { preset: '1h', from: Date.now() - 3_600_000, to: Date.now(), bucket_ms: 60_000 },
           providers: [
-            { id: 'codex-api-key', total: 12, success: 12, failure: 0, success_rate: 100 },
+            { id: 'codex', total: 12, success: 12, failure: 0, success_rate: 100 },
           ],
           partial_errors: [],
         })],
@@ -501,7 +502,7 @@ export const SCENARIOS = [
           cpa: { connected: true, version: 'probe', latency_ms: 1 },
           counts: { management_keys: 1, provider_keys: 1, credentials: 1, models: 1 },
           providers: [{
-            id: 'codex-api-key',
+            id: 'codex',
             credentials: 1,
             success: 12,
             failure: 0,
@@ -569,8 +570,8 @@ export const SCENARIOS = [
           providers: [
             pickerProvider,
             {
-              id: 'claude-api-key-0',
-              family: 'claude-api-key',
+              id: 'claude-0',
+              family: 'claude',
               name: 'Claude relay',
               protocol: 'Anthropic Messages',
               base_url: 'https://relay.example.test',
@@ -684,5 +685,11 @@ export const SCENARIOS = [
       viewport: { width: 320, height: 1200 },
     },
     run: systemInformationNarrow,
+  },
+  {
+    id: 'config-source-editor',
+    name: "the YAML source editor's find box is drawn with its loaded icon font",
+    options: { routes: configSourceFixtures() },
+    run: configSourceEditor,
   },
 ];

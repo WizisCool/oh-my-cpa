@@ -100,7 +100,7 @@ OMCPA_DEMO_MODE=true go run ./cmd/oh-my-cpa
 
 ### 前置条件
 
-- 已启动的 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) **v8.0.0 或更高版本**及其明文管理密钥（`remote-management.secret-key`；CPA v8 布局的配置文件中为 `management.secret-key`）
+- 已启动的 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) **v8.0.0 或更高版本**及其明文管理密钥（`management.secret-key`）
 - Go 1.25+（构建工具链锁定 `1.27.1`）
 - Node.js 22+ & pnpm 11+
 

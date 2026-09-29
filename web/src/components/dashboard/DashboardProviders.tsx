@@ -114,19 +114,21 @@ export const DashboardProviders: React.FC<DashboardProvidersProps> = ({
   const authFilesByType = overview.credentials?.by_type || [];
   // If the windowed query failed with partial errors, avoid fabricating zero traffic and fall back to overview
   const windowProviders = windowProvidersData?.partial_errors?.length ? undefined : windowProvidersData?.providers;
+  const windowCredentials = windowProvidersData?.partial_errors?.length ? undefined : windowProvidersData?.credentials;
 
   // Aggregated list: windowed traffic (or live overview fallback) + configured AI providers + OAuth channels
   const aggregated = useMemo<AggregatedProvider[]>(() => {
     return aggregateProviders({
       overviewProviders,
       windowProviders,
+      windowCredentials,
       configuredProviders,
       customIcons,
       authFilesByType,
       pluginOAuthIds,
       pluginLogos,
     });
-  }, [overviewProviders, windowProviders, configuredProviders, customIcons, authFilesByType, pluginOAuthIds, pluginLogos]);
+  }, [overviewProviders, windowProviders, windowCredentials, configuredProviders, customIcons, authFilesByType, pluginOAuthIds, pluginLogos]);
 
   const handleRowClick = (provider: AggregatedProvider) => {
     if (provider.kind === 'oauth') {

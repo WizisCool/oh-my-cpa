@@ -2,6 +2,7 @@ import type { ProviderItem } from '../../types/providers';
 import { matchProviderFamily } from '../../types/providerFamilies';
 import { successRateTone } from '../../types/usageEventMetrics';
 import { aggregateProviders, type WindowProviderTraffic } from '../dashboard/dashboardProvidersLogic';
+import type { WindowCredentialTraffic } from '../../types/dashboard';
 
 /** The status tiles, in reading order; each one is also the list's status filter. */
 export const PROVIDER_STATUS_FILTERS = ['all', 'active', 'disabled', 'attention'] as const;
@@ -45,18 +46,24 @@ export function providerFamilyKey(provider: ProviderItem): string {
 /**
  * providerTrafficById joins the window's per-provider traffic onto the configured rows.
  *
- * CPA labels its usage queue by upstream name, family or a prefixed spelling of either, so the
- * join is the dashboard's own (`aggregateProviders`) rather than a second matcher: the providers
- * page and the dashboard's provider panel therefore always credit a request to the same row.
+ * A row is credited with what its own keys served, by auth index (`windowCredentials`), never by
+ * CPA's family label, which every key of a family and its OAuth channel share. The join is the
+ * dashboard's own (`aggregateProviders`) rather than a second matcher: the providers page and the
+ * dashboard's provider panel therefore always credit a request to the same row.
  * `undefined` means the window could not be read, which the page shows as unknown rather than
  * as zero traffic.
  */
 export function providerTrafficById(
   providers: readonly ProviderItem[],
   windowProviders: readonly WindowProviderTraffic[] | undefined,
+  windowCredentials: readonly WindowCredentialTraffic[] = [],
 ): Map<string, ProviderTraffic> | undefined {
   if (!windowProviders) return undefined;
-  const joined = aggregateProviders({ configuredProviders: [...providers], windowProviders: [...windowProviders] });
+  const joined = aggregateProviders({
+    configuredProviders: [...providers],
+    windowProviders: [...windowProviders],
+    windowCredentials: [...windowCredentials],
+  });
   const traffic = new Map<string, ProviderTraffic>();
   for (const row of joined) {
     if (!row.providerId) continue;

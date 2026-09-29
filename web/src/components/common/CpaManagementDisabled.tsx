@@ -4,7 +4,7 @@ import { WarningOutlined } from '../icons';
 import { useT } from '../../i18n';
 import { CodeFrame } from './CodeFrame';
 
-const CPA_MANAGEMENT_SNIPPET = 'remote-management:\n  secret-key: "<OMCPA_CPA_MANAGEMENT_KEY>"';
+const CPA_MANAGEMENT_SNIPPET = 'management:\n  secret-key: "<OMCPA_CPA_MANAGEMENT_KEY>"';
 
 /**
  * Stands in for every page while the gateway serves no Management API at all.
