@@ -53,6 +53,7 @@ export const BulbOutlined = createIcon(Lucide.Lightbulb, 'anticon-bulb');
 export const CaretDownOutlined = createIcon(Lucide.ChevronDown, 'anticon-caret-down');
 export const CheckCircleOutlined = createIcon(Lucide.CheckCircle2, 'anticon-check-circle');
 export const CheckOutlined = createIcon(Lucide.Check, 'anticon-check');
+export const CheckSquareOutlined = createIcon(Lucide.ListChecks, 'anticon-check-square');
 export const ClearOutlined = createIcon(Lucide.Eraser, 'anticon-clear');
 export const ClockCircleOutlined = createIcon(Lucide.Clock, 'anticon-clock-circle');
 export const CloseCircleOutlined = createIcon(Lucide.XCircle, 'anticon-close-circle');

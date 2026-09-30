@@ -6,7 +6,7 @@
  * failing assertion exits non-zero and stops the script.
  */
 import assert from 'node:assert/strict';
-import { filterModelOptions, modelOptionsFor } from '../web/src/utils/modelOptions.ts';
+import { filterModelOptions, modelOptionsFor, modelsToAdd } from '../web/src/utils/modelOptions.ts';
 import { isSafeExternalURL, safeExternalURL } from '../web/src/utils/externalUrl.ts';
 import { parseProviderID, providerStatusPayload, FAMILY_BY_PROVIDER_ID_PREFIX } from '../web/src/types/providerId.ts';
 import { PROVIDER_FAMILIES, lookupProviderFamily, matchProviderFamily } from '../web/src/types/providerFamilies.ts';
@@ -212,6 +212,21 @@ console.log(
   'PASS model options: configured duplicates suppressed, own value kept, filter and suppression compose',
 );
 
+// ---- batch model pick: only new names become rows, in the order shown ----
+
+// The picker opens with configured models ticked, so its selection repeats them;
+// they must not come back as second rows, and whitespace does not disguise one.
+assert.deepEqual(
+  modelsToAdd(['gpt-5.4', 'deepseek-chat', 'claude-opus', 'azure/gpt-5.4'], [' deepseek-chat ', 'gpt-5.4', '']),
+  ['claude-opus', 'azure/gpt-5.4'],
+);
+// A name picked twice, or padded, is added once and trimmed; blanks are dropped.
+assert.deepEqual(modelsToAdd(['  o3 ', 'o3', '', '   '], []), ['o3']);
+// Nothing new means nothing to add, which the drawer reports instead of a no-op.
+assert.deepEqual(modelsToAdd(['gpt-5.4'], ['gpt-5.4']), []);
+
+console.log('PASS batch model pick: configured and repeated names skipped, pick order kept');
+
 // ---- provider families: the table the provider list and its form share ----
 
 // The family ids are the console's half of a contract with the Go side: each one
@@ -228,6 +243,14 @@ assert.deepEqual(
 assert.deepEqual(
   PROVIDER_FAMILIES.filter((family) => family.requiresBaseURL).map((family) => family.id),
   ['codex', 'xai'],
+);
+
+// CPA declares the image-endpoint flag only on the OpenAI-compatible model entry
+// and refuses any other family's list that carries it, so only that family's
+// form offers the checkbox.
+assert.deepEqual(
+  PROVIDER_FAMILIES.filter((family) => family.supportsModelImage).map((family) => family.id),
+  ['openai-compatibility'],
 );
 
 // The tag's border and fill are derived by appending hex alpha to this value, so a

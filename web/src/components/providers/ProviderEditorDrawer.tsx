@@ -11,7 +11,7 @@ import {
   Row,
   Select,
 } from 'antd';
-import { CloseOutlined, DownOutlined, PlusOutlined, SyncOutlined, UpOutlined } from '../icons';
+import { CheckSquareOutlined, CloseOutlined, DownOutlined, PlusOutlined, SyncOutlined, UpOutlined } from '../icons';
 
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
@@ -22,6 +22,8 @@ import { PROVIDER_FAMILIES, lookupProviderFamily } from '../../types/providerFam
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import type { useProviderManagement } from './useProviderManagement';
 import { EditorSection } from './EditorSection';
+import { ModelPickerModal } from './ModelPickerModal';
+import { SecretInput } from '../common/SecretInput';
 import styles from './ProviderEditorDrawer.module.css';
 
 type ProviderManagement = ReturnType<typeof useProviderManagement>;
@@ -79,6 +81,9 @@ interface ProviderEditorDrawerProps extends Pick<
   | 'modelFetchSeqRef'
   | 'websiteInputState'
   | 'handlePullModels'
+  | 'isModelPickerOpen'
+  | 'setIsModelPickerOpen'
+  | 'handleAddPickedModels'
   | 'toggleModelExpanded'
   | 'handleAddModel'
   | 'updateModelImage'
@@ -171,6 +176,9 @@ export function ProviderEditorDrawer({
     modelFetchSeqRef,
     websiteInputState,
     handlePullModels,
+    isModelPickerOpen,
+    setIsModelPickerOpen,
+    handleAddPickedModels,
     toggleModelExpanded,
     handleAddModel,
     updateModelImage,
@@ -193,6 +201,10 @@ export function ProviderEditorDrawer({
     label: `${t(family.labelKey)} (${family.id})`,
     value: family.id,
   }));
+  const supportsModelImage = lookupProviderFamily(formFamily)?.supportsModelImage ?? false;
+  const configuredModelNames = new Set(
+    formModels.map((m) => m.name.trim()).filter((name) => name !== ''),
+  );
 
   return (
 
@@ -524,7 +536,7 @@ export function ProviderEditorDrawer({
                               <div className={styles['item-field-label']}>
                                 {t('pro.api_key_label')}
                               </div>
-                              <Input.Password
+                              <SecretInput
                                 value={k.apiKey || ''}
                                 onChange={(e) =>
                                   setFormKeys((prev) =>
@@ -667,17 +679,24 @@ export function ProviderEditorDrawer({
                       </span>
                     )}
                   </div>
-                  <Button
-                    icon={<SyncOutlined spin={isPullingModels} />}
-                    loading={isPullingModels}
-                    disabled={isDemo}
-                    title={isDemo ? t('demo.blocked') : undefined}
-                    onClick={handlePullModels}
-                  >
-                    {endpointModels.length > 0
-                      ? t('pro.refresh_model_list')
-                      : t('pro.fetch_model_list')}
-                  </Button>
+                  <div className={styles['section-buttons']}>
+                    {endpointModels.length > 0 && (
+                      <Button icon={<CheckSquareOutlined />} onClick={() => setIsModelPickerOpen(true)}>
+                        {t('pro.pick_models')}
+                      </Button>
+                    )}
+                    <Button
+                      icon={<SyncOutlined spin={isPullingModels} />}
+                      loading={isPullingModels}
+                      disabled={isDemo}
+                      title={isDemo ? t('demo.blocked') : undefined}
+                      onClick={handlePullModels}
+                    >
+                      {endpointModels.length > 0
+                        ? t('pro.refresh_model_list')
+                        : t('pro.fetch_model_list')}
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Column Titles */}
@@ -796,20 +815,23 @@ export function ProviderEditorDrawer({
                           {/* Model Card Body (expanded) */}
                           {isExpanded && (
                             <div className={styles['item-body']}>
-                              {/* Option: Allow Image Endpoint */}
-                              <div>
-                                <Checkbox
-                                  checked={m.image || false}
-                                  onChange={(e) => updateModelImage(m.id, e.target.checked)}
-                                >
-                                  <span className={styles['flag-label']}>
-                                    {t('pro.allow_image_endpoint')}
-                                  </span>
-                                </Checkbox>
-                                <div className={styles['flag-desc']}>
-                                  {t('pro.allow_image_endpoint_desc')}
+                              {/* Only the OpenAI-compatible model entry has the image flag;
+                                  CPA refuses it on every other family's list. */}
+                              {supportsModelImage && (
+                                <div>
+                                  <Checkbox
+                                    checked={m.image || false}
+                                    onChange={(e) => updateModelImage(m.id, e.target.checked)}
+                                  >
+                                    <span className={styles['flag-label']}>
+                                      {t('pro.allow_image_endpoint')}
+                                    </span>
+                                  </Checkbox>
+                                  <div className={styles['flag-desc']}>
+                                    {t('pro.allow_image_endpoint_desc')}
+                                  </div>
                                 </div>
-                              </div>
+                              )}
 
                               {/* Option: Allowed Thinking Levels */}
                               <div>
@@ -858,6 +880,13 @@ export function ProviderEditorDrawer({
                 </Button>
           </EditorSection>
         </Form>
+        <ModelPickerModal
+          isOpen={isModelPickerOpen && providerDrawerOpen && endpointModels.length > 0}
+          models={endpointModels}
+          configured={configuredModelNames}
+          onApply={handleAddPickedModels}
+          onClose={() => setIsModelPickerOpen(false)}
+        />
       </Drawer>
   );
 }

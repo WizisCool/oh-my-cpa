@@ -547,3 +547,45 @@ func TestProviderEditKeepsTheSettingsTheFormDoesNotShow(t *testing.T) {
 		t.Fatalf("claude model = %#v, want its other settings kept", claudeModel)
 	}
 }
+
+// CPA declares the image-endpoint flag only on the OpenAI-compatible model entry
+// and refuses a config API-key list that carries it ("field image not found in
+// type config.CodexModel"), so a flagged model must reach CPA without the key.
+func TestConfigFamilyModelsNeverCarryTheImageFlag(t *testing.T) {
+	client, baseURL, state := startProviderTestServer(t)
+
+	storedModels := func(index int) []any {
+		t.Helper()
+		state.mu.Lock()
+		defer state.mu.Unlock()
+		return anyList(state.codexProviders[index]["models"])
+	}
+	assertNoImage := func(models []any) {
+		t.Helper()
+		if len(models) != 1 {
+			t.Fatalf("stored codex models = %#v, want one", models)
+		}
+		model := models[0].(map[string]any)
+		if model["name"] != "gpt-image-2" {
+			t.Fatalf("stored codex model = %#v, want gpt-image-2", model)
+		}
+		if _, hasImage := model["image"]; hasImage {
+			t.Fatalf("stored codex model = %#v, want no image key", model)
+		}
+	}
+
+	update := `{"family":"codex","name":"Codex Line","base_url":"https://api.openai.com","model_entries":[{"name":"gpt-image-2","image":true}]}`
+	if resp, payload := doJSON(t, client, http.MethodPut, baseURL+"/omc/api/v1/management/providers/codex-0", update); resp.StatusCode != http.StatusOK {
+		t.Fatalf("update codex status = %d body %s", resp.StatusCode, payload)
+	}
+	assertNoImage(storedModels(0))
+
+	create := `{"family":"codex","name":"Codex Images","base_url":"https://api.openai.com","keys":[{"api_key":"sk-codex-images"}],"model_entries":[{"name":"gpt-image-2","image":true}]}`
+	if resp, payload := doJSON(t, client, http.MethodPost, baseURL+"/omc/api/v1/management/providers", create); resp.StatusCode != http.StatusOK {
+		t.Fatalf("create codex status = %d body %s", resp.StatusCode, payload)
+	}
+	state.mu.Lock()
+	last := len(state.codexProviders) - 1
+	state.mu.Unlock()
+	assertNoImage(storedModels(last))
+}

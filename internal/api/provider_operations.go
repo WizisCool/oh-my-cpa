@@ -140,7 +140,7 @@ func (h *Handler) createProvider(ctx context.Context, client *management.Client,
 			Priority:       req.Priority,
 			Weight:         firstWeight,
 			Headers:        req.Headers,
-			Models:         models,
+			Models:         withoutImageFlag(models),
 			DisableCooling: disableCoolingPtr,
 		}
 		_, err := h.appendConfigKeyProvider(ctx, client, spec, newEntry, func(ctx context.Context, entries []management.ConfigAPIKey) error {
@@ -317,7 +317,7 @@ func (h *Handler) updateProvider(ctx context.Context, client *management.Client,
 			entry.Prefix = strings.TrimSpace(req.Prefix)
 			entry.Priority = req.Priority
 			entry.Weight = firstWeight
-			entry.Models = mergeModelEdits(entry.Models, models)
+			entry.Models = withoutImageFlag(mergeModelEdits(entry.Models, models))
 			entry.Headers = req.Headers
 			entry.DisableCooling = editedDisableCooling(entry.DisableCooling, req.DisableCooling)
 		}, func(ctx context.Context, _ []management.ConfigAPIKey) error {
@@ -417,6 +417,19 @@ func editedDisableCooling(stored *bool, isChecked bool) *bool {
 		return stored
 	}
 	return nil
+}
+
+// withoutImageFlag clears the image-endpoint flag on a config API-key family's
+// models. CPA declares `image` only on the OpenAI-compatible model entry; the
+// other families decode their model lists strictly, so a single flagged model
+// makes CPA refuse the whole configuration write ("field image not found in type
+// config.CodexModel"). Cleared here rather than trusted to the form, because the
+// agent's provider operations and older clients send the flag too.
+func withoutImageFlag(models []management.ModelAlias) []management.ModelAlias {
+	for i := range models {
+		models[i].Image = false
+	}
+	return models
 }
 
 // mergeModelEdits applies the form's models to the stored ones. The form edits

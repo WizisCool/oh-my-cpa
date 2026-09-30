@@ -31,6 +31,7 @@ export const PROBE_WEIGHTS = {
   'oauth-management': 46,
   'icon-picker-stacking': 4,
   'provider-icon-pick': 4,
+  'provider-model-picker': 5,
   'dashboard-charts': 3,
   'provider-rate-marks': 6,
   'dashboard-chart-motion': 9,
