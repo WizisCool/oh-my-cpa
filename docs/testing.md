@@ -107,8 +107,9 @@ mutations, because the clock does not publish through the transcript's run hook.
 
 ### Feedback regressions
 
-- `scripts/check-feedback.test.mjs` checks Ant Design modal bindings and aliases, scope shadowing,
-  false positives in comments and strings, legal confirmations, diagnostic locations and the
+- `scripts/check-feedback.test.mjs` checks Ant Design feedback bindings and aliases (named and namespace
+  imports, `App.useApp()` results and modal hooks), scope shadowing, false positives in comments,
+  strings and type-only imports, legal confirmations, diagnostic locations and the
   feedback module exemption. It is automatically discovered by the repository self-test runner.
 - The `oauth-management` browser scenario checks that ordinary copy acknowledgements cannot evict
   a persistent quota report, another refresh replaces it, and its close action removes it. It also

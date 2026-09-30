@@ -25,30 +25,35 @@ const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 const ts = createRequire(path.join(DEFAULT_ROOT, 'web', 'package.json'))('typescript');
 const FEEDBACK_MODULE = 'web/src/components/feedback/';
 
-/** Named imports from `antd`, each with the index of the import statement that names it. */
-function antdSpecifiers(source) {
-  const names = [];
-  for (const match of source.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]antd['"]/g)) {
-    for (const part of match[1].split(',')) {
-      const name = part.trim().split(/\s+as\s+/)[0].replace(/^type\s+/, '');
-      if (name) names.push({ name, index: match.index });
-    }
-  }
-  return names;
-}
-
 function lineOf(source, index) {
   return source.slice(0, index).split('\n').length;
 }
 
 /** Resolve local symbols so aliases work and shadowed names stay unrelated. */
-function findModalCalls(source) {
+export function findViolations(source) {
+  const violations = [];
   const file = ts.createSourceFile('feedback.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const options = { noLib: true, noResolve: true };
   const host = ts.createCompilerHost(options);
   host.getSourceFile = (name) => name === file.fileName ? file : undefined;
   const checker = ts.createProgram([file.fileName], options, host).getTypeChecker();
   const imports = new Map();
+  function reportRawFeedback(kind, node, origin) {
+    const line = lineOf(source, node.getStart(file));
+    if (kind === 'Alert') {
+      violations.push({ line, rule: 'raw-alert', message: 'import `Notice` or `LoadFailure` from components/feedback instead of antd `Alert`' });
+    } else if (kind === 'message' || kind === 'notification') {
+      violations.push({ line, rule: 'raw-toast', message: `use \`useToast\` instead of \`${kind}\` from ${origin}` });
+    }
+  }
+
+  function memberName(node) {
+    if (ts.isPropertyAccessExpression(node)) return node.name.text;
+    if (ts.isElementAccessExpression(node) && ts.isStringLiteral(node.argumentExpression)) {
+      return node.argumentExpression.text;
+    }
+    return undefined;
+  }
   for (const statement of file.statements) {
     if (!ts.isImportDeclaration(statement) || statement.moduleSpecifier.text !== 'antd') continue;
     const clause = statement.importClause;
@@ -57,7 +62,9 @@ function findModalCalls(source) {
     if (bindings && ts.isNamedImports(bindings)) {
       for (const specifier of bindings.elements) {
         if (!specifier.isTypeOnly) {
-          imports.set(checker.getSymbolAtLocation(specifier.name), (specifier.propertyName ?? specifier.name).text);
+          const kind = (specifier.propertyName ?? specifier.name).text;
+          imports.set(checker.getSymbolAtLocation(specifier.name), kind);
+          reportRawFeedback(kind, statement, 'antd');
         }
       }
     } else if (bindings && ts.isNamespaceImport(bindings)) {
@@ -66,21 +73,24 @@ function findModalCalls(source) {
   }
 
   function memberKind(owner, name) {
-    if (owner === 'antd' && (name === 'Modal' || name === 'App')) return name;
-    if (owner === 'app' && name === 'modal') return 'Modal';
+    if (owner === 'antd' && ['Modal', 'App', 'Alert', 'message', 'notification'].includes(name)) return name;
+    if (owner === 'app') {
+      if (name === 'modal') return 'Modal';
+      if (name === 'message' || name === 'notification') return name;
+    }
     return undefined;
   }
 
   function bindingKind(node, seen = new Set()) {
     if (!node) return undefined;
     if (ts.isParenthesizedExpression(node)) return bindingKind(node.expression, seen);
-    if (ts.isPropertyAccessExpression(node)) {
-      return memberKind(bindingKind(node.expression, seen), node.name.text);
+    if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
+      return memberKind(bindingKind(node.expression, seen), memberName(node));
     }
-    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+    if (ts.isCallExpression(node) && memberName(node.expression)) {
       const owner = bindingKind(node.expression.expression, seen);
-      if (owner === 'App' && node.expression.name.text === 'useApp') return 'app';
-      if (owner === 'Modal' && node.expression.name.text === 'useModal') return 'modalTuple';
+      if (owner === 'App' && memberName(node.expression) === 'useApp') return 'app';
+      if (owner === 'Modal' && memberName(node.expression) === 'useModal') return 'modalTuple';
     }
     if (!ts.isIdentifier(node)) return undefined;
     const symbol = checker.getSymbolAtLocation(node);
@@ -104,40 +114,20 @@ function findModalCalls(source) {
     return undefined;
   }
 
-  const calls = [];
   function visit(node) {
-    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
-      && ['warning', 'error', 'info', 'success'].includes(node.expression.name.text)
+    if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
+      reportRawFeedback(bindingKind(node), node, bindingKind(node.expression) === 'app' ? 'App.useApp()' : 'antd');
+    } else if (ts.isBindingElement(node)) {
+      reportRawFeedback(bindingKind(node.name), node.parent.parent, 'Ant Design binding');
+    }
+    if (ts.isCallExpression(node) && ['warning', 'error', 'info', 'success'].includes(memberName(node.expression))
       && bindingKind(node.expression.expression) === 'Modal') {
-      calls.push({ index: node.getStart(file), name: node.expression.getText(file) });
+      const name = node.expression.getText(file);
+      violations.push({ line: lineOf(source, node.getStart(file)), rule: 'notice-dialog', message: `a result is a toast, not an information dialog (\`${name}\`)` });
     }
     ts.forEachChild(node, visit);
   }
   visit(file);
-  return calls;
-}
-
-/** The feedback violations in one source file, as `{ line, rule, message }`. */
-export function findViolations(source) {
-  const violations = [];
-  for (const { name, index } of antdSpecifiers(source)) {
-    if (name === 'Alert') {
-      violations.push({ line: lineOf(source, index), rule: 'raw-alert', message: 'import `Notice` or `LoadFailure` from components/feedback instead of antd `Alert`' });
-    } else if (name === 'message' || name === 'notification') {
-      violations.push({ line: lineOf(source, index), rule: 'raw-toast', message: `use \`useToast\` instead of antd \`${name}\`` });
-    }
-  }
-  for (const match of source.matchAll(/const\s*\{([^}]*)\}\s*=\s*\w+\.useApp\(\)/g)) {
-    const names = match[1].split(',').map((part) => part.trim().split(':')[0].trim());
-    for (const name of ['message', 'notification']) {
-      if (names.includes(name)) {
-        violations.push({ line: lineOf(source, match.index), rule: 'raw-toast', message: `use \`useToast\` instead of \`${name}\` from App.useApp()` });
-      }
-    }
-  }
-  for (const { index, name } of findModalCalls(source)) {
-    violations.push({ line: lineOf(source, index), rule: 'notice-dialog', message: `a result is a toast, not an information dialog (\`${name}\`)` });
-  }
   return violations;
 }
 

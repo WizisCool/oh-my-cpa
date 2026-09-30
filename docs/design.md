@@ -907,8 +907,9 @@ how serious it is:
 - **A notice** has one layout whatever it carries: the icon at body size, the headline, and its detail
   under it in `--fg-2`. It is closable only when the condition may be put away.
 - `pnpm check:feedback` refuses antd `Alert`, `message` and `notification`, and information-only
-  `modal.*`/`Modal.*` dialogs, anywhere outside the feedback module. Modal calls are checked against
-  their Ant Design bindings, including aliases; comments, strings and unrelated objects are ignored.
+  `modal.*`/`Modal.*` dialogs, anywhere outside the feedback module. All checks resolve Ant Design
+  bindings, including namespace imports, local aliases and `App.useApp()` results; comments, strings,
+  type-only imports and unrelated or shadowed bindings are ignored.
 
 ### Time range control
 

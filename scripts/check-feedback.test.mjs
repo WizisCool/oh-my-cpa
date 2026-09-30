@@ -15,8 +15,40 @@ test('a raw antd Alert is refused', () => {
 test('antd message and notification are refused, imported or taken from useApp', () => {
   assert.deepEqual(rules("import { message } from 'antd';"), ['raw-toast']);
   assert.deepEqual(rules("import { notification } from 'antd';"), ['raw-toast']);
-  assert.deepEqual(rules('const { message, modal } = AntdApp.useApp();'), ['raw-toast']);
-  assert.deepEqual(rules('const { notification } = App.useApp();'), ['raw-toast']);
+  assert.deepEqual(rules("import { App as AntdApp } from 'antd'; const { message, modal } = AntdApp.useApp();"), ['raw-toast']);
+  assert.deepEqual(rules("import { App } from 'antd'; const { notification } = App.useApp();"), ['raw-toast']);
+});
+
+test('raw feedback resolves namespaces, useApp results and local aliases', () => {
+  for (const [source, rule] of [
+    ["import * as Antd from 'antd'; const banner = Antd.Alert;", 'raw-alert'],
+    ["import * as Antd from 'antd'; Antd.message.success('saved');", 'raw-toast'],
+    ["import * as Antd from 'antd'; const { notification: notices } = Antd;", 'raw-toast'],
+    ["import { App } from 'antd'; const app = App.useApp(); app.message.success('saved');", 'raw-toast'],
+    ["import { App as Shell } from 'antd'; const app = Shell.useApp(); const alias = app; alias.notification.info({});", 'raw-toast'],
+    ["import { App } from 'antd'; const app = App.useApp(); const { message: toast } = app; toast.success('saved');", 'raw-toast'],
+    ["import * as Antd from 'antd'; const { App: Shell } = Antd; Shell.useApp().notification.info({});", 'raw-toast'],
+    ["import { App } from 'antd'; const app = App.useApp(); app['message'].success('saved');", 'raw-toast'],
+  ]) assert.deepEqual(rules(source), [rule], source);
+});
+
+test('raw feedback ignores comments, strings, types and unrelated or shadowed bindings', () => {
+  for (const source of [
+    "// import { Alert } from 'antd';\n/* import { message, notification } from 'antd'; */",
+    'const example = "import { Alert } from \'antd\';"; const template = `const { message } = App.useApp()`;',
+    "import type { Alert, message } from 'antd'; import { type notification } from 'antd';",
+    "import { App } from './app'; const app = App.useApp(); app.message.success('saved');",
+    "const Other = { useApp() {} }; const { message } = Other.useApp();",
+    "import { App } from 'antd'; function render(App) { const { message } = App.useApp(); message.success('saved'); }",
+    "import { App } from 'antd'; const app = App.useApp(); function render(app) { app.notification.info({}); }",
+    "import * as Antd from 'antd'; function render(Antd) { return Antd.Alert; }",
+    "const app = { message: { success() {} } }; app.message.success('saved');",
+  ]) assert.deepEqual(rules(source), [], source);
+});
+
+test('raw feedback diagnostics retain import and access lines', () => {
+  const violations = findViolations("// import { Alert } from 'antd';\nimport { Alert as Banner, App } from 'antd';\nconst app = App.useApp();\napp.notification.info({});");
+  assert.deepEqual(violations.map(({ line, rule }) => [line, rule]), [[2, 'raw-alert'], [4, 'raw-toast']]);
 });
 
 test('an information-only dialog is refused; a confirmation is not', () => {

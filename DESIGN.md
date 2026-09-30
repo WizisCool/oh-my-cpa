@@ -349,7 +349,7 @@ The geometric form language is compact, rectangular, and tightly controlled:
 - **Toast**: a floating panel like a menu — `--elevated` fill, 1px `--border` edge, 4px radius, one 420px width, 18px icon, top centre, never stacked into a pile. Success and info hold 3s, warning 5s, error 8s, an offered action 10s; hover pauses. An upstream JSON envelope is read down to its status and sentence.
 - **Report toast**: a batch outcome with per-target reasons lists them under group headings (failures first), each target's full name on its own line with its reason beneath, and stays until closed. Ordinary notifications never evict a report; the next refresh replaces it under the same key. A long context group is summarised one line per reason; nothing in a toast changes height after it opens.
 - **Notice / LoadFailure**: one layout — body-size icon, headline, detail beneath in `--fg-2`, the action (Retry) at the right.
-- **Enforced**: `pnpm check:feedback` refuses raw antd `Alert`, `message`, `notification` and information-only `modal.*` dialogs outside `web/src/components/feedback/`. Modal calls are checked against their Ant Design bindings, including aliases; comments, strings and unrelated objects are ignored.
+- **Enforced**: `pnpm check:feedback` refuses raw antd `Alert`, `message`, `notification` and information-only `modal.*` dialogs outside `web/src/components/feedback/`. All checks resolve Ant Design bindings, including namespace imports, local aliases and `App.useApp()` results; comments, strings, type-only imports and unrelated or shadowed bindings are ignored.
 
 ### Floating Action Bar (Dirty Bar)
 - **Position**: Floating fixed bar anchored 24px above the viewport bottom, centered dynamically within the content column.
