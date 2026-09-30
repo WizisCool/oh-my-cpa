@@ -10,6 +10,7 @@ import { useTheme } from '../../../theme/ThemeContext';
 import { useTimeZone } from '../../../utils/TimeZoneProvider';
 import dayjs from '../../../utils/time';
 import { chartSeries } from '../state';
+import { agentChartAxis, isPieChart } from './chartAxis';
 
 const CHART_HEIGHT = 260;
 
@@ -58,7 +59,7 @@ export default function ChartView({ view, containerRef }: ChartViewProps) {
   );
 
   const config = React.useMemo(() => {
-    const isPie = chart?.type === 'pie';
+    const isPie = isPieChart(chart);
     const hasSeries = names.length > 1 || (names.length === 1 && names[0] !== '');
     return {
       data: data.points,
@@ -71,7 +72,7 @@ export default function ChartView({ view, containerRef }: ChartViewProps) {
         ? { color: { range: data.points.map((_, index) => seriesColor(theme.palette, index)) } }
         : { color: { domain: names, range: colors }, ...(chart?.type === 'area' || chart?.type === 'line' ? {} : { y: { nice: true } }) },
       ...(chart?.type === 'area' ? { style: { fillOpacity: 0.14 } } : {}),
-      axis: isPie ? false : { x: { labelFormatter: formatX, labelAutoHide: true }, y: { labelFormatter: (value: number) => value.toLocaleString() } },
+      axis: isPie ? false : agentChartAxis(formatX),
       legend: hasSeries || isPie ? { color: { position: 'bottom', itemLabelFill: theme.palette.fg2 } } : false,
       theme: { type: themeMode, tooltip: { crosshairsStroke: theme.palette.muted, crosshairsStrokeOpacity: 1 } },
       interaction: {

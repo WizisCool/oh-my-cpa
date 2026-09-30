@@ -147,7 +147,7 @@ server resolves the reference, projects and checks the named fields, freezes the
 call's trace, and returns a receipt (`rendered`, `rows`, `fields`) instead of the rows. `inline` rows
 (at most 200) are for figures the model derived itself. A refusal is an `invalid_tool_arguments`
 result whose detail names the field to change. Views are bounded to 1000 rows, 12 table columns,
-8 chart series and 96 KiB.
+8 chart series and 96 KiB. A category axis keeps its labels horizontal and ellipsised; the tooltip carries the full value.
 
 Displays are selective final-answer artifacts, not progress reports: the model investigates and verifies before preparing one, uses the smallest complementary set, and leaves exploration in the trace. The console publishes a frozen view only from a successful turn, in a result section after the answer; earlier or unsuccessful work stays inspectable in the call details.
 

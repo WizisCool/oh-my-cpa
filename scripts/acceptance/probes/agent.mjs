@@ -149,6 +149,8 @@ export async function agentWorkspace({ base, page, check }) {
   check('agent continues the run once the operator decides', await card.count() === 0);
   check('agent resumes the interrupt instead of supplying a message or tool history', runs.length === 2 && runs[1].messages.length === 0
     && JSON.stringify(runs[1].resume) === JSON.stringify([{ interruptId: 'operation-test', status: 'resolved' }]), JSON.stringify(runs[1]));
+  const settledChain = page.locator('[data-testid="agent-chain"]');
+  check('a finished capability chain folds behind the answer', await settledChain.getByRole('button').first().getAttribute('aria-expanded') === 'false');
   check('agent offers a new conversation once there is one to replace', await page.getByRole('button', { name: 'New conversation', exact: true }).isEnabled());
   await page.reload();
   await page.getByText('The approved operation completed.').waitFor();
@@ -352,6 +354,8 @@ export async function agentLive({ base, page, check }) {
   check('the queued message goes out once the run settles, as its own run', runs.length === 2 && runs[1].messages[0].content === 'And the day before?' && await page.locator('[data-testid="composer-queue-item"]').count() === 0, JSON.stringify(runs.map(run => run.messages)));
   const turn = page.locator('[data-testid="agent-turn"]').first();
   const chain = turn.locator('[data-testid="agent-chain"]');
+  await page.getByText('Two models failed most.').waitFor();
+  check('a finished stretch of reasoning folds back behind its answer', await turn.getByRole('button', { name: 'Thought process', exact: true }).evaluateAll(buttons => buttons.every(button => button.getAttribute('aria-expanded') === 'false')));
   if (await turn.locator('[data-testid="agent-trace"]').count() === 0) await chain.getByRole('button').first().click();
   for (const title of await turn.getByText('Thought process', { exact: true }).all()) await title.click();
   await turn.getByText('One model dominates.').waitFor();

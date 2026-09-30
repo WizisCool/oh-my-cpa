@@ -401,10 +401,10 @@ the configuration workbench.
   each row a localized title with its mono identifier beside it;
   call details as the panel's second tab;
   a turn drawn in the order it happened - reasoning, text and capability calls as segments, runs of
-  calls folded into a "Used N capabilities" chain, each call one row (status square, title, mono
+  calls folded into a "Used N capabilities" chain that opens while the turn runs or waits and folds when it is done, each call one row (status square, title, mono
   identifier, arguments in brief, status in words, duration) with a `--warn` attention glyph when it
-  waits on the operator or its outcome is unconfirmed; charts and tables from display calls drawn in
-  the answer in a hairline frame with a Chart / Data switch and CSV / PNG export; an approval card
+  waits on the operator or its outcome is unconfirmed; charts and tables from successful display calls drawn after the answer in a hairline frame with
+  a Chart / Data switch and CSV / PNG export, their category labels horizontal and ellipsised; an approval card
   under the call that raised it (`--surface`, a 2px `--warn` leading edge, `--danger` when
   destructive) with one Deny / Allow decision (Allow in the danger hue for a destructive capability),
   and a `--warn` notice in the composer while it is open; "Ask about this" on selected answer text,

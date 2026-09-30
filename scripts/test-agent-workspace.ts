@@ -34,6 +34,7 @@ import {
   chartSeries,
 } from '../web/src/pages/agent/state.ts';
 import { completedDisplayViews } from '../web/src/agent/types.ts';
+import { agentChartAxis } from '../web/src/pages/agent/tools/chartAxis.ts';
 import type { Capability, Conversation, Operation, Trace, Turn } from '../web/src/pages/agent/state.ts';
 
 import { applyAgentEvent, EMPTY_FRAME, invalidatedKeys, parseReceipt } from '../web/src/agent/runReducer.ts';
@@ -532,4 +533,13 @@ check('only a successful turn publishes display figures, and their export follow
   assert.deepEqual(completedDisplayViews(undefined), []);
   const markdown = turnAnswerMarkdown({ ...base, parts: [{ type: 'tool', trace_id: 'd' }, { type: 'text', content: 'Done.' }] }, labels);
   assert.equal(markdown, ['Calls\n\n- `render_chart` · success', 'Done.', '**Requests**\n\n| day | n |\n| --- | --- |\n| mon | 2 |'].join('\n\n'));
+});
+
+check('an agent category axis keeps model names horizontal and ellipsises them', () => {
+  const axis = agentChartAxis(value => value.toUpperCase());
+  assert.equal(axis.x.labelAutoRotate, false);
+  assert.equal(axis.x.labelAutoEllipsis, true);
+  assert.equal(axis.x.labelAutoHide, true);
+  assert.equal(axis.x.labelFormatter('gpt-4'), 'GPT-4');
+  assert.equal(axis.y.labelFormatter(1200), '1,200');
 });

@@ -962,7 +962,7 @@ return the reader to the newest message.
 **A message's anatomy.** The operator's message is a filled `--surface` block with a 1px border,
 aligned to the end of the column. An answer is borderless and uses the full column: a head naming
 the model and a status pip, the reasoning as a disclosure with a `--warn` rule on its edge (open
-while reasoning streams, closed for an answer that already finished, the reader's own after that;
+while reasoning streams and following its newest output until the reader scrolls away, closed for an answer that already finished, the reader's own after that;
 its caret turns with the `fast` motion token and its title does not shimmer, §7 rule 3), the
 Markdown answer, and a foot. The foot states measurements - first content, duration,
 tokens, TPS - with missing observations left out rather than shown as zero, and carries its actions
@@ -1041,8 +1041,7 @@ capability calls - rather than fixed slots for each kind. The server records the
 turn's parts, and the browser rebuilds the same parts from the stream, so the live turn and the
 stored one are identical. Each stretch of reasoning is its own disclosure where it occurred;
 consecutive reasoning and capability calls fold into one chain behind a quiet "Used N capabilities"
-toggle in `--muted` with a turning caret, open while the turn runs or waits on the operator and
-closed once it is done. A turn resumed after an approval grows in place below its earlier segments
+toggle in `--muted` with a turning caret, open while the turn runs or waits on the operator and closed once it is done; the reader's own toggle wins either way. A turn resumed after an approval grows in place below its earlier segments
 rather than appearing as a second answer, and copying the answer takes every text segment, without
 the reasoning.
 
@@ -1058,7 +1057,7 @@ selected; a failed call adds its code and detail beneath the row.
 **Display calls are part of the answer.** A `render_table` or `render_chart` call is drawn outside
 the chain, where the answer reads, as a figure in a hairline `--border` frame: a title in `--fg`
 600, a sortable table with copy and download as CSV, or a chart on the dashboard's chart stack
-(series palette, shared tooltip, `chart-slot` height reservation, reduced-motion rule) with a
+(series palette, shared tooltip, `chart-slot` height reservation, reduced-motion rule, horizontal ellipsised category labels with the full value in the tooltip) with a
 Chart / Data switch and a PNG download composited on `--surface`. The chart runtime loads only when
 a chart is drawn. While a display call resolves, or when the server refused its reference, it is an
 ordinary call row.
@@ -1109,7 +1108,7 @@ Playground uses, open while it is being written, and stays with the stored turn,
 the answer. The key, model and effort are the operator's choice and are remembered across reloads;
 New conversation replaces the transcript and nothing else. Failure is stated
 as a sentence with its code beneath it, and a run the operator stopped reads as stopped rather than
-failed. A live run carries an activity line - the round against its limit in `--muted` tabular
+failed. A live run carries an activity line - the current round in `--muted` tabular
 figures, what it is waiting for or which capability it is calling, and for how long - because a
 spinner cannot tell working from stuck; its pip pulses as an
 indeterminate loop, frozen under reduced motion. The empty conversation offers example questions as

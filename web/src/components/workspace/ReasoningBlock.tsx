@@ -24,6 +24,22 @@ export const ReasoningBlock = React.memo(function ReasoningBlock({ text, isThink
   const { t } = useI18n();
   const [isOpen, setIsOpen] = React.useState(isThinking);
   const contentID = React.useId();
+  const bodyRef = React.useRef<HTMLDivElement | null>(null);
+  const isFollowingRef = React.useRef(true);
+  const wasThinkingRef = React.useRef(isThinking);
+
+  // Live reasoning is a rolling read: it stays pinned to its newest output until the reader scrolls
+  // up, and a stream that finishes folds the block back so the answer reads first. The initial
+  // state is read once, at mount; a block an operator opens after the fact stays open.
+  React.useEffect(() => {
+    if (wasThinkingRef.current && !isThinking) setIsOpen(false);
+    wasThinkingRef.current = isThinking;
+  }, [isThinking]);
+  React.useEffect(() => {
+    const body = bodyRef.current;
+    if (!isThinking || !body || !isFollowingRef.current) return;
+    body.scrollTop = body.scrollHeight;
+  }, [isThinking, text]);
   return (
     <div className={clsx(styles['reasoning'], isThinking && styles['is-thinking'])}>
       <button
@@ -38,7 +54,16 @@ export const ReasoningBlock = React.memo(function ReasoningBlock({ text, isThink
         <RightOutlined className={styles['reasoning-caret']} aria-hidden="true" />
       </button>
       {isOpen && text ? (
-        <div id={contentID} className={styles['reasoning-body']}>
+        <div
+          id={contentID}
+          ref={bodyRef}
+          className={styles['reasoning-body']}
+          onScroll={() => {
+            const body = bodyRef.current;
+            if (!body) return;
+            isFollowingRef.current = body.scrollTop + body.clientHeight >= body.scrollHeight - 8;
+          }}
+        >
           <ModelMarkdown content={text} isStreaming={isThinking} externalImageLabel={t('pg.external_image')} className={styles['reasoning-text']} />
         </div>
       ) : null}
