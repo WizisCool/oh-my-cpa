@@ -2240,6 +2240,12 @@ admission, replay and explicit cancellation. `GET /{workspace}/runs/active`,
 4 MiB plus a terminal overflow error, retains the latest completed run for 15 minutes, and has
 15-second socket heartbeats. Its 30-minute run deadline does not override Playground's existing
 10-minute deadline. Replaced/expired ids have a 24-hour, 1,024-entry tombstone admission bound.
+Before buffering a managed request body, the wrapper rejects a different id while its workspace
+is active and refuses admission after shutdown. A shared four-permit gate bounds concurrent body
+reads, validation and handoff, including uploads with the same id; saturation returns HTTP 429
+with the workspace's busy code. Permits are released before streaming a subscription. Admission
+is checked again after reading because another request can start a run or shutdown can begin
+while an upload is in progress.
 
 `web/src/agent/runConnection.ts` is the injectable transport state machine; `reconnect.ts` binds
 it to the authenticated, subpath-aware API client. It retries GET subscriptions with 500ms-to-8s

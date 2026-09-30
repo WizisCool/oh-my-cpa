@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	BROWSER_RUN_BYTES     = 4 << 20
-	BROWSER_RUN_RETENTION = 15 * time.Minute
+	BROWSER_RUN_BYTES      = 4 << 20
+	BROWSER_RUN_RETENTION  = 15 * time.Minute
+	BROWSER_RUN_BODY_READS = 4
 )
 
 var BROWSER_RUN_ID = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,96}$`)
@@ -46,11 +47,12 @@ type browserRun struct {
 }
 
 type browserRuns struct {
-	mu       sync.Mutex
-	latest   map[string]*browserRun
-	retired  map[string]time.Time
-	workers  sync.WaitGroup
-	isClosed bool
+	bodySlots chan struct{}
+	mu        sync.Mutex
+	latest    map[string]*browserRun
+	retired   map[string]time.Time
+	workers   sync.WaitGroup
+	isClosed  bool
 }
 
 func (run *browserRun) Header() http.Header { return run.header }
@@ -142,6 +144,44 @@ func (h *Handler) startBrowserRun(kind string, next http.HandlerFunc, writer htt
 		next(writer, request)
 		return
 	}
+	if run := h.prepareBrowserRun(kind, id, next, writer, request); run != nil {
+		run.serve(writer, request)
+	}
+}
+
+func (h *Handler) prepareBrowserRun(kind, id string, next http.HandlerFunc, writer http.ResponseWriter, request *http.Request) *browserRun {
+	// Reject competing work before allocating its body, and bound same-id uploads too.
+	// The post-read admission check remains authoritative because another upload may finish first.
+	h.browserRuns.mu.Lock()
+	if h.browserRuns.isClosed {
+		h.browserRuns.mu.Unlock()
+		writePlaygroundError(writer, 503, "server_stopping")
+		return nil
+	}
+	if existing := h.browserRuns.latest[kind]; existing != nil && existing.id != id {
+		existing.mu.Lock()
+		isActive := !existing.isDone
+		existing.mu.Unlock()
+		if isActive {
+			h.browserRuns.mu.Unlock()
+			writePlaygroundError(writer, 409, kind+"_busy")
+			return nil
+		}
+	}
+	if h.browserRuns.bodySlots == nil {
+		h.browserRuns.bodySlots = make(chan struct{}, BROWSER_RUN_BODY_READS)
+	}
+	bodySlots := h.browserRuns.bodySlots
+	select {
+	case bodySlots <- struct{}{}:
+		h.browserRuns.mu.Unlock()
+	default:
+		h.browserRuns.mu.Unlock()
+		writePlaygroundError(writer, 429, kind+"_busy")
+		return nil
+	}
+	// The permit covers reading, validation and handoff, never a long-lived subscription.
+	defer func() { <-bodySlots }()
 	limit := int64(gateway.MaxRequestBytes)
 	if kind == "agent" {
 		limit = 64 << 10
@@ -149,18 +189,18 @@ func (h *Handler) startBrowserRun(kind string, next http.HandlerFunc, writer htt
 	body, err := io.ReadAll(http.MaxBytesReader(writer, request.Body, limit))
 	if err != nil {
 		writePlaygroundError(writer, 413, "request_too_large")
-		return
+		return nil
 	}
 	if !json.Valid(body) {
 		writePlaygroundError(writer, 400, "invalid_request")
-		return
+		return nil
 	}
 	digest := sha256.Sum256(body)
 	h.browserRuns.mu.Lock()
 	if h.browserRuns.isClosed {
 		h.browserRuns.mu.Unlock()
 		writePlaygroundError(writer, 503, "server_stopping")
-		return
+		return nil
 	}
 	if h.browserRuns.latest == nil {
 		h.browserRuns.latest = map[string]*browserRun{}
@@ -183,7 +223,7 @@ func (h *Handler) startBrowserRun(kind string, next http.HandlerFunc, writer htt
 	if _, isRetired := h.browserRuns.retired[kind+":"+id]; isRetired {
 		h.browserRuns.mu.Unlock()
 		writePlaygroundError(writer, 409, "run_expired")
-		return
+		return nil
 	}
 	existing := h.browserRuns.latest[kind]
 	if existing != nil {
@@ -194,15 +234,14 @@ func (h *Handler) startBrowserRun(kind string, next http.HandlerFunc, writer htt
 			h.browserRuns.mu.Unlock()
 			if existing.digest != digest {
 				writePlaygroundError(writer, 409, "run_id_conflict")
-				return
+				return nil
 			}
-			existing.serve(writer, request)
-			return
+			return existing
 		}
 		if isActive {
 			h.browserRuns.mu.Unlock()
 			writePlaygroundError(writer, 409, kind+"_busy")
-			return
+			return nil
 		}
 	}
 	// Retiring an id promises that a delayed POST cannot execute it again within the window.
@@ -210,7 +249,7 @@ func (h *Handler) startBrowserRun(kind string, next http.HandlerFunc, writer htt
 	if len(h.browserRuns.retired)+len(h.browserRuns.latest) >= 1024 {
 		h.browserRuns.mu.Unlock()
 		writePlaygroundError(writer, 429, "run_history_full")
-		return
+		return nil
 	}
 	if existing != nil {
 		h.browserRuns.retired[kind+":"+existing.id] = time.Now()
@@ -253,7 +292,7 @@ func (h *Handler) startBrowserRun(kind string, next http.HandlerFunc, writer htt
 		}()
 		next(run, detached)
 	}()
-	run.serve(writer, request)
+	return run
 }
 
 func (run *browserRun) serve(writer http.ResponseWriter, request *http.Request) {

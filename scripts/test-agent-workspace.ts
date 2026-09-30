@@ -495,9 +495,9 @@ check('an answer exports its text, its charts as data and its calls in brief, wi
     'Traffic is flat.',
     '> failed budget_exceeded (`budget_exceeded`)',
   ].join('\n\n'));
-  const report = conversationMarkdown({ id: 'c', revision: 1, model: 'm1', client_key_fingerprint: 'k', omitted: 0, turns: [turn({ user: 'How?', reply: 'Fine.', status: 'success' })] }, labels, new Date(Date.UTC(2026, 8, 29)));
+  const report = conversationMarkdown({ id: 'c', revision: 1, model: 'm1', client_key_fingerprint: 'private-export-fingerprint-7e219c', omitted: 0, turns: [turn({ user: 'How?', reply: 'Fine.', status: 'success' })] }, labels, new Date(Date.UTC(2026, 8, 29)));
   assert.equal(report.startsWith('# Agent\n\n- Model: `m1`\n- Exported: 2026-09-29T00:00:00.000Z\n\n---\n\n## Operator\n\nHow?\n\n## Answer · success\n\nFine.'), true, report);
-  assert.equal(report.includes('k'), report.includes('k'), 'the key fingerprint is not part of the report');
+  assert.equal(report.includes('private-export-fingerprint-7e219c'), false, 'the key fingerprint is not part of the report');
   assert.equal(report.includes('client_key'), false);
 });
 
@@ -513,8 +513,6 @@ check('an export file name is sortable and safe on every file system', () => {
   assert.equal(exportFileName('Requests / 24h', 'csv', new Date(2026, 8, 29, 7, 5, 9)), 'requests-24h-20260929-070509.csv');
   assert.equal(exportFileName('', 'md', new Date(2026, 0, 1)), 'export-20260101-000000.md');
 });
-
-console.log(`\n${passed} assertions passed`);
 
 check('only a successful turn publishes display figures, and their export follows the calls', () => {
   const view = { kind: 'chart', title: 'Requests', chart: { type: 'column', x: 'day', y: ['n'] }, columns: ['day', 'n'], rows: [{ day: 'mon', n: 2 }], source: { call_id: 'q', path: 'rows' } } as const;
@@ -545,3 +543,5 @@ check('an unavailable recovery journal names the recovery boundary rather than a
   assert.equal(failureKey('authentication_required'), 'agent.error.session');
   assert.equal(failureKey('response_too_large'), 'agent.error.budget');
 });
+
+console.log(`\n${passed} assertions passed`);
