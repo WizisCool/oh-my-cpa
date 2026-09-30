@@ -36,6 +36,13 @@ export interface ManagementOverviewTypeCount {
   count: number;
   /** How many of `count` the gateway reports disabled. */
   disabled: number;
+  /**
+   * How many of `count` are the runtime entries CPA lists for configured
+   * `{family}-api-key` keys rather than auth files, and how many of those are
+   * disabled. Absent from payloads that predate the split.
+   */
+  api_keys?: number;
+  api_keys_disabled?: number;
 }
 
 export interface ManagementOverviewCredentials {

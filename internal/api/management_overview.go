@@ -86,6 +86,13 @@ type managementOverviewTypeCount struct {
 	// surface needs it to tell a channel switched off wholesale from one whose
 	// remaining credentials still serve, which the total alone cannot say.
 	Disabled int `json:"disabled"`
+	// APIKeys is how many of Count are the runtime entries CPA lists for its
+	// `{family}-api-key` configuration rather than auth files, and
+	// APIKeysDisabled how many of those are disabled. CPA files both under the
+	// family's type, so without the split a Codex OAuth channel would count every
+	// configured Codex API key as one of its own credentials.
+	APIKeys         int `json:"api_keys"`
+	APIKeysDisabled int `json:"api_keys_disabled"`
 }
 
 // managementOverview returns a safe, read-only aggregation of the CPA
@@ -313,15 +320,25 @@ func buildCredentialHealth(files []management.AuthFile) *managementOverviewCrede
 	}
 	counts := make(map[string]int)
 	disabledCounts := make(map[string]int)
+	apiKeyCounts := make(map[string]int)
+	apiKeyDisabledCounts := make(map[string]int)
 	for _, file := range files {
 		provider := overviewProviderID(file.Type, file.Provider)
-		// The per-type tally counts every file, disabled ones included, so it
-		// stays the same number the channel's credential count has always been.
+		isAPIKey := isAPIKeyAuthFile(file)
+		// The per-type tally counts every file, disabled ones included; the API-key
+		// share is reported beside it rather than removed, so the health card's
+		// per-type figures still add up to its total.
 		counts[provider]++
+		if isAPIKey {
+			apiKeyCounts[provider]++
+		}
 		switch {
 		case file.Disabled:
 			result.Disabled++
 			disabledCounts[provider]++
+			if isAPIKey {
+				apiKeyDisabledCounts[provider]++
+			}
 		case file.Unavailable:
 			result.Unavailable++
 		}
@@ -333,9 +350,11 @@ func buildCredentialHealth(files []management.AuthFile) *managementOverviewCrede
 	}
 	for provider, count := range counts {
 		result.ByType = append(result.ByType, managementOverviewTypeCount{
-			Type:     provider,
-			Count:    count,
-			Disabled: disabledCounts[provider],
+			Type:            provider,
+			Count:           count,
+			Disabled:        disabledCounts[provider],
+			APIKeys:         apiKeyCounts[provider],
+			APIKeysDisabled: apiKeyDisabledCounts[provider],
 		})
 	}
 	sort.Slice(result.ByType, func(i, j int) bool {
@@ -345,6 +364,13 @@ func buildCredentialHealth(files []management.AuthFile) *managementOverviewCrede
 		return result.ByType[i].Type < result.ByType[j].Type
 	})
 	return result
+}
+
+// isAPIKeyAuthFile reports whether an auth-files entry is the runtime entry CPA
+// synthesizes for a configured API key rather than an OAuth or service-account
+// file. CPA marks those with the `api_key` account type.
+func isAPIKeyAuthFile(file management.AuthFile) bool {
+	return strings.EqualFold(strings.TrimSpace(file.AccountType), "api_key")
 }
 
 func overviewProviderID(values ...string) string {
@@ -403,9 +429,8 @@ func buildTrafficOverview(authOK bool, files []management.AuthFile, usageOK bool
 	}
 	if authOK {
 		for _, file := range files {
-			accountType := strings.ToLower(strings.TrimSpace(file.AccountType))
 			account := strings.TrimSpace(file.Account)
-			if accountType == "api_key" && account != "" {
+			if isAPIKeyAuthFile(file) && account != "" {
 				if _, exists := apiKeysFromUsage[account]; exists {
 					continue
 				}

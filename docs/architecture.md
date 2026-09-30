@@ -1152,7 +1152,12 @@ Six properties are load-bearing:
 - **A provider's credential count is its own** (`key_entries`, or `auth_indexes` for a
   key CPA reports without a mask). The gateway's per-type tally counts auth files, and
   several of those type ids are shared with the API-key families, so taking the count
-  from there reported credentials the provider does not hold.
+  from there reported credentials the provider does not hold. The converse holds for a
+  channel row: CPA also lists a runtime entry (account type `api_key`) for every
+  configured `{family}-api-key` key under the family's type, so the overview's
+  `credentials.by_type` reports that share as `api_keys` / `api_keys_disabled`. A
+  channel row counts and reads only the auth files, a configured family row reads only
+  its keys, and a type holding nothing but configured keys has no channel row.
 - **A record that names no index is credited to nobody.** History written before the
   index was captured, and a record whose credential CPA no longer holds — it keeps the index it
   was served under, which no configured provider publishes — count toward no configured provider.
