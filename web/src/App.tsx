@@ -82,7 +82,7 @@ export const App: React.FC = () => (
  * header or a table, and never stack into a collapsed pile: a report with per-target reasons has to
  * stay readable beside the acknowledgement that followed it.
  */
-const TOAST_CONFIG = { placement: 'top', stack: false, maxCount: 4 } as const;
+const TOAST_CONFIG = { placement: 'top', stack: false } as const;
 
 const ThemedShell: React.FC = () => {
   const { lang } = useI18n();

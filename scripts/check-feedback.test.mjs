@@ -20,10 +20,43 @@ test('antd message and notification are refused, imported or taken from useApp',
 });
 
 test('an information-only dialog is refused; a confirmation is not', () => {
-  assert.deepEqual(rules("modal.warning({ title: 'x' });"), ['notice-dialog']);
-  assert.deepEqual(rules("Modal.info({ title: 'x' });"), ['notice-dialog']);
-  assert.deepEqual(rules("modal.confirm({ title: 'x' });"), []);
-  assert.deepEqual(rules("const { modal } = AntdApp.useApp();"), []);
+  const imports = "import { Modal, App as AntdApp } from 'antd'; const { modal } = AntdApp.useApp();";
+  assert.deepEqual(rules(`${imports} modal.warning({ title: 'x' });`), ['notice-dialog']);
+  assert.deepEqual(rules(`${imports} Modal.info({ title: 'x' });`), ['notice-dialog']);
+  assert.deepEqual(rules(`${imports} modal.confirm({ title: 'x' });`), []);
+  assert.deepEqual(rules(imports), []);
+});
+
+test('modal calls resolve imports, hook bindings and aliases', () => {
+  for (const source of [
+    "import { Modal as Dialog } from 'antd'; Dialog.error({});",
+    "import { App as Shell } from 'antd'; const { modal: dialog } = Shell.useApp(); dialog.success({});",
+    "import { Modal } from 'antd'; const dialog = Modal; dialog.warning({});",
+    "import * as Antd from 'antd'; Antd.Modal.info({});",
+    "import { App } from 'antd'; const app = App.useApp(); app.modal.error({});",
+    "import { Modal } from 'antd'; const [dialog] = Modal.useModal(); dialog.info({});",
+  ]) assert.deepEqual(rules(source), ['notice-dialog'], source);
+});
+
+test('modal detection ignores comments, strings, unrelated objects and shadowed bindings', () => {
+  for (const source of [
+    '// Modal.info({});\n/* modal.warning({}); */',
+    'const example = "modal.error({})"; const template = `Modal.success({})`;',
+    'const modal = { info() {} }; modal.info({});',
+    "import { Modal } from './dialog'; Modal.info({});",
+    "import { App } from './app'; const { modal } = App.useApp(); modal.error({});",
+    "import { Modal } from 'antd'; function render(Modal) { Modal.info({}); }",
+    "import { App } from 'antd'; const { modal } = App.useApp(); function render(modal) { modal.info({}); }",
+    "import type { Modal } from 'antd'; Modal.info({});",
+    "import { Modal } from 'antd'; const text = 'Modal.info({})'; // Modal.error({})",
+  ]) assert.deepEqual(rules(source), [], source);
+});
+
+test('modal diagnostics retain the call line and alias', () => {
+  const violations = findViolations("import { Modal as Dialog } from 'antd';\n// Dialog.info({})\nDialog.success({});");
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].line, 3);
+  assert.match(violations[0].message, /Dialog\.success/);
 });
 
 test('what merely shares a name is not a violation', () => {

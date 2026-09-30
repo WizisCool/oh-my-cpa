@@ -18,9 +18,11 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const ts = createRequire(path.join(DEFAULT_ROOT, 'web', 'package.json'))('typescript');
 const FEEDBACK_MODULE = 'web/src/components/feedback/';
 
 /** Named imports from `antd`, each with the index of the import statement that names it. */
@@ -37,6 +39,82 @@ function antdSpecifiers(source) {
 
 function lineOf(source, index) {
   return source.slice(0, index).split('\n').length;
+}
+
+/** Resolve local symbols so aliases work and shadowed names stay unrelated. */
+function findModalCalls(source) {
+  const file = ts.createSourceFile('feedback.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const options = { noLib: true, noResolve: true };
+  const host = ts.createCompilerHost(options);
+  host.getSourceFile = (name) => name === file.fileName ? file : undefined;
+  const checker = ts.createProgram([file.fileName], options, host).getTypeChecker();
+  const imports = new Map();
+  for (const statement of file.statements) {
+    if (!ts.isImportDeclaration(statement) || statement.moduleSpecifier.text !== 'antd') continue;
+    const clause = statement.importClause;
+    if (!clause || clause.isTypeOnly) continue;
+    const bindings = clause.namedBindings;
+    if (bindings && ts.isNamedImports(bindings)) {
+      for (const specifier of bindings.elements) {
+        if (!specifier.isTypeOnly) {
+          imports.set(checker.getSymbolAtLocation(specifier.name), (specifier.propertyName ?? specifier.name).text);
+        }
+      }
+    } else if (bindings && ts.isNamespaceImport(bindings)) {
+      imports.set(checker.getSymbolAtLocation(bindings.name), 'antd');
+    }
+  }
+
+  function memberKind(owner, name) {
+    if (owner === 'antd' && (name === 'Modal' || name === 'App')) return name;
+    if (owner === 'app' && name === 'modal') return 'Modal';
+    return undefined;
+  }
+
+  function bindingKind(node, seen = new Set()) {
+    if (!node) return undefined;
+    if (ts.isParenthesizedExpression(node)) return bindingKind(node.expression, seen);
+    if (ts.isPropertyAccessExpression(node)) {
+      return memberKind(bindingKind(node.expression, seen), node.name.text);
+    }
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+      const owner = bindingKind(node.expression.expression, seen);
+      if (owner === 'App' && node.expression.name.text === 'useApp') return 'app';
+      if (owner === 'Modal' && node.expression.name.text === 'useModal') return 'modalTuple';
+    }
+    if (!ts.isIdentifier(node)) return undefined;
+    const symbol = checker.getSymbolAtLocation(node);
+    if (!symbol || seen.has(symbol)) return undefined;
+    if (imports.has(symbol)) return imports.get(symbol);
+    seen.add(symbol);
+    const declaration = symbol.valueDeclaration;
+    if (declaration && ts.isVariableDeclaration(declaration)) {
+      return bindingKind(declaration.initializer, seen);
+    }
+    if (declaration && ts.isBindingElement(declaration) && !declaration.dotDotDotToken) {
+      const pattern = declaration.parent;
+      const variable = pattern.parent;
+      if (!ts.isVariableDeclaration(variable)) return undefined;
+      const owner = bindingKind(variable.initializer, seen);
+      if (ts.isObjectBindingPattern(pattern)) {
+        return memberKind(owner, (declaration.propertyName ?? declaration.name).text);
+      }
+      if (owner === 'modalTuple' && pattern.elements[0] === declaration) return 'Modal';
+    }
+    return undefined;
+  }
+
+  const calls = [];
+  function visit(node) {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+      && ['warning', 'error', 'info', 'success'].includes(node.expression.name.text)
+      && bindingKind(node.expression.expression) === 'Modal') {
+      calls.push({ index: node.getStart(file), name: node.expression.getText(file) });
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(file);
+  return calls;
 }
 
 /** The feedback violations in one source file, as `{ line, rule, message }`. */
@@ -57,8 +135,8 @@ export function findViolations(source) {
       }
     }
   }
-  for (const match of source.matchAll(/\b(?:modal|Modal)\.(warning|error|info|success)\s*\(/g)) {
-    violations.push({ line: lineOf(source, match.index), rule: 'notice-dialog', message: `a result is a toast, not an information dialog (\`${match[0].replace(/\s*\($/, '')}\`)` });
+  for (const { index, name } of findModalCalls(source)) {
+    violations.push({ line: lineOf(source, index), rule: 'notice-dialog', message: `a result is a toast, not an information dialog (\`${name}\`)` });
   }
   return violations;
 }

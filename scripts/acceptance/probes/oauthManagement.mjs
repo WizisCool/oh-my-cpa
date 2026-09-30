@@ -281,6 +281,15 @@ export async function oauthManagement({ base, page, check }) {
     blipCompleted,
     `completed=${blipCompleted}`,
   );
+  const completionToast = page.locator('.omc-toast').filter({
+    has: page.getByRole('button', { name: /View credentials|查看凭证/i }),
+  });
+  await completionToast.waitFor({ state: 'visible', timeout: 10_000 });
+  check(
+    'workspace completion reports once through its credential-aware toast',
+    await page.locator('.omc-toast').count() === 1,
+    `toasts=${await page.locator('.omc-toast').count()}`,
+  );
   await page.keyboard.press('Escape');
 
   for (const width of [375, 320]) {

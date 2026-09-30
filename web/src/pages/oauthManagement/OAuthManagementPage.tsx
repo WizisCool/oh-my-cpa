@@ -254,7 +254,7 @@ export const OAuthManagementPage: React.FC = () => {
       [providerId]: { providerId, snapshot, startedAt: Date.now() },
     }));
   }, []);
-  const sessions = useOAuthSessions(choices, handleAuthorizationCompleted);
+  const sessions = useOAuthSessions(choices, handleAuthorizationCompleted, { shouldNotifyCompletion: false });
   const startSession = React.useCallback((providerId: string) => {
     preStartSnapshotRef.current[providerId] = new Set(recordsRef.current.map((record) => record.key));
     return sessions.start(providerId);

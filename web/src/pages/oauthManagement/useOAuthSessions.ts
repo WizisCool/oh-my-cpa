@@ -75,6 +75,7 @@ export function isOAuthSessionActive(state: OAuthSessionState | undefined): bool
 export function useOAuthSessions(
   choices: OAuthProviderChoice[],
   onCompleted?: (providerId: string) => void,
+  { shouldNotifyCompletion = true }: { shouldNotifyCompletion?: boolean } = {},
 ): OAuthSessionsController {
   const t = useT();
   const toast = useToast();
@@ -144,7 +145,7 @@ export function useOAuthSessions(
     setStates((previous) => ({ ...previous, [providerId]: emptySession() }));
   }, [clearProviderTimers]);
 
-  const complete = React.useCallback((providerId: string, generation: number, shouldNotify = true) => {
+  const complete = React.useCallback((providerId: string, generation: number) => {
     if (disposedRef.current || generationRef.current[providerId] !== generation) return;
     clearProviderTimers(providerId);
     updateProviderState(providerId, {
@@ -168,11 +169,11 @@ export function useOAuthSessions(
     void queryClient.invalidateQueries({ queryKey: ['management-quota'] });
     void queryClient.invalidateQueries({ queryKey: ['management-overview'] });
     completedRef.current?.(providerId);
-    if (shouldNotify) toast.success(t('oauth.status_success_badge'));
+    if (shouldNotifyCompletion) toast.success(t('oauth.status_success_badge'));
     successTimersRef.current[providerId] = window.setTimeout(() => {
       if (generationRef.current[providerId] === generation) reset(providerId);
     }, SUCCESS_RESET_DELAY_MS);
-  }, [clearProviderTimers, toast, queryClient, reset, t, updateProviderState]);
+  }, [clearProviderTimers, toast, queryClient, reset, shouldNotifyCompletion, t, updateProviderState]);
 
   const enqueueCheck = React.useCallback(<T,>(providerId: string, task: () => Promise<T>): Promise<T> => {
     const previous = checkQueuesRef.current[providerId] ?? Promise.resolve();

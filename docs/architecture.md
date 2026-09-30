@@ -543,7 +543,9 @@ read that fails before CPA answers is a note on a still-waiting attempt rather t
 a terminal state: the panel keeps its cancel action and the armed poll keeps running,
 because only CPA's own `error` status ends an attempt. Every site that arms the poll
 timer clears the previous one first, which is what holds the one-checker rule. The
-drawer presents one serialized status checker per attempt. Credential detail,
+drawer presents one serialized status checker per attempt. The workspace opts out of
+the hook’s default completion notification and reports completion once, through its
+credential-aware toast after the list refresh settles. Credential detail,
 configuration and models share one guarded Drawer; provider aliases remain
 provider-scoped. `CredentialQuotaBody` is the single quota renderer used by the
 workspace and its detail panel. The list always renders a compact quota summary;
