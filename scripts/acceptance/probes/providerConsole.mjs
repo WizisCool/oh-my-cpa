@@ -225,3 +225,68 @@ export async function providerIconPick({ base, page, check }) {
     `mark=${reloaded || 'none'}`,
   );
 }
+
+// ---------------------------------------------------------------------------
+// Provider editor: batch model pick and the key field
+// ---------------------------------------------------------------------------
+
+export const pickerCatalog = ['deepseek-v4.1-flash', 'gpt-5.4', 'gpt-5.4-mini', 'o3'];
+
+/**
+ * A fetch opens the batch picker, and what it adds is exactly the new names.
+ *
+ * The picker is a modal over the drawer, so whether a pick reaches the drawer's
+ * rows is the wiring between two portals and the form state - nothing a logic test
+ * of `modelsToAdd` can see. The same drawer is also where the key field must not
+ * be a password field: the browser's own autofill and save prompts key on the
+ * element's type, so the assertion reads the rendered DOM.
+ */
+export async function providerModelPicker({ base, page, check }) {
+  await page.goto(`${base}/ai-providers`, { waitUntil: 'domcontentloaded' });
+  await page.locator('.providers-page').waitFor({ timeout: 20_000 });
+  await page.locator('.providers-page').getByRole('button', { name: /Edit|编辑/i }).first().click({ timeout: 10_000 });
+  const drawer = page.locator('.ant-drawer-open');
+  await drawer.waitFor({ state: 'visible', timeout: 10_000 });
+
+  const keyFields = await drawer.evaluate((node) => {
+    const inputs = [...node.querySelectorAll('input')];
+    return {
+      passwords: inputs.filter((input) => input.type === 'password').length,
+      masked: inputs.filter((input) => getComputedStyle(input).webkitTextSecurity === 'disc').length,
+    };
+  });
+  check(
+    'the provider key is a masked text field, not a password field',
+    keyFields.passwords === 0 && keyFields.masked > 0,
+    `password=${keyFields.passwords} masked=${keyFields.masked}`,
+  );
+
+  await drawer.locator('button[aria-expanded]').filter({ hasText: /Custom Models|自定义模型/ }).click({ timeout: 10_000 });
+  await drawer.getByRole('button', { name: /Fetch Model List|获取模型列表/i }).click({ timeout: 10_000 });
+  const picker = page.locator('.ant-modal').filter({ hasText: /Choose models|选择模型/i });
+  await picker.waitFor({ state: 'visible', timeout: 10_000 });
+  check('a fetch opens the model picker', true);
+
+  const configuredOption = picker.locator('.ant-checkbox-wrapper').filter({ hasText: 'deepseek-v4.1-flash' });
+  check(
+    'a configured model is listed ticked and fixed',
+    (await configuredOption.locator('input').isChecked()) && (await configuredOption.locator('input').isDisabled()),
+  );
+
+  await picker.getByRole('textbox').fill('gpt');
+  await picker.getByText(/^(Select all|全选)$/).click();
+  await picker.getByRole('button', { name: /Apply \(2\)|应用 \(2\)/i }).click({ timeout: 10_000 });
+  await picker.waitFor({ state: 'hidden', timeout: 10_000 });
+
+  const readRows = () => drawer.evaluate((node) =>
+    [...node.querySelectorAll('[id^="model-card-"] input')]
+      .filter((input) => /Request Model|请求模型/.test(input.getAttribute('placeholder') ?? ''))
+      .map((input) => input.value));
+  await until(async () => (await readRows()).length === 3, { label: 'the picked models to become rows' }).catch(() => {});
+  const rows = await readRows();
+  check(
+    'the pick adds the searched models once, after the configured one',
+    JSON.stringify(rows) === JSON.stringify(['deepseek-v4.1-flash', 'gpt-5.4', 'gpt-5.4-mini']),
+    `rows=${JSON.stringify(rows)}`,
+  );
+}

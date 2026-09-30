@@ -346,3 +346,28 @@ func TestBuildCredentialHealthTallyDisabledPerType(t *testing.T) {
 		t.Fatalf("kimi tally = %#v", entry)
 	}
 }
+
+// CPA lists a runtime entry for every configured API key under the family's own
+// type, so the tally reports that share separately: a Codex OAuth channel must not
+// count six configured Codex API keys as six of its credentials.
+func TestBuildCredentialHealthSeparatesConfiguredAPIKeys(t *testing.T) {
+	health := buildCredentialHealth([]management.AuthFile{
+		{ID: "o1", Type: "codex", Provider: "codex", AccountType: "oauth"},
+		{ID: "k1", Type: "codex", Provider: "codex", AccountType: "api_key", Account: "sk-a"},
+		{ID: "k2", Type: "codex", Provider: "codex", AccountType: "API_KEY", Account: "sk-b", Disabled: true},
+		{ID: "k3", Type: "claude", Provider: "claude", AccountType: "api_key", Account: "sk-c"},
+	})
+	if health.Total != 4 {
+		t.Fatalf("credential totals = %#v, want every entry counted", health)
+	}
+	byType := map[string]managementOverviewTypeCount{}
+	for _, entry := range health.ByType {
+		byType[entry.Type] = entry
+	}
+	if entry := byType["codex"]; entry.Count != 3 || entry.Disabled != 1 || entry.APIKeys != 2 || entry.APIKeysDisabled != 1 {
+		t.Fatalf("codex tally = %#v, want 3 entries of which 2 API keys, one disabled", entry)
+	}
+	if entry := byType["claude"]; entry.Count != 1 || entry.APIKeys != 1 || entry.APIKeysDisabled != 0 {
+		t.Fatalf("claude tally = %#v, want its one API key", entry)
+	}
+}

@@ -234,7 +234,11 @@ CPA management key (`management.secret-key`), passed as
 system encryption secret used for AES-GCM at rest). Oh My CPA has no separate
 admin password: the login form takes the management key, submits it to the
 server, and derives the session signature from it (HMAC-SHA256 over a fixed
-label). The key is never persisted in browser storage and is omitted from normal
+label). Because it is the site's only login credential, the sign-in form is the
+only password field in the console: every other secret (an upstream provider key,
+a gateway client key) is entered through `SecretInput`, a text field masked by
+style, so the browser neither fills the management key into it nor offers to save
+a provider key as the console login. The key is never persisted in browser storage and is omitted from normal
 API responses; sessions are HttpOnly SameSite=Strict cookies. Rotating the CPA
 key invalidates existing sessions once Oh My CPA reloads the new key (e.g. upon
 restart or configuration reload). No key configured means the app boots but

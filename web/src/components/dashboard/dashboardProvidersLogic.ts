@@ -318,19 +318,36 @@ export function aggregateProviders({
   //    credentials a type holds and how many of them are switched off - is kept
   //    beside it, because that tally is what tells a channel switched off
   //    wholesale from one whose remaining credentials still serve.
+  //    CPA files the runtime entries of configured `{family}-api-key` keys under
+  //    the family's type too, so the tally is split: a channel row counts and
+  //    reads only the auth files, a configured family row only its API keys.
+  //    A tally that predates the split carries no API-key share and is read whole.
   const credsMap = new Map<string, number>();
   const authFileCredsMap = new Map<string, { count: number; disabled: number }>();
+  const apiKeyCredsMap = new Map<string, { count: number; disabled: number }>();
+  const typesWithAPIKeyShare = new Set<string>();
   for (const item of authFilesByType) {
-    if (item.type && item.count > 0) {
-      const key = normalizeProviderKey(item.type);
-      credsMap.set(key, item.count);
-      authFileCredsMap.set(key, { count: item.count, disabled: item.disabled || 0 });
+    if (!item.type || item.count <= 0) continue;
+    const key = normalizeProviderKey(item.type);
+    const apiKeys = item.api_keys ?? 0;
+    const apiKeysDisabled = item.api_keys_disabled ?? 0;
+    if (item.api_keys !== undefined) typesWithAPIKeyShare.add(key);
+    const files = { count: item.count - apiKeys, disabled: (item.disabled || 0) - apiKeysDisabled };
+    if (files.count > 0) {
+      credsMap.set(key, files.count);
+      authFileCredsMap.set(key, files);
     }
+    apiKeyCredsMap.set(
+      key,
+      item.api_keys === undefined ? { count: item.count, disabled: item.disabled || 0 } : { count: apiKeys, disabled: apiKeysDisabled },
+    );
   }
   for (const op of overviewProviders) {
     if (op.credentials > 0) {
       const key = normalizeProviderKey(op.id);
-      if (!credsMap.has(key)) {
+      // The live count mixes in API keys; once the tally has split a type, it is
+      // the only source for that type's auth-file count.
+      if (!credsMap.has(key) && !typesWithAPIKeyShare.has(key)) {
         credsMap.set(key, op.credentials);
       }
     }
@@ -359,11 +376,14 @@ export function aggregateProviders({
    * for is the one that answers: summing a second, different type would let one
    * channel's live file vouch for another channel's switched-off set.
    */
-  const areAllCredentialsDisabled = (candidateKeys: (string | undefined)[]): boolean => {
+  const areAllCredentialsDisabled = (
+    candidateKeys: (string | undefined)[],
+    tally: Map<string, { count: number; disabled: number }> = authFileCredsMap,
+  ): boolean => {
     for (const candidate of candidateKeys) {
       if (!candidate) continue;
-      const health = authFileCredsMap.get(normalizeProviderKey(candidate));
-      if (health) return health.disabled >= health.count;
+      const health = tally.get(normalizeProviderKey(candidate));
+      if (health && health.count > 0) return health.disabled >= health.count;
     }
     return false;
   };
@@ -448,7 +468,8 @@ export function aggregateProviders({
       configuredCreds = 1;
     }
     const credentials = isOAuth ? resolveCredentials([identity], configuredCreds) : configuredCreds;
-    const disabled = cp.disabled || areAllCredentialsDisabled(ownedCredentialKeys(cp, isOAuth));
+    const disabled = cp.disabled
+      || areAllCredentialsDisabled(ownedCredentialKeys(cp, isOAuth), isOAuth ? authFileCredsMap : apiKeyCredsMap);
 
     const traffic = summarizeTraffic(
       takeOwnKeyTraffic(cp),
@@ -496,6 +517,10 @@ export function aggregateProviders({
     if (isClaimed(item.type)) continue;
 
     const normType = normalizeProviderKey(item.type);
+    // A type whose every entry is a configured API key has no channel of its own:
+    // those keys are the configured family rows above.
+    const channelFiles = authFileCredsMap.get(normType);
+    if (!channelFiles) continue;
     const isOAuth = isOAuthChannel(item.type, undefined, pluginOAuthIds);
     if (!isOAuth) continue;
 
@@ -516,7 +541,7 @@ export function aggregateProviders({
       family: item.type,
       iconId,
       logo: resolvePluginLogo(item.type, normType),
-      credentials: item.count,
+      credentials: channelFiles.count,
       total: traffic.total,
       success: traffic.success,
       failure: traffic.failure,
@@ -534,6 +559,10 @@ export function aggregateProviders({
 
     const normId = normalizeProviderKey(op.id);
     const isOAuth = isOAuthChannel(op.id, undefined, pluginOAuthIds);
+    // The live bucket counts API keys and auth files alike. When the tally says the
+    // type holds no auth file, it is the configured API keys the rows above
+    // already present, not an OAuth channel.
+    if (isOAuth && typesWithAPIKeyShare.has(normId) && !authFileCredsMap.has(normId)) continue;
     const meta = isOAuth ? OAUTH_CHANNEL_META[normId] : undefined;
     const name = isOAuth && meta ? meta.name : capitalize(op.id);
     const defaultIcon = isOAuth && meta ? meta.iconId : getProviderDefaultIcon(normId, op.id);

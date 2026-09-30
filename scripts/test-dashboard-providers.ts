@@ -534,6 +534,42 @@ assert.equal(
 );
 console.log('✓ Key rows without their label list are ignored');
 
+// Test 7e: configured API keys are not the OAuth channel's credentials
+//
+// CPA lists a runtime entry for every configured `codex-api-key` under the `codex` type, beside the
+// Codex OAuth files. Counting the whole type made the Codex OAuth row report six credentials for an
+// operator with six Codex API-key providers and no OAuth account, and link to a page holding none.
+const sixCodexKeys = Array.from({ length: 6 }, (_, i) => codexFamilyRow(`codex-${i}`, `Relay ${i}`, `key-${i}`));
+const keysOnly = aggregateProviders({
+  windowProviders: [{ id: 'codex', total: 0, success: 0, failure: 0, success_rate: 0 }],
+  overviewProviders: [{ id: 'codex', credentials: 6, success: 0, failure: 0, total: 0, success_rate: null, buckets: [] }],
+  authFilesByType: [{ type: 'codex', count: 6, disabled: 2, api_keys: 6, api_keys_disabled: 2 }],
+  configuredProviders: sixCodexKeys,
+});
+assert.equal(keysOnly.filter((row) => row.kind === 'oauth').length, 0, 'API keys alone make no OAuth channel row');
+assert.equal(keysOnly.length, 6, 'each configured key keeps its own row');
+
+const keysAndFiles = aggregateProviders({
+  authFilesByType: [{ type: 'codex', count: 8, disabled: 2, api_keys: 6, api_keys_disabled: 0 }],
+  configuredProviders: sixCodexKeys,
+});
+const codexOAuthRow = keysAndFiles.find((row) => row.key === 'oauth:codex');
+assert.equal(codexOAuthRow?.credentials, 2, 'the channel counts its auth files, not the configured keys');
+assert.equal(codexOAuthRow?.disabled, true, 'both files disabled switch the channel off');
+assert.equal(
+  keysAndFiles.find((row) => row.providerId === 'codex-0')?.disabled,
+  false,
+  'disabled OAuth files do not switch off a configured key that still serves',
+);
+
+const allKeysOff = aggregateProviders({
+  authFilesByType: [{ type: 'codex', count: 3, disabled: 2, api_keys: 2, api_keys_disabled: 2 }],
+  configuredProviders: [codexFamilyRow('codex-0', 'Relay', 'key-0')],
+});
+assert.equal(allKeysOff.find((row) => row.providerId === 'codex-0')?.disabled, true, 'a family row reads its own keys');
+assert.equal(allKeysOff.find((row) => row.key === 'oauth:codex')?.disabled, false, 'the enabled file keeps the channel on');
+console.log('✓ Configured API keys stay out of the OAuth channel row');
+
 // Test 8: Summary stats calculation
 const summary = computeProviderSummary(aggregated);
 assert.equal(summary.totalProviders, 6);

@@ -41,6 +41,13 @@ export interface ProviderFamilyMeta {
    * rather than letting a save report success for a row that never appears.
    */
   requiresBaseURL?: boolean;
+  /**
+   * Whether CPA's model entry for this family has the `image` flag that opens a
+   * model to the image endpoints. Only the OpenAI-compatible model entry declares
+   * it; CPA's other families decode their model lists strictly and refuse the
+   * whole configuration when the key is present.
+   */
+  supportsModelImage?: boolean;
 }
 
 /** In the order the provider list and the family picker present them. */
@@ -51,6 +58,7 @@ export const PROVIDER_FAMILIES: ProviderFamilyMeta[] = [
     color: '#10A37F',
     iconId: 'OpenAI',
     protocolMatchers: ['openai', 'chat completion'],
+    supportsModelImage: true,
   },
   {
     id: 'codex',

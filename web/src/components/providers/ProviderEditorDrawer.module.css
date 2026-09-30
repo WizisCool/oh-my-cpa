@@ -180,6 +180,12 @@
   font-weight: 500;
 }
 
+.section-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* ── entries inside a group ─────────────────────────────────────────────── */
 
 .item-list {

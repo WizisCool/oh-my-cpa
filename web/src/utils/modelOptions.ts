@@ -52,3 +52,31 @@ export function modelOptionsFor(
     (name) => !configuredElsewhere.has(name) || name === own,
   );
 }
+
+/**
+ * modelsToAdd resolves which names a batch pick adds to a provider's model rows.
+ *
+ * The picker lists the whole fetched catalog with the configured models already
+ * ticked, so its selection is a mix of names the provider has and names it does
+ * not. Only the new ones become rows - adding a configured model again would give
+ * the gateway two entries competing for the same requests - and they keep the
+ * order the operator saw them in, so the rows appear where the picker showed them.
+ */
+export function modelsToAdd(
+  picked: readonly string[],
+  configured: Iterable<string>,
+): string[] {
+  const seen = new Set<string>();
+  for (const name of configured) {
+    const trimmed = name.trim();
+    if (trimmed) seen.add(trimmed);
+  }
+  const added: string[] = [];
+  for (const name of picked) {
+    const trimmed = name.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    added.push(trimmed);
+  }
+  return added;
+}

@@ -76,10 +76,13 @@ const navGroups: NavGroup[] = [
     key: 'gateway',
     labelKey: 'nav.group.gateway',
     items: [
+      // Upstream credentials first (provider keys, then OAuth accounts), then the keys
+      // clients use to reach this gateway: the group reads in the direction a request
+      // is authorised, rather than interleaving the two sides.
       { key: '/ai-providers', labelKey: 'nav.providers', icon: <CloudServerOutlined /> },
-      { key: '/api-keys', labelKey: 'nav.api_keys', icon: <KeyOutlined /> },
       // Authentication, credential management and quota are one credential-centred workspace.
       { key: '/oauth-management', labelKey: 'nav.auth_files', icon: <LoginOutlined /> },
+      { key: '/api-keys', labelKey: 'nav.api_keys', icon: <KeyOutlined /> },
     ],
   },
   {

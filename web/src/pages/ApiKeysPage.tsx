@@ -37,6 +37,7 @@ import type { ConfigChange, ConfigScalarsResponse } from '../types/configManagem
 import type { ClientKeyUsageItem } from '../types/providers';
 import { PageHeader } from '../components/common/PageHeader';
 import { RefreshButton } from '../components/common/RefreshButton';
+import { SecretInput } from '../components/common/SecretInput';
 import styles from './ApiKeysPage.module.css';
 
 /** The longest name the alias endpoint accepts. */
@@ -520,16 +521,14 @@ export const ApiKeysPage: React.FC = () => {
           <label className="keys-key-editor-label" htmlFor="gateway-key-value">
             <KeyOutlined /> {t('keys.modal_label')}
           </label>
-          <Input.Password
+          <SecretInput
             id="gateway-key-value"
             placeholder={t('cfg.api_keys_placeholder')}
             value={keyInput}
             onChange={(e) => setKeyInput(e.target.value)}
             onPressEnter={() => void handleSaveKey()}
-            visibilityToggle={{
-              visible: isKeyVisible,
-              onVisibleChange: setIsKeyVisible,
-            }}
+            isVisible={isKeyVisible}
+            onVisibleChange={setIsKeyVisible}
             className="config-mono-input"
             autoFocus
           />

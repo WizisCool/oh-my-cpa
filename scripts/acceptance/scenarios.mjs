@@ -56,7 +56,7 @@ import { pluginManagement, pluginManagementFixtures, pluginManagementNarrow } fr
 import { pricingBook, pricingFixtures, pricingFromRequestList } from './probes/pricingBook.mjs';
 import { touchErgonomics } from './probes/touchErgonomics.mjs';
 import { oauthManagement, oauthManagementFixtures, oauthManagementProbeRoutes } from './probes/oauthManagement.mjs';
-import { iconPickerStacking, pickerProvider, providerIconPick } from './probes/providerConsole.mjs';
+import { iconPickerStacking, pickerCatalog, pickerProvider, providerIconPick, providerModelPicker } from './probes/providerConsole.mjs';
 import { systemInformationNarrow, systemInformationPage, systemFixtures } from './probes/systemInformation.mjs';
 import { configSourceEditor, configSourceFixtures } from './probes/configSourceEditor.mjs';
 import {
@@ -152,6 +152,17 @@ export const SCENARIOS = [
       ],
     },
     run: providerIconPick,
+  },
+  {
+    id: 'provider-model-picker',
+    name: 'a fetched catalog is picked in one step and the key field is not a password field',
+    options: {
+      routes: [
+        [(url) => url.pathname.endsWith('/management/providers/pull-models'), () => ({ models: pickerCatalog })],
+        [(url) => url.pathname.endsWith('/management/providers'), () => ({ providers: [pickerProvider], total: 1 })],
+      ],
+    },
+    run: providerModelPicker,
   },
   {
     id: 'dashboard-charts',

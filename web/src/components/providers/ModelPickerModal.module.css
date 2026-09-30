@@ -1,0 +1,53 @@
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0 8px;
+  color: var(--meta);
+  font-size: 12px;
+}
+
+.list {
+  max-height: min(52vh, 480px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.name {
+  overflow-wrap: anywhere;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.row-configured .name {
+  color: var(--meta);
+}
+
+.configured-tag {
+  flex-shrink: 0;
+  color: var(--meta);
+  font-size: 12px;
+}
+
+.empty {
+  padding: 24px 12px;
+  color: var(--meta);
+  text-align: center;
+}

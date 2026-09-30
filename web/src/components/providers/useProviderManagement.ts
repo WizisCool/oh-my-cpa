@@ -11,6 +11,7 @@ import { resolveProviderIcon } from '../../types/providerIcons';
 import { isSafeExternalURL } from '../../utils/externalUrl';
 import { providerStatusPayload } from '../../types/providerId';
 import { lookupProviderFamily } from '../../types/providerFamilies';
+import { modelsToAdd } from '../../utils/modelOptions';
 import type {
   ProviderItem,
   SaveProviderPayload,
@@ -85,6 +86,7 @@ export function useProviderManagement({
   const modelFetchSeqRef = useRef<number>(0);
   const [isPullingModels, setIsPullingModels] = useState(false);
   const [endpointModels, setEndpointModels] = useState<string[]>([]);
+  const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
   const [expandedModelIds, setExpandedModelIds] = useState<Set<string>>(new Set());
 
   const handlePullModels = async () => {
@@ -107,6 +109,7 @@ export function useProviderManagement({
     const seq = ++modelFetchSeqRef.current;
     setIsPullingModels(true);
     setEndpointModels([]);
+    setIsModelPickerOpen(false);
     try {
       const res = await api.pullProviderModels({
         provider_id: editingProvider ? editingProvider.id : undefined,
@@ -130,7 +133,9 @@ export function useProviderManagement({
       ).sort((a, b) => a.localeCompare(b));
       setEndpointModels(models);
       if (models.length > 0) {
-        message.success(t('pro.pull_models_success', { count: models.length }));
+        // A fetch is almost always followed by choosing from it, so the list opens
+        // as a picker rather than leaving the operator to add rows one by one.
+        setIsModelPickerOpen(true);
       } else {
         message.info(t('pro.model_list_empty'));
       }
@@ -183,6 +188,26 @@ export function useProviderManagement({
         el.scrollIntoView({ behavior: 'smooth', block: 'end' });
       }
     }, 80);
+  };
+
+  const handleAddPickedModels = (picked: string[]) => {
+    const added = modelsToAdd(picked, formModels.map((m) => m.name));
+    setIsModelPickerOpen(false);
+    if (added.length === 0) return;
+    const stamp = Date.now();
+    setFormModels((prev) => [
+      // A blank row the operator added by hand and never filled would otherwise sit
+      // above the batch as an entry the save silently drops.
+      ...prev.filter((m) => m.name.trim() !== ''),
+      ...added.map((name, i) => ({
+        id: `mdl-${stamp}-${i}`,
+        name,
+        alias: '',
+        image: false,
+        thinking: { levels: [] },
+      })),
+    ]);
+    message.success(t('pro.models_applied', { count: added.length }));
   };
 
   const updateModelImage = (id: string, image: boolean) => {
@@ -595,12 +620,13 @@ export function useProviderManagement({
       weight: k.weight,
     }));
 
+    const supportsModelImage = lookupProviderFamily(formFamily)?.supportsModelImage ?? false;
     const modelsPayload: SaveProviderModelItem[] = formModels
       .filter((m) => m.name.trim() !== '')
       .map((m) => ({
         name: m.name.trim(),
         alias: m.alias.trim() || undefined,
-        image: m.image || false,
+        image: supportsModelImage && (m.image || false),
         thinking:
           m.thinking && m.thinking.levels && m.thinking.levels.length > 0
             ? { levels: m.thinking.levels }
@@ -688,6 +714,9 @@ export function useProviderManagement({
     expandedModelIds,
     setExpandedModelIds,
     endpointModels,
+    isModelPickerOpen,
+    setIsModelPickerOpen,
+    handleAddPickedModels,
     setEndpointModels,
     isPullingModels,
     setIsPullingModels,
