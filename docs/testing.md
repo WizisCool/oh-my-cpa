@@ -48,7 +48,9 @@ Rules that keep the suite fast and honest:
   `scripts/install-chromium.test.mjs` does.
 - **Keep the fixtures hermetic.** Browser fixtures build their environment with
   `scripts/acceptance/environment.mjs`; never read the operator's `.env`, network or
-  data directory.
+  data directory. Calendar fixtures must use the console's configured timezone rather
+  than the host timezone; the dashboard heatmap fixtures use the default UTC calendar,
+  with a script self-test spanning hosts on opposite sides of a UTC date boundary.
 
 ## 2. Registering a new test
 
@@ -94,6 +96,28 @@ How `check:ui` chooses scenarios (`scripts/acceptance/check-ui-plan.mjs`):
 Never add a skip switch or narrow a planner rule to make a slow run go away. If the
 selection is wider than the change warrants, add a path rule or a scenario mapping,
 with a test in `scripts/ui-impact.test.mjs` or `scripts/check-ui-plan.test.mjs`.
+
+Agent/Playground recovery assertions belong at the lowest boundary that owns the behaviour:
+channel-driven facade tests for execution lifetime and replay, injectable transport logic tests
+for connection failures, and the existing `agent-live` / `playground` probes for actual browser
+reload and rendering. Live elapsed labels are independent external-store consumers: their clock
+and hidden-tab suspension are logic tests, while the Agent probe checks visible tenths and the
+light Stop border. Stream-coalescing probes exclude only elapsed-label mutations, not answer
+mutations, because the clock does not publish through the transcript's run hook.
+
+### Feedback regressions
+
+- `scripts/check-feedback.test.mjs` checks Ant Design modal bindings and aliases, scope shadowing,
+  false positives in comments and strings, legal confirmations, diagnostic locations and the
+  feedback module exemption. It is automatically discovered by the repository self-test runner.
+- The `oauth-management` browser scenario checks that ordinary copy acknowledgements cannot evict
+  a persistent quota report, another refresh replaces it, and its close action removes it. It also
+  checks one credential-aware authorization toast for a unique new credential, an ambiguous result
+  and a failed credential-list refresh, including the action that reveals the provider collection.
+  Cross-stack OAuth acceptance dismisses the completion toast before exercising drawer reopening,
+  so the notification cannot cover the close action or consume the bounded success-state window.
+- The `agent-failure` scenario retries a failed capability-directory read without losing the
+  composer draft, then checks the refused-message retry and the accepted-run failure surfaces.
 
 ## 4. When CI fails
 

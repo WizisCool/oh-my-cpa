@@ -16,7 +16,7 @@ records why that trade was taken and what it costs.
 | --- | --- | --- |
 | Console | Cloudflare Static Assets, from `tmp/cloudflare-demo/assets` | The built SPA, with the demonstration's runtime configuration injected and its asset URLs made root-relative |
 | API | `deploy/cloudflare/worker.mjs` | Reads the dataset, re-bases its timestamps and answers; refuses everything that would leave the demonstration |
-| Data | `deploy/cloudflare/data/responses.json` | 83 captured responses, generated from the real handlers |
+| Data | `deploy/cloudflare/data/responses.json` | 107 captured responses, generated from the real handlers |
 | Routing | `deploy/cloudflare/routes.mjs` | Which request is answered by which captured response |
 | Time | `deploy/cloudflare/time.mjs` | Moves the captured history onto the viewer's clock |
 | Filters | `deploy/cloudflare/filters.mjs` | Applies the audit trail's category, outcome, search and folding rules, and the service log's `after` position, to the one captured page, so those filters work in the demonstration |
@@ -37,7 +37,8 @@ pnpm check:demo             # coverage, freshness and privacy
 the demo fixture, drives every read the console makes, and writes what comes back. The
 value of generating rather than authoring is that every response has been through the
 same DTO projection a self-hosted install produces, so the demonstration cannot show a
-shape the product never emits.
+shape the product never emits. The captured Agent session is the same console DTO: it
+excludes private model history, queued model calls and raw database-query results.
 
 The export is reproducible: two runs over unchanged code are byte-identical, on any
 machine and at any time. That is what makes `--check` meaningful, and it needed four
@@ -304,3 +305,7 @@ The generated pricing response includes the same non-secret provider membership 
 ### Timezone metadata
 
 The generated preferences response includes `time_zone` with the deployment, override and effective timezone names. Dataset generation fixes `TZ=UTC` so the captured metadata cannot depend on the generating developer's machine. The console reads that metadata before calendar displays; the public Worker retains its existing read-only preference-write policy. Regenerate the dataset when the timezone response or console reads change.
+
+Run recovery descriptors (`GET /agent/runs/active`, `GET /playground/runs/active`) are generated
+empty reads in the demo dataset. Live journal subscriptions and cancellation remain refused,
+alongside inference: the public demonstration never starts a background model/workflow task.

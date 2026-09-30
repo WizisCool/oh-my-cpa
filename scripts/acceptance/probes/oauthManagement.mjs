@@ -1,3 +1,5 @@
+import { until } from '../harness.mjs';
+
 const files = Array.from({ length: 12 }, (_, index) => {
   // auth-12 is the reset-credit credential, and it is Codex: the redemption action exists
   // only there, so a fixture that borrowed another provider would prove nothing.
@@ -334,6 +336,7 @@ export async function oauthManagement({ base, page, check }) {
       (await page.locator('.oauth-management-page .ant-select').count()) >= 3,
     );
   }
+  await verifyAuthorizationOutcomes({ base, page, check });
   await verifyWorkspaceScale({ base, page, check });
 }
 
@@ -407,6 +410,64 @@ export function oauthManagementProbeRoutes() {
 }
 
 
+async function verifyAuthorizationOutcomes({ base, page, check }) {
+  for (const outcome of ['new', 'ambiguous', 'refresh-failed']) {
+    let hasCompleted = false;
+    const newFile = { ...files[0], name: 'completion-new.json', auth_index: 'completion-new' };
+    const filesHandler = async (route) => {
+      if (hasCompleted && outcome === 'refresh-failed') {
+        await route.fulfill({ status: 502, json: { error: 'completion list unavailable' } });
+        return;
+      }
+      const currentFiles = hasCompleted && outcome === 'new' ? [...files, newFile] : files;
+      await route.fulfill({ json: { files: currentFiles, total: currentFiles.length } });
+    };
+    const startHandler = async (route) => route.fulfill({ json: {
+      provider: 'codex', flow: 'device', url: 'https://auth.example.test/device',
+      user_code: 'COMPLETION-CODE', state: `completion-${outcome}`, session_id: `completion-${outcome}`,
+    } });
+    const statusHandler = async (route) => {
+      hasCompleted = true;
+      await route.fulfill({ json: { status: 'ok' } });
+    };
+    await page.route('**/management/auth-files', filesHandler);
+    await page.route('**/management/oauth/start', startHandler);
+    await page.route('**/management/oauth/status?*', statusHandler);
+    try {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.goto(`${base}/oauth-management`, { waitUntil: 'domcontentloaded' });
+      await page.getByTestId('oauth-credential-record').first().waitFor();
+      await page.getByRole('button', { name: /OAuth sign-in|OAuth 登录/i }).click();
+      const panel = page.getByTestId('oauth-connect-panel');
+      await panel.locator('#oauth-connect-provider').click();
+      await page.getByTitle('Codex OAuth', { exact: true }).last().click();
+      await panel.locator('[data-oauth-start="codex"]').click();
+      await panel.getByRole('button', { name: /Check Authorization Status|检查授权状态/i }).waitFor();
+      await panel.getByRole('button', { name: /Check Authorization Status|检查授权状态/i }).click();
+      const expectedTitle = outcome === 'new' ? /one new credential was confirmed|确认一个新的凭证/
+        : outcome === 'ambiguous' ? /could not be identified uniquely|无法唯一确认/
+          : /refreshing the credential list failed|刷新凭证列表失败/;
+      const completionToast = page.locator('.omc-toast').filter({ hasText: expectedTitle });
+      await completionToast.waitFor();
+      check(`${outcome} authorization has exactly one outcome toast`, await page.locator('.omc-toast').count() === 1);
+      await completionToast.getByRole('button', { name: /View credentials|查看凭证/i }).click();
+      await completionToast.waitFor({ state: 'detached' });
+      await panel.waitFor({ state: 'hidden' });
+      check(`${outcome} completion action reveals the provider collection`,
+        new URL(page.url()).searchParams.get('provider') === 'codex');
+      if (outcome === 'new') {
+        check('the confirmed credential remains visible after the completion action',
+          await page.locator('[data-auth-index="completion-new"]').isVisible());
+      }
+    } finally {
+      await page.unroute('**/management/auth-files', filesHandler);
+      await page.unroute('**/management/oauth/start', startHandler);
+      await page.unroute('**/management/oauth/status?*', statusHandler);
+    }
+  }
+}
+
+
 async function verifyWorkspaceScale({ base, page, check }) {
   const scaleFiles = Array.from({ length: 48 }, (_, index) => ({
     ...files[index % files.length],
@@ -441,7 +502,7 @@ async function verifyWorkspaceScale({ base, page, check }) {
     await route.fulfill({ json: { status: 'ok', quotas: indexes
       .filter((index) => index !== 'scale-13')
       .map((index) => ({ ...scaleQuota.find((item) => item.auth_index === index),
-        ...(index === 'scale-7' ? { status: 'error', error: 'Fixture upstream failure' } : {}),
+        ...(index === 'scale-7' ? { status: 'error', error: `Fixture upstream failure (refresh ${Math.ceil(batches.length / 3)})` } : {}),
       })) } });
   };
   const countModels = (request) => {
@@ -472,9 +533,49 @@ async function verifyWorkspaceScale({ base, page, check }) {
       JSON.stringify({ sizes: batches.map((batch) => batch.length), peakBatches }));
     check('batch errors and missing results remain visible to the operator',
       report.includes('Fixture upstream failure') && report.includes('scale-13'), report);
-    // The report stays until it is closed, so it is closed here before the drawers below open.
+    // Exercise the real copy action without depending on the machine's clipboard permission.
+    await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', {
+      configurable: true, value: { writeText: async () => {} },
+    }));
+    await page.getByRole('button', { name: /OAuth sign-in|OAuth 登录/i }).click();
+    const copyPanel = page.getByTestId('oauth-connect-panel');
+    await copyPanel.locator('#oauth-connect-provider').click();
+    await page.getByTitle('Codex OAuth', { exact: true }).last().click();
+    await copyPanel.locator('[data-oauth-start="codex"]').click();
+    const copyLink = copyPanel.getByRole('button', { name: /Copy Link|复制链接/i });
+    await copyLink.waitFor();
+    // Retention, not pointer geometry: dispatch the burst in one task so none of the four
+    // ordinary notices can expire before the oldest-report eviction would happen.
+    await copyLink.evaluate((button) => {
+      for (let i = 0; i < 4; i += 1) button.click();
+    });
+    await until(async () => await page.locator('.omc-toast-success').count() === 4,
+      { label: 'four independent copy acknowledgements are present together' });
+    check('four ordinary notifications cannot evict the persistent quota report',
+      await page.getByTestId('quota-operation-report').isVisible()
+        && await page.getByTestId('quota-operation-report').evaluate((notice) => !notice.className.includes('-leave')));
+    const closeCopyPanel = page.locator('.ant-drawer-open .ant-drawer-close');
+    await closeCopyPanel.focus();
+    await closeCopyPanel.press('Enter');
+    await copyPanel.waitFor({ state: 'hidden' });
+    // Dismiss the ordinary notices so the next refresh's count proves replacement, not expiry.
+    await page.locator('.omc-toast-success .ant-notification-notice-close').evaluateAll((buttons) => {
+      for (const button of buttons) button.click();
+    });
+    await until(async () => await page.locator('.omc-toast-success').count() === 0,
+      { label: 'copy acknowledgements are dismissed' });
+    const previousBatches = batches.length;
+    await page.getByRole('button', { name: /Refresh quota \(23\)/ }).click();
+    await until(() => batches.length === previousBatches + 3, { label: 'the second refresh completes every batch' });
+    await until(async () => (await page.getByTestId('quota-operation-report').innerText()).includes('Fixture upstream failure (refresh 2)'),
+      { label: 'the replacement report has the settled refresh outcome' });
+    check('another refresh replaces the report instead of stacking it',
+      await page.getByTestId('quota-operation-report').count() === 1 && await page.locator('.omc-toast').count() === 1);
     await page.getByTestId('quota-operation-report').locator('.ant-notification-notice-close').click();
     await page.getByTestId('quota-operation-report').waitFor({ state: 'detached' });
+    // A hard navigation ends the copy fixture's synthetic authorization before the scale sessions.
+    await page.goto(`${base}/oauth-management?page_size=48&density=compact`, { waitUntil: 'domcontentloaded' });
+    await page.getByTestId('oauth-credential-record').first().waitFor();
     const starts = [];
     const pollReads = {};
     const pendingPolls = {};

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/agent"
+	"github.com/oh-my-cpa/oh-my-cpa/internal/agui"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/auth"
 	"github.com/oh-my-cpa/oh-my-cpa/internal/capability"
 )
@@ -43,7 +44,7 @@ func TestAgentHTTPManagementKeyAndCapabilityBoundary(t *testing.T) {
 	if status != 200 || !strings.Contains(string(body), "keys_list") {
 		t.Fatalf("catalog %d %s", status, body)
 	}
-	for _, path := range []string{"/management/client-api-keys", "/agent/session"} {
+	for _, path := range []string{"/management/client-api-keys", "/agent/session", "/agent/runs/active", "/playground/runs/active", "/agent/runs/private-run", "/playground/runs/private-run"} {
 		status, _ = call("GET", path, "", "management-secret-value")
 		if status != 401 {
 			t.Fatalf("bearer accepted outside capability API: %s %d", path, status)
@@ -103,7 +104,8 @@ func TestAgentCatalogueFitsTheSchemaBudget(t *testing.T) {
 	if len(definitions) < 20 {
 		t.Fatalf("registry looks truncated: %d definitions", len(definitions))
 	}
-	raw, err := json.Marshal(agent.ToolDeclarations(definitions))
+	// The whole catalogue a console-declared run can offer: every capability plus the display tools.
+	raw, err := json.Marshal(append(agent.ToolDeclarations(definitions), agent.DisplayToolDeclarations([]string{agent.RENDER_CHART, agent.RENDER_TABLE})...))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,5 +145,58 @@ func TestAgentApprovalRequiresBrowserOrigin(t *testing.T) {
 	raw, _ := json.Marshal(events)
 	if strings.Contains(string(raw), "agent-private-key-marker") {
 		t.Fatal("audit secret leak")
+	}
+}
+
+// TestAgentRunSpeaksAGUI covers the run endpoint's two refusals. A malformed request is a plain 400;
+// a well-formed one the runtime refuses before persisting anything is an event stream that never
+// says RUN_STARTED, which is how the browser knows to hand the message back to the operator.
+func TestAgentRunSpeaksAGUI(t *testing.T) {
+	fixture := newProviderTestFixture(t)
+	url := fixture.baseURL + "/omc/api/v1/agent/run"
+	for _, body := range []string{
+		`{"conversation_id":"","revision":0,"message":"hi","model":"m","client_key_fingerprint":"f"}`,
+		`{"threadId":"","runId":"r1","protocolVersion":"1.0","messages":[{"id":"m1","role":"user","content":"hi"}],"forwardedProps":{"revision":0,"model":"m","client_key_fingerprint":"f","extra":1}}`,
+		`{"threadId":"","runId":"r1","protocolVersion":"1.0","messages":[{"id":"m1","role":"user","content":"hi"}]}`,
+		`{"threadId":"","runId":"r1","protocolVersion":"1.0","messages":[{"id":"m1","role":"user","content":"hi"}],"tools":[{"name":"keys_delete","description":"x"}],"forwardedProps":{"revision":0,"model":"m","client_key_fingerprint":"f"}}`,
+	} {
+		response, payload := doJSON(t, fixture.client, "POST", url, body)
+		if response.StatusCode != 400 || !strings.Contains(string(payload), "invalid_parameters") {
+			t.Fatalf("accepted %s: %d %s", body, response.StatusCode, payload)
+		}
+	}
+	response, payload := doJSON(t, fixture.client, "POST", url, `{"threadId":"","runId":"r1","protocolVersion":"1.0","messages":[{"id":"m1","role":"user","content":"hi"}],"tools":[{"name":"render_chart","description":"chart"}],"context":[{"description":"console_language","value":"en"}],"forwardedProps":{"revision":99,"model":"m","client_key_fingerprint":"f"}}`)
+	if response.StatusCode != 200 || !strings.HasPrefix(response.Header.Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("stale run %d %s", response.StatusCode, payload)
+	}
+	if strings.Contains(string(payload), "RUN_STARTED") || !strings.Contains(string(payload), `"type":"RUN_ERROR"`) || !strings.Contains(string(payload), `"code":"agent_revision_conflict"`) {
+		t.Fatalf("stale run stream %s", payload)
+	}
+}
+
+// TestAgentEventsTranslateToInterrupts: a turn that stops on the operator ends its run with an
+// interrupt naming the operation, the call it belongs to and its kind; a failed turn ends in
+// RUN_ERROR after its snapshot, never in a successful finish.
+func TestAgentEventsTranslateToInterrupts(t *testing.T) {
+	var events []agui.Event
+	translator := agui.NewTranslator("run", func(event agui.Event) error {
+		events = append(events, event)
+		return nil
+	})
+	pending := &agent.Conversation{ID: "c", Turns: []agent.Turn{{ID: "t", Status: "pending", Usage: &agent.Usage{TotalTokens: 7}}}}
+	if err := translateAgentEvent(translator, "m", agent.Event{Type: "finished", Conversation: pending, Interrupts: []agent.Interrupt{{OperationID: "op", TraceID: "call", Reason: "secret", Capability: "provider_key_add", Permission: "write", ExpiresAtMS: 1}}}); err != nil {
+		t.Fatal(err)
+	}
+	finish := events[len(events)-1]
+	if finish.Type != agui.RUN_FINISHED || finish.Outcome.Type != "interrupt" || finish.Outcome.Interrupts[0].ID != "op" || finish.Outcome.Interrupts[0].Reason != "secret" || finish.Outcome.Interrupts[0].ToolCallID != "call" || finish.Outcome.Interrupts[0].ExpiresAt == "" || finish.Usage[0].TotalTokens != 7 || finish.Usage[0].Model != "m" {
+		t.Fatalf("finish %+v", finish)
+	}
+	events = nil
+	failed := &agent.Conversation{ID: "c", Turns: []agent.Turn{{ID: "t", Status: "error", Code: "budget_exceeded"}}}
+	if err := translateAgentEvent(translator, "m", agent.Event{Type: "finished", Conversation: failed}); err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 2 || events[0].Type != agui.STATE_SNAPSHOT || events[1].Type != agui.RUN_ERROR || events[1].Code != "budget_exceeded" {
+		t.Fatalf("failed turn %+v", events)
 	}
 }

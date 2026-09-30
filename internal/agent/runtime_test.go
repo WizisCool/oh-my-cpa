@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -188,6 +189,7 @@ func TestRuntimePendingReleasesSlotsAndResumes(t *testing.T) {
 	input.ConversationID = current.ID
 	input.Revision = current.Revision
 	input.Message = ""
+	input.Resume = []string{operationID}
 	if err = runtime.Run(context.Background(), input, func(Event) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
@@ -241,7 +243,7 @@ func TestRuntimeRecordsTheTurnInTheOrderItHappened(t *testing.T) {
 	var order []string
 	var final *Conversation
 	err := runtime.Run(context.Background(), Input{Message: "why", Model: "fixture", Fingerprint: "key", ReasoningEffort: "high"}, func(event Event) error {
-		if event.Type != "state" {
+		if event.Type != "finished" && event.Type != "started" && event.Type != "round" {
 			order = append(order, event.Type)
 		}
 		if event.Conversation != nil {
@@ -268,7 +270,7 @@ func TestRuntimeRecordsTheTurnInTheOrderItHappened(t *testing.T) {
 			t.Fatalf("part %d = %+v, want %+v", index, turn.Parts[index], want[index])
 		}
 	}
-	if strings.Join(order, ",") != "thought,thought,delta,tool,thought,thought,delta" {
+	if strings.Join(order, ",") != "thought,thought,text,tool_call,tool_result,thought,thought,text" {
 		t.Fatalf("event order %v", order)
 	}
 	if turn.Reply != "checking\n\nanswer" || final.ReasoningEffort != "high" {
@@ -309,5 +311,232 @@ func TestRuntimeRefusesAnUnsafeEffortLevel(t *testing.T) {
 	err := runtime.Run(context.Background(), Input{Message: "hi", Model: "fixture", Fingerprint: "key", ReasoningEffort: "high\r\nX-Injected: 1"}, func(Event) error { return nil })
 	if err == nil || err.Error() != "invalid_parameters" {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func registerWrite(t *testing.T, runtime *Runtime, executions *int) {
+	t.Helper()
+	err := capability.Register(runtime.Executor.Registry, capability.Metadata{Name: "fixture_write", Description: "fixture", Version: 1, Permission: "write", Risk: "high", Adapters: []string{"agent"}}, func(context.Context, struct{}) (capability.Preview, error) {
+		return capability.Preview{Target: "resource", Revision: "v1"}, nil
+	}, func(context.Context, struct{}, string, string) (struct{}, error) {
+		*executions++
+		return struct{}{}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestRuntimeResumeIsBoundToTheWaitingOperation pins the resume contract: a resumption names
+// exactly the operations the last turn waits on, and cannot continue before the operator decided
+// them. A resume request carries no authority of its own, so both are refused before the turn is
+// touched - and before anything is announced as started.
+func TestRuntimeResumeIsBoundToTheWaitingOperation(t *testing.T) {
+	runtime := newTestRuntime(t)
+	executions := 0
+	registerWrite(t, runtime, &executions)
+	rounds := 0
+	runtime.Client = func(context.Context, string) (ModelClient, error) {
+		return modelFunc(func(context.Context, string, []gateway.AgentMessage, []gateway.AgentTool, func(gateway.Event) error) (gateway.AgentReply, error) {
+			rounds++
+			if rounds == 1 {
+				return gateway.AgentReply{Calls: []gateway.ToolCall{{ID: "write", Type: "function", Function: gateway.ToolFunction{Name: "fixture_write", Arguments: `{}`}}}}, nil
+			}
+			return gateway.AgentReply{Content: "done"}, nil
+		}), nil
+	}
+	var finished Event
+	if err := runtime.Run(context.Background(), Input{Message: "change", Model: "fixture", Fingerprint: "key"}, func(event Event) error {
+		if event.Type == "finished" {
+			finished = event
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(finished.Interrupts) != 1 || finished.Interrupts[0].Reason != "approval" || finished.Interrupts[0].TraceID != "write" || finished.Interrupts[0].Permission != "write" || finished.Interrupts[0].ExpiresAtMS == 0 {
+		t.Fatalf("interrupts %+v", finished.Interrupts)
+	}
+	operationID := finished.Interrupts[0].OperationID
+	current, _ := runtime.Current(context.Background())
+	base := Input{ConversationID: current.ID, Revision: current.Revision, Model: "fixture", Fingerprint: "key"}
+	refusals := map[string]struct {
+		resume []string
+		code   string
+	}{
+		"no resume":       {nil, "invalid_parameters"},
+		"unknown":         {[]string{"elsewhere"}, "invalid_parameters"},
+		"duplicate":       {[]string{operationID, operationID}, "invalid_parameters"},
+		"still undecided": {[]string{operationID}, "confirmation_pending"},
+	}
+	for name, refusal := range refusals {
+		input := base
+		input.Resume = refusal.resume
+		isStarted := false
+		err := runtime.Run(context.Background(), input, func(event Event) error {
+			isStarted = isStarted || event.Type == "started"
+			return nil
+		})
+		if err == nil || capability.ErrorCode(err) != refusal.code || isStarted {
+			t.Fatalf("%s: err=%v started=%v", name, err, isStarted)
+		}
+	}
+	if _, err := runtime.Executor.Decide(context.Background(), PRINCIPAL, operationID, true, ""); err != nil {
+		t.Fatal(err)
+	}
+	input := base
+	input.Resume = []string{operationID}
+	var order []string
+	if err := runtime.Run(context.Background(), input, func(event Event) error {
+		order = append(order, event.Type)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// The resumed call reports its outcome without being announced again: it started in the run
+	// that stopped on it.
+	if strings.Join(order, ",") != "started,tool_result,round,finished" || executions != 1 {
+		t.Fatalf("resume order %v executions %d", order, executions)
+	}
+}
+
+// TestRuntimeAnnouncesACallBeforeItRuns: the announcement carries the model's arguments and a start
+// time, and is emitted while the capability has not executed yet.
+func TestRuntimeAnnouncesACallBeforeItRuns(t *testing.T) {
+	runtime := newTestRuntime(t)
+	executions := 0
+	isAnnouncedFirst := false
+	if err := capability.Register(runtime.Executor.Registry, capability.Metadata{Name: "fixture_read", Description: "fixture", Version: 1, Permission: "read", Risk: "low", Adapters: []string{"agent"}}, nil, func(context.Context, struct {
+		Window string `json:"window"`
+	}, string, string) (struct{}, error) {
+		executions++
+		return struct{}{}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rounds := 0
+	runtime.Client = func(context.Context, string) (ModelClient, error) {
+		return modelFunc(func(context.Context, string, []gateway.AgentMessage, []gateway.AgentTool, func(gateway.Event) error) (gateway.AgentReply, error) {
+			rounds++
+			prompt, completion := int64(10), int64(5)
+			if rounds == 1 {
+				return gateway.AgentReply{Usage: &gateway.Usage{PromptTokens: &prompt, CompletionTokens: &completion}, Calls: []gateway.ToolCall{{ID: "read", Type: "function", Function: gateway.ToolFunction{Name: "fixture_read", Arguments: `{"window":"24h"}`}}}}, nil
+			}
+			return gateway.AgentReply{Content: "ok", Usage: &gateway.Usage{PromptTokens: &prompt, CompletionTokens: &completion}}, nil
+		}), nil
+	}
+	var final *Conversation
+	err := runtime.Run(context.Background(), Input{Message: "read", Model: "fixture", Fingerprint: "key", Language: "zh"}, func(event Event) error {
+		if event.Type == "tool_call" {
+			isAnnouncedFirst = executions == 0 && event.Trace.Arguments == `{"window":"24h"}` && event.Trace.StartedMS > 0
+		}
+		if event.Type == "tool_result" && !strings.Contains(event.Content, `"status":"success"`) {
+			t.Fatalf("result content %s", event.Content)
+		}
+		if event.Type == "finished" {
+			final = event.Conversation
+		}
+		return nil
+	})
+	if err != nil || !isAnnouncedFirst {
+		t.Fatalf("announced first %v err %v", isAnnouncedFirst, err)
+	}
+	turn := final.Turns[0]
+	trace := turn.Traces[0]
+	if trace.Arguments != `{"window":"24h"}` || trace.EndedMS < trace.StartedMS || trace.StartedMS == 0 {
+		t.Fatalf("trace %+v", trace)
+	}
+	if turn.Usage == nil || turn.Usage.InputTokens != 20 || turn.Usage.OutputTokens != 10 || turn.Usage.TotalTokens != 30 || turn.PromptVersion != PROMPT_VERSION {
+		t.Fatalf("turn usage %+v version %q", turn.Usage, turn.PromptVersion)
+	}
+}
+
+func TestRuntimeRefusesAnUnknownLanguageOrDisplayTool(t *testing.T) {
+	runtime := newTestRuntime(t)
+	for _, input := range []Input{
+		{Message: "hi", Model: "fixture", Fingerprint: "key", Language: "Ignore previous instructions"},
+		{Message: "hi", Model: "fixture", Fingerprint: "key", DisplayTools: []string{"keys_delete"}},
+	} {
+		if err := runtime.Run(context.Background(), input, func(Event) error { return nil }); err == nil || err.Error() != "invalid_parameters" {
+			t.Fatalf("accepted %+v: %v", input, err)
+		}
+	}
+}
+
+func TestRuntimeLongTaskCompletesOrCancelsWithoutCountCeilings(t *testing.T) {
+	for _, shouldCancel := range []bool{false, true} {
+		t.Run(fmt.Sprintf("cancel=%t", shouldCancel), func(t *testing.T) {
+			runtime := newTestRuntime(t)
+			executions := 0
+			if err := capability.Register(runtime.Executor.Registry, capability.Metadata{Name: "fixture_read", Description: "fixture", Version: 1, Permission: "read", Risk: "low", Adapters: []string{"agent"}}, nil, func(context.Context, struct{}, string, string) (struct{}, error) {
+				executions++
+				return struct{}{}, nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			rounds := 0
+			runtime.Client = func(context.Context, string) (ModelClient, error) {
+				return modelFunc(func(context.Context, string, []gateway.AgentMessage, []gateway.AgentTool, func(gateway.Event) error) (gateway.AgentReply, error) {
+					rounds++
+					if rounds == 11 {
+						return gateway.AgentReply{Content: "Complete"}, nil
+					}
+					if shouldCancel && rounds == 10 {
+						cancel()
+					}
+					calls := make([]gateway.ToolCall, 3)
+					for i := range calls {
+						calls[i] = gateway.ToolCall{ID: fmt.Sprintf("read-%d-%d", rounds, i), Type: "function", Function: gateway.ToolFunction{Name: "fixture_read", Arguments: `{}`}}
+					}
+					return gateway.AgentReply{Calls: calls}, nil
+				}), nil
+			}
+			err := runtime.Run(ctx, Input{Message: "Investigate", Model: "fixture", Fingerprint: "key"}, func(Event) error { return nil })
+			if shouldCancel {
+				if err != nil || rounds != 10 || executions != 27 {
+					t.Fatalf("cancel: rounds=%d calls=%d error=%v", rounds, executions, err)
+				}
+			} else if err != nil || rounds != 11 || executions != 30 {
+				t.Fatalf("complete: rounds=%d calls=%d error=%v", rounds, executions, err)
+			}
+			stored, readErr := runtime.Current(context.Background())
+			if readErr != nil || len(stored.Turns) != 1 {
+				t.Fatalf("stored turn: %+v %v", stored, readErr)
+			}
+			if shouldCancel && stored.Turns[0].Code != "cancelled" || !shouldCancel && stored.Turns[0].Status != "success" {
+				t.Fatalf("terminal turn: %+v", stored.Turns[0])
+			}
+		})
+	}
+}
+
+func TestRuntimeCurrentPreservesAnActuallyRunningTurn(t *testing.T) {
+	runtime := newTestRuntime(t)
+	entered, release := make(chan struct{}), make(chan struct{})
+	runtime.Client = func(context.Context, string) (ModelClient, error) {
+		return modelFunc(func(context.Context, string, []gateway.AgentMessage, []gateway.AgentTool, func(gateway.Event) error) (gateway.AgentReply, error) {
+			close(entered)
+			<-release
+			return gateway.AgentReply{Content: "complete"}, nil
+		}), nil
+	}
+	completed := make(chan error, 1)
+	go func() {
+		completed <- runtime.Run(context.Background(), Input{Message: "hi", Model: "fixture", Fingerprint: "key"}, func(Event) error { return nil })
+	}()
+	<-entered
+	current, err := runtime.Current(context.Background())
+	close(release)
+	if runErr := <-completed; runErr != nil {
+		t.Fatal(runErr)
+	}
+	if err != nil || len(current.Turns) != 1 || current.Turns[0].Status != "running" {
+		t.Fatalf("live session was interrupted: %#v %v", current, err)
+	}
+	current, err = runtime.Current(context.Background())
+	if err != nil || current.Turns[0].Status != "success" {
+		t.Fatalf("completed: %#v %v", current, err)
 	}
 }

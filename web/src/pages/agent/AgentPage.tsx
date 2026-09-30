@@ -1,39 +1,43 @@
 import React from 'react';
-import { Button, Tooltip } from 'antd';
-import { XProvider } from '@ant-design/x';
-import type { BubbleItemType, BubbleListProps } from '@ant-design/x';
+import { Button, Dropdown, Tooltip } from 'antd';
+import { AssistantRuntimeProvider, ComposerPrimitive, SelectionToolbarPrimitive, ThreadPrimitive } from '@assistant-ui/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import { BrandArtwork } from '../../components/common/BrandArtwork';
 import {
-  BarChartOutlined, DashboardOutlined, DatabaseOutlined, LayoutOutlined, MessageOutlined, ReloadOutlined, WarningOutlined,
+  BarChartOutlined, CloseOutlined, DashboardOutlined, DatabaseOutlined, DownloadOutlined, LayoutOutlined, MessageOutlined, QuoteOutlined, ReloadOutlined, WarningOutlined,
 } from '../../components/icons';
-import { Composer } from '../../components/workspace/Composer';
+import { AssistantComposer } from '../../components/workspace/AssistantComposer';
+import { AssistantThread } from '../../components/workspace/AssistantThread';
 import { ReasoningEffortPicker } from '../../components/workspace/ReasoningEffortPicker';
-import type { ComposerHandle } from '../../components/workspace/Composer';
-import { ConversationList } from '../../components/workspace/ConversationList';
-import type { ConversationListHandle } from '../../components/workspace/ConversationList';
 import { TargetPicker } from '../../components/workspace/TargetPicker';
 import { WorkspaceLayout } from '../../components/workspace/WorkspaceLayout';
-import { useXLocale } from '../../components/workspace/useXLocale';
 import workspace from '../../components/workspace/Workspace.module.css';
+import { conversationMarkdown, exportFileName } from '../../agent/export';
+import type { Trace } from '../../agent/types';
 import { NARROW_VIEWPORT_QUERY } from '../../hooks/useIsNarrowViewport';
 import { usePreference } from '../../hooks/usePreference';
 import { gatewayCallPointOf } from '../../types/gatewayModels';
 import { useI18n } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
+import { saveBlob } from '../../utils/download';
+import { AgentMessage } from './AgentMessage';
 import { failureCode, getCapabilities, getOperation, getSession, resetSession } from './api';
-import { AuthorizationDialog } from './AuthorizationDialog';
+import { CallDetails } from './CallDetails';
 import { CapabilityDirectory } from './CapabilityDirectory';
-import { QuestionPanel } from './QuestionPanel';
-import { TurnView } from './AgentTurn';
-import type { LiveRun } from './AgentTurn';
-import { useAgentRun } from './useAgentRun';
+import { useExportLabels } from './exportLabels';
+import { QuestionPanel } from './interrupts/QuestionPanel';
+import { useAgentThreadRuntime } from './runtime';
 import {
   AGENT_TARGET_PREFERENCE, DEFAULT_AGENT_TARGET, failureKey, isAwaitingApproval, parseAgentTarget, pendingOperationID,
 } from './state';
 import type { AgentTarget, Conversation, Operation } from './state';
+import { mergeLiveTurn } from './thread';
+import { AgentViewContext } from './tools/AgentViewContext';
+import type { AgentViewState } from './tools/AgentViewContext';
+import { AgentToolUIs } from './tools/registry';
+import { RunRejectedError, useAgentRun } from './useAgentRun';
 import styles from './AgentPage.module.css';
 import { LoadFailure, Notice } from '../../components/feedback';
 
@@ -52,26 +56,24 @@ const EXAMPLES = [
   { key: 'agent.example.daily', icon: <DatabaseOutlined aria-hidden="true" /> },
 ];
 
-const BUBBLE_ROLES: BubbleListProps['role'] = {
-  user: { placement: 'end', variant: 'borderless' },
-  ai: { placement: 'start', variant: 'borderless' },
-};
+type PanelTab = 'directory' | 'details';
 
 export function AgentPage() {
-  const { t } = useI18n();
-  const xLocale = useXLocale();
+  const { t, lang } = useI18n();
   const queryClient = useQueryClient();
   const isDemo = isDemoMode();
+  const pageRef = React.useRef<HTMLDivElement>(null);
 
   const [isPanelOpen, setIsPanelOpen] = React.useState(() => !window.matchMedia(NARROW_VIEWPORT_QUERY).matches);
+  const [panelTab, setPanelTab] = React.useState<PanelTab>('directory');
+  const [selectedCallID, setSelectedCallID] = React.useState('');
   const [fingerprint, setFingerprint] = React.useState('');
   const [model, setModel] = React.useState('');
   const [reasoningEffort, setReasoningEffort] = React.useState('');
-  const [message, setMessage] = React.useState('');
   const [localError, setLocalError] = React.useState('');
-  const listRef = React.useRef<ConversationListHandle>(null);
-  const composerRef = React.useRef<ComposerHandle>(null);
+  const [rejection, setRejection] = React.useState<{ code: string; text: string }>();
   const targetPref = usePreference<AgentTarget>(AGENT_TARGET_PREFERENCE, DEFAULT_AGENT_TARGET, parseAgentTarget);
+  const exportLabels = useExportLabels();
 
   const session = useQuery({ queryKey: ['agent-session'], queryFn: ({ signal }) => getSession(signal) });
   const capabilities = useQuery({ queryKey: ['capabilities'], queryFn: ({ signal }) => getCapabilities(signal) });
@@ -87,10 +89,8 @@ export function AgentPage() {
     queryClient.setQueryData(['agent-session'], conversation);
   }, [queryClient]);
 
-  // Restored only into an empty composer: if the operator has started the next message, it wins.
-  const onRejected = React.useCallback((rejected: string) => setMessage(current => current || rejected), []);
-  const agent = useAgentRun({ conversation: session.data, model, fingerprint, reasoningEffort, onConversation: acceptConversation, onRejected });
-  const { isRunning, pendingMessage, isResuming, parts, traces, errorCode, startedAtMS, run, stop, clearError } = agent;
+  const run = useAgentRun({ conversation: session.data, model, fingerprint, reasoningEffort, language: lang, onConversation: acceptConversation });
+  const { isRunning, frame, errorCode, startedAtMS, clearError } = run;
 
   // ── the selector ───────────────────────────────────────────────────────────
   //
@@ -141,14 +141,14 @@ export function AgentPage() {
   const turns = session.data?.turns ?? [];
   const isAwaiting = isAwaitingApproval(session.data);
   const isFullyConfigured = !!fingerprint && !!model;
-  const canRun = !isRunning && !isDemo && isFullyConfigured && !!session.data;
 
   // ── the operator's decision ────────────────────────────────────────────────
   //
-  // A run that stops for the operator stops on one prepared operation: an approval, which opens
-  // as a dialog, or a question, which takes the composer's place. Deciding it continues the run
-  // straight away, so the operator's one click is the whole interaction. Polled while open, in
-  // case another tab decides it first.
+  // A run that stops for the operator stops on one prepared operation: an approval, decided on the
+  // card under the call that raised it, or a question, which takes the composer's place. Deciding
+  // it continues the run straight away, so the operator's one click is the whole interaction. The
+  // operation is polled while open in case another tab decides it first; that decision continues
+  // the run here too.
   const pendingID = isAwaiting ? pendingOperationID(session.data) : '';
   const pending = useQuery({
     queryKey: ['agent-operation', pendingID],
@@ -158,73 +158,120 @@ export function AgentPage() {
   });
   const openOperation = pending.data?.status === 'pending' ? pending.data : undefined;
   const isQuestion = openOperation?.human_input === 'answer';
-  const [dismissedID, setDismissedID] = React.useState('');
-  const isDialogOpen = !!openOperation && !isQuestion && dismissedID !== openOperation.id && !isRunning;
 
-  const onDecided = (operation: Operation) => {
+  const focusComposer = React.useCallback(() => {
+    requestAnimationFrame(() => pageRef.current?.querySelector<HTMLTextAreaElement>('textarea[name="input"]')?.focus({ preventScroll: true }));
+  }, []);
+
+  const resumedRef = React.useRef(new Set<string>());
+  const { resume } = run;
+  const continueAfter = React.useCallback((operation: Operation) => {
     queryClient.setQueryData(['agent-operation', operation.id], operation);
     for (const key of operation.result.invalidates ?? []) void queryClient.invalidateQueries({ queryKey: [key] });
-    if (operation.status === 'pending') return;
-    listRef.current?.followLatest();
-    // Resumption is the same request with an empty message: the server continues the stored turn.
-    if (canRun) run('');
-  };
+    if (operation.status === 'pending' || resumedRef.current.has(operation.id)) return;
+    resumedRef.current.add(operation.id);
+    focusComposer();
+    resume([operation.id]).catch((cause: unknown) => {
+      resumedRef.current.delete(operation.id);
+      setLocalError(cause instanceof RunRejectedError ? cause.code : failureCode(cause));
+    });
+  }, [queryClient, resume, focusComposer]);
 
-  const canSubmit = isAwaiting ? canRun || (!!openOperation && !isRunning) : canRun && !!message.trim();
-  const submit = (text: string) => {
-    if (!canSubmit) return;
-    if (openOperation) {
-      setDismissedID('');
-      return;
-    }
-    listRef.current?.followLatest();
-    run(isAwaiting ? '' : text);
-    if (!isAwaiting) setMessage('');
-  };
+  const decidedElsewhere = pending.data && pending.data.status !== 'pending' ? pending.data : undefined;
+  React.useEffect(() => {
+    if (decidedElsewhere && !isRunning && isAwaiting) continueAfter(decidedElsewhere);
+  }, [decidedElsewhere, isRunning, isAwaiting, continueAfter]);
+
+  const runtime = useAgentThreadRuntime({
+    conversation: session.data,
+    run,
+    isDisabled: isDemo || !session.data,
+    isSendDisabled: isDemo || !isFullyConfigured || isAwaiting,
+    onRejected: React.useCallback((text: string, code: string) => {
+      setRejection({ code, text });
+    }, []),
+    onDecided: continueAfter,
+  });
+
+  // A message the server refused before accepting goes back into an empty composer: if the operator
+  // has started the next one, it wins.
+  React.useEffect(() => {
+    if (!rejection) return;
+    const composer = runtime.thread.composer;
+    if (!composer.getState().text) composer.setText(rejection.text);
+  }, [rejection, runtime]);
 
   const reset = async () => {
     if (!session.data || isRunning) return;
     try {
       acceptConversation(await resetSession(session.data.revision));
-      setMessage('');
+      runtime.thread.composer.setText('');
       setLocalError('');
+      setRejection(undefined);
+      setSelectedCallID('');
       clearError();
     } catch (cause) {
       setLocalError(failureCode(cause));
     }
   };
 
-  // Built in two halves. Stored turns depend only on the stored conversation, so a streaming
-  // answer changes the tail item and every earlier element keeps its identity.
-  const historyItems = React.useMemo<BubbleItemType[]>(() => turns.flatMap(turn => [
-    { key: `${turn.id}-user`, role: 'user', content: <div className={workspace['user-text']}>{turn.user}</div> },
-    { key: `${turn.id}-ai`, role: 'ai', content: <TurnView turn={turn} /> },
-  ]), [turns]);
-
-  const isLive = isRunning || traces.length > 0 || parts.length > 0;
-  const live = React.useMemo<LiveRun | undefined>(
-    () => (isLive ? { parts, traces, startedAtMS, isAwaitingApproval: isAwaiting } : undefined),
-    [isLive, parts, traces, startedAtMS, isAwaiting],
-  );
-  const items = React.useMemo<BubbleItemType[]>(() => {
-    if (!live) return historyItems;
+  const answerQuestion = (operation: Operation) => {
     const lastTurn = turns.at(-1);
-    // A resumption continues the stored turn that stopped for a decision, so its live output is
-    // drawn inside that turn rather than as a second answer beneath it.
-    if (isResuming && lastTurn) {
-      return [
-        ...historyItems.slice(0, -1),
-        { key: `${lastTurn.id}-ai`, role: 'ai', content: <TurnView turn={lastTurn} live={live} /> },
-      ];
+    const trace = lastTurn?.traces.find(item => item.result.operation_id === operation.id);
+    // The answer goes through the framework's own human-input channel, which lands in the same
+    // continuation an approval does.
+    try {
+      if (!lastTurn || !trace) throw new Error('missing');
+      runtime.thread.getMessageById(`${lastTurn.id}:assistant`).getMessagePartByToolCallId(trace.id).resumeToolCall({ operation });
+    } catch {
+      continueAfter(operation);
     }
-    return [
-      ...historyItems,
-      // The operator's message is shown as sent at once; the stored turn replaces it when the run
-      // reports the conversation it saved.
-      ...(pendingMessage ? [{ key: 'agent-running-user', role: 'user', content: <div className={workspace['user-text']}>{pendingMessage}</div> }] : []),
-      { key: 'agent-running', role: 'ai', content: <TurnView live={live} /> },
-    ];
-  }, [historyItems, live, turns, isResuming, pendingMessage]);
+  };
+
+  // ── the view context ───────────────────────────────────────────────────────
+
+  const lastTurn = turns.at(-1);
+  const traces = React.useMemo(() => {
+    const byID = new Map<string, Trace>();
+    for (const turn of turns) for (const trace of turn.traces) byID.set(trace.id, trace);
+    if (isRunning) for (const trace of mergeLiveTurn(run.isResuming ? lastTurn : undefined, frame).traces) byID.set(trace.id, trace);
+    return byID;
+  }, [turns, isRunning, run.isResuming, lastTurn, frame]);
+
+  const selectCall = React.useCallback((id: string) => {
+    setSelectedCallID(id);
+    setPanelTab('details');
+    setIsPanelOpen(true);
+  }, []);
+
+  const runningCall = isRunning ? frame.traces.find(trace => trace.result.status === 'running')?.name : undefined;
+  const view = React.useMemo<AgentViewState>(() => ({
+    traces,
+    capabilities: capabilities.data ?? [],
+    pendingOperation: openOperation,
+    selectedCallID,
+    selectCall,
+    activity: isRunning ? {
+      round: frame.round,
+      startedAtMS,
+      isThinking: frame.parts.at(-1)?.type === 'thought',
+      runningCall,
+    } : undefined,
+  }), [traces, capabilities.data, openOperation, selectedCallID, selectCall, isRunning, frame, startedAtMS, runningCall]);
+
+  // ── exports ────────────────────────────────────────────────────────────────
+
+  const exportConversation = (format: 'markdown' | 'json') => {
+    if (!session.data) return;
+    const now = new Date();
+    if (format === 'json') {
+      saveBlob(new Blob([`${JSON.stringify(session.data, null, 2)}\n`], { type: 'application/json' }), exportFileName('omc-agent', 'json', now));
+      return;
+    }
+    saveBlob(new Blob([conversationMarkdown(session.data, exportLabels, now)], { type: 'text/markdown;charset=utf-8' }), exportFileName('omc-agent', 'md', now));
+  };
+
+  // ── frame ──────────────────────────────────────────────────────────────────
 
   const runError = localError || errorCode;
   const notices = (
@@ -240,6 +287,29 @@ export function AgentPage() {
         <Notice tone="info" title={t('pg.no_models')} action={<Link to="/ai-providers">{t('pg.manage_models')}</Link>} />
       )}
       {!!session.data?.omitted && <Notice tone="info" title={t('agent.omitted')} />}
+      {rejection && (
+        <Notice
+          tone="warning"
+          data-testid="agent-rejected"
+          onClose={() => setRejection(undefined)}
+          title={t('agent.rejected', { reason: t(failureKey(rejection.code)) })}
+          description={<code>{rejection.code}</code>}
+          action={(
+            <Button
+              size="small"
+              disabled={isRunning || isAwaiting}
+              onClick={() => {
+                const text = rejection.text;
+                setRejection(undefined);
+                if (runtime.thread.composer.getState().text === text) runtime.thread.composer.setText('');
+                void runtime.thread.append({ role: 'user', content: [{ type: 'text', text }] });
+              }}
+            >
+              {t('common.retry')}
+            </Button>
+          )}
+        />
+      )}
       {runError && (
         <Notice
           tone="error"
@@ -265,12 +335,26 @@ export function AgentPage() {
           }}
         />
       </Tooltip>
+      <Dropdown
+        disabled={turns.length === 0}
+        menu={{
+          items: [
+            { key: 'markdown', label: t('agent.export.markdown') },
+            { key: 'json', label: t('agent.export.json') },
+          ],
+          onClick: ({ key }) => exportConversation(key as 'markdown' | 'json'),
+        }}
+      >
+        <Button aria-label={t('agent.export')} icon={<DownloadOutlined />} disabled={turns.length === 0}>
+          <span className={styles['action-label']}>{t('agent.export')}</span>
+        </Button>
+      </Dropdown>
       <Button aria-label={t('agent.new')} icon={<MessageOutlined />} disabled={isRunning || isDemo || turns.length === 0} onClick={() => void reset()}>
         <span className={styles['action-label']}>{t('agent.new')}</span>
       </Button>
-      <Tooltip title={t('agent.directory')}>
+      <Tooltip title={t('agent.panel')}>
         <Button
-          aria-label={t('agent.directory')}
+          aria-label={t('agent.panel')}
           aria-pressed={isPanelOpen}
           type={isPanelOpen ? 'default' : 'text'}
           icon={<LayoutOutlined />}
@@ -281,113 +365,141 @@ export function AgentPage() {
   );
 
   // Sending is the act this line describes: the message, and whatever the agent reads to answer
-  // it, goes to the selected model and on to its upstream provider (ADR 0027). While a decision is
-  // open the send button reopens it; once decided, it resumes a run that did not continue itself.
-  const note = !isAwaiting
-    ? t('agent.data_notice')
-    : t(openOperation ? 'agent.operation.hint' : 'agent.resume.hint');
-  const sendLabel = !isAwaiting ? 'agent.send' : openOperation ? 'agent.operation.review' : 'agent.resume';
-
-  return (
-    <XProvider locale={xLocale}>
-      <WorkspaceLayout
-        testId="agent-page"
-        title={t('nav.agent')}
-        target={(
-          <TargetPicker
-            keys={keys.data?.keys ?? []}
-            models={directory.data?.models ?? []}
-            fingerprint={fingerprint}
-            model={model}
-            isKeysLoading={keys.isFetching}
-            isModelsLoading={directory.isFetching}
-            isDisabled={isRunning || isAwaiting}
-            onFingerprintChange={value => chooseTarget({ fingerprint: value, model: '', reasoningEffort })}
-            onModelChange={value => chooseTarget({ fingerprint, model: value, reasoningEffort })}
-          />
-        )}
-        actions={actions}
-        notices={notices}
-        aside={{
-          title: t('agent.directory'),
-          content: <CapabilityDirectory capabilities={capabilities.data ?? []} isPending={capabilities.isPending} isError={capabilities.isError} />,
-          isOpen: isPanelOpen,
-          onOpenChange: setIsPanelOpen,
-          resizeLabel: t('agent.directory.resize'),
-          defaultWidth: 340,
-          minWidth: 280,
-          maxWidth: 560,
+  // it, goes to the selected model and on to its upstream provider (ADR 0027).
+  const approvalHint = openOperation && !isQuestion && !isRunning ? (
+    <div className={styles['awaiting']} role="status" data-testid="agent-awaiting">
+      <WarningOutlined aria-hidden="true" />
+      <span>{t('agent.operation.hint')}</span>
+      <Button
+        type="link"
+        size="small"
+        onClick={() => {
+          const card = pageRef.current?.querySelector<HTMLElement>(`[data-approval-id="${CSS.escape(openOperation.id)}"]`);
+          card?.scrollIntoView({ block: 'center' });
+          card?.focus({ preventScroll: true });
         }}
       >
-        {session.isPending ? (
-          <div className={workspace['empty']} data-testid="agent-loading" aria-busy="true" />
-        ) : turns.length === 0 && !isLive ? (
-          <div className={workspace['empty']} data-testid="agent-empty">
-            <BrandArtwork shape="wordmark" height={28} className={workspace['empty-mark']} label="Oh My CPA" />
-            <p className={workspace['empty-text']}>{t('agent.empty.description')}</p>
-            <div className={styles['examples']}>
-              <span className={styles['examples-label']}>{t('agent.examples')}</span>
-              <div className={workspace['suggestions']}>
-                {EXAMPLES.map(example => (
-                  <button
-                    key={example.key}
-                    type="button"
-                    className={workspace['suggestion']}
-                    onClick={() => {
-                      setMessage(t(example.key));
-                      composerRef.current?.focus();
-                    }}
-                  >
-                    {example.icon}
-                    <span>{t(example.key)}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <ConversationList ref={listRef} items={items} roles={BUBBLE_ROLES} latestLabel={t('pg.latest')} />
-        )}
-        {openOperation && !isQuestion && (
-          <AuthorizationDialog
-            key={openOperation.id}
-            operation={openOperation}
-            capability={capabilities.data?.find(item => item.name === openOperation.capability)}
-            isOpen={isDialogOpen}
-            onClose={() => setDismissedID(openOperation.id)}
-            onDecided={onDecided}
-          />
-        )}
-        {openOperation && isQuestion ? (
-          <div className={workspace['composer']}>
-            <QuestionPanel key={openOperation.id} operation={openOperation} onDecided={onDecided} />
-          </div>
-        ) : (
-          <Composer
-            ref={composerRef}
-            value={message}
-            onChange={setMessage}
-            onSubmit={submit}
-            onStop={stop}
-            placeholder={t('agent.message')}
-            inputLabel={t('agent.message')}
-            sendLabel={t(sendLabel)}
-            isSendLabelled={isAwaiting}
-            stopLabel={t('agent.stop')}
-            isRunning={isRunning}
-            canSend={canSubmit}
-            isDisabled={isDemo || !session.data || !isFullyConfigured || isAwaiting}
-            footerStart={(
-              <ReasoningEffortPicker
-                value={reasoningEffort}
+        {t('agent.operation.jump')}
+      </Button>
+    </div>
+  ) : null;
+  const quote = (
+    <ComposerPrimitive.Quote className={styles['quote']}>
+      <QuoteOutlined aria-hidden="true" />
+      <ComposerPrimitive.QuoteText className={styles['quote-text']} />
+      <ComposerPrimitive.QuoteDismiss asChild>
+        <Button type="text" size="small" aria-label={t('agent.quote.dismiss')} icon={<CloseOutlined />} />
+      </ComposerPrimitive.QuoteDismiss>
+    </ComposerPrimitive.Quote>
+  );
+
+  const empty = (
+    <div className={workspace['empty']} data-testid="agent-empty">
+      <BrandArtwork shape="wordmark" height={28} className={workspace['empty-mark']} label="Oh My CPA" />
+      <p className={workspace['empty-text']}>{t('agent.empty.description')}</p>
+      <div className={styles['examples']}>
+        <span className={styles['examples-label']}>{t('agent.examples')}</span>
+        <div className={workspace['suggestions']}>
+          {EXAMPLES.map(example => (
+            <ThreadPrimitive.Suggestion key={example.key} prompt={t(example.key)} send={false} className={workspace['suggestion']}>
+              {example.icon}
+              <span>{t(example.key)}</span>
+            </ThreadPrimitive.Suggestion>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const selectedTrace = selectedCallID ? traces.get(selectedCallID) : undefined;
+
+  return (
+    <AssistantRuntimeProvider runtime={runtime}>
+      <AgentToolUIs />
+      <AgentViewContext.Provider value={view}>
+        <div ref={pageRef} className={styles['page']}>
+          <WorkspaceLayout
+            testId="agent-page"
+            title={t('nav.agent')}
+            target={(
+              <TargetPicker
+                keys={keys.data?.keys ?? []}
+                models={directory.data?.models ?? []}
+                fingerprint={fingerprint}
+                model={model}
+                isKeysLoading={keys.isFetching}
+                isModelsLoading={directory.isFetching}
                 isDisabled={isRunning || isAwaiting}
-                onChange={value => chooseTarget({ fingerprint, model, reasoningEffort: value })}
+                onFingerprintChange={value => chooseTarget({ fingerprint: value, model: '', reasoningEffort })}
+                onModelChange={value => chooseTarget({ fingerprint, model: value, reasoningEffort })}
               />
             )}
-            note={note}
-          />
-        )}
-      </WorkspaceLayout>
-    </XProvider>
+            actions={actions}
+            notices={notices}
+            aside={{
+              title: t('agent.panel'),
+              tabs: [
+                {
+                  key: 'directory',
+                  label: t('agent.directory'),
+                  content: <CapabilityDirectory capabilities={capabilities.data ?? []} isPending={capabilities.isPending} isError={capabilities.isError} onRetry={() => void capabilities.refetch()} />,
+                },
+                { key: 'details', label: t('agent.details'), content: <CallDetails trace={selectedTrace} /> },
+              ],
+              activeTab: panelTab,
+              onTabChange: key => setPanelTab(key as PanelTab),
+              isOpen: isPanelOpen,
+              onOpenChange: setIsPanelOpen,
+              resizeLabel: t('agent.directory.resize'),
+              defaultWidth: 360,
+              minWidth: 280,
+              maxWidth: 640,
+            }}
+          >
+            {session.isPending ? (
+              <div className={workspace['empty']} data-testid="agent-loading" aria-busy="true" />
+            ) : (
+              <AssistantThread
+                empty={empty}
+                latestLabel={t('pg.latest')}
+                testId="agent-transcript"
+                toolbar={(
+                  <SelectionToolbarPrimitive.Root className={styles['selection-toolbar']}>
+                    <SelectionToolbarPrimitive.Quote asChild>
+                      <Button type="text" size="small" className={styles['selection-action']} icon={<QuoteOutlined />}>{t('agent.quote')}</Button>
+                    </SelectionToolbarPrimitive.Quote>
+                  </SelectionToolbarPrimitive.Root>
+                )}
+              >
+                {() => <AgentMessage />}
+              </AssistantThread>
+            )}
+            {openOperation && isQuestion ? (
+              <div className={workspace['composer']}>
+                <QuestionPanel key={openOperation.id} operation={openOperation} onDecided={answerQuestion} />
+              </div>
+            ) : (
+              <AssistantComposer
+                placeholder={t('agent.message')}
+                inputLabel={t('agent.message')}
+                sendLabel={t(isRunning ? 'agent.queue.send' : 'agent.send')}
+                stopLabel={t('agent.stop')}
+                blockedReason={isAwaiting ? t('agent.operation.hint') : undefined}
+                header={<>{approvalHint}{quote}</>}
+                footerStart={(
+                  <ReasoningEffortPicker
+                    value={reasoningEffort}
+                    isDisabled={isRunning || isAwaiting}
+                    onChange={value => chooseTarget({ fingerprint, model, reasoningEffort: value })}
+                  />
+                )}
+                note={t('agent.data_notice')}
+                queue={{ title: t('agent.queue.title'), removeLabel: t('agent.queue.remove') }}
+              />
+            )}
+          </WorkspaceLayout>
+        </div>
+      </AgentViewContext.Provider>
+    </AssistantRuntimeProvider>
   );
 }

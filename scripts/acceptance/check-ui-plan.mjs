@@ -61,6 +61,8 @@ const DASHBOARD_SCENARIOS = [
   'provider-rate-marks',
 ];
 
+const AGENT_SCENARIOS = ['agent', 'agent-question', 'agent-live', 'agent-views', 'agent-failure', 'agent-stream', 'agent-narrow'];
+
 /**
  * A source path maps to the scenarios it can affect.
  *
@@ -69,13 +71,13 @@ const DASHBOARD_SCENARIOS = [
  * directory can be named without listing its files.
  */
 const SCENARIO_PATHS = [
-  { prefix: 'web/src/pages/agent/', scenarios: ['agent', 'agent-live', 'agent-failure', 'agent-stream', 'agent-narrow'] },
+  { prefix: 'web/src/pages/agent/', scenarios: AGENT_SCENARIOS },
   { prefix: 'web/src/pages/playground/', scenarios: ['playground', 'playground-narrow'] },
+  // The run protocol, stream reader and exports: the Agent runs on all of it, and the Playground
+  // reads its stream and writes its export with the same modules.
+  { prefix: 'web/src/agent/', scenarios: [...AGENT_SCENARIOS, 'playground', 'playground-narrow'] },
   // The conversation frame both workspaces are composed from.
-  {
-    prefix: 'web/src/components/workspace/',
-    scenarios: ['agent', 'agent-live', 'agent-failure', 'agent-stream', 'agent-narrow', 'playground', 'playground-narrow'],
-  },
+  { prefix: 'web/src/components/workspace/', scenarios: [...AGENT_SCENARIOS, 'playground', 'playground-narrow'] },
   // The request-records page, its row/column rendering and its stylesheet. Column
   // geometry, the virtualized list, the refresh sequence and the search box all live
   // in this one page, so they move together.

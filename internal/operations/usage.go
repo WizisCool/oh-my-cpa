@@ -111,7 +111,7 @@ type RequestPage struct {
 }
 
 func (s *Service) registerUsage(registry *capability.Registry) error {
-	if err := read(registry, "usage_aggregate", "Aggregate requests, tokens and failures over a fixed window; never infer causality from correlation. Data covers retained request records only.", s.AnalyzeUsage); err != nil {
+	if err := read(registry, "usage_aggregate", "The first stop for usage questions: requests, tokens, cost and failures over a window (default last 24 hours), grouped by group_by; is_trend groups by time bucket instead (data.groups is then a time series). Covers retained request records only.", s.AnalyzeUsage); err != nil {
 		return err
 	}
 	if err := read(registry, "usage_compare", "Compare the requested window with the immediately preceding equal-length window.", func(ctx context.Context, input UsageInput) (Comparison, error) {
@@ -126,7 +126,7 @@ func (s *Service) registerUsage(registry *capability.Registry) error {
 	}); err != nil {
 		return err
 	}
-	if err := read(registry, "requests_list", "Page through filtered request metadata. Prefer usage_aggregate for large analyses.", func(ctx context.Context, input UsageInput) (RequestPage, error) {
+	if err := read(registry, "requests_list", "Page through individual request records matching the filters. For counts, totals or trends use usage_aggregate instead.", func(ctx context.Context, input UsageInput) (RequestPage, error) {
 		filter, err := input.filter(ctx)
 		if err != nil {
 			return RequestPage{}, err

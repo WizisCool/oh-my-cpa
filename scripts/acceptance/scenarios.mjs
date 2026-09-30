@@ -1,4 +1,4 @@
-import { agentWorkspace, agentFailureCopy, agentStream, agentNarrow, agentLive, agentQuestion, agentFixtures } from './probes/agent.mjs';
+import { agentWorkspace, agentFailureCopy, agentStream, agentNarrow, agentLive, agentQuestion, agentViews, agentFixtures } from './probes/agent.mjs';
 import { playground, playgroundFixtures, playgroundNarrow } from './probes/playground.mjs';
 /**
  * The browser probe scenarios, as a registry rather than a script.
@@ -88,12 +88,13 @@ const pluginManagementWrites = [];
 const pricingBookWrites = [];
 
 export const SCENARIOS = [
-  { id: 'agent', name: 'Agent data notice, reasoning effort, one-click authorization, remembered target and server conversation recovery', options: { routes: agentFixtures() }, run: agentWorkspace },
+  { id: 'agent', name: 'Agent data notice, reasoning effort, inline one-click authorization, remembered target and server conversation recovery', options: { routes: agentFixtures() }, run: agentWorkspace },
   { id: 'agent-question', name: 'Agent asks a question in the composer and continues once it is answered', options: { routes: agentFixtures() }, run: agentQuestion },
-  { id: 'agent-live', name: 'Agent shows a sent message at once and keeps its reasoning', options: { routes: agentFixtures() }, run: agentLive },
-  { id: 'agent-failure', name: 'Agent reports a failure as a sentence, not a code', options: { routes: agentFixtures() }, run: agentFailureCopy },
+  { id: 'agent-live', name: 'Agent shows a sent message at once, queues the next one and keeps its reasoning', options: { routes: agentFixtures() }, run: agentLive },
+  { id: 'agent-views', name: 'Agent draws display calls from their frozen rows as tables and charts', options: { routes: agentFixtures() }, run: agentViews },
+  { id: 'agent-failure', name: 'Agent hands a refused message back and reports a failure as a sentence, not a code', options: { routes: agentFixtures() }, run: agentFailureCopy },
   { id: 'agent-stream', name: 'Agent coalesces a token burst into bounded repaints', options: { routes: agentFixtures() }, run: agentStream },
-  { id: 'agent-narrow', name: 'Agent keeps its target visible and its directory follows native Back on phones', options: { routes: agentFixtures(), viewport: { width: 320, height: 850 } }, run: agentNarrow },
+  { id: 'agent-narrow', name: 'Agent keeps its target visible and its side panel follows native Back on phones', options: { routes: agentFixtures(), viewport: { width: 320, height: 850 } }, run: agentNarrow },
   { id: 'playground', name: 'ephemeral multimodal playground streams and inspects safe requests', options: { routes: playgroundFixtures() }, run: playground },
   { id: 'playground-narrow', name: 'playground settings follow native Back and fit a phone', options: { routes: playgroundFixtures(), viewport: { width: 320, height: 850 } }, run: playgroundNarrow },
   {

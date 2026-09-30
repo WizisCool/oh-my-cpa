@@ -78,7 +78,7 @@ The following capabilities are unique to Oh My CPA and have no counterpart in CP
 | Quota Overview & Credential Details | `/management/quota`, `/management/quota/{authIndex}` | Normalized snapshots + cooldowns, resets, and Codex reset credits |
 | Audit Logging | `/management/audit/events`, `/management/audit/export` | Append-only logging; fail-closed on sensitive exports |
 | Server-Side Console Preferences | `/preferences` | Closed set of keys, surviving service and container restarts |
-| Built-in Agent & Capability Registry | `/agent`, `/api/v1/capabilities`, `oh-my-cpa mcp` | Natural-language operation of OMC capabilities across usage, requests, providers, OAuth, quota, keys, configuration, pricing and system state. The agent workspace shows the registry it can call, grouped read / write / destructive, and digests each result with the raw document one disclosure away. Every declared capability is offered to the model from the first round; reads run directly, writes carry a server-generated preview and require console confirmation, and destructive actions require the target identifier. The same registry backs the built-in Agent and the stdio MCP bridge, so a capability is declared once (`docs/agent-capabilities.md`, ADR 0026) |
+| Built-in Agent & Capability Registry | `/agent`, `/api/v1/capabilities`, `oh-my-cpa mcp` | Natural-language operation of OMC capabilities across usage, requests, providers, OAuth, quota, keys, configuration, pricing and system state. The agent workspace shows the registry it can call, grouped read / write / destructive, with each call's arguments and permitted result details in a details tab, and draws charts and tables from frozen capability results (ADR 0042). Raw database query results stay server-side rather than in a preview. Every declared capability is offered to the model from the first round; reads run directly, and writes carry a server-generated preview and wait for one Allow or Deny under the call (ADRs 0035, 0043). Runs stream over AG-UI (ADR 0041). The same registry backs the built-in Agent and the stdio MCP bridge, so a capability is declared once (`docs/agent-capabilities.md`, ADR 0026) |
 
 ## Known Limitations
 
@@ -134,3 +134,7 @@ matching, independent OAuth sessions and contextual provider aliases are retaine
 The price book groups models by actual configured API-key and OAuth providers, reuses their names/icons, and offers provider and price-mode filters, separator-tolerant search and 20-row pagination. Provider groups sort by routing priority; model names use stable case-aware natural ordering. Shared model memberships edit one global price, and unpriced models offer suggestions in place. The OpenRouter picker paginates its entire searchable catalog.
 
 | Deployment timezone | OMC Settings | OMC preferences | Covered | Server-default IANA timezone with persistent manual override, current UTC-offset labels, timezone-aware console timestamps and natural-day aggregation; Agent/MCP read and write capabilities share validation. |
+
+Agent/Playground browser connection recovery is covered by authenticated server-owned replay
+journals and explicit cancellation (ADR 0044); refresh never repeats a generation or capability
+write. Recovery retention is bounded and process-local, not a durable workflow queue.

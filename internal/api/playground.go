@@ -15,6 +15,7 @@ import (
 )
 
 type playgroundRequest struct {
+	RecoveryTurn         json.RawMessage   `json:"recovery_turn,omitempty"`
 	ClientKeyFingerprint string            `json:"client_key_fingerprint"`
 	Model                string            `json:"model"`
 	SystemPrompt         string            `json:"system_prompt,omitempty"`
@@ -255,8 +256,11 @@ func (h *Handler) chatPlayground(writer http.ResponseWriter, request *http.Reque
 		}
 		event.FirstContentMS = firstContentMS
 		return send(event.Type, event)
-	}); err != nil && request.Context().Err() == nil {
+	}); err != nil {
 		failure := gateway.ErrorEvent(err)
+		if errors.Is(err, context.Canceled) {
+			failure.Code = "cancelled"
+		}
 		failure.FirstContentMS = firstContentMS
 		elapsed := time.Since(started).Milliseconds()
 		failure.DurationMS = &elapsed

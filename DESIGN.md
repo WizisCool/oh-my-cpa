@@ -259,7 +259,7 @@ The console is operated from a phone as well as a desktop, and the phone is trea
 - **16px is the focus floor.** iOS Safari zooms the page when a focused field is under 16px, and the base size is 14px, so under `(pointer: coarse)` every focusable text control takes 16px. The declaration carries `!important` because antd injects its component styles at runtime, after the stylesheet: an equal-specificity rule loses on source order. The *displayed* text of a Select keeps its token size, because the browser reads the size of the element it focuses.
 - **Pinch-zoom is never disabled.** `maximum-scale=1` and `user-scalable=no` are absent on purpose.
 - **A page never moves sideways.** The content pane scrolls vertically only on a phone; a code block, a wide table, the heatmap, and a strip of choices that cannot wrap (price-book filters, configuration section nav) swipe inside their own frames with `overscroll-behavior-x: contain`. The conversation transcript clips horizontally as a backstop, and its capability steps are bounded by the column.
-- **A phone's composer starts at one line.** Below 640px the conversation composer grows from one line to five with send beside the input, and keeps a foot row only for a control that needs one; a desktop keeps the two-line box with send in its foot.
+- **The composer starts at one line.** It grows to ten lines on desktop, with the action in its foot. Below 640px it grows to five lines with the action beside the input, and keeps a foot row only for a control that needs one. User message text has no paragraph margins inside its padded bubble.
 - **The source editor is a phone surface too.** The configuration page's YAML editor stays editable at 640px and below, with the editor's own options rather than stylesheet rules (Monaco draws on a canvas-backed view): `fontSize` 16 with a 24px line height, `wordWrap: 'on'` so a long line does not force horizontal scrolling on the surface least able to perform it, and the minimap off. Its height is a `dvh` clamp so the on-screen keyboard cannot resize it under the caret.
 - **The viewport is not a fixed rectangle.** `viewport-fit=cover` is declared so `env(safe-area-inset-*)` resolves, and the insets go on chrome that touches a screen edge — never on a scroll container. Heights that decide how much data fits use `dvh`, not `vh`, because the mobile URL bar changes `100vh` continuously. `touch-action: manipulation` goes on controls, not on the page.
 
@@ -347,9 +347,9 @@ The geometric form language is compact, rectangular, and tightly controlled:
 ### Feedback Surfaces (Toasts, Load Failures, Notices)
 - **Chosen by what the message describes**: the outcome of the operator's action is a toast (`useToast`); a region that could not be read is a `LoadFailure` in that region's place with a Retry; a condition that holds while the region is on screen is an inline `Notice`; a refusal of the input in front of the operator (a login, a composer message) stays beside that input. One outcome is reported on one surface, and a result never opens an information-only dialog.
 - **Toast**: a floating panel like a menu — `--elevated` fill, 1px `--border` edge, 4px radius, one 420px width, 18px icon, top centre, never stacked into a pile. Success and info hold 3s, warning 5s, error 8s, an offered action 10s; hover pauses. An upstream JSON envelope is read down to its status and sentence.
-- **Report toast**: a batch outcome with per-target reasons lists them under group headings (failures first), each target's full name on its own line with its reason beneath, and stays until closed. A long context group is summarised one line per reason; nothing in a toast changes height after it opens.
+- **Report toast**: a batch outcome with per-target reasons lists them under group headings (failures first), each target's full name on its own line with its reason beneath, and stays until closed. Ordinary notifications never evict a report; the next refresh replaces it under the same key. A long context group is summarised one line per reason; nothing in a toast changes height after it opens.
 - **Notice / LoadFailure**: one layout — body-size icon, headline, detail beneath in `--fg-2`, the action (Retry) at the right.
-- **Enforced**: `pnpm check:feedback` refuses raw antd `Alert`, `message`, `notification` and information-only `modal.*` dialogs outside `web/src/components/feedback/`.
+- **Enforced**: `pnpm check:feedback` refuses raw antd `Alert`, `message`, `notification` and information-only `modal.*` dialogs outside `web/src/components/feedback/`. Modal calls are checked against their Ant Design bindings, including aliases; comments, strings and unrelated objects are ignored.
 
 ### Floating Action Bar (Dirty Bar)
 - **Position**: Floating fixed bar anchored 24px above the viewport bottom, centered dynamically within the content column.
@@ -386,23 +386,37 @@ transcript, notices and composer share a centred 760px reading column; and a res
 below 900px, where the target moves onto its own head row. The frame spans the content area, like
 the configuration workbench.
 
-- **Transcript**: Ant Design X `Bubble.List` with native reverse-scroll anchoring and a "back to
-  latest" control. The operator's message is a bordered `--surface` block; an answer is borderless
-  with a model-and-status head, X `Think` for reasoning (no title shimmer), Markdown in the
-  console's own styles, and a foot of measurements plus muted icon actions.
+- **Transcript**: assistant-ui's thread viewport, following the newest message while the reader is
+  there and offering "back to latest" once they scroll away. The operator's message is a bordered
+  `--surface` block; an answer is borderless with a model-and-status head, a reasoning disclosure
+  with a `--warn` edge (no title shimmer), Markdown in the console's own styles, and a foot of
+  measurements plus muted icon actions.
 - **Model output**: tables in a hairline frame; fenced code with a language head and copy action,
   highlighted only for allowlisted languages after the fence closes, in a palette-ink syntax theme
   that never borrows the semantic hues. Raw HTML is escaped and images are links.
-- **Composer**: X `Sender` with Enter and the send button as one gate, a stop button while running,
-  and one line beneath naming the cost or privacy boundary.
+- **Composer**: assistant-ui's composer with Ant Design controls; Enter and the send button as one
+  gate decided on the runtime's live state, a blocked send drawn with `aria-disabled` (`--surface`
+  fill, `--meta` glyph). Send and stop share one action slot: running with an empty draft
+  shows stop; an Agent draft replaces it with Queue, and queueing restores stop. Queued messages
+  appear as rows above the frame in the Agent, and one line beneath naming the cost or privacy boundary.
+- **Playground**: images pasted, dropped or picked into the composer; the last answer regenerates
+  and the last message edits in place, replacing its turn. The Agent quote toolbar styles itself
+  from theme tokens even though its portal sits outside Ant Design's variable scope.
 - **Playground panel**: Parameters (unset values read "Default"; sliders rest muted) and Turn
   diagnostics (metrics grid, request and response code blocks, labelled cURL copy).
 - **Agent**: a capability directory as an open list grouped read / write / destructive with pips,
   each row a localized title with its mono identifier beside it;
-  a turn drawn in the order it happened - reasoning, text and capability calls as segments, the calls
-  of one round as an X `ThoughtChain` with warn-toned attention marks for pending or unconfirmed
-  steps; an authorization dialog that opens by itself with one Deny / Allow decision (Allow in the
-  danger hue for a destructive capability); agent questions in an accent-framed panel that takes
+  call details as the panel's second tab; database queries keep their status, SQL arguments and
+  timing there, while raw query rows have no inline toggle or details preview;
+  a turn drawn in the order it happened - reasoning, text and capability calls as segments, runs of
+  calls folded into a "Used N capabilities" chain that opens while the turn runs or waits and folds when it is done, each call one row (status square, title, mono
+  identifier, arguments in brief, status in words, duration) with a `--warn` attention glyph when it
+  waits on the operator or its outcome is unconfirmed; charts and tables from successful display calls drawn after the answer in a hairline frame with
+  a Chart / Data switch and CSV / PNG export, their category labels horizontal and ellipsised; an approval card
+  under the call that raised it (`--surface`, a 2px `--warn` leading edge, `--danger` when
+  destructive) with one Deny / Allow decision (Allow in the danger hue for a destructive capability),
+  and a `--warn` notice in the composer while it is open; "Ask about this" on selected answer text,
+  quoted in the composer; agent questions in an accent-framed panel that takes
   the composer's place, shaped like the coding agents' question prompts: a tab per question and a
   Review tab, numbered option rows (a digit picks, the chosen one accent-edged with a filled key
   cap), "Something else…" as the last row with its field inside it; the data notice as the
@@ -424,3 +438,12 @@ Token Trend preserves measured zero buckets as continuous baseline segments.
 ## Time zone picker
 
 Use the shared controlled `TimeZoneSelect`: actual IANA names, a left-aligned name column and a right-aligned tabular UTC-offset column. Pin the server zone first and place its localized source label below the name. Field and popup share a width; narrow screens use the full settings-row width. Keep the helper text to “Used for timestamps and calendar-day totals.” Fixed 64-pixel virtual rows reserve indicator space uniformly. Search supports city/zone names and UTC offsets. Reuse existing color, typography and motion tokens.
+
+### Live elapsed labels and Stop
+
+Agent activity, running capability rows and Playground running turns use isolated `LiveElapsed`
+labels. A shared visible-only animation-frame clock quantizes milliseconds to 10ms and seconds
+to 0.1s; a formatted external-store snapshot limits second-scale label renders to 10Hz without
+rerendering the page or transcript. Hidden documents and settled labels schedule no frames.
+The Stop button uses the existing `--border` / `--surface` tokens and no shadow, with the existing
+`--danger` border on hover/active. This changes component usage, not the palette or token mapping.

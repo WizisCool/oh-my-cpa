@@ -2,9 +2,9 @@ import React from 'react';
 import { Button, Input } from 'antd';
 import type { TextAreaRef } from 'antd/es/input/TextArea';
 import { clsx } from 'clsx';
-import { CheckOutlined, EditOutlined, QuestionCircleOutlined } from '../../components/icons';
-import { useI18n } from '../../i18n';
-import { decideOperation, failureCode } from './api';
+import { CheckOutlined, EditOutlined, QuestionCircleOutlined } from '../../../components/icons';
+import { useI18n } from '../../../i18n';
+import { decideOperation, failureCode } from '../api';
 import {
   EMPTY_DRAFT,
   chooseOption,
@@ -13,9 +13,9 @@ import {
   failureKey,
   isQuestionAnswered,
   operationQuestions,
-} from './state';
-import type { AgentQuestion, Operation, QuestionDraft } from './state';
-import styles from './AgentPage.module.css';
+} from '../state';
+import type { AgentQuestion, Operation, QuestionDraft } from '../state';
+import styles from '../AgentPage.module.css';
 
 export interface QuestionPanelProps {
   operation: Operation;

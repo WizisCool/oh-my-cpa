@@ -47,7 +47,7 @@ func (s *Service) registerProviders(registry *capability.Registry) error {
 	}); err != nil {
 		return err
 	}
-	if err := read(registry, "providers_get", "Inspect one API provider's safe state.", func(ctx context.Context, input struct {
+	if err := read(registry, "providers_get", "Read one API provider by id: display and upstream name, status, model mappings and revision, without credentials.", func(ctx context.Context, input struct {
 		ID string `json:"id"`
 	}) (Provider, error) {
 		return s.FindProvider(ctx, input.ID)

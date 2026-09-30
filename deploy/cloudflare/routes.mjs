@@ -39,6 +39,8 @@ export function presetOf(url) {
  */
 const FIXED_ROUTES = new Map([
   ['/api/v1/agent/session', 'agent-session'],
+  ['/api/v1/agent/runs/active', 'agent-run-active'],
+  ['/api/v1/playground/runs/active', 'playground-run-active'],
   ['/api/v1/capabilities', 'capabilities'],
   ['/api/v1/playground/models', 'playground-models'],
   ['/api/v1/resources', 'resources'],

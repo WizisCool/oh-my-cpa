@@ -51,7 +51,7 @@ const BASELINE = {
   'scripts/acceptance/probes/omcSettings.mjs': 1,
   'scripts/acceptance/probes/overlayHistory.mjs': 1,
   'scripts/acceptance/probes/phoneLists.mjs': 1,
-  'scripts/acceptance/probes/playground.mjs': 1,
+
   'scripts/acceptance/probes/pluginManagement.mjs': 1,
   'scripts/acceptance/probes/systemInformation.mjs': 2,
   'scripts/acceptance/probes/touchErgonomics.mjs': 3,

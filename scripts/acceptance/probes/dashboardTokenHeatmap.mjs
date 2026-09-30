@@ -836,8 +836,7 @@ export async function dashboardTokenHeatmapMobile({ base, page, check }) {
 
   // It opens scrolled to today, which is the column whose total is still growing. Without this the
   // operator lands three months in the past with today off screen.
-  const today = new Date();
-  const todayKey = `${today.getFullYear()}-${`${today.getMonth() + 1}`.padStart(2, '0')}-${`${today.getDate()}`.padStart(2, '0')}`;
+  const todayKey = HEATMAP_TODAY;
   const opened = await page.evaluate((key) => {
     const scroll = document.querySelector('.heatmap-scroll');
     const bounds = scroll.getBoundingClientRect();

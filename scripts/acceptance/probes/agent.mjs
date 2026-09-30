@@ -1,7 +1,8 @@
 import { until } from '../harness.mjs';
 import { playgroundFixtures } from './playground.mjs';
 
-const initial = () => ({ id: 'agent-test-session', revision: 1, model: 'vision-alias', client_key_fingerprint: 'playground-identity', turns: [], omitted: 0 });
+const THREAD = 'agent-test-session';
+const initial = () => ({ id: THREAD, revision: 1, model: 'vision-alias', client_key_fingerprint: 'playground-identity', turns: [], omitted: 0 });
 export function agentFixtures() {
   return [
     ...playgroundFixtures(),
@@ -13,7 +14,42 @@ export function agentFixtures() {
     ] })],
   ];
 }
-const frame = event => `data: ${JSON.stringify(event)}\n\n`;
+
+// ── AG-UI frames ─────────────────────────────────────────────────────────────
+//
+// Built the way internal/agui's translator emits them, so the page is exercised on the wire
+// format the server actually speaks rather than on a shape invented for the probe.
+
+const sse = events => events.map(event => `data: ${JSON.stringify(event)}\n\n`).join('');
+const started = (turnId, runId = 'run-test') => ({ type: 'RUN_STARTED', threadId: THREAD, runId, protocolVersion: '1.0', metadata: { turn_id: turnId } });
+const step = round => ({ type: 'STEP_STARTED', stepName: `round:${round}`, metadata: { round } });
+const text = (messageId, delta) => [
+  { type: 'TEXT_MESSAGE_START', messageId, role: 'assistant' },
+  { type: 'TEXT_MESSAGE_CONTENT', messageId, delta },
+  { type: 'TEXT_MESSAGE_END', messageId },
+];
+const reasoning = (messageId, delta) => [
+  { type: 'REASONING_START', messageId },
+  { type: 'REASONING_MESSAGE_START', messageId, role: 'reasoning' },
+  { type: 'REASONING_MESSAGE_CONTENT', messageId, delta },
+  { type: 'REASONING_MESSAGE_END', messageId },
+  { type: 'REASONING_END', messageId },
+];
+const toolCall = (toolCallId, toolCallName, args = '{}') => [
+  { type: 'TOOL_CALL_START', toolCallId, toolCallName, metadata: { started_at_ms: Date.now() - 300 } },
+  { type: 'TOOL_CALL_ARGS', toolCallId, delta: args },
+  { type: 'TOOL_CALL_END', toolCallId },
+];
+const toolResult = (toolCallId, receipt, metadata = {}) => ({ type: 'TOOL_CALL_RESULT', messageId: `result:${toolCallId}`, toolCallId, role: 'tool', content: JSON.stringify(receipt), metadata: { started_at_ms: Date.now() - 300, ended_at_ms: Date.now(), ...metadata } });
+const snapshot = conversation => ({ type: 'STATE_SNAPSHOT', snapshot: conversation });
+const finished = (interrupts = [], runId = 'run-test') => ({
+  type: 'RUN_FINISHED',
+  threadId: THREAD,
+  runId,
+  outcome: interrupts.length ? { type: 'interrupt', interrupts } : { type: 'success' },
+  usage: [{ inputTokens: 1200, outputTokens: 80, totalTokens: 1280 }],
+});
+const runError = code => ({ type: 'RUN_ERROR', message: code, code });
 
 export async function agentWorkspace({ base, page, check }) {
   let conversation = initial();
@@ -35,8 +71,14 @@ export async function agentWorkspace({ base, page, check }) {
   await page.route('**/agent/run', async route => {
     runs.push(JSON.parse(route.request().postData()));
     const isFirst = runs.length === 1;
-    conversation = { ...conversation, revision: conversation.revision + 1, turns: [{ id: 'turn-test', user: 'Disable this provider', reply: isFirst ? '' : 'The approved operation completed.', status: isFirst ? 'pending' : 'success', started_at_ms: Date.now() - 1200, ended_at_ms: Date.now(), traces: [{ id: 'tool-test', name: 'providers_delete', result: isFirst ? { status: 'pending', operation_id: operation.id } : { status: 'success', data: { is_updated: true } } }] }] };
-    await route.fulfill({ contentType: 'text/event-stream', body: frame({ type: 'state', conversation }) });
+    const trace = { id: 'tool-test', name: 'providers_delete', arguments: '{"id":"provider-test"}', result: isFirst ? { status: 'pending', operation_id: operation.id } : { status: 'success', data: { is_updated: true } } };
+    const parts = isFirst ? [{ type: 'tool', trace_id: trace.id }] : [{ type: 'tool', trace_id: trace.id }, { type: 'text', content: 'The approved operation completed.' }];
+    conversation = { ...conversation, revision: conversation.revision + 1, turns: [{ id: 'turn-test', user: 'Disable this provider', reply: isFirst ? '' : 'The approved operation completed.', parts, status: isFirst ? 'pending' : 'success', started_at_ms: Date.now() - 1200, ended_at_ms: Date.now(), traces: [trace] }] };
+    const body = isFirst
+      ? [started('turn-test'), step(1), ...toolCall(trace.id, trace.name, trace.arguments), toolResult(trace.id, trace.result), snapshot(conversation),
+        finished([{ id: operation.id, reason: 'approval', toolCallId: trace.id, metadata: { capability: 'providers_delete', permission: 'destructive' } }])]
+      : [started('turn-test', 'run-resume'), toolResult(trace.id, trace.result), step(2), ...text('run-resume:1', 'The approved operation completed.'), snapshot(conversation), finished([], 'run-resume')];
+    await route.fulfill({ contentType: 'text/event-stream', body: sse(body) });
   });
   await page.goto(`${base}/agent`, { waitUntil: 'domcontentloaded' });
   await page.locator('[data-testid="agent-page"]').waitFor();
@@ -65,12 +107,12 @@ export async function agentWorkspace({ base, page, check }) {
 
   await page.getByRole('button', { name: 'Reasoning effort: Default', exact: true }).click();
   await page.getByRole('menuitem', { name: 'High (high)' }).click();
-  await page.getByLabel('Describe an OMC query or action').fill('Disable this provider');
+  const composer = page.getByLabel('Describe an OMC query or action');
+  await composer.fill('Disable this provider');
   check('agent can send as soon as a message is typed', await page.getByRole('button', { name: 'Send', exact: true }).isEnabled());
   // The composer decides Enter itself, so the two Enters that must not send are pinned beside the
   // one that must: Shift+Enter adds a line, and an Enter confirming an IME composition belongs to
   // the input method. A send empties the box in the same task, so an unchanged box is the evidence.
-  const composer = page.getByLabel('Describe an OMC query or action');
   await composer.press('Shift+Enter');
   check('Shift+Enter adds a line instead of sending', await composer.inputValue() === 'Disable this provider\n', JSON.stringify(await composer.inputValue()));
   await composer.fill('Disable this provider');
@@ -82,23 +124,33 @@ export async function agentWorkspace({ base, page, check }) {
     return element.value;
   });
   check('an Enter that confirms an IME composition does not send', afterImeEnter === 'Disable this provider', JSON.stringify(afterImeEnter));
-  // Enter is the composer's primary submit. It is asserted rather than the button, because the two
-  // are separate paths through the chat component and only the button used to work.
   await composer.press('Enter');
-  // A run that stops for approval puts the request in front of the operator by itself.
-  const dialog = page.getByRole('dialog', { name: 'Authorization required' });
-  await dialog.waitFor();
-  check('agent submits a message with Enter', runs.length === 1 && runs[0].message === 'Disable this provider', JSON.stringify(runs));
-  check('agent sends the chosen reasoning effort and no consent flag', runs[0].reasoning_effort === 'high' && !('has_consent' in runs[0]), JSON.stringify(runs[0]));
-  check('agent opens the authorization dialog when a run stops for approval', await dialog.getByText('providers_delete').isVisible() && await dialog.getByText('provider-test').first().isVisible());
-  check('a destructive request is one decision, with nothing to type', await dialog.getByRole('textbox').count() === 0 && await dialog.getByText('This cannot be undone.').isVisible());
-  await dialog.getByRole('button', { name: 'Allow', exact: true }).click();
+  // A run that stops for approval puts the decision in the transcript, under the call that raised it.
+  const card = page.locator('[data-testid="agent-transcript"] [data-testid="agent-authorization"][data-approval-id="operation-test"]');
+  await card.waitFor();
+  const request = runs[0];
+  check('agent submits a message with Enter as one AG-UI user message', runs.length === 1 && request.protocolVersion === '1.0' && request.messages.length === 1
+    && request.messages[0].role === 'user' && request.messages[0].content === 'Disable this provider', JSON.stringify(runs));
+  check('agent sends its target and effort as forwarded props and no consent flag', request.forwardedProps.model === 'vision-alias' && request.forwardedProps.client_key_fingerprint === 'playground-identity'
+    && request.forwardedProps.reasoning_effort === 'high' && !JSON.stringify(request).includes('has_consent'), JSON.stringify(request.forwardedProps));
+  check('agent declares only the display tools it can draw, and never supplies state', JSON.stringify(request.tools.map(tool => tool.name).sort()) === JSON.stringify(['render_chart', 'render_table'])
+    && (request.state === undefined || Object.keys(request.state).length === 0), JSON.stringify(request.tools));
+  check('agent tells the server the console language', request.context.length === 1 && request.context[0].description === 'console_language' && request.context[0].value === 'en', JSON.stringify(request.context));
+  check('agent shows the approval inline under the call, not in a dialog', await page.getByRole('dialog').count() === 0
+    && await page.locator('[data-testid="agent-trace"][data-status="pending"]').count() === 1
+    && await card.getByText('providers_delete').count() + await card.getByText('provider-test').count() >= 1);
+  check('a destructive request is one decision, with nothing to type', await card.getByRole('textbox').count() === 0 && await card.getByText('This cannot be undone.').isVisible());
+  check('the composer points at the waiting decision and refuses to send', await page.locator('[data-testid="agent-awaiting"]').isVisible() && await page.getByRole('button', { name: 'Send', exact: true }).isDisabled());
+  await card.getByRole('button', { name: 'Allow', exact: true }).click();
   await until(() => decisions.length === 1, { label: 'the approval decision reach the server' });
   // Deciding is the whole interaction: the run continues without a separate Resume.
   await page.getByText('The approved operation completed.').waitFor();
   check('agent posts one allow decision with no confirmation text', JSON.stringify(decisions[0]) === JSON.stringify({ approve: true }), JSON.stringify(decisions[0]));
-  check('agent continues the run once the operator decides', await dialog.count() === 0 || !(await dialog.isVisible()));
-  check('agent resumes server conversation instead of supplying tool history', runs.length === 2 && runs[1].message === '' && !('messages' in runs[1]) && !('tools' in runs[1]));
+  check('agent continues the run once the operator decides', await card.count() === 0);
+  check('agent resumes the interrupt instead of supplying a message or tool history', runs.length === 2 && runs[1].messages.length === 0
+    && JSON.stringify(runs[1].resume) === JSON.stringify([{ interruptId: 'operation-test', status: 'resolved' }]), JSON.stringify(runs[1]));
+  const settledChain = page.locator('[data-testid="agent-chain"]');
+  check('a finished capability chain folds behind the answer', await settledChain.getByRole('button').first().getAttribute('aria-expanded') === 'false');
   check('agent offers a new conversation once there is one to replace', await page.getByRole('button', { name: 'New conversation', exact: true }).isEnabled());
   await page.reload();
   await page.getByText('The approved operation completed.').waitFor();
@@ -114,15 +166,45 @@ export async function agentWorkspace({ base, page, check }) {
   check('the chosen target is remembered as the operator\'s own preference', preference?.agent_target?.model === 'vision-alias' && preference?.agent_target?.reasoning_effort === 'high', JSON.stringify(preference?.agent_target));
 }
 
+/**
+ * A run that fails after the server accepted it reports a sentence with the code beneath it; one
+ * the server refused before persisting anything hands the message back to the composer.
+ */
 export async function agentFailureCopy({ base, page, check }) {
-  await page.route('**/agent/run', route => route.fulfill({ contentType: 'text/event-stream', body: frame({ type: 'error', content: 'operation_outcome_unknown' }) }));
+  let mode = 'rejected';
+  let isDirectoryUnavailable = true;
+  await page.route('**/capabilities', route => isDirectoryUnavailable
+    ? route.fulfill({ status: 502, json: { error: 'directory unavailable' } })
+    : route.fallback());
+  await page.route('**/agent/run', route => {
+    const body = mode === 'rejected'
+      ? [runError('client_key_unavailable')]
+      : [started('turn-failed'), step(1), runError('operation_outcome_unknown')];
+    return route.fulfill({ contentType: 'text/event-stream', body: sse(body) });
+  });
   await page.goto(`${base}/agent`, { waitUntil: 'domcontentloaded' });
   await page.locator('[data-testid="agent-page"]').waitFor();
-  await page.getByLabel('Describe an OMC query or action').fill('Delete a provider');
+  const composer = page.getByLabel('Describe an OMC query or action');
+  await composer.fill('Delete a provider');
+  const directory = page.getByTestId('agent-directory');
+  const retryDirectory = directory.getByRole('button', { name: 'Retry', exact: true });
+  await retryDirectory.waitFor();
+  isDirectoryUnavailable = false;
+  await retryDirectory.click();
+  await directory.getByText('providers_delete', { exact: true }).waitFor();
+  check('retrying the capability directory preserves the composer draft',
+    await composer.inputValue() === 'Delete a provider' && await directory.locator('.omc-load-failure').count() === 0);
   await page.getByRole('button', { name: 'Send', exact: true }).click();
+  const rejected = page.locator('[data-testid="agent-rejected"]');
+  await rejected.waitFor();
+  check('a message refused before the run started goes back into the composer', await composer.inputValue() === 'Delete a provider' && await rejected.getByText('client_key_unavailable').count() === 1, await composer.inputValue());
+  check('a refused message leaves no turn behind', await page.locator('[data-testid="agent-turn"]').count() === 0 && await page.locator('[data-testid="agent-running"]').count() === 0);
+
+  mode = 'failed';
+  await rejected.getByRole('button', { name: 'Retry', exact: true }).click();
   // A failure states what happened and what to do, and keeps the machine code beneath it for a
   // support conversation rather than making the code the message.
-  await page.getByText('The operation may have taken effect but its outcome is unconfirmed. Inspect the target resource before retrying.').waitFor();
+  await page.getByText('The operation may have taken effect but its outcome is unconfirmed. Inspect the target resource before retrying.').first().waitFor();
   check('agent reports a failure as a sentence with the code beneath it', await page.getByText('operation_outcome_unknown').count() >= 1);
 }
 
@@ -132,38 +214,36 @@ export async function agentFailureCopy({ base, page, check }) {
  * This is the property the run loop's coalescing exists for, and it is the one that regresses
  * silently: dispatching every frame straight into React state still renders the same answer, just
  * two hundred times, and nothing in a screenshot can tell the difference. The probe counts the
- * mutations the running bubble actually receives while a 200-frame answer streams in.
+ * mutations the running message actually receives while a 200-frame answer streams in.
  */
 export async function agentStream({ base, page, check }) {
   const answer = Array.from({ length: 200 }, (_, index) => `token${index}`).join(' ');
   await page.route('**/agent/run', route => {
-    const body = Array.from({ length: 200 }, (_, index) => frame({ type: 'delta', content: `token${index} ` })).join('')
-      + frame({ type: 'state', conversation: {
-        id: 'agent-test-session',
-        revision: 2,
-        model: 'vision-alias',
-        client_key_fingerprint: 'playground-identity',
-        omitted: 0,
-        turns: [{ id: 'turn-stream', user: 'Stream', reply: answer, status: 'success', traces: [], started_at_ms: Date.now() - 500, ended_at_ms: Date.now() }],
-      } });
-    return route.fulfill({ contentType: 'text/event-stream', body });
+    const deltas = Array.from({ length: 200 }, (_, index) => ({ type: 'TEXT_MESSAGE_CONTENT', messageId: 'run-test:1', delta: `token${index} ` }));
+    const conversation = {
+      ...initial(),
+      revision: 2,
+      turns: [{ id: 'turn-stream', user: 'Stream', reply: answer, parts: [{ type: 'text', content: answer }], status: 'success', traces: [], usage: { input_tokens: 1200, output_tokens: 80, total_tokens: 1280 }, started_at_ms: Date.now() - 500, ended_at_ms: Date.now() }],
+    };
+    const body = [started('turn-stream'), step(1), { type: 'TEXT_MESSAGE_START', messageId: 'run-test:1', role: 'assistant' }, ...deltas, { type: 'TEXT_MESSAGE_END', messageId: 'run-test:1' }, snapshot(conversation), finished()];
+    return route.fulfill({ contentType: 'text/event-stream', body: sse(body) });
   });
   await page.goto(`${base}/agent`, { waitUntil: 'domcontentloaded' });
   await page.locator('[data-testid="agent-page"]').waitFor();
   await page.evaluate(() => {
     const target = { count: 0 };
     Object.defineProperty(window, '__agentUpdates', { value: target, configurable: true });
-    // Observed from the page rather than from the running bubble, because that bubble is one of
-    // the things the run creates: an observer attached to it can only ever see the frames that
-    // arrive after it exists. Records are filtered to the bubble's subtree instead, which counts
-    // the chat's own transient renders out.
-    const isInsideRunningBubble = node => {
+    // Observed from the page rather than from the running message, because that message is one
+    // of the things the run creates: an observer attached to it can only ever see the frames that
+    // arrive after it exists. Records are filtered to its subtree instead, which counts the
+    // thread's own transient renders out.
+    const isInsideRunningMessage = node => {
       const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
-      return Boolean(element?.closest?.('[data-testid="agent-running"]'));
+      return !element?.closest?.('[data-live-elapsed]') && Boolean(element?.closest?.('[data-testid="agent-running"]'));
     };
     new MutationObserver(records => {
       for (const record of records) {
-        if (isInsideRunningBubble(record.target)) target.count += 1;
+        if (isInsideRunningMessage(record.target)) target.count += 1;
       }
     }).observe(document.querySelector('[data-testid="agent-page"]'), { subtree: true, childList: true, characterData: true });
   });
@@ -176,6 +256,8 @@ export async function agentStream({ base, page, check }) {
   // machine cannot fail it, and far enough above the coalesced figure that removing the
   // coalescing fails it.
   check('a 200-frame answer is coalesced into a bounded number of paints', updates > 0 && updates < 100, `updates=${updates}`);
+  const footer = await page.locator('[data-testid="agent-turn"]').last().innerText();
+  check('a finished answer states the tokens the gateway reported', footer.includes('1,280') || footer.includes('1.28K') || footer.includes('1.3K'), footer);
 }
 
 export async function agentNarrow({ base, page, check }) {
@@ -183,22 +265,24 @@ export async function agentNarrow({ base, page, check }) {
   // that line used to size the call chain - and with it the whole transcript - so a sideways swipe
   // on a phone dragged the conversation off the screen.
   const longValue = 'a-value-without-any-break-'.repeat(12);
-  await page.route('**/agent/session', route => route.fulfill({ json: { id: 'agent-test-session', revision: 2, model: 'vision-alias', client_key_fingerprint: 'playground-identity', omitted: 0, turns: [
+  const privateQueryCell = 'private-query-cell-not-for-preview';
+  await page.route('**/agent/session', route => route.fulfill({ json: { ...initial(), revision: 2, turns: [
     { id: 'turn-wide', user: 'Which provider fails most?', reply: 'Checked.', parts: [{ type: 'tool', trace_id: 'call-wide' }, { type: 'text', content: 'Checked.' }], status: 'success', started_at_ms: Date.now() - 900, ended_at_ms: Date.now(), traces: [
-      { id: 'call-wide', name: 'database_query', result: { status: 'success', data: { columns: ['provider'], rows: [[longValue]], is_truncated: false, detail: longValue } } },
+      { id: 'call-wide', name: 'database_query', arguments: JSON.stringify({ sql: `select '${longValue}'` }), result: { status: 'success', data: { columns: ['provider'], rows: [[privateQueryCell]], is_truncated: false, detail: longValue } } },
     ] },
   ] } }));
   await page.goto(`${base}/agent`, { waitUntil: 'domcontentloaded' });
   await page.locator('[data-testid="agent-page"]').waitFor();
   await page.getByText('Checked.', { exact: true }).waitFor();
+  const chain = page.locator('[data-testid="agent-chain"]');
+  if (await page.locator('[data-testid="agent-trace"]').count() === 0) await chain.getByRole('button').first().click();
+  await page.locator('[data-testid="agent-trace"]').first().waitFor();
+  check('a database query stays a call row without a result preview', await page.locator('[data-testid="agent-trace"]').first().getByRole('button').count() === 1 && await page.getByText(privateQueryCell, { exact: false }).count() === 0);
   // scrollWidth counts content past a clipped edge too, so this proves nothing is wider than the
   // column rather than only that the overflow is hidden.
-  const transcript = await page.evaluate(() => {
-    const box = document.querySelector('.ant-bubble-list-scroll-box');
-    return { scroll: box.scrollWidth, client: box.clientWidth, overflowX: getComputedStyle(box).overflowX };
-  });
-  check('a long call digest does not widen the transcript on a phone', transcript.scroll <= transcript.client && transcript.overflowX === 'hidden', JSON.stringify(transcript));
-  const composer = await page.locator('[data-testid="agent-page"] .ant-sender').boundingBox();
+  const transcript = await page.locator('[data-testid="agent-transcript"]').evaluate(box => ({ scroll: box.scrollWidth, client: box.clientWidth }));
+  check('a long call digest does not widen the transcript on a phone', transcript.scroll <= transcript.client, JSON.stringify(transcript));
+  const composer = await page.locator('[data-testid="agent-page"] form').last().boundingBox();
   check('the Agent composer starts compact on a phone', composer.height <= 90, `height=${composer.height}`);
   // On a phone the target stays in the head rather than behind a settings sheet: which model a
   // message will reach is never one tap away.
@@ -206,23 +290,30 @@ export async function agentNarrow({ base, page, check }) {
   const geometry = await page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth, height: innerHeight, bottom: document.querySelector('[data-testid="agent-page"]').getBoundingClientRect().bottom }));
   check('Agent composer fits a narrow viewport', geometry.scroll <= geometry.width && geometry.bottom <= geometry.height + 1, JSON.stringify(geometry));
 
-  await page.getByRole('button', { name: 'Capabilities', exact: true }).click();
+  await page.getByRole('button', { name: 'Side panel', exact: true }).click();
   const directory = page.locator('[data-testid="agent-directory"]');
   await directory.waitFor();
   await page.goBack();
   await until(async () => await page.locator('[data-testid="agent-directory"]:visible').count() === 0);
-  check('Back dismisses the capability directory without navigating', new URL(page.url()).pathname.endsWith('/agent'));
+  check('Back dismisses the side panel without navigating', new URL(page.url()).pathname.endsWith('/agent'));
+  await page.locator('[data-testid="agent-trace"]').first().getByRole('button').first().click();
+  const details = page.locator('[data-testid="agent-details"]');
+  await details.waitFor();
+  check('query details omit raw results from an older session', !(await details.innerText()).includes(privateQueryCell));
+  await page.goBack();
+  await until(async () => await page.locator('[data-testid="agent-details"]:visible').count() === 0);
 }
 
 /**
- * The operator's message is in the transcript the moment it is sent, not when the run ends, and a
- * turn is drawn in the order the model worked - reasoning, a remark, a capability call, more
- * reasoning, the answer - rather than in fixed slots for reasoning, calls and answer.
+ * The operator's message is in the transcript the moment it is sent, not when the run ends; a
+ * message sent during the run waits in a queue and goes out after it; and a turn is drawn in the
+ * order the model worked.
  */
 export async function agentLive({ base, page, check }) {
-  let release;
-  const released = new Promise(resolve => { release = resolve; });
-  const trace = { id: 'call-usage', name: 'usage_aggregate', result: { status: 'success', data: { window: '1h', failed: 6 } } };
+  let releaseResult;
+  const resultReleased = new Promise(resolve => { releaseResult = resolve; });
+  const runs = [];
+  const trace = { id: 'call-usage', name: 'usage_aggregate', arguments: '{"window":"1h","group_by":"model"}', result: { status: 'success', data: { window: '1h', failed: 6 } } };
   const parts = [
     { type: 'thought', content: 'Compare failures by model first.' },
     { type: 'text', content: 'Let me read the last hour.' },
@@ -230,41 +321,128 @@ export async function agentLive({ base, page, check }) {
     { type: 'thought', content: 'One model dominates.' },
     { type: 'text', content: 'Two models failed most.' },
   ];
+  const firstTurn = { id: 'turn-live', user: 'Which models failed?', reply: 'Let me read the last hour.\n\nTwo models failed most.', parts, status: 'success', traces: [trace], rounds: 2, started_at_ms: Date.now() - 900, ended_at_ms: Date.now() };
+  // The first run is held until the probe has seen the sent message and queued a second one.
   await page.route('**/agent/run', async route => {
-    await released;
-    await route.fulfill({ contentType: 'text/event-stream', body:
-      frame({ type: 'thought', content: parts[0].content, round: 1 })
-      + frame({ type: 'delta', content: parts[1].content, round: 1 })
-      + frame({ type: 'tool', trace })
-      + frame({ type: 'thought', content: parts[3].content, round: 2 })
-      + frame({ type: 'delta', content: parts[4].content, round: 2 })
-      + frame({ type: 'state', conversation: {
-        id: 'agent-test-session',
-        revision: 2,
-        model: 'vision-alias',
-        client_key_fingerprint: 'playground-identity',
-        omitted: 0,
-        turns: [{ id: 'turn-live', user: 'Which models failed?', reply: 'Let me read the last hour.\n\nTwo models failed most.', parts, status: 'success', traces: [trace], started_at_ms: Date.now() - 900, ended_at_ms: Date.now() }],
-      } }) });
+    const input = JSON.parse(route.request().postData());
+    runs.push(input);
+    if (runs.length === 1) {
+      await resultReleased;
+      await route.fulfill({ contentType: 'text/event-stream', body: sse([
+        started('turn-live'), step(1), ...reasoning('run-test:1', parts[0].content), ...text('run-test:2', parts[1].content), ...toolCall(trace.id, trace.name, trace.arguments),
+        toolResult(trace.id, trace.result), step(2), ...reasoning('run-test:3', parts[3].content), ...text('run-test:4', parts[4].content),
+        snapshot({ ...initial(), revision: 2, turns: [firstTurn] }), finished(),
+      ]) });
+      return;
+    }
+    const second = { id: 'turn-queued', user: input.messages[0]?.content ?? '', reply: 'Queued answer.', parts: [{ type: 'text', content: 'Queued answer.' }], status: 'success', traces: [], started_at_ms: Date.now() - 200, ended_at_ms: Date.now() };
+    await route.fulfill({ contentType: 'text/event-stream', body: sse([started('turn-queued', 'run-queued'), step(1), ...text('run-queued:1', 'Queued answer.'),
+      snapshot({ ...initial(), revision: 3, turns: [firstTurn, second] }), finished([], 'run-queued')]) });
   });
   await page.goto(`${base}/agent`, { waitUntil: 'domcontentloaded' });
   await page.locator('[data-testid="agent-page"]').waitFor();
   const input = page.getByLabel('Describe an OMC query or action');
+  const emptyHeight = await input.evaluate(element => element.getBoundingClientRect().height);
+  check('the desktop composer starts at one line', emptyHeight < 30, `height=${emptyHeight}`);
+  await input.fill('First line\nSecond line\nThird line');
+  const expandedHeight = await input.evaluate(element => element.getBoundingClientRect().height);
+  check('the composer grows for multiline input', expandedHeight > emptyHeight * 2, `empty=${emptyHeight} expanded=${expandedHeight}`);
   await input.fill('Which models failed?');
   await input.press('Enter');
-  const transcript = page.locator('.ant-bubble-list');
+  const transcript = page.locator('[data-testid="agent-transcript"]');
   await transcript.getByText('Which models failed?', { exact: true }).waitFor({ timeout: 2000 });
   check('the sent message appears before the run answers', await transcript.getByText('Which models failed?', { exact: true }).isVisible() && await page.locator('[data-testid="agent-activity"]').isVisible());
   check('the composer is cleared once the message is sent', await input.inputValue() === '');
-  release();
+  const bubble = await transcript.locator('[data-role="user"]').last().evaluate(element => element.firstElementChild.getBoundingClientRect().height);
+  check('a single-line user message has compact vertical padding', bubble < 50, `height=${bubble}`);
+  await page.getByRole('button', { name: 'Stop', exact: true }).waitFor();
+  check('an empty running composer shows stop without a queue button', await page.getByRole('button', { name: 'Queue', exact: true }).count() === 0);
+  await page.mouse.move(0, 0);
+  const stopStyle = await page.getByRole('button', { name: 'Stop', exact: true }).evaluate(element => {
+    const style = getComputedStyle(element);
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--border)'; element.append(probe);
+    const expected = getComputedStyle(probe).color; probe.remove();
+    return { border: style.borderTopColor, expected, shadow: style.boxShadow };
+  });
+  check('light Stop uses the neutral token border without a black shadow', stopStyle.border === stopStyle.expected && stopStyle.shadow === 'none', JSON.stringify(stopStyle));
+  const elapsedSamples = await page.locator('[data-testid="agent-activity"] [data-live-elapsed]').evaluate(element => new Promise(resolve => {
+    const samples = [];
+    const observer = new MutationObserver(() => {
+      samples.push({ text: element.textContent, at: performance.now() });
+      if (samples.length >= 8 && samples.filter(sample => /^\d+\.\ds$/.test(sample.text)).length >= 3) { observer.disconnect(); resolve(samples); }
+    });
+    observer.observe(element, { subtree: true, characterData: true, childList: true });
+  }));
+  const seconds = elapsedSamples.filter(sample => /^\d+\.\ds$/.test(sample.text));
+  check('live elapsed changes in tenths instead of whole seconds', seconds.length >= 3 && seconds.every(sample => /^\d+\.\ds$/.test(sample.text)) && seconds.slice(1).every((sample, index) => Math.abs(parseFloat(sample.text) - parseFloat(seconds[index].text) - 0.1) < 0.01), JSON.stringify(elapsedSamples));
+
+
+  await input.fill('And the day before?');
+  await page.getByRole('button', { name: 'Queue', exact: true }).waitFor();
+  check('a running composer with a draft replaces stop with queue', await page.getByRole('button', { name: 'Stop', exact: true }).count() === 0);
+
+  await page.getByRole('button', { name: 'Queue', exact: true }).click();
+  await page.locator('[data-testid="composer-queue-item"]').waitFor();
+  await page.getByRole('button', { name: 'Stop', exact: true }).waitFor();
+  check('queueing clears the draft and restores the stop action', await input.inputValue() === '' && await page.getByRole('button', { name: 'Queue', exact: true }).count() === 0);
+
+  check('a message sent during a run waits in the queue instead of starting a second run', runs.length === 1 && await page.locator('[data-testid="composer-queue-item"]').getByText('And the day before?').isVisible(), `runs=${runs.length}`);
+  releaseResult();
   await page.getByText('Two models failed most.').waitFor();
-  const turn = page.locator('[data-testid="agent-turn"]').last();
+  await page.getByText('Queued answer.').waitFor();
+  check('the queued message goes out once the run settles, as its own run', runs.length === 2 && runs[1].messages[0].content === 'And the day before?' && await page.locator('[data-testid="composer-queue-item"]').count() === 0, JSON.stringify(runs.map(run => run.messages)));
+  const turn = page.locator('[data-testid="agent-turn"]').first();
+  const chain = turn.locator('[data-testid="agent-chain"]');
+  await page.getByText('Two models failed most.').waitFor();
+  check('a finished stretch of reasoning folds back behind its answer', await turn.getByRole('button', { name: 'Thought process', exact: true }).evaluateAll(buttons => buttons.every(button => button.getAttribute('aria-expanded') === 'false')));
+  if (await turn.locator('[data-testid="agent-trace"]').count() === 0) await chain.getByRole('button').first().click();
   for (const title of await turn.getByText('Thought process', { exact: true }).all()) await title.click();
   await turn.getByText('One model dominates.').waitFor();
-  const text = await turn.innerText();
-  const positions = ['Compare failures by model first.', 'Let me read the last hour.', 'usage_aggregate', 'One model dominates.', 'Two models failed most.'].map(fragment => text.indexOf(fragment));
+  const content = await turn.innerText();
+  const positions = ['Compare failures by model first.', 'Let me read the last hour.', 'usage_aggregate', 'One model dominates.', 'Two models failed most.'].map(fragment => content.indexOf(fragment));
   check('a turn is drawn in the order the model worked', positions.every(position => position >= 0) && positions.every((position, index) => index === 0 || position > positions[index - 1]), JSON.stringify(positions));
   check('each stretch of reasoning keeps its own place', await turn.getByText('Thought process', { exact: true }).count() === 2);
+  // A call row opens its details in the side panel: arguments and the result the model received.
+  await turn.locator('[data-testid="agent-trace"]').first().getByRole('button').first().click();
+  const details = page.locator('[data-testid="agent-details"]');
+  await details.getByText('Arguments', { exact: true }).waitFor();
+  check('a call opens its arguments and result in the details tab', (await details.innerText()).includes('group_by') && (await details.innerText()).includes('failed'), await details.innerText());
+  await verifyAgentRecovery({ base, page, check });
+}
+
+/**
+ * Display calls draw the rows the server froze on the trace, never the model's text: a table is a
+ * table with its own CSV actions, and a chart can be read as the data behind it.
+ */
+export async function agentViews({ base, page, check }) {
+  const rows = [{ model: 'gpt-4.1', requests: 120 }, { model: 'gemini-2.5', requests: 80 }];
+  const tableView = { kind: 'table', title: 'Requests by model', columns: ['model', 'requests'], rows, source: { call_id: 'call-usage', path: 'rows' } };
+  const chartView = { kind: 'chart', title: 'Request share', chart: { type: 'column', x: 'model', y: ['requests'] }, columns: ['model', 'requests'], rows, source: { call_id: 'call-usage', path: 'rows' } };
+  await page.route('**/agent/session', route => route.fulfill({ json: { ...initial(), revision: 2, turns: [{
+    id: 'turn-views', user: 'Chart requests by model', reply: 'Here they are.', status: 'success', started_at_ms: Date.now() - 900, ended_at_ms: Date.now(),
+    parts: [{ type: 'tool', trace_id: 'call-usage' }, { type: 'tool', trace_id: 'call-table' }, { type: 'tool', trace_id: 'call-chart' }, { type: 'text', content: 'Here they are.' }],
+    traces: [
+      { id: 'call-usage', name: 'usage_aggregate', arguments: '{}', result: { status: 'success', data: { rows } } },
+      { id: 'call-table', name: 'render_table', arguments: '{"title":"Requests by model"}', result: { status: 'success', data: { rendered: true, rows: 2 } }, view: tableView },
+      { id: 'call-chart', name: 'render_chart', arguments: '{"title":"Request share"}', result: { status: 'success', data: { rendered: true, rows: 2 } }, view: chartView },
+    ],
+  }] } }));
+  await page.goto(`${base}/agent`, { waitUntil: 'domcontentloaded' });
+  await page.locator('[data-testid="agent-page"]').waitFor();
+  await page.getByText('Here they are.').waitFor();
+  const table = page.locator('[data-testid="agent-view"][data-kind="table"]');
+  const chart = page.locator('[data-testid="agent-view"][data-kind="chart"]');
+  await table.waitFor();
+  await chart.waitFor();
+  check('a display call draws its frozen rows as a table', await table.getByText('Requests by model').count() >= 1 && await table.getByText('gemini-2.5').count() === 1 && await table.getByText('120').count() === 1);
+  check('a display call is drawn outside the call chain, where the answer reads', await page.locator('[data-testid="agent-chain"] [data-testid="agent-view"]').count() === 0);
+  await chart.locator('canvas').first().waitFor();
+  check('a chart view draws on the console chart stack', await chart.locator('canvas').count() >= 1 && await chart.getByRole('img', { name: 'Request share' }).count() === 1);
+  await chart.getByText('Data', { exact: true }).click();
+  await chart.getByText('gpt-4.1').waitFor();
+  check('a chart can be read as the rows behind it', await chart.getByText('gpt-4.1').count() === 1 && await chart.locator('canvas').count() === 0);
+
 }
 
 /**
@@ -289,8 +467,14 @@ export async function agentQuestion({ base, page, check }) {
   await page.route('**/agent/run', async route => {
     runs.push(JSON.parse(route.request().postData()));
     const isFirst = runs.length === 1;
-    conversation = { ...conversation, revision: conversation.revision + 1, turns: [{ id: 'turn-question', user: 'Summarize usage', reply: isFirst ? '' : 'Here is the 24 hour summary.', status: isFirst ? 'pending' : 'success', started_at_ms: Date.now() - 800, ended_at_ms: Date.now(), traces: [{ id: 'tool-question', name: 'ask_question', result: isFirst ? { status: 'pending', operation_id: operation.id } : { status: 'success', data: { answers: [] } } }] }] };
-    await route.fulfill({ contentType: 'text/event-stream', body: frame({ type: 'state', conversation }) });
+    const trace = { id: 'tool-question', name: 'ask_question', arguments: '{}', result: isFirst ? { status: 'pending', operation_id: operation.id } : { status: 'success', data: { answers: [] } } };
+    const parts = isFirst ? [{ type: 'tool', trace_id: trace.id }] : [{ type: 'tool', trace_id: trace.id }, { type: 'text', content: 'Here is the 24 hour summary.' }];
+    conversation = { ...conversation, revision: conversation.revision + 1, turns: [{ id: 'turn-question', user: 'Summarize usage', reply: isFirst ? '' : 'Here is the 24 hour summary.', parts, status: isFirst ? 'pending' : 'success', started_at_ms: Date.now() - 800, ended_at_ms: Date.now(), traces: [trace] }] };
+    const body = isFirst
+      ? [started('turn-question'), step(1), ...toolCall(trace.id, trace.name), toolResult(trace.id, trace.result), snapshot(conversation),
+        finished([{ id: operation.id, reason: 'question', toolCallId: trace.id, metadata: { capability: 'ask_question', permission: 'read' } }])]
+      : [started('turn-question', 'run-resume'), toolResult(trace.id, trace.result), step(2), ...text('run-resume:1', 'Here is the 24 hour summary.'), snapshot(conversation), finished([], 'run-resume')];
+    await route.fulfill({ contentType: 'text/event-stream', body: sse(body) });
   });
   await page.goto(`${base}/agent`, { waitUntil: 'domcontentloaded' });
   await page.locator('[data-testid="agent-page"]').waitFor();
@@ -326,5 +510,45 @@ export async function agentQuestion({ base, page, check }) {
   const answers = decisions[0]?.answer?.answers;
   check('the reply carries each question\'s choices and typed text', decisions.length === 1 && decisions[0].approve === true
     && JSON.stringify(answers) === JSON.stringify([{ selected: ['Last 24 hours'], text: '' }, { selected: ['OpenAI'], text: 'Exclude test keys' }]), JSON.stringify(decisions));
-  check('answering continues the run and returns the composer', runs.length === 2 && runs[1].message === '' && await page.getByLabel('Describe an OMC query or action').count() === 1);
+  check('answering resumes the question\'s interrupt and returns the composer', runs.length === 2 && runs[1].messages.length === 0
+    && runs[1].resume?.[0]?.interruptId === 'question-test' && await page.getByLabel('Describe an OMC query or action').count() === 1, JSON.stringify(runs[1]));
+}
+
+
+async function verifyAgentRecovery({ base, page, check }) {
+  let generationCount = 0;
+  let subscriptionCount = 0;
+  let cancelCount = 0;
+  let runID;
+  let conversation = initial();
+  let release;
+  const completion = new Promise(resolve => { release = resolve; });
+  await page.route('**/agent/session', route => route.fulfill({ json: conversation }));
+  await page.route('**/agent/runs/*/cancel', route => { cancelCount++; return route.fulfill({ json: { is_cancelled: true } }); });
+  await page.route('**/agent/run', route => {
+    generationCount++;
+    runID = route.request().headers()['x-omc-run-id'];
+    conversation = { ...initial(), active_run_id: runID, revision: 2, turns: [{ id: 'recover-turn', user: 'Recover this run', reply: '', status: 'running', traces: [], started_at_ms: Date.now() }] };
+    return route.fulfill({ contentType: 'text/event-stream', body: sse([started('recover-turn', runID), ...text('recover-message', 'Partial answer')]) });
+  });
+  await page.route('**/agent/runs/*', async route => {
+    if (route.request().method() === 'POST') { cancelCount++; await route.fulfill({ json: { is_cancelled: true } }); return; }
+    subscriptionCount++;
+    if (subscriptionCount === 1) { await route.abort('internetdisconnected'); return; }
+    await completion;
+    const finishedConversation = { ...conversation, active_run_id: undefined, revision: 3, turns: [{ ...conversation.turns[0], reply: 'Recovered complete.', status: 'success', ended_at_ms: Date.now() }] };
+    conversation = finishedConversation;
+    try { await route.fulfill({ contentType: 'text/event-stream', body: sse([started('recover-turn', runID), ...text('recover-message', 'Recovered complete.'), snapshot(finishedConversation), finished([], runID)]) }); } catch { /* The old subscriber was closed by reload. */ }
+  });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByLabel('Describe an OMC query or action').fill('Recover this run');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await until(() => subscriptionCount >= 2, { label: 'the failed subscription to reconnect' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Stop', exact: true }).waitFor();
+  await until(() => subscriptionCount >= 3, { label: 'refresh to attach to the original run' });
+  check('Agent refresh reattaches without sending Stop or starting another model call', generationCount === 1 && cancelCount === 0, JSON.stringify({ generationCount, cancelCount, subscriptionCount }));
+  release();
+  await page.getByText('Recovered complete.', { exact: true }).waitFor();
+  check('Agent replay replaces partial text and restores one complete answer', await page.getByText('Recovered complete.', { exact: true }).count() === 1 && await page.getByText('Partial answer', { exact: true }).count() === 0 && generationCount === 1);
 }

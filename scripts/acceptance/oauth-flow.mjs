@@ -82,6 +82,15 @@ export async function runOAuthFlowAcceptance({
     `errors=${replayErrors}`,
   );
 
+  // Read and dismiss the outcome before continuing: the top-centre toast can cover the
+  // drawer's close button, and waiting for it to expire would outlive the success-state window.
+  const completionToast = page.locator('.omc-toast').filter({
+    has: page.getByRole('button', { name: /View credentials|查看凭证/i }),
+  });
+  await completionToast.waitFor({ state: 'visible' });
+  await completionToast.locator('.ant-notification-notice-close').click();
+  await completionToast.waitFor({ state: 'detached' });
+
   // Minimize the successful panel, then reopen it. The drawer is presentation
   // only: the confirmed result must still be there and Start must have become the
   // explicit "sign in another account" action rather than a duplicate attempt.

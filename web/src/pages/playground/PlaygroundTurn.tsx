@@ -1,6 +1,9 @@
+import { LiveElapsed } from '../../components/workspace/LiveElapsed';
 import React from 'react';
 import { Button, Tooltip } from 'antd';
-import { BugOutlined, ClockCircleOutlined, DatabaseOutlined, FieldTimeOutlined, HistoryOutlined, ReloadOutlined, ThunderboltOutlined } from '../../components/icons';
+import { ActionBarPrimitive, ComposerPrimitive, MessagePrimitive, useAuiState } from '@assistant-ui/react';
+import { clsx } from 'clsx';
+import { BugOutlined, ClockCircleOutlined, DatabaseOutlined, EditOutlined, FieldTimeOutlined, HistoryOutlined, ReloadOutlined, ThunderboltOutlined } from '../../components/icons';
 import { CopyButton } from '../../components/common/CopyButton';
 import { ModelMarkdown } from '../../components/workspace/ModelMarkdown';
 import { ReasoningBlock } from '../../components/workspace/ReasoningBlock';
@@ -12,10 +15,11 @@ import { eventTokensPerSecond } from '../../types/usageEventMetrics';
 import { effectiveModel, extractThinking, turnTone } from './state';
 import type { Turn } from './state';
 import { playgroundErrorKey } from './errors';
+import type { PlaygroundMessageCustom } from './runtime';
 import styles from './PlaygroundPage.module.css';
 
 /** The operator's message: its text and the images that went with it. */
-export const UserMessage = React.memo(function UserMessage({ turn }: { turn: Turn }) {
+const UserContent = React.memo(function UserContent({ turn }: { turn: Turn }) {
   const { t } = useI18n();
   const text = turn.user.content.flatMap(part => (part.type === 'text' ? [part.text] : [])).join('\n');
   const images = turn.user.content.flatMap(part => (part.type === 'image_url' ? [part.image_url.url] : []));
@@ -34,13 +38,86 @@ export const UserMessage = React.memo(function UserMessage({ turn }: { turn: Tur
   );
 });
 
+/**
+ * The operator's message as a thread message. The last one can be edited in place: the edit is
+ * the same request asked again with different words (`editedTurn`), so it replaces the answer
+ * below it rather than adding a turn.
+ */
+export function UserMessage({ canEdit }: { canEdit: boolean }) {
+  const { t } = useI18n();
+  const turn = useAuiState(state => (state.message.metadata.custom as Partial<PlaygroundMessageCustom>).turn);
+  const isLast = useAuiState(state => state.message.isLast || state.thread.messages.at(-2)?.id === state.message.id);
+  const isEditing = useAuiState(state => state.message.composer.isEditing);
+  if (!turn) return null;
+  if (isEditing) {
+    return (
+      <MessagePrimitive.Root className={workspace['message']} data-role="user">
+        <ComposerPrimitive.Root className={clsx(workspace['composer-frame'], styles['edit-frame'])}>
+          <div className={workspace['composer-body']}>
+            <ComposerPrimitive.Input className={workspace['composer-input']} aria-label={t('pg.edit_message')} submitMode="enter" minRows={1} maxRows={8} />
+          </div>
+          <div className={workspace['composer-foot']}>
+            <span className={workspace['composer-foot-start']} />
+            <ComposerPrimitive.Cancel asChild><Button size="small">{t('common.cancel')}</Button></ComposerPrimitive.Cancel>
+            <ComposerPrimitive.Send asChild><Button size="small" type="primary">{t('pg.edit_send')}</Button></ComposerPrimitive.Send>
+          </div>
+        </ComposerPrimitive.Root>
+      </MessagePrimitive.Root>
+    );
+  }
+  return (
+    <MessagePrimitive.Root className={workspace['message']} data-role="user">
+      <div className={workspace['user-bubble']}>
+        <UserContent turn={turn} />
+      </div>
+      {canEdit && isLast && (
+        <ActionBarPrimitive.Root className={workspace['foot-actions']}>
+          <Tooltip title={t('pg.edit_message')}>
+            <ActionBarPrimitive.Edit asChild>
+              <Button type="text" size="small" aria-label={t('pg.edit_message')} icon={<EditOutlined />} />
+            </ActionBarPrimitive.Edit>
+          </Tooltip>
+        </ActionBarPrimitive.Root>
+      )}
+    </MessagePrimitive.Root>
+  );
+}
+
+/**
+ * One thread message, drawn by the role of the message it is bound to. The role is read here rather
+ * than from the thread's render callback, because the runtime can put its own placeholder at an
+ * index a Playground message held a render earlier.
+ */
+export function PlaygroundMessage({ canEdit, ...props }: AssistantMessageProps & { canEdit: boolean }) {
+  const role = useAuiState(state => state.message.role);
+  return role === 'user' ? <UserMessage canEdit={canEdit} /> : <AssistantMessage {...props} />;
+}
+
 export interface AssistantMessageProps {
-  turn: Turn;
-  isLast: boolean;
   canRetry: boolean;
-  onRetry: (turn: Turn) => void;
+  /** Whether the turn can be replayed; says why not when it cannot. */
+  isReplayable: (turn: Turn) => boolean;
   onInspect: (turn: Turn) => void;
   onOpenRequests: (turn: Turn) => void;
+}
+
+interface AssistantContentProps extends AssistantMessageProps {
+  turn: Turn;
+  isLast: boolean;
+}
+
+/** One answer as a thread message; the turn it draws is the Playground's own. */
+export function AssistantMessage(props: AssistantMessageProps) {
+  const turn = useAuiState(state => (state.message.metadata.custom as Partial<PlaygroundMessageCustom>).turn);
+  const isLast = useAuiState(state => state.message.isLast);
+  // The runtime's own placeholder for an answer that has not started carries no turn; the
+  // Playground's running turn already draws its waiting state.
+  if (!turn) return null;
+  return (
+    <MessagePrimitive.Root className={workspace['message']} data-role="assistant">
+      <AssistantContent {...props} turn={turn} isLast={isLast} />
+    </MessagePrimitive.Root>
+  );
 }
 
 /**
@@ -49,7 +126,7 @@ export interface AssistantMessageProps {
  * Memoised on the turn object. The streaming turn is the only one whose object changes while an
  * answer arrives, so a new token re-parses one answer rather than the whole conversation.
  */
-export const AssistantMessage = React.memo(function AssistantMessage({ turn, isLast, canRetry, onRetry, onInspect, onOpenRequests }: AssistantMessageProps) {
+const AssistantContent = React.memo(function AssistantContent({ turn, isLast, canRetry, isReplayable, onInspect, onOpenRequests }: AssistantContentProps) {
   const { t } = useI18n();
   const isRunning = turn.status === 'running';
   // Reasoning arrives either as its own event stream or inline in `<think>` tags, depending on the
@@ -88,7 +165,7 @@ export const AssistantMessage = React.memo(function AssistantMessage({ turn, isL
           turn={turn}
           isLast={isLast}
           canRetry={canRetry}
-          onRetry={onRetry}
+          isReplayable={isReplayable}
           onInspect={onInspect}
           onOpenRequests={onOpenRequests}
         />
@@ -97,7 +174,7 @@ export const AssistantMessage = React.memo(function AssistantMessage({ turn, isL
   );
 });
 
-function TurnFooter({ turn, isLast, canRetry, onRetry, onInspect, onOpenRequests }: AssistantMessageProps) {
+function TurnFooter({ turn, isLast, canRetry, isReplayable, onInspect, onOpenRequests }: AssistantContentProps) {
   const { t } = useI18n();
   const { style: tokenStyle } = useTokenDisplayStyle();
   const rate = eventTokensPerSecond({
@@ -124,9 +201,9 @@ function TurnFooter({ turn, isLast, canRetry, onRetry, onInspect, onOpenRequests
           <span className={workspace['metric']}><FieldTimeOutlined aria-hidden="true" />{milliseconds(turn.firstContentMS)}</span>
         </Tooltip>
       )}
-      {turn.durationMS !== undefined && (
+      {(turn.status === 'running' || turn.durationMS !== undefined) && (
         <Tooltip title={t('pg.duration')}>
-          <span className={workspace['metric']}><ClockCircleOutlined aria-hidden="true" />{milliseconds(turn.durationMS)}</span>
+          <span className={workspace['metric']}><ClockCircleOutlined aria-hidden="true" />{turn.status === 'running' ? <LiveElapsed startedAtMS={turn.startedAt} isRunning /> : milliseconds(turn.durationMS ?? 0)}</span>
         </Tooltip>
       )}
       {turn.usage?.total_tokens !== undefined && (
@@ -146,8 +223,12 @@ function TurnFooter({ turn, isLast, canRetry, onRetry, onInspect, onOpenRequests
           <Button type="text" size="small" aria-label={t('pg.view_requests')} disabled={!turn.requestID} icon={<HistoryOutlined />} onClick={() => onOpenRequests(turn)} />
         </Tooltip>
         {isLast && (
-          <Tooltip title={t('common.retry')}>
-            <Button type="text" size="small" aria-label={t('common.retry')} disabled={!canRetry} icon={<ReloadOutlined />} onClick={() => onRetry(turn)} />
+          <Tooltip title={t('pg.regenerate')}>
+            {/* The framework's reload routes to the same replay the retry always was. A turn whose
+                image was dropped from storage cannot be replayed, and says so instead. */}
+            <ActionBarPrimitive.Reload asChild disabled={!canRetry}>
+              <Button type="text" size="small" aria-label={t('pg.regenerate')} icon={<ReloadOutlined />} onClick={event => { if (!isReplayable(turn)) event.preventDefault(); }} />
+            </ActionBarPrimitive.Reload>
           </Tooltip>
         )}
         <Tooltip title={t('pg.inspect')}>

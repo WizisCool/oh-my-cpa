@@ -1,6 +1,6 @@
 # ADR 0035: Agent authorization is one allow-or-deny decision, and the agent may ask the operator
 
-- Status: Accepted
+- Status: Accepted; its dialog presentation is superseded by [ADR 0043](0043-agent-approval-is-decided-inline.md)
 - Date: 2026-09-28
 
 ## Context

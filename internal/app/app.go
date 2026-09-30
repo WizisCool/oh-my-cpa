@@ -422,6 +422,7 @@ func (a *App) Run(ctx context.Context) error {
 	case <-ctx.Done():
 		shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
+		a.handler.CloseBrowserRuns()
 		if err := a.httpServer.Shutdown(shutdownContext); err != nil {
 			return fmt.Errorf("shutdown HTTP server: %w", err)
 		}
@@ -438,6 +439,7 @@ func (a *App) Close() error {
 	if a == nil {
 		return nil
 	}
+	a.handler.CloseBrowserRuns()
 	// The fixture listens on a loopback socket, so it has to be closed with the
 	// database it describes.
 	if a.upstream != nil {

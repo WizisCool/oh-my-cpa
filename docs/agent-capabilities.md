@@ -26,8 +26,9 @@ Agent page ──▶ internal/agent.Runtime ──▶ CPA gateway (model + tool 
   validation, permission and risk rules, the pending-operation store, and the audit
   trail.
 - `internal/agent` owns the model loop: conversation persistence, budgets, streaming,
-  and resumption. It never touches the database, configuration, or the CPA client
-  directly.
+  and resumption, plus the two things that belong to the conversation rather than to OMC -
+  `ask_question` and the display tools. It never touches the database, configuration, or
+  the CPA client directly. The console reaches it over AG-UI (`internal/agui`, ADR 0041).
 - `internal/mcpbridge` maps the registry to MCP tools for external agents. It carries no
   business logic and no approval policy.
 
@@ -48,6 +49,13 @@ recurring cost rather than a one-off. A declaration is bounded by
 `agent.MAX_TOOL_SCHEMA_BYTES` (32 KiB) and the whole request by `agent.MAX_CONTEXT_BYTES`
 (128 KiB); a definition that pushes the catalogue past the first is a startup-time problem,
 not a runtime one, and the runtime refuses the turn rather than truncating the list.
+
+The system prompt is paid for the same way. It is built from named sections in
+`internal/agent/prompt.go` - identity, approach, data, safety, presentation, context - bounded by
+`agent.MAX_PROMPT_BYTES` (6 KiB), and every turn records the `agent.PROMPT_VERSION` it ran with.
+A capability's guidance belongs in its `Description`, where it is paid for only by the tool that
+needs it; a rule that holds across capabilities belongs in one section, and changing a section's
+wording bumps the version.
 
 A declaration is one call to `capability.Register` with:
 
@@ -86,16 +94,18 @@ configuration is `high` risk and goes through the executor's confirmation flow:
    `Changes`.
 3. The executor stores the pending operation encrypted, writes a `prepared` audit
    event, and returns `{status: "pending", operation_id: ...}` to the caller.
-4. The console opens the request as an authorization dialog, and a signed-in operator
-   makes one decision: allow or deny (ADR 0035). Approval re-validates the capability
-   version, the caller's authority, and the resource revision inside the same write gate
-   that performs the change; deciding continues the Agent's run without a separate step.
+4. The Agent's run finishes with an AG-UI interrupt naming the operation and the call that
+   raised it. The console draws an approval card under that call (ADR 0043), and a signed-in
+   operator makes one decision: allow or deny (ADR 0035). Approval re-validates the
+   capability version, the caller's authority, and the resource revision inside the same
+   write gate that performs the change; deciding resumes the Agent's run without a separate
+   step.
 5. The result is recorded (`success`, `partial`, `error`, or `uncertain`) and audited.
    An operation is consumed once; a repeated approval returns the stored outcome.
 
 Rules that are not optional:
 
-- A destructive capability is marked `destructive`, which the dialog states as an
+- A destructive capability is marked `destructive`, which the approval card states as an
   irreversible change. A batch operation must show the resolved target list and its
   count, and must never expand a wildcard at execution time.
 - The approval is bound to the revision captured by `Prepare`; if the target changed,
@@ -125,6 +135,27 @@ malformed answer leaves it open. The model receives each question with the chose
 text; Skip is a `rejected` result. It is not a way to ask for approval (writes already ask) or for
 secrets.
 
+### Display tools
+
+`render_chart` and `render_table` are how the Agent shows data rather than retelling it (ADR 0042).
+`internal/agent` owns them, and they are offered only when the client declares that it can draw
+them - the console does, the MCP bridge does not. They are not capabilities: they change nothing,
+never pass through the executor and never interrupt a run.
+
+The model references the rows of an earlier capability result by `source {call_id, path}`; the
+server resolves the reference, projects and checks the named fields, freezes the dataset on the
+call's trace, and returns a receipt (`rendered`, `rows`, `fields`) instead of the rows. `inline` rows
+(at most 200) are for figures the model derived itself. A refusal is an `invalid_tool_arguments`
+result whose detail names the field to change. Views are bounded to 1000 rows, 12 table columns,
+8 chart series and 96 KiB. A category axis keeps its labels horizontal and ellipsised; the tooltip carries the full value.
+
+Displays are selective final-answer artifacts, not progress reports: the model investigates and verifies before preparing one, uses the smallest complementary set, and leaves exploration in the trace. The console publishes a frozen view only from a successful turn, in a result section after the answer; earlier or unsuccessful work stays inspectable in the call details.
+
+What this means for a new capability: a result that holds its rows as an array of objects with
+scalar fields - or, like `database_query`, as positional arrays beside a `columns` list - can be
+charted and tabulated with no further work. A result shaped only for prose - rows packed into
+strings, figures nested inside objects - cannot.
+
 ### Read-only database queries
 
 `database_schema` lists what `database_query` may read, and `database_query` runs one SQLite
@@ -150,6 +181,15 @@ must be classified: readable in `QUERY_READABLE_TABLES` or hidden in `QUERY_HIDD
 reason, and `TestEveryTableIsClassifiedForOperatorQueries` fails until a new table is. A migration
 that adds a column able to carry a secret to a readable table adds it to that table's redacted list
 in the same change.
+
+The console draws a query as a normal capability-call row, without a raw-result preview. Agent
+session reads, final snapshots and streamed query receipts omit raw query data; the session DTO
+also omits the private model history and queued model calls. This applies to restored sessions as
+well as new runs. Query status, diagnostics, SQL arguments and timing remain inspectable. The
+full result stays in the server-side conversation for subsequent model rounds and explicit
+`render_chart` / `render_table` calls. This is a browser-preview boundary, not an upstream-data
+restriction: the selected model still receives query rows and may quote them in its answer or
+choose them for a final display.
 
 ### Secrets and OAuth
 
@@ -237,3 +277,12 @@ the console itself, and rotate the key if that trust changes.
 ### Timezone capabilities
 
 `timezone_get` is a low-risk read returning the optional manual override, deployment timezone and effective IANA timezone. `timezone_set` is a low-risk write accepting `{ "timezone": "Asia/Kuala_Lumpur" }`; an empty string restores the deployment timezone. Both are available to Agent and MCP administrators under the existing capability policy. The write shares the preference repository's validation and commit-before-publication rule, returns `invalid_timezone` for an invalid name, and invalidates `preferences` and `timezone` readers. No secret or OAuth handoff is involved. Tests cover validated writes, reads through both adapters and refusal without changing the runtime calendar.
+
+### Browser connection recovery
+
+Managed Agent execution belongs to the server, not a socket. Console refresh or network recovery
+replays its projected journal and does not invoke capabilities again. Stop calls the authenticated
+run cancellation endpoint; a disconnected subscriber does not signal operator intent. Pending
+approvals, secrets and OAuth continue through their existing server-side handoffs and are never
+automatically decided during recovery. Process restart does not resume uncertain external writes.
+See [ADR 0044](adr/0044-browser-connections-subscribe-to-server-owned-runs.md).
