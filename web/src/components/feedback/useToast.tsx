@@ -95,6 +95,7 @@ export function useToast(): Toast {
         description: toastDetail(options),
         actions: options?.actions,
         duration: toastDurationSeconds(tone, options),
+        pauseOnHover: true,
         className: `omc-toast omc-toast-${tone}`,
         role: tone === 'error' || tone === 'warning' ? 'alert' : 'status',
         props: options?.testId ? { 'data-testid': options.testId } : undefined,

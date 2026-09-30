@@ -39,10 +39,10 @@ export interface ToastOptions {
  * carries a sentence the operator has to read, and hovering pauses every one of them.
  */
 export const TOAST_DURATION_SECONDS: Record<ToastTone, number> = {
-  success: 3,
+  success: 2,
   info: 3,
-  warning: 5,
-  error: 8,
+  warning: 4,
+  error: 5,
 };
 
 /**
@@ -91,11 +91,18 @@ export function groupToastItems(items: ToastItem[]): ToastItemGroup[] {
 }
 
 /** A toast that offers an action is given long enough to reach it, whatever its tone. */
-export const TOAST_ACTION_DURATION_SECONDS = 10;
+export const TOAST_ACTION_DURATION_SECONDS = 6;
+
+const TOAST_DETAIL_DURATION_SECONDS = 3;
 
 export function toastDurationSeconds(tone: ToastTone, options: ToastOptions | undefined): number | false {
   if (options?.isPersistent || (options?.items?.length ?? 0) > 0) return false;
   if (options?.durationSeconds !== undefined) return options.durationSeconds;
-  const toneSeconds = TOAST_DURATION_SECONDS[tone];
-  return options?.actions ? Math.max(toneSeconds, TOAST_ACTION_DURATION_SECONDS) : toneSeconds;
+  const hasDetail = Boolean(options?.detail) || options?.error !== undefined;
+  // A two-line success needs reading time even though the operation itself only needs a glance.
+  return Math.max(
+    TOAST_DURATION_SECONDS[tone],
+    hasDetail ? TOAST_DETAIL_DURATION_SECONDS : 0,
+    options?.actions ? TOAST_ACTION_DURATION_SECONDS : 0,
+  );
 }

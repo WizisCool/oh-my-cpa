@@ -58,9 +58,30 @@ test('a toast with per-target reasons stays until it is closed', () => {
     'an empty list is not a report');
 });
 
-test('each tone has its lifetime, and an offered action is given time to reach', () => {
-  assert.equal(toastDurationSeconds('success', undefined), TOAST_DURATION_SECONDS.success);
-  assert.ok(TOAST_DURATION_SECONDS.error > TOAST_DURATION_SECONDS.success, 'a failure is read, not glanced at');
-  assert.equal(toastDurationSeconds('success', { actions: 'View' }), TOAST_ACTION_DURATION_SECONDS);
+test('brief acknowledgements clear quickly while outcomes retain reading time', () => {
+  assert.deepEqual(TOAST_DURATION_SECONDS, { success: 2, info: 3, warning: 4, error: 5 });
+  for (const tone of ['success', 'info', 'warning', 'error'] as const) {
+    assert.equal(toastDurationSeconds(tone, undefined), TOAST_DURATION_SECONDS[tone]);
+    assert.equal(toastDurationSeconds(tone, { actions: 'View' }), 6);
+  }
+  assert.equal(TOAST_ACTION_DURATION_SECONDS, 6);
+});
+
+test('a success carrying a second line is not treated as a glance-only acknowledgement', () => {
+  assert.equal(toastDurationSeconds('success', { detail: 'Changes take effect on new requests' }), 3);
+  assert.equal(toastDurationSeconds('success', { error: new Error('Partial result') }), 3);
+  assert.equal(toastDurationSeconds('success', { detail: '' }), 2);
+  assert.equal(toastDurationSeconds('warning', { detail: 'Review the settings' }), 4);
+});
+
+test('persistent reports take precedence over actions and explicit durations', () => {
+  assert.equal(toastDurationSeconds('warning', { items: [{ name: 'a.json' }], actions: 'View', durationSeconds: 1 }), false);
+  assert.equal(toastDurationSeconds('success', { isPersistent: true, durationSeconds: 1 }), false);
+  assert.equal(toastDurationSeconds('warning', { items: [] }), 4);
+});
+
+test('callers may override the default lifetime, including disabling auto-dismiss', () => {
   assert.equal(toastDurationSeconds('error', { durationSeconds: 2 }), 2);
+  assert.equal(toastDurationSeconds('success', { actions: 'View', durationSeconds: 12 }), 12);
+  assert.equal(toastDurationSeconds('success', { detail: 'Detail', durationSeconds: 0 }), 0);
 });

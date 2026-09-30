@@ -890,9 +890,11 @@ how serious it is:
 - **A toast** is a floating panel like a menu: `--elevated` fill, a 1px `--border` edge (shadows are
   off, so the border is its only edge), the 4px radius, one width (420px, antd's `Notification.width`
   token) and an 18px icon. It opens at the top centre, never stacks into a collapsed pile, and holds
-  for 3s (success, info), 5s (warning) or 8s (error); an offered action gets 10s, and hovering pauses
-  it. A second line carries the reason, with an upstream JSON envelope read down to its status and
-  sentence (`readableReason`).
+  for 2s (a brief success), 3s (info or a success with detail), 4s (warning) or 5s (error); an
+  offered shortcut gets 6s, and hovering pauses the remaining timer instead of restarting it.
+  A shortcut must also be reachable from the page without a timer; a time-critical or exclusive
+  action requires a persistent surface. A second line carries the reason, with an upstream JSON
+  envelope read down to its status and sentence (`readableReason`).
 - **A report is a toast that stays.** A batch outcome with per-target reasons (a quota refresh, a
   batch enable or delete, an upload) lists them under group headings - what needs attention first -
   each target's full name on its own line with its reason under it, and stays until it is closed.
@@ -910,6 +912,25 @@ how serious it is:
   `modal.*`/`Modal.*` dialogs, anywhere outside the feedback module. All checks resolve Ant Design
   bindings, including namespace imports, local aliases and `App.useApp()` results; comments, strings,
   type-only imports and unrelated or shadowed bindings are ignored.
+
+#### Auto-dismiss rationale
+
+There is no universal duration shared by established design systems. [Ant Design's message
+implementation](https://github.com/ant-design/ant-design/blob/master/components/message/useMessage.tsx)
+uses 3 seconds for brief feedback; [Fluent's toast guidance](https://fluent2.microsoft.design/components/web/react/core/toast/usage)
+uses 7 seconds for no-action notifications; [React Spectrum](https://react-spectrum.adobe.com/Toast.html)
+uses a minimum of 5 seconds and keeps actionable toasts until dismissed. These are different
+products' policies, not interchangeable accessibility guarantees (sources checked 2026-09-30).
+
+This console uses 2 seconds only for glanceable success acknowledgements, preserves at least
+3 seconds for a second line, and gives warning/error outcomes 4/5 seconds. Optional shortcuts get
+6 seconds rather than prolonging every acknowledgement. Their destinations remain available through
+ordinary page controls: OAuth credentials through the provider collection and plugin settings through
+the settings panel. [WCAG Timing Adjustable](https://www.w3.org/WAI/WCAG22/Understanding/timing-adjustable.html)
+permits temporary notices when equivalent information or functionality is available without a timer;
+hover alone is not a substitute for that alternative. Important per-target reports remain persistent,
+pending work closes only when it settles, and callers can explicitly select persistence or override
+the default duration. Lifetime changes do not change the entry/exit motion budget.
 
 ### Time range control
 

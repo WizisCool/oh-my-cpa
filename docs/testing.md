@@ -107,6 +107,9 @@ mutations, because the clock does not publish through the transcript's run hook.
 
 ### Feedback regressions
 
+- `scripts/test-feedback-surfaces.ts` pins short acknowledgement lifetimes, the second-line and
+  shortcut reading budgets, persistent-report precedence and explicit duration overrides. These
+  policy decisions belong in the logic suite rather than browser tests that wait for real time.
 - `scripts/check-feedback.test.mjs` checks Ant Design feedback bindings and aliases (named and namespace
   imports, `App.useApp()` results and modal hooks), scope shadowing, false positives in comments,
   strings and type-only imports, legal confirmations, diagnostic locations and the
