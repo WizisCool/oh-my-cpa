@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  Alert,
   Drawer,
   Descriptions,
   Tag,
@@ -40,6 +39,8 @@ import {
 import styles from './AuthFileDetailDrawer.module.css';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { copyText } from '../../utils/clipboard';
+import { useToast } from '../feedback';
+import { LoadFailure, Notice } from '../feedback';
 
 const { Text } = Typography;
 
@@ -135,7 +136,8 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
 }) => {
   const t = useT();
   const isDemo = isDemoMode();
-  const { message, modal } = AntdApp.useApp();
+  const { modal } = AntdApp.useApp();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const [form] = Form.useForm<FormValues>();
   const [baseline, setBaseline] = useState<FormValues>({});
@@ -216,7 +218,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
             response.fields,
           );
         }
-        message.success(t('af.save_fields_success'));
+        toast.success(t('af.save_fields_success'));
         setIsDirty(false);
         onClose();
       }
@@ -224,7 +226,7 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
     onError: (err: unknown) => {
       isPendingRef.current = false;
       const msg = describeError(err);
-      message.error(msg);
+      toast.error(msg);
     },
   });
 
@@ -418,8 +420,8 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                   aria-label={`${t('common.copy')}: ${model.id}`}
                   onClick={() => {
                     void copyText(model.id).then((copied) => {
-                      if (copied) message.success(t('common.copied'));
-                      else message.error(t('common.copy_failed'));
+                      if (copied) toast.success(t('common.copied'));
+                      else toast.error(t('common.copy_failed'));
                     });
                   }}
                 />
@@ -483,9 +485,8 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                             </Descriptions.Item>
                           </Descriptions>
                           {hasWarning && file.status_message && (
-                            <Alert
-                              type="warning"
-                              showIcon
+                            <Notice
+                              tone="warning"
                               title={t('af.warning_status')}
                               description={
                                 <>
@@ -537,12 +538,11 @@ export const AuthFileDetailDrawer: React.FC<AuthFileDetailDrawerProps> = ({
                     </div>
                     <div className={styles['section-body']}>
                       {safeFieldsFailed && (
-                        <Alert
-                          type="warning"
-                          showIcon
-                          description={t('af.safe_fields_error')}
-                          action={<Button size="small" onClick={() => void safeFieldsQuery.refetch()}>{t('common.retry')}</Button>}
-                          style={{ marginBottom: 12 }}
+                        <LoadFailure
+                          tone="warning"
+                          className={styles['safe-fields-failure']}
+                          title={t('af.safe_fields_error')}
+                          onRetry={() => void safeFieldsQuery.refetch()}
                         />
                       )}
                       <Form

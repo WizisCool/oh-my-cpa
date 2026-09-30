@@ -1,9 +1,10 @@
 import React from 'react';
-import { Alert, Button, Input, Modal, Tag } from 'antd';
+import { Button, Input, Modal, Tag } from 'antd';
 import { CodeBlock } from '../../components/workspace/ModelMarkdown';
 import workspace from '../../components/workspace/Workspace.module.css';
 import { useI18n } from '../../i18n';
 import { capabilityDescription, capabilityTitle } from '../../i18n/capabilities';
+import { Notice } from '../../components/feedback';
 import { decideOperation, failureCode, startOperationOAuth } from './api';
 import { failureKey, previewEntries } from './state';
 import type { Capability, Operation } from './state';
@@ -116,7 +117,7 @@ export function AuthorizationDialog({ operation, capability, isOpen, onClose, on
         {operation.preview.changes !== undefined && !entries && (
           <CodeBlock lang="json" block>{JSON.stringify(operation.preview.changes, null, 2)}</CodeBlock>
         )}
-        {isDestructive && <Alert type="error" showIcon title={t('agent.operation.irreversible')} />}
+        {isDestructive && <Notice tone="error" title={t('agent.operation.irreversible')} />}
         {operation.human_input === 'secret' && (
           <div className={workspace['field']}>
             <label className={workspace['field-label']} htmlFor={`secret-${operation.id}`}>{t('agent.private_input')}</label>

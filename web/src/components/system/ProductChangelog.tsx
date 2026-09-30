@@ -1,15 +1,16 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Alert, Tag, Tooltip, Typography } from 'antd';
+import { Tag, Tooltip, Typography } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from '../../utils/time';
 import XMarkdown from '@ant-design/x-markdown';
 import { LinkOutlined } from '../icons';
-import { api, describeError } from '../../api/client';
+import { api } from '../../api/client';
 import { useT } from '../../i18n';
 import type { ReleaseProduct } from '../../types/system';
 import { PageLoading } from '../common/PageLoading';
 import styles from '../../pages/SystemPage.module.css';
+import { LoadFailure, Notice } from '../feedback';
 
 const { Text } = Typography;
 
@@ -24,7 +25,7 @@ export const ProductChangelog: React.FC<ProductChangelogProps> = ({ product }) =
 
   // Fetched only when this component exists, which the drawer decides: a request feed is
   // rate limited, so nothing here may run for a reader who has not asked for the log.
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['management-system-releases', product],
     queryFn: () => api.getSystemReleases(product),
     staleTime: 60000,
@@ -33,8 +34,7 @@ export const ProductChangelog: React.FC<ProductChangelogProps> = ({ product }) =
   if (isLoading) return <PageLoading variant="block" />;
 
   if (isError) {
-    const msg = describeError(error);
-    return <Alert type="error" showIcon description={msg} />;
+    return <LoadFailure title={t('common.load_failed_title')} error={error} onRetry={() => void refetch()} />;
   }
 
   if (!data || data.releases.length === 0) {
@@ -44,17 +44,15 @@ export const ProductChangelog: React.FC<ProductChangelogProps> = ({ product }) =
   return (
     <div className={styles['changelog-panel']}>
       {!data.range_complete && (
-        <Alert
-          type="warning"
-          showIcon
+        <Notice
+          tone="warning"
           description={t('sys.range_incomplete')}
         />
       )}
 
       {data.check_error && (
-        <Alert
-          type="error"
-          showIcon
+        <Notice
+          tone="error"
           description={data.check_error}
         />
       )}

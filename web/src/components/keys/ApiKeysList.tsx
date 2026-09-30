@@ -1,7 +1,6 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import {
-  App as AntdApp,
   Button,
   Dropdown,
   Empty,
@@ -34,6 +33,7 @@ import { useIsPhoneViewport } from '../../hooks/useIsPhoneViewport';
 import { PhoneRow } from '../common/PhoneRow';
 import { phoneRowFields } from '../common/phoneRowFields';
 import styles from './ApiKeysList.module.css';
+import { useToast } from '../feedback';
 
 /** One rendered row: a key from CPA's client-key list plus the identity and
  *  traffic Oh My CPA knows about it. A key has no state of its own to report —
@@ -85,7 +85,7 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
 }) => {
   useTimeZone();
   const t = useT();
-  const { message } = AntdApp.useApp();
+  const toast = useToast();
   const { style: tokenStyle } = useTokenDisplayStyle();
   const nowMS = useVisibleNow();
 
@@ -145,10 +145,10 @@ export const ApiKeysList: React.FC<ApiKeysListProps> = ({
 
   const handleCopy = async (keyText: string) => {
     if (await copyText(keyText)) {
-      message.success(t('cfg.source_copy_success'));
+      toast.success(t('cfg.source_copy_success'));
       return;
     }
-    message.error(t('cfg.copy_failed'));
+    toast.error(t('cfg.copy_failed'));
   };
 
   /** The overflow menu holds what is not about the secret: following a key's

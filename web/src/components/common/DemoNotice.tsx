@@ -1,8 +1,8 @@
 import React from 'react';
-import { App as AntdApp } from 'antd';
 import { setDemoNoticeHandler, setDemoRefusalLabel } from '../../api/client';
 import { useT } from '../../i18n';
 import { isDemoMode } from '../../types/demoMode';
+import { useToast } from '../feedback';
 
 /**
  * Reports what a demo deployment does to the writes the console performs.
@@ -18,7 +18,7 @@ import { isDemoMode } from '../../types/demoMode';
  * (`setDemoRefusalLabel`), so whichever caller reports it reports the same, single sentence.
  */
 export const DemoNotice: React.FC = () => {
-  const { message } = AntdApp.useApp();
+  const toast = useToast();
   const t = useT();
 
   React.useEffect(() => {
@@ -31,14 +31,14 @@ export const DemoNotice: React.FC = () => {
       const now = Date.now();
       if (now - lastShownAt < NOTICE_INTERVAL_MS) return;
       lastShownAt = now;
-      void message.warning({ content: t('demo.notice'), key: 'omc-demo-notice', duration: 5 });
+      toast.warning(t('demo.notice'), { key: 'omc-demo-notice' });
     });
     setDemoRefusalLabel(t('demo.blocked'));
     return () => {
       setDemoNoticeHandler(undefined);
       setDemoRefusalLabel(undefined);
     };
-  }, [message, t]);
+  }, [toast, t]);
 
   return null;
 };

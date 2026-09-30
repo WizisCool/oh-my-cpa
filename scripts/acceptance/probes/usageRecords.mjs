@@ -549,7 +549,7 @@ export function refreshRecords() {
     );
 
     releasePull();
-    await page.locator('.ant-message').getByText(/Fetched and stored 2 new record/).waitFor({ timeout: 10_000 });
+    await page.locator('.omc-toast').getByText(/Fetched and stored 2 new record/).waitFor({ timeout: 10_000 });
     check('the list is re-read after the pull completes', reads.list.length > listBefore);
     check('the facets are re-read after the pull completes', reads.facets.length > facetBefore);
     check(

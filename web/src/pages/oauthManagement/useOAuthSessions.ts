@@ -1,5 +1,4 @@
 import React from 'react';
-import { App as AntdApp } from 'antd';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, describeError } from '../../api/client';
 import { useT } from '../../i18n';
@@ -9,6 +8,7 @@ import {
   type OAuthFlowKind,
   type OAuthProviderChoice,
 } from '../oauthProviderLogic';
+import { useToast } from '../../components/feedback';
 
 export type OAuthSessionStatus = 'idle' | 'starting' | 'waiting' | 'success' | 'error';
 
@@ -77,7 +77,7 @@ export function useOAuthSessions(
   onCompleted?: (providerId: string) => void,
 ): OAuthSessionsController {
   const t = useT();
-  const { message } = AntdApp.useApp();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const [states, setStates] = React.useState<Record<string, OAuthSessionState>>({});
   const choicesRef = React.useRef(choices);
@@ -168,11 +168,11 @@ export function useOAuthSessions(
     void queryClient.invalidateQueries({ queryKey: ['management-quota'] });
     void queryClient.invalidateQueries({ queryKey: ['management-overview'] });
     completedRef.current?.(providerId);
-    if (shouldNotify) message.success(t('oauth.status_success_badge'));
+    if (shouldNotify) toast.success(t('oauth.status_success_badge'));
     successTimersRef.current[providerId] = window.setTimeout(() => {
       if (generationRef.current[providerId] === generation) reset(providerId);
     }, SUCCESS_RESET_DELAY_MS);
-  }, [clearProviderTimers, message, queryClient, reset, t, updateProviderState]);
+  }, [clearProviderTimers, toast, queryClient, reset, t, updateProviderState]);
 
   const enqueueCheck = React.useCallback(<T,>(providerId: string, task: () => Promise<T>): Promise<T> => {
     const previous = checkQueuesRef.current[providerId] ?? Promise.resolve();
@@ -214,7 +214,7 @@ export function useOAuthSessions(
             ? { url: undefined, state: undefined, flow: undefined, userCode: undefined, callbackUrl: '' }
             : {}),
         });
-        if (surfaceErrors) message.error(t('oauth.status_error_badge', { msg: errorMessage }));
+        if (surfaceErrors) toast.error(t('oauth.status_error_badge', { msg: errorMessage }));
         return 'error';
       }
       return 'wait';
@@ -229,7 +229,7 @@ export function useOAuthSessions(
       updateProviderState(providerId, { checkingDevice: false, error: errorMessage });
       return 'unread';
     }
-  }, [clearStatusTimer, complete, message, t, updateProviderState]);
+  }, [clearStatusTimer, complete, toast, t, updateProviderState]);
 
   const scheduleStatusPoll = React.useCallback((providerId: string, token: string, generation: number) => {
     if (disposedRef.current) return;
@@ -294,11 +294,11 @@ export function useOAuthSessions(
         starting: false,
         error: errorMessage,
       });
-      message.error(t('oauth.status_error_badge', { msg: errorMessage }));
+      toast.error(t('oauth.status_error_badge', { msg: errorMessage }));
     } finally {
       startInFlightRef.current[providerId] = false;
     }
-  }, [clearProviderTimers, message, scheduleStatusPoll, states, t, updateProviderState]);
+  }, [clearProviderTimers, toast, scheduleStatusPoll, states, t, updateProviderState]);
 
   const cancel = React.useCallback(async (providerId: string) => {
     const choice = choicesRef.current.find((candidate) => candidate.id === providerId);
@@ -316,7 +316,7 @@ export function useOAuthSessions(
       clearProviderTimers(providerId);
       if (response.cancelled) {
         setStates((previous) => ({ ...previous, [providerId]: emptySession() }));
-        message.info(t('oauth.session_cancelled'));
+        toast.info(t('oauth.session_cancelled'));
         return;
       }
 
@@ -334,9 +334,9 @@ export function useOAuthSessions(
       const errorMessage = describeError(error);
       updateProviderState(providerId, { cancelling: false, cancelError: errorMessage, polling: Boolean(token) });
       if (token) scheduleStatusPoll(providerId, token, generation);
-      message.error(t('oauth.cancel_failed', { msg: errorMessage }));
+      toast.error(t('oauth.cancel_failed', { msg: errorMessage }));
     }
-  }, [clearProviderTimers, enqueueCheck, message, performStatusCheck, scheduleStatusPoll, states, t, updateProviderState]);
+  }, [clearProviderTimers, enqueueCheck, toast, performStatusCheck, scheduleStatusPoll, states, t, updateProviderState]);
 
   const setCallbackUrl = React.useCallback((providerId: string, value: string) => {
     updateProviderState(providerId, { callbackUrl: value });
@@ -349,7 +349,7 @@ export function useOAuthSessions(
     const current = states[providerId] ?? emptySession();
     const rawInput = current.callbackUrl.trim();
     if (!rawInput) {
-      message.warning(t('oauth.callback_required'));
+      toast.warning(t('oauth.callback_required'));
       return;
     }
     const callbackError = rules.validate?.(rawInput, current.state);
@@ -357,16 +357,16 @@ export function useOAuthSessions(
       const key = callbackError === 'state_mismatch'
         ? rules.errorKeys.stateMismatch
         : rules.errorKeys.invalid;
-      message.warning(t(key ?? rules.errorKeys.invalid));
+      toast.warning(t(key ?? rules.errorKeys.invalid));
       return;
     }
     const redirectUrl = rules.resolve ? rules.resolve(rawInput, current.state) : rawInput;
     if (!redirectUrl) {
-      message.warning(t(rules.errorKeys.missingState));
+      toast.warning(t(rules.errorKeys.missingState));
       return;
     }
     if (!redirectUrl.startsWith('http://') && !redirectUrl.startsWith('https://')) {
-      message.warning(t(rules.errorKeys.invalid));
+      toast.warning(t(rules.errorKeys.invalid));
       return;
     }
 
@@ -385,7 +385,7 @@ export function useOAuthSessions(
         return;
       }
       updateProviderState(providerId, { callbackSubmitting: false, callbackStatus: 'success' });
-      message.success(t('oauth.callback_submitted'));
+      toast.success(t('oauth.callback_submitted'));
       const token = (current.state ?? '').trim();
       if (token) {
         const outcome = await enqueueCheck(providerId, () => performStatusCheck(providerId, token, generation, false));
@@ -408,9 +408,9 @@ export function useOAuthSessions(
         callbackStatus: 'error',
         callbackError: errorMessage,
       });
-      message.error(t('oauth.callback_failed', { msg: errorMessage }));
+      toast.error(t('oauth.callback_failed', { msg: errorMessage }));
     }
-  }, [complete, enqueueCheck, message, performStatusCheck, scheduleStatusPoll, states, t, updateProviderState]);
+  }, [complete, enqueueCheck, toast, performStatusCheck, scheduleStatusPoll, states, t, updateProviderState]);
 
   const check = React.useCallback(async (providerId: string) => {
     const generation = generationRef.current[providerId] ?? 0;
@@ -419,8 +419,8 @@ export function useOAuthSessions(
     const outcome = await enqueueCheck(providerId, () => performStatusCheck(providerId, token, generation, true));
     if (disposedRef.current || generationRef.current[providerId] !== generation) return;
     updateProviderState(providerId, { checkingDevice: false });
-    if (outcome === 'wait') message.info(t('oauth.status_waiting_badge'));
-  }, [enqueueCheck, message, performStatusCheck, states, t, updateProviderState]);
+    if (outcome === 'wait') toast.info(t('oauth.status_waiting_badge'));
+  }, [enqueueCheck, toast, performStatusCheck, states, t, updateProviderState]);
 
   const activeProviders = React.useMemo(
     () => Object.entries(states)

@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Alert, App as AntdApp, Button, Input, Select } from 'antd';
+import { Button, Input, Select } from 'antd';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { PlusOutlined, SearchOutlined } from '../components/icons';
 import { PageHeader } from '../components/common/PageHeader';
@@ -32,7 +32,8 @@ import {
   type ProviderListFilters,
   type ProviderStatusFilter,
 } from '../components/providers/providerOverview';
-import { api, describeError } from '../api/client';
+import { api } from '../api/client';
+import { LoadFailure, useToast } from '../components/feedback';
 
 /**
  * The window the list's traffic column counts. It is the key list's window too, so the two pages
@@ -49,7 +50,7 @@ const STATUS_TILES: readonly { key: ProviderStatusFilter; tone: StatusTone; labe
 
 export const ProvidersPage: React.FC = () => {
   const t = useT();
-  const { message } = AntdApp.useApp();
+  const toast = useToast();
 
   const { providerIcons, writeProviderIcon, shiftCachedProviderIcons } = useProviderIconOverrides();
   // A plugin-registered provider's own logo outranks everything the console stores
@@ -137,7 +138,7 @@ export const ProvidersPage: React.FC = () => {
     setFormIcon,
     setIsPullingModels,
   } = useProviderManagement({
-    message,
+    toast,
     t,
     providerIcons,
     writeProviderIcon,
@@ -250,7 +251,7 @@ export const ProvidersPage: React.FC = () => {
       />
 
       {providersError && (
-        <Alert type="error" showIcon description={t('common.load_failed', { msg: describeError(providersErr) })} />
+        <LoadFailure title={t('common.load_failed_title')} error={providersErr} onRetry={() => void refetchProviders()} />
       )}
 
       <section className={styles['provider-overview']}>

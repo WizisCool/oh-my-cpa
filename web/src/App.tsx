@@ -73,17 +73,24 @@ export const App: React.FC = () => (
  * projections: the theme decides every colour, the language decides date and number formats.
  *
  * `ThemeServerSync` is rendered here rather than inside `ThemeProvider` for one reason - it reports
- * a refused save through Ant Design's message API, and `App` is the first component that provides
+ * a refused save through a toast (`useToast`), and `App` is the first component that provides
  * one. The theme itself does not wait for it: the console is painted from the browser's own stored
  * preference in the first frame, and the deployment's copy is reconciled afterwards.
  */
+/**
+ * Toasts (`useToast`) open at the top centre, where the eye already is after a click in the page
+ * header or a table, and never stack into a collapsed pile: a report with per-target reasons has to
+ * stay readable beside the acknowledgement that followed it.
+ */
+const TOAST_CONFIG = { placement: 'top', stack: false, maxCount: 4 } as const;
+
 const ThemedShell: React.FC = () => {
   const { lang } = useI18n();
   const { theme } = useTheme();
   const antdTheme = React.useMemo(() => createThemeConfig(theme), [theme]);
   return (
     <ConfigProvider locale={ANTD_LOCALES[lang]} theme={antdTheme}>
-      <AntdApp>
+      <AntdApp notification={TOAST_CONFIG}>
         <ThemeServerSync />
         <DemoNotice />
         <TokenDisplayProvider>

@@ -1,8 +1,8 @@
 import React from 'react';
-import { Alert, Button, Card, Segmented } from 'antd';
+import { Button, Card, Segmented } from 'antd';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { api, describeError } from '../api/client';
+import { api } from '../api/client';
 import { useT } from '../i18n';
 import { isDemoMode } from '../types/demoMode';
 import type { PluginItem } from '../types/plugin';
@@ -14,6 +14,7 @@ import { PluginSettingsPanel } from '../components/plugins/PluginSettingsPanel';
 import { PluginConfigDrawer } from '../components/plugins/PluginConfigDrawer';
 import { storeListingsByPluginId } from '../components/plugins/pluginStoreLogic';
 import styles from '../components/plugins/Plugins.module.css';
+import { LoadFailure, Notice } from '../components/feedback';
 
 const PLUGIN_TABS = ['installed', 'store', 'settings'] as const;
 type PluginTab = (typeof PLUGIN_TABS)[number];
@@ -149,16 +150,21 @@ export const PluginsPage: React.FC = () => {
       </PageHeader>
 
       {pluginsQuery.data && !isSystemEnabled && tab !== 'settings' && (
-        <Alert
-          type="warning"
-          showIcon
+        <Notice
+          tone="warning"
           title={t('plugin.system_disabled_title')}
           description={t('plugin.system_disabled_desc')}
           action={<Button size="small" onClick={() => selectTab('settings')}>{t('plugin.open_settings')}</Button>}
         />
       )}
 
-      {isActiveError && <Alert type="error" showIcon description={describeError(activeError)} />}
+      {isActiveError && (
+        <LoadFailure
+          title={t('common.load_failed_title')}
+          error={activeError}
+          onRetry={() => void (tab === 'store' ? storeQuery.refetch() : pluginsQuery.refetch())}
+        />
+      )}
 
       {tab === 'installed' && (
         <Card>

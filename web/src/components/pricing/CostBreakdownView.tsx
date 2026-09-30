@@ -1,6 +1,6 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Alert, Button } from 'antd';
+import { Button } from 'antd';
 import dayjs from '../../utils/time';
 import { DollarOutlined } from '../icons';
 import { useT } from '../../i18n';
@@ -11,6 +11,7 @@ import { describeTier } from './PricingParts';
 import { channelIdentity } from './pricingIdentity';
 import { useOpenPriceEditor } from './PricingEditorContext';
 import styles from './Pricing.module.css';
+import { Notice } from '../feedback';
 
 export interface CostBreakdownViewProps {
   breakdown: RequestCostBreakdown | undefined;
@@ -65,7 +66,7 @@ export const CostBreakdownView: React.FC<CostBreakdownViewProps> = ({ breakdown,
   return (
     <div className={styles.breakdown} data-testid="cost-breakdown">
       {(breakdown.status === 'invalid_price' || breakdown.invalid_reason) && (
-        <Alert type="warning" showIcon title={t('cost.invalid', { reason: breakdown.invalid_reason ?? '' })} />
+        <Notice tone="warning" title={t('cost.invalid', { reason: breakdown.invalid_reason ?? '' })} />
       )}
       {quote?.tier && <p className={styles['breakdown-tier']}>{t('cost.tier', { tier: describeTier(t, quote.tier) })}</p>}
       {quote && (

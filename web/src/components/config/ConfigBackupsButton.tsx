@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { App as AntdApp, Button, Modal, Table, Typography } from 'antd';
+import { Button, Modal, Table, Typography } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 
@@ -11,6 +11,7 @@ import { saveBlob } from '../../utils/download';
 import { formatBytes } from '../../utils/format';
 import type { ConfigBackup } from '../../types/configManagement';
 import { DownloadOutlined, HistoryOutlined } from '../icons';
+import { useToast } from '../feedback';
 
 const { Text } = Typography;
 
@@ -24,7 +25,7 @@ const { Text } = Typography;
  */
 export const ConfigBackupsButton: React.FC = () => {
   const t = useT();
-  const { message } = AntdApp.useApp();
+  const toast = useToast();
   const [isOpen, setIsOpen] = React.useState(false);
   const [downloadingID, setDownloadingID] = React.useState<number | null>(null);
   useOverlayHistory({ isOpen, onClose: () => setIsOpen(false) });
@@ -46,7 +47,7 @@ export const ConfigBackupsButton: React.FC = () => {
         `cpa-config-before-v8-${dayjs(backup.created_at_ms).format('YYYYMMDD-HHmmss')}.yaml`,
       );
     } catch (err) {
-      message.error(t('cfg.backups_download_failed', { msg: describeError(err) }));
+      toast.error(t('cfg.backups_download_failed', { msg: describeError(err) }));
     } finally {
       setDownloadingID(null);
     }

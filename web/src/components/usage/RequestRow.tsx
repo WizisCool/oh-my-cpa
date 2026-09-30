@@ -1,6 +1,6 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Tooltip, App as AntdApp } from 'antd';
+import { Tooltip } from 'antd';
 import { BlockOutlined, BulbOutlined, CopyOutlined, DollarOutlined, RightOutlined } from '../icons';
 import dayjs from '../../utils/time';
 import { getProviderDefaultIcon } from '../LobeIcon';
@@ -32,6 +32,7 @@ import {
 import { requestColumnAlignClass } from './requestColumns';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import { formatTokens, formatTokensFull } from '../../types/tokenDisplay';
+import { useToast } from '../feedback';
 
 export interface RequestRowProps {
   event: UsageEvent;
@@ -56,7 +57,7 @@ export const RequestRow = React.memo<RequestRowProps>(
   }) => {
   useTimeZone();
     const t = useT();
-    const { message } = AntdApp.useApp();
+    const toast = useToast();
     const openPriceEditor = useOpenPriceEditor();
     // The console-wide token unit style: the list scans compactly while every
     // accessible name keeps the exact count.
@@ -104,7 +105,7 @@ export const RequestRow = React.memo<RequestRowProps>(
       // The quick-copy control carries no success state of its own, so a silent
       // failure would read exactly like a copy that worked.
       void copyText(event.request_id).then((copied) => {
-        if (!copied) message.error(t('common.copy_failed'));
+        if (!copied) toast.error(t('common.copy_failed'));
       });
     };
 

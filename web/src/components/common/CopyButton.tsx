@@ -1,8 +1,9 @@
 import React from 'react';
-import { App, Button, Tooltip } from 'antd';
+import { Button, Tooltip } from 'antd';
 import { CheckOutlined, CopyOutlined } from '../icons';
 import { useI18n } from '../../i18n';
 import { copyText } from '../../utils/clipboard';
+import { useToast } from '../feedback';
 
 /** How long the check mark stands in for the copy glyph after a successful copy. */
 const COPIED_MS = 1500;
@@ -28,7 +29,7 @@ export interface CopyButtonProps {
  */
 export function CopyButton({ text, label, size = 'small', disabled, className, showLabel = false }: CopyButtonProps) {
   const { t } = useI18n();
-  const { message } = App.useApp();
+  const toast = useToast();
   const [hasCopied, setHasCopied] = React.useState(false);
   const timerRef = React.useRef<ReturnType<typeof setTimeout>>();
   React.useEffect(() => () => clearTimeout(timerRef.current), []);
@@ -36,7 +37,7 @@ export function CopyButton({ text, label, size = 'small', disabled, className, s
   const name = hasCopied ? t('common.copied') : (label ?? t('common.copy'));
   const onClick = async () => {
     if (!(await copyText(text))) {
-      message.error(t('common.copy_failed'));
+      toast.error(t('common.copy_failed'));
       return;
     }
     setHasCopied(true);

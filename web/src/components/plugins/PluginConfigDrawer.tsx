@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, App as AntdApp, Button, Drawer, Input, Segmented, Select, Skeleton, Switch, Tooltip } from 'antd';
+import { App as AntdApp, Button, Drawer, Input, Segmented, Select, Skeleton, Switch, Tooltip } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ClearOutlined, PlusOutlined, UndoOutlined } from '../icons';
 import { api, describeError } from '../../api/client';
@@ -21,6 +21,8 @@ import {
 } from './pluginConfigForm';
 import { formatPluginVersion, PluginLogo, PluginMeta } from './PluginParts';
 import styles from './Plugins.module.css';
+import { useToast } from '../feedback';
+import { LoadFailure, Notice } from '../feedback';
 
 type EditorMode = 'form' | 'json';
 
@@ -42,7 +44,8 @@ interface PluginConfigDrawerProps {
  */
 export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDrawerProps) {
   const t = useT();
-  const { message, modal } = AntdApp.useApp();
+  const { modal } = AntdApp.useApp();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const pluginId = plugin?.id ?? '';
   const fields = React.useMemo(() => plugin?.config_fields ?? [], [plugin]);
@@ -95,13 +98,13 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
   const saveMutation = useMutation({
     mutationFn: (config: Record<string, unknown>) => api.setPluginConfig(pluginId, config),
     onSuccess: () => {
-      message.success(t('plugin.config_saved'));
+      toast.success(t('plugin.config_saved'));
       void queryClient.invalidateQueries({ queryKey: ['management-plugins'] });
       void queryClient.invalidateQueries({ queryKey: ['management-plugin-config', pluginId] });
       seededFor.current = null;
       onClose();
     },
-    onError: (err: unknown) => message.error(t('common.save_failed', { msg: describeError(err) })),
+    onError: (err: unknown) => toast.error(t('common.save_failed', { msg: describeError(err) })),
   });
 
   const requestClose = () => {
@@ -125,7 +128,7 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
     if (next === mode) return;
     if (next === 'json') {
       if (!composed.value) {
-        message.warning(t('plugin.config_fix_errors'));
+        toast.warning(t('plugin.config_fix_errors'));
         return;
       }
       setJsonText(JSON.stringify(composed.value, null, 2));
@@ -134,7 +137,7 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
     }
     const parsed = parsePluginConfig(jsonText);
     if (!parsed.value) {
-      message.warning(t('plugin.config_fix_json'));
+      toast.warning(t('plugin.config_fix_json'));
       return;
     }
     setBase(parsed.value);
@@ -144,7 +147,7 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
 
   const handleSave = () => {
     if (!composed.value) {
-      message.warning(mode === 'json' ? t('plugin.config_fix_json') : t('plugin.config_fix_errors'));
+      toast.warning(mode === 'json' ? t('plugin.config_fix_json') : t('plugin.config_fix_errors'));
       return;
     }
     saveMutation.mutate(composed.value);
@@ -218,7 +221,7 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
           {!configQuery.isError && (configQuery.isLoading || !draft || seededFor.current !== plugin.id) ? (
             <Skeleton active paragraph={{ rows: 6 }} />
           ) : configQuery.isError ? (
-            <Alert type="error" showIcon title={t('plugin.config_load_failed')} description={describeError(configQuery.error)} />
+            <LoadFailure title={t('plugin.config_load_failed')} error={configQuery.error} onRetry={() => void configQuery.refetch()} />
           ) : mode === 'json' ? (
             <PluginConfigEditor value={jsonText} onChange={setJsonText} pluginName={name} isReadOnly={isDemo} />
           ) : draft && (
@@ -265,7 +268,7 @@ export function PluginConfigDrawer({ plugin, isDemo, onClose }: PluginConfigDraw
                   <span>{fields.length}</span>
                 </h3>
                 {fields.length === 0 ? (
-                  <Alert type="info" showIcon title={t('plugin.config_no_fields')} />
+                  <Notice tone="info" title={t('plugin.config_no_fields')} />
                 ) : fields.map((field) => (
                   <ConfigFieldRow
                     key={field.name}

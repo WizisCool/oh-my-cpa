@@ -764,7 +764,7 @@ Oh My CPA draws from OpenCode's minimalist, high-density, engineer-first console
    - Rows are separated by subtle 1px hairline dividers (`border-bottom: 1px solid var(--border-soft)`).
    - Clear structure: entity name and identifier on the left, technical metadata / provider in the middle, and direct interactive controls on the right (e.g. switch toggles, action buttons).
 2. **Unified Credential Workspace Density**
-   - OAuth sign-in, credential management and quota reading share one credential collection. The list presents a scan-first overview: identity, management state and metadata, quota condition, plan, observation age and the credential's own model family as its five-hour and weekly windows - each a labelled bar carrying its share, with its reset on the line below. A group's window is named from the period it covers when the provider sends no kind, so the row reads in the console's language whatever the provider labelled. The row carries one visible action beside its enable switch; models, editing, a quota refresh, a cooldown release, download and delete sit in the row menu, because a row is a reading and not a stack of buttons. A menu entry names its action and never the file name, which would stretch the menu to whatever the longest credential is called; the file name belongs to the confirmation, where it identifies the target. A refresh reports itself once: a run without a failure is acknowledged by a toast, and a run with a failing target keeps the in-page report that carries the per-target reason. Redeeming a banked reset credit is not a row action at all: it is irreversible and spends an entitlement, so only the Drawer's Quota tab offers it, beside the credit expiries it consumes. One Details action opens the complete reading - every family, credit, cooldown and diagnostic - in the credential Drawer. The overview floor is six complete credential records at 1440x900: the row is allowed its height, because reading a credential matters more than fitting as many of them as possible. The Drawer separates Quota, Configuration and Models into tabs; only the selected task is visible. Configuration drafts survive tab changes and remain guarded when closing from any tab. Safe fields and models are fetched only when their respective tabs are selected. Search stays visible, additional filters are disclosed on demand, and pagination owns page size. Provider tabs show populated families plus the selected family; empty providers remain available in Connect. Record boundaries are visible, status colors remain semantic, and model/group labels and ordering survive full quota rendering.  Full quota completeness is verified in the Quota tab, including six model/group windows, with no horizontal overflow in the list or Drawer at 320px.
+   - OAuth sign-in, credential management and quota reading share one credential collection. The list presents a scan-first overview: identity, management state and metadata, quota condition, plan, observation age and the credential's own model family as its five-hour and weekly windows - each a labelled bar carrying its share, with its reset on the line below. A group's window is named from the period it covers when the provider sends no kind, so the row reads in the console's language whatever the provider labelled. The row carries one visible action beside its enable switch; models, editing, a quota refresh, a cooldown release, download and delete sit in the row menu, because a row is a reading and not a stack of buttons. A menu entry names its action and never the file name, which would stretch the menu to whatever the longest credential is called; the file name belongs to the confirmation, where it identifies the target. A refresh reports itself once, as a toast: a run without a failure is an acknowledgement that leaves on its own, and a run with a failing target is a report toast that lists each target's reason and stays until it is closed. Redeeming a banked reset credit is not a row action at all: it is irreversible and spends an entitlement, so only the Drawer's Quota tab offers it, beside the credit expiries it consumes. One Details action opens the complete reading - every family, credit, cooldown and diagnostic - in the credential Drawer. The overview floor is six complete credential records at 1440x900: the row is allowed its height, because reading a credential matters more than fitting as many of them as possible. The Drawer separates Quota, Configuration and Models into tabs; only the selected task is visible. Configuration drafts survive tab changes and remain guarded when closing from any tab. Safe fields and models are fetched only when their respective tabs are selected. Search stays visible, additional filters are disclosed on demand, and pagination owns page size. Provider tabs show populated families plus the selected family; empty providers remain available in Connect. Record boundaries are visible, status colors remain semantic, and model/group labels and ordering survive full quota rendering.  Full quota completeness is verified in the Quota tab, including six model/group windows, with no horizontal overflow in the list or Drawer at 320px.
 3. **Task-Dependent Density**
    - Monitoring and high-frequency telemetry (Dashboard, Live Logs, Request Records): High density, compact, tabular monospace alignment.
    - Configuration and system operations (Config, Pricing, System Settings): More generous whitespace, 32–48px section spacing, and full-width 1px dividers.
@@ -871,6 +871,42 @@ reader moving between pages never sees the refresh control jump or resize:
   header row for assistive technology and clip it from view (`.data-table-head-hidden`).
 - **Code is shown in a `CodeFrame`**: a head naming the language with the copy action, then the code
   in the console's own mono stack - never the browser's default `monospace`.
+
+### Feedback surfaces
+
+Every notification, failure and error reaches the operator through one of two surfaces, both in
+`web/src/components/feedback/` (ADR 0045). The choice is made by what the message describes, not by
+how serious it is:
+
+| The message describes | Surface | Component |
+| --- | --- | --- |
+| The outcome of something the operator just did - saved, copied, refused, three of five refreshed | **Toast** | `useToast()` |
+| A region that could not be read - a chart, a list, a drawer's tab | **Inline, in the region's place, with Retry** | `LoadFailure` |
+| A condition that holds while the region is on screen - demo mode, stale data, a feature switched off, a diagnostic about a record | **Inline, where it applies** | `Notice` |
+| A refusal of the input in front of the operator - a login, a composer message, a form field | **Inline, beside that input** | `Notice` / the form's own field error |
+
+- **One outcome, one surface.** A toast is never repeated as a banner, and a result never opens an
+  information-only dialog: `modal.confirm` asks before an action, a toast reports after it.
+- **A toast** is a floating panel like a menu: `--elevated` fill, a 1px `--border` edge (shadows are
+  off, so the border is its only edge), the 4px radius, one width (420px, antd's `Notification.width`
+  token) and an 18px icon. It opens at the top centre, never stacks into a collapsed pile, and holds
+  for 3s (success, info), 5s (warning) or 8s (error); an offered action gets 10s, and hovering pauses
+  it. A second line carries the reason, with an upstream JSON envelope read down to its status and
+  sentence (`readableReason`).
+- **A report is a toast that stays.** A batch outcome with per-target reasons (a quota refresh, a
+  batch enable or delete, an upload) lists them under group headings - what needs attention first -
+  each target's full name on its own line with its reason under it, and stays until it is closed. A
+  long group of context (targets never eligible) is summarised one line per reason. Nothing in a toast
+  changes height after it opens: antd places toasts from the heights it measured on arrival, so a
+  group that expanded in place would slide under the toast below it.
+- **A load failure** names what could not be read, why, and offers Retry in place, so the operator
+  repairs the one panel without reloading the page around it. A failed re-read over data still on
+  screen is the warning tone above that data; a failed first read takes the data's place, and says so
+  once.
+- **A notice** has one layout whatever it carries: the icon at body size, the headline, and its detail
+  under it in `--fg-2`. It is closable only when the condition may be put away.
+- `pnpm check:feedback` refuses antd `Alert`, `message` and `notification`, and information-only
+  `modal.*`/`Modal.*` dialogs, anywhere outside the feedback module.
 
 ### Time range control
 
@@ -1617,6 +1653,7 @@ remembered. ADR 0012 records the threshold, its measurement and its alternatives
 - [ ] No shadows, no gradients, 4px radius
 - [ ] Mono font inherited (never set a new font-family)
 - [ ] The page opens with `PageHeader`; a refresh is `RefreshButton`; a state is `StatusLabel`; a list is `ResponsiveList`
+- [ ] An action's outcome is a `useToast` toast; a failed read is a `LoadFailure` with Retry in the region's place; a condition is a `Notice` (§5, Feedback surfaces)
 - [ ] One page title; subtitles only with live data; no duplicated translations
 - [ ] Nav position marked by 2px `--fg` left tick rule, not a filled block or semantic color
 - [ ] Settings and management favor open section lists over heavy card wrappers

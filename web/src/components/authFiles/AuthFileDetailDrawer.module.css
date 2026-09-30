@@ -149,3 +149,8 @@
   margin-bottom: 12px;
   color: var(--fg-2);
 }
+
+/* A failed read of the safe fields sits above the fields it could not fill. */
+.safe-fields-failure {
+  margin-bottom: 12px;
+}

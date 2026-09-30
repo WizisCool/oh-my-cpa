@@ -73,16 +73,19 @@ export async function runObservabilityAcceptance({
   const refreshAllBtn = page.getByRole('button', { name: /刷新配额|Refresh quota/i }).first();
   await refreshAllBtn.waitFor({ state: 'visible', timeout: 10000 });
   await refreshAllBtn.click();
-  // A refresh reports on exactly one surface. This fixture run has failing targets, so the
-  // outcome is the in-page report that carries their reasons. Which branch a run takes is the
-  // rule the `quotaRefreshOutcomeSurface` unit test pins; here the assertion is that the
-  // failing branch shows the report and does not also raise a toast.
+  // A refresh reports once. This fixture run has failing targets, so the outcome is the report
+  // toast that carries their reasons. Which kind a run gets is the rule the
+  // `quotaRefreshOutcomeKind` unit test pins; here the assertion is that the failing branch shows
+  // the report and raises no second toast beside it.
   await page.getByTestId('quota-operation-report').waitFor({ state: 'visible', timeout: 90000 });
   check(
-    'a failing quota refresh reports in the page and raises no toast',
-    (await page.locator('.ant-message-notice').count()) === 0,
-    `toasts=${await page.locator('.ant-message-notice').count()}`,
+    'a failing quota refresh raises one report toast',
+    (await page.locator('.omc-toast').count()) === 1,
+    `toasts=${await page.locator('.omc-toast').count()}`,
   );
+  // The report stays until it is closed; closed here so it cannot sit over the Drawer below.
+  await page.getByTestId('quota-operation-report').locator('.ant-notification-notice-close').click();
+  await page.getByTestId('quota-operation-report').waitFor({ state: 'detached' });
 
   const openQuota = async (name) => {
     await page.locator(`[data-testid="oauth-credential-record"][data-file-name="${name}"]`)

@@ -1,5 +1,5 @@
 import React from 'react';
-import { App as AntdApp, Button, Input, InputNumber, Popconfirm, Tooltip } from 'antd';
+import { Button, Input, InputNumber, Popconfirm, Tooltip } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CheckOutlined, UndoOutlined } from '../../components/icons';
 import { api } from '../../api/client';
@@ -13,6 +13,7 @@ import { PRICING_QUERY_KEYS } from '../../components/pricing/pricingQueries';
 import { pricingErrorText } from '../../components/pricing/pricingErrors';
 import { UsageCell } from './UsageCell';
 import styles from './PricingPage.module.css';
+import { useToast } from '../../components/feedback';
 
 /**
  * Channel multipliers: what one CPA provider actually charges relative to list price. A relay
@@ -83,7 +84,7 @@ export const ChannelMultipliersPanel: React.FC<{
  */
 const ChannelEditor: React.FC<{ channel: PricingChannel; label: string }> = ({ channel, label }) => {
   const t = useT();
-  const { message } = AntdApp.useApp();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const [multiplier, setMultiplier] = React.useState<number>(channel.multiplier);
   const [note, setNote] = React.useState(channel.note);
@@ -96,18 +97,18 @@ const ChannelEditor: React.FC<{ channel: PricingChannel; label: string }> = ({ c
   const save = useMutation({
     mutationFn: () => api.updatePricingChannel(channel.channel, { multiplier, note }),
     onSuccess: () => {
-      message.success(t('pricing.channels.saved', { channel: label }));
+      toast.success(t('pricing.channels.saved', { channel: label }));
       refresh();
     },
-    onError: (error) => message.error(t('pricing.save_failed', { msg: pricingErrorText(t, error) })),
+    onError: (error) => toast.error(t('pricing.save_failed', { msg: pricingErrorText(t, error) })),
   });
   const reset = useMutation({
     mutationFn: () => api.deletePricingChannel(channel.channel),
     onSuccess: () => {
-      message.success(t('pricing.channels.reset_done', { channel: label }));
+      toast.success(t('pricing.channels.reset_done', { channel: label }));
       refresh();
     },
-    onError: (error) => message.error(t('pricing.delete_failed', { msg: pricingErrorText(t, error) })),
+    onError: (error) => toast.error(t('pricing.delete_failed', { msg: pricingErrorText(t, error) })),
   });
   return (
     <div className={styles['channel-editor']}>

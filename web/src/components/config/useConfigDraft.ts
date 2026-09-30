@@ -13,6 +13,7 @@ import { ALL_CONFIG_FIELDS, type ConfigFieldDefinition, type ConfigSectionId } f
 import type { ConfigScalarsResponse } from '../../types/configManagement';
 import type { PayloadValidationIssue } from './payloadRules';
 import type { YamlSourceEditorRef } from './YamlSourceEditor';
+import { useToast } from '../feedback';
 
 /**
  * The configuration draft and the transaction that saves it.
@@ -37,7 +38,8 @@ import type { YamlSourceEditorRef } from './YamlSourceEditor';
  */
 export function useConfigDraft() {
   const t = useT();
-  const { message, modal } = AntdApp.useApp();
+  const { modal } = AntdApp.useApp();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const editorRef = React.useRef<YamlSourceEditorRef | null>(null);
 
@@ -55,7 +57,6 @@ export function useConfigDraft() {
   const [serverYaml, setServerYaml] = React.useState<string>('');
   const [serverRevision, setServerRevision] = React.useState<string>('');
   const [conflictState, setConflictState] = React.useState<{ currentRevision: string } | null>(null);
-  const [saveError, setSaveError] = React.useState<string | null>(null);
 
   const docRef = React.useRef<Document | null>(null);
   const serverDocRef = React.useRef<Document | null>(null);
@@ -136,7 +137,7 @@ export function useConfigDraft() {
           currentDoc = parseDocument(rawYaml || '');
           docRef.current = currentDoc;
         } catch {
-          message.error(t('cfg.yaml_syntax_error'));
+          toast.error(t('cfg.yaml_syntax_error'));
           return;
         }
       }
@@ -153,7 +154,7 @@ export function useConfigDraft() {
         setRawYaml(nextYaml);
       }
     },
-    [rawYaml, serverYaml, message, t],
+    [rawYaml, serverYaml, toast, t],
   );
 
   const getFieldValue = React.useCallback(
@@ -175,7 +176,6 @@ export function useConfigDraft() {
 
   const saveMutation = useMutation({
     mutationFn: async ({ yamlToSave, revision }: { yamlToSave: string; revision: string }): Promise<{ yaml?: string; revision?: string }> => {
-      setSaveError(null);
       setConflictState(null);
       if (viewMode === 'source') {
         const saved = await api.updateConfigSource(yamlToSave, revision);
@@ -189,7 +189,7 @@ export function useConfigDraft() {
       return { yaml: saved.safe_yaml, revision: saved.revision };
     },
     onSuccess: (saved, variables) => {
-      message.success(t('cfg.source_save_success'));
+      toast.success(t('cfg.source_save_success'));
       // The operator may have kept typing while the save was in flight: those
       // newer edits are carried over onto what was saved.
       const hasNewerDraft = rawYamlRef.current !== variables.yamlToSave;
@@ -225,8 +225,7 @@ export function useConfigDraft() {
         return;
       }
       const msg = describeConfigSaveError(err, t);
-      setSaveError(msg);
-      message.error(msg);
+      toast.error(msg);
     },
   });
 
@@ -241,7 +240,6 @@ export function useConfigDraft() {
     } catch {
       // A malformed document is expected here: the previous baseline stays in place.
     }
-    setSaveError(null);
     setPayloadIssues([]);
     setShowErrorFeedback(false);
     setValidateTrigger(0);
@@ -280,13 +278,13 @@ export function useConfigDraft() {
     if (saveInFlightRef.current || saveMutation.isPending) return Promise.resolve();
     if (hasYamlErrors) {
       setShowErrorFeedback(true);
-      message.error(t('cfg.dirty_bar_yaml_error'));
+      toast.error(t('cfg.dirty_bar_yaml_error'));
       return Promise.resolve();
     }
     if (payloadIssues.length > 0) {
       setValidateTrigger((v) => v + 1);
       setShowErrorFeedback(true);
-      message.warning(t('cfg.dirty_bar_payload_issues', { n: payloadIssues.length }));
+      toast.warning(t('cfg.dirty_bar_payload_issues', { n: payloadIssues.length }));
       return Promise.resolve();
     }
     saveInFlightRef.current = true;
@@ -307,7 +305,7 @@ export function useConfigDraft() {
     configQuery.isError,
     rawYaml,
     serverRevision,
-    message,
+    toast,
     t,
   ]);
 
@@ -391,11 +389,10 @@ export function useConfigDraft() {
         } catch {
           // A malformed document is expected here: the previous baseline stays in place.
         }
-        setSaveError(null);
         setViewMode('source');
       } catch (err) {
         const msg = describeError(err);
-        message.error(t('cfg.source_load_failed', { msg }));
+        toast.error(t('cfg.source_load_failed', { msg }));
       }
     } else {
       setViewMode('visual');
@@ -420,9 +417,9 @@ export function useConfigDraft() {
       const source = await api.getConfigSource();
       adoptBaseline(source.yaml, source.revision, null, false);
     } catch (err) {
-      message.error(t('cfg.source_load_failed', { msg: describeError(err) }));
+      toast.error(t('cfg.source_load_failed', { msg: describeError(err) }));
     }
-  }, [adoptBaseline, configQuery, message, t]);
+  }, [adoptBaseline, configQuery, toast, t]);
 
   return {
     storedLayout: configQuery.data?.stored_layout,
@@ -442,8 +439,6 @@ export function useConfigDraft() {
     serverRevision,
     conflictState,
     setConflictState,
-    saveError,
-    setSaveError,
     docRef,
     serverDocRef,
     rawYamlRef,

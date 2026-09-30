@@ -1,6 +1,6 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Alert, Button, Popconfirm, Tag } from 'antd';
+import { Button, Popconfirm, Tag } from 'antd';
 import { SyncOutlined, ThunderboltOutlined } from '../../components/icons';
 import { useT } from '../../i18n';
 import type { QuotaItem } from '../../types/quota';
@@ -9,6 +9,7 @@ import { QuotaProgressBar } from './QuotaProgressBar';
 import { orderQuotaWindows } from './quotaWindowSelection';
 import { quotaStatusTag } from './quotaStatusTag';
 import styles from './QuotaPresentation.module.css';
+import { Notice } from '../../components/feedback';
 
 interface CredentialQuotaBodyProps {
   item: QuotaItem;
@@ -106,9 +107,8 @@ export const CredentialQuotaBody: React.FC<CredentialQuotaBodyProps> = ({
       </div>
 
       {item.error && (
-        <Alert
-          type="error"
-          showIcon
+        <Notice
+          tone="error"
           description={item.error}
           className={styles['quota-diagnostic-alert']}
         />

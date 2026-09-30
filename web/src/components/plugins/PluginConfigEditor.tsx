@@ -1,9 +1,10 @@
 import React from 'react';
-import { Alert, Button, Input, Tag, Typography } from 'antd';
+import { Button, Input, Tag, Typography } from 'antd';
 import { CheckOutlined, FormatPainterOutlined } from '../icons';
 import { useT } from '../../i18n';
 import { parsePluginConfig, pluginConfigSummary } from './pluginConfig';
 import styles from './PluginConfigEditor.module.css';
+import { Notice } from '../feedback';
 
 const { Text } = Typography;
 
@@ -46,9 +47,8 @@ export const PluginConfigEditor: React.FC<PluginConfigEditorProps> = ({ value, o
       </div>
 
       {parsed.error && (
-        <Alert
-          type="error"
-          showIcon
+        <Notice
+          tone="error"
           description={parsed.error === 'duplicate-key' ? t('plugin.config_duplicate_key_desc') : t('plugin.config_json_desc')}
         />
       )}

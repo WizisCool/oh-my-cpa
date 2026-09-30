@@ -1,6 +1,5 @@
 import React from 'react';
-import { Alert, Button, Card, Segmented, Skeleton, Tooltip } from 'antd';
-import { ReloadOutlined } from '../icons';
+import { Card, Segmented, Skeleton, Tooltip } from 'antd';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
 import { useT } from '../../i18n';
@@ -21,6 +20,7 @@ import {
 } from '../../types/dashboardModels';
 import { formatCost } from '../../types/tokenDisplay';
 import { isSlidingRange, type DashboardRange } from '../../types/dashboard';
+import { LoadFailure } from '../feedback';
 
 const LazyModelTokenTrend = React.lazy(() =>
   import('../../charts/ModelTokenTrend').then((module) => ({ default: module.ModelTokenTrend }))
@@ -123,12 +123,11 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
         ) : (
           <>
             {isError && (
-              <Alert
+              <LoadFailure
                 className="model-stale-alert"
-                type="warning"
-                showIcon
-                description={t('dash.models.stale')}
-                action={<Button size="small" icon={<ReloadOutlined />} onClick={() => void refetch()}>{t('common.retry')}</Button>}
+                tone="warning"
+                title={t('dash.models.stale')}
+                onRetry={() => void refetch()}
               />
             )}
             <ModelLegend groups={groups} foldedLabel={foldedLabel} unnamedLabel={unnamedLabel} palette={theme.palette} />
@@ -159,12 +158,11 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
         ) : (
           <>
             {isError && (
-              <Alert
+              <LoadFailure
                 className="model-stale-alert"
-                type="warning"
-                showIcon
-                description={t('dash.models.stale')}
-                action={<Button size="small" icon={<ReloadOutlined />} onClick={() => void refetch()}>{t('common.retry')}</Button>}
+                tone="warning"
+                title={t('dash.models.stale')}
+                onRetry={() => void refetch()}
               />
             )}
             {groups.length === 0 ? (
@@ -303,13 +301,7 @@ const ModelLegend: React.FC<{
 const ModelPanelsError: React.FC<{ message: string; onRetry: () => void }> = ({ message, onRetry }) => {
   const t = useT();
   return (
-    <Alert
-      className="model-alert"
-      type="error"
-      showIcon
-      description={`${t('dash.models.error')} — ${message}`}
-      action={<Button size="small" icon={<ReloadOutlined />} onClick={onRetry}>{t('common.retry')}</Button>}
-    />
+    <LoadFailure className="model-alert" title={t('dash.models.error')} detail={message} onRetry={onRetry} />
   );
 };
 

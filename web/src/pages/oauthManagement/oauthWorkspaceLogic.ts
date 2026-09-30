@@ -564,17 +564,15 @@ export function legacyOAuthManagementRedirect(
 }
 
 /**
- * Which surface a quota-refresh outcome is reported on.
+ * What kind of toast a quota-refresh outcome is.
  *
  * A run whose targets all answered - including one that skipped credentials which were never
- * eligible, since that is decided before the run rather than by it - is an acknowledgement and
- * belongs in a toast: it leaves no block behind, so a finished refresh cannot push the
- * credential list down. A failed or unknown target is a result to inspect, and the in-page
- * report is the only surface that can carry its per-target reason. Exactly one of the two is
- * used.
+ * eligible, since that is decided before the run rather than by it - is an acknowledgement that
+ * leaves on its own. A failed or unknown target is a result to inspect: the toast becomes a report
+ * that lists each target's reason and stays until it is closed.
  */
-export function quotaRefreshOutcomeSurface(
+export function quotaRefreshOutcomeKind(
   report: { failed: number; unknown: number },
-): 'toast' | 'report' {
-  return report.failed > 0 || report.unknown > 0 ? 'report' : 'toast';
+): 'acknowledgement' | 'report' {
+  return report.failed > 0 || report.unknown > 0 ? 'report' : 'acknowledgement';
 }

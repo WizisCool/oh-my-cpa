@@ -198,7 +198,8 @@ button, input, textarea, select { font: inherit; }
 a { color: inherit; }
 
 .ant-layout, .ant-card, .ant-drawer-content, .ant-modal-content, .ant-popover-inner,
-.ant-dropdown-menu, .ant-select-dropdown, .ant-picker-dropdown .ant-picker-panel-container {
+.ant-dropdown-menu, .ant-select-dropdown, .ant-picker-dropdown .ant-picker-panel-container,
+.ant-notification-notice {
   box-shadow: none !important;
 }
 /* Floating panels: their background is one step away from the page in dark mode
@@ -207,7 +208,8 @@ a { color: inherit; }
    design.md puts all structure in borders, so this is the rule doing its job
    rather than a decoration added on top. */
 .ant-popover-inner, .ant-dropdown-menu, .ant-select-dropdown,
-.ant-picker-dropdown .ant-picker-panel-container, .ant-modal-content {
+.ant-picker-dropdown .ant-picker-panel-container, .ant-modal-content,
+.ant-notification-notice {
   border: 1px solid var(--border);
 }
 /* The date panel needs the same fill step as the popover, dropdown and select
@@ -295,6 +297,91 @@ a { color: inherit; }
 .terminal-page-stack > .terminal-page-head { margin-bottom: 8px; }
 .terminal-page-stack > * { min-width: 0; }
 .terminal-page-stack > .ant-alert { margin: 0; }
+
+/* Feedback surfaces (docs/design.md, Feedback surfaces). A toast reports an action and leaves; a
+   notice describes a region while it is on screen. Both read at the console's body size so a
+   failure is never smaller than the data it interrupts. */
+/* A toast is a floating panel like a menu: the elevated fill and the 1px border above - with
+   shadows off, the border is the only edge it has over the page. Its icon is the notice's size,
+   so a failure reads at the same weight whether it floats or sits in the page. */
+.ant-notification .omc-toast.ant-notification-notice { --ant-notification-icon-font-size: 18px; }
+.omc-toast .ant-notification-notice-title { font-size: 14px; line-height: 1.5; color: var(--fg); }
+.omc-toast .ant-notification-notice-description { color: var(--fg-2); overflow-wrap: anywhere; }
+.omc-toast-detail { margin-bottom: 6px; }
+/* A report's per-target list scrolls inside the toast, so forty failures cannot push it past the
+   viewport. */
+.omc-toast-report {
+  max-height: min(320px, 50vh);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+.omc-toast-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+  margin-bottom: 4px;
+}
+.omc-toast-group-count {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  color: var(--muted);
+}
+.omc-toast-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.omc-toast-items li {
+  padding: 6px 10px;
+  border-top: 1px solid var(--border);
+}
+.omc-toast-items li:first-child { border-top: 0; }
+.omc-toast-item-name {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+.omc-toast-item-reason-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--fg);
+}
+/* A summarised reason names its targets on one line: the full list is in the tooltip, and the
+   line cannot grow, which keeps the toast's height fixed. */
+.omc-toast-item-names {
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.omc-toast-item-reason {
+  margin-top: 2px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--fg-2);
+  overflow-wrap: anywhere;
+}
+.omc-notice-detail {
+  display: block;
+  margin-top: 2px;
+  color: var(--fg-2);
+  overflow-wrap: anywhere;
+}
+.config-notice { margin-bottom: 16px; }
 
 /* A card's own head (`PanelTitle`): glyph, title and the one control that acts on that card. */
 .panel-title {

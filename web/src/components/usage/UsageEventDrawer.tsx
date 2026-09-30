@@ -1,6 +1,6 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Alert, App as AntdApp, Button, Descriptions, Drawer, Empty, Modal, Skeleton, Tabs, Tooltip } from 'antd';
+import { Button, Descriptions, Drawer, Empty, Modal, Skeleton, Tabs, Tooltip } from 'antd';
 import {
   ArrowRightOutlined,
   BlockOutlined,
@@ -31,6 +31,8 @@ import {
 import { requestGroupName } from '../../types/usageEventLabels';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import { CostBreakdownView } from '../pricing/CostBreakdownView';
+import { useToast } from '../feedback';
+import { LoadFailure, Notice } from '../feedback';
 
 export interface UsageEventDrawerProps {
   eventId: number | null;
@@ -53,7 +55,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   // The drawer's token cards follow the console's unit style; the values are
   // exact counts, so the full form is what this surface prints.
   const { style: tokenStyle } = useTokenDisplayStyle();
-  const { message } = AntdApp.useApp();
+  const toast = useToast();
   const [downloadModalOpen, setDownloadModalOpen] = React.useState(false);
 
   // The drawer and the download confirmation over it are two overlays on one stack, so Back
@@ -106,10 +108,10 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
   );
   const copy = async (text: string) => {
     if (await copyText(text)) {
-      message.success(t('res.copied'));
+      toast.success(t('res.copied'));
       return;
     }
-    message.error(t('events.copy_failed'));
+    toast.error(t('events.copy_failed'));
   };
   const download = async () => {
     if (eventId == null || !event?.request_id) return;
@@ -125,9 +127,9 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
       anchor.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       setDownloadModalOpen(false);
-      message.success(t('events.download_success'));
+      toast.success(t('events.download_success'));
     } catch {
-      message.error(t('events.download_failed'));
+      toast.error(t('events.download_failed'));
     } finally {
       setDownloading(false);
     }
@@ -221,13 +223,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
       {result.isLoading ? (
         <Skeleton active={false} paragraph={{ rows: 12 }} />
       ) : result.isError ? (
-        <Alert
-          type="error"
-          showIcon
-          title={t('events.load_error')}
-          description={result.error instanceof Error ? result.error.message : undefined}
-          action={<Button onClick={() => void result.refetch()}>{t('common.retry')}</Button>}
-        />
+        <LoadFailure title={t('events.load_error')} error={result.error} onRetry={() => void result.refetch()} />
       ) : event ? (
         <>
           <div className="request-detail-hero">
@@ -515,7 +511,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
                       <>
                         <p className="request-detail-note">{t('events.correlation_note')}</p>
                         {isRelatedErrorsPartial && (
-                          <Alert type="warning" showIcon title={t('events.partial_errors')} />
+                          <Notice tone="warning" title={t('events.partial_errors')} />
                         )}
                         {errors.length
                           ? errors.map((error) => (
@@ -587,7 +583,7 @@ export const UsageEventDrawer: React.FC<UsageEventDrawerProps> = ({
         okText={t('common.confirm')}
         cancelText={t('common.cancel')}
       >
-        <Alert type="warning" showIcon description={t('events.download_log_desc')} />
+        <Notice tone="warning" description={t('events.download_log_desc')} />
         <p className="request-detail-id">Request ID: {event?.request_id}</p>
       </Modal>
     </Drawer>

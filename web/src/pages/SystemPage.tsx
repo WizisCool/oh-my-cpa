@@ -4,11 +4,9 @@ import {
   Card,
   Button,
   Typography,
-  Alert,
   Spin,
   Modal,
   Drawer,
-  App as AntdApp,
 } from 'antd';
 import {
   DownloadOutlined,
@@ -48,6 +46,7 @@ import { StatusLabel } from '../components/common/StatusLabel';
 import { formatBytes, formatTimeAgo } from '../utils/format';
 import { saveBlob } from '../utils/download';
 import styles from './SystemPage.module.css';
+import { LoadFailure, Notice, useToast } from '../components/feedback';
 
 const { Text, Paragraph } = Typography;
 
@@ -159,11 +158,10 @@ const ProductBlock: React.FC<ProductBlockProps> = ({
       )}
 
       {version.check_error && (
-        <Alert
-          type="warning"
-          showIcon
+        <Notice
+          tone="warning"
           className={styles['check-alert']}
-          description={t('sys.last_check_failed', {
+          title={t('sys.last_check_failed', {
             time: version.attempted_at_ms ? dayjs(version.attempted_at_ms).format('YYYY-MM-DD HH:mm:ss') : '—',
             msg: version.check_error,
           })}
@@ -178,7 +176,7 @@ export const SystemPage: React.FC = () => {
   useTimeZone();
   const t = useT();
   const isDemo = isDemoMode();
-  const { message } = AntdApp.useApp();
+  const toast = useToast();
   const queryClient = useQueryClient();
 
   const [downloadingDiag, setDownloadingDiag] = useState(false);
@@ -347,19 +345,19 @@ export const SystemPage: React.FC = () => {
 
     const label = actionLabel(job.action);
     if (job.error) {
-      message.error(t('sys.maintenance_failed', { action: label, msg: job.error }));
+      toast.error(t('sys.maintenance_failed', { action: label, msg: job.error }));
     } else if (job.incomplete) {
       // The statement ran but did not fully do its job, which is a different claim from
       // success and from failure.
-      message.warning(
+      toast.warning(
         t('sys.maintenance_incomplete_warning', {
           detail: job.detail || t('sys.maintenance_incomplete_default'),
         }),
       );
     } else {
-      message.success(t('sys.maintenance_success', { action: label }));
+      toast.success(t('sys.maintenance_success', { action: label }));
     }
-  }, [maintenanceData, queryClient, message, t]);
+  }, [maintenanceData, queryClient, toast, t]);
 
   const handleCheckUpdates = async () => {
     setIsCheckingUpdates(true);
@@ -369,15 +367,15 @@ export const SystemPage: React.FC = () => {
       // the stored index. Saying "already up to date" there would claim a check that did not
       // happen; saying when the stored answer is from is the honest report.
       if (outcome.served_from_cache) {
-        message.info(t('sys.check_updates_cached'));
+        toast.info(t('sys.check_updates_cached'));
       } else {
-        message.success(t('sys.check_updates_success'));
+        toast.success(t('sys.check_updates_success'));
       }
       await queryClient.invalidateQueries({ queryKey: ['management-system-info'] });
       await queryClient.invalidateQueries({ queryKey: ['management-system-releases'] });
     } catch (err: unknown) {
       const msg = describeError(err);
-      message.error(t('sys.last_check_failed', { time: dayjs().format('HH:mm:ss'), msg }));
+      toast.error(t('sys.last_check_failed', { time: dayjs().format('HH:mm:ss'), msg }));
       await queryClient.invalidateQueries({ queryKey: ['management-system-info'] });
     } finally {
       setIsCheckingUpdates(false);
@@ -411,11 +409,11 @@ export const SystemPage: React.FC = () => {
       // 202 means the job was admitted, not that it finished. Saying "started" is the
       // honest reading, and the outcome arrives with the terminal status.
       queryClient.setQueryData(['management-system-maintenance'], accepted);
-      message.info(t('sys.maintenance_started', { action: actionLabel('checkpoint') }));
+      toast.info(t('sys.maintenance_started', { action: actionLabel('checkpoint') }));
       handleAcceptedJob(accepted.maintenance);
     } catch (err: unknown) {
       const msg = describeError(err);
-      message.error(t('sys.maintenance_failed', { action: actionLabel('checkpoint'), msg }));
+      toast.error(t('sys.maintenance_failed', { action: actionLabel('checkpoint'), msg }));
     } finally {
       setSubmittingAction(null);
     }
@@ -427,11 +425,11 @@ export const SystemPage: React.FC = () => {
     try {
       const accepted = await api.runSystemMaintenance('vacuum');
       queryClient.setQueryData(['management-system-maintenance'], accepted);
-      message.info(t('sys.maintenance_started', { action: actionLabel('vacuum') }));
+      toast.info(t('sys.maintenance_started', { action: actionLabel('vacuum') }));
       handleAcceptedJob(accepted.maintenance);
     } catch (err: unknown) {
       const msg = describeError(err);
-      message.error(t('sys.maintenance_failed', { action: actionLabel('vacuum'), msg }));
+      toast.error(t('sys.maintenance_failed', { action: actionLabel('vacuum'), msg }));
     } finally {
       setSubmittingAction(null);
     }
@@ -442,10 +440,10 @@ export const SystemPage: React.FC = () => {
     try {
       const blob = await api.downloadSystemDiagnostics();
       saveBlob(blob, `omc-diagnostics-${Date.now()}.json`);
-      message.success(t('sys.download_success'));
+      toast.success(t('sys.download_success'));
     } catch (err: unknown) {
       const msg = describeError(err);
-      message.error(t('sys.download_failed', { msg }));
+      toast.error(t('sys.download_failed', { msg }));
     } finally {
       setDownloadingDiag(false);
     }
@@ -493,7 +491,7 @@ export const SystemPage: React.FC = () => {
         )}
       />
 
-      {isError && <Alert type="error" showIcon description={describeError(error)} />}
+      {isError && <LoadFailure title={t('common.load_failed_title')} error={error} onRetry={() => void refetch()} />}
 
       {/* Four cards in a 2x2 grid, paired by height: versions beside maintenance and storage
           beside health keeps each row's cards close to the same height, so neither card in a row
@@ -625,12 +623,11 @@ export const SystemPage: React.FC = () => {
               that was already running when the page was opened, and it is never dismissible:
               the page must not let a reader hide a job that is still holding the write gate. */}
           {effectiveMaintenance?.running && (
-            <Alert
-              type="info"
-              showIcon
+            <Notice
+              tone="info"
               icon={<Spin size="small" />}
               className={styles['maintenance-running']}
-              description={t('sys.maintenance_in_progress', { action: actionLabel(effectiveMaintenance.action) })}
+              title={t('sys.maintenance_in_progress', { action: actionLabel(effectiveMaintenance.action) })}
             />
           )}
 
@@ -691,22 +688,20 @@ export const SystemPage: React.FC = () => {
               )}
 
               {displayedOutcome.incomplete && (
-                <Alert
-                  type="warning"
-                  showIcon
+                <Notice
+                  tone="warning"
                   className={styles['maintenance-outcome-alert']}
-                  description={t('sys.maintenance_incomplete_warning', {
+                  title={t('sys.maintenance_incomplete_warning', {
                     detail: displayedOutcome.detail || t('sys.maintenance_incomplete_default'),
                   })}
                 />
               )}
 
               {displayedOutcome.error && (
-                <Alert
-                  type="error"
-                  showIcon
+                <Notice
+                  tone="error"
                   className={styles['maintenance-outcome-alert']}
-                  description={displayedOutcome.error}
+                  title={displayedOutcome.error}
                 />
               )}
             </div>

@@ -1,7 +1,6 @@
 import React from 'react';
 import { useBlocker, useSearchParams } from 'react-router-dom';
 import {
-  Alert,
   App as AntdApp,
   Button,
   Dropdown,
@@ -62,6 +61,7 @@ import {
 } from './oauthWorkspaceLogic';
 import styles from './OAuthManagementPage.module.css';
 import { PageHeader } from '../../components/common/PageHeader';
+import { LoadFailure, Notice, useToast } from '../../components/feedback';
 
 interface OAuthManagementViewPreference {
   pageSize: 12 | 24 | 48;
@@ -100,7 +100,8 @@ interface SelectedIdentity {
 
 export const OAuthManagementPage: React.FC = () => {
   const t = useT();
-  const { message, modal } = AntdApp.useApp();
+  const { modal } = AntdApp.useApp();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const visibleNow = useVisibleNow();
@@ -243,8 +244,8 @@ export const OAuthManagementPage: React.FC = () => {
   }, [filesQuery.data, filesQuery.isError, pendingFocusQuota]);
 
   const [completionPending, setCompletionPending] = React.useState<Record<string, CompletionPending>>({});
-  const [completionResults, setCompletionResults] = React.useState<Record<string, CompletionResult>>({});
   const preStartSnapshotRef = React.useRef<Record<string, Set<string>>>({});
+  const announceCompletionRef = React.useRef<(result: CompletionResult) => void>(() => undefined);
   const handleAuthorizationCompleted = React.useCallback((providerId: string) => {
     const snapshot = preStartSnapshotRef.current[providerId]
       ?? new Set(recordsRef.current.map((record) => record.key));
@@ -311,7 +312,9 @@ export const OAuthManagementPage: React.FC = () => {
       settled.push(providerId);
     }
     if (settled.length === 0) return;
-    setCompletionResults((previous) => ({ ...previous, ...nextResults }));
+    // A sign-in finishing is the outcome of the operator's click in the connect panel, so it is a
+    // toast; the one it offers - show me the credential - is carried as its action.
+    Object.values(nextResults).forEach((result) => announceCompletionRef.current(result));
     setCompletionPending((previous) => {
       const next = { ...previous };
       settled.forEach((providerId) => delete next[providerId]);
@@ -407,7 +410,7 @@ export const OAuthManagementPage: React.FC = () => {
   const openConnectForRecord = (record: OAuthWorkspaceRecord) => {
     const providerId = record.authorizationProviderId;
     if (!providerId) {
-      message.warning(t('omc.reauth_unavailable', { provider: record.displayProvider }));
+      toast.warning(t('omc.reauth_unavailable', { provider: record.displayProvider }));
       return;
     }
     setConnectProviderId(providerId);
@@ -428,12 +431,31 @@ export const OAuthManagementPage: React.FC = () => {
         document.querySelector(`[data-identity="${CSS.escape(recordKey)}"]`)?.scrollIntoView({ block: 'center' });
       });
     }
-    setCompletionResults((previous) => {
-      const next = { ...previous };
-      delete next[providerId];
-      return next;
-    });
   };
+  const announceCompletion = (result: CompletionResult) => {
+    const key = `omc-oauth-complete-${result.providerId}`;
+    const title = result.kind === 'new'
+      ? t('omc.oauth_success_new_credential')
+      : result.kind === 'ambiguous'
+        ? t('omc.oauth_success_ambiguous')
+        : t('omc.oauth_success_refresh_failed');
+    const actions = (
+      <Button
+        size="small"
+        onClick={() => {
+          toast.dismiss(key);
+          revealCompletedCredential(result.providerId, result);
+        }}
+      >
+        {t('omc.view_credentials')}
+      </Button>
+    );
+    if (result.kind === 'new') toast.success(title, { key, actions });
+    else toast.warning(title, { key, actions });
+  };
+  // The effect that settles a sign-in runs before this render's handlers exist, and the action
+  // must reveal against the records on screen when it is clicked, not when the toast opened.
+  announceCompletionRef.current = announceCompletion;
 
   const sessionEntries = Object.entries(sessions.states)
     .filter(([, state]) => state.status === 'starting' || state.status === 'waiting' || state.status === 'error')
@@ -472,9 +494,8 @@ export const OAuthManagementPage: React.FC = () => {
         ? t('omc.quota_ambiguous')
         : t('omc.quota_unobserved');
     return (
-      <Alert
-        type={record.quotaMatch === 'missing-quota' ? 'info' : 'warning'}
-        showIcon
+      <Notice
+        tone={record.quotaMatch === 'missing-quota' ? 'info' : 'warning'}
         title={quotaMessage}
         action={record.canRefreshQuota ? (
           <Button size="small" onClick={() => void actions.refreshQuotaForRecord(record)}>
@@ -583,46 +604,13 @@ export const OAuthManagementPage: React.FC = () => {
         </div>
       )}
 
-      {Object.entries(completionResults).map(([providerId, result]) => (
-        <Alert
-          key={providerId}
-          className={styles['diagnostic-bar']}
-          type={result.kind === 'new' ? 'success' : 'warning'}
-          showIcon
-          title={
-            result.kind === 'new'
-              ? t('omc.oauth_success_new_credential')
-              : result.kind === 'ambiguous'
-                ? t('omc.oauth_success_ambiguous')
-                : t('omc.oauth_success_refresh_failed')
-          }
-          action={(
-            <Space>
-              <Button size="small" onClick={() => revealCompletedCredential(providerId, result)}>{t('omc.view_credentials')}</Button>
-              <Button
-                size="small"
-                type="text"
-                onClick={() => setCompletionResults((previous) => {
-                  const next = { ...previous };
-                  delete next[providerId];
-                  return next;
-                })}
-              >
-                {t('common.close')}
-              </Button>
-            </Space>
-          )}
-        />
-      ))}
-
       {(projection.duplicateAuthIndexes.length > 0
         || projection.duplicateFileNames.length > 0
         || projection.missingAuthIndexCount > 0
         || projection.quotaOnly.length > 0) && (
-          <Alert
+          <Notice
             className={styles['diagnostic-bar']}
-            type="warning"
-            showIcon
+            tone="warning"
             title={t('af.status_problem')}
             description={t('omc.sync_diagnostics_desc', {
               duplicateIndexes: projection.duplicateAuthIndexes.length,
@@ -635,32 +623,29 @@ export const OAuthManagementPage: React.FC = () => {
         )}
 
       {filesQuery.isError && (
-        <Alert
+        <LoadFailure
           className={styles['diagnostic-bar']}
-          type="error"
-          showIcon
           title={t('af.error')}
-          description={filesQuery.error instanceof Error ? filesQuery.error.message : t('af.request_failed')}
-          action={<Button size="small" onClick={() => void filesQuery.refetch()}>{t('common.retry')}</Button>}
+          error={filesQuery.error}
+          onRetry={() => void filesQuery.refetch()}
         />
       )}
       {quotaQuery.isError && (
-        <Alert
+        <LoadFailure
           className={styles['diagnostic-bar']}
-          type="warning"
-          showIcon
+          tone="warning"
           title={t('omc.quota_read_failed')}
-          description={quotaQuery.error instanceof Error ? quotaQuery.error.message : t('af.request_failed')}
-          action={<Button size="small" onClick={() => void quotaQuery.refetch()}>{t('common.retry')}</Button>}
+          error={quotaQuery.error}
+          onRetry={() => void quotaQuery.refetch()}
         />
       )}
       {pluginsQuery.isError && (
-        <Alert
+        <LoadFailure
           className={styles['diagnostic-bar']}
-          type="warning"
-          showIcon
+          tone="warning"
           title={t('omc.plugin_discovery_failed')}
-          description={t('omc.plugin_builtins_retained')}
+          detail={t('omc.plugin_builtins_retained')}
+          onRetry={() => void pluginsQuery.refetch()}
         />
       )}
 
@@ -801,31 +786,6 @@ export const OAuthManagementPage: React.FC = () => {
         </div>
       )}
 
-      {actions.quotaReport && (
-        <Alert
-          className={styles['quota-operation-report']}
-          data-testid="quota-operation-report"
-          closable={{ onClose: actions.clearQuotaReport }}
-          type="warning"
-          showIcon
-          title={t('omc.quota_refresh_report', {
-            succeeded: actions.quotaReport.succeeded,
-            failed: actions.quotaReport.failed + actions.quotaReport.unknown,
-            skipped: actions.quotaReport.skipped,
-          })}
-          // Only a run with a failure reaches this report, and the per-target reason is the
-          // point of it, so the detail is on screen rather than behind a disclosure. The
-          // scroll keeps a long list of failures bounded.
-          description={actions.quotaReport.details.length > 0 ? (
-            <div className="operation-detail-scroll">
-              {actions.quotaReport.details.map((item, index) => (
-                <div key={`${item.name}-${index}`}><span className="mono-num">{item.name}</span>: {item.reason}</div>
-              ))}
-            </div>
-          ) : undefined}
-        />
-      )}
-
       {filesQuery.isPending && !filesQuery.data ? (
         <div className="dashboard-loading"><Spin><div style={{ minHeight: 80, minWidth: 220 }} /></Spin></div>
       ) : visibleRecords.length === 0 ? (
@@ -878,9 +838,8 @@ export const OAuthManagementPage: React.FC = () => {
                   canClearCooldown={record.canClearCooldown}
                   quotaContent={quotaBodyForRecord(record, true)}
                   identityDiagnostic={!record.hasUniqueFileName ? (
-                    <Alert
-                      type="warning"
-                      showIcon
+                    <Notice
+                      tone="warning"
                       title={t('omc.duplicate_file_identity', { name: record.fileName })}
                     />
                   ) : undefined}

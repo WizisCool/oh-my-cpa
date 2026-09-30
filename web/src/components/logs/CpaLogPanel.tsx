@@ -1,7 +1,7 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import { formatGatewayTimestamp } from '../../utils/time';
 import React from 'react';
-import { Alert, App as AntdApp, Button, Checkbox, Empty, Input, Popconfirm, Segmented, Tabs, Tooltip, Typography } from 'antd';
+import { Button, Checkbox, Empty, Input, Popconfirm, Segmented, Tabs, Tooltip, Typography } from 'antd';
 import {
   ClearOutlined,
   DownloadOutlined,
@@ -39,6 +39,8 @@ import {
 } from '../../types/logs';
 import { LogList } from './LogList';
 import styles from './Logs.module.css';
+import { useToast } from '../feedback';
+import { LoadFailure, Notice } from '../feedback';
 
 const { Text } = Typography;
 
@@ -84,7 +86,7 @@ const ErrorLogFiles: React.FC = () => {
   useTimeZone();
   const t = useT();
   const isDemo = isDemoMode();
-  const { message } = AntdApp.useApp();
+  const toast = useToast();
   const query = useQuery({
     queryKey: ['request-error-logs'],
     queryFn: api.getRequestErrorLogs,
@@ -97,11 +99,9 @@ const ErrorLogFiles: React.FC = () => {
   if (query.isError) {
     const code = apiErrorCode(query.error);
     return (
-      <Alert
-        type="warning"
-        showIcon
-        description={code === 'capability_missing' ? t('logs.errors_unsupported') : t('logs.errors_failed')}
-      />
+      code === 'capability_missing'
+        ? <Notice tone="warning" title={t('logs.errors_unsupported')} />
+        : <LoadFailure tone="warning" title={t('logs.errors_failed')} onRetry={() => void query.refetch()} />
     );
   }
   if (query.data.files.length === 0) {
@@ -141,7 +141,7 @@ const ErrorLogFiles: React.FC = () => {
             try {
               saveBlob(await api.downloadRequestErrorLog(file.name), file.name);
             } catch (err: unknown) {
-              message.error(describeError(err));
+              toast.error(describeError(err));
             }
           }}
         />
@@ -169,7 +169,7 @@ export const CpaLogPanel: React.FC = () => {
   useTimeZone();
   const t = useT();
   const isDemo = isDemoMode();
-  const { message } = AntdApp.useApp();
+  const toast = useToast();
   const { value: filters, ready: filtersReady, set: setFilters } = usePreference<LogFilters>(
     LOG_FILTERS_PREFERENCE,
     DEFAULT_LOG_FILTERS,
@@ -207,11 +207,11 @@ export const CpaLogPanel: React.FC = () => {
   const truncate = useMutation({
     mutationFn: api.clearLogs,
     onSuccess: () => {
-      message.success(t('logs.clear_success'));
+      toast.success(t('logs.clear_success'));
       tail.reload();
     },
     onError: (err: unknown) => {
-      message.error(t('logs.clear_failed', { err: describeError(err) }));
+      toast.error(t('logs.clear_failed', { err: describeError(err) }));
     },
   });
 
@@ -235,25 +235,18 @@ export const CpaLogPanel: React.FC = () => {
   let blockedAlert: React.ReactNode = null;
   if (status.isError) {
     blockedAlert = (
-      <Alert
+      <LoadFailure
         className="logs-alert"
-        type="error"
-        showIcon
         title={statusErrorTitle}
-        description={statusError ? describeError(statusError) : undefined}
-        action={(
-          <Button size="small" icon={<ReloadOutlined />} onClick={() => void status.refetch()}>
-            {t('logs.retry')}
-          </Button>
-        )}
+        error={statusError ?? undefined}
+        onRetry={() => void status.refetch()}
       />
     );
   } else if (loggingDisabled || tail.phase === 'disabled') {
     blockedAlert = (
-      <Alert
+      <Notice
         className="logs-alert"
-        type="warning"
-        showIcon
+        tone="warning"
         title={t('logs.disabled_title')}
         action={(
           <Button
@@ -270,11 +263,11 @@ export const CpaLogPanel: React.FC = () => {
       />
     );
   } else if (tail.phase === 'unsupported') {
-    blockedAlert = <Alert className="logs-alert" type="warning" showIcon title={t('logs.unsupported_title')} />;
+    blockedAlert = <Notice className="logs-alert" tone="warning" title={t('logs.unsupported_title')} />;
   } else if (tail.phase === 'offline') {
-    blockedAlert = <Alert className="logs-alert" type="error" showIcon title={t('logs.offline_title')} />;
+    blockedAlert = <Notice className="logs-alert" tone="error" title={t('logs.offline_title')} />;
   } else if (tail.phase === 'error') {
-    blockedAlert = <Alert className="logs-alert" type="error" showIcon title={t('logs.error_title')} description={tail.message} />;
+    blockedAlert = <LoadFailure className="logs-alert" title={t('logs.error_title')} detail={tail.message} onRetry={tail.reload} />;
   }
 
   const isTail = tab === 'tail';

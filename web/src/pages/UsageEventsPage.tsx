@@ -1,7 +1,6 @@
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import {
-  Alert,
   Badge,
   Button,
   Descriptions,
@@ -64,6 +63,7 @@ import { RequestStreamHeader } from '../components/usage/RequestStreamHeader';
 import { RequestToolbar } from '../components/usage/RequestToolbar';
 import './UsageEventsPage.css';
 import { RefreshButton } from '../components/common/RefreshButton';
+import { LoadFailure, Notice } from '../components/feedback';
 
 export const UsageEventsPage: React.FC = () => {
   useTimeZone();
@@ -525,20 +525,17 @@ export const UsageEventsPage: React.FC = () => {
           </div>
         </header>
         {rejectedParams.length > 0 && (
-          <Alert
-            type="warning"
-            showIcon
+          <Notice
+            tone="warning"
             title={t('events.rejected_filters', { n: rejectedParams.length })}
             description={`${rejectedParams.join(', ')} — ${t('events.rejected_filters_hint')}`}
           />
         )}
         {result.isError && (
-          <Alert
-            type="error"
-            showIcon
+          <LoadFailure
             title={t('events.load_error')}
-            description={result.error instanceof Error ? result.error.message : undefined}
-            action={<Button onClick={() => void result.refetch()}>{t('common.retry')}</Button>}
+            error={result.error}
+            onRetry={() => void result.refetch()}
           />
         )}
         <RequestToolbar

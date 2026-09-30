@@ -1,6 +1,5 @@
 import React from 'react';
 
-import { App as AntdApp } from 'antd';
 import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { api, describeError } from '../../api/client';
@@ -10,6 +9,7 @@ import { eventWindowQuery } from '../../types/usageEventQuery';
 import type { UsageEventQuery } from '../../types/usageEvents';
 import { shouldPoll } from './pollingPolicy';
 import { shouldAnnounceStuckSync, syncOutcomeMessage, syncShortfallReason } from './syncPresentation';
+import { useToast } from '../feedback';
 
 interface IngestStatus {
   enabled?: boolean;
@@ -52,7 +52,7 @@ export function useUsageEventSync({
   isFetchingRef: { current: boolean };
 }) {
   const t = useT();
-  const { message } = AntdApp.useApp();
+  const toast = useToast();
   // The list's poll counter. Both writers advance it: a manual sync and one tick
   // of the interval below.
   const [refresh, setRefresh] = React.useState(0);
@@ -156,9 +156,9 @@ export function useUsageEventSync({
     // A sync still running after a visible delay has stopped looking like "working
     // on it" and started looking like a frozen page.
     if (shouldAnnounceStuckSync(isSyncPending, isSyncStuck)) {
-      void message.warning(t('events.sync_still_running'), 6);
+      void toast.warning(t('events.sync_still_running'));
     }
-  }, [isSyncPending, isSyncStuck, message, t]);
+  }, [isSyncPending, isSyncStuck, toast, t]);
   const handleManualRefresh = React.useCallback(() => {
     requestSync(undefined, {
       onSuccess: (outcome) => {
@@ -173,16 +173,16 @@ export function useUsageEventSync({
             : syncShortfallReason(outcome, t('events.sync_unknown_reason')),
         });
         const text = t(outcomeMessage.key, outcomeMessage.vars);
-        if (outcomeMessage.tone === 'info') message.info(text);
-        else if (outcomeMessage.tone === 'success') message.success(text);
-        else message.warning(text, 6);
+        if (outcomeMessage.tone === 'info') toast.info(text);
+        else if (outcomeMessage.tone === 'success') toast.success(text);
+        else toast.warning(text);
       },
       onError: (error: unknown) => {
         const msg = describeError(error);
-        message.error(t('events.sync_failed', { msg }));
+        toast.error(t('events.sync_failed', { msg }));
       },
     });
-  }, [message, requestSync, t]);
+  }, [toast, requestSync, t]);
 
   return {
     ingest,

@@ -146,7 +146,7 @@ export async function refreshAndLayoutSection(context) {
   await page.locator('.request-row').first().click();
   await page.locator('.request-detail-id').waitFor({ state: 'visible', timeout: 10000 });
   const drawerRequestId = (await page.locator('.request-detail-id span').first().innerText()).trim();
-  const drawerCopyMessage = page.locator('.ant-message').getByText(/已复制|Copied/);
+  const drawerCopyMessage = page.locator('.omc-toast').getByText(/已复制|Copied/);
   // Waited for rather than edited away: the message nodes belong to React, and removing
   // one detaches the holder the next message is rendered into, so the copy below would
   // report itself nowhere. Waiting for a leftover carrying this text also keeps the

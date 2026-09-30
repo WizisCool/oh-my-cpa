@@ -1,11 +1,11 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Alert, App as AntdApp, Button, Collapse, Drawer, InputNumber, Popconfirm, Segmented, Skeleton } from 'antd';
+import { Button, Collapse, Drawer, InputNumber, Popconfirm, Segmented, Skeleton } from 'antd';
 import dayjs from '../../utils/time';
 import clsx from 'clsx';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { EditOutlined, LinkOutlined, ThunderboltOutlined } from '../icons';
-import { api, describeError } from '../../api/client';
+import { api } from '../../api/client';
 import { pricingErrorText } from './pricingErrors';
 import { useT } from '../../i18n';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
@@ -29,6 +29,8 @@ import {
 import { RateGrid, TierBadges, TierEditor, UpstreamPicker, UpstreamSummary } from './PricingParts';
 import { PRICING_QUERY_KEYS } from './pricingQueries';
 import styles from './Pricing.module.css';
+import { useToast } from '../feedback';
+import { LoadFailure, Notice } from '../feedback';
 
 export interface PriceEditorDrawerProps {
   model: string;
@@ -85,7 +87,7 @@ export function modeTone(mode: PricingMode | null): StatusTone {
 export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, initialMode, initialUpstream, isOpen, onClose }) => {
   useTimeZone();
   const t = useT();
-  const { message } = AntdApp.useApp();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const { style: tokenStyle } = useTokenDisplayStyle();
   useOverlayHistory({ isOpen, onClose });
@@ -195,21 +197,21 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
       return api.updatePricingModel(model, payload);
     },
     onSuccess: () => {
-      message.success(t('pricing.saved', { model }));
+      toast.success(t('pricing.saved', { model }));
       invalidate();
       onClose();
     },
-    onError: (error) => message.error(t('pricing.save_failed', { msg: pricingErrorText(t, error) })),
+    onError: (error) => toast.error(t('pricing.save_failed', { msg: pricingErrorText(t, error) })),
   });
 
   const remove = useMutation({
     mutationFn: () => api.deletePricingModel(model),
     onSuccess: () => {
-      message.success(t('pricing.removed', { model }));
+      toast.success(t('pricing.removed', { model }));
       invalidate();
       onClose();
     },
-    onError: (error) => message.error(t('pricing.delete_failed', { msg: pricingErrorText(t, error) })),
+    onError: (error) => toast.error(t('pricing.delete_failed', { msg: pricingErrorText(t, error) })),
   });
 
   const canSave = mode === 'auto' ? automatic !== null : mode === 'linked' ? linked !== null : mode === 'custom' && isCustomValid;
@@ -261,7 +263,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
     >
       {detail.isLoading || mode === null ? (
         detail.isError ? (
-          <Alert type="error" showIcon title={t('pricing.load_error')} description={describeError(detail.error)} />
+          <LoadFailure title={t('pricing.load_error')} error={detail.error} onRetry={() => void detail.refetch()} />
         ) : (
           <Skeleton active={false} paragraph={{ rows: 8 }} />
         )
@@ -302,7 +304,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
                   extra={<span className={styles['match-kind']}>{t(`pricing.match.${automatic.match_kind || 'exact'}`)}</span>}
                 />
               ) : (
-                <Alert type="warning" showIcon title={t('pricing.editor.auto_none')} />
+                <Notice tone="warning" title={t('pricing.editor.auto_none')} />
               )}
             </section>
           )}
@@ -311,7 +313,7 @@ export const PriceEditorDrawer: React.FC<PriceEditorDrawerProps> = ({ model, ini
             <section className={styles.section}>
               {linked && <UpstreamSummary model={linked} />}
               {catalog.isSuccess && catalog.data.models.length === 0 ? (
-                <Alert type="info" showIcon title={t('pricing.editor.catalog_empty')} />
+                <Notice tone="info" title={t('pricing.editor.catalog_empty')} />
               ) : (
                 <UpstreamPicker
                   models={catalog.data?.models ?? []}

@@ -1,6 +1,6 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Alert, App as AntdApp, Button, Input, Pagination, Popover, Segmented, Select, Tooltip } from 'antd';
+import { Button, Input, Pagination, Popover, Segmented, Select, Tooltip } from 'antd';
 import dayjs from '../../utils/time';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -28,6 +28,7 @@ import { pricingErrorText } from '../../components/pricing/pricingErrors';
 import { ChannelMultipliersPanel } from './ChannelMultipliersPanel';
 import { UsageCell } from './UsageCell';
 import styles from './PricingPage.module.css';
+import { LoadFailure, Notice, useToast } from '../../components/feedback';
 
 /** One page of the price list, shared by both renderings so a page means the same thing at either width. */
 const PAGE_SIZE = 20;
@@ -76,7 +77,7 @@ export const PricingPage: React.FC = () => {
   useTimeZone();
   const t = useT();
   const isDemo = isDemoMode();
-  const { message } = AntdApp.useApp();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const openEditor = useOpenPriceEditor();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -107,15 +108,15 @@ export const PricingPage: React.FC = () => {
   const syncMutation = useMutation({
     mutationFn: () => api.startPricingSync(),
     onSuccess: () => {
-      message.info(t('pricing.sync_started'));
+      toast.info(t('pricing.sync_started'));
       invalidate();
     },
     onError: (err) => {
       if (err instanceof ApiError && err.status === 409) {
-        message.info(t('pricing.sync_conflict'));
+        toast.info(t('pricing.sync_conflict'));
         invalidate();
       } else {
-        message.error(t('pricing.sync_failed', { msg: describeError(err) }));
+        toast.error(t('pricing.sync_failed', { msg: describeError(err) }));
       }
     },
   });
@@ -123,10 +124,10 @@ export const PricingPage: React.FC = () => {
   const scheduleMutation = useMutation({
     mutationFn: (intervalHours: number) => api.updatePricingSyncSchedule(intervalHours),
     onSuccess: () => {
-      message.success(t('pricing.sync.schedule_updated'));
+      toast.success(t('pricing.sync.schedule_updated'));
       invalidate();
     },
-    onError: (err) => message.error(describeError(err)),
+    onError: (err) => toast.error(describeError(err)),
   });
 
   // Adopting a suggestion is a link, saved in one click from its model row without opening the editor.
@@ -134,10 +135,10 @@ export const PricingPage: React.FC = () => {
     mutationFn: ({ model, upstream }: { model: string; upstream: UpstreamModel }) =>
       api.updatePricingModel(model, { mode: 'linked', upstream_id: upstream.id }),
     onSuccess: (_, { model, upstream }) => {
-      message.success(t('pricing.adopted', { model, id: upstream.id }));
+      toast.success(t('pricing.adopted', { model, id: upstream.id }));
       invalidate();
     },
-    onError: (err) => message.error(t('pricing.save_failed', { msg: pricingErrorText(t, err) })),
+    onError: (err) => toast.error(t('pricing.save_failed', { msg: pricingErrorText(t, err) })),
   });
 
   const rows = React.useMemo<BookRow[]>(() => {
@@ -327,7 +328,7 @@ export const PricingPage: React.FC = () => {
         ]}
       />
       {data?.sync.state.last_error && (
-        <Alert type="error" showIcon title={t('pricing.sync.error', { error: data.sync.state.last_error })} />
+        <Notice tone="error" title={t('pricing.sync.error', { error: data.sync.state.last_error })} />
       )}
       <label className={styles['sync-schedule']}>
         <span>{t('pricing.sync.auto_label')}</span>
@@ -386,13 +387,7 @@ export const PricingPage: React.FC = () => {
       />
 
       {result.isError && (
-        <Alert
-          type="error"
-          showIcon
-          title={t('pricing.load_error')}
-          description={describeError(result.error)}
-          action={<Button onClick={invalidate}>{t('common.retry')}</Button>}
-        />
+        <LoadFailure title={t('pricing.load_error')} error={result.error} onRetry={invalidate} />
       )}
 
       {tab === 'models' ? (

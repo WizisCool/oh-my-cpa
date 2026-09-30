@@ -235,6 +235,9 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
       Descriptions: { itemPaddingBottom: 10 },
       Statistic: { contentFontSize: 26 },
       Alert: { borderRadiusLG: 4 },
+      // Every toast is one width - a report with file names and reasons included - because antd
+      // lays toasts out in a column of this width, and a wider notice would overhang it.
+      Notification: { width: 420, borderRadiusLG: 4, colorBgElevated: t.elevated },
       Empty: { colorIcon: t.meta },
       Spin: { colorPrimary: t.muted },
     },

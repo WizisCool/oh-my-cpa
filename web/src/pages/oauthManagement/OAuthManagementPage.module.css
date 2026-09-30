@@ -184,10 +184,6 @@
   flex-wrap: nowrap;
 }
 
-.quota-operation-report {
-  margin: 12px 0;
-}
-
 .empty {
   min-height: 180px;
   display: flex;

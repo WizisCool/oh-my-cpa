@@ -1,6 +1,6 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Alert, Button, Input, Tooltip, Typography } from 'antd';
+import { Button, Input, Tooltip, Typography } from 'antd';
 import dayjs from '../../utils/time';
 import { PauseCircleOutlined, PlayCircleOutlined, SearchOutlined } from '../icons';
 import { useT } from '../../i18n';
@@ -10,6 +10,7 @@ import { RefreshButton } from '../common/RefreshButton';
 import { CopyButton } from '../common/CopyButton';
 import { LogList } from './LogList';
 import styles from './Logs.module.css';
+import { LoadFailure, Notice } from '../feedback';
 
 const { Text } = Typography;
 
@@ -126,9 +127,9 @@ export const ServiceLogPanel: React.FC = () => {
       </div>
 
       <div className="logs-tail">
-        {tail.phase === 'off' && <Alert className="logs-alert" type="info" showIcon title={t('logs.service_off')} />}
+        {tail.phase === 'off' && <Notice className="logs-alert" tone="info" title={t('logs.service_off')} />}
         {tail.phase === 'error' && (
-          <Alert className="logs-alert" type="error" showIcon title={t('logs.service_failed')} description={tail.message} />
+          <LoadFailure className="logs-alert" title={t('logs.service_failed')} detail={tail.message} onRetry={tail.reload} />
         )}
         {!isBlocked && (
           <LogList

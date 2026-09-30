@@ -935,7 +935,7 @@ export async function systemInformationPage({ base, page, check }) {
       await confirm.click();
       // A partial outcome must not be announced as success.
       const warned = await until(async () => {
-        const warning = page.locator('.ant-message-warning, .ant-message-error');
+        const warning = page.locator('.omc-toast-warning, .omc-toast-error');
         return (await warning.count()) > 0 ? true : false;
       }, { label: 'the outcome notice', timeoutMs: 8000 }).catch(() => false);
       check('an incomplete rebuild is reported as partial, not as success', warned);

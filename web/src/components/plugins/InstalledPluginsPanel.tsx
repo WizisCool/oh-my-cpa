@@ -1,5 +1,5 @@
 import React from 'react';
-import { App as AntdApp, Button, Empty, Input, Popconfirm, Skeleton, Switch, Tooltip } from 'antd';
+import { Button, Empty, Input, Popconfirm, Skeleton, Switch, Tooltip } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, SearchOutlined, SettingOutlined, ShopOutlined } from '../icons';
 import { api, apiErrorCode, describeError } from '../../api/client';
@@ -9,6 +9,7 @@ import { StatusLabel } from '../common/StatusLabel';
 import { filterInstalledPlugins } from './pluginStoreLogic';
 import { formatPluginVersion, PluginLinks, PluginLogo, PluginMeta } from './PluginParts';
 import styles from './Plugins.module.css';
+import { useToast } from '../feedback';
 
 interface InstalledPluginsPanelProps {
   plugins: PluginItem[];
@@ -39,7 +40,7 @@ export function InstalledPluginsPanel({
   onBrowseStore,
 }: InstalledPluginsPanelProps) {
   const t = useT();
-  const { message, modal } = AntdApp.useApp();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const [query, setQuery] = React.useState('');
 
@@ -53,28 +54,28 @@ export function InstalledPluginsPanel({
   const enabledMutation = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => api.setPluginEnabled(id, enabled),
     onSuccess: (_, variables) => {
-      message.success(variables.enabled ? t('plugin.enabled_success') : t('plugin.disabled_success'));
+      toast.success(variables.enabled ? t('plugin.enabled_success') : t('plugin.disabled_success'));
       invalidate();
       void queryClient.invalidateQueries({ queryKey: ['management-plugin-config', variables.id] });
     },
-    onError: (err: unknown) => message.error(describeError(err)),
+    onError: (err: unknown) => toast.error(describeError(err)),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.deletePlugin(id),
     onSuccess: (result) => {
-      if (result.restart_required) message.warning(t('plugin.delete_restart_required'));
-      else message.success(t('plugin.delete_success'));
+      if (result.restart_required) toast.warning(t('plugin.delete_restart_required'));
+      else toast.success(t('plugin.delete_success'));
       invalidate();
     },
     onError: (err: unknown) => {
       // A loaded plugin cannot be removed from a running gateway; that is an outcome to
       // explain, not a failure to report as one.
       if (apiErrorCode(err) === 'plugin_delete_requires_restart') {
-        modal.warning({ title: t('plugin.delete_restart_title'), content: t('plugin.delete_restart_required') });
+        toast.warning(t('plugin.delete_restart_title'), { detail: t('plugin.delete_restart_required') });
         return;
       }
-      message.error(describeError(err));
+      toast.error(describeError(err));
     },
   });
 

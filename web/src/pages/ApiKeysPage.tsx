@@ -2,8 +2,6 @@ import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Alert,
-  App as AntdApp,
   Button,
   Card,
   Input,
@@ -39,6 +37,7 @@ import { PageHeader } from '../components/common/PageHeader';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { SecretInput } from '../components/common/SecretInput';
 import styles from './ApiKeysPage.module.css';
+import { LoadFailure, Notice, useToast } from '../components/feedback';
 
 /** The longest name the alias endpoint accepts. */
 const MAX_ALIAS_LENGTH = 64;
@@ -83,7 +82,7 @@ export const ApiKeysPage: React.FC = () => {
   // Gateway keys live in CPA's own configuration document, so adding, editing and
   // removing a key are refused by the demonstration.
   const isDemo = isDemoMode();
-  const { message } = AntdApp.useApp();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -109,7 +108,6 @@ export const ApiKeysPage: React.FC = () => {
     staleTime: 60_000,
   });
 
-  const [saveError, setSaveError] = React.useState<string | null>(null);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [editor, setEditor] = React.useState<EditorState>(CLOSED_EDITOR);
   const [keyInput, setKeyInput] = React.useState('');
@@ -167,14 +165,13 @@ export const ApiKeysPage: React.FC = () => {
       }
       return true;
     } catch (err: unknown) {
-      message.error(describeError(err) || t('keys.alias_save_failed'));
+      toast.error(describeError(err) || t('keys.alias_save_failed'));
       return false;
     }
-  }, [message, t]);
+  }, [toast, t]);
 
   const saveMutation = useMutation({
     mutationFn: ({ changes, revision }: { changes: ConfigChange[]; revision: string }) => {
-      setSaveError(null);
       return api.patchConfig(changes, revision);
     },
     onSuccess: async () => {
@@ -187,13 +184,12 @@ export const ApiKeysPage: React.FC = () => {
       ) {
         // Another writer moved the document. Nothing was written here, so the honest answer is
         // the current list and an invitation to repeat the change against it.
-        message.warning(t('keys.conflict_reloaded'));
+        toast.warning(t('keys.conflict_reloaded'));
         void configQuery.refetch();
         return;
       }
       const msg = describeConfigSaveError(err, t);
-      setSaveError(msg);
-      message.error(msg);
+      toast.error(msg);
       // Part of the write landed, so the list shown is no longer CPA's.
       if (apiErrorCode(err) === 'config_partially_applied') void configQuery.refetch();
     },
@@ -210,7 +206,7 @@ export const ApiKeysPage: React.FC = () => {
   const commitKeys = React.useCallback(
     async (next: string[], aliases: Record<string, string> = {}): Promise<'saved' | 'unnamed' | 'failed'> => {
       if (saveMutation.isPending) {
-        message.warning(t('keys.applying'));
+        toast.warning(t('keys.applying'));
         return 'failed';
       }
       if (!apiKeysField || !serverDoc) return 'failed';
@@ -218,7 +214,7 @@ export const ApiKeysPage: React.FC = () => {
       try {
         draft = parseDocument(serverYaml);
       } catch {
-        message.error(t('cfg.yaml_syntax_error'));
+        toast.error(t('cfg.yaml_syntax_error'));
         return 'failed';
       }
       updateFieldWithBaseline(draft, serverDoc, apiKeysField, next);
@@ -237,7 +233,7 @@ export const ApiKeysPage: React.FC = () => {
       await invalidateKeyReaders();
       return isNamed ? 'saved' : 'unnamed';
     },
-    [apiKeysField, serverDoc, serverYaml, serverRevision, saveMutation, applyAliases, invalidateKeyReaders, message, t],
+    [apiKeysField, serverDoc, serverYaml, serverRevision, saveMutation, applyAliases, invalidateKeyReaders, toast, t],
   );
 
   const closeEditor = React.useCallback(() => {
@@ -281,12 +277,12 @@ export const ApiKeysPage: React.FC = () => {
     async (key: string, alias: string): Promise<boolean> => {
       const stored = keysQuery.data?.keys?.find((item) => item.key === key);
       if (!stored?.usage_fingerprint) {
-        message.error(t('keys.alias_save_failed'));
+        toast.error(t('keys.alias_save_failed'));
         return false;
       }
       try {
         await api.setClientKeyAlias(stored.usage_fingerprint, alias, stored.alias_version);
-        message.success(alias ? t('keys.renamed') : t('keys.rename_cleared'));
+        toast.success(alias ? t('keys.renamed') : t('keys.rename_cleared'));
         await invalidateKeyReaders();
         return true;
       } catch (error) {
@@ -294,30 +290,30 @@ export const ApiKeysPage: React.FC = () => {
           error instanceof ApiError &&
           (error.status === 409 || (error.data as Record<string, unknown>)?.code === 'alias_version_conflict')
         ) {
-          message.warning(t('keys.rename_conflict'));
+          toast.warning(t('keys.rename_conflict'));
           await queryClient.invalidateQueries({ queryKey: ['management-client-keys'] });
           return false;
         }
-        message.error(describeError(error) || t('keys.rename_control'));
+        toast.error(describeError(error) || t('keys.rename_control'));
         return false;
       }
     },
-    [keysQuery.data, message, queryClient, t, invalidateKeyReaders],
+    [keysQuery.data, toast, queryClient, t, invalidateKeyReaders],
   );
 
   const handleSaveKey = async () => {
     const trimmedKey = keyInput.trim();
     const trimmedAlias = aliasInput.trim();
     if (!trimmedKey) {
-      message.warning(t('cfg.api_key_empty_warning'));
+      toast.warning(t('cfg.api_key_empty_warning'));
       return;
     }
     if (trimmedAlias.length > MAX_ALIAS_LENGTH) {
-      message.error(t('keys.rename_too_long', { n: MAX_ALIAS_LENGTH }));
+      toast.error(t('keys.rename_too_long', { n: MAX_ALIAS_LENGTH }));
       return;
     }
     if (currentApiKeys.some((key, index) => key === trimmedKey && index !== editor.index)) {
-      message.error(t('keys.duplicate'));
+      toast.error(t('keys.duplicate'));
       return;
     }
 
@@ -347,7 +343,7 @@ export const ApiKeysPage: React.FC = () => {
         setEditor({ isOpen: true, index: next.indexOf(trimmedKey), originalKey: trimmedKey });
         return;
       }
-      message.success(editor.index === null ? t('keys.created') : t('keys.saved'));
+      toast.success(editor.index === null ? t('keys.created') : t('keys.saved'));
       closeEditor();
     } finally {
       setIsSavingEditor(false);
@@ -357,10 +353,10 @@ export const ApiKeysPage: React.FC = () => {
   const handleDeleteRecord = React.useCallback(
     async (record: ApiKeyRecord) => {
       if ((await commitKeys(currentApiKeys.filter((_, position) => position !== record.index))) !== 'failed') {
-        message.success(t('keys.deleted'));
+        toast.success(t('keys.deleted'));
       }
     },
-    [currentApiKeys, commitKeys, message, t],
+    [currentApiKeys, commitKeys, toast, t],
   );
 
   const viewRequestsFor = React.useCallback(
@@ -423,15 +419,6 @@ export const ApiKeysPage: React.FC = () => {
         )}
       />
 
-      {saveError && (
-        <Alert
-          type="error"
-          showIcon
-          closable={{ onClose: () => setSaveError(null) }}
-          description={saveError}
-        />
-      )}
-
       {/* One container for the whole list: its head, its rule and the rows are one surface
           rather than a card holding another card holding a toolbar (design.md: prefer
           border-separated open rows over nested card wrappers). The card keeps its own 20px
@@ -476,15 +463,10 @@ export const ApiKeysPage: React.FC = () => {
           </div>
         ) : configQuery.isError && !configQuery.data ? (
           <div className={styles['keys-state']}>
-            <Alert
-              type="warning"
-              showIcon
-              description={t('cfg.load_failed_desc')}
-              action={
-                <Button size="small" type="primary" onClick={() => void configQuery.refetch()}>
-                  {t('common.retry')}
-                </Button>
-              }
+            <LoadFailure
+              title={t('cfg.load_failed')}
+              detail={t('cfg.load_failed_desc')}
+              onRetry={() => void configQuery.refetch()}
             />
           </div>
         ) : (
@@ -549,17 +531,17 @@ export const ApiKeysPage: React.FC = () => {
               disabled={!keyInput.trim()}
               onClick={async () => {
                 if (await copyText(keyInput.trim())) {
-                  message.success(t('cfg.source_copy_success'));
+                  toast.success(t('cfg.source_copy_success'));
                   return;
                 }
-                message.error(t('cfg.copy_failed'));
+                toast.error(t('cfg.copy_failed'));
               }}
             >
               {t('cfg.api_keys_copy')}
             </Button>
           </div>
           {isValueChanged && (
-            <Alert type="warning" showIcon icon={<WarningOutlined />} description={t('keys.value_change_warning')} />
+            <Notice tone="warning" icon={<WarningOutlined />} title={t('keys.value_change_warning')} />
           )}
 
           <label className="keys-key-editor-label" htmlFor="gateway-key-alias">

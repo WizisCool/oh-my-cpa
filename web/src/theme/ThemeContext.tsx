@@ -347,8 +347,8 @@ export function useTheme(): ThemeContextValue {
  * stated rather than hidden: two browsers that both hold an unsaved change settle on whichever
  * pushes last, because neither localStorage nor the preference table carries a version to compare.
  *
- * It lives here rather than in `ThemeProvider` because `usePreference` reports failures through Ant
- * Design's message API, which only exists below `App` - and the provider has to sit above
+ * It lives here rather than in `ThemeProvider` because `usePreference` reports failures through a
+ * toast, which only exists below Ant Design's `App` - and the provider has to sit above
  * `ConfigProvider`, since Ant Design's tokens are projected from the palette it resolves.
  */
 export const ThemeServerSync: React.FC = () => {
@@ -408,7 +408,7 @@ export const ThemeServerSync: React.FC = () => {
     if (revision === pushedRevision.current) return;
     // A new local change is a new attempt: the previous one may have been refused by a database that is
     // back, and suppressing every later push for the rest of the session would leave an operator editing
-    // a console whose changes never leave the browser. Each attempt can cost one error message, which is
+    // a console whose changes never leave the browser. Each attempt can cost one error toast, which is
     // the operator's only sign that the deployment is not keeping up.
     isBlocked.current = false;
     pushedRevision.current = revision;

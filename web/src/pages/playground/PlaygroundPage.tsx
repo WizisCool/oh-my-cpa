@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Button, Tabs, Tooltip } from 'antd';
+import { Button, Tabs, Tooltip } from 'antd';
 import { XProvider } from '@ant-design/x';
 import type { BubbleItemType, BubbleListProps } from '@ant-design/x';
 import { useQuery } from '@tanstack/react-query';
@@ -34,6 +34,7 @@ import type { Content, Message, PlaygroundParameters, PlaygroundSession, Turn } 
 import { useImageAttachments } from './useImageAttachments';
 import { usePlaygroundRun } from './usePlaygroundRun';
 import styles from './PlaygroundPage.module.css';
+import { LoadFailure, Notice } from '../../components/feedback';
 
 /**
  * How long the stored session waits for edits to settle before it is written.
@@ -275,16 +276,16 @@ export const PlaygroundPage: React.FC = () => {
 
   const notices = (
     <>
-      {isDemo && <Alert type="info" title={t('pg.demo')} />}
-      {keys.isError && <Alert type="error" title={t(playgroundErrorKey(failureCode(keys.error)))} />}
+      {isDemo && <Notice tone="info" title={t('pg.demo')} />}
+      {keys.isError && <LoadFailure title={t(playgroundErrorKey(failureCode(keys.error)))} onRetry={() => void keys.refetch()} />}
       {keys.isSuccess && keys.data.length === 0 && (
-        <Alert type="info" title={t('pg.no_keys')} action={<Link to="/api-keys">{t('pg.manage_keys')}</Link>} />
+        <Notice tone="info" title={t('pg.no_keys')} action={<Link to="/api-keys">{t('pg.manage_keys')}</Link>} />
       )}
-      {models.isError && <Alert type="error" title={t(playgroundErrorKey(failureCode(models.error)))} />}
+      {models.isError && <LoadFailure title={t(playgroundErrorKey(failureCode(models.error)))} onRetry={() => void models.refetch()} />}
       {models.isSuccess && models.data.models.length === 0 && (
-        <Alert type="info" title={t('pg.no_models')} action={<Link to="/ai-providers">{t('pg.manage_models')}</Link>} />
+        <Notice tone="info" title={t('pg.no_models')} action={<Link to="/ai-providers">{t('pg.manage_models')}</Link>} />
       )}
-      {notice && <Alert type="error" title={t(playgroundErrorKey(notice))} closable={{ onClose: () => setNotice('') }} />}
+      {notice && <Notice tone="error" title={t(playgroundErrorKey(notice))} onClose={() => setNotice('')} />}
     </>
   );
 

@@ -1,7 +1,7 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Alert, Button, Card, Tooltip } from 'antd';
-import { ReloadOutlined, RightOutlined } from '../icons';
+import { Card, Tooltip } from 'antd';
+import { RightOutlined } from '../icons';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
@@ -21,6 +21,7 @@ import {
   type DashboardTokenHeatmapDay,
   type HeatmapCell,
 } from '../../types/tokenHeatmap';
+import { LoadFailure } from '../feedback';
 
 const FULL_NUMBER_FORMAT = new Intl.NumberFormat('en');
 
@@ -432,12 +433,11 @@ export const TokenHeatmap: React.FC = () => {
     return (
       <Card className="dashboard-tile is-wide heatmap-panel" styles={{ body: { padding: 20 } }}>
         <div className="tile-label">{t('dash.heatmap.title')}</div>
-        <Alert
+        <LoadFailure
           className="heatmap-alert"
-          type="error"
-          showIcon
-          description={`${t('dash.heatmap.error')} — ${error instanceof ApiError ? error.message : t('dash.error_desc')}`}
-          action={<Button size="small" icon={<ReloadOutlined />} onClick={() => void refetch()}>{t('common.retry')}</Button>}
+          title={t('dash.heatmap.error')}
+          detail={error instanceof ApiError ? error.message : t('dash.error_desc')}
+          onRetry={() => void refetch()}
         />
       </Card>
     );
@@ -464,12 +464,11 @@ export const TokenHeatmap: React.FC = () => {
               on its own line: the grid below stays readable, so the warning has to be
               additive rather than replacing it. */}
           {isError && (
-            <Alert
+            <LoadFailure
               className="heatmap-alert heatmap-stale-alert"
-              type="warning"
-              showIcon
-              description={t('dash.heatmap.stale')}
-              action={<Button size="small" icon={<ReloadOutlined />} onClick={() => void refetch()}>{t('common.retry')}</Button>}
+              tone="warning"
+              title={t('dash.heatmap.stale')}
+              onRetry={() => void refetch()}
             />
           )}
 

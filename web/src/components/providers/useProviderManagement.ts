@@ -1,10 +1,10 @@
 import React, { useState, useRef } from 'react';
 
-import { App as AntdApp } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api, ApiError, apiErrorCode, isRetryableWriteFailure, describeError } from '../../api/client';
 import { useT } from '../../i18n';
+import type { Toast } from '../feedback';
 import { useLastIntentQueue, LastIntentTimeoutError } from '../../hooks/useLastIntentQueue';
 import { getProviderDefaultIcon } from '../LobeIcon';
 import { resolveProviderIcon } from '../../types/providerIcons';
@@ -36,14 +36,14 @@ import type {
  * would only move the same couplings across two files.
  */
 export function useProviderManagement({
-  message,
+  toast,
   t,
   providerIcons,
   writeProviderIcon,
   shiftCachedProviderIcons,
   settleProviderRow,
 }: {
-  message: ReturnType<typeof AntdApp.useApp>['message'];
+  toast: Toast;
   t: ReturnType<typeof useT>;
   providerIcons: Record<string, string>;
   writeProviderIcon: (id: string, icon: string) => void;
@@ -92,7 +92,7 @@ export function useProviderManagement({
   const handlePullModels = async () => {
     const rawUrl = formBaseURL.trim();
     if (!rawUrl) {
-      message.warning(t('pro.pull_requires_base_url'));
+      toast.warning(t('pro.pull_requires_base_url'));
       return;
     }
 
@@ -137,12 +137,12 @@ export function useProviderManagement({
         // as a picker rather than leaving the operator to add rows one by one.
         setIsModelPickerOpen(true);
       } else {
-        message.info(t('pro.model_list_empty'));
+        toast.info(t('pro.model_list_empty'));
       }
     } catch (err) {
       if (seq !== modelFetchSeqRef.current) return;
       const msg = describeError(err);
-      message.error(msg);
+      toast.error(msg);
     } finally {
       if (seq === modelFetchSeqRef.current) {
         setIsPullingModels(false);
@@ -207,7 +207,7 @@ export function useProviderManagement({
         thinking: { levels: [] },
       })),
     ]);
-    message.success(t('pro.models_applied', { count: added.length }));
+    toast.success(t('pro.models_applied', { count: added.length }));
   };
 
   const updateModelImage = (id: string, image: boolean) => {
@@ -235,7 +235,7 @@ export function useProviderManagement({
   const handleSelectIcon = (selectedIconId: string) => {
     if (targetProviderForIcon) {
       writeProviderIcon(targetProviderForIcon.id, selectedIconId);
-      message.success(t('pro.icon_updated'));
+      toast.success(t('pro.icon_updated'));
       setTargetProviderForIcon(null);
     } else {
       setFormIcon(selectedIconId);
@@ -281,12 +281,12 @@ export function useProviderManagement({
   const testProviderKey = async (k: FormKeyItem): Promise<{ ok: boolean; error?: unknown }> => {
     const apiKey = k.apiKey?.trim() || '';
     if (!apiKey) {
-      message.warning(t('pro.test_key_empty'));
+      toast.warning(t('pro.test_key_empty'));
       return { ok: false };
     }
     const baseURL = formBaseURL.trim();
     if (!baseURL) {
-      message.warning(t('pro.pull_requires_base_url'));
+      toast.warning(t('pro.pull_requires_base_url'));
       return { ok: false };
     }
     try {
@@ -305,15 +305,15 @@ export function useProviderManagement({
   };
 
   const handleTestKey = async (k: FormKeyItem, idx: number) => {
-    const hide = message.loading(t('pro.testing_key', { n: idx + 1 }), 0);
+    const hide = toast.pending(t('pro.testing_key', { n: idx + 1 }));
     const result = await testProviderKey(k);
     hide();
     if (result.ok) {
-      message.success(t('pro.test_key_ok', { n: idx + 1 }));
+      toast.success(t('pro.test_key_ok', { n: idx + 1 }));
       return;
     }
     if (result.error) {
-      message.error(result.error instanceof ApiError ? result.error.message : String(result.error));
+      toast.error(result.error instanceof ApiError ? result.error.message : String(result.error));
     }
   };
 
@@ -321,23 +321,23 @@ export function useProviderManagement({
     const keys = formKeys.filter((k) => k.apiKey && k.apiKey.trim() !== '');
     const hasAny = keys.length > 0;
     if (!hasAny) {
-      message.warning(t('pro.test_key_empty'));
+      toast.warning(t('pro.test_key_empty'));
       return;
     }
     if (!formBaseURL.trim()) {
-      message.warning(t('pro.pull_requires_base_url'));
+      toast.warning(t('pro.pull_requires_base_url'));
       return;
     }
-    const hide = message.loading(t('pro.testing_all'), 0);
+    const hide = toast.pending(t('pro.testing_all'));
     const results = await Promise.all(keys.map((key) => testProviderKey(key)));
     hide();
     const failed = results.filter((result) => !result.ok && result.error);
     if (failed.length === 0) {
-      message.success(t('pro.test_all_ok', { count: keys.length }));
+      toast.success(t('pro.test_all_ok', { count: keys.length }));
       return;
     }
     const firstError = failed[0]?.error;
-    message.error(describeError(firstError));
+    toast.error(describeError(firstError));
   };
 
   const handleCloseProviderDrawer = () => {
@@ -428,7 +428,7 @@ export function useProviderManagement({
           : err instanceof ApiError
             ? err.message
             : String(err);
-      message.error(t('pro.status_update_failed', { msg }));
+      toast.error(t('pro.status_update_failed', { msg }));
       // The write did not confirm, so the row's displayed state is unknown rather
       // than merely stale: the list is re-read so the switch shows what the
       // gateway actually holds instead of the value that was attempted.
@@ -445,14 +445,14 @@ export function useProviderManagement({
     // key before a name key, so an override stored under the display name alone
     // could be shadowed by whatever id the new row landed on.
     onSuccess: (data, variables) => {
-      message.success(t('pro.provider_created'));
+      toast.success(t('pro.provider_created'));
       writeProviderIcon(data.id, variables.icon);
       handleCloseProviderDrawer();
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
     },
     onError: (err: unknown) => {
       const msg = describeError(err);
-      message.error(msg);
+      toast.error(msg);
     },
   });
 
@@ -460,27 +460,27 @@ export function useProviderManagement({
     mutationFn: ({ id, payload }: { id: string; payload: SaveProviderPayload; icon: string }) =>
       api.updateManagementProvider(id, payload),
     onSuccess: (data, variables) => {
-      message.success(t('pro.provider_updated'));
+      toast.success(t('pro.provider_updated'));
       writeProviderIcon(data.id, variables.icon);
       handleCloseProviderDrawer();
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
     },
     onError: (err: unknown) => {
       const msg = describeError(err);
-      message.error(msg);
+      toast.error(msg);
     },
   });
 
   const deleteProviderMutation = useMutation({
     mutationFn: (id: string) => api.deleteManagementProvider(id),
     onSuccess: (_data, id) => {
-      message.success(t('pro.provider_deleted'));
+      toast.success(t('pro.provider_deleted'));
       shiftCachedProviderIcons(id);
       void queryClient.invalidateQueries({ queryKey: ['management-providers'] });
     },
     onError: (err: unknown) => {
       const msg = describeError(err);
-      message.error(msg);
+      toast.error(msg);
     },
   });
 
@@ -610,7 +610,7 @@ export function useProviderManagement({
 
   const handleSaveProvider = () => {
     if (lookupProviderFamily(formFamily)?.requiresBaseURL && !formBaseURL.trim()) {
-      message.warning(t('pro.base_url_required'));
+      toast.warning(t('pro.base_url_required'));
       return;
     }
 

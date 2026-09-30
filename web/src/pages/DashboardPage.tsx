@@ -1,7 +1,7 @@
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Alert, Button, Card, Empty, Select, Skeleton, Tooltip, Typography } from 'antd';
+import { Button, Card, Empty, Select, Skeleton, Tooltip, Typography } from 'antd';
 import { HistoryOutlined, KeyOutlined, QuestionCircleOutlined, RightOutlined } from '../components/icons';
 import { PageHeader } from '../components/common/PageHeader';
 import { RefreshButton } from '../components/common/RefreshButton';
@@ -44,6 +44,7 @@ import {
   type DashboardRange,
   type DashboardResponse,
 } from '../types/dashboard';
+import { LoadFailure } from '../components/feedback';
 
 const { Text } = Typography;
 
@@ -249,10 +250,10 @@ export const DashboardPage: React.FC = () => {
             title={t('nav.dashboard')}
             actions={<RefreshButton label={t('common.retry')} onRefresh={() => void refetch()} />}
           />
-          <Alert
-            type="error"
-            showIcon
-            description={`${t('dash.error_title')} — ${error instanceof ApiError ? error.message : t('dash.error_desc')}`}
+          <LoadFailure
+            title={t('dash.error_title')}
+            detail={error instanceof ApiError ? error.message : t('dash.error_desc')}
+            onRetry={() => void refetch()}
           />
         </div>
       );
@@ -308,7 +309,13 @@ export const DashboardPage: React.FC = () => {
       />
 
       {data.partial_errors.length > 0 && (
-        <Alert className="dashboard-alert" type="warning" showIcon description={`${t('dash.partial_title')} — ${data.partial_errors.join(' · ')}`} />
+        <LoadFailure
+          className="dashboard-alert"
+          tone="warning"
+          title={t('dash.partial_title')}
+          detail={data.partial_errors.join(' · ')}
+          onRetry={refreshAll}
+        />
       )}
 
       <div className="dashboard-grid">

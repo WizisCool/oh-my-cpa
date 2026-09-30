@@ -340,7 +340,7 @@ async function main() {
     await toggle.waitFor({ state: 'visible', timeout: 20_000 });
     await toggle.click();
     const notice = await until(async () => {
-      const text = await page.locator('.ant-message').innerText().catch(() => '');
+      const text = (await page.locator('.omc-toast').allInnerTexts().catch(() => [])).join('\n');
       // Matched on either language's own word for the claim, because the console's
       // language follows the browser rather than this run.
       return /persisted|被保存/.test(text) ? text.trim() : false;

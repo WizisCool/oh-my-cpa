@@ -1,5 +1,5 @@
 import React from 'react';
-import { App as AntdApp, Layout, Menu, Drawer, Tooltip, Button, Breadcrumb, Spin } from 'antd';
+import { Layout, Menu, Drawer, Tooltip, Button, Breadcrumb, Spin } from 'antd';
 import {
   PuzzleOutlined,
   AuditOutlined,
@@ -33,6 +33,7 @@ import { api } from '../../api/client';
 import { BrandArtwork } from './BrandArtwork';
 import { useT, type TFunc } from '../../i18n';
 import { PricingEditorProvider } from '../pricing/PricingEditorContext';
+import { useToast } from '../feedback';
 
 const { Sider, Content } = Layout;
 
@@ -131,7 +132,7 @@ function isNarrowViewport(): boolean {
 
 export const AppLayout: React.FC = () => {
   const t = useT();
-  const { message } = AntdApp.useApp();
+  const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -173,7 +174,7 @@ export const AppLayout: React.FC = () => {
   const logoutMutation = useMutation({
     mutationFn: api.logout,
     onSuccess: () => window.location.reload(),
-    onError: (err: Error) => message.error(t('shell.logout_failed', { msg: err.message })),
+    onError: (err: Error) => toast.error(t('shell.logout_failed', { msg: err.message })),
   });
 
   // The title names only a page the path really is; the menu still highlights the dashboard
@@ -330,7 +331,7 @@ export const AppLayout: React.FC = () => {
           </div>
           <HeaderNav
             isDiscovering={false}
-            onDiscover={() => { void queryClient.invalidateQueries(); message.success(t('common.refresh')); }}
+            onDiscover={() => { void queryClient.invalidateQueries(); toast.success(t('common.refresh')); }}
             onLogout={() => logoutMutation.mutate()}
             isLoggingOut={logoutMutation.isPending}
           />

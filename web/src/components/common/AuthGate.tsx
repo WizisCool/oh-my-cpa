@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, App as AntdApp, Button, Card, Form, Input, Skeleton } from 'antd';
+import { Button, Card, Form, Input, Skeleton } from 'antd';
 import { LockOutlined } from '../icons';
 import { api, ApiError, setUnauthorizedHandler } from '../../api/client';
 import { useQueryClient } from '@tanstack/react-query';
@@ -8,10 +8,12 @@ import { BrandArtwork } from './BrandArtwork';
 import { PreferenceMenus } from './PreferenceMenus';
 import { isDemoMode } from '../../types/demoMode';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
+import { useToast } from '../feedback';
+import { Notice } from '../feedback';
 
 export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const t = useT();
-  const { message } = AntdApp.useApp();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const isDemo = isDemoMode();
   const [status, setStatus] = React.useState<'loading' | 'authenticated' | 'unauthenticated'>('loading');
@@ -45,7 +47,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
       await api.login(values.password);
       await queryClient.invalidateQueries();
       setStatus('authenticated');
-      message.success(t('auth.success'));
+      toast.success(t('auth.success'));
     } catch (err) {
       setError(err instanceof Error ? err.message : t('auth.failed'));
       setStatus('unauthenticated');
@@ -99,11 +101,11 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
             <h1 className="terminal-title">{t('auth.title')}</h1>
             <p className="auth-subtitle">{t('auth.subtitle')}</p>
           </div>
-          {error && <Alert showIcon type="error" description={error} className="auth-alert" />}
+          {error && <Notice tone="error" description={error} className="auth-alert" />}
           {/* The demonstration signs in anyone who asks, so the field is filled in for
               them. It is still the ordinary form: what it protects is the deployment's
               own session, and there is nothing behind it that a demo must withhold. */}
-          {isDemo && <Alert showIcon type="info" description={t('demo.login_hint')} className="auth-alert" />}
+          {isDemo && <Notice tone="info" description={t('demo.login_hint')} className="auth-alert" />}
           <Form
             layout="vertical"
             onFinish={login}

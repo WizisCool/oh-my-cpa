@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, App as AntdApp, Button, Card, Checkbox, Empty, Input, Select, Skeleton, Switch, Tooltip } from 'antd';
+import { Button, Card, Checkbox, Empty, Input, Select, Skeleton, Switch, Tooltip } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, PlusOutlined, SafetyCertificateOutlined, SaveOutlined, UndoOutlined } from '../icons';
 import { api, ApiError, apiErrorCode, describeError } from '../../api/client';
@@ -15,6 +15,8 @@ import {
   type PluginSettingsIssue,
 } from './pluginStoreLogic';
 import styles from './Plugins.module.css';
+import { useToast } from '../feedback';
+import { LoadFailure, Notice } from '../feedback';
 
 interface SettingsDraft {
   enabled: boolean;
@@ -55,7 +57,7 @@ interface PluginSettingsPanelProps {
  */
 export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
   const t = useT();
-  const { message } = AntdApp.useApp();
+  const toast = useToast();
   const queryClient = useQueryClient();
 
   const settingsQuery = useQuery({
@@ -96,7 +98,7 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
       });
     },
     onSuccess: (saved) => {
-      message.success(t('plugin.settings_saved'));
+      toast.success(t('plugin.settings_saved'));
       queryClient.setQueryData(['management-plugin-settings'], saved);
       setDraft(null);
       setShowIssues(false);
@@ -110,7 +112,7 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
         setHasConflict(true);
         return;
       }
-      message.error(apiErrorCode(err) === 'write_busy' ? t('cfg.save_busy') : t('common.save_failed', { msg: describeError(err) }));
+      toast.error(apiErrorCode(err) === 'write_busy' ? t('cfg.save_busy') : t('common.save_failed', { msg: describeError(err) }));
     },
   });
 
@@ -118,7 +120,7 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
     return <Skeleton active paragraph={{ rows: 6 }} className={styles.empty} />;
   }
   if (settingsQuery.isError || !current) {
-    return <Alert type="error" showIcon className={styles['store-notice']} title={t('plugin.settings_load_failed')} description={describeError(settingsQuery.error)} />;
+    return <LoadFailure className={styles['store-notice']} title={t('plugin.settings_load_failed')} error={settingsQuery.error} onRetry={() => void settingsQuery.refetch()} />;
   }
 
   const update = (next: Partial<SettingsDraft>) => setDraft({ ...current, ...next });
@@ -130,7 +132,7 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
   const handleSave = () => {
     if (issues.length > 0) {
       setShowIssues(true);
-      message.warning(t('plugin.settings_invalid'));
+      toast.warning(t('plugin.settings_invalid'));
       return;
     }
     saveMutation.mutate(current);
@@ -165,9 +167,8 @@ export function PluginSettingsPanel({ isDemo }: PluginSettingsPanelProps) {
   return (
     <div className={styles.settings} data-plugin-panel="settings">
       {hasConflict && (
-        <Alert
-          type="warning"
-          showIcon
+        <Notice
+          tone="warning"
           title={t('plugin.settings_conflict')}
           description={t('plugin.settings_conflict_desc')}
           action={<Button size="small" onClick={reload}>{t('plugin.settings_reload')}</Button>}

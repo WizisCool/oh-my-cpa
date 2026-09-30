@@ -1,6 +1,6 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Alert, App as AntdApp, Button, Input, Segmented, Select, Tooltip } from 'antd';
+import { Button, Input, Segmented, Select, Tooltip } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import dayjs from '../../utils/time';
@@ -47,6 +47,8 @@ import { saveBlob } from '../../utils/download';
 import { auditActionLabel, auditResultLabel } from './auditText';
 import { AuditEventDrawer } from './AuditEventDrawer';
 import styles from './Audit.module.css';
+import { useToast } from '../feedback';
+import { LoadFailure } from '../feedback';
 
 /** How long typing settles before the search asks the server. */
 const SEARCH_SETTLE_MS = 300;
@@ -155,7 +157,7 @@ interface AuditTrailProps {
 export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFiltersChange }) => {
   const timeZone = useTimeZone();
   const t = useT();
-  const { message } = AntdApp.useApp();
+  const toast = useToast();
   const isPhone = useIsPhoneViewport();
   const [searchDraft, setSearchDraft] = React.useState(filters.search);
   const [isExporting, setIsExporting] = React.useState(false);
@@ -235,7 +237,7 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
     try {
       saveBlob(await api.exportAuditEvents(filters), `omc-audit-${dayjs().format('YYYYMMDD-HHmmss')}.json`);
     } catch (err: unknown) {
-      message.error(t('audit.export_failed', { err: describeError(err) }));
+      toast.error(t('audit.export_failed', { err: describeError(err) }));
     } finally {
       setIsExporting(false);
     }
@@ -410,13 +412,11 @@ export const AuditTrail: React.FC<AuditTrailProps> = ({ title, filters, onFilter
       </div>
 
       {isBlocked && (
-        <Alert
+        <LoadFailure
           className={styles['audit-alert']}
-          type="error"
-          showIcon
           title={t('audit.load_failed')}
-          description={describeError(query.error)}
-          action={<Button size="small" onClick={() => void query.refetch()}>{t('common.retry')}</Button>}
+          error={query.error}
+          onRetry={() => void query.refetch()}
         />
       )}
 

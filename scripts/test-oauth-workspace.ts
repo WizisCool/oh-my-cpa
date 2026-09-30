@@ -12,7 +12,7 @@ import {
   matchesQuotaFilter,
   parseOAuthWorkspaceQuery,
   resolveAuthorizationProviderId,
-  quotaRefreshOutcomeSurface,
+  quotaRefreshOutcomeKind,
   sortOAuthWorkspaceRecords,
   updateWorkspaceSearch,
   workspaceProviderOptions,
@@ -527,19 +527,19 @@ test('the list summary and the status filter agree on what is healthy', () => {
   }
 });
 
-test('a refresh reports on one surface, chosen by whether it needs inspecting', () => {
+test('a refresh is acknowledged or reported, chosen by whether it needs inspecting', () => {
   assert.equal(
-    quotaRefreshOutcomeSurface({ failed: 0, unknown: 0 }),
-    'toast',
-    'a run whose targets all answered is an acknowledgement, not a block above the list',
+    quotaRefreshOutcomeKind({ failed: 0, unknown: 0 }),
+    'acknowledgement',
+    'a run whose targets all answered is an acknowledgement that leaves on its own',
   );
   assert.equal(
-    quotaRefreshOutcomeSurface({ failed: 1, unknown: 0 }),
+    quotaRefreshOutcomeKind({ failed: 1, unknown: 0 }),
     'report',
-    'a failure needs its per-target reason, which only the in-page report can carry',
+    'a failure needs its per-target reason, so its toast stays until it is closed',
   );
   assert.equal(
-    quotaRefreshOutcomeSurface({ failed: 0, unknown: 2 }),
+    quotaRefreshOutcomeKind({ failed: 0, unknown: 2 }),
     'report',
     'a target the response never mentioned is as inspectable as a failure',
   );
@@ -582,9 +582,9 @@ test('a target nobody could refresh is reported, not counted as clean', () => {
   // A conflict is resolved before the run, so it must not be filed with the credentials that
   // were never eligible: a run whose every target was held elsewhere refreshed nothing, and
   // `skipped` is the count the clean acknowledgement is built from.
-  const surfaceFor = (failed: number, unknown: number) => quotaRefreshOutcomeSurface({ failed, unknown });
-  assert.equal(surfaceFor(0, 3), 'report', 'a fully conflicted run is not an acknowledgement');
-  assert.equal(surfaceFor(0, 0), 'toast');
+  const kindFor = (failed: number, unknown: number) => quotaRefreshOutcomeKind({ failed, unknown });
+  assert.equal(kindFor(0, 3), 'report', 'a fully conflicted run is not an acknowledgement');
+  assert.equal(kindFor(0, 0), 'acknowledgement');
 });
 
 test('an allowance outside the plan is one family, not one per window', () => {

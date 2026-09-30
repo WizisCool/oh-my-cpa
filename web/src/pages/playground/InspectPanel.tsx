@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Button, Tabs } from 'antd';
+import { Button, Tabs } from 'antd';
 import { HistoryOutlined } from '../../components/icons';
 import { CopyButton } from '../../components/common/CopyButton';
 import { CodeBlock } from '../../components/workspace/ModelMarkdown';
@@ -11,6 +11,7 @@ import { buildCurl, effectiveModel, inspectRequest, turnTone } from './state';
 import type { Turn } from './state';
 import { playgroundErrorKey } from './errors';
 import styles from './PlaygroundPage.module.css';
+import { Notice } from '../../components/feedback';
 
 export interface InspectPanelProps {
   turn: Turn | undefined;
@@ -77,8 +78,8 @@ export const InspectPanel = React.memo(function InspectPanel({ turn, defaultUser
           ))}
         </dl>
         {turn.error && (
-          <Alert
-            type="error"
+          <Notice
+            tone="error"
             title={t(playgroundErrorKey(turn.error.code ?? ''))}
             description={<code>{[turn.error.code, turn.error.upstream_status, turn.error.parameter].filter(Boolean).join(' · ')}</code>}
           />
@@ -110,7 +111,7 @@ export const InspectPanel = React.memo(function InspectPanel({ turn, defaultUser
                 <div className={styles['document-actions']}>
                   <CopyButton text={curl} label={t('pg.copy_curl')} showLabel />
                 </div>
-                {turn.hasOmittedHistory && <Alert type="info" title={t('pg.history_omitted')} />}
+                {turn.hasOmittedHistory && <Notice tone="info" title={t('pg.history_omitted')} />}
                 <CodeBlock lang="json" block>{requestJSON}</CodeBlock>
               </div>
             ),
@@ -120,7 +121,7 @@ export const InspectPanel = React.memo(function InspectPanel({ turn, defaultUser
             label: t('pg.response'),
             children: (
               <div className={styles['document']}>
-                {turn.isTruncated && <Alert type="warning" title={t('pg.truncated')} />}
+                {turn.isTruncated && <Notice tone="warning" title={t('pg.truncated')} />}
                 <CodeBlock lang="json" block>{eventsJSON}</CodeBlock>
               </div>
             ),

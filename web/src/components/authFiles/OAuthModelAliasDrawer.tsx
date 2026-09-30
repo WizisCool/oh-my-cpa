@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   App as AntdApp,
   AutoComplete,
   Button,
@@ -32,6 +31,8 @@ import {
 } from './oauthModelAliasLogic';
 import styles from './OAuthModelAliasDrawer.module.css';
 import { useOverlayHistory } from '../../hooks/useOverlayHistory';
+import { useToast } from '../feedback';
+import { LoadFailure, Notice } from '../feedback';
 
 const { Text } = Typography;
 
@@ -74,7 +75,8 @@ export const OAuthModelAliasDrawer: React.FC<OAuthModelAliasDrawerProps> = ({
 }) => {
   const t = useT();
   const isDemo = isDemoMode();
-  const { message, modal } = AntdApp.useApp();
+  const { modal } = AntdApp.useApp();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const rowCounterRef = useRef(0);
   const [selectedProvider, setSelectedProvider] = useState('');
@@ -161,14 +163,14 @@ export const OAuthModelAliasDrawer: React.FC<OAuthModelAliasDrawerProps> = ({
   const handleSave = async () => {
     const validation = validateOAuthModelAliasDrafts(selectedProvider, drafts);
     if (!validation.ok) {
-      message.error(validationMessage(validation.error, t, validation.alias));
+      toast.error(validationMessage(validation.error, t, validation.alias));
       return;
     }
     try {
       await saveMutation.mutateAsync({ provider: validation.provider, aliases: validation.aliases });
-      message.success(t('af.alias_saved'));
+      toast.success(t('af.alias_saved'));
     } catch (error) {
-      message.error(safeError(error, t));
+      toast.error(safeError(error, t));
     }
   };
 
@@ -183,9 +185,9 @@ export const OAuthModelAliasDrawer: React.FC<OAuthModelAliasDrawerProps> = ({
       onOk: async () => {
         try {
           await saveMutation.mutateAsync({ provider, aliases: [] });
-          message.success(t('af.alias_delete_success', { provider }));
+          toast.success(t('af.alias_delete_success', { provider }));
         } catch (error) {
-          message.error(safeError(error, t));
+          toast.error(safeError(error, t));
           throw error;
         }
       },
@@ -194,7 +196,7 @@ export const OAuthModelAliasDrawer: React.FC<OAuthModelAliasDrawerProps> = ({
 
   const handleSelectProvider = (value: string) => {
     if (isDirty) {
-      message.info(t('af.alias_provider_locked'));
+      toast.info(t('af.alias_provider_locked'));
       return;
     }
     loadProvider(value);
@@ -202,12 +204,12 @@ export const OAuthModelAliasDrawer: React.FC<OAuthModelAliasDrawerProps> = ({
 
   const handleUseNewProvider = () => {
     if (isDirty) {
-      message.info(t('af.alias_provider_locked'));
+      toast.info(t('af.alias_provider_locked'));
       return;
     }
     const normalized = normalizeOAuthModelAliasProvider(newProvider);
     if (!normalized || !isValidOAuthModelAliasProvider(normalized)) {
-      message.error(t('af.alias_error_provider'));
+      toast.error(t('af.alias_error_provider'));
       return;
     }
     // The endpoint replaces a provider's whole list, and this field offers the
@@ -336,12 +338,15 @@ export const OAuthModelAliasDrawer: React.FC<OAuthModelAliasDrawerProps> = ({
     if (aliasesQuery.isError) {
       const unsupported = aliasesQuery.error instanceof ApiError && aliasesQuery.error.status === 501;
       return (
-        <Alert
-          type={unsupported ? 'info' : 'error'}
-          showIcon
-          description={unsupported ? t('af.alias_unsupported') : safeError(aliasesQuery.error, t)}
-          action={!unsupported && <Button size="small" onClick={() => void aliasesQuery.refetch()}>{t('common.retry')}</Button>}
-        />
+        unsupported ? (
+          <Notice tone="info" title={t('af.alias_unsupported')} />
+        ) : (
+          <LoadFailure
+            title={t('common.load_failed_title')}
+            detail={safeError(aliasesQuery.error, t)}
+            onRetry={() => void aliasesQuery.refetch()}
+          />
+        )
       );
     }
     return (
@@ -368,7 +373,7 @@ export const OAuthModelAliasDrawer: React.FC<OAuthModelAliasDrawerProps> = ({
           </Button>
         </div>
         {provider && <Tag data-testid="oauth-model-alias-provider" className={styles['provider-tag']}>{provider}</Tag>}
-        {isDirty && <Alert type="info" showIcon description={t('af.alias_dirty_hint')} />}
+        {isDirty && <Notice tone="info" description={t('af.alias_dirty_hint')} />}
         {drafts.length === 0 ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('af.alias_empty')}>
             <Button

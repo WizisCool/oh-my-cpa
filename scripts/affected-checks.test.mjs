@@ -57,7 +57,14 @@ test('an ordinary component change selects the frontend gates and nothing else',
     // A component's inline style is a motion declaration too: `transition: 'all 0.15s'` inside a
     // `style` object is a duration the budget owns, and the checker reads both extensions.
     'motion',
+    // A component is where a raw toast or banner would bypass the feedback surfaces.
+    'feedback',
   ]);
+});
+
+test('a hook or helper change still checks the feedback surfaces', () => {
+  // A `.ts` hook can take `message` from `App.useApp()` as easily as a component can.
+  assert.ok(planChecks(['web/src/components/usage/useUsageEventSync.ts']).includes('feedback'));
 });
 
 test('a frontend change never selects a check that starts a browser or a build', () => {

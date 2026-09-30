@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Button, Tooltip } from 'antd';
+import { Button, Tooltip } from 'antd';
 import { XProvider } from '@ant-design/x';
 import type { BubbleItemType, BubbleListProps } from '@ant-design/x';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -35,6 +35,7 @@ import {
 } from './state';
 import type { AgentTarget, Conversation, Operation } from './state';
 import styles from './AgentPage.module.css';
+import { LoadFailure, Notice } from '../../components/feedback';
 
 /**
  * Starting questions, not templates.
@@ -228,25 +229,21 @@ export function AgentPage() {
   const runError = localError || errorCode;
   const notices = (
     <>
-      {isDemo && <Alert type="info" title={t('agent.demo')} />}
+      {isDemo && <Notice tone="info" title={t('agent.demo')} />}
       {session.isError && (
-        <Alert
-          type="error"
-          title={t('agent.session.failed')}
-          action={<Button size="small" onClick={() => void session.refetch()}>{t('common.retry')}</Button>}
-        />
+        <LoadFailure title={t('agent.session.failed')} onRetry={() => void session.refetch()} />
       )}
       {!isDemo && keys.isSuccess && keys.data.keys.length === 0 && (
-        <Alert type="info" title={t('pg.no_keys')} action={<Link to="/api-keys">{t('pg.manage_keys')}</Link>} />
+        <Notice tone="info" title={t('pg.no_keys')} action={<Link to="/api-keys">{t('pg.manage_keys')}</Link>} />
       )}
       {!isDemo && !!fingerprint && directory.isSuccess && directory.data.models.length === 0 && (
-        <Alert type="info" title={t('pg.no_models')} action={<Link to="/ai-providers">{t('pg.manage_models')}</Link>} />
+        <Notice tone="info" title={t('pg.no_models')} action={<Link to="/ai-providers">{t('pg.manage_models')}</Link>} />
       )}
-      {!!session.data?.omitted && <Alert type="info" title={t('agent.omitted')} />}
+      {!!session.data?.omitted && <Notice tone="info" title={t('agent.omitted')} />}
       {runError && (
-        <Alert
-          type="error"
-          closable={{ onClose: () => { setLocalError(''); clearError(); } }}
+        <Notice
+          tone="error"
+          onClose={() => { setLocalError(''); clearError(); }}
           title={t(failureKey(runError))}
           description={<code>{runError}</code>}
         />

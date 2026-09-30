@@ -1,7 +1,7 @@
 import React from 'react';
-import { App as AntdApp } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../../api/client';
+import { useToast, type ToastItem } from '../../components/feedback';
 import { useT, type TFunc } from '../../i18n';
 import {
   chunkItems,
@@ -10,25 +10,14 @@ import {
 } from '../../components/authFiles/authFileLogic';
 import {
   buildQuotaRefreshTargets,
-  quotaRefreshOutcomeSurface,
+  quotaRefreshOutcomeKind,
   type OAuthWorkspaceRecord,
 } from './oauthWorkspaceLogic';
-
-export interface OAuthWorkspaceOperationReport {
-  scope: 'single' | 'page' | 'filtered' | 'all';
-  succeeded: number;
-  failed: number;
-  skipped: number;
-  unknown: number;
-  details: Array<{ name: string; reason: string }>;
-}
 
 export interface OAuthWorkspaceActions {
   busyFileKeys: Set<string>;
   busyQuotaIndexes: Set<string>;
   isOperating: boolean;
-  quotaReport?: OAuthWorkspaceOperationReport;
-  clearQuotaReport: () => void;
   upload: (files: File[]) => void;
   download: (record: OAuthWorkspaceRecord) => void;
   deleteOne: (record: OAuthWorkspaceRecord) => Promise<void>;
@@ -46,6 +35,9 @@ export interface OAuthWorkspaceActions {
   redeemCredit: (record: OAuthWorkspaceRecord) => Promise<void>;
   isRecordBusy: (record: OAuthWorkspaceRecord) => boolean;
 }
+
+/** Quota refreshes answer under one key: a new run's outcome replaces the last run's report. */
+const QUOTA_REFRESH_TOAST_KEY = 'omc-quota-refresh';
 
 function errorMessage(error: unknown, t: TFunc): string {
   if (error instanceof ApiError && error.status === 501) return t('af.unsupported');
@@ -73,7 +65,7 @@ export function useOAuthWorkspaceActions(
   onTargetGone: (recordKey: string) => void,
 ): OAuthWorkspaceActions {
   const t = useT();
-  const { message, modal } = AntdApp.useApp();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const recordsRef = React.useRef(records);
   const selectedRef = React.useRef(selectedKeys);
@@ -82,7 +74,6 @@ export function useOAuthWorkspaceActions(
   const [isOperating, setIsOperating] = React.useState(false);
   const [busyFileKeys, setBusyFileKeys] = React.useState<Set<string>>(new Set());
   const [busyQuotaIndexes, setBusyQuotaIndexes] = React.useState<Set<string>>(new Set());
-  const [quotaReport, setQuotaReport] = React.useState<OAuthWorkspaceOperationReport>();
 
   React.useEffect(() => {
     recordsRef.current = records;
@@ -173,22 +164,15 @@ export function useOAuthWorkspaceActions(
     mutationFn: (files: File[]) => api.uploadManagementAuthFiles(files),
     onSuccess: async (result) => {
       if (result.failed && result.failed.length > 0) {
-        modal.warning({
-          title: t('af.failure_details_title'),
-          content: (
-            <div className="operation-detail-scroll">
-              {result.failed.map((item) => (
-                <div key={item.name}><span className="mono-num">{item.name}</span>: {item.error}</div>
-              ))}
-            </div>
-          ),
+        toast.warning(t('af.failure_details_title'), {
+          items: result.failed.map((item) => ({ name: item.name, reason: item.error })),
         });
       } else {
-        message.success(t('af.uploaded', { n: result.uploaded ?? 0 }));
+        toast.success(t('af.uploaded', { n: result.uploaded ?? 0 }));
       }
       await invalidateWorkspace();
     },
-    onError: (error) => message.error(errorMessage(error, t)),
+    onError: (error) => toast.error(errorMessage(error, t)),
     onSettled: () => releaseFileLock(),
   });
 
@@ -201,7 +185,7 @@ export function useOAuthWorkspaceActions(
       return { record: latest, blob: await api.downloadManagementAuthFile(latest.fileName) };
     },
     onSuccess: ({ record, blob }) => downloadBlob(blob, record.fileName),
-    onError: (error) => message.error(errorMessage(error, t)),
+    onError: (error) => toast.error(errorMessage(error, t)),
   });
 
   const upload = React.useCallback((files: File[]) => {
@@ -222,7 +206,7 @@ export function useOAuthWorkspaceActions(
     if (!record.canDeleteFile || !acquireFileLock()) return;
     const reservation = reserveRecordSet([record]);
     if (reservation.reservedRecords.length === 0) {
-      message.warning(t('omc.operation_conflict'));
+      toast.warning(t('omc.operation_conflict'));
       releaseFileLock();
       return;
     }
@@ -233,15 +217,15 @@ export function useOAuthWorkspaceActions(
       const confirmedByResponse = Boolean(result.files?.includes(record.fileName));
       const confirmed = confirmedByResponse || await confirmSingleDeletion(record.fileName);
       if (!confirmed) {
-        message.error(result.failed?.[0]?.error || t('af.request_failed'));
+        toast.error(result.failed?.[0]?.error || t('af.request_failed'));
         return;
       }
       setSelectedKeys((previous) => previous.filter((key) => key !== record.key));
       onTargetGone(record.key);
-      message.success(t('af.deleted', { n: 1 }));
+      toast.success(t('af.deleted', { n: 1 }));
       await invalidateWorkspace();
     } catch (error) {
-      message.error(errorMessage(error, t));
+      toast.error(errorMessage(error, t));
     } finally {
       markFileBusy([record.key], false);
       releaseTargets(targets);
@@ -252,7 +236,7 @@ export function useOAuthWorkspaceActions(
     confirmSingleDeletion,
     invalidateWorkspace,
     markFileBusy,
-    message,
+    toast,
     onTargetGone,
     releaseFileLock,
     releaseTargets,
@@ -265,7 +249,7 @@ export function useOAuthWorkspaceActions(
     if (!record.canToggleFile || !acquireFileLock()) return;
     const reservation = reserveRecordSet([record]);
     if (reservation.reservedRecords.length === 0) {
-      message.warning(t('omc.operation_conflict'));
+      toast.warning(t('omc.operation_conflict'));
       releaseFileLock();
       return;
     }
@@ -277,13 +261,13 @@ export function useOAuthWorkspaceActions(
       await api.setManagementAuthFileStatus(latest.fileName, !isAuthFileDisabled(latest.file), latest.authIndex);
       await invalidateWorkspace();
     } catch (error) {
-      message.error(errorMessage(error, t));
+      toast.error(errorMessage(error, t));
     } finally {
       markFileBusy([record.key], false);
       releaseTargets(targets);
       releaseFileLock();
     }
-  }, [acquireFileLock, invalidateWorkspace, markFileBusy, message, releaseFileLock, releaseTargets, reserveRecordSet, t]);
+  }, [acquireFileLock, invalidateWorkspace, markFileBusy, toast, releaseFileLock, releaseTargets, reserveRecordSet, t]);
 
   const batchStatus = React.useCallback(async (disabled: boolean, selectedRecords: OAuthWorkspaceRecord[]) => {
     const eligible = selectedRecords.filter((record) => record.canToggleFile);
@@ -291,7 +275,7 @@ export function useOAuthWorkspaceActions(
     const reservation = reserveRecordSet(eligible);
     const targetRecords = reservation.reservedRecords;
     if (targetRecords.length === 0) {
-      message.warning(t('omc.operation_conflict'));
+      toast.warning(t('omc.operation_conflict'));
       releaseFileLock();
       return;
     }
@@ -314,18 +298,11 @@ export function useOAuthWorkspaceActions(
       ];
       setSelectedKeys((previous) => previous.filter((key) => !succeededKeys.has(key)));
       if (failures.length > 0) {
-        modal.warning({
-          title: t('af.failure_details_title'),
-          content: (
-            <div className="operation-detail-scroll">
-              {failures.map((item) => (
-                <div key={item.name}><span className="mono-num">{item.name}</span>: {item.error}</div>
-              ))}
-            </div>
-          ),
+        toast.warning(t('af.failure_details_title'), {
+          items: failures.map((item) => ({ name: item.name, reason: item.error })),
         });
       } else {
-        message.success(
+        toast.success(
           disabled
             ? t('af.batch_disable_success', { n: outcome.succeeded.length })
             : t('af.batch_enable_success', { n: outcome.succeeded.length }),
@@ -333,13 +310,13 @@ export function useOAuthWorkspaceActions(
       }
       await invalidateWorkspace();
     } catch (error) {
-      message.error(errorMessage(error, t));
+      toast.error(errorMessage(error, t));
     } finally {
       markFileBusy(targetRecords.map((record) => record.key), false);
       releaseTargets(targets);
       releaseFileLock();
     }
-  }, [acquireFileLock, invalidateWorkspace, markFileBusy, message, modal, releaseFileLock, releaseTargets, reserveRecordSet, setSelectedKeys, t]);
+  }, [acquireFileLock, invalidateWorkspace, markFileBusy, toast, releaseFileLock, releaseTargets, reserveRecordSet, setSelectedKeys, t]);
 
   const batchDelete = React.useCallback(async (selectedRecords: OAuthWorkspaceRecord[]) => {
     const eligible = selectedRecords.filter((record) => record.canDeleteFile);
@@ -347,7 +324,7 @@ export function useOAuthWorkspaceActions(
     const reservation = reserveRecordSet(eligible);
     const targetRecords = reservation.reservedRecords;
     if (targetRecords.length === 0) {
-      message.warning(t('omc.operation_conflict'));
+      toast.warning(t('omc.operation_conflict'));
       releaseFileLock();
       return;
     }
@@ -383,18 +360,11 @@ export function useOAuthWorkspaceActions(
       setSelectedKeys((previous) => previous.filter((key) => !confirmedKeys.some((record) => record.key === key)));
       confirmedKeys.forEach((record) => onTargetGone(record.key));
       if (failures.length > 0) {
-        modal.warning({
-          title: t('af.failure_details_title'),
-          content: (
-            <div className="operation-detail-scroll">
-              {failures.map((item) => (
-                <div key={item.name}><span className="mono-num">{item.name}</span>: {item.error}</div>
-              ))}
-            </div>
-          ),
+        toast.warning(t('af.failure_details_title'), {
+          items: failures.map((item) => ({ name: item.name, reason: item.error })),
         });
       } else if (confirmedNames.length > 0) {
-        message.success(t('af.deleted', { n: confirmedNames.length }));
+        toast.success(t('af.deleted', { n: confirmedNames.length }));
       }
       await invalidateWorkspace();
     } finally {
@@ -402,7 +372,7 @@ export function useOAuthWorkspaceActions(
       releaseTargets(targets);
       releaseFileLock();
     }
-  }, [acquireFileLock, invalidateWorkspace, markFileBusy, message, modal, onTargetGone, releaseFileLock, releaseTargets, reserveRecordSet, setSelectedKeys, t]);
+  }, [acquireFileLock, invalidateWorkspace, markFileBusy, toast, onTargetGone, releaseFileLock, releaseTargets, reserveRecordSet, setSelectedKeys, t]);
 
   const mergeReturnedQuota = React.useCallback((returned: Array<{ auth_index: string }>) => {
     queryClient.setQueryData(['management-quota'], (previous: unknown) => {
@@ -427,26 +397,27 @@ export function useOAuthWorkspaceActions(
   }, [queryClient]);
 
   const refreshQuotaIndexes = React.useCallback(async (
-    scope: OAuthWorkspaceOperationReport['scope'],
     planIndexes: string[],
     skipped: Array<{ name: string; reason: string }>,
   ) => {
     if (planIndexes.length === 0) {
-      // The previous run's report has to go, or the toast saying nothing was eligible appears
-      // beside a report describing the run before it - two surfaces, two outcomes, one click.
-      setQuotaReport(undefined);
-      message.info(t('omc.quota_refresh_none'));
+      // Every run reports under one key, so the previous run's report is replaced rather than
+      // left open beside an answer about a different click.
+      toast.info(t('omc.quota_refresh_none'), { key: QUOTA_REFRESH_TOAST_KEY });
       return;
     }
     const reserved = reserveTargets(planIndexes.map((index) => `quota:${index}`));
     const targetIndexes = planIndexes.filter((index) => reserved.includes(`quota:${index}`));
     const conflicting = planIndexes.filter((index) => !reserved.includes(`quota:${index}`));
-    const details = [...skipped, ...conflicting.map((index) => ({ name: index, reason: t('omc.operation_conflict') }))];
+    // Kept apart so the report lists what needs attention first: a failure, then a target with no
+    // outcome, then what was never eligible.
+    const failures: ToastItem[] = [];
+    const unknowns: ToastItem[] = conflicting.map((index) => ({ name: index, reason: t('omc.operation_conflict') }));
     let succeeded = 0;
     let failed = 0;
     // A target held by another operation was not refreshed either. Counting it as skipped
     // would let a run that refreshed nothing report a clean acknowledgement, so it is
-    // unrefreshed: the run reports in the page, with the conflict named per target.
+    // unrefreshed: the run is reported, with the conflict named per target.
     let unknown = conflicting.length;
     markQuotaBusy(targetIndexes, true);
     try {
@@ -459,10 +430,10 @@ export function useOAuthWorkspaceActions(
             const item = returned.get(index);
             if (!item) {
               unknown += 1;
-              details.push({ name: index, reason: t('omc.quota_refresh_unknown') });
+              unknowns.push({ name: index, reason: t('omc.quota_refresh_unknown') });
             } else if (item.status === 'error' || item.error) {
               failed += 1;
-              details.push({ name: item.name || index, reason: item.error || t('quota.status_error') });
+              failures.push({ name: item.name || index, reason: item.error || t('quota.status_error') });
             } else {
               succeeded += 1;
             }
@@ -470,32 +441,43 @@ export function useOAuthWorkspaceActions(
         } catch (error) {
           const reason = errorMessage(error, t);
           failed += chunk.length;
-          chunk.forEach((index) => details.push({ name: index, reason }));
+          chunk.forEach((index) => failures.push({ name: index, reason }));
         }
       }
-      // One surface reports the outcome, chosen by whether it needs inspecting. A clean run -
-      // including one that skipped targets which were never eligible - is an acknowledgement,
-      // so it arrives as a toast and leaves no block behind. A failure keeps the in-page
-      // report, because a toast cannot carry the per-target reason and would have to be
-      // dismissed before the reason could be read.
-      const skippedCount = details.length - failed - unknown;
-      const outcome = { scope, succeeded, failed, skipped: skippedCount, unknown, details };
-      if (quotaRefreshOutcomeSurface(outcome) === 'report') {
-        setQuotaReport(outcome);
+      // A clean run - including one that skipped targets which were never eligible - is an
+      // acknowledgement that leaves on its own. A run with a failed or unknown target is a report:
+      // it lists each target's reason and stays until it is closed, because the reasons are what
+      // the operator has to read.
+      const skippedCount = skipped.length;
+      if (quotaRefreshOutcomeKind({ failed, unknown }) === 'report') {
+        toast.warning(
+          t('omc.quota_refresh_report', { succeeded, failed: failed + unknown, skipped: skippedCount }),
+          {
+            key: QUOTA_REFRESH_TOAST_KEY,
+            testId: 'quota-operation-report',
+            items: [
+              ...failures.map((item) => ({ ...item, group: t('toast.group_failed') })),
+              ...unknowns.map((item) => ({ ...item, group: t('toast.group_unknown') })),
+              ...skipped.map((item) => ({ ...item, group: t('toast.group_skipped'), isGroupSummarised: true })),
+            ],
+          },
+        );
       } else {
-        setQuotaReport(undefined);
-        message.success(t('omc.quota_refresh_report_clean', { succeeded, skipped: skippedCount }));
+        toast.success(
+          t('omc.quota_refresh_report_clean', { succeeded, skipped: skippedCount }),
+          { key: QUOTA_REFRESH_TOAST_KEY },
+        );
       }
       await queryClient.invalidateQueries({ queryKey: ['management-quota'] });
     } finally {
       markQuotaBusy(targetIndexes, false);
       releaseTargets(reserved);
     }
-  }, [mergeReturnedQuota, message, queryClient, releaseTargets, reserveTargets, t]);
+  }, [mergeReturnedQuota, toast, queryClient, releaseTargets, reserveTargets, t]);
 
   const refreshQuotaForRecord = React.useCallback(async (record: OAuthWorkspaceRecord) => {
     if (!record.canRefreshQuota || !record.authIndex) return;
-    await refreshQuotaIndexes('single', [record.authIndex], []);
+    await refreshQuotaIndexes([record.authIndex], []);
   }, [refreshQuotaIndexes]);
 
   const refreshQuota = React.useCallback(async (
@@ -506,7 +488,7 @@ export function useOAuthWorkspaceActions(
   ) => {
     const source = scope === 'page' ? pageRecords : scope === 'all' ? allRecords : filteredRecords;
     const plan = buildQuotaRefreshTargets(source);
-    await refreshQuotaIndexes(scope, plan.eligibleIndexes, plan.skipped.map((item) => ({
+    await refreshQuotaIndexes(plan.eligibleIndexes, plan.skipped.map((item) => ({
       name: item.name,
       reason: t(`omc.quota_skip_${item.reason}`),
     })));
@@ -518,24 +500,24 @@ export function useOAuthWorkspaceActions(
     if (reserved.length === 0) {
       // A batch refresh or another quota action can hold this target. Returning silently
       // would leave a confirmed menu action looking like it did nothing.
-      message.warning(t('omc.operation_conflict'));
+      toast.warning(t('omc.operation_conflict'));
       return;
     }
     markQuotaBusy([record.authIndex], true);
     try {
       await api.clearCredentialCooldown(record.authIndex);
-      message.success(t('quota.clear_cooldown_success'));
+      toast.success(t('quota.clear_cooldown_success'));
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['management-quota'] }),
         queryClient.invalidateQueries({ queryKey: ['management-auth-files'] }),
       ]);
     } catch (error) {
-      message.error(t('quota.clear_cooldown_failed', { msg: errorMessage(error, t) }));
+      toast.error(t('quota.clear_cooldown_failed', { msg: errorMessage(error, t) }));
     } finally {
       markQuotaBusy([record.authIndex], false);
       releaseTargets(reserved);
     }
-  }, [markQuotaBusy, message, queryClient, releaseTargets, reserveTargets, t]);
+  }, [markQuotaBusy, toast, queryClient, releaseTargets, reserveTargets, t]);
 
   const redeemCredit = React.useCallback(async (record: OAuthWorkspaceRecord) => {
     // Redemption spends an entitlement, so the target is re-resolved from the latest
@@ -545,21 +527,21 @@ export function useOAuthWorkspaceActions(
     if (!latest || !latest.canRedeemCredit || !latest.authIndex) return;
     const reserved = reserveTargets([`quota:${latest.authIndex}`]);
     if (reserved.length === 0) {
-      message.warning(t('omc.operation_conflict'));
+      toast.warning(t('omc.operation_conflict'));
       return;
     }
     markQuotaBusy([latest.authIndex], true);
     try {
       await api.redeemCodexResetCredit(latest.authIndex);
-      message.success(t('quota.redeem_credit_success'));
+      toast.success(t('quota.redeem_credit_success'));
       await queryClient.invalidateQueries({ queryKey: ['management-quota'] });
     } catch (error) {
-      message.error(t('quota.redeem_credit_failed', { msg: errorMessage(error, t) }));
+      toast.error(t('quota.redeem_credit_failed', { msg: errorMessage(error, t) }));
     } finally {
       markQuotaBusy([latest.authIndex], false);
       releaseTargets(reserved);
     }
-  }, [markQuotaBusy, message, queryClient, releaseTargets, reserveTargets, t]);
+  }, [markQuotaBusy, toast, queryClient, releaseTargets, reserveTargets, t]);
 
   const isRecordBusy = React.useCallback((record: OAuthWorkspaceRecord) => {
     if (busyFileKeys.has(record.key)) return true;
@@ -571,8 +553,6 @@ export function useOAuthWorkspaceActions(
     busyFileKeys,
     busyQuotaIndexes,
     isOperating,
-    quotaReport,
-    clearQuotaReport: () => setQuotaReport(undefined),
     upload,
     download,
     deleteOne,

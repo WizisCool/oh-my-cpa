@@ -450,19 +450,22 @@ async function verifyWorkspaceScale({ base, page, check }) {
     check('48 credentials share collection queries without per-row model reads',
       reads.files <= 2 && reads.quota <= 2 && reads.models === 0, JSON.stringify(reads));
     await page.getByRole('button', { name: /Refresh quota \(23\)/ }).click();
-    // This fixture run has failures, so the outcome arrives as the in-page report, which is
-    // the only surface a failure uses: a toast cannot carry a per-target reason.
+    // This fixture run has failures, so the outcome is the report toast that lists each
+    // target's reason, and it is the only toast the run raises.
     await page.getByTestId('quota-operation-report').waitFor();
     const report = await page.getByTestId('quota-operation-report').innerText();
-    check('a failing refresh reports in the page rather than in a toast',
-      (await page.locator('.ant-message-notice').count()) === 0,
-      `toasts=${await page.locator('.ant-message-notice').count()}`);
+    check('a failing refresh raises one report toast and nothing beside it',
+      (await page.locator('.omc-toast').count()) === 1,
+      `toasts=${await page.locator('.omc-toast').count()}`);
     check('23 eligible quota targets use sequential 10/10/3 batches exactly once',
       batches.map((batch) => batch.length).join('/') === '10/10/3'
         && new Set(batches.flat()).size === 23 && peakBatches === 1,
       JSON.stringify({ sizes: batches.map((batch) => batch.length), peakBatches }));
     check('batch errors and missing results remain visible to the operator',
       report.includes('Fixture upstream failure') && report.includes('scale-13'), report);
+    // The report stays until it is closed, so it is closed here before the drawers below open.
+    await page.getByTestId('quota-operation-report').locator('.ant-notification-notice-close').click();
+    await page.getByTestId('quota-operation-report').waitFor({ state: 'detached' });
     const starts = [];
     const pollReads = {};
     const pendingPolls = {};

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, App as AntdApp, Button, Empty, Input, Modal, Radio, Segmented, Skeleton, Tooltip } from 'antd';
+import { Button, Empty, Input, Modal, Radio, Segmented, Skeleton, Tooltip } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   DownloadOutlined,
@@ -24,6 +24,8 @@ import {
 } from './pluginStoreLogic';
 import { formatPluginVersion, PluginLinks, PluginLogo, PluginMeta } from './PluginParts';
 import styles from './Plugins.module.css';
+import { useToast } from '../feedback';
+import { Notice } from '../feedback';
 
 /** Past this length a description is clamped with a toggle; shorter ones never need one. */
 const DESCRIPTION_CLAMP_CHARS = 150;
@@ -77,20 +79,18 @@ export function PluginStorePanel({ store, isLoading, isDemo, onManage, onOpenSet
 
   return (
     <div data-plugin-panel="store">
-      <Alert
+      <Notice
         className={styles['store-notice']}
-        type="info"
-        showIcon
+        tone="info"
         icon={<SafetyCertificateOutlined />}
         title={t('plugin.store_notice_title')}
         description={t('plugin.store_notice_desc')}
       />
 
       {(store?.source_errors.length ?? 0) > 0 && (
-        <Alert
+        <Notice
           className={styles['store-notice']}
-          type="warning"
-          showIcon
+          tone="warning"
           title={t('plugin.source_errors_title')}
           description={(
             <ul>
@@ -273,7 +273,7 @@ interface PluginInstallModalProps {
  */
 function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOpenSettings }: PluginInstallModalProps) {
   const t = useT();
-  const { message, modal } = AntdApp.useApp();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const [versionMode, setVersionMode] = React.useState<'latest' | 'pinned'>('latest');
   const [version, setVersion] = React.useState('');
@@ -293,15 +293,17 @@ function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOpenSetti
       }),
     onSuccess: (result, target) => {
       const isUpdate = target.installed;
-      message.success(isUpdate
+      const outcome = isUpdate
         ? t('plugin.update_success', { name: target.name || target.id, version: formatPluginVersion(result.version) })
-        : t('plugin.install_success', { name: target.name || target.id, version: formatPluginVersion(result.version) }));
-      if (!result.plugins_enabled) {
-        modal.info({
-          title: t('plugin.system_disabled_title'),
-          content: t('plugin.installed_while_disabled'),
-          okText: t('plugin.open_settings'),
-          onOk: onOpenSettings,
+        : t('plugin.install_success', { name: target.name || target.id, version: formatPluginVersion(result.version) });
+      // Installed while the plugin system is off is still a success, but one that will not take
+      // effect: one toast says both and offers the switch, rather than a success and a dialog.
+      if (result.plugins_enabled) {
+        toast.success(outcome);
+      } else {
+        toast.warning(outcome, {
+          detail: t('plugin.installed_while_disabled'),
+          actions: <Button size="small" onClick={onOpenSettings}>{t('plugin.open_settings')}</Button>,
         });
       }
       void queryClient.invalidateQueries({ queryKey: ['management-plugins'] });
@@ -311,14 +313,14 @@ function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOpenSetti
     onError: (err: unknown) => {
       const code = apiErrorCode(err);
       if (code === 'plugin_update_requires_restart') {
-        message.warning(t('plugin.update_restart_required'));
+        toast.warning(t('plugin.update_restart_required'));
         return;
       }
       if (code === 'plugin_store_rate_limited') {
-        message.error(t('plugin.rate_limited'));
+        toast.error(t('plugin.rate_limited'));
         return;
       }
-      message.error(t('plugin.install_failed', { msg: describeError(err) }));
+      toast.error(t('plugin.install_failed', { msg: describeError(err) }));
     },
   });
 
@@ -356,7 +358,7 @@ function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOpenSetti
             entry.platforms.length > 0 && t('plugin.platforms', { platforms: entry.platforms.join(', ') }),
           ]}
         />
-        {!isPluginSystemEnabled && <Alert type="warning" showIcon title={t('plugin.installed_while_disabled')} />}
+        {!isPluginSystemEnabled && <Notice tone="warning" title={t('plugin.installed_while_disabled')} />}
         <div>
           <div className={styles['setting-label']}>{t('plugin.version_label')}</div>
           <Radio.Group value={versionMode} onChange={(event) => setVersionMode(event.target.value)}>
@@ -377,9 +379,8 @@ function PluginInstallModal({ entry, isPluginSystemEnabled, onClose, onOpenSetti
           )}
         </div>
         {isThirdParty && (
-          <Alert
-            type="warning"
-            showIcon
+          <Notice
+            tone="warning"
             title={t('plugin.third_party_title')}
             description={(
               <div className={styles['install-body']}>

@@ -26,6 +26,7 @@ export const CHECK_IDS = [
   'antd-lint',
   'css-modules',
   'motion',
+  'feedback',
   'go',
   'docs',
   'workflow',
@@ -42,7 +43,7 @@ const WEB_TEST_INFRASTRUCTURE = [
 const DEPENDENCY_INPUTS = new Set([
   'package.json', 'web/package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc',
 ]);
-const FRONTEND_CHECKS = ['type-check', 'logic', 'i18n', 'antd-lint', 'css-modules', 'motion'];
+const FRONTEND_CHECKS = ['type-check', 'logic', 'i18n', 'antd-lint', 'css-modules', 'motion', 'feedback'];
 
 function planFileChecks(file) {
   const checks = new Set();
@@ -50,7 +51,7 @@ function planFileChecks(file) {
   const isWebCode = file.startsWith('web/src/') && /\.(?:ts|tsx)$/.test(file);
 
   if (DEPENDENCY_INPUTS.has(file)) return CHECK_IDS;
-  if (isWebCode) add('type-check', 'logic', 'i18n', 'css-modules');
+  if (isWebCode) add('type-check', 'logic', 'i18n', 'css-modules', 'feedback');
   if (file.endsWith('.tsx')) add('antd-lint', 'motion', 'css-modules');
   if (file.endsWith('.css')) add('css-modules', 'motion');
   if (/^(?:.*\.go|go\.mod|go\.sum)$/.test(file)

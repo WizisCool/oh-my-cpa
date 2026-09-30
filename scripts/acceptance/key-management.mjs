@@ -150,7 +150,7 @@ export async function runKeyManagementAcceptance({
     await checkEventually(
       'the copy control reports a copy it made',
       async () =>
-        (await page.locator('.ant-message').getByText(/已复制到剪贴板|Copied to clipboard/).count()) > 0,
+        (await page.locator('.omc-toast').getByText(/已复制到剪贴板|Copied to clipboard/).count()) > 0,
       { label: "the copy control's success message" },
     );
     // Read back through the browser's own paste pipeline rather than through the
@@ -236,7 +236,7 @@ export async function runKeyManagementAcceptance({
     // outside the dialog selects nothing, and `execCommand('copy')` answers `true` for
     // that empty selection. The draft is pasted back with the dialog closed, because
     // its focus trap would keep the probe input from taking focus while it is open.
-    const dialogCopyMessage = page.locator('.ant-message').getByText(/已复制到剪贴板|Copied to clipboard/);
+    const dialogCopyMessage = page.locator('.omc-toast').getByText(/已复制到剪贴板|Copied to clipboard/);
     // Waited for rather than edited away: the message nodes belong to React, and removing
     // one detaches the holder the next message is rendered into, so the copy below would
     // report itself nowhere. Waiting for a leftover carrying this exact text also keeps

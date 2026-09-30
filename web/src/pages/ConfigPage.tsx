@@ -1,8 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Alert,
-  App as AntdApp,
   Button,
   Card,
   Input,
@@ -47,6 +45,7 @@ import {
   getGroupsForSection,
   type ConfigGroupDefinition,
 } from '../types/configSchema';
+import { LoadFailure, Notice, useToast } from '../components/feedback';
 
 const { Text } = Typography;
 
@@ -56,7 +55,7 @@ export const ConfigPage: React.FC = () => {
   // CPA's own file. The editor stays usable so the page can be read and explored; only
   // the save is withheld.
   const isDemo = isDemoMode();
-  const { message } = AntdApp.useApp();
+  const toast = useToast();
   const { theme } = useTheme();
   const navigate = useNavigate();
   const draft = useConfigDraft();
@@ -72,8 +71,6 @@ export const ConfigPage: React.FC = () => {
     setRawYaml,
     conflictState,
     setConflictState,
-    saveError,
-    setSaveError,
     docRef,
     isDirty,
     getFieldValue,
@@ -272,36 +269,19 @@ export const ConfigPage: React.FC = () => {
         </div>
       </div>
 
-      {saveError && (
-        <Alert
-          type="error"
-          showIcon
-          closable={{ onClose: () => setSaveError(null) }}
-          description={saveError}
-          style={{ marginBottom: 16 }}
-        />
-      )}
-
       {storedLayout === 'legacy' && (
-        <Alert
-          type="info"
-          showIcon
-          description={t('cfg.stored_layout_legacy')}
-          style={{ marginBottom: 16 }}
-        />
+        <Notice tone="info" title={t('cfg.stored_layout_legacy')} className="config-notice" />
       )}
 
-      {configQuery.isError && (
-        <Alert
-          type="error"
-          showIcon
-          description={t('cfg.load_failed') + ' — ' + t('cfg.load_failed_desc')}
-          action={
-            <Button size="small" type="primary" onClick={() => void configQuery.refetch()}>
-              {t('common.retry')}
-            </Button>
-          }
-          style={{ marginBottom: 16 }}
+      {/* A failed re-read over a document already on screen is a warning above it; a failed
+          first read takes the document's place, so the failure is stated once. */}
+      {configQuery.isError && rawYaml && (
+        <LoadFailure
+          tone="warning"
+          className="config-notice"
+          title={t('cfg.load_failed')}
+          detail={t('cfg.load_failed_desc')}
+          onRetry={() => void configQuery.refetch()}
         />
       )}
 
@@ -310,11 +290,11 @@ export const ConfigPage: React.FC = () => {
           <Skeleton active paragraph={{ rows: 10 }} />
         </Card>
       ) : configQuery.isError && !rawYaml ? (
-        <Card size="small" className="config-card">
-          <div style={{ textAlign: 'center', padding: '40px 0' }}>
-            <Alert type="warning" showIcon description={t('cfg.load_failed_desc')} />
-          </div>
-        </Card>
+        <LoadFailure
+          title={t('cfg.load_failed')}
+          detail={t('cfg.load_failed_desc')}
+          onRetry={() => void configQuery.refetch()}
+        />
       ) : viewMode === 'visual' ? (
         /* Visual mode: sticky section nav, settings canvas, and a balancing
            right gutter — a three-track grid, not two columns. */
@@ -401,11 +381,11 @@ export const ConfigPage: React.FC = () => {
                   editorRef.current
                     .formatDocument()
                     .then(() => {
-                      message.success(t('cfg.source_format_success'));
+                      toast.success(t('cfg.source_format_success'));
                     })
                     .catch((err: unknown) => {
                       const errMsg = err instanceof Error ? err.message : '';
-                      message.error(
+                      toast.error(
                         errMsg
                           ? `${t('cfg.source_format_error')}: ${errMsg}`
                           : t('cfg.source_format_error')
@@ -421,10 +401,10 @@ export const ConfigPage: React.FC = () => {
                 disabled={!rawYaml}
                 onClick={async () => {
                   if (await copyText(rawYaml)) {
-                    message.success(t('cfg.source_copy_success'));
+                    toast.success(t('cfg.source_copy_success'));
                     return;
                   }
-                  message.error(t('cfg.copy_failed'));
+                  toast.error(t('cfg.copy_failed'));
                 }}
               >
                 {t('cfg.source_copy')}
@@ -491,10 +471,10 @@ export const ConfigPage: React.FC = () => {
             icon={<CopyOutlined />}
             onClick={async () => {
               if (await copyText(rawYaml)) {
-                message.success(t('cfg.source_copy_success'));
+                toast.success(t('cfg.source_copy_success'));
                 return;
               }
-              message.error(t('cfg.copy_failed'));
+              toast.error(t('cfg.copy_failed'));
             }}
           >
             {t('cfg.conflict_copy')}
@@ -510,7 +490,7 @@ export const ConfigPage: React.FC = () => {
         ]}
         onCancel={() => setConflictState(null)}
       >
-        <Alert type="error" showIcon description={t('cfg.conflict_desc')} style={{ marginBottom: 16 }} />
+        <Notice tone="error" title={t('cfg.conflict_desc')} className="config-notice" />
       </Modal>
 
     </div>

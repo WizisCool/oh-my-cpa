@@ -38,6 +38,8 @@ export function createIcon(LucideComponent: LucideIcon, defaultClassName?: strin
   return IconComponent;
 }
 
+const SpinningLoader = createIcon(Lucide.LoaderCircle, 'anticon-loading');
+
 export const ApiOutlined = createIcon(Lucide.Plug, 'anticon-api');
 export const AppstoreOutlined = createIcon(Lucide.LayoutGrid, 'anticon-appstore');
 export const ArrowDownOutlined = createIcon(Lucide.ArrowDown, 'anticon-arrow-down');
@@ -92,6 +94,7 @@ export const KeyOutlined = createIcon(Lucide.Key, 'anticon-key');
 export const LayoutOutlined = createIcon(Lucide.PanelRight, 'anticon-layout');
 export const LeftOutlined = createIcon(Lucide.ChevronLeft, 'anticon-left');
 export const LinkOutlined = createIcon(Lucide.Link, 'anticon-link');
+export const LoadingOutlined = (props: AntdIconProps) => <SpinningLoader spin {...props} />;
 export const LockOutlined = createIcon(Lucide.Lock, 'anticon-lock');
 export const LoginOutlined = createIcon(Lucide.LogIn, 'anticon-login');
 export const LogoutOutlined = createIcon(Lucide.LogOut, 'anticon-logout');

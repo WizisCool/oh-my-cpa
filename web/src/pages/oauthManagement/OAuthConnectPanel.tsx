@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  App as AntdApp,
   Button,
   Drawer,
   Input,
@@ -26,6 +25,7 @@ import { useOverlayHistory } from '../../hooks/useOverlayHistory';
 import type { OAuthProviderChoice } from '../oauthProviderLogic';
 import type { OAuthSessionsController } from './useOAuthSessions';
 import styles from './OAuthConnectPanel.module.css';
+import { useToast } from '../../components/feedback';
 
 interface OAuthConnectPanelProps {
   open: boolean;
@@ -47,7 +47,7 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
   sessions,
 }) => {
   const t = useT();
-  const { message } = AntdApp.useApp();
+  const toast = useToast();
   const isDemo = isDemoMode();
   const choice = choices.find((candidate) => candidate.id === selectedProviderId);
   const session = selectedProviderId ? sessions.states[selectedProviderId] : undefined;
@@ -62,9 +62,9 @@ export const OAuthConnectPanel: React.FC<OAuthConnectPanelProps> = ({
   const copyValue = async (value?: string, successKey = 'oauth.link_copied') => {
     if (!value) return;
     if (await copyText(value)) {
-      message.success(t(successKey));
+      toast.success(t(successKey));
     } else {
-      message.error(t('oauth.copy_failed'));
+      toast.error(t('oauth.copy_failed'));
     }
   };
 
