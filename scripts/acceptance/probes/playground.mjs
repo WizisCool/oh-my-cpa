@@ -2,6 +2,7 @@ import { until } from '../harness.mjs';
 
 export function playgroundFixtures() {
   return [
+    [url => url.pathname.endsWith('/runs/active'), () => ({ run: null })],
     [url => url.pathname.endsWith('/management/api-keys'), () => ({ keys: [{ index: 0, key: 'fixture…mask', usage_fingerprint: 'playground-identity', alias: 'Test key', alias_version: 1, length: 20, fingerprint: 'legacy-identity' }], total: 1 })],
     [url => url.pathname.endsWith('/playground/models'), () => ({ models: [{ id: 'vision-alias', call_point: 'vision-alias', vision: 'unknown' }, { id: 'text-only', call_point: 'text-only', vision: 'unknown' }] })],
   ];
@@ -18,15 +19,19 @@ export async function playground({ base, page, check, context }) {
   const calls = [];
   let mode = 'success';
   let cancelled = false;
+  let releaseCancelled;
+  const cancelledRequest = new Promise(resolve => { releaseCancelled = resolve; });
+  await page.route('**/playground/runs/*/cancel', async route => { cancelled = true; releaseCancelled(); await route.fulfill({ json: { is_cancelled: true } }); });
   const external = [];
   context.on('request', request => { if (request.url().startsWith('http') && new URL(request.url()).origin !== new URL(base).origin) external.push(request.url()); });
   await page.route('**/playground/chat', async route => {
-    calls.push(JSON.parse(route.request().postData()));
+    const { recovery_turn, ...request } = JSON.parse(route.request().postData());
+    calls.push(request);
     if (mode === 'wait') {
-      // A cancellable pending fetch exercises the Sender and unmount cleanup;
-      // the Go tests separately assert cancellation reaches the upstream socket.
-      await new Promise(resolve => setTimeout(resolve, 1200));
-      try { await route.fulfill({ contentType: 'text/event-stream', body: frame('delta', { content: 'too late' }) }); } catch { cancelled = true; }
+      // Hold the task until the explicit server cancellation arrives; a subscriber
+      // disconnect on its own is not an upstream cancellation.
+      await cancelledRequest;
+      try { await route.fulfill({ contentType: 'text/event-stream', body: frame('error', { code: 'cancelled' }) }); } catch { cancelled = true; }
       return;
     }
     const answer = mode === 'error' ? 'Partial response' : 'A streamed answer\n\n' + 'Additional detail line.\n\n'.repeat(10) + '![tracking](https://tracking.invalid/x.png)\n<img src="https://tracking.invalid/html.png" onerror="window.__playgroundInjected=1">';
@@ -197,6 +202,7 @@ export async function playground({ base, page, check, context }) {
   });
   const storedSession = (await page.evaluate(async () => (await (await fetch('/omc/api/v1/preferences')).json()).preferences)).playground_session;
   check('the stored session keeps its target after a new conversation', storedSession.model === 'vision-alias' && storedSession.client_key_fingerprint === 'playground-identity', JSON.stringify(storedSession));
+  await verifyPlaygroundRecovery({ base, page, check });
 }
 
 export async function playgroundNarrow({ base, page, check }) {
@@ -226,4 +232,50 @@ export async function playgroundNarrow({ base, page, check }) {
     return { height: frame.getBoundingClientRect().height, hasFootRow: frame.childElementCount > 1 && !isSendInline, isSendInline };
   });
   check('the playground composer has send beside the input and no separate row on a phone', !composer.hasFootRow && composer.isSendInline && composer.height <= 72, JSON.stringify(composer));
+}
+
+
+async function verifyPlaygroundRecovery({ base, page, check }) {
+  let generationCount = 0;
+  let subscriptions = 0;
+  let cancelCount = 0;
+  let active = null;
+  let release;
+  const completion = new Promise(resolve => { release = resolve; });
+  await page.route('**/playground/runs/active', route => route.fulfill({ json: { run: active } }));
+  await page.route('**/playground/runs/*/cancel', route => { cancelCount++; return route.fulfill({ json: { is_cancelled: true } }); });
+  await page.route('**/playground/chat', route => {
+    generationCount++;
+    const request = JSON.parse(route.request().postData());
+    const id = route.request().headers()['x-omc-run-id'];
+    const startedAt = Date.now();
+    active = { id, started_at_ms: startedAt, is_running: true, request: { id, request, keyLabel: 'Test key', user: request.messages.at(-1), reply: '', status: 'running', startedAt, events: [], eventBytes: 0, isTruncated: false } };
+    return route.fulfill({ contentType: 'text/event-stream', body: frame('meta', { started_at_ms: startedAt }) + frame('delta', { content: 'Partial recovery answer' }) });
+  });
+  await page.route('**/playground/runs/*', async route => {
+    if (route.request().method() === 'POST') { cancelCount++; await route.fulfill({ json: { is_cancelled: true } }); return; }
+    if (route.request().url().endsWith('/active')) { await route.fulfill({ json: { run: active } }); return; }
+    subscriptions++;
+    if (subscriptions === 1) { await route.abort('internetdisconnected'); return; }
+    await completion;
+    active = { ...active, is_running: false };
+    try { await route.fulfill({ contentType: 'text/event-stream', body: frame('meta', { started_at_ms: active.started_at_ms }) + frame('delta', { content: 'Recovered playground answer' }) + frame('done', { duration_ms: 1200, finish_reason: 'stop' }) }); } catch { /* The old subscriber was closed by reload. */ }
+  });
+  await page.getByPlaceholder('Enter a message, or paste an image…').fill('Recover playground');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await until(() => subscriptions >= 2, { label: 'Playground to reconnect after a socket error' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Stop', exact: true }).waitFor();
+  await until(() => subscriptions >= 3, { label: 'Playground refresh to subscribe to the same task' });
+  check('Playground reload keeps one generation and does not cancel it', generationCount === 1 && cancelCount === 0, JSON.stringify({ generationCount, subscriptions, cancelCount }));
+  release();
+  await page.getByText('Recovered playground answer', { exact: true }).waitFor();
+  check('Playground replay restores a complete answer without duplicated partial text', await page.getByText('Recovered playground answer', { exact: true }).count() === 1 && await page.getByText('Partial recovery answer', { exact: true }).count() === 0);
+  await until(async () => (await page.evaluate(async () => (await (await fetch('/omc/api/v1/preferences')).json()).preferences)).playground_session?.last_run_id === active.id, { label: 'recovered final result to be persisted' });
+  await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+  await page.locator('[data-testid="playground-empty"]').waitFor();
+  await until(async () => (await page.evaluate(async () => (await (await fetch('/omc/api/v1/preferences')).json()).preferences)).playground_session?.turns?.length === 0, { label: 'new conversation to persist' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Send', exact: true }).waitFor();
+  check('a retained completed journal cannot resurrect a cleared conversation', await page.getByText('Recovered playground answer', { exact: true }).count() === 0 && generationCount === 1);
 }

@@ -70,7 +70,7 @@ export const PlaygroundPage: React.FC = () => {
   const [panelTab, setPanelTab] = React.useState<PanelTab>('parameters');
   const [isPanelOpen, setIsPanelOpen] = React.useState(() => !window.matchMedia(NARROW_VIEWPORT_QUERY).matches);
   const [notice, setNotice] = React.useState('');
-  const { turns, isRunning, send, retry, edit, stop, replaceTurns } = usePlaygroundRun();
+  const { turns, lastRunID, isRunning, send, retry, edit, stop, recover, replaceTurns } = usePlaygroundRun();
 
   // The console's own key list entry, so a key created or renamed on the key page is current here.
   // Only a key with a usage fingerprint can be named to the server, so the rest are not offered.
@@ -100,8 +100,8 @@ export const PlaygroundPage: React.FC = () => {
     const stored = sessionPref.value;
     storedRef.current = stored;
     setParameters(parametersFromSession(stored));
+    replaceTurns(stored.turns ?? [], stored.last_run_id ?? stored.turns?.at(-1)?.id ?? "");
     if (stored.turns?.length) {
-      replaceTurns(stored.turns);
       setSelectedID(stored.turns[stored.turns.length - 1].id);
     }
     setHydration(state => ({ ...state, session: true }));
@@ -132,6 +132,21 @@ export const PlaygroundPage: React.FC = () => {
   }, [target.model, onlyModel]);
 
   const isHydrated = hydration.session && hydration.key && hydration.model;
+  const [isRecoveryChecked, setIsRecoveryChecked] = React.useState(isDemo);
+  const restoreRunTarget = React.useCallback((turn: Turn) => {
+    const request = turn.request;
+    const recovered = { ...request, custom_body: request.custom_body ? JSON.stringify(request.custom_body) : undefined };
+    storedRef.current = recovered;
+    setParameters(parametersFromSession(recovered));
+    const hasKey = keys.data?.some(key => key.usage_fingerprint === request.client_key_fingerprint);
+    setTarget(hasKey ? { fingerprint: request.client_key_fingerprint, model: request.model } : { fingerprint: '', model: '' });
+  }, [keys.data]);
+  React.useEffect(() => {
+    if (isDemo || !hydration.session || !keys.isSuccess) return;
+    const controller = new AbortController();
+    void recover(controller.signal, restoreRunTarget).finally(() => { if (!controller.signal.aborted) setIsRecoveryChecked(true); });
+    return () => controller.abort();
+  }, [isDemo, hydration.session, keys.isSuccess, recover, restoreRunTarget]);
   // A streaming turn changes every 40ms, so nothing is written while one runs. A turn that has just
   // settled is written at once - the reader may reload the moment it ends - and an edit to the
   // parameters waits for typing to pause. A write whose document matches the last one is skipped.
@@ -149,11 +164,11 @@ export const PlaygroundPage: React.FC = () => {
     void persistSession(document);
   }, [persistSession]);
   React.useEffect(() => {
-    if (isDemo || !isHydrated || isRunning) return;
-    pendingRef.current = sessionDocument(target, parameters, turns);
+    if (isDemo || !isHydrated || !isRecoveryChecked || isRunning) return;
+    pendingRef.current = sessionDocument(target, parameters, turns, lastRunID);
     const timer = setTimeout(flushSession, wasRunningRef.current ? 0 : PERSIST_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [isDemo, isHydrated, isRunning, flushSession, target, parameters, turns]);
+  }, [isDemo, isHydrated, isRecoveryChecked, isRunning, flushSession, target, parameters, turns, lastRunID]);
   // Declared after the write above so that, in the commit where a run ends, the write still sees
   // that it was running.
   React.useEffect(() => {
@@ -230,8 +245,8 @@ export const PlaygroundPage: React.FC = () => {
   const runtime = usePlaygroundThreadRuntime({
     turns,
     isRunning,
-    isDisabled: isDemo || !isTargetReady,
-    isSendDisabled: isDemo || !isTargetReady || !customBody.ok,
+    isDisabled: isDemo || !isTargetReady || !isRecoveryChecked,
+    isSendDisabled: isDemo || !isTargetReady || !isRecoveryChecked || !customBody.ok,
     attachments: attachmentAdapter,
     onSend: submit,
     onReload: () => {
@@ -257,7 +272,7 @@ export const PlaygroundPage: React.FC = () => {
   const exportConversation = (format: 'markdown' | 'json') => {
     const now = new Date();
     if (format === 'json') {
-      saveBlob(new Blob([`${JSON.stringify(sessionDocument(target, parameters, turns), null, 2)}\n`], { type: 'application/json' }), exportFileName('omc-playground', 'json', now));
+      saveBlob(new Blob([`${JSON.stringify(sessionDocument(target, parameters, turns, lastRunID), null, 2)}\n`], { type: 'application/json' }), exportFileName('omc-playground', 'json', now));
       return;
     }
     const markdown = playgroundMarkdown(turns.map(turn => ({
@@ -340,7 +355,7 @@ export const PlaygroundPage: React.FC = () => {
           <span className={styles['action-label']}>{t('agent.export')}</span>
         </Button>
       </Dropdown>
-      <Button aria-label={t('pg.new_chat')} icon={<MessageOutlined />} disabled={isRunning || turns.length === 0} onClick={resetConversation}>
+      <Button aria-label={t('pg.new_chat')} icon={<MessageOutlined />} disabled={isRunning || !isRecoveryChecked || turns.length === 0} onClick={resetConversation}>
         <span className={styles['action-label']}>{t('pg.new_chat')}</span>
       </Button>
       <Tooltip title={t('pg.parameters')}>

@@ -1,6 +1,11 @@
 {
   "reference_ms": 1767225600000,
   "responses": {
+    "agent-run-active": {
+      "status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "body": "{\"run\":null}"
+    },
     "agent-session": {
       "status": 200,
       "content_type": "application/json; charset=utf-8",
@@ -325,6 +330,11 @@
       "status": 200,
       "content_type": "application/json; charset=utf-8",
       "body": "{\"models\":[{\"call_point\":\"claude-haiku-4-5\",\"id\":\"claude-haiku-4-5\",\"vision\":\"unknown\"},{\"call_point\":\"claude-opus-4-1\",\"id\":\"claude-opus-4-1\",\"vision\":\"unknown\"},{\"call_point\":\"claude-sonnet-4-5-20250929\",\"id\":\"claude-sonnet-4-5-20250929\",\"vision\":\"unknown\"},{\"call_point\":\"gemini-2.5-flash\",\"id\":\"gemini-2.5-flash\",\"vision\":\"unknown\"},{\"call_point\":\"gemini-2.5-pro\",\"id\":\"gemini-2.5-pro\",\"vision\":\"unknown\"},{\"call_point\":\"gemini-3-pro-preview\",\"id\":\"gemini-3-pro-preview\",\"vision\":\"unknown\"},{\"call_point\":\"gpt-5\",\"id\":\"gpt-5\",\"vision\":\"unknown\"},{\"call_point\":\"gpt-5-codex\",\"id\":\"gpt-5-codex\",\"vision\":\"unknown\"},{\"call_point\":\"gpt-5.1-codex\",\"id\":\"gpt-5.1-codex\",\"vision\":\"unknown\"},{\"call_point\":\"grok-4\",\"id\":\"grok-4\",\"vision\":\"unknown\"},{\"call_point\":\"kimi-k2-0905\",\"id\":\"kimi-k2-0905\",\"vision\":\"unknown\"}]}"
+    },
+    "playground-run-active": {
+      "status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "body": "{\"run\":null}"
     },
     "plugin-config-prompt-redactor": {
       "status": 200,

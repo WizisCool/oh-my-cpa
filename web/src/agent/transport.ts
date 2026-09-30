@@ -1,8 +1,7 @@
 import { EventType } from '@ag-ui/core';
-import { requestResponse } from '../api/client';
 import { buildRunInput, parseAgentEvent } from './protocol';
 import type { AgentEvent, AgentRunRequest } from './protocol';
-import { readSSE } from './sse';
+import { reconnectRun } from './reconnect';
 
 /**
  * Posts a run and yields its events as they arrive.
@@ -12,17 +11,11 @@ import { readSSE } from './sse';
  * `stream_incomplete` rather than being skipped, because a skipped event may be the interrupt the
  * operator has to answer.
  */
-export async function* runAgent(request: AgentRunRequest, signal: AbortSignal): AsyncGenerator<AgentEvent> {
-  const response = await requestResponse('/agent/run', {
-    method: 'POST',
-    headers: { Accept: 'text/event-stream' },
-    body: JSON.stringify(buildRunInput(request)),
-    signal,
+export async function* runAgent(request: AgentRunRequest, signal: AbortSignal, replay: () => void = () => {}, isRecovery = false): AsyncGenerator<AgentEvent> {
+  const frames = reconnectRun({ workspace: 'agent', id: request.runId, signal, replay,
+    ...(isRecovery ? {} : { initial: { method: 'POST', body: JSON.stringify(buildRunInput(request)) } }),
   });
-  if (!response.body || !response.headers.get('content-type')?.startsWith('text/event-stream')) {
-    throw new Error('invalid_stream');
-  }
-  for await (const frame of readSSE(response.body, signal)) {
+  for await (const frame of frames) {
     const event = parseAgentEvent(frame.data);
     if (!event) throw new Error('stream_incomplete');
     yield event;

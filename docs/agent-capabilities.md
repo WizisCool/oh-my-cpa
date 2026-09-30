@@ -182,6 +182,15 @@ reason, and `TestEveryTableIsClassifiedForOperatorQueries` fails until a new tab
 that adds a column able to carry a secret to a readable table adds it to that table's redacted list
 in the same change.
 
+The console draws a query as a normal capability-call row, without a raw-result preview. Agent
+session reads, final snapshots and streamed query receipts omit raw query data; the session DTO
+also omits the private model history and queued model calls. This applies to restored sessions as
+well as new runs. Query status, diagnostics, SQL arguments and timing remain inspectable. The
+full result stays in the server-side conversation for subsequent model rounds and explicit
+`render_chart` / `render_table` calls. This is a browser-preview boundary, not an upstream-data
+restriction: the selected model still receives query rows and may quote them in its answer or
+choose them for a final display.
+
 ### Secrets and OAuth
 
 - Secrets never enter tool arguments. A capability that needs one declares
@@ -268,3 +277,12 @@ the console itself, and rotate the key if that trust changes.
 ### Timezone capabilities
 
 `timezone_get` is a low-risk read returning the optional manual override, deployment timezone and effective IANA timezone. `timezone_set` is a low-risk write accepting `{ "timezone": "Asia/Kuala_Lumpur" }`; an empty string restores the deployment timezone. Both are available to Agent and MCP administrators under the existing capability policy. The write shares the preference repository's validation and commit-before-publication rule, returns `invalid_timezone` for an invalid name, and invalidates `preferences` and `timezone` readers. No secret or OAuth handoff is involved. Tests cover validated writes, reads through both adapters and refusal without changing the runtime calendar.
+
+### Browser connection recovery
+
+Managed Agent execution belongs to the server, not a socket. Console refresh or network recovery
+replays its projected journal and does not invoke capabilities again. Stop calls the authenticated
+run cancellation endpoint; a disconnected subscriber does not signal operator intent. Pending
+approvals, secrets and OAuth continue through their existing server-side handoffs and are never
+automatically decided during recovery. Process restart does not resume uncertain external writes.
+See [ADR 0044](adr/0044-browser-connections-subscribe-to-server-owned-runs.md).

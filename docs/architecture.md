@@ -141,11 +141,18 @@ is persisted, so a run refused before that emits `RUN_ERROR` alone and the conso
 message back to the composer. Each model round is a step; a capability call is announced
 (`TOOL_CALL_START`/`ARGS`/`END`) before it executes and its receipt follows as `TOOL_CALL_RESULT`;
 reasoning (`reasoning_content`, or `reasoning`) streams as reasoning messages and never enters the
-messages later rounds are built from. The run ends with a `STATE_SNAPSHOT` of the stored
+messages later rounds are built from. The run ends with a `STATE_SNAPSHOT` of the console-projected
 conversation and `RUN_FINISHED`, whose outcome is `success` or `interrupt` with one interrupt per
 waiting operation (`approval`, `question`, `secret` or `oauth`, naming the call that raised it), or
 with `RUN_ERROR`; token usage rides on the last event. A resume must name exactly the waiting
 operations, each already decided on the decision endpoint (`confirmation_pending` otherwise).
+
+`internal/api/agent_projection.go` projects session reads and final snapshots into explicit console
+DTOs: model history (`messages`) and queued model calls (`pending`) stay server-side. For
+`database_query`, both the streamed receipt and stored trace omit raw `data` and any `view`, while
+retaining status, diagnostics, arguments and timing. Projection never mutates the persisted
+conversation: the model loop and display tools still resolve the full query result. Answer text
+and explicitly generated display views remain visible and may include data selected by the model.
 
 The turn records its output as ordered `parts` - reasoning, text and capability calls, in arrival
 order, with a new part for each model round - plus its rounds, token usage and the
@@ -2220,6 +2227,35 @@ pipeline and no authentication are behind it, which
 records as a deliberate trade. `docs/ops/cloudflare-demo.md` is the runbook, including
 the account steps no command can perform and the failure modes that look like something
 else.
+
+## Browser-managed run lifetime
+
+`internal/api/browser_runs.go` wraps console Agent and Playground POSTs carrying
+`X-OMC-Run-ID` with a per-workspace, notification-driven replay journal. The existing handlers
+still own validation, inference and capabilities; the wrapper owns detached lifetime, same-id
+admission, replay and explicit cancellation. `GET /{workspace}/runs/active`,
+`GET /{workspace}/runs/{id}` and `POST /{workspace}/runs/{id}/cancel` are console-authenticated
+(`workspace` is `agent` or `playground`). Socket loss never cancels managed execution.
+`internal/app/app.go` joins these tasks before closing dependencies. The journal is bounded to
+4 MiB plus a terminal overflow error, retains the latest completed run for 15 minutes, and has
+15-second socket heartbeats. Its 30-minute run deadline does not override Playground's existing
+10-minute deadline. Replaced/expired ids have a 24-hour, 1,024-entry tombstone admission bound.
+
+`web/src/agent/runConnection.ts` is the injectable transport state machine; `reconnect.ts` binds
+it to the authenticated, subpath-aware API client. It retries GET subscriptions with 500ms-to-8s
+backoff, waits for online events and reconnects 45-second stalled reads. Full replay first resets
+the transient frame. It never repeats an initial generation POST automatically. Cleanup aborts
+subscriptions, while Stop sends the idempotent server cancel command. Agent's persisted session
+includes `active_run_id` when a managed task is running; reading a live stored turn does not mark
+it interrupted. Restarted runtimes still expose stored running turns as interrupted.
+
+`internal/api/playground_run_state.go` builds the bounded recovery turn from the actual request
+and redacts large inline images. The existing frontend preference writer alone persists recovered
+Playground results. `last_run_id` acknowledges completed journals, including after clearing turns,
+so a retained journal cannot recreate a cleared conversation. Retry/edit descriptors identify the
+turn they replace. These are process-local recovery guarantees, not durable execution; a result
+not recovered before journal expiry may never enter the Playground preference. ADR 0044 records
+this boundary and its shutdown behaviour.
 
 ## 14. Model playground
 

@@ -44,7 +44,7 @@ func TestAgentHTTPManagementKeyAndCapabilityBoundary(t *testing.T) {
 	if status != 200 || !strings.Contains(string(body), "keys_list") {
 		t.Fatalf("catalog %d %s", status, body)
 	}
-	for _, path := range []string{"/management/client-api-keys", "/agent/session"} {
+	for _, path := range []string{"/management/client-api-keys", "/agent/session", "/agent/runs/active", "/playground/runs/active", "/agent/runs/private-run", "/playground/runs/private-run"} {
 		status, _ = call("GET", path, "", "management-secret-value")
 		if status != 401 {
 			t.Fatalf("bearer accepted outside capability API: %s %d", path, status)

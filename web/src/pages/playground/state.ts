@@ -75,6 +75,7 @@ export function sessionDocument(
   target: { fingerprint: string; model: string },
   parameters: PlaygroundParameters,
   turns: Turn[],
+  lastRunID?: string,
 ): PlaygroundSession {
   return {
     client_key_fingerprint: target.fingerprint || undefined,
@@ -87,6 +88,7 @@ export function sessionDocument(
     user_agent: parameters.userAgent || undefined,
     custom_body: parameters.customBody || undefined,
     turns: sanitizeTurnsForStorage(turns),
+    ...(lastRunID ? { last_run_id: lastRunID } : {}),
   };
 }
 
@@ -180,6 +182,7 @@ export function hasOmittedImage(turn: Turn): boolean {
 }
 
 export interface PlaygroundSession {
+  last_run_id?: string;
   client_key_fingerprint?: string;
   model?: string;
   system_prompt?: string;
@@ -249,6 +252,7 @@ export function parsePlaygroundSession(raw: unknown): PlaygroundSession | undefi
   }
 
   return {
+    ...(typeof value.last_run_id === 'string' ? { last_run_id: value.last_run_id } : {}),
     ...(clientKeyFingerprint ? { client_key_fingerprint: clientKeyFingerprint } : {}),
     ...(model ? { model } : {}),
     ...(systemPrompt !== undefined ? { system_prompt: systemPrompt } : {}),
@@ -443,7 +447,7 @@ export function applyEvent(turn: Turn, event: StreamEvent, now = Date.now()): Tu
     next.status = 'success'; next.endedAt = now; next.durationMS = event.duration_ms;
     next.firstContentMS = event.first_content_ms ?? undefined; next.finishReason = event.finish_reason;
   }
-  if (event.type === 'error') { next.status = 'error'; next.error = event; next.endedAt = now; next.durationMS = event.duration_ms ?? now - turn.startedAt; next.firstContentMS ??= event.first_content_ms ?? undefined; }
+  if (event.type === 'error') { next.status = event.code === 'cancelled' ? 'cancelled' : 'error'; next.error = event; next.endedAt = now; next.durationMS = event.duration_ms ?? now - turn.startedAt; next.firstContentMS ??= event.first_content_ms ?? undefined; }
   return next;
 }
 

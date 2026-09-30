@@ -10,11 +10,24 @@ export interface SSEFrame {
  * Network chunks split anywhere - inside a multi-byte character, inside a line, between the two
  * newlines that end a frame - so bytes are decoded in streaming mode and lines are only read once
  * complete. Comments (keepalives) and frames without data are skipped; the `id` and `retry` fields
- * are ignored because neither console stream reconnects: a dropped run is re-read from the server's
- * stored state, never replayed.
+ * are ignored: reconnection replays the bounded server journal and resets the
+ * transient frame before folding it, so no partial SSE frame or token is applied twice.
  */
-export async function* readSSE(stream: ReadableStream<Uint8Array>, signal?: AbortSignal): AsyncGenerator<SSEFrame> {
+export async function* readSSE(stream: ReadableStream<Uint8Array>, signal?: AbortSignal, idleMS?: number): AsyncGenerator<SSEFrame> {
   const reader = stream.getReader();
+  const abort = () => { void reader.cancel().catch(() => undefined); };
+  signal?.addEventListener('abort', abort, { once: true });
+  const read = async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        reader.read(),
+        new Promise<never>((_, reject) => {
+          if (idleMS) timer = setTimeout(() => { reject(new TypeError('stream_idle')); abort(); }, idleMS);
+        }),
+      ]);
+    } finally { clearTimeout(timer); }
+  };
   const decoder = new TextDecoder();
   let buffer = '';
   let event: string | undefined;
@@ -40,7 +53,7 @@ export async function* readSSE(stream: ReadableStream<Uint8Array>, signal?: Abor
   try {
     for (;;) {
       if (signal?.aborted) return;
-      const { value, done } = await reader.read();
+      const { value, done } = await read();
       buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
       let newline = buffer.search(/\r\n|\r|\n/);
       while (newline >= 0) {
@@ -64,6 +77,7 @@ export async function* readSSE(stream: ReadableStream<Uint8Array>, signal?: Abor
       }
     }
   } finally {
+    signal?.removeEventListener('abort', abort);
     // A consumer that stops early - a terminal event, an abort - releases the body rather than
     // leaving the connection draining into nothing.
     if (isFinished) reader.releaseLock();

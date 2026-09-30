@@ -34,6 +34,7 @@ import (
 
 type Handler struct {
 	agent           agentState
+	browserRuns     browserRuns
 	playgroundSlots chan struct{}
 	cfg             config.Config
 	repo            *repository.Repository
@@ -177,12 +178,15 @@ func (h *Handler) routes() chi.Router {
 				v1.Get("/capabilities/operations/{id}", h.getCapabilityOperation)
 				v1.Get("/agent/session", h.currentAgent)
 				v1.Post("/agent/session/reset", h.resetAgent)
-				v1.Post("/agent/run", h.runAgent)
+				v1.Post("/agent/run", h.startAgentRun)
 				v1.Get("/agent/operations/{id}", h.getCapabilityOperation)
 				v1.Post("/agent/operations/{id}/decision", h.decideAgentOperation)
 				v1.Post("/agent/operations/{id}/oauth", h.startAgentOAuth)
 				v1.Get("/playground/models", h.listPlaygroundModels)
-				v1.Post("/playground/chat", h.chatPlayground)
+				v1.Post("/playground/chat", h.startPlaygroundRun)
+				v1.Get("/{workspace:agent|playground}/runs/active", h.currentBrowserRun)
+				v1.Get("/{workspace:agent|playground}/runs/{id}", h.subscribeBrowserRun)
+				v1.Post("/{workspace:agent|playground}/runs/{id}/cancel", h.cancelBrowserRun)
 				v1.Post("/instances/default/discover", h.discoverDefault)
 				v1.Get("/resources", h.listResources)
 				v1.Patch("/resources/{id}/override", h.updateResourceOverride)

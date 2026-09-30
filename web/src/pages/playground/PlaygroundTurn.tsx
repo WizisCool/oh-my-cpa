@@ -1,3 +1,4 @@
+import { LiveElapsed } from '../../components/workspace/LiveElapsed';
 import React from 'react';
 import { Button, Tooltip } from 'antd';
 import { ActionBarPrimitive, ComposerPrimitive, MessagePrimitive, useAuiState } from '@assistant-ui/react';
@@ -200,9 +201,9 @@ function TurnFooter({ turn, isLast, canRetry, isReplayable, onInspect, onOpenReq
           <span className={workspace['metric']}><FieldTimeOutlined aria-hidden="true" />{milliseconds(turn.firstContentMS)}</span>
         </Tooltip>
       )}
-      {turn.durationMS !== undefined && (
+      {(turn.status === 'running' || turn.durationMS !== undefined) && (
         <Tooltip title={t('pg.duration')}>
-          <span className={workspace['metric']}><ClockCircleOutlined aria-hidden="true" />{milliseconds(turn.durationMS)}</span>
+          <span className={workspace['metric']}><ClockCircleOutlined aria-hidden="true" />{turn.status === 'running' ? <LiveElapsed startedAtMS={turn.startedAt} isRunning /> : milliseconds(turn.durationMS ?? 0)}</span>
         </Tooltip>
       )}
       {turn.usage?.total_tokens !== undefined && (

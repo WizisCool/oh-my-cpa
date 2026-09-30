@@ -3,9 +3,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { isAbortError } from '../../api/client';
 import { applyAgentEvent, EMPTY_FRAME, invalidatedKeys } from '../../agent/runReducer';
 import type { RunFrame } from '../../agent/runReducer';
+import { cancelRun, discoverRun } from '../../agent/reconnect';
 import { runAgent } from '../../agent/transport';
 import { DISPLAY_TOOLS } from '../../agent/types';
 import type { Conversation } from '../../agent/types';
+import { createID } from '../playground/state';
 import { failureCode } from './api';
 
 /**
@@ -59,9 +61,7 @@ export class RunRejectedError extends Error {
   }
 }
 
-function newRunID(): string {
-  return typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `run-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
+function newRunID(): string { return createID('run'); }
 
 /**
  * Drives one Agent run over AG-UI (ADR 0041).
@@ -82,6 +82,7 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
   const [startedAtMS, setStartedAtMS] = React.useState(0);
 
   const controllerRef = React.useRef<AbortController>();
+  const runIDRef = React.useRef('');
   const publishTimerRef = React.useRef<ReturnType<typeof setTimeout>>();
   // The live frame. Held outside React state so a burst of tokens costs one render per
   // publish interval rather than one per token.
@@ -101,24 +102,29 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
 
   React.useEffect(() => () => {
     if (publishTimerRef.current) clearTimeout(publishTimerRef.current);
-    controllerRef.current?.abort();
+    const controller = controllerRef.current;
+    controller?.abort();
+    controllerRef.current = undefined;
   }, []);
 
   const stop = React.useCallback(() => {
-    controllerRef.current?.abort();
+    const controller = controllerRef.current;
+    if (controller && runIDRef.current) void cancelRun('agent', runIDRef.current, controller.signal).catch(() => {});
   }, []);
 
-  const execute = React.useCallback(async (message: string, resume: string[]) => {
+  const execute = React.useCallback(async (message: string, resume: string[], recoveryID?: string) => {
     const { conversation: current, model, fingerprint, reasoningEffort, language } = optionsRef.current;
     if (controllerRef.current || !current) throw new RunRejectedError('agent_busy', message);
     const isResume = message === '';
+    const runID = recoveryID ?? newRunID();
+    runIDRef.current = runID;
     const controller = new AbortController();
     controllerRef.current = controller;
     frameRef.current = EMPTY_FRAME;
     setFrame(EMPTY_FRAME);
     setIsResuming(isResume);
     setErrorCode('');
-    setStartedAtMS(Date.now());
+    setStartedAtMS(recoveryID ? current.turns.find(turn => turn.status === 'running')?.started_at_ms ?? Date.now() : Date.now());
     setPendingMessage(message);
     setIsRunning(true);
     let rejection: RunRejectedError | undefined;
@@ -126,7 +132,7 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
     try {
       const events = runAgent({
         threadId: current.id,
-        runId: newRunID(),
+        runId: runID,
         ...(isResume ? {} : { message: { id: newRunID(), content: message } }),
         tools: DISPLAY_TOOL_DECLARATIONS,
         language,
@@ -137,7 +143,10 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
           ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
         },
         ...(isResume ? { resume: resume.map(interruptId => ({ interruptId, status: 'resolved' as const })) } : {}),
-      }, controller.signal);
+      }, controller.signal, () => {
+        frameRef.current = EMPTY_FRAME;
+        schedule();
+      }, !!recoveryID);
       for await (const event of events) {
         if (controller.signal.aborted) break;
         frameRef.current = applyAgentEvent(frameRef.current, event);
@@ -146,9 +155,10 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
         for (const key of invalidatedKeys(event)) void queryClient.invalidateQueries({ queryKey: [key] });
         schedule();
       }
+      if (controllerRef.current !== controller) return;
       const settled = frameRef.current;
       if (settled.snapshot) optionsRef.current.onConversation(settled.snapshot);
-      if (!settled.isAccepted && settled.errorCode) {
+      if (!settled.isAccepted && settled.errorCode && !recoveryID) {
         rejection = new RunRejectedError(settled.errorCode, message);
       } else if (settled.errorCode && !settled.snapshot) {
         setErrorCode(settled.errorCode);
@@ -160,7 +170,7 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
       // records it; reporting it as a failure would contradict the reason they pressed it.
       if (!isAbortError(cause) && !controller.signal.aborted) {
         const code = failureCode(cause);
-        if (!frameRef.current.isAccepted) rejection = new RunRejectedError(code, message);
+        if (!frameRef.current.isAccepted && !recoveryID) rejection = new RunRejectedError(code, message);
         else setErrorCode(code);
       }
     } finally {
@@ -168,6 +178,8 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
         clearTimeout(publishTimerRef.current);
         publishTimerRef.current = undefined;
       }
+      if (controllerRef.current !== controller) return;
+      controller.abort();
       const settled = frameRef.current;
       frameRef.current = EMPTY_FRAME;
       setFrame(EMPTY_FRAME);
@@ -182,6 +194,22 @@ export function useAgentRun(options: AgentRunOptions): AgentRunControls {
     }
     if (rejection) throw rejection;
   }, [queryClient, schedule]);
+
+  React.useEffect(() => {
+    if (controllerRef.current || !options.conversation) return;
+    if (options.conversation.active_run_id) {
+      void execute('', [], options.conversation.active_run_id).catch(() => {});
+      return;
+    }
+    if (!options.conversation.turns.some(turn => turn.status === 'running')) return;
+    const controller = new AbortController();
+    void discoverRun('agent', controller.signal).then(active => {
+      if (active && !controller.signal.aborted && !controllerRef.current) {
+        void execute('', [], active.id).catch(() => {});
+      }
+    }).catch(() => {});
+    return () => controller.abort();
+  }, [options.conversation, execute]);
 
   return {
     isRunning,

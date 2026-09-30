@@ -70,7 +70,7 @@ const CONSOLE_ROUTES = [
 const ROUTE_READS = {
   '/dashboard': ['overview', 'pricing-attention', 'dashboard-24h', 'dashboard-tail-24h', 'dashboard-models-call-24h', 'dashboard-models-model-24h', 'dashboard-token-heatmap-utc'],
   '/quick-start': ['overview', 'providers', 'api-keys'],
-  '/playground': ['api-keys', 'playground-models'],
+  '/playground': ['api-keys', 'playground-models', 'playground-run-active'],
   '/agent': ['api-keys', 'capabilities', 'agent-session'],
   '/ai-providers': ['providers', 'dashboard-providers-24h'],
   '/api-keys': ['api-keys', 'client-key-aliases'],

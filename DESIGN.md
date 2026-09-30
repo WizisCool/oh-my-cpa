@@ -399,7 +399,8 @@ the configuration workbench.
   diagnostics (metrics grid, request and response code blocks, labelled cURL copy).
 - **Agent**: a capability directory as an open list grouped read / write / destructive with pips,
   each row a localized title with its mono identifier beside it;
-  call details as the panel's second tab;
+  call details as the panel's second tab; database queries keep their status, SQL arguments and
+  timing there, while raw query rows have no inline toggle or details preview;
   a turn drawn in the order it happened - reasoning, text and capability calls as segments, runs of
   calls folded into a "Used N capabilities" chain that opens while the turn runs or waits and folds when it is done, each call one row (status square, title, mono
   identifier, arguments in brief, status in words, duration) with a `--warn` attention glyph when it
@@ -430,3 +431,12 @@ Token Trend preserves measured zero buckets as continuous baseline segments.
 ## Time zone picker
 
 Use the shared controlled `TimeZoneSelect`: actual IANA names, a left-aligned name column and a right-aligned tabular UTC-offset column. Pin the server zone first and place its localized source label below the name. Field and popup share a width; narrow screens use the full settings-row width. Keep the helper text to “Used for timestamps and calendar-day totals.” Fixed 64-pixel virtual rows reserve indicator space uniformly. Search supports city/zone names and UTC offsets. Reuse existing color, typography and motion tokens.
+
+### Live elapsed labels and Stop
+
+Agent activity, running capability rows and Playground running turns use isolated `LiveElapsed`
+labels. A shared visible-only animation-frame clock quantizes milliseconds to 10ms and seconds
+to 0.1s; a formatted external-store snapshot limits second-scale label renders to 10Hz without
+rerendering the page or transcript. Hidden documents and settled labels schedule no frames.
+The Stop button uses the existing `--border` / `--surface` tokens and no shadow, with the existing
+`--danger` border on hover/active. This changes component usage, not the palette or token mapping.

@@ -511,3 +511,32 @@ func TestRuntimeLongTaskCompletesOrCancelsWithoutCountCeilings(t *testing.T) {
 		})
 	}
 }
+
+func TestRuntimeCurrentPreservesAnActuallyRunningTurn(t *testing.T) {
+	runtime := newTestRuntime(t)
+	entered, release := make(chan struct{}), make(chan struct{})
+	runtime.Client = func(context.Context, string) (ModelClient, error) {
+		return modelFunc(func(context.Context, string, []gateway.AgentMessage, []gateway.AgentTool, func(gateway.Event) error) (gateway.AgentReply, error) {
+			close(entered)
+			<-release
+			return gateway.AgentReply{Content: "complete"}, nil
+		}), nil
+	}
+	completed := make(chan error, 1)
+	go func() {
+		completed <- runtime.Run(context.Background(), Input{Message: "hi", Model: "fixture", Fingerprint: "key"}, func(Event) error { return nil })
+	}()
+	<-entered
+	current, err := runtime.Current(context.Background())
+	close(release)
+	if runErr := <-completed; runErr != nil {
+		t.Fatal(runErr)
+	}
+	if err != nil || len(current.Turns) != 1 || current.Turns[0].Status != "running" {
+		t.Fatalf("live session was interrupted: %#v %v", current, err)
+	}
+	current, err = runtime.Current(context.Background())
+	if err != nil || current.Turns[0].Status != "success" {
+		t.Fatalf("completed: %#v %v", current, err)
+	}
+}

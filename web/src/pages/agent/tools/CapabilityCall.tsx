@@ -5,14 +5,14 @@ import { useI18n } from '../../../i18n';
 import { capabilityTitle } from '../../../i18n/capabilities';
 import type { Trace } from '../../../agent/types';
 import { argumentSummary, callDuration, callStatusKey, formatDuration, statusTone } from '../state';
-import { useLiveNow } from './useLiveNow';
+import { LiveElapsed } from '../../../components/workspace/LiveElapsed';
 import styles from '../AgentPage.module.css';
 
 export interface CapabilityCallProps {
   trace: Trace;
   isSelected: boolean;
   onSelect: (id: string) => void;
-  /** Drawn under the row: an approval card, an inline result. */
+  /** Drawn under the row: an approval card. */
   children?: React.ReactNode;
 }
 
@@ -21,15 +21,14 @@ export interface CapabilityCallProps {
  * identifier, the arguments in brief, and how long it took.
  *
  * The row appears the moment the call starts, before it has a result, so a slow capability reads
- * as running rather than as nothing happening. The arguments and the raw result are one click away
+ * as running rather than as nothing happening. Arguments and permitted results are one click away
  * in the side panel's details tab; the transcript keeps only what an operator scans.
  */
 export const CapabilityCall = React.memo(function CapabilityCall({ trace, isSelected, onSelect, children }: CapabilityCallProps) {
   const { t } = useI18n();
   const isRunning = trace.result.status === 'running';
-  const nowMS = useLiveNow(isRunning);
   const tone = statusTone(trace.result.status, trace.result.code);
-  const duration = callDuration(trace, isRunning ? nowMS : undefined);
+  const duration = callDuration(trace);
   const summary = argumentSummary(trace.arguments);
   const title = capabilityTitle(trace.name, t);
   const needsAttention = tone === 'warning';
@@ -50,7 +49,9 @@ export const CapabilityCall = React.memo(function CapabilityCall({ trace, isSele
         {summary && <span className={styles['call-args']} title={summary}>{summary}</span>}
         <span className={styles['call-spacer']} />
         <span className={styles['call-status']} data-tone={tone}>{t(callStatusKey(trace))}</span>
-        {duration !== undefined && <span className={styles['call-duration']}>{formatDuration(duration)}</span>}
+        {(isRunning || duration !== undefined) && <span className={styles['call-duration']}>
+          {isRunning ? <LiveElapsed startedAtMS={trace.started_at_ms ?? Date.now()} isRunning /> : formatDuration(duration!)}
+        </span>}
       </button>
       {trace.result.status === 'error' && trace.result.code && (
         <div className={styles['call-failure']}>

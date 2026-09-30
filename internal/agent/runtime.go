@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/oh-my-cpa/oh-my-cpa/internal/capability"
@@ -185,12 +186,13 @@ type ModelClient interface {
 	StreamAgent(ctx context.Context, model string, reasoningEffort string, messages []gateway.AgentMessage, tools []gateway.AgentTool, emit func(gateway.Event) error) (gateway.AgentReply, error)
 }
 type Runtime struct {
-	Executor *capability.Executor
-	Store    repository.AgentStore
-	Location func() *time.Location
-	Slots    chan struct{}
-	Client   func(context.Context, string) (ModelClient, error)
-	mu       sync.Mutex
+	Executor  *capability.Executor
+	Store     repository.AgentStore
+	Location  func() *time.Location
+	Slots     chan struct{}
+	Client    func(context.Context, string) (ModelClient, error)
+	mu        sync.Mutex
+	isRunning atomic.Bool
 }
 
 var PRINCIPAL = capability.Principal{ID: "administrator", Adapter: "agent", IsAdmin: true}
@@ -202,7 +204,7 @@ func (r *Runtime) Current(ctx context.Context) (Conversation, error) {
 		return Conversation{ID: "", Turns: []Turn{}}, nil
 	}
 	conversation.Revision = revision
-	if len(conversation.Turns) > 0 && conversation.Turns[len(conversation.Turns)-1].Status == "running" {
+	if !r.isRunning.Load() && len(conversation.Turns) > 0 && conversation.Turns[len(conversation.Turns)-1].Status == "running" {
 		conversation.Turns[len(conversation.Turns)-1].Status = "interrupted"
 		conversation.Turns[len(conversation.Turns)-1].Code = "operation_outcome_unknown"
 	}
@@ -271,6 +273,8 @@ func (r *Runtime) Run(ctx context.Context, input Input, emit func(Event) error) 
 	if err != nil {
 		return err
 	}
+	r.isRunning.Store(true)
+	defer r.isRunning.Store(false)
 	if input.Revision != conversation.Revision || input.ConversationID != conversation.ID {
 		return repository.ErrAgentConflict
 	}

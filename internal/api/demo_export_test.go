@@ -117,6 +117,8 @@ func demoExportCases() []demoExportCase {
 		{Name: "providers", Path: "/api/v1/management/providers"},
 		{Name: "providers-with-keys", Path: "/api/v1/management/providers?include_keys=true"},
 		{Name: "agent-session", Path: "/api/v1/agent/session"},
+		{Name: "agent-run-active", Path: "/api/v1/agent/runs/active"},
+		{Name: "playground-run-active", Path: "/api/v1/playground/runs/active"},
 		{Name: "capabilities", Path: "/api/v1/capabilities"},
 		{Name: "api-keys", Path: "/api/v1/management/api-keys"},
 		{Name: "playground-models", Route: "/api/v1/playground/models", From: demoExportPlaygroundModelsPath},

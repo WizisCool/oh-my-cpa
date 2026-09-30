@@ -1,12 +1,12 @@
 /**
- * The Agent's stored document, as the server persists and returns it.
+ * The Agent's console document, projected from the server's stored conversation.
  *
  * These types belong to OMC rather than to any UI framework or wire protocol: the server's
- * `internal/agent` package defines the shape, the AG-UI stream carries it as a `STATE_SNAPSHOT`,
+ * API projects the stored `internal/agent` conversation, AG-UI carries it as a `STATE_SNAPSHOT`,
  * and the page renders it. A change of chat framework or transport leaves this module alone.
  */
 
-/** The executor envelope a capability returns, as the agent sees it. */
+/** The console's capability receipt; raw database query data remains server-side. */
 export interface CapabilityReceipt {
   status: string;
   code?: string;
@@ -78,6 +78,7 @@ export interface Turn {
 }
 
 export interface Conversation {
+  active_run_id?: string;
   id: string;
   revision: number;
   model: string;

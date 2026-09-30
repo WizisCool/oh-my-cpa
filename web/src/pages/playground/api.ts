@@ -1,24 +1,20 @@
-import { requestResponse, ApiError } from '../../api/client';
-import { readSSE } from '../../agent/sse';
+import { ApiError } from '../../api/client';
+import { reconnectRun } from '../../agent/reconnect';
 import { PLAYGROUND_EVENT_TYPES } from './state';
 import type { ChatRequest, StreamEvent } from './state';
 
-export async function streamChat(request: ChatRequest, signal: AbortSignal, onEvent: (event: StreamEvent) => void): Promise<void> {
-  const response = await requestResponse('/playground/chat', { method: 'POST', headers: { Accept: 'text/event-stream' }, body: JSON.stringify(request), signal });
-  if (!response.body || !response.headers.get('content-type')?.startsWith('text/event-stream')) throw new Error('invalid_gateway_response');
-  let hasTerminalEvent = false;
-  // The shared reader handles fragmented UTF-8 and SSE framing; OMC retains ownership of
-  // authentication and cancellation instead of letting an SDK retry paid requests.
-  for await (const frame of readSSE(response.body, signal)) {
+export async function streamChat(request: ChatRequest, signal: AbortSignal, onEvent: (event: StreamEvent) => void, run: { id: string; turn?: unknown; replay: () => void; isRecovery?: boolean }): Promise<void> {
+  const frames = reconnectRun({ workspace: 'playground', id: run.id, signal, replay: run.replay,
+    ...(run.isRecovery ? {} : { initial: { method: 'POST', body: JSON.stringify({ ...request, recovery_turn: run.turn }) } }),
+  });
+  for await (const frame of frames) {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
     if (!frame.event || !frame.data) continue;
     if (!(PLAYGROUND_EVENT_TYPES as readonly string[]).includes(frame.event)) throw new Error('invalid_gateway_response');
     const event = { ...JSON.parse(frame.data), type: frame.event } as StreamEvent;
     onEvent(event);
-    if (event.type === 'done' || event.type === 'error') { hasTerminalEvent = true; break; }
+    if (event.type === 'done' || event.type === 'error') return;
   }
-  if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
-  if (!hasTerminalEvent) throw new Error('stream_incomplete');
 }
 export function failureCode(error: unknown): string {
   if (error instanceof ApiError) {

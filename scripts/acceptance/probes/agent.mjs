@@ -227,7 +227,7 @@ export async function agentStream({ base, page, check }) {
     // thread's own transient renders out.
     const isInsideRunningMessage = node => {
       const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
-      return Boolean(element?.closest?.('[data-testid="agent-running"]'));
+      return !element?.closest?.('[data-live-elapsed]') && Boolean(element?.closest?.('[data-testid="agent-running"]'));
     };
     new MutationObserver(records => {
       for (const record of records) {
@@ -253,9 +253,10 @@ export async function agentNarrow({ base, page, check }) {
   // that line used to size the call chain - and with it the whole transcript - so a sideways swipe
   // on a phone dragged the conversation off the screen.
   const longValue = 'a-value-without-any-break-'.repeat(12);
+  const privateQueryCell = 'private-query-cell-not-for-preview';
   await page.route('**/agent/session', route => route.fulfill({ json: { ...initial(), revision: 2, turns: [
     { id: 'turn-wide', user: 'Which provider fails most?', reply: 'Checked.', parts: [{ type: 'tool', trace_id: 'call-wide' }, { type: 'text', content: 'Checked.' }], status: 'success', started_at_ms: Date.now() - 900, ended_at_ms: Date.now(), traces: [
-      { id: 'call-wide', name: 'database_query', arguments: JSON.stringify({ sql: `select '${longValue}'` }), result: { status: 'success', data: { columns: ['provider'], rows: [[longValue]], is_truncated: false, detail: longValue } } },
+      { id: 'call-wide', name: 'database_query', arguments: JSON.stringify({ sql: `select '${longValue}'` }), result: { status: 'success', data: { columns: ['provider'], rows: [[privateQueryCell]], is_truncated: false, detail: longValue } } },
     ] },
   ] } }));
   await page.goto(`${base}/agent`, { waitUntil: 'domcontentloaded' });
@@ -264,6 +265,7 @@ export async function agentNarrow({ base, page, check }) {
   const chain = page.locator('[data-testid="agent-chain"]');
   if (await page.locator('[data-testid="agent-trace"]').count() === 0) await chain.getByRole('button').first().click();
   await page.locator('[data-testid="agent-trace"]').first().waitFor();
+  check('a database query stays a call row without a result preview', await page.locator('[data-testid="agent-trace"]').first().getByRole('button').count() === 1 && await page.getByText(privateQueryCell, { exact: false }).count() === 0);
   // scrollWidth counts content past a clipped edge too, so this proves nothing is wider than the
   // column rather than only that the overflow is hidden.
   const transcript = await page.locator('[data-testid="agent-transcript"]').evaluate(box => ({ scroll: box.scrollWidth, client: box.clientWidth }));
@@ -282,6 +284,12 @@ export async function agentNarrow({ base, page, check }) {
   await page.goBack();
   await until(async () => await page.locator('[data-testid="agent-directory"]:visible').count() === 0);
   check('Back dismisses the side panel without navigating', new URL(page.url()).pathname.endsWith('/agent'));
+  await page.locator('[data-testid="agent-trace"]').first().getByRole('button').first().click();
+  const details = page.locator('[data-testid="agent-details"]');
+  await details.waitFor();
+  check('query details omit raw results from an older session', !(await details.innerText()).includes(privateQueryCell));
+  await page.goBack();
+  await until(async () => await page.locator('[data-testid="agent-details"]:visible').count() === 0);
 }
 
 /**
@@ -337,6 +345,26 @@ export async function agentLive({ base, page, check }) {
   check('a single-line user message has compact vertical padding', bubble < 50, `height=${bubble}`);
   await page.getByRole('button', { name: 'Stop', exact: true }).waitFor();
   check('an empty running composer shows stop without a queue button', await page.getByRole('button', { name: 'Queue', exact: true }).count() === 0);
+  await page.mouse.move(0, 0);
+  const stopStyle = await page.getByRole('button', { name: 'Stop', exact: true }).evaluate(element => {
+    const style = getComputedStyle(element);
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--border)'; element.append(probe);
+    const expected = getComputedStyle(probe).color; probe.remove();
+    return { border: style.borderTopColor, expected, shadow: style.boxShadow };
+  });
+  check('light Stop uses the neutral token border without a black shadow', stopStyle.border === stopStyle.expected && stopStyle.shadow === 'none', JSON.stringify(stopStyle));
+  const elapsedSamples = await page.locator('[data-testid="agent-activity"] [data-live-elapsed]').evaluate(element => new Promise(resolve => {
+    const samples = [];
+    const observer = new MutationObserver(() => {
+      samples.push({ text: element.textContent, at: performance.now() });
+      if (samples.length >= 8 && samples.filter(sample => /^\d+\.\ds$/.test(sample.text)).length >= 3) { observer.disconnect(); resolve(samples); }
+    });
+    observer.observe(element, { subtree: true, characterData: true, childList: true });
+  }));
+  const seconds = elapsedSamples.filter(sample => /^\d+\.\ds$/.test(sample.text));
+  check('live elapsed changes in tenths instead of whole seconds', seconds.length >= 3 && seconds.every(sample => /^\d+\.\ds$/.test(sample.text)) && seconds.slice(1).every((sample, index) => Math.abs(parseFloat(sample.text) - parseFloat(seconds[index].text) - 0.1) < 0.01), JSON.stringify(elapsedSamples));
+
 
   await input.fill('And the day before?');
   await page.getByRole('button', { name: 'Queue', exact: true }).waitFor();
@@ -368,6 +396,7 @@ export async function agentLive({ base, page, check }) {
   const details = page.locator('[data-testid="agent-details"]');
   await details.getByText('Arguments', { exact: true }).waitFor();
   check('a call opens its arguments and result in the details tab', (await details.innerText()).includes('group_by') && (await details.innerText()).includes('failed'), await details.innerText());
+  await verifyAgentRecovery({ base, page, check });
 }
 
 /**
@@ -471,4 +500,43 @@ export async function agentQuestion({ base, page, check }) {
     && JSON.stringify(answers) === JSON.stringify([{ selected: ['Last 24 hours'], text: '' }, { selected: ['OpenAI'], text: 'Exclude test keys' }]), JSON.stringify(decisions));
   check('answering resumes the question\'s interrupt and returns the composer', runs.length === 2 && runs[1].messages.length === 0
     && runs[1].resume?.[0]?.interruptId === 'question-test' && await page.getByLabel('Describe an OMC query or action').count() === 1, JSON.stringify(runs[1]));
+}
+
+
+async function verifyAgentRecovery({ base, page, check }) {
+  let generationCount = 0;
+  let subscriptionCount = 0;
+  let cancelCount = 0;
+  let runID;
+  let conversation = initial();
+  let release;
+  const completion = new Promise(resolve => { release = resolve; });
+  await page.route('**/agent/session', route => route.fulfill({ json: conversation }));
+  await page.route('**/agent/runs/*/cancel', route => { cancelCount++; return route.fulfill({ json: { is_cancelled: true } }); });
+  await page.route('**/agent/run', route => {
+    generationCount++;
+    runID = route.request().headers()['x-omc-run-id'];
+    conversation = { ...initial(), active_run_id: runID, revision: 2, turns: [{ id: 'recover-turn', user: 'Recover this run', reply: '', status: 'running', traces: [], started_at_ms: Date.now() }] };
+    return route.fulfill({ contentType: 'text/event-stream', body: sse([started('recover-turn', runID), ...text('recover-message', 'Partial answer')]) });
+  });
+  await page.route('**/agent/runs/*', async route => {
+    if (route.request().method() === 'POST') { cancelCount++; await route.fulfill({ json: { is_cancelled: true } }); return; }
+    subscriptionCount++;
+    if (subscriptionCount === 1) { await route.abort('internetdisconnected'); return; }
+    await completion;
+    const finishedConversation = { ...conversation, active_run_id: undefined, revision: 3, turns: [{ ...conversation.turns[0], reply: 'Recovered complete.', status: 'success', ended_at_ms: Date.now() }] };
+    conversation = finishedConversation;
+    try { await route.fulfill({ contentType: 'text/event-stream', body: sse([started('recover-turn', runID), ...text('recover-message', 'Recovered complete.'), snapshot(finishedConversation), finished([], runID)]) }); } catch { /* The old subscriber was closed by reload. */ }
+  });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByLabel('Describe an OMC query or action').fill('Recover this run');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await until(() => subscriptionCount >= 2, { label: 'the failed subscription to reconnect' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Stop', exact: true }).waitFor();
+  await until(() => subscriptionCount >= 3, { label: 'refresh to attach to the original run' });
+  check('Agent refresh reattaches without sending Stop or starting another model call', generationCount === 1 && cancelCount === 0, JSON.stringify({ generationCount, cancelCount, subscriptionCount }));
+  release();
+  await page.getByText('Recovered complete.', { exact: true }).waitFor();
+  check('Agent replay replaces partial text and restores one complete answer', await page.getByText('Recovered complete.', { exact: true }).count() === 1 && await page.getByText('Partial answer', { exact: true }).count() === 0 && generationCount === 1);
 }

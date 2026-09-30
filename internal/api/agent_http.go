@@ -168,7 +168,15 @@ func (h *Handler) currentAgent(writer http.ResponseWriter, request *http.Request
 		writePlaygroundError(writer, 500, "session_unavailable")
 		return
 	}
-	writeJSON(writer, 200, conversation)
+	projected := agentConversationForConsole(&conversation)
+	if run := h.browserRuns.find("agent", ""); run != nil {
+		run.mu.Lock()
+		if !run.isDone {
+			projected.ActiveRunID = run.id
+		}
+		run.mu.Unlock()
+	}
+	writeJSON(writer, 200, projected)
 }
 func (h *Handler) resetAgent(writer http.ResponseWriter, request *http.Request) {
 	if !h.readyAgent(writer) {
@@ -311,10 +319,20 @@ func translateAgentEvent(translator *agui.Translator, model string, event agent.
 		if len(event.Trace.View) > 0 {
 			metadata["view"] = event.Trace.View
 		}
-		return translator.ToolResult(event.Trace.ID, event.Content, metadata)
+		content := event.Content
+		if event.Trace.Name == "database_query" {
+			delete(metadata, "view")
+			trace := agentTraceForConsole(*event.Trace)
+			receipt, err := json.Marshal(trace.Result)
+			if err != nil {
+				return err
+			}
+			content = string(receipt)
+		}
+		return translator.ToolResult(event.Trace.ID, content, metadata)
 	case "finished":
 		conversation := event.Conversation
-		if err := translator.Snapshot(conversation); err != nil {
+		if err := translator.Snapshot(agentConversationForConsole(conversation)); err != nil {
 			return err
 		}
 		turn := conversation.Turns[len(conversation.Turns)-1]

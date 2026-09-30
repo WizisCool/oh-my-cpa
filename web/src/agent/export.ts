@@ -51,21 +51,6 @@ export function viewToMarkdown(view: Pick<DisplayView, 'title' | 'columns' | 'ro
   return `**${markdownCell(view.title)}**\n\n${rowsToMarkdown(view.columns, view.rows)}`;
 }
 
-/**
- * The answer's export: its text first, then the figures only a successful turn publishes, then any
- * failure. Display calls stay in the call list as work; the figures repeat the rows they froze.
- */
-/** A `database_query` result - columns and positional rows - as the table shape the exports use. */
-export function queryResultTable(data: unknown): Pick<DisplayView, 'columns' | 'rows'> | undefined {
-  const value = data as { columns?: unknown; rows?: unknown } | undefined;
-  if (!Array.isArray(value?.columns) || !Array.isArray(value.rows)) return undefined;
-  const columns = value.columns.map(String);
-  const rows = value.rows.flatMap(row => (Array.isArray(row)
-    ? [Object.fromEntries(columns.map((column, index) => [column, (row[index] ?? null) as DisplayView['rows'][number][string]]))]
-    : []));
-  return { columns, rows };
-}
-
 /** `omc-agent-20260929-153012.md`: sortable, free of characters a file system refuses. */
 export function exportFileName(prefix: string, extension: string, at: Date): string {
   const pad = (value: number) => String(value).padStart(2, '0');

@@ -18,10 +18,10 @@ function prettyJSON(text: string | undefined): string {
 }
 
 /**
- * One call, in full: what the model asked for, what the model was told, and what it ran against.
+ * One call's permitted audit details: its arguments, outcome and explicit display.
  *
- * The transcript keeps a call to one row; the arguments and the result live here so an operator can
- * audit a call without the answer being buried under JSON. "What the model received" is shown
+ * The transcript keeps a call to one row; permitted results live here without burying the answer
+ * under JSON. Raw database query results stay server-side. "What the model received" is shown
  * separately from the data because they differ for display calls: the model gets a small receipt,
  * while the rows it drew are frozen on the call.
  */
@@ -35,7 +35,7 @@ export function CallDetails({ trace }: { trace: Trace | undefined }) {
     );
   }
   const duration = callDuration(trace);
-  const received = trace.result.status === 'running' || trace.result.status === 'pending'
+  const received = trace.name === 'database_query' || trace.result.status === 'running' || trace.result.status === 'pending'
     ? undefined
     : JSON.stringify(trace.result, null, 2);
   return (
@@ -83,7 +83,7 @@ export function CallDetails({ trace }: { trace: Trace | undefined }) {
           <CodeBlock lang="json" block>{received}</CodeBlock>
         </section>
       )}
-      {trace.view && (
+      {trace.name !== 'database_query' && trace.view && (
         <section className={styles['details-section']}>
           <h3 className={workspace['section-title']}>{t('agent.details.view')}</h3>
           <p className={styles['details-note']}>

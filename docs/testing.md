@@ -97,6 +97,14 @@ Never add a skip switch or narrow a planner rule to make a slow run go away. If 
 selection is wider than the change warrants, add a path rule or a scenario mapping,
 with a test in `scripts/ui-impact.test.mjs` or `scripts/check-ui-plan.test.mjs`.
 
+Agent/Playground recovery assertions belong at the lowest boundary that owns the behaviour:
+channel-driven facade tests for execution lifetime and replay, injectable transport logic tests
+for connection failures, and the existing `agent-live` / `playground` probes for actual browser
+reload and rendering. Live elapsed labels are independent external-store consumers: their clock
+and hidden-tab suspension are logic tests, while the Agent probe checks visible tenths and the
+light Stop border. Stream-coalescing probes exclude only elapsed-label mutations, not answer
+mutations, because the clock does not publish through the transcript's run hook.
+
 ## 4. When CI fails
 
 - Probe shards upload `tmp/probe-failure/`: for every failed scenario, whether a check

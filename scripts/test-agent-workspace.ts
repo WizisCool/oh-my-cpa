@@ -42,7 +42,7 @@ import type { RunFrame } from '../web/src/agent/runReducer.ts';
 import { buildRunInput, parseAgentEvent } from '../web/src/agent/protocol.ts';
 import type { AgentEvent } from '../web/src/agent/protocol.ts';
 import { readSSE } from '../web/src/agent/sse.ts';
-import { conversationMarkdown, csvCell, exportFileName, playgroundMarkdown, queryResultTable, rowsToMarkdown, turnAnswerMarkdown, viewToCSV } from '../web/src/agent/export.ts';
+import { conversationMarkdown, csvCell, exportFileName, playgroundMarkdown, rowsToMarkdown, turnAnswerMarkdown, viewToCSV } from '../web/src/agent/export.ts';
 import type { ExportLabels } from '../web/src/agent/export.ts';
 import { agentThreadMessages, appendMessageText, mergeLiveTurn, storedMessages, toolCallPart, turnMessageStatus } from '../web/src/pages/agent/thread.ts';
 
@@ -473,11 +473,6 @@ check('a Markdown table neutralises pipes and line breaks inside cells', () => {
   assert.equal(rowsToMarkdown(['k'], [{ k: 'a|b\nc' }]), '| k |\n| --- |\n| a\\|b c |');
 });
 
-check('a query result becomes a table by its column names', () => {
-  assert.deepEqual(queryResultTable({ columns: ['provider', 'n'], rows: [['p', 3], 'junk'] }), { columns: ['provider', 'n'], rows: [{ provider: 'p', n: 3 }] });
-  assert.equal(queryResultTable({ rows: [] }), undefined);
-});
-
 check('an answer exports its text, its charts as data and its calls in brief, without reasoning', () => {
   const answer = turnAnswerMarkdown({
     status: 'error',
@@ -542,4 +537,11 @@ check('an agent category axis keeps model names horizontal and ellipsises them',
   assert.equal(axis.x.labelAutoHide, true);
   assert.equal(axis.x.labelFormatter('gpt-4'), 'GPT-4');
   assert.equal(axis.y.labelFormatter(1200), '1,200');
+});
+
+
+check('an unavailable recovery journal names the recovery boundary rather than an upstream outage', () => {
+  for (const code of ['run_not_found', 'run_expired']) assert.equal(failureKey(code), 'workspace.error.run_missing');
+  assert.equal(failureKey('authentication_required'), 'agent.error.session');
+  assert.equal(failureKey('response_too_large'), 'agent.error.budget');
 });

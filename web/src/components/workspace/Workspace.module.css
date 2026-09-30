@@ -833,6 +833,16 @@
   height: 32px;
   padding: 0;
   color: var(--danger);
+  border-color: var(--border);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.stop-button:global(.ant-btn):hover,
+.stop-button:global(.ant-btn):active {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: var(--surface);
 }
 
 .stop-glyph {

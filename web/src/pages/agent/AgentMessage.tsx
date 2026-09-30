@@ -22,7 +22,7 @@ import { failureKey, formatClock, formatDuration, isAwaitingAnswer, statusTone, 
 import type { AgentMessageCustom } from './thread';
 import { useAgentView } from './tools/AgentViewContext';
 import { ToolFallback } from './tools/registry';
-import { useLiveNow } from './tools/useLiveNow';
+import { LiveElapsed } from '../../components/workspace/LiveElapsed';
 import styles from './AgentPage.module.css';
 
 // User text is plain content, not a paragraph with browser-default vertical margins.
@@ -82,7 +82,6 @@ function ChainGroup({ group, children }: { group: GroupPart; children: React.Rea
 function ActivityStrip() {
   const { t } = useI18n();
   const { activity } = useAgentView();
-  const nowMS = useLiveNow(!!activity);
   if (!activity) return null;
   const label = activity.runningCall
     ? t('agent.activity.calling', { name: capabilityTitle(activity.runningCall, t) })
@@ -94,7 +93,7 @@ function ActivityStrip() {
       <span className={styles['activity-mark']} aria-hidden="true" />
       {activity.round > 0 && <span className={styles['activity-round']}>{t('agent.activity.round', { round: String(activity.round) })}</span>}
       <span className={styles['activity-label']}>{label}</span>
-      <span className={workspace['metric']}>{formatDuration(Math.max(0, nowMS - activity.startedAtMS))}</span>
+      <span className={workspace['metric']}><LiveElapsed startedAtMS={activity.startedAtMS} isRunning /></span>
     </div>
   );
 }

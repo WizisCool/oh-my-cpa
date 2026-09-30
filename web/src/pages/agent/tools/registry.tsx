@@ -1,17 +1,11 @@
-import React from 'react';
-import { Button } from 'antd';
 import { makeAssistantToolUI } from '@assistant-ui/react';
 import type { ToolCallMessagePartProps } from '@assistant-ui/react';
-import { queryResultTable } from '../../../agent/export';
 import type { Trace } from '../../../agent/types';
-import { useI18n } from '../../../i18n';
 import { ApprovalCard } from '../interrupts/ApprovalCard';
 import type { CapabilityReceipt } from '../state';
 import { useAgentView } from './AgentViewContext';
 import { CapabilityCall } from './CapabilityCall';
 import { DisplayCall } from './DisplayCall';
-import { TableView } from './TableView';
-import styles from '../AgentPage.module.css';
 
 /**
  * The Agent's tool views, registered with assistant-ui by tool name.
@@ -58,30 +52,8 @@ function DisplayToolView(part: ToolCallMessagePartProps) {
   return <DisplayCall trace={trace} isSelected={selectedCallID === trace.id} onSelect={selectCall} />;
 }
 
-/** `database_query`: the call row, and its rows one click away as a table. */
-function QueryToolView(part: ToolCallMessagePartProps) {
-  const { t } = useI18n();
-  const { selectedCallID, selectCall } = useAgentView();
-  const trace = useTrace(part);
-  const [isOpen, setIsOpen] = React.useState(false);
-  const table = trace.result.status === 'success' ? queryResultTable(trace.result.data) : undefined;
-  return (
-    <CapabilityCall trace={trace} isSelected={selectedCallID === trace.id} onSelect={selectCall}>
-      {table && (
-        <div className={styles['call-extra']}>
-          <Button type="link" size="small" aria-expanded={isOpen} onClick={() => setIsOpen(value => !value)}>
-            {t(isOpen ? 'agent.view.hide_rows' : 'agent.view.show_rows', { count: String(table.rows.length) })}
-          </Button>
-          {isOpen && <TableView table={table} title={trace.name} />}
-        </div>
-      )}
-    </CapabilityCall>
-  );
-}
-
 const RenderChartToolUI = makeAssistantToolUI({ toolName: 'render_chart', render: DisplayToolView });
 const RenderTableToolUI = makeAssistantToolUI({ toolName: 'render_table', render: DisplayToolView });
-const DatabaseQueryToolUI = makeAssistantToolUI({ toolName: 'database_query', render: QueryToolView });
 
 /** Mounted once inside the runtime provider; each entry registers one tool's view. */
 export function AgentToolUIs() {
@@ -89,7 +61,6 @@ export function AgentToolUIs() {
     <>
       <RenderChartToolUI />
       <RenderTableToolUI />
-      <DatabaseQueryToolUI />
     </>
   );
 }

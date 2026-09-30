@@ -1051,8 +1051,12 @@ the operator or its outcome is partial, expired or unconfirmed), the localized t
 identifier in small mono `--meta`, the arguments in brief in mono `--muted` and ellipsized, then the
 status in words and the duration in tabular figures. The row appears the moment the call is
 announced, before it has a result. Selecting it opens the details tab - status, start and duration,
-the full arguments, and the result exactly as the model received it - and marks the row as
+the full arguments, and permitted result details - and marks the row as
 selected; a failed call adds its code and detail beneath the row.
+
+Database queries use that same single row, with no inline result toggle or raw-result block in the
+details panel. Their status, SQL arguments and timing remain inspectable; data selected for an
+explicit display belongs in the final answer's figure.
 
 **Display calls are part of the answer.** A `render_table` or `render_chart` call is drawn outside
 the chain, where the answer reads, as a figure in a hairline `--border` frame: a title in `--fg`
@@ -1675,3 +1679,12 @@ The price book uses the existing console tokens and table/phone-row primitives. 
 The shared `TimeZoneSelect` follows the console's existing settings rows and color tokens. The selected value names the actual IANA zone. Options use two aligned columns: a wrapping zone name on the left and a right-aligned, tabular UTC offset on the right. The server zone is pinned first with a secondary localized source label below its name. The field and popup share a width, capped by the viewport; narrow layouts use the settings row's full width. The description is only “Used for timestamps and calendar-day totals.”
 
 The list uses fixed 64-pixel virtual rows, with space reserved for the selection indicator on every row so offsets do not shift when selected. Search accepts zone/city names, spaces in place of underscores, and UTC offsets. Offset labels reflect the current date, including fractional offsets and daylight saving. Existing typography, palette and motion tokens remain unchanged.
+
+### Live elapsed labels and Stop
+
+Agent activity, running capability rows and Playground running turns use isolated `LiveElapsed`
+labels. A shared visible-only animation-frame clock quantizes milliseconds to 10ms and seconds
+to 0.1s; a formatted external-store snapshot limits second-scale label renders to 10Hz without
+rerendering the page or transcript. Hidden documents and settled labels schedule no frames.
+The Stop button uses the existing `--border` / `--surface` tokens and no shadow, with the existing
+`--danger` border on hover/active. This changes component usage, not the palette or token mapping.

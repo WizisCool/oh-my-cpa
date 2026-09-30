@@ -200,13 +200,6 @@
   color: var(--danger);
 }
 
-.call-extra {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-left: 22px;
-}
-
 .copy-idle,
 .copy-done {
   display: inline-flex;
