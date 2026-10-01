@@ -1459,8 +1459,11 @@ and leaves the *stream* alone (`web/src/utils/scrollSmoothing.ts`, ADR 0046):
 
 Each notch retargets the glide from where it is, so a turning wheel accelerates rather than queueing;
 the glide follows the nearest scroller under the pointer that can still move, and stops chaining at a
-scroller that contains its overscroll, as the native scroll does. A virtualized list is moved through
-its own wheel handling, one step per frame, because it owns its offset. A component that turns a
+scroller that contains its overscroll, as the native scroll does. A virtualized list (the request
+list, a Select's option popup) is moved through its own wheel handling, one step per frame, because
+it owns its offset. It applies a step only once React commits it, often frames behind, so an offset
+anywhere between where the glide started and where it has asked to be is that lag; only an offset
+outside that span counts as a correction and stops the glide. A component that turns a
 notch into something else — the request list collapsing its header on the first notch — says so with
 `consumeWheel`, since `preventDefault` from a React handler is ignored.
 

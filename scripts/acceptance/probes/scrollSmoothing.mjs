@@ -7,7 +7,8 @@ import { until } from '../harness.mjs';
  * glide reaches the scroller the reader is pointing at. Two scrollers matter and they are reached
  * differently: an ordinary `overflow: auto` region (the console's content pane), and the request
  * list, whose virtualizer clips its overflow and applies every wheel delta itself in one jump - the
- * surface that stepped on every Windows desk.
+ * surface that stepped on every Windows desk. A Select's option popup is the same virtualizer, inline
+ * in a portal, and is checked as well.
  *
  * A glide is recognised by its frames: sampled once per animation frame after one notch, the offset
  * passes through intermediate values and settles exactly one notch further. A jump has no
@@ -85,6 +86,28 @@ export async function scrollSmoothing({ base, page, check }) {
   notch = describeNotch(await sampleScroll(page, () => page.keyboard.press('ArrowUp')));
   check('the opposite arrow glides back', notch.intermediateFrames >= 2 && Math.abs(notch.travelled + 40) <= 1, notch.detail);
 
+  // A Select's virtualized option popup glides like the request list does.
+  await page.getByRole('combobox', { name: 'Time zone' }).click();
+  const option = page.locator('.ant-select-dropdown .ant-select-item-option').nth(1);
+  await option.waitFor({ timeout: 10_000 });
+  const hasPopupHolder = await markScroller(page, (notchPx) => {
+    document.querySelector('[data-probe-scroller]')?.removeAttribute('data-probe-scroller');
+    const holder = document.querySelector('.ant-select-dropdown .ant-select-dropdown-list-holder');
+    if (!holder || holder.scrollHeight - holder.clientHeight < notchPx * 2) return false;
+    holder.setAttribute('data-probe-scroller', '');
+    return true;
+  }, NOTCH);
+  check('the time zone popup is a virtualized list long enough to scroll', hasPopupHolder);
+  const optionBox = await option.boundingBox();
+  notch = describeNotch(await sampleNotch(page, { x: optionBox.x + optionBox.width / 2, y: optionBox.y + optionBox.height / 2 }));
+  check('a notch over a virtualized Select popup glides and lands one notch further', notch.intermediateFrames >= 2 && Math.abs(notch.travelled - NOTCH) <= 1, notch.detail);
+  await page.keyboard.press('Escape');
+  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').waitFor({ state: 'detached', timeout: 10_000 }).catch(() => undefined);
+  await markScroller(page, () => {
+    document.querySelector('[data-probe-scroller]')?.removeAttribute('data-probe-scroller');
+    document.querySelector('.app-content').setAttribute('data-probe-scroller', '');
+  });
+
   // Windows' "Animation effects" switch reports reduced motion; the default still glides, because
   // that switch is also what turns the browser's own wheel animation off (ADR 0046).
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -150,4 +173,12 @@ export async function scrollSmoothing({ base, page, check }) {
   check('the list lands exactly one notch further', Math.abs(notch.travelled - NOTCH) <= 1, notch.detail);
   notch = describeNotch(await sampleNotch(page, { x: nextRow.x + nextRow.width / 2, y: nextRow.y + nextRow.height / 2 }));
   check('the next notch continues from where the first landed', notch.intermediateFrames >= 2 && Math.abs(notch.travelled - NOTCH) <= 1, notch.detail);
+
+  // A turning wheel: notches arrive while the list is still catching up with the glide. The list
+  // applies each step only once React commits it, frames behind the glide, and that lag must not
+  // read as someone else moving the list - which would stop the glide a few pixels in.
+  notch = describeNotch(await sampleScroll(page, async () => {
+    for (let turned = 0; turned < 3; turned += 1) await page.mouse.wheel(0, NOTCH);
+  }));
+  check('a wheel turned several notches glides the list through all of them', notch.intermediateFrames >= 2 && Math.abs(notch.travelled - NOTCH * 3) <= 1, notch.detail);
 }
