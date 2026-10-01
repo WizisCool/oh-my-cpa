@@ -160,18 +160,37 @@ func (cache *assetGzipCache) compressAsset(name string, data []byte) []byte {
 	if len(data) < 1024 {
 		return nil
 	}
+	return cache.getOrCompressAsset(name, func() []byte {
+		var output bytes.Buffer
+		writer, _ := gzip.NewWriterLevel(&output, gzip.BestSpeed)
+		_, _ = writer.Write(data)
+		_ = writer.Close()
+		compressed := output.Bytes()
+		if len(compressed) >= len(data) {
+			return nil
+		}
+		return compressed
+	})
+}
+
+func (cache *assetGzipCache) getOrCompressAsset(name string, compress func() []byte) []byte {
 	cache.mutex.Lock()
-	defer cache.mutex.Unlock()
 	if compressed, ok := cache.assets[name]; ok {
+		cache.mutex.Unlock()
 		return compressed
 	}
-	var output bytes.Buffer
-	writer, _ := gzip.NewWriterLevel(&output, gzip.BestSpeed)
-	_, _ = writer.Write(data)
-	_ = writer.Close()
-	compressed := output.Bytes()
-	if len(compressed) >= len(data) {
+	cache.mutex.Unlock()
+
+	// CPU work must not block cached reads or unrelated asset misses behind the shared lock.
+	compressed := compress()
+	if compressed == nil {
 		return nil
+	}
+	cache.mutex.Lock()
+	defer cache.mutex.Unlock()
+	// Another miss may have published this immutable asset while compression ran.
+	if existing, ok := cache.assets[name]; ok {
+		return existing
 	}
 	// Embedded files never change in a running binary. Cache only compressed text, not fonts
 	// or the original bytes, and cap retention so a large icon catalog cannot grow it unbounded.

@@ -146,7 +146,8 @@ mutations, because the clock does not publish through the transcript's run hook.
   triggers no business reads or YAML editor load, then navigates to the preloaded page.
 - `internal/api/compression_test.go` checks gzip negotiation, decoded-response parity,
   preserved status/cache headers, identity variation, GET/HEAD representation parity,
-  bounded concurrent asset caching, sub-path routing and immediate SSE flush delivery.
+  bounded concurrent asset caching, unlocked compression work, publication rechecks for
+  overlapping cold misses, sub-path routing and immediate SSE flush delivery.
 
 - `scripts/test-chart-mount-queue.ts` injects task scheduling to check one FIFO mount per
   task, cancellation, StrictMode cleanup/setup and recovery after a failed mount.

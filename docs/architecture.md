@@ -887,7 +887,10 @@ removes the original content length, and both encoded and identity variants carr
 Embedded JS, CSS, SVG and JSON assets keep their immutable cache policy. Assets of at least
 1 KiB are compressed on first negotiated use, only when gzip saves bytes. Their compressed
 representations are reused in a process-wide cache capped at 8 MiB; larger inventories can
-still be served without increasing retained bytes. Fonts and other binary assets are not
+still be served without increasing retained bytes. Compression runs outside the cache mutex;
+publication rechecks for a concurrent entry before charging the retained-byte budget.
+Overlapping misses may compute the same asset, but a retained result is published and counted
+only once. Fonts and other binary assets are not
 compressed. GET and HEAD select the same representation and content length under both the
 root mount and configured sub-path. No reverse-proxy compression setting is required.
 

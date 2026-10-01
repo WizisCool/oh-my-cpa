@@ -151,22 +151,28 @@ func TestCompressionForwardsImmediateSSEFlushAndResponseController(t *testing.T)
 func TestStaticCompressionCacheIsBoundedAndConcurrent(t *testing.T) {
 	payload := []byte(strings.Repeat("const data = 'fixture';\n", 1000))
 	cache := assetGzipCache{assets: make(map[string][]byte), limit: 1024}
-	first := cache.compressAsset("fixture.js", payload)
-	if decoded := decompressBody(t, first); !bytes.Equal(decoded, payload) {
-		t.Fatal("asset changed")
-	}
+	start := make(chan struct{})
+	results := make([][]byte, 20)
 	var workers sync.WaitGroup
-	for i := 0; i < 20; i++ {
+	for i := range results {
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
-			compressed := cache.compressAsset("fixture.js", payload)
-			if &compressed[0] != &first[0] {
-				t.Error("cached bytes replaced")
-			}
+			<-start
+			results[i] = cache.compressAsset("fixture.js", payload)
 		}()
 	}
+	close(start)
 	workers.Wait()
+	first := results[0]
+	if decoded := decompressBody(t, first); !bytes.Equal(decoded, payload) {
+		t.Fatal("asset changed")
+	}
+	for _, compressed := range results {
+		if len(compressed) == 0 || &compressed[0] != &first[0] {
+			t.Fatal("concurrent misses did not reuse the published bytes")
+		}
+	}
 	for i := 0; i < 20; i++ {
 		cache.compressAsset(strconv.Itoa(i)+".js", payload)
 	}
@@ -179,6 +185,50 @@ func TestStaticCompressionCacheIsBoundedAndConcurrent(t *testing.T) {
 	}
 	if cache.compressAsset("small.svg", []byte("<svg/>")) != nil {
 		t.Fatal("small asset inflated")
+	}
+}
+
+func TestStaticCompressionRunsOutsideCacheLock(t *testing.T) {
+	cache := assetGzipCache{assets: make(map[string][]byte), limit: 1024}
+	payload := []byte("compressed fixture")
+	compressed := cache.getOrCompressAsset("fixture.js", func() []byte {
+		if !cache.mutex.TryLock() {
+			t.Error("compression holds the shared cache lock")
+			return nil
+		}
+		cache.mutex.Unlock()
+		return payload
+	})
+	if !bytes.Equal(compressed, payload) || cache.bytes != len(payload) {
+		t.Fatal("compressed result was not retained")
+	}
+	cached := cache.getOrCompressAsset("fixture.js", func() []byte {
+		t.Error("cache hit recompressed the asset")
+		return nil
+	})
+	if len(cached) == 0 || &cached[0] != &payload[0] {
+		t.Fatal("cache hit did not reuse the published bytes")
+	}
+}
+
+func TestStaticCompressionRechecksAnInFlightMiss(t *testing.T) {
+	cache := assetGzipCache{assets: make(map[string][]byte), limit: 1024}
+	published := []byte("published fixture")
+	compressed := cache.getOrCompressAsset("fixture.js", func() []byte {
+		if !cache.mutex.TryLock() {
+			t.Error("compression holds the shared cache lock")
+			return nil
+		}
+		cache.mutex.Unlock()
+		// Complete a second miss before the first publishes, without scheduler-dependent timing.
+		cache.getOrCompressAsset("fixture.js", func() []byte { return published })
+		return []byte("late fixture")
+	})
+	if len(compressed) == 0 || &compressed[0] != &published[0] {
+		t.Fatal("in-flight miss replaced the published bytes")
+	}
+	if cache.bytes != len(published) || len(cache.assets) != 1 {
+		t.Fatal("in-flight miss charged the cache twice")
 	}
 }
 
