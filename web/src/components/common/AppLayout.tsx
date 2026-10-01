@@ -34,6 +34,7 @@ import { BrandArtwork } from './BrandArtwork';
 import { useT, type TFunc } from '../../i18n';
 import { PricingEditorProvider } from '../pricing/PricingEditorContext';
 import { useToast } from '../feedback';
+import { preloadRoute } from '../../routePages';
 
 const { Sider, Content } = Layout;
 
@@ -112,7 +113,7 @@ const navEntries: NavEntry[] = navGroups.flatMap((group) => group.items);
 
 function buildMenuItems(t: TFunc, isCollapsed: boolean): NavItem[] {
   if (isCollapsed) {
-    return navEntries.map((entry) => ({ key: entry.key, icon: entry.icon, label: t(entry.labelKey), title: t(entry.labelKey) }));
+    return navEntries.map((entry) => ({ key: entry.key, icon: entry.icon, label: t(entry.labelKey), title: t(entry.labelKey), 'data-route-path': entry.key }));
   }
   return navGroups.map((group) => ({
     key: `group:${group.key}`,
@@ -122,6 +123,7 @@ function buildMenuItems(t: TFunc, isCollapsed: boolean): NavItem[] {
       key: entry.key,
       icon: entry.icon,
       label: t(entry.labelKey),
+      'data-route-path': entry.key,
     })),
   }));
 }
@@ -160,9 +162,13 @@ export const AppLayout: React.FC = () => {
   // Without this a short page inherits the previous page's scroll offset and
   // appears blank below the fold.
   const contentRef = React.useRef<HTMLElement | null>(null);
+  const hasContentScroll = React.useRef(false);
   React.useEffect(() => {
     const node = contentRef.current;
-    if (node) node.scrollTo({ top: 0, behavior: 'auto' });
+    // Even a no-op scrollTo flushes pending layout on navigation. Scroll events already
+    // tell us whether a reset is needed, without measuring the newly mounted page.
+    if (node && hasContentScroll.current) node.scrollTo({ top: 0, behavior: 'auto' });
+    hasContentScroll.current = false;
   }, [location.pathname]);
 
   const { data: health } = useQuery({
@@ -192,6 +198,12 @@ export const AppLayout: React.FC = () => {
     setIsMobileNavOpen(false);
   };
 
+  const preloadMenuTarget = (event: React.SyntheticEvent) => {
+    const target = event.target;
+    const path = target instanceof Element ? target.closest('[data-route-path]')?.getAttribute('data-route-path') : null;
+    if (path) preloadRoute(path);
+  };
+
   const menu = (
     <Menu
       mode="inline"
@@ -199,6 +211,9 @@ export const AppLayout: React.FC = () => {
       items={menuItems}
       selectedKeys={[selectedKey]}
       onClick={selectPage}
+      onMouseOver={preloadMenuTarget}
+      onFocus={preloadMenuTarget}
+      onTouchStart={preloadMenuTarget}
       className="app-menu"
       inlineCollapsed={false}
     />
@@ -336,7 +351,14 @@ export const AppLayout: React.FC = () => {
             isLoggingOut={logoutMutation.isPending}
           />
         </header>
-        <Content className="app-content" ref={contentRef} data-scroll-root>
+        <Content
+          className="app-content"
+          ref={contentRef}
+          data-scroll-root
+          onScroll={(event) => {
+            if (event.target === event.currentTarget) hasContentScroll.current = event.currentTarget.scrollTop !== 0;
+          }}
+        >
           {/* App-wide in-flight indicator, so no page needs its own spinner swap. */}
           <DataProgress />
           {/* Keyed by pathname so each view cross-fades in instead of hard

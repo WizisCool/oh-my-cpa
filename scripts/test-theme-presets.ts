@@ -22,6 +22,7 @@
  *    paints one palette and documents another, which is exactly what the CSS pin catches.
  */
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -57,7 +58,12 @@ import {
 import { createThemeConfig, themePaletteCssVariables } from '../web/src/theme/themeConfig.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const requireWeb = createRequire(new URL('../web/package.json', import.meta.url));
+const { theme: antdTheme } = requireWeb('antd');
 const css = readFileSync(path.join(root, 'web', 'src', 'index.css'), 'utf8');
+const requestCss = readFileSync(path.join(root, 'web', 'src', 'pages', 'UsageEventsPage.css'), 'utf8');
+const requestRowRule = requestCss.match(/\.request-row\s*\{([^}]+)\}/)?.[1] ?? '';
+const requestRowMinHeight = Number(requestRowRule.match(/min-height:\s*(\d+)px/)?.[1]);
 
 // ── the registry ─────────────────────────────────────────────────────────────
 
@@ -344,6 +350,9 @@ for (const definition of BUILT_IN_PALETTES) {
   assert.equal(antd.components?.Table?.rowHoverBg, resolved.palette.rowHover, `${definition.id} paints row hover from its palette`);
   assert.equal(antd.components?.Button?.primaryColor, resolved.palette.accentOn, `${definition.id} draws the primary label in its on-accent step`);
   assert.equal(antd.components?.Tooltip?.colorBgSpotlight, resolved.palette.tooltipBg, `${definition.id} paints the spotlight from its palette`);
+  const tokens = antdTheme.getDesignToken(antd);
+  const estimatedRowHeight = tokens.fontHeight + 2 * (antd.components?.Listy?.itemPaddingBlock ?? tokens.paddingSM);
+  assert.equal(estimatedRowHeight, requestRowMinHeight, `${definition.id} estimates custom request rows from their CSS minimum`);
 }
 
 // ── the filled control's label, on both fills ────────────────────────────────

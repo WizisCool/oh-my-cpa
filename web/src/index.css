@@ -1450,6 +1450,12 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   pointer-events: none;
   transition: transform var(--motion-fast) var(--ease-standard);
 }
+/* The popup's only anchor shares the cell's stationary box without becoming a hit target. */
+.heatmap-tooltip-anchor {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
 .heatmap-cell.is-interactive:hover .heatmap-cell-mark {
   box-shadow: inset 0 0 0 1px var(--fg-2);
   transform: scale(1.18);

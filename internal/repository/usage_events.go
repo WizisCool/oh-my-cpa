@@ -608,10 +608,8 @@ func (r *Repository) GetUsageFacets(ctx context.Context, instanceID string, from
 	if r == nil || r.SQL() == nil {
 		return facets, errors.New("repository is not initialized")
 	}
-	// Each entry costs one grouped scan of the window. The set is kept to the
-	// dimensions a dropdown genuinely serves, because the count of these queries -
-	// not the size of any one of them - is what makes facets the expensive part of
-	// opening the page. BenchmarkUsageFacets pins the budget.
+	// Materialize only the facet columns once: ten indexed detail-table walks otherwise
+	// hold the single SQLite connection much longer than grouping this narrow window.
 	columns := []struct {
 		column     string
 		maskColumn string
@@ -619,9 +617,6 @@ func (r *Repository) GetUsageFacets(ctx context.Context, instanceID string, from
 	}{
 		{column: "model", target: &facets.Models},
 		{column: "provider", target: &facets.Providers},
-		// The api_group_keys facet is the caller-key list, so it carries the
-		// display mask. The mask is deterministic per key, so any non-empty mask
-		// in the group labels the whole group.
 		{column: "api_group_key", maskColumn: "api_key_mask", target: &facets.APIGroupKey},
 		{column: "auth_index", target: &facets.AuthIndexes},
 		{column: "source", target: &facets.Sources},
@@ -631,43 +626,47 @@ func (r *Repository) GetUsageFacets(ctx context.Context, instanceID string, from
 		{column: "reasoning_effort", target: &facets.ReasoningEfforts},
 		{column: "service_tier", target: &facets.ServiceTiers},
 	}
-	for _, entry := range columns {
-		if strings.TrimSpace(entry.column) == "" {
-			continue
+	var query strings.Builder
+	query.WriteString(`WITH facet_window AS MATERIALIZED (
+		SELECT model, provider, api_group_key, api_key_mask, auth_index, source,
+		       executor_type, model_alias, auth_type, reasoning_effort, service_tier
+		FROM usage_events WHERE instance_id = ? AND timestamp_ms BETWEEN ? AND ?
+	) `)
+	for i, entry := range columns {
+		if i > 0 {
+			query.WriteString(" UNION ALL ")
 		}
 		maskExpression := "''"
 		if entry.maskColumn != "" {
 			maskExpression = `COALESCE(MAX(NULLIF(` + entry.maskColumn + `, '')), '')`
 		}
-		rows, err := r.SQL().QueryContext(ctx, `
-			SELECT `+entry.column+`, COUNT(1), `+maskExpression+`
-			FROM usage_events
-			WHERE instance_id = ? AND timestamp_ms BETWEEN ? AND ? AND `+entry.column+` <> ''
-			GROUP BY `+entry.column+`
-			ORDER BY COUNT(1) DESC, `+entry.column+` ASC
-			LIMIT 200`, instanceID, fromMS, toMS)
-		if err != nil {
-			return facets, fmt.Errorf("read usage facets %s: %w", entry.column, err)
-		}
-		values := []UsageFacetValue{}
-		for rows.Next() {
-			var value UsageFacetValue
-			if errScan := rows.Scan(&value.Value, &value.Requests, &value.Mask); errScan != nil {
-				rows.Close()
-				return facets, fmt.Errorf("scan usage facet %s: %w", entry.column, errScan)
-			}
-			// Facet masks are stored values too, so legacy rows are converted here
-			// as well; the list and detail views do the same in the API projection.
-			value.Mask = security.NormalizeMask(value.Mask)
-			values = append(values, value)
-		}
-		if err := rows.Err(); err != nil {
-			rows.Close()
-			return facets, err
-		}
-		rows.Close()
-		*entry.target = values
+		// Each subquery retains its own cap and binary tie ordering before the union.
+		fmt.Fprintf(&query, `SELECT %d AS dimension, value, requests, mask FROM (
+			SELECT %s AS value, COUNT(1) AS requests, %s AS mask
+			FROM facet_window WHERE %s <> '' GROUP BY %s
+			ORDER BY requests DESC, value ASC LIMIT 200
+		)`, i, entry.column, maskExpression, entry.column, entry.column)
 	}
+	query.WriteString(" ORDER BY dimension ASC, requests DESC, value ASC")
+	rows, err := r.SQL().QueryContext(ctx, query.String(), instanceID, fromMS, toMS)
+	if err != nil {
+		return facets, fmt.Errorf("read usage facets: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var dimension int
+		var value UsageFacetValue
+		if err := rows.Scan(&dimension, &value.Value, &value.Requests, &value.Mask); err != nil {
+			return facets, fmt.Errorf("scan usage facets: %w", err)
+		}
+		value.Mask = security.NormalizeMask(value.Mask)
+		target := columns[dimension].target
+		*target = append(*target, value)
+	}
+	if err := rows.Err(); err != nil {
+		return facets, err
+	}
+
 	return facets, nil
 }
 

@@ -1,5 +1,6 @@
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
+import { ChartMount } from './ChartMount';
 import { Area } from '@ant-design/charts';
 import dayjs from '../utils/time';
 import { renderChartTooltip } from './chartTooltip';
@@ -131,7 +132,9 @@ export const DashboardTrendChart: React.FC<DashboardTrendChartProps> = ({
 
   return (
     <div className="chart-slot" style={{ height }}>
-      <Area {...config} />
+      <ChartMount>
+        <Area {...config} />
+      </ChartMount>
     </div>
   );
 };

@@ -54,6 +54,7 @@ import {
   parseProviderIcons,
 } from '../types/providerIcons';
 import { RequestRow } from '../components/usage/RequestRow';
+import { RequestTooltipLayer } from '../components/usage/RequestTooltip';
 import { usePluginOAuthLogos } from '../hooks/usePluginOAuthLogos';
 import { UsageEventDrawer } from '../components/usage/UsageEventDrawer';
 import { RequestFilterDrawer } from '../components/usage/RequestFilterDrawer';
@@ -170,8 +171,7 @@ export const UsageEventsPage: React.FC = () => {
     },
     enabled: isQueryEnabled,
     placeholderData: keepPreviousData,
-    // Facets are the expensive part of the page: one grouped scan per dimension,
-    // ten in all. They describe which values exist in a window, so they change
+    // Facets materialize the window once and group its dimensions. They change
     // only when the window moves - not on every poll - and the cache keeps the
     // dropdowns populated while a poll is in flight.
     staleTime: 5 * 60_000,
@@ -609,6 +609,7 @@ export const UsageEventsPage: React.FC = () => {
             handleResizeKeyDown={handleResizeKeyDown}
           />
           <div ref={listHost} className="request-list-host">
+            <RequestTooltipLayer hostRef={listHost} />
             {!isQueryEnabled || result.isLoading ? (
               <div className="request-loading">
                 <Skeleton active={false} paragraph={{ rows: 8 }} title={false} />

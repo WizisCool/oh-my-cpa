@@ -94,6 +94,7 @@ Browser ──▶ Reverse Proxy (Caddy / Nginx) ──▶ Oh My CPA (:8080)
 
 - **Single Binary**: The React SPA is embedded into the Go executable (`internal/web/dist`).
 - **Single Replica**: Uses SQLite in WAL mode with a single connection pool. Must run as one instance per data directory.
+- **Built-in Compression**: Negotiated gzip for embedded text assets and ordinary API JSON reduces transfer size without reverse-proxy configuration. Event streams and downloads remain uncompressed.
 - **Sub-Path Native**: Mounts under `/omc` by default (configurable via `OMCPA_BASE_PATH`).
 
 ## Getting Started

@@ -17,17 +17,51 @@ import { installRoutes } from '../probe.mjs';
  * this probe lacked, which is why it passed on a mark the design never called for.
  */
 export async function dashboardChartMarks({ base, page, check }) {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addInitScript(() => {
+    const clientWidth = Object.getOwnPropertyDescriptor(Element.prototype, 'clientWidth');
+    window.__kpiChartMeasurements = 0;
+    Object.defineProperty(Element.prototype, 'clientWidth', {
+      ...clientWidth,
+      get() {
+        if (this.parentElement?.classList.contains('chart-slot')) window.__kpiChartMeasurements++;
+        return clientWidth.get.call(this);
+      },
+    });
+    window.__chartMountFrames = new WeakMap();
+    let frame = 0;
+    function observeFrame() { frame++; requestAnimationFrame(observeFrame); }
+    requestAnimationFrame(observeFrame);
+    new MutationObserver((records) => {
+      for (const record of records) for (const node of record.addedNodes) {
+        if (!(node instanceof Element)) continue;
+        const canvases = node.matches('canvas') ? [node] : node.querySelectorAll('canvas');
+        for (const canvas of canvases) window.__chartMountFrames.set(canvas, frame);
+      }
+    }).observe(document, { childList: true, subtree: true });
+
+  });
   const partialCost = { ...chartDashboard, metrics: { ...chartDashboard.metrics, cost: 89.72, cost_source: 'partial' } };
   await page.route(/\/management\/dashboard(?:\/tail)?(?:\?|$)/, (route) => route.fulfill({ json: partialCost }));
   await page.route('**/pricing/attention', (route) => route.fulfill({ json: { unpriced: ['unpriced-model'] } }));
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
-  await page.locator('.chart-slot canvas, .chart-slot svg').first().waitFor({ timeout: 20_000 });
+  await until(async () => await page.locator('.chart-slot canvas').count() === 6,
+    { label: 'all six scheduled KPI charts to mount', timeoutMs: 20_000 });
+  await page.waitForFunction(() => [...document.querySelectorAll('.chart-slot canvas')].every((canvas) => {
+    const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+    return pixels.some((value, index) => index % 4 === 3 && value > 20);
+  }));
 
   const slots = await page.locator('.chart-slot').count();
   check('all six tiles rendered chart slots', slots === 6, `slots=${slots}`);
 
   const canvases = await page.locator('.chart-slot canvas').count();
   check('all six tiles painted canvas marks', canvases === 6, `canvases=${canvases}`);
+  const mountFrames = await page.locator('.chart-slot canvas').evaluateAll((canvases) =>
+    canvases.map((canvas) => window.__chartMountFrames.get(canvas)));
+  check('KPI chart creation yields a frame between mounts',
+    mountFrames.every((frame) => frame !== undefined) && new Set(mountFrames).size === 6,
+    JSON.stringify(mountFrames));
 
   // Read the painted pixels of the first tile: a non-empty canvas is not evidence
   // that a mark was drawn, let alone drawn correctly.
@@ -178,6 +212,19 @@ export async function dashboardChartMarks({ base, page, check }) {
     check(`KPI ${index + 1} uses the shared tooltip with an exact value`,
       Boolean(await readout.locator('.omc-tip-value').getAttribute('title')));
   }
+
+  await page.mouse.move(0, 0);
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const measurementsBeforeRefresh = await page.evaluate(() => window.__kpiChartMeasurements);
+  const refreshResponse = page.waitForResponse((response) => /\/management\/dashboard(?:\?|$)/.test(response.url()));
+  await page.locator('.terminal-page-head button:has(.anticon-reload)').click();
+  await refreshResponse;
+  await until(async () => await page.locator('.terminal-page-head button:has(.anticon-reload)[aria-busy="false"]').count() === 1,
+    { label: 'identical dashboard refresh to settle' });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const measurementsAfterRefresh = await page.evaluate(() => window.__kpiChartMeasurements);
+  check('an identical refresh does not remeasure the six KPI charts', measurementsBeforeRefresh === measurementsAfterRefresh,
+    `${measurementsBeforeRefresh} → ${measurementsAfterRefresh}`);
 
 }
 

@@ -186,6 +186,9 @@ export function createThemeConfig(resolved: Pick<ResolvedPalette, 'mode' | 'pale
         fontSizeSM: 13,
         headerSplitColor: 'transparent',
       },
+      // Request rows supply their own padding. This token keeps Listy's initial
+      // height estimate near their 68 px minimum instead of mounting extra rows.
+      Listy: { itemPaddingBlock: 23 },
       Button: {
         controlHeight: 32,
         controlHeightSM: 28,

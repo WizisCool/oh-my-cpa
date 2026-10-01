@@ -716,6 +716,16 @@ reduced-motion hook above. `docs/design.md`
 §7 rules 5 and 8 own the motion they are allowed to run, and ADRs 0007 and 0008 own the
 trade-offs.
 
+Dashboard chart creation is paced by `utils/chartMountQueue.ts` and `charts/ChartMount.tsx`:
+one queued mount commits in a task following each animation frame, leaving opportunities
+for paint and input between the eight G2 initializations. The caller reserves the existing
+chart geometry, queued work is canceled on unmount (including StrictMode cleanup), and
+hidden tabs pause with the browser's animation frames. Once mounted, charts keep their
+instances and receive data, theme, timezone, locale and unit-style updates normally; the
+queue does not defer updates or change the motion specification. KPI selectors and
+formatters have stable references, and memoized chart boundaries avoid reprocessing
+unchanged series on query-status updates.
+
 Icons come from `lucide-react`, through the wrapper layer in
 `web/src/components/icons/index.tsx` rather than by direct import, so the console keeps the Ant
 Design icon names and the `anticon` classes its CSS already selects on. Those wrappers are thin
@@ -774,6 +784,55 @@ layout animation are listed in its `EXCEPTIONS` table with a reason each, and a
 stale entry is itself a failure. The budget it enforces is stated in
 `docs/design.md` §7, and the reasoning behind the hover bound is ADR 0009.
 
+### Navigation and calendar render costs
+
+`web/src/routePages.ts` owns the lazy page modules and their shared loaders. The navigation
+menu preloads a target's code on pointer hover, keyboard focus or touch start. It does not
+prefetch authenticated data, mount the target or load the configuration page's YAML editor.
+The sign-in screen has no navigation menu and starts none of these speculative imports.
+`web/src/utils/routeLoader.ts` shares one import across intent and navigation, reusing success
+and clearing a failed speculative attempt so a later navigation can retry.
+The content column records whether it has scrolled through its own scroll events.
+Path navigation resets it only after actual scrolling; a column already at the top
+avoids the otherwise redundant `scrollTo` call and its synchronous layout flush.
+Nested scrollable widgets do not change the content column's recorded state.
+
+The token heatmap resolves its first-stored and as-of instants to calendar days once per
+observation/timezone revision, rather than once per cell. `createHeatmapCellClassifier`
+retains the same per-instant dayjs timezone/DST interpretation. Localized cell names and
+Agent clocks reuse the bounded formatter cache in `web/src/utils/dateTimeFormat.ts`;
+civil-date keys use a UTC carrier so the browser's zone cannot shift or skip a date.
+Cells are plain memoized DOM nodes. The first click creates one antd tooltip, portaled
+into the selected cell through a stationary, pointer-transparent anchor; switching days
+replaces that one instance without replacing cell DOM or focus. The active cell owns the
+ARIA description and open ring. Outside pointer and Escape dismiss it; Escape from its
+link restores cell focus. Closing keeps antd's exit motion, with popup content destroyed
+when hidden. The instance and listeners are removed on navigation or calendar changes.
+Initial positioning observes the first nonzero scroll-container layout and sets the scroll
+position to the browser-clamped end once per mount, rather than synchronously reading the
+whole dashboard's pending layout. Refreshes preserve the operator's scroll position.
+See `docs/performance.md` for the measured audit and remaining bottlenecks.
+
+Request rows generate their short label and millisecond-precision tooltip from one
+zoned instant in `web/src/components/usage/requestTimestamp.ts`. The row memo retains
+both strings until its timestamp or the shared display timezone changes, so selection
+and unit-style changes do not repeat timezone conversion. The underlying dayjs timezone
+implementation and wire timestamps remain unchanged.
+
+Request cells carry their exact tooltip label as a data attribute instead of creating
+an antd trigger tree per cell. `web/src/components/usage/RequestTooltip.tsx` delegates
+pointer and focus intent within the list host to one on-demand tooltip. Its fixed,
+pointer-transparent anchor is portaled to the document body so row DOM, grid layout
+and focus remain unchanged. Labels update while the target stays mounted; virtual-row
+removal, scrolling, resize, Escape and route cleanup release the active description
+and popup. The existing 100 ms pointer intent delay and antd exit motion remain;
+keyboard focus shows the price-action hint without waiting for pointer intent.
+
+Listy's initial virtual-row estimate is aligned to the request rows' existing 68 px
+minimum through its component token. Request-row CSS still owns visible padding and
+geometry; the virtualizer continues measuring real item and group-header heights.
+
+
 ## 4. Request and session flow
 
 1. `POST <base>/api/auth/login` with the CPA management key. The handler
@@ -813,6 +872,24 @@ stale entry is itself a failure. The budget it enforces is stated in
 The key itself is encrypted with `OMCPA_MASTER_KEY` and stored on the
 `cpa_instances` row, where `bootstrapDefaultInstance` refreshes it at every
 startup so a rotation needs no SQLite surgery.
+
+### Response compression
+
+`internal/api/compression.go` negotiates gzip from `Accept-Encoding`, including quality-zero
+refusals and wildcard precedence. The API middleware compresses ordinary JSON with pooled
+best-speed encoders; SSE, file downloads, HEAD/range requests, already encoded bodies,
+`no-transform` responses, explicit `include_keys=true` credential reveals and responses setting
+cookies pass through unchanged. Streaming
+flushes and `http.ResponseController` operations reach the original writer. JSON compression
+removes the original content length, and both encoded and identity variants carry
+`Vary: Accept-Encoding` without discarding other vary fields.
+
+Embedded JS, CSS, SVG and JSON assets keep their immutable cache policy. Assets of at least
+1 KiB are compressed on first negotiated use, only when gzip saves bytes. Their compressed
+representations are reused in a process-wide cache capped at 8 MiB; larger inventories can
+still be served without increasing retained bytes. Fonts and other binary assets are not
+compressed. GET and HEAD select the same representation and content length under both the
+root mount and configured sub-path. No reverse-proxy compression setting is required.
 
 ## 5. Discovery and identity flow
 
@@ -1373,10 +1450,17 @@ Three properties are load-bearing rather than incidental:
 ### 6.2 Facets
 
 `GetUsageFacets` enumerates the values actually present in a window so a dropdown
-never offers a choice that returns nothing. Each dimension costs one grouped scan
-of the window, and it is the *count* of those scans — not the size of any one —
-that makes facets the expensive part of opening the page; `BenchmarkUsageFacets`
-pins the budget. Endpoint and user agent are deliberately **not** facets: both are
+never offers a choice that returns nothing. A single SQL statement materializes a
+narrow `facet_window` CTE from the indexed instance/time window, then groups each of
+the ten dimensions over that relation instead of walking the wide detail table ten
+times. Each dimension still excludes only empty values, orders by count descending
+and value ascending, and caps at 200. Caller-key masks retain the maximum nonempty
+stored mask and normalization; empty results remain arrays. All dimensions share one
+statement snapshot. Materialization uses SQLite temporary storage proportional to
+the selected rows; no unbounded Go cardinality map or connection change is introduced.
+`BenchmarkUsageFacets`, `BenchmarkUsageFacetsStrategies` and
+`BenchmarkUsageFacetsNarrowWindow` track sparse, populated/high-cardinality and selective
+windows. Endpoint and user agent are deliberately **not** facets: both are
 long, high-cardinality values where a typed substring beats a capped 200-row list,
 and the endpoint must never be handed to the browser at all.
 

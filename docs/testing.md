@@ -133,3 +133,62 @@ mutations, because the clock does not publish through the transcript's run hook.
   `pnpm build` and `pnpm verify:browser` (or `verify:browser:p0`).
 - Rerun only the failed command. A failure that passes on rerun is a flake to fix at
   its assertion, never a reason to add a retry or lengthen a wait.
+
+### Responsiveness regressions
+
+- `scripts/test-date-time-format.ts` checks formatter reuse, locale/zone isolation,
+  civil dates on hosts with skipped midnights, Agent clock parity, and exactly two
+  timezone conversions per heatmap observation regardless of cell count.
+- `scripts/test-route-loader.ts` checks no eager imports, in-flight/success reuse,
+  and recovery after a failed speculative import.
+- The `route-preloading` browser scenario observes module requests from actual menu
+  hover, focus and touch events, verifies that sign-in loads no page modules and intent
+  triggers no business reads or YAML editor load, then navigates to the preloaded page.
+- `internal/api/compression_test.go` checks gzip negotiation, decoded-response parity,
+  preserved status/cache headers, identity variation, GET/HEAD representation parity,
+  bounded concurrent asset caching, sub-path routing and immediate SSE flush delivery.
+
+- `scripts/test-chart-mount-queue.ts` injects task scheduling to check one FIFO mount per
+  task, cancellation, StrictMode cleanup/setup and recovery after a failed mount.
+- The existing `dashboard-charts` probe observes distinct browser frames for KPI canvas
+  creation, waits for all six marks to paint, and counts chart-container measurements
+  during an identical refresh. The `dashboard-chart-motion` and model-panel probes
+  continue to own update morphs, reduced motion, hover and exact readouts.
+- `internal/repository/usage_facets_test.go` compares the combined SQL read with independent
+  grouped queries across windows, instances, empty/whitespace values, binary ordering,
+  per-dimension caps and normalized masks, and checks canceled/uninitialized reads. Its
+  strategy benchmarks compare populated and high-cardinality windows without duplicating
+  benchmark fixture creation inside the timed portion.
+
+- The existing `dashboard-heatmap` probe owns active popup anchor geometry, one-popup
+  ownership, its cell's ARIA description, pointer/keyboard dismissal, focus restoration,
+  rapid switching, active-cell data refresh and route cleanup. It instruments scroll extent getters before navigation
+  to detect synchronous mount measurements; these portal, focus and layout claims require
+  Chromium rather than a pure logic test. The phone scenario continues to own initial
+  today visibility, swiping and scroll preservation through a refresh.
+
+- `route-preloading` also checks shell scroll-reset calls: top-of-page navigation must
+  issue none, while leaving a genuinely scrolled Dashboard resets the content column
+  once. Its Dashboard reads use the shared chart/heatmap fixtures, keeping the scenario
+  hermetic while exercising real overflowing content.
+
+- `scripts/test-request-timestamp.ts` pins the row's two labels against the existing
+  dayjs interpretation across fractional offsets, date rollovers, milliseconds and both
+  DST boundaries, and counts one conversion per instant. The `column-alignment` probe
+  changes the shared timezone while a request row stays mounted, detecting a stale memo
+  without replacing the DOM node. That subscription claim requires the browser.
+- `scripts/test-theme-presets.ts` pins the Listy estimate to the request row's CSS
+  minimum across every built-in palette using antd's computed font height.
+  `request-list-interactions` observes the initial peak of mounted rows against the holder's
+  geometry, then checks the first and final records under source/client grouping before
+  returning to chronological rows. Its bottom-of-list, resize and drawer assertions and
+  the existing smoothing/touch scenarios continue to validate measured heights.
+
+- The request probes also own the shared tooltip's exact timestamp/cache hints, one-popup
+  ownership, stationary anchor geometry, cell DOM and ARIA preservation, hover transfer
+  to its text, Escape dismissal with price-button focus retained, active label revisions,
+  virtual-list scrolling and route cleanup. `column-alignment` keeps the popup open while
+  the shared timezone changes, asserting both the short label and full tooltip on the
+  same mounted cell. The cross-page cleanup check uses the shared System fixtures and
+  waits for its rendered card before navigating back, so module-cache timing cannot hide
+  an incomplete response fixture. These event, portal and virtualizer claims belong in Chromium.

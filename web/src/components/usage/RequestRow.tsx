@@ -1,8 +1,8 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
-import { Tooltip } from 'antd';
+import { RequestTooltip } from './RequestTooltip';
 import { BlockOutlined, BulbOutlined, CopyOutlined, DollarOutlined, RightOutlined } from '../icons';
-import dayjs from '../../utils/time';
+import { formatRequestTimestamp } from './requestTimestamp';
 import { getProviderDefaultIcon } from '../LobeIcon';
 import { ProviderBrandIcon } from '../LobeIcon';
 import { useT } from '../../i18n';
@@ -55,7 +55,7 @@ export const RequestRow = React.memo<RequestRowProps>(
     onOpen,
     isSelected = false,
   }) => {
-  useTimeZone();
+    const timeZone = useTimeZone();
     const t = useT();
     const toast = useToast();
     const openPriceEditor = useOpenPriceEditor();
@@ -109,8 +109,10 @@ export const RequestRow = React.memo<RequestRowProps>(
       });
     };
 
-    const formattedTime = dayjs(event.timestamp_ms).format('MM-DD HH:mm:ss');
-    const fullTime = dayjs(event.timestamp_ms).format('YYYY-MM-DD HH:mm:ss.SSS');
+    const { shortTime: formattedTime, fullTime } = React.useMemo(
+      () => formatRequestTimestamp(event.timestamp_ms),
+      [event.timestamp_ms, timeZone],
+    );
 
     return (
       <div
@@ -129,11 +131,11 @@ export const RequestRow = React.memo<RequestRowProps>(
       >
         {/* Column 1: timestamp */}
         <div className={`req-col req-col-time ${requestColumnAlignClass('time')}`}>
-          <Tooltip title={fullTime}>
+          <RequestTooltip title={fullTime}>
             <time dateTime={new Date(event.timestamp_ms).toISOString()} className="req-time-text">
               {formattedTime}
             </time>
-          </Tooltip>
+          </RequestTooltip>
           <div className="req-time-sub" title={event.request_id}>
             {/* One line, truncated: CPA v8 names each execution with a 36-character UUID, which
                 wrapped at every hyphen and made every row several lines tall. The full id stays in
@@ -214,11 +216,11 @@ export const RequestRow = React.memo<RequestRowProps>(
               {event.model || t('events.not_captured')}
             </strong>
             {isNonStreamingEvent(event) && (
-              <Tooltip title={t('events.non_stream_hint')}>
+              <RequestTooltip title={t('events.non_stream_hint')}>
                 <span className="req-non-stream-icon" aria-label={t('events.non_stream_hint')}>
                   <BlockOutlined />
                 </span>
-              </Tooltip>
+              </RequestTooltip>
             )}
             {!event.generate && (
               <span className="req-preflight-badge" title={t('events.preflight_hint')}>
@@ -259,7 +261,7 @@ export const RequestRow = React.memo<RequestRowProps>(
         <div className={`req-col req-col-tps ${requestColumnAlignClass('tps')}`}>
           <span className="req-mobile-label">{t('events.col_tps')}</span>
           {tpsInfo.tps !== null ? (
-            <Tooltip
+            <RequestTooltip
               title={
                 tpsInfo.hasTTFT
                   ? `${t('events.tps_hint_ttft')} (${tpsInfo.formatted})`
@@ -267,7 +269,7 @@ export const RequestRow = React.memo<RequestRowProps>(
               }
             >
               <span className="req-tps-val">{tpsInfo.formatted}</span>
-            </Tooltip>
+            </RequestTooltip>
           ) : (
             <span className="req-tps-none">—</span>
           )}
@@ -307,11 +309,11 @@ export const RequestRow = React.memo<RequestRowProps>(
             <strong className="req-cost-val">${event.cost_usd.toFixed(4)}</strong>
           ) : (
             <>
-              <Tooltip title={t('events.cost_unpriced')}>
+              <RequestTooltip title={t('events.cost_unpriced')}>
                 <span className="req-cost-none">—</span>
-              </Tooltip>
+              </RequestTooltip>
               {openPriceEditor && event.model && event.pricing_status !== 'legacy_unpriced' && (
-                <Tooltip title={t('cost.set_price', { model: event.model })}>
+                <RequestTooltip title={t('cost.set_price', { model: event.model })}>
                   <button
                     type="button"
                     className="req-cost-set"
@@ -326,7 +328,7 @@ export const RequestRow = React.memo<RequestRowProps>(
                   >
                     <DollarOutlined />
                   </button>
-                </Tooltip>
+                </RequestTooltip>
               )}
             </>
           )}
@@ -334,7 +336,7 @@ export const RequestRow = React.memo<RequestRowProps>(
         {/* Column 9: cache hit rate */}
         <div className={`req-col req-col-cache ${requestColumnAlignClass('cache')}`}>
           <span className="req-mobile-label">{t('events.col_cache_rate')}</span>
-          <Tooltip
+          <RequestTooltip
             title={
               cache.hasData
                 ? t('events.cache_rate_tooltip', {
@@ -361,7 +363,7 @@ export const RequestRow = React.memo<RequestRowProps>(
                 </span>
               )}
             </div>
-          </Tooltip>
+          </RequestTooltip>
         </div>
 
         {/* Column 10: caller key, masked, and only for api_key callers;

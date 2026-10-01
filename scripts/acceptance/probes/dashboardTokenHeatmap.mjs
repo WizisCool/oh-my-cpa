@@ -15,8 +15,23 @@ import {
 
 
 export async function dashboardTokenHeatmap({ base, page, check }) {
+  await page.addInitScript(() => {
+    window.__heatmapExtentReads = [];
+    for (const property of ['scrollWidth', 'clientWidth']) {
+      const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, property);
+      Object.defineProperty(Element.prototype, property, {
+        ...descriptor,
+        get() {
+          if (this.classList.contains('heatmap-scroll')) window.__heatmapExtentReads.push(property);
+          return descriptor.get.call(this);
+        },
+      });
+    }
+  });
   await page.goto(`${base}/dashboard`, { waitUntil: 'domcontentloaded' });
   await page.locator('.heatmap-grid').waitFor({ timeout: 20_000 });
+  const extentReads = await page.evaluate(() => window.__heatmapExtentReads);
+  check('initial heatmap positioning does not synchronously read its scroll extent', extentReads.length === 0, JSON.stringify(extentReads));
 
   const shape = await page.evaluate(() => {
     const cells = [...document.querySelectorAll('.heatmap-grid .heatmap-cell')];
@@ -252,6 +267,10 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
   // The tooltip opens on click and carries the date, the request count, the token volume and the
   // link that opens the day. Click, not hover: a hover tooltip on a field this dense fires
   // continuously as the pointer crosses it, and it competes with the hover ring for the gesture.
+  check(
+    'the grid creates no popup anchors before interaction',
+    (await page.locator('.heatmap-tooltip-anchor').count()) === 0,
+  );
   const busiest = heatmapMarked[0];
   const busiestCell = page.locator(`.heatmap-cell[data-day="${busiest.day}"]`);
   const tooltip = page.locator('.ant-tooltip:not(.ant-tooltip-hidden) .heatmap-tip');
@@ -266,6 +285,26 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
 
   await busiestCell.click();
   await tooltip.waitFor({ state: 'visible', timeout: 5000 });
+  const popupOwnership = await busiestCell.evaluate((cell) => {
+    window.__heatmapActiveCell = cell;
+    const description = document.getElementById(cell.getAttribute('aria-describedby'));
+    const anchor = cell.querySelector('.heatmap-tooltip-anchor');
+    const cellRect = cell.getBoundingClientRect();
+    const anchorRect = anchor?.getBoundingClientRect();
+    return {
+      anchors: document.querySelectorAll('.heatmap-tooltip-anchor').length,
+      describedCells: document.querySelectorAll('.heatmap-cell[aria-describedby]').length,
+      hasDescription: Boolean(description?.querySelector('.heatmap-tip')),
+      hasRing: cell.classList.contains('ant-tooltip-open'),
+      isStationary: Boolean(anchorRect) && ['left', 'top', 'width', 'height'].every((field) => Math.abs(anchorRect[field] - cellRect[field]) < 1),
+      pointerEvents: anchor ? getComputedStyle(anchor).pointerEvents : null,
+    };
+  });
+  check(
+    'one stationary popup anchor belongs to the described active cell',
+    popupOwnership.anchors === 1 && popupOwnership.describedCells === 1 && popupOwnership.hasDescription && popupOwnership.hasRing && popupOwnership.isStationary && popupOwnership.pointerEvents === 'none',
+    JSON.stringify(popupOwnership),
+  );
   const tooltipText = await tooltip.innerText();
   check('the tooltip names the day', /\d{4}/.test(tooltipText), `tooltip=${JSON.stringify(tooltipText)}`);
   check('the tooltip reports the request count', tooltipText.includes(busiest.requests.toLocaleString('en')), `tooltip=${JSON.stringify(tooltipText)}`);
@@ -644,6 +683,30 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
     `marker=${survived.marker} sameNode=${survived.sameNode}`,
   );
 
+  // A background data revision can change the active cell's CSS state without replacing
+  // its DOM node. Keep the popup description/ring and refresh its content in place.
+  const heatmapRoute = /\/management\/dashboard\/token-heatmap(?:\?|$)/;
+  await page.route(heatmapRoute, (route) => route.fulfill({ json: {
+    ...chartTokenHeatmap,
+    days: chartTokenHeatmap.days.map((entry) => entry.day === busiest.day ? { ...entry, requests: 0, tokens: 0 } : entry),
+  } }));
+  const refreshWithoutPointerDismissal = async () => {
+    const response = page.waitForResponse((result) => heatmapRoute.test(result.url()));
+    // The click event invalidates the queries, like the panel's background refresh;
+    // dispatch alone avoids the unrelated outside-pointer dismissal of a physical click.
+    await page.locator('.dashboard-page').getByRole('button', { name: 'Refresh all', exact: true }).dispatchEvent('click');
+    await response;
+  };
+  await refreshWithoutPointerDismissal();
+  await tooltip.locator('.heatmap-tip-empty').waitFor({ state: 'visible' });
+  check('a data revision keeps the active popup on its original, described cell',
+    await busiestCell.evaluate((cell) => cell === window.__heatmapActiveCell && cell.classList.contains('ant-tooltip-open') && Boolean(document.getElementById(cell.getAttribute('aria-describedby'))?.querySelector('.heatmap-tip-empty'))));
+  await page.unroute(heatmapRoute);
+  await refreshWithoutPointerDismissal();
+  await tooltip.locator('a.heatmap-tip-link').waitFor({ state: 'visible' });
+  check('a further refresh updates the retained popup back to the returned counts',
+    (await tooltip.innerText()).includes(busiest.requests.toLocaleString('en')));
+
   // Keyboard access: one cell in the tab order, the arrow keys walking the two axes, and the
   // tooltip following the focused day.
   // The tab stop lives on an interactive cell, so this is also the assertion that dead cells are
@@ -706,6 +769,51 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
   const endDay = await page.evaluate(() => document.activeElement?.getAttribute('data-day') ?? null);
   check('End reaches the newest day', endDay === shape.days[shape.days.length - 1], `end=${endDay}`);
 
+  // Dismissal and switching retain the grid's focused DOM node, not merely the same day key.
+  await page.keyboard.press('Escape');
+  await tooltip.waitFor({ state: 'hidden' });
+  check('Escape clears the popup description and active-cell ring',
+    await page.locator('.heatmap-cell[aria-describedby], .heatmap-cell.ant-tooltip-open').count() === 0);
+  await busiestCell.focus();
+  await page.keyboard.press('Enter');
+  await tooltip.waitFor({ state: 'visible' });
+  const popupLink = tooltip.locator('a.heatmap-tip-link');
+  await popupLink.focus();
+  await page.keyboard.press('Escape');
+  await tooltip.waitFor({ state: 'hidden' });
+  check('Escape from the popup link restores focus to its original cell',
+    await busiestCell.evaluate((cell) => document.activeElement === cell && cell === window.__heatmapActiveCell));
+  await page.keyboard.press('Space');
+  await tooltip.waitFor({ state: 'visible' });
+  await busiestCell.click();
+  await tooltip.waitFor({ state: 'hidden' });
+  check('clicking the active cell toggles its popup closed',
+    await page.locator('.heatmap-cell[aria-describedby]').count() === 0);
+
+  await busiestCell.click();
+  await tooltip.waitFor({ state: 'visible' });
+  await tooltip.locator('.heatmap-tip-day').click();
+  check('interacting inside the popup keeps it open', await tooltip.isVisible());
+  await page.locator('.heatmap-head').click();
+  await tooltip.waitFor({ state: 'hidden' });
+  check('an outside pointer dismisses the popup', await page.locator('.heatmap-cell.ant-tooltip-open').count() === 0);
+
+  const switchDays = [heatmapMarked[1].day, heatmapMarked[2].day, busiest.day];
+  await page.evaluate((days) => {
+    for (const day of days) document.querySelector(`.heatmap-cell[data-day="${day}"]`).click();
+  }, switchDays);
+  await tooltip.waitFor({ state: 'visible' });
+  const switched = await busiestCell.evaluate((cell) => ({
+    anchors: document.querySelectorAll('.heatmap-tooltip-anchor').length,
+    popups: document.querySelectorAll('.heatmap-tip-popper:not(.ant-tooltip-hidden)').length,
+    descriptions: document.querySelectorAll('.heatmap-cell[aria-describedby]').length,
+    hasDescription: Boolean(document.getElementById(cell.getAttribute('aria-describedby'))?.querySelector('.heatmap-tip-link')),
+    isSameCell: cell === window.__heatmapActiveCell,
+  }));
+  check('rapid switching leaves one popup on the final original cell',
+    switched.anchors === 1 && switched.popups === 1 && switched.descriptions === 1 && switched.hasDescription && switched.isSameCell,
+    JSON.stringify(switched));
+
   // The drill-down navigates through the tooltip's link, and nowhere else: the cell itself opens
   // the tooltip. Asserted end to end, because the whole point of the change was that a click on a
   // square should not throw the operator out of the dashboard.
@@ -721,6 +829,8 @@ export async function dashboardTokenHeatmap({ base, page, check }) {
   await openLink.waitFor({ state: 'visible', timeout: 5000 });
   await openLink.click();
   await page.waitForFunction(() => location.pathname.endsWith('/usage/events'), null, { timeout: 10_000 });
+  check('leaving the dashboard removes its popup portal and anchor',
+    await page.locator('.heatmap-tooltip-anchor, .heatmap-tip-popper').count() === 0);
   const query = await page.evaluate(() => Object.fromEntries(new URLSearchParams(location.search).entries()));
   check(
     "the tooltip's link opens the request list on that day's own bounds",
@@ -855,6 +965,18 @@ export async function dashboardTokenHeatmapMobile({ base, page, check }) {
     opened.todayVisible && opened.scrollLeft === opened.maxScroll,
     `scrollLeft=${opened.scrollLeft}/${opened.maxScroll} todayVisible=${opened.todayVisible}`,
   );
+
+  const retainedScroll = await page.locator('.heatmap-scroll').evaluate((container) => {
+    container.scrollLeft = Math.floor(container.scrollLeft / 2);
+    return container.scrollLeft;
+  });
+  const refreshed = page.waitForResponse((response) => response.url().includes('/dashboard/token-heatmap') && response.request().method() === 'GET');
+  await page.locator('.dashboard-page').getByRole('button', { name: 'Refresh all', exact: true }).click();
+  await refreshed;
+  await page.locator('.dashboard-page button[aria-busy="false"]').waitFor();
+  check("a refresh preserves the phone reader's chosen week",
+    await page.locator('.heatmap-scroll').evaluate((container) => container.scrollLeft) === retainedScroll,
+    `expected=${retainedScroll}`);
 
   // A tap in the middle of a square opens that square's day. The panel is brought into view first:
   // `elementFromPoint` cannot resolve a point below the fold.

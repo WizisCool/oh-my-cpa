@@ -17,26 +17,24 @@ import { AppLayout } from './components/common/AppLayout';
 import { AuthGate } from './components/common/AuthGate';
 import { DemoNotice } from './components/common/DemoNotice';
 
-const UsageEventsPage = React.lazy(() => import('./pages/UsageEventsPage').then(m => ({ default: m.UsageEventsPage })));
-const PricingPage = React.lazy(() => import('./pages/pricing/PricingPage').then(m => ({ default: m.PricingPage })));
-const ProvidersPage = React.lazy(() => import('./pages/ProvidersPage').then(m => ({ default: m.ProvidersPage })));
-const ApiKeysPage = React.lazy(() => import('./pages/ApiKeysPage').then(m => ({ default: m.ApiKeysPage })));
-const DashboardPage = React.lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
-const AgentPage = React.lazy(() => import('./pages/agent/AgentPage').then(module => ({ default: module.AgentPage })));
-const PlaygroundPage = React.lazy(() => import('./pages/playground/PlaygroundPage').then(module => ({ default: module.PlaygroundPage })));
-const QuickStartPage = React.lazy(() => import('./pages/QuickStartPage').then(m => ({ default: m.QuickStartPage })));
-const LogsPage = React.lazy(() => import('./pages/LogsPage').then(m => ({ default: m.LogsPage })));
-const AuditPage = React.lazy(() => import('./pages/AuditPage').then(m => ({ default: m.AuditPage })));
-const ConfigPage = React.lazy(() => import('./pages/ConfigPage').then(m => ({ default: m.ConfigPage })));
-const OAuthManagementPage = React.lazy(() => import('./pages/oauthManagement/OAuthManagementPage').then(m => ({ default: m.OAuthManagementPage })));
-const LegacyOAuthManagementRedirect = React.lazy(() => import('./pages/LegacyOAuthManagementRedirect').then(m => ({ default: m.LegacyOAuthManagementRedirect })));
-const SystemPage = React.lazy(() => import('./pages/SystemPage').then(m => ({ default: m.SystemPage })));
-const PluginsPage = React.lazy(() => import('./pages/PluginsPage').then(m => ({ default: m.PluginsPage })));
-// Lazy like every other route, and not only for consistency: the palette editor pulls in Ant Design's
-// colour picker, which is a large dependency for a page an operator visits once. Loading it eagerly put
-// that cost into the first paint of the console - and into the sign-in screen, which renders this
-// application's shell.
-const OmcSettingsPage = React.lazy(() => import('./pages/OmcSettingsPage').then(m => ({ default: m.OmcSettingsPage })));
+import {
+  UsageEventsPage,
+  PricingPage,
+  ProvidersPage,
+  ApiKeysPage,
+  DashboardPage,
+  AgentPage,
+  PlaygroundPage,
+  QuickStartPage,
+  LogsPage,
+  AuditPage,
+  ConfigPage,
+  OAuthManagementPage,
+  LegacyOAuthManagementRedirect,
+  SystemPage,
+  PluginsPage,
+  OmcSettingsPage,
+} from './routePages';
 import { ThemeProvider, ThemeServerSync, useTheme } from './theme/ThemeContext';
 import { I18nProvider, useI18n } from './i18n';
 import { TokenDisplayProvider } from './types/tokenDisplayContext';

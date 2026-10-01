@@ -95,6 +95,7 @@ OMCPA_DEMO_MODE=true go run ./cmd/oh-my-cpa
 
 - **单二进制运行**：React SPA 构建产物直接内嵌进 Go 可执行文件（`internal/web/dist`）。
 - **单副本持久化**：采用 SQLite WAL 模式，固定单连接池，数据目录仅允许单一实例挂载写入。
+- **内置压缩**：内嵌文本资源和普通 API JSON 支持协商 gzip，无需配置反向代理压缩；事件流和下载响应保持原样。
 - **子路径原生支持**：默认挂载于 `/omc`（可通过 `OMCPA_BASE_PATH` 自定义）。
 
 ## 快速上手

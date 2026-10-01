@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -163,6 +164,7 @@ func (h *Handler) routes() chi.Router {
 	}
 	router.Route(base, func(r chi.Router) {
 		r.Route("/api", func(apiRouter chi.Router) {
+			apiRouter.Use(compressAPIResponses)
 			apiRouter.Get("/healthz", h.healthz)
 			apiRouter.Route("/auth", func(authRouter chi.Router) {
 				authRouter.Post("/login", h.login)
@@ -813,8 +815,22 @@ func (h *Handler) asset(writer http.ResponseWriter, request *http.Request) {
 		h.notFound(writer, request)
 		return
 	}
+	serveAssetRepresentation(writer, request, name, data)
+}
+
+func serveAssetRepresentation(writer http.ResponseWriter, request *http.Request, name string, data []byte) {
 	writer.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	writer.Header().Set("Content-Type", contentType(name))
+	if isCompressibleAsset(name) {
+		varyAcceptEncoding(writer.Header())
+		if request.Header.Get("Range") == "" && acceptsGzip(request.Header) {
+			if compressed := staticGzipCache.compressAsset(name, data); compressed != nil {
+				data = compressed
+				writer.Header().Set("Content-Encoding", "gzip")
+			}
+		}
+	}
+	writer.Header().Set("Content-Length", strconv.Itoa(len(data)))
 	if request.Method == http.MethodHead {
 		return
 	}

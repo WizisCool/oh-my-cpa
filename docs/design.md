@@ -1596,6 +1596,12 @@ over every drag that started on the filters and every drag that reached the end 
 bounced at its own end, or reloaded the page when pulled down at the top. Over the list the browser
 keeps only sideways panning and zoom (`touch-action: pan-x pinch-zoom`).
 
+The request list starts with a 68px virtual-row estimate, projected through Listy's
+component token (22px font height plus twice 23px block padding). Its wrapper padding
+is overridden to zero by `web/src/pages/UsageEventsPage.css`: this projection supplies
+a sizing hint, while the existing row CSS owns visible spacing. Actual item and
+group-header heights are still measured, including the taller phone rows.
+
 The list is virtualized, so the browser cannot scroll it for a finger, and the library's own touch
 emulation ran up to four times ahead of the finger: it restarted a fixed-interval coast after every
 move, and that coast kept firing while the finger was still down. The console moves the list itself

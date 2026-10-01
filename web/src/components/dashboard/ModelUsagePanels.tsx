@@ -88,8 +88,8 @@ export const ModelUsagePanels: React.FC<ModelUsagePanelsProps> = ({ query, range
   const groups = data?.models ?? [];
   const total = data?.total_tokens ?? 0;
 
-  // The ring and the trend are loaded together because they are drawn together; one skeleton covers
-  // both so the two never appear a frame apart, which reads as one of them failing.
+  // A shared loading boundary keeps the ranking readable while both chart modules arrive;
+  // their expensive canvas creation then yields through the common mount queue.
   const chartFallback = <div className="model-chart-skeleton" aria-hidden="true" />;
 
   const viewToggle = (

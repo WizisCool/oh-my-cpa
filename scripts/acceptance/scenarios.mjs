@@ -6,15 +6,14 @@ import { playground, playgroundFixtures, playgroundNarrow } from './probes/playg
  * Each scenario is a claim only a real engine can establish - geometry, stacking,
  * hit-testing, paint or virtualization - so none of them can move to the pure
  * suite. What they can share is their setup and their fixtures, which is why they
- * live here as data: `verify:probes` runs all of them against the built SPA in the
- * release gate, and `check:ui` runs the relevant subset against the dev server
- * during development.
+ * live here as data: `verify:probes` runs the full catalog against the dev server in CI, and
+ * `check:ui` runs the relevant subset against the same server during development.
  *
  * The implementations live in `probes/`, one module per product surface - the
  * provider console, the request records, the dashboard's charts, heatmap and model
  * panels, and the OMC settings page - and this file is the registry that orders
  * them. An id, its name, its route table and its viewport are stated once, here,
- * so the order the release gate runs them in is readable in one place.
+ * so the order the full catalog runs them in is readable in one place.
  *
  * Nothing in this module or in `probes/` runs on import. That is deliberate:
  * `check:ui --list` and `--plan` must be able to answer without starting a
@@ -59,6 +58,7 @@ import { scrollSmoothing } from './probes/scrollSmoothing.mjs';
 import { requestListTouch } from './probes/requestListTouch.mjs';
 import { oauthManagement, oauthManagementFixtures, oauthManagementProbeRoutes } from './probes/oauthManagement.mjs';
 import { iconPickerStacking, pickerCatalog, pickerProvider, providerIconPick, providerModelPicker } from './probes/providerConsole.mjs';
+import { routePreloading } from './probes/routePreloading.mjs';
 import { systemInformationNarrow, systemInformationPage, systemFixtures } from './probes/systemInformation.mjs';
 import { configSourceEditor, configSourceFixtures } from './probes/configSourceEditor.mjs';
 import {
@@ -90,6 +90,21 @@ const pluginManagementWrites = [];
 const pricingBookWrites = [];
 
 export const SCENARIOS = [
+  {
+    id: 'route-preloading',
+    name: 'navigation intent preloads code without mounting pages or their reads',
+    options: {
+      routes: [
+        ...systemFixtures(),
+        ...configSourceFixtures(),
+        [(url) => url.pathname.endsWith('/dashboard'), () => chartDashboard],
+        [(url) => url.pathname.endsWith('/dashboard/tail'), () => chartDashboard],
+        [(url) => url.pathname.endsWith('/dashboard/token-heatmap'), () => chartTokenHeatmap],
+        [(url) => url.pathname.endsWith('/dashboard/models'), () => chartDashboardModels],
+      ],
+    },
+    run: routePreloading,
+  },
   { id: 'agent', name: 'Agent data notice, reasoning effort, inline one-click authorization, remembered target and server conversation recovery', options: { routes: agentFixtures() }, run: agentWorkspace },
   { id: 'agent-question', name: 'Agent asks a question in the composer and continues once it is answered', options: { routes: agentFixtures() }, run: agentQuestion },
   { id: 'agent-live', name: 'Agent shows a sent message at once, queues the next one and keeps its reasoning', options: { routes: agentFixtures() }, run: agentLive },
@@ -636,6 +651,7 @@ export const SCENARIOS = [
     name: 'request list interactions',
     options: {
       routes: [
+        ...systemFixtures(),
         [(url) => url.pathname.endsWith('/usage/facets'), () => alignmentFacets],
         [
           (url) => url.pathname.includes('/usage/events'),

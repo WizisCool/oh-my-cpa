@@ -1,4 +1,5 @@
 import { sleep } from '../probe.mjs';
+import { until } from '../harness.mjs';
 
 /**
  * Probes for the request-record console: the column geometry and truncation, the
@@ -61,6 +62,41 @@ export const alignmentFacets = {
 export async function columnAlignment({ base, page, check }) {
   await page.goto(`${base}/usage/events?preset=24h`, { waitUntil: 'domcontentloaded' });
   await page.locator('.request-row').first().waitFor({ timeout: 20_000 });
+
+  // Change the shared display-zone store while the row remains mounted; route navigation
+  // would recreate its memo and could not detect a missing timezone dependency.
+  const timeLabel = page.locator('.request-row .req-time-text').first();
+  const initialTimestamp = Date.parse(await timeLabel.getAttribute('datetime'));
+  const timeHandle = await timeLabel.elementHandle();
+  await timeLabel.hover();
+  const timePopup = page.locator('.request-cell-tooltip');
+  await timePopup.waitFor({ state: 'visible' });
+  const timeModuleUrl = `${base}/src/utils/time.ts`;
+  const originalZone = await page.evaluate(async (url) => (await import(url)).getTimeZone(), timeModuleUrl);
+  try {
+    for (const zone of ['UTC', 'Asia/Kathmandu']) {
+      const fields = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+        timeZone: zone, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+      }).formatToParts(initialTimestamp).map((part) => [part.type, part.value]));
+      const expected = `${fields.month}-${fields.day} ${fields.hour}:${fields.minute}:${fields.second}`;
+      await page.evaluate(async ({ url, zone }) => (await import(url)).configureTimeZone(zone), { url: timeModuleUrl, zone });
+      const hasUpdated = await until(async () => (await timeLabel.innerText()) === expected, { label: `mounted request time in ${zone}` })
+        .then(() => true).catch(() => false);
+      check(`mounted request labels follow ${zone} without replacing the row`, hasUpdated &&
+        await timeHandle.evaluate((element) => element.isConnected && element === document.querySelector('.request-row .req-time-text')),
+      await timeLabel.innerText());
+      await until(async () => (await timePopup.innerText()) === (await timeLabel.getAttribute('data-request-tooltip')),
+        { label: `active request tooltip in ${zone}` });
+      check(`active timestamp tooltip follows ${zone} on the same cell`,
+        (await timePopup.innerText()).includes(expected.slice(0, 5)) &&
+        (await timePopup.innerText()).includes(expected.slice(6)));
+    }
+  } finally {
+    await page.evaluate(async ({ url, zone }) => (await import(url)).configureTimeZone(zone), { url: timeModuleUrl, zone: originalZone });
+    await timeHandle.dispose();
+    await page.keyboard.press('Escape');
+    await timePopup.waitFor({ state: 'hidden' });
+  }
 
   // 1. No cell's content may spill outside its own grid track.
   //
@@ -315,6 +351,12 @@ export const interactionRecords = (() => {
  * something to virtualize.
  */
 export async function requestListInteractions({ base, page, check }) {
+  await page.addInitScript(() => {
+    window.__requestRowMountPeak = 0;
+    new MutationObserver(() => {
+      window.__requestRowMountPeak = Math.max(window.__requestRowMountPeak, document.querySelectorAll('.request-row').length);
+    }).observe(document, { childList: true, subtree: true });
+  });
   const downloads = [];
   page.on('request', (request) => {
     if (request.url().includes('/request-log')) downloads.push(request.url());
@@ -322,6 +364,83 @@ export async function requestListInteractions({ base, page, check }) {
 
   await page.goto(`${base}/usage/events?preset=24h&limit=100`, { waitUntil: 'domcontentloaded' });
   await page.locator('.request-row').first().waitFor({ timeout: 20_000 });
+
+  const mountWindow = await page.evaluate(() => {
+    const holder = document.querySelector('.request-list [class*="-holder"]');
+    const row = document.querySelector('.request-row');
+    const rowMinimum = row ? Number.parseFloat(getComputedStyle(row).minHeight) : NaN;
+    const allowedRows = Math.ceil((holder?.clientHeight ?? 0) / rowMinimum) + 3;
+    return { peak: window.__requestRowMountPeak, allowedRows };
+  });
+  check('the initial request mount is bounded by row geometry rather than generic list items',
+    mountWindow.peak > 0 && mountWindow.peak <= mountWindow.allowedRows, JSON.stringify(mountWindow));
+
+  check('request cells mount without dormant popup instances',
+    await page.locator('.request-cell-tooltip').count() === 0);
+  const timestampCell = page.locator('.request-row .req-time-text').first();
+  const timestampHandle = await timestampCell.elementHandle();
+  const timestampTitle = await timestampCell.getAttribute('data-request-tooltip');
+  await timestampCell.hover();
+  const cellPopup = page.locator('.request-cell-tooltip');
+  await cellPopup.waitFor({ state: 'visible' });
+  await until(async () => (await cellPopup.innerText()) === timestampTitle, { label: 'request timestamp tooltip' });
+  const tooltipAnchor = await page.evaluate(() => {
+    const cell = document.querySelector('.req-time-text');
+    const popup = document.querySelector('.request-cell-tooltip');
+    const bounds = cell.getBoundingClientRect();
+    const popupBounds = popup.getBoundingClientRect();
+    return { described: document.getElementById(cell.getAttribute('aria-describedby'))?.closest('.request-cell-tooltip') === popup,
+      aligned: popupBounds.bottom <= bounds.top + 1 && popupBounds.right > bounds.left && popupBounds.left < bounds.right };
+  });
+  check('one popup shows the exact timestamp and describes its stationary cell',
+    await cellPopup.count() === 1 && tooltipAnchor.described && tooltipAnchor.aligned &&
+    await timestampHandle.evaluate((element) => element === document.querySelector('.req-time-text')),
+    JSON.stringify(tooltipAnchor));
+
+  const cacheCell = page.locator('.request-row .req-cache-hit').first();
+  await cacheCell.hover();
+  const cacheTitle = await cacheCell.getAttribute('data-request-tooltip');
+  await until(async () => (await cellPopup.innerText()) === cacheTitle, { label: 'shared cache tooltip' });
+  check('switching cells reuses one popup and releases the previous description',
+    await cellPopup.count() === 1 && await timestampCell.getAttribute('aria-describedby') === null);
+  await cellPopup.hover();
+  check('the tooltip stays visible while its text is hovered', await cellPopup.isVisible());
+  await page.keyboard.press('Escape');
+  await cellPopup.waitFor({ state: 'hidden' });
+  check('Escape dismisses the shared request tooltip', await cacheCell.getAttribute('aria-describedby') === null);
+  await page.mouse.move(0, 0);
+
+  const priceAction = page.locator('[data-testid="request-set-price"]').first();
+  await priceAction.focus();
+  await cellPopup.waitFor({ state: 'visible' });
+  await until(async () => (await cellPopup.innerText()) === (await priceAction.getAttribute('aria-label')),
+    { label: 'keyboard price tooltip' });
+  await page.keyboard.press('Escape');
+  await cellPopup.waitFor({ state: 'hidden' });
+  check('keyboard dismissal preserves the price action and its focus',
+    await priceAction.evaluate((element) => element === document.activeElement && !element.hasAttribute('aria-describedby')));
+  await timestampCell.hover();
+  await cellPopup.waitFor({ state: 'visible' });
+  // The same DOM node can be recycled by an identical refresh; its current label must win.
+  await timestampCell.evaluate((element) => { element.dataset.requestTooltip += ' refreshed'; });
+  await until(async () => (await cellPopup.innerText()) === `${timestampTitle} refreshed`, { label: 'active tooltip revision' });
+  check('an active tooltip follows updates without replacing its request cell',
+    await timestampHandle.evaluate((element) => element.isConnected && element === document.querySelector('.req-time-text')));
+  await timestampCell.evaluate((element, title) => { element.dataset.requestTooltip = title; }, timestampTitle);
+  await timestampHandle.dispose();
+  await timestampCell.hover();
+  await cellPopup.waitFor({ state: 'visible' });
+  await page.locator('.app-menu [data-route-path="/system"]').first().click();
+  await until(async () => (await page.locator('.request-list-host').count()) === 0,
+    { label: 'leave the request tooltip host' });
+  await page.locator('.system-page .ant-card').first().waitFor();
+  check('leaving Requests removes the active popup and its anchor',
+    await page.locator('.request-cell-tooltip').count() === 0 &&
+    await page.locator('[data-request-tooltip-anchor]').count() === 0);
+  await page.locator('.app-menu [data-route-path="/usage/events"]').first().click();
+  await page.locator('.request-row').first().waitFor();
+  await page.locator('.request-row .req-time-text').first().hover();
+  await cellPopup.waitFor({ state: 'visible' });
 
   // The virtualizer must expose a real scroll container, and the mounted window must
   // stay bounded however far the reader goes: an unbounded DOM is what makes a long
@@ -358,7 +477,45 @@ export async function requestListInteractions({ base, page, check }) {
     await sleep(400);
     const mounted = await page.locator('.request-row').count();
     check('the virtualized window stays bounded at the bottom', mounted > 0 && mounted < 40, `rows=${mounted}`);
+    await cellPopup.waitFor({ state: 'hidden' });
+    check('scrolling virtualized rows dismisses stale tooltip anchors',
+      await page.locator('[data-request-tooltip][aria-describedby]').count() === 0);
   }
+
+  const returnToLatest = async () => {
+    await page.locator('.req-back-to-top-btn').click();
+    await until(() => page.evaluate(() => {
+      const holder = document.querySelector('.request-list [class*="-holder"]');
+      return holder && holder.scrollTop <= 1 && !document.querySelector('.request-collapsible-header.is-collapsed');
+    }), { label: 'return to the expanded request controls' });
+  };
+  await returnToLatest();
+  const groupingControl = page.getByRole('combobox', { name: 'Group by', exact: true });
+  const groupingSelect = page.locator('.request-toolbar .ant-select').filter({ has: groupingControl });
+  for (const [label, lastRequestId] of [
+    ['By source', interactionRecords.filter((record) => record.provider === interactionRecords[2].provider).at(-1).request_id],
+    ['By client', interactionRecords.at(-1).request_id],
+  ]) {
+    await groupingSelect.click();
+    await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option')
+      .filter({ hasText: label }).click();
+    await until(async () => (await page.locator('.request-group-title').count()) > 0 &&
+      (await page.locator('.request-row .req-time-sub-id').first().innerText()) === interactionRecords[0].request_id,
+    { label: `first row after ${label}` });
+    const holder = page.locator('.request-list [class*="-holder"]').first();
+    await holder.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+    const hasReachedLast = await until(async () => (await page.locator('.request-row .req-time-sub-id').last().innerText()) === lastRequestId,
+      { label: `last row after ${label}` }).then(() => true).catch(() => false);
+    const mounted = await page.locator('.request-row').count();
+    check(`${label} measures group headers and keeps the final request reachable`,
+      hasReachedLast && mounted > 0 && mounted < 40, `rows=${mounted} last=${await page.locator('.request-row .req-time-sub-id').last().innerText()}`);
+    await returnToLatest();
+  }
+  await groupingSelect.click();
+  await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option')
+    .filter({ hasText: 'Chronological' }).click();
+  await until(async () => (await page.locator('.request-row .req-time-sub-id').first().innerText()) === interactionRecords[0].request_id,
+    { label: 'chronological request rows restored' });
 
   // Column resize: the handle has to exist, a drag has to change the track, and the
   // width has to survive as a preference - the last part is what makes a column

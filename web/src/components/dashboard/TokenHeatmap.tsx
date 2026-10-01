@@ -1,6 +1,8 @@
 import { useTimeZone } from '../../utils/TimeZoneProvider';
 import React from 'react';
 import { Card, Tooltip } from 'antd';
+import type { TooltipRef } from 'antd/es/tooltip';
+import { createPortal } from 'react-dom';
 import { RightOutlined } from '../icons';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -11,7 +13,7 @@ import { formatTokens, formatTokensFull } from '../../types/tokenDisplay';
 import { useTokenDisplayStyle } from '../../types/tokenDisplayContext';
 import {
   buildHeatmapGrid,
-  heatmapCellState,
+  createHeatmapCellClassifier,
   heatmapColumnCount,
   heatmapDrillDown,
   heatmapFocusDay,
@@ -22,6 +24,7 @@ import {
   type HeatmapCell,
 } from '../../types/tokenHeatmap';
 import { LoadFailure } from '../feedback';
+import { formatCalendarDay } from '../../utils/dateTimeFormat';
 
 const FULL_NUMBER_FORMAT = new Intl.NumberFormat('en');
 
@@ -69,14 +72,11 @@ function full(value: number): string {
 /**
  * formatDay renders a `YYYY-MM-DD` key as a localized date.
  *
- * The key is a calendar position, so it is read field by field rather than through
- * `new Date(key)`: the latter parses a bare date as UTC midnight, and a viewer behind
- * UTC would then be shown the previous day in every readout and axis label.
+ * The key is a calendar position, not a browser-local instant. An explicit UTC
+ * carrier keeps labels unchanged even where a local midnight or whole day was skipped.
  */
 function formatDay(day: string, lang: Lang, options: Intl.DateTimeFormatOptions): string {
-  const [year, month, date] = day.split('-').map(Number);
-  return new Intl.DateTimeFormat(languageLocale(lang), options)
-    .format(new Date(year, (month ?? 1) - 1, date ?? 1));
+  return formatCalendarDay(day, languageLocale(lang), options);
 }
 
 /**
@@ -139,6 +139,75 @@ export const HeatmapTooltipContent: React.FC<{
   );
 };
 
+interface HeatmapPopupTarget {
+  day: string;
+  element: HTMLElement;
+  timezone: string;
+  isOpen: boolean;
+}
+
+/**
+ * Only the selected cell needs popup machinery. A portal keeps the grid's DOM and focus
+ * stable while giving antd a real, stationary anchor for placement and scroll tracking.
+ */
+const ActiveHeatmapTooltip: React.FC<{
+  target: HeatmapPopupTarget;
+  entry: DashboardTokenHeatmapDay;
+  lang: Lang;
+  onClose: () => void;
+}> = ({ target, entry, lang, onClose }) => {
+  const popupRef = React.useRef<TooltipRef>(null);
+  const popupId = React.useId();
+  const { element, isOpen } = target;
+
+  React.useLayoutEffect(() => {
+    if (!isOpen) return;
+    element.setAttribute('aria-describedby', popupId);
+    element.classList.add('ant-tooltip-open');
+    return () => {
+      element.removeAttribute('aria-describedby');
+      element.classList.remove('ant-tooltip-open');
+    };
+  }, [element, isOpen, popupId, entry]);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const dismissOutside = (event: PointerEvent) => {
+      const node = event.target;
+      if (!(node instanceof Node) || element.contains(node) || popupRef.current?.popupElement?.contains(node)) return;
+      onClose();
+    };
+    const dismissEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (popupRef.current?.popupElement?.contains(document.activeElement)) element.focus({ preventScroll: true });
+      onClose();
+    };
+    document.addEventListener('pointerdown', dismissOutside, true);
+    document.addEventListener('keydown', dismissEscape);
+    return () => {
+      document.removeEventListener('pointerdown', dismissOutside, true);
+      document.removeEventListener('keydown', dismissEscape);
+    };
+  }, [element, isOpen, onClose]);
+
+  return createPortal(
+    <Tooltip
+      ref={popupRef}
+      id={popupId}
+      open={isOpen}
+      trigger={[]}
+      placement="top"
+      classNames={{ root: 'heatmap-tip-popper' }}
+      styles={{ container: { maxWidth: 'none' } }}
+      title={<HeatmapTooltipContent day={entry} lang={lang} href={heatmapDrillDown(entry)} />}
+      destroyOnHidden
+    >
+      <span className="heatmap-tooltip-anchor" aria-hidden="true" />
+    </Tooltip>,
+    element,
+  );
+};
+
 /**
  * The prefix every grid query shares, so the page's refresh button can invalidate it.
  *
@@ -196,6 +265,7 @@ export const TokenHeatmap: React.FC = () => {
   // keep the shared zone string and cached daily totals stable.
   const timezone = useTimeZone();
   const [focusDay, setFocusDay] = React.useState<string | null>(null);
+  const [popupTarget, setPopupTarget] = React.useState<HeatmapPopupTarget | null>(null);
   // The hover ring is pure CSS and no state records it, so the only writes to this panel's own state
   // are moving the tab stop and opening a tooltip. The cell elements are memoized below, which keeps
   // either of them from reconciling all ~370 cells.
@@ -225,6 +295,11 @@ export const TokenHeatmap: React.FC = () => {
     for (const entry of data?.days ?? []) map.set(entry.day, entry);
     return map;
   }, [data]);
+  React.useEffect(() => {
+    if (popupTarget && (popupTarget.timezone !== timezone || !entries.has(popupTarget.day) || !popupTarget.element.isConnected)) {
+      setPopupTarget(null);
+    }
+  }, [entries, popupTarget, timezone]);
   // The ramp is scaled to the window's own busiest day, so the shade is relative to what this
   // deployment actually does rather than to a fixed token count. Zero means nothing in the window
   // carried traffic, which is the case the component skips the ramp for entirely.
@@ -260,8 +335,8 @@ export const TokenHeatmap: React.FC = () => {
   /**
    * Brings today into view when the field is swipeable.
    *
-   * Only a panel too narrow for the cell floor scrolls at all; everywhere else the distance is
-   * zero and this is a no-op. The DOM order stays oldest-to-newest - it is what the arrow keys,
+   * Only a panel too narrow for the cell floor scrolls at all; a fitted field clamps to zero.
+   * The DOM order stays oldest-to-newest - it is what the arrow keys,
    * the month axis and a screen reader describe - so the newest column is scrolled to instead.
    * Run once per mount, so a background re-read does not yank the field back while the operator
    * is reading January.
@@ -270,9 +345,18 @@ export const TokenHeatmap: React.FC = () => {
     if (hasScrolledToToday.current || cells.length === 0) return;
     const container = scrollRef.current;
     if (!container) return;
-    hasScrolledToToday.current = true;
-    const distance = container.scrollWidth - container.clientWidth;
-    if (distance > 0) container.scrollLeft = distance;
+    // ResizeObserver delivers after layout. An extent read in the mount effect instead
+    // forces the entire dashboard's pending layout into the navigation commit.
+    const observer = new ResizeObserver((observations) => {
+      if (!observations.some((entry) => entry.contentRect.width > 0)) return;
+      hasScrolledToToday.current = true;
+      // The browser clamps to the available extent, including zero on a fitted desktop
+      // grid; no geometry read or hardcoded cell-floor calculation is needed.
+      container.scrollLeft = Number.MAX_SAFE_INTEGER;
+      observer.disconnect();
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
   }, [cells.length]);
 
   /**
@@ -284,13 +368,26 @@ export const TokenHeatmap: React.FC = () => {
    */
   // Stable across renders that do not move the tab stop, which is what lets the grid's elements be
   // reused: an inline arrow here would be a new identity every render and would invalidate the
-  // `cellNodes` memo below on every one of them.
+  // `cellRows` memo below on every one of them.
   const handleCellFocus = React.useCallback((day: string) => {
     setFocusDay((current) => (heatmapFocusDay(cells, current) === day ? current : day));
   }, [cells]);
 
+  const closePopup = React.useCallback(() => {
+    setPopupTarget((current) => current?.isOpen ? { ...current, isOpen: false } : current);
+  }, []);
+
+  const handleCellClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!(event.target instanceof Element)) return;
+    const element = event.target.closest<HTMLElement>('[role="gridcell"]');
+    const day = element?.dataset.day;
+    if (!element || !day || !gridRef.current?.contains(element) || !entries.has(day)) return;
+    setPopupTarget((current) => ({ day, element, timezone, isOpen: current?.element !== element || !current.isOpen }));
+  };
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (!resolvedFocus) return;
+    if (!(event.target instanceof Element) || !event.target.matches('[role="gridcell"]')) return;
     // Every function of a cell is reachable from the keyboard: a grid that can only be explored
     // with a pointer is one an operator without one cannot use. Enter and Space activate the cell
     // the way a click does - opening its tooltip - rather than navigating, so the keyboard and the
@@ -327,6 +424,11 @@ export const TokenHeatmap: React.FC = () => {
     return rows;
   }, [cells]);
 
+  const classifyCell = React.useMemo(
+    () => createHeatmapCellClassifier(data?.first_stored_ms ?? null, data?.as_of_ms ?? null),
+    [data?.first_stored_ms, data?.as_of_ms, timezone],
+  );
+
   /**
    * The cell elements, memoized so the panel's own re-renders do not rebuild them.
    *
@@ -338,7 +440,7 @@ export const TokenHeatmap: React.FC = () => {
    */
   const renderCell = React.useCallback((cell: HeatmapCell) => {
       const entry = entries.get(cell.day);
-      const state = heatmapCellState(entry, data?.first_stored_ms ?? null, data?.as_of_ms ?? null);
+      const state = classifyCell(entry);
       // The name follows the cell's *state*, not the response's shape. The server emits a
       // zero-valued entry for every day in the window, so keying on the entry's presence announced
       // "0 requests, 0 tokens" for a day nothing is stored for - asserting a measurement that does
@@ -385,38 +487,8 @@ export const TokenHeatmap: React.FC = () => {
           <span className="heatmap-cell-mark" aria-hidden="true" />
         </div>
       );
-      // Every cell opens a tooltip, including one with nothing stored: the tooltip says so, which is
-      // the answer to "what happened on this date" rather than a reason to refuse the question.
-      if (!entry) return node;
-      return (
-        <Tooltip
-          key={cell.day}
-          // Click, not hover. A hover tooltip on a field this dense fires continuously as the
-          // pointer crosses it, and it competes with the hover ring for the same gesture; a click
-          // is deliberate, and it is the gesture that leaves the tooltip open to be read and
-          // followed.
-          trigger="click"
-          placement="top"
-          // Structure and spacing only, through antd's own semantic hooks - antd owns the popper,
-          // placement, arrow and motion, so the panel contributes a class and nothing positional.
-          //
-          // Only the width is overridden, and the container's inset is left to antd: zeroing the
-          // padding made the right-aligned values sit flush against the box's border, which reads
-          // as clipped text. The wrapping was the `max-width`, which is what is lifted here.
-          // The container's inset is antd's own and is left alone: zeroing its padding made the
-          // right-aligned values sit flush against the box's border, which reads as clipped text.
-          // Only the `max-width` is lifted, because it - not the padding - is what wrapped the rows.
-          classNames={{ root: 'heatmap-tip-popper' }}
-          styles={{ container: { maxWidth: 'none' } }}
-          title={<HeatmapTooltipContent day={entry} lang={lang} href={heatmapDrillDown(entry)} />}
-          // ~370 cells must not each hold a popper instance for a tooltip the operator may never
-          // open, and a closed one leaves no node behind to be measured or clicked.
-          destroyOnHidden
-        >
-          {node}
-        </Tooltip>
-      );
-  }, [entries, rampMax, t, lang, resolvedFocus, data, handleCellFocus]);
+      return node;
+  }, [entries, rampMax, t, lang, resolvedFocus, classifyCell, handleCellFocus]);
 
   const cellRows = React.useMemo(
     () => cellsByRow.map((row, index) => (
@@ -512,9 +584,19 @@ export const TokenHeatmap: React.FC = () => {
                 aria-label={t('dash.heatmap.grid_label', { n: data.days.length })}
                 aria-readonly="true"
                 onKeyDown={handleKeyDown}
+                onClick={handleCellClick}
               >
                 {cellRows}
               </div>
+              {popupTarget && popupTarget.timezone === timezone && entries.has(popupTarget.day) && (
+                <ActiveHeatmapTooltip
+                  key={popupTarget.day}
+                  target={popupTarget}
+                  entry={entries.get(popupTarget.day)!}
+                  lang={lang}
+                  onClose={closePopup}
+                />
+              )}
             </div>
           </div>
 

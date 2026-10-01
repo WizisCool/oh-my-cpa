@@ -1,4 +1,5 @@
 import React from 'react';
+import { ChartMount } from './ChartMount';
 import { Pie } from '@ant-design/charts';
 import { useTheme } from '../theme/ThemeContext';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
@@ -40,7 +41,7 @@ export interface ModelUsageDonutProps {
  * with values would be two renderings of the same ranking. See `ModelUsagePanels`, which owns that
  * list for both panels.
  */
-export const ModelUsageDonut: React.FC<ModelUsageDonutProps> = ({
+export const ModelUsageDonut = React.memo<ModelUsageDonutProps>(({
   groups,
   totalTokens,
   foldedLabel,
@@ -89,78 +90,80 @@ export const ModelUsageDonut: React.FC<ModelUsageDonutProps> = ({
       {/* The square frame is what the readout centres on; see the class note on the centre box. */}
       <div className="model-ring-frame">
         {data.length > 0 && (
-          <Pie
-            plugins={plugins}
-            onReady={onReady}
-            data={data}
-            angleField="tokens"
-            colorField="series"
-            innerRadius={0.68}
-            radius={0.92}
-            // No height prop: the drawing takes the box the CSS frame gives it. A fixed height here
-            // outranks `autoFit` and pins the canvas to 220px tall while the frame is clamped narrower,
-            // which draws an ellipse and drops the readout below the arcs' centre.
-            autoFit
-            // The arcs morph when a revision moves the shares, and fade in or out when a group enters or
-            // leaves the ranking: an angle that jumps between two readings is a chart that looks like it
-            // reloaded. See `chartMotion.ts` and docs/design.md §7 rule 5.
-            animate={animate}
-            legend={false}
-            label={false}
-            // The readout is rendered here for the same reasons as the trend's: the library's own panel is
-            // a light sans-serif box on a dark console. The share is printed beside the volume because a
-            // slice is read as a fraction of the ring, and it is derived from the same window total the
-            // centre reports, so the two readings cannot disagree.
-            scale={{ color: { domain, range } }}
-            // The item's own name comes from the datum, not from the library's inference: the inferred
-            // item is built from the y channel, so every slice would be named after the field ("tokens")
-            // instead of after its group. A function item is the one form the library evaluates per data
-            // row, and it is also where the exact count is kept, so the tooltip's formatter never has to
-            // re-derive which group it is printing.
-            tooltip={{
-              items: [(datum: { series: string; tokens: number }) => ({
-                name: labelOf(datum.series),
-                value: datum.tokens,
-              })],
-            }}
-            // A 2px stroke in the card's own colour separates adjacent slices. Without it two neighbouring
-            // hues touch directly, which is where a boundary is hardest to find.
-            style={{ stroke: colors.surface, lineWidth: 2, radius: 0.92, innerRadius: 0.68 }}
-            // A ring with no axes: the coordinate is theta, so an axis would be a line through the middle
-            // of the drawing.
-            axis={false}
-            theme={{ view: { viewFill: 'transparent' } }}
-            padding={0}
-            // The readout is configured on the interaction - see the trend's note for why - because the
-            // library's own template is a light sans-serif panel that does not belong on this console.
-            // The value prints in the console's unit style, matching the list beside the ring.
-            interaction={{
-              tooltip: {
-                render: (
-                  _event: unknown,
-                  context: { items?: Array<{ color?: string; value?: number; name?: string }> },
-                ) => {
-                  const item = context?.items?.[0];
-                  if (!item) return '';
-                  // The item is named from the datum by the mark's own tooltip spec above, so it already
-                  // carries the group's label; only the value needs the console's unit style.
-                  const name = item.name ?? '';
-                  const shape = `<span class="omc-tip-swatch" style="background:${item.color ?? 'transparent'}"></span>`;
-                  // The readout states the three things a slice is being judged on, in the order the
-                  // ranked list beside the ring prints them: which group it is, how much it moved, and
-                  // what share of the window that is. The share is derived from the same total the
-                  // centre reports, so a slice's percentage and the ring's own reading cannot disagree.
-                  const value = item.value ?? 0;
-                  const exact = `${formatTokensFull(value)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}`;
-                  return `<div class="omc-tip"><div class="omc-tip-row">${shape}<span class="omc-tip-name">${escapeTooltipText(name)}</span><span class="omc-tip-value" title="${escapeTooltipText(exact)}">${formatTokens(value, tokenStyle)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}</span><span class="omc-tip-share">${formatModelShare(value, totalTokens)}</span></div></div>`;
+          <ChartMount>
+            <Pie
+              plugins={plugins}
+              onReady={onReady}
+              data={data}
+              angleField="tokens"
+              colorField="series"
+              innerRadius={0.68}
+              radius={0.92}
+              // No height prop: the drawing takes the box the CSS frame gives it. A fixed height here
+              // outranks `autoFit` and pins the canvas to 220px tall while the frame is clamped narrower,
+              // which draws an ellipse and drops the readout below the arcs' centre.
+              autoFit
+              // The arcs morph when a revision moves the shares, and fade in or out when a group enters or
+              // leaves the ranking: an angle that jumps between two readings is a chart that looks like it
+              // reloaded. See `chartMotion.ts` and docs/design.md §7 rule 5.
+              animate={animate}
+              legend={false}
+              label={false}
+              // The readout is rendered here for the same reasons as the trend's: the library's own panel is
+              // a light sans-serif box on a dark console. The share is printed beside the volume because a
+              // slice is read as a fraction of the ring, and it is derived from the same window total the
+              // centre reports, so the two readings cannot disagree.
+              scale={{ color: { domain, range } }}
+              // The item's own name comes from the datum, not from the library's inference: the inferred
+              // item is built from the y channel, so every slice would be named after the field ("tokens")
+              // instead of after its group. A function item is the one form the library evaluates per data
+              // row, and it is also where the exact count is kept, so the tooltip's formatter never has to
+              // re-derive which group it is printing.
+              tooltip={{
+                items: [(datum: { series: string; tokens: number }) => ({
+                  name: labelOf(datum.series),
+                  value: datum.tokens,
+                })],
+              }}
+              // A 2px stroke in the card's own colour separates adjacent slices. Without it two neighbouring
+              // hues touch directly, which is where a boundary is hardest to find.
+              style={{ stroke: colors.surface, lineWidth: 2, radius: 0.92, innerRadius: 0.68 }}
+              // A ring with no axes: the coordinate is theta, so an axis would be a line through the middle
+              // of the drawing.
+              axis={false}
+              theme={{ view: { viewFill: 'transparent' } }}
+              padding={0}
+              // The readout is configured on the interaction - see the trend's note for why - because the
+              // library's own template is a light sans-serif panel that does not belong on this console.
+              // The value prints in the console's unit style, matching the list beside the ring.
+              interaction={{
+                tooltip: {
+                  render: (
+                    _event: unknown,
+                    context: { items?: Array<{ color?: string; value?: number; name?: string }> },
+                  ) => {
+                    const item = context?.items?.[0];
+                    if (!item) return '';
+                    // The item is named from the datum by the mark's own tooltip spec above, so it already
+                    // carries the group's label; only the value needs the console's unit style.
+                    const name = item.name ?? '';
+                    const shape = `<span class="omc-tip-swatch" style="background:${item.color ?? 'transparent'}"></span>`;
+                    // The readout states the three things a slice is being judged on, in the order the
+                    // ranked list beside the ring prints them: which group it is, how much it moved, and
+                    // what share of the window that is. The share is derived from the same total the
+                    // centre reports, so a slice's percentage and the ring's own reading cannot disagree.
+                    const value = item.value ?? 0;
+                    const exact = `${formatTokensFull(value)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}`;
+                    return `<div class="omc-tip"><div class="omc-tip-row">${shape}<span class="omc-tip-name">${escapeTooltipText(name)}</span><span class="omc-tip-value" title="${escapeTooltipText(exact)}">${formatTokens(value, tokenStyle)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}</span><span class="omc-tip-share">${formatModelShare(value, totalTokens)}</span></div></div>`;
+                  },
                 },
-              },
-            }}
-            // The library's own background circle is off. The empty state is drawn by the panel's CSS
-            // track instead, so it belongs to the same scale as the trend's plot floor and appears when
-            // there is no ring to sit behind.
-            background={false}
-          />
+              }}
+              // The library's own background circle is off. The empty state is drawn by the panel's CSS
+              // track instead, so it belongs to the same scale as the trend's plot floor and appears when
+              // there is no ring to sit behind.
+              background={false}
+            />
+          </ChartMount>
         )}
         <div className="model-ring-center">
           <span className="model-ring-total">{formatModelTokens(totalTokens, tokenStyle)}</span>
@@ -172,4 +175,4 @@ export const ModelUsageDonut: React.FC<ModelUsageDonutProps> = ({
       {data.length === 0 && <span className="model-ring-track" style={{ borderColor: seriesTrackColor(theme.palette) }} aria-hidden="true" />}
     </div>
   );
-};
+});

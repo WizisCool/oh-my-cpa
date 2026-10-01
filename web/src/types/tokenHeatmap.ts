@@ -90,19 +90,21 @@ export function heatmapCellState(
   asOfMS: number | null,
 ): HeatmapCellState {
   if (!day) return 'empty';
-  // The marker is an instant and the day key is a local calendar date, so the marker is
-  // flattened onto the viewer's calendar before the two are ordered. Both are then fixed-width
-  // `YYYY-MM-DD` strings, which compare correctly as strings.
-  if (firstStoredMS !== null && day.day < localDayOf(firstStoredMS)) return 'unrecorded';
-  // The tail of the current week has not happened yet, so nothing is stored for it either - the
-  // server does not even query those days. They are bracketed by the same marker as a pruned day
-  // rather than left to fall through to the traffic test below, which would classify them by
-  // whether tracking happened to start before them: a day that has not occurred would read as a
-  // *measured* zero on an established deployment and as an unrecorded one on a fresh install.
-  if (asOfMS !== null && day.day > localDayOf(asOfMS)) return 'unrecorded';
-  // Requests without tokens still count as traffic: a request that produced no completion is a
-  // real request, and painting it as an empty day would hide it.
-  return day.tokens > 0 || day.requests > 0 ? 'measured' : 'empty';
+  return createHeatmapCellClassifier(firstStoredMS, asOfMS)(day);
+}
+
+export function createHeatmapCellClassifier(firstStoredMS: number | null, asOfMS: number | null) {
+  // Both markers describe the whole grid. Resolve their DST-aware calendar days once,
+  // rather than converting the same two instants for each of the year's cells.
+  const firstStoredDay = firstStoredMS === null ? null : localDayOf(firstStoredMS);
+  const asOfDay = asOfMS === null ? null : localDayOf(asOfMS);
+  return (day: DashboardTokenHeatmapDay | undefined): HeatmapCellState => {
+    if (!day) return 'empty';
+    if (firstStoredDay !== null && day.day < firstStoredDay) return 'unrecorded';
+    if (asOfDay !== null && day.day > asOfDay) return 'unrecorded';
+    // A request without completion tokens is still measured traffic.
+    return day.tokens > 0 || day.requests > 0 ? 'measured' : 'empty';
+  };
 }
 
 /**

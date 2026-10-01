@@ -43,6 +43,7 @@ import {
   costNoteKey,
   type DashboardRange,
   type DashboardResponse,
+  type DashboardSeriesPoint,
 } from '../types/dashboard';
 import { LoadFailure } from '../components/feedback';
 
@@ -75,17 +76,25 @@ function resolveTileCostReadout(cost: number): RollingReadout {
   };
 }
 
+// Parent query status changes must not turn unchanged series into G2 revisions.
+function pickRequests(point: DashboardSeriesPoint): number { return point.v ?? 0; }
+function pickTokens(point: DashboardSeriesPoint): number { return point.tokens ?? 0; }
+function pickCacheReads(point: DashboardSeriesPoint): number { return point.cache_read ?? 0; }
+function pickCost(point: DashboardSeriesPoint): number { return (point.cost_nanos ?? 0) / 1_000_000_000; }
+function formatTrendTime(timeMs: number): string { return dayjs(timeMs).format('MM-DD HH:mm'); }
+function formatTrendCost(value: number): string { return `$${value.toFixed(2)}`; }
+
 const LazyDashboardTrendChart = React.lazy(() =>
   import('../charts/DashboardTrendChart').then((m) => ({ default: m.DashboardTrendChart }))
 );
 
-const DashboardTrendChart: React.FC<DashboardTrendChartProps> = (props) => (
+const DashboardTrendChart = React.memo<DashboardTrendChartProps>((props) => (
   <React.Suspense
     fallback={<div className="chart-placeholder" style={{ height: props.height ?? 46 }} aria-hidden="true" />}
   >
     <LazyDashboardTrendChart {...props} />
   </React.Suspense>
-);
+));
 
 const Pip: React.FC<{ tone: ChartTone }> = ({ tone }) => (
   <i className={`legend-dot ${tone}`} />
@@ -214,6 +223,14 @@ export const DashboardPage: React.FC = () => {
     const ms = data?.window.bucket_ms ?? 0;
     return ms > 0 ? ms / 60_000 : 1;
   }, [data?.window.bucket_ms]);
+  const pickRequestRate = React.useCallback((point: DashboardSeriesPoint) => pickRequests(point) / bucketMinutes, [bucketMinutes]);
+  const pickTokenRate = React.useCallback((point: DashboardSeriesPoint) => pickTokens(point) / bucketMinutes, [bucketMinutes]);
+  const formatRequests = React.useCallback((value: number) => `${formatCount(value)} ${t('dash.unit_requests')}`, [t]);
+  const formatTokens = React.useCallback((value: number) => `${formatTokensStyled(value, tokenStyle)} ${t('dash.unit_tokens')}`, [t, tokenStyle]);
+  const formatExactTokens = React.useCallback((value: number) => `${formatTokensFull(value)} ${t('dash.unit_tokens')}`, [t]);
+  const formatRequestRate = React.useCallback((value: number) => `${value.toFixed(2)} ${t('dash.unit_requests_per_min')}`, [t]);
+  const formatTokenRateLabel = React.useCallback((value: number) => `${formatTokenRate(value)} ${t('dash.unit_tokens_per_min')}`, [t]);
+  const formatExactTokenRate = React.useCallback((value: number) => `${formatTokensFull(value)} ${t('dash.unit_tokens_per_min')}`, [t]);
   // Refresh reaches the strip below as well as the tiles. The strip owns its own query
   // - its span is a fixed fifty-three weeks rather than this window - so invalidating it by
   // key prefix is what keeps one button meaning "re-read this page". Today's total in
@@ -349,11 +366,11 @@ export const DashboardPage: React.FC = () => {
           </div>
           <DashboardTrendChart
             points={data.requests.series}
-            pick={(point) => point.v ?? 0}
+            pick={pickRequests}
             tone="accent"
             height={64}
-            label={(timeMs) => dayjs(timeMs).format('MM-DD HH:mm')}
-            format={(value) => `${formatCount(value)} ${t('dash.unit_requests')}`}
+            label={formatTrendTime}
+            format={formatRequests}
           />
         </Card>
 
@@ -372,12 +389,12 @@ export const DashboardPage: React.FC = () => {
           </div>
           <DashboardTrendChart
             points={data.tokens.series}
-            pick={(point) => point.tokens ?? 0}
+            pick={pickTokens}
             tone="accent"
             height={64}
-            label={(timeMs) => dayjs(timeMs).format('MM-DD HH:mm')}
-            format={(value) => `${formatTokensStyled(value, tokenStyle)} ${t('dash.unit_tokens')}`}
-            formatExact={(value) => `${formatTokensFull(value)} ${t('dash.unit_tokens')}`}
+            label={formatTrendTime}
+            format={formatTokens}
+            formatExact={formatExactTokens}
           />
         </Card>
 
@@ -393,11 +410,11 @@ export const DashboardPage: React.FC = () => {
               a raw bucket count. The tile's own value is a rate too. */}
           <DashboardTrendChart
             points={data.requests.series}
-            pick={(point) => (point.v ?? 0) / bucketMinutes}
+            pick={pickRequestRate}
             tone="success"
             height={44}
-            label={(timeMs) => dayjs(timeMs).format('MM-DD HH:mm')}
-            format={(value) => `${value.toFixed(2)} ${t('dash.unit_requests_per_min')}`}
+            label={formatTrendTime}
+            format={formatRequestRate}
           />
         </Card>
 
@@ -414,12 +431,12 @@ export const DashboardPage: React.FC = () => {
               reading rather than a restatement of Token total. */}
           <DashboardTrendChart
             points={data.tokens.series}
-            pick={(point) => (point.tokens ?? 0) / bucketMinutes}
+            pick={pickTokenRate}
             tone="warn"
             height={44}
-            label={(timeMs) => dayjs(timeMs).format('MM-DD HH:mm')}
-            format={(value) => `${formatTokenRate(value)} ${t('dash.unit_tokens_per_min')}`}
-            formatExact={(value) => `${formatTokensFull(value)} ${t('dash.unit_tokens_per_min')}`}
+            label={formatTrendTime}
+            format={formatTokenRateLabel}
+            formatExact={formatExactTokenRate}
           />
         </Card>
 
@@ -449,12 +466,12 @@ export const DashboardPage: React.FC = () => {
               which would overstate the rate whenever output tokens were large. */}
           <DashboardTrendChart
             points={data.tokens.series}
-            pick={(point) => point.cache_read ?? 0}
+            pick={pickCacheReads}
             tone="neutral"
             height={44}
-            label={(timeMs) => dayjs(timeMs).format('MM-DD HH:mm')}
-            format={(value) => `${formatTokensStyled(value, tokenStyle)} ${t('dash.unit_tokens')}`}
-            formatExact={(value) => `${formatTokensFull(value)} ${t('dash.unit_tokens')}`}
+            label={formatTrendTime}
+            format={formatTokens}
+            formatExact={formatExactTokens}
           />
         </Card>
 
@@ -485,11 +502,11 @@ export const DashboardPage: React.FC = () => {
               spend curve is complete. */}
           <DashboardTrendChart
             points={data.tokens.series}
-            pick={(point) => (point.cost_nanos ?? 0) / 1_000_000_000}
+            pick={pickCost}
             tone="neutral"
             height={44}
-            label={(timeMs) => dayjs(timeMs).format('MM-DD HH:mm')}
-            format={(value) => `$${value.toFixed(2)}`}
+            label={formatTrendTime}
+            format={formatTrendCost}
           />
         </Card>
       </div>

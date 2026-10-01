@@ -1,5 +1,6 @@
 import { useTimeZone } from '../utils/TimeZoneProvider';
 import React from 'react';
+import { ChartMount } from './ChartMount';
 import { Line } from '@ant-design/charts';
 import dayjs from '../utils/time';
 import { renderChartTooltip } from './chartTooltip';
@@ -45,7 +46,7 @@ export interface ModelTokenTrendProps {
  * of a draw-in. A reader who asked for reduced motion gets the geometry swapped in place, because the
  * mark is painted on a canvas that CSS cannot reach. See `chartMotion.ts`.
  */
-export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, foldedLabel, tokenUnitLabel = '', height = 260 }) => {
+export const ModelTokenTrend = React.memo<ModelTokenTrendProps>(({ groups, foldedLabel, tokenUnitLabel = '', height = 260 }) => {
   const timeZone = useTimeZone();
   const { theme, themeMode } = useTheme();
   const isReducedMotion = usePrefersReducedMotion();
@@ -178,122 +179,124 @@ export const ModelTokenTrend: React.FC<ModelTokenTrendProps> = ({ groups, folded
 
   return (
     <div className="model-trend" style={{ height }}>
-      <Line
-        data={data}
-        xField="bucket"
-        yField="tokens"
-        colorField="series"
-        height={height}
-        autoFit
-        // The lines morph between two revisions rather than being redrawn: the panel re-reads on the same
-        // poll the tiles do, and a ranking that hard-cuts every few seconds reads as a flicker. See
-        // `chartMotion.ts` for the motion and its reduced-motion escape.
-        animate={animate}
-        // A smoothed line rather than straight segments between buckets.
-        //
-        // G2 resolves this string to its `smooth` shape, which draws with `curveMonotoneX` - a monotone
-        // cubic, not a plain Catmull-Rom spline. That distinction is why this is safe here: the series
-        // are zero-filled, so most buckets sit exactly on the floor, and a non-monotone spline through
-        // them would overshoot *below* the axis between points and draw a line where the data says zero.
-        // A monotone curve cannot leave the range spanned by its own neighbours, so the floor stays the
-        // floor. The KPI tiles above use the same shape for the same reason.
-        shapeField="smooth"
-        // No library legend: the legend is the app's DOM (see above), so the trend's colours stay in the
-        // console's type scale and in the same assignment as the usage list.
-        legend={false}
-        scale={{
-          // A band scale, not a linear one.
+      <ChartMount>
+        <Line
+          data={data}
+          xField="bucket"
+          yField="tokens"
+          colorField="series"
+          height={height}
+          autoFit
+          // The lines morph between two revisions rather than being redrawn: the panel re-reads on the same
+          // poll the tiles do, and a ranking that hard-cuts every few seconds reads as a flicker. See
+          // `chartMotion.ts` for the motion and its reduced-motion escape.
+          animate={animate}
+          // A smoothed line rather than straight segments between buckets.
           //
-          // The grid is uniform - every bucket is one bucket width from its neighbour - so both fit the
-          // mark. What separates them is the edges. A linear scale on raw epoch milliseconds puts the
-          // first and last bucket exactly on the plot's corners, so the axis labels under those corners
-          // are cut by the card's gutter and the outermost marks are half-clipped. A band scale reserves
-          // half a band at each end, which is what makes the first and last tick read inside the frame.
-          x: { type: 'band', domain: buckets, paddingInner: 0, paddingOuter: 0.5 },
-          y: { nice: false, domainMin: 0 },
-          color: { domain, range },
-        }}
-        axis={axis}
-        theme={{
-          // The mode is named so nothing the palette does not name is drawn in the wrong half of the
-          // library's ink: without it every chart renders the library's *light* theme, whose ink is
-          // near-black, onto a card that may be dark.
-          type: themeMode,
-          // The grid ink belongs to the *axis*, not to a scale under it. The axis renderer resolves
-          // `theme.axis` and then `theme.axis<Position>` / `theme.axis<Channel>`, so a channel nested
-          // under `axis` is never read at all - which is where the grid's ink used to be declared, and
-          // why the grid kept the library's own. The axis labels are styled on `axis.x` above instead,
-          // because that is the object the axis renderer reads for them.
-          axis: { gridStroke: colors.borderSoft, gridStrokeOpacity: 1 },
-          // The crosshair is drawn by the tooltip interaction, so its ink is a `tooltip` token of the
-          // *theme* - a different `tooltip` from the mark's interaction spec below, which is read from
-          // the interaction's own options. Both rules are drawn, because `crosshairsY` follows the
-          // `crosshairs` level, so both are named: the interaction's default ink is near-black, which is
-          // how the one line a reader follows with the pointer disappeared on every dark card.
-          tooltip: {
-            crosshairsStroke: colors.muted,
-            crosshairsStrokeOpacity: 1,
-            crosshairsLineWidth: 1,
-          },
-          view: {
-            viewFill: 'transparent',
-            plotFill: 'transparent',
-            mainFill: 'transparent',
-            contentFill: 'transparent',
-          },
-        }}
-        // An explicit padding, not the library's `auto`. The automatic layout sizes the strips from the
-        // axis labels' own measured bounds, and inside a fixed-height card the bottom strip came out
-        // larger than the canvas, so the labels were painted past its edge and clipped to their top
-        // halves. The reserved strips are: 10px of headroom, 32px below the plot for a 10px label with
-        // its tick and spacing, and 40px at each side so the outermost tick's label - which is centred
-        // on the plot's very edge - stays inside the card instead of being cut by the gutter.
-        paddingTop={10}
-        paddingBottom={32}
-        paddingLeft={40}
-        paddingRight={40}
-        plugins={plugins}
-        onReady={onReady}
-        style={{ lineWidth: 1.75, lineJoin: 'round', lineCap: 'round' }}
-        state={{ active: { lineWidth: 2.5 } }}
-        // The tooltip is configured on the *interaction*, not on the mark: G2 reads `render` from the
-        // interaction's options, so a renderer placed in the mark's own `tooltip` spec is ignored and the
-        // library's default template is used instead - which prints the raw domain value as each item's
-        // name. A shared crosshair is what makes six lines readable at one instant: the readout lists
-        // every series at the hovered bucket, which is how a reader compares models rather than tracing
-        // one.
-        interaction={{
-          tooltip: {
-            shared: true,
-            crosshairs: true,
-            render: (
-              _event: unknown,
-              context: { items?: Array<{ color?: string; value?: number | null; name?: string }>; title?: string },
-            ) => {
-              // Named by each item's own series key rather than by its position: the rows are drawn
-              // in reverse rank, so position does not line up with the legend. The readout is re-sorted into the
-              // legend's order and a quiet series is listed at zero rather than left out.
-              const byKey = new Map((context?.items ?? []).map((item) => [String(item.name ?? ''), item]));
-              const items = domain.map((key, rank) => {
-                const item = byKey.get(key);
-                return { key, color: item?.color ?? range[rank], value: item?.value ?? 0 };
-              });
-              if (items.length === 0) return '';
-              // The bucket arrives as the group's title - a string of epoch milliseconds - not on each
-              // item, so it is parsed from there. Falling back to "now" would print a time the mark is
-              // not showing, which is worse than printing nothing.
-              const bucketMS = Number(context?.title);
-              const time = Number.isFinite(bucketMS) ? dayjs(bucketMS).format('MM-DD HH:mm') : '';
-              return renderChartTooltip(time, items.map((item, index) => ({
-                name: groupLabels[index] ?? labelOf(item.key),
-                color: item.color,
-                value: `${formatTokensStyled(item.value ?? 0, tokenStyle)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}`,
-                exact: `${formatTokensFull(item.value ?? 0)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}`,
-              })));
+          // G2 resolves this string to its `smooth` shape, which draws with `curveMonotoneX` - a monotone
+          // cubic, not a plain Catmull-Rom spline. That distinction is why this is safe here: the series
+          // are zero-filled, so most buckets sit exactly on the floor, and a non-monotone spline through
+          // them would overshoot *below* the axis between points and draw a line where the data says zero.
+          // A monotone curve cannot leave the range spanned by its own neighbours, so the floor stays the
+          // floor. The KPI tiles above use the same shape for the same reason.
+          shapeField="smooth"
+          // No library legend: the legend is the app's DOM (see above), so the trend's colours stay in the
+          // console's type scale and in the same assignment as the usage list.
+          legend={false}
+          scale={{
+            // A band scale, not a linear one.
+            //
+            // The grid is uniform - every bucket is one bucket width from its neighbour - so both fit the
+            // mark. What separates them is the edges. A linear scale on raw epoch milliseconds puts the
+            // first and last bucket exactly on the plot's corners, so the axis labels under those corners
+            // are cut by the card's gutter and the outermost marks are half-clipped. A band scale reserves
+            // half a band at each end, which is what makes the first and last tick read inside the frame.
+            x: { type: 'band', domain: buckets, paddingInner: 0, paddingOuter: 0.5 },
+            y: { nice: false, domainMin: 0 },
+            color: { domain, range },
+          }}
+          axis={axis}
+          theme={{
+            // The mode is named so nothing the palette does not name is drawn in the wrong half of the
+            // library's ink: without it every chart renders the library's *light* theme, whose ink is
+            // near-black, onto a card that may be dark.
+            type: themeMode,
+            // The grid ink belongs to the *axis*, not to a scale under it. The axis renderer resolves
+            // `theme.axis` and then `theme.axis<Position>` / `theme.axis<Channel>`, so a channel nested
+            // under `axis` is never read at all - which is where the grid's ink used to be declared, and
+            // why the grid kept the library's own. The axis labels are styled on `axis.x` above instead,
+            // because that is the object the axis renderer reads for them.
+            axis: { gridStroke: colors.borderSoft, gridStrokeOpacity: 1 },
+            // The crosshair is drawn by the tooltip interaction, so its ink is a `tooltip` token of the
+            // *theme* - a different `tooltip` from the mark's interaction spec below, which is read from
+            // the interaction's own options. Both rules are drawn, because `crosshairsY` follows the
+            // `crosshairs` level, so both are named: the interaction's default ink is near-black, which is
+            // how the one line a reader follows with the pointer disappeared on every dark card.
+            tooltip: {
+              crosshairsStroke: colors.muted,
+              crosshairsStrokeOpacity: 1,
+              crosshairsLineWidth: 1,
             },
-          },
-        }}
-      />
+            view: {
+              viewFill: 'transparent',
+              plotFill: 'transparent',
+              mainFill: 'transparent',
+              contentFill: 'transparent',
+            },
+          }}
+          // An explicit padding, not the library's `auto`. The automatic layout sizes the strips from the
+          // axis labels' own measured bounds, and inside a fixed-height card the bottom strip came out
+          // larger than the canvas, so the labels were painted past its edge and clipped to their top
+          // halves. The reserved strips are: 10px of headroom, 32px below the plot for a 10px label with
+          // its tick and spacing, and 40px at each side so the outermost tick's label - which is centred
+          // on the plot's very edge - stays inside the card instead of being cut by the gutter.
+          paddingTop={10}
+          paddingBottom={32}
+          paddingLeft={40}
+          paddingRight={40}
+          plugins={plugins}
+          onReady={onReady}
+          style={{ lineWidth: 1.75, lineJoin: 'round', lineCap: 'round' }}
+          state={{ active: { lineWidth: 2.5 } }}
+          // The tooltip is configured on the *interaction*, not on the mark: G2 reads `render` from the
+          // interaction's options, so a renderer placed in the mark's own `tooltip` spec is ignored and the
+          // library's default template is used instead - which prints the raw domain value as each item's
+          // name. A shared crosshair is what makes six lines readable at one instant: the readout lists
+          // every series at the hovered bucket, which is how a reader compares models rather than tracing
+          // one.
+          interaction={{
+            tooltip: {
+              shared: true,
+              crosshairs: true,
+              render: (
+                _event: unknown,
+                context: { items?: Array<{ color?: string; value?: number | null; name?: string }>; title?: string },
+              ) => {
+                // Named by each item's own series key rather than by its position: the rows are drawn
+                // in reverse rank, so position does not line up with the legend. The readout is re-sorted into the
+                // legend's order and a quiet series is listed at zero rather than left out.
+                const byKey = new Map((context?.items ?? []).map((item) => [String(item.name ?? ''), item]));
+                const items = domain.map((key, rank) => {
+                  const item = byKey.get(key);
+                  return { key, color: item?.color ?? range[rank], value: item?.value ?? 0 };
+                });
+                if (items.length === 0) return '';
+                // The bucket arrives as the group's title - a string of epoch milliseconds - not on each
+                // item, so it is parsed from there. Falling back to "now" would print a time the mark is
+                // not showing, which is worse than printing nothing.
+                const bucketMS = Number(context?.title);
+                const time = Number.isFinite(bucketMS) ? dayjs(bucketMS).format('MM-DD HH:mm') : '';
+                return renderChartTooltip(time, items.map((item, index) => ({
+                  name: groupLabels[index] ?? labelOf(item.key),
+                  color: item.color,
+                  value: `${formatTokensStyled(item.value ?? 0, tokenStyle)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}`,
+                  exact: `${formatTokensFull(item.value ?? 0)}${tokenUnitLabel ? ` ${tokenUnitLabel}` : ''}`,
+                })));
+              },
+            },
+          }}
+        />
+      </ChartMount>
     </div>
   );
-};
+});

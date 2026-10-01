@@ -1,4 +1,5 @@
 import { getTimeZone } from '../../utils/time';
+import { getDateTimeFormatter } from '../../utils/dateTimeFormat';
 import type { Lang } from '../../i18n/language';
 import { languageLocale } from '../../i18n/language';
 
@@ -346,7 +347,7 @@ export function formatDuration(milliseconds: number): string {
 
 export function formatClock(milliseconds: number | undefined, lang: Lang): string {
   if (!milliseconds) return '';
-  return new Date(milliseconds).toLocaleTimeString(languageLocale(lang), { hour: '2-digit', minute: '2-digit', timeZone: getTimeZone() });
+  return getDateTimeFormatter(languageLocale(lang), { hour: '2-digit', minute: '2-digit', timeZone: getTimeZone() }).format(milliseconds);
 }
 
 /** How long a stored turn took, or undefined while it is still in flight. */
