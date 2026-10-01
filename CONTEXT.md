@@ -94,7 +94,8 @@ Oh My CPA adds a user-owned identity and organization layer above CLIProxyAPI (C
   bottom, because the running version's own notes describe a version already in use.
   Prereleases are excluded: a stable operator never received them. When the running
   version is not comparable no interval is claimed at all, and the newest release is
-  shown alone. The log states that the interval is **not fully known** only when a
+  shown alone. That fallback belongs to the uncomparable case only: a build that is up
+  to date or ahead has an empty interval, and its card offers no change log. The log states that the interval is **not fully known** only when a
   truncated release walk can actually affect it: a walk that stopped at its page limit
   kept the *newest* releases and dropped older ones, so the interval is still complete
   whenever the running version is at or above the oldest release that was read. The
